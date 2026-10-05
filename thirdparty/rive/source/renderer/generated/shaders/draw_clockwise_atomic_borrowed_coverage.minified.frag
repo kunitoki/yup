@@ -1,15 +1,15 @@
 #ifdef FRAGMENT
-N3 Ea(ga,Yd,S0);O3 void main(){
+f4 mb(Na,Te,V0);g4 void main(){
 #ifdef DRAW_INTERIOR_TRIANGLES
-Y(j1,d);
+T(m1,d);
 #else
-Y(I,z2);
+T(S,G2);
 #endif
-B(e3,W0);B(j4,c);d o0=
+q(q3,O0);q(F4,c);d A0=
 #ifdef DRAW_INTERIOR_TRIANGLES
-j1;
+m1;
 #else
-cb(I);
+Ub(S);
 #endif
-W0 y6=W0(floor(j4));uint N7=e3.y;uint T1=e3.x+L8(y6,N7);uint Zd=q7(abs(o0));uint O7=k.W1|(j5-Zd);uint f3=A7(S0,T1,O7);if(f3>=k.W1){uint wh=f3-max(f3,O7);Fa(S0,T1,wh-Zd);}}
+O0 N6=O0(floor(F4));uint a8=q3.y;uint d2=q3.x+d9(N6,a8);uint Ue=G7(abs(A0));uint c8=j.j2|(C5-Ue);uint r3=M7(V0,d2,c8);if(r3>=j.j2){uint Yi=r3-max(r3,c8);nb(V0,d2,Yi-Ue);}}
 #endif

@@ -454,6 +454,7 @@ std::unique_ptr<ContextWGPU> ContextWGPU::Make(wgpu::Device device,
     // Populate features with WebGPU-level capabilities.
     Features& f = ctx->m_features;
     f.colorBufferFloat = true;
+    f.colorBufferHalfFloat = true;
     f.perTargetBlend = true;
     f.perTargetWriteMask = true;
     f.textureViewSampling = true;
@@ -606,7 +607,7 @@ rcp<Texture> ContextWGPU::makeTexture(const TextureDesc& desc)
 // makeTextureView
 // ============================================================================
 
-rcp<TextureView> ContextWGPU::makeTextureView(const TextureViewDesc& desc)
+rcp<TextureView> ContextWGPU::makeTextureViewImpl(const TextureViewDesc& desc)
 {
     auto tex = lite_rtti_cast<TextureWGPU*>(desc.texture);
     if (!tex)
@@ -873,13 +874,10 @@ rcp<Pipeline> ContextWGPU::makePipeline(const PipelineDesc& desc,
     // shader binding must be declared by the corresponding layout.
     {
         std::string err;
-        if (!validateLayoutsAgainstBindingMap(pipeline->m_bindingMap,
-                                              desc.bindGroupLayouts,
-                                              desc.bindGroupLayoutCount,
-                                              &err) ||
-            !validateColorRequiresFragment(desc.colorCount,
-                                           desc.fragmentModule != nullptr,
-                                           &err))
+        if (!validatePipelineDesc(desc,
+                                  pipeline->m_bindingMap,
+                                  NativeSlotScope::perStage,
+                                  &err))
         {
             if (outError)
                 *outError = err;
@@ -973,6 +971,11 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
         setLastError("makeBindGroup: BindGroupDesc::layout is null");
         return nullptr;
     }
+    if (std::string err; !validateBindGroupDesc(desc, &err))
+    {
+        setLastError("makeBindGroup: %s", err.c_str());
+        return nullptr;
+    }
     auto layout = lite_rtti_cast<BindGroupLayoutWGPU*>(desc.layout);
     assert(layout != nullptr);
     if (layout->groupIndex() >= kMaxBindGroups)
@@ -987,6 +990,7 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
     auto bg = rcp<BindGroupWGPU>(new BindGroupWGPU());
     bg->m_context = this;
     bg->m_layoutRef = ref_rcp(layout);
+    bg->recordDynamicRanges(desc);
 
     // Count dynamic-offset UBOs declared by the layout. Authoritative —
     // dynamic-ness is a layout property (WebGPU/Vulkan model).
@@ -1043,7 +1047,7 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
             {buffer,
              ubo.slot,
              ubo.offset,
-             (ubo.size > 0) ? ubo.size : buffer->size()});
+             (ubo.size > 0) ? ubo.size : buffer->size() - ubo.offset});
         bg->m_retainedBuffers.push_back(ref_rcp(buffer));
     }
 
@@ -1084,8 +1088,6 @@ std::unique_ptr<RenderPass> ContextWGPU::beginRenderPass(
     const RenderPassDesc& desc,
     std::string* outError)
 {
-    finishActiveRenderPass();
-
     assert(m_wgpuCommandEncoder != nullptr &&
            "beginFrame must be called before beginRenderPass");
 
@@ -1176,9 +1178,16 @@ std::unique_ptr<RenderPass> ContextWGPU::beginRenderPass(
 rcp<TextureView> ContextWGPU::wrapCanvasTexture(gpu::RenderCanvas* canvas)
 {
     assert(canvas != nullptr);
+    return wrapRenderTarget(canvas->renderTarget());
+}
 
-    auto* wgpuTarget =
-        static_cast<gpu::RenderTargetWebGPU*>(canvas->renderTarget());
+rcp<TextureView> ContextWGPU::wrapRenderTarget(gpu::RenderTarget* target)
+{
+    auto* wgpuTarget = static_cast<gpu::RenderTargetWebGPU*>(target);
+    if (wgpuTarget == nullptr || !wgpuTarget->targetTextureView())
+    {
+        return nullptr;
+    }
 
     // Derive the ore format from the actual WebGPU surface format so any MSAA
     // texture created from this descriptor matches the resolve target exactly.
@@ -1201,8 +1210,8 @@ rcp<TextureView> ContextWGPU::wrapCanvasTexture(gpu::RenderCanvas* canvas)
     }
 
     TextureDesc texDesc{};
-    texDesc.width = canvas->width();
-    texDesc.height = canvas->height();
+    texDesc.width = target->width();
+    texDesc.height = target->height();
     texDesc.format = oreFormat;
     texDesc.type = TextureType::texture2D;
     texDesc.renderTarget = true;

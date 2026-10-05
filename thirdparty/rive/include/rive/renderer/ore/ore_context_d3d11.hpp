@@ -23,7 +23,7 @@ public:
 
     rcp<Buffer> makeBuffer(const BufferDesc& desc) override;
     rcp<Texture> makeTexture(const TextureDesc& desc) override;
-    rcp<TextureView> makeTextureView(const TextureViewDesc& desc) override;
+    rcp<TextureView> makeTextureViewImpl(const TextureViewDesc& desc) override;
     rcp<Sampler> makeSampler(const SamplerDesc& desc) override;
     rcp<ShaderModule> makeShaderModule(const ShaderModuleDesc& desc) override;
     rcp<BindGroupLayout> makeBindGroupLayout(
@@ -41,6 +41,7 @@ public:
     void waitForGPU() override;
 
     rcp<TextureView> wrapCanvasTexture(gpu::RenderCanvas* canvas) override;
+    rcp<TextureView> wrapRenderTarget(gpu::RenderTarget* target) override;
     rcp<TextureView> wrapRiveTexture(gpu::Texture* gpuTex,
                                      uint32_t width,
                                      uint32_t height) override;
@@ -70,7 +71,7 @@ private:
         const BindGroupLayoutDesc& desc);
     std::unique_ptr<RenderPass> d3d11BeginRenderPass(const RenderPassDesc& desc,
                                                      std::string* outError);
-    rcp<TextureView> d3d11WrapCanvasTexture(gpu::RenderCanvas* canvas);
+    rcp<TextureView> d3d11WrapTarget(gpu::RenderTarget* target, bool canvas);
     rcp<TextureView> d3d11WrapRiveTexture(gpu::Texture* gpuTex,
                                           uint32_t w,
                                           uint32_t h);

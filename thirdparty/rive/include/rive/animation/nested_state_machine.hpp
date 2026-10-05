@@ -27,13 +27,34 @@ public:
     HitResult pointerMove(Vec2D position,
                           float timeStamp = 0,
                           int pointerId = 0);
-    HitResult pointerDown(Vec2D position, int pointerId = 0);
-    HitResult pointerUp(Vec2D position, int pointerId = 0);
+    HitResult pointerDown(Vec2D position,
+                          int pointerId = 0,
+                          PointerButton button = PointerButton::primary);
+    HitResult pointerUp(Vec2D position,
+                        int pointerId = 0,
+                        PointerButton button = PointerButton::primary);
     HitResult pointerExit(Vec2D position, int pointerId = 0);
-    HitResult dragStart(Vec2D position, float timeStamp = 0, int pointerId = 0);
-    HitResult dragEnd(Vec2D position, float timeStamp = 0, int pointerId = 0);
+    HitResult pointerScroll(Vec2D position,
+                            const ScrollEvent& event,
+                            float timeStamp = 0,
+                            int pointerId = 0);
+    bool wantsScroll(Vec2D position, const ScrollEvent& event);
+    bool hasScrollLatch();
+    bool hasScrollTargetAt(Vec2D position);
+    bool scrollOccludedAt(Vec2D position);
+    void cancelScroll();
+    bool listensToButtonAt(Vec2D position, PointerButton button);
+    HitResult dragStart(Vec2D position,
+                        float timeStamp = 0,
+                        int pointerId = 0,
+                        PointerButton button = PointerButton::primary);
+    HitResult dragEnd(Vec2D position,
+                      float timeStamp = 0,
+                      int pointerId = 0,
+                      PointerButton button = PointerButton::primary);
     bool tryChangeState();
     bool hitTest(Vec2D position) const;
+    bool hitTestBounded(Vec2D position) const;
 
     void addNestedInput(NestedInput* input);
     size_t inputCount() { return m_nestedInputs.size(); }

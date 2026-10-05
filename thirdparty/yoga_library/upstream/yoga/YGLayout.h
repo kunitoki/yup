@@ -40,6 +40,14 @@ public:
 
   YGCachedMeasurement cachedLayout = YGCachedMeasurement();
 
+  // Grid line positions (column/row) in this node's local content space,
+  // matching the coordinate space of child layout positions. Populated only
+  // for grid nodes during a performLayout pass; empty (no heap) otherwise.
+  // Exposes the cell/track geometry the layout engine otherwise discards, so
+  // tooling can hit-test a point to a grid cell.
+  std::vector<float> gridColumnLineOffsets = {};
+  std::vector<float> gridRowLineOffsets = {};
+
   YGDirection direction() const {
     return facebook::yoga::detail::getEnumData<YGDirection>(
         flags, directionOffset);

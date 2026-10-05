@@ -114,7 +114,6 @@ GpuTexture::~GpuTexture()
         oreTexture = nullptr;
         gpuTexture = nullptr;
         renderCanvas = nullptr;
-        sampledTexture = nullptr;
     });
 }
 
@@ -178,9 +177,6 @@ rive::rcp<rive::ore::TextureView> GpuTexture::getOrCreateView (rive::ore::Contex
             return nullptr;
         }
 
-        if (sampledTexture != nullptr)
-            return oreCtx.wrapRiveTexture (sampledTexture.get(), (uint32_t) width, (uint32_t) height);
-
         if (auto tex = getOrAdoptGpuTexture())
             return oreCtx.wrapRiveTexture (tex.get(), (uint32_t) width, (uint32_t) height);
 
@@ -231,12 +227,13 @@ bool GpuTexture::upload (const GpuTextureDataDesc& data)
     if (texelSize == 0 && data.bytesPerRow == 0)
         return false;
 
+    bool uploaded = false;
     device->runOnGraphicsContext ([&]
     {
-        oreTexture->upload (oreData);
+        uploaded = oreTexture->upload (oreData);
     });
 
-    return true;
+    return uploaded;
 }
 
 GpuTexture::Ptr GpuTexture::fromGpuTexture (ReferenceCountedObjectPtr<GpuDevice> device, rive::rcp<rive::gpu::Texture> texture, int width, int height)
@@ -270,9 +267,6 @@ GpuTexture::Ptr GpuTexture::fromRenderCanvas (ReferenceCountedObjectPtr<GpuDevic
 
 rive::rcp<rive::gpu::Texture> GpuTexture::getOrAdoptGpuTexture() const
 {
-    if (sampledTexture != nullptr)
-        return sampledTexture;
-
     if (gpuTexture != nullptr)
         return gpuTexture;
 

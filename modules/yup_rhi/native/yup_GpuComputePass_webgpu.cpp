@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
 
 namespace yup
 {
@@ -166,15 +166,10 @@ private:
 
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplWebGPU (GpuDevice& ctx)
 {
-#if YUP_EMSCRIPTEN && RIVE_WEBGPU
     auto& wc = static_cast<GpuDeviceWebGPU&> (ctx);
     return std::make_unique<GpuComputePassImplWebGPU> (wc.getWgpuDevice(), wc.getWgpuQueue());
-#elif YUP_RIVE_USE_DAWN
-    auto& dc = static_cast<GpuDeviceDawn&> (ctx);
-    return std::make_unique<GpuComputePassImplWebGPU> (dc.getDevice(), dc.getQueue());
-#endif
 }
 
 } // namespace yup
 
-#endif // WebGPU / Dawn
+#endif // YUP_EMSCRIPTEN && RIVE_WEBGPU

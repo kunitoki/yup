@@ -538,6 +538,7 @@ std::unique_ptr<ContextD3D12> ContextD3D12::Make(
     // --- Features ---
     Features& f = ctx->m_features;
     f.colorBufferFloat = true;
+    f.colorBufferHalfFloat = true;
     f.perTargetBlend = true;
     f.perTargetWriteMask = true;
     f.textureViewSampling = true;
@@ -573,6 +574,13 @@ void ContextD3D12::beginFrame(const FrameDescriptor& desc)
     m_safeFrameNumber = desc.safeFrameNumber;
     m_d3dCmdList =
         static_cast<ID3D12GraphicsCommandList*>(desc.externalCommandBuffer);
+    if (m_d3dCmdList == nullptr)
+    {
+        // A host that opened the frame without a command list; the frame's
+        // passes fail through lastError instead of dereferencing null.
+        setLastError("Ore D3D12: beginFrame needs an external command list");
+        return;
+    }
 
     // Reset frame-scoped GPU heap allocation offsets.
     m_d3dGpuSrvAllocated = 0;
@@ -584,12 +592,92 @@ void ContextD3D12::beginFrame(const FrameDescriptor& desc)
     ID3D12DescriptorHeap* heaps[] = {m_d3dGpuSrvHeap.Get(),
                                      m_d3dGpuSamplerHeap.Get()};
     m_d3dCmdList->SetDescriptorHeaps(2, heaps);
+
+    // Record uploads staged while no frame was open onto this frame's list.
+    d3d12FlushPendingTextureUploads();
 #endif
 }
 
 void ContextD3D12::waitForGPU() {}
 
-void ContextD3D12::endFrame() {}
+void ContextD3D12::endFrame()
+{
+#if defined(ORE_BACKEND_D3D12)
+    // The list belongs to the host's frame; a pass begun after this frame
+    // must fail the beginRenderPass guard, not record onto a retired list.
+    m_d3dCmdList = nullptr;
+#endif
+}
+
+#if defined(ORE_BACKEND_D3D12)
+void ContextD3D12::d3d12QueuePendingTextureUpload(
+    D3D12PendingTextureUpload pending)
+{
+    m_d3dPendingUploads.push_back(std::move(pending));
+}
+
+void ContextD3D12::d3d12FlushPendingTextureUploads()
+{
+    if (m_d3dPendingUploads.empty())
+        return;
+    // Only reachable with a live list: beginFrame and beginRenderPass drain.
+    assert(m_d3dCmdList != nullptr);
+
+    for (auto& pu : m_d3dPendingUploads)
+    {
+        auto* tex = lite_rtti_cast<TextureD3D12*>(pu.texture.get());
+        auto* staging = lite_rtti_cast<BufferD3D12*>(pu.staging.get());
+        if (tex == nullptr || staging == nullptr ||
+            tex->m_d3dTexture == nullptr)
+            continue;
+
+        if (tex->m_d3dCurrentState != D3D12_RESOURCE_STATE_COPY_DEST)
+        {
+            D3D12_RESOURCE_BARRIER barrier = {};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Transition.pResource = tex->m_d3dTexture.Get();
+            barrier.Transition.StateBefore = tex->m_d3dCurrentState;
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+            barrier.Transition.Subresource =
+                D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            m_d3dCmdList->ResourceBarrier(1, &barrier);
+            tex->m_d3dCurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
+        }
+
+        D3D12_TEXTURE_COPY_LOCATION dstLoc = {};
+        dstLoc.pResource = tex->m_d3dTexture.Get();
+        dstLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        dstLoc.SubresourceIndex = pu.subresource;
+
+        D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
+        srcLoc.pResource = staging->m_d3dBuffer.Get();
+        srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        srcLoc.PlacedFootprint = pu.footprint;
+
+        m_d3dCmdList->CopyTextureRegion(&dstLoc,
+                                        pu.dstX,
+                                        pu.dstY,
+                                        pu.dstZ,
+                                        &srcLoc,
+                                        nullptr);
+
+        // Leave it sample-ready so render passes need no explicit barrier.
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = tex->m_d3dTexture.Get();
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        barrier.Transition.StateAfter =
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        barrier.Transition.Subresource =
+            D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        m_d3dCmdList->ResourceBarrier(1, &barrier);
+        tex->m_d3dCurrentState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    }
+
+    // Purgatory keeps the staging buffers alive until safeFrameNumber.
+    m_d3dPendingUploads.clear();
+}
+#endif
 
 // ============================================================================
 // d3d12FlushUploads + GPU-visible heap allocation helpers (called by
@@ -1171,13 +1259,10 @@ rcp<Pipeline> ContextD3D12::d3d12MakePipeline(const PipelineDesc& desc,
     // --- Validate user-supplied layouts against shader binding map ---
     {
         std::string err;
-        if (!validateLayoutsAgainstBindingMap(pipeline->m_bindingMap,
-                                              desc.bindGroupLayouts,
-                                              desc.bindGroupLayoutCount,
-                                              &err) ||
-            !validateColorRequiresFragment(desc.colorCount,
-                                           desc.fragmentModule != nullptr,
-                                           &err))
+        if (!validatePipelineDesc(desc,
+                                  pipeline->m_bindingMap,
+                                  NativeSlotScope::perKind,
+                                  &err))
         {
             if (outError)
                 *outError = err;
@@ -1383,6 +1468,11 @@ rcp<BindGroup> ContextD3D12::d3d12MakeBindGroup(const BindGroupDesc& desc)
         setLastError("makeBindGroup: BindGroupDesc::layout is null");
         return nullptr;
     }
+    if (std::string err; !validateBindGroupDesc(desc, &err))
+    {
+        setLastError("makeBindGroup: %s", err.c_str());
+        return nullptr;
+    }
     BindGroupLayout* layout = desc.layout;
     const uint32_t groupIndex = layout->groupIndex();
     if (groupIndex >= kMaxBindGroups)
@@ -1394,6 +1484,7 @@ rcp<BindGroup> ContextD3D12::d3d12MakeBindGroup(const BindGroupDesc& desc)
 
     auto bg = rcp<BindGroupD3D12>(new BindGroupD3D12(m_manager));
     bg->m_layoutRef = ref_rcp(layout);
+    bg->recordDynamicRanges(desc);
 
     // Count dynamic-offset UBOs declared by the layout — authoritative.
     uint32_t dynamicCount = 0;
@@ -1464,7 +1555,9 @@ rcp<BindGroup> ContextD3D12::d3d12MakeBindGroup(const BindGroupDesc& desc)
         bg->m_d3dUBOBuffers[slot] = buffer;
         bg->m_d3dUBOOffsets[slot] = entry.offset;
         bg->m_d3dUBOSizes[slot] =
-            entry.size > 0 ? entry.size : static_cast<uint32_t>(buffer->size());
+            entry.size > 0
+                ? entry.size
+                : static_cast<uint32_t>(buffer->size() - entry.offset);
         bg->m_d3dUBOSlotMask |= static_cast<uint8_t>(1u << slot);
         if (layout->hasDynamicOffset(entry.slot))
             bg->m_d3dUBODynamicOffsetMask |= static_cast<uint8_t>(1u << slot);
@@ -1551,6 +1644,18 @@ std::unique_ptr<RenderPass> ContextD3D12::d3d12BeginRenderPass(
     std::string* outError)
 {
 #if defined(ORE_BACKEND_D3D12)
+    if (m_d3dCmdList == nullptr)
+    {
+        setLastError("Ore D3D12: beginRenderPass without an open frame");
+        if (outError != nullptr)
+        {
+            *outError = lastError();
+        }
+        return nullptr;
+    }
+    // Drain uploads staged mid-frame before the pass reads the textures.
+    d3d12FlushPendingTextureUploads();
+
     std::unique_ptr<RenderPassD3D12> pass(new RenderPassD3D12(this));
     pass->m_d3dCmdList = m_d3dCmdList;
     pass->m_d3dDevice = m_d3dDevice.Get();
@@ -1591,10 +1696,10 @@ std::unique_ptr<RenderPass> ContextD3D12::d3d12BeginRenderPass(
         // Record resource + final state for finish() to transition back.
         pass->m_d3dColorResources[i] = tex->m_d3dTexture.Get();
         pass->m_d3dColorTextures[i] = tex;
-        // External (canvas) textures go back to COMMON; ORE-owned go to
+        // External textures go back to their owner's state; ORE-owned go to
         // PIXEL_SHADER_RESOURCE.
         const D3D12_RESOURCE_STATES colourFinalState =
-            tex->m_d3dIsExternal ? D3D12_RESOURCE_STATE_COMMON
+            tex->m_d3dIsExternal ? tex->m_d3dExternalState
                                  : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
         pass->m_d3dColorFinalStates[i] = colourFinalState;
         pass->m_d3dColorCount++;
@@ -1622,7 +1727,7 @@ std::unique_ptr<RenderPass> ContextD3D12::d3d12BeginRenderPass(
             r.resolvePriorState = resolveTex->m_d3dCurrentState;
             r.resolveFinalState =
                 resolveTex->m_d3dIsExternal
-                    ? D3D12_RESOURCE_STATE_COMMON
+                    ? resolveTex->m_d3dExternalState
                     : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
         }
     }
@@ -1691,13 +1796,13 @@ std::unique_ptr<RenderPass> ContextD3D12::d3d12BeginRenderPass(
         uint32_t w = 0, h = 0;
         if (desc.colorCount > 0 && desc.colorAttachments[0].view)
         {
-            w = desc.colorAttachments[0].view->texture()->width();
-            h = desc.colorAttachments[0].view->texture()->height();
+            w = desc.colorAttachments[0].view->width();
+            h = desc.colorAttachments[0].view->height();
         }
         else if (desc.depthStencil.view)
         {
-            w = desc.depthStencil.view->texture()->width();
-            h = desc.depthStencil.view->texture()->height();
+            w = desc.depthStencil.view->width();
+            h = desc.depthStencil.view->height();
         }
         if (w > 0 && h > 0)
         {
@@ -1741,18 +1846,21 @@ std::unique_ptr<RenderPass> ContextD3D12::d3d12BeginRenderPass(
 }
 
 // ============================================================================
-// d3d12WrapCanvasTexture
+// d3d12WrapTarget
 // ============================================================================
 
-rcp<TextureView> ContextD3D12::d3d12WrapCanvasTexture(gpu::RenderCanvas* canvas)
+rcp<TextureView> ContextD3D12::d3d12WrapTarget(gpu::RenderTarget* target,
+                                               bool canvas)
 {
 #if defined(ORE_BACKEND_D3D12)
-    assert(canvas != nullptr);
+    assert(target != nullptr);
 
-    auto* d3dTarget =
-        static_cast<gpu::RenderTargetD3D12*>(canvas->renderTarget());
+    auto* d3dTarget = static_cast<gpu::RenderTargetD3D12*>(target);
     gpu::D3D12Texture* d3dTex = d3dTarget->targetTexture();
-    assert(d3dTex != nullptr);
+    if (d3dTex == nullptr)
+    {
+        return nullptr;
+    }
 
     DXGI_FORMAT dxgiFmt = d3dTex->format();
 
@@ -1774,18 +1882,34 @@ rcp<TextureView> ContextD3D12::d3d12WrapCanvasTexture(gpu::RenderCanvas* canvas)
     }
 
     TextureDesc texDesc{};
-    texDesc.width = canvas->width();
-    texDesc.height = canvas->height();
+    texDesc.width = target->width();
+    texDesc.height = target->height();
     texDesc.format = oreFormat;
     texDesc.type = TextureType::texture2D;
     texDesc.renderTarget = true;
     texDesc.numMipmaps = 1;
     texDesc.sampleCount = 1;
 
-    auto texture = rcp<TextureD3D12>(new TextureD3D12(m_manager, texDesc));
+    // A host target frees on its last release, not in purgatory, since its
+    // back buffer reference would fail the host's ResizeBuffers.
+    auto manager = canvas ? m_manager : nullptr;
+    auto texture = rcp<TextureD3D12>(new TextureD3D12(manager, texDesc));
     texture->m_d3dTexture =
         d3dTex->resource(); // Borrow — RenderCanvas owns it.
-    texture->m_d3dCurrentState = D3D12_RESOURCE_STATE_COMMON;
+    // Rive tracks a host target's state and draws into it after us, so it
+    // moves to and stays a render target through Rive's own tracking.
+    if (!canvas && m_d3dCmdList != nullptr &&
+        d3dTex->lastState() != D3D12_RESOURCE_STATE_RENDER_TARGET)
+    {
+        static_cast<gpu::D3D12ResourceManager*>(d3dTex->manager())
+            ->transition(m_d3dCmdList,
+                         d3dTex,
+                         D3D12_RESOURCE_STATE_RENDER_TARGET);
+    }
+    const D3D12_RESOURCE_STATES ownerState =
+        canvas ? D3D12_RESOURCE_STATE_COMMON : d3dTex->lastState();
+    texture->m_d3dCurrentState = ownerState;
+    texture->m_d3dExternalState = ownerState;
     texture->m_d3dIsExternal = true;
     texture->m_d3dDevice = m_d3dDevice.Get();
     texture->m_d3dOreContext = this;
@@ -1799,12 +1923,48 @@ rcp<TextureView> ContextD3D12::d3d12WrapCanvasTexture(gpu::RenderCanvas* canvas)
     viewDesc.layerCount = 1;
 
     auto view = rcp<TextureViewD3D12>(
-        new TextureViewD3D12(m_manager, std::move(texture), viewDesc));
+        new TextureViewD3D12(manager, std::move(texture), viewDesc));
 
-    // Create the RTV in our CPU RTV heap.
+    // SRV so a later pass can sample the canvas after rendering into it;
+    // without it a bind group copies a null descriptor and the debug layer
+    // faults.
+    if (canvas && m_d3dCpuSrvAllocated < 1024)
+    {
+        D3D12_CPU_DESCRIPTOR_HANDLE srvHandle =
+            m_d3dCpuSrvHeap->GetCPUDescriptorHandleForHeapStart();
+        srvHandle.ptr += (SIZE_T)m_d3dCpuSrvAllocated++ * m_d3dSrvDescSize;
+
+        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+        srvDesc.Format = dxgiFmt;
+        srvDesc.Shader4ComponentMapping =
+            D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        srvDesc.Texture2D.MipLevels = 1;
+
+        m_d3dDevice->CreateShaderResourceView(d3dTex->resource(),
+                                              &srvDesc,
+                                              srvHandle);
+        view->m_d3dSrvHandle = srvHandle;
+    }
+
+    // Create the RTV in our CPU RTV heap. Passes copy RTVs as they record,
+    // so last frame's target slot is free to rewrite.
+    UINT rtvIndex;
+    if (canvas)
+    {
+        rtvIndex = m_d3dCpuRtvAllocated++;
+    }
+    else
+    {
+        if (m_d3dTargetRtvIndex == UINT_MAX)
+        {
+            m_d3dTargetRtvIndex = m_d3dCpuRtvAllocated++;
+        }
+        rtvIndex = m_d3dTargetRtvIndex;
+    }
     D3D12_CPU_DESCRIPTOR_HANDLE handle =
         m_d3dCpuRtvHeap->GetCPUDescriptorHandleForHeapStart();
-    handle.ptr += (SIZE_T)m_d3dCpuRtvAllocated++ * m_d3dRtvDescSize;
+    handle.ptr += (SIZE_T)rtvIndex * m_d3dRtvDescSize;
 
     D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
     rtvDesc.Format = dxgiFmt;
@@ -1816,6 +1976,7 @@ rcp<TextureView> ContextD3D12::d3d12WrapCanvasTexture(gpu::RenderCanvas* canvas)
 
     return view;
 #else
+    (void)target;
     (void)canvas;
     return {};
 #endif
@@ -1876,11 +2037,19 @@ rcp<TextureView> ContextD3D12::d3d12WrapRiveTexture(gpu::Texture* gpuTex,
     // do it when external-CL mode is active, because in owned-CL mode the Ore
     // CL is submitted before Rive's CL and a barrier recorded here would
     // reference a state the texture isn't actually in at submission time.
-    assert(m_d3dCmdList != nullptr);
     auto* manager = static_cast<gpu::D3D12ResourceManager*>(d3dTex->manager());
     if (manager != nullptr &&
         d3dTex->lastState() != D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
     {
+        if (m_d3dCmdList == nullptr)
+        {
+            // No list to record the transition, and the wrap outlives this
+            // call via the resident table; a view over a wrong-state texture
+            // reads garbage silently, so refuse instead.
+            setLastError("Ore D3D12: wrapRiveTexture needs an open frame to "
+                         "transition the texture");
+            return nullptr;
+        }
         manager->transition(m_d3dCmdList,
                             d3dTex,
                             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -1936,7 +2105,7 @@ rcp<Texture> ContextD3D12::makeTexture(const TextureDesc& desc)
     return d3d12MakeTexture(desc);
 }
 
-rcp<TextureView> ContextD3D12::makeTextureView(const TextureViewDesc& desc)
+rcp<TextureView> ContextD3D12::makeTextureViewImpl(const TextureViewDesc& desc)
 {
     return d3d12MakeTextureView(desc);
 }
@@ -1972,13 +2141,18 @@ std::unique_ptr<RenderPass> ContextD3D12::beginRenderPass(
     const RenderPassDesc& desc,
     std::string* outError)
 {
-    finishActiveRenderPass();
     return d3d12BeginRenderPass(desc, outError);
 }
 
 rcp<TextureView> ContextD3D12::wrapCanvasTexture(gpu::RenderCanvas* canvas)
 {
-    return d3d12WrapCanvasTexture(canvas);
+    assert(canvas != nullptr);
+    return d3d12WrapTarget(canvas->renderTarget(), true);
+}
+
+rcp<TextureView> ContextD3D12::wrapRenderTarget(gpu::RenderTarget* target)
+{
+    return target != nullptr ? d3d12WrapTarget(target, false) : nullptr;
 }
 
 rcp<TextureView> ContextD3D12::wrapRiveTexture(gpu::Texture* gpuTex,

@@ -82,7 +82,6 @@ private:
     friend class GpuDeviceD3D;
     friend class GpuDeviceGL;
     friend class GpuDeviceWebGPU;
-    friend class GpuDeviceDawn;
     friend class GpuRenderPass;
     friend class GpuComputePass;
     friend class GpuComputePassImplMetal;

@@ -6,82 +6,97 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_raster_order_path_frag[] = R"===(#ifdef FB
-J1 r0(Q2,g0);k1(R2,d0);r0(d6,g4);k1(F6,H7);K1 m1(IB){B(i1,g);
-#ifdef DB
-B(j1,d);
-#else
-B(I,z2);
+R1 B0(K2,n0);o1(c3,m0);B0(o6,B4);o1(U6,R7);S1 T1(IB){q(a1,e);
+#ifdef GB
+q(r1,O);
 #endif
-B(z0,d);
-#ifdef O
-B(S1,D);
+#ifdef DB
+q(m1,d);
+#else
+q(S,G2);
+#endif
+q(F0,d);
+#ifdef A
+q(l1,C);
 #endif
 #ifdef AB
-B(N0,g);
+q(R0,e);
 #endif
-#ifdef GB
-B(Z1,d);
+#ifdef N
+q(Q0,d);
 #endif
 #if!defined(DB)
-v2;
+E2;
 #endif
-D N4=unpackHalf2x16(d1(H7));d h9=N4.y;d m0=h9==z0?N4.x:G0(.0);
+C d5=unpackHalf2x16(h1(R7));d D9=d5.y;d w0=D9==F0?d5.x:H0(.0);
 #ifdef DB
-m0+=j1;Y1(H7);
+w0+=m1;Z1(R7);
 #else
-m0=vh(m0,I g1);f1(H7,packHalf2x16(A2(m0,z0)));
+w0=Xi(w0,S k1);j1(R7,packHalf2x16(H2(w0,F0)));
 #endif
 d n;
-#ifdef UD
-if(UD){n=W9(m0,G0(.0),G0(1.));}else
+#ifdef GE
+if(GE){n=Aa(w0,H0(.0),H0(1.));}else
 #endif
-{n=abs(m0);
-#ifdef PC
-if(PC&&z0<.0){n=1.-G0(abs(fract(n*.5)*2.+-1.));}
+{n=abs(w0);
+#ifdef XC
+if(XC&&F0<.0){n=1.-H0(abs(fract(n*.5)*2.+-1.));}
 #endif
-n=min(n,G0(1.));}
-#ifdef O
-if(O&&S1.x<.0){d V0=-S1.x;
-#ifdef RC
-if(RC){d F5=S1.y;if(F5!=.0){D O0=unpackHalf2x16(d1(d0));d A6=O0.y;d k4;if(A6!=V0){k4=A6==F5?O0.x:.0;
+n=min(n,H0(1.));}
+#ifdef A
+if(A&&l1.x<.0){d X0=-l1.x;
+#ifdef AD
+if(AD){d E4=l1.y;if(E4!=.0){C T0=unpackHalf2x16(h1(m0));d P6=T0.y;d G4;if(P6!=X0){G4=P6==E4?T0.x:.0;
 #ifndef DB
-v0(g4,B0(k4,.0,.0,.0));
+y0(B4,I0(G4,.0,.0,.0));
 #endif
-}else{k4=H0(g4).x;
+}else{G4=N0(B4).x;
 #ifndef DB
-r2(g4);
+D2(B4);
 #endif
-}n=min(n,k4);}}
+}n=min(n,G4);}}
 #endif
-f1(d0,packHalf2x16(A2(n,V0)));r2(g0);}else
+j1(m0,packHalf2x16(H2(n,X0)));D2(n0);}else
 #endif
 {
-#ifdef O
-if(O){d V0=S1.x;if(V0!=.0){D O0=unpackHalf2x16(d1(d0));d A6=O0.y;n=(A6==V0)?min(O0.x,n):G0(.0);}}
+#ifdef A
+if(A){d X0=l1.x;if(X0!=.0){C T0=unpackHalf2x16(h1(m0));d P6=T0.y;n=(P6==X0)?min(T0.x,n):H0(.0);}}
 #endif
 #ifdef AB
-if(AB){d U4=g3(Y4(N0));n=clamp(U4,G0(.0),n);}
+if(AB){d m5=v3(v5(R0));n=clamp(m5,H0(.0),n);}
 #endif
-i j=M7(i1,n S2);i L1;if(h9!=z0){L1=H0(g0);
-#ifndef DB
-v0(g4,L1);
-#endif
-}else{L1=H0(g4);
-#ifndef DB
-r2(g4);
-#endif
-}
+i p=Y7(
 #ifdef GB
-if(GB){if(Z1!=V5(M5)){j.xyz=Q4(j.xyz,L1,W5(Z1));}j.xyz*=j.w;}
+r1,
 #endif
-#ifdef UB
-if(UB){j=k3(j);}
+#ifdef N
+k3(Q0),
 #endif
-j+=L1*(1.-j.w);j.xyz=Q3(j.xyz,S.xy,k.y3,k.z3);v0(g0,j);Y1(d0);}
+a1 e3);i I1;if(D9!=F0){I1=N0(n0);
+#ifndef DB
+y0(B4,I1);
+#endif
+}else{I1=N0(B4);
+#ifndef DB
+D2(B4);
+#endif
+}bool bf=false;
+#ifdef GB
+bf=GB&&r1.z<.0;
+#endif
+if(bf){
+#ifdef GB
+uint dj=uint(-r1.z-1.);d ej=Vi(p,dj);p=I1*mix(H0(1.),ej,n);y0(n0,p);Z1(m0);
+#endif
+}else{
+#ifdef N
+if(N&&Q0!=j6(L4)){p.xyz=h5(p.xyz,I1,k3(Q0))*p.w;}
+#endif
+p*=n;d n3=p.w;p+=I1*(1.-n3);p.xyz=M2(p.xyz,n3,f0.xy,j.L3,j.M3);y0(n0,p);Z1(m0);}}
 #if!defined(DB)
-w2;
+F2;
 #endif
-U1;}
+h2;}
 #endif
 )===";
 } // namespace glsl

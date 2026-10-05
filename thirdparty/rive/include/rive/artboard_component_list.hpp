@@ -29,14 +29,14 @@ class ArtboardListMapRule;
 class ArtboardListDrawIndexDependent;
 class FocusManager;
 
-class ArtboardComponentList : public ArtboardComponentListBase,
-                              public ArtboardHost,
-                              public AdvancingComponent,
-                              public ResettingComponent,
-                              public LayoutNodeProvider,
-                              public DataBindListItemConsumer,
-                              public VirtualizingComponent,
-                              public ConstrainableList
+class ArtboardComponentList final : public ArtboardComponentListBase,
+                                    public ArtboardHost,
+                                    public AdvancingComponent,
+                                    public ResettingComponent,
+                                    public LayoutNodeProvider,
+                                    public DataBindListItemConsumer,
+                                    public VirtualizingComponent,
+                                    public ConstrainableList
 {
 private:
     std::vector<rcp<ViewModelInstanceListItem>> m_listItems;
@@ -49,6 +49,11 @@ public:
     void* layoutNode(int index) override;
 #endif
     size_t artboardCount() override { return m_listItems.size(); }
+#ifdef WITH_RIVE_TOOLS
+    /// A mounted item's offset from the list: its layout bounds less the item
+    /// artboard's origin.
+    Vec2D itemPosition(int index);
+#endif
     rcp<ViewModelInstanceListItem> listItem(int index);
     ArtboardInstance* artboardInstance(int index = 0) override;
     /// Logical index of the given instance in the list, or -1 if not found.
@@ -72,6 +77,7 @@ public:
     void draw(Renderer* renderer) override;
     bool willDraw() override;
     Core* hitTest(HitInfo*, const Mat2D&) override;
+    void hostedRowWoke(Artboard* artboard, uint32_t row) override;
     void update(ComponentDirt value) override;
     void updateConstraints() override;
     void internalDataContext(rcp<DataContext> dataContext) override;
@@ -115,9 +121,14 @@ public:
     {
         m_visibleStartIndex = start;
         m_visibleEndIndex = end;
+    }
+    void setRealizedIndices(int start, int end) override
+    {
+        m_realizedStartIndex = start;
+        m_realizedEndIndex = end;
         invalidateOrderedListIndicesCache();
     }
-    void shouldResetInstances(bool value) { m_shouldResetInstances = value; }
+    void shouldResetInstances(bool value);
     void setVirtualizablePosition(int index, Vec2D position) override;
     void createArtboardAt(int index, bool forceLayoutSync = true);
     void addArtboardAt(std::unique_ptr<ArtboardInstance> artboard,
@@ -135,11 +146,16 @@ public:
     float gap();
     void syncLayoutChildren();
     bool mainAxisIsRow();
+    bool isStack();
     LayoutComponent* layoutParent();
     const Mat2D& listTransform() override;
     void listItemTransforms(std::vector<Mat2D*>& transforms) override;
     void addMapRule(ArtboardListMapRule*);
     int type() const override { return coreType(); }
+#ifdef WITH_RIVE_EDITOR
+    void addMapRuleForEditor(ArtboardListMapRule* rule);
+    void removeMapRuleForEditor(ArtboardListMapRule* rule);
+#endif
 
     /// Create/parent a synthetic list scope FocusNode (structural, no
     /// Focusable) so list item focus trees group under it. Idempotent.
@@ -172,6 +188,7 @@ private:
     void linkStateMachineToArtboard(StateMachineInstance* stateMachineInstance,
                                     ArtboardInstance* artboard);
     void computeLayoutBounds();
+    bool isWithinVisibleWindow(int index) const;
     void createArtboardRecorders(const Artboard*);
     void applyRecorders(Artboard* artboard, const Artboard* sourceArtboard);
     void applyRecorders(StateMachineInstance* stateMachineInstance,
@@ -194,15 +211,25 @@ private:
     std::unordered_map<ArtboardInstance*, Mat2D> m_artboardTransforms;
     Vec2D artboardPosition(ArtboardInstance* artboard);
 
-    // Vectors used for access in non-virtualized mode
+    // Each row's instances, or null for a row that isn't realized. They mirror
+    // the maps above, which own the instances, so per-row loops can reach a
+    // row without hashing its item.
     std::vector<ArtboardInstance*> m_artboardInstancesByIndex;
     std::vector<StateMachineInstance*> m_stateMachinesByIndex;
+    // Points the row at index, and any other row showing the same item, at
+    // the item's instances.
+    void setRowsForItem(int index,
+                        const rcp<ViewModelInstanceListItem>& item,
+                        ArtboardInstance* artboard,
+                        StateMachineInstance* stateMachine);
 
     File* m_file = nullptr;
     std::vector<Vec2D> m_artboardSizes;
     Vec2D m_layoutSize;
     int m_visibleStartIndex = -1;
     int m_visibleEndIndex = -1;
+    int m_realizedStartIndex = -1;
+    int m_realizedEndIndex = -1;
     std::unordered_map<ArtboardInstance*, ArtboardComponentListOverride*>
         m_artboardOverridesMap;
     std::unordered_map<int, int> m_artboardMapRules;
@@ -220,6 +247,11 @@ private:
         const std::vector<rcp<FocusNode>>& previousRowNodes);
     rcp<FocusNode> makeListRowFocusNode() const;
     void reparentListRowsInScope(FocusManager* fm);
+    // Whether the scope's children are exactly the rows, in order.
+    bool listRowNodesInPlace() const;
+    // Wires each realized row's state machine to the manager and builds the
+    // row's focus tree under it when needed.
+    void buildListRowFocusTrees(FocusManager* fm);
     bool listItemNeedsBuildUnderRow(FocusManager* parentFM,
                                     ArtboardInstance* inst,
                                     rcp<FocusNode> row) const;
@@ -227,6 +259,55 @@ private:
                                 rcp<ViewModelInstanceListItem>);
     void clearArtboardOverride(ArtboardInstance*);
     bool m_shouldResetInstances = false;
+    // Whether some item shows on more than one row.
+    bool m_listHasDuplicateItems = false;
+
+    // Quiet rows: rows whose per-frame work (their state machine's advance,
+    // tryChangeState and updateDataBinds, their artboard's advance, bind
+    // updates, reset and update pass) would do nothing are skipped until
+    // something wakes them (Artboard::quietHostRow). A bit per row, so a pass
+    // steps over 64 quiet rows at a time.
+    std::vector<uint64_t> m_quietRows;
+    // Rows whose content can't report being quiet, so they aren't checked
+    // again every frame.
+    std::vector<uint64_t> m_neverQuietRows;
+    // The first row at or after `row` that isn't quiet, or the row count.
+    size_t nextAwakeRow(size_t row) const;
+    bool isRowQuiet(size_t row) const;
+    // Marks the row quiet if its work would do nothing; true if it did.
+    bool tryQuietRow(size_t row);
+    // Whether the row's work would do nothing right now.
+    AdvancingComponent::QuietState rowQuietState(size_t row);
+    // Wakes the row and forgets it can't be quiet: its instances are about to
+    // change.
+    void resetQuietRow(size_t row);
+    // Wakes every row, then sizes the bits for `rowCount` rows.
+    void resetQuietRows(size_t rowCount);
+    enum class RowPass
+    {
+        advance,
+        settle,
+        updateDataBinds,
+        reset,
+        update,
+    };
+#ifdef TESTING
+    // Each quiet row's skipped work is still done in tests, after the pass,
+    // and must do nothing; a row still quiet must also still be quiet by
+    // rowQuietState, or a wake-up was missed.
+    void verifyQuietRows(RowPass pass,
+                         float elapsedSeconds,
+                         AdvanceFlags flags,
+                         bool advanceNested);
+
+public:
+    // Row passes skipped because the row was quiet, across every list.
+    static uint64_t sm_quietRowSkips;
+    // Lets a test run the same frames with and without quiet rows.
+    static bool sm_quietRowsEnabled;
+
+private:
+#endif
     bool listsAreEqual(std::vector<rcp<ViewModelInstanceListItem>>* list,
                        std::vector<rcp<ViewModelInstanceListItem>>* compared);
 
@@ -239,6 +320,8 @@ private:
 
     bool m_listUsesDrawIndexSort = false;
     bool m_orderedListIndicesCacheValid = false;
+    // Set while updateList runs, which syncs the focus rows once at its end.
+    bool m_updatingList = false;
     /// Always paint / scroll order (ascending drawIndex when enabled).
     std::vector<int> m_cachedOrderedListIndices;
     std::unordered_map<rcp<ViewModelInstanceListItem>,

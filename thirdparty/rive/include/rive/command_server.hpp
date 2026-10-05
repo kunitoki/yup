@@ -6,6 +6,7 @@
 
 #include "rive/command_queue.hpp"
 #include "rive/hit_result.hpp"
+#include "rive/math/mat2d.hpp"
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -15,13 +16,28 @@
 namespace rive
 {
 class ScriptingContext;
+class GlobalAssetRegistry;
+
 // Server-side worker that executes commands from a CommandQueue.
 class CommandServer
 {
 public:
-    CommandServer(rcp<CommandQueue>,
-                  Factory*,
-                  rcp<rive::FileAssetLoader> = nullptr);
+    /**
+     * Creates the server that executes commands from commandQueue.
+     *
+     * @param commandQueue The queue from which commands are read.
+     * @param factory The factory used to create runtime resources.
+     * @param internalFileAssetLoader An optional FileAssetLoader for loading
+     * out-of-band asset contents without using command-queue global assets.
+     * Provide a loader that recognizes and loads the assets it owns, returning
+     * true from FileAssetLoader::loadContents for those assets. This is
+     * typically used by an embedder that already has its own asset-loading
+     * path. Leave it null when out-of-band images, audio, and fonts should be
+     * handled through the command queue.
+     */
+    CommandServer(rcp<CommandQueue> commandQueue,
+                  Factory* factory,
+                  rcp<rive::FileAssetLoader> internalFileAssetLoader = nullptr);
     virtual ~CommandServer();
 
     Factory* factory() const { return m_factory; }
@@ -32,12 +48,18 @@ public:
                                             const CommandQueue::PointerEvent&);
     rive::HitResult pointerUpSynchronized(StateMachineHandle,
                                           const CommandQueue::PointerEvent&);
+    // Whether a listener under the event's position responds to presses of
+    // its button. Lets a host keep a mouse button for its own use wherever
+    // nothing in the scene wants it.
+    bool listensToButtonAtSynchronized(StateMachineHandle,
+                                       const CommandQueue::PointerEvent&);
 
     File* getFile(FileHandle) const;
     bool getWasDisconnected() const { return m_wasDisconnectReceived; }
     RenderImage* getImage(RenderImageHandle) const;
     AudioSource* getAudioSource(AudioSourceHandle) const;
     Font* getFont(FontHandle) const;
+    BlobAsset* getBlob(BlobAssetHandle) const;
     ArtboardInstance* getArtboardInstance(ArtboardHandle) const;
     rcp<BindableArtboard> getBindableArtboard(ArtboardHandle) const;
     StateMachineInstance* getStateMachineInstance(StateMachineHandle) const;
@@ -47,19 +69,33 @@ public:
         ViewModelInstanceRuntime*) const;
     // Wait for queue to not be empty, then returns pollMessages.
     bool waitCommands();
-    // Returns imidiatly after checking messages. If there are none just returns
+    // Returns immediately after checking messages. If there are none just
     // returns !m_wasDisconnectReceived.
     bool processCommands();
     // Blocks and runs waitMessages until disconnect is received.
     void serveUntilDisconnect();
 
+    /**
+     * Posts a runtime-defined message to the command queue.
+     *
+     * This is intended for host runtime integrations that need to report
+     * information discovered while executing command server work, such as from
+     * runOnce or draw callbacks. The command queue forwards the message through
+     * its RuntimeMessageListener when processMessages() runs. Rive does not
+     * interpret the tag or payload.
+     *
+     * @param tag Runtime-owned message type identifier.
+     * @param payload Runtime-owned serialized message bytes.
+     */
+    void postRuntimeMessage(uint32_t tag, std::vector<uint8_t> payload);
+
     struct Subscription
     {
-        // The request Id for sbuscribing to this particular property.
+        // The request Id for subscribing to this particular property.
         uint64_t requestId;
-        // Information about the property we want to "subsribe" to.
+        // Information about the property we want to "subscribe" to.
         PropertyData data;
-        // The root view model of from the perspective of the path in data.name.
+        // The root view model from the perspective of the path in data.name.
         ViewModelInstanceHandle rootViewModel;
     };
 
@@ -71,7 +107,7 @@ public:
         return cursorPosForPointerEvent(instance, event);
     }
 
-    const std::vector<Subscription>& testing_getSubsciptions() const
+    const std::vector<Subscription>& testing_getSubscriptions() const
     {
         return m_propertySubscriptions;
     }
@@ -93,6 +129,28 @@ public:
     }
 #endif
 #endif
+
+    bool focusNextSynchronized(StateMachineHandle);
+    bool focusPreviousSynchronized(StateMachineHandle);
+
+    /** @copydoc CommandQueue::focusNextWithResultSynchronized */
+    CommandQueue::FocusTraversalResult focusNextWithResultSynchronized(
+        StateMachineHandle stateMachineHandle);
+
+    /** @copydoc CommandQueue::focusPreviousWithResultSynchronized */
+    CommandQueue::FocusTraversalResult focusPreviousWithResultSynchronized(
+        StateMachineHandle stateMachineHandle);
+
+    /** @copydoc CommandQueue::keyInputSynchronized */
+    bool keyInputSynchronized(StateMachineHandle stateMachineHandle,
+                              Key key,
+                              KeyModifiers modifiers,
+                              bool isPressed,
+                              bool isRepeat);
+
+    /** @copydoc CommandQueue::focusInDirectionSynchronized */
+    bool focusInDirectionSynchronized(StateMachineHandle stateMachineHandle,
+                                      Direction direction);
 
 private:
     friend class CommandQueue;
@@ -184,23 +242,18 @@ private:
 
     struct SynchronizedStateMachine : RefCnt<SynchronizedStateMachine>
     {
-        // kept in seperate header to avoid including StateMachineInstance in
-        // the main CommandServer header
+        // Kept out of line to avoid including StateMachineInstance in the main
+        // CommandServer header.
         ~SynchronizedStateMachine();
-        SynchronizedStateMachine& operator=(SynchronizedStateMachine&& other)
-        {
-            instance = std::move(other.instance);
-            return *this;
-        }
+        SynchronizedStateMachine& operator=(SynchronizedStateMachine&& other);
         SynchronizedStateMachine() = default;
         SynchronizedStateMachine(
-            std::unique_ptr<StateMachineInstance> instance) :
-            instance(std::move(instance))
-        {}
+            std::unique_ptr<StateMachineInstance> instance);
         std::unique_ptr<StateMachineInstance> instance;
-        // This mutex is used to ensure that a specific state machine instance
-        // is not being advanced at the same time a sync mouse event is being
-        // processed.
+        Mat2D m_lastSemanticsTransform;
+        bool m_hasLastSemanticsTransform = false;
+        // This mutex ensures that a specific state machine instance is not
+        // advanced while a synchronized input or focus operation is running.
         std::mutex m_mutex;
     };
 
@@ -223,13 +276,13 @@ private:
     std::vector<Subscription> m_propertySubscriptions;
 
     // Dependencies
-    // When a file gets deleted artboards and statemachine become invalid. Here
-    // we hold a reference to the artboard only because that artboard has a
+    // When a file gets deleted artboards and state machines become invalid.
+    // Here we hold a reference to the artboard only because that artboard has a
     // dependency to the State Machine.
     std::unordered_map<FileHandle, std::vector<ArtboardHandle>>
         m_fileDependencies;
-    // When an artboard gets deleted the statemachine assosiated with it is also
-    // now invalid.
+    // When an artboard gets deleted the state machine associated with it is
+    // also now invalid.
     std::unordered_map<ArtboardHandle, std::vector<StateMachineHandle>>
         m_artboardDependencies;
 
@@ -237,6 +290,7 @@ private:
     std::unordered_map<FileHandle, rcp<File>> m_files;
     std::unordered_map<FontHandle, rcp<Font>> m_fonts;
     std::unordered_map<RenderImageHandle, rcp<RenderImage>> m_images;
+    std::unordered_map<BlobAssetHandle, rcp<BlobAsset>> m_blobs;
     std::unordered_map<AudioSourceHandle, rcp<AudioSource>> m_audioSources;
     std::unordered_map<ArtboardHandle, rcp<BindableArtboard>> m_artboards;
     std::unordered_map<ViewModelInstanceHandle, rcp<ViewModelInstanceRuntime>>
@@ -248,6 +302,7 @@ private:
     std::unordered_map<DrawKey, CommandServerDrawCallback> m_uniqueDraws;
 
     class CommandFileAssetLoader;
-    rcp<CommandFileAssetLoader> m_fileAssetLoader;
+    rcp<GlobalAssetRegistry> m_globalAssetRegistry;
+    rcp<FileAssetLoader> m_internalFileAssetLoader;
 };
 }; // namespace rive

@@ -44,8 +44,6 @@ std::unique_ptr<GraphicsContext> yup_constructOpenGLGraphicsContext (GpuDevice::
 #endif
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
 std::unique_ptr<GraphicsContext> yup_constructWebGPUGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
-#elif YUP_RIVE_USE_DAWN
-std::unique_ptr<GraphicsContext> yup_constructDawnGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
 #endif
 
 //==============================================================================
@@ -77,9 +75,6 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (GpuPlatform gra
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
         case GpuPlatform::WebGPU:
             return yup_constructWebGPUGraphicsContext (options, std::move (existingGpu));
-#elif YUP_RIVE_USE_DAWN
-        case GpuPlatform::WebGPU:
-            return yup_constructDawnGraphicsContext (options, std::move (existingGpu));
 #endif
 
         default:

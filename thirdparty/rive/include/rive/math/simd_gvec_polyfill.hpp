@@ -142,7 +142,7 @@ template <typename T> struct gvec_data<T, 3>
 {
     union
     {
-        T data[2];
+        T data[3];
         struct
         {
             T x, y, z;
@@ -151,6 +151,7 @@ template <typename T> struct gvec_data<T, 3>
         {
             T r, g, b;
         };
+        gvec<T, 2> xy;
         gvec<T, 3, PackSwizzle3(3, 0, 1, 2)> xyz;
     };
 };
@@ -521,10 +522,14 @@ gvec<U, N> cast(gvec<T, N, Z> x)
     return cast<U>((gvec<T, N>)x);
 }
 
-static_assert(std::is_standard_layout_v<gvec<float, 1>>);
-static_assert(std::is_standard_layout_v<gvec<float, 2>>);
-static_assert(std::is_standard_layout_v<gvec<float, 3>>);
-static_assert(std::is_standard_layout_v<gvec<float, 4>>);
+static_assert(std::is_trivial<gvec<float, 1>>() &&
+              std::is_standard_layout<gvec<float, 1>>());
+static_assert(std::is_trivial<gvec<float, 2>>() &&
+              std::is_standard_layout<gvec<float, 2>>());
+static_assert(std::is_trivial<gvec<float, 3>>() &&
+              std::is_standard_layout<gvec<float, 3>>());
+static_assert(std::is_trivial<gvec<float, 4>>() &&
+              std::is_standard_layout<gvec<float, 4>>());
 
 #undef ENABLE_SWIZZLE1
 #undef ENABLE_SWIZZLE_REDUCE

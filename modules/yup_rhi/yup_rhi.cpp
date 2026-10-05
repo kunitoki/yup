@@ -58,11 +58,6 @@
 
 #endif
 
-#if YUP_RIVE_USE_DAWN
-#include "dawn/native/DawnNative.h"
-#include "dawn/dawn_proc.h"
-#endif
-
 //==============================================================================
 #include "rhi/yup_GpuTypes.cpp"
 #include "rhi/yup_GpuBuffer.cpp"
@@ -83,8 +78,6 @@
 
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
 #include "native/yup_GpuDevice_webgpu.cpp"
-#elif YUP_RIVE_USE_DAWN
-#include "native/yup_GpuDevice_dawn.cpp"
 #endif
 
 //==============================================================================
@@ -104,7 +97,7 @@
 #include "native/yup_GpuComputePipeline_d3d.cpp"
 #include "native/yup_GpuComputePass_d3d.cpp"
 #endif
-#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
 #include "native/yup_GpuComputePipeline_webgpu.cpp"
 #include "native/yup_GpuComputePass_webgpu.cpp"
 #endif

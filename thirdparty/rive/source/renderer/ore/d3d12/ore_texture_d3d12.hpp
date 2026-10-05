@@ -16,14 +16,16 @@ public:
         lite_rtti_override(std::move(manager), desc)
     {}
     ~TextureD3D12() override = default; // ComPtr released automatically
-    void upload(const TextureDataDesc& data) override;
+    void uploadImpl(const TextureDataDesc& data) override;
 
 private:
     friend class ContextD3D12;
     friend class RenderPassD3D12;
     Microsoft::WRL::ComPtr<ID3D12Resource> m_d3dTexture;
     D3D12_RESOURCE_STATES m_d3dCurrentState = D3D12_RESOURCE_STATE_COMMON;
-    bool m_d3dIsExternal = false;        // true for wrapCanvasTexture.
+    bool m_d3dIsExternal = false; // true for wrapCanvasTexture.
+    // The state its owner expects an external texture back in after a pass.
+    D3D12_RESOURCE_STATES m_d3dExternalState = D3D12_RESOURCE_STATE_COMMON;
     ID3D12Device* m_d3dDevice = nullptr; // Weak ref.
     // ContextD3D12. Weak ref. actually used for barriers
     ContextD3D12* m_d3dOreContext = nullptr;

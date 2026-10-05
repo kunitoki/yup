@@ -49,9 +49,6 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compile (GpuDevice::Ptr
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
         case GpuPlatform::WebGPU:
             return yup_constructComputePipelineWebGPU (*ctx, source, workgroupSize);
-#elif YUP_RIVE_USE_DAWN
-        case GpuPlatform::WebGPU:
-            return yup_constructComputePipelineWebGPU (*ctx, source, workgroupSize);
 #endif
 
 #if YUP_RHI_USE_GL_COMPUTE

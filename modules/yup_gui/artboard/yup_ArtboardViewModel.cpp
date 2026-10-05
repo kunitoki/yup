@@ -56,6 +56,12 @@ ArtboardViewModel::PropertyType toPropertyType (rive::ViewModelProperty* propert
     if (property->is<rive::ViewModelPropertyAssetImage>())
         return ArtboardViewModel::PropertyType::assetImage;
 
+    if (property->is<rive::ViewModelPropertyAssetFont>())
+        return ArtboardViewModel::PropertyType::assetFont;
+
+    if (property->is<rive::ViewModelPropertyAssetBlob>())
+        return ArtboardViewModel::PropertyType::assetBlob;
+
     if (property->is<rive::ViewModelPropertyArtboard>())
         return ArtboardViewModel::PropertyType::artboard;
 

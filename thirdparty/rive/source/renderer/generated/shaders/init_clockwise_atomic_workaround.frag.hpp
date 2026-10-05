@@ -6,15 +6,15 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char init_clockwise_atomic_workaround_frag[] = R"===(#ifdef FB
-J1
-#ifndef K
-r0(Q2,g0);
+R1
+#ifndef W
+B0(K2,n0);
 #endif
-r0(R2,d0);K1 d5(IB){v0(d0,B0(H0(d0).x,.0,.0,1.));
-#ifndef K
-V3(H0(g0));
+B0(c3,m0);S1 z5(IB){y0(m0,I0(N0(m0).x,.0,.0,1.));
+#ifndef W
+n4(N0(n0));
 #else
-V3(B0(.0));
+n4(I0(.0));
 #endif
 }
 #endif

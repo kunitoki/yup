@@ -224,17 +224,11 @@
           "already_contains": "    glBindFramebuffer(GL_FRAMEBUFFER, pass->m_glFBO);\n\n    glDisable(GL_SCISSOR_TEST);",
           "replace": {
             "from": [
-              "    // Create an FBO for this render pass.",
-              "    glGenFramebuffers(1, &pass->m_glFBO);",
-              "    pass->m_ownsFBO = true;",
               "    glBindFramebuffer(GL_FRAMEBUFFER, pass->m_glFBO);",
               "",
               "    // Attach color targets."
             ],
             "to": [
-              "    // Create an FBO for this render pass.",
-              "    glGenFramebuffers(1, &pass->m_glFBO);",
-              "    pass->m_ownsFBO = true;",
               "    glBindFramebuffer(GL_FRAMEBUFFER, pass->m_glFBO);",
               "",
               "    glDisable(GL_SCISSOR_TEST);",
@@ -244,28 +238,49 @@
           }
         },
         {
-          "path": "source/renderer/ore/gl/ore_context_gl.cpp",
-          "note": "Ore GL render pass: force the color/depth/stencil write masks on before the clears — the host renderer may leave them disabled, which silently discards glClearBuffer* and leaves stale content in reused render targets (trails/ghosting)",
-          "already_contains": "    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);\n    glDepthMask(GL_TRUE);\n    glStencilMask(0xFF);",
+          "path": "include/rive/renderer/ore/ore_binding_map.hpp",
+          "note": "Ore BindingMap: expose the tooling-only construction and serialization API (push/finalize/toBlob) under RIVE_ORE_BINDING_MAP_TOOLS, since YUP builds binding maps at runtime from SPIR-V reflection",
+          "already_contains": "RIVE_ORE_BINDING_MAP_TOOLS",
+          "replace_all": true,
+          "replace": {
+            "from": "#ifdef WITH_RIVE_TOOLS",
+            "to": "#if defined(WITH_RIVE_TOOLS) || defined(RIVE_ORE_BINDING_MAP_TOOLS)"
+          }
+        },
+        {
+          "path": "source/renderer/ore/ore_binding_map.cpp",
+          "note": "Ore BindingMap: compile the tooling-only construction and serialization API under RIVE_ORE_BINDING_MAP_TOOLS",
+          "already_contains": "RIVE_ORE_BINDING_MAP_TOOLS",
+          "replace_all": true,
+          "replace": {
+            "from": "#ifdef WITH_RIVE_TOOLS",
+            "to": "#if defined(WITH_RIVE_TOOLS) || defined(RIVE_ORE_BINDING_MAP_TOOLS)"
+          }
+        },
+        {
+          "path": "source/file.cpp",
+          "note": "never attach the file watermark pre-roll, so artboards draw and animate from their first frame",
+          "already_contains": "    // YUP never plays the file watermark pre-roll.\n    return;",
           "replace": {
             "from": [
-              "    // Handle clear ops.",
-              "    for (uint32_t i = 0; i < desc.colorCount; ++i)"
+              "void File::attachWatermark(ArtboardInstance* instance,",
+              "                           const Artboard* source) const",
+              "{"
             ],
             "to": [
-              "    // Handle clear ops.",
-              "    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);",
-              "    glDepthMask(GL_TRUE);",
-              "    glStencilMask(0xFF);",
-              "",
-              "    for (uint32_t i = 0; i < desc.colorCount; ++i)"
+              "void File::attachWatermark(ArtboardInstance* instance,",
+              "                           const Artboard* source) const",
+              "{",
+              "    // YUP never plays the file watermark pre-roll.",
+              "    return;",
+              ""
             ]
           }
         },
         {
           "path": "source/renderer/draw.cpp",
-          "note": "PathDraw: a paint faded through modulateOpacity is not opaque - otherwise MSAA mode (WebGL2 without PLS) moves it into the unblended opaque prepass and it replaces the pixels below instead of blending",
-          "already_contains": "paint->getIsOpaque() && modulatedOpacity >= 1.0f",
+          "note": "PathDraw: a paint faded through modulateOpacity or a translucent modulateColor is not opaque - otherwise MSAA mode (WebGL2 without PLS) moves it into the unblended opaque prepass and it replaces the pixels below instead of blending",
+          "already_contains": "paint->getIsOpaque() && modulatedOpacity >= 1.0f && colorAlpha(modulatedColor) == 255",
           "replace": {
             "from": [
               "    if (paint->getIsOpaque())",
@@ -273,7 +288,7 @@
               "        m_drawContents |= gpu::DrawContents::opaquePaint;"
             ],
             "to": [
-              "    if (paint->getIsOpaque() && modulatedOpacity >= 1.0f)",
+              "    if (paint->getIsOpaque() && modulatedOpacity >= 1.0f && colorAlpha(modulatedColor) == 255)",
               "    {",
               "        m_drawContents |= gpu::DrawContents::opaquePaint;"
             ]
@@ -357,7 +372,12 @@
         ],
         "optional_targets": [
           "d3d"
-        ]
+        ],
+        "skipped_target_outputs": {
+          "d3d": [
+            "d3d/**"
+          ]
+        }
       }
     },
     {
@@ -747,11 +767,11 @@
         },
         {
           "path": "upstream/pngpriv.h",
-          "note": "add closing endif for PNGPRIV_H include guard",
+          "note": "add closing endif for PNGPRIV_H include guard at the end of the file (PNG_VERSION_INFO_ONLY closes twice, so anchor on the tail)",
           "already_contains": "#endif /* PNGPRIV_H */",
           "replace": {
-            "from": "#endif /* PNG_VERSION_INFO_ONLY */",
-            "to": "#endif /* PNG_VERSION_INFO_ONLY */\n\n#endif /* PNGPRIV_H */"
+            "from": "#ifdef __cplusplus\n}\n#endif\n\n#endif /* PNG_VERSION_INFO_ONLY */",
+            "to": "#ifdef __cplusplus\n}\n#endif\n\n#endif /* PNG_VERSION_INFO_ONLY */\n\n#endif /* PNGPRIV_H */"
           }
         }
       ]
@@ -799,8 +819,7 @@
           "to": "src",
           "include_globs": [
             "*.c",
-            "*.h",
-            "README"
+            "*.h"
           ],
           "exclude_globs": [
             "example.c",
@@ -837,6 +856,9 @@
       "insert_before": "#if __clang__",
       "root": "thirdparty/rive/source",
       "prefix": "source",
+      "search_roots": [
+        "thirdparty/rive/include"
+      ],
       "include_globs": [
         "**/*.c",
         "**/*.cc",
@@ -950,11 +972,9 @@
           "#include \"rive/math/mat2d.hpp\"",
           "#define graphics_roundf yup_rive_hit_test_graphics_roundf",
           "#define graphics_round yup_rive_hit_test_graphics_round",
-          "#define lerp yup_rive_hit_test_lerp",
           "#include \"source/math/hit_test.cpp\"",
           "#undef graphics_roundf",
-          "#undef graphics_round",
-          "#undef lerp"
+          "#undef graphics_round"
         ],
         "source/shapes/clipping_shape.cpp": [
           "#define identity yup_rive_clipping_shape_identity",
@@ -1072,7 +1092,11 @@
     },
     {
       "path": "thirdparty/luau/luau.cpp",
-      "validate_existing_includes": true
+      "validate_existing_includes": true,
+      "root": "thirdparty/luau/upstream/VM/src",
+      "include_globs": [
+        "*.cpp"
+      ]
     },
     {
       "path": "thirdparty/luau/luau_split.cpp",

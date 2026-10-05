@@ -40,7 +40,7 @@ class ViewModelInstanceValue : public ViewModelInstanceValueBase,
 private:
     ViewModelProperty* m_ViewModelProperty = nullptr;
     static std::string defaultName;
-    ValueFlags m_changeFlags;
+    ValueFlags m_changeFlags = ValueFlags::none;
     LazyVector<ViewModelInstanceValueDelegate*> m_delegates;
     LazyVector<ViewModelInstanceValueDelegate*> m_delegatesCopy;
     void registerSymbol();
@@ -82,9 +82,9 @@ public:
     void viewModelProperty(ViewModelProperty* value);
     ViewModelProperty* viewModelProperty();
     void viewModelInstance(ViewModelInstance* value);
-#ifdef WITH_RIVE_TOOLS
+    // Not tools-only: a scripted property wrapper keeps the instance that owns
+    // its value alive through this, in every build.
     ViewModelInstance* viewModelInstance() const { return m_viewModelInstance; }
-#endif
     void addDependent(ViewModelValueDependent* value);
     void removeDependent(ViewModelValueDependent* value);
     virtual void setRoot(rcp<ViewModelInstance> value);

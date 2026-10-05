@@ -36,8 +36,6 @@ std::unique_ptr<GpuDevice> yup_constructOpenGLGpuDevice (GpuDevice::Options);
 #endif
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
 std::unique_ptr<GpuDevice> yup_constructWebGPUGpuDevice (GpuDevice::Options);
-#elif YUP_RIVE_USE_DAWN
-std::unique_ptr<GpuDevice> yup_constructDawnGpuDevice (GpuDevice::Options);
 #endif
 
 //==============================================================================
@@ -74,10 +72,6 @@ GpuDevice::Ptr GpuDevice::create (GpuPlatform gpuApi, Options options)
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
         case GpuPlatform::WebGPU:
             ctx = yup_constructWebGPUGpuDevice (options);
-            break;
-#elif YUP_RIVE_USE_DAWN
-        case GpuPlatform::WebGPU:
-            ctx = yup_constructDawnGpuDevice (options);
             break;
 #endif
 

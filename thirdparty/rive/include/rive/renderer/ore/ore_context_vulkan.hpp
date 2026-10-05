@@ -5,13 +5,34 @@
 #pragma once
 
 #include "rive/renderer/ore/ore_context.hpp"
+#include "rive/renderer/vulkan/render_target_vulkan.hpp"
 #include "rive/renderer/vulkan/vulkan_context.hpp"
 #include <functional>
+#include <string>
 #include <utility>
+#include <vector>
 #include <vulkan/vulkan.h>
 
 namespace rive::ore
 {
+class TextureVulkan;
+
+// What a host exposes of a Vulkan target to scripts, hidden unless its format
+// is one Ore reports.
+inline Context::TargetDesc targetDescFor(const gpu::RenderTargetVulkan& target)
+{
+    switch (target.framebufferFormat())
+    {
+        case VK_FORMAT_R8G8B8A8_UNORM:
+        case VK_FORMAT_B8G8R8A8_UNORM:
+            return Context::TargetDesc::color8(target.width(),
+                                               target.height(),
+                                               target.framebufferFormat() ==
+                                                   VK_FORMAT_B8G8R8A8_UNORM);
+        default:
+            return {};
+    }
+}
 
 // Refcounted VkDescriptorPool. Dies in one shot when its last ref
 // (ContextVulkan or any BindGroupVulkan) is released.
@@ -90,7 +111,7 @@ public:
 
     rcp<Buffer> makeBuffer(const BufferDesc& desc) override;
     rcp<Texture> makeTexture(const TextureDesc& desc) override;
-    rcp<TextureView> makeTextureView(const TextureViewDesc& desc) override;
+    rcp<TextureView> makeTextureViewImpl(const TextureViewDesc& desc) override;
     rcp<Sampler> makeSampler(const SamplerDesc& desc) override;
     rcp<ShaderModule> makeShaderModule(const ShaderModuleDesc& desc) override;
     rcp<BindGroupLayout> makeBindGroupLayout(
@@ -108,6 +129,7 @@ public:
     void waitForGPU() override;
 
     rcp<TextureView> wrapCanvasTexture(gpu::RenderCanvas* canvas) override;
+    rcp<TextureView> wrapRenderTarget(gpu::RenderTarget*) override;
     rcp<TextureView> wrapRiveTexture(gpu::Texture* gpuTex,
                                      uint32_t width,
                                      uint32_t height) override;
@@ -131,6 +153,11 @@ private:
     ContextVulkan(const rcp<rive::gpu::VulkanContext> vk) :
         Context(vk), m_vk(vk)
     {}
+
+    rcp<TextureView> wrapTargetImage(gpu::RenderTarget*,
+                                     uint32_t width,
+                                     uint32_t height,
+                                     VkImageLayout layout);
 
     const rcp<rive::gpu::VulkanContext> m_vk;
 
@@ -190,19 +217,28 @@ private:
     struct VkPendingImageTransition
     {
         rcp<Texture> texture;
-        VkImageAspectFlags aspectMask;
-        VkImageLayout oldLayout;
+        VkImageSubresourceRange range;
         VkImageLayout newLayout;
     };
     std::vector<VkPendingImageTransition> m_vkPendingInitialTransitions;
     void vkFlushPendingInitialTransitions();
+    // Textures borrowed from Rive, weak; each unregisters on destruction.
+    std::vector<TextureVulkan*> m_vkRiveWrapped;
+    void vkSyncRiveTextures();
+    // Loading a never written subresource reads undefined contents, and
+    // some ICDs then reject every fragment of the pass, so clear instead.
+    // Marks the view's range written either way.
+    static LoadOp firstUseLoadOp(TextureView* view, LoadOp loadOp);
+
     // Queue a transition for `texture` from its current m_vkLayout to
     // `newLayout` (typically SHADER_READ_ONLY_OPTIMAL for sampled use).
     // No-op when the texture is already in the target layout.  Safe to
     // call outside any active render pass; the transition is emitted by
-    // the next vkFlushPendingInitialTransitions().
+    // the next vkFlushPendingInitialTransitions(). m_vkLayout is tracked
+    // per image, so a range narrower than the whole image is only for a
+    // pass attachment, which finish() moves back with the same range.
     void vkQueueTransitionToLayout(Texture* texture,
-                                   VkImageAspectFlags aspectMask,
+                                   const VkImageSubresourceRange& range,
                                    VkImageLayout newLayout);
 
     // Deferred texture uploads: upload() can be called with no recording
@@ -219,6 +255,32 @@ private:
     std::vector<VkPendingTextureUpload> m_vkPendingTextureUploads;
     void vkQueuePendingTextureUpload(VkPendingTextureUpload pending);
     void vkFlushPendingTextureUploads();
+
+    // Per pass timestamps behind gpuProfiling(). Each frame writes one slot,
+    // read back once the frame is at or below safeFrameNumber; a frame that
+    // finds its slot still pending goes unmeasured rather than stalling.
+    static constexpr uint32_t kVkProfileSlots = 3;
+    static constexpr uint32_t kVkProfilePassesPerSlot = 64;
+    struct VkProfileSlot
+    {
+        uint64_t frameNumber = 0;
+        bool pending = false;
+        std::vector<std::string> labels;
+    };
+    VkQueryPool m_vkProfilePool = VK_NULL_HANDLE;
+    // Latched so a device without timestamps is not retried every frame.
+    bool m_vkProfileUnavailable = false;
+    bool m_vkProfileOverflowWarned = false;
+    uint64_t m_vkTimestampMask = UINT64_MAX;
+    VkProfileSlot m_vkProfileSlots[kVkProfileSlots];
+    // kVkProfileSlots when this frame has no slot.
+    uint32_t m_vkProfileSlot = kVkProfileSlots;
+    bool vkCreateProfilePool();
+    void vkBeginProfileFrame(const FrameDescriptor& desc);
+    void vkResolveProfileSlot(uint32_t index);
+    // Writes the pass's opening timestamp; returns its query index or
+    // UINT32_MAX when the pass goes unmeasured.
+    uint32_t vkBeginProfilePass(const RenderPassDesc& desc);
 };
 
 } // namespace rive::ore

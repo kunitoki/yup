@@ -26,14 +26,14 @@
 
     ID:                 rive
     vendor:             rive
-    version:            0.1.155
+    version:            0.1.512
     name:               Rive C++ is a runtime library for Rive.
     description:        Rive C++ is a runtime library for Rive, a real-time interactive design and animation tool.
     website:            https://github.com/rive-app/rive-runtime
     license:            MIT
 
     dependencies:       rive_decoders harfbuzz sheenbidi_library yoga_library libhydrogen luau glad
-    defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1 WITH_RIVE_SCRIPTING=1 RIVE_DECODERS=1 RIVE_CANVAS=1 RIVE_LUAU=1 RIVE_ORE=1
+    defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1 WITH_RIVE_SCRIPTING=1 WITH_RIVE_SCRIPTING_LUAU=1 RIVE_DECODERS=1 RIVE_CANVAS=1 RIVE_LUAU=1 RIVE_ORE=1 RIVE_ORE_BINDING_MAP_TOOLS=1
     searchpaths:        include source source/renderer source/renderer/generated/shaders
     appleFrameworks:    CoreText Metal QuartzCore
     appleDefines:       ORE_BACKEND_METAL=1 RIVE_OBJC_EXCEPTIONS=1
@@ -74,13 +74,6 @@
 */
 #ifndef YUP_RIVE_USE_OPENGL
 #define YUP_RIVE_USE_OPENGL 1
-#endif
-
-/** Config: YUP_RIVE_USE_DAWN
-    Enables the use of the Dawn renderer on platform that support it.
-*/
-#ifndef YUP_RIVE_USE_DAWN
-#define YUP_RIVE_USE_DAWN 0
 #endif
 
 //==============================================================================
@@ -130,12 +123,6 @@
 
 #if !YUP_RIVE_USE_OPENGL
 #undef ORE_BACKEND_GL
-#endif
-
-#if YUP_RIVE_USE_DAWN
-#if !defined(RIVE_DAWN)
-#define RIVE_DAWN 1
-#endif
 #endif
 
 //==============================================================================

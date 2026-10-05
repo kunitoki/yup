@@ -5,9 +5,9 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char pls_load_store_ext[] = R"===(#ifdef CB
+const char pls_load_store_ext[] = R"===(#ifdef BB
 void main(){gl_Position=vec4(mix(vec2(-1,1),vec2(1,-1),equal(gl_VertexID&ivec2(1,2),ivec2(0))),0,1);
-#ifdef JC
+#ifdef MC
 gl_Position.y=-gl_Position.y;
 #endif
 }
@@ -19,55 +19,55 @@ gl_Position.y=-gl_Position.y;
 #else
 #extension GL_EXT_shader_framebuffer_fetch:require
 #endif
-#ifdef JE
+#ifdef XE
 #if __VERSION__>=310
-layout(binding=0,std140)uniform mi{uniform highp vec4 Fg;}Gg;
+layout(binding=0,std140) uniform Vj{uniform highp vec4 di;}ei;
 #else
-uniform mediump vec4 KE;
+uniform mediump vec4 YE;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
-#ifdef SD
-__pixel_local_inEXT n1
+#ifdef EE
+__pixel_local_inEXT a2
 #else
-__pixel_local_outEXT n1
+__pixel_local_outEXT a2
 #endif
-{layout(rgba8)mediump vec4 g0;layout(r32ui)highp uint d0;layout(rgba8)mediump vec4 g4;layout(r32ui)highp uint H7;};
+{layout(rgba8) mediump vec4 n0;layout(r32ui) highp uint m0;layout(rgba8) mediump vec4 B4;layout(r32ui) highp uint R7;};
 #ifndef GL_ARM_shader_framebuffer_fetch
-#ifdef LE
-layout(location=0)inout mediump vec4 Na;
+#ifdef ZE
+layout(location=0) inout mediump vec4 xb;
 #endif
 #endif
-#ifdef SD
-layout(location=0)out mediump vec4 Na;
+#ifdef EE
+layout(location=0) out mediump vec4 xb;
 #endif
 void main(){
-#ifdef JE
+#ifdef XE
 #if __VERSION__>=310
-g0=Gg.Fg;
+n0=ei.di;
 #else
-g0=KE;
+n0=YE;
 #endif
 #endif
-#ifdef LE
+#ifdef ZE
 #ifdef GL_ARM_shader_framebuffer_fetch
-g0=gl_LastFragColorARM;
+n0=gl_LastFragColorARM;
 #else
-g0=Na;
+n0=xb;
 #endif
 #endif
-#ifdef TD
-H7=0u;
+#ifdef FE
+R7=0u;
 #endif
-#ifdef JF
-d0=0u;
+#ifdef XF
+m0=0u;
 #endif
-#ifdef SD
-Na=g0;
+#ifdef EE
+xb=n0;
 #endif
 }
 #else
-layout(location=0)out mediump vec4 Hg;void main(){Hg=vec4(0,1,0,1);}
+layout(location=0) out mediump vec4 fi;void main(){fi=vec4(0,1,0,1);}
 #endif
 #endif
 )===";

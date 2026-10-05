@@ -31,6 +31,11 @@ struct GpuFrame::Impl
     uint64_t generation = 0;
     bool submitted = false;
     bool released = false;
+
+    /** The ore pass currently open in this frame. Ore no longer finishes a previous pass by
+        itself, and Metal and D3D12 allow one open encoder at a time. */
+    rive::ore::RenderPass* openPass = nullptr;
+
     std::vector<rive::rcp<rive::ore::Buffer>> liveBuffers;
     std::vector<rive::rcp<rive::ore::TextureView>> liveViews;
     std::vector<rive::rcp<rive::ore::Sampler>> liveSamplers;
@@ -181,7 +186,8 @@ bool GpuFrame::submit()
     if (i == nullptr || i->oreCtx == nullptr || i->submitted)
         return false;
 
-    i->oreCtx->finishActiveRenderPass();
+    if (i->openPass != nullptr)
+        i->openPass->finish();
 
     i->oreCtx->endFrame();
     i->submitted = true;

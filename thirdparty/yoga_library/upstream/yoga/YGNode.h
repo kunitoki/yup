@@ -130,6 +130,24 @@ public:
 
   const YGStyle& getStyle() const { return style_; }
 
+  // rive: yoga 3.x-style aliases used by the grid backport (#1894)
+  const YGStyle& style() { return style_; }
+  const YGStyle& style() const { return style_; }
+  const YGVector& getLayoutChildren() const { return children_; }
+  void processDimensions() { resolveDimension(); }
+  bool hasDefiniteLength(YGDimension dimension, float ownerSize);
+  YGFloatOptional getResolvedDimension(
+      YGDirection direction,
+      YGDimension dimension,
+      float referenceLength,
+      float ownerWidth) const;
+  float relativePosition(
+      YGFlexDirection axis,
+      YGDirection direction,
+      float axisSize) const;
+  // 2.x has no contain/paint containment; grid treats it as never set
+  bool alwaysFormsContainingBlock() const { return false; }
+
   // For Performance reasons passing as reference.
   YGLayout& getLayout() { return layout_; }
 

@@ -719,3 +719,75 @@ TEST_F (ViewModelLabSchemaTests, EveryAuthoredInstanceClonesUnderItsSchemaName)
         }
     }
 }
+
+//==============================================================================
+// ArtboardViewModel asset property types against tests/data/rive/viewmodel-assets.riv
+//
+// viewmodel-assets.riv declares one "Assets" ViewModel with an image, a font and
+// a blob asset property, in that order.
+//==============================================================================
+
+class ViewModelAssetsSchemaTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        const auto file = findTestFile();
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/viewmodel-assets.riv";
+            return;
+        }
+
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+    }
+
+    static File findTestFile()
+    {
+        auto dir = File (__FILE__)
+                       .getParentDirectory()
+                       .getParentDirectory()
+                       .getChildFile ("data")
+                       .getChildFile ("rive");
+
+        if (dir.exists())
+            return dir.getChildFile ("viewmodel-assets.riv");
+
+        dir = File::getCurrentWorkingDirectory()
+                  .getParentDirectory()
+                  .getParentDirectory()
+                  .getParentDirectory()
+                  .getChildFile ("tests")
+                  .getChildFile ("data")
+                  .getChildFile ("rive");
+
+        if (dir.exists())
+            return dir.getChildFile ("viewmodel-assets.riv");
+
+        return File ("/data/rive/viewmodel-assets.riv");
+    }
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+};
+
+TEST_F (ViewModelAssetsSchemaTests, AssetPropertiesReportTheirAssetKind)
+{
+    auto viewModel = artboardFile->getArtboardViewModel ("Assets");
+    ASSERT_NE (nullptr, viewModel.get());
+    ASSERT_EQ (3, viewModel->getNumProperties());
+
+    EXPECT_EQ (ArtboardViewModel::PropertyType::assetImage, viewModel->getPropertyAt (0).type);
+    EXPECT_EQ (ArtboardViewModel::PropertyType::assetFont, viewModel->getPropertyAt (1).type);
+    EXPECT_EQ (ArtboardViewModel::PropertyType::assetBlob, viewModel->getPropertyAt (2).type);
+
+    EXPECT_EQ (ArtboardViewModel::PropertyType::assetFont, viewModel->getProperty ("font").type);
+    EXPECT_EQ (ArtboardViewModel::PropertyType::assetBlob, viewModel->getProperty ("blob").type);
+}

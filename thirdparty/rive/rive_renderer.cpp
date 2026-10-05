@@ -59,6 +59,10 @@
 #undef readU32LE
 #include "source/renderer/ore/ore_bind_group_layout.cpp"
 #include "source/renderer/ore/ore_binding_map.cpp"
+#include "source/renderer/deferred_cmd.cpp"
+#include "source/renderer/deferred_host.cpp"
+#include "source/renderer/ore/ore_context.cpp"
+#include "source/renderer/triangulation_controller.cpp"
 // END YUP GENERATED RIVE RENDERER INCLUDES
 
 #if __clang__

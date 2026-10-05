@@ -1,27 +1,27 @@
 #ifdef FRAGMENT
-J1
+R1
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-r0(Q2,g0);
+B0(K2,n0);
 #endif
-rd(R2,d0);K1
+he(c3,m0);S1
 #ifdef NESTED_CLIP_UPDATE_ONLY
-N3 Ea(ga,Yd,S0);O3
+f4 mb(Na,Te,V0);g4
 #endif
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-#define d5 o2
-#define V3(p5) l1=p5;l3
+#define z5 z2
+#define n4(J5) K1=J5;z3
 #else
-#define d5 m1
-#define V3(p5) v0(g0,p5);U1;
+#define z5 T1
+#define n4(J5) y0(n0,J5);h2;
 #endif
-d5(IB){
+z5(IB){
 #ifdef DRAW_INTERIOR_TRIANGLES
-B(j1,d);d o0=j1;
+q(m1,d);d A0=m1;
 #else
-B(I,z2);d o0=I.x;
+q(S,G2);d A0=S.x;
 #endif
 #ifdef NESTED_CLIP_UPDATE_ONLY
-if(NESTED_CLIP_UPDATE_ONLY){B(e3,W0);B(j4,c);uint N7=e3.y;uint T1=e3.x+L8(W0(floor(j4)),N7);uint p1=pd(S0,T1);d db;if(o0>=1.&&(p1<k.W1||p1>=(k.W1|j5))){db=.0;}else{d ae=o0;d g9=o0;if(p1<k.W1){uint O7=k.W1|(j5+q7(abs(o0)));uint f3=A7(S0,T1,O7);if(f3<=k.W1){g9=.0;}else if(f3<O7){g9=Aa(f3);}}if(g9>.0){uint eb=Fa(S0,T1,q7(abs(g9)));ae=Aa(eb)+o0;}db=1.-ae;}v0(d0,B0(db));V3(B0(1.))}else
+if(NESTED_CLIP_UPDATE_ONLY){q(q3,O0);q(F4,c);uint a8=q3.y;uint d2=q3.x+d9(O0(floor(F4)),a8);uint z1=fe(V0,d2);d Vb;if(A0>=1.&&(z1<j.j2||z1>=(j.j2|C5))){Vb=.0;}else{d Ve=A0;d C9=A0;if(z1<j.j2){uint c8=j.j2|(C5+G7(abs(A0)));uint r3=M7(V0,d2,c8);if(r3<=j.j2){C9=.0;}else if(r3<c8){C9=ib(r3);}}if(C9>.0){uint Wb=nb(V0,d2,G7(abs(C9)));Ve=ib(Wb)+A0;}Vb=1.-Ve;}y0(m0,I0(Vb));n4(I0(1.))}else
 #endif
-{v0(d0,B0(o0));V3(B0(.0))}}
+{y0(m0,I0(A0));n4(I0(.0))}}
 #endif

@@ -1,6 +1,7 @@
 #include "rive/shapes/paint/shape_paint.hpp"
 #include "rive/shapes/shape_paint_container.hpp"
 #include "rive/shapes/paint/feather.hpp"
+#include "rive/shapes/paint/paint_image.hpp"
 #include "rive/artboard.hpp"
 #include "rive/transform_component.hpp"
 #include "rive/factory.hpp"
@@ -11,6 +12,11 @@ using namespace rive;
 
 StatusCode ShapePaint::onAddedClean(CoreContext* context)
 {
+    // Every child has registered with us by now (onAddedDirty runs for all
+    // objects first).
+    m_hasPaintImage = firstChild<PaintImage>() != nullptr;
+    m_isFill = is<Fill>();
+
     auto container = ShapePaintContainer::from(parent());
     if (container == nullptr)
     {
@@ -24,7 +30,35 @@ StatusCode ShapePaint::onAddedClean(CoreContext* context)
         container->addPaint(this);
     }
 
+#ifdef WITH_RIVE_EDITOR
+    // Edit-time: Stroke / Fill::update derefs `m_RenderPaint` which
+    // is set by `initRenderPaint` only if a child mutator
+    // (SolidColor / LinearGradient) successfully initialized. Coop
+    // can deliver duplicate or conflicting mutators where all but
+    // the first return InvalidObject from `initPaintMutator`,
+    // leaving `m_RenderPaint` null. Signal the dispatcher to cull
+    // this ShapePaint so it doesn't enter `m_DependencyOrder` and
+    // crash inside `update()`.
+    if (m_RenderPaint == nullptr)
+    {
+        return StatusCode::InvalidObject;
+    }
+#endif
+
     return StatusCode::Ok;
+}
+
+void ShapePaint::renderOpacity(float value)
+{
+    m_PaintMutator->renderOpacity(value);
+    // A transparent shape usually defers its path too, and rebuilding that
+    // path when the shape shows is what brings Path dirt back here. Shapes
+    // that never defer (skinned ones, or ones following a path) build while
+    // hidden, so nothing else would re-run the effects this paint skipped.
+    if (m_effectsDeferred && value != 0)
+    {
+        addDirt(ComponentDirt::Path);
+    }
 }
 
 void ShapePaint::update(ComponentDirt value)
@@ -34,6 +68,15 @@ void ShapePaint::update(ComponentDirt value)
     if (hasDirt(value, ComponentDirt::Path) && shapeEffects->size() > 0)
     {
         auto container = ShapePaintContainer::from(parent());
+        // Hidden paints are re-invalidated when shown (see renderOpacity), so
+        // measuring now is wasted, unless a clip still reads the result.
+        if (renderOpacity() == 0 &&
+            (container->pathFlags() & PathFlags::clipping) == PathFlags::none)
+        {
+            m_effectsDeferred = true;
+            return;
+        }
+        m_effectsDeferred = false;
         auto path = pickPath(container);
         for (auto& effect : *shapeEffects)
         {
@@ -57,18 +100,31 @@ RenderPaint* ShapePaint::initRenderPaint(ShapePaintMutator* mutator)
     return m_RenderPaint.get();
 }
 
-void ShapePaint::blendMode(BlendMode parentValue)
+void ShapePaint::blendMode(BlendMode parentValue, uint8_t parentAdditiveAmount)
 {
     assert(m_RenderPaint != nullptr);
     // 127 means inherit
-    if (blendModeValue() == 127)
+    const bool inherits = blendModeValue() == 127;
+    const BlendMode mode = inherits ? parentValue : (BlendMode)blendModeValue();
+    const uint8_t amount = inherits ? parentAdditiveAmount : additiveAmount();
+
+    m_RenderPaint->blendMode(mode);
+    // Only additive is parameterized; every other mode ignores additiveness
+    // anyway, but keep it at 0 so a stale value can never leak through.
+    m_RenderPaint->additiveness(additivenessFor(mode, amount));
+}
+
+void ShapePaint::additiveAmountChanged()
+{
+    // additiveAmount animates and data binds, so it can change long after
+    // buildDependencies() did the initial sync. A paint set to inherit takes
+    // its amount from the parent drawable, which pushes it down itself.
+    if (m_RenderPaint == nullptr || inheritsBlendMode())
     {
-        m_RenderPaint->blendMode(parentValue);
+        return;
     }
-    else
-    {
-        m_RenderPaint->blendMode((BlendMode)blendModeValue());
-    }
+    m_RenderPaint->blendMode(blendMode());
+    m_RenderPaint->additiveness(additivenessFor(blendMode(), additiveAmount()));
 }
 
 void ShapePaint::feather(Feather* feather) { m_feather = feather; }
@@ -89,7 +145,7 @@ void ShapePaint::draw(Renderer* renderer,
     if (m_feather != nullptr)
     {
         bool offsetInArtboard = m_feather->space() == TransformSpace::world;
-        if (offsetInArtboard && !m_feather->inner())
+        if (offsetInArtboard && !m_feather->isInner())
         {
             if (m_feather->offsetX() != 0 || m_feather->offsetY() != 0)
             {
@@ -120,10 +176,16 @@ void ShapePaint::draw(Renderer* renderer,
 
     if (m_feather != nullptr)
     {
-        if (m_feather->inner())
+        if (m_feather->isInner())
         {
             if (m_feather->innerPath() == nullptr)
             {
+                // Bail out, but never leave the renderer's state stack
+                // unbalanced: we may already have saved above.
+                if (saved && needsSaveOperation)
+                {
+                    renderer->restore();
+                }
                 return;
             }
             // When a path effect is active, the inner path and clip must be
@@ -158,7 +220,7 @@ void ShapePaint::draw(Renderer* renderer,
 
         // If we're offseting in world space, apply the offset last.
         if (m_feather->space() != TransformSpace::world &&
-            !m_feather->inner() &&
+            !m_feather->isInner() &&
             (m_feather->offsetX() != 0 || m_feather->offsetY() != 0))
         {
             if (!saved)
@@ -174,9 +236,22 @@ void ShapePaint::draw(Renderer* renderer,
     if (renderPath != nullptr)
     {
         // Ugh, can't we make fillRule part of the Paint?
-        if (!usePathFillRule && is<Fill>())
+#ifdef WITH_RIVE_EDITOR
+        const bool isFill = is<Fill>();
+#else
+        const bool isFill = m_isFill;
+#endif
+        if (!usePathFillRule && isFill)
         {
             renderPath->fillRule((FillRule)as<Fill>()->fillRule());
+        }
+
+        // Modulate this paint with the (optional) PaintImage child, fit to the
+        // shape's local bounds. Skipped when drawing with an external override
+        // paint. The child is discovered by type rather than cached.
+        if (overridePaint == nullptr)
+        {
+            applyModulatedImage(shapePaintPath);
         }
 
         renderer->drawPath(renderPath,
@@ -190,19 +265,50 @@ void ShapePaint::draw(Renderer* renderer,
     }
 }
 
+void ShapePaint::applyModulatedImage(const ShapePaintPath* path)
+{
+#ifdef WITH_RIVE_EDITOR
+    PaintImage* image = firstChild<PaintImage>();
+#else
+    PaintImage* image = m_hasPaintImage ? firstChild<PaintImage>() : nullptr;
+#endif
+    if (image != nullptr &&
+        image->applyTo(renderPaint(), path->rawPath()->bounds()))
+    {
+        m_hasModulatedImage = true;
+        return;
+    }
+    if (m_hasModulatedImage)
+    {
+        // No image to modulate with any more -- the child was removed, its
+        // asset cleared, or the replacement hasn't decoded yet. The RenderPaint
+        // persists across draws, so drop the stale texture explicitly.
+        renderPaint()->modulatedImage(nullptr,
+                                      ImageSampler::LinearClamp(),
+                                      Mat2D());
+        m_hasModulatedImage = false;
+    }
+}
+
 void ShapePaint::invalidateEffects(StrokeEffect* invalidatingEffect)
 {
     EffectsContainer::invalidateEffects(invalidatingEffect);
     if (m_feather != nullptr)
     {
         m_feather->markEffectPathDirty();
+        // The path we paint changed; an inner feather derives its geometry
+        // from that path so it has to rebuild.
+        if (m_feather->isInner())
+        {
+            m_feather->addDirt(ComponentDirt::Path);
+        }
     }
     invalidateRendering();
 }
 
 void ShapePaint::invalidateEffects() { invalidateEffects(nullptr); }
 
-void ShapePaint::invalidateRendering() { addDirt(ComponentDirt::Path); }
+void ShapePaint::invalidateRendering() { addDirt(ComponentDirt::Path, true); }
 
 void ShapePaint::addStrokeEffect(StrokeEffect* effect)
 {

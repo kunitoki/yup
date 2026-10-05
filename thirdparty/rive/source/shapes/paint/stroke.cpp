@@ -2,6 +2,7 @@
 #include "rive/shapes/paint/stroke.hpp"
 #include "rive/shapes/paint/stroke_cap.hpp"
 #include "rive/shapes/paint/stroke_join.hpp"
+#include "rive/shapes/paint/stroke_position.hpp"
 
 using namespace rive;
 
@@ -16,6 +17,7 @@ RenderPaint* Stroke::initRenderPaint(ShapePaintMutator* mutator)
     renderPaint->thickness(thickness());
     renderPaint->cap((StrokeCap)cap());
     renderPaint->join((StrokeJoin)join());
+    renderPaint->strokePosition(strokePosition());
     return renderPaint;
 }
 
@@ -25,6 +27,7 @@ void Stroke::applyTo(RenderPaint* renderPaint, float opacityModifier)
     renderPaint->thickness(thickness());
     renderPaint->cap((StrokeCap)cap());
     renderPaint->join((StrokeJoin)join());
+    renderPaint->strokePosition(strokePosition());
     renderPaint->shader(nullptr);
     m_PaintMutator->applyTo(renderPaint, opacityModifier);
 }
@@ -40,21 +43,59 @@ void Stroke::capChanged() { addDirt(ComponentDirt::Paint); }
 
 void Stroke::joinChanged() { addDirt(ComponentDirt::Paint); }
 
+void Stroke::positionChanged() { addDirt(ComponentDirt::Paint); }
+
+StrokePosition Stroke::strokePosition() const
+{
+    // An unknown value (e.g. from a newer file) draws centered, which is also
+    // what renderers without stroke position support do.
+    if (position() > (uint8_t)StrokePosition::outside)
+    {
+        return StrokePosition::center;
+    }
+    return (StrokePosition)position();
+}
+
 void Stroke::update(ComponentDirt value)
 {
     Super::update(value);
     if (hasDirt(value, ComponentDirt::Paint))
     {
+#ifdef WITH_RIVE_EDITOR
+        // Same hazard as LinearGradient::update — coop hydration order
+        // can leave a Stroke in m_DependencyOrder with m_RenderPaint
+        // null (mutator child arrived in a later batch, or all
+        // initPaintMutator attempts returned InvalidObject because of
+        // duplicate mutators in a malformed file). Pass 4-cull only
+        // runs on the newly-hydrated batch, so a previously-orphaned
+        // Stroke whose ancestor chain re-resolves later can re-enter
+        // the live update set with m_RenderPaint still null.
+        // Mirrors the Dart editor's late-init nullability — see the
+        // long-form note in linear_gradient.cpp.
+        if (m_RenderPaint == nullptr)
+        {
+            return;
+        }
+#else
         assert(m_RenderPaint != nullptr);
+#endif
         m_RenderPaint->thickness(thickness());
         m_RenderPaint->cap((StrokeCap)cap());
         m_RenderPaint->join((StrokeJoin)join());
+        m_RenderPaint->strokePosition(strokePosition());
     }
 }
 
 void Stroke::invalidateRendering()
 {
+#ifdef WITH_RIVE_EDITOR
+    if (m_RenderPaint == nullptr)
+    {
+        return;
+    }
+#else
     assert(m_RenderPaint != nullptr);
+#endif
     m_RenderPaint->invalidateStroke();
     Super::invalidateRendering();
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "rive/renderer/ore/ore_texture.hpp"
+#include "rive/renderer/rive_render_image.hpp"
 
 namespace rive::ore
 {
@@ -10,7 +11,7 @@ class TextureGL : public LITE_RTTI_OVERRIDE(Texture, TextureGL)
 public:
     TextureGL(const TextureDesc& desc) : lite_rtti_override(desc) {}
     ~TextureGL() override;
-    void upload(const TextureDataDesc& data) override;
+    void uploadImpl(const TextureDataDesc& data) override;
 
 private:
     friend class ContextGL;
