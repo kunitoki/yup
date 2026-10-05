@@ -163,9 +163,45 @@ artboard->onPropertyChanged = [] (yup::Artboard&,
 };
 ```
 
-The queue is drained after every advance and after every pointer interaction.
-Only genuine changes are reported: the artboard remembers the last value seen
-per event and skips repeats.
+The queue is drained after every advance and after every pointer, wheel and
+keyboard interaction. Only genuine changes are reported: the artboard remembers
+the last value seen per event and skips repeats.
+
+## Input
+
+The artboard forwards its mouse, touch, wheel and keyboard input to the state
+machine, so scroll views, focusable nodes and text fields authored in Rive work
+without host code.
+
+- **Buttons.** Left, right and middle reach Rive as the primary, secondary and
+  middle pointer buttons. Plain listeners only react to the primary button, so a
+  right click never fires a click listener authored for the left one.
+- **Touch.** Each finger is its own pointer, so two fingers can press two
+  buttons at once.
+- **Wheel.** Turning the wheel over a scroll view scrolls it, 30 pixels per
+  notch. Trackpads scroll the same way, without momentum or rubber banding.
+- **Keyboard focus.** When the file has focusable nodes, the artboard wants
+  keyboard focus and takes it on click. Tab and Shift+Tab move Rive's focus
+  unless a keyboard listener in the file handles them; other keys go to the
+  focused node. To keep the keyboard for the host, opt out after loading:
+
+  ```cpp
+  artboard->setFile (file);
+  artboard->setWantsKeyboardFocus (false);
+  ```
+
+- **Text fields.** A focused Rive text field receives typed text, including
+  input method commits, and asks for the on-screen keyboard on mobile.
+  Cmd/Ctrl+C, X and V copy, cut and paste through the system clipboard. Select
+  all, undo and redo are handled by Rive, which expects Ctrl on Windows and
+  Cmd (the Super key on Linux) elsewhere.
+- **Focus loss.** When the artboard loses keyboard focus, for example when
+  focus moves to another component or the window is deactivated, Rive's focus
+  is cleared too.
+
+A focused artboard receives every wheel event of its window, wherever the
+pointer is, and ignores those outside its bounds, so they are not passed on to
+the component under the pointer.
 
 ## Nodes
 

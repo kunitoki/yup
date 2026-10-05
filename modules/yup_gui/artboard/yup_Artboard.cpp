@@ -131,6 +131,49 @@ std::optional<rive::AABB> collectNodeWorldBounds (rive::Component* node)
 
     return found ? std::optional<rive::AABB> (result) : std::nullopt;
 }
+
+// Matches TextEditor::mouseWheel, so a notch scrolls the same distance everywhere.
+constexpr float wheelPixelsPerNotch = 30.0f;
+
+// YUP key codes and rive::Key are both GLFW key codes.
+static_assert (KeyPress::spaceKey == static_cast<int> (rive::Key::space));
+static_assert (KeyPress::textAKey == static_cast<int> (rive::Key::a));
+static_assert (KeyPress::tabKey == static_cast<int> (rive::Key::tab));
+static_assert (KeyPress::f1Key == static_cast<int> (rive::Key::f1));
+static_assert (KeyPress::kp0Key == static_cast<int> (rive::Key::kp0));
+
+std::optional<rive::Key> toRiveKey (int keyCode)
+{
+    const auto isWithin = [keyCode] (int first, int last)
+    {
+        return keyCode >= first && keyCode <= last;
+    };
+
+    if (isWithin (32, 96) || isWithin (161, 162) || isWithin (256, 269) || isWithin (280, 284)
+        || isWithin (290, 314) || isWithin (320, 336) || isWithin (340, 348))
+        return static_cast<rive::Key> (keyCode);
+
+    return std::nullopt;
+}
+
+rive::KeyModifiers toRiveModifiers (const KeyModifiers& modifiers)
+{
+    auto result = rive::KeyModifiers::none;
+
+    if (modifiers.isShiftDown())
+        result = result | rive::KeyModifiers::shift;
+
+    if (modifiers.isControlDown())
+        result = result | rive::KeyModifiers::ctrl;
+
+    if (modifiers.isAltDown())
+        result = result | rive::KeyModifiers::alt;
+
+    if (modifiers.isCommandDown())
+        result = result | rive::KeyModifiers::meta;
+
+    return result;
+}
 } // namespace
 
 //==============================================================================
@@ -149,6 +192,9 @@ Artboard::Artboard (StringRef componentID, std::shared_ptr<ArtboardFile> file)
 
 Artboard::~Artboard()
 {
+    // The base destructors can no longer reach the native component.
+    relinquishTextInput();
+
     detachAllComponents();
 }
 
@@ -174,6 +220,8 @@ void Artboard::clear()
     boundViewModelInstance = nullptr;
 
     eventProperties.clear();
+    pressedMouseButtons = 0;
+    pressedKeys.clear();
     viewTransform = rive::Mat2D();
     selectedArtboardName.clear();
 
@@ -185,6 +233,13 @@ void Artboard::clear()
 
     scene.reset();
     artboard.reset();
+
+    // hasKeyboardFocus() reads false once the flag is off, so leave first.
+    if (hasKeyboardFocus())
+        leaveKeyboardFocus();
+
+    setWantsKeyboardFocus (false);
+    relinquishTextInput();
 }
 
 //==============================================================================
@@ -723,41 +778,45 @@ void Artboard::contentScaleChanged (float dpiScale)
 
 void Artboard::mouseEnter (const MouseEvent& event)
 {
-    if (scene == nullptr)
+    // A finger has no hover: it only reaches Rive between its mouseDown and mouseUp.
+    if (scene == nullptr || event.isTouch())
         return;
 
     auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerMove (rive::Vec2D (x, y));
+    scene->pointerMove (rive::Vec2D (x, y), 0.0f, pointerIdFor (event));
 
-    pullEventsFromStateMachines();
-
-    repaint();
+    afterInput();
 }
 
 void Artboard::mouseExit (const MouseEvent& event)
 {
-    if (scene == nullptr)
+    if (scene == nullptr || event.isTouch())
         return;
 
     auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerExit (rive::Vec2D (x, y));
+    scene->pointerExit (rive::Vec2D (x, y), pointerIdFor (event));
 
-    pullEventsFromStateMachines();
-
-    repaint();
+    afterInput();
 }
 
 void Artboard::mouseDown (const MouseEvent& event)
 {
-    if (scene == nullptr || ! event.isLeftButtonDown())
+    if (scene == nullptr)
         return;
 
-    auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerDown (rive::Vec2D (x, y));
+    if (event.isTouch())
+    {
+        auto [x, y] = transformPoint (event.getPosition());
+        scene->pointerDown (rive::Vec2D (x, y), pointerIdFor (event), rive::PointerButton::primary);
+    }
+    else
+    {
+        const int buttons = event.getButtons();
+        forwardButtons (event, buttons & ~pressedMouseButtons, true);
+        pressedMouseButtons = buttons;
+    }
 
-    pullEventsFromStateMachines();
-
-    repaint();
+    afterInput();
 }
 
 void Artboard::mouseUp (const MouseEvent& event)
@@ -765,38 +824,181 @@ void Artboard::mouseUp (const MouseEvent& event)
     if (scene == nullptr)
         return;
 
-    auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerUp (rive::Vec2D (x, y));
+    if (event.isTouch())
+    {
+        // Touches never get a mouseExit, and Rive only frees a pointer's state on exit.
+        auto [x, y] = transformPoint (event.getPosition());
+        scene->pointerUp (rive::Vec2D (x, y), pointerIdFor (event), rive::PointerButton::primary);
+        scene->pointerExit (rive::Vec2D (x, y), pointerIdFor (event));
+    }
+    else
+    {
+        // The event reports the buttons still held after the release.
+        const int buttons = event.getButtons();
+        forwardButtons (event, pressedMouseButtons & ~buttons, false);
+        pressedMouseButtons = buttons;
+    }
 
-    pullEventsFromStateMachines();
-
-    repaint();
+    afterInput();
 }
 
 void Artboard::mouseMove (const MouseEvent& event)
+{
+    if (scene == nullptr || event.isTouch())
+        return;
+
+    // A move carries every button still held, so a release we never saw is dropped here.
+    pressedMouseButtons &= event.getButtons();
+
+    auto [x, y] = transformPoint (event.getPosition());
+    scene->pointerMove (rive::Vec2D (x, y), 0.0f, pointerIdFor (event));
+
+    afterInput();
+}
+
+void Artboard::mouseDrag (const MouseEvent& event)
 {
     if (scene == nullptr)
         return;
 
     auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerMove (rive::Vec2D (x, y));
+    scene->pointerMove (rive::Vec2D (x, y), 0.0f, pointerIdFor (event));
 
-    pullEventsFromStateMachines();
+    afterInput();
+}
+
+void Artboard::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+{
+    // A focused component gets the wheel wherever the pointer is.
+    if (scene == nullptr || ! getLocalBounds().contains (event.getPosition()))
+        return;
+
+    // Rive moves the content by the delta, so revealing later content is negative.
+    const auto position = event.getPosition();
+    const Point<float> delta (-wheelData.getDeltaX() * wheelPixelsPerNotch,
+                              wheelData.getDeltaY() * wheelPixelsPerNotch);
+
+    const auto artboardPosition = transformPoint (position);
+    const auto artboardDelta = transformPoint (position + delta) - artboardPosition;
+
+    rive::ScrollEvent scrollEvent;
+    scrollEvent.delta = rive::Vec2D (artboardDelta.getX(), artboardDelta.getY());
+
+    scene->pointerScroll (rive::Vec2D (artboardPosition.getX(), artboardPosition.getY()),
+                          scrollEvent,
+                          0.0f,
+                          pointerIdFor (event));
+
+    afterInput();
+}
+
+//==============================================================================
+
+void Artboard::keyDown (const KeyPress& key, const Point<float>&)
+{
+    if (stateMachine == nullptr)
+        return;
+
+    const auto keyCode = key.getKey();
+    const auto modifiers = key.getModifiers();
+
+    const bool isRepeat = pressedKeys.contains (keyCode);
+    if (! isRepeat)
+        pressedKeys.add (keyCode);
+
+    // Rive text fields have no access to the system clipboard. AltGr arrives as
+    // Ctrl+Alt and types letters on some layouts, so Alt rules a shortcut out.
+    const bool isClipboardShortcut = (modifiers.isControlDown() || modifiers.isCommandDown())
+                                  && ! modifiers.isAltDown()
+                                  && stateMachine->focusState().expectsKeyboardInput;
+
+    if (isClipboardShortcut && (keyCode == KeyPress::textCKey || keyCode == KeyPress::textXKey))
+    {
+        const String selection (stateMachine->selectedText());
+        if (selection.isNotEmpty())
+        {
+            SystemClipboard::copyTextToClipboard (selection);
+
+            if (keyCode == KeyPress::textXKey)
+                stateMachine->keyInput (rive::Key::backspace, rive::KeyModifiers::none, true, false);
+        }
+
+        afterInput();
+        return;
+    }
+
+    if (isClipboardShortcut && keyCode == KeyPress::textVKey)
+    {
+        stateMachine->textInput (SystemClipboard::getTextFromClipboard().toStdString());
+
+        afterInput();
+        return;
+    }
+
+    const auto riveKey = toRiveKey (keyCode);
+    if (! riveKey.has_value())
+        return;
+
+    const bool handled = stateMachine->keyInput (*riveKey, toRiveModifiers (modifiers), true, isRepeat);
+
+    if (! handled && keyCode == KeyPress::tabKey)
+    {
+        if (modifiers.isShiftDown())
+            stateMachine->focusPrevious();
+        else
+            stateMachine->focusNext();
+    }
+
+    afterInput();
+}
+
+void Artboard::keyUp (const KeyPress& key, const Point<float>&)
+{
+    pressedKeys.removeFirstMatchingValue (key.getKey());
+
+    if (stateMachine == nullptr)
+        return;
+
+    const auto riveKey = toRiveKey (key.getKey());
+    if (! riveKey.has_value())
+        return;
+
+    stateMachine->keyInput (*riveKey, toRiveModifiers (key.getModifiers()), false, false);
+
+    afterInput();
+}
+
+void Artboard::textInput (const String& text)
+{
+    if (stateMachine == nullptr)
+        return;
+
+    stateMachine->textInput (text.toStdString());
+
+    afterInput();
+}
+
+//==============================================================================
+
+void Artboard::focusGained()
+{
+    syncTextInput();
+}
+
+void Artboard::focusLost()
+{
+    if (stateMachine != nullptr)
+        stateMachine->clearFocus();
+
+    relinquishTextInput();
+    pressedKeys.clear();
 
     repaint();
 }
 
-void Artboard::mouseDrag (const MouseEvent& event)
+Rectangle<float> Artboard::getTextInputRect() const
 {
-    if (scene == nullptr || ! event.isLeftButtonDown())
-        return;
-
-    auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerMove (rive::Vec2D (x, y));
-
-    pullEventsFromStateMachines();
-
-    repaint();
+    return localToScreen (getLocalBounds());
 }
 
 //==============================================================================
@@ -850,6 +1052,8 @@ void Artboard::updateSceneFromFile()
     scene = std::move (currentScene);
 
     stateMachine = currentStateMachine;
+
+    setWantsKeyboardFocus (stateMachine != nullptr && stateMachine->hasFocusNodes());
 
     updateNodeBounds();
     repaint();
@@ -926,6 +1130,52 @@ Point<float> Artboard::transformPoint (Point<float> point) const
 {
     const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (point.getX(), point.getY());
     return { xy.x, xy.y };
+}
+
+int Artboard::pointerIdFor (const MouseEvent& event) const
+{
+    // The mouse is pointer 0, so it never shares a pointer with a finger.
+    return event.isTouch() ? event.getTouchIndex() + 1 : 0;
+}
+
+void Artboard::forwardButtons (const MouseEvent& event, int changedButtons, bool isDown)
+{
+    static constexpr std::pair<int, rive::PointerButton> buttonMap[] = {
+        { MouseEvent::leftButton, rive::PointerButton::primary },
+        { MouseEvent::rightButton, rive::PointerButton::secondary },
+        { MouseEvent::middleButton, rive::PointerButton::middle },
+    };
+
+    auto [x, y] = transformPoint (event.getPosition());
+
+    for (const auto& [button, riveButton] : buttonMap)
+    {
+        if ((changedButtons & button) == 0)
+            continue;
+
+        if (isDown)
+            scene->pointerDown (rive::Vec2D (x, y), pointerIdFor (event), riveButton);
+        else
+            scene->pointerUp (rive::Vec2D (x, y), pointerIdFor (event), riveButton);
+    }
+}
+
+void Artboard::syncTextInput()
+{
+    // Only a focused text field asks for the keyboard, so focusing a button never
+    // pops up an on-screen keyboard.
+    if (hasKeyboardFocus() && stateMachine != nullptr && stateMachine->focusState().expectsKeyboardInput)
+        requestTextInput();
+    else
+        relinquishTextInput();
+}
+
+void Artboard::afterInput()
+{
+    pullEventsFromStateMachines();
+    syncTextInput();
+
+    repaint();
 }
 
 //==============================================================================

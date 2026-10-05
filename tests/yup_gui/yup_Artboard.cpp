@@ -2639,3 +2639,328 @@ TEST_F (ArtboardLayoutTests, RefreshDisplayAdvancesUnlessPausingWhileHidden)
     EXPECT_TRUE (artboard->isPaused());
     EXPECT_NO_THROW (artboard->refreshDisplay (0.016));
 }
+
+//==============================================================================
+// Artboard input tests (require tests/data/rive/artboard-input.riv)
+//
+// artboard-input.riv's 400x400 "Input" artboard writes every reaction into its
+// `Input` view model: clicking "Button A" / "Button B" sets clickedA / clickedB,
+// focusing "First", "Second" or the text field sets `focused`, and the field's
+// text is bound two-way to `text`. "Viewport" is a clamped vertical scroll view
+// whose first row is "scrollItem". See tests/data/rive/artboard-input/scene.rml.
+//==============================================================================
+
+class ArtboardInputTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        const auto file = getTestDataRiveDirectory().getChildFile ("artboard-input.riv");
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/artboard-input.riv";
+            return;
+        }
+
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+        artboard = std::make_unique<Artboard> ("testArtboard", artboardFile);
+        artboard->setFitting (Fitting::scaleToFit);
+        artboard->setBounds (0.0f, 0.0f, 400.0f, 400.0f);
+
+        instance = artboardFile->createArtboardViewModelInstance ("Input", "Default");
+        ASSERT_NE (nullptr, instance);
+        ASSERT_TRUE (artboard->bindViewModelInstance (instance));
+
+        settle();
+    }
+
+    // Focus listeners and two-way binds land on the next advance.
+    void settle()
+    {
+        artboard->advanceAndApply (0.0f);
+    }
+
+    static MouseEvent mouseAt (Point<float> position, MouseEvent::Buttons buttons = MouseEvent::noButtons)
+    {
+        return MouseEvent (buttons, KeyModifiers(), position);
+    }
+
+    static MouseEvent touchAt (Point<float> position, int touchIndex)
+    {
+        return MouseEvent (MouseEvent::leftButton, KeyModifiers(), position).withTouchIndex (touchIndex);
+    }
+
+    void click (Point<float> position, MouseEvent::Buttons button = MouseEvent::leftButton)
+    {
+        artboard->mouseMove (mouseAt (position));
+        artboard->mouseDown (mouseAt (position, button));
+        artboard->mouseUp (mouseAt (position));
+        settle();
+    }
+
+    void press (int keyCode, KeyModifiers modifiers = KeyModifiers())
+    {
+        const KeyPress key (keyCode, modifiers);
+        artboard->keyDown (key, {});
+        artboard->keyUp (key, {});
+        settle();
+    }
+
+    void wheel (Point<float> position, float deltaY)
+    {
+        artboard->mouseWheel (mouseAt (position), MouseWheelData (0.0f, deltaY));
+        settle();
+    }
+
+    double clickedA() const { return instance->getNumberProperty ("clickedA").value_or (-1.0); }
+
+    double clickedB() const { return instance->getNumberProperty ("clickedB").value_or (-1.0); }
+
+    double hoveredB() const { return instance->getNumberProperty ("hoveredB").value_or (-1.0); }
+
+    String focused() const { return instance->getStringProperty ("focused").value_or ("<missing>"); }
+
+    String text() const { return instance->getStringProperty ("text").value_or ("<missing>"); }
+
+    float scrollItemTop() const { return artboard->getNodeBounds ("scrollItem").getY(); }
+
+    const Point<float> buttonA { 60.0f, 40.0f };
+    const Point<float> buttonB { 180.0f, 40.0f };
+    const Point<float> field { 120.0f, 175.0f };
+    const Point<float> viewport { 120.0f, 295.0f };
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+    std::unique_ptr<Artboard> artboard;
+    ArtboardViewModelInstance::Ptr instance;
+};
+
+TEST_F (ArtboardInputTests, LeftClickFiresClickListener)
+{
+    EXPECT_EQ (0.0, clickedA());
+
+    click (buttonA);
+
+    EXPECT_EQ (1.0, clickedA());
+    EXPECT_EQ (0.0, clickedB());
+}
+
+TEST_F (ArtboardInputTests, RightAndMiddleClickDoNotFirePrimaryListener)
+{
+    // Single-type listeners only respond to the primary button.
+    click (buttonA, MouseEvent::rightButton);
+    click (buttonA, MouseEvent::middleButton);
+
+    EXPECT_EQ (0.0, clickedA());
+}
+
+TEST_F (ArtboardInputTests, ReleaseOfSecondButtonDuringDragDoesNotSendPrimaryUp)
+{
+    artboard->mouseDown (mouseAt (buttonA, MouseEvent::leftButton));
+    artboard->mouseDown (mouseAt (buttonA, static_cast<MouseEvent::Buttons> (MouseEvent::leftButton | MouseEvent::rightButton)));
+
+    // mouseUp reports the buttons still held: releasing right leaves left down.
+    artboard->mouseUp (mouseAt (buttonA, MouseEvent::leftButton));
+    settle();
+
+    // Had the right release reached Rive as a primary up, A would have clicked.
+    EXPECT_EQ (0.0, clickedA());
+
+    artboard->mouseDrag (mouseAt (buttonB, MouseEvent::leftButton));
+    artboard->mouseUp (mouseAt (buttonB));
+    settle();
+
+    EXPECT_EQ (0.0, clickedA());
+}
+
+TEST_F (ArtboardInputTests, TouchPointersAreIndependent)
+{
+    artboard->mouseDown (touchAt (buttonA, 0));
+    artboard->mouseDown (touchAt (buttonB, 1));
+    artboard->mouseUp (touchAt (buttonA, 0));
+    artboard->mouseUp (touchAt (buttonB, 1));
+    settle();
+
+    EXPECT_EQ (1.0, clickedA());
+    EXPECT_EQ (1.0, clickedB());
+}
+
+TEST_F (ArtboardInputTests, MouseAndFirstFingerAreIndependent)
+{
+    artboard->mouseDown (mouseAt (buttonA, MouseEvent::leftButton));
+    artboard->mouseDown (touchAt (buttonB, 0));
+    artboard->mouseUp (touchAt (buttonB, 0));
+    artboard->mouseUp (mouseAt (buttonA));
+    settle();
+
+    // Had finger 0 shared the mouse's pointer, its press would have reset the mouse's.
+    EXPECT_EQ (1.0, clickedA());
+    EXPECT_EQ (1.0, clickedB());
+}
+
+TEST_F (ArtboardInputTests, TouchesNeverHover)
+{
+    // After lifting the first finger, the window re-evaluates what is under it
+    // with the touch event, which must not bring a hover back.
+    const auto lifted = MouseEvent (MouseEvent::noButtons, KeyModifiers(), buttonB).withTouchIndex (0);
+    artboard->mouseEnter (lifted);
+    artboard->mouseMove (lifted);
+    settle();
+
+    EXPECT_EQ (0.0, hoveredB());
+
+    artboard->mouseMove (mouseAt (buttonB));
+    settle();
+
+    EXPECT_EQ (1.0, hoveredB());
+}
+
+TEST_F (ArtboardInputTests, WheelScrollsScrollView)
+{
+    const auto initialTop = scrollItemTop();
+
+    // A wheel turned towards the user reveals later content.
+    wheel (viewport, -1.0f);
+    EXPECT_LT (scrollItemTop(), initialTop - 1.0f);
+
+    wheel (viewport, 1.0f);
+    EXPECT_NEAR (initialTop, scrollItemTop(), 0.5f);
+}
+
+TEST_F (ArtboardInputTests, WheelOutsideBoundsIsIgnored)
+{
+    // Unscaled and pinned top left in a shorter component, the bottom of the
+    // viewport hangs below the component's bounds.
+    artboard->setFitting (Fitting::none);
+    artboard->setJustification (Justification::topLeft);
+    artboard->setBounds (0.0f, 0.0f, 400.0f, 300.0f);
+    settle();
+
+    const auto initialTop = scrollItemTop();
+
+    wheel ({ 120.0f, 320.0f }, -1.0f);
+    EXPECT_NEAR (initialTop, scrollItemTop(), 0.5f);
+
+    // The same wheel inside the bounds does scroll.
+    wheel ({ 120.0f, 250.0f }, -1.0f);
+    EXPECT_LT (scrollItemTop(), initialTop - 1.0f);
+}
+
+TEST_F (ArtboardInputTests, WantsKeyboardFocusFollowsFocusNodes)
+{
+    EXPECT_TRUE (artboard->getWantsKeyboardFocus());
+
+    const auto layoutFile = getTestDataRiveDirectory().getChildFile ("layout-ui.riv");
+    if (auto result = ArtboardFile::load (layoutFile, factory); result.wasOk())
+    {
+        artboard->setFile (result.getValue());
+        EXPECT_FALSE (artboard->getWantsKeyboardFocus());
+    }
+
+    artboard->setFile (artboardFile);
+    EXPECT_TRUE (artboard->getWantsKeyboardFocus());
+
+    artboard->clear();
+    EXPECT_FALSE (artboard->getWantsKeyboardFocus());
+}
+
+TEST_F (ArtboardInputTests, TabMovesFocusForwardAndShiftTabBackward)
+{
+    press (KeyPress::tabKey);
+    EXPECT_EQ ("first", focused());
+
+    press (KeyPress::tabKey);
+    EXPECT_EQ ("second", focused());
+
+    press (KeyPress::tabKey);
+    EXPECT_EQ ("field", focused());
+
+    press (KeyPress::tabKey, KeyModifiers (KeyModifiers::shiftMask));
+    EXPECT_EQ ("second", focused());
+}
+
+TEST_F (ArtboardInputTests, TextInputReachesFocusedField)
+{
+    click (field);
+    ASSERT_EQ ("field", focused());
+
+    artboard->textInput ("abc");
+    settle();
+    EXPECT_EQ ("abc", text());
+
+    press (KeyPress::backspaceKey);
+    EXPECT_EQ ("ab", text());
+}
+
+TEST_F (ArtboardInputTests, CutAndPasteUseClipboard)
+{
+    const auto previousClipboard = SystemClipboard::getTextFromClipboard();
+
+    SystemClipboard::copyTextToClipboard ("probe");
+    if (SystemClipboard::getTextFromClipboard() != "probe")
+        GTEST_SKIP() << "System clipboard unavailable";
+
+    click (field);
+    artboard->textInput ("abc");
+    settle();
+    ASSERT_EQ ("abc", text());
+
+    // Shift+Home selects to the line start without Rive's platform-specific
+    // select-all modifier.
+    press (KeyPress::homeKey, KeyModifiers (KeyModifiers::shiftMask));
+
+    press (KeyPress::textXKey, KeyModifiers (KeyModifiers::commandMask));
+    EXPECT_EQ ("", text());
+    EXPECT_EQ ("abc", SystemClipboard::getTextFromClipboard());
+
+    press (KeyPress::textVKey, KeyModifiers (KeyModifiers::controlMask));
+    EXPECT_EQ ("abc", text());
+
+    SystemClipboard::copyTextToClipboard (previousClipboard);
+}
+
+TEST_F (ArtboardInputTests, AltGraphLettersAreNotClipboardShortcuts)
+{
+    click (field);
+    artboard->textInput ("abc");
+    settle();
+    press (KeyPress::homeKey, KeyModifiers (KeyModifiers::shiftMask));
+
+    // AltGr arrives as Ctrl+Alt, and AltGr+X types a letter on some layouts.
+    press (KeyPress::textXKey, KeyModifiers (KeyModifiers::controlMask | KeyModifiers::altMask));
+
+    EXPECT_EQ ("abc", text());
+}
+
+TEST_F (ArtboardInputTests, FocusLostClearsRiveFocus)
+{
+    click (field);
+    artboard->textInput ("a");
+    settle();
+    ASSERT_EQ ("a", text());
+
+    artboard->focusLost();
+
+    artboard->textInput ("x");
+    settle();
+    EXPECT_EQ ("a", text());
+}
+
+TEST_F (ArtboardInputTests, KeyboardAndWheelHandlersDoNotCrashWithoutFile)
+{
+    artboard->clear();
+
+    EXPECT_NO_THROW (artboard->mouseWheel (mouseAt (viewport), MouseWheelData (0.0f, -1.0f)));
+    EXPECT_NO_THROW (artboard->keyDown (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_NO_THROW (artboard->keyUp (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_NO_THROW (artboard->textInput ("x"));
+    EXPECT_NO_THROW (artboard->focusGained());
+    EXPECT_NO_THROW (artboard->focusLost());
+}

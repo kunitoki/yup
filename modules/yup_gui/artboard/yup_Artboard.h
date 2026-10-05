@@ -27,6 +27,18 @@ namespace yup
 
     This class is used to display a Rive artboard.
 
+    The artboard forwards the input it receives to its state machine: every
+    mouse button (left as primary, right as secondary, middle as middle), each
+    touch as its own pointer, mouse wheel scrolling, keys and typed text. When
+    the loaded file has focusable nodes the artboard wants keyboard focus, so
+    Tab and Shift+Tab move Rive's focus when nothing in the file handles them,
+    and Cmd/Ctrl+C, X and V copy, cut and paste through the system clipboard
+    while a text field is focused. Losing keyboard focus clears Rive's focus.
+    Call setWantsKeyboardFocus (false) after setFile() to opt out. Listeners that
+    write a bound ViewModel instance run during these input handlers, so its
+    ArtboardViewModelInstance::PropertyChangedCallback can also fire from them,
+    on the message thread.
+
     Artboards are not internally synchronized. Beyond the message thread, the
     artboard also advances from refreshDisplay(), which YUP runs on the render
     thread while holding the message manager lock, so the two never run
@@ -39,6 +51,7 @@ namespace yup
 */
 class YUP_API Artboard
     : public Component
+    , public TextInputTarget
     , private ComponentListener
 {
 public:
@@ -439,9 +452,9 @@ public:
     /** A callback that is called when a custom property of a reported state machine
         event changes.
 
-        Events are drained after every advance and after every pointer interaction,
-        so the callback fires from advanceAndApply(), refreshDisplay() and the mouse
-        handlers, on the thread described above. Only actual changes are reported: the
+        Events are drained after every advance and after every pointer, wheel and
+        keyboard interaction, so the callback fires from advanceAndApply(),
+        refreshDisplay() and the input handlers, on the thread described above. Only actual changes are reported: the
         artboard remembers the last value seen for each event and skips repeats.
 
         @param artboard     The artboard that reported the event.
@@ -493,6 +506,20 @@ public:
     void mouseMove (const MouseEvent& event) override;
     /** @internal */
     void mouseDrag (const MouseEvent& event) override;
+    /** @internal */
+    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+    /** @internal */
+    void keyDown (const KeyPress& key, const Point<float>& position) override;
+    /** @internal */
+    void keyUp (const KeyPress& key, const Point<float>& position) override;
+    /** @internal */
+    void textInput (const String& text) override;
+    /** @internal */
+    void focusGained() override;
+    /** @internal */
+    void focusLost() override;
+    /** @internal */
+    Rectangle<float> getTextInputRect() const override;
 
 private:
     friend class ArtboardNode;
@@ -525,6 +552,10 @@ private:
     Rectangle<float> computeNodeBounds (rive::Component* node) const;
     AffineTransform computeNodeViewTransform (rive::Component* node) const;
     Point<float> transformPoint (Point<float> point) const;
+    int pointerIdFor (const MouseEvent& event) const;
+    void forwardButtons (const MouseEvent& event, int changedButtons, bool isDown);
+    void syncTextInput();
+    void afterInput();
 
     std::shared_ptr<ArtboardFile> artboardFile;
 
@@ -543,6 +574,9 @@ private:
     uint64_t nodeEpoch = 0;
 
     ArtboardViewModelInstance::Ptr boundViewModelInstance;
+
+    int pressedMouseButtons = 0;
+    Array<int> pressedKeys;
 
     rive::Mat2D viewTransform;
     String selectedArtboardName;
