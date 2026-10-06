@@ -55,6 +55,12 @@
 
 #include <rive/rive.h>
 
+namespace rive::cmd
+{
+class DeferredSession;
+class DeferredReplayer;
+} // namespace rive::cmd
+
 //==============================================================================
 /** Config: YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT
 

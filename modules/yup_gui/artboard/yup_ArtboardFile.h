@@ -75,7 +75,9 @@ public:
     //==============================================================================
     /** A callback type for loading assets within the Rive file.
 
-        Invoked once per asset referenced by the file while it is importing. To
+        Invoked once per asset referenced by the file while it is importing, or twice
+        for a scripted file loaded with a GPU render context, which is imported again
+        through a recording session with that session as the factory. To
         provide an asset, decode the bytes with the given factory, hand the result
         to the asset and return true. Return false to leave the asset unresolved,
         in which case Rive falls back to the in-band bytes when the file carries
@@ -200,10 +202,23 @@ public:
     /** Returns the underlying Rive file. */
     rive::File* getRiveFile();
 
-    /** @internal Returns the factory the file was loaded with. */
+    /** @internal Returns the factory the file was imported through.
+
+        This is the factory passed to load(), except for scripted files rendering through a
+        GPU render context, which import through a recording session instead.
+    */
     rive::Factory* getFactory() const noexcept;
 
+    /** @internal Returns the GPU render context the file draws with, or null when it was
+        loaded with a factory that is not one.
+    */
+    rive::gpu::RenderContext* getRenderContext() const noexcept;
+
+    /** Destructor. */
+    ~ArtboardFile();
+
 private:
+    friend class Artboard;
     friend class ArtboardViewModelInstance;
 
     // Counts the observer callbacks currently unwinding across every instance
@@ -217,11 +232,21 @@ private:
 
     bool isObserverDispatchInProgress() const noexcept { return observerDispatchDepth != 0; }
 
-    ArtboardFile() = default;
-    ArtboardFile (rive::rcp<rive::File> rivFile, rive::Factory& factory);
+    rive::cmd::DeferredSession* getDeferredSession() const noexcept { return deferredSession.get(); }
+    rive::cmd::DeferredReplayer& getDeferredReplayer() noexcept;
+    void bindDeferredRecordingThread();
 
+    ArtboardFile() = default;
+    ArtboardFile (rive::rcp<rive::File> rivFile,
+                  rive::Factory& factory,
+                  rive::gpu::RenderContext* renderContext,
+                  std::unique_ptr<rive::cmd::DeferredSession> deferredSession);
+
+    std::unique_ptr<rive::cmd::DeferredReplayer> deferredReplayer;
+    std::unique_ptr<rive::cmd::DeferredSession> deferredSession;
     rive::rcp<rive::File> rivFile;
     rive::Factory* factory = nullptr;
+    rive::gpu::RenderContext* renderContext = nullptr;
     HashMap<String, rive::rcp<rive::ViewModelInstance>> globalViewModelInstances;
     int observerDispatchDepth = 0;
 

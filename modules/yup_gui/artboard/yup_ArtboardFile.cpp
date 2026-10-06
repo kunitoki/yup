@@ -57,11 +57,19 @@ private:
 
 //==============================================================================
 
-ArtboardFile::ArtboardFile (rive::rcp<rive::File> rivFile, rive::Factory& factory)
-    : rivFile (std::move (rivFile))
+ArtboardFile::ArtboardFile (rive::rcp<rive::File> rivFile,
+                            rive::Factory& factory,
+                            rive::gpu::RenderContext* renderContext,
+                            std::unique_ptr<rive::cmd::DeferredSession> deferredSession)
+    : deferredReplayer (deferredSession != nullptr ? std::make_unique<rive::cmd::DeferredReplayer>() : nullptr)
+    , deferredSession (std::move (deferredSession))
+    , rivFile (std::move (rivFile))
     , factory (std::addressof (factory))
+    , renderContext (renderContext)
 {
 }
+
+ArtboardFile::~ArtboardFile() = default;
 
 //==============================================================================
 
@@ -78,6 +86,28 @@ rive::File* ArtboardFile::getRiveFile()
 rive::Factory* ArtboardFile::getFactory() const noexcept
 {
     return factory;
+}
+
+rive::gpu::RenderContext* ArtboardFile::getRenderContext() const noexcept
+{
+    return renderContext;
+}
+
+rive::cmd::DeferredReplayer& ArtboardFile::getDeferredReplayer() noexcept
+{
+    jassert (deferredReplayer != nullptr);
+    return *deferredReplayer;
+}
+
+void ArtboardFile::bindDeferredRecordingThread()
+{
+    if (deferredSession == nullptr)
+        return;
+
+    deferredSession->commandBuffer().bindRecordingThread();
+
+    // Rive offers no mutable access to the GPU stream, though the session that owns it is mutable.
+    const_cast<rive::ore::cmd::OreCommandBuffer&> (deferredSession->oreContext().stream()).bindRecordingThread();
 }
 
 //==============================================================================
@@ -190,24 +220,21 @@ ResultValue<ArtboardFile::Ptr> ArtboardFile::load (InputStream& is, rive::Factor
     if (is.readIntoMemoryBlock (mb) == 0)
         return makeResultValueFail ("Failed to read artboard file");
 
-    rive::ImportResult result;
-    rive::rcp<rive::File> rivFile;
-
+    rive::rcp<rive::FileAssetLoader> assetLoader;
     if (assetCallback != nullptr)
+        assetLoader = rive::make_rcp<LambdaAssetLoader> (assetCallback);
+
+    const auto importFile = [&] (rive::Factory& importFactory, rive::ImportResult& importResult)
     {
-        rivFile = rive::File::import (
+        return rive::File::import (
             { static_cast<const uint8_t*> (mb.getData()), mb.getSize() },
-            std::addressof (factory),
-            std::addressof (result),
-            rive::make_rcp<LambdaAssetLoader> (assetCallback));
-    }
-    else
-    {
-        rivFile = rive::File::import (
-            { static_cast<const uint8_t*> (mb.getData()), mb.getSize() },
-            std::addressof (factory),
-            std::addressof (result));
-    }
+            std::addressof (importFactory),
+            std::addressof (importResult),
+            assetLoader);
+    };
+
+    rive::ImportResult result;
+    auto rivFile = importFile (factory, result);
 
     if (result == rive::ImportResult::malformed)
         return makeResultValueFail ("Malformed artboard file");
@@ -218,7 +245,25 @@ ResultValue<ArtboardFile::Ptr> ArtboardFile::load (InputStream& is, rive::Factor
     if (rivFile == nullptr)
         return makeResultValueFail ("Failed to import artboard file");
 
-    return makeResultValueOk (ArtboardFile::Ptr (new ArtboardFile { std::move (rivFile), factory }));
+    auto* renderContext = dynamic_cast<rive::gpu::RenderContext*> (std::addressof (factory));
+
+    const auto assets = rivFile->assets();
+    const bool hasScripts = std::any_of (assets.begin(), assets.end(), [] (const auto& asset)
+    {
+        return asset->template is<rive::ScriptAsset>();
+    });
+
+    if (hasScripts && renderContext != nullptr && renderContext->ore() != nullptr)
+    {
+        auto session = std::make_unique<rive::cmd::DeferredSession> (rive::ore::ReplayCaps::from (*renderContext->ore()));
+        session->bindRenderContext (renderContext);
+
+        auto& sessionFactory = *session;
+        if (auto deferredFile = importFile (sessionFactory, result))
+            return makeResultValueOk (ArtboardFile::Ptr (new ArtboardFile { std::move (deferredFile), sessionFactory, renderContext, std::move (session) }));
+    }
+
+    return makeResultValueOk (ArtboardFile::Ptr (new ArtboardFile { std::move (rivFile), factory, renderContext, nullptr }));
 }
 
 } // namespace yup

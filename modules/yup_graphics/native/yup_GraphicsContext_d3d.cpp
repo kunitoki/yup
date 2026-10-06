@@ -114,37 +114,14 @@ public:
 
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
+        this->frameDescriptor = frameDescriptor;
         getRenderContext()->beginFrame (frameDescriptor);
     }
 
     void end (void*) override
     {
-        if (renderTarget->targetTexture() == nullptr)
-        {
-            if (isHeadless)
-                renderTarget->setTargetTexture (headlessDrawTexture);
-            else
-            {
-                if (cachedBackbuffer == nullptr)
-                {
-                    HRESULT hr = swapchain->GetBuffer (0, __uuidof (ID3D11Texture2D), reinterpret_cast<void**> (cachedBackbuffer.ReleaseAndGetAddressOf()));
-                    if (FAILED (hr))
-                    {
-                        auto reason = device->GetDeviceRemovedReason();
-                        fprintf (stderr, "D3D: GetBuffer failed: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
-                        cachedBackbuffer.Reset();
-                        renderTarget->setTargetTexture (nullptr);
-                        return;
-                    }
-
-                    renderTarget->setTargetTexture (cachedBackbuffer);
-                }
-            }
-        }
-
-        rive::gpu::RenderContext::FlushResources flushDesc;
-        flushDesc.renderTarget = renderTarget.get();
-        getRenderContext()->flush (flushDesc);
+        if (! flushIntoTargetTexture())
+            return;
 
         if (! isHeadless)
         {
@@ -162,6 +139,11 @@ public:
 
     }
 
+    void suspendFrame() override
+    {
+        flushIntoTargetTexture();
+    }
+
     bool setVsyncEnabled (bool shouldEnable) override
     {
         options.vsync = shouldEnable;
@@ -169,6 +151,37 @@ public:
     }
 
 private:
+    bool flushIntoTargetTexture()
+    {
+        if (renderTarget->targetTexture() == nullptr)
+        {
+            if (isHeadless)
+                renderTarget->setTargetTexture (headlessDrawTexture);
+            else
+            {
+                if (cachedBackbuffer == nullptr)
+                {
+                    HRESULT hr = swapchain->GetBuffer (0, __uuidof (ID3D11Texture2D), reinterpret_cast<void**> (cachedBackbuffer.ReleaseAndGetAddressOf()));
+                    if (FAILED (hr))
+                    {
+                        auto reason = device->GetDeviceRemovedReason();
+                        fprintf (stderr, "D3D: GetBuffer failed: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
+                        cachedBackbuffer.Reset();
+                        renderTarget->setTargetTexture (nullptr);
+                        return false;
+                    }
+
+                    renderTarget->setTargetTexture (cachedBackbuffer);
+                }
+            }
+        }
+
+        rive::gpu::RenderContext::FlushResources flushDesc;
+        flushDesc.renderTarget = renderTarget.get();
+        getRenderContext()->flush (flushDesc);
+        return true;
+    }
+
     const bool isHeadless;
     Options options;
     GpuDevice::Ptr gpuDevice;

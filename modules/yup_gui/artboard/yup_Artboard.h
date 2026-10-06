@@ -569,6 +569,7 @@ private:
     void componentResized (Component& component) override;
 
     void updateSceneFromFile();
+    void releaseDeferredTarget();
     void bindDefaultViewModelInstances();
     void placeGlobalViewModelInstances();
     void applyGlobalViewModelInstances();
@@ -594,6 +595,7 @@ private:
     void afterInput();
 
     std::shared_ptr<ArtboardFile> artboardFile;
+    uint64_t deferredTarget = 0;
 
     std::unique_ptr<rive::Artboard> artboard;
     std::unique_ptr<rive::Scene> scene;

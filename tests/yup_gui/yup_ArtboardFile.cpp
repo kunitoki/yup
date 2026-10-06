@@ -96,6 +96,22 @@ TEST_F (ArtboardFileTests, LoadFromFileSucceeds)
     EXPECT_NE (nullptr, file->getRiveFile());
 }
 
+TEST_F (ArtboardFileTests, FileImportsThroughTheGivenFactory)
+{
+    auto result = ArtboardFile::load (riveFile, factory);
+    ASSERT_FALSE (result.failed());
+
+    EXPECT_EQ (std::addressof (factory), result.getValue()->getFactory());
+}
+
+TEST_F (ArtboardFileTests, FactoryWithoutRenderContextHasNoRenderContext)
+{
+    auto result = ArtboardFile::load (riveFile, factory);
+    ASSERT_FALSE (result.failed());
+
+    EXPECT_EQ (nullptr, result.getValue()->getRenderContext());
+}
+
 TEST_F (ArtboardFileTests, LoadFromMissingFileFails)
 {
     const auto missing = getArtboardFileTestDataDirectory().getChildFile ("definitely-not-here.riv");

@@ -126,6 +126,22 @@ artboard->shouldPauseWhenHidden (false); // keep advancing while off-screen
 artboard->durationSeconds();             // the scene's length
 ```
 
+### Scripted files
+
+Files whose Luau scripts draw into canvases or run GPU shaders (`context:canvas()`,
+`gpuCanvas`, render passes) render when loaded with a window's GPU factory,
+`getNativeComponent()->getFactory()`. `ArtboardFile::load` imports such files
+through a recording session, and `Artboard` replays what was recorded into the
+window frame while painting, splitting the frame around the script's canvas work
+if it has to. Files without scripts render as before. Loading a scripted file
+imports it twice, so its asset callback runs twice per asset: once with the
+window's factory and once with the recording session's.
+
+A scripted artboard draws only into the window it was loaded for: painting it
+into an `Image` or a transparency layer draws nothing. Load the file with a
+headless factory, or one that is not a GPU render context, and its scripts run
+without canvas or GPU support.
+
 ## State machine inputs and events
 
 When the artboard is driven by a state machine, its inputs are reachable by

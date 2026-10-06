@@ -523,6 +523,8 @@ bool ArtboardViewModelInstance::setImageProperty (StringRef nameOrPath, Span<con
     if (imageValue == nullptr || factory == nullptr)
         return false;
 
+    file->bindDeferredRecordingThread();
+
     auto renderImage = factory->decodeImage ({ encodedBytes.data(), encodedBytes.size() });
     if (renderImage == nullptr)
         return false;
@@ -534,7 +536,7 @@ bool ArtboardViewModelInstance::setImageProperty (StringRef nameOrPath, Span<con
 bool ArtboardViewModelInstance::setImageProperty (StringRef nameOrPath, const Image& image)
 {
     auto* imageValue = resolveAs<rive::ViewModelInstanceAssetImage> (impl->instance, nameOrPath);
-    auto* renderContext = file != nullptr ? dynamic_cast<rive::gpu::RenderContext*> (file->getFactory()) : nullptr;
+    auto* renderContext = file != nullptr ? file->getRenderContext() : nullptr;
     if (imageValue == nullptr || renderContext == nullptr)
         return false;
 

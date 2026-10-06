@@ -75,6 +75,18 @@ TEST_F (GraphicsContextTests, TickDoesNotCrash)
     EXPECT_NO_THROW (context->tick());
 }
 
+TEST_F (GraphicsContextTests, SuspendAndResumeFrameDoNotCrashForHeadless)
+{
+    rive::gpu::RenderContext::FrameDescriptor descriptor;
+    descriptor.renderTargetWidth = 64;
+    descriptor.renderTargetHeight = 64;
+
+    context->begin (descriptor);
+    EXPECT_NO_THROW (context->suspendFrame());
+    EXPECT_NO_THROW (context->resumeFrame());
+    context->end (nullptr);
+}
+
 TEST_F (GraphicsContextTests, CreateContextWithNullExistingDeviceSucceeds)
 {
     auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {}, nullptr);
@@ -99,4 +111,87 @@ TEST (GraphicsContextStaticTests, CreateContextReturnsNullForInvalidApi)
     const auto invalidApi = static_cast<GpuPlatform> (9999);
     auto ctx = GraphicsContext::createContext (invalidApi, {});
     EXPECT_EQ (ctx, nullptr);
+}
+
+//==============================================================================
+
+class GraphicsContextResumeFrameTests : public ::testing::Test
+{
+protected:
+    // Stores the descriptor on begin, as every backend does, and records what it was given.
+    class RecordingContext : public GraphicsContext
+    {
+    public:
+        GpuPlatform getPlatform() const noexcept override { return real->getPlatform(); }
+
+        GpuDevice::Ptr getGpuDevice() const noexcept override { return real->getGpuDevice(); }
+
+        rive::Factory* getFactory() override { return real->getFactory(); }
+
+        rive::gpu::RenderContext* getRenderContext() override { return nullptr; }
+
+        rive::gpu::RenderTarget* getRenderTarget() override { return nullptr; }
+
+        std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override { return real->makeRenderer (width, height); }
+
+        void onSizeChanged (void*, int, int, float, uint32_t) override {}
+
+        void begin (const rive::gpu::RenderContext::FrameDescriptor& descriptor) override
+        {
+            frameDescriptor = descriptor;
+            begunFrames.push_back (descriptor);
+        }
+
+        void end (void*) override {}
+
+        std::vector<rive::gpu::RenderContext::FrameDescriptor> begunFrames;
+
+    private:
+        std::unique_ptr<GraphicsContext> real = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    };
+
+    RecordingContext context;
+};
+
+TEST_F (GraphicsContextResumeFrameTests, ResumeReopensTheLastFramePreservingItsContent)
+{
+    rive::gpu::RenderContext::FrameDescriptor descriptor;
+    descriptor.renderTargetWidth = 320;
+    descriptor.renderTargetHeight = 240;
+    descriptor.loadAction = rive::gpu::LoadAction::clear;
+    descriptor.clearColor = 0xff336699;
+    descriptor.disableRasterOrdering = true;
+
+    context.begin (descriptor);
+    context.suspendFrame();
+    context.resumeFrame();
+
+    ASSERT_EQ (context.begunFrames.size(), 2u);
+
+    const auto& resumed = context.begunFrames.back();
+    EXPECT_EQ (resumed.loadAction, rive::gpu::LoadAction::preserveRenderTarget);
+    EXPECT_EQ (resumed.renderTargetWidth, 320u);
+    EXPECT_EQ (resumed.renderTargetHeight, 240u);
+    EXPECT_EQ (resumed.clearColor, 0xff336699u);
+    EXPECT_TRUE (resumed.disableRasterOrdering);
+}
+
+TEST_F (GraphicsContextResumeFrameTests, ResumeFollowsTheMostRecentBegin)
+{
+    rive::gpu::RenderContext::FrameDescriptor first;
+    first.renderTargetWidth = 100;
+    first.renderTargetHeight = 100;
+
+    rive::gpu::RenderContext::FrameDescriptor second;
+    second.renderTargetWidth = 200;
+    second.renderTargetHeight = 150;
+
+    context.begin (first);
+    context.end (nullptr);
+    context.begin (second);
+    context.resumeFrame();
+
+    ASSERT_EQ (context.begunFrames.size(), 3u);
+    EXPECT_EQ (context.begunFrames.back().renderTargetWidth, 200u);
+    EXPECT_EQ (context.begunFrames.back().renderTargetHeight, 150u);
 }

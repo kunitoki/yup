@@ -174,6 +174,53 @@ rive::KeyModifiers toRiveModifiers (const KeyModifiers& modifiers)
 
     return result;
 }
+
+// Replays a scripted file's recorded frame into the window frame being painted. Script canvases
+// render in GPU frames of their own and script GPU passes need a freshly opened screen frame,
+// so the window frame is suspended around them and resumed for the screen draws.
+class ArtboardFrameSink final : public rive::cmd::HostFrameSink
+{
+public:
+    ArtboardFrameSink (Graphics& g, rive::gpu::RenderContext& context, uint64_t target, bool suspendUpFront)
+        : HostFrameSink (false, 0, target)
+        , g (g)
+        , context (context)
+    {
+        if (suspendUpFront)
+            suspend();
+    }
+
+    rive::gpu::RenderContext* renderContext() override { return std::addressof (context); }
+
+    rive::Renderer* beginScreen (uint64_t, bool, uint32_t) override
+    {
+        resume();
+        return g.getRenderer();
+    }
+
+    rive::Renderer* beginCanvasContent (rive::gpu::RenderCanvas* canvas, uint32_t clearColor) override
+    {
+        suspend();
+        return HostFrameSink::beginCanvasContent (canvas, clearColor);
+    }
+
+    void resume()
+    {
+        if (std::exchange (suspended, false))
+            g.getGraphicsContext().resumeFrame();
+    }
+
+private:
+    void suspend()
+    {
+        if (! std::exchange (suspended, true))
+            g.getGraphicsContext().suspendFrame();
+    }
+
+    Graphics& g;
+    rive::gpu::RenderContext& context;
+    bool suspended = false;
+};
 } // namespace
 
 //==============================================================================
@@ -196,6 +243,8 @@ Artboard::~Artboard()
     relinquishTextInput();
 
     detachAllComponents();
+
+    releaseDeferredTarget();
 }
 
 //==============================================================================
@@ -207,7 +256,23 @@ void Artboard::setFile (std::shared_ptr<ArtboardFile> file, StringRef artboardNa
     artboardFile = std::move (file);
     selectedArtboardName = artboardName;
 
+    if (artboardFile != nullptr)
+        if (auto* session = artboardFile->getDeferredSession())
+            deferredTarget = session->acquireScreenTarget();
+
     updateSceneFromFile();
+}
+
+void Artboard::releaseDeferredTarget()
+{
+    if (artboardFile == nullptr)
+        return;
+
+    if (auto* session = artboardFile->getDeferredSession())
+    {
+        session->discardTargetFrame (deferredTarget);
+        session->releaseScreenTarget (deferredTarget);
+    }
 }
 
 //==============================================================================
@@ -230,10 +295,11 @@ void Artboard::clear()
     lastNodeViewTransforms.clear();
     cachedNodeHandles.clear();
 
-    artboardFile.reset();
-
     scene.reset();
     artboard.reset();
+
+    releaseDeferredTarget();
+    artboardFile.reset();
 
     // hasKeyboardFocus() reads false once the flag is off, so leave first.
     if (hasKeyboardFocus())
@@ -692,6 +758,8 @@ bool Artboard::bindViewModelInstance (const ArtboardViewModelInstance::Ptr& mode
     if (riveInstance == nullptr)
         return false;
 
+    artboardFile->bindDeferredRecordingThread();
+
     if (stateMachine == nullptr)
         artboard->unbind();
 
@@ -825,7 +893,22 @@ void Artboard::paint (Graphics& g)
     if (scene == nullptr)
         return;
 
-    auto* renderer = g.getRenderer();
+    auto* session = artboardFile->getDeferredSession();
+    auto* renderContext = artboardFile->getRenderContext();
+
+    if (session != nullptr && g.getFactory() != renderContext)
+    {
+        jassertfalse;
+        return;
+    }
+
+    if (session != nullptr)
+    {
+        artboardFile->bindDeferredRecordingThread();
+        session->beginTargetFrame (deferredTarget);
+    }
+
+    auto* renderer = session != nullptr ? session->screenRenderer (deferredTarget) : g.getRenderer();
 
     auto transform = g.getTransform()
                          .translated (g.getDrawingArea().getX(), g.getDrawingArea().getY())
@@ -837,6 +920,22 @@ void Artboard::paint (Graphics& g)
 
     scene->draw (renderer);
     renderer->restore();
+
+    if (session == nullptr || ! session->endTargetFrame (deferredTarget))
+        return;
+
+    const bool hasGpuPasses = session->oreContext().stream().commandBytes().size() != 0;
+
+    auto& replayer = artboardFile->getDeferredReplayer();
+
+    ArtboardFrameSink sink (g, *renderContext, deferredTarget, hasGpuPasses);
+    replayer.replayFrame (*session, sink);
+    sink.resume();
+
+    if (const auto droppedDraws = replayer.droppedDraws(); droppedDraws != 0)
+        YUP_DBG ("Artboard: " << static_cast<int> (droppedDraws) << " scripted draws dropped while replaying");
+
+    session->resetFrame();
 }
 
 //==============================================================================
@@ -861,6 +960,8 @@ void Artboard::mouseEnter (const MouseEvent& event)
     if (scene == nullptr || event.isTouch())
         return;
 
+    artboardFile->bindDeferredRecordingThread();
+
     auto [x, y] = transformPoint (event.getPosition());
     scene->pointerMove (rive::Vec2D (x, y), 0.0f, pointerIdFor (event));
 
@@ -872,6 +973,8 @@ void Artboard::mouseExit (const MouseEvent& event)
     if (scene == nullptr || event.isTouch())
         return;
 
+    artboardFile->bindDeferredRecordingThread();
+
     auto [x, y] = transformPoint (event.getPosition());
     scene->pointerExit (rive::Vec2D (x, y), pointerIdFor (event));
 
@@ -882,6 +985,8 @@ void Artboard::mouseDown (const MouseEvent& event)
 {
     if (scene == nullptr)
         return;
+
+    artboardFile->bindDeferredRecordingThread();
 
     if (event.isTouch())
     {
@@ -902,6 +1007,8 @@ void Artboard::mouseUp (const MouseEvent& event)
 {
     if (scene == nullptr)
         return;
+
+    artboardFile->bindDeferredRecordingThread();
 
     if (event.isTouch())
     {
@@ -926,6 +1033,8 @@ void Artboard::mouseMove (const MouseEvent& event)
     if (scene == nullptr || event.isTouch())
         return;
 
+    artboardFile->bindDeferredRecordingThread();
+
     // A move carries every button still held, so a release we never saw is dropped here.
     pressedMouseButtons &= event.getButtons();
 
@@ -940,6 +1049,8 @@ void Artboard::mouseDrag (const MouseEvent& event)
     if (scene == nullptr)
         return;
 
+    artboardFile->bindDeferredRecordingThread();
+
     auto [x, y] = transformPoint (event.getPosition());
     scene->pointerMove (rive::Vec2D (x, y), 0.0f, pointerIdFor (event));
 
@@ -951,6 +1062,8 @@ void Artboard::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelD
     // A focused component gets the wheel wherever the pointer is.
     if (scene == nullptr || ! getLocalBounds().contains (event.getPosition()))
         return;
+
+    artboardFile->bindDeferredRecordingThread();
 
     // Rive moves the content by the delta, so revealing later content is negative.
     const auto position = event.getPosition();
@@ -977,6 +1090,8 @@ void Artboard::keyDown (const KeyPress& key, const Point<float>&)
 {
     if (stateMachine == nullptr)
         return;
+
+    artboardFile->bindDeferredRecordingThread();
 
     const auto keyCode = key.getKey();
     const auto modifiers = key.getModifiers();
@@ -1038,6 +1153,8 @@ void Artboard::keyUp (const KeyPress& key, const Point<float>&)
     if (stateMachine == nullptr)
         return;
 
+    artboardFile->bindDeferredRecordingThread();
+
     const auto riveKey = toRiveKey (key.getKey());
     if (! riveKey.has_value())
         return;
@@ -1051,6 +1168,8 @@ void Artboard::textInput (const String& text)
 {
     if (stateMachine == nullptr)
         return;
+
+    artboardFile->bindDeferredRecordingThread();
 
     stateMachine->textInput (text.toStdString());
 
@@ -1067,7 +1186,10 @@ void Artboard::focusGained()
 void Artboard::focusLost()
 {
     if (stateMachine != nullptr)
+    {
+        artboardFile->bindDeferredRecordingThread();
         stateMachine->clearFocus();
+    }
 
     relinquishTextInput();
     pressedKeys.clear();
@@ -1101,6 +1223,8 @@ void Artboard::updateSceneFromFile()
     auto rivFile = artboardFile->getRiveFile();
     if (rivFile == nullptr)
         return;
+
+    artboardFile->bindDeferredRecordingThread();
 
     auto currentArtboard = selectedArtboardName.isEmpty()
                                ? rivFile->artboardDefault()
@@ -1146,6 +1270,8 @@ void Artboard::advanceScene (float elapsedSeconds)
 {
     if (scene == nullptr)
         return;
+
+    artboardFile->bindDeferredRecordingThread();
 
     scene->advanceAndApply (elapsedSeconds);
 
