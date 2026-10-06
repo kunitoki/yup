@@ -855,6 +855,32 @@ protected:
         EXPECT_TRUE (layer.commit());
     }
 
+    static int channelAt (const std::vector<uint8>& pixels, int x, int y, int channel)
+    {
+        return pixels[static_cast<std::size_t> ((y * size + x) * 4 + channel)];
+    }
+
+    /** An opaque 2 x 1 image: red on the left, blue on the right. */
+    static Image createRedBlueImage()
+    {
+        Image image (2, 1);
+        auto bytes = image.getRawData();
+        const uint8 red[] = { 255, 0, 0, 255 };
+        const uint8 blue[] = { 0, 0, 255, 255 };
+        std::copy (std::begin (red), std::end (red), bytes.begin());
+        std::copy (std::begin (blue), std::end (blue), bytes.begin() + 4);
+        return image;
+    }
+
+    static Image createWhiteImage()
+    {
+        Image image (4, 4);
+        for (auto& byte : image.getRawData())
+            byte = 255;
+
+        return image;
+    }
+
     static constexpr int size = 64;
     static std::unique_ptr<GraphicsContext> gpuContext;
 };
@@ -927,6 +953,93 @@ TEST_F (GraphicsMetalPixelTests, StackedMasksMultiply)
     EXPECT_GT (alphaAt (pixels, 16, 16), 200);
     EXPECT_LT (alphaAt (pixels, 48, 16), 50);
     EXPECT_LT (alphaAt (pixels, 16, 48), 50);
+}
+
+TEST_F (GraphicsMetalPixelTests, ImageMeshCoversItsArea)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        g.drawImageMesh (createWhiteImage(), ImageMesh::createGrid ({ 16.0f, 16.0f, 32.0f, 32.0f }, 2, 2));
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 32, 32), 200);
+    EXPECT_LT (alphaAt (pixels, 8, 8), 50);
+    EXPECT_LT (alphaAt (pixels, 56, 56), 50);
+}
+
+TEST_F (GraphicsMetalPixelTests, MeshInstancesLandAtTheirTransforms)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        std::vector<ImageMeshInstance> instances (2);
+        instances[0].transform = AffineTransform::translation (8.0f, 8.0f);
+        instances[1].transform = AffineTransform::translation (40.0f, 40.0f);
+
+        g.drawImageMeshInstanced (createWhiteImage(), ImageMesh::createGrid ({ 0.0f, 0.0f, 8.0f, 8.0f }, 1, 1), instances);
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 12, 12), 200);
+    EXPECT_GT (alphaAt (pixels, 44, 44), 200);
+    EXPECT_LT (alphaAt (pixels, 28, 28), 50);
+}
+
+TEST_F (GraphicsMetalPixelTests, MeshTextureCoordinatesStartAtTheImagesTopLeft)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        g.drawImageMesh (createRedBlueImage(), ImageMesh::createGrid ({ 0.0f, 0.0f, 64.0f, 64.0f }, 1, 1), { ImageWrap::Clamp, ImageWrap::Clamp, ImageFilter::Nearest });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (channelAt (pixels, 16, 32, 0), 200);
+    EXPECT_LT (channelAt (pixels, 16, 32, 2), 50);
+    EXPECT_LT (channelAt (pixels, 48, 32, 0), 50);
+    EXPECT_GT (channelAt (pixels, 48, 32, 2), 200);
+}
+
+TEST_F (GraphicsMetalPixelTests, MeshInstanceTextureOffsetAndScalePickACell)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        // The instance shows only the right half of the image, the blue one
+        std::vector<ImageMeshInstance> instances (1);
+        instances[0].textureOffset = { 0.5f, 0.0f };
+        instances[0].textureScale = { 0.5f, 1.0f };
+
+        g.drawImageMeshInstanced (createRedBlueImage(),
+                                  ImageMesh::createGrid ({ 0.0f, 0.0f, 64.0f, 64.0f }, 1, 1),
+                                  instances,
+                                  { ImageWrap::Clamp, ImageWrap::Clamp, ImageFilter::Nearest });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (channelAt (pixels, 16, 32, 2), 200);
+    EXPECT_LT (channelAt (pixels, 16, 32, 0), 50);
+}
+
+TEST_F (GraphicsMetalPixelTests, MovedVerticesAreUploadedAgain)
+{
+    auto mesh = ImageMesh::createGrid ({ 0.0f, 0.0f, 16.0f, 16.0f }, 1, 1);
+
+    const auto first = render ([&] (Graphics& g)
+    {
+        g.drawImageMesh (createWhiteImage(), mesh);
+    });
+    ASSERT_EQ (first.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (alphaAt (first, 8, 8), 200);
+
+    const std::vector<Point<float>> moved { { 40.0f, 40.0f }, { 56.0f, 40.0f }, { 40.0f, 56.0f }, { 56.0f, 56.0f } };
+    ASSERT_TRUE (mesh.setVertices (moved));
+
+    const auto second = render ([&] (Graphics& g)
+    {
+        g.drawImageMesh (createWhiteImage(), mesh);
+    });
+    ASSERT_EQ (second.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_LT (alphaAt (second, 8, 8), 50);
+    EXPECT_GT (alphaAt (second, 48, 48), 200);
 }
 
 TEST_F (GraphicsMetalPixelTests, CenteredClipStrokeKeepsOnlyTheBand)

@@ -147,6 +147,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "imaging/yup_ImageFormatManager.cpp"
 #include "graphics/yup_Color.cpp"
 #include "graphics/yup_Colors.cpp"
+#include "graphics/yup_ImageMesh.cpp"
 #include "graphics/yup_Graphics.cpp"
 #include "svg/yup_SVGDocument.cpp"
 #include "svg/yup_SVGCssParser.cpp"

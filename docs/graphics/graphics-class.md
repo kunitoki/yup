@@ -196,6 +196,48 @@ g.drawTexture (gpuTexture, targetRect);   // draw a GPU texture directly
 straight from the RHI (e.g. `GpuCanvas::asTexture()`) without allocating a
 CPU-side image - the fast path for GPU-generated content.
 
+### Image meshes
+
+An `ImageMesh` maps an image onto triangles: each vertex has a position and a
+texture coordinate, from `(0, 0)` at the image's top-left to `(1, 1)` at its
+bottom-right. `ImageMesh::createGrid` builds the common case, a grid covering an
+area; move its vertices to warp the image.
+
+```cpp
+// Once
+mesh = ImageMesh::createGrid (area, 8, 8);
+
+// Whenever the warp changes: only the positions are uploaded again
+mesh.setVertex (index, newPosition);
+
+// In paint
+g.drawImageMesh (photo, mesh);
+```
+
+`drawImageMeshInstanced` draws the same mesh many times in one call, each copy
+with its own transform, opacity, additive amount and texture coordinate offset
+and scale, for example to pick a cell of a sprite sheet:
+
+```cpp
+std::vector<ImageMeshInstance> sprites (count);
+for (auto& sprite : sprites)
+{
+    sprite.transform = AffineTransform::rotation (angle).translated (position);
+    sprite.textureScale = { 0.25f, 0.25f };   // a 4 x 4 sprite sheet
+    sprite.textureOffset = { column * 0.25f, row * 0.25f };
+}
+
+g.drawImageMeshInstanced (sheet, quad, sprites);
+```
+
+Meshes follow the current transform, opacity and tint. `drawImageMesh` also uses
+the blend mode; instanced copies are always drawn over what is below, or added to
+it through their additive amount.
+
+The GPU reads a mesh's positions when the frame is rendered, so a mesh shows one
+set of positions per frame: use a separate `ImageMesh` for each differently warped
+copy drawn in the same frame. A grid has at most 255 cells per side.
+
 ## Transparency layers
 
 For correct *group* opacity - where a set of overlapping shapes must fade as a

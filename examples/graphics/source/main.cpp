@@ -160,6 +160,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
 #include "examples/Images.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ImageMesh
+#include "examples/ImageMesh.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
 #include "examples/Layout.h"
 #endif
@@ -360,6 +363,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
         addDemo ("Images", [] { return std::make_unique<ImagesDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ImageMesh
+        addDemo ("Image Mesh", [] { return std::make_unique<ImageMeshDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
         addDemo ("Layout", [] { return std::make_unique<LayoutExample>(); });

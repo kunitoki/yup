@@ -70,6 +70,7 @@ graphics_demo (FluidSimulation SHADERS
     fluid_splat_dye:fluid_fullscreen fluid_splat_velocity:fluid_fullscreen fluid_vorticity:fluid_fullscreen)
 graphics_demo (GpuAudio MODULES ${audio_modules} dr_libs RESOURCES audio LIVE_SHADERS)
 graphics_demo (Images MODULES libgif libjpeg libtiff libwebp)
+graphics_demo (ImageMesh)
 graphics_demo (Layout)
 graphics_demo (LayoutFonts)
 graphics_demo (ListBox)

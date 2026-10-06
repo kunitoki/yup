@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- `ImageMesh` maps an image onto a triangle mesh (with `ImageMesh::createGrid` for warp grids), drawn with `Graphics::drawImageMesh`, or many copies at once with `Graphics::drawImageMeshInstanced` and per-copy `ImageMeshInstance` transform, opacity, additive amount and texture offset and scale. Bound in Python. A new Image Mesh demo warps the logo and draws thousands of sprites.
 - `Graphics::setClipStroke` clips to the outline of a stroked path (inside, centered or outside), and `TransparencyLayer::addMask` masks a layer by the alpha or luminance of what is drawn into it (`LayerMaskMode`), with any number of masks multiplying. The Paths demo can stack clip and mask layers above any layer.
 - `Graphics`: `BlendMode::Additive` with `setAdditiveAmount`, `setStrokePosition` (and `StrokeType::withPosition`) for inside / centered / outside strokes, `setTint` to multiply a color into all drawing, and `setFillImage` / `setStrokeImage` to paint shapes and text with an image, tiled or clamped through `ImageSampling`. Bound in Python. `SVGParser` reads `mix-blend-mode: plus-lighter` as additive. The Paths demo edits all of them per layer, with image paints loaded from disk.
 - **Behavior change** `Artboard::setFile` binds a copy of the artboard's default ViewModel instance and the file's global ViewModel instances, like Rive's own players, so data-bound files show their authored values without host code. `bindViewModelInstance` still replaces the default.

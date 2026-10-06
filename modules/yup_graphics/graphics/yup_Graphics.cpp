@@ -1228,6 +1228,81 @@ void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea
     renderTexture (image.getTexture(), targetArea);
 }
 
+void Graphics::drawImageMesh (const Image& image, const ImageMesh& mesh, ImageSampling sampling)
+{
+    if (! image.createTextureIfNotPresent (context))
+        return;
+
+    const auto* buffers = mesh.updateGpuBuffers (factory, context.getGpuDevice());
+    if (buffers == nullptr)
+        return;
+
+    const auto& options = currentRenderOptions();
+    const auto renderImage = rive::make_rcp<rive::RiveRenderImage> (image.getTexture());
+
+    renderer.save();
+    renderer.transform (options.getTransform().toMat2D());
+    renderer.modulateColor ((rive::ColorInt) options.tint);
+    renderer.drawImageMesh (renderImage.get(),
+                            toImageSampler (sampling),
+                            buffers->vertices,
+                            buffers->textureCoordinates,
+                            buffers->indices,
+                            static_cast<uint32_t> (mesh.getVertices().size()),
+                            static_cast<uint32_t> (mesh.getIndices().size()),
+                            toBlendMode (options.blendMode),
+                            options.opacity,
+                            options.blendMode == BlendMode::Additive ? options.additiveAmount : 0.0f);
+    renderer.restore();
+}
+
+void Graphics::drawImageMeshInstanced (const Image& image, const ImageMesh& mesh, Span<const ImageMeshInstance> instances, ImageSampling sampling)
+{
+    if (instances.empty())
+        return;
+
+    if (! image.createTextureIfNotPresent (context))
+        return;
+
+    const auto* buffers = mesh.updateGpuBuffers (factory, context.getGpuDevice());
+    if (buffers == nullptr)
+        return;
+
+    auto meshInstances = factory.makeImageMeshInstances (instances.size());
+    if (meshInstances == nullptr)
+        return;
+
+    auto instanceData = meshInstances->edit();
+    for (std::size_t i = 0; i < instances.size(); ++i)
+    {
+        const auto& instance = instances[i];
+        auto& data = instanceData[i];
+
+        data.transform = instance.transform.toMat2D();
+        data.uvTranslate = { instance.textureOffset.getX(), instance.textureOffset.getY() };
+        data.uvScale = { instance.textureScale.getX(), instance.textureScale.getY() };
+        data.opacity = jlimit (0.0f, 1.0f, instance.opacity);
+        data.additiveness = jlimit (0.0f, 1.0f, instance.additiveAmount);
+    }
+    meshInstances->endEdit();
+
+    const auto& options = currentRenderOptions();
+    const auto renderImage = rive::make_rcp<rive::RiveRenderImage> (image.getTexture());
+
+    renderer.save();
+    renderer.transform (options.getTransform().toMat2D());
+    applyModulation (options);
+    renderer.drawImageMeshInstanced (renderImage.get(),
+                                     toImageSampler (sampling),
+                                     buffers->vertices,
+                                     buffers->textureCoordinates,
+                                     buffers->indices,
+                                     static_cast<uint32_t> (mesh.getVertices().size()),
+                                     static_cast<uint32_t> (mesh.getIndices().size()),
+                                     std::move (meshInstances));
+    renderer.restore();
+}
+
 void Graphics::drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea)
 {
     if (texture == nullptr)

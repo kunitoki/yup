@@ -218,6 +218,7 @@ class Context;
 #include "graphics/yup_StrokeType.h"
 #include "graphics/yup_FillType.h"
 #include "context/yup_GraphicsContext.h"
+#include "graphics/yup_ImageMesh.h"
 #include "graphics/yup_Graphics.h"
 #include "rhi/yup_GpuCanvas.h"
 #include "svg/yup_SVGElement.h"

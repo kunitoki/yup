@@ -1402,3 +1402,22 @@ TEST_F (GraphicsTest, Clip_Path_Replaces_A_Stroke_Clip_In_Get_Clip_Path)
 
     expectBoundsNear (graphics->getClipPath(), { 20.0f, 20.0f, 10.0f, 10.0f });
 }
+
+TEST_F (GraphicsTest, Drawing_Image_Meshes_Does_Not_Crash)
+{
+    const Image image (8, 8);
+    auto mesh = ImageMesh::createGrid ({ 0.0f, 0.0f, 40.0f, 40.0f }, 3, 3);
+
+    EXPECT_NO_THROW (graphics->drawImageMesh (image, mesh));
+
+    mesh.setVertex (5, { 12.0f, 12.0f });
+    EXPECT_NO_THROW (graphics->drawImageMesh (image, mesh, { ImageWrap::Repeat, ImageWrap::Repeat, ImageFilter::Nearest }));
+
+    std::vector<ImageMeshInstance> instances (3);
+    instances[1].transform = AffineTransform::translation (50.0f, 0.0f);
+    instances[2].textureScale = { 0.5f, 0.5f };
+    EXPECT_NO_THROW (graphics->drawImageMeshInstanced (image, mesh, instances));
+
+    EXPECT_NO_THROW (graphics->drawImageMesh (image, ImageMesh()));
+    EXPECT_NO_THROW (graphics->drawImageMeshInstanced (image, mesh, {}));
+}

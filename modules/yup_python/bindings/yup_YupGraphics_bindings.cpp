@@ -1978,6 +1978,42 @@ void registerYupGraphicsBindings (py::module_& m)
         .def (py::self != py::self)
     ;
 
+    // ============================================================================================ yup::ImageMesh
+
+    py::class_<ImageMesh> (m, "ImageMesh")
+        .def (py::init<>())
+        .def (py::init<std::vector<Point<float>>, std::vector<Point<float>>, std::vector<uint16>>(), "vertices"_a, "textureCoordinates"_a, "indices"_a)
+        .def_static ("createGrid", &ImageMesh::createGrid, "area"_a, "columns"_a, "rows"_a)
+        .def ("getVertices", [] (const ImageMesh& self)
+        {
+            const auto vertices = self.getVertices();
+            return std::vector<Point<float>> (vertices.begin(), vertices.end());
+        })
+        .def ("getTextureCoordinates", [] (const ImageMesh& self)
+        {
+            const auto textureCoordinates = self.getTextureCoordinates();
+            return std::vector<Point<float>> (textureCoordinates.begin(), textureCoordinates.end());
+        })
+        .def ("getIndices", [] (const ImageMesh& self)
+        {
+            const auto indices = self.getIndices();
+            return std::vector<uint16> (indices.begin(), indices.end());
+        })
+        .def ("setVertex", &ImageMesh::setVertex, "index"_a, "position"_a)
+        .def ("setVertices", [] (ImageMesh& self, const std::vector<Point<float>>& vertices)
+        {
+            return self.setVertices (vertices);
+        }, "vertices"_a)
+        .def ("isValid", &ImageMesh::isValid);
+
+    py::class_<ImageMeshInstance> (m, "ImageMeshInstance")
+        .def (py::init<>())
+        .def_readwrite ("transform", &ImageMeshInstance::transform)
+        .def_readwrite ("textureOffset", &ImageMeshInstance::textureOffset)
+        .def_readwrite ("textureScale", &ImageMeshInstance::textureScale)
+        .def_readwrite ("opacity", &ImageMeshInstance::opacity)
+        .def_readwrite ("additiveAmount", &ImageMeshInstance::additiveAmount);
+
     // ============================================================================================ yup::Graphics
 
     py::class_<Graphics> classGraphics (m, "Graphics");
@@ -2097,6 +2133,11 @@ void registerYupGraphicsBindings (py::module_& m)
         // Image operations
         .def ("drawImageAt", &Graphics::drawImageAt)
         .def ("drawImage", &Graphics::drawImage)
+        .def ("drawImageMesh", &Graphics::drawImageMesh, "image"_a, "mesh"_a, "sampling"_a = ImageSampling())
+        .def ("drawImageMeshInstanced", [] (Graphics& self, const Image& image, const ImageMesh& mesh, const std::vector<ImageMeshInstance>& instances, ImageSampling sampling)
+        {
+            self.drawImageMeshInstanced (image, mesh, instances, sampling);
+        }, "image"_a, "mesh"_a, "instances"_a, "sampling"_a = ImageSampling())
         .def ("drawTexture", &Graphics::drawTexture)
 
         // Text operations

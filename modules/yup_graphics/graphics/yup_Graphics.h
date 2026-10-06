@@ -719,6 +719,30 @@ public:
     */
     void drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea);
 
+    /** Draws an image mapped onto a triangle mesh.
+
+        The mesh is drawn with the current transform, opacity, tint, blend mode and additive
+        amount. Nothing is drawn if the mesh is not valid (see ImageMesh::isValid()).
+
+        @param image    The image to map onto the mesh.
+        @param mesh     The mesh, whose GPU buffers are kept for the next draw.
+        @param sampling How the image repeats and is filtered.
+    */
+    void drawImageMesh (const Image& image, const ImageMesh& mesh, ImageSampling sampling = {});
+
+    /** Draws many copies of an image mesh in a single call.
+
+        Each copy has its own transform, texture coordinate offset and scale, opacity and
+        additive amount. The current transform, opacity and tint apply to all of them; the
+        blend mode does not, copies are always drawn over what is below (or added to it).
+
+        @param image     The image to map onto the mesh.
+        @param mesh      The mesh every copy uses.
+        @param instances The copies to draw.
+        @param sampling  How the image repeats and is filtered.
+    */
+    void drawImageMeshInstanced (const Image& image, const ImageMesh& mesh, Span<const ImageMeshInstance> instances, ImageSampling sampling = {});
+
     //==============================================================================
     /** Draws an attributed text.
 
