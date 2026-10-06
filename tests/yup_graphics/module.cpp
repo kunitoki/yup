@@ -34,6 +34,7 @@
 #include "yup_GraphicsOffscreen.cpp"
 #include "yup_GpuCanvas.cpp"
 #include "yup_Image.cpp"
+#include "yup_ImageMesh.cpp"
 #include "yup_ImageFormatManager.cpp"
 #include "yup_ImageFormatMetadataExtended.cpp"
 #include "yup_ImageFormatReader.cpp"

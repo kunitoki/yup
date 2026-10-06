@@ -69,7 +69,11 @@ ArtboardFile::ArtboardFile (rive::rcp<rive::File> rivFile,
 {
 }
 
-ArtboardFile::~ArtboardFile() = default;
+ArtboardFile::~ArtboardFile()
+{
+    // Tearing down the session drains its pending destroys into its streams.
+    bindDeferredRecordingThread();
+}
 
 //==============================================================================
 
