@@ -1042,6 +1042,29 @@ TEST_F (GraphicsMetalPixelTests, MovedVerticesAreUploadedAgain)
     EXPECT_GT (alphaAt (second, 48, 48), 200);
 }
 
+TEST_F (GraphicsMetalPixelTests, FrameDescriptorPassesTriangulationThresholds)
+{
+    auto canvas = GpuCanvas::create (*gpuContext, size, size);
+    ASSERT_NE (canvas, nullptr);
+
+    GpuFrameDescriptor frameDesc;
+    frameDesc.triangulationThresholds.minArea = 100.0f;
+    frameDesc.triangulationThresholds.maxVerbs = 32;
+    frameDesc.triangulationThresholds.frameBudgetMs = 0.5f;
+
+    auto& g = canvas->beginDraw (frameDesc);
+
+    auto* renderContext = dynamic_cast<rive::gpu::RenderContext*> (g.getFactory());
+    ASSERT_NE (nullptr, renderContext);
+
+    const auto& thresholds = renderContext->frameDescriptor().triangulationThresholds;
+    EXPECT_FLOAT_EQ (100.0f, thresholds.minArea);
+    EXPECT_EQ (32u, thresholds.maxVerbs);
+    EXPECT_FLOAT_EQ (0.5f, thresholds.frameBudgetMs);
+
+    EXPECT_TRUE (canvas->commit());
+}
+
 TEST_F (GraphicsMetalPixelTests, CenteredClipStrokeKeepsOnlyTheBand)
 {
     const auto pixels = render ([] (Graphics& g)

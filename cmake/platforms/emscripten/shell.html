@@ -734,10 +734,20 @@
             if (typeof navigator === 'undefined' || !navigator.gpu)
               return;
             addRunDependency('webgpu-device');
+            var requestedCompatibility = false;
             navigator.gpu.requestAdapter().then(function (adapter) {
+              if (adapter != null)
+                return adapter;
+
+              // Compatibility mode runs on older GPUs and on browsers implementing WebGPU over OpenGL ES
+              requestedCompatibility = true;
+              return navigator.gpu.requestAdapter({ featureLevel: 'compatibility' });
+            }).then(function (adapter) {
               if (adapter == null) throw new Error('WebGPU: no adapter');
               return adapter.requestDevice();
             }).then(function (device) {
+              // An adapter returned for a compatibility request may still give a full (core) device
+              Module.webGPUCompatibilityMode = requestedCompatibility && !device.features.has('core-features-and-limits');
               Module.preinitializedWebGPUDevice = device;
               removeRunDependency('webgpu-device');
             }).catch(function (e) {

@@ -1292,3 +1292,75 @@ TEST (StyledTextTests, AdjacentLineMovementWorksAcrossWraps)
     const int downFromEnd = fixture.text.getGlyphIndexOnAdjacentLine (textEnd, true);
     EXPECT_EQ (textEnd, downFromEnd);
 }
+
+// ==============================================================================
+// Line breaking (Unicode UAX #14 rules)
+// ==============================================================================
+
+class StyledTextLineBreakTests : public ::testing::Test
+{
+protected:
+    static void shape (StyledText& text, const String& string, float maxWidth)
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ maxWidth, 400.0f });
+        modifier.appendText (string, loadStyledTextTestFont());
+    }
+
+    /** The x position of a character when nothing wraps. */
+    static float unwrappedX (const String& string, int characterIndex)
+    {
+        StyledText text;
+        shape (text, string, 10000.0f);
+        return text.getCaretBounds (characterIndex).getX();
+    }
+
+    static float lineY (const StyledText& text, int characterIndex)
+    {
+        return text.getCaretBounds (characterIndex).getY();
+    }
+};
+
+TEST_F (StyledTextLineBreakTests, BreaksAfterAHyphen)
+{
+    const String string = "well-known";
+    const int afterHyphen = string.indexOfChar ('k');
+
+    // Room for "well-kn": splitting the word where it overflows would keep "kn" on the first
+    // line, breaking after the hyphen moves all of "known" down
+    StyledText text;
+    shape (text, string, unwrappedX (string, afterHyphen + 2) + 1.0f);
+
+    // A caret exactly at a wrap can report the end of the previous line, so look one character in
+    EXPECT_FLOAT_EQ (lineY (text, 0), lineY (text, afterHyphen - 1));
+    EXPECT_GT (lineY (text, afterHyphen + 1), lineY (text, 0));
+}
+
+TEST_F (StyledTextLineBreakTests, CjkTextWrapsBetweenCharacters)
+{
+    // A short word, then six ideographs: "a \u65e5\u672c\u8a9e\u306e\u6587\u7ae0"
+    const String string = String::fromUTF8 ("a \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\xe3\x81\xae\xe6\x96\x87\xe7\xab\xa0");
+    const int firstIdeograph = 2;
+
+    const float roomForTwo = unwrappedX (string, firstIdeograph + 2);
+    if (roomForTwo <= unwrappedX (string, firstIdeograph))
+        GTEST_SKIP() << "The test font gives these characters no width";
+
+    // Room for "a" and two ideographs: breaking only at spaces would move the whole run down,
+    // breaking between ideographs keeps the first two on the first line
+    StyledText text;
+    shape (text, string, roomForTwo + 1.0f);
+
+    EXPECT_FLOAT_EQ (lineY (text, 0), lineY (text, firstIdeograph));
+    EXPECT_GT (lineY (text, firstIdeograph + 3), lineY (text, 0));
+}
+
+TEST_F (StyledTextLineBreakTests, NewlineAlwaysBreaks)
+{
+    const String string = "one\ntwo";
+
+    StyledText text;
+    shape (text, string, 10000.0f);
+
+    EXPECT_GT (lineY (text, string.indexOfChar ('t')), lineY (text, 0));
+}

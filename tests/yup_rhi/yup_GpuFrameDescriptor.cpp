@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,19 +19,24 @@
   ==============================================================================
 */
 
-#include "../mocks/rive_gpu.h"
-#include "../mocks/rive_ore.h"
-#include "../mocks/yup_rhi.h"
-#include "../mocks/yup_graphics.h"
+#include <yup_rhi/yup_rhi.h>
 
-#include "yup_GpuDevice.cpp"
-#include "yup_GpuTarget.cpp"
-#include "yup_GpuTexture.cpp"
-#include "yup_GpuPipeline.cpp"
-#include "yup_GpuPipelineMocked.cpp"
-#include "yup_GpuComputePass.cpp"
-#include "yup_GpuFrameDescriptor.cpp"
+#include <gtest/gtest.h>
 
-#if YUP_LINUX
-#include "native/yup_GpuDevice_linux.cpp"
-#endif
+using namespace yup;
+
+class GpuFrameDescriptorTests : public ::testing::Test
+{
+};
+
+TEST_F (GpuFrameDescriptorTests, TriangulationThresholdsDefaultToRivesDefaults)
+{
+    const GpuTriangulationThresholds thresholds;
+    const rive::gpu::TriangulationThresholds riveThresholds;
+
+    EXPECT_FLOAT_EQ (riveThresholds.minArea, thresholds.minArea);
+    EXPECT_EQ (riveThresholds.maxVerbs, thresholds.maxVerbs);
+    EXPECT_FLOAT_EQ (riveThresholds.frameBudgetMs, thresholds.frameBudgetMs);
+
+    EXPECT_FLOAT_EQ (riveThresholds.minArea, GpuFrameDescriptor().triangulationThresholds.minArea);
+}

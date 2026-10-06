@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- **Behavior change** `StyledText` wraps lines by the Unicode line breaking rules (UAX #14) Rive now follows within words: text can break after hyphens and between CJK characters, where it used to break only at spaces.
+- WebAssembly: the page falls back to a WebGPU compatibility mode device when the browser cannot provide a full one (older GPUs, WebGPU over OpenGL ES), and tells Rive so; `GpuDevice::isCompatibilityMode` reports it.
+- `GpuTriangulationThresholds` controls when Rive triangulates filled paths on the CPU: set it on `GpuFrameDescriptor::triangulationThresholds` for offscreen frames, or per window with `ComponentNative::setTriangulationThresholds`. Bound in Python.
 - Scripted Rive files whose scripts draw into canvases or run GPU shaders now render in `Artboard`. `ArtboardFile::load` imports them through a Rive recording session, which the artboard replays into the window frame. `GraphicsContext::suspendFrame` / `resumeFrame` flush and reopen the open frame for that replay.
 - `ImageMesh` maps an image onto a triangle mesh (with `ImageMesh::createGrid` for warp grids), drawn with `Graphics::drawImageMesh`, or many copies at once with `Graphics::drawImageMeshInstanced` and per-copy `ImageMeshInstance` transform, opacity, additive amount and texture offset and scale. Bound in Python. A new Image Mesh demo warps the logo and draws thousands of sprites.
 - `Graphics::setClipStroke` clips to the outline of a stroked path (inside, centered or outside), and `TransparencyLayer::addMask` masks a layer by the alpha or luminance of what is drawn into it (`LayerMaskMode`), with any number of masks multiplying. The Paths demo can stack clip and mask layers above any layer.

@@ -506,6 +506,18 @@ public:
     */
     virtual void enableWireframe (bool shouldBeEnabld) = 0;
 
+    /** Returns when this window's renderer triangulates filled paths on the CPU. */
+    virtual GpuTriangulationThresholds getTriangulationThresholds() const = 0;
+
+    /** Sets when this window's renderer triangulates filled paths on the CPU.
+
+        Applied from the next frame. Lower budgets or higher thresholds save CPU time on
+        busy frames; a budget of 0 turns triangulation off.
+
+        @param thresholds The area, complexity and per-frame time limits to use.
+    */
+    virtual void setTriangulationThresholds (const GpuTriangulationThresholds& thresholds) = 0;
+
     //==============================================================================
     /** Requests a repaint of the entire component. */
     virtual void repaint() = 0;
