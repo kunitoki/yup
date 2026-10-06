@@ -8,6 +8,7 @@
 #include "lfunc.h"
 #include "lobject.h"
 #include "lstring.h"
+#include "lvector.h"
 
 #include "lgc.h"
 #include "lmem.h"
@@ -16,8 +17,8 @@
 
 #include <string.h>
 
-LUAU_FASTFLAGVARIABLE(LuauUdataDirectAccess6)
 LUAU_FASTFLAG(LuauCallFeedback)
+LUAU_FASTFLAGVARIABLE(LuauCostModel)
 
 template<typename T>
 struct TempBuffer
@@ -297,7 +298,7 @@ static int loadsafe(
         return 1;
     }
 
-    if (version < LBC_VERSION_MIN || version > LBC_VERSION_MAX)
+    if ((version < LBC_VERSION_MIN || version > LBC_VERSION_MAX) && version != LBC_VERSION_CLASSES)
     {
         char chunkbuf[LUA_IDSIZE];
         const char* chunkid = luaO_chunkid(chunkbuf, sizeof(chunkbuf), chunkname, strlen(chunkname));
@@ -370,6 +371,10 @@ static int loadsafe(
 
     for (unsigned int i = 0; i < protoCount; ++i)
     {
+        uint32_t protoSize = 0;
+        if (version >= 12)
+            protoSize = readVarInt(data, size, offset);
+        size_t protoStartOffset = offset;
         Proto* p = luaF_newproto(L);
         p->source = source;
         p->bytecodeid = int(i);
@@ -492,7 +497,18 @@ static int loadsafe(
                 float z = read<float>(data, size, offset);
                 float w = read<float>(data, size, offset);
                 (void)w;
-                setvvalue(&p->k[j], x, y, z, w);
+                setvvalue(L, &p->k[j], x, y, z, w);
+                break;
+            }
+
+            case LBC_CONSTANT_VECTORD:
+            {
+                double x = read<double>(data, size, offset);
+                double y = read<double>(data, size, offset);
+                double z = read<double>(data, size, offset);
+                double w = read<double>(data, size, offset);
+                (void)w;
+                setvvalue(L, &p->k[j], x, y, z, w);
                 break;
             }
 
@@ -600,7 +616,7 @@ static int loadsafe(
 
                 membersToOffset->readonly = true;
 
-                LuauClass* lco = luaR_newclass(L, tsvalue(classname), membersToOffset, offsetToMember, numProperties, numMethods);
+                LuauClass* lco = luaR_newclass(L, tsvalue(classname), membersToOffset, offsetToMember, numProperties, numMethods, envt);
                 setclassvalue(L, &p->k[j], lco);
                 break;
             }
@@ -618,46 +634,43 @@ static int loadsafe(
             }
         }
 
-        if (FFlag::LuauUdataDirectAccess6)
+        for (Instruction* instruction = p->code; instruction < p->code + p->sizecode;)
         {
-            for (Instruction* instruction = p->code; instruction < p->code + p->sizecode;)
+            int targetOp = -1;
+
+            switch (LUAU_INSN_OP(*instruction))
             {
-                int targetOp = -1;
+            case LOP_GETTABLEKS:
+                targetOp = LOP_GETUDATAKS;
+                break;
 
-                switch (LUAU_INSN_OP(*instruction))
-                {
-                case LOP_GETTABLEKS:
-                    targetOp = LOP_GETUDATAKS;
-                    break;
+            case LOP_SETTABLEKS:
+                targetOp = LOP_SETUDATAKS;
+                break;
 
-                case LOP_SETTABLEKS:
-                    targetOp = LOP_SETUDATAKS;
-                    break;
-
-                case LOP_NAMECALL:
-                    targetOp = LOP_NAMECALLUDATA;
-                    break;
-                }
-
-                if (targetOp != -1)
-                {
-                    LUAU_ASSERT(instruction[1] < uint32_t(sizek));
-
-                    // We take over the upper 16 bits of AUX - so no constants with big indices.
-                    if (instruction[1] < 0x10000)
-                    {
-                        TValue* k = &p->k[instruction[1]];
-                        TString* s = tsvalue(k);
-
-                        luaS_updateatom(L, s);
-
-                        if (s->atom >= 0)
-                            *instruction = (*instruction & 0xffffff00) | targetOp;
-                    }
-                }
-
-                instruction += Luau::getOpLength(LuauOpcode(LUAU_INSN_OP(*instruction)));
+            case LOP_NAMECALL:
+                targetOp = LOP_NAMECALLUDATA;
+                break;
             }
+
+            if (targetOp != -1)
+            {
+                LUAU_ASSERT(instruction[1] < uint32_t(sizek));
+
+                // We take over the upper 16 bits of AUX - so no constants with big indices.
+                if (instruction[1] < 0x10000)
+                {
+                    TValue* k = &p->k[instruction[1]];
+                    TString* s = tsvalue(k);
+
+                    luaS_updateatom(L, s);
+
+                    if (s->atom >= 0)
+                        *instruction = (*instruction & 0xffffff00) | targetOp;
+                }
+            }
+
+            instruction += Luau::getOpLength(LuauOpcode(LUAU_INSN_OP(*instruction)));
         }
 
         const int sizep = readVarInt(data, size, offset);
@@ -733,7 +746,6 @@ static int loadsafe(
 
         if (version >= 11)
         {
-            LUAU_ASSERT(FFlag::LuauCallFeedback);
             p->feedbackvecsize = readVarInt(data, size, offset);
 
             if (p->feedbackvecsize > 0)
@@ -750,6 +762,18 @@ static int loadsafe(
                 slot.call_target.proto = 0;
                 slot.call_target.hits = 0;
             }
+        }
+
+        if (version >= 12)
+        {
+            if ((p->flags & LPF_INLINABLE) != 0)
+                p->cost = readVarInt64(data, size, offset);
+        }
+
+        if (version >= 12)
+        {
+            // Potentially skipping unknown data at the end of Proto.
+            offset = protoStartOffset + protoSize;
         }
 
         protos[i] = p;

@@ -6,113 +6,124 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_clockwise_atomic_path_frag[] = R"===(#ifdef FB
-J1
-#ifndef K
-r0(Q2,g0);
+R1
+#ifndef W
+B0(K2,n0);
 #endif
-r0(R2,d0);
-#ifndef K
-Ja(d6,z6);
+B0(c3,m0);
+#ifndef W
+rb(o6,O6);
 #endif
-K1 N3 Ea(ga,Yd,S0);O3 e void xh(T4(float) o3,d o0,uint T1,e1(uint) p1,e1(d) J3){
-#ifdef K
-if(min(o3,o0)>=1.){return;}
+S1 f4 mb(Na,Te,V0);g4 f d Zi(float n3,d A0,uint d2,i1(uint) z1,i1(d) Z3){
+#ifdef W
+if(min(n3,A0)>=1.){return 1.;}
 #endif
-d q;uint be=q7(abs(o0));p1=A7(S0,T1,k.W1|be);if(p1<k.W1){q=o0;
-#ifndef K
-J3=o0;
+d F;uint We=G7(abs(A0));z1=M7(V0,d2,j.j2|We);if(z1<j.j2){F=A0;
+#ifndef W
+Z3=A0;
 #endif
 }else{
-#ifndef K
-if((p1&e7)!=0u){p1=A7(S0,T1,k.W1|e7|be);}
+#ifndef W
+if((z1&w7)!=0u){z1=M7(V0,d2,j.j2|w7|We);}
 #endif
-d V1=V5(p1&ja)*ha;d G1=max(V1,o0);q=K8(V1,G1,o3);
-#ifndef K
-J3=G1;
+d i2=j6(z1&Ra)*Pa;d M1=max(i2,A0);F=c9(i2,M1,n3);
+#ifndef W
+Z3=M1;
 #endif
-}o3*=q;}e void yh(T4(float) o3,d P4,uint T1,e1(uint) p1,e1(d) J3){d q=.0;uint fb=q7(abs(P4));p1=pd(S0,T1);
-#ifdef K
-if(min(o3,P4)>=1.&&(p1<k.W1||p1>=(k.W1|j5))){return;}
+}return F;}f d aj(float n3,d g5,uint d2,i1(uint) z1,i1(d) Z3){d F=.0;uint Xb=G7(abs(g5));z1=fe(V0,d2);
+#ifdef W
+if(min(n3,g5)>=1.&&(z1<j.j2||z1>=(j.j2|C5))){return 1.;}
 #endif
-if(p1<k.W1){uint ce=k.W1|(j5+fb);uint f3=A7(S0,T1,ce);
-#ifndef K
-p1=f3;
+if(z1<j.j2){uint Xe=j.j2|(C5+Xb);uint r3=M7(V0,d2,Xe);
+#ifndef W
+z1=r3;
 #endif
-if(f3<=k.W1){q=P4;
+if(r3<=j.j2){F=g5;
 #ifdef DB
-q=min(q,1.);
+F=min(F,1.);
 #endif
-#ifndef K
-J3=q;
+#ifndef W
+Z3=F;
 #endif
-P4=.0;}else if(f3<ce){uint de=(f3&ja)-j5;d V1=V5(de)*ha;d G1=P4;
+g5=.0;}else if(r3<Xe){uint Ye=(r3&Ra)-C5;d i2=j6(Ye)*Pa;d M1=g5;
 #ifdef DB
-G1=min(G1,1.);
+M1=min(M1,1.);
 #endif
-#ifndef K
-J3=G1;
+#ifndef W
+Z3=M1;
 #endif
-q=K8(V1,G1,o3);fb=de;P4=V1;}}if(P4>.0){uint eb=Fa(S0,T1,fb);d V1=Aa(eb);d G1=V1+P4;V1=clamp(V1,.0,1.);G1=clamp(G1,.0,1.);
-#ifndef K
-J3=G1;
+F=c9(i2,M1,n3);Xb=Ye;g5=i2;}}if(g5>.0){uint Wb=nb(V0,d2,Xb);d i2=ib(Wb);d M1=i2+g5;i2=clamp(i2,.0,1.);M1=clamp(M1,.0,1.);
+#ifndef W
+Z3=M1;
 #endif
-q+=(1.-q*o3)*K8(V1,G1,o3);}o3*=q;}d5(IB){B(i1,g);
-#ifdef DB
-Y(j1,d);
-#else
-Y(I,z2);
-#endif
-B(z0,d);
-#ifdef O
-B(S1,D);
-#endif
-#ifdef AB
-B(N0,g);
-#endif
+F+=(1.-F*n3)*c9(i2,M1,n3);}return F;}z5(IB){q(a1,e);
 #ifdef GB
-B(Z1,d);
+q(r1,O);
 #endif
-B(e3,W0);B(j4,c);i F0=M7(i1,1. S2);
-#ifndef K
-i gb=H0(g0);
-#endif
-d o0=
 #ifdef DB
-j1;
+T(m1,d);
 #else
-cb(I);
+T(S,G2);
 #endif
-c y6=j4;
-#ifndef K
-y6+=(gb.xy+gb.zw)*k.vg;
+q(F0,d);
+#ifdef A
+q(l1,C);
 #endif
-y6=floor(y6);uint N7=e3.y;uint T1=e3.x+L8(W0(y6),N7);d H1=1.;
 #ifdef AB
-if(AB){d hb=g3(Y4(N0));H1=min(hb,H1);}
+q(R0,e);
 #endif
-#ifdef O
-if(O&&S1.x!=.0){d ib=H0(d0).x;H1=min(ib,H1);}
+#ifdef N
+q(Q0,d);
 #endif
-H1=max(H1,.0);o0=clamp(o0,.0,H1);uint p1;float J3;
+q(q3,O0);q(F4,c);i o0=Y7(
+#ifdef GB
+r1,
+#endif
+#ifdef N
+k3(Q0),
+#endif
+a1 e3);
+#ifndef W
+i Yb=N0(n0);
+#endif
+d A0=
+#ifdef DB
+m1;
+#else
+Ub(S);
+#endif
+c N6=F4;
+#ifndef W
+N6+=(Yb.xy+Yb.zw)*j.Ph;
+#endif
+N6=floor(N6);uint a8=q3.y;uint d2=q3.x+d9(O0(N6),a8);d N1=1.;
+#ifdef AB
+if(AB){d Zb=v3(v5(R0));N1=min(Zb,N1);}
+#endif
+#ifdef A
+if(A&&l1.x!=.0){d ac=N0(m0).x;N1=min(ac,N1);}
+#endif
+N1=max(N1,.0);A0=clamp(A0,.0,N1);uint z1;d d8;float Z3;
 #ifndef DB
-if(Q5(I)){xh(F0.w,o0,T1,p1,J3);}else
+if(f6(S)){d8=Zi(o0.w,A0,d2,z1,Z3);}else
 #endif
-{yh(F0.w,o0,T1,p1,J3);}
-#ifdef JB
-d G5;if(JB){G5=Z9(S.xy,k.y3,k.z3);}
+{d8=aj(o0.w,A0,d2,z1,Z3);}
+#ifdef OB
+d W5;if(OB){W5=Da(f0.xy,j.L3,j.M3);}
 #endif
-#ifndef K
-if(F0.w>.0){bool zh=p1>=k.W1&&(p1&e7)!=0u;if(!zh){F0.xyz=Q4(F0.xyz,gb,W5(Z1));if(J3<1.){r P7=F0.xyz;
-#ifdef JB
-if(JB){P7+=G5*k.gd;}
+#ifdef W
+o0*=d8;
+#else
+if(N&&k3(Q0)!=L4){o0.w*=d8;if(o0.w>.0){bool bj=z1>=j.j2&&(z1&w7)!=0u;if(!bj){o0.xyz=h5(o0.xyz,Yb,k3(Q0));if(Z3<1.){v e8=o0.xyz;
+#ifdef OB
+if(OB){e8+=W5*j.Wd;}
 #endif
-Ia(z6,B0(P7,.0));memoryBarrier();xg(S0,T1,e7);}}else{F0.xyz=Ha(z6).xyz;}}
+qb(O6,I0(e8,.0));memoryBarrier();Rh(V0,d2,w7);}}else{o0.xyz=pb(O6).xyz;}}o0.xyz*=o0.w;}else{o0*=d8;}
 #endif
-F0.xyz*=F0.w;
-#ifdef JB
-if(JB){F0.xyz+=G5;}
+#ifdef OB
+o0.xyz=M2(o0.xyz,o0.w,W5);
 #endif
-v0(d0,B0(.0));V3(F0);}
+y0(m0,I0(.0));n4(o0);}
 #endif
 )===";
 } // namespace glsl

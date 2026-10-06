@@ -179,3 +179,15 @@ def test_is_invisible_is_opaque():
     assert c.isInvisible()
     assert not c.isOpaque()
 """
+
+#==================================================================================================
+
+def test_get_stops_and_repr():
+    linear = yup.ColorGradient(yup.Colors.red, 0.0, 0.0, yup.Colors.blue, 10.0, 0.0)
+    stops = linear.getStops()
+    assert len(stops) == linear.getNumStops()
+    assert len(stops) >= 2
+    assert repr(linear).endswith(f"(Linear, {linear.getNumStops()} stops)")
+
+    radial = yup.ColorGradient(yup.Colors.red, 0.0, 0.0, yup.Colors.blue, 10.0, 0.0, yup.ColorGradient.Type.Radial)
+    assert repr(radial).endswith(f"(Radial, {radial.getNumStops()} stops)")

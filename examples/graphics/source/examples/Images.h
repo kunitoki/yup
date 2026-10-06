@@ -104,21 +104,28 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         auto bounds = getLocalBounds().to<float>().reduced (10.0f);
         bounds.removeFromTop (75.0f);
 
         {
-            g.setFillColor (yup::Colors::black.withAlpha (0.3f));
+            const auto theme = yup::ApplicationTheme::getGlobalTheme();
+            const auto& palette = theme->getPalette();
+
+            g.setFillColor (palette.getColor (yup::ThemePalette::Role::surface));
             g.fillRoundedRect (bounds, 8.0f);
+            g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
+            g.setStrokeWidth (1.0f);
+            g.strokeRoundedRect (bounds, 8.0f);
 
             yup::String label = currentImage.isValid() ? currentImageLabel : yup::String ("No image");
             if (animationIsAnimated && animationFrameCount > 0)
                 label << "  (frame " << (animationCurrentFrame + 1) << "/" << animationFrameCount << ")";
 
-            g.fillFittedText (label, yup::Font().withHeight (14.0f), bounds.removeFromTop (24.0f).translated (0.0f, 8.0f), yup::Justification::center);
+            g.setFillColor (palette.getColor (yup::ThemePalette::Role::text));
+            g.fillFittedText (label, theme->getDefaultFont().withHeight (14.0f), bounds.removeFromTop (24.0f).translated (0.0f, 8.0f), yup::Justification::center);
 
             auto imageArea = bounds.reduced (8.0f);
             imageArea.removeFromTop (8.0f);

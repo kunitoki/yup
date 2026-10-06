@@ -100,6 +100,12 @@ public:
 
     void enableWireframe (bool) override {}
 
+    GpuTriangulationThresholds getTriangulationThresholds() const override { return thresholds; }
+
+    void setTriangulationThresholds (const GpuTriangulationThresholds& newThresholds) override { thresholds = newThresholds; }
+
+    GpuTriangulationThresholds thresholds;
+
     void repaint() override {}
 
     void repaint (const Rectangle<float>&) override {}
@@ -238,7 +244,7 @@ public:
 
     static void setOnDesktop (Component& comp, bool value)
     {
-        comp.options.onDesktop = value;
+        comp.flags.onDesktop = value;
     }
 
     static void triggerDisplayChanged (Component& comp)
@@ -2802,11 +2808,11 @@ TEST_F (ComponentTest, GetParentComponentWithTypeWalksUpTheChain)
 
 TEST (ComponentNativeOptionsTest, RepaintModeDefaultsToDisjointRegionsAndIsSettable)
 {
-    ComponentNative::Options options;
-    EXPECT_EQ (ComponentNative::RepaintMode::disjointRegions, options.repaintMode);
+    ComponentNative::Options flags;
+    EXPECT_EQ (ComponentNative::RepaintMode::disjointRegions, flags.repaintMode);
 
-    options.withRepaintMode (ComponentNative::RepaintMode::boundingBox);
-    EXPECT_EQ (ComponentNative::RepaintMode::boundingBox, options.repaintMode);
+    flags.withRepaintMode (ComponentNative::RepaintMode::boundingBox);
+    EXPECT_EQ (ComponentNative::RepaintMode::boundingBox, flags.repaintMode);
 }
 
 namespace
@@ -3054,6 +3060,22 @@ TEST_F (ComponentRepaintRegionTest, NestedChildSeesClipInLocalCoordinates)
     ComponentHelper::triggerPaint (*root, g, root->getLocalBounds(), false);
 
     expectRectNear (child.clipBounds, { 0.0f, 0.0f, 40.0f, 30.0f });
+}
+
+TEST_F (ComponentRepaintRegionTest, AChildOnAHalfUnitRepaintsTheWholeRegionOverIt)
+{
+    ClipRecordingComponent child;
+    child.setBounds (150.5f, 30.0f, 100.0f, 100.0f);
+    child.setVisible (true);
+    root->addChildComponent (child);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, region ({ { 140, 40, 61, 20 } }), false);
+
+    // The region ends 50.5 into the child. Rounding the clip position and size apart (to even) would
+    // stop it at 50 and leave the last column of the region unpainted.
+    EXPECT_NEAR (50.5f, child.clipBounds.getRight(), 1.0e-3f);
+    EXPECT_LE (child.clipBounds.getX(), 0.0f);
 }
 
 TEST_F (ComponentRepaintRegionTest, TransformedChildSeesClipInLocalCoordinates)

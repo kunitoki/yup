@@ -76,6 +76,10 @@ public:
         height = newHeight;
         sampleCount = newSampleCount;
         createOffscreenResources();
+
+        // Rive creates its GPU scripting context on first use, querying GL as it does. Do it here,
+        // with the context current, rather than wherever a scripted file happens to be loaded.
+        getRenderContext()->ore();
     }
 
     std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override
@@ -85,16 +89,22 @@ public:
 
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
+        this->frameDescriptor = frameDescriptor;
         getRenderContext()->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
         getRenderContext()->beginFrame (frameDescriptor);
     }
 
     void end (void*) override
     {
+        suspendFrame();
+        blitToMainFramebuffer();
+    }
+
+    void suspendFrame() override
+    {
         getRenderContext()->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
         getRenderContext()->flush ({ offscreenRenderTarget.get() });
         getRenderContext()->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
-        blitToMainFramebuffer();
     }
 
 private:

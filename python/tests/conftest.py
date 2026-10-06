@@ -59,3 +59,17 @@ def juce_app():
         next(app)
         yield app
         next(app)
+
+#==================================================================================================
+
+@pytest.fixture
+def gui_app(request):
+    """The running application, for tests that only need one to exist.
+
+    Under the embedded interpreter the host process already runs an application with a message
+    thread, so nothing is started. Otherwise this falls back to juce_app.
+    """
+    if getattr(yup, "__embedded_interpreter__", False):
+        yield None
+    else:
+        yield request.getfixturevalue("juce_app")

@@ -2,6 +2,12 @@
 #include "rive/lua/rive_lua_libs.hpp"
 #include "rive/file.hpp"
 #include "rive/artboard.hpp"
+#include "rive/custom_property_boolean.hpp"
+#include "rive/custom_property_color.hpp"
+#include "rive/assets/manifest_asset.hpp"
+#include "rive/custom_property_number.hpp"
+#include "rive/custom_property_string.hpp"
+#include "rive/drawable.hpp"
 #include "rive/animation/listener_invocation.hpp"
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/input/focus_manager.hpp"
@@ -11,6 +17,7 @@
 #include "rive/bones/root_bone.hpp"
 #include "rive/constraints/constraint.hpp"
 #include "rive/math/transform_components.hpp"
+#include "rive/shapes/path.hpp"
 
 #include <math.h>
 #include <stdio.h>
@@ -22,12 +29,23 @@ ScriptReffedArtboard::ScriptReffedArtboard(
     std::unique_ptr<ArtboardInstance>&& artboardInstance,
     rcp<ViewModelInstance> viewModelInstance,
     rcp<DataContext> parentDataContext,
-    ScriptingContext* scriptingContext) :
+    ScriptingContext* scriptingContext
+#ifdef WITH_RIVE_TOOLS
+    ,
+    rcp<File> filePin
+#endif
+    ) :
     m_file(file),
+#ifdef WITH_RIVE_TOOLS
+    m_filePin(std::move(filePin)),
+#endif
     m_artboard(std::move(artboardInstance)),
     m_stateMachine(m_artboard->defaultStateMachine()),
     m_scriptingContext(scriptingContext)
 {
+    // A scripted artboard is a root: nothing hosts it in another artboard's
+    // focus tree, so it owns its FocusManager and builds its own focus tree.
+    m_artboard->buildFocusTree(m_artboard->ensureFocusManager(), nullptr);
     if (viewModelInstance)
     {
         m_viewModelInstance = viewModelInstance;
@@ -81,22 +99,251 @@ StateMachineInstance* ScriptReffedArtboard::stateMachine()
     return m_stateMachine.get();
 }
 
+static const int kVisitorIndex = 3;
+static const int kVisitContextIndex = 4;
+static const int kVisitedDrawableIndex = 5;
+
+struct LuaDrawVisit
+{
+    lua_State* L;
+    VisitedDrawable* visited;
+    ScriptedRenderer* renderer;
+    // A visitor that draws a nested artboard is visited again from inside
+    // its own call frame, where artboard:draw's stack slots are out of reach.
+    int visitorRef;
+    int contextRef;
+    int visitedRef;
+    int rendererRef;
+    int errorRef = LUA_NOREF;
+    bool visiting = false;
+};
+
+static void luaDrawVisitor(void* context,
+                           Drawable* drawable,
+                           Renderer* renderer)
+{
+    auto visit = static_cast<LuaDrawVisit*>(context);
+    lua_State* L = visit->L;
+    if (visit->errorRef != LUA_NOREF || !lua_checkstack(L, 4))
+    {
+        drawable->draw(renderer);
+        return;
+    }
+    // The visit outside this one reads its own drawable again afterwards.
+    Drawable* outer = visit->visited->drawable;
+    visit->visited->drawable = drawable;
+    bool nested = visit->visiting;
+    if (nested)
+    {
+        lua_getref(L, visit->visitorRef);
+        lua_getref(L, visit->contextRef);
+        lua_getref(L, visit->visitedRef);
+        lua_getref(L, visit->rendererRef);
+    }
+    else
+    {
+        lua_pushvalue(L, kVisitorIndex);
+        lua_pushvalue(L, kVisitContextIndex);
+        lua_pushvalue(L, kVisitedDrawableIndex);
+        lua_pushvalue(L, 2);
+    }
+    visit->visiting = true;
+    uint32_t saves = visit->renderer->saveCount();
+    if (lua_pcall(L, 3, 0, 0) != LUA_OK)
+    {
+        // Rethrown once the draw loop has unwound on its own.
+        visit->errorRef = lua_ref(L, -1);
+        lua_pop(L, 1);
+        visit->renderer->restoreTo(saves);
+    }
+    visit->visiting = nested;
+    visit->visited->drawable = outer;
+}
+
 static int artboard_draw(lua_State* L)
 {
     auto scriptedArtboard = lua_torive<ScriptedArtboard>(L, 1);
     auto scriptedRenderer = lua_torive<ScriptedRenderer>(L, 2);
 
     auto renderer = scriptedRenderer->validate(L);
-    scriptedArtboard->artboard()->drawInternal(renderer);
-
+    if (lua_isnoneornil(L, kVisitorIndex))
+    {
+        scriptedArtboard->artboard()->drawInternal(renderer);
+        return 0;
+    }
+    luaL_checktype(L, kVisitorIndex, LUA_TFUNCTION);
+    lua_settop(L, kVisitContextIndex);
+    luaL_checkstack(L, 8, "artboard draw visitor");
+    auto visited = lua_newrive<VisitedDrawable>(L);
+    LuaDrawVisit visit = {L,
+                          visited,
+                          scriptedRenderer,
+                          lua_ref(L, kVisitorIndex),
+                          lua_ref(L, kVisitContextIndex),
+                          lua_ref(L, -1),
+                          lua_ref(L, 2)};
+    scriptedArtboard->artboard()->drawInternal(
+        renderer,
+        luaDrawVisitor,
+        &visit,
+        scriptedArtboard->scriptReffedArtboard()->file());
+    visited->drawable = nullptr;
+    for (int ref : {visit.visitorRef,
+                    visit.contextRef,
+                    visit.visitedRef,
+                    visit.rendererRef})
+    {
+        lua_unref(L, ref);
+    }
+    if (visit.errorRef != LUA_NOREF)
+    {
+        lua_getref(L, visit.errorRef);
+        lua_unref(L, visit.errorRef);
+        lua_error(L);
+    }
     return 0;
 }
 
-static int artboard_draw_canvas(lua_State* L)
+static Drawable* visitedDrawable(lua_State* L)
+{
+    auto visited = lua_torive<VisitedDrawable>(L, 1);
+    if (visited->drawable == nullptr)
+    {
+        luaL_error(L, "Drawable is only valid inside the draw visitor");
+    }
+    return visited->drawable;
+}
+
+// The key a visitor reads custom properties by; one that matches nothing
+// when no property in the file carries that name.
+static int artboard_propertyKey(lua_State* L)
 {
     auto scriptedArtboard = lua_torive<ScriptedArtboard>(L, 1);
-    scriptedArtboard->artboard()->internalDrawCanvases();
+    size_t length = 0;
+    const char* name = luaL_checklstring(L, 2, &length);
+    lua_pushunsigned(L,
+                     File::customPropertyKey(
+                         scriptedArtboard->scriptReffedArtboard()->file(),
+                         name,
+                         length));
+    return 1;
+}
 
+static int artboard_drawModulated(lua_State* L)
+{
+    auto scriptedArtboard = lua_torive<ScriptedArtboard>(L, 1);
+    auto renderer = lua_torive<ScriptedRenderer>(L, 2)->validate(L);
+    scriptedArtboard->artboard()->drawModulated(
+        renderer,
+        luaL_checkunsigned(L, 3),
+        scriptedArtboard->scriptReffedArtboard()->file());
+    return 0;
+}
+
+// Nothing when the drawable has no property of this key and kind.
+static int drawable_value(lua_State* L, CustomPropertyKind kind)
+{
+    auto property =
+        visitedDrawable(L)->customProperty(luaL_checkunsigned(L, 2));
+    if (property == nullptr || property->kind() != kind)
+    {
+        return 0;
+    }
+    switch (kind)
+    {
+        case CustomPropertyKind::number:
+            lua_pushnumber(
+                L,
+                property->as<CustomPropertyNumber>()->propertyValue());
+            break;
+        case CustomPropertyKind::boolean:
+            lua_pushboolean(
+                L,
+                property->as<CustomPropertyBoolean>()->propertyValue());
+            break;
+        case CustomPropertyKind::color:
+            lua_pushunsigned(
+                L,
+                (unsigned)property->as<CustomPropertyColor>()->propertyValue());
+            break;
+        case CustomPropertyKind::string:
+        {
+            const std::string& value =
+                property->as<CustomPropertyString>()->propertyValue();
+            lua_pushlstring(L, value.data(), value.size());
+            break;
+        }
+        default:
+            return 0;
+    }
+    return 1;
+}
+
+#ifdef WITH_RIVE_TOOLS
+// For tooling and debugging, so shipping runtimes leave it out.
+static int drawable_properties(lua_State* L)
+{
+    static const char* kindNames[] =
+        {"number", "boolean", "string", "color", "enum", "trigger"};
+    auto drawable = visitedDrawable(L);
+    auto file = drawable->artboard()->drawVisitorFile();
+    auto manifest = file != nullptr ? file->manifest() : nullptr;
+    lua_newtable(L);
+    int index = 0;
+    for (auto child : drawable->children())
+    {
+        auto property = CustomProperty::tagging(child);
+        if (property == nullptr || manifest == nullptr)
+        {
+            continue;
+        }
+        const std::string& name = manifest->resolveName(property->nameId());
+        lua_createtable(L, 0, 2);
+        lua_pushlstring(L, name.data(), name.size());
+        lua_setfield(L, -2, "name");
+        lua_pushstring(L, kindNames[(int)property->kind()]);
+        lua_setfield(L, -2, "kind");
+        lua_rawseti(L, -2, ++index);
+    }
+    return 1;
+}
+#endif
+
+static int drawable_draw(lua_State* L)
+{
+    auto renderer = lua_torive<ScriptedRenderer>(L, 2)->validate(L);
+    visitedDrawable(L)->draw(renderer);
+    return 0;
+}
+
+static int drawable_namecall(lua_State* L)
+{
+    int atom;
+    const char* str = lua_namecallatom(L, &atom);
+    if (str != nullptr)
+    {
+        switch (atom)
+        {
+            case (int)LuaAtoms::number:
+                return drawable_value(L, CustomPropertyKind::number);
+            case (int)LuaAtoms::boolean:
+                return drawable_value(L, CustomPropertyKind::boolean);
+            case (int)LuaAtoms::color:
+                return drawable_value(L, CustomPropertyKind::color);
+            case (int)LuaAtoms::string:
+                return drawable_value(L, CustomPropertyKind::string);
+#ifdef WITH_RIVE_TOOLS
+            case (int)LuaAtoms::properties:
+                return drawable_properties(L);
+#endif
+            case (int)LuaAtoms::draw:
+                return drawable_draw(L);
+        }
+    }
+    luaL_error(L,
+               "%s is not a valid method of %s",
+               str,
+               VisitedDrawable::luaName);
     return 0;
 }
 
@@ -160,8 +407,10 @@ static int apply_gamepad_event(lua_State* L, int atom)
     {
         auto dispatch = [&](const ListenerInvocation& invocation) {
             ScriptedDrawable* dispatched = nullptr;
-            (void)stateMachine->focusManager()->gamepadDispatch(invocation,
-                                                                &dispatched);
+            if (auto* fm = stateMachine->focusManager())
+            {
+                (void)fm->gamepadDispatch(invocation, &dispatched);
+            }
             result = (int)stateMachine->broadcastGamepadToScriptedDrawables(
                 invocation,
                 dispatched);
@@ -217,8 +466,10 @@ static int artboard_namecall(lua_State* L)
         {
             case (int)LuaAtoms::draw:
                 return artboard_draw(L);
-            case (int)LuaAtoms::drawCanvas:
-                return artboard_draw_canvas(L);
+            case (int)LuaAtoms::propertyKey:
+                return artboard_propertyKey(L);
+            case (int)LuaAtoms::drawModulated:
+                return artboard_drawModulated(L);
             case (int)LuaAtoms::advance:
                 return artboard_advance(L);
             case (int)LuaAtoms::instance:
@@ -336,12 +587,18 @@ int ScriptedArtboard::instance(lua_State* L,
 {
     auto artboardInstance = artboard()->instance();
     artboardInstance->frameOrigin(false);
+    // Clones share the source's dependency on a cross-lifetime host file.
     lua_newrive<ScriptedArtboard>(L,
                                   L,
                                   m_scriptReffedArtboard->file(),
                                   std::move(artboardInstance),
                                   viewModelInstance,
-                                  m_dataContext);
+                                  m_dataContext
+#ifdef WITH_RIVE_TOOLS
+                                  ,
+                                  m_scriptReffedArtboard->filePin()
+#endif
+    );
     return 1;
 }
 
@@ -484,14 +741,24 @@ ScriptedArtboard::ScriptedArtboard(
     File* file,
     std::unique_ptr<ArtboardInstance>&& artboardInstance,
     rcp<ViewModelInstance> viewModelInstance,
-    rcp<DataContext> dataContext) :
+    rcp<DataContext> dataContext
+#ifdef WITH_RIVE_TOOLS
+    ,
+    rcp<File> filePin
+#endif
+    ) :
     m_state(L),
     m_scriptReffedArtboard(make_rcp<ScriptReffedArtboard>(
         file,
         std::move(artboardInstance),
         viewModelInstance,
         dataContext,
-        static_cast<ScriptingContext*>(lua_getthreaddata(L)))),
+        static_cast<ScriptingContext*>(lua_getthreaddata(L))
+#ifdef WITH_RIVE_TOOLS
+            ,
+        std::move(filePin)
+#endif
+            )),
     m_dataContext(dataContext)
 {}
 
@@ -623,9 +890,9 @@ static int node_index(lua_State* L)
     switch (atom)
     {
         case (int)LuaAtoms::position:
-            lua_pushvector2(L,
-                            scriptedNode->component()->x(),
-                            scriptedNode->component()->y());
+            rive_lua_pushvector2(L,
+                                 scriptedNode->component()->x(),
+                                 scriptedNode->component()->y());
             return 1;
 
         case (int)LuaAtoms::rotation:
@@ -633,9 +900,9 @@ static int node_index(lua_State* L)
             return 1;
 
         case (int)LuaAtoms::scale:
-            lua_pushvector2(L,
-                            scriptedNode->component()->scaleX(),
-                            scriptedNode->component()->scaleY());
+            rive_lua_pushvector2(L,
+                                 scriptedNode->component()->scaleX(),
+                                 scriptedNode->component()->scaleY());
             return 1;
 
         case (int)LuaAtoms::scaleX:
@@ -1029,6 +1296,12 @@ int luaopen_rive_artboards(lua_State* L)
                                        ScriptedNode::luaTag,
                                        "scale",
                                        node_direct_scale);
+
+    lua_register_rive<VisitedDrawable>(L);
+    lua_pushcfunction(L, drawable_namecall, nullptr);
+    lua_setfield(L, -2, "__namecall");
+    lua_setreadonly(L, -1, true);
+    lua_pop(L, 1); // pop the metatable
 
     lua_register_rive<ScriptedAnimation>(L);
     lua_pushcfunction(L, animation_index, nullptr);

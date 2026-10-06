@@ -47,7 +47,7 @@ public:
 
     MOCK_METHOD (rive::rcp<rive::ore::Buffer>, makeBuffer, (const rive::ore::BufferDesc&), (override));
     MOCK_METHOD (rive::rcp<rive::ore::Texture>, makeTexture, (const rive::ore::TextureDesc&), (override));
-    MOCK_METHOD (rive::rcp<rive::ore::TextureView>, makeTextureView, (const rive::ore::TextureViewDesc&), (override));
+    MOCK_METHOD (rive::rcp<rive::ore::TextureView>, makeTextureViewImpl, (const rive::ore::TextureViewDesc&), (override));
     MOCK_METHOD (rive::rcp<rive::ore::Sampler>, makeSampler, (const rive::ore::SamplerDesc&), (override));
     MOCK_METHOD (rive::rcp<rive::ore::ShaderModule>, makeShaderModule, (const rive::ore::ShaderModuleDesc&), (override));
     MOCK_METHOD (rive::rcp<rive::ore::BindGroupLayout>, makeBindGroupLayout, (const rive::ore::BindGroupLayoutDesc&), (override));
@@ -107,12 +107,13 @@ public:
 
 struct MockOreTexture : public rive::ore::Texture
 {
-    MockOreTexture()
-        : rive::ore::Texture ({})
+    /** Texture::upload() and Context::makeTextureView() validate against @p desc. */
+    explicit MockOreTexture (const rive::ore::TextureDesc& desc = {})
+        : rive::ore::Texture (desc)
     {
     }
 
-    MOCK_METHOD (void, upload, (const rive::ore::TextureDataDesc&), (override));
+    MOCK_METHOD (void, uploadImpl, (const rive::ore::TextureDataDesc&), (override));
 };
 
 // ==============================================================================

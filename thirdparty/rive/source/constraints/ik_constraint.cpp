@@ -14,9 +14,9 @@ void IKConstraint::buildDependencies()
     // IK Constraint needs to depend on the target so that world transform
     // changes can propagate to the bones (and they can be reset before IK
     // runs).
-    if (m_Target != nullptr)
+    if (auto* t = target())
     {
-        m_Target->addDependent(this);
+        t->addDependent(this);
     }
 }
 
@@ -173,9 +173,7 @@ void IKConstraint::solve2(BoneChainLink* fk1,
     constrainRotation(*firstChild, r2);
     if (firstChild != fk2)
     {
-        Bone* bone = fk2->bone;
-        bone->mutableWorldTransform() =
-            getParentWorld(*bone) * bone->transform();
+        fk2->bone->composeWorldTransform();
     }
 
     // Simple storage, need this for interpolation.
@@ -185,10 +183,24 @@ void IKConstraint::solve2(BoneChainLink* fk1,
 
 void IKConstraint::invertDirectionChanged() { markConstraintDirty(); }
 
+// True while the bone's world is still ours composed under its current parent,
+// so the angle on it is ours and not a rebuilt pose. Comparing worlds instead
+// would read a moved parent as someone else's work.
+bool IKConstraint::BoneChainLink::holdsOurSolve() const
+{
+    return solved &&
+           getParentWorld(*bone) * solvedLocal == bone->worldTransform();
+}
+
+void IKConstraint::BoneChainLink::recordSolve()
+{
+    solvedLocal = bone->transform();
+    solved = true;
+}
+
 void IKConstraint::constrainRotation(BoneChainLink& fk, float rotation)
 {
     Bone* bone = fk.bone;
-    const Mat2D& parentWorld = getParentWorld(*bone);
     Mat2D& transform = bone->mutableTransform();
     TransformComponents& c = fk.transformComponents;
 
@@ -213,28 +225,45 @@ void IKConstraint::constrainRotation(BoneChainLink& fk, float rotation)
         transform[3] = transform[1] * skew + transform[3];
     }
 
-    bone->mutableWorldTransform() = parentWorld * transform;
+    bone->composeWorldTransform();
 }
 
 void IKConstraint::constrain(TransformComponent* component)
 {
-    if (m_Target == nullptr || m_Target->isCollapsed())
+    auto* tgt = target();
+    if (tgt == nullptr || tgt->isCollapsed())
     {
         return;
     }
 
-    Vec2D worldTargetTranslation = m_Target->worldTranslation();
+    Vec2D worldTargetTranslation = tgt->worldTranslation();
 
-    // Decompose the chain.
+    // The pose to blend from: whatever ran before us leaves its work here.
     for (BoneChainLink& item : m_FkChain)
     {
-        auto bone = item.bone;
-        const Mat2D& parentWorld = getParentWorld(*bone);
-        item.parentWorldInverse = parentWorld.invertOrIdentity();
+        item.parentWorldInverse = getParentWorld(*item.bone).invertOrIdentity();
+        item.transformComponents =
+            (item.parentWorldInverse * item.bone->worldTransform()).decompose();
+        item.ours = item.holdsOurSolve();
+        if (item.ours)
+        {
+            // Our own angle. Blending from it creeps toward the full solution.
+            item.transformComponents.rotation(item.baseRotation);
+        }
+        item.baseRotation = item.transformComponents.rotation();
+    }
 
-        Mat2D& boneTransform = bone->mutableTransform();
-        boneTransform = item.parentWorldInverse * bone->worldTransform();
-        item.transformComponents = boneTransform.decompose();
+    // Longer chains solve from the pose they stand in, so put ours back first.
+    bool rebuilt = false;
+    for (BoneChainLink& item : m_FkChain)
+    {
+        rebuilt = rebuilt || item.ours;
+        if (rebuilt)
+        {
+            item.parentWorldInverse =
+                getParentWorld(*item.bone).invertOrIdentity();
+            constrainRotation(item, item.transformComponents.rotation());
+        }
     }
 
     int count = (int)m_FkChain.size();
@@ -286,5 +315,11 @@ void IKConstraint::constrain(TransformComponent* component)
             float angle = fromAngle + diff * strength();
             constrainRotation(fk, angle);
         }
+    }
+
+    // Lets the next solve tell our own output from a rebuilt pose.
+    for (BoneChainLink& item : m_FkChain)
+    {
+        item.recordSolve();
     }
 }

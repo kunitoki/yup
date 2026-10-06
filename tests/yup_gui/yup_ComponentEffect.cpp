@@ -63,17 +63,17 @@ class ComponentTestHelper<ComponentEffect>
 public:
     static void setPaintAsOffscreenRoot (Component& comp, bool value)
     {
-        comp.options.paintAsOffscreenRoot = value;
+        comp.flags.paintAsOffscreenRoot = value;
     }
 
     static bool isPaintAsOffscreenRoot (const Component& comp)
     {
-        return comp.options.paintAsOffscreenRoot;
+        return comp.flags.paintAsOffscreenRoot;
     }
 
     static bool isCachedToTextureOptionSet (const Component& comp)
     {
-        return comp.options.cachedToTexture;
+        return comp.flags.cachedToTexture;
     }
 
     static ComponentEffect::Ptr getComponentEffect (const Component& comp)

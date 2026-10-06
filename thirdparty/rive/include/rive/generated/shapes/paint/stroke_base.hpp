@@ -36,12 +36,14 @@ public:
     static const uint16_t capPropertyKey = 48;
     static const uint16_t joinPropertyKey = 49;
     static const uint16_t transformAffectsStrokePropertyKey = 50;
+    static const uint16_t positionPropertyKey = 470;
 
 protected:
     float m_Thickness = 1.0f;
-    uint32_t m_Cap = 0;
-    uint32_t m_Join = 0;
+    uint8_t m_Cap = 0;
+    uint8_t m_Join = 0;
     bool m_TransformAffectsStroke = true;
+    uint8_t m_Position = 1;
 
 public:
     inline float thickness() const { return m_Thickness; }
@@ -51,32 +53,35 @@ public:
         {
             return;
         }
+        RIVE_EDITOR_CHANGING(thicknessPropertyKey, &m_Thickness, &value);
         m_Thickness = value;
-        thicknessChanged();
+        RIVE_EDITOR_CHANGED(thicknessChanged());
         notifyPropertyChanged(thicknessPropertyKey);
     }
 
-    inline uint32_t cap() const { return m_Cap; }
-    void cap(uint32_t value)
+    inline uint8_t cap() const { return m_Cap; }
+    void cap(uint8_t value)
     {
         if (m_Cap == value)
         {
             return;
         }
+        RIVE_EDITOR_CHANGING(capPropertyKey, &m_Cap, &value);
         m_Cap = value;
-        capChanged();
+        RIVE_EDITOR_CHANGED(capChanged());
         notifyPropertyChanged(capPropertyKey);
     }
 
-    inline uint32_t join() const { return m_Join; }
-    void join(uint32_t value)
+    inline uint8_t join() const { return m_Join; }
+    void join(uint8_t value)
     {
         if (m_Join == value)
         {
             return;
         }
+        RIVE_EDITOR_CHANGING(joinPropertyKey, &m_Join, &value);
         m_Join = value;
-        joinChanged();
+        RIVE_EDITOR_CHANGED(joinChanged());
         notifyPropertyChanged(joinPropertyKey);
     }
 
@@ -90,9 +95,25 @@ public:
         {
             return;
         }
+        RIVE_EDITOR_CHANGING(transformAffectsStrokePropertyKey,
+                             &m_TransformAffectsStroke,
+                             &value);
         m_TransformAffectsStroke = value;
-        transformAffectsStrokeChanged();
+        RIVE_EDITOR_CHANGED(transformAffectsStrokeChanged());
         notifyPropertyChanged(transformAffectsStrokePropertyKey);
+    }
+
+    inline uint8_t position() const { return m_Position; }
+    void position(uint8_t value)
+    {
+        if (m_Position == value)
+        {
+            return;
+        }
+        RIVE_EDITOR_CHANGING(positionPropertyKey, &m_Position, &value);
+        m_Position = value;
+        RIVE_EDITOR_CHANGED(positionChanged());
+        notifyPropertyChanged(positionPropertyKey);
     }
 
     Core* clone() const override;
@@ -102,6 +123,7 @@ public:
         m_Cap = object.m_Cap;
         m_Join = object.m_Join;
         m_TransformAffectsStroke = object.m_TransformAffectsStroke;
+        m_Position = object.m_Position;
         ShapePaint::copy(object);
     }
 
@@ -121,6 +143,9 @@ public:
             case transformAffectsStrokePropertyKey:
                 m_TransformAffectsStroke = CoreBoolType::deserialize(reader);
                 return true;
+            case positionPropertyKey:
+                m_Position = CoreUintType::deserialize(reader);
+                return true;
         }
         return ShapePaint::deserialize(propertyKey, reader);
     }
@@ -130,6 +155,10 @@ protected:
     virtual void capChanged() {}
     virtual void joinChanged() {}
     virtual void transformAffectsStrokeChanged() {}
+    virtual void positionChanged() {}
+#ifdef WITH_RIVE_EDITOR
+#include "editor_native/generated/shapes/paint/stroke_ext.inl"
+#endif
 };
 } // namespace rive
 

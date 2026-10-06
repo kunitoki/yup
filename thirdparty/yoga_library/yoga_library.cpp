@@ -33,5 +33,7 @@
 #include "upstream/yoga/YGStyle.cpp"
 #include "upstream/yoga/YGValue.cpp"
 #include "upstream/yoga/Yoga.cpp"
+#include "upstream/yoga/YGGridTrackList.cpp"
+#include "upstream/yoga/grid/GridLayout.cpp"
 // END YUP GENERATED YOGA INCLUDES
 

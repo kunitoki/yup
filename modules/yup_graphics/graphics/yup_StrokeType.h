@@ -26,7 +26,8 @@ namespace yup
 /** Defines types of stroke used in graphical contexts.
 
     This class encapsulates the type of stroke used in graphical contexts.
-    It includes the width of the stroke, the cap type, and the join type.
+    It includes the width of the stroke, the cap type, the join type and where
+    the stroke sits relative to the path's edge.
 */
 class YUP_API StrokeType
 {
@@ -102,7 +103,9 @@ public:
     /** Returns a new stroke type with the given width. */
     StrokeType withWidth (float newWidth) const noexcept
     {
-        return StrokeType (newWidth, join, cap);
+        auto result = *this;
+        result.width = newWidth;
+        return result;
     }
 
     //==============================================================================
@@ -115,7 +118,9 @@ public:
     /** Returns a new stroke type with the given cap. */
     StrokeType withCap (StrokeCap newCap) const noexcept
     {
-        return StrokeType (width, join, newCap);
+        auto result = *this;
+        result.cap = newCap;
+        return result;
     }
 
     //==============================================================================
@@ -128,14 +133,31 @@ public:
     /** Returns a new stroke type with the given join. */
     StrokeType withJoin (StrokeJoin newJoin) const noexcept
     {
-        return StrokeType (width, newJoin, cap);
+        auto result = *this;
+        result.join = newJoin;
+        return result;
+    }
+
+    //==============================================================================
+    /** Returns where the stroke is drawn relative to the path's edge. */
+    StrokePosition getPosition() const noexcept
+    {
+        return position;
+    }
+
+    /** Returns a new stroke type with the given position. */
+    StrokeType withPosition (StrokePosition newPosition) const noexcept
+    {
+        auto result = *this;
+        result.position = newPosition;
+        return result;
     }
 
     //==============================================================================
     /** Returns true if the stroke types are equal. */
     bool operator== (const StrokeType& other) const noexcept
     {
-        return width == other.width && cap == other.cap && join == other.join;
+        return width == other.width && cap == other.cap && join == other.join && position == other.position;
     }
 
     /** Returns true if the stroke types are not equal. */
@@ -148,6 +170,7 @@ private:
     float width = 1.0f;
     StrokeCap cap = StrokeCap::Butt;
     StrokeJoin join = StrokeJoin::Miter;
+    StrokePosition position = StrokePosition::Center;
 };
 
 } // namespace yup

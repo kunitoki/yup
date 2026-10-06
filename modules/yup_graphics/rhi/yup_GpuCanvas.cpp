@@ -98,8 +98,6 @@ bool GpuCanvas::commit()
     if (renderableTarget == nullptr)
         return false;
 
-    renderableTarget->getOrCreateSampledTexture();
-
     if (graphics == nullptr || ! graphics->commitOffscreenTarget())
         return false;
 

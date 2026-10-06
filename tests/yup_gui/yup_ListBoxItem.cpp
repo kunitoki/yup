@@ -101,12 +101,28 @@ TEST_F (ListBoxItemTests, NullIconDrawableCanBeSet)
     EXPECT_EQ (nullptr, item->getIconDrawable());
 }
 
-TEST_F (ListBoxItemTests, DISABLED_IconFromImageCanBeSet)
+TEST_F (ListBoxItemTests, IconFromImageCanBeSet)
 {
     Image testImage (32, 32, PixelFormat::RGBA);
     item->setIcon (testImage);
 
-    EXPECT_NE (nullptr, item->getIconDrawable());
+    EXPECT_TRUE (item->getIconImage().isValid());
+    EXPECT_EQ (32, item->getIconImage().getWidth());
+    EXPECT_EQ (nullptr, item->getIconDrawable());
+}
+
+TEST_F (ListBoxItemTests, AnIconImageAndAnIconDrawableReplaceEachOther)
+{
+    item->setIcon (Image (32, 32, PixelFormat::RGBA));
+
+    auto drawable = std::make_shared<Drawable>();
+    item->setIconDrawable (drawable);
+    EXPECT_FALSE (item->getIconImage().isValid());
+    EXPECT_EQ (drawable, item->getIconDrawable());
+
+    item->setIcon (Image (16, 16, PixelFormat::RGBA));
+    EXPECT_TRUE (item->getIconImage().isValid());
+    EXPECT_EQ (nullptr, item->getIconDrawable());
 }
 
 TEST_F (ListBoxItemTests, EmptyImageDoesNotCrash)
@@ -260,12 +276,13 @@ TEST_F (ListBoxItemTests, IconBoundsAreValidWithIcon)
     item->setIcon (testImage);
     item->resized();
 
+    // A square image keeps a square icon area.
     auto iconBounds = item->getIconBoundsForRendering();
-    // May be empty if no icon, but should not crash
-    EXPECT_TRUE (true);
+    EXPECT_FALSE (iconBounds.isEmpty());
+    EXPECT_FLOAT_EQ (iconBounds.getWidth(), iconBounds.getHeight());
 }
 
-TEST_F (ListBoxItemTests, DISABLED_LayoutChangesWithIconPosition)
+TEST_F (ListBoxItemTests, LayoutChangesWithIconPosition)
 {
     Image testImage (32, 32, PixelFormat::RGBA);
     item->setIcon (testImage);
@@ -283,7 +300,7 @@ TEST_F (ListBoxItemTests, DISABLED_LayoutChangesWithIconPosition)
     EXPECT_TRUE (boundsLeft.getX() != boundsRight.getX() || boundsLeft.getY() != boundsRight.getY());
 }
 
-TEST_F (ListBoxItemTests, DISABLED_LayoutChangesWithVerticalIconPosition)
+TEST_F (ListBoxItemTests, LayoutChangesWithVerticalIconPosition)
 {
     Image testImage (32, 32, PixelFormat::RGBA);
     item->setIcon (testImage);
@@ -357,7 +374,7 @@ TEST_F (ListBoxItemTests, MultipleIconChanges)
     EXPECT_EQ (nullptr, item->getIconDrawable());
 }
 
-TEST_F (ListBoxItemTests, DISABLED_TextAndIconTogether)
+TEST_F (ListBoxItemTests, TextAndIconTogether)
 {
     item->setText ("Item with Icon");
     Image testImage (24, 24, PixelFormat::RGBA);
@@ -365,7 +382,8 @@ TEST_F (ListBoxItemTests, DISABLED_TextAndIconTogether)
     item->resized();
 
     EXPECT_EQ ("Item with Icon", item->getText());
-    EXPECT_NE (nullptr, item->getIconDrawable());
+    EXPECT_TRUE (item->getIconImage().isValid());
+    EXPECT_FALSE (item->getIconBoundsForRendering().isEmpty());
 }
 
 TEST_F (ListBoxItemTests, AllIconPositions)

@@ -229,6 +229,7 @@ public:
 
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
+        this->frameDescriptor = frameDescriptor;
         getRenderContext()->beginFrame (frameDescriptor);
 
         if (frameDescriptor.loadAction == rive::gpu::LoadAction::clear)
@@ -283,6 +284,19 @@ public:
         [presentCommandBuffer commit];
 
         currentFrameSurface = nil;
+        renderTarget->setTargetTexture (nil);
+    }
+
+    void suspendFrame() override
+    {
+        jassert (renderTarget != nil);
+
+        renderTarget->setTargetTexture (currentTexture);
+
+        id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
+        getRenderContext()->flush ({ .renderTarget = renderTarget.get(), .externalCommandBuffer = (__bridge void*) commandBuffer });
+        [commandBuffer commit];
+
         renderTarget->setTargetTexture (nil);
     }
 

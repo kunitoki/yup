@@ -718,9 +718,9 @@ struct PyComboBox : PyComponent<Base>
 
 /** Trampoline for ListBoxModel, which is entirely virtual and is never owned by a ListBox.
 
-    refreshComponentForRow is deliberately absent: it hands the ListBox ownership of a raw
-    Component*, which pybind11 cannot take away from a Python-owned instance without risking a
-    double free. A Python model paints its rows through paintListBoxItem/getRowText/getRowIcon.
+    refreshRowComponent is deliberately absent: it hands the ListBox ownership of the row
+    component, which pybind11 cannot take away from a Python-owned instance without risking a
+    double free. A Python model shows its rows through the built-in item, via getRowText/getRowIcon.
 */
 template <class Base = yup::ListBoxModel>
 struct PyListBoxModel : Base
@@ -733,19 +733,9 @@ struct PyListBoxModel : Base
         PYBIND11_OVERRIDE_PURE (int, Base, getNumRows);
     }
 
-    int getRowHeight (int rowIndex) override
+    float getRowSize (int rowIndex) override
     {
-        PYBIND11_OVERRIDE (int, Base, getRowHeight, rowIndex);
-    }
-
-    int getRowWidth (int rowIndex) override
-    {
-        PYBIND11_OVERRIDE (int, Base, getRowWidth, rowIndex);
-    }
-
-    void paintListBoxItem (int rowIndex, yup::Graphics& g, yup::Rectangle<float> area, bool isSelected) override
-    {
-        PYBIND11_OVERRIDE (void, Base, paintListBoxItem, rowIndex, g, area, isSelected);
+        PYBIND11_OVERRIDE (float, Base, getRowSize, rowIndex);
     }
 
     yup::String getRowText (int rowIndex) override
@@ -773,9 +763,9 @@ struct PyListBoxModel : Base
         PYBIND11_OVERRIDE (void, Base, rowDoubleClicked, rowIndex, event);
     }
 
-    void returnKeyPressed (int lastSelectedRow) override
+    void returnKeyPressed (int currentRow) override
     {
-        PYBIND11_OVERRIDE (void, Base, returnKeyPressed, lastSelectedRow);
+        PYBIND11_OVERRIDE (void, Base, returnKeyPressed, currentRow);
     }
 
     void deleteKeyPressed (const yup::Array<int>& selectedRows) override
@@ -786,6 +776,101 @@ struct PyListBoxModel : Base
     yup::var getDragSourceDescription (const yup::Array<int>& selectedRows) override
     {
         PYBIND11_OVERRIDE (yup::var, Base, getDragSourceDescription, selectedRows);
+    }
+};
+
+// ============================================================================================
+
+/** Trampoline for TreeViewItem and DataTreeViewItem.
+
+    Items are owned by their parent item or by the TreeView, so Python instances are handed over as
+    std::unique_ptr: trampoline_self_life_support keeps the Python object alive while C++ owns it,
+    which keeps the overrides reachable. refreshItemComponent is deliberately absent, for the same
+    ownership reason as ListBoxModel::refreshRowComponent, and so is DataTreeViewItem::createSubItem.
+*/
+template <class Base = yup::TreeViewItem>
+struct PyTreeViewItem : Base, pybind11::trampoline_self_life_support
+{
+    using Base::Base;
+
+    bool mightContainSubItems() const override
+    {
+        PYBIND11_OVERRIDE (bool, Base, mightContainSubItems);
+    }
+
+    yup::String getItemText() const override
+    {
+        PYBIND11_OVERRIDE (yup::String, Base, getItemText);
+    }
+
+    yup::Image getItemIcon() const override
+    {
+        PYBIND11_OVERRIDE (yup::Image, Base, getItemIcon);
+    }
+
+    bool hasItemIcon() const override
+    {
+        PYBIND11_OVERRIDE (bool, Base, hasItemIcon);
+    }
+
+    void paintItemIcon (yup::Graphics& g, yup::Rectangle<float> area, bool isSelected) const override
+    {
+        PYBIND11_OVERRIDE (void, Base, paintItemIcon, g, area, isSelected);
+    }
+
+    yup::String getUniqueName() const override
+    {
+        PYBIND11_OVERRIDE (yup::String, Base, getUniqueName);
+    }
+
+    float getItemHeight() const override
+    {
+        PYBIND11_OVERRIDE (float, Base, getItemHeight);
+    }
+
+    void itemOpennessChanged (bool isNowOpen) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemOpennessChanged, isNowOpen);
+    }
+
+    void itemClicked (const yup::MouseEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemClicked, event);
+    }
+
+    void itemDoubleClicked (const yup::MouseEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDoubleClicked, event);
+    }
+
+    void itemSelectionChanged (bool isNowSelected) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemSelectionChanged, isNowSelected);
+    }
+
+    void itemEntered() override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemEntered);
+    }
+
+    void itemExited() override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemExited);
+    }
+
+    yup::var getDragSourceDescription() const override
+    {
+        PYBIND11_OVERRIDE (yup::var, Base, getDragSourceDescription);
+    }
+
+    bool isInterestedInDragSource (const yup::DragAndDropSourceDetails& details) const override
+    {
+        PYBIND11_OVERRIDE (bool, Base, isInterestedInDragSource, details);
+    }
+
+    void itemDropped (const yup::DragAndDropSourceDetails& details, int insertIndex) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDropped, details, insertIndex);
     }
 };
 

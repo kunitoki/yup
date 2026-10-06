@@ -26,6 +26,7 @@ namespace yup
 ChannelSection::ChannelRowComponent::ChannelRowComponent()
 {
     setOpaque (false);
+    setWantsMouseEvents (false, true);
 
     addAndMakeVisible (toggle);
 
@@ -73,11 +74,11 @@ int ChannelSection::Model::getNumRows()
     return channelNames.size();
 }
 
-Component* ChannelSection::Model::refreshComponentForRow (int rowIndex, Component* existing)
+void ChannelSection::Model::refreshRowComponent (int rowIndex, bool isSelected, std::unique_ptr<Component>& component)
 {
-    auto* row = dynamic_cast<ChannelRowComponent*> (existing);
-    if (row == nullptr)
-        row = new ChannelRowComponent();
+    ignoreUnused (isSelected);
+
+    auto* row = &reuseOrCreate<ChannelRowComponent> (component);
 
     const bool isActive = activeChannels[rowIndex];
 
@@ -91,8 +92,6 @@ Component* ChannelSection::Model::refreshComponentForRow (int rowIndex, Componen
         if (onChannelsChanged != nullptr)
             onChannelsChanged (activeChannels);
     });
-
-    return row;
 }
 
 //==============================================================================

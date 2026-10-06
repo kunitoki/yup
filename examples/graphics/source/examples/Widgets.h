@@ -35,13 +35,9 @@ class WidgetsDemo : public yup::Component
 public:
     WidgetsDemo()
     {
-        auto theme = yup::ApplicationTheme::getGlobalTheme();
-        exampleFont = theme->getDefaultFont();
-
         addAndMakeVisible (panel);
 
         setupWidgets();
-        setupLayout();
 
         for (auto* handle : { &topLeftHandle, &topRightHandle, &bottomLeftHandle })
         {
@@ -104,7 +100,6 @@ private:
         // Labels
         titleLabel = std::make_unique<yup::Label> ("titleLabel");
         titleLabel->setText ("YUP Widget Examples", yup::dontSendNotification);
-        titleLabel->setFont (exampleFont);
         panel.addAndMakeVisible (titleLabel.get());
 
         statusLabel = std::make_unique<yup::Label> ("statusLabel");
@@ -175,6 +170,8 @@ private:
         indeterminateLabel->setText ("Indeterminate Progress Bar:", yup::dontSendNotification);
         panel.addAndMakeVisible (indeterminateLabel.get());
 
+        setupTabs();
+
         // Update slider to control progress bar
         slider->onValueChanged = [this] (double value)
         {
@@ -183,9 +180,82 @@ private:
         };
     }
 
-    void setupLayout()
+    void setupTabs()
     {
-        // Layout will be handled in resized()
+        tabsLabel = std::make_unique<yup::Label> ("tabsLabel");
+        tabsLabel->setText ("Tabs: drag to reorder, narrow the window to see the More menu", yup::dontSendNotification);
+        panel.addAndMakeVisible (tabsLabel.get());
+
+        // A segmented control of views, reorderable, that overflows into a menu
+        viewTabs = std::make_unique<yup::TabBar> ("viewTabs");
+        viewTabs->setReorderable (true);
+
+        const std::pair<const char*, const char*> views[] = {
+            { "Table", YUP_ICON_TABLE },
+            { "Board", YUP_ICON_TABLE_COLUMNS },
+            { "Chart", YUP_ICON_CHART_COLUMN },
+            { "List", YUP_ICON_LIST },
+            { "Timeline", YUP_ICON_TIMELINE },
+            { "Calendar", YUP_ICON_CALENDAR },
+            { "Gallery", YUP_ICON_IMAGE }
+        };
+
+        for (const auto& [name, glyph] : views)
+            viewTabs->addTab (yup::String (name).toLowerCase(), name).setIconGlyph (glyph);
+
+        viewTabs->onSelectionChanged = [this] (const yup::Identifier& tabId)
+        {
+            updateStatus ("View tab selected: " + tabId.toString());
+        };
+
+        viewTabs->onTabMoved = [this] (const yup::Identifier& tabId, int oldIndex, int newIndex)
+        {
+            updateStatus ("View tab " + tabId.toString() + " moved from " + yup::String (oldIndex) + " to " + yup::String (newIndex));
+        };
+
+        panel.addAndMakeVisible (viewTabs.get());
+
+        // Browser-like tabs that can be closed and added
+        documentTabs = std::make_unique<yup::TabBar> ("documentTabs");
+        documentTabs->setVariant (yup::TabBar::Variant::underline);
+        documentTabs->setOverflow (yup::TabBar::Overflow::scroll);
+        documentTabs->setReorderable (true);
+
+        for (int i = 0; i < 3; ++i)
+            addDocumentTab();
+
+        documentTabs->onSelectionChanged = [this] (const yup::Identifier& tabId)
+        {
+            if (tabId.isValid())
+                updateStatus ("Document tab selected: " + tabId.toString());
+        };
+
+        documentTabs->onTabCloseRequested = [this] (const yup::Identifier& tabId)
+        {
+            documentTabs->removeTab (tabId);
+            updateStatus ("Document tab closed: " + tabId.toString());
+        };
+
+        panel.addAndMakeVisible (documentTabs.get());
+
+        addTabButton = std::make_unique<yup::TextButton> ("Add tab");
+        addTabButton->onClick = [this]
+        {
+            documentTabs->setSelectedTab (addDocumentTab());
+        };
+        panel.addAndMakeVisible (addTabButton.get());
+    }
+
+    yup::Identifier addDocumentTab()
+    {
+        ++numDocumentsCreated;
+
+        const auto tabId = yup::Identifier ("document" + yup::String (numDocumentsCreated));
+        auto& tab = documentTabs->addTab (tabId, "Document " + yup::String (numDocumentsCreated));
+        tab.setIconGlyph (YUP_ICON_FILE_LINES);
+        tab.setClosable (true);
+
+        return tabId;
     }
 
     void updateStatus (const yup::String& message)
@@ -237,67 +307,94 @@ private:
         repaint();
     }
 
+    /** Lays the widgets out inside the panel bounds, so they fit whatever size the panel gets.
+
+        Rows keep a fixed height and only the text editor and the slider/logo row absorb the
+        space that is left, which keeps every widget inside the panel (and so inside the
+        transformed shape the handles control).
+    */
     void layoutWidgets()
     {
-        auto bounds = panel.getLocalBounds();
-        auto margin = 20;
-        auto componentHeight = 30;
-        auto spacing = 10;
+        auto area = panel.getLocalBounds().reduced (contentMargin);
 
-        int y = margin;
+        titleLabel->setBounds (area.removeFromTop (32.0f));
+        statusLabel->setBounds (area.removeFromTop (rowHeight));
+        area.removeFromTop (sectionSpacing);
 
-        // Title
-        titleLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 40.0f));
-        y += 50;
+        // Full width, so the view tabs only overflow into the More menu when the panel is narrow
+        layoutTabs (area);
+        area.removeFromTop (sectionSpacing);
 
-        // Status
-        statusLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), static_cast<float> (componentHeight)));
-        y += componentHeight + spacing * 2;
+        // Two columns side by side, stacked instead when the remaining area is taller than wide
+        if (area.getWidth() >= area.getHeight())
+        {
+            layoutInputs (area.removeFromLeft ((area.getWidth() - sectionSpacing) * 0.5f));
+            area.removeFromLeft (sectionSpacing);
+        }
+        else
+        {
+            layoutInputs (area.removeFromTop ((area.getHeight() - sectionSpacing) * 0.5f));
+            area.removeFromTop (sectionSpacing);
+        }
 
-        // Buttons row
-        auto buttonWidth = 120;
-        textButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (buttonWidth), static_cast<float> (componentHeight)));
-        toggleButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin + buttonWidth + spacing), static_cast<float> (y), static_cast<float> (buttonWidth), static_cast<float> (componentHeight)));
-        switchButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin + 2 * (buttonWidth + spacing)), static_cast<float> (y), 80.0f, static_cast<float> (componentHeight)));
-        y += componentHeight + spacing * 2;
+        layoutValues (area);
+    }
 
-        // Input widgets
-        auto inputWidth = (bounds.getWidth() - 3 * margin) / 2;
+    void layoutTabs (yup::Rectangle<float>& area)
+    {
+        constexpr auto addTabButtonWidth = 90.0f;
 
-        comboBox->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (inputWidth), static_cast<float> (componentHeight)));
-        y += componentHeight + spacing;
+        tabsLabel->setBounds (area.removeFromTop (labelHeight));
+        viewTabs->setBounds (area.removeFromTop (tabBarHeight));
+        area.removeFromTop (spacing);
 
-        textEditor->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 100.0f));
-        y += 110;
+        auto documentRow = area.removeFromTop (tabBarHeight);
+        addTabButton->setBounds (documentRow.removeFromRight (addTabButtonWidth).withSizeKeepingCenter (addTabButtonWidth, rowHeight));
+        documentRow.removeFromRight (spacing);
+        documentTabs->setBounds (documentRow);
+    }
 
-        // Slider, and the image button sharing the row the square slider leaves half empty
-        auto sliderSize = static_cast<int> (inputWidth / 2);
-        slider->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (sliderSize), static_cast<float> (sliderSize)));
+    void layoutInputs (yup::Rectangle<float> area)
+    {
+        constexpr auto switchWidth = 60.0f;
 
-        auto imageButtonSize = 110;
-        auto imageButtonX = margin + sliderSize + spacing * 2;
-        imageButton->setBounds (yup::Rectangle<float> (static_cast<float> (imageButtonX), static_cast<float> (y), static_cast<float> (imageButtonSize), static_cast<float> (imageButtonSize)));
-        imageButtonLabel->setBounds (yup::Rectangle<float> (static_cast<float> (imageButtonX), static_cast<float> (y + imageButtonSize + spacing), static_cast<float> (bounds.getWidth() - imageButtonX - margin), 20.0f));
+        auto buttonsRow = area.removeFromTop (rowHeight);
+        switchButton->setBounds (buttonsRow.removeFromRight (switchWidth));
+        buttonsRow.removeFromRight (spacing);
+        textButton->setBounds (buttonsRow.removeFromLeft ((buttonsRow.getWidth() - spacing) * 0.5f));
+        buttonsRow.removeFromLeft (spacing);
+        toggleButton->setBounds (buttonsRow);
+        area.removeFromTop (spacing);
 
-        y += sliderSize + spacing * 2;
+        comboBox->setBounds (area.removeFromTop (rowHeight));
+        area.removeFromTop (spacing);
 
-        // Progress Bar (normal mode)
-        progressBarLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 20.0f));
-        y += 25;
+        textEditor->setBounds (area);
+    }
 
-        progressBar->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), static_cast<float> (componentHeight)));
-        y += componentHeight + spacing * 2;
+    void layoutValues (yup::Rectangle<float> area)
+    {
+        indeterminateProgressBar->setBounds (area.removeFromBottom (rowHeight));
+        indeterminateLabel->setBounds (area.removeFromBottom (labelHeight));
+        area.removeFromBottom (spacing);
 
-        // Indeterminate Progress Bar
-        indeterminateLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 20.0f));
-        y += 25;
+        progressBar->setBounds (area.removeFromBottom (rowHeight));
+        progressBarLabel->setBounds (area.removeFromBottom (labelHeight));
+        area.removeFromBottom (spacing);
 
-        indeterminateProgressBar->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), static_cast<float> (componentHeight)));
+        imageButtonLabel->setBounds (area.removeFromBottom (labelHeight));
+
+        // The rotary slider and the logo are square: take the largest pair of squares that fits
+        const auto squareSize = yup::jmax (0.0f, yup::jmin (area.getHeight(), (area.getWidth() - spacing) * 0.5f));
+        auto squaresRow = area.withSizeKeepingCenter (squareSize * 2.0f + spacing, squareSize);
+
+        slider->setBounds (squaresRow.removeFromLeft (squareSize));
+        imageButton->setBounds (squaresRow.removeFromRight (squareSize));
     }
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -343,7 +440,7 @@ private:
 
             if (isButtonOver())
             {
-                g.setFillColor (yup::Colors::white.withAlpha (isButtonDown() ? 0.35f : 0.15f));
+                g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::text).withAlpha (isButtonDown() ? 0.35f : 0.15f));
                 g.fillRoundedRect (imageArea, 8.0f);
             }
 
@@ -406,7 +503,7 @@ private:
 
         void paint (yup::Graphics& g) override
         {
-            g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray).brighter (0.1f));
+            g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::surface));
             g.fillAll();
         }
 
@@ -496,8 +593,13 @@ private:
 
 private:
     static constexpr float panelMargin = 30.0f;
+    static constexpr float contentMargin = 20.0f;
+    static constexpr float spacing = 10.0f;
+    static constexpr float sectionSpacing = 16.0f;
+    static constexpr float rowHeight = 30.0f;
+    static constexpr float labelHeight = 24.0f;
+    static constexpr float tabBarHeight = 36.0f;
 
-    yup::Font exampleFont;
     WidgetsPanel panel;
     CornerHandle topLeftHandle;
     CornerHandle topRightHandle;
@@ -522,6 +624,11 @@ private:
     std::unique_ptr<yup::Label> progressBarLabel;
     std::unique_ptr<yup::ProgressBar> indeterminateProgressBar;
     std::unique_ptr<yup::Label> indeterminateLabel;
+    std::unique_ptr<yup::Label> tabsLabel;
+    std::unique_ptr<yup::TabBar> viewTabs;
+    std::unique_ptr<yup::TabBar> documentTabs;
+    std::unique_ptr<yup::TextButton> addTabButton;
+    int numDocumentsCreated = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WidgetsDemo)
 };

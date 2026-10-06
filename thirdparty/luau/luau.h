@@ -26,7 +26,7 @@
 
     ID:               luau
     vendor:           luau
-    version:          0.728
+    version:          0.734
     name:             Luau Runtime
     description:      Luau is a fast, small, safe, gradually typed embeddable scripting language derived from Lua.
     website:          https://github.com/luau-lang/luau

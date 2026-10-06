@@ -213,7 +213,7 @@ public:
     {
         setTitle ("Profiler Dashboard");
         auto theme = yup::ApplicationTheme::getGlobalTheme();
-        font = theme->getDefaultFont();
+        font = theme->getDefaultFont().withHeight (12.0f); // the table rows and axes are sized for 12 px
     }
 
     void setSnapshot (const yup::PaintProfiler::Snapshot& newSnapshot, int selectedIndex)
@@ -231,7 +231,7 @@ public:
         if (bounds.isEmpty())
             return;
 
-        g.setFillColor (yup::Color (0xff1a1a2e));
+        g.setFillColor (role (yup::ThemePalette::Role::background));
         g.fillAll();
 
         const float divX = bounds.getWidth() * 0.60f;
@@ -259,6 +259,16 @@ private:
     static constexpr float kHeaderH = 24.0f;
     static constexpr float kRowH = 20.0f;
 
+    static yup::Color role (yup::ThemePalette::Role paletteRole)
+    {
+        return yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (paletteRole);
+    }
+
+    static yup::Color readable (yup::Color severityColor)
+    {
+        return severityColor.mixedWith (role (yup::ThemePalette::Role::text), 0.35f, yup::ColorSpace::SRGB);
+    }
+
     void drawTable (yup::Graphics& g, yup::Rectangle<float> area)
     {
         if (area.isEmpty())
@@ -267,9 +277,9 @@ private:
         const float histColW = area.getWidth() - kMaxColW - kAvgColW;
 
         auto header = area.removeFromTop (kHeaderH);
-        g.setFillColor (yup::Color (0xff252545));
+        g.setFillColor (role (yup::ThemePalette::Role::surfaceRaised));
         g.fillRect (header);
-        g.setFillColor (yup::Color (0xffaaaacc));
+        g.setFillColor (role (yup::ThemePalette::Role::textMuted));
 
         const float nameW = histColW * 0.42f;
 
@@ -291,15 +301,16 @@ private:
             const bool isHot = entry.total.maxMicros > 2000.0;
             const bool isWarm = ! isHot && entry.total.maxMicros > 500.0;
 
-            g.setFillColor (isSelected ? yup::Color (0xff353565)
-                            : isHot    ? yup::Color (0xff3a1010)
-                            : isWarm   ? yup::Color (0xff3a2a10)
-                                       : yup::Color (0xff1e1e38));
+            const auto surface = role (yup::ThemePalette::Role::surface);
+            g.setFillColor (isSelected ? surface.mixedWith (role (yup::ThemePalette::Role::accent), 0.3f, yup::ColorSpace::SRGB)
+                            : isHot    ? surface.mixedWith (yup::Color (0xffcc2222), 0.25f, yup::ColorSpace::SRGB)
+                            : isWarm   ? surface.mixedWith (yup::Color (0xffbb8800), 0.25f, yup::ColorSpace::SRGB)
+                                       : surface);
             g.fillRect (row);
 
-            g.setFillColor (isHot    ? yup::Color (0xffff6060)
-                            : isWarm ? yup::Color (0xffffcc44)
-                                     : yup::Colors::white);
+            g.setFillColor (isHot    ? readable (yup::Color (0xffff6060))
+                            : isWarm ? readable (yup::Color (0xffffcc44))
+                                     : role (yup::ThemePalette::Role::text));
 
             auto r = row.reduced (2, 0);
             g.fillFittedText (entry.name, font, r.removeFromLeft (nameW), yup::Justification::centerLeft);
@@ -378,7 +389,7 @@ private:
             drawHistogramPanel (g, selArea, entry.name + " total", selHisto, entry.total.p95Micros);
 
             area.removeFromTop (4.0f);
-            g.setFillColor (yup::Color (0xff888899));
+            g.setFillColor (role (yup::ThemePalette::Role::textMuted));
             g.fillFittedText (
                 yup::String::formatted ("self %.0f  children %.0f  fw %.0f  total %.0f us  [p95 %.0f]",
                                         entry.self.lastMicros,
@@ -406,12 +417,12 @@ private:
         if (area.isEmpty())
             return;
 
-        g.setFillColor (yup::Color (0xff161628));
+        g.setFillColor (role (yup::ThemePalette::Role::surface));
         g.fillRect (area);
 
         const float labelH = 15.0f;
         auto labelArea = area.removeFromTop (labelH);
-        g.setFillColor (yup::Color (0xff8888bb));
+        g.setFillColor (role (yup::ThemePalette::Role::textMuted));
         g.fillFittedText (label, font, labelArea.reduced (3, 0), yup::Justification::centerLeft);
 
         const float axisH = 13.0f;
@@ -464,11 +475,11 @@ private:
         if (p95Micros > 0.0 && p95Micros < histo.rangeMaxMicros)
         {
             const float x = area.getX() + area.getWidth() * (float) (p95Micros / histo.rangeMaxMicros);
-            g.setFillColor (yup::Color (0xffffffff).withAlpha (0.7f));
+            g.setFillColor (role (yup::ThemePalette::Role::text).withAlpha (0.7f));
             g.fillRect ({ x - 0.5f, area.getY(), 1.0f, area.getHeight() });
         }
 
-        g.setFillColor (yup::Color (0xff666688));
+        g.setFillColor (role (yup::ThemePalette::Role::textMuted));
         g.fillFittedText ("0", font, axisArea.removeFromLeft (28.0f), yup::Justification::centerLeft);
 
         const float pos500 = area.getWidth() * (float) (500.0 / histo.rangeMaxMicros);
@@ -485,7 +496,7 @@ private:
             g.fillFittedText ("2ms", font, { area.getX() + pos2ms - 16.0f, axisArea.getY(), 32.0f, axisH }, yup::Justification::center);
         }
 
-        g.setFillColor (yup::Color (0xff666688));
+        g.setFillColor (role (yup::ThemePalette::Role::textMuted));
         g.fillFittedText (formatMicros (histo.rangeMaxMicros), font, axisArea.removeFromRight (52.0f), yup::Justification::centerRight);
     }
 
@@ -508,11 +519,7 @@ class ProfilerWindow : public yup::DocumentWindow
 {
 public:
     explicit ProfilerWindow (std::function<void()> onClose)
-        : yup::DocumentWindow (
-              yup::ComponentNative::Options()
-                  .withResizableWindow (true)
-                  .withRenderContinuous (false),
-              yup::Color (0xff1a1a2e))
+        : yup::DocumentWindow (yup::ComponentNative::Options())
         , closeCallback (std::move (onClose))
     {
         setTitle ("Paint Profiler");

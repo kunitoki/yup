@@ -71,7 +71,7 @@ RectangleList<float> intersectRepaintRegion (const RectangleList<float>& region,
 
     for (const auto& rect : region.getRectangles())
     {
-        const auto clipped = clipBounds.intersection (rect).roundToInt().to<float>();
+        const auto clipped = clipBounds.intersection (rect).smallestIntContainer();
 
         if (! clipped.isEmpty())
             result.add (clipped);
@@ -117,13 +117,13 @@ bool hasPixelSize (const GpuCanvas::Ptr& canvas, const Size<int>& pixelSize)
 //==============================================================================
 
 Component::Component()
-    : optionsValue (0)
+    : flagsValue (0)
 {
 }
 
 Component::Component (StringRef componentID)
     : componentID (componentID)
-    , optionsValue (0)
+    , flagsValue (0)
 {
 }
 
@@ -131,7 +131,7 @@ Component::~Component()
 {
     componentListeners.call (&ComponentListener::componentBeingDeleted, *this);
 
-    if (options.onDesktop)
+    if (flags.onDesktop)
         removeFromDesktop();
 
     if (parentComponent != nullptr)
@@ -156,17 +156,17 @@ String Component::getComponentID() const
 
 bool Component::isEnabled() const
 {
-    return ! options.isDisabled && (parentComponent == nullptr || parentComponent->isEnabled());
+    return ! flags.isDisabled && (parentComponent == nullptr || parentComponent->isEnabled());
 }
 
 void Component::setEnabled (bool shouldBeEnabled)
 {
-    if (options.isDisabled == ! shouldBeEnabled)
+    if (flags.isDisabled == ! shouldBeEnabled)
         return;
 
-    options.isDisabled = ! shouldBeEnabled;
+    flags.isDisabled = ! shouldBeEnabled;
 
-    //if (options.onDesktop && native != nullptr)
+    //if (flags.onDesktop && native != nullptr)
     //    native->setEnabled (shouldBeEnabled);
 
     enablementChanged();
@@ -178,21 +178,21 @@ void Component::enablementChanged() {}
 
 bool Component::isVisible() const
 {
-    return options.isVisible;
+    return flags.isVisible;
 }
 
 void Component::setVisible (bool shouldBeVisible)
 {
-    if (options.isVisible == shouldBeVisible)
+    if (flags.isVisible == shouldBeVisible)
         return;
 
     const bool wasShowing = isShowing();
 
-    options.isVisible = shouldBeVisible;
+    flags.isVisible = shouldBeVisible;
 
     auto bailOutChecker = BailOutChecker (this);
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setVisible (shouldBeVisible);
 
     if (bailOutChecker.shouldBailOut())
@@ -237,7 +237,7 @@ void Component::setTitle (const String& title)
 {
     componentTitle = title;
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setTitle (title);
 }
 
@@ -252,7 +252,7 @@ void Component::setPosition (const Point<float>& newPosition)
 {
     boundsInParent.setTopLeft (newPosition);
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setPosition (newPosition.to<int>());
 
     sendMoved();
@@ -297,7 +297,7 @@ void Component::setTopLeft (const Point<float>& newTopLeft)
 {
     boundsInParent.setTopLeft (newTopLeft);
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setPosition (newTopLeft.to<int>());
 
     sendMoved();
@@ -312,7 +312,7 @@ void Component::setBottomLeft (const Point<float>& newBottomLeft)
 {
     boundsInParent.setBottomLeft (newBottomLeft);
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setPosition (newBottomLeft.translated (0.0f, -getHeight()).to<int>());
 
     sendMoved();
@@ -327,7 +327,7 @@ void Component::setTopRight (const Point<float>& newTopRight)
 {
     boundsInParent.setTopRight (newTopRight);
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setPosition (newTopRight.translated (-getWidth(), 0.0f).to<int>());
 
     sendMoved();
@@ -342,7 +342,7 @@ void Component::setBottomRight (const Point<float>& newBottomRight)
 {
     boundsInParent.setBottomRight (newBottomRight);
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setPosition (newBottomRight.translated (-getWidth(), -getHeight()).to<int>());
 
     sendMoved();
@@ -357,7 +357,7 @@ void Component::setCenter (const Point<float>& newCenter)
 {
     boundsInParent.setCenter (newCenter);
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setPosition (newCenter.translated (-getWidth() / 2.0f, -getHeight() / 2.0f).to<int>());
 
     sendMoved();
@@ -372,7 +372,7 @@ void Component::setCenterX (float newCenterX)
 {
     boundsInParent.setCenterX (newCenterX);
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
     {
         auto newCenter = boundsInParent.getCenter();
         native->setPosition (newCenter.translated (-getWidth() / 2.0f, 0.0f).to<int>());
@@ -390,7 +390,7 @@ void Component::setCenterY (float newCenterY)
 {
     boundsInParent.setCenterY (newCenterY);
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
     {
         auto newCenter = boundsInParent.getCenter();
         native->setPosition (newCenter.translated (0.0f, -getHeight() / 2.0f).to<int>());
@@ -431,7 +431,7 @@ void Component::setSize (const Size<float>& newSize)
     boundsInParent = boundsInParent.withSize (newSize);
     areaToRepaint = areaToRepaint.unionWith (boundsInParent);
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setSize (newSize.to<int>());
 
     sendResized();
@@ -441,7 +441,7 @@ void Component::setSize (const Size<float>& newSize)
 
 Size<float> Component::getSize() const
 {
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         return native->getSize().to<float>();
 
     return boundsInParent.getSize();
@@ -472,7 +472,7 @@ void Component::setBounds (const Rectangle<float>& newBounds)
 
     repaint();
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setBounds (newBounds.to<int>());
 
     auto bailOutChecker = BailOutChecker (this);
@@ -507,11 +507,11 @@ Rectangle<float> Component::getLocalBounds() const
 Rectangle<float> Component::getBoundsRelativeToTopLevelComponent() const
 {
     auto bounds = boundsInParent;
-    if (options.onDesktop || options.paintAsOffscreenRoot)
+    if (flags.onDesktop || flags.paintAsOffscreenRoot)
         return bounds.withZeroPosition();
 
     auto parent = getParentComponent();
-    while (parent != nullptr && ! parent->options.onDesktop && ! parent->options.paintAsOffscreenRoot)
+    while (parent != nullptr && ! parent->flags.onDesktop && ! parent->flags.paintAsOffscreenRoot)
     {
         bounds.translate (parent->getPosition());
         parent = parent->getParentComponent();
@@ -524,7 +524,7 @@ AffineTransform Component::getTransformToTopLevelComponent() const
 {
     AffineTransform toTopLevel;
 
-    for (auto comp = this; comp != nullptr && ! comp->options.onDesktop && ! comp->options.paintAsOffscreenRoot; comp = comp->getParentComponent())
+    for (auto comp = this; comp != nullptr && ! comp->flags.onDesktop && ! comp->flags.paintAsOffscreenRoot; comp = comp->getParentComponent())
     {
         if (comp->isTransformed())
             toTopLevel = toTopLevel.followedBy (comp->getTransform());
@@ -616,17 +616,17 @@ void Component::transformChanged()
 
 bool Component::isFullScreen() const
 {
-    return options.isFullScreen;
+    return flags.isFullScreen;
 }
 
 void Component::setFullScreen (bool shouldBeFullScreen)
 {
-    if (options.isFullScreen == shouldBeFullScreen)
+    if (flags.isFullScreen == shouldBeFullScreen)
         return;
 
-    options.isFullScreen = shouldBeFullScreen;
+    flags.isFullScreen = shouldBeFullScreen;
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setFullScreen (shouldBeFullScreen);
 }
 
@@ -638,7 +638,7 @@ void Component::displayChanged() {}
 
 float Component::getScaleDpi() const
 {
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         return native->getScaleDpi();
 
     if (parentComponent == nullptr)
@@ -659,7 +659,7 @@ void Component::setOpacity (float newOpacity)
 
     opacity = clampedOpacity;
 
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->setOpacity (newOpacity);
 
     opacityChanged();
@@ -676,34 +676,34 @@ void Component::opacityChanged() {}
 
 bool Component::isOpaque() const
 {
-    return ! options.isTransparent;
+    return ! flags.isTransparent;
 }
 
 void Component::setOpaque (bool shouldBeOpaque)
 {
-    options.isTransparent = ! shouldBeOpaque;
+    flags.isTransparent = ! shouldBeOpaque;
 }
 
 //==============================================================================
 
 void Component::enableRenderingUnclipped (bool shouldBeEnabled)
 {
-    options.unclippedRendering = shouldBeEnabled;
+    flags.unclippedRendering = shouldBeEnabled;
 }
 
 bool Component::isRenderingUnclipped() const
 {
-    return options.unclippedRendering;
+    return flags.unclippedRendering;
 }
 
 void Component::setPaintProfilingDisabled (bool shouldBeDisabled)
 {
-    options.paintProfilingDisabled = shouldBeDisabled;
+    flags.paintProfilingDisabled = shouldBeDisabled;
 }
 
 bool Component::isPaintProfilingDisabled() const
 {
-    return options.paintProfilingDisabled;
+    return flags.paintProfilingDisabled;
 }
 
 void Component::repaint()
@@ -732,7 +732,7 @@ void Component::repaint (const Rectangle<float>& rect)
 
 void* Component::getNativeHandle() const
 {
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         return native->getNativeHandle();
 
     return nullptr;
@@ -770,14 +770,14 @@ void Component::detachedFromNative() {}
 
 bool Component::isOnDesktop() const
 {
-    return options.onDesktop;
+    return flags.onDesktop;
 }
 
 void Component::addToDesktop (const ComponentNative::Options& nativeOptions, void* parent)
 {
     YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
-    if (options.onDesktop)
+    if (flags.onDesktop)
         removeFromDesktop();
 
     if (parentComponent != nullptr)
@@ -786,7 +786,7 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
         parentComponent = nullptr;
     }
 
-    options.onDesktop = true;
+    flags.onDesktop = true;
 
     native = ComponentNative::createFor (*this, nativeOptions, parent);
 
@@ -799,10 +799,10 @@ void Component::removeFromDesktop()
 {
     YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
-    if (! options.onDesktop)
+    if (! flags.onDesktop)
         return;
 
-    options.onDesktop = false;
+    flags.onDesktop = false;
 
     native.reset();
 
@@ -813,7 +813,7 @@ void Component::removeFromDesktop()
 
 void Component::toFront (bool shouldGainKeyboardFocus)
 {
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         native->toFront();
 
     if (parentComponent == nullptr)
@@ -821,7 +821,7 @@ void Component::toFront (bool shouldGainKeyboardFocus)
 
     parentComponent->addChildComponent (this, parentComponent->getNumChildComponents());
 
-    if (shouldGainKeyboardFocus && options.wantsKeyboardFocus)
+    if (shouldGainKeyboardFocus && flags.wantsKeyboardFocus)
         takeKeyboardFocus();
 }
 
@@ -1077,7 +1077,7 @@ bool Component::hitTest (float x, float y)
 
 Component* Component::findComponentAt (const Point<float>& p)
 {
-    if (! options.isVisible || ! hitTest (p.getX(), p.getY()))
+    if (! flags.isVisible || ! hitTest (p.getX(), p.getY()))
         return nullptr;
 
     for (int index = children.size(); --index >= 0;)
@@ -1099,7 +1099,7 @@ Component* Component::findComponentAt (const Point<float>& p)
 
 Component* Component::findComponentAtForMouseEvent (const Point<float>& p)
 {
-    if (! options.isVisible || ! boundsInParent.withZeroPosition().contains (p) || ! hitTest (p.getX(), p.getY()))
+    if (! flags.isVisible || ! boundsInParent.withZeroPosition().contains (p) || ! hitTest (p.getX(), p.getY()))
         return nullptr;
 
     if (doesWantChildrenMouseEvents())
@@ -1144,7 +1144,7 @@ Component* Component::getPopupParentComponent()
     {
         popupParent = ancestor;
 
-        if (ancestor->isTransformed() || ancestor->options.manuallyComposited)
+        if (ancestor->isTransformed() || ancestor->flags.manuallyComposited)
             break;
     }
 
@@ -1173,22 +1173,22 @@ MouseCursor Component::getMouseCursor() const
 
 void Component::setWantsKeyboardFocus (bool wantsFocus)
 {
-    options.wantsKeyboardFocus = wantsFocus;
+    flags.wantsKeyboardFocus = wantsFocus;
 }
 
 bool Component::getWantsKeyboardFocus() const
 {
-    return options.wantsKeyboardFocus;
+    return flags.wantsKeyboardFocus;
 }
 
 void Component::setClickingGrabFocus (bool shouldGrabFocus)
 {
-    options.clickingDoesNotGrabFocus = ! shouldGrabFocus;
+    flags.clickingDoesNotGrabFocus = ! shouldGrabFocus;
 }
 
 bool Component::getClickingGrabFocus() const
 {
-    return ! options.clickingDoesNotGrabFocus;
+    return ! flags.clickingDoesNotGrabFocus;
 }
 
 void Component::takeKeyboardFocus()
@@ -1198,7 +1198,7 @@ void Component::takeKeyboardFocus()
 
 void Component::takeKeyboardFocus (FocusChangeType cause)
 {
-    if (! options.wantsKeyboardFocus || ! isEnabled())
+    if (! flags.wantsKeyboardFocus || ! isEnabled())
         return;
 
     if (auto nativeComponent = getNativeComponent())
@@ -1216,7 +1216,7 @@ void Component::leaveKeyboardFocus()
 
 bool Component::hasKeyboardFocus() const
 {
-    if (! options.wantsKeyboardFocus || ! isEnabled())
+    if (! flags.wantsKeyboardFocus || ! isEnabled())
         return false;
 
     if (auto nativeComponent = getNativeComponent())
@@ -1237,7 +1237,7 @@ void Component::handleKeyboardFocusFromClick()
 {
     for (auto* component = this; component != nullptr; component = component->parentComponent)
     {
-        if (component->options.wantsKeyboardFocus && ! component->options.clickingDoesNotGrabFocus)
+        if (component->flags.wantsKeyboardFocus && ! component->flags.clickingDoesNotGrabFocus)
         {
             component->takeKeyboardFocus (FocusChangeType::focusChangedByMouseClick);
             return;
@@ -1272,18 +1272,18 @@ void Component::refreshDisplay ([[maybe_unused]] double lastFrameTimeSeconds) {}
 
 void Component::setWantsMouseEvents (bool allowSelfMouseEvents, bool allowChildrenMouseEvents)
 {
-    options.blockSelfMouseEvents = ! allowSelfMouseEvents;
-    options.blockChildrenMouseEvents = ! allowChildrenMouseEvents;
+    flags.blockSelfMouseEvents = ! allowSelfMouseEvents;
+    flags.blockChildrenMouseEvents = ! allowChildrenMouseEvents;
 }
 
 bool Component::doesWantSelfMouseEvents() const
 {
-    return ! options.blockSelfMouseEvents;
+    return ! flags.blockSelfMouseEvents;
 }
 
 bool Component::doesWantChildrenMouseEvents() const
 {
-    return ! options.blockChildrenMouseEvents;
+    return ! flags.blockChildrenMouseEvents;
 }
 
 //==============================================================================
@@ -1445,27 +1445,27 @@ ComponentEffect::Ptr Component::getComponentEffect() const
 
 void Component::setCachedToTexture (bool shouldCache)
 {
-    if (options.cachedToTexture == shouldCache)
+    if (flags.cachedToTexture == shouldCache)
         return;
 
-    options.cachedToTexture = shouldCache;
+    flags.cachedToTexture = shouldCache;
     cachedTextureCanvas = nullptr;
     repaint();
 }
 
 bool Component::isCachedToTexture() const
 {
-    return options.cachedToTexture;
+    return flags.cachedToTexture;
 }
 
 //==============================================================================
 
 void Component::setManuallyComposited (bool shouldBeManuallyComposited)
 {
-    if (options.manuallyComposited == shouldBeManuallyComposited)
+    if (flags.manuallyComposited == shouldBeManuallyComposited)
         return;
 
-    options.manuallyComposited = shouldBeManuallyComposited;
+    flags.manuallyComposited = shouldBeManuallyComposited;
 
     if (! shouldBeManuallyComposited)
         presentedCanvas = nullptr;
@@ -1475,7 +1475,7 @@ void Component::setManuallyComposited (bool shouldBeManuallyComposited)
 
 bool Component::isManuallyComposited() const
 {
-    return options.manuallyComposited;
+    return flags.manuallyComposited;
 }
 
 GpuTexture::Ptr Component::renderToTexture (GraphicsContext& ctx, float scale)
@@ -1591,7 +1591,7 @@ bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
     for (int childIndex = children.size(); --childIndex >= 0;)
     {
         auto child = children.getUnchecked (childIndex);
-        if (! child->isVisible() || ! child->isOpaque() || child->options.unclippedRendering || child->options.manuallyComposited || child->isTransformed())
+        if (! child->isVisible() || ! child->isOpaque() || child->flags.unclippedRendering || child->flags.manuallyComposited || child->isTransformed())
             continue;
 
         auto childBounds = child->getBoundsRelativeToTopLevelComponent();
@@ -1634,9 +1634,9 @@ void Component::internalRepaint (const Rectangle<float>& rect)
 
         auto* parent = component->parentComponent;
 
-        if (parent != nullptr && component->options.manuallyComposited)
+        if (parent != nullptr && component->flags.manuallyComposited)
             dirtyArea = parent->getLocalBounds();
-        else if (! component->options.onDesktop)
+        else if (! component->flags.onDesktop)
             dirtyArea = getTransformedBounds (dirtyArea, component->transform.translated (component->getPosition()));
 
         if (parent == nullptr)
@@ -1684,11 +1684,11 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
 
         auto& offscreenG = canvas->beginDraw ({}, scale);
 
-        options.paintAsOffscreenRoot = true;
+        flags.paintAsOffscreenRoot = true;
 
         paintSubtree (offscreenG, RectangleList<float> { getLocalBounds() }, opacity, renderContinuous);
 
-        options.paintAsOffscreenRoot = false;
+        flags.paintAsOffscreenRoot = false;
 
         canvas->commit();
         return canvas;
@@ -1714,7 +1714,7 @@ void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRe
     g.setDrawingArea ({});
     g.setTransform (AffineTransform::identity());
 
-    if (! options.unclippedRendering)
+    if (! flags.unclippedRendering)
         setClipRegion (g, clipRegion);
 
     // The translation goes in the drawing area and only the linear part in the transform, so an
@@ -1725,7 +1725,7 @@ void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRe
     // Under rotation or shear the clip region only holds the bounding box, so clip to the real
     // outline too. Children paint inside this state, so they inherit it.
     const bool isAxisAligned = approximatelyEqual (toTopLevel.getShearX(), 0.0f) && approximatelyEqual (toTopLevel.getShearY(), 0.0f);
-    if (! options.unclippedRendering && ! isAxisAligned)
+    if (! flags.unclippedRendering && ! isAxisAligned)
         g.setClipPath (getLocalBounds());
 }
 
@@ -1739,7 +1739,7 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
     });
 
     {
-        const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
+        const bool shouldMeasurePaint = ! flags.paintProfilingDisabled && ! componentListeners.isEmpty();
         const auto toTopLevel = getTransformToTopLevelComponent();
 
         ComponentPaintMetrics metrics;
@@ -1762,7 +1762,7 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
         applyPaintState (g, clipRegion);
 
         bool canSkipPaint = false;
-        if (! options.unclippedRendering && toTopLevel.isOnlyTranslation() && clipRegion.getNumRectangles() == 1)
+        if (! flags.unclippedRendering && toTopLevel.isOnlyTranslation() && clipRegion.getNumRectangles() == 1)
             canSkipPaint = hasOpaqueChildCoveringArea (clipRegion.getRectangles()[0]);
 
         if (! canSkipPaint)
@@ -1817,7 +1817,7 @@ void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegio
 
 void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous)
 {
-    if (! isVisible() || options.manuallyComposited || getWidth() <= 0.0f || getHeight() <= 0.0f)
+    if (! isVisible() || flags.manuallyComposited || getWidth() <= 0.0f || getHeight() <= 0.0f)
         return;
 
     const auto toTopLevel = getTransformToTopLevelComponent();
@@ -1832,7 +1832,7 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         boundsToRedraw.addWithoutMerge (getTransformedBounds (getLocalBounds(), toTopLevel));
     }
 
-    const auto selfOpacity = (! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f;
+    const auto selfOpacity = (! flags.onDesktop && native == nullptr) ? getOpacity() : 1.0f;
     const auto opacity = g.getOpacity() * selfOpacity;
     if (opacity <= 0.0f)
         return;
@@ -1855,13 +1855,13 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
         effectOffscreenCanvas = canvas;
 
-        if (options.cachedToTexture)
+        if (flags.cachedToTexture)
             cachedTextureCanvas = canvas;
 
         return;
     }
 
-    if (options.cachedToTexture)
+    if (flags.cachedToTexture)
     {
         const auto scale = g.getContextScale();
         const auto pixelSize = getCanvasPixelSize (getSize(), scale);
@@ -1876,9 +1876,9 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
                 auto& offscreenG = canvas->beginDraw ({}, scale);
                 offscreenG.setDrawingArea (getLocalBounds());
 
-                options.paintAsOffscreenRoot = true;
+                flags.paintAsOffscreenRoot = true;
                 paint (offscreenG);
-                options.paintAsOffscreenRoot = false;
+                flags.paintAsOffscreenRoot = false;
 
                 canvas->commit();
                 cachedTextureCanvas = canvas;
@@ -2105,7 +2105,7 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
 
 void Component::internalTextInput (const String& text)
 {
-    if (! options.wantsKeyboardFocus || ! isVisible() || ! isEnabled())
+    if (! flags.wantsKeyboardFocus || ! isVisible() || ! isEnabled())
         return;
 
     textInput (text);
@@ -2316,7 +2316,7 @@ Rectangle<float> Component::getScreenBounds() const
 
 Rectangle<float> Component::getSafeAreaBounds() const
 {
-    if (options.onDesktop && native != nullptr)
+    if (flags.onDesktop && native != nullptr)
         return native->getSafeAreaBounds().to<float>();
 
     if (parentComponent == nullptr)
@@ -2395,7 +2395,7 @@ Point<float> Component::getTopLevelScreenOrigin() const
     while (topLevel->parentComponent != nullptr)
         topLevel = topLevel->parentComponent;
 
-    if (topLevel->options.onDesktop && topLevel->native != nullptr)
+    if (topLevel->flags.onDesktop && topLevel->native != nullptr)
         return topLevel->native->getPosition().to<float>();
 
     return topLevel->getPosition();

@@ -102,7 +102,8 @@ bool DragAndDropManager::beginSession (DragAndDropSource& source, Component& com
     hoveredComponent = nullptr;
 
     createGhost();
-    moveGhostTo (Desktop::getInstance()->getCurrentMouseLocation());
+    moveGhostTo (currentOptions.touchIndex >= 0 ? currentOptions.touchScreenPosition
+                                                : Desktop::getInstance()->getCurrentMouseLocation());
 
     if (auto* native = component.getNativeComponent())
         native->setGlobalMouseCaptureActive (true);
@@ -175,6 +176,11 @@ const DragAndDropData& DragAndDropManager::getCurrentDragData() const noexcept
     return currentData;
 }
 
+int DragAndDropManager::getCurrentDragTouchIndex() const noexcept
+{
+    return currentOptions.touchIndex;
+}
+
 Component* DragAndDropManager::getCurrentDragSourceComponent() const
 {
     return sourceComponent.get();
@@ -189,7 +195,8 @@ DragAndDropTarget* DragAndDropManager::getCurrentDragTarget() const
 
 void DragAndDropManager::mouseDrag (const MouseEvent& event)
 {
-    if (! isDragging() || cancelled)
+    // A session follows one pointer: the mouse, or the finger it was started with.
+    if (! isDragging() || cancelled || event.getTouchIndex() != currentOptions.touchIndex)
         return;
 
     const auto screenPosition = event.getScreenPosition();
@@ -200,14 +207,14 @@ void DragAndDropManager::mouseDrag (const MouseEvent& event)
 
 void DragAndDropManager::mouseUp (const MouseEvent& event)
 {
+    if (! isDragging() || event.getTouchIndex() != currentOptions.touchIndex)
+        return;
+
     if (cancelled)
     {
         endSession (DragAndDropAction::none);
         return;
     }
-
-    if (! isDragging())
-        return;
 
     const auto screenPosition = event.getScreenPosition();
     auto* component = resolveComponentAt (screenPosition);
@@ -255,6 +262,9 @@ void DragAndDropManager::createGhost()
 {
     if (ghost == nullptr)
         ghost = std::make_unique<DragImageComponent>();
+
+    auto* source = sourceComponent.get();
+    ghost->setHostComponent (currentOptions.imageInTopLevelComponent && source != nullptr ? source->getTopLevelComponent() : nullptr);
 
     if (currentOptions.dragImageComponent != nullptr)
         ghost->setDragImageComponent (currentOptions.dragImageComponent, currentOptions.imageOffset, currentOptions.imageOpacity);

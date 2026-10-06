@@ -208,6 +208,16 @@ public:
     /** Sets the GPU texture, replacing any existing GPU backing. */
     void setGpuTexture (GpuTexture::Ptr tex);
 
+    /** @internal
+        Returns this image's GPU texture, or uploads its pixels into a new texture when it has none.
+
+        A newly made texture is not kept by the image.
+
+        @param renderContext The Rive render context to create the texture with.
+        @return The texture, or null when the image has neither a texture nor pixels.
+    */
+    rive::rcp<rive::gpu::Texture> getOrCreateTexture (rive::gpu::RenderContext& renderContext) const;
+
 private:
     friend class Graphics;
 

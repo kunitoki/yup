@@ -256,6 +256,18 @@ TEST_F (SpectrumAnalyzerComponentTests, SetUpdateRateVeryHigh)
     EXPECT_EQ (1000, analyzer->getUpdateRate());
 }
 
+TEST_F (SpectrumAnalyzerComponentTests, DefaultUpdateRateFollowsDisplay)
+{
+    EXPECT_EQ (0, analyzer->getUpdateRate());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, SetUpdateRateZeroFollowsDisplay)
+{
+    analyzer->setUpdateRate (30);
+    analyzer->setUpdateRate (0);
+    EXPECT_EQ (0, analyzer->getUpdateRate());
+}
+
 //==============================================================================
 // Frequency Range Tests
 //==============================================================================
@@ -601,6 +613,35 @@ TEST_F (SpectrumAnalyzerComponentTests, MultipleTimerCallbacks)
         analyzer->timerCallback();
 
     // Should handle multiple calls
+    EXPECT_TRUE (true);
+}
+
+//==============================================================================
+// Style Tests
+//==============================================================================
+
+TEST_F (SpectrumAnalyzerComponentTests, StyleColorsResolveFromComponent)
+{
+    analyzer->setColor (SpectrumAnalyzerComponent::Style::outlineColorId, Colors::red);
+    analyzer->setColor (SpectrumAnalyzerComponent::Style::fillColorId, Colors::blue);
+
+    EXPECT_EQ (Colors::red, ApplicationTheme::findComponentColor (*analyzer, SpectrumAnalyzerComponent::Style::outlineColorId));
+    EXPECT_EQ (Colors::blue, ApplicationTheme::findComponentColor (*analyzer, SpectrumAnalyzerComponent::Style::fillColorId));
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, PaintWithStyleColors)
+{
+    analyzer->setColor (SpectrumAnalyzerComponent::Style::backgroundTopColorId, Colors::white);
+    analyzer->setColor (SpectrumAnalyzerComponent::Style::backgroundBottomColorId, Colors::gray);
+    analyzer->setColor (SpectrumAnalyzerComponent::Style::gridColorId, Colors::black);
+    analyzer->setColor (SpectrumAnalyzerComponent::Style::textColorId, Colors::black);
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (800, 400);
+    Graphics g (*context, *renderer);
+
+    analyzer->paint (g);
+
     EXPECT_TRUE (true);
 }
 

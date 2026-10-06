@@ -77,7 +77,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (yup::Color (0xff404040));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -317,7 +317,6 @@ private:
     void createUI()
     {
         // Get fonts
-        auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
         auto buttonFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (14.0f);
 
         // Load IR button
@@ -339,13 +338,11 @@ private:
 
         // IR info label
         irInfoLabel.setText ("Loading default IR...", yup::NotificationType::dontSendNotification);
-        irInfoLabel.setFont (labelFont);
         irInfoLabel.setJustification (yup::Justification::center);
         addAndMakeVisible (irInfoLabel);
 
         // Wet gain slider
         wetGainLabel.setText ("Wet Gain", yup::NotificationType::dontSendNotification);
-        wetGainLabel.setFont (labelFont);
         addAndMakeVisible (wetGainLabel);
 
         wetGainSlider.setRange (0.0, 2.0);
@@ -358,7 +355,6 @@ private:
 
         // Dry gain slider
         dryGainLabel.setText ("Dry Gain", yup::NotificationType::dontSendNotification);
-        dryGainLabel.setFont (labelFont);
         addAndMakeVisible (dryGainLabel);
 
         dryGainSlider.setRange (0.0, 2.0);

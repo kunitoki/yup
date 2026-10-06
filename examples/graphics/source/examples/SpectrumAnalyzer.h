@@ -149,7 +149,6 @@ public:
         sweepStartFreq = startFreq;
         sweepEndFreq = endFreq;
         sweepDurationSeconds = yup::jmax (0.001, durationSeconds);
-        resetSweepPlaybackState();
     }
 
     void setSmoothingTime (float timeInSeconds)
@@ -628,7 +627,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -763,13 +762,9 @@ public:
 private:
     void setupUI()
     {
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
-
         // Title
         titleLabel = std::make_unique<yup::Label> ("Title");
         titleLabel->setText ("Real-Time Spectrum Analyzer Demo");
-        titleLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
-        titleLabel->setFont (font);
         addAndMakeVisible (*titleLabel);
 
         // Signal type selector
@@ -882,17 +877,6 @@ private:
         };
         addAndMakeVisible (*windowTypeCombo);
 
-        // Display type selector
-        displayTypeCombo = std::make_unique<yup::ComboBox> ("DisplayType");
-        displayTypeCombo->addItem ("Filled", 1);
-        displayTypeCombo->addItem ("Lines", 2);
-        displayTypeCombo->setSelectedId (1);
-        displayTypeCombo->onSelectedItemChanged = [this]
-        {
-            updateDisplayType();
-        };
-        addAndMakeVisible (*displayTypeCombo);
-
         // Level mode selector
         levelModeCombo = std::make_unique<yup::ComboBox> ("LevelMode");
         levelModeCombo->addItem ("Peak dBFS", 1);
@@ -964,23 +948,20 @@ private:
         addAndMakeVisible (*colorMapCombo);
 
         // Status labels with appropriate font size
-        auto statusFont = font.withHeight (11.0f);
+        auto statusFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (11.0f);
 
         frequencyLabel = std::make_unique<yup::Label> ("FrequencyLabel");
         frequencyLabel->setText ("Frequency: 440 Hz");
-        frequencyLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
         frequencyLabel->setFont (statusFont);
         addAndMakeVisible (*frequencyLabel);
 
         amplitudeLabel = std::make_unique<yup::Label> ("AmplitudeLabel");
         amplitudeLabel->setText ("Amplitude: 50%");
-        amplitudeLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
         amplitudeLabel->setFont (statusFont);
         addAndMakeVisible (*amplitudeLabel);
 
         fftInfoLabel = std::make_unique<yup::Label> ("FFTInfoLabel");
         fftInfoLabel->setText ("FFT: 2048");
-        fftInfoLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
         fftInfoLabel->setFont (statusFont);
         addAndMakeVisible (*fftInfoLabel);
 
@@ -988,7 +969,6 @@ private:
         analyzerComponent.setWindowType (yup::WindowType::hann);
         analyzerComponent.setFrequencyRange (20.0f, 22000.0f);
         analyzerComponent.setDecibelRange (-100.0f, 10.0f);
-        analyzerComponent.setUpdateRate (30);
         analyzerComponent.setSampleRate (44100.0);
         analyzerComponent.setOverlapFactor (0.75f); // 75% overlap for better responsiveness
         addAndMakeVisible (analyzerComponent);
@@ -1003,15 +983,11 @@ private:
         spectrogramComponent.setVisible (false);
         addAndMakeVisible (spectrogramComponent);
 
-        // Create parameter labels with proper font sizing
-        auto labelFont = font.withHeight (12.0f);
-
-        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:", "Level Mode:", "Waveform:" })
+        // Create parameter labels
+        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:", "Level Mode:", "Waveform:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
-            label->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
-            label->setFont (labelFont);
             addAndMakeVisible (*label);
         }
 
@@ -1059,14 +1035,13 @@ private:
         parameterLabels[3]->setBounds (sweepSection.removeFromTop (labelHeight));
         sweepDurationSlider->setBounds (sweepSection.removeFromTop (controlHeight));
 
-        parameterLabels[11]->setBounds (smoothingParamSection.removeFromTop (labelHeight));
+        parameterLabels[10]->setBounds (smoothingParamSection.removeFromTop (labelHeight));
         smoothingSlider->setBounds (smoothingParamSection.removeFromTop (controlHeight));
 
         // Second row: FFT and view mode controls
         auto row2 = bounds.removeFromTop (rowHeight);
         auto fftSizeSection = row2.removeFromLeft (colWidth);
         auto windowSection = row2.removeFromLeft (colWidth);
-        auto displaySection = row2.removeFromLeft (colWidth);
         auto viewModeSection = row2.removeFromLeft (colWidth);
         auto colorMapSection = row2.removeFromLeft (colWidth);
 
@@ -1076,13 +1051,10 @@ private:
         parameterLabels[5]->setBounds (windowSection.removeFromTop (labelHeight));
         windowTypeCombo->setBounds (windowSection.removeFromTop (controlHeight));
 
-        parameterLabels[6]->setBounds (displaySection.removeFromTop (labelHeight));
-        displayTypeCombo->setBounds (displaySection.removeFromTop (controlHeight));
-
-        parameterLabels[7]->setBounds (viewModeSection.removeFromTop (labelHeight));
+        parameterLabels[6]->setBounds (viewModeSection.removeFromTop (labelHeight));
         viewModeCombo->setBounds (viewModeSection.removeFromTop (controlHeight));
 
-        parameterLabels[8]->setBounds (colorMapSection.removeFromTop (labelHeight));
+        parameterLabels[7]->setBounds (colorMapSection.removeFromTop (labelHeight));
         colorMapCombo->setBounds (colorMapSection.removeFromTop (controlHeight));
 
         // Third row: Release and overlap controls
@@ -1092,16 +1064,16 @@ private:
         auto levelModeSection = row3.removeFromLeft (colWidth);
         auto waveformSection = row3.removeFromLeft (colWidth);
 
-        parameterLabels[9]->setBounds (releaseSection.removeFromTop (labelHeight));
+        parameterLabels[8]->setBounds (releaseSection.removeFromTop (labelHeight));
         releaseSlider->setBounds (releaseSection.removeFromTop (controlHeight));
 
-        parameterLabels[10]->setBounds (overlapSection.removeFromTop (labelHeight));
+        parameterLabels[9]->setBounds (overlapSection.removeFromTop (labelHeight));
         overlapSlider->setBounds (overlapSection.removeFromTop (controlHeight));
 
-        parameterLabels[12]->setBounds (levelModeSection.removeFromTop (labelHeight));
+        parameterLabels[11]->setBounds (levelModeSection.removeFromTop (labelHeight));
         levelModeCombo->setBounds (levelModeSection.removeFromTop (controlHeight));
 
-        parameterLabels[13]->setBounds (waveformSection.removeFromTop (labelHeight));
+        parameterLabels[12]->setBounds (waveformSection.removeFromTop (labelHeight));
         waveformCombo->setBounds (waveformSection.removeFromTop (controlHeight));
 
         // Fourth row: Status labels
@@ -1280,23 +1252,6 @@ private:
         spectrogramComponent.setWindowType (windowType);
     }
 
-    void updateDisplayType()
-    {
-        yup::SpectrumAnalyzerComponent::DisplayType displayType = yup::SpectrumAnalyzerComponent::DisplayType::filled;
-
-        switch (displayTypeCombo->getSelectedId())
-        {
-            case 1:
-                displayType = yup::SpectrumAnalyzerComponent::DisplayType::filled;
-                break;
-            case 2:
-                displayType = yup::SpectrumAnalyzerComponent::DisplayType::lines;
-                break;
-        }
-
-        analyzerComponent.setDisplayType (displayType);
-    }
-
     void updateLevelMode()
     {
         auto levelMode = yup::SpectrumAnalyzerComponent::LevelMode::peakDecibels;
@@ -1403,7 +1358,6 @@ private:
     // FFT controls
     std::unique_ptr<yup::ComboBox> fftSizeCombo;
     std::unique_ptr<yup::ComboBox> windowTypeCombo;
-    std::unique_ptr<yup::ComboBox> displayTypeCombo;
     std::unique_ptr<yup::ComboBox> levelModeCombo;
     std::unique_ptr<yup::Slider> releaseSlider;
     std::unique_ptr<yup::Slider> overlapSlider;

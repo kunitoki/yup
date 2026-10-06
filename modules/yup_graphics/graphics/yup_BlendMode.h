@@ -41,7 +41,8 @@ enum class BlendMode : uint8
     Hue,
     Saturation,
     Color,
-    Luminosity
+    Luminosity,
+    Additive
 };
 
 } // namespace yup

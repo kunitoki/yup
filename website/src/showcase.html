@@ -9,165 +9,167 @@
         <!-- @header -->
 
         <main>
-            <section class="relative overflow-hidden pt-16 pb-6 sm:pt-24">
-                <div class="bg-grid"></div>
-                <div class="container-site relative text-center">
-                    <p class="eyebrow">Showcase</p>
-                    <h1 class="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">Rendered by YUP, every pixel</h1>
-                    <p class="lead mx-auto mt-5 max-w-2xl">Everything below comes from the example apps in the repository. The ones marked live demo run right in your browser.</p>
+            <section class="pt-16 pb-6 sm:pt-24">
+                <div class="container-site">
+                    <h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">Rendered by YUP, every pixel</h1>
+                    <p class="lead mt-5">Everything below comes from the example apps in the repository. The ones with a live demo run right in your browser.</p>
+                    <nav class="segmented mt-8 flex-wrap" aria-label="Gallery sections">
+                            <a class="seg inline-flex items-center" href="#graphics">Graphics and GPU</a>
+                            <a class="seg inline-flex items-center" href="#ui">Interface</a>
+                            <a class="seg inline-flex items-center" href="#audio">Audio</a>
+                            <a class="seg inline-flex items-center" href="#dsp">DSP</a>
+                    </nav>
                 </div>
             </section>
 
             <section class="pb-24">
                 <div class="container-site">
-                    <div class="mt-8 flex justify-center">
-                        <nav class="segmented flex-wrap" aria-label="Gallery sections">
-                        <a class="seg inline-flex items-center" href="#graphics">Graphics and GPU</a>
-                        <a class="seg inline-flex items-center" href="#ui">Interface</a>
-                        <a class="seg inline-flex items-center" href="#dsp">DSP</a>
-                        <a class="seg inline-flex items-center" href="#audio">Audio</a>
-                        </nav>
-                    </div>
-                <section id="graphics" class="mt-20 scroll-mt-24">
-                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
-                        <h2 class="text-2xl font-semibold">Graphics and GPU</h2>
-                        <p class="hidden text-sm text-muted sm:block">Vector rendering on Rive, plus RHI compute and 3D.</p>
-                    </div>
-                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <figure class="card spotlight group">
-                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Artboard.h" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_rive_artboard.jpg" alt="Rive artboards" loading="lazy" />
+                    <section id="graphics" class="mt-20 scroll-mt-24">
+                        <div class="flex items-baseline justify-between gap-4 border-b-2 border-graphics pb-3">
+                            <h2 class="text-2xl font-semibold">Graphics and GPU</h2>
+                            <p class="hidden text-sm text-muted sm:block">Vector rendering on Rive, plus RHI compute and 3D.</p>
+                        </div>
+                        <div class="mt-6 grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+                        <figure class="sm:col-span-2">
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Artboard.h" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_rive_artboard.jpg" alt="Rive artboards" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Rive artboards</span><span class="flex gap-2"><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Artboard.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Rive artboards</span><span class="flex gap-4"><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Artboard.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://kunitoki.github.io/yup-demos/demos/lottie" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_lottie.png" alt="Lottie playback" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/lottie" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_lottie.png" alt="Lottie playback" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Lottie playback</span><span class="flex gap-2"><a class="chip chip-on chip-link" href="https://kunitoki.github.io/yup-demos/demos/lottie" target="_blank" rel="noopener">Live demo</a><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/LottieDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Lottie playback</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/lottie" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/LottieDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://kunitoki.github.io/yup-demos/demos/svg" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_svg_tiger.jpg" alt="SVG carousel" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/svg" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_svg_tiger.jpg" alt="SVG carousel" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>SVG carousel</span><span class="flex gap-2"><a class="chip chip-on chip-link" href="https://kunitoki.github.io/yup-demos/demos/svg" target="_blank" rel="noopener">Live demo</a><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Svg.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">SVG carousel</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/svg" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Svg.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpinningCubeDemo.h" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_rhi_cube.jpg" alt="RHI spinning cube" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpinningCubeDemo.h" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_rhi_cube.jpg" alt="RHI spinning cube" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>RHI spinning cube</span><span class="flex gap-2"><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpinningCubeDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">RHI spinning cube</span><span class="flex gap-4"><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpinningCubeDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://kunitoki.github.io/yup-demos/demos/pbr" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_rhi_pbr.jpg" alt="Physically based rendering" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/pbr" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_rhi_pbr.jpg" alt="Physically based rendering" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Physically based rendering</span><span class="flex gap-2"><a class="chip chip-on chip-link" href="https://kunitoki.github.io/yup-demos/demos/pbr" target="_blank" rel="noopener">Live demo</a><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/PbrDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Physically based rendering</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/pbr" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/PbrDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://kunitoki.github.io/yup-demos/demos/fluid-simulation" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_rhi_fluid.jpg" alt="GPU fluid simulation" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/fluid-simulation" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_rhi_fluid.jpg" alt="GPU fluid simulation" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>GPU fluid simulation</span><span class="flex gap-2"><a class="chip chip-on chip-link" href="https://kunitoki.github.io/yup-demos/demos/fluid-simulation" target="_blank" rel="noopener">Live demo</a><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/FluidSimulationDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">GPU fluid simulation</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/fluid-simulation" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/FluidSimulationDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/VariableFonts.h" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_variable_fonts.jpg" alt="Variable fonts" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/VariableFonts.h" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_variable_fonts.jpg" alt="Variable fonts" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Variable fonts</span><span class="flex gap-2"><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/VariableFonts.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Variable fonts</span><span class="flex gap-4"><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/VariableFonts.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                    </div>
-                </section>
-                <section id="ui" class="mt-20 scroll-mt-24">
-                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
-                        <h2 class="text-2xl font-semibold">Interface</h2>
-                        <p class="hidden text-sm text-muted sm:block">Widgets and tools built with the GUI toolkit.</p>
-                    </div>
-                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <figure class="card spotlight group">
-                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/ColorLab.h" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_color_picker.png" alt="Color picker" loading="lazy" />
+                        </div>
+                    </section>
+                    <section id="ui" class="mt-20 scroll-mt-24">
+                        <div class="flex items-baseline justify-between gap-4 border-b-2 border-graphics pb-3">
+                            <h2 class="text-2xl font-semibold">Interface</h2>
+                            <p class="hidden text-sm text-muted sm:block">Widgets and tools built with the GUI toolkit.</p>
+                        </div>
+                        <div class="mt-6 grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+                        <figure class="sm:col-span-2">
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/ColorLab.h" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_color_picker.png" alt="Color picker" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Color picker</span><span class="flex gap-2"><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/ColorLab.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Color picker</span><span class="flex gap-4"><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/ColorLab.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://kunitoki.github.io/yup-demos/demos/widgets" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_widgets.png" alt="Transformable widgets panel" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/widgets" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_widgets.jpg" alt="Transformable widgets panel" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Transformable widgets</span><span class="flex gap-2"><a class="chip chip-on chip-link" href="https://kunitoki.github.io/yup-demos/demos/widgets" target="_blank" rel="noopener">Live demo</a><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Widgets.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Transformable widgets</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/widgets" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Widgets.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://kunitoki.github.io/yup-demos/demos/component-3d" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_3d_components.png" alt="Components in 3D" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/component-3d" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_3d_components.png" alt="Components in 3D" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Components in 3D</span><span class="flex gap-2"><a class="chip chip-on chip-link" href="https://kunitoki.github.io/yup-demos/demos/component-3d" target="_blank" rel="noopener">Live demo</a><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Component3D.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Components in 3D</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/component-3d" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Component3D.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://kunitoki.github.io/yup-demos/demos/component-effects" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_component_effects.jpg" alt="Shader effects on components" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/component-effects" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_component_effects.jpg" alt="Shader effects on components" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Component effects</span><span class="flex gap-2"><a class="chip chip-on chip-link" href="https://kunitoki.github.io/yup-demos/demos/component-effects" target="_blank" rel="noopener">Live demo</a><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/ComponentEffects.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Component effects</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/component-effects" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/ComponentEffects.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://kunitoki.github.io/yup-demos/demos/touch-trails" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_multitouch.jpg" alt="Multitouch trails" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/touch-trails" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-contain bg-void p-2" src="../../docs/_static/images/yup_multitouch.jpg" alt="Multitouch trails" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Multitouch trails</span><span class="flex gap-2"><a class="chip chip-on chip-link" href="https://kunitoki.github.io/yup-demos/demos/touch-trails" target="_blank" rel="noopener">Live demo</a><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/TouchTrails.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Multitouch trails</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/touch-trails" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/TouchTrails.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/PaintProfilerDemo.h" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_component_profiler.png" alt="Paint profiler" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/PaintProfilerDemo.h" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-contain bg-void p-2" src="../../docs/_static/images/yup_component_profiler.png" alt="Paint profiler" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Paint profiler</span><span class="flex gap-2"><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/PaintProfilerDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Paint profiler</span><span class="flex gap-4"><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/PaintProfilerDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                    </div>
-                </section>
-                <section id="dsp" class="mt-20 scroll-mt-24">
-                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
-                        <h2 class="text-2xl font-semibold">DSP</h2>
-                        <p class="hidden text-sm text-muted sm:block">Filter design, crossovers and spectral analysis from yup_dsp.</p>
-                    </div>
-                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <figure class="card spotlight group">
-                            <a href="https://kunitoki.github.io/yup-demos/demos/filter" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_dsp_filter_rbj.png" alt="RBJ filter responses" loading="lazy" />
+                        <figure class="sm:col-span-2">
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/themes" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_themes.jpg" alt="Theme palettes applied to widgets" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>RBJ filter responses</span><span class="flex gap-2"><a class="chip chip-on chip-link" href="https://kunitoki.github.io/yup-demos/demos/filter" target="_blank" rel="noopener">Live demo</a><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/FilterDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Theme palettes</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/themes" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Themes.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/CrossoverDemo.h" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_dsp_crossover.png" alt="Crossover network" loading="lazy" />
+                        </div>
+                    </section>
+                    <section id="audio" class="mt-20 scroll-mt-24">
+                        <div class="flex items-baseline justify-between gap-4 border-b-2 border-audio pb-3">
+                            <h2 class="text-2xl font-semibold">Audio</h2>
+                            <p class="hidden text-sm text-muted sm:block">Graph editing, plugin hosting and audio visualization.</p>
+                        </div>
+                        <div class="mt-6 grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+                        <figure class="sm:col-span-2">
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-contain bg-void p-2" src="../../docs/_static/images/yup_audio_graph.png" alt="Audio graph editor" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Crossover network</span><span class="flex gap-2"><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/CrossoverDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Audio graph editor</span><span class="flex gap-4"><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://kunitoki.github.io/yup-demos/demos/spectrum-analyzer" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_dsp_spectrum_fill.png" alt="Spectrum analyzer, filled" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/AudioFileDemo.h" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_audio_waveform.png" alt="Waveform view" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Spectrum analyzer</span><span class="flex gap-2"><a class="chip chip-on chip-link" href="https://kunitoki.github.io/yup-demos/demos/spectrum-analyzer" target="_blank" rel="noopener">Live demo</a><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpectrumAnalyzer.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Waveform view</span><span class="flex gap-4"><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/AudioFileDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                    </div>
-                </section>
-                <section id="audio" class="mt-20 scroll-mt-24">
-                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
-                        <h2 class="text-2xl font-semibold">Audio</h2>
-                        <p class="hidden text-sm text-muted sm:block">Graph editing, plugin hosting and audio visualization.</p>
-                    </div>
-                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <figure class="card spotlight group">
-                            <a href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_audio_graph.png" alt="Audio graph editor" loading="lazy" />
+                        </div>
+                    </section>
+                    <section id="dsp" class="mt-20 scroll-mt-24">
+                        <div class="flex items-baseline justify-between gap-4 border-b-2 border-audio pb-3">
+                            <h2 class="text-2xl font-semibold">DSP</h2>
+                            <p class="hidden text-sm text-muted sm:block">Filter design, crossovers and spectral analysis from yup_dsp.</p>
+                        </div>
+                        <div class="mt-6 grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+                        <figure class="sm:col-span-2">
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/filter" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-contain bg-void p-2" src="../../docs/_static/images/yup_dsp_filter_rbj.png" alt="RBJ filter responses" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Audio graph editor</span><span class="flex gap-2"><a class="chip chip-link" href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">RBJ filter responses</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/filter" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/FilterDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                        <figure class="card spotlight group">
-                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/AudioFileDemo.h" target="_blank" rel="noopener">
-                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_audio_waveform.png" alt="Waveform view" loading="lazy" />
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/CrossoverDemo.h" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_dsp_crossover.png" alt="Crossover network" loading="lazy" />
                             </a>
-                            <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Waveform view</span><span class="flex gap-2"><a class="chip chip-link" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/AudioFileDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Crossover network</span><span class="flex gap-4"><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/CrossoverDemo.h" target="_blank" rel="noopener">Source</a></span></figcaption>
                         </figure>
-                    </div>
-                </section>
+                        <figure>
+                            <a class="block overflow-hidden rounded-[10px] border border-edge" href="https://kunitoki.github.io/yup-demos/demos/spectrum-analyzer" target="_blank" rel="noopener">
+                                <img class="h-60 w-full lg:h-72 object-cover" src="../../docs/_static/images/yup_dsp_spectrum_fill.png" alt="Spectrum analyzer, filled" loading="lazy" />
+                            </a>
+                            <figcaption class="mt-3 flex items-baseline justify-between gap-3 text-sm"><span class="text-ink">Spectrum analyzer</span><span class="flex gap-4"><a class="text-graphics-soft hover:text-ink" href="https://kunitoki.github.io/yup-demos/demos/spectrum-analyzer" target="_blank" rel="noopener">Live demo</a><a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpectrumAnalyzer.h" target="_blank" rel="noopener">Source</a></span></figcaption>
+                        </figure>
+                        </div>
+                    </section>
                 </div>
             </section>
         </main>

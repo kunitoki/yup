@@ -912,6 +912,51 @@ void registerYupGraphicsBindings (py::module_& m)
     registerRectangleList<RectangleList, int, float> (m);
 
 
+    // ============================================================================================ yup::StrokeCap
+
+    py::enum_<StrokeCap> (m, "StrokeCap")
+        .value ("Butt", StrokeCap::Butt)
+        .value ("Round", StrokeCap::Round)
+        .value ("Square", StrokeCap::Square);
+
+    // ============================================================================================ yup::StrokeJoin
+
+    py::enum_<StrokeJoin> (m, "StrokeJoin")
+        .value ("Miter", StrokeJoin::Miter)
+        .value ("Round", StrokeJoin::Round)
+        .value ("Bevel", StrokeJoin::Bevel);
+
+    // ============================================================================================ yup::StrokePosition
+
+    py::enum_<StrokePosition> (m, "StrokePosition")
+        .value ("Inside", StrokePosition::Inside)
+        .value ("Center", StrokePosition::Center)
+        .value ("Outside", StrokePosition::Outside);
+
+    // ============================================================================================ yup::ImageSampling
+
+    py::enum_<ImageWrap> (m, "ImageWrap")
+        .value ("Clamp", ImageWrap::Clamp)
+        .value ("Repeat", ImageWrap::Repeat)
+        .value ("Mirror", ImageWrap::Mirror);
+
+    py::enum_<ImageFilter> (m, "ImageFilter")
+        .value ("Linear", ImageFilter::Linear)
+        .value ("Nearest", ImageFilter::Nearest);
+
+    py::class_<ImageSampling> (m, "ImageSampling")
+        .def (py::init<>())
+        .def (py::init ([] (ImageWrap wrapX, ImageWrap wrapY, ImageFilter filter)
+        {
+            return ImageSampling { wrapX, wrapY, filter };
+        }),
+              "wrapX"_a = ImageWrap::Clamp,
+              "wrapY"_a = ImageWrap::Clamp,
+              "filter"_a = ImageFilter::Linear)
+        .def_readwrite ("wrapX", &ImageSampling::wrapX)
+        .def_readwrite ("wrapY", &ImageSampling::wrapY)
+        .def_readwrite ("filter", &ImageSampling::filter);
+
     // ============================================================================================ yup::Path
 
     py::class_<Path> classPath (m, "Path");
@@ -1027,7 +1072,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("addBubble", &Path::addBubble, "bodyArea"_a, "maximumArea"_a, "arrowTipPosition"_a, "cornerSize"_a, "arrowBaseWidth"_a)
 
         // Path operations
-        .def ("createStrokePolygon", &Path::createStrokePolygon, "strokeWidth"_a)
+        .def ("createStrokePolygon", &Path::createStrokePolygon, "strokeWidth"_a, "join"_a = StrokeJoin::Round, "cap"_a = StrokeCap::Butt)
+        .def ("createFillPolygon", &Path::createFillPolygon)
         .def ("withRoundedCorners", &Path::withRoundedCorners, "cornerRadius"_a)
         .def ("appendPath", py::overload_cast<const Path&> (&Path::appendPath), "other"_a)
         .def ("appendPath", py::overload_cast<const Path&, const AffineTransform&> (&Path::appendPath), "other"_a, "transform"_a)
@@ -1730,6 +1776,16 @@ void registerYupGraphicsBindings (py::module_& m)
 
             return result.getValue();
         })
+        .def_static ("loadColorEmojiSystemFont", [] () -> Font
+        {
+            auto result = Font::loadColorEmojiSystemFont();
+            if (! result.wasOk())
+                throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
+
+            return result.getValue();
+        })
+        .def_static ("setColorEmojiFallbackFont", &Font::setColorEmojiFallbackFont, "font"_a)
+        .def_static ("getColorEmojiFallbackFont", &Font::getColorEmojiFallbackFont)
 
         // Metrics
         .def ("isEmpty", &Font::isEmpty)
@@ -1859,6 +1915,7 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getParagraphSpacing", &StyledText::getParagraphSpacing)
         .def ("getWrap", &StyledText::getWrap)
         .def ("getComputedTextBounds", &StyledText::getComputedTextBounds)
+        .def ("getNumColorGlyphs", &StyledText::getNumColorGlyphs)
         .def ("getOffset", &StyledText::getOffset, "area"_a)
 
         .def ("getGlyphIndexAtPosition", &StyledText::getGlyphIndexAtPosition, "position"_a)
@@ -1907,21 +1964,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .value ("Hue", BlendMode::Hue)
         .value ("Saturation", BlendMode::Saturation)
         .value ("Color", BlendMode::Color)
-        .value ("Luminosity", BlendMode::Luminosity);
-
-    // ============================================================================================ yup::StrokeCap
-
-    py::enum_<StrokeCap> (m, "StrokeCap")
-        .value ("Butt", StrokeCap::Butt)
-        .value ("Round", StrokeCap::Round)
-        .value ("Square", StrokeCap::Square);
-
-    // ============================================================================================ yup::StrokeJoin
-
-    py::enum_<StrokeJoin> (m, "StrokeJoin")
-        .value ("Miter", StrokeJoin::Miter)
-        .value ("Round", StrokeJoin::Round)
-        .value ("Bevel", StrokeJoin::Bevel);
+        .value ("Luminosity", BlendMode::Luminosity)
+        .value ("Additive", BlendMode::Additive);
 
     // ============================================================================================ yup::Graphics
 
@@ -1939,9 +1983,47 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("withCap", &StrokeType::withCap)
         .def ("getJoin", &StrokeType::getJoin)
         .def ("withJoin", &StrokeType::withJoin)
+        .def ("getPosition", &StrokeType::getPosition)
+        .def ("withPosition", &StrokeType::withPosition)
         .def (py::self == py::self)
         .def (py::self != py::self)
     ;
+
+    // ============================================================================================ yup::ImageMesh
+
+    py::class_<ImageMesh> (m, "ImageMesh")
+        .def (py::init<>())
+        .def (py::init<std::vector<Point<float>>, std::vector<Point<float>>, std::vector<uint16>>(), "vertices"_a, "textureCoordinates"_a, "indices"_a)
+        .def_static ("createGrid", &ImageMesh::createGrid, "area"_a, "columns"_a, "rows"_a)
+        .def ("getVertices", [] (const ImageMesh& self)
+        {
+            const auto vertices = self.getVertices();
+            return std::vector<Point<float>> (vertices.begin(), vertices.end());
+        })
+        .def ("getTextureCoordinates", [] (const ImageMesh& self)
+        {
+            const auto textureCoordinates = self.getTextureCoordinates();
+            return std::vector<Point<float>> (textureCoordinates.begin(), textureCoordinates.end());
+        })
+        .def ("getIndices", [] (const ImageMesh& self)
+        {
+            const auto indices = self.getIndices();
+            return std::vector<uint16> (indices.begin(), indices.end());
+        })
+        .def ("setVertex", &ImageMesh::setVertex, "index"_a, "position"_a)
+        .def ("setVertices", [] (ImageMesh& self, const std::vector<Point<float>>& vertices)
+        {
+            return self.setVertices (vertices);
+        }, "vertices"_a)
+        .def ("isValid", &ImageMesh::isValid);
+
+    py::class_<ImageMeshInstance> (m, "ImageMeshInstance")
+        .def (py::init<>())
+        .def_readwrite ("transform", &ImageMeshInstance::transform)
+        .def_readwrite ("textureOffset", &ImageMeshInstance::textureOffset)
+        .def_readwrite ("textureScale", &ImageMeshInstance::textureScale)
+        .def_readwrite ("opacity", &ImageMeshInstance::opacity)
+        .def_readwrite ("additiveAmount", &ImageMeshInstance::additiveAmount);
 
     // ============================================================================================ yup::Graphics
 
@@ -1983,6 +2065,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("setStrokeColor", &Graphics::setStrokeColor)
         .def ("getStrokeColor", &Graphics::getStrokeColor)
         .def ("setFillColorGradient", &Graphics::setFillColorGradient)
+        .def ("setFillImage", &Graphics::setFillImage, "image"_a, "imageTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
+        .def ("setStrokeImage", &Graphics::setStrokeImage, "image"_a, "imageTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
         .def ("getFillColorGradient", &Graphics::getFillColorGradient)
         .def ("setStrokeColorGradient", &Graphics::setStrokeColorGradient)
         .def ("getStrokeColorGradient", &Graphics::getStrokeColorGradient)
@@ -1996,6 +2080,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getStrokeJoin", &Graphics::getStrokeJoin)
         .def ("setStrokeCap", &Graphics::setStrokeCap)
         .def ("getStrokeCap", &Graphics::getStrokeCap)
+        .def ("setStrokePosition", &Graphics::setStrokePosition)
+        .def ("getStrokePosition", &Graphics::getStrokePosition)
 
         // Rendering properties
         .def ("setFeather", &Graphics::setFeather)
@@ -2004,6 +2090,10 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getOpacity", &Graphics::getOpacity)
         .def ("setBlendMode", &Graphics::setBlendMode)
         .def ("getBlendMode", &Graphics::getBlendMode)
+        .def ("setAdditiveAmount", &Graphics::setAdditiveAmount)
+        .def ("getAdditiveAmount", &Graphics::getAdditiveAmount)
+        .def ("setTint", &Graphics::setTint)
+        .def ("getTint", &Graphics::getTint)
 
         // Drawing area and transformations
         .def ("setDrawingArea", &Graphics::setDrawingArea)
@@ -2014,6 +2104,8 @@ void registerYupGraphicsBindings (py::module_& m)
         // Clipping
         .def ("setClipPath", py::overload_cast<const Rectangle<float>&> (&Graphics::setClipPath))
         .def ("setClipPath", py::overload_cast<const Path&> (&Graphics::setClipPath))
+        .def ("setClipStroke", py::overload_cast<const Path&, const StrokeType&> (&Graphics::setClipStroke), "path"_a, "stroke"_a)
+        .def ("setClipStroke", py::overload_cast<const Path&> (&Graphics::setClipStroke), "path"_a)
         .def ("getClipPath", &Graphics::getClipPath)
 
         // Line drawing
@@ -2052,6 +2144,11 @@ void registerYupGraphicsBindings (py::module_& m)
         // Image operations
         .def ("drawImageAt", &Graphics::drawImageAt)
         .def ("drawImage", &Graphics::drawImage)
+        .def ("drawImageMesh", &Graphics::drawImageMesh, "image"_a, "mesh"_a, "sampling"_a = ImageSampling())
+        .def ("drawImageMeshInstanced", [] (Graphics& self, const Image& image, const ImageMesh& mesh, const std::vector<ImageMeshInstance>& instances, ImageSampling sampling)
+        {
+            self.drawImageMeshInstanced (image, mesh, instances, sampling);
+        }, "image"_a, "mesh"_a, "instances"_a, "sampling"_a = ImageSampling())
         .def ("drawTexture", &Graphics::drawTexture)
 
         // Text operations

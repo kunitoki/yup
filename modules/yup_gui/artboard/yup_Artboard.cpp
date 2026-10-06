@@ -131,6 +131,96 @@ std::optional<rive::AABB> collectNodeWorldBounds (rive::Component* node)
 
     return found ? std::optional<rive::AABB> (result) : std::nullopt;
 }
+
+// Matches TextEditor::mouseWheel, so a notch scrolls the same distance everywhere.
+constexpr float wheelPixelsPerNotch = 30.0f;
+
+// YUP key codes and rive::Key are both GLFW key codes.
+static_assert (KeyPress::spaceKey == static_cast<int> (rive::Key::space));
+static_assert (KeyPress::textAKey == static_cast<int> (rive::Key::a));
+static_assert (KeyPress::tabKey == static_cast<int> (rive::Key::tab));
+static_assert (KeyPress::f1Key == static_cast<int> (rive::Key::f1));
+static_assert (KeyPress::kp0Key == static_cast<int> (rive::Key::kp0));
+
+std::optional<rive::Key> toRiveKey (int keyCode)
+{
+    const auto isWithin = [keyCode] (int first, int last)
+    {
+        return keyCode >= first && keyCode <= last;
+    };
+
+    if (isWithin (32, 96) || isWithin (161, 162) || isWithin (256, 269) || isWithin (280, 284)
+        || isWithin (290, 314) || isWithin (320, 336) || isWithin (340, 348))
+        return static_cast<rive::Key> (keyCode);
+
+    return std::nullopt;
+}
+
+rive::KeyModifiers toRiveModifiers (const KeyModifiers& modifiers)
+{
+    auto result = rive::KeyModifiers::none;
+
+    if (modifiers.isShiftDown())
+        result = result | rive::KeyModifiers::shift;
+
+    if (modifiers.isControlDown())
+        result = result | rive::KeyModifiers::ctrl;
+
+    if (modifiers.isAltDown())
+        result = result | rive::KeyModifiers::alt;
+
+    if (modifiers.isCommandDown())
+        result = result | rive::KeyModifiers::meta;
+
+    return result;
+}
+
+// Replays a scripted file's recorded frame into the window frame being painted. Script canvases
+// render in GPU frames of their own and script GPU passes need a freshly opened screen frame,
+// so the window frame is suspended around them and resumed for the screen draws.
+class ArtboardFrameSink final : public rive::cmd::HostFrameSink
+{
+public:
+    ArtboardFrameSink (Graphics& g, rive::gpu::RenderContext& context, uint64_t target, bool suspendUpFront)
+        : HostFrameSink (false, 0, target)
+        , g (g)
+        , context (context)
+    {
+        if (suspendUpFront)
+            suspend();
+    }
+
+    rive::gpu::RenderContext* renderContext() override { return std::addressof (context); }
+
+    rive::Renderer* beginScreen (uint64_t, bool, uint32_t) override
+    {
+        resume();
+        return g.getRenderer();
+    }
+
+    rive::Renderer* beginCanvasContent (rive::gpu::RenderCanvas* canvas, uint32_t clearColor) override
+    {
+        suspend();
+        return HostFrameSink::beginCanvasContent (canvas, clearColor);
+    }
+
+    void resume()
+    {
+        if (std::exchange (suspended, false))
+            g.getGraphicsContext().resumeFrame();
+    }
+
+private:
+    void suspend()
+    {
+        if (! std::exchange (suspended, true))
+            g.getGraphicsContext().suspendFrame();
+    }
+
+    Graphics& g;
+    rive::gpu::RenderContext& context;
+    bool suspended = false;
+};
 } // namespace
 
 //==============================================================================
@@ -149,7 +239,12 @@ Artboard::Artboard (StringRef componentID, std::shared_ptr<ArtboardFile> file)
 
 Artboard::~Artboard()
 {
+    // The base destructors can no longer reach the native component.
+    relinquishTextInput();
+
     detachAllComponents();
+
+    releaseDeferredTarget();
 }
 
 //==============================================================================
@@ -161,7 +256,23 @@ void Artboard::setFile (std::shared_ptr<ArtboardFile> file, StringRef artboardNa
     artboardFile = std::move (file);
     selectedArtboardName = artboardName;
 
+    if (artboardFile != nullptr)
+        if (auto* session = artboardFile->getDeferredSession())
+            deferredTarget = session->acquireScreenTarget();
+
     updateSceneFromFile();
+}
+
+void Artboard::releaseDeferredTarget()
+{
+    if (artboardFile == nullptr)
+        return;
+
+    if (auto* session = artboardFile->getDeferredSession())
+    {
+        session->discardTargetFrame (deferredTarget);
+        session->releaseScreenTarget (deferredTarget);
+    }
 }
 
 //==============================================================================
@@ -172,8 +283,11 @@ void Artboard::clear()
 
     stateMachine = nullptr;
     boundViewModelInstance = nullptr;
+    globalViewModelOverrides.clear();
 
     eventProperties.clear();
+    pressedMouseButtons = 0;
+    pressedKeys.clear();
     viewTransform = rive::Mat2D();
     selectedArtboardName.clear();
 
@@ -181,10 +295,18 @@ void Artboard::clear()
     lastNodeViewTransforms.clear();
     cachedNodeHandles.clear();
 
-    artboardFile.reset();
-
     scene.reset();
     artboard.reset();
+
+    releaseDeferredTarget();
+    artboardFile.reset();
+
+    // hasKeyboardFocus() reads false once the flag is off, so leave first.
+    if (hasKeyboardFocus())
+        leaveKeyboardFocus();
+
+    setWantsKeyboardFocus (false);
+    relinquishTextInput();
 }
 
 //==============================================================================
@@ -636,17 +758,18 @@ bool Artboard::bindViewModelInstance (const ArtboardViewModelInstance::Ptr& mode
     if (riveInstance == nullptr)
         return false;
 
-    riveInstance->ref();
+    artboardFile->bindDeferredRecordingThread();
+
+    if (stateMachine == nullptr)
+        artboard->unbind();
+
+    // Binding fills an empty global slot with a private copy, so the shared ones go in first.
+    placeGlobalViewModelInstances();
 
     if (stateMachine != nullptr)
-    {
-        stateMachine->bindViewModelInstance (rive::rcp<rive::ViewModelInstance> (riveInstance));
-    }
+        stateMachine->bindViewModelInstance (rive::ref_rcp (riveInstance));
     else
-    {
-        artboard->unbind();
-        artboard->bindViewModelInstance (rive::rcp<rive::ViewModelInstance> (riveInstance));
-    }
+        artboard->bindViewModelInstance (rive::ref_rcp (riveInstance));
 
     boundViewModelInstance = model;
 
@@ -674,6 +797,85 @@ ArtboardViewModelInstance::Ptr Artboard::getBoundViewModelInstance() const noexc
     return boundViewModelInstance;
 }
 
+bool Artboard::setGlobalViewModelInstance (StringRef name, const ArtboardViewModelInstance::Ptr& instance)
+{
+    if (artboard == nullptr || artboardFile == nullptr)
+        return false;
+
+    const String key (name);
+    if (! artboardFile->getGlobalViewModelNames().contains (key))
+        return false;
+
+    if (instance != nullptr && (instance->getArtboardFile() != artboardFile.get() || instance->internalRiveInstance() == nullptr))
+        return false;
+
+    if (instance != nullptr)
+        globalViewModelOverrides.set (key, instance);
+    else
+        globalViewModelOverrides.remove (key);
+
+    // With nothing bound, Rive would bind a default main instance of its own along
+    // with the globals, so the override waits for the next bind instead.
+    if (getGlobalViewModelInstance (key) == nullptr)
+        return true;
+
+    applyGlobalViewModelInstances();
+
+    advanceScene (0.0f);
+    repaint();
+
+    return true;
+}
+
+ArtboardViewModelInstance::Ptr Artboard::getGlobalViewModelInstance (StringRef name) const
+{
+    if (artboard == nullptr || artboardFile == nullptr)
+        return nullptr;
+
+    const auto key = String (name).toStdString();
+    auto instance = stateMachine != nullptr ? stateMachine->globalViewModelInstance (key)
+                                            : artboard->globalViewModelInstance (key);
+
+    return ArtboardViewModelInstance::createFromRive (artboardFile, instance.get());
+}
+
+void Artboard::bindDefaultViewModelInstances()
+{
+    if (auto instance = artboardFile->getRiveFile()->createDefaultViewModelInstance (artboard.get()))
+    {
+        bindViewModelInstance (ArtboardViewModelInstance::createFromRive (artboardFile, instance.get()));
+        return;
+    }
+
+    if (! artboardFile->getGlobalViewModelNames().isEmpty())
+        applyGlobalViewModelInstances();
+}
+
+void Artboard::placeGlobalViewModelInstances()
+{
+    for (const auto& name : artboardFile->getGlobalViewModelNames())
+    {
+        auto* overridden = globalViewModelOverrides.getPointer (name);
+        auto instance = overridden != nullptr ? *overridden : artboardFile->getGlobalViewModelInstance (name);
+        auto riveInstance = rive::ref_rcp (instance != nullptr ? instance->internalRiveInstance() : nullptr);
+
+        if (stateMachine != nullptr)
+            stateMachine->setGlobalViewModelInstance (name.toStdString(), std::move (riveInstance));
+        else
+            artboard->setGlobalViewModelInstance (name.toStdString(), std::move (riveInstance));
+    }
+}
+
+void Artboard::applyGlobalViewModelInstances()
+{
+    placeGlobalViewModelInstances();
+
+    if (stateMachine != nullptr)
+        stateMachine->bind();
+    else
+        artboard->bind();
+}
+
 //==============================================================================
 
 void Artboard::refreshDisplay (double lastFrameTimeSeconds)
@@ -691,7 +893,22 @@ void Artboard::paint (Graphics& g)
     if (scene == nullptr)
         return;
 
-    auto* renderer = g.getRenderer();
+    auto* session = artboardFile->getDeferredSession();
+    auto* renderContext = artboardFile->getRenderContext();
+
+    if (session != nullptr && g.getFactory() != renderContext)
+    {
+        jassertfalse;
+        return;
+    }
+
+    if (session != nullptr)
+    {
+        artboardFile->bindDeferredRecordingThread();
+        session->beginTargetFrame (deferredTarget);
+    }
+
+    auto* renderer = session != nullptr ? session->screenRenderer (deferredTarget) : g.getRenderer();
 
     auto transform = g.getTransform()
                          .translated (g.getDrawingArea().getX(), g.getDrawingArea().getY())
@@ -703,6 +920,22 @@ void Artboard::paint (Graphics& g)
 
     scene->draw (renderer);
     renderer->restore();
+
+    if (session == nullptr || ! session->endTargetFrame (deferredTarget))
+        return;
+
+    const bool hasGpuPasses = session->oreContext().stream().commandBytes().size() != 0;
+
+    auto& replayer = artboardFile->getDeferredReplayer();
+
+    ArtboardFrameSink sink (g, *renderContext, deferredTarget, hasGpuPasses);
+    replayer.replayFrame (*session, sink);
+    sink.resume();
+
+    if (const auto droppedDraws = replayer.droppedDraws(); droppedDraws != 0)
+        YUP_DBG ("Artboard: " << static_cast<int> (droppedDraws) << " scripted draws dropped while replaying");
+
+    session->resetFrame();
 }
 
 //==============================================================================
@@ -723,41 +956,51 @@ void Artboard::contentScaleChanged (float dpiScale)
 
 void Artboard::mouseEnter (const MouseEvent& event)
 {
-    if (scene == nullptr)
+    // A finger has no hover: it only reaches Rive between its mouseDown and mouseUp.
+    if (scene == nullptr || event.isTouch())
         return;
 
+    artboardFile->bindDeferredRecordingThread();
+
     auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerMove (rive::Vec2D (x, y));
+    scene->pointerMove (rive::Vec2D (x, y), 0.0f, pointerIdFor (event));
 
-    pullEventsFromStateMachines();
-
-    repaint();
+    afterInput();
 }
 
 void Artboard::mouseExit (const MouseEvent& event)
 {
-    if (scene == nullptr)
+    if (scene == nullptr || event.isTouch())
         return;
 
+    artboardFile->bindDeferredRecordingThread();
+
     auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerExit (rive::Vec2D (x, y));
+    scene->pointerExit (rive::Vec2D (x, y), pointerIdFor (event));
 
-    pullEventsFromStateMachines();
-
-    repaint();
+    afterInput();
 }
 
 void Artboard::mouseDown (const MouseEvent& event)
 {
-    if (scene == nullptr || ! event.isLeftButtonDown())
+    if (scene == nullptr)
         return;
 
-    auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerDown (rive::Vec2D (x, y));
+    artboardFile->bindDeferredRecordingThread();
 
-    pullEventsFromStateMachines();
+    if (event.isTouch())
+    {
+        auto [x, y] = transformPoint (event.getPosition());
+        scene->pointerDown (rive::Vec2D (x, y), pointerIdFor (event), rive::PointerButton::primary);
+    }
+    else
+    {
+        const int buttons = event.getButtons();
+        forwardButtons (event, buttons & ~pressedMouseButtons, true);
+        pressedMouseButtons = buttons;
+    }
 
-    repaint();
+    afterInput();
 }
 
 void Artboard::mouseUp (const MouseEvent& event)
@@ -765,38 +1008,198 @@ void Artboard::mouseUp (const MouseEvent& event)
     if (scene == nullptr)
         return;
 
-    auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerUp (rive::Vec2D (x, y));
+    artboardFile->bindDeferredRecordingThread();
 
-    pullEventsFromStateMachines();
+    if (event.isTouch())
+    {
+        // Touches never get a mouseExit, and Rive only frees a pointer's state on exit.
+        auto [x, y] = transformPoint (event.getPosition());
+        scene->pointerUp (rive::Vec2D (x, y), pointerIdFor (event), rive::PointerButton::primary);
+        scene->pointerExit (rive::Vec2D (x, y), pointerIdFor (event));
+    }
+    else
+    {
+        // The event reports the buttons still held after the release.
+        const int buttons = event.getButtons();
+        forwardButtons (event, pressedMouseButtons & ~buttons, false);
+        pressedMouseButtons = buttons;
+    }
 
-    repaint();
+    afterInput();
 }
 
 void Artboard::mouseMove (const MouseEvent& event)
 {
-    if (scene == nullptr)
+    if (scene == nullptr || event.isTouch())
         return;
 
+    artboardFile->bindDeferredRecordingThread();
+
+    // A move carries every button still held, so a release we never saw is dropped here.
+    pressedMouseButtons &= event.getButtons();
+
     auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerMove (rive::Vec2D (x, y));
+    scene->pointerMove (rive::Vec2D (x, y), 0.0f, pointerIdFor (event));
 
-    pullEventsFromStateMachines();
-
-    repaint();
+    afterInput();
 }
 
 void Artboard::mouseDrag (const MouseEvent& event)
 {
-    if (scene == nullptr || ! event.isLeftButtonDown())
+    if (scene == nullptr)
         return;
 
-    auto [x, y] = transformPoint (event.getPosition());
-    scene->pointerMove (rive::Vec2D (x, y));
+    artboardFile->bindDeferredRecordingThread();
 
-    pullEventsFromStateMachines();
+    auto [x, y] = transformPoint (event.getPosition());
+    scene->pointerMove (rive::Vec2D (x, y), 0.0f, pointerIdFor (event));
+
+    afterInput();
+}
+
+void Artboard::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+{
+    // A focused component gets the wheel wherever the pointer is.
+    if (scene == nullptr || ! getLocalBounds().contains (event.getPosition()))
+        return;
+
+    artboardFile->bindDeferredRecordingThread();
+
+    // Rive moves the content by the delta, so revealing later content is negative.
+    const auto position = event.getPosition();
+    const Point<float> delta (-wheelData.getDeltaX() * wheelPixelsPerNotch,
+                              wheelData.getDeltaY() * wheelPixelsPerNotch);
+
+    const auto artboardPosition = transformPoint (position);
+    const auto artboardDelta = transformPoint (position + delta) - artboardPosition;
+
+    rive::ScrollEvent scrollEvent;
+    scrollEvent.delta = rive::Vec2D (artboardDelta.getX(), artboardDelta.getY());
+
+    scene->pointerScroll (rive::Vec2D (artboardPosition.getX(), artboardPosition.getY()),
+                          scrollEvent,
+                          0.0f,
+                          pointerIdFor (event));
+
+    afterInput();
+}
+
+//==============================================================================
+
+void Artboard::keyDown (const KeyPress& key, const Point<float>&)
+{
+    if (stateMachine == nullptr)
+        return;
+
+    artboardFile->bindDeferredRecordingThread();
+
+    const auto keyCode = key.getKey();
+    const auto modifiers = key.getModifiers();
+
+    const bool isRepeat = pressedKeys.contains (keyCode);
+    if (! isRepeat)
+        pressedKeys.add (keyCode);
+
+    // Rive text fields have no access to the system clipboard. AltGr arrives as
+    // Ctrl+Alt and types letters on some layouts, so Alt rules a shortcut out.
+    const bool isClipboardShortcut = (modifiers.isControlDown() || modifiers.isCommandDown())
+                                  && ! modifiers.isAltDown()
+                                  && stateMachine->focusState().expectsKeyboardInput;
+
+    if (isClipboardShortcut && (keyCode == KeyPress::textCKey || keyCode == KeyPress::textXKey))
+    {
+        const String selection (stateMachine->selectedText());
+        if (selection.isNotEmpty())
+        {
+            SystemClipboard::copyTextToClipboard (selection);
+
+            if (keyCode == KeyPress::textXKey)
+                stateMachine->keyInput (rive::Key::backspace, rive::KeyModifiers::none, true, false);
+        }
+
+        afterInput();
+        return;
+    }
+
+    if (isClipboardShortcut && keyCode == KeyPress::textVKey)
+    {
+        stateMachine->textInput (SystemClipboard::getTextFromClipboard().toStdString());
+
+        afterInput();
+        return;
+    }
+
+    const auto riveKey = toRiveKey (keyCode);
+    if (! riveKey.has_value())
+        return;
+
+    const bool handled = stateMachine->keyInput (*riveKey, toRiveModifiers (modifiers), true, isRepeat);
+
+    if (! handled && keyCode == KeyPress::tabKey)
+    {
+        if (modifiers.isShiftDown())
+            stateMachine->focusPrevious();
+        else
+            stateMachine->focusNext();
+    }
+
+    afterInput();
+}
+
+void Artboard::keyUp (const KeyPress& key, const Point<float>&)
+{
+    pressedKeys.removeFirstMatchingValue (key.getKey());
+
+    if (stateMachine == nullptr)
+        return;
+
+    artboardFile->bindDeferredRecordingThread();
+
+    const auto riveKey = toRiveKey (key.getKey());
+    if (! riveKey.has_value())
+        return;
+
+    stateMachine->keyInput (*riveKey, toRiveModifiers (key.getModifiers()), false, false);
+
+    afterInput();
+}
+
+void Artboard::textInput (const String& text)
+{
+    if (stateMachine == nullptr)
+        return;
+
+    artboardFile->bindDeferredRecordingThread();
+
+    stateMachine->textInput (text.toStdString());
+
+    afterInput();
+}
+
+//==============================================================================
+
+void Artboard::focusGained()
+{
+    syncTextInput();
+}
+
+void Artboard::focusLost()
+{
+    if (stateMachine != nullptr)
+    {
+        artboardFile->bindDeferredRecordingThread();
+        stateMachine->clearFocus();
+    }
+
+    relinquishTextInput();
+    pressedKeys.clear();
 
     repaint();
+}
+
+Rectangle<float> Artboard::getTextInputRect() const
+{
+    return localToScreen (getLocalBounds());
 }
 
 //==============================================================================
@@ -820,6 +1223,8 @@ void Artboard::updateSceneFromFile()
     auto rivFile = artboardFile->getRiveFile();
     if (rivFile == nullptr)
         return;
+
+    artboardFile->bindDeferredRecordingThread();
 
     auto currentArtboard = selectedArtboardName.isEmpty()
                                ? rivFile->artboardDefault()
@@ -851,6 +1256,10 @@ void Artboard::updateSceneFromFile()
 
     stateMachine = currentStateMachine;
 
+    bindDefaultViewModelInstances();
+
+    setWantsKeyboardFocus (stateMachine != nullptr && stateMachine->hasFocusNodes());
+
     updateNodeBounds();
     repaint();
 }
@@ -861,6 +1270,8 @@ void Artboard::advanceScene (float elapsedSeconds)
 {
     if (scene == nullptr)
         return;
+
+    artboardFile->bindDeferredRecordingThread();
 
     scene->advanceAndApply (elapsedSeconds);
 
@@ -906,16 +1317,20 @@ void Artboard::pullEventsFromStateMachines()
             else
                 continue;
 
-            var oldValue = eventProperties[eventName];
+            // Each property of each event keeps its own last value
+            const auto propertyName = String (child->name());
+            const auto propertyKey = eventName + "/" + propertyName;
+
+            var oldValue = eventProperties[propertyKey];
             if (oldValue == newValue)
                 continue;
 
-            eventProperties.set (eventName, newValue);
+            eventProperties.set (propertyKey, newValue);
 
-            propertyChanged (eventName, String (child->name()), oldValue, newValue);
+            propertyChanged (eventName, propertyName, oldValue, newValue);
 
             if (onPropertyChanged)
-                onPropertyChanged (*this, eventName, String (child->name()), oldValue, newValue);
+                onPropertyChanged (*this, eventName, propertyName, oldValue, newValue);
         }
     }
 }
@@ -926,6 +1341,52 @@ Point<float> Artboard::transformPoint (Point<float> point) const
 {
     const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (point.getX(), point.getY());
     return { xy.x, xy.y };
+}
+
+int Artboard::pointerIdFor (const MouseEvent& event) const
+{
+    // The mouse is pointer 0, so it never shares a pointer with a finger.
+    return event.isTouch() ? event.getTouchIndex() + 1 : 0;
+}
+
+void Artboard::forwardButtons (const MouseEvent& event, int changedButtons, bool isDown)
+{
+    static constexpr std::pair<int, rive::PointerButton> buttonMap[] = {
+        { MouseEvent::leftButton, rive::PointerButton::primary },
+        { MouseEvent::rightButton, rive::PointerButton::secondary },
+        { MouseEvent::middleButton, rive::PointerButton::middle },
+    };
+
+    auto [x, y] = transformPoint (event.getPosition());
+
+    for (const auto& [button, riveButton] : buttonMap)
+    {
+        if ((changedButtons & button) == 0)
+            continue;
+
+        if (isDown)
+            scene->pointerDown (rive::Vec2D (x, y), pointerIdFor (event), riveButton);
+        else
+            scene->pointerUp (rive::Vec2D (x, y), pointerIdFor (event), riveButton);
+    }
+}
+
+void Artboard::syncTextInput()
+{
+    // Only a focused text field asks for the keyboard, so focusing a button never
+    // pops up an on-screen keyboard.
+    if (hasKeyboardFocus() && stateMachine != nullptr && stateMachine->focusState().expectsKeyboardInput)
+        requestTextInput();
+    else
+        relinquishTextInput();
+}
+
+void Artboard::afterInput()
+{
+    pullEventsFromStateMachines();
+    syncTextInput();
+
+    repaint();
 }
 
 //==============================================================================

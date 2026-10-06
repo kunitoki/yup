@@ -47,11 +47,20 @@ public:
 
         renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (device, renderContexOptions);
         oreContext = rive::ore::ContextMetal::Make (device, queue);
+
+        // Scripted canvases and their GPU passes are submitted through the render context's own
+        // queue, which must be the one the window frame is flushed on so Metal orders them.
+        if (renderContext != nullptr)
+            renderContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>()->setCommandQueue (queue);
     }
 
     //==============================================================================
 
-    ~GpuDeviceMetal() override { releasePooledResources(); }
+    ~GpuDeviceMetal() override
+    {
+        waitForCompletedHandlers();
+        releasePooledResources();
+    }
 
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Metal; }
 
@@ -391,6 +400,26 @@ private:
             return nil;
         }
     };
+
+    /** Rive's completion handlers reference the render contexts that flushed into this queue, so they
+        must all have run before the contexts are destroyed. A queue completes its command buffers in
+        commit order and runs their handlers serially, so the handler of a last empty command buffer
+        runs after every earlier one. */
+    void waitForCompletedHandlers()
+    {
+        id<MTLCommandBuffer> fence = [queue commandBuffer];
+        if (fence == nil)
+            return;
+
+        dispatch_semaphore_t done = dispatch_semaphore_create (0);
+        [fence addCompletedHandler:^(id<MTLCommandBuffer>)
+        {
+            dispatch_semaphore_signal (done);
+        }];
+        [fence commit];
+
+        dispatch_semaphore_wait (done, DISPATCH_TIME_FOREVER);
+    }
 
     OffscreenContextSlot* acquireOffscreenContext()
     {

@@ -28,12 +28,13 @@ namespace yup
 /** Options for the GLSL→WGSL transpiler. */
 struct WgslTranspileOptions
 {
-    /** WGSL entry-point name in the emitted output. Default is "main". */
-    String entryPoint = "main";
+    /** Name of the emitted WGSL entry-point function. Default is "main".
 
-    /** WGSL output entry-point function name. Default is "main".
-        Callers can request "vs_main"/"fs_main"/"cs_main" for pipeline builders. */
-    String outputEntryPoint;
+        Callers can request "vs_main"/"fs_main"/"cs_main" for pipeline builders.
+        The GLSL main() body is always emitted as a separate inner function that
+        the entry point calls.
+    */
+    String outputEntryPoint = "main";
 
     /** Default group (descriptor set) index for resources without explicit layout(set=...).
         Default is 0 (matches glslang's default). */
@@ -42,6 +43,13 @@ struct WgslTranspileOptions
     /** Default workgroup size for compute shaders without explicit local_size_x/y/z.
         Default is (1, 1, 1). */
     std::array<uint32_t, 3> defaultWorkgroupSize { 1, 1, 1 };
+
+    /** Optional sink for non-fatal diagnostics, formatted as "line:column: message".
+
+        Warnings never describe a change in semantics: anything the transpiler can't
+        express faithfully fails the transpile instead.
+    */
+    StringArray* warnings = nullptr;
 };
 
 //==============================================================================
@@ -58,13 +66,20 @@ struct WgslTranspileOptions
     golden tests can run GlslParser → WgslLowering → WgslEmitter without
     glslang, testing the pure transpilation pipeline.
 
-    Functional bindings (@group/@binding) are assigned to match glslang's
-    SPIR-V assignment 1:1, so reflection via reflectFromSPIRV() can
-    populate backendSlot values that match the emitted WGSL code.
+    Every resource keeps the @group/@binding of its GLSL set/binding. Resources
+    without an explicit binding are numbered like glslang's automatic binding
+    mapping. A combined image sampler (sampler2D and friends) is split into a
+    texture at its own binding and a companion sampler, which is placed after
+    the highest binding used in its group; ShaderTranspiler::reflectFromSPIRV()
+    with the WGSL target applies the same rule to backendSlotSecondary.
+
+    Any GLSL construct that has no faithful WGSL equivalent (double precision,
+    geometry and tessellation stages, subpass inputs, ...) makes the transpile
+    fail with a "line:column: message" diagnostic instead of producing output.
 
     @code
     WgslTranspileOptions opts;
-    opts.entryPoint = "main";
+    opts.outputEntryPoint = "vs_main";
     opts.defaultGroup = 0;
 
     auto result = WgslTranspiler::transpile (preprocessedGlsl,

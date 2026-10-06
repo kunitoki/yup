@@ -31,8 +31,16 @@ shader transpiler compiled in.
 
 For WebGPU, WGSL variants are generated from GLSL source via a direct GLSL→WGSL
 transpiler that bypasses SPIR-V for code generation - no SPIRV-Cross WGSL backend
-required. The bundled reflection data still derives from SPIR-V so binding
-assignment stays consistent across all targets.
+required. Resources keep their GLSL bindings, and the bundled reflection data,
+derived from SPIR-V, describes the WGSL bindings including the extra sampler a
+combined image sampler is split into.
+
+The transpiler either produces WGSL that behaves like the GLSL or fails with a
+`line:column` diagnostic: see [GLSL on the WebGPU target](wgsl-shaders.md) for
+what it translates (implicit conversions, out parameters, switch fallthrough,
+std140 layouts, texture functions, ...) and the constructs WGSL can't express.
+Fragment shaders turn off WGSL's `derivative_uniformity` check, so `texture()`
+can be called inside branches that depend on varyings, as GLSL allows.
 
 ```cpp
 ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (

@@ -30,6 +30,11 @@ RHI factory functions honor this contract:
 - `GpuTarget::create(device, ...)` / `GpuCanvas::create(ctx, ...)` return `nullptr` if
   offscreen GPU resources cannot be allocated.
 
+On the web, the page asks the browser for a full WebGPU device and falls back to
+*compatibility mode* when it cannot get one, as on older GPUs or browsers that
+implement WebGPU over OpenGL ES. Rendering works the same, with some GPU features
+and limits reduced; `device.isCompatibilityMode()` tells which one you got.
+
 ## The frame → pass → draw model
 
 RHI rendering follows a strict hierarchy:

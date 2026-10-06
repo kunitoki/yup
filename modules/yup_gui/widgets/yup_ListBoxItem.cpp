@@ -53,6 +53,7 @@ void ListBoxItem::setIconDrawable (std::shared_ptr<Drawable> newIcon)
     if (iconDrawable != newIcon)
     {
         iconDrawable = newIcon;
+        iconImage = {};
         calculateLayout();
         repaint();
     }
@@ -60,16 +61,8 @@ void ListBoxItem::setIconDrawable (std::shared_ptr<Drawable> newIcon)
 
 void ListBoxItem::setIcon (const Image& newIcon)
 {
-    if (newIcon.isValid())
-    {
-        // TODO: Create a Drawable from the Image once Drawable supports Image rendering
-        // For now, just clear the iconDrawable
-        iconDrawable = nullptr;
-    }
-    else
-    {
-        iconDrawable = nullptr;
-    }
+    iconImage = newIcon;
+    iconDrawable = nullptr;
 
     calculateLayout();
     repaint();
@@ -78,6 +71,11 @@ void ListBoxItem::setIcon (const Image& newIcon)
 std::shared_ptr<Drawable> ListBoxItem::getIconDrawable() const
 {
     return iconDrawable;
+}
+
+Image ListBoxItem::getIconImage() const
+{
+    return iconImage;
 }
 
 //==============================================================================
@@ -136,20 +134,23 @@ void ListBoxItem::calculateLayout()
     auto paddingY = proportionOfHeight (0.04f);
     auto contentBounds = bounds.reduced (paddingX, paddingY);
 
-    // If no icon, text takes full content area
-    if (iconDrawable == nullptr)
+    // Get the icon's size to determine aspect ratio
+    float drawableWidth = 0.0f;
+    float drawableHeight = 0.0f;
+
+    if (iconDrawable != nullptr)
     {
-        textBounds = contentBounds;
-        iconBounds = {};
-        return;
+        auto drawableBounds = iconDrawable->getBounds();
+        drawableWidth = drawableBounds.getWidth();
+        drawableHeight = drawableBounds.getHeight();
+    }
+    else if (iconImage.isValid())
+    {
+        drawableWidth = static_cast<float> (iconImage.getWidth());
+        drawableHeight = static_cast<float> (iconImage.getHeight());
     }
 
-    // Get the drawable's bounds to determine aspect ratio
-    auto drawableBounds = iconDrawable->getBounds();
-    auto drawableWidth = drawableBounds.getWidth();
-    auto drawableHeight = drawableBounds.getHeight();
-
-    // If drawable has no size, use text bounds only
+    // If there is no icon, or it has no size, use text bounds only
     if (drawableWidth <= 0.0f || drawableHeight <= 0.0f)
     {
         textBounds = contentBounds;

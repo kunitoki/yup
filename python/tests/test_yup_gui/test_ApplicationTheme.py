@@ -29,3 +29,14 @@ def test_default_font_is_a_copy_that_withHeight_does_not_mutate(juce_app):
 
     assert resized.getHeight() == original + 10.0
     assert theme.getDefaultFont().getHeight() == original
+
+
+def test_global_theme_is_returned_or_reported_missing():
+    # Without a running application there is no global theme, and that must raise ValueError
+    # rather than hand back None; with one, the theme is returned.
+    try:
+        theme = yup.ApplicationTheme.getGlobalTheme()
+    except ValueError:
+        return
+
+    assert isinstance(theme, yup.ApplicationTheme)

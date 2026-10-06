@@ -29,7 +29,7 @@ class ArtboardFile;
 
     A ViewModel is the data schema a Rive artboard is designed against: a named
     list of typed properties (boolean, number, string, color, enum, trigger,
-    nested viewmodels, lists, ...). Schemas are authored in the Rive editor and
+    nested viewmodels, lists, image / font / blob assets, ...). Schemas are authored in the Rive editor and
     stored inside the .riv file.
 
     A handle to a schema is obtained from an ArtboardFile via
@@ -81,6 +81,12 @@ public:
 
         /** An image asset property. */
         assetImage,
+
+        /** A font asset property. */
+        assetFont,
+
+        /** A blob (arbitrary data) asset property. */
+        assetBlob,
 
         /** An artboard reference property. */
         artboard

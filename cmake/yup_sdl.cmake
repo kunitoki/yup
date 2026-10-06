@@ -25,8 +25,7 @@ function (_yup_sdl_make_symbols_force_include_options output_variable patch_head
     foreach (source_language IN ITEMS C CXX OBJC OBJCXX)
         list (APPEND force_include_options
             "$<$<COMPILE_LANG_AND_ID:${source_language},MSVC>:/FI${patch_header}>"
-            "$<$<COMPILE_LANG_AND_ID:${source_language},AppleClang,Clang,GNU>:-include>"
-            "$<$<COMPILE_LANG_AND_ID:${source_language},AppleClang,Clang,GNU>:${patch_header}>")
+            "$<$<COMPILE_LANG_AND_ID:${source_language},AppleClang,Clang,GNU>:SHELL:-include \"${patch_header}\">")
     endforeach()
 
     set (${output_variable} "${force_include_options}" PARENT_SCOPE)
@@ -232,12 +231,17 @@ function (_yup_sdl_configure_symbols_patch target_name output_patch_target outpu
     set (patch_header "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_sdl-symbols-patch.h")
     configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/sdl-symbols-patch.h.in" "${patch_header}" @ONLY)
 
+    # Statically declared Objective-C classes of the YUP modules, compiled into the plugin itself
+    set (objc_patch_header "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_objc-symbols-patch.h")
+    configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/objc-symbols-patch.h.in" "${objc_patch_header}" @ONLY)
+
     set (patch_target "${target_name}_sdl_symbols_patch")
     add_library (${patch_target} INTERFACE)
-    target_sources (${patch_target} INTERFACE "${patch_header}")
+    target_sources (${patch_target} INTERFACE "${patch_header}" "${objc_patch_header}")
 
     _yup_sdl_make_symbols_force_include_options (force_include_options "${patch_header}")
-    target_compile_options (${patch_target} INTERFACE ${force_include_options})
+    _yup_sdl_make_symbols_force_include_options (objc_force_include_options "${objc_patch_header}")
+    target_compile_options (${patch_target} INTERFACE ${force_include_options} ${objc_force_include_options})
 
     _yup_sdl_configure_private_static_target ("${target_name}" "${force_include_options}" private_sdl_target)
 

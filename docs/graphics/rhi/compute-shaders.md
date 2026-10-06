@@ -9,7 +9,7 @@ framebuffer, or graphics pipeline.
 
 Compute shaders are available on backends that expose
 `GpuDevice::isComputeAvailable() == true`: **Metal**, **Direct3D 11**,
-**WebGPU** (Dawn and Emscripten), and **OpenGL 4.3+** / **OpenGL ES 3.1+**.
+**WebGPU** (Emscripten), and **OpenGL 4.3+** / **OpenGL ES 3.1+**.
 
 Compute is **not** available on the Headless backend, nor on WebGL2 (Emscripten
 without WebGPU), which is OpenGL ES 3.0 and has no compute shaders at all.
@@ -125,7 +125,7 @@ device->updateBuffer (buf, newData, byteSize);
 ```
 
 `byteSize` must not exceed the buffer's original size. Supported on all
-compute-capable backends (Metal, D3D11, WebGPU/Dawn, OpenGL).
+compute-capable backends (Metal, D3D11, WebGPU, OpenGL).
 
 ### Buffer binding indices on Metal
 

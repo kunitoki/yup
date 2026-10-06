@@ -27,7 +27,6 @@ public:
     SvgDemo()
     {
         updateListOfSvgFiles();
-        loadDemoFont();
 
         parseSvgFile (currentSvgFileIndex);
     }
@@ -44,7 +43,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         drawable.paint (g, getLocalBounds());
@@ -87,12 +86,6 @@ private:
         drawable.parseSVG (svgFiles[currentSvgFileIndex], createParseOptions (svgFiles[currentSvgFileIndex]));
 
         repaint();
-    }
-
-    void loadDemoFont()
-    {
-        if (auto result = yup::Font::loadFontFromFile (dataDirectory.getChildFile ("RobotoFlex-VariableFont.ttf")); result.wasOk())
-            demoFont = result.getValue();
     }
 
     std::optional<yup::Image> fetchHttpImage (const yup::String& href)
@@ -148,21 +141,15 @@ private:
             return fetchHttpImage (yup::String (href.text));
         };
 
-        options.fontResolver = [this] (yup::StringRef, float fontSize, int weight, bool italic) -> std::optional<yup::Font>
+        options.fontResolver = [] (yup::StringRef, float fontSize, int weight, bool italic) -> std::optional<yup::Font>
         {
-            if (demoFont)
+            if (auto theme = yup::ApplicationTheme::getGlobalTheme())
             {
-                auto font = *demoFont;
+                auto font = theme->getDefaultFont();
                 font.setAxisValue ("wght", static_cast<float> (weight));
-                if (italic)
-                    font.setAxisValue ("slnt", -10.0f);
-                else
-                    font.setAxisValue ("slnt", 0.0f);
+                font.setAxisValue ("slnt", italic ? -10.0f : 0.0f);
                 return font.withHeight (fontSize);
             }
-
-            if (auto theme = yup::ApplicationTheme::getGlobalTheme())
-                return theme->getDefaultFont().withHeight (fontSize);
 
             return std::nullopt;
         };
@@ -173,7 +160,6 @@ private:
     yup::Drawable drawable;
     yup::Array<yup::File> svgFiles;
     yup::File dataDirectory;
-    std::optional<yup::Font> demoFont;
     yup::HashMap<yup::String, yup::Image> httpImageCache;
     int currentSvgFileIndex = 0;
 };

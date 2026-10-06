@@ -342,11 +342,9 @@ private:
     {
         const float labelWidth = 96.0f;
         const float rowHeight = 26.0f;
-        const auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
         for (size_t i = 0; i < sliders.size(); ++i)
         {
             auto row = area.removeFromTop (rowHeight);
-            labels[i]->setFont (labelFont);
             labels[i]->setJustification (yup::Justification::left);
             labels[i]->setBounds (row.removeFromLeft (labelWidth));
             sliders[i]->setBounds (row);
@@ -380,9 +378,14 @@ private:
         return yup::Color (toByte (a), toByte (r), toByte (g), toByte (b));
     }
 
+    static yup::Color paletteColor (yup::ThemePalette::Role role)
+    {
+        return yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (role);
+    }
+
     void drawBackground (yup::Graphics& g, const yup::Rectangle<float>& area)
     {
-        g.setFillColor (yup::Color::fromHSLuv (0.62f, 0.35f, 0.12f));
+        g.setFillColor (paletteColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -409,21 +412,17 @@ private:
             modifier.appendText ("Perceptual spaces, spectral mixing, editable gradients, and live picking.", subtitleFont);
         }
 
-        g.setFillColor (yup::Colors::white.withAlpha (0.9f));
+        g.setFillColor (paletteColor (yup::ThemePalette::Role::text));
         g.fillFittedText (title, area.removeFromTop (34.0f));
-        g.setFillColor (yup::Colors::white.withAlpha (0.6f));
+        g.setFillColor (paletteColor (yup::ThemePalette::Role::textMuted));
         g.fillFittedText (subtitle, area.removeFromTop (18.0f));
     }
 
     void drawPanel (yup::Graphics& g, const yup::Rectangle<float>& area)
     {
-        const auto panelBase = yup::Color::fromHSLuv (0.63f, 0.15f, 0.16f).withAlpha (0.92f);
-        const auto panelEdge = yup::Color::fromHSLuv (0.63f, 0.25f, 0.1f).withAlpha (0.92f);
-        yup::ColorGradient panel (panelBase, area.getX(), area.getY(), panelEdge, area.getRight(), area.getBottom(), yup::ColorGradient::Linear);
-
-        g.setFillColorGradient (panel);
+        g.setFillColor (paletteColor (yup::ThemePalette::Role::surface));
         g.fillRoundedRect (area, 16.0f);
-        g.setStrokeColor (yup::Colors::white.withAlpha (0.08f));
+        g.setStrokeColor (paletteColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
         g.strokeRoundedRect (area, 16.0f);
     }
@@ -435,10 +434,10 @@ private:
             auto modifier = text.startUpdate();
             modifier.setMaxSize (area.getSize());
             modifier.setHorizontalAlign (yup::StyledText::left);
-            modifier.appendText (title, yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (14.0f));
+            modifier.appendText (title, yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
         }
 
-        g.setFillColor (yup::Colors::white.withAlpha (0.75f));
+        g.setFillColor (paletteColor (yup::ThemePalette::Role::text));
         g.fillFittedText (text, area.removeFromTop (18.0f));
     }
 
@@ -485,7 +484,7 @@ private:
         g.setFillColorGradient (gradient);
         g.fillRoundedRect (gradientEditorArea, 16.0f);
 
-        g.setStrokeColor (yup::Colors::white.withAlpha (0.2f));
+        g.setStrokeColor (paletteColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
         g.strokeRoundedRect (gradientEditorArea, 16.0f);
 
@@ -508,8 +507,8 @@ private:
         drawStopHandles (g, gradientEditorArea, start, end);
 
         auto hintArea = content.removeFromBottom (22.0f);
-        g.setFillColor (yup::Colors::white.withAlpha (0.6f));
-        const auto infoFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+        g.setFillColor (paletteColor (yup::ThemePalette::Role::textMuted));
+        const auto& infoFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
         g.fillFittedText ("Drag points; hold Shift to constrain stops to the line.", infoFont, hintArea, yup::Justification::left);
     }
 
@@ -564,7 +563,7 @@ private:
             g.fillPath (wedge);
         }
 
-        g.setStrokeColor (yup::Colors::white.withAlpha (0.25f));
+        g.setStrokeColor (paletteColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
         g.strokeEllipse (area);
 
@@ -583,13 +582,13 @@ private:
         auto swatch = area.removeFromTop (50.0f);
         g.setFillColor (pickerColor);
         g.fillRoundedRect (swatch, 14.0f);
-        g.setStrokeColor (yup::Colors::white.withAlpha (0.2f));
+        g.setStrokeColor (paletteColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
         g.strokeRoundedRect (swatch, 14.0f);
 
         area.removeFromTop (12.0f);
-        g.setFillColor (yup::Colors::white.withAlpha (0.65f));
-        const auto infoFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+        g.setFillColor (paletteColor (yup::ThemePalette::Role::textMuted));
+        const auto& infoFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
         g.fillFittedText ("Space: " + pickerSpaceCombo->getText(), infoFont, area.removeFromTop (18.0f), yup::Justification::left);
     }
 
@@ -649,8 +648,8 @@ private:
     void drawBlendRamp (yup::Graphics& g, yup::Rectangle<float> area, const yup::String& label, BlendMode mode)
     {
         auto labelArea = area.removeFromTop (18.0f);
-        g.setFillColor (yup::Colors::white.withAlpha (0.7f));
-        const auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+        g.setFillColor (paletteColor (yup::ThemePalette::Role::textMuted));
+        const auto& labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
         g.fillFittedText (label, labelFont, labelArea, yup::Justification::left);
 
         const auto& colorA = blendStartColor;
@@ -665,7 +664,7 @@ private:
         auto gradient = yup::ColorGradient::fromLinearColors (colorA, start, colorB, end, steps, yup::ColorGradient::Type::Linear, colorSpace);
         g.setFillColorGradient (gradient);
         g.fillRoundedRect (area, 8.0f);
-        g.setStrokeColor (yup::Colors::white.withAlpha (0.2f));
+        g.setStrokeColor (paletteColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
         g.strokeRoundedRect (area, 8.0f);
     }
@@ -729,7 +728,7 @@ private:
         auto gradient = yup::ColorGradient::fromLinearColors (leftColor, bar.getX(), bar.getY(), rightColor, bar.getRight(), bar.getY(), 7);
         g.setFillColorGradient (gradient);
         g.fillRoundedRect (bar, 8.0f);
-        g.setStrokeColor (yup::Colors::white.withAlpha (0.15f));
+        g.setStrokeColor (paletteColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
         g.strokeRoundedRect (bar, 8.0f);
     }

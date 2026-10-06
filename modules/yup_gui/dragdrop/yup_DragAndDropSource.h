@@ -78,6 +78,19 @@ public:
         /** The opacity applied to the ghost window. */
         float imageOpacity = 0.7f;
 
+        /** Whether the ghost floats inside the source's top-level component instead of its own window.
+
+            A window of its own can float over every YUP window, and over the gap between them, but the
+            web has a single canvas that a second window would take over. So this defaults to true on
+            the web and false elsewhere. Inside the top-level component the ghost stays within that window.
+        */
+        bool imageInTopLevelComponent =
+#if YUP_EMSCRIPTEN
+            true;
+#else
+            false;
+#endif
+
         /** The operations this drag offers. */
         DragAndDropActions allowedActions = dragAndDropActionCopy | dragAndDropActionMove | dragAndDropActionLink;
 
@@ -87,6 +100,12 @@ public:
                   the remaining native-export work. Internal drags are unaffected.
         */
         bool allowExternalDrag = false;
+
+        /** The finger the drag follows, or -1 when it follows the mouse. See withTouchPointer(). */
+        int touchIndex = -1;
+
+        /** Where the finger was, in screen coordinates, when a touch drag started. */
+        Point<float> touchScreenPosition;
 
         //==============================================================================
         /** Sets the payload. */
@@ -101,11 +120,28 @@ public:
         /** Sets the ghost window opacity. */
         DragOptions& withImageOpacity (float newOpacity);
 
+        /** Sets whether the ghost floats inside the source's top-level component instead of its own window.
+
+            @see imageInTopLevelComponent
+        */
+        DragOptions& withImageInTopLevelComponent (bool shouldUseTopLevelComponent);
+
         /** Sets the operations this drag offers. */
         DragOptions& withAllowedActions (DragAndDropActions newActions);
 
         /** Sets whether the drag may leave the application. */
         DragOptions& withExternalDragAllowed (bool shouldAllowExternalDrag);
+
+        /** Makes the drag follow a finger instead of the mouse.
+
+            Only the moves and the release of that finger drive the session, and the ghost starts at
+            @a screenPosition, since a touch has no mouse cursor to start from. A list uses this to start
+            dragging a row on a long-press.
+
+            @param newTouchIndex   The finger's touch index, see MouseEvent::getTouchIndex(); -1 for the mouse.
+            @param screenPosition  Where the finger is, in screen coordinates.
+        */
+        DragOptions& withTouchPointer (int newTouchIndex, Point<float> screenPosition);
     };
 
     //==============================================================================

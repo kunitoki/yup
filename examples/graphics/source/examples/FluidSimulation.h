@@ -151,7 +151,7 @@ public:
     //==============================================================================
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (yup::Color (0xff05060a));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         if (capturedContext == nullptr)
@@ -526,13 +526,15 @@ private:
                                           barWidth,
                                           barHeight);
 
-        g.setFillColor (yup::Color (0xff1c1f26));
+        const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::surface));
         g.fillRect (bar);
 
         const float fraction = compileJobs.empty() ? 1.0f
                                                    : (float) compileCursor / (float) compileJobs.size();
         auto fill = bar.withWidth (bar.getWidth() * fraction);
-        g.setFillColor (yup::Color (0xff4f8cff));
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::accent));
         g.fillRect (fill);
 
         statusLabel->setText (yup::String::formatted ("Compiling shaders (%d/%d)...",

@@ -22,6 +22,7 @@ namespace rive::ore
 // range, and Lua-side validation in `gpubindgroup_construct` /
 // `setBindGroup`.
 constexpr uint32_t kMaxBindGroups = 4;
+constexpr uint32_t kMaxVertexBufferSlots = 8;
 
 // ============================================================================
 // Enums
@@ -360,14 +361,17 @@ struct TextureViewDesc
     TextureViewDimension dimension = TextureViewDimension::texture2D;
     TextureAspect aspect = TextureAspect::all;
     uint32_t baseMipLevel = 0;
-    uint32_t mipCount = 1;
+    uint32_t mipCount = 1; // Zero spans the remaining levels.
     uint32_t baseLayer = 0;
-    uint32_t layerCount = 1;
+    uint32_t layerCount = 1; // Zero spans the remaining layers.
 };
 
+// Zero bytesPerRow, rowsPerImage, width, height and depth mean tight rows,
+// the region height and the rest of the mip level from the origin.
 struct TextureDataDesc
 {
     const void* data = nullptr;
+    uint32_t dataSize = 0; // Bytes at data; zero skips the size check.
     uint32_t bytesPerRow = 0;
     uint32_t rowsPerImage = 0;
     uint32_t mipLevel = 0;
@@ -415,6 +419,12 @@ struct ShaderModuleDesc
     const uint8_t* bindingMapBytes = nullptr;
     uint32_t bindingMapSize = 0;
 
+    // Texture-sampler pairs from the RSTB, four bytes each: texture group and
+    // binding, then sampler group and binding. Travels in the desc so it
+    // survives deferred record and replay, which rebuilds modules from this.
+    const uint8_t* texSamplerPairBytes = nullptr;
+    uint32_t texSamplerPairSize = 0;
+
     // GL program-link fixup blob from the RSTB (target IDs 14/15, one per
     // GLSL stage). Consumed by `oreGLFixupProgramBindings` at
     // `glLinkProgram` time to call `glUniformBlockBinding` / `glUniform1i`
@@ -428,12 +438,17 @@ struct ShaderModuleDesc
     uint32_t shaderAssetId = 0;
 };
 
+// Recorded into the blob arena as raw structs, so the layout is gapless and
+// pad trails the real fields. Aggregate init stays { offset, shaderSlot,
+// format }, widest first like the recorded PODs.
 struct VertexAttribute
 {
-    VertexFormat format = VertexFormat::float4;
     uint32_t offset = 0;
     uint32_t shaderSlot = 0;
+    VertexFormat format = VertexFormat::float4;
+    uint8_t pad[3] = {};
 };
+static_assert(sizeof(VertexAttribute) == 12, "VertexAttribute grew gaps");
 
 struct VertexBufferLayout
 {
@@ -477,10 +492,13 @@ struct DepthStencilState
     TextureFormat format = TextureFormat::rgba8unorm;
     CompareFunction depthCompare = CompareFunction::always;
     bool depthWriteEnabled = false;
+    // Named so a recorded copy of this struct carries no indeterminate bytes.
+    uint8_t pad = 0;
     int32_t depthBias = 0;
     float depthBiasSlopeScale = 0.0f;
     float depthBiasClamp = 0.0f;
 };
+static_assert(sizeof(DepthStencilState) == 16, "DepthStencilState grew gaps");
 
 // ============================================================================
 // BindGroupLayout Descriptor, explicit layout, Dawn-shaped.
@@ -557,18 +575,24 @@ struct BindGroupLayoutEntry
     };
     SampleType textureSampleType = SampleType::floatFilterable;
     bool textureMultisampled = false;
+    // Sampler-only: WebGPU forbids a filtering-typed sampler binding on a
+    // depth texture, so a sampler paired only with depth textures declares
+    // non-filtering. Other backends ignore it.
+    bool samplerNonFiltering = false;
+    // Named so recording an entry array copies no indeterminate bytes.
+    uint8_t pad[1] = {};
 
     // UBO-only: smallest valid bind size for this entry. 0 = no minimum
     // (use the full buffer range). Matches WebGPU's
-    // `BindGroupLayoutEntry::buffer.minBindingSize`. Currently advisory —
-    // backends don't yet enforce.
+    // `BindGroupLayoutEntry::buffer.minBindingSize`. Filled from the
+    // shader's reflected block size and enforced by `validateBindGroupDesc`.
     uint32_t minBindingSize = 0;
 
     // Pre-resolved native slots, per-stage. Populated by the caller from
-    // the shader's binding map (typically via the GM helper
-    // `makeLayoutFromShader(ctx, shader, group)`). Used by backends with
-    // no native layout object (Metal: buffer index; D3D11: per-stage
-    // register; GL: global slot). Vulkan and WebGPU ignore — those
+    // the shader's binding map (typically via
+    // `makeBindGroupLayoutFromShader(ctx, shader, group)`). Used by
+    // backends with no native layout object (Metal: buffer index; D3D11:
+    // per-stage register; GL: global slot). Vulkan and WebGPU ignore — those
     // backends use `binding` directly (per-set namespace).
     //
     // 0xFFFFFFFF = `kAbsent` (binding not visible to that stage). Default
@@ -579,6 +603,8 @@ struct BindGroupLayoutEntry
     uint32_t nativeSlotFS = kNativeSlotAbsent;
     uint32_t nativeSlotCS = kNativeSlotAbsent;
 };
+static_assert(sizeof(BindGroupLayoutEntry) == 28,
+              "BindGroupLayoutEntry grew gaps");
 
 struct BindGroupLayoutDesc
 {
@@ -735,6 +761,8 @@ struct Features
     uint32_t maxTextureSizeCube = 4096;
     uint32_t maxTextureSize3D = 256;
     uint32_t maxUniformBufferSize = 16384;
+    // What setBindGroup's dynamic offsets must be a multiple of.
+    uint32_t minUniformBufferOffsetAlignment = 256;
     uint32_t maxVertexAttributes = 16;
     uint32_t maxSamplers = 16;
     // Maximum MSAA sample count supported for color render targets.

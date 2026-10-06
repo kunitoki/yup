@@ -1,5 +1,7 @@
 import Lenis from "lenis";
 import "lenis/dist/lenis.css";
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 
 // Eases wheel ticks into continuous scrolling; touch stays native and code blocks keep their own horizontal scroll.
 const lenis = new Lenis({ autoRaf: true, anchors: true, allowNestedScroll: true });
@@ -11,14 +13,6 @@ navToggle?.addEventListener("click", () => {
     const open = navMenu.classList.toggle("hidden") === false;
     navMenu.classList.toggle("flex", open);
     navToggle.setAttribute("aria-expanded", String(open));
-});
-
-document.querySelectorAll(".spotlight").forEach((card) => {
-    card.addEventListener("pointermove", (e) => {
-        const r = card.getBoundingClientRect();
-        card.style.setProperty("--mx", `${e.clientX - r.left}px`);
-        card.style.setProperty("--my", `${e.clientY - r.top}px`);
-    });
 });
 
 document.querySelectorAll("[data-tabs]").forEach((root) => {
@@ -47,11 +41,15 @@ document.querySelectorAll("[data-copy]").forEach((button) => {
 
 const moduleFilter = document.getElementById("module-filter");
 
+// Only the module name and description are searched, so a dependency like yup_core doesn't match everything.
+const moduleMatches = (module, query) =>
+    [...module.querySelectorAll("[data-filter-text]")].some((text) => text.textContent.toLowerCase().includes(query));
+
 moduleFilter?.addEventListener("input", () => {
     const query = moduleFilter.value.trim().toLowerCase();
 
-    document.querySelectorAll("[data-module]").forEach((card) => {
-        card.hidden = query !== "" && !card.textContent.toLowerCase().includes(query);
+    document.querySelectorAll("[data-module]").forEach((module) => {
+        module.hidden = query !== "" && !moduleMatches(module, query);
     });
 
     document.querySelectorAll("[data-group]").forEach((group) => {
@@ -106,7 +104,7 @@ const renderSearch = () => {
         hit.setAttribute("role", "option");
         hit.append(element("span", "block text-sm font-medium text-ink", entry.h));
         if (entry.p !== entry.h)
-            hit.append(element("span", "block font-mono text-[11px] text-glow-soft", entry.p));
+            hit.append(element("span", "block text-xs text-graphics-soft", entry.p));
         hit.append(element("span", "mt-1 block text-xs leading-relaxed text-muted", entry.t));
 
         const item = document.createElement("li");
@@ -169,6 +167,9 @@ searchDialog.addEventListener("click", (e) => {
 
 searchDialog.addEventListener("close", () => lenis.start());
 
+// Module chips take the color of their signal domain.
+const chipClass = (name) => `chip chip-id chip-on${/^yup_(audio|dsp)(?!_gui)/.test(name) ? " chip-audio" : ""}`;
+
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 document.querySelectorAll("[data-slideshow]").forEach((show) => {
@@ -187,7 +188,7 @@ document.querySelectorAll("[data-slideshow]").forEach((show) => {
         buttons.forEach((b, i) => b.setAttribute("aria-pressed", String(i === current)));
         label.textContent = slide.dataset.label;
         chips.replaceChildren(...slide.dataset.chips.split(",").map((name) =>
-            Object.assign(document.createElement("span"), { className: "chip chip-on", textContent: name })));
+            Object.assign(document.createElement("span"), { className: chipClass(name), textContent: name })));
     };
 
     const play = () => {

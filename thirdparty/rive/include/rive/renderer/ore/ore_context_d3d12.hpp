@@ -27,7 +27,7 @@ public:
 
     rcp<Buffer> makeBuffer(const BufferDesc& desc) override;
     rcp<Texture> makeTexture(const TextureDesc& desc) override;
-    rcp<TextureView> makeTextureView(const TextureViewDesc& desc) override;
+    rcp<TextureView> makeTextureViewImpl(const TextureViewDesc& desc) override;
     rcp<Sampler> makeSampler(const SamplerDesc& desc) override;
     rcp<ShaderModule> makeShaderModule(const ShaderModuleDesc& desc) override;
     rcp<BindGroupLayout> makeBindGroupLayout(
@@ -51,6 +51,7 @@ public:
     uint64_t safeFrameNumber() const { return m_safeFrameNumber; }
 
     rcp<TextureView> wrapCanvasTexture(gpu::RenderCanvas* canvas) override;
+    rcp<TextureView> wrapRenderTarget(gpu::RenderTarget* target) override;
     rcp<TextureView> wrapRiveTexture(gpu::Texture* gpuTex,
                                      uint32_t width,
                                      uint32_t height) override;
@@ -89,10 +90,25 @@ private:
         const BindGroupLayoutDesc& desc);
     std::unique_ptr<RenderPass> d3d12BeginRenderPass(const RenderPassDesc& desc,
                                                      std::string* outError);
-    rcp<TextureView> d3d12WrapCanvasTexture(gpu::RenderCanvas* canvas);
+    rcp<TextureView> d3d12WrapTarget(gpu::RenderTarget* target, bool canvas);
     rcp<TextureView> d3d12WrapRiveTexture(gpu::Texture* gpuTex,
                                           uint32_t w,
                                           uint32_t h);
+
+    // Recording a copy directly would land on the host command list even while
+    // it is closed between frames, so uploads stage here until one is live.
+    struct D3D12PendingTextureUpload
+    {
+        rcp<Texture> texture;
+        rcp<Buffer> staging;
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+        UINT subresource;
+        UINT dstX;
+        UINT dstY;
+        UINT dstZ;
+    };
+    void d3d12QueuePendingTextureUpload(D3D12PendingTextureUpload pending);
+    void d3d12FlushPendingTextureUploads();
 
     Microsoft::WRL::ComPtr<ID3D12Device> m_d3dDevice;
     // Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_d3dQueue;
@@ -101,6 +117,8 @@ private:
     //  mode. All recording code reads through this pointer, so the two modes
     //  share one code path.
     ID3D12GraphicsCommandList* m_d3dCmdList = nullptr;
+    // Drained at the next beginFrame or beginRenderPass.
+    std::vector<D3D12PendingTextureUpload> m_d3dPendingUploads;
     // resource-creation time.
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_d3dCpuSrvHeap;
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_d3dCpuRtvHeap;
@@ -108,6 +126,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_d3dCpuSamplerHeap;
     UINT m_d3dCpuSrvAllocated = 0;
     UINT m_d3dCpuRtvAllocated = 0;
+    // Host targets are wrapped anew every frame, so they share one RTV slot.
+    UINT m_d3dTargetRtvIndex = UINT_MAX;
     UINT m_d3dCpuDsvAllocated = 0;
     UINT m_d3dCpuSamplerAllocated = 0;
     UINT m_d3dSrvDescSize = 0;

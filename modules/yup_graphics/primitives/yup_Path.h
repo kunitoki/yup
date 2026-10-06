@@ -593,16 +593,45 @@ public:
     Path& addBubble (const Rectangle<float>& bodyArea, const Rectangle<float>& maximumArea, const Point<float>& arrowTipPosition, float cornerSize, float arrowBaseWidth);
 
     //==============================================================================
-    /** Converts the path to a stroke polygon with specified width.
+    /** Converts the path to the outline of its stroke.
 
-        This method generates a closed polygon that represents the stroke of this path
-        with the given stroke width. The resulting path can be filled to achieve the
-        appearance of a stroked path.
+        Filling the returned path gives the appearance of stroking this path, and makes it
+        possible to apply fill-only effects (such as a feather) to a stroke.
 
-        @param strokeWidth The width of the stroke.
-        @return A new Path representing the stroke as a closed polygon.
+        Curves are flattened to line segments. Closed contours are outlined on both sides,
+        giving a ring with a hole; open contours end with the given cap. Overlapping parts
+        of the stroke are merged, so the result is made of simple (non self-intersecting)
+        contours using the non-zero winding rule, with outer contours wound clockwise.
+
+        @param strokeWidth The width of the stroke. A width of zero or less returns an empty path.
+        @param join        How segments meet. Miter joins use a miter limit of 4, beyond which
+                           the corner is squared off.
+        @param cap         How the ends of open contours are drawn.
+
+        @return A new Path representing the outline of the stroke.
     */
-    Path createStrokePolygon (float strokeWidth) const;
+    Path createStrokePolygon (float strokeWidth,
+                              StrokeJoin join = StrokeJoin::Round,
+                              StrokeCap cap = StrokeCap::Butt) const;
+
+    /** Converts the path to the outline of the area it fills.
+
+        The area covered by this path under its own fill rule (non-zero or even-odd) is
+        returned as simple, non-overlapping contours: self-intersecting contours are split
+        at their crossings and overlapping contours are merged. Outer contours are wound
+        clockwise and holes counter-clockwise, using the non-zero winding rule, so the
+        result fills the same area whatever fill rule is applied to it.
+
+        Curves are flattened to line segments and open contours are implicitly closed, as
+        when filling.
+
+        Calling this on a path it returned, as long as that path hasn't been modified since,
+        returns it as is without recomputing it. A cached result can therefore be filled with
+        a feather, which needs this outline, at no extra cost.
+
+        @return A Path representing the outline of the filled area.
+    */
+    [[nodiscard]] Path createFillPolygon() const;
 
     //==============================================================================
     /** Creates a new path with rounded corners applied to this path.
@@ -948,6 +977,7 @@ public:
 
 private:
     rive::rcp<rive::RiveRenderPath> path;
+    uint64 fillPolygonMutationID = 0;
 };
 
 } // namespace yup

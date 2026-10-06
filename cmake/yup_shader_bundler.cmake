@@ -96,6 +96,7 @@ endfunction()
 #       [GLSL_VERSION  <version>]       # default: 450
 #       [BUNDLE_RESOURCE <variable>]    # don't embed, see below
 #       [BUNDLE_DESTINATION <path>]     # default: <OUTPUT_NAME>.ysl
+#       [TEMP_FOLDER   <path>]          # default: CMAKE_CURRENT_BINARY_DIR
 #       [DEPENDS       <file>...]       # extra inputs, e.g. #included files
 #       [OPTIONS       <flag>...])      # extra flags forwarded to yup_shader_bundler
 #
@@ -109,13 +110,13 @@ endfunction()
 # The bytes can be loaded at runtime with ShaderBundle::loadFromData().
 #
 # With BUNDLE_RESOURCE no library is created: the .ysl is left in
-# CMAKE_CURRENT_BINARY_DIR and <variable> is set to "<ysl path>@<BUNDLE_DESTINATION>",
+# TEMP_FOLDER and <variable> is set to "<ysl path>@<BUNDLE_DESTINATION>",
 # ready to be passed to the BUNDLE_RESOURCES of yup_standalone_app. Load it at
 # runtime with ShaderBundle::loadFromFile().
 
 function (yup_add_shader_bundle library_name)
     set (options "")
-    set (one_value_args VERT FRAG COMPUTE OUTPUT_NAME RESOURCE_NAME NAMESPACE ENTRY GLSL_VERSION BUNDLE_RESOURCE BUNDLE_DESTINATION)
+    set (one_value_args VERT FRAG COMPUTE OUTPUT_NAME RESOURCE_NAME NAMESPACE ENTRY GLSL_VERSION BUNDLE_RESOURCE BUNDLE_DESTINATION TEMP_FOLDER)
     set (multi_value_args OPTIONS DEPENDS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -133,6 +134,7 @@ function (yup_add_shader_bundle library_name)
     _yup_set_default (YUP_ARG_ENTRY "main")
     _yup_set_default (YUP_ARG_GLSL_VERSION "450")
     _yup_set_default (YUP_ARG_BUNDLE_DESTINATION "${YUP_ARG_OUTPUT_NAME}.ysl")
+    _yup_set_default (YUP_ARG_TEMP_FOLDER "${CMAKE_CURRENT_BINARY_DIR}")
 
     set (stage_args "")
     set (stage_paths "")
@@ -169,7 +171,7 @@ function (yup_add_shader_bundle library_name)
     _yup_build_shader_bundler_tool (shader_bundler_exe)
 
     # ==== Generate the .ysl bundle at configure time, unless tool, arguments and inputs are unchanged
-    set (bundle_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUTPUT_NAME}.ysl")
+    set (bundle_path "${YUP_ARG_TEMP_FOLDER}/${YUP_ARG_OUTPUT_NAME}.ysl")
     set (bundle_key_path "${bundle_path}.sha256")
 
     set (bundler_command
@@ -198,6 +200,7 @@ function (yup_add_shader_bundle library_name)
     else()
         _yup_message (STATUS "Generating shader bundle ${bundle_path}")
         file (REMOVE "${bundle_key_path}")
+        _yup_execute_process_or_fail ("${CMAKE_COMMAND}" "-E" "make_directory" "${YUP_ARG_TEMP_FOLDER}")
         _yup_execute_process_or_fail (${bundler_command})
         file (WRITE "${bundle_key_path}" "${bundle_key}")
     endif()

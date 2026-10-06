@@ -1,0 +1,51 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#ifndef @YupPluginPrefix@_YUP_OBJC_SYMBOLS_PATCH_H
+#define @YupPluginPrefix@_YUP_OBJC_SYMBOLS_PATCH_H
+
+// YUP modules are compiled into every plugin image, so the Objective-C classes
+// they declare statically must be private to the plugin image, otherwise two
+// YUP plugins loaded in the same host process register duplicate classes in
+// the shared Objective-C runtime and the host resolves them from whichever
+// plugin was loaded first (for example, the AUv2 Cocoa view factory of another
+// plugin is asked to create the editor, and fails).
+//
+// Classes created at runtime through ObjCClass already get a unique name and
+// are not listed here. Classes that are looked up by a fixed name from an
+// Info.plist (YUPAUv3ViewController) or that only exist in applications
+// (YupApplicationDelegate) must not be renamed here.
+
+// yup_audio_plugin_client (AUv2)
+#define AudioPluginEditorViewAU @YupPluginPrefix@_YupPlugin_AudioPluginEditorViewAU
+#define AudioPluginProcessorAUViewFactory @YupPluginPrefix@_YupPlugin_AudioPluginProcessorAUViewFactory
+
+// yup_gui
+#define YUPDraggingSource @YupPluginPrefix@_YupPlugin_YUPDraggingSource
+#define YUPFileChooserDelegate @YupPluginPrefix@_YupPlugin_YUPFileChooserDelegate
+
+// yup_events
+#define ToastNotificationCenterDelegate @YupPluginPrefix@_YupPlugin_ToastNotificationCenterDelegate
+
+// yup_audio_devices
+#define iOSAudioSessionNative @YupPluginPrefix@_YupPlugin_iOSAudioSessionNative
+
+#endif // @YupPluginPrefix@_YUP_OBJC_SYMBOLS_PATCH_H

@@ -200,7 +200,7 @@ MidiDeviceListConnection AudioDeviceManagerPanel::makeMidiDeviceListConnection()
 
 void AudioDeviceManagerPanel::paint (Graphics& g)
 {
-    g.setFillColor (findColor (DocumentWindow::Style::backgroundColorId).value_or (Colors::dimgray));
+    g.setFillColor (ApplicationTheme::findComponentColor (*this, DocumentWindow::Style::backgroundColorId).value_or (Colors::dimgray));
     g.fillAll();
 }
 

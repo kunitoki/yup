@@ -468,6 +468,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("enableAtomicMode", &ComponentNative::enableAtomicMode)
         .def ("isWireframeEnabled", &ComponentNative::isWireframeEnabled)
         .def ("enableWireframe", &ComponentNative::enableWireframe)
+        .def ("getTriangulationThresholds", &ComponentNative::getTriangulationThresholds)
+        .def ("setTriangulationThresholds", &ComponentNative::setTriangulationThresholds)
         .def ("repaint", py::overload_cast<> (&ComponentNative::repaint))
         .def ("repaint", py::overload_cast<const Rectangle<float>&> (&ComponentNative::repaint))
         .def ("getRepaintAreas", &ComponentNative::getRepaintAreas)
@@ -871,6 +873,7 @@ void registerYupGuiBindings (py::module_& m)
         .def_readwrite ("dragImage", &DragAndDropSource::DragOptions::dragImage, "An optional static image to show as the ghost.")
         .def_readwrite ("imageOffset", &DragAndDropSource::DragOptions::imageOffset, "The point within the ghost that sits under the cursor.")
         .def_readwrite ("imageOpacity", &DragAndDropSource::DragOptions::imageOpacity, "The opacity applied to the ghost window.")
+        .def_readwrite ("imageInTopLevelComponent", &DragAndDropSource::DragOptions::imageInTopLevelComponent, "Whether the ghost floats inside the source's top-level component instead of its own window.")
         .def_readwrite ("allowedActions", &DragAndDropSource::DragOptions::allowedActions, "The operations this drag offers.")
         .def_readwrite ("allowExternalDrag", &DragAndDropSource::DragOptions::allowExternalDrag)
 
@@ -880,6 +883,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("withDragImage", &DragAndDropSource::DragOptions::withDragImage, "newImage"_a, "offset"_a = Point<float>(), py::return_value_policy::reference_internal)
         .def ("withDragImageComponent", &DragAndDropSource::DragOptions::withDragImageComponent, "component"_a, "offset"_a = Point<float>(), py::return_value_policy::reference_internal, "Sets a live component as the drag image.")
         .def ("withImageOpacity", &DragAndDropSource::DragOptions::withImageOpacity, "newOpacity"_a, py::return_value_policy::reference_internal)
+        .def ("withImageInTopLevelComponent", &DragAndDropSource::DragOptions::withImageInTopLevelComponent, "shouldUseTopLevelComponent"_a, py::return_value_policy::reference_internal)
         .def ("withAllowedActions", &DragAndDropSource::DragOptions::withAllowedActions, "newActions"_a, py::return_value_policy::reference_internal)
         .def ("withExternalDragAllowed", &DragAndDropSource::DragOptions::withExternalDragAllowed, "shouldAllowExternalDrag"_a, py::return_value_policy::reference_internal)
     ;
@@ -1690,17 +1694,14 @@ void registerYupGuiBindings (py::module_& m)
         .def (py::init<>())
         .def ("getNumRows", &ListBoxModel::getNumRows,
               "Returns the number of rows in the list; a Python subclass must override it.")
-        .def ("getRowHeight", &ListBoxModel::getRowHeight, "rowIndex"_a,
-              "Returns 0 to use the ListBox's fixed row height.")
-        .def ("getRowWidth", &ListBoxModel::getRowWidth, "rowIndex"_a,
-              "Returns 0 to use the ListBox's fixed row width.")
-        .def ("paintListBoxItem", &ListBoxModel::paintListBoxItem, "rowIndex"_a, "g"_a, "area"_a, "isSelected"_a)
+        .def ("getRowSize", &ListBoxModel::getRowSize, "rowIndex"_a,
+              "The row's size along the scroll axis; 0 or less uses the ListBox's row size.")
         .def ("getRowText", &ListBoxModel::getRowText, "rowIndex"_a)
         .def ("getRowIcon", &ListBoxModel::getRowIcon, "rowIndex"_a)
         .def ("selectedRowsChanged", &ListBoxModel::selectedRowsChanged, "selectedRows"_a)
         .def ("rowClicked", &ListBoxModel::rowClicked, "rowIndex"_a, "event"_a)
         .def ("rowDoubleClicked", &ListBoxModel::rowDoubleClicked, "rowIndex"_a, "event"_a)
-        .def ("returnKeyPressed", &ListBoxModel::returnKeyPressed, "lastSelectedRow"_a)
+        .def ("returnKeyPressed", &ListBoxModel::returnKeyPressed, "currentRow"_a)
         .def ("deleteKeyPressed", &ListBoxModel::deleteKeyPressed, "selectedRows"_a)
         .def ("getDragSourceDescription", &ListBoxModel::getDragSourceDescription, "selectedRows"_a);
 
@@ -1725,6 +1726,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setIcon", &ListBoxItem::setIcon, "newIcon"_a)
         .def ("setIconPosition", &ListBoxItem::setIconPosition, "position"_a)
         .def ("getIconPosition", &ListBoxItem::getIconPosition)
+        .def ("getIconImage", &ListBoxItem::getIconImage)
         .def ("setSelected", &ListBoxItem::setSelected, "shouldBeSelected"_a)
         .def ("isSelected", &ListBoxItem::isSelected)
         .def ("setHovered", &ListBoxItem::setHovered, "shouldBeHovered"_a)
@@ -1754,6 +1756,19 @@ void registerYupGuiBindings (py::module_& m)
         .value ("multiple", ListBox::SelectionMode::multiple)
         .export_values();
 
+    py::enum_<ListBox::ScrollAlignment> (classListBox, "ScrollAlignment")
+        .value ("nearest", ListBox::ScrollAlignment::nearest)
+        .value ("start", ListBox::ScrollAlignment::start)
+        .value ("center", ListBox::ScrollAlignment::center)
+        .value ("end", ListBox::ScrollAlignment::end)
+        .export_values();
+
+    py::enum_<ListBox::ScrollState> (classListBox, "ScrollState")
+        .value ("idle", ListBox::ScrollState::idle)
+        .value ("dragging", ListBox::ScrollState::dragging)
+        .value ("settling", ListBox::ScrollState::settling)
+        .export_values();
+
     classListBox
         .def (py::init<StringRef, ListBox::Orientation>(),
               "componentID"_a = StringRef(), "orientation"_a = ListBox::Orientation::vertical)
@@ -1777,20 +1792,38 @@ void registerYupGuiBindings (py::module_& m)
         .def ("isRowSelected", &ListBox::isRowSelected, "rowIndex"_a)
         .def ("getNumSelectedRows", &ListBox::getNumSelectedRows)
 
+        .def ("setCurrentRow", &ListBox::setCurrentRow, "rowIndex"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("getCurrentRow", &ListBox::getCurrentRow)
+
         .def ("updateContent", &ListBox::updateContent)
+        .def ("rowsInserted", &ListBox::rowsInserted, "startRow"_a, "count"_a)
+        .def ("rowsRemoved", &ListBox::rowsRemoved, "startRow"_a, "count"_a)
+        .def ("rowMoved", &ListBox::rowMoved, "fromRow"_a, "toRow"_a)
+        .def ("rowsChanged", &ListBox::rowsChanged, "startRow"_a, "count"_a)
         .def ("repaintRow", &ListBox::repaintRow, "rowIndex"_a)
-        .def ("scrollToEnsureRowIsVisible", &ListBox::scrollToEnsureRowIsVisible, "rowIndex"_a)
+
+        .def ("scrollToRow", &ListBox::scrollToRow,
+              "rowIndex"_a, "alignment"_a = ListBox::ScrollAlignment::nearest, "animated"_a = false)
+        .def ("setScrollPosition", &ListBox::setScrollPosition, "newOffset"_a, "animated"_a = false)
+        .def ("getScrollPosition", &ListBox::getScrollPosition)
+        .def ("getScrollState", &ListBox::getScrollState)
+        .def ("setMouseDragScrollingEnabled", &ListBox::setMouseDragScrollingEnabled, "shouldBeEnabled"_a)
+        .def ("isMouseDragScrollingEnabled", &ListBox::isMouseDragScrollingEnabled)
+        .def ("setPullToRefreshEnabled", &ListBox::setPullToRefreshEnabled, "shouldBeEnabled"_a)
+        .def ("isPullToRefreshEnabled", &ListBox::isPullToRefreshEnabled)
+        .def ("setRefreshing", &ListBox::setRefreshing, "shouldBeRefreshing"_a)
+        .def ("isRefreshing", &ListBox::isRefreshing)
+        .def ("getPullToRefreshProgress", &ListBox::getPullToRefreshProgress)
+        .def ("setEndReachedThreshold", &ListBox::setEndReachedThreshold, "viewportFraction"_a)
+        .def ("getEndReachedThreshold", &ListBox::getEndReachedThreshold)
 
         .def ("setOrientation", &ListBox::setOrientation, "newOrientation"_a)
         .def ("getOrientation", &ListBox::getOrientation)
-        .def ("setRowHeight", &ListBox::setRowHeight, "newHeight"_a)
-        .def ("setRowWidth", &ListBox::setRowWidth, "newWidth"_a)
-        .def ("getRowHeight", &ListBox::getRowHeight)
-        .def ("getRowWidth", &ListBox::getRowWidth)
-        .def ("setVariableHeightEnabled", &ListBox::setVariableHeightEnabled, "enabled"_a)
-        .def ("setVariableWidthEnabled", &ListBox::setVariableWidthEnabled, "enabled"_a)
-        .def ("isVariableHeightEnabled", &ListBox::isVariableHeightEnabled)
-        .def ("isVariableWidthEnabled", &ListBox::isVariableWidthEnabled)
+        .def ("setRowSize", &ListBox::setRowSize, "newSize"_a)
+        .def ("getRowSize", &ListBox::getRowSize)
+        .def ("setRowSpacing", &ListBox::setRowSpacing, "newSpacing"_a)
+        .def ("getRowSpacing", &ListBox::getRowSpacing)
+        .def ("setContentInsets", &ListBox::setContentInsets, "leading"_a, "trailing"_a)
         .def ("setMinimumContentSize", &ListBox::setMinimumContentSize, "minSize"_a)
         .def ("getMinimumContentSize", &ListBox::getMinimumContentSize)
 
@@ -1804,10 +1837,19 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getRowAt", &ListBox::getRowAt, "position"_a)
         .def ("getComponentForRow", &ListBox::getComponentForRow, "rowIndex"_a, py::return_value_policy::reference_internal)
         .def ("getRowBounds", &ListBox::getRowBounds, "rowIndex"_a)
+        .def ("getHoveredRow", &ListBox::getHoveredRow)
 
         .def_readwrite ("onRowClicked", &ListBox::onRowClicked, "Called with the row the user clicked.")
         .def_readwrite ("onRowDoubleClicked", &ListBox::onRowDoubleClicked, "Called with the row the user double-clicked.")
-        .def_readwrite ("onSelectionChanged", &ListBox::onSelectionChanged, "Called when the selected rows change.");
+        .def_readwrite ("onSelectionChanged", &ListBox::onSelectionChanged, "Called when the selected rows change.")
+        .def_readwrite ("onRowEntered", &ListBox::onRowEntered, "Called with the row the mouse moved onto.")
+        .def_readwrite ("onRowExited", &ListBox::onRowExited, "Called with the row the mouse left.")
+        .def_readwrite ("onCurrentRowChanged", &ListBox::onCurrentRowChanged, "Called with the new current row.")
+        .def_readwrite ("onScroll", &ListBox::onScroll, "Called with the new scroll position.")
+        .def_readwrite ("onVisibleRowsChanged", &ListBox::onVisibleRowsChanged, "Called with the new range of visible rows.")
+        .def_readwrite ("onScrollStateChanged", &ListBox::onScrollStateChanged, "Called with the new scroll state.")
+        .def_readwrite ("onRefresh", &ListBox::onRefresh, "Called when a pull triggers a refresh.")
+        .def_readwrite ("onEndReached", &ListBox::onEndReached, "Called once when the end of the content comes within the end-reached threshold.");
 
     py::class_<ListBox::Style> listBoxStyle (classListBox, "Style");
     listBoxStyle.attr ("backgroundColorId") = ListBox::Style::backgroundColorId;
@@ -1815,6 +1857,350 @@ void registerYupGuiBindings (py::module_& m)
     listBoxStyle.attr ("rowBackgroundColorId") = ListBox::Style::rowBackgroundColorId;
     listBoxStyle.attr ("selectedRowBackgroundColorId") = ListBox::Style::selectedRowBackgroundColorId;
     listBoxStyle.attr ("hoveredRowBackgroundColorId") = ListBox::Style::hoveredRowBackgroundColorId;
+    listBoxStyle.attr ("refreshIndicatorColorId") = ListBox::Style::refreshIndicatorColorId;
+    listBoxStyle.attr ("refreshIndicatorSizeId") = ListBox::Style::refreshIndicatorSizeId;
+
+    // ============================================================================================ yup::TreeViewItem
+
+    const auto toItemList = [] (const std::vector<TreeViewItem*>& items)
+    {
+        py::list result;
+
+        for (auto* item : items)
+            result.append (py::cast (item, py::return_value_policy::reference));
+
+        return result;
+    };
+
+    py::class_<TreeViewItem, PyTreeViewItem<>, py::smart_holder> classTreeViewItem (m, "TreeViewItem");
+
+    classTreeViewItem
+        .def (py::init<>())
+
+        // The parent takes the item over; trampoline_self_life_support keeps a Python subclass alive with it.
+        .def ("addSubItem", [] (TreeViewItem& self, std::unique_ptr<TreeViewItem> newItem, int index) -> TreeViewItem&
+        {
+            if (newItem == nullptr)
+                throw py::value_error ("newItem must not be None");
+
+            return self.addSubItem (std::move (newItem), index);
+        }, "newItem"_a, "index"_a = -1, py::return_value_policy::reference)
+        .def ("removeSubItem", &TreeViewItem::removeSubItem, "index"_a)
+        .def ("moveSubItem", &TreeViewItem::moveSubItem, "currentIndex"_a, "newIndex"_a)
+        .def ("clearSubItems", &TreeViewItem::clearSubItems)
+        .def ("getNumSubItems", &TreeViewItem::getNumSubItems)
+        .def ("getSubItem", &TreeViewItem::getSubItem, "index"_a, py::return_value_policy::reference)
+        .def ("getParentItem", &TreeViewItem::getParentItem, py::return_value_policy::reference)
+        .def ("getIndexInParent", &TreeViewItem::getIndexInParent)
+        .def ("getDepth", &TreeViewItem::getDepth)
+        .def ("getOwnerView", &TreeViewItem::getOwnerView, py::return_value_policy::reference)
+        .def ("isEqualToOrDescendantOf", &TreeViewItem::isEqualToOrDescendantOf, "possibleAncestor"_a)
+
+        .def ("setOpen", &TreeViewItem::setOpen, "shouldBeOpen"_a)
+        .def ("isOpen", &TreeViewItem::isOpen)
+        .def ("setOpenRecursively", &TreeViewItem::setOpenRecursively, "shouldBeOpen"_a)
+        .def ("isSelected", &TreeViewItem::isSelected)
+        .def ("isHovered", &TreeViewItem::isHovered)
+        .def ("setSelected", &TreeViewItem::setSelected, "shouldBeSelected"_a, "deselectOthers"_a = true)
+        .def ("itemChanged", &TreeViewItem::itemChanged)
+        .def ("repaintItem", &TreeViewItem::repaintItem)
+
+        .def ("mightContainSubItems", &TreeViewItem::mightContainSubItems)
+        .def ("getItemText", &TreeViewItem::getItemText)
+        .def ("getItemIcon", &TreeViewItem::getItemIcon)
+        .def ("hasItemIcon", &TreeViewItem::hasItemIcon)
+        .def ("paintItemIcon", &TreeViewItem::paintItemIcon, "g"_a, "area"_a, "isSelected"_a)
+        .def ("getUniqueName", &TreeViewItem::getUniqueName)
+        .def ("getItemHeight", &TreeViewItem::getItemHeight)
+        .def ("itemOpennessChanged", &TreeViewItem::itemOpennessChanged, "isNowOpen"_a)
+        .def ("itemClicked", &TreeViewItem::itemClicked, "event"_a)
+        .def ("itemDoubleClicked", &TreeViewItem::itemDoubleClicked, "event"_a)
+        .def ("itemSelectionChanged", &TreeViewItem::itemSelectionChanged, "isNowSelected"_a)
+        .def ("itemEntered", &TreeViewItem::itemEntered)
+        .def ("itemExited", &TreeViewItem::itemExited)
+        .def ("getDragSourceDescription", &TreeViewItem::getDragSourceDescription)
+        .def ("isInterestedInDragSource", &TreeViewItem::isInterestedInDragSource, "details"_a)
+        .def ("itemDropped", &TreeViewItem::itemDropped, "details"_a, "insertIndex"_a);
+
+    // ============================================================================================ yup::DataTreeViewItem
+
+    py::class_<DataTreeViewItem, TreeViewItem, PyTreeViewItem<DataTreeViewItem>, py::smart_holder> classDataTreeViewItem (m, "DataTreeViewItem");
+
+    classDataTreeViewItem
+        .def (py::init<DataTree>(), "node"_a)
+        .def (py::init<DataTree, UndoManager::Ptr>(), "node"_a, "undoManager"_a)
+        .def ("getDataTree", &DataTreeViewItem::getDataTree)
+        .def ("getUndoManager", &DataTreeViewItem::getUndoManager);
+
+    // ============================================================================================ yup::TreeViewRow
+
+    py::class_<TreeViewRow, Component, PyComponent<TreeViewRow>, py::smart_holder> classTreeViewRow (m, "TreeViewRow");
+
+    classTreeViewRow
+        .def (py::init<>())
+        .def ("getItem", &TreeViewRow::getItem, py::return_value_policy::reference)
+        .def ("getOwnerView", &TreeViewRow::getOwnerView, py::return_value_policy::reference)
+        .def ("getDepth", &TreeViewRow::getDepth)
+        .def ("isItemSelected", &TreeViewRow::isItemSelected)
+        .def ("isItemHovered", &TreeViewRow::isItemHovered)
+        .def ("getOpenFraction", &TreeViewRow::getOpenFraction)
+        .def ("getItemHeight", &TreeViewRow::getItemHeight)
+        .def ("getItemText", &TreeViewRow::getItemText)
+        .def ("hasItemIcon", &TreeViewRow::hasItemIcon)
+        .def ("hasCustomContent", &TreeViewRow::hasCustomContent)
+        .def ("getDisclosureBounds", &TreeViewRow::getDisclosureBounds)
+        .def ("getIconBounds", &TreeViewRow::getIconBounds)
+        .def ("getTextBounds", &TreeViewRow::getTextBounds);
+
+    // ============================================================================================ yup::TreeView
+
+    // The item callbacks are write-only: an item reference would be copied into Python, and items are not copyable.
+    const auto setItemCallback = [] (std::function<void (TreeViewItem&)> TreeView::* member)
+    {
+        return [member] (TreeView& self, std::function<void (TreeViewItem*)> callback)
+        {
+            if (! callback)
+            {
+                self.*member = nullptr;
+                return;
+            }
+
+            self.*member = [callback = std::move (callback)] (TreeViewItem& item)
+            {
+                callback (&item);
+            };
+        };
+    };
+
+    py::class_<TreeView, Component, PyComponent<TreeView>, py::smart_holder> classTreeView (m, "TreeView");
+
+    classTreeView
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+
+        // The view takes the root over; trampoline_self_life_support keeps a Python subclass alive with it.
+        .def ("setRootItem", [] (TreeView& self, std::unique_ptr<TreeViewItem> newRootItem)
+        {
+            self.setRootItem (std::move (newRootItem));
+        }, py::arg ("newRootItem").none (true))
+        .def ("getRootItem", &TreeView::getRootItem, py::return_value_policy::reference)
+        .def ("setRootItemVisible", &TreeView::setRootItemVisible, "shouldBeVisible"_a)
+        .def ("isRootItemVisible", &TreeView::isRootItemVisible)
+        .def ("setOpenCloseButtonsVisible", &TreeView::setOpenCloseButtonsVisible, "shouldBeVisible"_a)
+        .def ("areOpenCloseButtonsVisible", &TreeView::areOpenCloseButtonsVisible)
+
+        .def ("setIndentSize", &TreeView::setIndentSize, "newIndentSize"_a)
+        .def ("getIndentSize", &TreeView::getIndentSize)
+        .def ("setDefaultItemHeight", &TreeView::setDefaultItemHeight, "newHeight"_a)
+        .def ("getDefaultItemHeight", &TreeView::getDefaultItemHeight)
+        .def ("setIndentGuidesVisible", &TreeView::setIndentGuidesVisible, "shouldBeVisible"_a)
+        .def ("areIndentGuidesVisible", &TreeView::areIndentGuidesVisible)
+        .def ("setExpandAnimationTime", &TreeView::setExpandAnimationTime, "seconds"_a)
+        .def ("getExpandAnimationTime", &TreeView::getExpandAnimationTime)
+
+        .def ("setVerticalScrollBarVisibility", &TreeView::setVerticalScrollBarVisibility, "mode"_a)
+        .def ("setScrollPosition", &TreeView::setScrollPosition, "newPosition"_a, "animated"_a = false)
+        .def ("getScrollPosition", &TreeView::getScrollPosition)
+
+        .def ("setSelectionMode", &TreeView::setSelectionMode, "mode"_a)
+        .def ("getSelectionMode", &TreeView::getSelectionMode)
+        .def ("getNumSelectedItems", &TreeView::getNumSelectedItems)
+        .def ("getSelectedItems", [toItemList] (const TreeView& self)
+        {
+            return toItemList (self.getSelectedItems());
+        })
+        .def ("clearSelectedItems", &TreeView::clearSelectedItems)
+
+        .def ("getNumRowsInTree", &TreeView::getNumRowsInTree)
+        .def ("getItemOnRow", &TreeView::getItemOnRow, "rowIndex"_a, py::return_value_policy::reference)
+        .def ("getRowOf", &TreeView::getRowOf, "item"_a)
+        .def ("getItemAt", &TreeView::getItemAt, "position"_a, py::return_value_policy::reference)
+        .def ("getHoveredItem", &TreeView::getHoveredItem, py::return_value_policy::reference)
+        .def ("getItemBounds", &TreeView::getItemBounds, "item"_a)
+        .def ("scrollToItem", &TreeView::scrollToItem,
+              "item"_a, "alignment"_a = ListBox::ScrollAlignment::nearest, "animated"_a = false)
+
+        .def ("getOpennessState", &TreeView::getOpennessState, "includeScrollPosition"_a)
+        .def ("restoreOpennessState", &TreeView::restoreOpennessState, "state"_a, "restoreSelection"_a)
+
+        .def_static ("getDraggedItems", [toItemList] (const DragAndDropSourceDetails& details)
+        {
+            return toItemList (TreeView::getDraggedItems (details));
+        }, "details"_a)
+
+        .def_readwrite ("onSelectionChanged", &TreeView::onSelectionChanged, "Called when the selection changes.")
+        .def_property ("onItemClicked", nullptr, setItemCallback (&TreeView::onItemClicked), "Called with the item whose row was clicked.")
+        .def_property ("onItemDoubleClicked", nullptr, setItemCallback (&TreeView::onItemDoubleClicked), "Called with the item whose row was double-clicked.")
+        .def_property ("onItemEntered", nullptr, setItemCallback (&TreeView::onItemEntered), "Called with the item whose row the mouse moved onto.")
+        .def_property ("onItemExited", nullptr, setItemCallback (&TreeView::onItemExited), "Called with the item whose row the mouse left.")
+        .def_property ("onReturnKeyPressed", nullptr, setItemCallback (&TreeView::onReturnKeyPressed), "Called with the item on the current row when Return is pressed.")
+        .def_property ("onDeleteKeyPressed", nullptr, [toItemList] (TreeView& self, std::function<void (py::list)> callback)
+        {
+            if (! callback)
+            {
+                self.onDeleteKeyPressed = nullptr;
+                return;
+            }
+
+            self.onDeleteKeyPressed = [callback = std::move (callback), toItemList] (std::vector<TreeViewItem*> items)
+            {
+                py::gil_scoped_acquire gil;
+                callback (toItemList (items));
+            };
+        }, "Called with the selected items when Delete or Backspace is pressed.");
+
+    py::class_<TreeView::Style> treeViewStyle (classTreeView, "Style");
+    treeViewStyle.attr ("indentGuideColorId") = TreeView::Style::indentGuideColorId;
+    treeViewStyle.attr ("disclosureColorId") = TreeView::Style::disclosureColorId;
+    treeViewStyle.attr ("itemTextColorId") = TreeView::Style::itemTextColorId;
+    treeViewStyle.attr ("itemTextSelectedColorId") = TreeView::Style::itemTextSelectedColorId;
+    treeViewStyle.attr ("dropIndicatorColorId") = TreeView::Style::dropIndicatorColorId;
+    treeViewStyle.attr ("itemHoveredColorId") = TreeView::Style::itemHoveredColorId;
+
+    // ============================================================================================ yup::TabButton
+
+    // Tabs are created and owned by their bar, so they have no constructor here.
+    py::class_<TabButton, Button, py::smart_holder> classTabButton (m, "TabButton");
+
+    classTabButton
+        .def ("getTabId", &TabButton::getTabId)
+        .def ("getTabBar", &TabButton::getTabBar, py::return_value_policy::reference)
+        .def ("setText", &TabButton::setText, "newText"_a)
+        .def ("getText", &TabButton::getText)
+        .def ("setIconGlyph", py::overload_cast<const String&> (&TabButton::setIconGlyph), "newGlyph"_a)
+        .def ("getIconGlyph", &TabButton::getIconGlyph)
+        .def ("setIconImage", &TabButton::setIconImage, "newImage"_a)
+        .def ("getIconImage", &TabButton::getIconImage)
+        .def ("hasIcon", &TabButton::hasIcon)
+        .def ("setClosable", &TabButton::setClosable, "shouldBeClosable"_a)
+        .def ("isClosable", &TabButton::isClosable)
+
+        // The tab takes the component over; trampoline_self_life_support keeps a Python subclass alive with it.
+        .def ("setCustomComponent", [] (TabButton& self, std::unique_ptr<Component> newComponent)
+        {
+            self.setCustomComponent (std::move (newComponent));
+        }, py::arg ("newComponent").none (true))
+        .def ("getCustomComponent", &TabButton::getCustomComponent, py::return_value_policy::reference)
+
+        .def ("isSelected", &TabButton::isSelected)
+        .def ("isCloseButtonOver", &TabButton::isCloseButtonOver)
+        .def ("isOverflowButton", &TabButton::isOverflowButton)
+        .def ("getPreferredLength", &TabButton::getPreferredLength)
+        .def ("getFont", &TabButton::getFont, "forSelectedTab"_a)
+        .def ("getIconBounds", &TabButton::getIconBounds)
+        .def ("getTextBounds", &TabButton::getTextBounds)
+        .def ("getCloseButtonBounds", &TabButton::getCloseButtonBounds)
+        .def ("getArrowBounds", &TabButton::getArrowBounds);
+
+    py::class_<TabButton::Style> tabButtonStyle (classTabButton, "Style");
+    tabButtonStyle.attr ("textColorId") = TabButton::Style::textColorId;
+    tabButtonStyle.attr ("textSelectedColorId") = TabButton::Style::textSelectedColorId;
+    tabButtonStyle.attr ("hoveredBackgroundColorId") = TabButton::Style::hoveredBackgroundColorId;
+    tabButtonStyle.attr ("closeButtonColorId") = TabButton::Style::closeButtonColorId;
+
+    // ============================================================================================ yup::TabBar
+
+    py::class_<TabBar, Component, PyComponent<TabBar>, py::smart_holder> classTabBar (m, "TabBar");
+
+    py::enum_<TabBar::Orientation> (classTabBar, "Orientation")
+        .value ("horizontal", TabBar::Orientation::horizontal)
+        .value ("vertical", TabBar::Orientation::vertical)
+        .export_values();
+
+    py::enum_<TabBar::Variant> (classTabBar, "Variant")
+        .value ("pill", TabBar::Variant::pill)
+        .value ("underline", TabBar::Variant::underline)
+        .export_values();
+
+    py::enum_<TabBar::Layout> (classTabBar, "Layout")
+        .value ("natural", TabBar::Layout::natural)
+        .value ("fill", TabBar::Layout::fill)
+        .export_values();
+
+    py::enum_<TabBar::Overflow> (classTabBar, "Overflow")
+        .value ("menu", TabBar::Overflow::menu)
+        .value ("scroll", TabBar::Overflow::scroll)
+        .value ("shrink", TabBar::Overflow::shrink)
+        .export_values();
+
+    classTabBar
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+
+        .def ("addTab", &TabBar::addTab, "tabId"_a, "text"_a, "insertIndex"_a = -1, py::return_value_policy::reference_internal)
+        .def ("removeTab", &TabBar::removeTab, "tabId"_a)
+        .def ("clearTabs", &TabBar::clearTabs)
+        .def ("moveTab", &TabBar::moveTab, "tabId"_a, "newIndex"_a, "notification"_a = sendNotification)
+        .def ("getNumTabs", &TabBar::getNumTabs)
+        .def ("getTabId", &TabBar::getTabId, "index"_a)
+        .def ("indexOfTab", &TabBar::indexOfTab, "tabId"_a)
+        .def ("getTabButton", &TabBar::getTabButton, "tabId"_a, py::return_value_policy::reference_internal)
+
+        .def ("setSelectedTab", &TabBar::setSelectedTab, "tabId"_a, "notification"_a = sendNotification)
+        .def ("getSelectedTabId", &TabBar::getSelectedTabId)
+        .def ("getSelectedTabIndex", &TabBar::getSelectedTabIndex)
+
+        .def ("setOrientation", &TabBar::setOrientation, "newOrientation"_a)
+        .def ("getOrientation", &TabBar::getOrientation)
+        .def ("setVariant", &TabBar::setVariant, "newVariant"_a)
+        .def ("getVariant", &TabBar::getVariant)
+        .def ("setLayout", &TabBar::setLayout, "newLayout"_a)
+        .def ("getLayout", &TabBar::getLayout)
+        .def ("setOverflow", &TabBar::setOverflow, "newOverflow"_a)
+        .def ("getOverflow", &TabBar::getOverflow)
+        .def ("setFlipped", &TabBar::setFlipped, "shouldBeFlipped"_a)
+        .def ("isFlipped", &TabBar::isFlipped)
+        .def ("setReorderable", &TabBar::setReorderable, "shouldBeReorderable"_a)
+        .def ("isReorderable", &TabBar::isReorderable)
+        .def ("setOverflowText", &TabBar::setOverflowText, "newText"_a)
+        .def ("getOverflowText", &TabBar::getOverflowText)
+        .def ("setAnimationDuration", &TabBar::setAnimationDuration, "newDurationSeconds"_a)
+        .def ("getAnimationDuration", &TabBar::getAnimationDuration)
+
+        .def ("getOverflowButton", &TabBar::getOverflowButton, py::return_value_policy::reference_internal)
+        .def ("getScrollOffset", &TabBar::getScrollOffset)
+        .def ("getIndicatorBounds", &TabBar::getIndicatorBounds)
+        .def ("getTabArea", &TabBar::getTabArea)
+        .def ("isFocusIndicatorVisible", &TabBar::isFocusIndicatorVisible)
+        .def_readonly_static ("minimumTabLength", &TabBar::minimumTabLength)
+
+        .def_readwrite ("onSelectionChanged", &TabBar::onSelectionChanged,
+                        "Called with the newly selected tab, or a null Identifier when the selection is cleared.")
+        .def_readwrite ("onTabMoved", &TabBar::onTabMoved,
+                        "Called with the tab, its old index and its new index after it moved.")
+        .def_readwrite ("onTabCloseRequested", &TabBar::onTabCloseRequested,
+                        "Called when the close button of a tab is clicked. When not set, the tab is removed.");
+
+    py::class_<TabBar::Style> tabBarStyle (classTabBar, "Style");
+    tabBarStyle.attr ("trackColorId") = TabBar::Style::trackColorId;
+    tabBarStyle.attr ("indicatorColorId") = TabBar::Style::indicatorColorId;
+    tabBarStyle.attr ("underlineColorId") = TabBar::Style::underlineColorId;
+    tabBarStyle.attr ("focusOutlineColorId") = TabBar::Style::focusOutlineColorId;
+
+    // ============================================================================================ yup::TabComponent
+
+    py::class_<TabComponent, Component, PyComponent<TabComponent>, py::smart_holder> classTabComponent (m, "TabComponent");
+
+    py::enum_<TabComponent::Placement> (classTabComponent, "Placement")
+        .value ("top", TabComponent::Placement::top)
+        .value ("bottom", TabComponent::Placement::bottom)
+        .value ("left", TabComponent::Placement::left)
+        .value ("right", TabComponent::Placement::right)
+        .export_values();
+
+    classTabComponent
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+
+        // Only the owning overload is bound: a page owned by Python could be collected while still shown.
+        .def ("addTab", [] (TabComponent& self, const Identifier& tabId, const String& text, std::unique_ptr<Component> content, int insertIndex) -> TabButton&
+        {
+            return self.addTab (tabId, text, std::move (content), insertIndex);
+        }, "tabId"_a, "text"_a, "content"_a, "insertIndex"_a = -1, py::return_value_policy::reference_internal)
+        .def ("removeTab", &TabComponent::removeTab, "tabId"_a)
+        .def ("getTabContent", &TabComponent::getTabContent, "tabId"_a, py::return_value_policy::reference_internal)
+        .def ("getTabBar", py::overload_cast<> (&TabComponent::getTabBar), py::return_value_policy::reference_internal)
+        .def ("setTabBarPlacement", &TabComponent::setTabBarPlacement, "newPlacement"_a)
+        .def ("getTabBarPlacement", &TabComponent::getTabBarPlacement)
+        .def ("setTabBarThickness", &TabComponent::setTabBarThickness, "newThickness"_a)
+        .def ("getTabBarThickness", &TabComponent::getTabBarThickness);
 
     // ============================================================================================ yup::ComboBox
 

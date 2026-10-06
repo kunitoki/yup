@@ -105,7 +105,7 @@ public:
         surface.Configure (&config);
 
         wgpu::TextureDescriptor textureDesc = {};
-        textureDesc.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
+        textureDesc.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::TextureBinding;
         textureDesc.dimension = wgpu::TextureDimension::e2D;
         textureDesc.size = { (uint32_t) width, (uint32_t) height, 1 };
         textureDesc.format = wgpu::TextureFormat::BGRA8Unorm;
@@ -121,6 +121,7 @@ public:
         if (offscreenTextureView == nullptr || renderTarget == nullptr)
             return;
 
+        this->frameDescriptor = frameDescriptor;
         renderTarget->setTargetTextureView (offscreenTextureView, offscreenTexture);
         getRenderContext()->beginFrame (frameDescriptor);
     }

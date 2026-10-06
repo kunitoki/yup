@@ -55,6 +55,12 @@
 
 #include <rive/rive.h>
 
+namespace rive::cmd
+{
+class DeferredSession;
+class DeferredReplayer;
+} // namespace rive::cmd
+
 //==============================================================================
 /** Config: YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT
 
@@ -149,6 +155,7 @@
 #include "mouse/yup_MouseCursor.h"
 #include "mouse/yup_MouseWheelData.h"
 #include "mouse/yup_MouseListener.h"
+#include "mouse/yup_KineticScroller.h"
 #include "clipboard/yup_SystemClipboard.h"
 #include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
@@ -183,6 +190,13 @@
 #include "widgets/yup_ProgressBar.h"
 #include "widgets/yup_ListBoxItem.h"
 #include "widgets/yup_ListBox.h"
+#include "widgets/yup_TreeViewItem.h"
+#include "widgets/yup_TreeViewRow.h"
+#include "widgets/yup_TreeView.h"
+#include "widgets/yup_DataTreeViewItem.h"
+#include "widgets/yup_TabButton.h"
+#include "widgets/yup_TabBar.h"
+#include "widgets/yup_TabComponent.h"
 #include "artboard/yup_ArtboardViewModel.h"
 #include "artboard/yup_ArtboardViewModelInstance.h"
 #include "artboard/yup_ArtboardFile.h"
@@ -209,6 +223,7 @@
 
 //==============================================================================
 
+#include "themes/yup_ThemePalette.h"
 #include "themes/yup_ApplicationTheme.h"
 #include "themes/theme_v1/yup_ThemeVersion1.h"
 #include "themes/theme_v1/yup_ThemeVersion1_Icons.h"

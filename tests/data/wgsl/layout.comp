@@ -1,0 +1,32 @@
+#version 450
+layout(local_size_x = 64) in;
+struct Inner { float a; bool flag; vec2 b[2]; };
+layout(std140, binding = 0) uniform Params {
+    float scalars[4];
+    vec2 pairs[3];
+    mat2 rot;
+    mat3x2 m32;
+    bool enabled;
+    bvec3 mask;
+    Inner inner;
+    Inner inners[2];
+    layout(offset = 512) vec4 far;
+} params;
+layout(std430, binding = 1) buffer Counters { uint hits; int values[]; } counters;
+layout(std430, binding = 2) buffer Flags { bool done; float data[]; } flags;
+shared uint tileCount;
+void main() {
+    uint i = gl_LocalInvocationIndex;
+    if (i == 0u) tileCount = 0u;
+    barrier();
+    float s = params.scalars[i % 4u] + params.pairs[1].y + params.rot[1][0] + params.m32[2].x;
+    float copy[4] = params.scalars;
+    mat2 r = params.rot;
+    Inner inn = params.inner;
+    bool anyMask = any(params.mask) && params.enabled && params.inners[1].flag;
+    uint old = atomicAdd(counters.hits, 1u);
+    int prev = atomicCompSwap(counters.values[i], 0, int(old));
+    atomicAdd(tileCount, 1u);
+    flags.done = anyMask;
+    flags.data[i] = s + copy[1] + r[0][1] + inn.b[1].x + float(prev) + float(counters.values.length()) + params.far.w;
+}

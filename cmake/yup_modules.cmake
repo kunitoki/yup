@@ -786,6 +786,8 @@ function (yup_add_module module_path modules_definitions module_group)
             set (module_branch "${value}")
         elseif (${key} MATCHES "^submodules$")
             _yup_boolean_property ("${value}" module_submodules)
+        elseif (${key} MATCHES "^vsToolOverrides$")
+            _yup_comma_or_space_separated_list ("${value}" module_vs_tool_overrides)
         endif()
     endforeach()
 
@@ -1027,6 +1029,18 @@ function (yup_add_module module_path modules_definitions module_group)
     source_group (TREE ${module_path}/ FILES ${all_module_files})
     list (REMOVE_ITEM all_module_files ${module_sources})
     set_source_files_properties (${all_module_files} PROPERTIES HEADER_FILE_ONLY TRUE)
+
+    foreach (vs_tool_override IN LISTS module_vs_tool_overrides)
+        if (NOT vs_tool_override MATCHES "^([^=]+)=(.+)$")
+            _yup_message (FATAL_ERROR "Invalid vsToolOverrides entry '${vs_tool_override}' in module ${module_name}, expected extension=Tool")
+        endif()
+
+        set (vs_tool_override_files ${all_module_files})
+        list (FILTER vs_tool_override_files INCLUDE REGEX "\\.${CMAKE_MATCH_1}$")
+        if (vs_tool_override_files)
+            set_source_files_properties (${vs_tool_override_files} PROPERTIES VS_TOOL_OVERRIDE "${CMAKE_MATCH_2}")
+        endif()
+    endforeach()
 
     # ==== Setup parent scope variables
     set (${module_name}_Found ON PARENT_SCOPE)

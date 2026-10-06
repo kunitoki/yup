@@ -1,0 +1,53 @@
+#version 450
+// Builtins lowered to polyfills or renamed: extended arithmetic, bitfields, relational, matrix helpers, barriers
+layout(local_size_x = 8) in;
+layout(std430, binding = 0) buffer Data {
+    uvec4 u[4];
+    ivec4 i[4];
+    vec4 f[4];
+    mat4 m4;
+    mat2 m2;
+    mat3 m3;
+    mat4x3 m43;
+} data;
+layout(binding = 1, rgba8) uniform readonly image2DArray layers;
+shared uint scratch[8];
+void main() {
+    uint idx = gl_LocalInvocationID.x;
+    uvec2 hi2, lo2;
+    umulExtended(data.u[0].xy, data.u[1].xy, hi2, lo2);
+    uint hi, lo;
+    umulExtended(data.u[0].x, data.u[1].x, hi, lo);
+    uint carry;
+    uint sum = uaddCarry(data.u[2].x, data.u[2].y, carry);
+    uint borrow;
+    uint diff = usubBorrow(data.u[2].z, data.u[2].w, borrow);
+    data.u[3] = uvec4(hi2 ^ lo2, hi ^ lo, sum + carry + diff + borrow);
+    ivec4 e = bitfieldExtract(data.i[0], 1, 3);
+    uint ue = bitfieldExtract(data.u[0].z, 2, 4);
+    ivec4 ins = bitfieldInsert(data.i[1], data.i[2], 0, 8);
+    data.i[3] = e + ins + int(ue);
+    bvec4 lt = lessThan(data.f[0], data.f[1]);
+    bvec4 le = lessThanEqual(data.f[0], data.f[1]);
+    bvec4 gt = greaterThan(data.i[0], data.i[1]);
+    bvec4 ge = greaterThanEqual(data.u[0], data.u[1]);
+    bvec4 eq = equal(data.f[2], data.f[3]);
+    bvec4 ne = notEqual(lt, le);
+    data.f[3] = vec4(gt) + vec4(ge) + vec4(eq) + vec4(ne) + imageLoad(layers, ivec3(idx, 0, 1));
+    data.m2 = inverse(data.m2) + matrixCompMult(data.m2, data.m2);
+    data.m4 = inverse(data.m4);
+    data.m3 = matrixCompMult(data.m3, data.m3);
+    data.m43 = matrixCompMult(data.m43, data.m43);
+    vec4 unpacked = unpackUnorm4x8(data.u[0].x) + vec4(unpackHalf2x16(data.u[0].y), unpackSnorm2x16(data.u[0].z));
+    data.f[2] = unpacked + vec4(fma(data.f[0].x, data.f[1].x, 1.0), determinant(data.m3), intBitsToFloat(data.i[0].x), uintBitsToFloat(data.u[1].x));
+    data.i[2] = floatBitsToInt(data.f[0]);
+    data.u[2].x = packUnorm4x8(data.f[1]) + packHalf2x16(data.f[1].xy) + floatBitsToUint(data.f[0].w);
+    scratch[idx] = idx;
+    memoryBarrierShared();
+    barrier();
+    memoryBarrierBuffer();
+    memoryBarrierImage();
+    memoryBarrier();
+    groupMemoryBarrier();
+    data.u[0].x = scratch[(idx + 1u) % 8u];
+}

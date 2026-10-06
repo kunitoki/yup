@@ -209,8 +209,38 @@ void RenderPassVulkan::finish()
     if (m_finished)
         return;
     m_finished = true;
+    releaseBoundResources();
 
     m_vkContext->m_vk->CmdEndRenderPass(m_vkCmdBuf);
+    if (m_vkProfileQuery != UINT32_MAX)
+    {
+        m_vkContext->m_vk->CmdWriteTimestamp(
+            m_vkCmdBuf,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            m_vkContext->m_vkProfilePool,
+            m_vkProfileQuery + 1);
+    }
+
+    // A target that is never sampled stays in the layout the pass left it in,
+    // and Rive's tracker hears the write so its own barrier starts from there.
+    auto keepAsAttachment = [](Texture* texture,
+                               gpu::RenderTargetVulkan* renderTarget) {
+        auto* tex = lite_rtti_cast<TextureVulkan*>(texture);
+        if (tex == nullptr || tex->m_vkSampleable)
+        {
+            return false;
+        }
+        tex->m_vkLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        if (renderTarget != nullptr)
+        {
+            renderTarget->updateLastAccess({
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            });
+        }
+        return true;
+    };
 
     // Transition color attachments COLOR_ATTACHMENT_OPTIMAL →
     // SHADER_READ_ONLY_OPTIMAL so callers (e.g. Rive drawImage) can sample.
@@ -232,6 +262,9 @@ void RenderPassVulkan::finish()
     {
         if (m_vkColorImages[i] == VK_NULL_HANDLE)
             continue;
+        if (keepAsAttachment(m_vkColorTextures[i].get(),
+                             m_vkColorRenderTargets[i]))
+            continue;
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -239,11 +272,7 @@ void RenderPassVulkan::finish()
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = m_vkColorImages[i];
-        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,
-                                    0,
-                                    1,
-                                    m_vkColorBaseLayer[i],
-                                    m_vkColorLayerCount[i]};
+        barrier.subresourceRange = m_vkColorRanges[i];
         barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         barrier.dstAccessMask = 0; // visibility established in Rive's CB
         m_vkContext->m_vk->CmdPipelineBarrier(
@@ -278,7 +307,8 @@ void RenderPassVulkan::finish()
     // attachment in COLOR_ATTACHMENT_OPTIMAL.
     for (auto& resolve : m_vkResolveTargets)
     {
-        if (resolve.image == VK_NULL_HANDLE)
+        if (resolve.image == VK_NULL_HANDLE ||
+            keepAsAttachment(resolve.texture.get(), resolve.renderTarget))
         {
             continue;
         }
@@ -289,11 +319,7 @@ void RenderPassVulkan::finish()
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = resolve.image;
-        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,
-                                    resolve.baseMip,
-                                    1,
-                                    resolve.baseLayer,
-                                    resolve.layerCount};
+        barrier.subresourceRange = resolve.range;
         barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         barrier.dstAccessMask = 0; // visibility established in Rive's CB
         m_vkContext->m_vk->CmdPipelineBarrier(
@@ -327,16 +353,6 @@ void RenderPassVulkan::finish()
     // ERROR_DEVICE_LOST during pixel readback.
     if (m_vkDepthImage != VK_NULL_HANDLE)
     {
-        // Aspect mask must cover stencil when format contains one, else
-        // strict drivers / validation layer fault on a missing-aspect
-        // transition for depth+stencil-combined formats.
-        VkImageAspectFlags depthAspect = VK_IMAGE_ASPECT_DEPTH_BIT;
-        if (m_depthFormat == TextureFormat::depth24plusStencil8 ||
-            m_depthFormat == TextureFormat::depth32floatStencil8)
-        {
-            depthAspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
-        }
-
         VkImageMemoryBarrier depthBarrier{};
         depthBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         depthBarrier.oldLayout =
@@ -345,11 +361,7 @@ void RenderPassVulkan::finish()
         depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         depthBarrier.image = m_vkDepthImage;
-        depthBarrier.subresourceRange = {depthAspect,
-                                         0,
-                                         1,
-                                         m_vkDepthBaseLayer,
-                                         m_vkDepthLayerCount};
+        depthBarrier.subresourceRange = m_vkDepthRange;
         depthBarrier.srcAccessMask =
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         depthBarrier.dstAccessMask = 0;
@@ -385,12 +397,7 @@ RenderPassVulkan::RenderPassVulkan(RenderPassVulkan&& other) noexcept
     m_vkIndexType = other.m_vkIndexType;
     m_vkIndexOffset = other.m_vkIndexOffset;
     memcpy(m_vkColorImages, other.m_vkColorImages, sizeof(m_vkColorImages));
-    memcpy(m_vkColorBaseLayer,
-           other.m_vkColorBaseLayer,
-           sizeof(m_vkColorBaseLayer));
-    memcpy(m_vkColorLayerCount,
-           other.m_vkColorLayerCount,
-           sizeof(m_vkColorLayerCount));
+    memcpy(m_vkColorRanges, other.m_vkColorRanges, sizeof(m_vkColorRanges));
     m_vkColorCount = other.m_vkColorCount;
     memcpy(m_vkColorRenderTargets,
            other.m_vkColorRenderTargets,
@@ -405,10 +412,10 @@ RenderPassVulkan::RenderPassVulkan(RenderPassVulkan&& other) noexcept
             std::exchange(other.m_vkResolveTargets[i], ResolveTarget{});
     }
     m_vkDepthImage = other.m_vkDepthImage;
-    m_vkDepthBaseLayer = other.m_vkDepthBaseLayer;
-    m_vkDepthLayerCount = other.m_vkDepthLayerCount;
+    m_vkDepthRange = other.m_vkDepthRange;
     m_vkDepthTexture = std::move(other.m_vkDepthTexture);
     m_vkStencilRef = other.m_vkStencilRef;
+    m_vkProfileQuery = std::exchange(other.m_vkProfileQuery, UINT32_MAX);
     other.m_vkDepthImage = VK_NULL_HANDLE;
     other.m_vkStencilRef = 0;
 #endif

@@ -57,6 +57,16 @@ windowing, widgets, and theming are still to come.
   `ArtboardNode`, and ViewModel data binding.
 - [MIDI keyboard](midi-keyboard.md) - `MidiKeyboardComponent`, multitouch
   playing, scroll buttons and the available / visible key ranges.
+- [List box](list-box.md) - `ListBox` and `ListBoxModel`, custom rows, change
+  notifications, touch scrolling and pull-to-refresh.
+- [Tree view](tree-view.md) - `TreeView` and `TreeViewItem`, lazy loading,
+  custom content, drag and drop reordering, `DataTree` mirroring and saved
+  openness state.
+- [Tabs](tabs.md) - `TabBar`, `TabButton` and `TabComponent`: segmented
+  controls and tabbed pages with animated selection, reordering, overflow and
+  closable tabs.
+- [File chooser](file-chooser.md) - `FileChooser` for opening and saving
+  files, and how picks behave on the web.
 
 ```{toctree}
 :hidden:
@@ -74,4 +84,8 @@ component-profiling
 code-editor
 artboard
 midi-keyboard
+list-box
+tree-view
+tabs
+file-chooser
 ```

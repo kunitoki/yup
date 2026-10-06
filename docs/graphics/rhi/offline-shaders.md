@@ -15,8 +15,10 @@ ESSL, HLSL, and MSL, plus the SPIR-V and the mandatory binding-map reflection.
 `compileFromBundle` picks the variant matching the active graphics API.
 
 WGSL variants are produced via a direct GLSL→WGSL transpiler - no SPIRV-Cross WGSL
-backend is needed. Reflection data still originates from SPIR-V so binding numbers
-match across all targets.
+backend is needed. Reflection data still originates from SPIR-V: resources keep
+their GLSL bindings in every target, and the extra sampler a combined image
+sampler needs in WGSL follows the rule described in
+[GLSL on the WebGPU target](wgsl-shaders.md#bindings).
 ```
 
 ## The `yup_add_shader_bundle` CMake helper
@@ -40,6 +42,7 @@ yup_add_shader_bundle(<library_name>
     [GLSL_VERSION  <version>]       # default: 450
     [BUNDLE_RESOURCE <variable>]    # ship the .ysl as a file instead of embedding it
     [BUNDLE_DESTINATION <path>]     # default: <OUTPUT_NAME>.ysl
+    [TEMP_FOLDER   <path>]          # default: CMAKE_CURRENT_BINARY_DIR
     [DEPENDS       <file>...]       # extra inputs, e.g. #included files
     [OPTIONS       <flag>...])      # extra flags forwarded to yup_shader_bundler
 ```
@@ -57,6 +60,7 @@ yup_add_shader_bundle(<library_name>
 | `GLSL_VERSION` | `450` | GLSL version passed to the compiler. |
 | `BUNDLE_RESOURCE` | - | Don't embed: set this variable to `<ysl path>@<BUNDLE_DESTINATION>` for `BUNDLE_RESOURCES` (see [below](#shipping-the-bundle-as-a-file)). |
 | `BUNDLE_DESTINATION` | `<OUTPUT_NAME>.ysl` | Path of the bundle inside the application bundle. |
+| `TEMP_FOLDER` | `CMAKE_CURRENT_BINARY_DIR` | Folder where the `.ysl` is generated, created if missing. |
 | `DEPENDS` | - | Extra input files, such as the ones pulled in with `#include`. |
 | `OPTIONS` | - | Extra flags forwarded verbatim to `yup_shader_bundler` (see [below](#the-yup_shader_bundler-tool)). |
 
@@ -98,7 +102,7 @@ extern const std::size_t ShaderBundleFile_size;
 ### Shipping the bundle as a file
 
 Embedding keeps every bundle in the binary. With `BUNDLE_RESOURCE` no library is
-created: the `.ysl` stays in `CMAKE_CURRENT_BINARY_DIR`, and the variable receives
+created: the `.ysl` stays in `TEMP_FOLDER`, and the variable receives
 a `source@destination` pair ready for the `BUNDLE_RESOURCES` of
 `yup_standalone_app`:
 

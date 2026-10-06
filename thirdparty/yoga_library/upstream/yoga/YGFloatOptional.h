@@ -23,6 +23,7 @@ public:
   constexpr float unwrap() const { return value_; }
 
   bool isUndefined() const { return std::isnan(value_); }
+  bool isDefined() const { return !std::isnan(value_); } // rive: grid backport
 };
 
 // operators take YGFloatOptional by value, as it is a 32bit value

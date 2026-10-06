@@ -27,8 +27,9 @@ namespace yup
 //==============================================================================
 /** The semi-transparent ghost that follows the cursor during a drag.
 
-    A borderless, transparent, non-focusable, always-on-top window, so it can float over every YUP
-    window - and over the gap between them - without ever being clicked or stealing keyboard focus.
+    Either a borderless, transparent, non-focusable, always-on-top window, so it can float over every
+    YUP window - and over the gap between them - without ever being clicked or stealing keyboard focus,
+    or a child floating on top of a host component, where a second window isn't available.
 
     This is an implementation detail of DragAndDropManager, which owns the single instance and moves
     it; nothing else needs to construct one.
@@ -39,11 +40,19 @@ class DragImageComponent final : public Component
 {
 public:
     //==============================================================================
-    /** Creates the ghost window, hidden. */
+    /** Creates the ghost, hidden. It has no window until setHostComponent() is called. */
     DragImageComponent();
 
     /** Destructor. */
     ~DragImageComponent() override;
+
+    //==============================================================================
+    /** Chooses where the ghost lives.
+
+        @param newHost The component the ghost floats on top of, as a child, or nullptr to make the
+                       ghost a window of its own.
+    */
+    void setHostComponent (Component* newHost);
 
     //==============================================================================
     /** Shows a static image as the drag image.
@@ -73,6 +82,9 @@ public:
 
     //==============================================================================
     void paint (Graphics& g) override;
+
+    /** Always false: the ghost sits under the pointer, and drops and mouse events must reach what is below it. */
+    bool hitTest (float x, float y) override;
 
 private:
     //==============================================================================

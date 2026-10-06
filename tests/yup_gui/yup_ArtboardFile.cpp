@@ -26,6 +26,9 @@
 
 #include "../mocks/rive_gpu.h"
 
+#include <filesystem>
+#include <fstream>
+
 using namespace yup;
 
 //==============================================================================
@@ -96,6 +99,22 @@ TEST_F (ArtboardFileTests, LoadFromFileSucceeds)
     EXPECT_NE (nullptr, file->getRiveFile());
 }
 
+TEST_F (ArtboardFileTests, FileImportsThroughTheGivenFactory)
+{
+    auto result = ArtboardFile::load (riveFile, factory);
+    ASSERT_FALSE (result.failed());
+
+    EXPECT_EQ (std::addressof (factory), result.getValue()->getFactory());
+}
+
+TEST_F (ArtboardFileTests, FactoryWithoutRenderContextHasNoRenderContext)
+{
+    auto result = ArtboardFile::load (riveFile, factory);
+    ASSERT_FALSE (result.failed());
+
+    EXPECT_EQ (nullptr, result.getValue()->getRenderContext());
+}
+
 TEST_F (ArtboardFileTests, LoadFromMissingFileFails)
 {
     const auto missing = getArtboardFileTestDataDirectory().getChildFile ("definitely-not-here.riv");
@@ -128,6 +147,42 @@ TEST_F (ArtboardFileTests, LoadFromGarbageStreamReportsMalformed)
 
     EXPECT_TRUE (result.failed());
     EXPECT_FALSE (result.getErrorMessage().isEmpty());
+}
+
+TEST_F (ArtboardFileTests, LoadFromAnUnsupportedVersionReportsIt)
+{
+    // A well formed header carrying a major version no runtime knows.
+    const uint8 header[] = { 'R', 'I', 'V', 'E', 99, 0, 0, 0 };
+    MemoryInputStream stream (header, sizeof (header), false);
+
+    auto result = ArtboardFile::load (stream, factory);
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("Unsupported"));
+}
+
+TEST_F (ArtboardFileTests, LoadFromAnUnreadableFileFails)
+{
+    const auto unreadable = File::createTempFile ("riv");
+    ASSERT_TRUE (unreadable.replaceWithText ("never read"));
+
+    const auto path = std::filesystem::path (unreadable.getFullPathName().toStdString());
+
+    std::error_code error;
+    std::filesystem::permissions (path, std::filesystem::perms::none, error);
+    const bool stillReadable = std::ifstream (path).good();
+
+    auto result = ArtboardFile::load (unreadable, factory);
+
+    std::filesystem::permissions (path, std::filesystem::perms::owner_read | std::filesystem::perms::owner_write, error);
+    unreadable.deleteFile();
+
+    if (stillReadable)
+        GTEST_SKIP() << "File permissions are not enforced here";
+
+    // The file exists, so this is told apart from a missing one.
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("open"));
 }
 
 TEST_F (ArtboardFileTests, LoadFromInputStreamMatchesLoadFromFile)
@@ -326,4 +381,95 @@ TEST_F (LoadedArtboardFileTests, BothRiveFileAccessorsAgree)
     const auto* constFile = std::as_const (*artboardFile).getRiveFile();
 
     EXPECT_EQ (constFile, artboardFile->getRiveFile());
+}
+
+//==============================================================================
+// Global view models, against tests/data/rive/viewmodel-globals.riv
+//
+// The file declares the "Main" view model (count = 7) and the global "Theme"
+// view model (title = "Hello").
+//==============================================================================
+
+class ArtboardFileGlobalsTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        const auto file = getArtboardFileTestDataDirectory().getChildFile ("viewmodel-globals.riv");
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/viewmodel-globals.riv";
+            return;
+        }
+
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+    }
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+};
+
+TEST_F (ArtboardFileGlobalsTests, ListsOnlyGlobalViewModels)
+{
+    EXPECT_EQ (StringArray ("Theme"), artboardFile->getGlobalViewModelNames());
+}
+
+TEST_F (ArtboardFileGlobalsTests, GlobalInstanceStartsFromTheAuthoredDefault)
+{
+    auto theme = artboardFile->getGlobalViewModelInstance ("Theme");
+    ASSERT_NE (nullptr, theme.get());
+
+    EXPECT_EQ (std::optional<String> ("Hello"), theme->getStringProperty ("title"));
+}
+
+TEST_F (ArtboardFileGlobalsTests, EveryHandleSharesOneInstance)
+{
+    auto first = artboardFile->getGlobalViewModelInstance ("Theme");
+    auto second = artboardFile->getGlobalViewModelInstance ("Theme");
+    ASSERT_NE (nullptr, first.get());
+    ASSERT_NE (nullptr, second.get());
+
+    EXPECT_EQ (first->internalRiveInstance(), second->internalRiveInstance());
+
+    ASSERT_TRUE (first->setStringProperty ("title", "World"));
+    EXPECT_EQ (std::optional<String> ("World"), second->getStringProperty ("title"));
+}
+
+TEST_F (ArtboardFileGlobalsTests, UnknownAndNonGlobalNamesHaveNoGlobalInstance)
+{
+    EXPECT_EQ (nullptr, artboardFile->getGlobalViewModelInstance ("Main").get());
+    EXPECT_EQ (nullptr, artboardFile->getGlobalViewModelInstance ("Missing").get());
+}
+
+TEST_F (ArtboardFileGlobalsTests, GlobalHandleKeepsTheFileAlive)
+{
+    auto theme = artboardFile->getGlobalViewModelInstance ("Theme");
+    ASSERT_NE (nullptr, theme.get());
+
+    {
+        Artboard artboard ("globals", artboardFile);
+        artboard.setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+        artboard.advanceAndApply (0.016f);
+    }
+
+    artboardFile.reset();
+
+    EXPECT_NE (nullptr, theme->getArtboardFile());
+    EXPECT_EQ (std::optional<String> ("Hello"), theme->getStringProperty ("title"));
+}
+
+TEST_F (ArtboardFileGlobalsTests, FileWithoutGlobalsListsNone)
+{
+    const auto file = getArtboardFileTestDataDirectory().getChildFile ("viewmodel-assets.riv");
+    auto result = ArtboardFile::load (file, factory);
+    ASSERT_TRUE (result.wasOk());
+
+    EXPECT_TRUE (result.getValue()->getGlobalViewModelNames().isEmpty());
 }

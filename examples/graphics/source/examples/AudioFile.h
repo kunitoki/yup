@@ -678,7 +678,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::darkslategray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -860,15 +860,12 @@ private:
 
         addAndMakeVisible (infoLabel);
         infoLabel.setText ("No audio loaded.", yup::NotificationType::dontSendNotification);
-        infoLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
 
         addAndMakeVisible (statusLabel);
         statusLabel.setText ("Choose an audio file to begin.", yup::NotificationType::dontSendNotification);
-        statusLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
 
         addAndMakeVisible (timeLabel);
         timeLabel.setText ("Time", yup::NotificationType::dontSendNotification);
-        timeLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
 
         addAndMakeVisible (timeStretchSlider);
         timeStretchSlider.setSliderType (yup::Slider::LinearHorizontal);
@@ -887,7 +884,6 @@ private:
 
         addAndMakeVisible (pitchLabel);
         pitchLabel.setText ("Pitch", yup::NotificationType::dontSendNotification);
-        pitchLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
 
         addAndMakeVisible (pitchShiftSlider);
         pitchShiftSlider.setSliderType (yup::Slider::LinearHorizontal);
@@ -905,7 +901,6 @@ private:
 
         addAndMakeVisible (backendLabel);
         backendLabel.setText ("Backend", yup::NotificationType::dontSendNotification);
-        backendLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
 
         addAndMakeVisible (backendComboBox);
         backendComboBox.addItem ("Auto", backendAutomaticId);

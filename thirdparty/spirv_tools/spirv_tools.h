@@ -30,7 +30,7 @@
     name:               SPIRV-Tools
     description:        SPIRV-Tools is a collection of tools for processing SPIR-V, including validation, optimization, and reflection.
     website:            https://github.com/KhronosGroup/SPIRV-Tools
-    license:            Apache-2.0 OR MIT
+    license:            Apache-2.0
 
     searchpaths:        upstream upstream/include upstream/include/spirv/unified1 upstream/generated
     defines:            ENABLE_OPT=1

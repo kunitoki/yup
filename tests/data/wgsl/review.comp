@@ -1,0 +1,23 @@
+#version 450
+// Corner cases from the transpiler review: atomics, default block layouts and element reads
+layout(local_size_x = 64) in;
+
+layout(std140) buffer;
+
+layout(binding = 0) buffer Lock { uint lock; } spin;
+layout(std430, binding = 1) buffer Data { float data[]; } store;
+layout(binding = 2) buffer Wide { float values[4]; } wide;
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+
+    while (atomicCompSwap(spin.lock, 0u, 1u) != 0u) { }
+
+    if (store.data[0] > 0.0 && atomicCompSwap(spin.lock, 1u, 0u) == 1u)
+        store.data[1] = 1.0;
+
+    int k = 0;
+    float first = store.data[k++];
+    wide.values[i % 4u] = first + float(k);
+}

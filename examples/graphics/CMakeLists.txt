@@ -61,6 +61,7 @@ graphics_demo (Convolution MODULES ${audio_modules} dr_libs flac_library RESOURC
 graphics_demo (Crossover MODULES ${audio_modules} dr_libs RESOURCES audio)
 graphics_demo (CodeEditor)
 graphics_demo (DragAndDrop)
+graphics_demo (Emoji RESOURCES fonts)
 graphics_demo (FileChooser)
 graphics_demo (Filter MODULES ${audio_modules})
 graphics_demo (FluidSimulation SHADERS
@@ -70,8 +71,9 @@ graphics_demo (FluidSimulation SHADERS
     fluid_splat_dye:fluid_fullscreen fluid_splat_velocity:fluid_fullscreen fluid_vorticity:fluid_fullscreen)
 graphics_demo (GpuAudio MODULES ${audio_modules} dr_libs RESOURCES audio LIVE_SHADERS)
 graphics_demo (Images MODULES libgif libjpeg libtiff libwebp)
+graphics_demo (ImageMesh)
 graphics_demo (Layout)
-graphics_demo (LayoutFonts)
+graphics_demo (ListBox)
 graphics_demo (Lottie MODULES yup::yup_animation RESOURCES lottie)
 graphics_demo (OffscreenRender)
 graphics_demo (Opaque)
@@ -85,10 +87,12 @@ graphics_demo (ScrollBar)
 graphics_demo (Sliders)
 graphics_demo (SpectrumAnalyzer MODULES ${audio_modules} dr_libs RESOURCES audio)
 graphics_demo (SpinningCube MODULES yup::yup_animation RESOURCES lottie LIVE_SHADERS)
-graphics_demo (Svg RESOURCES svg RobotoFlex-VariableFont.ttf)
+graphics_demo (Svg RESOURCES svg fonts)
 graphics_demo (TextEditor)
+graphics_demo (Themes)
 graphics_demo (ToastNotification)
 graphics_demo (TouchTrails)
+graphics_demo (TreeView)
 graphics_demo (VariableFonts)
 graphics_demo (Widgets)
 if (YUP_PLATFORM_DESKTOP OR YUP_PLATFORM_EMSCRIPTEN)
@@ -159,6 +163,7 @@ endif()
 # ==== Precompile shaders, bundled like the data files and read from the build tree on desktop
 #      - see loadShaderBundle()
 set (shaders_dir "${CMAKE_CURRENT_LIST_DIR}/data/shaders")
+set (shaders_output_dir "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 file (GLOB shader_includes "${shaders_dir}/*.glsl")
 foreach (shader IN LISTS demo_shaders)
     string (REPLACE ":" ";" shader_parts "${shader}")
@@ -175,6 +180,7 @@ foreach (shader IN LISTS demo_shaders)
         ${shader_stages}
         BUNDLE_RESOURCE shader_resource
         BUNDLE_DESTINATION "data/shaders/${shader_name}.ysl"
+        TEMP_FOLDER "${shaders_output_dir}"
         DEPENDS ${shader_includes}
         OPTIONS "-I${shaders_dir}")
 
@@ -190,6 +196,7 @@ if ("SpinningCube" IN_LIST selected_demo_ids)
         VERT ${CMAKE_CURRENT_LIST_DIR}/data/shaders/cube.vert
         FRAG ${CMAKE_CURRENT_LIST_DIR}/data/shaders/cube.frag
         NAMESPACE yup
+        TEMP_FOLDER "${shaders_output_dir}"
         OUTPUT_NAME
             ShaderBundle
         RESOURCE_NAME
@@ -200,7 +207,7 @@ endif()
 # ==== Prepare target
 set (additional_definitions
     ${demo_definitions}
-    "YUP_EXAMPLE_GRAPHICS_SHADERS_PATH=\"${CMAKE_CURRENT_BINARY_DIR}\"")
+    "YUP_EXAMPLE_GRAPHICS_SHADERS_PATH=\"${shaders_output_dir}\"")
 
 yup_standalone_app (
     TARGET_NAME ${target_name}

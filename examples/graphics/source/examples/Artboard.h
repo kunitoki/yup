@@ -149,7 +149,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -196,10 +196,7 @@ private:
 
     void setupControls()
     {
-        auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
-
         fitLabel.setText ("Fit", yup::dontSendNotification);
-        fitLabel.setFont (labelFont);
         addAndMakeVisible (fitLabel);
 
         fitCombo.addItem ("Fill", 1);
@@ -218,7 +215,6 @@ private:
         addAndMakeVisible (fitCombo);
 
         alignmentLabel.setText ("Align", yup::dontSendNotification);
-        alignmentLabel.setFont (labelFont);
         addAndMakeVisible (alignmentLabel);
 
         addJustificationItems (alignmentCombo, 5);
@@ -229,7 +225,6 @@ private:
         addAndMakeVisible (alignmentCombo);
 
         markerLabel.setText ("Marker", yup::dontSendNotification);
-        markerLabel.setFont (labelFont);
         addAndMakeVisible (markerLabel);
 
         markerModeCombo.addItem ("Fill node", 1);
@@ -251,7 +246,6 @@ private:
         addAndMakeVisible (applyTransformToggle);
 
         pivotLabel.setText ("Pivot", yup::dontSendNotification);
-        pivotLabel.setFont (labelFont);
         addAndMakeVisible (pivotLabel);
 
         addJustificationItems (pivotCombo, 1);
@@ -262,7 +256,6 @@ private:
         addAndMakeVisible (pivotCombo);
 
         anchorLabel.setText ("Anchor", yup::dontSendNotification);
-        anchorLabel.setFont (labelFont);
         addAndMakeVisible (anchorLabel);
 
         addJustificationItems (anchorCombo, 1);

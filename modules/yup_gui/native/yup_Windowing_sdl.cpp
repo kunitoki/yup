@@ -42,6 +42,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
     , screenBounds (component.getBounds().to<int>())
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
     , repaintMode (options.repaintMode)
+    , requestedFrameRate (options.framerateRedraw)
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
     , unfocusedFrameRate (options.unfocusedFramerateRedraw)
     , effectiveFrameRate (options.framerateRedraw.value_or (60.0f))
@@ -168,6 +169,23 @@ SDLComponentNative::SDLComponentNative (Component& component,
         }
     }
 
+#if YUP_EMSCRIPTEN
+    // Keep pointer events flowing to the canvas while a button is held outside of it, like SDL mouse auto capture on desktop
+    // clang-format off
+    EM_ASM ({
+        var canvas = document.querySelector (UTF8ToString ($0));
+        if (! canvas || canvas.yupPointerCaptureInstalled)
+            return;
+
+        canvas.yupPointerCaptureInstalled = true;
+        canvas.addEventListener ("pointerdown", function (event)
+        {
+            try { canvas.setPointerCapture (event.pointerId); } catch (e) {}
+        });
+    }, SDL_GetStringProperty (SDL_GetWindowProperties (window), SDL_PROP_WINDOW_EMSCRIPTEN_CANVAS_ID_STRING, "#canvas"));
+    // clang-format on
+#endif
+
     SDL_SetWindowFocusable (window, ! options.flags.test (nonFocusableWindow));
     SDL_PumpEvents();
 
@@ -265,6 +283,9 @@ SDLComponentNative::SDLComponentNative (Component& component,
     if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
         SDL_GL_MakeCurrent (window, nullptr);
 #endif
+
+    // Pick the frame rate before rendering starts, the realtime render thread is set up for it
+    updateDesiredFrameRate();
 
     // Start the rendering
     startRendering();
@@ -471,7 +492,7 @@ void SDLComponentNative::setPosition (const Point<int>& newPosition)
 Point<int> SDLComponentNative::getPosition() const
 {
     int x = 0, y = 0;
-    float scale = 0.0f;
+    float scale = 1.0f;
 
 #if ! (YUP_MOBILE || YUP_EMSCRIPTEN)
     if (window != nullptr)
@@ -766,6 +787,22 @@ void SDLComponentNative::enableWireframe (bool shouldBeEnabled)
     repaint();
 }
 
+GpuTriangulationThresholds SDLComponentNative::getTriangulationThresholds() const
+{
+    const SpinLock::ScopedLockType lock (triangulationThresholdsLock);
+    return triangulationThresholds;
+}
+
+void SDLComponentNative::setTriangulationThresholds (const GpuTriangulationThresholds& thresholds)
+{
+    {
+        const SpinLock::ScopedLockType lock (triangulationThresholdsLock);
+        triangulationThresholds = thresholds;
+    }
+
+    repaint();
+}
+
 //==============================================================================
 
 void SDLComponentNative::repaint()
@@ -830,7 +867,23 @@ void SDLComponentNative::setDesiredFrameRate (float newFrameRate)
 {
     YUP_ASSERT_MESSAGE_THREAD
 
-    desiredFrameRate.store (jmax (1.0f, newFrameRate), std::memory_order_relaxed);
+    requestedFrameRate = newFrameRate;
+
+    updateDesiredFrameRate();
+}
+
+void SDLComponentNative::updateDesiredFrameRate()
+{
+    auto frameRate = requestedFrameRate.value_or (60.0f);
+
+    // Without a requested rate, vsync follows the display so repaints between frames wait for the next refresh
+    if (! requestedFrameRate.has_value() && vsyncEnabled.load (std::memory_order_relaxed) && window != nullptr)
+    {
+        if (const auto* mode = SDL_GetCurrentDisplayMode (SDL_GetDisplayForWindow (window)); mode != nullptr && mode->refresh_rate > 0.0f)
+            frameRate = mode->refresh_rate;
+    }
+
+    desiredFrameRate.store (jmax (1.0f, frameRate), std::memory_order_relaxed);
 
     updateEffectiveFrameRate (hasNativeKeyboardFocus());
 }
@@ -870,6 +923,8 @@ void SDLComponentNative::setVsyncEnabled (bool shouldEnable)
     if (currentGraphicsApi != GpuPlatform::OpenGL && currentGraphicsApi != GpuPlatform::OpenGLES && window != nullptr)
         SDL_SetWindowSurfaceVSync (window, shouldEnable ? SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE : SDL_WINDOW_SURFACE_VSYNC_DISABLED);
 #endif
+
+    updateDesiredFrameRate();
 
     repaint();
 }
@@ -1041,6 +1096,10 @@ void SDLComponentNative::run()
         {
             nextFrameDeadlineMs += maxFrameTimeMs;
         } while (nextFrameDeadlineMs <= nowMs);
+
+        // Frames paced by the present skip the wait, and on a display faster than the frame rate they
+        // advance the deadline quicker than the clock: keep it within a frame of now.
+        nextFrameDeadlineMs = jmin (nextFrameDeadlineMs, nowMs + maxFrameTimeMs + renderBudgetMs);
     }
 }
 
@@ -1190,21 +1249,6 @@ bool SDLComponentNative::renderFrame()
         const auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
         const auto currentTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
 
-        const auto measureFramesPerSeconds = ErasedScopeGuard ([&]
-        {
-            ++frameRateCounter;
-
-            const double timeSinceFpsMeasure = currentTimeSeconds - frameRateStartTimeSeconds;
-            if (timeSinceFpsMeasure >= 1.0)
-            {
-                const double currentFps = static_cast<double> (frameRateCounter) / timeSinceFpsMeasure;
-                currentFrameRate.store (currentFps, std::memory_order_relaxed);
-
-                frameRateStartTimeSeconds = currentTimeSeconds;
-                frameRateCounter = 0;
-            }
-        });
-
         const auto loadAction = (renderContinuous || ! clearColor.isOpaque())
                                 ? rive::gpu::LoadAction::clear
                                 : rive::gpu::LoadAction::preserveRenderTarget;
@@ -1216,9 +1260,15 @@ bool SDLComponentNative::renderFrame()
         frameDescriptor.clearColor = clearColor.getARGB();
         frameDescriptor.disableRasterOrdering = renderAtomicMode.load (std::memory_order_relaxed);
         frameDescriptor.wireframe = renderWireframe.load (std::memory_order_relaxed);
+
+        {
+            const auto thresholds = getTriangulationThresholds();
+            frameDescriptor.triangulationThresholds.minArea = thresholds.minArea;
+            frameDescriptor.triangulationThresholds.maxVerbs = thresholds.maxVerbs;
+            frameDescriptor.triangulationThresholds.frameBudgetMs = thresholds.frameBudgetMs;
+        }
         frameDescriptor.fillsDisabled = false;
         frameDescriptor.strokesDisabled = false;
-        frameDescriptor.clockwiseFillOverride = true;
 
         RectangleList<float> repaintAreas;
 
@@ -1305,6 +1355,22 @@ bool SDLComponentNative::renderFrame()
 
         return true;
     };
+
+    const auto measureFramesPerSecond = ErasedScopeGuard ([&]
+    {
+        const auto nowSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+
+        if (frameBegun)
+            ++frameRateCounter;
+
+        if (const auto elapsedSeconds = nowSeconds - frameRateStartTimeSeconds; elapsedSeconds >= 1.0)
+        {
+            currentFrameRate.store (static_cast<float> (static_cast<double> (frameRateCounter) / elapsedSeconds), std::memory_order_relaxed);
+
+            frameRateStartTimeSeconds = nowSeconds;
+            frameRateCounter = 0;
+        }
+    });
 
     auto endFrameAtExit = ErasedScopeGuard ([&]
     {
@@ -1429,6 +1495,9 @@ void SDLComponentNative::renderAnimationFrame (double timestampMs)
         renderFrame();
     }
     YUP_CATCH_EXCEPTION
+
+    if (framePaintedSincePointerCheck.exchange (false) && SDL_GetMouseFocus() == window)
+        revalidateStationaryPointer();
 }
 
 //==============================================================================
@@ -1550,13 +1619,14 @@ void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position, To
     if (touchFinger != nullptr)
     {
         const auto fingerId = touchFinger->fingerId;
+        const auto touchIndex = touchFinger->index;
         touchFinger->position = position;
 
         auto event = MouseEvent()
                          .withButtons (touchFinger->buttons)
                          .withModifiers (currentKeyModifiers)
                          .withPosition (position)
-                         .withTouchIndex (touchFinger->index)
+                         .withTouchIndex (touchIndex)
                          .withPressure (touchFinger->pressure);
 
         if (touchFinger->lastDownPosition)
@@ -1588,6 +1658,10 @@ void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position, To
                 }
             }
         }
+
+        // Lets a drag and drop session started by this finger follow it outside its component.
+        Desktop::getInstance()->handleGlobalMouseDrag (MouseEvent (MouseEvent::leftButton, currentKeyModifiers, component.localToScreen (position))
+                                                           .withTouchIndex (touchIndex));
 
         return;
     }
@@ -1635,8 +1709,6 @@ Component* SDLComponentNative::getPointerTarget() const
 
 void SDLComponentNative::revalidateStationaryPointer()
 {
-    // Animations, effects and 3D projections can move content under a pointer that didn't move:
-    // dispatch a synthetic move (or drag) only when that changed what the pointer is over
     const auto position = lastMouseMovePosition;
 
     if (lastComponentClicked == nullptr && component.findComponentAtForMouseEvent (position) != lastComponentUnderMouse.get())
@@ -1743,9 +1815,20 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
         if (touchFinger->lastDownTime)
             event = event.withLastMouseDownTime (*touchFinger->lastDownTime);
 
+        // A system cancel must end a drag this finger is carrying with no drop at all.
+        if (wasCanceled)
+        {
+            if (auto* manager = DragAndDropManager::getInstanceWithoutCreating();
+                manager != nullptr && manager->isDragging() && manager->getCurrentDragTouchIndex() == touchIndex)
+            {
+                manager->cancelDrag();
+            }
+        }
+
         if (auto* clickedComponent = touchFinger->clickedComponent.get())
         {
             const auto currentMouseDownTime = yup::Time::getCurrentTime();
+            const auto downPosition = touchFinger->lastDownPosition;
             const WeakReference<Component> clickedComponentReference (clickedComponent);
             auto clickedComponentBailOut = Component::BailOutChecker (clickedComponent);
 
@@ -1756,6 +1839,7 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
                 && clickState.lastUpTime
                 && *clickState.lastUpTime > yup::Time()
                 && clickState.lastComponent.get() == clickedComponent
+                && isNearLastClick (downPosition, clickState.lastPosition)
                 && currentMouseDownTime - *clickState.lastUpTime < doubleClickTime)
             {
                 clickedComponent->internalMouseDoubleClick (event.withRelativePositionTo (clickedComponent));
@@ -1770,6 +1854,7 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
             {
                 auto& currentClickState = getTouchClickState (touchIndex);
                 currentClickState.lastUpTime = currentMouseDownTime;
+                currentClickState.lastPosition = downPosition;
                 currentClickState.lastComponent = clickedComponentReference;
             }
         }
@@ -1788,6 +1873,10 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
                     activeTouches.getReference (currentIndex).componentUnderPointer = currentComponent;
             }
         }
+
+        // Ends a drag and drop session started by this finger, wherever it was released.
+        Desktop::getInstance()->handleGlobalMouseUp (MouseEvent (MouseEvent::noButtons, currentKeyModifiers, component.localToScreen (position))
+                                                         .withTouchIndex (touchIndex));
 
         return;
     }
@@ -1812,6 +1901,8 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
     if (auto* clickedComponent = lastComponentClicked.get())
     {
         const auto currentMouseDownTime = yup::Time::getCurrentTime();
+        const auto downPosition = lastMouseDownPosition;
+        const WeakReference<Component> clickedComponentReference (clickedComponent);
         auto clickedComponentBailOut = Component::BailOutChecker (clickedComponent);
 
         event = event.withSourceComponent (clickedComponent);
@@ -1819,6 +1910,8 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
         if (! wasCanceled
             && lastMouseUpTime
             && *lastMouseUpTime > yup::Time()
+            && lastClickComponent.get() == clickedComponent
+            && isNearLastClick (downPosition, lastClickPosition)
             && currentMouseDownTime - *lastMouseUpTime < doubleClickTime)
         {
             clickedComponent->internalMouseDoubleClick (event.withRelativePositionTo (clickedComponent));
@@ -1828,7 +1921,11 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
             clickedComponent->internalMouseUp (event.withRelativePositionTo (clickedComponent));
 
         if (! wasCanceled)
+        {
             lastMouseUpTime = currentMouseDownTime;
+            lastClickPosition = downPosition;
+            lastClickComponent = clickedComponentReference;
+        }
     }
 
     if (nativeBailOut.shouldBailOut())
@@ -1960,6 +2057,17 @@ SDLComponentNative::TouchClickState& SDLComponentNative::getTouchClickState (int
         touchClickStates.add ({});
 
     return touchClickStates.getReference (touchIndex);
+}
+
+bool SDLComponentNative::isNearLastClick (const std::optional<Point<float>>& downPosition, const std::optional<Point<float>>& lastClickPosition)
+{
+    constexpr float maxDistance = 8.0f;
+
+    if (! downPosition || ! lastClickPosition)
+        return false;
+
+    const auto delta = *downPosition - *lastClickPosition;
+    return std::abs (delta.getX()) <= maxDistance && std::abs (delta.getY()) <= maxDistance;
 }
 
 //==============================================================================
@@ -2412,7 +2520,11 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
         case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_DISPLAY_CHANGED");
-            processEvent ([this] { handleContentScaleChanged(); });
+            processEvent ([this]
+            {
+                handleContentScaleChanged();
+                updateDesiredFrameRate();
+            });
             break;
 
         case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:

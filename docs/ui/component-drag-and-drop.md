@@ -238,6 +238,7 @@ struct DragOptions
     Image           dragImage;             // optional static ghost
     Point<float>    imageOffset;           // the point of the ghost under the cursor
     float           imageOpacity = 0.7f;   // applied to the ghost window
+    bool            imageInTopLevelComponent; // true on the web, see The ghost window
     DragAndDropActions allowedActions = copy | move | link;
     bool            allowExternalDrag = false; // not honoured yet, see Limitations
 };
@@ -273,6 +274,10 @@ window that follows the cursor. It is the whole of that window, so a component u
 live ghost is expected to size itself. Transparency depends on the platform compositor:
 macOS, Windows and X11/Wayland are handled, but X11 additionally needs a compositing
 manager running.
+
+With `withImageInTopLevelComponent (true)` the ghost is instead a child floating on top of
+the source's top-level component, so it stays inside that window. This is the default on the
+web, where the page has a single canvas that a second window would take over.
 
 ### Cancelling
 
@@ -355,6 +360,11 @@ started on one of several selected rows carry all of them.
 
 `setDragSourceEnabled (false)` makes a list undraggable without consulting its model at all;
 it is enabled by default.
+
+With touch, a drag scrolls the list instead, so a long press is what starts dragging: it
+selects the pressed row and drags the selection, following that finger. A custom source can
+do the same by starting its drag with `DragOptions::withTouchPointer (touchIndex, screenPosition)`:
+the session then follows only that finger, and a system cancel of the touch ends it without a drop.
 
 ---
 

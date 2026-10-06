@@ -1,4 +1,5 @@
 #include "rive/bones/weight.hpp"
+#include "rive/bones/skinnable.hpp"
 #include "rive/container_component.hpp"
 #include "rive/shapes/vertex.hpp"
 
@@ -11,15 +12,33 @@ StatusCode Weight::onAddedDirty(CoreContext* context)
     {
         return code;
     }
+#ifndef WITH_RIVE_EDITOR
+    // Runtime-only path; editor build registers via
+    // `editorParentChanged` (dispatcher Pass 4.5).
     if (!parent()->is<Vertex>())
     {
         return StatusCode::MissingObject;
     }
 
     parent()->as<Vertex>()->weight(this);
+#endif
 
     return StatusCode::Ok;
 }
+
+#ifdef WITH_RIVE_EDITOR
+void Weight::bindingChanged()
+{
+    if (parent() == nullptr || parent()->parent() == nullptr)
+    {
+        return;
+    }
+    if (auto skinnable = Skinnable::from(parent()->parent()))
+    {
+        skinnable->bindingChangedForEditor();
+    }
+}
+#endif
 
 static int encodedWeightValue(unsigned int index, unsigned int data)
 {

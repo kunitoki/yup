@@ -83,6 +83,18 @@ float YGConfig::getPointScaleFactor() const {
   return pointScaleFactor_;
 }
 
+void YGConfig::beginMinContentProbe() {
+  minContentProbeDepth_++;
+}
+
+void YGConfig::endMinContentProbe() {
+  minContentProbeDepth_--;
+}
+
+bool YGConfig::isMeasuringMinContent() const {
+  return minContentProbeDepth_ > 0;
+}
+
 void YGConfig::setContext(void* context) {
   context_ = context;
 }

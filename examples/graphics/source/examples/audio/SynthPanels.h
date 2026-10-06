@@ -32,19 +32,27 @@
 //==============================================================================
 /** The palette the synthesiser panels share.
 
-    The example draws its own chrome rather than leaning on the theme, so that the
-    oscillator, envelope and display panels read as one instrument.
+    The example draws its own chrome rather than leaning on the theme widgets, so that the
+    oscillator, envelope and display panels read as one instrument. The colors come from
+    the roles of the theme palette, so the instrument follows palette switches.
 */
 namespace SynthTheme
 {
-inline constexpr yup::Color windowBackground { 0xff16191d };
-inline constexpr yup::Color panelBackground { 0xff21262c };
-inline constexpr yup::Color panelBorder { 0xff2e353d };
-inline constexpr yup::Color displayBackground { 0xff0e1114 };
-inline constexpr yup::Color accent { 0xff72ead2 };
-inline constexpr yup::Color accentDim { 0xff287f78 };
-inline constexpr yup::Color textPrimary { 0xffe6ebf0 };
-inline constexpr yup::Color textSecondary { 0xff8b96a0 };
+inline yup::Color role (yup::ThemePalette::Role paletteRole) { return yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (paletteRole); }
+
+inline yup::Color windowBackground() { return role (yup::ThemePalette::Role::background); }
+inline yup::Color panelBackground() { return role (yup::ThemePalette::Role::surface); }
+inline yup::Color panelBorder() { return role (yup::ThemePalette::Role::outline); }
+inline yup::Color accent() { return role (yup::ThemePalette::Role::accent); }
+inline yup::Color accentDim() { return accent().mixedWith (windowBackground(), 0.45f, yup::ColorSpace::SRGB); }
+inline yup::Color textPrimary() { return role (yup::ThemePalette::Role::text); }
+inline yup::Color textSecondary() { return role (yup::ThemePalette::Role::textMuted); }
+
+inline yup::Color displayBackground()
+{
+    const auto isDark = yup::ApplicationTheme::getGlobalTheme()->getPalette().getMode() == yup::ThemePalette::Mode::dark;
+    return windowBackground().mixedWith (isDark ? yup::Colors::black : yup::Colors::white, 0.35f, yup::ColorSpace::SRGB);
+}
 
 constexpr float panelCorner = 6.0f;
 } // namespace SynthTheme
@@ -52,10 +60,10 @@ constexpr float panelCorner = 6.0f;
 /** @internal Paints the rounded frame every panel of the instrument sits in. */
 inline void paintSynthPanel (yup::Graphics& g, yup::Rectangle<float> bounds)
 {
-    g.setFillColor (SynthTheme::panelBackground);
+    g.setFillColor (SynthTheme::panelBackground());
     g.fillRoundedRect (bounds, SynthTheme::panelCorner);
 
-    g.setStrokeColor (SynthTheme::panelBorder);
+    g.setStrokeColor (SynthTheme::panelBorder());
     g.setStrokeWidth (1.0f);
     g.strokeRoundedRect (bounds.reduced (0.5f), SynthTheme::panelCorner);
 }
@@ -93,11 +101,11 @@ public:
         slider.setRange (minimum, maximum, interval);
         slider.setDefaultValue (defaultValue);
         slider.setValue (defaultValue, yup::dontSendNotification);
-        slider.setColor (yup::Slider::Style::backgroundColorId, SynthTheme::displayBackground);
-        slider.setColor (yup::Slider::Style::trackColorId, SynthTheme::accent);
-        slider.setColor (yup::Slider::Style::thumbColorId, SynthTheme::textPrimary);
-        slider.setColor (yup::Slider::Style::thumbOverColorId, SynthTheme::accent);
-        slider.setColor (yup::Slider::Style::thumbDownColorId, SynthTheme::accent);
+        slider.setColor (yup::Slider::Style::backgroundColorId, SynthTheme::displayBackground());
+        slider.setColor (yup::Slider::Style::trackColorId, SynthTheme::panelBorder());
+        slider.setColor (yup::Slider::Style::thumbColorId, SynthTheme::accent());
+        slider.setColor (yup::Slider::Style::thumbOverColorId, SynthTheme::accent().brighter (0.3f));
+        slider.setColor (yup::Slider::Style::thumbDownColorId, SynthTheme::accent());
         slider.onValueChanged = [this] (double value)
         {
             if (onChange != nullptr)
@@ -121,7 +129,7 @@ public:
         captionText = caption;
         label.setText (caption, yup::dontSendNotification);
         label.setFont (font);
-        label.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
+        label.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary());
         label.setJustification (yup::Justification::center);
         addAndMakeVisible (label);
     }
@@ -178,17 +186,17 @@ public:
 
         label.setText (caption, yup::dontSendNotification);
         label.setFont (font);
-        label.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
+        label.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary());
 
         if (caption.isNotEmpty())
             addAndMakeVisible (label);
 
         comboBox.addItemList (items, 1);
         comboBox.setTextWhenNothingSelected ("-");
-        comboBox.setColor (yup::ComboBox::Style::backgroundColorId, SynthTheme::displayBackground);
-        comboBox.setColor (yup::ComboBox::Style::textColorId, SynthTheme::textPrimary);
-        comboBox.setColor (yup::ComboBox::Style::borderColorId, SynthTheme::panelBorder);
-        comboBox.setColor (yup::ComboBox::Style::arrowColorId, SynthTheme::accent);
+        comboBox.setColor (yup::ComboBox::Style::backgroundColorId, SynthTheme::displayBackground());
+        comboBox.setColor (yup::ComboBox::Style::textColorId, SynthTheme::textPrimary());
+        comboBox.setColor (yup::ComboBox::Style::borderColorId, SynthTheme::panelBorder());
+        comboBox.setColor (yup::ComboBox::Style::arrowColorId, SynthTheme::accent());
         comboBox.onSelectedItemChanged = [this]
         {
             if (onChange != nullptr)
@@ -294,13 +302,24 @@ public:
         if (target == nullptr)
             return nullptr;
 
-        const Params params { time, static_cast<float> (width), static_cast<float> (height), 0.0f };
+        const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+        const auto accent = SynthTheme::accent();
+        const auto background = SynthTheme::displayBackground();
+
+        const Params params {
+            time,
+            static_cast<float> (width),
+            static_cast<float> (height),
+            palette.getMode() == yup::ThemePalette::Mode::light ? 1.0f : 0.0f,
+            { accent.getRedFloat(), accent.getGreenFloat(), accent.getBlueFloat(), 1.0f },
+            { background.getRedFloat(), background.getGreenFloat(), background.getBlueFloat(), 1.0f }
+        };
 
         auto frame = yup::GpuFrame::begin (device);
         if (! frame.isValid())
             return nullptr;
 
-        auto pass = target->beginRenderPass (frame, { true, SynthTheme::displayBackground });
+        auto pass = target->beginRenderPass (frame, { true, background });
         if (! pass.isValid())
             return nullptr;
 
@@ -320,7 +339,9 @@ private:
         float time;
         float width;
         float height;
-        float pad;
+        float lightMode;
+        float accent[4];
+        float background[4];
     };
 
     bool ensurePipeline (yup::GraphicsContext& context)
@@ -500,11 +521,11 @@ public:
         }
         else
         {
-            g.setFillColor (SynthTheme::displayBackground);
+            g.setFillColor (SynthTheme::displayBackground());
             g.fillRoundedRect (bounds, cornerRadius);
         }
 
-        g.setStrokeColor (SynthTheme::panelBorder);
+        g.setStrokeColor (SynthTheme::panelBorder());
         g.setStrokeWidth (1.0f);
         g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
@@ -601,7 +622,7 @@ private:
                 drawnPath.lineTo (x, y);
         }
 
-        g.setStrokeColor (SynthTheme::accent.withAlpha (0.25f));
+        g.setStrokeColor (SynthTheme::accent().withAlpha (0.25f));
         g.setStrokeWidth (1.0f);
         g.strokePath (drawnPath);
     }
@@ -609,7 +630,7 @@ private:
     /** Draws one period of the reconstructed series. */
     void paintWaveform (yup::Graphics& g, yup::Rectangle<float> bounds)
     {
-        g.setStrokeColor (SynthTheme::panelBorder);
+        g.setStrokeColor (SynthTheme::panelBorder());
         g.setStrokeWidth (1.0f);
         g.strokeLine (bounds.getX(), bounds.getCenterY(), bounds.getRight(), bounds.getCenterY());
 
@@ -631,13 +652,13 @@ private:
                 path.lineTo (x, y);
         }
 
-        g.setStrokeColor (SynthTheme::accent.withAlpha (0.35f));
+        g.setStrokeColor (SynthTheme::accent().withAlpha (0.35f));
         g.setStrokeWidth (4.0f);
         g.setFeather (6.0f);
         g.strokePath (path);
 
         g.setFeather (0.0f);
-        g.setStrokeColor (SynthTheme::accent);
+        g.setStrokeColor (SynthTheme::accent());
         g.setStrokeWidth (1.5f);
         g.strokePath (path);
     }
@@ -655,7 +676,7 @@ private:
 
             const yup::Rectangle<float> bar { x + barGap, bounds.getBottom() - height, yup::jmax (1.0f, barWidth - barGap * 2.0f), height };
 
-            g.setFillColor (magnitude > 0.0f ? SynthTheme::accent : SynthTheme::panelBorder);
+            g.setFillColor (magnitude > 0.0f ? SynthTheme::accent() : SynthTheme::panelBorder());
             g.fillRect (bar);
         }
     }
@@ -814,10 +835,10 @@ public:
     {
         const auto bounds = getLocalBounds();
 
-        g.setFillColor (SynthTheme::displayBackground);
+        g.setFillColor (SynthTheme::displayBackground());
         g.fillRoundedRect (bounds, 4.0f);
 
-        g.setStrokeColor (SynthTheme::panelBorder);
+        g.setStrokeColor (SynthTheme::panelBorder());
         g.setStrokeWidth (1.0f);
         g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
         g.strokeLine (bounds.getX(), bounds.getCenterY(), bounds.getRight(), bounds.getCenterY());
@@ -841,7 +862,7 @@ public:
 
         filledPath = path.createStrokePolygon (4.0f);
 
-        g.setFillColor (SynthTheme::accent.withAlpha (0.5f));
+        g.setFillColor (SynthTheme::accent().withAlpha (0.5f));
         g.setFeather (8.0f);
         g.fillPath (filledPath);
 
@@ -849,7 +870,7 @@ public:
         g.fillPath (filledPath);
 
         g.setFeather (0.0f);
-        g.setStrokeColor (SynthTheme::accent);
+        g.setStrokeColor (SynthTheme::accent());
         g.setStrokeWidth (1.5f);
         g.strokePath (path);
     }
@@ -889,10 +910,10 @@ public:
     {
         const auto bounds = getLocalBounds();
 
-        g.setFillColor (SynthTheme::displayBackground);
+        g.setFillColor (SynthTheme::displayBackground());
         g.fillRoundedRect (bounds, 4.0f);
 
-        g.setStrokeColor (SynthTheme::panelBorder);
+        g.setStrokeColor (SynthTheme::panelBorder());
         g.setStrokeWidth (1.0f);
         g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
 
@@ -931,13 +952,13 @@ public:
         for (int index = 1; index < numPoints; ++index)
             path.lineTo (points[index]);
 
-        g.setStrokeColor (SynthTheme::accent);
+        g.setStrokeColor (SynthTheme::accent());
         g.setStrokeWidth (1.5f);
         g.strokePath (path);
 
         for (int index = 1; index < numPoints - 1; ++index)
         {
-            g.setFillColor (SynthTheme::accent);
+            g.setFillColor (SynthTheme::accent());
             g.fillEllipse (yup::Rectangle<float> (points[index].getX() - pointRadius,
                                                   points[index].getY() - pointRadius,
                                                   pointRadius * 2.0f,
@@ -972,7 +993,7 @@ public:
     {
         titleLabel.setText (panelTitle, yup::dontSendNotification);
         titleLabel.setFont (font.withHeight (12.0f));
-        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary);
+        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary());
         addAndMakeVisible (titleLabel);
 
         addAndMakeVisible (display);
@@ -1075,10 +1096,10 @@ public:
     {
         const auto bounds = getLocalBounds();
 
-        g.setFillColor (SynthTheme::displayBackground);
+        g.setFillColor (SynthTheme::displayBackground());
         g.fillRoundedRect (bounds, 4.0f);
 
-        g.setStrokeColor (SynthTheme::panelBorder);
+        g.setStrokeColor (SynthTheme::panelBorder());
         g.setStrokeWidth (1.0f);
         g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
 
@@ -1110,7 +1131,7 @@ public:
                 path.lineTo (x, y);
         }
 
-        g.setStrokeColor (SynthTheme::accent);
+        g.setStrokeColor (SynthTheme::accent());
         g.setStrokeWidth (1.5f);
         g.strokePath (path);
 
@@ -1119,7 +1140,7 @@ public:
         const auto markerX = area.getX() + area.getWidth() * phase;
         const auto markerY = area.getCenterY() - shape.getValue() * area.getHeight() * 0.45f;
 
-        g.setFillColor (SynthTheme::textPrimary);
+        g.setFillColor (SynthTheme::textPrimary());
         g.fillEllipse (yup::Rectangle<float> (markerX - 3.0f, markerY - 3.0f, 6.0f, 6.0f));
     }
 
@@ -1147,16 +1168,16 @@ public:
     {
         titleLabel.setText (panelTitle, yup::dontSendNotification);
         titleLabel.setFont (font.withHeight (12.0f));
-        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary);
+        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary());
         addAndMakeVisible (titleLabel);
 
         retriggerButton.setButtonText ("RETRIG");
-        retriggerButton.setColor (yup::ToggleButton::Style::backgroundColorId, SynthTheme::displayBackground);
-        retriggerButton.setColor (yup::ToggleButton::Style::backgroundToggledColorId, SynthTheme::accentDim);
-        retriggerButton.setColor (yup::ToggleButton::Style::textColorId, SynthTheme::textSecondary);
-        retriggerButton.setColor (yup::ToggleButton::Style::textToggledColorId, SynthTheme::textPrimary);
-        retriggerButton.setColor (yup::ToggleButton::Style::borderColorId, SynthTheme::panelBorder);
-        retriggerButton.setColor (yup::ToggleButton::Style::borderToggledColorId, SynthTheme::accent);
+        retriggerButton.setColor (yup::ToggleButton::Style::backgroundColorId, SynthTheme::displayBackground());
+        retriggerButton.setColor (yup::ToggleButton::Style::backgroundToggledColorId, SynthTheme::accentDim());
+        retriggerButton.setColor (yup::ToggleButton::Style::textColorId, SynthTheme::textSecondary());
+        retriggerButton.setColor (yup::ToggleButton::Style::textToggledColorId, SynthTheme::textPrimary());
+        retriggerButton.setColor (yup::ToggleButton::Style::borderColorId, SynthTheme::panelBorder());
+        retriggerButton.setColor (yup::ToggleButton::Style::borderToggledColorId, SynthTheme::accent());
         retriggerButton.onClick = [this] { settings.retrigger = retriggerButton.getToggleState(); };
         addAndMakeVisible (retriggerButton);
 
@@ -1254,7 +1275,7 @@ public:
     {
         titleLabel.setText ("FILTER", yup::dontSendNotification);
         titleLabel.setFont (font.withHeight (12.0f));
-        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary);
+        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary());
         addAndMakeVisible (titleLabel);
 
         addAndMakeVisible (typeChoice);
@@ -1362,22 +1383,22 @@ public:
     {
         titleLabel.setText (panelTitle, yup::dontSendNotification);
         titleLabel.setFont (font.withHeight (12.0f));
-        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary);
+        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary());
         addAndMakeVisible (titleLabel);
 
         partialsButton.setButtonText ("PARTIALS");
-        partialsButton.setColor (yup::ToggleButton::Style::backgroundColorId, SynthTheme::displayBackground);
-        partialsButton.setColor (yup::ToggleButton::Style::backgroundToggledColorId, SynthTheme::accentDim);
-        partialsButton.setColor (yup::ToggleButton::Style::textColorId, SynthTheme::textSecondary);
-        partialsButton.setColor (yup::ToggleButton::Style::textToggledColorId, SynthTheme::textPrimary);
-        partialsButton.setColor (yup::ToggleButton::Style::borderColorId, SynthTheme::panelBorder);
-        partialsButton.setColor (yup::ToggleButton::Style::borderToggledColorId, SynthTheme::accent);
+        partialsButton.setColor (yup::ToggleButton::Style::backgroundColorId, SynthTheme::displayBackground());
+        partialsButton.setColor (yup::ToggleButton::Style::backgroundToggledColorId, SynthTheme::accentDim());
+        partialsButton.setColor (yup::ToggleButton::Style::textColorId, SynthTheme::textSecondary());
+        partialsButton.setColor (yup::ToggleButton::Style::textToggledColorId, SynthTheme::textPrimary());
+        partialsButton.setColor (yup::ToggleButton::Style::borderColorId, SynthTheme::panelBorder());
+        partialsButton.setColor (yup::ToggleButton::Style::borderToggledColorId, SynthTheme::accent());
         partialsButton.onClick = [this] { editor.setEditingPartials (partialsButton.getToggleState()); };
         addAndMakeVisible (partialsButton);
 
-        resetButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::displayBackground);
-        resetButton.setColor (yup::TextButton::Style::textColorId, SynthTheme::textSecondary);
-        resetButton.setColor (yup::TextButton::Style::outlineColorId, SynthTheme::panelBorder);
+        resetButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::displayBackground());
+        resetButton.setColor (yup::TextButton::Style::textColorId, SynthTheme::textSecondary());
+        resetButton.setColor (yup::TextButton::Style::outlineColorId, SynthTheme::panelBorder());
         resetButton.onClick = [this] { editor.revertToPreset(); };
         addAndMakeVisible (resetButton);
 

@@ -15,13 +15,23 @@ float Scene::height() const { return m_artboardInstance->height(); }
 
 void Scene::draw(Renderer* renderer) { m_artboardInstance->draw(renderer); }
 
-HitResult Scene::pointerDown(Vec2D, int) { return HitResult::none; }
+HitResult Scene::pointerDown(Vec2D, int, PointerButton)
+{
+    return HitResult::none;
+}
 HitResult Scene::pointerMove(Vec2D, float timeStamp, int)
 {
     return HitResult::none;
 }
-HitResult Scene::pointerUp(Vec2D, int) { return HitResult::none; }
+HitResult Scene::pointerUp(Vec2D, int, PointerButton)
+{
+    return HitResult::none;
+}
 HitResult Scene::pointerExit(Vec2D, int) { return HitResult::none; }
+HitResult Scene::pointerScroll(Vec2D, const ScrollEvent&, float, int)
+{
+    return HitResult::none;
+}
 
 size_t Scene::inputCount() const { return 0; }
 SMIInput* Scene::input(size_t index) const { return nullptr; }

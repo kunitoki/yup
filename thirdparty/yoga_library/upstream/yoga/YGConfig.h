@@ -75,6 +75,14 @@ struct YOGA_EXPORT YGConfig {
   void setPointScaleFactor(float pointScaleFactor);
   float getPointScaleFactor() const;
 
+  // rive: raised for the duration of an intrinsic-sizing probe (grid
+  // min-content, see TrackSizing.h). A measure func that clamps to the space
+  // it is offered can tell an AtMost(0) probe from a genuinely zero-sized box.
+  // A depth counter, not a bool: probes nest through intermediate layouts.
+  void beginMinContentProbe();
+  void endMinContentProbe();
+  bool isMeasuringMinContent() const;
+
   void setContext(void* context);
   void* getContext() const;
 
@@ -107,4 +115,5 @@ private:
   YGErrata errata_ = YGErrataNone;
   float pointScaleFactor_ = 1.0f;
   void* context_ = nullptr;
+  uint32_t minContentProbeDepth_ = 0;
 };

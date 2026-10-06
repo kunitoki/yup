@@ -75,3 +75,48 @@ def test_image_format_type_flags():
 
 def test_image_repr():
     assert "Image" in repr(yup.Image(4, 4))
+
+#==================================================================================================
+
+def test_options_repr():
+    options = yup.ImageFormat.Options()
+    options.parseMetadata = True
+    options.parseRawChunks = False
+    assert repr(options).endswith("(metadata, no-raw-chunks)")
+
+    options.parseMetadata = False
+    options.parseRawChunks = True
+    assert repr(options).endswith("(no-metadata, raw-chunks)")
+
+def test_possible_pixel_formats():
+    # A format without Python overrides reports no pixel formats.
+    assert yup.ImageFormat().getPossiblePixelFormats() == []
+
+    if hasattr(yup, "PngImageFormat"):
+        assert len(yup.PngImageFormat().getPossiblePixelFormats()) > 0
+
+def test_manager_reads_with_options_and_writes_with_settings(tmp_path):
+    if not hasattr(yup, "PngImageFormat"):
+        pytest.skip("PNG support not compiled in")
+
+    from utilities import get_test_data_file
+
+    source = get_test_data_file("images/file_example.png")
+    if not source.existsAsFile():
+        pytest.skip("tests/data/images/file_example.png is not available")
+
+    manager = yup.ImageFormatManager()
+    manager.registerDefaultFormats()
+
+    reader = manager.createReaderFor(source, yup.ImageFormat.Options())
+    assert reader is not None
+    assert reader.readImage().isValid()
+    del reader
+
+    output = yup.File(str(tmp_path / "written.png"))
+    writer = manager.createWriterFor(output, yup.PixelFormat.RGBA, yup.StringPairArray(), 0)
+    assert writer is not None
+    assert writer.writeImage(yup.Image(4, 4, yup.PixelFormat.RGBA))
+    del writer
+
+    assert output.existsAsFile()

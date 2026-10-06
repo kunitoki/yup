@@ -51,6 +51,12 @@ DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withImageOpacity
     return *this;
 }
 
+DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withImageInTopLevelComponent (bool shouldUseTopLevelComponent)
+{
+    imageInTopLevelComponent = shouldUseTopLevelComponent;
+    return *this;
+}
+
 DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withAllowedActions (DragAndDropActions newActions)
 {
     allowedActions = newActions;
@@ -60,6 +66,13 @@ DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withAllowedActio
 DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withExternalDragAllowed (bool shouldAllowExternalDrag)
 {
     allowExternalDrag = shouldAllowExternalDrag;
+    return *this;
+}
+
+DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withTouchPointer (int newTouchIndex, Point<float> screenPosition)
+{
+    touchIndex = newTouchIndex;
+    touchScreenPosition = screenPosition;
     return *this;
 }
 

@@ -121,6 +121,18 @@ per-frame GPU resource reallocation. `frameDesc` gives control over
 canvas. The default `{}` reproduces the previous behaviour (clear to
 transparent black, no msaa).
 
+`frameDesc.triangulationThresholds` controls when large, simple fills are
+triangulated on the CPU to save GPU work: fills smaller than `minArea` pixels or
+with more than `maxVerbs` path segments are skipped, and at most `frameBudgetMs`
+of CPU time is spent per frame (0 turns it off). The defaults are Rive's. Windows
+take the same settings through `ComponentNative::setTriangulationThresholds`:
+
+```cpp
+GpuTriangulationThresholds thresholds;
+thresholds.frameBudgetMs = 1.0f; // spend less CPU time on busy frames
+getNativeComponent()->setTriangulationThresholds (thresholds);
+```
+
 `scale` is the number of canvas pixels per logical drawing unit. The canvas stays
 sized in pixels, while the returned `Graphics` reports `scale` through
 `getContextScale()` and its default drawing area is the canvas size divided by

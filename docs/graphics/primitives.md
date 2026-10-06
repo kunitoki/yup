@@ -141,6 +141,23 @@ shapes.addEllipse (0, 120, 100, 50);
 shapes.addArc (arcBounds, 0.0f, MathConstants<float>::pi, true);
 ```
 
+`createStrokePolygon` turns a path into the outline of its stroke, so a stroke can
+be filled with fill-only effects such as a feather. Closed contours become a ring,
+open contours end with the given cap, and overlaps are merged into simple contours.
+
+```cpp
+Path outline = spectrum.createStrokePolygon (4.0f, StrokeJoin::Round, StrokeCap::Round);
+
+g.setFillColor (Colors::cyan);
+g.setFeather (4.0f);
+g.fillPath (outline);
+```
+
+`createFillPolygon` returns the area a path fills, under its own fill rule, as
+simple non-overlapping contours: outer contours clockwise, holes counter-clockwise,
+curves flattened. Self-intersecting and overlapping contours are resolved, so the
+result fills the same area under any fill rule.
+
 ## Stroke types
 
 Stroking is configured with three related types:

@@ -14,7 +14,7 @@ const siteUrl = "https://yup.audio";
 const socialImage = resolve(repoRoot, "docs/_static/images/yup_prism_synth.jpg");
 
 // GoatCounter site code (https://<code>.goatcounter.com). Analytics stay off while it is empty.
-const goatCounterCode = "";
+const goatCounterCode = "yup";
 
 const docsDir = resolve(repoRoot, "docs");
 const docsUrl = "https://yup.readthedocs.io/en/latest";

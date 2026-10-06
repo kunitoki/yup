@@ -239,19 +239,31 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
     if (getTexture() != nullptr)
         return true;
 
-    if (pixelData == nullptr)
-        return false;
-
-    auto width = getWidth();
-    auto height = getHeight();
-
     auto renderContext = context.getRenderContext();
-    if (renderContext == nullptr || renderContext->impl() == nullptr)
+    if (renderContext == nullptr)
         return false;
 
+    auto riveTex = getOrCreateTexture (*renderContext);
+    if (riveTex == nullptr)
+        return false;
+
+    gpuTexture = GpuTexture::fromGpuTexture (context.getGpuDevice(), std::move (riveTex), getWidth(), getHeight());
+    return true;
+}
+
+rive::rcp<rive::gpu::Texture> Image::getOrCreateTexture (rive::gpu::RenderContext& renderContext) const
+{
+    if (auto texture = getTexture())
+        return texture;
+
+    if (pixelData == nullptr || renderContext.impl() == nullptr)
+        return nullptr;
+
+    const auto width = getWidth();
+    const auto height = getHeight();
     const auto texturePixels = pixelData->toRGBA (true);
 
-    auto riveTex = renderContext->impl()->makeImageTexture (
+    return renderContext.impl()->makeImageTexture (
         width,
         height,
         rive::math::msb (width | height),
@@ -261,12 +273,6 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
         1,     /* blockHeight */
         false, /* srgb */
         true); /* generateRemainingMips */
-
-    if (riveTex == nullptr)
-        return false;
-
-    gpuTexture = GpuTexture::fromGpuTexture (context.getGpuDevice(), std::move (riveTex), width, height);
-    return true;
 }
 
 void Image::invalidateTexture()

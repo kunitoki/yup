@@ -55,6 +55,7 @@
 #include <rive/transform_component.hpp>
 #include <rive/node.hpp>
 #include <rive/shapes/shape.hpp>
+#include <rive/shapes/rectangle.hpp>
 #include <rive/shapes/ellipse.hpp>
 #include <rive/shapes/image.hpp>
 #include <rive/text/text.hpp>
@@ -73,6 +74,8 @@
 #include <rive/viewmodel/viewmodel_property_viewmodel.hpp>
 #include <rive/viewmodel/viewmodel_property_symbol_list_index.hpp>
 #include <rive/viewmodel/viewmodel_property_asset_image.hpp>
+#include <rive/viewmodel/viewmodel_property_asset_font.hpp>
+#include <rive/viewmodel/viewmodel_property_asset_blob.hpp>
 #include <rive/viewmodel/viewmodel_property_artboard.hpp>
 #include <rive/viewmodel/viewmodel_instance.hpp>
 #include <rive/viewmodel/viewmodel_instance_value.hpp>
@@ -85,6 +88,15 @@
 #include <rive/viewmodel/viewmodel_instance_list.hpp>
 #include <rive/viewmodel/viewmodel_instance_list_item.hpp>
 #include <rive/viewmodel/viewmodel_instance_viewmodel.hpp>
+#include <rive/viewmodel/viewmodel_instance_asset_image.hpp>
+#include <rive/viewmodel/viewmodel_instance_asset_font.hpp>
+#include <rive/viewmodel/viewmodel_instance_asset_blob.hpp>
+#include <rive/assets/blob_asset.hpp>
+#include <rive/assets/script_asset.hpp>
+#include <rive/renderer/render_context.hpp>
+#include <rive/renderer/rive_render_image.hpp>
+#include <rive/renderer/cmd/deferred_host.hpp>
+#include <rive/view_model_type.hpp>
 #include <rive/math/transform_components.hpp>
 
 //==============================================================================
@@ -167,6 +179,7 @@
 #include <emscripten/bind.h>
 
 #include "native/yup_FileChooser_wasm.cpp"
+#include "native/yup_SystemClipboard_emscripten.cpp"
 #endif
 
 //==============================================================================
@@ -181,6 +194,7 @@
 #include "keyboard/yup_TextInputTarget.cpp"
 #include "mouse/yup_MouseEvent.cpp"
 #include "mouse/yup_MouseCursor.cpp"
+#include "mouse/yup_KineticScroller.cpp"
 #include "clipboard/yup_SystemClipboard.cpp"
 #include "component/yup_ComponentNative.cpp"
 #include "component/yup_Component.cpp"
@@ -209,6 +223,13 @@
 #include "widgets/yup_ProgressBar.cpp"
 #include "widgets/yup_ListBoxItem.cpp"
 #include "widgets/yup_ListBox.cpp"
+#include "widgets/yup_TreeViewItem.cpp"
+#include "widgets/yup_TreeViewRow.cpp"
+#include "widgets/yup_TreeView.cpp"
+#include "widgets/yup_DataTreeViewItem.cpp"
+#include "widgets/yup_TabButton.cpp"
+#include "widgets/yup_TabBar.cpp"
+#include "widgets/yup_TabComponent.cpp"
 #include "artboard/yup_ArtboardViewModel.cpp"
 #include "artboard/yup_ArtboardViewModelInstance.cpp"
 #include "artboard/yup_ArtboardFile.cpp"
@@ -220,6 +241,7 @@
 #include "layout/yup_FlexBox.cpp"
 #include "layout/yup_GridItem.cpp"
 #include "layout/yup_Grid.cpp"
+#include "themes/yup_ThemePalette.cpp"
 #include "themes/yup_ApplicationTheme.cpp"
 
 //==============================================================================

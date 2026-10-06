@@ -65,8 +65,9 @@ public:
     void paint (yup::Graphics& g) override
     {
         auto area = getLocalBounds().reduced (5);
+        const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
 
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         auto styledText = yup::StyledText();
@@ -75,11 +76,11 @@ public:
             modifier.appendText ("PopupMenu Features: Placement, Submenus, Scrolling", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (16.0f));
         }
 
-        g.setFillColor (yup::Color (0xffffffff));
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::text));
         g.fillFittedText (styledText, area.removeFromTop (20).to<float>());
 
         // Draw grid lines to help visualize positioning
-        g.setStrokeColor (yup::Color (0x33ffffff));
+        g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
 
         auto buttonBounds = targetButton.getBounds().to<float>();

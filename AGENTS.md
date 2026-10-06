@@ -9,9 +9,10 @@ Copyright line for new files: `Copyright (c) 2026 - kunitoki@gmail.com`.
 
 ## Hard Rules
 
-- **Never run bash commands to configure, compile or test.** Say what should be tested; the user runs it and reports back.
+- **Never run bash commands to configure, compile or test, unless you are directed to do so.** Say what should be tested; the user runs it and reports back.
+- **When you are directed to configure, compile or test, you should rely ONLY on the `just` tool and its actions.** Never try to escape or bypass it.
 - **Code that changed without you noticing is the user's doing, not a linter's.** Acknowledge it, never revert it.
-- Headers and implementation files are compiled through the main module header/cpp - linter errors when parsing them in isolation are expected.
+- **Headers and implementation files are compiled through the main module header/cpp** - linter errors when parsing them in isolation are expected.
 
 ## Design Rules
 
@@ -89,5 +90,6 @@ Mirror the structure of an existing test, e.g. `tests/yup_dsp/yup_KMeterState.cp
 
 - American English: `center` not `centred`, `Color` not `Colour`.
 - Check the YUP `Graphics` API - do not assume JUCE's.
+- Components are opaque by default, if they are opaque the need to be fully painted.
 - Graphics primitives convert with the template `.to<float>()`, not `toFloat()`.
 - Fonts come from `ApplicationTheme`, never instantiated inline.

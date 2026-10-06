@@ -1,7 +1,5 @@
 alias c := clean
 
-gtest_filter := "*"
-
 [doc("list available recipes")]
 default:
   @just --list
@@ -22,10 +20,10 @@ build PLATFORM="mac" CONFIG="Debug" TARGET="yup_tests":
 
 [doc("execute unit tests using cmake")]
 [macos]
-test CONFIG="Debug":
+test CONFIG="Debug" GTEST_FILTER="*":
   cmake -G Xcode -B build/mac
   cmake --build build/mac --target yup_tests --config {{CONFIG}}
-  build/mac/tests/{{CONFIG}}/yup_tests.app/Contents/MacOS/yup_tests --gtest_filter={{gtest_filter}}
+  build/mac/tests/{{CONFIG}}/yup_tests.app/Contents/MacOS/yup_tests --gtest_filter="{{GTEST_FILTER}}"
 
 [doc("generate and open project in macOS using Xcode")]
 [macos]
@@ -84,15 +82,15 @@ emscripten CONFIG="Debug" TARGET="yup_tests":
 
 [doc("run Debug tests for WASM")]
 [working-directory: 'build/emscripten/tests/Debug/']
-emscripten_test_debug:
+emscripten_test_debug GTEST_FILTER="*":
   @just build emscripten Debug
-  node yup_tests.js --gtest_filter={{gtest_filter}}
+  node yup_tests.js --gtest_filter="{{GTEST_FILTER}}"
 
 [doc("run Release tests for WASM")]
 [working-directory: 'build/emscripten/tests/Release/']
-emscripten_test_release:
+emscripten_test_release GTEST_FILTER="*":
   @just build emscripten Release
-  node yup_tests.js --gtest_filter={{gtest_filter}}
+  node yup_tests.js --gtest_filter="{{GTEST_FILTER}}"
 
 [doc("serve project for WASM")]
 emscripten_serve INTERFACE="localhost":
@@ -153,8 +151,13 @@ vscode:
 fetch_coverage PR:
   uv run python tools/print_uncovered_lines.py --pr {{PR}}
 
+[doc("sample a running process (example_graphics by default) and print the call graph")]
+[macos]
+sample SECONDS="5" NAME="example_graphics" PID="":
+  uv run python tools/sample_process.py --name {{NAME}} --seconds {{SECONDS}} {{ if PID != "" { "--pid " + PID } else { "" } }}
+
 [doc("update rive runtime")]
-rive_update REF="runtime-v0.1.62":
+rive_update REF="runtime-v0.1.512":
   uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir
 
 [doc("update rive shaders")]
@@ -166,6 +169,15 @@ rive_shaders_update:
   cp -R thirdparty/rive/source/renderer/shaders/out/generated/* thirdparty/rive/source/renderer/generated/shaders/
   rm -Rf thirdparty/rive/source/renderer/shaders/out
   .venv/bin/deactivate
+
+[doc("regenerate rive d3d shaders (needs make, python3 and the Windows SDK fxc on PATH)")]
+[windows]
+rive_shaders_d3d:
+  @command -v fxc >/dev/null || { echo "fxc not found: run from a Developer Command Prompt or add the Windows SDK bin folder to PATH"; exit 1; }
+  python3 -m pip install --quiet --target build/rive-shaders-ply ply
+  make -C thirdparty/rive/source/renderer/shaders d3d FLAGS=--ply-path=../../../../../build/rive-shaders-ply
+  cp thirdparty/rive/source/renderer/shaders/out/generated/d3d/*.h thirdparty/rive/source/renderer/generated/shaders/d3d/
+  rm -Rf thirdparty/rive/source/renderer/shaders/out build/rive-shaders-ply
 
 [doc("develop website")]
 [working-directory: 'website']
@@ -191,5 +203,6 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example SpectrumAnalyzer spectrum-analyzer {{DEMOPATH}}
   @just update_emscripten_example Svg svg {{DEMOPATH}}
   @just update_emscripten_example TouchTrails touch-trails {{DEMOPATH}}
+  @just update_emscripten_example Themes themes {{DEMOPATH}}
   @just update_emscripten_example Widgets widgets {{DEMOPATH}}
   @just update_emscripten_example YdspSynths ydsp-synths {{DEMOPATH}}

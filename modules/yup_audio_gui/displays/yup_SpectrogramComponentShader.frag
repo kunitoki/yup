@@ -70,7 +70,7 @@ void main()
     vec2 uv = gl_FragCoord.xy / vec2(p.width, p.height);
     if (uv.y >= p.numRows / p.height)
     {
-        fragColor = texture(sampler2D(u_prev, u_samp), vec2(uv.x, uv.y - p.numRows / p.height));
+        fragColor = textureLod(sampler2D(u_prev, u_samp), vec2(uv.x, uv.y - p.numRows / p.height), 0.0);
     }
     else
     {

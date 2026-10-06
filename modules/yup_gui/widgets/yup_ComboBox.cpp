@@ -331,7 +331,7 @@ void ComboBox::updateDisplayText()
         modifier.clear();
 
         if (displayText.isNotEmpty())
-            modifier.appendText (displayText, font.withHeight (getHeight() * 0.35f));
+            modifier.appendText (displayText, font.withHeight (jmin (font.getHeight(), getHeight() * 0.6f)));
     }
 
     repaint();

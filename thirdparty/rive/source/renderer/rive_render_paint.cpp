@@ -2,6 +2,7 @@
  * Copyright 2022 Rive
  */
 
+#include "rive/renderer/rive_render_image.hpp"
 #include "rive_render_paint.hpp"
 #include "gradient.hpp"
 
@@ -11,69 +12,121 @@ RiveRenderPaint::RiveRenderPaint() {}
 
 RiveRenderPaint::~RiveRenderPaint() {}
 
+rcp<RiveRenderPaint> RiveRenderPaint::clone() const
+{
+    auto r = make_rcp<RiveRenderPaint>();
+    r->m_data = m_data;
+    return r;
+}
+
 void RiveRenderPaint::color(ColorInt color)
 {
-    m_paintType = gpu::PaintType::solidColor;
-    m_simpleValue.color = color;
-    m_gradient.reset();
-    m_imageTexture.reset();
+    m_data.m_paintType = gpu::PaintType::solidColor;
+    m_data.m_simpleValue.color = color;
+    m_data.m_gradient.reset();
 }
 
 void RiveRenderPaint::shader(rcp<RenderShader> shader)
 {
-    m_gradient = static_rcp_cast<gpu::Gradient>(std::move(shader));
-    m_paintType =
-        m_gradient ? m_gradient->paintType() : gpu::PaintType::solidColor;
+    m_data.m_gradient = static_rcp_cast<gpu::Gradient>(std::move(shader));
+    m_data.m_paintType = m_data.m_gradient ? m_data.m_gradient->paintType()
+                                           : gpu::PaintType::solidColor;
     // m_simpleValue.colorRampLocation is unused at this level. A new location
     // for a this gradient's color ramp will decided by the render context every
     // frame.
-    m_simpleValue.color = 0xff000000;
-    m_imageTexture.reset();
+    m_data.m_simpleValue.color = 0xff000000;
 }
 
-rcp<gpu::Gradient> RiveRenderPaint::getGradientWithOpacity(float opacity) const
+rcp<gpu::Gradient> RiveRenderPaint::getModulatedGradient(float opacity,
+                                                         ColorInt color) const
 {
-    if (m_gradient)
+    if (m_data.m_gradient)
     {
-        return m_gradient->getModulated(opacity);
+        return m_data.m_gradient->getModulated(opacity, color);
     }
     return nullptr;
 }
 
+void RiveRenderPaint::modulatedImage(const RenderImage* renderImage,
+                                     ImageSampler sampler,
+                                     const Mat2D& matrix)
+{
+    if (renderImage == nullptr)
+    {
+        m_data.m_imageTexture = nullptr;
+        return;
+    }
+
+    m_data.m_imageSampler = sampler;
+    m_data.m_imageTransform = matrix;
+    LITE_RTTI_CAST_OR_RETURN(riveImage, const RiveRenderImage*, renderImage);
+    m_data.m_imageTexture = riveImage->refTexture();
+}
+
 void RiveRenderPaint::image(rcp<gpu::Texture> imageTexture, float opacity)
 {
-    m_paintType = gpu::PaintType::image;
-    m_simpleValue.imageOpacity = opacity;
-    m_gradient.reset();
-    m_imageTexture = std::move(imageTexture);
+    m_data.m_paintType = gpu::PaintType::solidColor;
+    m_data.m_simpleValue.color = colorModulateOpacity(0xFFFFFFFF, opacity);
+    m_data.m_gradient.reset();
+    m_data.m_imageTexture = std::move(imageTexture);
+}
+
+void RiveRenderPaint::layerMask(rcp<gpu::Texture> maskTexture,
+                                LayerMaskMode mode)
+{
+    // Reuses the single image-texture slot: the mask is the only thing sampled,
+    // and the content it multiplies is the render target, not a second input.
+    // That is what keeps this off the per-backend texture-binding path.
+    m_data.m_paintType = gpu::PaintType::solidColor;
+    m_data.m_simpleValue.color = 0xFFFFFFFF;
+    m_data.m_gradient.reset();
+    m_data.m_imageTexture = std::move(maskTexture);
+    m_data.m_isLayerMask = true;
+    m_data.m_layerMaskMode = mode;
 }
 
 void RiveRenderPaint::clipUpdate(uint32_t outerClipID)
 {
-    m_paintType = gpu::PaintType::clipUpdate;
-    m_simpleValue.outerClipID = outerClipID;
-    m_gradient.reset();
-    m_imageTexture.reset();
+    m_data.m_paintType = gpu::PaintType::clipUpdate;
+    m_data.m_simpleValue.outerClipID = outerClipID;
+    m_data.m_gradient.reset();
+    m_data.m_imageTexture.reset();
 }
 
 bool RiveRenderPaint::getIsOpaque() const
 {
-    if (m_feather != 0)
+    if (m_data.m_isLayerMask)
+    {
+        // It multiplies the destination rather than replacing it, so it can
+        // never be treated as covering what is underneath.
+        return false;
+    }
+    if (m_data.m_feather != 0)
     {
         return false;
     }
-    if (m_blendMode != BlendMode::srcOver)
+    if (m_data.m_blendMode != BlendMode::srcOver)
     {
         return false;
     }
-    switch (m_paintType)
+    if (m_data.m_additiveness != 0)
+    {
+        return false;
+    }
+    if (m_data.m_imageTexture != nullptr)
+    {
+        // We can't assume opacity with an image (as it might have non-1.0
+        // alpha)
+        return false;
+    }
+
+    switch (m_data.m_paintType)
     {
         case gpu::PaintType::solidColor:
-            return colorAlpha(m_simpleValue.color) == 0xff;
+            return colorAlpha(m_data.m_simpleValue.color) == 0xff;
         case gpu::PaintType::linearGradient:
         case gpu::PaintType::radialGradient:
-            return m_gradient->isOpaque();
-        case gpu::PaintType::image:
+            return m_data.m_gradient->isOpaque();
         case gpu::PaintType::clipUpdate:
             return false;
     }

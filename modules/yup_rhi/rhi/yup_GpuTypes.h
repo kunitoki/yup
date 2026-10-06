@@ -31,7 +31,7 @@ enum class GpuPlatform
     OpenGLES, ///< Specifies the use of OpenGL ES (GLES 3.0+) for rendering (Android, WASM).
     Direct3D, ///< Specifies the use of Direct3D for rendering.
     Metal,    ///< Specifies the use of Metal for rendering.
-    WebGPU    ///< Specifies the use of WebGPU (native browser WebGPU on Emscripten, Dawn elsewhere).
+    WebGPU    ///< Specifies the use of WebGPU (native browser WebGPU on Emscripten).
 };
 
 //==============================================================================
@@ -720,6 +720,27 @@ struct GpuColor
 };
 
 //==============================================================================
+/** Controls when the 2D renderer triangulates the interior of filled paths on the CPU.
+
+    Triangulating a large, simple fill saves GPU work at the cost of CPU time. The
+    renderer tunes itself to stay within frameBudgetMs of CPU time per frame, and draws
+    every remaining path without triangulation once the budget is spent. The defaults
+    match Rive's.
+*/
+struct GpuTriangulationThresholds
+{
+    /** Fills covering less than this area, in pixels, are never triangulated. */
+    float minArea = 512.0f * 512.0f;
+
+    /** Fills with more path segments than this are never triangulated. */
+    std::size_t maxVerbs = 256;
+
+    /** The CPU time per frame, in milliseconds, triangulation may use. 0 never triangulates;
+        infinity triangulates every eligible fill whatever the time, for deterministic output. */
+    float frameBudgetMs = 2.0f;
+};
+
+//==============================================================================
 /** Describes the GPU frame to open for offscreen 2D rendering.
 
     Mirrors rive::gpu::RenderContext::FrameDescriptor field-for-field, so it can
@@ -738,9 +759,10 @@ struct GpuFrameDescriptor
     GpuLoadOp loadOp = GpuLoadOp::clear; ///< Attachment load behaviour at the start of the frame.
     GpuColor clearColor = GpuColor::transparentBlack(); ///< Clear color used when loadOp is clear.
 
-    uint32_t msaaSampleCount = 0; ///< If nonzero, the number of MSAA samples to use; forces msaa mode.
-    bool disableRasterOrdering = false; ///< Use atomic mode (preferred) or msaa instead of rasterOrdering.
+    uint32_t msaaSampleCount = 0; ///< 0 lets Rive choose its mode, 1 forces depthStencil mode without MSAA, more than 1 forces depthStencil mode with that many MSAA samples.
+    bool disableRasterOrdering = false; ///< Use atomic mode (preferred) or depthStencil instead of rasterOrdering.
     GpuDitherMode ditherMode = GpuDitherMode::interleavedGradientNoise; ///< Dithering applied to gradients.
+    GpuTriangulationThresholds triangulationThresholds; ///< When filled paths are triangulated on the CPU.
 
     // Vulkan-only virtual tiling; inert on every current YUP backend.
     uint32_t virtualTileWidth = 0;

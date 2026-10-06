@@ -206,3 +206,13 @@ def test_to_float():
     assert isclose(p.getEndX(), 2)
     assert isclose(p.getEndY(), 2)
 """
+
+#==================================================================================================
+
+def test_repr_and_str():
+    line = yup.Line[int](1, 2, 3, 4)
+    assert str(line) == "1, 2, 3, 4"
+    assert repr(line).startswith("yup.Line")
+    assert repr(line).endswith("(1, 2, 3, 4)")
+
+    assert str(yup.Line[float](0.5, 1.5, 2.5, 3.5)).startswith("0.5, 1.5")

@@ -106,11 +106,13 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         // Header separator
-        g.setStrokeColor (yup::Colors::darkgray);
+        g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (2.0f);
         g.strokeLine (10.0f, 60.0f, getWidth() - 10.0f, 60.0f);
     }

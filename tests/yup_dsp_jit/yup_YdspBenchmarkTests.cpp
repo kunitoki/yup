@@ -3838,6 +3838,17 @@ TEST_F (YdspBenchmarkTests, ChainedNodesAgainstAFusedProcessor)
     ASSERT_TRUE (chained.isValid());
     ASSERT_TRUE (fused.isValid());
 
+    const auto hasFusedKernel = [] (const YdspAudioGraph& graph)
+    {
+        for (const auto& kernel : graph.getExecutionReport().getKernels())
+            if (kernel.name.startsWith ("fused("))
+                return true;
+
+        return false;
+    };
+
+    EXPECT_TRUE (hasFusedKernel (chained)) << "the chained form is no longer being fused";
+
     chained.prepare (benchmarkSampleRate, benchmarkBlockSize);
     fused.prepare (benchmarkSampleRate, benchmarkBlockSize);
 
@@ -3863,8 +3874,8 @@ TEST_F (YdspBenchmarkTests, ChainedNodesAgainstAFusedProcessor)
                              "fused",
                              fusedTiming);
 
-    EXPECT_LT (chainedTiming.best / fusedTiming.best, 1.5)
-        << "the chained form is no longer being fused";
+    EXPECT_LT (chainedTiming.best / fusedTiming.best, 2.0)
+        << "the fused chain is far slower than the hand-fused processor";
 }
 
 TEST_F (YdspBenchmarkTests, IdleVoiceSkippingAgainstEveryVoiceRunning)

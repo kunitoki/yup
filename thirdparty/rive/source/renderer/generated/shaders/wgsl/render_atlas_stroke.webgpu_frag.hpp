@@ -18,8 +18,8 @@ struct Shader
 
 inline constexpr Shader render_atlas_stroke_webgpu_frag = {
     .source = R"WGSL(
-struct NB{Ub:f32,dd:f32,Xe:f32,Ye:f32,q5_:u32,ug:u32,Je:u32,Ke:u32,U7_:vec4<i32>,rg:vec2<f32>,ed:vec2<f32>,W1_:u32,vg:f32,Y5_:u32,P2_:f32,fd:f32,Ee:u32,y3_:f32,z3_:f32,gd:f32,og:u32,}@group(0)@binding(10) var QC:texture_2d<f32>;@group(3)@binding(10) var T9_:sampler;var<private>yg:f32;var<private>I_1:vec4<f32>;@group(0)@binding(0) var<uniform>k:NB;@group(0)@binding(9) var DD:texture_2d<f32>;@group(1)@binding(12) var AC:texture_2d<f32>;@group(3)@binding(9) var Bb:sampler;@group(1)@binding(14) var R5_:sampler;fn _b(){let _a=I_1;let _d=textureSampleLevel(QC,T9_,vec2<f32>((3f+_a.x),0f),0f);let _e=textureSampleLevel(QC,T9_,vec2<f32>((1f-_a.y),0f),0f);yg=((1f-_d.x)-_e.x);return;}@fragment fn main(@location(0) I:vec4<f32>)->@location(0) f32{I_1=I;_b();let _c=yg;return _c;})WGSL",
-    .usedOverrides = {{false, false, false, false, false, false, false, false, false, false, false, false, false, false}},
+struct UB{Qc:f32,Td:f32,bg:f32,cg:f32,A6_:u32,X9_:u32,Nf:u32,Of:u32,j8_:vec4<i32>,Lh:vec2<f32>,Ud:vec2<f32>,j2_:u32,Ph:f32,T4_:u32,a3_:f32,Vd:f32,Hf:u32,L3_:f32,M3_:f32,Wd:f32,Ih:u32,W9_:u32,wc:f32,xc:f32,}@group(0)@binding(9) var YC:texture_2d<f32>;@group(3)@binding(9) var wa:sampler;var<private>Sh:f32;var<private>S_1:vec4<f32>;@group(0)@binding(0) var<uniform>j:UB;@group(0)@binding(8) var ED:texture_2d<f32>;@group(1)@binding(11) var CC:texture_2d<f32>;@group(3)@binding(8) var ha:sampler;@group(1)@binding(13) var r5_:sampler;fn _c(){let _a=S_1;let _d=textureSampleLevel(YC,wa,vec2<f32>((3f+_a.x),0f),0f);let _e=textureSampleLevel(YC,wa,vec2<f32>((1f-_a.y),0f),0f);Sh=((1f-_d.x)-_e.x);return;}@fragment fn main(@location(0) S:vec4<f32>)->@location(0) f32{S_1=S;_c();let _b=Sh;return _b;})WGSL",
+    .usedOverrides = {{false, false, false, false, false, false, false, false, false, false, false, false, false, false, false}},
     .label = "render_atlas_stroke.webgpu_frag",
 };
 } // namespace wgsl

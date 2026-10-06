@@ -158,6 +158,9 @@ class NoOpRenderer : public rive::Renderer
 public:
     NoOpRenderer() = default;
 
+    using rive::Renderer::drawImage;
+    using rive::Renderer::drawImageMesh;
+
     void save() override {}
 
     void restore() override {}

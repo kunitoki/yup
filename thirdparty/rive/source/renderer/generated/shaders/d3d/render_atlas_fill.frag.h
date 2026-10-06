@@ -7,8 +7,8 @@
 //
 // Name                                 Type  Format         Dim      HLSL Bind  Count
 // ------------------------------ ---------- ------- ----------- -------------- ------
-// T9                                sampler      NA          NA            s10      1 
-// QC                                texture   float     1darray            t10      1 
+// wa                                sampler      NA          NA             s9      1 
+// YC                                texture   float     1darray             t9      1 
 //
 //
 //
@@ -29,8 +29,8 @@
 //
 ps_5_0
 dcl_globalFlags refactoringAllowed
-dcl_sampler s10, mode_default
-dcl_resource_texture1darray (float,float,float,float) t10
+dcl_sampler s9, mode_default
+dcl_resource_texture1darray (float,float,float,float) t9
 dcl_input_ps linear noperspective v0.xyzw
 dcl_input_ps_sgv constant v2.x, is_front_face
 dcl_output o0.x
@@ -38,7 +38,7 @@ dcl_temps 6
 max r0.x, v0.w, l(0.000000)
 ge r0.z, v0.z, l(0.000000)
 mov r0.y, l(0)
-sample_l_indexable(texture1darray)(float,float,float,float) r0.y, r0.xyxx, t10.yxzw, s10, l(0.000000)
+sample_l_indexable(texture1darray)(float,float,float,float) r0.y, r0.xyxx, t9.yxzw, s9, l(0.000000)
 and r0.y, r0.y, r0.z
 lt r0.z, |v0.z|, l(1000.000000)
 if_nz r0.z
@@ -51,11 +51,11 @@ if_nz r0.z
   mad r3.xyzw, r2.zxwy, -v0.zzzz, r0.xxxx
   mov r4.xz, r3.yywy
   mov r4.yw, l(0,0,0,0)
-  sample_l_indexable(texture1darray)(float,float,float,float) r5.x, r4.xyxx, t10.xyzw, s10, l(0.000000)
-  sample_l_indexable(texture1darray)(float,float,float,float) r5.y, r4.zwzz, t10.yxzw, s10, l(0.000000)
+  sample_l_indexable(texture1darray)(float,float,float,float) r5.x, r4.xyxx, t9.xyzw, s9, l(0.000000)
+  sample_l_indexable(texture1darray)(float,float,float,float) r5.y, r4.zwzz, t9.yxzw, s9, l(0.000000)
   mov r3.yw, l(0,0,0,0)
-  sample_l_indexable(texture1darray)(float,float,float,float) r5.z, r3.xyxx, t10.yzxw, s10, l(0.000000)
-  sample_l_indexable(texture1darray)(float,float,float,float) r5.w, r3.zwzz, t10.yzwx, s10, l(0.000000)
+  sample_l_indexable(texture1darray)(float,float,float,float) r5.z, r3.xyxx, t9.yzxw, s9, l(0.000000)
+  sample_l_indexable(texture1darray)(float,float,float,float) r5.w, r3.zwzz, t9.yzwx, s9, l(0.000000)
   mad r2.xyzw, r2.xyzw, l(5.095931, 5.095931, 5.095931, 5.095931), l(-2.547965, -2.547965, -2.547965, -2.547965)
   mul r2.xyzw, r2.xyzw, -r2.xyzw
   exp r2.xyzw, r2.xyzw
@@ -74,10 +74,10 @@ ret
 
 const BYTE g_main[] =
 {
-     68,  88,  66,  67,  71,  73, 
-    131, 187, 158, 232, 178,  57, 
-    202, 193, 177, 156, 166, 199, 
-    110, 194,   1,   0,   0,   0, 
+     68,  88,  66,  67, 133,  72, 
+    192,  41, 112, 251, 113, 131, 
+     44, 167,  64, 206,  74,  73, 
+    221,  88,   1,   0,   0,   0, 
     224,   6,   0,   0,   5,   0, 
       0,   0,  52,   0,   0,   0, 
     232,   0,   0,   0, 100,   1, 
@@ -97,15 +97,15 @@ const BYTE g_main[] =
     124,   0,   0,   0,   3,   0, 
       0,   0,   0,   0,   0,   0, 
       0,   0,   0,   0,   0,   0, 
-      0,   0,  10,   0,   0,   0, 
+      0,   0,   9,   0,   0,   0, 
       1,   0,   0,   0,   1,   0, 
       0,   0, 127,   0,   0,   0, 
       2,   0,   0,   0,   5,   0, 
       0,   0,   3,   0,   0,   0, 
-    255, 255, 255, 255,  10,   0, 
+    255, 255, 255, 255,   9,   0, 
       0,   0,   1,   0,   0,   0, 
-      1,   0,   0,   0,  84,  57, 
-      0,  81,  67,   0,  77, 105, 
+      1,   0,   0,   0, 119,  97, 
+      0,  89,  67,   0,  77, 105, 
      99, 114, 111, 115, 111, 102, 
     116,  32,  40,  82,  41,  32, 
      72,  76,  83,  76,  32,  83, 
@@ -146,9 +146,9 @@ const BYTE g_main[] =
       0,   0,  80,   0,   0,   0, 
      41,   1,   0,   0, 106,   8, 
       0,   1,  90,   0,   0,   3, 
-      0,  96,  16,   0,  10,   0, 
+      0,  96,  16,   0,   9,   0, 
       0,   0,  88,  56,   0,   4, 
-      0, 112,  16,   0,  10,   0, 
+      0, 112,  16,   0,   9,   0, 
       0,   0,  85,  85,   0,   0, 
      98,  32,   0,   3, 242,  16, 
      16,   0,   0,   0,   0,   0, 
@@ -176,8 +176,8 @@ const BYTE g_main[] =
      16,   0,   0,   0,   0,   0, 
      70,   0,  16,   0,   0,   0, 
       0,   0,  22, 126,  16,   0, 
-     10,   0,   0,   0,   0,  96, 
-     16,   0,  10,   0,   0,   0, 
+      9,   0,   0,   0,   0,  96, 
+     16,   0,   9,   0,   0,   0, 
       1,  64,   0,   0,   0,   0, 
       0,   0,   1,   0,   0,   7, 
      34,   0,  16,   0,   0,   0, 
@@ -246,17 +246,17 @@ const BYTE g_main[] =
      21,   0,  18,   0,  16,   0, 
       5,   0,   0,   0,  70,   0, 
      16,   0,   4,   0,   0,   0, 
-     70, 126,  16,   0,  10,   0, 
+     70, 126,  16,   0,   9,   0, 
       0,   0,   0,  96,  16,   0, 
-     10,   0,   0,   0,   1,  64, 
+      9,   0,   0,   0,   1,  64, 
       0,   0,   0,   0,   0,   0, 
      72,   0,   0, 141, 194,   1, 
       0, 128,  67,  85,  21,   0, 
      34,   0,  16,   0,   5,   0, 
       0,   0, 230,  10,  16,   0, 
       4,   0,   0,   0,  22, 126, 
-     16,   0,  10,   0,   0,   0, 
-      0,  96,  16,   0,  10,   0, 
+     16,   0,   9,   0,   0,   0, 
+      0,  96,  16,   0,   9,   0, 
       0,   0,   1,  64,   0,   0, 
       0,   0,   0,   0,  54,   0, 
       0,   8, 162,   0,  16,   0, 
@@ -269,8 +269,8 @@ const BYTE g_main[] =
      66,   0,  16,   0,   5,   0, 
       0,   0,  70,   0,  16,   0, 
       3,   0,   0,   0, 150, 124, 
-     16,   0,  10,   0,   0,   0, 
-      0,  96,  16,   0,  10,   0, 
+     16,   0,   9,   0,   0,   0, 
+      0,  96,  16,   0,   9,   0, 
       0,   0,   1,  64,   0,   0, 
       0,   0,   0,   0,  72,   0, 
       0, 141, 194,   1,   0, 128, 
@@ -278,8 +278,8 @@ const BYTE g_main[] =
      16,   0,   5,   0,   0,   0, 
     230,  10,  16,   0,   3,   0, 
       0,   0, 150, 115,  16,   0, 
-     10,   0,   0,   0,   0,  96, 
-     16,   0,  10,   0,   0,   0, 
+      9,   0,   0,   0,   0,  96, 
+     16,   0,   9,   0,   0,   0, 
       1,  64,   0,   0,   0,   0, 
       0,   0,  50,   0,   0,  15, 
     242,   0,  16,   0,   2,   0, 

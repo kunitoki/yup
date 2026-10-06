@@ -19,6 +19,7 @@ private:
 
     void overflow();
     void intRangeError();
+    size_t readLength();
 
 public:
     explicit BinaryReader(Span<const uint8_t>);
@@ -35,7 +36,7 @@ public:
     Span<const uint8_t> readBytes();
     Span<const uint8_t> readBytes(size_t length);
     float readFloat32();
-#ifdef WITH_RIVE_TOOLS
+#if defined(WITH_RIVE_TOOLS) || defined(WITH_RIVE_EDITOR)
     double readFloat64();
 #endif
     uint8_t readByte();

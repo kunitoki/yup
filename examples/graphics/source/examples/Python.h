@@ -70,7 +70,7 @@ public:
         g.fillAll();
     }
 
-    yup::Color backgroundColor = yup::Color (0xff404040);
+    yup::Color backgroundColor = yup::Colors::transparentBlack;
 
 private:
     static constexpr const char* defaultScript = R"(

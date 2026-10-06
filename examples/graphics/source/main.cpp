@@ -23,6 +23,7 @@
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
+
 #if YUP_MODULE_AVAILABLE_yup_audio_devices
 #include <yup_audio_devices/yup_audio_devices.h>
 #endif
@@ -144,6 +145,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
 #include "examples/DragAndDrop.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Emoji
+#include "examples/Emoji.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
 #include "examples/FileChooser.h"
 #endif
@@ -159,11 +163,14 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
 #include "examples/Images.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ImageMesh
+#include "examples/ImageMesh.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
 #include "examples/Layout.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
-#include "examples/LayoutFonts.h"
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ListBox
+#include "examples/ListBox.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Lottie
 #include "examples/Lottie.h"
@@ -204,11 +211,17 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
 #include "examples/TextEditor.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Themes
+#include "examples/Themes.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
 #include "examples/ToastNotification.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails
 #include "examples/TouchTrails.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_TreeView
+#include "examples/TreeView.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
 #include "examples/VariableFonts.h"
@@ -265,10 +278,7 @@ class CustomWindow
 {
 public:
     CustomWindow()
-        : yup::DocumentWindow (yup::ComponentNative::Options()
-                                   .withAllowedHighDensityDisplay (true)
-                                   .withVSync (false),
-                               yup::Color (0xff404040))
+        : yup::DocumentWindow (yup::ComponentNative::Options().withVSync (true))
     {
         setTitle ("main");
 
@@ -339,6 +349,9 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
         addDemo ("Drag and Drop", [] { return std::make_unique<DragAndDropDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Emoji
+        addDemo ("Emoji", [] { return std::make_unique<EmojiDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
         addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
 #endif
@@ -354,11 +367,14 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
         addDemo ("Images", [] { return std::make_unique<ImagesDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ImageMesh
+        addDemo ("Image Mesh", [] { return std::make_unique<ImageMeshDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
         addDemo ("Layout", [] { return std::make_unique<LayoutExample>(); });
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
-        addDemo ("Layout Fonts", [] { return std::make_unique<LayoutFontsExample>(); });
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ListBox
+        addDemo ("List Box", [] { return std::make_unique<ListBoxDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Lottie
         addDemo ("Lottie", [] { return std::make_unique<LottieDemo>(); });
@@ -399,11 +415,17 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
         addDemo ("Text Editor", [] { return std::make_unique<TextEditorDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Themes
+        addDemo ("Themes", [] { return std::make_unique<ThemesDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
         addDemo ("Toast Notifications", [] { return std::make_unique<ToastNotificationDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails
         addDemo ("Touch Trails", [] { return std::make_unique<TouchTrailsDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_TreeView
+        addDemo ("Tree View", [] { return std::make_unique<TreeViewDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
         addDemo ("Variable Fonts", [] { return std::make_unique<VariableFontsExample>(); });
@@ -434,15 +456,14 @@ public:
 
             listBox = std::make_unique<yup::ListBox>();
             listBox->setModel (listModel.get());
-            listBox->setRowHeight (30);
-            listBox->setRowWidth (200);
+            listBox->setRowSize (30);
             listBox->selectRow (0, false, yup::dontSendNotification);
             addAndMakeVisible (listBox.get());
         }
 
         selectComponent (0);
 
-        startTimerHz (10);
+        startTimerHz (1);
     }
 
     ~CustomWindow() override
@@ -465,7 +486,7 @@ public:
             if (width > height)
             {
                 listBox->setOrientation (yup::ListBox::Orientation::vertical);
-                listBox->setRowHeight (30);
+                listBox->setRowSize (30);
                 listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
                 listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
 
@@ -479,8 +500,7 @@ public:
             else
             {
                 listBox->setOrientation (yup::ListBox::Orientation::horizontal);
-                listBox->setRowWidth (80);
-                listBox->setRowHeight (listBoxHeight);
+                listBox->setRowSize (80);
                 listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
                 listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
 

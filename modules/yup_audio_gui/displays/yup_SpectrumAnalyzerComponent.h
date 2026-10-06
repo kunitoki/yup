@@ -27,8 +27,9 @@ namespace yup
     A component that displays a real-time spectrum analyzer.
 
     This component performs FFT processing on audio data collected by a SpectrumAnalyzerState and renders
-    the frequency spectrum as a visual display. The FFT processing is performed on the UI thread using a timer,
-    following the pattern from the JUCE spectrum analyzer tutorial.
+    the frequency spectrum as a visual display. The FFT processing is performed on the UI thread, once per displayed
+    frame by default or at a fixed rate set with setUpdateRate(). The release is timed from the elapsed time between
+    updates, so the spectrum falls off at the same speed at any frame rate.
 
     The component can be configured with different window functions, display types, frequency ranges, and update
     rates. It automatically handles logarithmic frequency scaling for natural spectrum visualization. Levels are
@@ -45,7 +46,6 @@ namespace yup
         analyzerComponent.setWindowType(WindowType::hann);
         analyzerComponent.setFrequencyRange(20.0f, 20000.0f);
         analyzerComponent.setDecibelRange(-100.0f, 0.0f);
-        analyzerComponent.setUpdateRate(30);
 
         // In audio callback:
         analyzerState.pushSamples(audioData, numSamples);
@@ -58,6 +58,29 @@ class YUP_API SpectrumAnalyzerComponent
     , public Timer
 {
 public:
+    //==============================================================================
+    /** Style identifiers for theme customization. */
+    struct Style
+    {
+        /** Background color at the top of the vertical gradient. */
+        static const Identifier backgroundTopColorId;
+
+        /** Background color at the bottom of the vertical gradient. */
+        static const Identifier backgroundBottomColorId;
+
+        /** Spectrum outline color, also used for the line display type. */
+        static const Identifier outlineColorId;
+
+        /** Spectrum fill color at the top, fading out towards the bottom (filled display type). */
+        static const Identifier fillColorId;
+
+        /** Color of the major grid lines, the minor lines are drawn with a reduced alpha. */
+        static const Identifier gridColorId;
+
+        /** Color of the frequency and decibel labels. */
+        static const Identifier textColorId;
+    };
+
     //==============================================================================
     /** Display type for the spectrum visualization. */
     enum class DisplayType
@@ -115,11 +138,13 @@ public:
     //==============================================================================
     /** Sets the display update rate in Hz.
 
-        @param hz    update rate (typical values: 15-60 Hz)
+        By default the spectrum updates once per displayed frame, following the display refresh rate.
+
+        @param hz    update rate (typical values: 15-60 Hz), or 0 to follow the display refresh rate
     */
     void setUpdateRate (int hz);
 
-    /** Returns the current update rate in Hz. */
+    /** Returns the current update rate in Hz, or 0 when following the display refresh rate. */
     int getUpdateRate() const noexcept;
 
     //==============================================================================
@@ -230,12 +255,15 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
+    void refreshDisplay (double lastFrameTimeSeconds) override;
+    /** @internal */
     void timerCallback() override;
 
 private:
     //==============================================================================
+    void updateSpectrum();
     void processFFT();
-    void updateDisplay (bool hasNewFFTData);
+    void updateTargets();
     void generateWindow();
     void initializeFFTBuffers();
     void updateBinMapping();
@@ -271,6 +299,7 @@ private:
 
     // Display data
     std::vector<float> scopeData;
+    std::vector<float> targetData;     // Latest FFT level of every display point, the release target
     std::vector<float> binLevelBuffer; // Calibrated linear level of every FFT bin
     SpectrumBinMapping binMapping;     // Log-frequency > fractional FFT bin mapping
 
@@ -287,6 +316,8 @@ private:
     float maxDecibels = 0.0f;
     double sampleRate = 44100.0;
     float releaseTimeSeconds = 1.0f;
+    double lastUpdateSeconds = 0.0;
+    double lastFFTSeconds = 0.0;
 
     // Window compensation
     float windowCoherentGain = 1.0f;

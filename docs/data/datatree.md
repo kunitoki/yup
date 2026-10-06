@@ -138,6 +138,8 @@ public:
     void childRemoved    (DataTree& parent, DataTree& child, int formerIndex) override {}
     void childMoved      (DataTree& parent, DataTree& child, int oldIndex, int newIndex) override {}
     void treeRedirected  (DataTree& tree) override {}
+    void parentChanged   (DataTree& child, DataTree& previousParent) override {}
+    void ancestorChanged (DataTree& tree, DataTree& reparentedAncestor) override {}
 };
 
 MyListener listener;
@@ -153,6 +155,22 @@ settings.removeListener (&listener);
 | `childRemoved` | A child is removed (with its former index). |
 | `childMoved` | A child changes position. |
 | `treeRedirected` | The node is repointed at different underlying data. |
+| `parentChanged` | This node was added to, removed from, or moved to another parent. `previousParent` is invalid if it had none; `child.getParent()` is the new parent. Both are invalid when the parent was destroyed while this node is still referenced. |
+| `ancestorChanged` | An ancestor of this node changed its parent. Sent to every descendant of the node that received `parentChanged`. |
+
+Notifications are delivered only to listeners registered on the affected node,
+they are not propagated up to its ancestors: to observe a child being reparented,
+listen on the child itself. Every callback runs after the change has been fully
+applied, so the tree is already in its final state (for example `child.getParent()`
+inside `childRemoved` returns the new parent when the child was moved elsewhere).
+Reordering a child with `moveChild` does not send `parentChanged`.
+
+```{warning}
+When a parent is destroyed, its children that are still referenced elsewhere
+receive `parentChanged` from inside the parent's destructor, on the thread that
+released the last reference. Always remove a listener before destroying it, and
+never throw from a callback.
+```
 
 ```{tip}
 For typed, cached, auto-refreshing access to a single property, prefer a

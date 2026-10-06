@@ -73,6 +73,9 @@ public:
     /** Returns the payload of the current drag, or an empty payload when none is running. */
     const DragAndDropData& getCurrentDragData() const noexcept;
 
+    /** Returns the finger the current drag follows, or -1 when it follows the mouse or no drag is running. */
+    int getCurrentDragTouchIndex() const noexcept;
+
     /** Returns the component the current drag started from, or nullptr. */
     Component* getCurrentDragSourceComponent() const;
 
