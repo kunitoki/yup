@@ -52,6 +52,74 @@ rive::TextWrap toTextWrap (StyledText::TextWrap wrap) noexcept
     return rive::TextWrap::noWrap;
 }
 
+/** Glyph outlines shared by every text, kept for the most recently used fonts.
+
+    Each entry holds its font, so another font cannot reuse its address while it is cached. The
+    bound matters for variable fonts, which make a new font for every axis change.
+*/
+class GlyphOutlineCache
+{
+public:
+    static GlyphOutlineCache& getInstance()
+    {
+        static GlyphOutlineCache cache;
+        return cache;
+    }
+
+    /** Returns a glyph's outline transformed, made under the lock so eviction cannot touch it. */
+    rive::RawPath getOutline (const rive::rcp<rive::Font>& font, rive::GlyphID glyphId, const rive::Mat2D& transform)
+    {
+        const ScopedLock sl (lock);
+
+        auto& outlines = findOutlines (font);
+
+        auto outline = outlines.find (glyphId);
+        if (outline == outlines.end())
+            outline = outlines.emplace (glyphId, font->getPath (glyphId)).first;
+
+        return outline->second.transform (transform);
+    }
+
+private:
+    struct FontOutlines
+    {
+        rive::rcp<rive::Font> font;
+        std::unordered_map<rive::GlyphID, rive::RawPath> outlines;
+        uint64 lastUse = 0;
+    };
+
+    std::unordered_map<rive::GlyphID, rive::RawPath>& findOutlines (const rive::rcp<rive::Font>& font)
+    {
+        auto entry = std::find_if (fonts.begin(), fonts.end(), [&font] (const FontOutlines& candidate)
+        {
+            return candidate.font.get() == font.get();
+        });
+
+        if (entry == fonts.end())
+        {
+            if (fonts.size() >= maxFonts)
+            {
+                fonts.erase (std::min_element (fonts.begin(), fonts.end(), [] (const FontOutlines& a, const FontOutlines& b)
+                {
+                    return a.lastUse < b.lastUse;
+                }));
+            }
+
+            fonts.push_back ({ font, {}, 0 });
+            entry = std::prev (fonts.end());
+        }
+
+        entry->lastUse = ++useCount;
+        return entry->outlines;
+    }
+
+    static constexpr std::size_t maxFonts = 32;
+
+    CriticalSection lock;
+    std::vector<FontOutlines> fonts;
+    uint64 useCount = 0;
+};
+
 } // namespace
 
 //==============================================================================
@@ -520,7 +588,6 @@ void StyledText::update()
 
             for (const auto& [run, glyphIndex] : orderedLines[lineIndex])
             {
-                const rive::Font* font = run->font.get();
                 const rive::Vec2D& offset = run->offsets[glyphIndex];
 
                 rive::GlyphID glyphId = run->glyphs[glyphIndex];
@@ -543,17 +610,12 @@ void StyledText::update()
 
                 if (auto layers = findColorGlyphLayers (run->font, glyphId))
                 {
-                    const auto* paint = lite_rtti_cast<rive::RiveRenderPaint*> (style->paint.get());
-                    colorGlyphs.push_back ({ std::move (layers), glyphTransform, paint != nullptr ? paint->getColor() : 0xff000000 });
+                    // Drawn with the paint of their style, like the outlines
+                    colorGlyphs.push_back ({ std::move (layers), glyphTransform, run->styleId });
                     continue;
                 }
 
-                auto& fontCache = glyphPathCache[font];
-                auto cachedPath = fontCache.find (glyphId);
-                if (cachedPath == fontCache.end())
-                    cachedPath = fontCache.emplace (glyphId, font->getPath (glyphId)).first;
-
-                rive::RawPath path = cachedPath->second.transform (glyphTransform);
+                rive::RawPath path = GlyphOutlineCache::getInstance().getOutline (run->font, glyphId, glyphTransform);
                 path.addTo (style->path.get());
 
                 if (style->isEmpty)

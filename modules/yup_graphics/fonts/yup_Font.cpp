@@ -594,7 +594,7 @@ Font Font::withFeature (Feature feature) const
     std::vector<rive::Font::Feature> realFeatures;
     realFeatures.push_back (rive::Font::Feature { feature.tag, feature.value });
 
-    return Font (font->withOptions ({}, realFeatures));
+    return Font (font->withOptions ({}, realFeatures), height);
 }
 
 Font Font::withFeatures (std::initializer_list<Feature> features) const
@@ -608,7 +608,7 @@ Font Font::withFeatures (std::initializer_list<Feature> features) const
     for (const auto& feature : features)
         realFeatures.push_back (rive::Font::Feature { feature.tag, feature.value });
 
-    return Font (font->withOptions ({}, realFeatures));
+    return Font (font->withOptions ({}, realFeatures), height);
 }
 
 //==============================================================================

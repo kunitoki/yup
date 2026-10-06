@@ -1360,31 +1360,12 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
     if (text.needsUpdate() || text.isEmpty())
         return;
 
-    bool hasStylePaints = false;
-    for (auto style : text.getRenderStyles())
-    {
-        if (style->paint != nullptr)
-        {
-            hasStylePaints = true;
-        }
-        else
-        {
-            hasStylePaints = false;
-            break;
-        }
-    }
-
-    if (hasStylePaints)
-    {
-        renderFittedText (text, rect, nullptr);
-        return;
-    }
-
     const auto& options = currentRenderOptions();
 
+    // Runs appended with their own color keep it, the others are filled with the current fill
     rive::RiveRenderPaint paint;
-    if (setupFillPaint (paint, options, options.getTransform(), textOrigin (text, rect)))
-        renderFittedText (text, rect, std::addressof (paint));
+    const bool hasFillPaint = setupFillPaint (paint, options, options.getTransform(), textOrigin (text, rect));
+    renderFittedText (text, rect, hasFillPaint ? std::addressof (paint) : nullptr, false);
 }
 
 void Graphics::fillFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification)
@@ -1416,7 +1397,7 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
     if (! setupStrokePaint (paint, options, options.getTransform(), textOrigin (text, rect)))
         return;
 
-    renderFittedText (text, rect, std::addressof (paint));
+    renderFittedText (text, rect, std::addressof (paint), true);
 }
 
 void Graphics::strokeFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification)
@@ -1436,7 +1417,7 @@ void Graphics::strokeFittedText (const String& text, const Font& font, const Rec
     strokeFittedText (styledText, rect);
 }
 
-void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint)
+void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint, bool replacesStylePaints)
 {
     jassert (! text.needsUpdate());
     if (text.needsUpdate() || text.isEmpty())
@@ -1464,55 +1445,222 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
 
     for (auto style : text.getRenderStyles())
     {
-        if (isFeatheredFill)
+        // The paint replaces the style paints when stroking, and stands in for missing ones when filling
+        rive::RenderPaint* stylePaint = (replacesStylePaints || style->paint == nullptr) ? paint : style->paint.get();
+        if (stylePaint == nullptr)
+            continue;
+
+        if (isFeatheredFill && stylePaint == paint)
             renderer.drawPath (toClockwiseFillPath (Path (rive::ref_rcp (static_cast<rive::RiveRenderPath*> (style->path.get())))).get(), paint);
         else
-            renderer.drawPath (style->path.get(), (paint != nullptr) ? paint : style->paint.get());
+            renderer.drawPath (style->path.get(), stylePaint);
     }
 
-    if (paint == nullptr || ! paint->getIsStroked())
-        renderColorGlyphs (text, paint);
+    std::vector<const StyledText::ColorGlyph*> groupedGlyphs;
+    if (! replacesStylePaints)
+        renderColorGlyphs (text, paint, groupedGlyphs);
 
     renderer.restore();
+
+    for (const auto* colorGlyph : groupedGlyphs)
+        renderColorGlyphGroup (text, rect, *colorGlyph, paint->getColor());
 }
 
-void Graphics::renderColorGlyphs (const StyledText& text, const rive::RiveRenderPaint* paint)
+void Graphics::renderColorGlyphs (const StyledText& text, const rive::RiveRenderPaint* paint, std::vector<const StyledText::ColorGlyph*>& groupedGlyphs)
 {
     for (const auto& colorGlyph : text.colorGlyphs)
     {
-        const auto foregroundColor = paint != nullptr ? paint->getColor() : static_cast<rive::ColorInt> (colorGlyph.foregroundColor);
+        jassert (colorGlyph.styleIndex < text.styles.size());
+        if (colorGlyph.styleIndex >= text.styles.size())
+            continue;
+
+        // Like the outlines: the glyph's style paint when it has one, otherwise the fill paint
+        const auto& stylePaint = text.styles[colorGlyph.styleIndex].paint;
+        if (stylePaint == nullptr && paint == nullptr)
+            continue;
+
+        const auto* glyphPaint = stylePaint != nullptr ? lite_rtti_cast<rive::RiveRenderPaint*> (stylePaint.get()) : paint;
+        const auto foregroundColor = glyphPaint != nullptr ? glyphPaint->getColor() : 0xff000000;
+        const auto blendMode = glyphPaint != nullptr ? glyphPaint->getBlendMode() : rive::BlendMode::srcOver;
+        const auto additiveness = glyphPaint != nullptr ? glyphPaint->getAdditiveness() : 0.0f;
+
+        if (stylePaint == nullptr && colorGlyph.layers->size() > 1 && (blendMode != rive::BlendMode::srcOver || additiveness > 0.0f))
+        {
+            groupedGlyphs.push_back (std::addressof (colorGlyph));
+            continue;
+        }
 
         renderer.save();
         renderer.transform (colorGlyph.transform);
 
-        for (const auto& [layer, image] : *colorGlyph.layers)
+        for (const auto& glyphLayer : *colorGlyph.layers)
         {
-            if (layer.paintType == rive::Font::ColorGlyphPaintType::image)
-            {
-                renderColorGlyphImage (image, layer);
-                continue;
-            }
-
-            // The layers were extracted with a black foreground, so only their alpha is kept.
-            // Drawing also transforms the layer path, hence the copy
-            auto coloredLayer = layer;
-            if (coloredLayer.useForeground)
-                coloredLayer.color = rive::colorModulateOpacity (foregroundColor, rive::colorOpacity (coloredLayer.color));
-
-            for (auto& stop : coloredLayer.stops)
-            {
-                if (stop.isForeground)
-                    stop.color = rive::colorModulateOpacity (foregroundColor, rive::colorOpacity (stop.color));
-            }
-
-            rive::drawColorGlyphLayer (std::addressof (renderer), std::addressof (factory), coloredLayer, 1.0f);
+            if (glyphLayer.layer.paintType == rive::Font::ColorGlyphPaintType::image)
+                renderColorGlyphImage (glyphLayer.image, glyphLayer.layer, blendMode, additiveness);
+            else
+                renderColorGlyphLayer (glyphLayer, foregroundColor, blendMode, additiveness);
         }
 
         renderer.restore();
     }
 }
 
-void Graphics::renderColorGlyphImage (const Image& image, const rive::Font::ColorGlyphLayer& layer)
+void Graphics::renderColorGlyphGroup (const StyledText& text, const Rectangle<float>& rect, const StyledText::ColorGlyph& colorGlyph, rive::ColorInt foregroundColor)
+{
+    const auto& options = currentRenderOptions();
+    const auto origin = textOrigin (text, rect);
+    const auto glyphToDevice = options.getTransform (origin.getX(), origin.getY()).toMat2D() * colorGlyph.transform;
+
+    float minX = std::numeric_limits<float>::max();
+    float minY = std::numeric_limits<float>::max();
+    float maxX = std::numeric_limits<float>::lowest();
+    float maxY = std::numeric_limits<float>::lowest();
+
+    const auto include = [&] (const rive::AABB& bounds)
+    {
+        for (const auto corner : { rive::Vec2D (bounds.minX, bounds.minY), rive::Vec2D (bounds.maxX, bounds.minY), rive::Vec2D (bounds.minX, bounds.maxY), rive::Vec2D (bounds.maxX, bounds.maxY) })
+        {
+            const auto point = glyphToDevice * corner;
+            minX = jmin (minX, point.x);
+            minY = jmin (minY, point.y);
+            maxX = jmax (maxX, point.x);
+            maxY = jmax (maxY, point.y);
+        }
+    };
+
+    for (const auto& glyphLayer : *colorGlyph.layers)
+    {
+        const auto& layer = glyphLayer.layer;
+        if (layer.paintType == rive::Font::ColorGlyphPaintType::image)
+            include ({ layer.imageBearingX, layer.imageBearingY, layer.imageBearingX + layer.imageExtentX, layer.imageBearingY + layer.imageExtentY });
+        else
+            include (layer.path.bounds());
+    }
+
+    if (minX > maxX || minY > maxY)
+        return;
+
+    const auto viewport = Rectangle<float> (0.0f, 0.0f, options.drawingArea.getWidth(), options.drawingArea.getHeight()).transformed (options.getFixedTransform());
+    const auto deviceArea = Rectangle<float> (std::floor (minX) - 1.0f,
+                                              std::floor (minY) - 1.0f,
+                                              std::ceil (maxX) - std::floor (minX) + 2.0f,
+                                              std::ceil (maxY) - std::floor (minY) + 2.0f)
+                                .intersection (viewport);
+    if (deviceArea.isEmpty())
+        return;
+
+    const auto state = saveState();
+    if (text.getOverflow() != StyledText::visible)
+        setClipPath (rect);
+
+    auto& deviceOptions = currentRenderOptions();
+    deviceOptions.transform = AffineTransform::scaling (1.0f / deviceOptions.scale)
+                                  .translated (-deviceOptions.drawingArea.getX(), -deviceOptions.drawingArea.getY());
+
+    auto layer = beginTransparencyLayer (deviceArea);
+    if (! layer.isValid())
+        return;
+
+    auto& layerGraphics = layer.getGraphics();
+    layerGraphics.renderer.save();
+    layerGraphics.renderer.transform (rive::Mat2D::fromTranslate (-deviceArea.getX(), -deviceArea.getY()) * glyphToDevice);
+
+    for (const auto& glyphLayer : *colorGlyph.layers)
+    {
+        if (glyphLayer.layer.paintType == rive::Font::ColorGlyphPaintType::image)
+            layerGraphics.renderColorGlyphImage (glyphLayer.image, glyphLayer.layer, rive::BlendMode::srcOver, 0.0f);
+        else
+            layerGraphics.renderColorGlyphLayer (glyphLayer, foregroundColor, rive::BlendMode::srcOver, 0.0f);
+    }
+
+    layerGraphics.renderer.restore();
+    layer.commit();
+}
+
+void Graphics::renderColorGlyphLayer (const StyledText::ColorGlyphLayer& glyphLayer, rive::ColorInt foregroundColor, rive::BlendMode blendMode, float additiveness)
+{
+    using PaintType = rive::Font::ColorGlyphPaintType;
+    const auto& layer = glyphLayer.layer;
+
+    // The rules of rive::drawColorGlyphLayer: sweeps, single stops and singular radials are one color
+    rive::Mat2D toUnitCircle;
+    const bool isLinear = layer.paintType == PaintType::linearGradient;
+    const bool isRadial = layer.paintType == PaintType::radialGradient && layer.radialTransform.invert (&toUnitCircle);
+    const bool isGradient = layer.stops.size() >= 2 && (isLinear || isRadial);
+
+    // The layers were decoded with a black text color, so only their alpha is kept
+    const auto colorOf = [foregroundColor] (rive::ColorInt decodedColor, bool usesForeground)
+    {
+        return usesForeground ? rive::colorModulateOpacity (foregroundColor, rive::colorOpacity (decodedColor)) : decodedColor;
+    };
+
+    const auto makeGradient = [&]
+    {
+        std::vector<rive::ColorInt> colors;
+        std::vector<float> stops;
+        for (const auto& stop : layer.stops)
+        {
+            colors.push_back (colorOf (stop.color, stop.isForeground));
+            stops.push_back (stop.offset);
+        }
+
+        // Radial gradients are drawn in the unit circle space of the gradient
+        return isLinear ? factory.makeLinearGradient (layer.x0, layer.y0, layer.x1, layer.y1, colors.data(), stops.data(), colors.size())
+                        : factory.makeRadialGradient (0.0f, 0.0f, 1.0f, colors.data(), stops.data(), colors.size());
+    };
+
+    const bool hasForegroundStops = std::any_of (layer.stops.begin(), layer.stops.end(), [] (const auto& stop)
+    {
+        return stop.isForeground;
+    });
+
+    // The path and paint are made once per factory, Rive copies the paint settings at each draw
+    if (glyphLayer.preparedFactory != std::addressof (factory))
+    {
+        auto path = layer.path;
+        if (isGradient && isRadial)
+            path.transformInPlace (toUnitCircle);
+
+        glyphLayer.renderPath = factory.makeRenderPath (path, rive::FillRule::nonZero);
+        glyphLayer.renderPaint = factory.makeRenderPaint();
+        glyphLayer.renderPaint->style (rive::RenderPaintStyle::fill);
+
+        if (isGradient && ! hasForegroundStops)
+            glyphLayer.renderPaint->shader (makeGradient());
+
+        glyphLayer.preparedFactory = std::addressof (factory);
+    }
+
+    auto* paint = glyphLayer.renderPaint.get();
+
+    if (! isGradient)
+    {
+        const bool isSolid = layer.paintType == PaintType::solid || layer.stops.empty();
+        paint->color (isSolid ? colorOf (layer.color, layer.useForeground)
+                              : colorOf (layer.stops.front().color, layer.stops.front().isForeground));
+    }
+    else if (hasForegroundStops)
+    {
+        paint->shader (makeGradient());
+    }
+
+    paint->blendMode (blendMode);
+    paint->additiveness (additiveness);
+
+    if (isGradient && isRadial)
+    {
+        renderer.save();
+        renderer.transform (layer.radialTransform);
+        renderer.drawPath (glyphLayer.renderPath.get(), paint);
+        renderer.restore();
+    }
+    else
+    {
+        renderer.drawPath (glyphLayer.renderPath.get(), paint);
+    }
+}
+
+void Graphics::renderColorGlyphImage (const Image& image, const rive::Font::ColorGlyphLayer& layer, rive::BlendMode blendMode, float additiveness)
 {
     if (! image.isValid() || ! image.createTextureIfNotPresent (context))
         return;
@@ -1527,7 +1675,7 @@ void Graphics::renderColorGlyphImage (const Image& image, const rive::Font::Colo
                                      layer.imageExtentY / static_cast<float> (image.getHeight()),
                                      layer.imageBearingX,
                                      layer.imageBearingY));
-    renderer.drawImage (renderImage.get(), rive::ImageSampler::LinearClamp(), rive::BlendMode::srcOver, 1.0f);
+    renderer.drawImage (renderImage.get(), rive::ImageSampler::LinearClamp(), blendMode, 1.0f, additiveness);
     renderer.restore();
 }
 

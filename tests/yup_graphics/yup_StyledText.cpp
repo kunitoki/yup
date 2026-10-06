@@ -1366,6 +1366,50 @@ TEST_F (StyledTextLineBreakTests, NewlineAlwaysBreaks)
 }
 
 // ==============================================================================
+// Glyph Outline Tests
+// ==============================================================================
+
+class StyledTextGlyphOutlineTests : public ::testing::Test
+{
+protected:
+    /** The bounds of the outlines drawn for a string. */
+    static Rectangle<float> outlineBounds (const String& string, const Font& font)
+    {
+        StyledText text;
+        {
+            auto modifier = text.startUpdate();
+            modifier.appendText (string, font);
+        }
+
+        const auto styles = text.getRenderStyles();
+        if (styles.empty())
+            return {};
+
+        const auto& bounds = static_cast<rive::RiveRenderPath*> (styles[0]->path.get())->getBounds();
+        return { bounds.left(), bounds.top(), bounds.width(), bounds.height() };
+    }
+};
+
+TEST_F (StyledTextGlyphOutlineTests, OutlinesFollowVariableFontAxesAcrossManyFonts)
+{
+    const auto font = loadStyledTextTestFont (32.0f);
+    const auto weight = font.getAxisDescription ("wght");
+    ASSERT_TRUE (weight.has_value());
+
+    const auto light = outlineBounds ("abc", font.withAxisValue ("wght", weight->minimumValue));
+    const auto heavy = outlineBounds ("abc", font.withAxisValue ("wght", weight->maximumValue));
+    ASSERT_FALSE (light.isEmpty());
+    EXPECT_NE (light, heavy);
+
+    // Every axis change makes a new font: more of them than any outline cache keeps
+    for (int i = 0; i < 64; ++i)
+        outlineBounds ("abc", font.withAxisValue ("wght", jmap (static_cast<float> (i), 0.0f, 63.0f, weight->minimumValue, weight->maximumValue)));
+
+    EXPECT_EQ (light, outlineBounds ("abc", font.withAxisValue ("wght", weight->minimumValue)));
+    EXPECT_EQ (heavy, outlineBounds ("abc", font.withAxisValue ("wght", weight->maximumValue)));
+}
+
+// ==============================================================================
 // Color Emoji Tests
 // ==============================================================================
 

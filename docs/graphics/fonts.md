@@ -205,11 +205,17 @@ Font::setColorEmojiFallbackFont (Font()); // turn the fallback off
 ```
 
 The setting affects text shaped afterwards, so update already shaped `StyledText` to pick
-up a new font. Bitmap emoji are decoded once per process, but each `StyledText` uploads its
-own textures: for animated text, keep the `StyledText` around instead of calling
-`fillFittedText` with a `String` every frame. Emoji follow the `Graphics` opacity, tint and transform, but always draw with
-normal blending: draw them into a transparency layer and blend the layer to combine them
-otherwise.
+up a new font. Emoji follow the `Graphics` opacity, tint, transform and blend mode, like the
+text around them. A layered emoji drawn with a blend mode other than normal is composed in an
+offscreen layer first, so its layers cover each other before it is blended as a whole: that
+costs one offscreen pass per such emoji, so gather many of them in one transparency layer
+and blend the layer instead.
+
+Glyph outlines are cached for the whole process for the 32 most recently used fonts, which
+stay loaded while cached, and decoded color glyphs for every color font used. Each
+`StyledText` uploads its own emoji textures and prepares its own emoji paths: for animated
+text, keep the `StyledText` around instead of calling `fillFittedText` with a `String` every
+frame.
 
 Known limitation: when the text font has a glyph for the zero width joiner (U+200D), joined
 sequences such as 👩‍💻 split into their parts.

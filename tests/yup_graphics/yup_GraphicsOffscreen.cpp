@@ -881,6 +881,38 @@ protected:
         return image;
     }
 
+    /** Shapes text in the COLR test font, where "A" is red on the left half and blue on the right,
+        "B" is one layer in the text color, "C" a radial gradient from red at the center to blue,
+        and "D" a red square with a blue left half layered on top.
+    */
+    static void shapeColorGlyphText (StyledText& text, const String& string, float width = static_cast<float> (size))
+    {
+        const auto fontFile = File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/YupColrTest.ttf");
+        auto font = Font::loadFontFromFile (fontFile);
+        ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
+
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ width, static_cast<float> (size) });
+        modifier.appendText (string, font.getValue().withHeight (48.0f));
+    }
+
+    /** Counts the opaque pixels within [minX, maxX) that match a color test. */
+    static int countPixels (const std::vector<uint8>& pixels, const std::function<bool (int r, int g, int b)>& matches, int minX = 0, int maxX = size)
+    {
+        int count = 0;
+        for (int y = 0; y < size; ++y)
+        {
+            for (int x = minX; x < maxX; ++x)
+            {
+                const auto* pixel = pixels.data() + static_cast<std::size_t> ((y * size + x) * 4);
+                if (pixel[3] > 200 && matches (pixel[0], pixel[1], pixel[2]))
+                    ++count;
+            }
+        }
+
+        return count;
+    }
+
     static constexpr int size = 64;
     static std::unique_ptr<GraphicsContext> gpuContext;
 };
@@ -1147,17 +1179,8 @@ TEST_F (GraphicsMetalPixelTests, FillsColorEmojiInTheirOwnColors)
 
 TEST_F (GraphicsMetalPixelTests, FillsLayeredColorGlyphsWithTheirPaletteColors)
 {
-    // "A" in this font is a COLR glyph: a red left half and a blue right half, one em wide
-    const auto fontFile = File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/YupColrTest.ttf");
-    auto font = Font::loadFontFromFile (fontFile);
-    ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
-
     StyledText text;
-    {
-        auto modifier = text.startUpdate();
-        modifier.setMaxSize ({ static_cast<float> (size), static_cast<float> (size) });
-        modifier.appendText ("A", font.getValue().withHeight (48.0f));
-    }
+    shapeColorGlyphText (text, "A");
 
     const auto pixels = render ([&text] (Graphics& g)
     {
@@ -1166,15 +1189,201 @@ TEST_F (GraphicsMetalPixelTests, FillsLayeredColorGlyphsWithTheirPaletteColors)
     });
     ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
 
-    const auto channel = [&pixels] (int x, int y, int index)
+    // Unpaletted layers would all be black: find both colors, red to the left of blue
+    int redPixels = 0, bluePixels = 0;
+    float redX = 0.0f, blueX = 0.0f;
+
+    for (int y = 0; y < size; ++y)
     {
-        return static_cast<int> (pixels[static_cast<std::size_t> ((y * size + x) * 4 + index)]);
+        for (int x = 0; x < size; ++x)
+        {
+            const auto* pixel = pixels.data() + static_cast<std::size_t> ((y * size + x) * 4);
+            if (pixel[3] < 200)
+                continue;
+
+            if (pixel[0] > 200 && pixel[2] < 50)
+            {
+                ++redPixels;
+                redX += static_cast<float> (x);
+            }
+            else if (pixel[2] > 200 && pixel[0] < 50)
+            {
+                ++bluePixels;
+                blueX += static_cast<float> (x);
+            }
+        }
+    }
+
+    ASSERT_GT (redPixels, 20);
+    ASSERT_GT (bluePixels, 20);
+    EXPECT_LT (redX / static_cast<float> (redPixels), blueX / static_cast<float> (bluePixels));
+}
+
+TEST_F (GraphicsMetalPixelTests, ColorGlyphTakesEachDrawsTextColor)
+{
+    // The same text, so the same prepared layer, drawn twice in one frame in two colors
+    StyledText text;
+    shapeColorGlyphText (text, "B", size * 0.5f);
+
+    const auto pixels = render ([&text] (Graphics& g)
+    {
+        g.setFillColor (Color (0xff00ff00));
+        g.fillFittedText (text, { 0.0f, 0.0f, size * 0.5f, static_cast<float> (size) });
+        g.setFillColor (Color (0xffff0000));
+        g.fillFittedText (text, { size * 0.5f, 0.0f, size * 0.5f, static_cast<float> (size) });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    const auto isGreen = [] (int r, int g, int b) { return g > 200 && r < 50 && b < 50; };
+    const auto isRed = [] (int r, int g, int b) { return r > 200 && g < 50 && b < 50; };
+
+    EXPECT_GT (countPixels (pixels, isGreen, 0, size / 2), 20);
+    EXPECT_EQ (countPixels (pixels, isRed, 0, size / 2), 0);
+    EXPECT_GT (countPixels (pixels, isRed, size / 2, size), 20);
+    EXPECT_EQ (countPixels (pixels, isGreen, size / 2, size), 0);
+}
+
+TEST_F (GraphicsMetalPixelTests, FillsRadialGradientColorGlyphs)
+{
+    StyledText text;
+    shapeColorGlyphText (text, "C");
+
+    const auto pixels = render ([&text] (Graphics& g)
+    {
+        g.setFillColor (Colors::white);
+        g.fillFittedText (text, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    // Find the glyph, then compare its center with the middle of its left edge
+    int minX = size, maxX = -1, minY = size, maxY = -1;
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            if (pixels[static_cast<std::size_t> ((y * size + x) * 4 + 3)] > 200)
+            {
+                minX = jmin (minX, x);
+                maxX = jmax (maxX, x);
+                minY = jmin (minY, y);
+                maxY = jmax (maxY, y);
+            }
+        }
+    }
+    ASSERT_GT (maxX - minX, 8);
+    ASSERT_GT (maxY - minY, 8);
+
+    const auto pixelAt = [&pixels] (int x, int y)
+    {
+        return pixels.data() + static_cast<std::size_t> ((y * size + x) * 4);
     };
 
-    EXPECT_GT (channel (12, 20, 0), 200);
-    EXPECT_LT (channel (12, 20, 2), 50);
-    EXPECT_LT (channel (36, 20, 0), 50);
-    EXPECT_GT (channel (36, 20, 2), 200);
+    const auto* center = pixelAt ((minX + maxX) / 2, (minY + maxY) / 2);
+    const auto* edge = pixelAt (minX + 1, (minY + maxY) / 2);
+
+    EXPECT_GT (center[0], center[2] + 50);
+    EXPECT_GT (edge[2], edge[0] + 50);
+}
+
+TEST_F (GraphicsMetalPixelTests, ColorGlyphsFollowTheBlendMode)
+{
+    StyledText text;
+    shapeColorGlyphText (text, "A");
+
+    const auto pixels = render ([&text] (Graphics& g)
+    {
+        g.setFillColor (Color (0xff800000));
+        g.fillAll();
+
+        g.setBlendMode (BlendMode::Additive);
+        g.setAdditiveAmount (1.0f);
+        g.setFillColor (Colors::white);
+        g.fillFittedText (text, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    // Added onto dark red, the blue half keeps the red; drawn normally it would replace it
+    const auto isBlueOverRed = [] (int r, int, int b) { return b > 200 && r > 100; };
+    const auto isPlainBlue = [] (int r, int, int b) { return b > 200 && r < 50; };
+
+    EXPECT_GT (countPixels (pixels, isBlueOverRed), 20);
+    EXPECT_EQ (countPixels (pixels, isPlainBlue), 0);
+}
+
+TEST_F (GraphicsMetalPixelTests, MixedColoredAndPlainRunsKeepTheirColors)
+{
+    const auto fontFile = File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/Linefont-VariableFont_wdth,wght.ttf");
+    auto font = Font::loadFontFromFile (fontFile);
+    ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ static_cast<float> (size), static_cast<float> (size) });
+        modifier.appendText ("abc", Color (0xffff0000), font.getValue().withHeight (24.0f));
+        modifier.appendText ("abc", font.getValue().withHeight (24.0f));
+    }
+
+    const auto pixels = render ([&text] (Graphics& g)
+    {
+        g.setFillColor (Color (0xff00ff00));
+        g.fillFittedText (text, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    // The colored run keeps its color, the plain one takes the fill color
+    EXPECT_GT (countPixels (pixels, [] (int r, int g, int b) { return r > 200 && g < 50 && b < 50; }), 0);
+    EXPECT_GT (countPixels (pixels, [] (int r, int g, int b) { return g > 200 && r < 50 && b < 50; }), 0);
+}
+
+TEST_F (GraphicsMetalPixelTests, ColorGlyphsInMixedRunsTakeTheirRunsColor)
+{
+    // "B" is one layer in the text color: the colored run draws it red, the plain run in the fill
+    const auto fontFile = File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/YupColrTest.ttf");
+    auto font = Font::loadFontFromFile (fontFile);
+    ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ static_cast<float> (size), static_cast<float> (size) });
+        modifier.appendText ("B", Color (0xffff0000), font.getValue().withHeight (24.0f));
+        modifier.appendText ("B", font.getValue().withHeight (24.0f));
+    }
+
+    const auto pixels = render ([&text] (Graphics& g)
+    {
+        g.setFillColor (Color (0xff00ff00));
+        g.fillFittedText (text, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (countPixels (pixels, [] (int r, int g, int b) { return r > 200 && g < 50 && b < 50; }), 20);
+    EXPECT_GT (countPixels (pixels, [] (int r, int g, int b) { return g > 200 && r < 50 && b < 50; }), 20);
+}
+
+TEST_F (GraphicsMetalPixelTests, LayeredColorGlyphsBlendAsAWhole)
+{
+    StyledText text;
+    shapeColorGlyphText (text, "D");
+
+    const auto pixels = render ([&text] (Graphics& g)
+    {
+        g.setFillColor (Colors::black);
+        g.fillAll();
+
+        g.setBlendMode (BlendMode::Additive);
+        g.setAdditiveAmount (1.0f);
+        g.setFillColor (Colors::white);
+        g.fillFittedText (text, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    // The blue layer covers the red one before the glyph is added: blending each layer on its own
+    // would add the blue onto the red, and the left half would turn magenta
+    EXPECT_GT (countPixels (pixels, [] (int r, int, int b) { return b > 200 && r < 50; }), 20);
+    EXPECT_GT (countPixels (pixels, [] (int r, int, int b) { return r > 200 && b < 50; }), 20);
+    EXPECT_EQ (countPixels (pixels, [] (int r, int, int b) { return r > 200 && b > 200; }), 0);
 }
 
 #endif // YUP_MAC

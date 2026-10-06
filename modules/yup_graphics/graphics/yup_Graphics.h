@@ -959,9 +959,11 @@ private:
     void renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
     bool renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea);
 
-    void renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
-    void renderColorGlyphs (const StyledText& text, const rive::RiveRenderPaint* paint);
-    void renderColorGlyphImage (const Image& image, const rive::Font::ColorGlyphLayer& layer);
+    void renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint, bool replacesStylePaints);
+    void renderColorGlyphs (const StyledText& text, const rive::RiveRenderPaint* paint, std::vector<const StyledText::ColorGlyph*>& groupedGlyphs);
+    void renderColorGlyphGroup (const StyledText& text, const Rectangle<float>& rect, const StyledText::ColorGlyph& colorGlyph, rive::ColorInt foregroundColor);
+    void renderColorGlyphLayer (const StyledText::ColorGlyphLayer& glyphLayer, rive::ColorInt foregroundColor, rive::BlendMode blendMode, float additiveness);
+    void renderColorGlyphImage (const Image& image, const rive::Font::ColorGlyphLayer& layer, rive::BlendMode blendMode, float additiveness);
 
     GraphicsContext& context;
 

@@ -142,7 +142,7 @@ public:
         for (std::size_t i = 0; i < sampleTexts.size() && area.getHeight() > 0.0f; ++i)
         {
             g.setFillColor (palette.getColor (yup::ThemePalette::Role::textMuted));
-            g.fillFittedText (getSamples()[i].caption, captionFont(), area.removeFromTop (20.0f), yup::Justification::topLeft);
+            g.fillFittedText (sampleCaptions[i], area.removeFromTop (20.0f));
 
             g.setFillColor (palette.getColor (yup::ThemePalette::Role::text));
             g.fillFittedText (sampleTexts[i], area.removeFromTop (sampleTexts[i].getComputedTextBounds().getHeight()));
@@ -194,14 +194,31 @@ private:
         numEffects
     };
 
+    static constexpr std::array<const char*, numEffects> effectCaptions {
+        "Tint", "Shadow", "Additive glow", "Gradient through a mask", "Transform", "Tinted trail"
+    };
+
+    static void shapeCaption (yup::StyledText& text, const yup::String& caption, yup::Size<float> maxSize, bool centered)
+    {
+        auto modifier = text.startUpdate();
+        modifier.clear();
+        modifier.setMaxSize (maxSize);
+        modifier.setHorizontalAlign (centered ? yup::StyledText::center : yup::StyledText::left);
+        modifier.setVerticalAlign (centered ? yup::StyledText::middle : yup::StyledText::top);
+        modifier.appendText (caption, captionFont());
+    }
+
     void shapeSamples()
     {
         const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
         const auto& samples = getSamples();
 
         sampleTexts.resize (samples.size());
+        sampleCaptions.resize (samples.size());
         for (std::size_t i = 0; i < samples.size(); ++i)
         {
+            shapeCaption (sampleCaptions[i], samples[i].caption, { samplesArea.isEmpty() ? -1.0f : samplesArea.getWidth(), 20.0f }, false);
+
             auto modifier = sampleTexts[i].startUpdate();
             modifier.clear();
             modifier.setMaxSize ({ samplesArea.isEmpty() ? -1.0f : samplesArea.getWidth(), -1.0f });
@@ -212,8 +229,11 @@ private:
             u8"\U0001F984", u8"\U0001F419", u8"\U0001F31F", u8"\U0001F3B8", u8"\U0001F354", u8"\U0001F680"
         };
 
+        const auto captionWidth = effectsArea.getWidth() / static_cast<float> (numEffects) - 8.0f;
         for (std::size_t i = 0; i < effectEmoji.size(); ++i)
         {
+            shapeCaption (effectCaptionTexts[i], effectCaptions[i], { yup::jmax (1.0f, captionWidth), 24.0f }, true);
+
             auto modifier = effectTexts[i].startUpdate();
             modifier.clear();
             modifier.setMaxSize ({ emojiBox, emojiBox });
@@ -240,11 +260,9 @@ private:
 
     void paintEffects (yup::Graphics& g, const yup::ThemePalette& palette)
     {
-        static constexpr std::array<const char*, numEffects> captions { "Tint", "Shadow", "Additive glow", "Gradient through a mask", "Transform", "Tinted trail" };
+        const auto cellWidth = effectsArea.getWidth() / static_cast<float> (numEffects);
 
-        const auto cellWidth = effectsArea.getWidth() / static_cast<float> (captions.size());
-
-        for (std::size_t i = 0; i < captions.size(); ++i)
+        for (std::size_t i = 0; i < numEffects; ++i)
         {
             auto cell = effectsArea.withX (effectsArea.getX() + cellWidth * static_cast<float> (i)).withWidth (cellWidth).reduced (4.0f);
 
@@ -252,7 +270,7 @@ private:
             g.fillRoundedRect (cell, 8.0f);
 
             g.setFillColor (palette.getColor (yup::ThemePalette::Role::textMuted));
-            g.fillFittedText (captions[i], captionFont(), cell.removeFromBottom (24.0f), yup::Justification::center);
+            g.fillFittedText (effectCaptionTexts[i], cell.removeFromBottom (24.0f));
 
             const auto state = g.saveState();
             g.setClipPath (cell);
@@ -291,7 +309,7 @@ private:
 
             case glowEffect:
             {
-                // Enlarged tinted copies, grouped in a layer that is added onto the background
+                // Enlarged tinted copies, gathered in one layer that is added onto the background
                 const auto pulse = std::sin (time * 3.0f) * 0.5f + 0.5f;
                 {
                     const auto state = g.saveState();
@@ -410,7 +428,9 @@ private:
     yup::Rectangle<float> effectsArea;
     yup::Rectangle<float> samplesArea;
     std::vector<yup::StyledText> sampleTexts;
+    std::vector<yup::StyledText> sampleCaptions;
     std::array<yup::StyledText, numEffects> effectTexts;
+    std::array<yup::StyledText, numEffects> effectCaptionTexts;
     float textSize = 18.0f;
     float time = 0.0f;
 };

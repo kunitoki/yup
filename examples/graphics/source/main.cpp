@@ -169,9 +169,6 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
 #include "examples/Layout.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
-#include "examples/LayoutFonts.h"
-#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ListBox
 #include "examples/ListBox.h"
 #endif
@@ -375,9 +372,6 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
         addDemo ("Layout", [] { return std::make_unique<LayoutExample>(); });
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
-        addDemo ("Layout Fonts", [] { return std::make_unique<LayoutFontsExample>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ListBox
         addDemo ("List Box", [] { return std::make_unique<ListBoxDemo>(); });

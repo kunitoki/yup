@@ -791,6 +791,14 @@ TEST (FontTests, WithFeatureReturnsEmptyFontForEmptyFont)
     EXPECT_EQ (0, newFont.getNumAxis());
 }
 
+TEST (FontTests, WithFeatureKeepsTheHeight)
+{
+    const auto font = loadTestFont().withHeight (20.0f);
+
+    EXPECT_FLOAT_EQ (20.0f, font.withFeature ({ "liga", 1 }).getHeight());
+    EXPECT_FLOAT_EQ (20.0f, font.withFeatures ({ { "liga", 1 }, { "kern", 0 } }).getHeight());
+}
+
 TEST (FontTests, WithFeaturesReturnsEmptyFontForEmptyFont)
 {
     Font font;
