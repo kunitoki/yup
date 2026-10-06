@@ -960,6 +960,8 @@ private:
     bool renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea);
 
     void renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
+    void renderColorGlyphs (const StyledText& text, const rive::RiveRenderPaint* paint);
+    void renderColorGlyphImage (const Image& image, const rive::Font::ColorGlyphLayer& layer);
 
     GraphicsContext& context;
 

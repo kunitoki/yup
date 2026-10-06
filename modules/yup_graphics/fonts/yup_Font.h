@@ -90,6 +90,38 @@ public:
     */
     static ResultValue<Font> loadMonospaceSystemTextFont();
 
+    /** Attempts to load the platform's color emoji system font.
+
+        On macOS/iOS this uses CoreText's Apple Color Emoji, on Windows Segoe UI Emoji and on
+        Linux and Android Noto Color Emoji. WebAssembly has no system fonts, so this always
+        fails there: ship an emoji font with the app and pass it to setColorEmojiFallbackFont().
+
+        @return The result of the operation, holding the loaded font on success, or a failure
+                if no font with color glyphs could be found.
+    */
+    static ResultValue<Font> loadColorEmojiSystemFont();
+
+    /** Sets the font that draws characters missing from a text's own font, typically emoji.
+
+        Shaping text falls back to this font for a run of characters the text's font lacks,
+        when this font has the first of them. That covers StyledText, every component drawing
+        text and Rive artboard text, and color glyphs are drawn in their own colors.
+
+        The default is the system color emoji font (see loadColorEmojiSystemFont()), loaded
+        on first use. Pass an empty Font to turn the fallback off. The setting is process-wide,
+        can be changed from any thread, and only affects text shaped after the call.
+
+        @param font The fallback font, or an empty Font for none.
+    */
+    static void setColorEmojiFallbackFont (const Font& font);
+
+    /** Returns the font that draws characters missing from a text's own font.
+
+        @return The font set with setColorEmojiFallbackFont(), otherwise the system color emoji
+                font, or an empty Font when there is none.
+    */
+    static Font getColorEmojiFallbackFont();
+
     //==============================================================================
     /** Returns true if the font is empty (no font data loaded). */
     bool isEmpty() const noexcept { return font == nullptr; }

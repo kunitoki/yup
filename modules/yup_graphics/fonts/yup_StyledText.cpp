@@ -193,6 +193,7 @@ void StyledText::clear()
     ellipsisRun = {};
     styles.clear();
     renderStyles.clear();
+    colorGlyphs.clear();
     glyphLookup.clear();
     colorPaints.clear();
     bounds = {};
@@ -369,6 +370,7 @@ void StyledText::update()
     }
 
     renderStyles.clear();
+    colorGlyphs.clear();
     if (styledTexts.empty())
         return;
 
@@ -524,17 +526,12 @@ void StyledText::update()
                 rive::GlyphID glyphId = run->glyphs[glyphIndex];
                 float advance = run->advances[glyphIndex];
 
-                auto& fontCache = glyphPathCache[font];
-                auto cachedPath = fontCache.find (glyphId);
-                if (cachedPath == fontCache.end())
-                    cachedPath = fontCache.emplace (glyphId, font->getPath (glyphId)).first;
-
-                rive::RawPath path = cachedPath->second.transform (rive::Mat2D (run->size,
-                                                                                0.0f,
-                                                                                0.0f,
-                                                                                run->size,
-                                                                                x + offset.x,
-                                                                                renderY + offset.y));
+                const rive::Mat2D glyphTransform (run->size,
+                                                  0.0f,
+                                                  0.0f,
+                                                  run->size,
+                                                  x + offset.x,
+                                                  renderY + offset.y);
 
                 lineGlyphX[static_cast<size_t> (lineIndex)].push_back (x);
 
@@ -543,6 +540,20 @@ void StyledText::update()
                 jassert (run->styleId < styles.size());
                 RenderStyle* style = &styles[run->styleId];
                 jassert (style != nullptr);
+
+                if (auto layers = findColorGlyphLayers (run->font, glyphId))
+                {
+                    const auto* paint = lite_rtti_cast<rive::RiveRenderPaint*> (style->paint.get());
+                    colorGlyphs.push_back ({ std::move (layers), glyphTransform, paint != nullptr ? paint->getColor() : 0xff000000 });
+                    continue;
+                }
+
+                auto& fontCache = glyphPathCache[font];
+                auto cachedPath = fontCache.find (glyphId);
+                if (cachedPath == fontCache.end())
+                    cachedPath = fontCache.emplace (glyphId, font->getPath (glyphId)).first;
+
+                rive::RawPath path = cachedPath->second.transform (glyphTransform);
                 path.addTo (style->path.get());
 
                 if (style->isEmpty)
@@ -1102,6 +1113,74 @@ Span<const StyledText::RenderStyle* const> StyledText::getRenderStyles() const
 {
     jassert (! isDirty);
     return renderStyles;
+}
+
+int StyledText::getNumColorGlyphs() const
+{
+    jassert (! isDirty);
+    return static_cast<int> (colorGlyphs.size());
+}
+
+std::shared_ptr<const std::vector<StyledText::ColorGlyphLayer>> StyledText::findColorGlyphLayers (const rive::rcp<rive::Font>& font, rive::GlyphID glyphId)
+{
+    if (! font->isColorGlyph (glyphId))
+        return nullptr;
+
+    auto& fontCache = colorGlyphLayerCache[font.get()];
+    if (auto cached = fontCache.find (glyphId); cached != fontCache.end())
+        return cached->second;
+
+    // The copy shares the decoded pixels, and keeps its own GPU texture for as long as this text lives
+    std::shared_ptr<const std::vector<ColorGlyphLayer>> layers;
+    if (auto decodedLayers = decodeColorGlyphLayers (font, glyphId))
+        layers = std::make_shared<const std::vector<ColorGlyphLayer>> (*decodedLayers);
+
+    fontCache.emplace (glyphId, layers);
+    return layers;
+}
+
+std::shared_ptr<const std::vector<StyledText::ColorGlyphLayer>> StyledText::decodeColorGlyphLayers (const rive::rcp<rive::Font>& font, rive::GlyphID glyphId)
+{
+    // Shared by all texts, so text shaped for a single draw does not decode bitmap emoji again.
+    // The lock also guards the font's own layer cache, which Rive does not synchronize
+    struct DecodedLayers
+    {
+        rive::rcp<rive::Font> font;
+        std::shared_ptr<const std::vector<ColorGlyphLayer>> layers;
+    };
+
+    static CriticalSection lock;
+    static std::map<std::pair<const rive::Font*, rive::GlyphID>, DecodedLayers> cache;
+
+    const ScopedLock sl (lock);
+
+    const auto key = std::make_pair (font.get(), glyphId);
+    if (auto cached = cache.find (key); cached != cache.end())
+        return cached->second.layers;
+
+    std::vector<rive::Font::ColorGlyphLayer> fontLayers;
+    font->getColorLayers (glyphId, fontLayers);
+
+    std::shared_ptr<std::vector<ColorGlyphLayer>> layers;
+    if (! fontLayers.empty())
+    {
+        layers = std::make_shared<std::vector<ColorGlyphLayer>>();
+
+        for (auto& fontLayer : fontLayers)
+        {
+            // Bitmap emoji are decoded once here, and their encoded bytes are no longer needed
+            Image image;
+            if (fontLayer.paintType == rive::Font::ColorGlyphPaintType::image)
+                image = Image::loadFromData (Span<const uint8> (fontLayer.imageBytes.data(), fontLayer.imageBytes.size())).valueOr (Image());
+
+            fontLayer.imageBytes = {};
+            layers->push_back ({ std::move (fontLayer), std::move (image) });
+        }
+    }
+
+    // Holding the font keeps its address from being reused by another font
+    cache.emplace (key, DecodedLayers { font, layers });
+    return layers;
 }
 
 //==============================================================================

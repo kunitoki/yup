@@ -159,6 +159,10 @@ public:
     Span<const RenderStyle* const> getRenderStyles() const;
 
     //==============================================================================
+    /** Returns the number of color glyphs (emoji) in the text, drawn in their own colors. */
+    int getNumColorGlyphs() const;
+
+    //==============================================================================
 
     /** Find the glyph index at a given position in the text area.
 
@@ -210,6 +214,20 @@ public:
 
 private:
     friend class TextModifier;
+    friend class Graphics;
+
+    struct ColorGlyphLayer
+    {
+        rive::Font::ColorGlyphLayer layer;
+        Image image;
+    };
+
+    struct ColorGlyph
+    {
+        std::shared_ptr<const std::vector<ColorGlyphLayer>> layers;
+        rive::Mat2D transform;
+        uint32 foregroundColor = 0xff000000;
+    };
 
     void clear();
 
@@ -235,6 +253,8 @@ private:
     void update();
     int findParagraphNewlinePosition (int orderedLineIndex) const;
     int findParagraphNewlinePositionByIndex (int paragraphIndex) const;
+    std::shared_ptr<const std::vector<ColorGlyphLayer>> findColorGlyphLayers (const rive::rcp<rive::Font>& font, rive::GlyphID glyphId);
+    static std::shared_ptr<const std::vector<ColorGlyphLayer>> decodeColorGlyphLayers (const rive::rcp<rive::Font>& font, rive::GlyphID glyphId);
 
     rive::SimpleArray<rive::Paragraph> shape;
     rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>> lines;
@@ -243,10 +263,12 @@ private:
     rive::StyledText styledTexts;
     std::vector<RenderStyle> styles;
     std::vector<RenderStyle*> renderStyles;
+    std::vector<ColorGlyph> colorGlyphs;
     rive::GlyphLookup glyphLookup;
     std::unordered_map<uint32_t, rive::rcp<rive::RenderPaint>> colorPaints;
 
     std::unordered_map<const rive::Font*, std::unordered_map<rive::GlyphID, rive::RawPath>> glyphPathCache;
+    std::unordered_map<const rive::Font*, std::unordered_map<rive::GlyphID, std::shared_ptr<const std::vector<ColorGlyphLayer>>>> colorGlyphLayerCache;
 
     TextOrigin origin = TextOrigin::topOrigin;
     TextOverflow overflow = TextOverflow::visible;

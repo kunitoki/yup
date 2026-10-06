@@ -1776,6 +1776,16 @@ void registerYupGraphicsBindings (py::module_& m)
 
             return result.getValue();
         })
+        .def_static ("loadColorEmojiSystemFont", [] () -> Font
+        {
+            auto result = Font::loadColorEmojiSystemFont();
+            if (! result.wasOk())
+                throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
+
+            return result.getValue();
+        })
+        .def_static ("setColorEmojiFallbackFont", &Font::setColorEmojiFallbackFont, "font"_a)
+        .def_static ("getColorEmojiFallbackFont", &Font::getColorEmojiFallbackFont)
 
         // Metrics
         .def ("isEmpty", &Font::isEmpty)
@@ -1905,6 +1915,7 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getParagraphSpacing", &StyledText::getParagraphSpacing)
         .def ("getWrap", &StyledText::getWrap)
         .def ("getComputedTextBounds", &StyledText::getComputedTextBounds)
+        .def ("getNumColorGlyphs", &StyledText::getNumColorGlyphs)
         .def ("getOffset", &StyledText::getOffset, "area"_a)
 
         .def ("getGlyphIndexAtPosition", &StyledText::getGlyphIndexAtPosition, "position"_a)

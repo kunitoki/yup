@@ -293,6 +293,21 @@
               "        m_drawContents |= gpu::DrawContents::opaquePaint;"
             ]
           }
+        },
+        {
+          "path": "source/text/font_hb.cpp",
+          "note": "load the CPAL palette: hb_ot_color_palette_get_colors returns the palette size, the in/out count only says how many colors to copy, so COLRv0 emoji (Twemoji, Segoe UI Emoji) drew every layer black",
+          "already_contains": "unsigned int colorCount =\n            hb_ot_color_palette_get_colors(face, 0, 0, nullptr, nullptr);",
+          "replace": {
+            "from": [
+              "        unsigned int colorCount = 0;",
+              "        hb_ot_color_palette_get_colors(face, 0, 0, &colorCount, nullptr);"
+            ],
+            "to": [
+              "        unsigned int colorCount =",
+              "            hb_ot_color_palette_get_colors(face, 0, 0, nullptr, nullptr);"
+            ]
+          }
         }
       ],
       "shader_generation": {

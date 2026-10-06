@@ -1364,3 +1364,98 @@ TEST_F (StyledTextLineBreakTests, NewlineAlwaysBreaks)
 
     EXPECT_GT (lineY (text, string.indexOfChar ('t')), lineY (text, 0));
 }
+
+// ==============================================================================
+// Color Emoji Tests
+// ==============================================================================
+
+class StyledTextColorEmojiTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        previousFallback = Font::getColorEmojiFallbackFont();
+
+        auto emojiFont = Font::loadColorEmojiSystemFont();
+        if (emojiFont.failed())
+            GTEST_SKIP() << "No system color emoji font: " << emojiFont.getErrorMessage();
+
+        Font::setColorEmojiFallbackFont (emojiFont.getValue());
+    }
+
+    void TearDown() override
+    {
+        Font::setColorEmojiFallbackFont (previousFallback);
+    }
+
+    static void shape (StyledText& text, const String& string)
+    {
+        auto modifier = text.startUpdate();
+        modifier.appendText (string, Colors::black, loadStyledTextTestFont (32.0f));
+    }
+
+    static String grinningFace()
+    {
+        return String::fromUTF8 ("\xf0\x9f\x98\x80");
+    }
+
+    Font previousFallback;
+};
+
+TEST_F (StyledTextColorEmojiTests, EmojiMissingFromTheTextFontUsesTheFallbackFont)
+{
+    StyledText text;
+    shape (text, "a" + grinningFace());
+
+    EXPECT_EQ (1, text.getNumColorGlyphs());
+}
+
+TEST_F (StyledTextColorEmojiTests, EmojiAddsNoOutline)
+{
+    StyledText text;
+    shape (text, grinningFace());
+
+    EXPECT_EQ (1, text.getNumColorGlyphs());
+    EXPECT_TRUE (text.getRenderStyles().empty());
+}
+
+TEST_F (StyledTextColorEmojiTests, TextWithoutEmojiHasNoColorGlyphs)
+{
+    StyledText text;
+    shape (text, "abc");
+
+    EXPECT_EQ (0, text.getNumColorGlyphs());
+    EXPECT_FALSE (text.getRenderStyles().empty());
+}
+
+TEST_F (StyledTextColorEmojiTests, ConsecutiveEmojiKeepTheirOwnCharacterPositions)
+{
+    const auto partyPopper = String::fromUTF8 ("\xf0\x9f\x8e\x89");
+
+    StyledText text;
+    shape (text, "a" + grinningFace() + partyPopper + "b");
+
+    EXPECT_EQ (2, text.getNumColorGlyphs());
+    EXPECT_LT (text.getCaretBounds (1).getX(), text.getCaretBounds (2).getX());
+    EXPECT_LT (text.getCaretBounds (2).getX(), text.getCaretBounds (3).getX());
+}
+
+TEST_F (StyledTextColorEmojiTests, ClearRemovesColorGlyphs)
+{
+    StyledText text;
+    shape (text, grinningFace());
+
+    text.startUpdate().clear();
+
+    EXPECT_EQ (0, text.getNumColorGlyphs());
+}
+
+TEST_F (StyledTextColorEmojiTests, ClearedFallbackLeavesEmojiMissing)
+{
+    Font::setColorEmojiFallbackFont (Font());
+
+    StyledText text;
+    shape (text, grinningFace());
+
+    EXPECT_EQ (0, text.getNumColorGlyphs());
+}

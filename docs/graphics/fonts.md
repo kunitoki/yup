@@ -186,6 +186,34 @@ g.fillFittedText (styledText, textBounds);
 g.strokeFittedText (styledText, textBounds);
 ```
 
+## Color emoji
+
+Characters missing from a text's font are shaped with a process-wide fallback font, so emoji
+show up in any text - `StyledText`, labels, text editors and Rive artboard text - with no
+extra code. Color glyphs (COLR layers, SBIX and CBDT bitmaps) keep their own colors when the
+text is filled; stroking text leaves them out.
+
+By default the fallback is the system color emoji font, loaded on first use: Apple Color
+Emoji on macOS and iOS, Segoe UI Emoji on Windows, Noto Color Emoji on Linux and Android.
+WebAssembly has no system fonts, so ship an emoji font with the app and set it at startup:
+
+```cpp
+if (auto emoji = Font::loadFontFromFile (File ("data/Twemoji.Mozilla.ttf")); emoji.wasOk())
+    Font::setColorEmojiFallbackFont (emoji.getValue());
+
+Font::setColorEmojiFallbackFont (Font()); // turn the fallback off
+```
+
+The setting affects text shaped afterwards, so update already shaped `StyledText` to pick
+up a new font. Bitmap emoji are decoded once per process, but each `StyledText` uploads its
+own textures: for animated text, keep the `StyledText` around instead of calling
+`fillFittedText` with a `String` every frame. Emoji follow the `Graphics` opacity, tint and transform, but always draw with
+normal blending: draw them into a transparency layer and blend the layer to combine them
+otherwise.
+
+Known limitation: when the text font has a glyph for the zero width joiner (U+200D), joined
+sequences such as 👩‍💻 split into their parts.
+
 ## See also
 
 - [The Graphics class](graphics-class.md) - `fillFittedText`, `strokeFittedText`.

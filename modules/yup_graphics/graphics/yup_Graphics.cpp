@@ -1470,6 +1470,64 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
             renderer.drawPath (style->path.get(), (paint != nullptr) ? paint : style->paint.get());
     }
 
+    if (paint == nullptr || ! paint->getIsStroked())
+        renderColorGlyphs (text, paint);
+
+    renderer.restore();
+}
+
+void Graphics::renderColorGlyphs (const StyledText& text, const rive::RiveRenderPaint* paint)
+{
+    for (const auto& colorGlyph : text.colorGlyphs)
+    {
+        const auto foregroundColor = paint != nullptr ? paint->getColor() : static_cast<rive::ColorInt> (colorGlyph.foregroundColor);
+
+        renderer.save();
+        renderer.transform (colorGlyph.transform);
+
+        for (const auto& [layer, image] : *colorGlyph.layers)
+        {
+            if (layer.paintType == rive::Font::ColorGlyphPaintType::image)
+            {
+                renderColorGlyphImage (image, layer);
+                continue;
+            }
+
+            // The layers were extracted with a black foreground, so only their alpha is kept.
+            // Drawing also transforms the layer path, hence the copy
+            auto coloredLayer = layer;
+            if (coloredLayer.useForeground)
+                coloredLayer.color = rive::colorModulateOpacity (foregroundColor, rive::colorOpacity (coloredLayer.color));
+
+            for (auto& stop : coloredLayer.stops)
+            {
+                if (stop.isForeground)
+                    stop.color = rive::colorModulateOpacity (foregroundColor, rive::colorOpacity (stop.color));
+            }
+
+            rive::drawColorGlyphLayer (std::addressof (renderer), std::addressof (factory), coloredLayer, 1.0f);
+        }
+
+        renderer.restore();
+    }
+}
+
+void Graphics::renderColorGlyphImage (const Image& image, const rive::Font::ColorGlyphLayer& layer)
+{
+    if (! image.isValid() || ! image.createTextureIfNotPresent (context))
+        return;
+
+    const auto renderImage = rive::make_rcp<rive::RiveRenderImage> (image.getTexture());
+
+    // drawImage() maps the image to [0, 0, width, height], the layer places it in glyph space
+    renderer.save();
+    renderer.transform (rive::Mat2D (layer.imageExtentX / static_cast<float> (image.getWidth()),
+                                     0.0f,
+                                     0.0f,
+                                     layer.imageExtentY / static_cast<float> (image.getHeight()),
+                                     layer.imageBearingX,
+                                     layer.imageBearingY));
+    renderer.drawImage (renderImage.get(), rive::ImageSampler::LinearClamp(), rive::BlendMode::srcOver, 1.0f);
     renderer.restore();
 }
 

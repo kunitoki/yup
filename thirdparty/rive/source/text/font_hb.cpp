@@ -717,8 +717,8 @@ HBFont::HBFont(hb_font_t* font,
     m_hasPNG = hb_ot_color_has_png(face);
     if (m_hasColorLayers || m_hasColorPaint)
     {
-        unsigned int colorCount = 0;
-        hb_ot_color_palette_get_colors(face, 0, 0, &colorCount, nullptr);
+        unsigned int colorCount =
+            hb_ot_color_palette_get_colors(face, 0, 0, nullptr, nullptr);
         if (colorCount > 0)
         {
             m_paletteColors.resize(colorCount);

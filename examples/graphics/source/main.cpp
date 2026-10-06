@@ -145,6 +145,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
 #include "examples/DragAndDrop.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Emoji
+#include "examples/Emoji.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
 #include "examples/FileChooser.h"
 #endif
@@ -348,6 +351,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
         addDemo ("Drag and Drop", [] { return std::make_unique<DragAndDropDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Emoji
+        addDemo ("Emoji", [] { return std::make_unique<EmojiDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
         addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });

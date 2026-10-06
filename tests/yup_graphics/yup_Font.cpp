@@ -1140,3 +1140,48 @@ TEST (FontTests, LoadMonospaceSystemTextFontDoesNotCrash)
         EXPECT_GT (font.getValue().getHeight(), 0.0f);
 #endif
 }
+
+// ==============================================================================
+// Color Emoji Tests
+// ==============================================================================
+
+class FontColorEmojiTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        previousFallback = Font::getColorEmojiFallbackFont();
+    }
+
+    void TearDown() override
+    {
+        Font::setColorEmojiFallbackFont (previousFallback);
+    }
+
+    Font previousFallback;
+};
+
+TEST_F (FontColorEmojiTests, SystemColorEmojiFontHasColorGlyphs)
+{
+    auto result = Font::loadColorEmojiSystemFont();
+
+#if YUP_APPLE
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+#else
+    if (result.failed())
+        GTEST_SKIP() << "No system color emoji font: " << result.getErrorMessage();
+#endif
+
+    EXPECT_TRUE (result.getValue().getFont()->hasGlyph (0x1F600));
+}
+
+TEST_F (FontColorEmojiTests, FallbackFontCanBeReplacedAndCleared)
+{
+    const auto font = loadTestFont();
+
+    Font::setColorEmojiFallbackFont (font);
+    EXPECT_EQ (font, Font::getColorEmojiFallbackFont());
+
+    Font::setColorEmojiFallbackFont (Font());
+    EXPECT_TRUE (Font::getColorEmojiFallbackFont().isEmpty());
+}

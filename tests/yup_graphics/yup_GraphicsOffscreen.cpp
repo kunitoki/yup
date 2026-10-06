@@ -1113,4 +1113,68 @@ TEST_F (GraphicsMetalPixelTests, DrawingAfterClipStrokeIsNotShifted)
     EXPECT_LT (alphaAt (pixels, 50, 44), 50);
 }
 
+TEST_F (GraphicsMetalPixelTests, FillsColorEmojiInTheirOwnColors)
+{
+    auto emojiFont = Font::loadColorEmojiSystemFont();
+    if (emojiFont.failed())
+        GTEST_SKIP() << "No system color emoji font: " << emojiFont.getErrorMessage();
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ static_cast<float> (size), static_cast<float> (size) });
+        modifier.appendText (String::fromUTF8 ("\xf0\x9f\x98\x80"), emojiFont.getValue().withHeight (48.0f));
+    }
+
+    const auto pixels = render ([&text] (Graphics& g)
+    {
+        // A black fill would paint a monochrome outline in black
+        g.setFillColor (Colors::black);
+        g.fillFittedText (text, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    int colorfulPixels = 0;
+    for (std::size_t i = 0; i < pixels.size(); i += 4)
+    {
+        const auto [minChannel, maxChannel] = std::minmax ({ pixels[i], pixels[i + 1], pixels[i + 2] });
+        if (pixels[i + 3] > 128 && maxChannel - minChannel > 64)
+            ++colorfulPixels;
+    }
+
+    EXPECT_GT (colorfulPixels, 100);
+}
+
+TEST_F (GraphicsMetalPixelTests, FillsLayeredColorGlyphsWithTheirPaletteColors)
+{
+    // "A" in this font is a COLR glyph: a red left half and a blue right half, one em wide
+    const auto fontFile = File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/YupColrTest.ttf");
+    auto font = Font::loadFontFromFile (fontFile);
+    ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ static_cast<float> (size), static_cast<float> (size) });
+        modifier.appendText ("A", font.getValue().withHeight (48.0f));
+    }
+
+    const auto pixels = render ([&text] (Graphics& g)
+    {
+        g.setFillColor (Colors::white);
+        g.fillFittedText (text, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    const auto channel = [&pixels] (int x, int y, int index)
+    {
+        return static_cast<int> (pixels[static_cast<std::size_t> ((y * size + x) * 4 + index)]);
+    };
+
+    EXPECT_GT (channel (12, 20, 0), 200);
+    EXPECT_LT (channel (12, 20, 2), 50);
+    EXPECT_LT (channel (36, 20, 0), 50);
+    EXPECT_GT (channel (36, 20, 2), 200);
+}
+
 #endif // YUP_MAC

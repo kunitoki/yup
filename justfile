@@ -151,6 +151,11 @@ vscode:
 fetch_coverage PR:
   uv run python tools/print_uncovered_lines.py --pr {{PR}}
 
+[doc("sample a running process (example_graphics by default) and print the call graph")]
+[macos]
+sample SECONDS="5" NAME="example_graphics" PID="":
+  uv run python tools/sample_process.py --name {{NAME}} --seconds {{SECONDS}} {{ if PID != "" { "--pid " + PID } else { "" } }}
+
 [doc("update rive runtime")]
 rive_update REF="runtime-v0.1.512":
   uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir
