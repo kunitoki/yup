@@ -49,6 +49,38 @@ public:
     using LoaderFunction = void* (*) (const char*);
 
     //==============================================================================
+    /** Windowing hooks of the Vulkan backend, ignored by every other backend.
+
+        Vulkan has no window system of its own: the windowing layer resolves the
+        loader and creates the surfaces, and the device calls back into it. Handles
+        are passed type-erased, so this header stays free of Vulkan types: a
+        @c VkInstance or @c VkPhysicalDevice travels as @c void*, a
+        @c VkSurfaceKHR as a 64-bit integer.
+    */
+    struct VulkanOptions
+    {
+        /** The loader entry point (@c PFN_vkGetInstanceProcAddr). Without it the
+            Vulkan backend is unavailable. */
+        void* getInstanceProcAddr = nullptr;
+
+        /** Instance extensions the window surfaces need, such as @c VK_KHR_surface
+            and the platform surface extension. Empty for a headless device. */
+        StringArray instanceExtensions;
+
+        /** Tells whether a queue family of a physical device can present to the
+            window system. Null for a headless device, which then has no swapchain. */
+        std::function<bool (void* instance, void* physicalDevice, uint32 queueFamilyIndex)> presentationSupport;
+
+        /** Creates the window surface on the given instance, returning the
+            @c VkSurfaceKHR handle or 0 on failure. Called again whenever the window
+            is attached after having been detached. */
+        std::function<uint64 (void* instance)> createSurface;
+
+        /** Destroys a surface returned by createSurface. */
+        std::function<void (void* instance, uint64 surface)> destroySurface;
+    };
+
+    //==============================================================================
     /** Configuration options for creating a GPU context. */
     struct Options
     {
@@ -92,6 +124,9 @@ public:
             @param fn The GPU compute work to run with the compute context current.
         */
         std::function<void (const std::function<void()>&)> computeContextActivator;
+
+        /** Windowing hooks of the Vulkan backend. */
+        VulkanOptions vulkan;
     };
 
     //==============================================================================
@@ -104,6 +139,18 @@ public:
                 GPU API and configured according to the options.
     */
     static GpuDevice::Ptr create (GpuPlatform gpuApi, Options options);
+
+    /** Returns true if a device of the given GPU API can be created with these options.
+
+        A cheap probe meant for picking a graphics API before creating a window. Vulkan
+        checks for a loader, a driver and a physical device that meets the renderer's
+        requirements (Vulkan 1.1, Vulkan 1.3 on PowerVR, Android 10), caching the answer
+        for the process. Every other API reports whether it was compiled in.
+
+        @param gpuApi   The GPU API to probe.
+        @param options  The options the device would be created with.
+    */
+    static bool isPlatformSupported (GpuPlatform gpuApi, const Options& options);
 
     //==============================================================================
     /** Destructor.
@@ -167,6 +214,10 @@ public:
         rather than creating a second device, since resources are not shared
         across Metal devices.
 
+        Vulkan returns the backend's internal @c VulkanDevice, which bundles the
+        instance, device, queue, entry points and the command ring every
+        submission must go through; a bare @c VkDevice is not usable on its own.
+
         @returns An opaque native handle, or nullptr.
     */
     virtual void* getNativeDevice() const noexcept { return nullptr; }
@@ -178,8 +229,9 @@ public:
         the ore context submit to. A windowing layer that encodes its own present
         work **must** submit on this queue rather than creating its own: Metal
         does not order work between two queues, so a second queue would let a
-        frame present before the offscreen work it samples has finished. Every
-        other backend has a single command stream and returns nullptr.
+        frame present before the offscreen work it samples has finished. Vulkan
+        returns its single @c VkQueue. Every other backend has a single command
+        stream and returns nullptr.
 
         @returns An opaque native handle, or nullptr.
     */
@@ -202,7 +254,7 @@ public:
     //==============================================================================
     /** Returns true if compute shaders are available on this backend.
 
-        Implemented on Metal, Direct3D 11, WebGPU and OpenGL / OpenGL ES; the GL
+        Implemented on Metal, Direct3D 11, WebGPU, Vulkan and OpenGL / OpenGL ES; the GL
         path additionally probes the runtime version, since compute needs desktop
         GL 4.3 or GLES 3.1 and WebGL2 has no compute at all. Always false on the
         headless backend.
@@ -428,6 +480,47 @@ protected:
     */
     void releasePooledResources() noexcept;
 
+    //==============================================================================
+    /** Starts a new frame generation and releases any that are now safe.
+
+        Every frame that submits GPU work takes one, so the generations of a device
+        increase monotonically across all of its frames.
+
+        @returns The generation number the new frame should be tagged with.
+    */
+    uint64_t beginFrameGeneration();
+
+    /** Returns the generation whose work the GPU is guaranteed to have finished.
+
+        The default assumes at most framesInFlight generations in flight. Backends
+        that track completion themselves override it.
+    */
+    virtual uint64_t getSafeFrameGeneration() const noexcept;
+
+    /** Returns the latest generation handed out by beginFrameGeneration(). */
+    uint64_t getCurrentFrameGeneration() const noexcept { return frameGeneration; }
+
+    //==============================================================================
+    /** Provides the command buffer a GpuFrame records into, on backends where the
+        host owns command buffers (Vulkan).
+
+        Called by GpuFrame::begin() right after it took @p generation. The returned
+        handle is passed back to submitFrameCommands() and waitFrameCommands().
+
+        @returns The native command buffer, or nullptr to let the ore context
+                 manage its own (the default).
+    */
+    virtual void* beginFrameCommands (uint64_t generation);
+
+    /** Submits the command buffer a frame recorded into. Does nothing by default. */
+    virtual void submitFrameCommands (void* commandBuffer);
+
+    /** Waits until the GPU finished a submitted frame command buffer. Does nothing by default. */
+    virtual void waitFrameCommands (void* commandBuffer);
+
+    /** Pool of in-flight frames assumed by the default getSafeFrameGeneration(). */
+    static constexpr uint64_t framesInFlight = 3;
+
 private:
     friend class GpuFrame;
 
@@ -500,12 +593,12 @@ private:
         The count is a safety margin, not a correctness requirement on the
         backends YUP ships: Metal retains resources on the command buffer, OpenGL
         defers deletion of names still referenced by queued commands, and D3D11
-        and WebGPU hold their own references. It *is* what a manager-backed
-        backend (ore's Vulkan and D3D12 paths) would rely on, which is why the
-        matching safeFrameNumber is also reported to the ore context.
+        and WebGPU hold their own references. A manager-backed backend (ore's
+        Vulkan and D3D12 paths) relies on it, which is why the matching
+        safeFrameNumber is also reported to the ore context, and why the Vulkan
+        backend derives it from its command buffer fences instead of assuming
+        framesInFlight (see getSafeFrameGeneration()).
     */
-    static constexpr uint64_t framesInFlight = 3;
-
     struct RetiredFrame
     {
         uint64_t generation = 0;
@@ -513,15 +606,6 @@ private:
         std::vector<rive::rcp<rive::ore::TextureView>> views;
         std::vector<rive::rcp<rive::ore::Sampler>> samplers;
     };
-
-    /** Starts a new frame generation and releases any that are now safe.
-
-        @returns The generation number the new frame should be tagged with.
-    */
-    uint64_t beginFrameGeneration();
-
-    /** Returns the generation whose work the GPU is guaranteed to have finished. */
-    uint64_t getSafeFrameGeneration() const noexcept;
 
     /** Takes ownership of a submitted frame's transient resources. */
     void retireFrameResources (uint64_t generation,

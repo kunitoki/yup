@@ -77,7 +77,8 @@ void registerYupRhiBindings (py::module_& m)
         .value ("OpenGLES", GpuPlatform::OpenGLES)
         .value ("Direct3D", GpuPlatform::Direct3D)
         .value ("Metal", GpuPlatform::Metal)
-        .value ("WebGPU", GpuPlatform::WebGPU);
+        .value ("WebGPU", GpuPlatform::WebGPU)
+        .value ("Vulkan", GpuPlatform::Vulkan);
 
     py::enum_<GpuShaderLanguage> (m, "GpuShaderLanguage")
         .value ("wgsl", GpuShaderLanguage::wgsl)

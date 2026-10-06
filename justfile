@@ -32,8 +32,8 @@ mac PROFILING="OFF":
   -open build/mac/yup.xcodeproj
 
 [doc("generate and open project using Ninja multi config")]
-ninja PROFILING="OFF":
-  cmake -G "Ninja Multi-Config" -B build/ninja -DYUP_ENABLE_PROFILING={{PROFILING}}
+ninja PROFILING="OFF" VULKAN="OFF":
+  cmake -G "Ninja Multi-Config" -B build/ninja -DYUP_ENABLE_PROFILING={{PROFILING}} -DYUP_ENABLE_VULKAN={{VULKAN}}
 
 [doc("generate and open project in Windows using Visual Studio")]
 [windows]

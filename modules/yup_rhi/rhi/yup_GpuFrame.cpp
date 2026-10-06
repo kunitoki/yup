@@ -29,6 +29,7 @@ struct GpuFrame::Impl
     GpuDevice::Ptr device;
     rive::ore::Context* oreCtx = nullptr;
     uint64_t generation = 0;
+    void* commandBuffer = nullptr;
     bool submitted = false;
     bool released = false;
 
@@ -135,9 +136,10 @@ GpuFrame GpuFrame::begin (GpuDevice::Ptr ctx)
     i->device = ctx;
     i->oreCtx = oreCtx;
     i->generation = ctx->beginFrameGeneration();
+    i->commandBuffer = ctx->beginFrameCommands (i->generation);
 
     rive::ore::Context::FrameDescriptor frameDesc;
-    frameDesc.externalCommandBuffer = nullptr;
+    frameDesc.externalCommandBuffer = i->commandBuffer;
     frameDesc.safeFrameNumber = ctx->getSafeFrameGeneration();
     frameDesc.currentFrameNumber = i->generation;
 
@@ -190,6 +192,7 @@ bool GpuFrame::submit()
         i->openPass->finish();
 
     i->oreCtx->endFrame();
+    i->device->submitFrameCommands (i->commandBuffer);
     i->submitted = true;
 
     return true;
@@ -202,6 +205,7 @@ void GpuFrame::waitForGPU()
         return;
 
     i->oreCtx->waitForGPU();
+    i->device->waitFrameCommands (i->commandBuffer);
 
     i->releaseNow();
 }

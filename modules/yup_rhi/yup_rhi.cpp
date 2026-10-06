@@ -59,6 +59,23 @@
 #endif
 
 //==============================================================================
+#if YUP_RIVE_USE_VULKAN
+#if YUP_ANDROID
+#include <android/api-level.h>
+#include <sys/system_properties.h>
+#endif
+
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+#include <rive/renderer/vulkan/render_context_vulkan_impl.hpp>
+#include <rive/renderer/vulkan/render_target_vulkan.hpp>
+#include <rive/renderer/vulkan/vulkan_context.hpp>
+#include <rive/renderer/ore/ore_context_vulkan.hpp>
+YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+#include "native/yup_VulkanDevice.h"
+#endif
+
+//==============================================================================
 #include "rhi/yup_GpuTypes.cpp"
 #include "rhi/yup_GpuBuffer.cpp"
 
@@ -78,6 +95,11 @@
 
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
 #include "native/yup_GpuDevice_webgpu.cpp"
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+#include "native/yup_VulkanDevice.cpp"
+#include "native/yup_GpuDevice_vulkan.cpp"
 #endif
 
 //==============================================================================
@@ -104,6 +126,10 @@
 #if YUP_RHI_USE_GL_COMPUTE
 #include "native/yup_GpuComputePipeline_opengl.cpp"
 #include "native/yup_GpuComputePass_opengl.cpp"
+#endif
+#if YUP_RIVE_USE_VULKAN
+#include "native/yup_GpuComputePipeline_vulkan.cpp"
+#include "native/yup_GpuComputePass_vulkan.cpp"
 #endif
 
 #include "rhi/yup_GpuComputePipeline.cpp"

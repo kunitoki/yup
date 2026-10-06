@@ -173,6 +173,10 @@ entry point, transpiled source, optional original input source, and reflection.
 |   |  ISRC  |  size  |  input source (UTF-8)      |   raw chunk-sized str |
 |   +--------+--------+----------------------------+                       |
 |                                                                          |
+|   +--------+--------+----------------------------+   (optional)          |
+|   |  BINY  |  size  |  compiled module (bytes)   |   binary chunk        |
+|   +--------+--------+----------------------------+                       |
+|                                                                          |
 |   +--------+--------+----------------------------+                       |
 |   |  REFL  |  size  |  reflection (archive blob) |   binary chunk        |
 |   +--------+--------+----------------------------+                       |
@@ -185,6 +189,7 @@ entry point, transpiled source, optional original input source, and reflection.
 | `entryPoint` | prefixed str  | Entry-point function name (e.g. `"main"`).                                   |
 | `source`     | prefixed str  | Transpiled source code in `language`.                                        |
 | `ISRC`       | chunk         | Original Vulkan GLSL input source, raw UTF-8. Optional — omitted when empty. |
+| `BINY`       | chunk         | Compiled module of binary targets (`ShaderInfo::binary`): the Vulkan SPIR-V of a `spirv` variant, whose `source` is empty. Optional - omitted for text targets. |
 | `REFL`       | chunk         | Serialised `ShaderReflection` (see below).                                   |
 
 ### `ISRC` — Original input source
@@ -249,6 +254,7 @@ independently of the RIFF envelope version.
 | `VARS` | `kFourCC_VARS`    | List type for the variant list.                      |
 | `VART` | `kFourCC_VART`    | Per-variant chunk.                                   |
 | `ISRC` | `kFourCC_ISRC`    | Original input source chunk (per-variant, optional). |
+| `BINY` | `kFourCC_BINY`    | Compiled binary module chunk (per-variant, optional). |
 | `REFL` | `kFourCC_REFL`    | Reflection archive chunk.                            |
 
 Current format version: **`2`** (`kCurrentVersion`).

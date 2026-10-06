@@ -48,6 +48,7 @@ constexpr uint32_t kFourCC_VARS = makeFourCC ('V', 'A', 'R', 'S');
 constexpr uint32_t kFourCC_VART = makeFourCC ('V', 'A', 'R', 'T');
 constexpr uint32_t kFourCC_REFL = makeFourCC ('R', 'E', 'F', 'L');
 constexpr uint32_t kFourCC_ISRC = makeFourCC ('I', 'S', 'R', 'C');
+constexpr uint32_t kFourCC_BINY = makeFourCC ('B', 'I', 'N', 'Y');
 
 constexpr uint32_t kCurrentVersion = 2;
 
@@ -132,6 +133,15 @@ const ShaderInfo* ShaderBundle::findShader (ShaderStage stage, ShaderLanguage la
         if (info.stage == stage && info.language == language)
             return &info;
     return nullptr;
+}
+
+const MemoryBlock* ShaderBundle::getSPIRV (ShaderStage stage) const
+{
+    const auto it = spirvBinaries.find (stage);
+    if (it == spirvBinaries.end() || it->second.spirv.isEmpty())
+        return nullptr;
+
+    return &it->second.spirv;
 }
 
 //==============================================================================
@@ -221,6 +231,9 @@ Result ShaderBundle::saveToStream (OutputStream& stream) const
                                         buf.write (info.inputSource.toRawUTF8(), info.inputSource.getNumBytesAsUTF8());
                                     });
 
+                                if (! info.binary.isEmpty())
+                                    writeBinaryChunk (buf, kFourCC_BINY, info.binary);
+
                                 MemoryOutputStream reflBuf;
                                 BinaryOutputArchive reflArchive (reflBuf);
                                 detail::doSave (reflArchive, info.reflection);
@@ -299,6 +312,12 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
                 MemoryBlock srcData (static_cast<size_t> (len), false);
                 sub.read (srcData.getData(), len);
                 info.inputSource = String::fromUTF8 (static_cast<const char*> (srcData.getData()), len);
+            }
+            else if (fourcc == kFourCC_BINY)
+            {
+                const auto len = static_cast<size_t> (sub.getNumBytesRemaining());
+                info.binary.setSize (len, false);
+                sub.read (info.binary.getData(), static_cast<int> (len));
             }
             else if (fourcc == kFourCC_REFL)
             {

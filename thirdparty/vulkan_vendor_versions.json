@@ -1,0 +1,23 @@
+{
+  "dependencies": [
+    {
+      "checkout": "2cd90f9d20df57eac214c148f3aed885372ddcfe",
+      "destination": "thirdparty/vulkan_library/include",
+      "files": "include/vulkan/*.h include/vk_video/*.h",
+      "name": "Vulkan-Headers",
+      "ref": "vulkan-sdk-1.4.321",
+      "repo": "https://github.com/KhronosGroup/Vulkan-Headers.git",
+      "version": "1.4.321"
+    },
+    {
+      "checkout": "1d8f600fd424278486eade7ed3e877c99f0846b1",
+      "destination": "thirdparty/vulkan_library/include",
+      "files": "include/vk_mem_alloc.h",
+      "name": "VulkanMemoryAllocator",
+      "ref": "v3.3.0",
+      "repo": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git",
+      "version": "3.3.0"
+    }
+  ],
+  "note": "Pinned to the versions the vendored Rive runtime builds against (renderer/premake5_pls_renderer.lua)."
+}

@@ -23,7 +23,7 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 ## Why YUP?
 
 - **Permissive by default:** ISC-licensed project code, with dependencies chosen for liberal licensing or public-domain availability.
-- **Modern vector rendering:** GPU-backed rendering through the Rive renderer, with Metal, Direct3D, OpenGL, WebGL/WebGPU, and in-progress Vulkan support.
+- **Modern vector rendering:** GPU-backed rendering through the Rive renderer, with Metal, Direct3D, OpenGL, WebGL/WebGPU, and Vulkan.
 - **Audio-first application stack:** Audio devices, MIDI, formats, DSP, audio graph components, plugin hosting, and plugin client wrappers live in the same framework.
 - **Native and web targets:** Windows, macOS, Linux, Wasm, Android, and iOS are part of the regular CI surface.
 - **CMake-first workflow:** Use YUP as a standalone repository or bring it into your own app/plugin project with `FetchContent`.
@@ -119,7 +119,7 @@ YUP is usable for experimentation, examples, prototypes, and contributors who ar
 | **WebGL2 (GLES3.0)**     |                    |                    |                    | :white_check_mark: |                           |                       |
 | **Metal**                |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
 | **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
-| **Vulkan**               | :construction:     |                    | :construction:     |                    | :construction:            |                       |
+| **Vulkan**               | :construction:     |                    | :construction:     |                    | :white_check_mark:        |                       |
 | **WebGPU**               |                    |                    |                    | :white_check_mark: |                           |                       |
 
 

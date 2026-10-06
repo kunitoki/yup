@@ -52,11 +52,37 @@ ResultValue<ShaderBundle> ShaderBundleCompiler::compile (const ShaderBundleCompi
         // Decompile + reflect for each target language
         for (const auto targetLang : entry.targetLanguages)
         {
+            ShaderInfo info;
+            info.stage = entry.stage;
+            info.language = targetLang;
+            info.entryPoint = entry.options.entryPoint;
+            info.inputSource = request.source;
+
+            if (targetLang == ShaderLanguage::spirv)
+            {
+                // Vulkan's clip space is Y-down, so its module is compiled again with the flip baked in
+                auto vulkanOptions = entry.options;
+                vulkanOptions.spirvInvertY = true;
+
+                auto vulkanResult = transpiler->compileToSPIRV (request.source, entry.stage, request.sourceLanguage, vulkanOptions);
+                if (vulkanResult.failed())
+                    return makeResultValueFail (String ("ShaderBundleCompiler: SPIR-V compilation for Vulkan failed for stage ")
+                                                + toString (entry.stage)
+                                                + ": " + vulkanResult.getErrorMessage());
+
+                auto reflResult = transpiler->reflectFromSPIRV (vulkanResult.getValue(), targetLang, entry.options);
+                if (reflResult.failed())
+                    return makeResultValueFail (String ("ShaderBundleCompiler: reflection for spirv failed: ") + reflResult.getErrorMessage());
+
+                info.binary = std::move (vulkanResult.getValue());
+                info.reflection = std::move (reflResult.getValue());
+
+                bundle.addShader (std::move (info));
+                continue;
+            }
+
             auto srcValue = [&]() -> ResultValue<String>
             {
-                if (targetLang == ShaderLanguage::spirv)
-                    return makeResultValueOk (request.source);
-
                 if (targetLang == ShaderLanguage::wgsl)
                     return transpiler->transpile (request.source, entry.stage, request.sourceLanguage, targetLang, entry.options);
 
@@ -68,20 +94,13 @@ ResultValue<ShaderBundle> ShaderBundleCompiler::compile (const ShaderBundleCompi
                                             + toString (targetLang)
                                             + " failed: " + srcValue.getErrorMessage());
 
-            auto reflResult = (targetLang == ShaderLanguage::spirv)
-                                ? transpiler->reflectFromSPIRV (spirv)
-                                : transpiler->reflectFromSPIRV (spirv, targetLang, entry.options);
+            auto reflResult = transpiler->reflectFromSPIRV (spirv, targetLang, entry.options);
             if (reflResult.failed())
                 return makeResultValueFail (String ("ShaderBundleCompiler: reflection for ")
                                             + toString (targetLang)
                                             + " failed: " + reflResult.getErrorMessage());
 
-            ShaderInfo info;
-            info.stage = entry.stage;
-            info.language = targetLang;
-            info.entryPoint = entry.options.entryPoint;
             info.source = srcValue.getValue();
-            info.inputSource = request.source;
             info.reflection = std::move (reflResult.getValue());
 
             bundle.addShader (std::move (info));

@@ -116,6 +116,19 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 
+#if YUP_RIVE_USE_VULKAN
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+#include <rive/renderer/vulkan/render_context_vulkan_impl.hpp>
+#include <rive/renderer/vulkan/render_target_vulkan.hpp>
+YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+#include <yup_rhi/native/yup_VulkanDevice.h>
+
+#include "native/yup_GraphicsContext_vulkan.cpp"
+#endif
+
+//==============================================================================
+
 #ifndef YUP_DRAWABLE_LOGGING
 #define YUP_DRAWABLE_LOGGING 0
 #endif

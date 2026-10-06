@@ -38,7 +38,7 @@ namespace
         --vert   "$PWD/modules/yup_3d/shaders/yup_$name.vert" \
         --frag   "$PWD/modules/yup_3d/shaders/yup_$name.frag" \
         --output /tmp/yup_$name.ysl \
-        --target-langs glsl,essl,hlsl,msl,wgsl
+        --target-langs glsl,essl,hlsl,msl,spirv,wgsl
 
      # then embed the bundle bytes into the .inc (keep the two-line comment header)
      xxd -i /tmp/yup_$name.ysl \

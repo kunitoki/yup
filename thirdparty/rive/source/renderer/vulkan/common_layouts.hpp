@@ -1,3 +1,5 @@
+#pragma once
+
 #include "rive/renderer/gpu.hpp"
 #include "rive/renderer/vulkan/vkutil.hpp"
 #include "shaders/constants.glsl"

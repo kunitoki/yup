@@ -308,6 +308,23 @@
               "            hb_ot_color_palette_get_colors(face, 0, 0, nullptr, nullptr);"
             ]
           }
+        },
+        {
+          "path": "source/renderer/vulkan/common_layouts.hpp",
+          "note": "add the missing include guard: several Vulkan sources include this header and YUP compiles them into one unity translation unit (rive_vulkan.cpp)",
+          "already_contains": "#pragma once\n\n#include \"rive/renderer/gpu.hpp\"",
+          "replace": {
+            "from": [
+              "#include \"rive/renderer/gpu.hpp\"",
+              "#include \"rive/renderer/vulkan/vkutil.hpp\""
+            ],
+            "to": [
+              "#pragma once",
+              "",
+              "#include \"rive/renderer/gpu.hpp\"",
+              "#include \"rive/renderer/vulkan/vkutil.hpp\""
+            ]
+          }
         }
       ],
       "shader_generation": {

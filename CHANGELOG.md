@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- Vulkan backend (`GpuPlatform::Vulkan`), built with the new `YUP_ENABLE_VULKAN` CMake option (ON by default on Android). Rive renders through a Vulkan swapchain; the loader is resolved at runtime through SDL and never linked, so devices without a Vulkan driver fall back to OpenGL ES. `GpuDevice::isPlatformSupported` probes an API before a window exists, `GpuDevice::Options::vulkan` carries the windowing hooks, and `GraphicsContext::detachFromWindow` releases the surface when an Android app moves to the background. `YUP_ANDROID_VALIDATION_LAYERS` packages the Khronos validation layer into Android debug builds.
+- Vulkan runs the RHI too: `GpuPipeline`, `GpuFrame` and `yup_3d` through Rive's ore layer, and native `GpuComputePipeline` / `GpuComputePass` with host visible storage buffers.
+- Shader bundles gain a `spirv` target: `ShaderInfo::binary` holds the Vulkan SPIR-V module, compiled with the vertex Y output flipped (`TranspileOptions::spirvInvertY`), and `ShaderBundle::getSPIRV` returns a stage's intermediate SPIR-V, which `yup_shader_bundler` now keeps. The embedded `yup_3d` and spectrogram bundles include it.
+- **Behavior change** Vulkan is the default graphics API on Android, ahead of OpenGL ES. A window picks the first API of its platform's list the device supports, and an API requested with `ComponentNative::Options::withGraphicsApi` that is unavailable falls back to that list instead of failing.
+
 - `yup_3d`: 3D scenes of `EntityNode`s with attached parts, glTF 2.0 / GLB loading through the new `tinygltf` module, and PBR rendering in a `SceneComponent`. Adds `Quaternion` to `yup_graphics` and a Scene 3D demo.
 - `yup_3d`: environment lighting and shadows. `EnvironmentMap` bakes reflections and diffuse light from any radiance function, set with `Scene::setEnvironment` and optionally drawn behind the scene; directional lights with `LightNode::castsShadows` cast filtered shadows; `Scene::setToneMapping` adds the ACES filmic curve. The Scene 3D demo shows a painted MPC-style device lit by a photo studio.
 - Fixed `Graphics::fillFittedText` drawing every run of a `StyledText` in the fill color when only some runs were appended with their own color: those runs now keep it, and only the others use the fill.
@@ -458,6 +463,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Thirdparty
 
+- New `vulkan_library` module (`thirdparty/vulkan_library`): Khronos Vulkan-Headers `vulkan-sdk-1.4.321` and Vulkan Memory Allocator `v3.3.0`, header-only, the versions the Rive runtime builds against (pinned in `thirdparty/vulkan_vendor_versions.json`).
 - New `asmjit_library` module (`thirdparty/asmjit_library`): AsmJit machine-code generation library (core, x86, AArch64 and ujit backends), statically linked via the YUP module system.
 
 ### Breaking changes

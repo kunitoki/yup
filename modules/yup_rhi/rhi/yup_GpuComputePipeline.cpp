@@ -51,6 +51,11 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compile (GpuDevice::Ptr
             return yup_constructComputePipelineWebGPU (*ctx, source, workgroupSize);
 #endif
 
+#if YUP_RIVE_USE_VULKAN
+        case GpuPlatform::Vulkan:
+            return yup_constructComputePipelineVulkan (*ctx, source, workgroupSize);
+#endif
+
 #if YUP_RHI_USE_GL_COMPUTE
         case GpuPlatform::OpenGL:
         case GpuPlatform::OpenGLES:
@@ -101,6 +106,9 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compileFromBundle (GpuD
         case GpuPlatform::OpenGLES:
             targetLang = GpuShaderLanguage::glsl;
             break;
+        case GpuPlatform::Vulkan:
+            targetLang = GpuShaderLanguage::spirv;
+            break;
         default:
             return makeResultValueFail ("Unsupported GPU platform");
     }
@@ -111,7 +119,12 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compileFromBundle (GpuD
 
     GpuShaderSource source;
     source.language = targetLang;
-    source.code = gpuShaderSourceBytes (shader->source);
+    source.code = shaderCodeBytes (*shader);
+
+    // Vulkan creates the pipeline layout from it
+    if (targetLang == GpuShaderLanguage::spirv)
+        source.bindingMap = makeShaderBindingMapBlob (shader->reflection, ShaderStage::compute);
+
     source.entryPoint = (targetLang == GpuShaderLanguage::msl && shader->entryPoint == "main") ? String ("main0") : shader->entryPoint;
 
     GpuWorkgroupSize wgs = workgroupSize;
@@ -153,11 +166,43 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compileFromGlsl (GpuDev
         case GpuPlatform::OpenGLES:
             targetLang = GpuShaderLanguage::glsl;
             break;
+        case GpuPlatform::Vulkan:
+            targetLang = GpuShaderLanguage::spirv;
+            break;
         default:
             return makeResultValueFail ("Unsupported GPU platform");
     }
 
     ShaderTranspiler transpiler;
+
+    if (targetLang == GpuShaderLanguage::spirv)
+    {
+        // Vulkan loads the SPIR-V itself, with the layout described by its binding map
+        TranspileOptions options;
+        auto spirv = transpiler.compileToSPIRV (glsl, ShaderStage::compute, ShaderLanguage::glsl, options);
+        if (spirv.failed())
+            return makeResultValueFail ("GLSL compilation failed: " + spirv.getErrorMessage());
+
+        auto reflection = transpiler.reflectFromSPIRV (spirv.getReference(), ShaderLanguage::spirv, options);
+        if (reflection.failed())
+            return makeResultValueFail ("SPIR-V reflection failed: " + reflection.getErrorMessage());
+
+        GpuWorkgroupSize wgs = workgroupSize;
+        const auto& reflWgs = reflection.getReference().workgroupSize;
+        if (wgs.x == 1 && wgs.y == 1 && wgs.z == 1 && reflWgs.x > 0 && reflWgs.y > 0 && reflWgs.z > 0)
+            wgs = GpuWorkgroupSize { reflWgs.x, reflWgs.y, reflWgs.z };
+
+        const auto& module = spirv.getReference();
+        auto* bytes = static_cast<const uint8*> (module.getData());
+
+        GpuShaderSource source;
+        source.language = targetLang;
+        source.code.assign (bytes, bytes + module.getSize());
+        source.bindingMap = makeShaderBindingMapBlob (reflection.getReference(), ShaderStage::compute);
+
+        return compile (ctx, source, wgs);
+    }
+
     auto transpileResult = transpiler.transpile (glsl, ShaderStage::compute, ShaderLanguage::glsl, shaderLanguageForApi (ctx->getPlatform()));
     if (transpileResult.failed())
         return makeResultValueFail ("GLSL transpilation failed: " + transpileResult.getErrorMessage());

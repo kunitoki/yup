@@ -11,8 +11,9 @@ no transpiler needed in the final binary.
 
 ```{note}
 A `.ysl` bundle stores one variant per `(stage × target language)`: WGSL, GLSL,
-ESSL, HLSL, and MSL, plus the SPIR-V and the mandatory binding-map reflection.
-`compileFromBundle` picks the variant matching the active graphics API.
+ESSL, HLSL, MSL and SPIR-V, plus the intermediate SPIR-V of each stage and the
+mandatory binding-map reflection. `compileFromBundle` picks the variant matching
+the active graphics API.
 
 WGSL variants are produced via a direct GLSL→WGSL transpiler - no SPIRV-Cross WGSL
 backend is needed. Reflection data still originates from SPIR-V: resources keep
@@ -20,6 +21,22 @@ their GLSL bindings in every target, and the extra sampler a combined image
 sampler needs in WGSL follows the rule described in
 [GLSL on the WebGPU target](wgsl-shaders.md#bindings).
 ```
+
+## The `spirv` target
+
+The `spirv` variant is what the Vulkan backend loads. It is a binary module, held
+in `ShaderInfo::binary` rather than `source`, and it differs from the stage's
+intermediate SPIR-V (`ShaderBundle::getSPIRV`) in one way: vertex shaders negate
+`gl_Position.y` once their entry point returns. Your shaders are written for the
+Y-up clip space every other backend uses, and this maps it onto Vulkan's Y-down
+one, so a scene renders with the same orientation and winding everywhere.
+
+Its reflection keeps the shader's own `set` / `binding` numbers, which become the
+Vulkan descriptor bindings, and drops resources the entry point never uses.
+
+Bundles built without `spirv` in `--target-langs` still load on Vulkan, but
+`compileFromBundle` fails there, since there is no variant to pick. The default
+target list includes it.
 
 ## The `yup_add_shader_bundle` CMake helper
 
@@ -216,7 +233,7 @@ flags verbatim.
 --print <lang>           Print shader source for a language
                          (glsl, essl, hlsl, msl, spirv, wgsl, all; repeatable)
 --stage <stage>          Filter by pipeline stage (repeatable; default: all)
---list                   List all variants with source lengths
+--list                   List all variants with source (and binary) lengths
 --info                   Print reflection data for matched variants
 ```
 

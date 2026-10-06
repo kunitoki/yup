@@ -32,7 +32,7 @@
     website:            https://github.com/rive-app/rive-runtime
     license:            MIT
 
-    dependencies:       rive_decoders harfbuzz sheenbidi_library yoga_library libhydrogen luau glad
+    dependencies:       rive_decoders harfbuzz sheenbidi_library yoga_library libhydrogen luau glad vulkan_library
     defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1 WITH_RIVE_SCRIPTING=1 WITH_RIVE_SCRIPTING_LUAU=1 RIVE_DECODERS=1 RIVE_CANVAS=1 RIVE_LUAU=1 RIVE_ORE=1 RIVE_ORE_BINDING_MAP_TOOLS=1
     searchpaths:        include source source/renderer source/renderer/generated/shaders
     vsToolOverrides:    hlsl=None
@@ -75,6 +75,14 @@
 */
 #ifndef YUP_RIVE_USE_OPENGL
 #define YUP_RIVE_USE_OPENGL 1
+#endif
+
+/** Config: YUP_RIVE_USE_VULKAN
+    Enables the use of the Vulkan renderer (the default is disabled, the YUP_ENABLE_VULKAN CMake
+    option turns it on). Vulkan entry points are resolved at runtime, the loader is never linked.
+*/
+#ifndef YUP_RIVE_USE_VULKAN
+#define YUP_RIVE_USE_VULKAN 0
 #endif
 
 //==============================================================================
@@ -124,6 +132,24 @@
 
 #if !YUP_RIVE_USE_OPENGL
 #undef ORE_BACKEND_GL
+#endif
+
+#if YUP_RIVE_USE_VULKAN && defined (__EMSCRIPTEN__)
+#undef YUP_RIVE_USE_VULKAN
+#define YUP_RIVE_USE_VULKAN 0
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+#ifndef RIVE_VULKAN
+#define RIVE_VULKAN 1
+#endif
+#ifndef ORE_BACKEND_VK
+#define ORE_BACKEND_VK 1
+#endif
+// The atomic and clockwiseAtomic SPIR-V is large and Android does not use those modes by default
+#if !defined (WITH_VULKAN_ATOMICS) && !defined (__ANDROID__)
+#define WITH_VULKAN_ATOMICS 1
+#endif
 #endif
 
 //==============================================================================

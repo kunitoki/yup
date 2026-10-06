@@ -37,6 +37,10 @@ std::unique_ptr<GpuDevice> yup_constructOpenGLGpuDevice (GpuDevice::Options);
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
 std::unique_ptr<GpuDevice> yup_constructWebGPUGpuDevice (GpuDevice::Options);
 #endif
+#if YUP_RIVE_USE_VULKAN
+std::unique_ptr<GpuDevice> yup_constructVulkanGpuDevice (GpuDevice::Options);
+bool yup_isVulkanGpuDeviceSupported (const GpuDevice::Options&);
+#endif
 
 //==============================================================================
 
@@ -75,6 +79,12 @@ GpuDevice::Ptr GpuDevice::create (GpuPlatform gpuApi, Options options)
             break;
 #endif
 
+#if YUP_RIVE_USE_VULKAN
+        case GpuPlatform::Vulkan:
+            ctx = yup_constructVulkanGpuDevice (options);
+            break;
+#endif
+
         default:
             Logger::outputDebugString ("Invalid GPU API requested for current platform");
             return nullptr;
@@ -87,6 +97,44 @@ GpuDevice::Ptr GpuDevice::create (GpuPlatform gpuApi, Options options)
     }
 
     return ctx.release();
+}
+
+bool GpuDevice::isPlatformSupported (GpuPlatform gpuApi, [[maybe_unused]] const Options& options)
+{
+    switch (gpuApi)
+    {
+        case GpuPlatform::Headless:
+            return true;
+
+#if YUP_RIVE_USE_METAL && YUP_APPLE
+        case GpuPlatform::Metal:
+            return true;
+#endif
+
+#if YUP_RIVE_USE_D3D && YUP_WINDOWS
+        case GpuPlatform::Direct3D:
+            return true;
+#endif
+
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
+        case GpuPlatform::OpenGL:
+        case GpuPlatform::OpenGLES:
+            return true;
+#endif
+
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
+        case GpuPlatform::WebGPU:
+            return true;
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+        case GpuPlatform::Vulkan:
+            return yup_isVulkanGpuDeviceSupported (options);
+#endif
+
+        default:
+            return false;
+    }
 }
 
 //==============================================================================
@@ -271,6 +319,19 @@ uint64_t GpuDevice::beginFrameGeneration()
 uint64_t GpuDevice::getSafeFrameGeneration() const noexcept
 {
     return frameGeneration > framesInFlight ? frameGeneration - framesInFlight : 0;
+}
+
+void* GpuDevice::beginFrameCommands (uint64_t)
+{
+    return nullptr;
+}
+
+void GpuDevice::submitFrameCommands (void*)
+{
+}
+
+void GpuDevice::waitFrameCommands (void*)
+{
 }
 
 void GpuDevice::retireFrameResources (uint64_t generation,

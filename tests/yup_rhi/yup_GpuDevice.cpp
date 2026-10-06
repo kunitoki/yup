@@ -345,6 +345,39 @@ TEST_F (GpuDeviceErrorTests, ComputePassSettersOnInvalidPassAreNoOps)
 }
 
 //==============================================================================
+// GpuDevice::isPlatformSupported
+//==============================================================================
+
+TEST (GpuDevicePlatformTests, HeadlessIsAlwaysSupported)
+{
+    EXPECT_TRUE (GpuDevice::isPlatformSupported (GpuPlatform::Headless, {}));
+}
+
+TEST (GpuDevicePlatformTests, InvalidPlatformIsUnsupported)
+{
+    EXPECT_FALSE (GpuDevice::isPlatformSupported (static_cast<GpuPlatform> (9999), {}));
+}
+
+#if ! YUP_EMSCRIPTEN
+TEST (GpuDevicePlatformTests, WebGpuIsUnsupportedOutsideTheBrowser)
+{
+    EXPECT_FALSE (GpuDevice::isPlatformSupported (GpuPlatform::WebGPU, {}));
+}
+#endif
+
+TEST (GpuDevicePlatformTests, VulkanWithoutLoaderIsUnsupported)
+{
+    // No vkGetInstanceProcAddr: there is nothing to probe, whether or not Vulkan is compiled in
+    EXPECT_FALSE (GpuDevice::isPlatformSupported (GpuPlatform::Vulkan, {}));
+}
+
+TEST (GpuDevicePlatformTests, CreateVulkanWithoutLoaderReturnsNull)
+{
+    EXPECT_EQ (GpuDevice::create (GpuPlatform::Vulkan, {}), nullptr);
+}
+
+
+//==============================================================================
 // gpuShaderSourceBytes
 //==============================================================================
 

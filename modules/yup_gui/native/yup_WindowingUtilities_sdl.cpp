@@ -390,46 +390,161 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
 
 //==============================================================================
 
-GpuPlatform getGraphicsContextApi (const std::optional<GpuPlatform>& forceContextApi)
+/** The graphics APIs to try on this platform, best first. The first one supported wins. */
+std::vector<GpuPlatform> getPreferredGraphicsApis()
 {
-    GpuPlatform desiredApi;
-
 #if YUP_APPLE
 #if YUP_RIVE_USE_METAL
-    desiredApi = forceContextApi.value_or (GpuPlatform::Metal);
-#elif YUP_RIVE_USE_OPENGL
-    desiredApi = forceContextApi.value_or (GpuPlatform::OpenGL);
+    return { GpuPlatform::Metal };
+#else
+    return { GpuPlatform::OpenGL };
 #endif
 
 #elif YUP_WINDOWS
 #if YUP_RIVE_USE_D3D
-    desiredApi = forceContextApi.value_or (GpuPlatform::Direct3D);
-#elif YUP_RIVE_USE_OPENGL
-    desiredApi = forceContextApi.value_or (GpuPlatform::OpenGL);
+    return { GpuPlatform::Direct3D };
+#else
+    return { GpuPlatform::OpenGL };
 #endif
 
 #elif YUP_LINUX
-    desiredApi = forceContextApi.value_or (GpuPlatform::OpenGL);
+    return { GpuPlatform::OpenGL };
 
-#elif YUP_ANDROID || YUP_WASM
-#if YUP_EMSCRIPTEN && RIVE_WEBGPU
-    desiredApi = forceContextApi.value_or (GpuPlatform::WebGPU);
+#elif YUP_ANDROID && YUP_RIVE_USE_VULKAN
+    return { GpuPlatform::Vulkan, GpuPlatform::OpenGLES };
+
+#elif YUP_EMSCRIPTEN && RIVE_WEBGPU
+    return { GpuPlatform::WebGPU };
+
 #else
-    desiredApi = forceContextApi.value_or (GpuPlatform::OpenGLES);
+    return { GpuPlatform::OpenGLES };
+
+#endif
+}
+
+//==============================================================================
+
+#if YUP_RIVE_USE_VULKAN
+/** The Vulkan windowing hooks, all resolved through SDL: the loader, the surface
+    extensions, the presentation probe and, given a window, its surface. */
+GpuDevice::VulkanOptions makeVulkanOptions (SDL_Window* window)
+{
+    GpuDevice::VulkanOptions result;
+    result.getInstanceProcAddr = reinterpret_cast<void*> (SDL_Vulkan_GetVkGetInstanceProcAddr());
+
+    Uint32 count = 0;
+    if (auto* const* names = SDL_Vulkan_GetInstanceExtensions (&count))
+    {
+        for (Uint32 i = 0; i < count; ++i)
+            result.instanceExtensions.add (names[i]);
+    }
+
+    result.presentationSupport = [] (void* instance, void* physicalDevice, uint32 queueFamilyIndex)
+    {
+        return SDL_Vulkan_GetPresentationSupport (static_cast<VkInstance> (instance),
+                                                  static_cast<VkPhysicalDevice> (physicalDevice),
+                                                  queueFamilyIndex);
+    };
+
+    if (window != nullptr)
+    {
+        result.createSurface = [window] (void* instance) -> uint64
+        {
+            VkSurfaceKHR surface {};
+            if (! SDL_Vulkan_CreateSurface (window, static_cast<VkInstance> (instance), nullptr, &surface))
+            {
+                YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unable to create the Vulkan surface: " << SDL_GetError());
+                return 0;
+            }
+
+            return reinterpret_cast<uint64> (surface);
+        };
+
+        result.destroySurface = [] (void* instance, uint64 surface)
+        {
+            SDL_Vulkan_DestroySurface (static_cast<VkInstance> (instance), reinterpret_cast<VkSurfaceKHR> (surface), nullptr);
+        };
+    }
+
+    return result;
+}
 #endif
 
-#else
-    desiredApi = forceContextApi.value_or (GpuPlatform::OpenGLES);
+/** Returns true if windows can render with the given API. Vulkan needs a loader and a
+    device meeting the renderer's requirements, and this must be known before the window
+    exists: an Android window accepts a single producer, so it cannot try one API and
+    then switch to another. */
+bool isGraphicsApiSupported (GpuPlatform api)
+{
+#if YUP_RIVE_USE_VULKAN
+    if (api == GpuPlatform::Vulkan)
+    {
+        // Loaded once for the process and kept, every Vulkan window shares it
+        static bool loaderLoaded = false;
 
+        if (! loaderLoaded)
+        {
+            if (! SDL_Vulkan_LoadLibrary (nullptr))
+            {
+                YUP_MODULE_DBG (GUI_WINDOWING, "SDL: no Vulkan loader: " << SDL_GetError());
+                return false;
+            }
+
+            loaderLoaded = true;
+        }
+
+        GpuDevice::Options options;
+        options.vulkan = makeVulkanOptions (nullptr);
+
+        if (GpuDevice::isPlatformSupported (api, options))
+            return true;
+
+        SDL_Vulkan_UnloadLibrary();
+        loaderLoaded = false;
+        return false;
+    }
 #endif
 
-    return desiredApi;
+    return GpuDevice::isPlatformSupported (api, {});
+}
+
+/** Picks the graphics API for a new window.
+
+    An explicitly requested API is tried first, then the platform's preference list,
+    so a request this device cannot honor falls back to what the platform would have
+    used anyway.
+*/
+GpuPlatform resolveGraphicsApi (const std::optional<GpuPlatform>& requestedApi)
+{
+    auto candidates = getPreferredGraphicsApis();
+
+    if (requestedApi.has_value())
+    {
+        candidates.erase (std::remove (candidates.begin(), candidates.end(), *requestedApi), candidates.end());
+        candidates.insert (candidates.begin(), *requestedApi);
+    }
+
+    for (const auto api : candidates)
+    {
+        if (! isGraphicsApiSupported (api))
+            continue;
+
+        if (requestedApi.has_value() && api != *requestedApi)
+            Logger::outputDebugString ("SDL: the requested graphics API is unavailable, falling back to the platform default");
+
+        return api;
+    }
+
+    return candidates.back();
 }
 
 //==============================================================================
 
 Uint32 setContextWindowHints (GpuPlatform desiredApi)
 {
+    if (desiredApi == GpuPlatform::Vulkan)
+        return SDL_WINDOW_VULKAN;
+
     if (desiredApi == GpuPlatform::Metal)
     {
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "metal");

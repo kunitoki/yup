@@ -36,6 +36,9 @@ std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplWebGPU (GpuDevice
 #if YUP_RHI_USE_GL_COMPUTE
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplGL (GpuDevice&);
 #endif
+#if YUP_RIVE_USE_VULKAN
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplVulkan (GpuDevice&);
+#endif
 
 //==============================================================================
 
@@ -108,6 +111,12 @@ GpuComputePass GpuComputePass::begin (GpuDevice::Ptr ctx)
         case GpuPlatform::OpenGL:
         case GpuPlatform::OpenGLES:
             pass.impl = yup_createComputePassImplGL (*ctx);
+            break;
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+        case GpuPlatform::Vulkan:
+            pass.impl = yup_createComputePassImplVulkan (*ctx);
             break;
 #endif
 

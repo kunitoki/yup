@@ -37,7 +37,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
     : ComponentNative (component, options.flags)
     , Thread ("YUP Render Thread", renderThreadStackSize)
     , parentWindow (parent)
-    , currentGraphicsApi (getGraphicsContextApi (options.graphicsApi))
+    , currentGraphicsApi (resolveGraphicsApi (options.graphicsApi))
     , clearColor (options.clearColor.value_or (Colors::black))
     , screenBounds (component.getBounds().to<int>())
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
@@ -224,8 +224,9 @@ SDLComponentNative::SDLComponentNative (Component& component,
 
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created GL context");
     }
-    else
+    else if (currentGraphicsApi != GpuPlatform::Vulkan)
     {
+        // Vulkan picks its present mode on the swapchain instead
         SDL_SetWindowSurfaceVSync (window, vsyncEnabled ? SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE : SDL_WINDOW_SURFACE_VSYNC_DISABLED);
     }
 
@@ -251,6 +252,11 @@ SDLComponentNative::SDLComponentNative (Component& component,
         if (guard->native != nullptr)
             guard->native->runWithComputeContext (fn);
     };
+
+#if YUP_RIVE_USE_VULKAN
+    if (currentGraphicsApi == GpuPlatform::Vulkan)
+        graphicsOptions.vulkan = makeVulkanOptions (window);
+#endif
 
     context = GraphicsContext::createContext (currentGraphicsApi, graphicsOptions);
     if (context == nullptr)
@@ -920,7 +926,7 @@ void SDLComponentNative::setVsyncEnabled (bool shouldEnable)
         return;
 
 #if ! YUP_EMSCRIPTEN
-    if (currentGraphicsApi != GpuPlatform::OpenGL && currentGraphicsApi != GpuPlatform::OpenGLES && window != nullptr)
+    if (currentGraphicsApi != GpuPlatform::OpenGL && currentGraphicsApi != GpuPlatform::OpenGLES && currentGraphicsApi != GpuPlatform::Vulkan && window != nullptr)
         SDL_SetWindowSurfaceVSync (window, shouldEnable ? SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE : SDL_WINDOW_SURFACE_VSYNC_DISABLED);
 #endif
 
@@ -2943,7 +2949,13 @@ bool SDLComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WILL_ENTER_BACKGROUND");
 
-            static_cast<SDLComponentNative*> (userdata)->stopRendering();
+            auto* nativeComponent = static_cast<SDLComponentNative*> (userdata);
+            nativeComponent->stopRendering();
+
+            // The native window is about to go away, surfaces created on it must go first
+            if (nativeComponent->context != nullptr)
+                nativeComponent->context->detachFromWindow();
+
             return true;
         }
 
@@ -2956,7 +2968,18 @@ bool SDLComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
                 if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
                 {
                     if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
+                    {
+                        if (nativeComponent->context != nullptr)
+                        {
+                            const auto contentSize = nativeComponent->getContentSize();
+                            nativeComponent->context->attachToWindow (nativeComponent->getNativeHandle(),
+                                                                      contentSize.getWidth(),
+                                                                      contentSize.getHeight(),
+                                                                      nativeComponent->getScaleDpi());
+                        }
+
                         nativeComponent->startRendering();
+                    }
                     else
                         YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown native component");
                 }
