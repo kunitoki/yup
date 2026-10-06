@@ -121,9 +121,14 @@ ResolvedPath resolvePath (rive::ViewModelInstance* root, const Array<String>& se
             current = nested.get();
             value = nullptr;
         }
-        else
+        else if (propertyValue->is<rive::ViewModelInstanceList>() && isIndexSegment (segments.getReference (i + 1)))
         {
             value = propertyValue;
+        }
+        else
+        {
+            // Only a list index can follow a value: nothing else lives below it
+            return {};
         }
     }
 
@@ -375,15 +380,8 @@ std::optional<bool> ArtboardViewModelInstance::getBoolProperty (StringRef nameOr
 
 std::optional<double> ArtboardViewModelInstance::getNumberProperty (StringRef nameOrPath) const
 {
-    const auto value = getProperty (nameOrPath);
-    if (value.isDouble())
-        return static_cast<double> (value);
-
-    if (value.isInt())
-        return static_cast<double> (static_cast<int> (value));
-
-    if (value.isInt64())
-        return static_cast<double> (static_cast<int64> (value));
+    if (auto* number = resolveAs<rive::ViewModelInstanceNumber> (impl->instance, nameOrPath))
+        return static_cast<double> (number->propertyValue());
 
     return std::nullopt;
 }

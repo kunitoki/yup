@@ -912,8 +912,8 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
         float lineY = lastLine.y();
         float lineHeight = glyphLine.bottom - glyphLine.top;
 
-        // Find the rightmost position in the last line (cached line-relative x)
-        const float endX = ! lineEndX.empty() ? lineEndX.back() : glyphLine.startX;
+        const auto lastLineIndex = orderedLines.size() - 1;
+        const float endX = lastLineIndex < lineEndX.size() ? lineEndX[lastLineIndex] : glyphLine.startX;
 
         const float caretWidth = 1.0f;
         return Rectangle<float> (

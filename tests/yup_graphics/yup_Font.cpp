@@ -136,13 +136,25 @@ TEST (FontTests, LoadFromDataWithEmptyData)
     EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
 
-TEST (FontTests, DISABLED_LoadFromDataWithInvalidData) // TODO - this doesn't fail harfbuzz!!
+TEST (FontTests, LoadFromDataWithInvalidData)
 {
     MemoryBlock invalidData ("invalid font data", 17);
 
     auto result = Font::loadFontFromData (invalidData);
 
     EXPECT_TRUE (result.failed());
+    EXPECT_FALSE (result.getErrorMessage().isEmpty());
+}
+
+TEST (FontTests, LoadFromSpanWithInvalidData)
+{
+    MemoryBlock invalidData ("invalid font data", 17);
+    Span<const uint8> span (static_cast<const uint8*> (invalidData.getData()), invalidData.getSize());
+
+    auto result = Font::loadFontFromData (span);
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
 
 TEST (FontTests, LoadFromNonExistentFile)
@@ -513,6 +525,77 @@ TEST (FontTests, VariableFont_FontMetrics)
     EXPECT_NE (0.0f, font.getAscent());
     EXPECT_NE (0.0f, font.getDescent());
     EXPECT_GT (font.getWeight(), 0);
+}
+
+TEST (FontTests, VariableFont_IsNotItalic)
+{
+    EXPECT_FALSE (loadTestFont().isItalic());
+}
+
+TEST (FontTests, VariableFont_SetAxisValueIgnoresUnknownTag)
+{
+    auto font = loadTestFont();
+    const auto original = font;
+
+    font.setAxisValue ("xxxx", 1.0f);
+
+    EXPECT_EQ (original, font);
+}
+
+TEST (FontTests, VariableFont_WithAxisValueReturnsEmptyFontForUnknownTag)
+{
+    const auto font = loadTestFont();
+
+    EXPECT_TRUE (font.withAxisValue ("xxxx", 1.0f).isEmpty());
+    EXPECT_FALSE (font.isEmpty());
+}
+
+TEST (FontTests, VariableFont_SetAxisValuesSkipsUnknownTags)
+{
+    auto font = loadTestFont();
+
+    auto wghtAxis = font.getAxisDescription ("wght");
+    ASSERT_TRUE (wghtAxis.has_value());
+
+    font.setAxisValues ({ { "xxxx", 1.0f },
+                          { "wght", wghtAxis->maximumValue } });
+
+    EXPECT_FLOAT_EQ (wghtAxis->maximumValue, font.getAxisValue ("wght"));
+}
+
+TEST (FontTests, VariableFont_SetAxisValuesWithOnlyUnknownTagsLeavesTheFont)
+{
+    auto font = loadTestFont();
+    const auto original = font;
+
+    font.setAxisValues ({ { "xxxx", 1.0f },
+                          { "yyyy", 2.0f } });
+
+    EXPECT_EQ (original, font);
+}
+
+TEST (FontTests, VariableFont_WithAxisValuesSkipsUnknownTags)
+{
+    const auto font = loadTestFont();
+
+    auto wghtAxis = font.getAxisDescription ("wght");
+    ASSERT_TRUE (wghtAxis.has_value());
+
+    const auto newFont = font.withAxisValues ({ { "xxxx", 1.0f },
+                                                { "wght", wghtAxis->maximumValue } });
+
+    ASSERT_FALSE (newFont.isEmpty());
+    EXPECT_FLOAT_EQ (wghtAxis->maximumValue, newFont.getAxisValue ("wght"));
+    EXPECT_FLOAT_EQ (wghtAxis->defaultValue, font.getAxisValue ("wght"));
+}
+
+TEST (FontTests, VariableFont_WithAxisValuesReturnsEmptyFontForOnlyUnknownTags)
+{
+    const auto font = loadTestFont();
+
+    EXPECT_TRUE (font.withAxisValues ({ { "xxxx", 1.0f },
+                                        { "yyyy", 2.0f } })
+                     .isEmpty());
 }
 
 // ==============================================================================
@@ -1192,4 +1275,40 @@ TEST_F (FontColorEmojiTests, FallbackFontCanBeReplacedAndCleared)
 
     Font::setColorEmojiFallbackFont (Font());
     EXPECT_TRUE (Font::getColorEmojiFallbackFont().isEmpty());
+}
+
+TEST_F (FontColorEmojiTests, FallbackFontHasNoFallbackOfItsOwn)
+{
+    const auto textFont = Font::loadFontFromFile (getValidFontFile().getSiblingFile ("YupColrTest.ttf"));
+    ASSERT_TRUE (textFont.wasOk()) << textFont.getErrorMessage();
+
+    const auto fallbackFont = loadTestFont();
+    Font::setColorEmojiFallbackFont (fallbackFont);
+
+    // "E" is only in the fallback font, U+0251 LATIN SMALL LETTER ALPHA is in neither. All three
+    // are Latin, so they are shaped as one run rather than split by script
+    ASSERT_TRUE (textFont.getValue().getFont()->hasGlyph ('A'));
+    ASSERT_FALSE (textFont.getValue().getFont()->hasGlyph ('E'));
+    ASSERT_FALSE (textFont.getValue().getFont()->hasGlyph (0x0251));
+    ASSERT_TRUE (fallbackFont.getFont()->hasGlyph ('E'));
+    ASSERT_FALSE (fallbackFont.getFont()->hasGlyph (0x0251));
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.appendText (String::fromUTF8 ("AE\xc9\x91"), textFont.getValue().withHeight (24.0f));
+    }
+
+    const auto lines = text.getOrderedLines();
+    ASSERT_EQ (1u, lines.size());
+
+    const auto& runs = lines[0].runs();
+    ASSERT_EQ (2u, runs.size());
+    EXPECT_EQ (textFont.getValue().getFont().get(), runs[0]->font.get());
+    EXPECT_EQ (fallbackFont.getFont().get(), runs[1]->font.get());
+
+    // The fallback font shapes what it can, and keeps the character it lacks as a missing glyph
+    ASSERT_EQ (2u, runs[1]->glyphs.size());
+    EXPECT_NE (0, runs[1]->glyphs[0]);
+    EXPECT_EQ (0, runs[1]->glyphs[1]);
 }

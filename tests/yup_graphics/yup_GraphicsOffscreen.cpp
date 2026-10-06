@@ -374,7 +374,8 @@ TEST_F (GraphicsOffscreenTests, SingleStopGradientDoesNotCrash)
         Color (0xFFFF0000), 0.0f, 0.0f, Color (0xFFFF0000), 0.0f, 0.0f, ColorGradient::Linear);
     // Add only one stop to force the single-stop path.
     singleStop.clearStops();
-    singleStop.addColorStop (Color (0xFF00FF00), 0.0f);
+    singleStop.addColorStop (Color (0xFF00FF00), 0.0f, 0.0f, 0.0f);
+    ASSERT_EQ (singleStop.getStops().size(), 1u);
 
     EXPECT_NO_THROW ({
         g.setFillColorGradient (singleStop);
@@ -757,7 +758,7 @@ TEST_F (TransparencyLayerTests, EachAddMaskCreatesAnotherMask)
 {
     auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 1.0f);
     if (! layer.isValid())
-        GTEST_SKIP() << "Transparency layers need offscreen targets, see GraphicsMetalPixelTests";
+        GTEST_SKIP() << "Transparency layers need offscreen targets, see GraphicsGpuPixelTests";
 
     auto* first = layer.addMask (LayerMaskMode::Luminance);
     auto* second = layer.addMask (LayerMaskMode::InvertedAlpha);
@@ -771,7 +772,7 @@ TEST_F (TransparencyLayerTests, MaskedLayerCommitDoesNotCrash)
 {
     auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 1.0f);
     if (! layer.isValid())
-        GTEST_SKIP() << "Transparency layers need offscreen targets, see GraphicsMetalPixelTests";
+        GTEST_SKIP() << "Transparency layers need offscreen targets, see GraphicsGpuPixelTests";
 
     if (auto* mask = layer.addMask (LayerMaskMode::Alpha))
     {
@@ -784,33 +785,61 @@ TEST_F (TransparencyLayerTests, MaskedLayerCommitDoesNotCrash)
 }
 
 //==============================================================================
-// Pixel tests on a real GPU (Metal), reading back what was drawn
+// Pixel tests on a real GPU, reading back what was drawn
 //==============================================================================
 
-#if YUP_MAC
+#ifndef YUP_GRAPHICS_TESTS_GPU_PIXEL_HOST
+namespace
+{
 
-class GraphicsMetalPixelTests : public ::testing::Test
+/** No GPU context for the pixel tests on this platform, so they skip. */
+class GraphicsGpuPixelTestHost
+{
+public:
+    GraphicsContext* getContext() const noexcept { return nullptr; }
+
+    void makeCurrent() {}
+};
+
+} // namespace
+#endif
+
+/** Draws with the platform's GPU context: Metal on macOS, OpenGL on Linux, see native/. */
+class GraphicsGpuPixelTests : public ::testing::Test
 {
 protected:
     static void SetUpTestSuite()
     {
-        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        host = std::make_unique<GraphicsGpuPixelTestHost>();
+        gpuContext = host->getContext();
         if (gpuContext == nullptr)
             return;
 
-        if (GpuCanvas::create (*gpuContext, size, size) == nullptr)
-            gpuContext.reset();
+        auto canvas = GpuCanvas::create (*gpuContext, size, size);
+        if (canvas == nullptr)
+        {
+            gpuContext = nullptr;
+            return;
+        }
+
+        // Layer masks only apply in frames drawn with raster ordering, which GL needs fragment shader interlock for
+        auto* renderContext = dynamic_cast<rive::gpu::RenderContext*> (canvas->beginDraw().getFactory());
+        layerMasksApply = renderContext != nullptr && renderContext->frameSupportsLayerMask();
+        canvas->commit();
     }
 
     static void TearDownTestSuite()
     {
-        gpuContext.reset();
+        gpuContext = nullptr;
+        host.reset();
     }
 
     void SetUp() override
     {
         if (gpuContext == nullptr)
-            GTEST_SKIP() << "No Metal GPU context available";
+            GTEST_SKIP() << "No GPU graphics context available";
+
+        host->makeCurrent();
     }
 
     /** Draws into a transparent size x size canvas and returns its RGBA pixels, or nothing on failure. */
@@ -887,8 +916,7 @@ protected:
     */
     static void shapeColorGlyphText (StyledText& text, const String& string, float width = static_cast<float> (size))
     {
-        const auto fontFile = File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/YupColrTest.ttf");
-        auto font = Font::loadFontFromFile (fontFile);
+        auto font = loadTestFont ("YupColrTest.ttf");
         ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
 
         auto modifier = text.startUpdate();
@@ -913,13 +941,76 @@ protected:
         return count;
     }
 
+    /** Wraps the GPU context and flushes its frames into a target of the test's choosing, with the
+        default GraphicsContext::suspendFrame() rather than the backend's own.
+    */
+    class FlushingContext : public GraphicsContext
+    {
+    public:
+        FlushingContext (GraphicsContext& contextToWrap, rive::gpu::RenderTarget* targetToFlushInto)
+            : wrapped (contextToWrap)
+            , target (targetToFlushInto)
+        {
+        }
+
+        GpuPlatform getPlatform() const noexcept override { return wrapped.getPlatform(); }
+
+        GpuDevice::Ptr getGpuDevice() const noexcept override { return wrapped.getGpuDevice(); }
+
+        rive::Factory* getFactory() override { return wrapped.getFactory(); }
+
+        rive::gpu::RenderContext* getRenderContext() override { return wrapped.getRenderContext(); }
+
+        rive::gpu::RenderTarget* getRenderTarget() override { return target; }
+
+        std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override { return wrapped.makeRenderer (width, height); }
+
+        void onSizeChanged (void*, int, int, float, uint32_t) override {}
+
+        void begin (const rive::gpu::RenderContext::FrameDescriptor& descriptor) override { wrapped.begin (descriptor); }
+
+        void end (void*) override {}
+
+    private:
+        GraphicsContext& wrapped;
+        rive::gpu::RenderTarget* target = nullptr;
+    };
+
+    static ResultValue<Font> loadTestFont (StringRef fileName)
+    {
+        return Font::loadFontFromFile (
+#if YUP_EMSCRIPTEN
+            File ("/")
+#else
+            File (__FILE__).getParentDirectory().getParentDirectory()
+#endif
+                .getChildFile ("data/fonts")
+                .getChildFile (fileName));
+    }
+
+    /** Counts the visible pixels in the rows [minY, maxY). */
+    static int countVisiblePixelsInRows (const std::vector<uint8>& pixels, int minY, int maxY)
+    {
+        int count = 0;
+        for (int y = minY; y < maxY; ++y)
+            for (int x = 0; x < size; ++x)
+                if (alphaAt (pixels, x, y) > 50)
+                    ++count;
+
+        return count;
+    }
+
     static constexpr int size = 64;
-    static std::unique_ptr<GraphicsContext> gpuContext;
+    static std::unique_ptr<GraphicsGpuPixelTestHost> host;
+    static GraphicsContext* gpuContext;
+    static bool layerMasksApply;
 };
 
-std::unique_ptr<GraphicsContext> GraphicsMetalPixelTests::gpuContext;
+std::unique_ptr<GraphicsGpuPixelTestHost> GraphicsGpuPixelTests::host;
+GraphicsContext* GraphicsGpuPixelTests::gpuContext = nullptr;
+bool GraphicsGpuPixelTests::layerMasksApply = false;
 
-TEST_F (GraphicsMetalPixelTests, AlphaMaskShowsTheLayerWhereTheMaskIsOpaque)
+TEST_F (GraphicsGpuPixelTests, AlphaMaskShowsTheLayerWhereTheMaskIsOpaque)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -927,11 +1018,14 @@ TEST_F (GraphicsMetalPixelTests, AlphaMaskShowsTheLayerWhereTheMaskIsOpaque)
     });
     ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
 
+    if (! layerMasksApply)
+        GTEST_SKIP() << "Drawn, but this GPU lacks the raster ordering layer masks need";
+
     EXPECT_GT (alphaAt (pixels, 16, 32), 200);
     EXPECT_LT (alphaAt (pixels, 48, 32), 50);
 }
 
-TEST_F (GraphicsMetalPixelTests, InvertedAlphaMaskShowsTheOtherSide)
+TEST_F (GraphicsGpuPixelTests, InvertedAlphaMaskShowsTheOtherSide)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -939,11 +1033,14 @@ TEST_F (GraphicsMetalPixelTests, InvertedAlphaMaskShowsTheOtherSide)
     });
     ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
 
+    if (! layerMasksApply)
+        GTEST_SKIP() << "Drawn, but this GPU lacks the raster ordering layer masks need";
+
     EXPECT_LT (alphaAt (pixels, 16, 32), 50);
     EXPECT_GT (alphaAt (pixels, 48, 32), 200);
 }
 
-TEST_F (GraphicsMetalPixelTests, ClipLeftOnTheLayerDoesNotLimitTheMask)
+TEST_F (GraphicsGpuPixelTests, ClipLeftOnTheLayerDoesNotLimitTheMask)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -951,13 +1048,16 @@ TEST_F (GraphicsMetalPixelTests, ClipLeftOnTheLayerDoesNotLimitTheMask)
     });
     ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
 
+    if (! layerMasksApply)
+        GTEST_SKIP() << "Drawn, but this GPU lacks the raster ordering layer masks need";
+
     // The fill was drawn before the clip, so it covers the layer: the mask, not the leftover clip,
     // decides what shows, keeping the whole left half and hiding the right half
     EXPECT_GT (alphaAt (pixels, 24, 32), 200);
     EXPECT_LT (alphaAt (pixels, 48, 32), 50);
 }
 
-TEST_F (GraphicsMetalPixelTests, StackedMasksMultiply)
+TEST_F (GraphicsGpuPixelTests, StackedMasksMultiply)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -982,12 +1082,15 @@ TEST_F (GraphicsMetalPixelTests, StackedMasksMultiply)
     });
     ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
 
+    if (! layerMasksApply)
+        GTEST_SKIP() << "Drawn, but this GPU lacks the raster ordering layer masks need";
+
     EXPECT_GT (alphaAt (pixels, 16, 16), 200);
     EXPECT_LT (alphaAt (pixels, 48, 16), 50);
     EXPECT_LT (alphaAt (pixels, 16, 48), 50);
 }
 
-TEST_F (GraphicsMetalPixelTests, ImageMeshCoversItsArea)
+TEST_F (GraphicsGpuPixelTests, ImageMeshCoversItsArea)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -1000,7 +1103,7 @@ TEST_F (GraphicsMetalPixelTests, ImageMeshCoversItsArea)
     EXPECT_LT (alphaAt (pixels, 56, 56), 50);
 }
 
-TEST_F (GraphicsMetalPixelTests, MeshInstancesLandAtTheirTransforms)
+TEST_F (GraphicsGpuPixelTests, MeshInstancesLandAtTheirTransforms)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -1017,7 +1120,7 @@ TEST_F (GraphicsMetalPixelTests, MeshInstancesLandAtTheirTransforms)
     EXPECT_LT (alphaAt (pixels, 28, 28), 50);
 }
 
-TEST_F (GraphicsMetalPixelTests, MeshTextureCoordinatesStartAtTheImagesTopLeft)
+TEST_F (GraphicsGpuPixelTests, MeshTextureCoordinatesStartAtTheImagesTopLeft)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -1031,7 +1134,7 @@ TEST_F (GraphicsMetalPixelTests, MeshTextureCoordinatesStartAtTheImagesTopLeft)
     EXPECT_GT (channelAt (pixels, 48, 32, 2), 200);
 }
 
-TEST_F (GraphicsMetalPixelTests, MeshInstanceTextureOffsetAndScalePickACell)
+TEST_F (GraphicsGpuPixelTests, MeshInstanceTextureOffsetAndScalePickACell)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -1051,7 +1154,7 @@ TEST_F (GraphicsMetalPixelTests, MeshInstanceTextureOffsetAndScalePickACell)
     EXPECT_LT (channelAt (pixels, 16, 32, 0), 50);
 }
 
-TEST_F (GraphicsMetalPixelTests, MovedVerticesAreUploadedAgain)
+TEST_F (GraphicsGpuPixelTests, MovedVerticesAreUploadedAgain)
 {
     auto mesh = ImageMesh::createGrid ({ 0.0f, 0.0f, 16.0f, 16.0f }, 1, 1);
 
@@ -1074,7 +1177,7 @@ TEST_F (GraphicsMetalPixelTests, MovedVerticesAreUploadedAgain)
     EXPECT_GT (alphaAt (second, 48, 48), 200);
 }
 
-TEST_F (GraphicsMetalPixelTests, FrameDescriptorPassesTriangulationThresholds)
+TEST_F (GraphicsGpuPixelTests, FrameDescriptorPassesTriangulationThresholds)
 {
     auto canvas = GpuCanvas::create (*gpuContext, size, size);
     ASSERT_NE (canvas, nullptr);
@@ -1097,7 +1200,7 @@ TEST_F (GraphicsMetalPixelTests, FrameDescriptorPassesTriangulationThresholds)
     EXPECT_TRUE (canvas->commit());
 }
 
-TEST_F (GraphicsMetalPixelTests, CenteredClipStrokeKeepsOnlyTheBand)
+TEST_F (GraphicsGpuPixelTests, CenteredClipStrokeKeepsOnlyTheBand)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -1112,7 +1215,7 @@ TEST_F (GraphicsMetalPixelTests, CenteredClipStrokeKeepsOnlyTheBand)
     EXPECT_LT (alphaAt (pixels, 4, 32), 50);
 }
 
-TEST_F (GraphicsMetalPixelTests, InsideClipStrokeKeepsOnlyTheInnerBand)
+TEST_F (GraphicsGpuPixelTests, InsideClipStrokeKeepsOnlyTheInnerBand)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -1127,7 +1230,7 @@ TEST_F (GraphicsMetalPixelTests, InsideClipStrokeKeepsOnlyTheInnerBand)
     EXPECT_LT (alphaAt (pixels, 32, 32), 50);
 }
 
-TEST_F (GraphicsMetalPixelTests, DrawingAfterClipStrokeIsNotShifted)
+TEST_F (GraphicsGpuPixelTests, DrawingAfterClipStrokeIsNotShifted)
 {
     const auto pixels = render ([] (Graphics& g)
     {
@@ -1145,7 +1248,7 @@ TEST_F (GraphicsMetalPixelTests, DrawingAfterClipStrokeIsNotShifted)
     EXPECT_LT (alphaAt (pixels, 50, 44), 50);
 }
 
-TEST_F (GraphicsMetalPixelTests, FillsColorEmojiInTheirOwnColors)
+TEST_F (GraphicsGpuPixelTests, FillsColorEmojiInTheirOwnColors)
 {
     auto emojiFont = Font::loadColorEmojiSystemFont();
     if (emojiFont.failed())
@@ -1177,7 +1280,7 @@ TEST_F (GraphicsMetalPixelTests, FillsColorEmojiInTheirOwnColors)
     EXPECT_GT (colorfulPixels, 100);
 }
 
-TEST_F (GraphicsMetalPixelTests, FillsLayeredColorGlyphsWithTheirPaletteColors)
+TEST_F (GraphicsGpuPixelTests, FillsLayeredColorGlyphsWithTheirPaletteColors)
 {
     StyledText text;
     shapeColorGlyphText (text, "A");
@@ -1219,7 +1322,7 @@ TEST_F (GraphicsMetalPixelTests, FillsLayeredColorGlyphsWithTheirPaletteColors)
     EXPECT_LT (redX / static_cast<float> (redPixels), blueX / static_cast<float> (bluePixels));
 }
 
-TEST_F (GraphicsMetalPixelTests, ColorGlyphTakesEachDrawsTextColor)
+TEST_F (GraphicsGpuPixelTests, ColorGlyphTakesEachDrawsTextColor)
 {
     // The same text, so the same prepared layer, drawn twice in one frame in two colors
     StyledText text;
@@ -1243,7 +1346,7 @@ TEST_F (GraphicsMetalPixelTests, ColorGlyphTakesEachDrawsTextColor)
     EXPECT_EQ (countPixels (pixels, isGreen, size / 2, size), 0);
 }
 
-TEST_F (GraphicsMetalPixelTests, FillsRadialGradientColorGlyphs)
+TEST_F (GraphicsGpuPixelTests, FillsRadialGradientColorGlyphs)
 {
     StyledText text;
     shapeColorGlyphText (text, "C");
@@ -1285,7 +1388,7 @@ TEST_F (GraphicsMetalPixelTests, FillsRadialGradientColorGlyphs)
     EXPECT_GT (edge[2], edge[0] + 50);
 }
 
-TEST_F (GraphicsMetalPixelTests, ColorGlyphsFollowTheBlendMode)
+TEST_F (GraphicsGpuPixelTests, ColorGlyphsFollowTheBlendMode)
 {
     StyledText text;
     shapeColorGlyphText (text, "A");
@@ -1310,7 +1413,7 @@ TEST_F (GraphicsMetalPixelTests, ColorGlyphsFollowTheBlendMode)
     EXPECT_EQ (countPixels (pixels, isPlainBlue), 0);
 }
 
-TEST_F (GraphicsMetalPixelTests, MixedColoredAndPlainRunsKeepTheirColors)
+TEST_F (GraphicsGpuPixelTests, MixedColoredAndPlainRunsKeepTheirColors)
 {
     const auto fontFile = File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/Linefont-VariableFont_wdth,wght.ttf");
     auto font = Font::loadFontFromFile (fontFile);
@@ -1336,7 +1439,7 @@ TEST_F (GraphicsMetalPixelTests, MixedColoredAndPlainRunsKeepTheirColors)
     EXPECT_GT (countPixels (pixels, [] (int r, int g, int b) { return g > 200 && r < 50 && b < 50; }), 0);
 }
 
-TEST_F (GraphicsMetalPixelTests, ColorGlyphsInMixedRunsTakeTheirRunsColor)
+TEST_F (GraphicsGpuPixelTests, ColorGlyphsInMixedRunsTakeTheirRunsColor)
 {
     // "B" is one layer in the text color: the colored run draws it red, the plain run in the fill
     const auto fontFile = File (__FILE__).getParentDirectory().getParentDirectory().getChildFile ("data/fonts/YupColrTest.ttf");
@@ -1362,7 +1465,7 @@ TEST_F (GraphicsMetalPixelTests, ColorGlyphsInMixedRunsTakeTheirRunsColor)
     EXPECT_GT (countPixels (pixels, [] (int r, int g, int b) { return g > 200 && r < 50 && b < 50; }), 20);
 }
 
-TEST_F (GraphicsMetalPixelTests, LayeredColorGlyphsBlendAsAWhole)
+TEST_F (GraphicsGpuPixelTests, LayeredColorGlyphsBlendAsAWhole)
 {
     StyledText text;
     shapeColorGlyphText (text, "D");
@@ -1386,4 +1489,536 @@ TEST_F (GraphicsMetalPixelTests, LayeredColorGlyphsBlendAsAWhole)
     EXPECT_EQ (countPixels (pixels, [] (int r, int, int b) { return r > 200 && b > 200; }), 0);
 }
 
-#endif // YUP_MAC
+
+TEST_F (GraphicsGpuPixelTests, SingleStopGradientFillsWithItsColor)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        ColorGradient gradient (Color (0xffff0000), 0.0f, 0.0f, Color (0xff0000ff), static_cast<float> (size), 0.0f, ColorGradient::Linear);
+        gradient.clearStops();
+        gradient.addColorStop (Color (0xff00ff00), 0.0f, 0.0f, 0.0f);
+
+        g.setFillColorGradient (gradient);
+        g.fillRect (0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size));
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    for (const auto x : { 8, 56 })
+    {
+        EXPECT_GT (alphaAt (pixels, x, 32), 200);
+        EXPECT_GT (channelAt (pixels, x, 32, 1), 200);
+        EXPECT_LT (channelAt (pixels, x, 32, 0), 50);
+        EXPECT_LT (channelAt (pixels, x, 32, 2), 50);
+    }
+}
+
+TEST_F (GraphicsGpuPixelTests, ClipStrokeUnderADegenerateTransformClipsEverything)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        g.setTransform (AffineTransform::scaling (0.0f, 0.0f));
+        g.setClipStroke (Path().addRectangle (16.0f, 16.0f, 32.0f, 32.0f), StrokeType (8.0f));
+        g.setTransform (AffineTransform());
+        g.setFillColor (Colors::red);
+        g.fillAll();
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_LT (alphaAt (pixels, 16, 32), 50);
+    EXPECT_LT (alphaAt (pixels, 32, 32), 50);
+    EXPECT_LT (alphaAt (pixels, 4, 4), 50);
+}
+
+TEST_F (GraphicsGpuPixelTests, FillImageCoversTheShapeWithTheImage)
+{
+    const auto image = createRedBlueImage();
+
+    const auto pixels = render ([&image] (Graphics& g)
+    {
+        // The 2 x 1 image stretched over the whole canvas
+        g.setFillImage (image, AffineTransform::scaling (static_cast<float> (size) * 0.5f, static_cast<float> (size)), { ImageWrap::Clamp, ImageWrap::Clamp, ImageFilter::Nearest });
+        g.fillRect (0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size));
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 16, 32), 200);
+    EXPECT_GT (channelAt (pixels, 16, 32, 0), 200);
+    EXPECT_LT (channelAt (pixels, 16, 32, 2), 50);
+    EXPECT_GT (alphaAt (pixels, 48, 32), 200);
+    EXPECT_LT (channelAt (pixels, 48, 32, 0), 50);
+    EXPECT_GT (channelAt (pixels, 48, 32, 2), 200);
+}
+
+TEST_F (GraphicsGpuPixelTests, InvalidMeshesAndEmptyInstanceListsDrawNothing)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        g.drawImageMesh (createWhiteImage(), ImageMesh());
+        g.drawImageMeshInstanced (createWhiteImage(), ImageMesh::createGrid ({ 0.0f, 0.0f, 64.0f, 64.0f }, 1, 1), {});
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_LT (alphaAt (pixels, 32, 32), 50);
+}
+
+TEST_F (GraphicsGpuPixelTests, CopiedMeshesDrawWithBuffersOfTheirOwn)
+{
+    auto mesh = ImageMesh::createGrid ({ 0.0f, 0.0f, 16.0f, 16.0f }, 1, 1);
+
+    const auto first = render ([&] (Graphics& g)
+    {
+        g.drawImageMesh (createWhiteImage(), mesh);
+    });
+    ASSERT_EQ (first.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (alphaAt (first, 8, 8), 200);
+
+    // Copied once the original has buffers: moving the copy's vertices leaves the original in place
+    ImageMesh copy (mesh);
+    const std::vector<Point<float>> moved { { 40.0f, 40.0f }, { 56.0f, 40.0f }, { 40.0f, 56.0f }, { 56.0f, 56.0f } };
+    ASSERT_TRUE (copy.setVertices (moved));
+
+    const auto second = render ([&] (Graphics& g)
+    {
+        g.drawImageMesh (createWhiteImage(), mesh);
+        g.drawImageMesh (createWhiteImage(), copy);
+    });
+    ASSERT_EQ (second.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (alphaAt (second, 8, 8), 200);
+    EXPECT_GT (alphaAt (second, 48, 48), 200);
+    EXPECT_LT (alphaAt (second, 28, 28), 50);
+
+    // A move takes the buffers along
+    const ImageMesh movedMesh (std::move (copy));
+
+    const auto third = render ([&] (Graphics& g)
+    {
+        g.drawImageMesh (createWhiteImage(), movedMesh);
+    });
+    ASSERT_EQ (third.size(), static_cast<std::size_t> (size * size * 4));
+    EXPECT_GT (alphaAt (third, 48, 48), 200);
+    EXPECT_LT (alphaAt (third, 8, 8), 50);
+}
+
+TEST_F (GraphicsGpuPixelTests, ImagesWithoutPixelsGetNoTexture)
+{
+    const Image empty;
+    EXPECT_FALSE (empty.createTextureIfNotPresent (*gpuContext));
+    EXPECT_EQ (empty.getGpuTexture(), nullptr);
+
+    const Image image (4, 4);
+    EXPECT_TRUE (image.createTextureIfNotPresent (*gpuContext));
+    EXPECT_NE (image.getGpuTexture(), nullptr);
+}
+
+TEST_F (GraphicsGpuPixelTests, DefaultSuspendFrameFlushesTheFrameIntoTheRenderTarget)
+{
+    auto device = gpuContext->getGpuDevice();
+    ASSERT_NE (device, nullptr);
+
+    auto target = device->createOffscreenTarget (size, size);
+    ASSERT_NE (target, nullptr);
+
+    FlushingContext context (*gpuContext, target->getRenderTarget());
+    auto renderer = context.makeRenderer (size, size);
+    ASSERT_NE (renderer, nullptr);
+
+    // Loading rather than clearing, so the wrapped context does not clear a window it does not have.
+    // The fill covers the whole target, so what was loaded does not matter.
+    rive::gpu::RenderContext::FrameDescriptor descriptor;
+    descriptor.renderTargetWidth = static_cast<uint32_t> (size);
+    descriptor.renderTargetHeight = static_cast<uint32_t> (size);
+    descriptor.loadAction = rive::gpu::LoadAction::preserveRenderTarget;
+    context.begin (descriptor);
+
+    Graphics g (context, *renderer);
+    g.setFillColor (Colors::red);
+    g.fillRect (0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size));
+
+    context.suspendFrame();
+
+    std::vector<uint8> pixels (static_cast<std::size_t> (size * size * 4));
+    ASSERT_TRUE (device->readOffscreenPixels (*target, pixels.data(), pixels.size()));
+
+    EXPECT_GT (alphaAt (pixels, 32, 32), 200);
+    EXPECT_GT (channelAt (pixels, 32, 32, 0), 200);
+    EXPECT_LT (channelAt (pixels, 32, 32, 2), 50);
+}
+
+TEST_F (GraphicsGpuPixelTests, EllipsisOverflowClipsTextToItsArea)
+{
+    auto font = loadTestFont ("YupColrTest.ttf");
+    ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
+
+    // "D" is 38 pixels tall at 48 pixels, laid out from the top and drawn into an area 16 pixels tall
+    const auto renderD = [&font] (StyledText::TextOverflow overflow)
+    {
+        StyledText text;
+        {
+            auto modifier = text.startUpdate();
+            modifier.setMaxSize ({ static_cast<float> (size), static_cast<float> (size) });
+            modifier.setVerticalAlign (StyledText::top);
+            modifier.setOverflow (overflow);
+            modifier.appendText ("D", font.getValue().withHeight (48.0f));
+        }
+
+        return render ([&text] (Graphics& g)
+        {
+            g.setFillColor (Colors::white);
+            g.fillFittedText (text, { 0.0f, 0.0f, static_cast<float> (size), 16.0f });
+        });
+    };
+
+    const auto clipped = renderD (StyledText::ellipsis);
+    const auto unclipped = renderD (StyledText::visible);
+    ASSERT_EQ (clipped.size(), static_cast<std::size_t> (size * size * 4));
+    ASSERT_EQ (unclipped.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (countVisiblePixelsInRows (clipped, 0, 16), 100);
+    EXPECT_EQ (countVisiblePixelsInRows (clipped, 20, size), 0);
+    EXPECT_GT (countVisiblePixelsInRows (unclipped, 20, size), 100);
+}
+
+TEST_F (GraphicsGpuPixelTests, FeatheredTextFillLeavesColoredRunsSharp)
+{
+    auto font = loadTestFont ("Linefont-VariableFont_wdth,wght.ttf");
+    ASSERT_TRUE (font.wasOk()) << font.getErrorMessage();
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ static_cast<float> (size), static_cast<float> (size) });
+        modifier.appendText ("abc", Color (0xffff0000), font.getValue().withHeight (24.0f));
+        modifier.appendText ("abc", font.getValue().withHeight (24.0f));
+    }
+
+    const auto pixels = render ([&text] (Graphics& g)
+    {
+        g.setFeather (2.0f);
+        g.setFillColor (Color (0xff00ff00));
+        g.fillFittedText (text, { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    // The colored run is drawn with its own paint, the plain one softened in the fill color
+    int softGreenPixels = 0;
+    for (std::size_t i = 0; i < pixels.size(); i += 4)
+    {
+        if (pixels[i + 1] > pixels[i] + 16 && pixels[i + 1] > pixels[i + 2] + 16)
+            ++softGreenPixels;
+    }
+
+    EXPECT_GT (countPixels (pixels, [] (int r, int g, int b) { return r > 200 && g < 50 && b < 50; }), 0);
+    EXPECT_GT (softGreenPixels, 0);
+}
+
+//==============================================================================
+// What Graphics asks a renderer to draw, checked without a GPU
+//==============================================================================
+
+class GraphicsDrawCallTests : public ::testing::Test
+{
+protected:
+    struct DrawCalls
+    {
+        int paths = 0;
+        int clips = 0;
+        int layerMasks = 0;
+    };
+
+    /** Counts the draws it is asked for. */
+    class CountingRenderer : public rive::Renderer
+    {
+    public:
+        explicit CountingRenderer (DrawCalls& callsToCount)
+            : calls (callsToCount)
+        {
+        }
+
+        using rive::Renderer::drawImage;
+        using rive::Renderer::drawImageMesh;
+
+        void save() override {}
+
+        void restore() override {}
+
+        void transform (const rive::Mat2D&) override {}
+
+        void drawPath (rive::RenderPath*, rive::RenderPaint*) override { ++calls.paths; }
+
+        void clipPath (rive::RenderPath*) override { ++calls.clips; }
+
+        void drawImage (const rive::RenderImage*, rive::ImageSampler, rive::BlendMode, float) override {}
+
+        void drawImageMesh (const rive::RenderImage*,
+                            rive::ImageSampler,
+                            rive::rcp<rive::RenderBuffer>,
+                            rive::rcp<rive::RenderBuffer>,
+                            rive::rcp<rive::RenderBuffer>,
+                            uint32_t,
+                            uint32_t,
+                            rive::BlendMode,
+                            float) override {}
+
+        void applyLayerMask (const rive::RenderImage*, rive::ImageSampler, rive::LayerMaskMode) override { ++calls.layerMasks; }
+
+        void modulateOpacity (float) override {}
+
+    private:
+        DrawCalls& calls;
+    };
+
+    /** A headless context whose device hands out the mock targets given to it, and whose renderers count their draws. */
+    class MockTargetContext : public GraphicsContext
+    {
+    public:
+        MockTargetContext (GpuDevice::Ptr deviceToUse, DrawCalls& callsToCount)
+            : device (std::move (deviceToUse))
+            , calls (callsToCount)
+        {
+        }
+
+        GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Headless; }
+
+        GpuDevice::Ptr getGpuDevice() const noexcept override { return device; }
+
+        rive::Factory* getFactory() override { return headless->getFactory(); }
+
+        rive::gpu::RenderContext* getRenderContext() override { return nullptr; }
+
+        rive::gpu::RenderTarget* getRenderTarget() override { return nullptr; }
+
+        std::unique_ptr<rive::Renderer> makeRenderer (int, int) override { return std::make_unique<CountingRenderer> (calls); }
+
+        void onSizeChanged (void*, int, int, float, uint32_t) override {}
+
+        void begin (const rive::gpu::RenderContext::FrameDescriptor&) override {}
+
+        void end (void*) override {}
+
+    private:
+        std::unique_ptr<GraphicsContext> headless = GraphicsContext::createContext (GpuPlatform::Headless, {});
+        GpuDevice::Ptr device;
+        DrawCalls& calls;
+    };
+
+    void SetUp() override
+    {
+        device = new OreAndTargetGpuDevice (nullptr, nullptr);
+        context = std::make_unique<MockTargetContext> (GpuDevice::Ptr (device.get()), calls);
+        renderer = context->makeRenderer (size, size);
+        graphics = std::make_unique<Graphics> (*context, *renderer);
+        graphics->setDrawingArea ({ 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+    }
+
+    /** A target without a render canvas, whose texture is adopted instead. */
+    static std::unique_ptr<MockOffscreenTarget> targetWithTexture()
+    {
+        return MockOffscreenTarget::withGpuTexture (size, size);
+    }
+
+    /** A target with neither a render canvas nor a texture. */
+    static std::unique_ptr<MockOffscreenTarget> targetWithoutTexture()
+    {
+        return std::make_unique<::testing::NiceMock<MockOffscreenTarget>> (size, size);
+    }
+
+    static Font loadTestFont (StringRef fileName)
+    {
+        auto font = Font::loadFontFromFile (
+#if YUP_EMSCRIPTEN
+            File ("/")
+#else
+            File (__FILE__).getParentDirectory().getParentDirectory()
+#endif
+                .getChildFile ("data/fonts")
+                .getChildFile (fileName));
+        EXPECT_TRUE (font.wasOk()) << font.getErrorMessage();
+        return font.valueOr (Font());
+    }
+
+    static constexpr int size = 64;
+    const Rectangle<float> area { 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) };
+
+    DrawCalls calls;
+    ReferenceCountedObjectPtr<OreAndTargetGpuDevice> device;
+    std::unique_ptr<MockTargetContext> context;
+    std::unique_ptr<rive::Renderer> renderer;
+    std::unique_ptr<Graphics> graphics;
+};
+
+TEST_F (GraphicsDrawCallTests, CommitToImageAdoptsTheTargetTextureWithoutARenderCanvas)
+{
+    device->setNextOffscreenTarget (targetWithTexture());
+
+    Image image (size, size);
+    Graphics g (*context, image);
+    ASSERT_TRUE (g.isOffscreen());
+
+    EXPECT_TRUE (g.commitToImage());
+    EXPECT_NE (image.getGpuTexture(), nullptr);
+}
+
+TEST_F (GraphicsDrawCallTests, LayerMasksComeFromTheirTargetTextures)
+{
+    device->setNextOffscreenTarget (targetWithTexture());
+    auto layer = graphics->beginTransparencyLayer ({ 0.0f, 0.0f, 32.0f, 32.0f });
+    ASSERT_TRUE (layer.isValid());
+
+    // The device has no target left for a mask
+    EXPECT_EQ (layer.addMask(), nullptr);
+
+    device->setNextOffscreenTarget (targetWithTexture());
+    ASSERT_NE (layer.addMask (LayerMaskMode::InvertedLuminance), nullptr);
+
+    // The mask is applied, but the headless parent has no render context to draw the layer with
+    EXPECT_FALSE (layer.commit());
+    EXPECT_EQ (calls.layerMasks, 1);
+    EXPECT_FALSE (layer.isValid());
+}
+
+TEST_F (GraphicsDrawCallTests, LayerWithoutTexturesSkipsItsMasksAndFailsToCommit)
+{
+    device->setNextOffscreenTarget (targetWithoutTexture());
+    auto layer = graphics->beginTransparencyLayer ({ 0.0f, 0.0f, 32.0f, 32.0f });
+    ASSERT_TRUE (layer.isValid());
+
+    device->setNextOffscreenTarget (targetWithoutTexture());
+    ASSERT_NE (layer.addMask(), nullptr);
+
+    EXPECT_FALSE (layer.commit());
+    EXPECT_EQ (calls.layerMasks, 0);
+    EXPECT_FALSE (layer.isValid());
+}
+
+TEST_F (GraphicsDrawCallTests, FillImageWithoutTextureDrawsOnlyRunsWithTheirOwnColor)
+{
+    const auto outlineFont = loadTestFont ("Linefont-VariableFont_wdth,wght.ttf");
+    const auto colorFont = loadTestFont ("YupColrTest.ttf");
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize (area.getSize());
+        modifier.appendText ("abc", Color (0xffff0000), outlineFont.withHeight (24.0f));
+        modifier.appendText ("abc", outlineFont.withHeight (24.0f));
+        modifier.appendText ("B", colorFont.withHeight (24.0f));
+    }
+
+    // Headless images get no texture, so the plain outlines and the color glyph have no paint
+    graphics->setFillImage (Image (4, 4));
+    graphics->fillFittedText (text, area);
+
+    EXPECT_EQ (calls.paths, 1);
+}
+
+TEST_F (GraphicsDrawCallTests, StrokeImageWithoutTextureDrawsNoText)
+{
+    const auto font = loadTestFont ("Linefont-VariableFont_wdth,wght.ttf");
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize (area.getSize());
+        modifier.appendText ("abc", font.withHeight (24.0f));
+    }
+
+    graphics->setStrokeImage (Image (4, 4));
+    graphics->strokeFittedText (text, area);
+    EXPECT_EQ (calls.paths, 0);
+
+    graphics->setStrokeColor (Colors::white);
+    graphics->strokeFittedText (text, area);
+    EXPECT_EQ (calls.paths, 1);
+}
+
+TEST_F (GraphicsDrawCallTests, EllipsisOverflowClipsTextToItsArea)
+{
+    const auto font = loadTestFont ("Linefont-VariableFont_wdth,wght.ttf");
+
+    const auto fillText = [&] (StyledText::TextOverflow overflow)
+    {
+        StyledText text;
+        {
+            auto modifier = text.startUpdate();
+            modifier.setMaxSize (area.getSize());
+            modifier.setOverflow (overflow);
+            modifier.appendText ("abc", font.withHeight (24.0f));
+        }
+
+        graphics->fillFittedText (text, area);
+    };
+
+    graphics->setFillColor (Colors::white);
+
+    fillText (StyledText::visible);
+    EXPECT_EQ (calls.clips, 0);
+
+    fillText (StyledText::ellipsis);
+    EXPECT_EQ (calls.clips, 1);
+    EXPECT_EQ (calls.paths, 2);
+}
+
+TEST_F (GraphicsDrawCallTests, FeatheredFillDrawsEveryRun)
+{
+    const auto font = loadTestFont ("Linefont-VariableFont_wdth,wght.ttf");
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize (area.getSize());
+        modifier.appendText ("abc", Color (0xffff0000), font.withHeight (24.0f));
+        modifier.appendText ("abc", font.withHeight (24.0f));
+    }
+
+    // The colored run with its own paint, the plain one as a feathered outline in the fill paint
+    graphics->setFeather (2.0f);
+    graphics->setFillColor (Colors::white);
+    graphics->fillFittedText (text, area);
+
+    EXPECT_EQ (calls.paths, 2);
+}
+
+TEST_F (GraphicsDrawCallTests, ColorGlyphsDrawEachOfTheirLayers)
+{
+    const auto font = loadTestFont ("YupColrTest.ttf");
+
+    // "A" has two solid layers, "B" one in the text color and "C" one radial gradient
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize (area.getSize());
+        modifier.appendText ("ABC", font.withHeight (16.0f));
+    }
+
+    graphics->setFillColor (Colors::white);
+    graphics->fillFittedText (text, area);
+
+    EXPECT_EQ (calls.paths, 4);
+}
+
+TEST_F (GraphicsDrawCallTests, BlendedLayeredColorGlyphsNeedAnOffscreenLayer)
+{
+    const auto font = loadTestFont ("YupColrTest.ttf");
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize (area.getSize());
+        modifier.setOverflow (StyledText::ellipsis);
+        modifier.appendText ("A", font.withHeight (48.0f));
+    }
+
+    graphics->setBlendMode (BlendMode::Additive);
+    graphics->setAdditiveAmount (1.0f);
+    graphics->setFillColor (Colors::white);
+
+    // On the canvas the glyph is clipped to the text area once more, then needs a layer the device cannot make
+    graphics->fillFittedText (text, area);
+    EXPECT_EQ (calls.clips, 2);
+    EXPECT_EQ (calls.paths, 0);
+
+    // Off the canvas it is skipped before that
+    graphics->fillFittedText (text, area.translated (1000.0f, 1000.0f));
+    EXPECT_EQ (calls.clips, 3);
+    EXPECT_EQ (calls.paths, 0);
+}

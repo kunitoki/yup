@@ -234,3 +234,13 @@ def test_legacy():
 
     assert yup.approximatelyEqual(math.sqrt(math.fabs(transform.getDeterminant())), scale1 * scale2)
 """
+
+#==================================================================================================
+
+def test_transform_point_and_points_with_ints_and_floats():
+    t = yup.AffineTransform.translation(10.0, 20.0)
+
+    assert t.transformPoint(1, 2) == (11, 22)
+    assert t.transformPoint(1.5, 2.5) == (11.5, 22.5)
+    assert t.transformPoints(1, 2, 3, 4) == (11, 22, 13, 24)
+    assert t.transformPoints(0.5, 0.5, 1.5, 1.5) == (10.5, 20.5, 11.5, 21.5)

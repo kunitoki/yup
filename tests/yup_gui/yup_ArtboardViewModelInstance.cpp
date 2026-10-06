@@ -1856,3 +1856,283 @@ TEST_F (ViewModelAssetValueTests, AssetWritesSurviveAdvancingABoundArtboard)
     for (int frame = 0; frame < 5; ++frame)
         EXPECT_NO_THROW (artboard.advanceAndApply (0.016f));
 }
+
+//==============================================================================
+// Every value kind, nesting and lists, against tests/data/rive/artboard-lab.riv
+//
+// The authored "Default" instance of "Store" holds open = true, total = 12,
+// title = "Shop", tint = FF336699, mode = On (of the Off / On / Automatic enum
+// keyed off / on / auto), the trigger ping, featured = the "Default" Item
+// (label = "item") and items = the "First" (label = "first", amount = 1) and
+// "Second" (label = "second", amount = 2) Items. "Chain" nests itself, so a
+// fresh instance leaves its inner "next" empty. The file needs no scripting.
+//==============================================================================
+
+class ArtboardLabInstanceTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        const auto file = findRiveDirectory().getChildFile ("artboard-lab.riv");
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/artboard-lab.riv";
+            return;
+        }
+
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+        store = artboardFile->createArtboardViewModelInstance ("Store", "Default");
+        ASSERT_NE (nullptr, store.get());
+    }
+
+    static File findRiveDirectory()
+    {
+        auto dir = File (__FILE__)
+                       .getParentDirectory()
+                       .getParentDirectory()
+                       .getChildFile ("data")
+                       .getChildFile ("rive");
+
+        if (dir.exists())
+            return dir;
+
+        dir = File::getCurrentWorkingDirectory()
+                  .getParentDirectory()
+                  .getParentDirectory()
+                  .getParentDirectory()
+                  .getChildFile ("tests")
+                  .getChildFile ("data")
+                  .getChildFile ("rive");
+
+        if (dir.exists())
+            return dir;
+
+        return File ("/data/rive");
+    }
+
+    StringArray itemLabels() const
+    {
+        StringArray labels;
+
+        for (int i = 0; i < store->getListSize ("items"); ++i)
+            if (auto item = store->getListItem ("items", i))
+                labels.add (item->getStringProperty ("label").value_or ("<missing>"));
+
+        return labels;
+    }
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+    ArtboardViewModelInstance::Ptr store;
+};
+
+TEST_F (ArtboardLabInstanceTests, InstancesReportTheirSchemaAndAuthoredName)
+{
+    EXPECT_EQ (String ("Store"), store->getName());
+    EXPECT_EQ (String ("Default"), store->getInstanceName());
+
+    auto fresh = artboardFile->createArtboardViewModelInstance ("Store");
+    ASSERT_NE (nullptr, fresh.get());
+    EXPECT_EQ (String ("Store"), fresh->getName());
+    EXPECT_TRUE (fresh->getInstanceName().isEmpty());
+}
+
+TEST_F (ArtboardLabInstanceTests, InstancesAreOnlyCreatedForKnownSchemasAndInstances)
+{
+    EXPECT_EQ (nullptr, ArtboardViewModelInstance::createFromFile (nullptr, "Store").get());
+    EXPECT_EQ (nullptr, ArtboardViewModelInstance::createFromFile (nullptr, "Store", "Default").get());
+    EXPECT_EQ (nullptr, ArtboardViewModelInstance::createFromRive (artboardFile, nullptr).get());
+
+    EXPECT_EQ (nullptr, artboardFile->createArtboardViewModelInstance ("NoSuchViewModel").get());
+    EXPECT_EQ (nullptr, artboardFile->createArtboardViewModelInstance ("NoSuchViewModel", "Default").get());
+    EXPECT_EQ (nullptr, artboardFile->createArtboardViewModelInstance ("Store", "NoSuchInstance").get());
+}
+
+TEST_F (ArtboardLabInstanceTests, ColorsAndEnumsReadAsVars)
+{
+    const auto tint = store->getProperty ("tint");
+    EXPECT_TRUE (tint.isInt64());
+    EXPECT_EQ (var (static_cast<int64> (0xFF336699u)), tint);
+
+    // An enum reads as the display value of its option.
+    EXPECT_EQ (var ("On"), store->getProperty ("mode"));
+    EXPECT_EQ (std::optional<String> ("On"), store->getEnumProperty ("mode"));
+}
+
+TEST_F (ArtboardLabInstanceTests, NumberGetterRejectsAColorProperty)
+{
+    // Typed getters report nullopt for a property of another type.
+    EXPECT_EQ (std::nullopt, store->getNumberProperty ("tint"));
+}
+
+TEST_F (ArtboardLabInstanceTests, SetPropertyRejectsValuesOfAnotherType)
+{
+    EXPECT_FALSE (store->setProperty ("open", var (1)));
+    EXPECT_FALSE (store->setProperty ("total", var ("12")));
+    EXPECT_FALSE (store->setProperty ("title", var (1.0)));
+    EXPECT_FALSE (store->setProperty ("tint", var ("red")));
+    EXPECT_FALSE (store->setProperty ("tint", var (1.0)));
+
+    // Triggers, nested view models and lists hold no writable value.
+    EXPECT_FALSE (store->setProperty ("ping", var (true)));
+    EXPECT_FALSE (store->setProperty ("featured", var (1)));
+    EXPECT_FALSE (store->setProperty ("items", var (1)));
+
+    EXPECT_EQ (std::optional<bool> (true), store->getBoolProperty ("open"));
+    EXPECT_EQ (std::optional<double> (12.0), store->getNumberProperty ("total"));
+    EXPECT_EQ (std::optional<String> ("Shop"), store->getStringProperty ("title"));
+    EXPECT_EQ (0xFF336699u, store->getColorProperty ("tint").value_or (Color()).getARGB());
+}
+
+TEST_F (ArtboardLabInstanceTests, ColorsAcceptIntAndInt64Values)
+{
+    EXPECT_TRUE (store->setProperty ("tint", var (0x7F112233)));
+    EXPECT_EQ (0x7F112233u, store->getColorProperty ("tint").value_or (Color()).getARGB());
+
+    EXPECT_TRUE (store->setProperty ("tint", var (static_cast<int64> (0xFF445566u))));
+    EXPECT_EQ (0xFF445566u, store->getColorProperty ("tint").value_or (Color()).getARGB());
+}
+
+TEST_F (ArtboardLabInstanceTests, EnumsAcceptKeysDisplayValuesAndIndices)
+{
+    EXPECT_TRUE (store->setProperty ("mode", var ("auto")));
+    EXPECT_EQ (std::optional<String> ("Automatic"), store->getEnumProperty ("mode"));
+
+    EXPECT_TRUE (store->setEnumProperty ("mode", "Off"));
+    EXPECT_EQ (std::optional<String> ("Off"), store->getEnumProperty ("mode"));
+
+    EXPECT_TRUE (store->setProperty ("mode", var (1)));
+    EXPECT_EQ (std::optional<String> ("On"), store->getEnumProperty ("mode"));
+
+    EXPECT_TRUE (store->setProperty ("mode", var (static_cast<int64> (2))));
+    EXPECT_EQ (std::optional<String> ("Automatic"), store->getEnumProperty ("mode"));
+
+    // Neither a fractional value nor an index out of range selects an option.
+    EXPECT_FALSE (store->setProperty ("mode", var (1.0)));
+    EXPECT_FALSE (store->setProperty ("mode", var (-1)));
+    EXPECT_FALSE (store->setProperty ("mode", var (3)));
+    EXPECT_FALSE (store->setEnumProperty ("mode", "nonexistentOption"));
+    EXPECT_EQ (std::optional<String> ("Automatic"), store->getEnumProperty ("mode"));
+}
+
+TEST_F (ArtboardLabInstanceTests, PathsWalkNestedViewModelsAndListItems)
+{
+    EXPECT_EQ (std::optional<String> ("item"), store->getStringProperty ("featured.label"));
+    EXPECT_EQ (std::optional<String> ("first"), store->getStringProperty ("items.0.label"));
+    EXPECT_EQ (std::optional<double> (2.0), store->getNumberProperty ("items.1.amount"));
+
+    EXPECT_TRUE (store->setStringProperty ("items.1.label", "changed"));
+    EXPECT_EQ (std::optional<String> ("changed"), store->getListItem ("items", 1)->getStringProperty ("label"));
+
+    auto viaPath = store->getNestedInstance ("items.1");
+    ASSERT_NE (nullptr, viaPath.get());
+    EXPECT_EQ (String ("Item"), viaPath->getName());
+    EXPECT_EQ (store->getListItem ("items", 1)->internalRiveInstance(), viaPath->internalRiveInstance());
+
+    // Past the end of the list, the path resolves to nothing.
+    EXPECT_FALSE (store->hasProperty ("items.2"));
+    EXPECT_FALSE (store->hasProperty ("items.2.label"));
+    EXPECT_EQ (nullptr, store->getNestedInstance ("items.2").get());
+}
+
+TEST_F (ArtboardLabInstanceTests, ValueSegmentsDoNotResolveAgainstTheirOwner)
+{
+    // "title" holds a string and "items" a list, so a name after either of them
+    // addresses nothing, rather than a sibling property of the same instance.
+    EXPECT_FALSE (store->hasProperty ("title.total"));
+    EXPECT_EQ (std::nullopt, store->getNumberProperty ("title.total"));
+
+    EXPECT_FALSE (store->setNumberProperty ("items.total", 1.0));
+    EXPECT_EQ (std::optional<double> (12.0), store->getNumberProperty ("total"));
+}
+
+TEST_F (ArtboardLabInstanceTests, ASelfNestingViewModelLeavesItsInnerReferenceEmpty)
+{
+    auto chain = artboardFile->createArtboardViewModelInstance ("Chain");
+    ASSERT_NE (nullptr, chain.get());
+
+    EXPECT_TRUE (chain->hasProperty ("next"));
+    EXPECT_EQ (nullptr, chain->getNestedInstance ("next").get());
+
+    EXPECT_FALSE (chain->hasProperty ("next.label"));
+    EXPECT_EQ (std::nullopt, chain->getStringProperty ("next.label"));
+    EXPECT_FALSE (chain->setStringProperty ("next.label", "x"));
+}
+
+TEST_F (ArtboardLabInstanceTests, ListOperationsRejectInvalidPathsAndIndices)
+{
+    ASSERT_EQ (2, store->getListSize ("items"));
+
+    EXPECT_EQ (nullptr, store->getListItem ("items", -1).get());
+    EXPECT_EQ (nullptr, store->getListItem ("items", 2).get());
+    EXPECT_EQ (nullptr, store->getListItem ("title", 0).get());
+
+    EXPECT_FALSE (store->addListItem ("title", "Item"));
+    EXPECT_FALSE (store->addListItemAt ("missing", 0, "Item"));
+    EXPECT_FALSE (store->addListItemAt ("items", 0, "NoSuchViewModel"));
+
+    EXPECT_FALSE (store->removeListItem ("items", -1));
+    EXPECT_FALSE (store->removeListItem ("items", 2));
+    EXPECT_FALSE (store->removeListItem ("title", 0));
+
+    EXPECT_FALSE (store->swapListItems ("items", -1, 0));
+    EXPECT_FALSE (store->swapListItems ("items", 0, -1));
+    EXPECT_FALSE (store->swapListItems ("items", 0, 2));
+    EXPECT_FALSE (store->swapListItems ("items", 2, 0));
+    EXPECT_FALSE (store->swapListItems ("title", 0, 1));
+
+    store->clearListItems ("title");
+    EXPECT_EQ (std::optional<String> ("Shop"), store->getStringProperty ("title"));
+
+    EXPECT_EQ (StringArray ({ "first", "second" }), itemLabels());
+}
+
+TEST_F (ArtboardLabInstanceTests, ListOperationsReorderTheItems)
+{
+    EXPECT_TRUE (store->swapListItems ("items", 0, 1));
+    EXPECT_EQ (StringArray ({ "second", "first" }), itemLabels());
+
+    // A fresh Item has an empty label.
+    EXPECT_TRUE (store->addListItemAt ("items", 1, "Item"));
+    EXPECT_EQ (StringArray ({ "second", "", "first" }), itemLabels());
+
+    EXPECT_TRUE (store->addListItem ("items", "Item"));
+    EXPECT_EQ (4, store->getListSize ("items"));
+
+    EXPECT_TRUE (store->removeListItem ("items", 0));
+    EXPECT_EQ (StringArray ({ "", "first", "" }), itemLabels());
+
+    store->clearListItems ("items");
+    EXPECT_EQ (0, store->getListSize ("items"));
+}
+
+TEST_F (ArtboardLabInstanceTests, ListChangesNotifyAndKeepItemPathsCurrent)
+{
+    StringArray paths;
+    store->setPropertyChangedCallback ([&] (ArtboardViewModelInstance&, const String& path, const var&)
+    {
+        paths.add (path);
+    });
+
+    EXPECT_TRUE (store->swapListItems ("items", 0, 1));
+    EXPECT_TRUE (paths.contains ("items"));
+
+    paths.clear();
+    EXPECT_TRUE (store->addListItemAt ("items", 0, "Item"));
+    EXPECT_TRUE (paths.contains ("items"));
+
+    // Inserting in front shifted "second" from index 0 to 1, and it reports there.
+    paths.clear();
+    EXPECT_TRUE (store->setStringProperty ("items.1.label", "moved"));
+    EXPECT_TRUE (paths.contains ("items.1.label"));
+    EXPECT_FALSE (paths.contains ("items.0.label"));
+
+    store->setPropertyChangedCallback ({});
+}

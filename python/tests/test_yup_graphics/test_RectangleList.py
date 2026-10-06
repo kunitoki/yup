@@ -286,3 +286,22 @@ def test_rectangle_list_ensure_storage_allocated():
     rect_list.ensureStorageAllocated(20)
     assert rect_list.getNumRectangles() == 10
 """
+
+#==================================================================================================
+
+def test_iteration_indexing_and_repr():
+    rects = yup.RectangleList[float]()
+    rects.addWithoutMerge(yup.Rectangle[float](0.0, 0.0, 10.0, 10.0))
+    rects.addWithoutMerge(yup.Rectangle[float](20.0, 20.0, 5.0, 5.0))
+
+    assert len(rects) == 2
+    assert bool(rects)
+    assert [r.getWidth() for r in rects] == [10.0, 5.0]
+    assert rects[1].getX() == 20.0
+    assert repr(rects).endswith("(2 rectangles)")
+
+    with pytest.raises(IndexError):
+        rects[2]
+
+    with pytest.raises(IndexError):
+        rects[-1]

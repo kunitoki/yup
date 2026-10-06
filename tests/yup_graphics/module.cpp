@@ -23,6 +23,12 @@
 #include "../mocks/rive_ore.h"
 #include "../mocks/yup_graphics.h"
 
+#if YUP_LINUX
+#include "native/yup_GraphicsGpuPixelTestHost_linux.cpp"
+#elif YUP_MAC
+#include "native/yup_GraphicsGpuPixelTestHost_mac.cpp"
+#endif
+
 #include "yup_AffineTransform.cpp"
 #include "yup_Color.cpp"
 #include "yup_ColorGradient.cpp"

@@ -26,6 +26,9 @@
 
 #include "../mocks/rive_gpu.h"
 
+#include <filesystem>
+#include <fstream>
+
 using namespace yup;
 
 //==============================================================================
@@ -144,6 +147,42 @@ TEST_F (ArtboardFileTests, LoadFromGarbageStreamReportsMalformed)
 
     EXPECT_TRUE (result.failed());
     EXPECT_FALSE (result.getErrorMessage().isEmpty());
+}
+
+TEST_F (ArtboardFileTests, LoadFromAnUnsupportedVersionReportsIt)
+{
+    // A well formed header carrying a major version no runtime knows.
+    const uint8 header[] = { 'R', 'I', 'V', 'E', 99, 0, 0, 0 };
+    MemoryInputStream stream (header, sizeof (header), false);
+
+    auto result = ArtboardFile::load (stream, factory);
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("Unsupported"));
+}
+
+TEST_F (ArtboardFileTests, LoadFromAnUnreadableFileFails)
+{
+    const auto unreadable = File::createTempFile ("riv");
+    ASSERT_TRUE (unreadable.replaceWithText ("never read"));
+
+    const auto path = std::filesystem::path (unreadable.getFullPathName().toStdString());
+
+    std::error_code error;
+    std::filesystem::permissions (path, std::filesystem::perms::none, error);
+    const bool stillReadable = std::ifstream (path).good();
+
+    auto result = ArtboardFile::load (unreadable, factory);
+
+    std::filesystem::permissions (path, std::filesystem::perms::owner_read | std::filesystem::perms::owner_write, error);
+    unreadable.deleteFile();
+
+    if (stillReadable)
+        GTEST_SKIP() << "File permissions are not enforced here";
+
+    // The file exists, so this is told apart from a missing one.
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("open"));
 }
 
 TEST_F (ArtboardFileTests, LoadFromInputStreamMatchesLoadFromFile)

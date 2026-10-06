@@ -138,7 +138,8 @@ imports it twice, so its asset callback runs twice per asset: once with the
 window's factory and once with the recording session's.
 
 A scripted artboard draws only into the window it was loaded for: painting it
-into an `Image` or a transparency layer draws nothing. Load the file with a
+into an `Image`, a transparency layer, a `Component::snapshotToImage` snapshot or a
+component effect draws nothing, and asserts in debug builds. Load the file with a
 headless factory, or one that is not a GPU render context, and its scripts run
 without canvas or GPU support.
 

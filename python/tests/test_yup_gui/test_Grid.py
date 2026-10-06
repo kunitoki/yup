@@ -399,3 +399,25 @@ def test_empty_grid_and_degenerate_area_do_not_throw():
     add_rows(grid, 1, 50.0)
     add_items(grid, components)
     grid.performLayout(yup.Rectangle[float](0, 0, 0, 0))
+
+#==================================================================================================
+
+def test_grid_item_associated_component_property_round_trips():
+    component = yup.Component()
+
+    item = yup.GridItem()
+    item.associatedComponent = component
+    assert item.associatedComponent is not None
+
+    item.associatedComponent = None
+    assert item.associatedComponent is None
+
+def test_track_info_array_iterates_and_removes():
+    tracks = yup.ArrayTrackInfo()
+    tracks.add(yup.Grid.TrackInfo.px(10.0))
+    tracks.add(yup.Grid.TrackInfo.fr(1.0))
+    assert [track.isFractional() for track in tracks] == [False, True]
+
+    tracks.remove(0)
+    assert len(tracks) == 1
+    assert tracks[0].isFractional()

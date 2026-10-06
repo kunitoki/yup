@@ -40,3 +40,9 @@ def test_label_style_is_not_constructible():
         pass
     else:
         raise AssertionError("Label.Style should not be constructible")
+
+
+def test_label_repr_shows_its_text():
+    label = yup.Label("Header")
+    label.setText("hello")
+    assert repr(label).endswith('text="hello">')

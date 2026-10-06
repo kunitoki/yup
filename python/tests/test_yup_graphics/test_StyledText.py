@@ -108,3 +108,7 @@ def test_align_from_justification():
     justified = yup.Justification(yup.Justification.Flags.center)
     assert yup.StyledText.horizontalAlignFromJustification(justified) == yup.StyledText.HorizontalAlign.center
     assert yup.StyledText.verticalAlignFromJustification(justified) == yup.StyledText.VerticalAlign.middle
+
+
+def test_repr_reports_emptiness():
+    assert repr(yup.StyledText()).endswith("(empty)")

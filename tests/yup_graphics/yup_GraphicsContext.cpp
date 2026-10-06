@@ -195,3 +195,38 @@ TEST_F (GraphicsContextResumeFrameTests, ResumeFollowsTheMostRecentBegin)
     EXPECT_EQ (context.begunFrames.back().renderTargetWidth, 200u);
     EXPECT_EQ (context.begunFrames.back().renderTargetHeight, 150u);
 }
+
+//==============================================================================
+
+class GraphicsContextWithoutDeviceTests : public ::testing::Test
+{
+protected:
+    class DevicelessContext : public GraphicsContext
+    {
+    public:
+        GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Headless; }
+
+        GpuDevice::Ptr getGpuDevice() const noexcept override { return {}; }
+
+        rive::Factory* getFactory() override { return nullptr; }
+
+        rive::gpu::RenderContext* getRenderContext() override { return nullptr; }
+
+        rive::gpu::RenderTarget* getRenderTarget() override { return nullptr; }
+
+        std::unique_ptr<rive::Renderer> makeRenderer (int, int) override { return nullptr; }
+
+        void onSizeChanged (void*, int, int, float, uint32_t) override {}
+
+        void begin (const rive::gpu::RenderContext::FrameDescriptor&) override {}
+
+        void end (void*) override {}
+    };
+
+    DevicelessContext context;
+};
+
+TEST_F (GraphicsContextWithoutDeviceTests, IsGpuAvailableReturnsFalseWithoutADevice)
+{
+    EXPECT_FALSE (context.isGpuAvailable());
+}

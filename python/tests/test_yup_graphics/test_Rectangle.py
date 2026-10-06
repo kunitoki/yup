@@ -586,3 +586,13 @@ def test_rectangle_static_from_string():
     assert rect.getWidth() == 30
     assert rect.getHeight() == 40
 """
+
+#==================================================================================================
+
+def test_repr_and_str():
+    rect = yup.Rectangle[int](1, 2, 30, 40)
+    assert str(rect) == "1, 2, 30, 40"
+    assert repr(rect).startswith("yup.Rectangle")
+    assert repr(rect).endswith("(1, 2, 30, 40)")
+
+    assert str(yup.Rectangle[float](0.5, 0.5, 2.0, 2.0)).startswith("0.5, 0.5")

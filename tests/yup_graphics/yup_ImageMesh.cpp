@@ -124,3 +124,29 @@ TEST (ImageMeshTests, CopiesAndMovesKeepTheData)
     EXPECT_EQ (moved.getVertices().size(), 9u);
     EXPECT_TRUE (moved.isValid());
 }
+
+TEST (ImageMeshTests, CopyConstructionKeepsTheData)
+{
+    const auto mesh = ImageMesh::createGrid ({ 0.0f, 0.0f, 10.0f, 10.0f }, 2, 1);
+    const ImageMesh copy (mesh);
+
+    EXPECT_EQ (std::vector<Point<float>> (copy.getVertices().begin(), copy.getVertices().end()),
+               std::vector<Point<float>> (mesh.getVertices().begin(), mesh.getVertices().end()));
+    EXPECT_EQ (std::vector<Point<float>> (copy.getTextureCoordinates().begin(), copy.getTextureCoordinates().end()),
+               std::vector<Point<float>> (mesh.getTextureCoordinates().begin(), mesh.getTextureCoordinates().end()));
+    EXPECT_EQ (std::vector<uint16> (copy.getIndices().begin(), copy.getIndices().end()),
+               std::vector<uint16> (mesh.getIndices().begin(), mesh.getIndices().end()));
+}
+
+TEST (ImageMeshTests, SelfAssignmentKeepsTheData)
+{
+    auto mesh = ImageMesh::createGrid ({ 0.0f, 0.0f, 10.0f, 10.0f }, 2, 2);
+    auto& sameMesh = mesh;
+
+    mesh = sameMesh;
+    EXPECT_EQ (mesh.getVertices().size(), 9u);
+
+    mesh = std::move (sameMesh);
+    EXPECT_EQ (mesh.getVertices().size(), 9u);
+    EXPECT_TRUE (mesh.isValid());
+}

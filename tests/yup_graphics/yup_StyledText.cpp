@@ -360,6 +360,13 @@ TEST (StyledTextTests, HorizontalAlignFromJustificationCenteredRight)
     EXPECT_EQ (StyledText::right, align);
 }
 
+TEST (StyledTextTests, HorizontalAlignFromJustificationWithoutHorizontalFlagIsLeft)
+{
+    auto align = StyledText::horizontalAlignFromJustification (Justification::top);
+
+    EXPECT_EQ (StyledText::left, align);
+}
+
 TEST (StyledTextTests, VerticalAlignFromJustificationTop)
 {
     auto align = StyledText::verticalAlignFromJustification (Justification::top);
@@ -1502,4 +1509,231 @@ TEST_F (StyledTextColorEmojiTests, ClearedFallbackLeavesEmojiMissing)
     shape (text, grinningFace());
 
     EXPECT_EQ (0, text.getNumColorGlyphs());
+}
+
+// ==============================================================================
+// Layout Tests
+// ==============================================================================
+
+class StyledTextLayoutTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        // Characters missing from the test font stay missing, whatever emoji font the system has
+        previousFallback = Font::getColorEmojiFallbackFont();
+        Font::setColorEmojiFallbackFont (Font());
+    }
+
+    void TearDown() override
+    {
+        Font::setColorEmojiFallbackFont (previousFallback);
+    }
+
+    static void shape (StyledText& text,
+                       const String& string,
+                       Size<float> maxSize = { 400.0f, 400.0f },
+                       StyledText::TextOverflow overflow = StyledText::visible)
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize (maxSize);
+        modifier.setOverflow (overflow);
+        modifier.appendText (string, loadStyledTextTestFont());
+    }
+
+    static float lineCenterY (const rive::OrderedLine& line)
+    {
+        return line.y() + (line.glyphLine().top + line.glyphLine().bottom) * 0.5f;
+    }
+
+    static int countGlyphs (const rive::OrderedLine& line)
+    {
+        int numGlyphs = 0;
+        for (const auto& [run, glyphIndex] : line)
+        {
+            if (glyphIndex < run->glyphs.size())
+                ++numGlyphs;
+        }
+
+        return numGlyphs;
+    }
+
+    /** The COLR test font, where "A" is a color glyph. */
+    static Font loadColorGlyphFont()
+    {
+        auto result = Font::loadFontFromFile (getStyledTextTestFontFile().getSiblingFile ("YupColrTest.ttf"));
+        EXPECT_TRUE (result.wasOk()); // can't use ASSERT_* here: it returns void, but this function returns Font
+        return result.getValue().withHeight (24.0f);
+    }
+
+    Font previousFallback;
+};
+
+TEST_F (StyledTextLayoutTests, AppendTextWithARivePaintGroupsGlyphsByPaint)
+{
+    const auto font = loadStyledTextTestFont();
+    const rive::rcp<rive::RenderPaint> firstPaint = rive::make_rcp<rive::RiveRenderPaint>();
+    const rive::rcp<rive::RenderPaint> secondPaint = rive::make_rcp<rive::RiveRenderPaint>();
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.appendText ("ab", firstPaint, font);
+        modifier.appendText ("cd", secondPaint, font);
+        modifier.appendText ("ef", firstPaint, font);
+    }
+
+    // Runs drawn with the same paint share one outline
+    const auto styles = text.getRenderStyles();
+    ASSERT_EQ (2u, styles.size());
+    EXPECT_EQ (firstPaint.get(), styles[0]->paint.get());
+    EXPECT_EQ (secondPaint.get(), styles[1]->paint.get());
+}
+
+TEST_F (StyledTextLayoutTests, EllipsisEndsTheFirstLineWhenNoLineFits)
+{
+    const String string = "one\ntwo\nthree";
+
+    StyledText full;
+    shape (full, string, { 400.0f, 1.0f }, StyledText::visible);
+
+    StyledText truncated;
+    shape (truncated, string, { 400.0f, 1.0f }, StyledText::ellipsis);
+
+    ASSERT_EQ (3u, full.getOrderedLines().size());
+    ASSERT_EQ (1u, truncated.getOrderedLines().size());
+
+    // The only line laid out is the first one, followed by the ellipsis
+    EXPECT_GT (countGlyphs (truncated.getOrderedLines()[0]), countGlyphs (full.getOrderedLines()[0]));
+}
+
+TEST_F (StyledTextLayoutTests, CaretPastTheEllipsisStaysAtTheEndOfTheVisibleText)
+{
+    StyledText text;
+    shape (text, "one\ntwo\nthree", { 400.0f, 1.0f }, StyledText::ellipsis);
+
+    ASSERT_EQ (1u, text.getOrderedLines().size());
+
+    const auto endOfVisibleText = text.getCaretBounds (1000);
+    ASSERT_FALSE (endOfVisibleText.isEmpty());
+
+    // The newline after "two" ends a line cut away by the ellipsis
+    EXPECT_EQ (endOfVisibleText, text.getCaretBounds (7));
+    EXPECT_FLOAT_EQ (text.getCaretBounds (0).getY(), endOfVisibleText.getY());
+    EXPECT_GT (endOfVisibleText.getX(), text.getCaretBounds (2).getX());
+}
+
+TEST_F (StyledTextLayoutTests, AdjacentLineMovementStopsAtTheEllipsisLine)
+{
+    const String string = "one\ntwo\nthree";
+
+    StyledText text;
+    shape (text, string, { 400.0f, 1.0f }, StyledText::ellipsis);
+
+    ASSERT_EQ (1u, text.getOrderedLines().size());
+
+    // The lines past the ellipsis are not laid out, so there is no line to move to
+    EXPECT_EQ (string.length(), text.getGlyphIndexOnAdjacentLine (1, true));
+    EXPECT_EQ (0, text.getGlyphIndexOnAdjacentLine (1, false));
+}
+
+TEST_F (StyledTextLayoutTests, JustifiedLinesStretchToTheWidestLine)
+{
+    // Narrow enough for the test font to wrap the sentence over several lines
+    auto justified = makeWrappedText (40.0f, StyledText::justified);
+    ASSERT_GE (justified.numLines, 3);
+
+    const auto widestLine = justified.text.getComputedTextBounds().getWidth();
+    const auto justifiedLines = justified.text.getSelectionRectangles (0, justified.content.length());
+    ASSERT_EQ (static_cast<std::size_t> (justified.numLines), justifiedLines.size());
+
+    // Every line but the last spreads its glyphs to end at the widest line
+    for (std::size_t i = 0; i + 1 < justifiedLines.size(); ++i)
+        EXPECT_NEAR (widestLine, justifiedLines[i].getRight(), 0.5f);
+
+    // Left aligned, at least one of those lines ends before
+    auto left = makeWrappedText (40.0f, StyledText::left);
+    const auto leftLines = left.text.getSelectionRectangles (0, left.content.length());
+    ASSERT_EQ (justifiedLines.size(), leftLines.size());
+
+    float shortestLine = widestLine;
+    for (std::size_t i = 0; i + 1 < leftLines.size(); ++i)
+        shortestLine = jmin (shortestLine, leftLines[i].getRight());
+
+    EXPECT_LT (shortestLine, widestLine - 1.0f);
+}
+
+TEST_F (StyledTextLayoutTests, NegativeCaretIndexClampsToTheStart)
+{
+    StyledText text;
+    shape (text, "Hello");
+
+    const auto caret = text.getCaretBounds (-5);
+
+    EXPECT_FALSE (caret.isEmpty());
+    EXPECT_EQ (text.getCaretBounds (0), caret);
+}
+
+TEST_F (StyledTextLayoutTests, CaretInsideTheLastClusterOfALineIsAtTheLineEnd)
+{
+    // "abe" and U+0301 COMBINING ACUTE ACCENT: the accent is in the same glyph cluster as the "e"
+    StyledText text;
+    shape (text, String::fromUTF8 ("abe\xcc\x81\nxy"));
+
+    ASSERT_EQ (2u, text.getOrderedLines().size());
+
+    const auto insideCluster = text.getCaretBounds (3);
+    ASSERT_FALSE (insideCluster.isEmpty());
+
+    EXPECT_FLOAT_EQ (text.getCaretBounds (4).getX(), insideCluster.getX());
+    EXPECT_FLOAT_EQ (text.getCaretBounds (0).getY(), insideCluster.getY());
+    EXPECT_GT (insideCluster.getX(), text.getCaretBounds (2).getX());
+}
+
+TEST_F (StyledTextLayoutTests, MovingDownFromAWhitespaceOnlyLineGoesToTheNextLineStart)
+{
+    StyledText text;
+    shape (text, "   \nabc");
+
+    ASSERT_EQ (2u, text.getOrderedLines().size());
+
+    // Below the end of the spaces would be inside "abc": the caret goes to its start instead
+    EXPECT_EQ (4, text.getGlyphIndexOnAdjacentLine (3, true));
+}
+
+TEST_F (StyledTextLayoutTests, ClickOnAnEmptyLineReturnsItsNewline)
+{
+    StyledText text;
+    shape (text, "one\n\ntwo");
+
+    const auto lines = text.getOrderedLines();
+    ASSERT_EQ (3u, lines.size());
+    ASSERT_EQ (0, countGlyphs (lines[1]));
+
+    const float emptyLineY = lineCenterY (lines[1]);
+
+    // The second newline, at index 4, is the only character of the empty line
+    EXPECT_EQ (4, text.getGlyphIndexAtPosition ({ -5.0f, emptyLineY }));
+    EXPECT_EQ (4, text.getGlyphIndexAtPosition ({ 50.0f, emptyLineY }));
+}
+
+TEST_F (StyledTextLayoutTests, RepeatedColorGlyphsAreAllDrawnInColor)
+{
+    const auto font = loadColorGlyphFont();
+
+    StyledText first;
+    {
+        auto modifier = first.startUpdate();
+        modifier.appendText ("AA", font);
+    }
+
+    StyledText second;
+    {
+        auto modifier = second.startUpdate();
+        modifier.appendText ("A", font);
+    }
+
+    EXPECT_EQ (2, first.getNumColorGlyphs());
+    EXPECT_TRUE (first.getRenderStyles().empty());
+    EXPECT_EQ (1, second.getNumColorGlyphs());
 }

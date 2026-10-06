@@ -271,7 +271,7 @@ public:
     /** Returns the horizontal alignment matching a Justification, left when it has none. */
     static HorizontalAlign horizontalAlignFromJustification (Justification justification);
 
-    /** Returns the vertical alignment matching a Justification, top when it has none. */
+    /** Returns the vertical alignment matching a Justification, middle when it has none. */
     static VerticalAlign verticalAlignFromJustification (Justification justification);
 
     //==============================================================================

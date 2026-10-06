@@ -1317,16 +1317,20 @@ void Artboard::pullEventsFromStateMachines()
             else
                 continue;
 
-            var oldValue = eventProperties[eventName];
+            // Each property of each event keeps its own last value
+            const auto propertyName = String (child->name());
+            const auto propertyKey = eventName + "/" + propertyName;
+
+            var oldValue = eventProperties[propertyKey];
             if (oldValue == newValue)
                 continue;
 
-            eventProperties.set (eventName, newValue);
+            eventProperties.set (propertyKey, newValue);
 
-            propertyChanged (eventName, String (child->name()), oldValue, newValue);
+            propertyChanged (eventName, propertyName, oldValue, newValue);
 
             if (onPropertyChanged)
-                onPropertyChanged (*this, eventName, String (child->name()), oldValue, newValue);
+                onPropertyChanged (*this, eventName, propertyName, oldValue, newValue);
         }
     }
 }

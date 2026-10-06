@@ -40,3 +40,67 @@ TEST_F (GpuFrameDescriptorTests, TriangulationThresholdsDefaultToRivesDefaults)
 
     EXPECT_FLOAT_EQ (riveThresholds.minArea, GpuFrameDescriptor().triangulationThresholds.minArea);
 }
+
+#if YUP_APPLE
+// ---------------------------------------------------------------------------
+// GpuFrameDescriptor - Metal (the descriptor only reaches Rive on a real backend)
+// ---------------------------------------------------------------------------
+
+class GpuFrameDescriptorMetalTests : public ::testing::Test
+{
+protected:
+    static constexpr int size = 8;
+
+    void SetUp() override
+    {
+        device = GpuDevice::create (GpuPlatform::Metal, {});
+        if (device == nullptr)
+            GTEST_SKIP() << "No Metal device available";
+
+        target = device->createRenderableTarget (size, size);
+        if (target == nullptr)
+            GTEST_SKIP() << "No Metal offscreen target available";
+    }
+
+    /** Runs a frame with nothing drawn, and returns the pixel at the top left as RGBA. */
+    std::array<uint8, 4> renderEmptyFrame (GpuFrameDescriptor desc)
+    {
+        desc.renderTargetWidth = static_cast<uint32_t> (size);
+        desc.renderTargetHeight = static_cast<uint32_t> (size);
+
+        device->beginOffscreen (*target, desc);
+        device->endOffscreen (*target);
+
+        std::vector<uint8> pixels (static_cast<std::size_t> (size * size * 4));
+        EXPECT_TRUE (device->readOffscreenPixels (*target, pixels.data(), pixels.size()));
+        return { pixels[0], pixels[1], pixels[2], pixels[3] };
+    }
+
+    // Green and magenta read back the same in RGBA and BGRA order
+    static constexpr std::array<uint8, 4> green { 0, 255, 0, 255 };
+    static constexpr std::array<uint8, 4> magenta { 255, 0, 255, 255 };
+
+    GpuDevice::Ptr device;
+    std::unique_ptr<RenderableTarget> target;
+};
+
+TEST_F (GpuFrameDescriptorMetalTests, LoadOpsDecideWhatTheFrameStartsFrom)
+{
+    EXPECT_EQ (green, renderEmptyFrame ({ .loadOp = GpuLoadOp::clear, .clearColor = GpuColor (0.0f, 1.0f, 0.0f) }));
+
+    // Load keeps what the previous frame left, ignoring the clear color
+    EXPECT_EQ (green, renderEmptyFrame ({ .loadOp = GpuLoadOp::load, .clearColor = GpuColor (1.0f, 0.0f, 1.0f) }));
+
+    EXPECT_EQ (magenta, renderEmptyFrame ({ .loadOp = GpuLoadOp::clear, .clearColor = GpuColor (1.0f, 0.0f, 1.0f) }));
+
+    // Don't care leaves the contents undefined, but the frame still completes
+    renderEmptyFrame ({ .loadOp = GpuLoadOp::dontCare });
+}
+
+TEST_F (GpuFrameDescriptorMetalTests, DitherModeNoneStillClears)
+{
+    // Dithering only applies to gradients: a plain clear is exact with or without it
+    EXPECT_EQ (green, renderEmptyFrame ({ .clearColor = GpuColor (0.0f, 1.0f, 0.0f), .ditherMode = GpuDitherMode::none }));
+    EXPECT_EQ (magenta, renderEmptyFrame ({ .clearColor = GpuColor (1.0f, 0.0f, 1.0f), .ditherMode = GpuDitherMode::interleavedGradientNoise }));
+}
+#endif // YUP_APPLE
