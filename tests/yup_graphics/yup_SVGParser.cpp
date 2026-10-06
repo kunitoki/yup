@@ -2402,3 +2402,8 @@ TEST (SVGParserTests, ParseSVGWithWhitespaceInAttributes)
         "<rect x = \"10\" y = \"10\" width = \"80\" height = \"80\" fill = \"red\" />"
         "</svg>"));
 }
+
+TEST (SVGParserTests, ParsePlusLighterAsAdditive)
+{
+    EXPECT_EQ (std::optional<BlendMode> (BlendMode::Additive), SVGParser::parseBlendMode ("plus-lighter"));
+}

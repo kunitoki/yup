@@ -49,8 +49,11 @@ public:
 
         queue = device.GetQueue();
 
+        // Set by the page shell when it had to fall back to a compatibility mode adapter
+        contextOptions.compatibilityMode = EM_ASM_INT ({ return Module.webGPUCompatibilityMode ? 1 : 0; }) != 0;
+
         renderContext = rive::gpu::RenderContextWebGPUImpl::MakeContext (
-            {}, device, queue, rive::gpu::RenderContextWebGPUImpl::ContextOptions());
+            {}, device, queue, contextOptions);
 
         if (renderContext == nullptr)
         {
@@ -64,6 +67,8 @@ public:
     ~GpuDeviceWebGPU() override { releasePooledResources(); }
 
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::WebGPU; }
+
+    bool isCompatibilityMode() const noexcept override { return contextOptions.compatibilityMode; }
 
     rive::gpu::RenderContext* getRenderContext() const override { return renderContext.get(); }
 
@@ -444,7 +449,7 @@ private:
 
         auto slot = std::make_unique<OffscreenContextSlot>();
         slot->renderContext = rive::gpu::RenderContextWebGPUImpl::MakeContext (
-            {}, device, queue, rive::gpu::RenderContextWebGPUImpl::ContextOptions());
+            {}, device, queue, contextOptions);
         if (slot->renderContext == nullptr)
             return nullptr;
 
@@ -458,6 +463,7 @@ private:
     Options options;
     wgpu::Device device;
     wgpu::Queue queue;
+    rive::gpu::RenderContextWebGPUImpl::ContextOptions contextOptions;
     std::unique_ptr<rive::gpu::RenderContext> renderContext;
     std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;
     std::unique_ptr<rive::ore::Context> oreContext;

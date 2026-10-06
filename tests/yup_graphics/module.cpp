@@ -23,6 +23,12 @@
 #include "../mocks/rive_ore.h"
 #include "../mocks/yup_graphics.h"
 
+#if YUP_LINUX
+#include "native/yup_GraphicsGpuPixelTestHost_linux.cpp"
+#elif YUP_MAC
+#include "native/yup_GraphicsGpuPixelTestHost_mac.cpp"
+#endif
+
 #include "yup_AffineTransform.cpp"
 #include "yup_Color.cpp"
 #include "yup_ColorGradient.cpp"
@@ -34,6 +40,7 @@
 #include "yup_GraphicsOffscreen.cpp"
 #include "yup_GpuCanvas.cpp"
 #include "yup_Image.cpp"
+#include "yup_ImageMesh.cpp"
 #include "yup_ImageFormatManager.cpp"
 #include "yup_ImageFormatMetadataExtended.cpp"
 #include "yup_ImageFormatReader.cpp"

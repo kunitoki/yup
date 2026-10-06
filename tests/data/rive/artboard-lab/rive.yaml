@@ -1,0 +1,5 @@
+name: artboard-lab
+main: Machine
+logs:
+  file: build/rive.log
+  problems: build/problems.log

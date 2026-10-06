@@ -34,6 +34,7 @@
 
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/renderer/rive_renderer.hpp>
+#include <rive/renderer/render_context_impl.hpp>
 #include <rive/math/mat4.hpp>
 #include <rive/renderer/rive_render_image.hpp>
 #include <rive/text/font_hb.hpp>
@@ -147,6 +148,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "imaging/yup_ImageFormatManager.cpp"
 #include "graphics/yup_Color.cpp"
 #include "graphics/yup_Colors.cpp"
+#include "graphics/yup_ImageMesh.cpp"
 #include "graphics/yup_Graphics.cpp"
 #include "svg/yup_SVGDocument.cpp"
 #include "svg/yup_SVGCssParser.cpp"

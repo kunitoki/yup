@@ -209,6 +209,14 @@ public:
     */
     virtual bool isComputeAvailable() const noexcept { return false; }
 
+    /** Returns true if the device is a WebGPU device created in compatibility mode.
+
+        The web page falls back to compatibility mode when the browser cannot provide a
+        full WebGPU device, as on older GPUs or browsers implementing WebGPU over OpenGL
+        ES. Some GPU features and limits are then reduced. Always false on other backends.
+    */
+    virtual bool isCompatibilityMode() const noexcept { return false; }
+
     //==============================================================================
     /** Returns true if textures of the given format can be created and sampled.
 

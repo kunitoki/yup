@@ -44,7 +44,7 @@
     wasmDefines:        RIVE_WEBGL=1 ORE_BACKEND_GL=1
     wasmOptions:        -sUSE_SDL=2
     wasmLinkOptions:    -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2
-    windowsDefines:     ORE_BACKEND_D3D11=1 ORE_BACKEND_GL=1
+    windowsDefines:     RIVE_WINDOWS=1 ORE_BACKEND_D3D11=1 ORE_BACKEND_GL=1
     androidDefines:     RIVE_ANDROID=1 ORE_BACKEND_GL=1
     androidLibs:        EGL GLESv3
 

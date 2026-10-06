@@ -1,0 +1,47 @@
+<!--
+
+  ViewModel Globals - a fixture for auto-binding and global view models.
+
+  One artboard bound to the `Main` view model, whose authored default instance
+  sets `count` to 7. The file also declares the global view model `Theme`, whose
+  authored default instance sets `title` to "Hello"; the artboard binds `title`
+  into a text run, so a write to the global is visible.
+
+-->
+<Rive version="1" kind="fragment">
+    <Artboard defaultStateMachineId="1:1" viewModelId="5:1" viewModelInstanceId="5:2" width="200" height="100" name="Globals" id="0:1">
+        <Text x="10" y="10" width="180" height="24" sizingValue="fixed" name="Title" id="0:10">
+            <TextStylePaint fontSize="16" fontAssetId="7:1" familyName="Karla" name="Title Paint" id="0:11">
+                <Fill name="Fill">
+                    <SolidColor colorValue="FF000000" name="Color"/>
+                </Fill>
+            </TextStylePaint>
+            <TextValueRun styleId="0:11" text="-" name="Run" id="0:12">
+                <DataBindContext sourcePathIds="6:1-6:3" propertyKey="268"/>
+            </TextValueRun>
+        </Text>
+        <StateMachine name="State Machine 1" id="1:1">
+            <StateMachineLayer name="Layer 1" id="1:2">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState/>
+            </StateMachineLayer>
+        </StateMachine>
+    </Artboard>
+
+    <ViewModel defaultInstanceId="5:2" name="Main" id="5:1">
+        <ViewModelPropertyNumber name="count" id="5:3"/>
+        <ViewModelInstance exports="true" name="Default" id="5:2">
+            <ViewModelInstanceNumber propertyValue="7" viewModelPropertyId="5:3"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <ViewModel viewModelType="global" defaultInstanceId="6:2" name="Theme" id="6:1">
+        <ViewModelPropertyString name="title" id="6:3"/>
+        <ViewModelInstance exports="true" name="Default" id="6:2">
+            <ViewModelInstanceString propertyValue="Hello" viewModelPropertyId="6:3"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <FontAsset file="../viewmodel-lab/assets/karla.ttf" name="Karla" id="7:1"/>
+</Rive>

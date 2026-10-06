@@ -44,6 +44,18 @@ inline const yup::Identifier visible { "visible" };
 inline const yup::Identifier opacity { "opacity" };
 inline const yup::Identifier blendMode { "blendMode" };
 inline const yup::Identifier feather { "feather" };
+inline const yup::Identifier additiveAmount { "additiveAmount" };
+inline const yup::Identifier tint { "tint" };
+inline const yup::Identifier useAs { "useAs" };
+inline const yup::Identifier image { "image" };
+inline const yup::Identifier wrapX { "wrapX" };
+inline const yup::Identifier wrapY { "wrapY" };
+inline const yup::Identifier filter { "filter" };
+inline const yup::Identifier imageScale { "imageScale" };
+inline const yup::Identifier imageRotation { "imageRotation" };
+inline const yup::Identifier imageSkewX { "imageSkewX" };
+inline const yup::Identifier imageSkewY { "imageSkewY" };
+inline const yup::Identifier position { "position" };
 inline const yup::Identifier fillRule { "fillRule" };
 inline const yup::Identifier kind { "kind" };
 inline const yup::Identifier color { "color" };
@@ -83,7 +95,12 @@ inline constexpr const char* documentSchemaJson = R"({
         "opacity": { "type": "number", "default": 1, "minimum": 0, "maximum": 1 },
         "blendMode": { "type": "string", "default": "normal",
                        "enum": ["normal", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light",
-                                "soft-light", "difference", "exclusion", "multiply", "hue", "saturation", "color", "luminosity"] },
+                                "soft-light", "difference", "exclusion", "multiply", "hue", "saturation", "color", "luminosity",
+                                "plus-lighter"] },
+        "additiveAmount": { "type": "number", "default": 1, "minimum": 0, "maximum": 1 },
+        "tint": { "type": "string", "default": "#ffffffff" },
+        "useAs": { "type": "string", "default": "layer",
+                   "enum": ["layer", "clip-fill", "clip-stroke", "mask-alpha", "mask-inverted-alpha", "mask-luminance", "mask-inverted-luminance"] },
         "feather": { "type": "number", "default": 0, "minimum": 0, "maximum": 200 },
         "fillRule": { "type": "string", "default": "nonzero", "enum": ["nonzero", "evenodd"] }
       },
@@ -91,8 +108,16 @@ inline constexpr const char* documentSchemaJson = R"({
     },
     "Fill": {
       "properties": {
-        "kind": { "type": "string", "default": "solid", "enum": ["none", "solid", "linear", "radial"] },
+        "kind": { "type": "string", "default": "solid", "enum": ["none", "solid", "linear", "radial", "image"] },
         "color": { "type": "string", "default": "#4f8cffff" },
+        "image": { "type": "string", "default": "" },
+        "wrapX": { "type": "string", "default": "repeat", "enum": ["clamp", "repeat", "mirror"] },
+        "wrapY": { "type": "string", "default": "repeat", "enum": ["clamp", "repeat", "mirror"] },
+        "filter": { "type": "string", "default": "smooth", "enum": ["smooth", "pixelated"] },
+        "imageScale": { "type": "number", "default": 1, "minimum": 0.01, "maximum": 20 },
+        "imageRotation": { "type": "number", "default": 0, "minimum": -180, "maximum": 180 },
+        "imageSkewX": { "type": "number", "default": 0, "minimum": -60, "maximum": 60 },
+        "imageSkewY": { "type": "number", "default": 0, "minimum": -60, "maximum": 60 },
         "x1": { "type": "number", "default": 0 },
         "y1": { "type": "number", "default": 0 },
         "x2": { "type": "number", "default": 0 },
@@ -102,15 +127,24 @@ inline constexpr const char* documentSchemaJson = R"({
     },
     "Stroke": {
       "properties": {
-        "kind": { "type": "string", "default": "none", "enum": ["none", "solid", "linear", "radial"] },
+        "kind": { "type": "string", "default": "none", "enum": ["none", "solid", "linear", "radial", "image"] },
         "color": { "type": "string", "default": "#ffffffff" },
+        "image": { "type": "string", "default": "" },
+        "wrapX": { "type": "string", "default": "repeat", "enum": ["clamp", "repeat", "mirror"] },
+        "wrapY": { "type": "string", "default": "repeat", "enum": ["clamp", "repeat", "mirror"] },
+        "filter": { "type": "string", "default": "smooth", "enum": ["smooth", "pixelated"] },
+        "imageScale": { "type": "number", "default": 1, "minimum": 0.01, "maximum": 20 },
+        "imageRotation": { "type": "number", "default": 0, "minimum": -180, "maximum": 180 },
+        "imageSkewX": { "type": "number", "default": 0, "minimum": -60, "maximum": 60 },
+        "imageSkewY": { "type": "number", "default": 0, "minimum": -60, "maximum": 60 },
         "x1": { "type": "number", "default": 0 },
         "y1": { "type": "number", "default": 0 },
         "x2": { "type": "number", "default": 0 },
         "y2": { "type": "number", "default": 0 },
         "width": { "type": "number", "default": 2, "minimum": 0, "maximum": 100 },
         "join": { "type": "string", "default": "round", "enum": ["miter", "round", "bevel"] },
-        "cap": { "type": "string", "default": "round", "enum": ["butt", "round", "square"] }
+        "cap": { "type": "string", "default": "round", "enum": ["butt", "round", "square"] },
+        "position": { "type": "string", "default": "center", "enum": ["inside", "center", "outside"] }
       },
       "children": { "allowedTypes": ["Stop"] }
     },
@@ -147,10 +181,19 @@ inline constexpr const char* documentSchemaJson = R"({
 /** CSS names of the blend modes, indexed by yup::BlendMode (same order as the schema enum). */
 inline constexpr const char* blendModeNames[] = {
     "normal", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light",
-    "soft-light", "difference", "exclusion", "multiply", "hue", "saturation", "color", "luminosity"
+    "soft-light", "difference", "exclusion", "multiply", "hue", "saturation", "color", "luminosity",
+    "plus-lighter"
 };
 
-inline constexpr const char* paintKindNames[] = { "none", "solid", "linear", "radial" };
+inline constexpr const char* paintKindNames[] = { "none", "solid", "linear", "radial", "image" };
+inline constexpr const char* imageWrapNames[] = { "clamp", "repeat", "mirror" };
+inline constexpr const char* imageFilterNames[] = { "smooth", "pixelated" };
+inline constexpr const char* strokePositionNames[] = { "inside", "center", "outside" };
+
+/** How a layer is used: drawn, or acting as a clip or a mask (in yup::LayerMaskMode order) on the layer below it. */
+inline constexpr const char* useAsNames[] = {
+    "layer", "clip-fill", "clip-stroke", "mask-alpha", "mask-inverted-alpha", "mask-luminance", "mask-inverted-luminance"
+};
 inline constexpr const char* fillRuleNames[] = { "nonzero", "evenodd" };
 inline constexpr const char* strokeJoinNames[] = { "miter", "round", "bevel" };
 inline constexpr const char* strokeCapNames[] = { "butt", "round", "square" };
@@ -206,6 +249,9 @@ inline yup::DataTree getStroke (const yup::DataTree& layer) { return layer.getCh
 
 inline bool isGradientKind (const yup::String& kind) { return kind == "linear" || kind == "radial"; }
 
+/** Gradients and image paints are placed with two on-canvas handles, see getPaintHandleEnd(). */
+inline bool hasPaintHandles (const yup::String& kind) { return isGradientKind (kind) || kind == "image"; }
+
 inline bool isPaintVisible (const yup::DataTree& paint) { return paint.isValid() && getString (paint, Ids::kind) != "none"; }
 
 inline yup::BlendMode getBlendMode (const yup::DataTree& layer)
@@ -221,6 +267,141 @@ inline yup::StrokeJoin getStrokeJoin (const yup::DataTree& stroke)
 inline yup::StrokeCap getStrokeCap (const yup::DataTree& stroke)
 {
     return static_cast<yup::StrokeCap> (indexOfName (strokeCapNames, getString (stroke, Ids::cap)));
+}
+
+inline yup::StrokePosition getStrokePosition (const yup::DataTree& stroke)
+{
+    return static_cast<yup::StrokePosition> (indexOfName (strokePositionNames, getString (stroke, Ids::position)));
+}
+
+/** True for a layer that is not drawn itself but clips or masks the layer below it. */
+inline bool isModifierLayer (const yup::DataTree& layer)
+{
+    return layer.isValid() && getString (layer, Ids::useAs) != "layer";
+}
+
+inline bool isMaskLayer (const yup::DataTree& layer)
+{
+    return getString (layer, Ids::useAs).startsWith ("mask-");
+}
+
+inline yup::LayerMaskMode getLayerMaskMode (const yup::DataTree& layer)
+{
+    constexpr int firstMaskIndex = 3;
+    return static_cast<yup::LayerMaskMode> (yup::jmax (0, indexOfName (useAsNames, getString (layer, Ids::useAs)) - firstMaskIndex));
+}
+
+/** The visible clip and mask layers stacked directly above a layer, which all act on it. */
+inline std::vector<yup::DataTree> getModifierLayers (const yup::DataTree& document, int layerIndex)
+{
+    std::vector<yup::DataTree> modifiers;
+
+    for (int i = layerIndex + 1; isModifierLayer (document.getChild (i)); ++i)
+    {
+        if (const auto modifier = document.getChild (i); getBool (modifier, Ids::visible))
+            modifiers.push_back (modifier);
+    }
+
+    return modifiers;
+}
+
+/** The stroke a clip-stroke layer clips to: its own stroke's width, join, cap and position. */
+inline yup::StrokeType getClipStrokeType (const yup::DataTree& layer)
+{
+    const auto stroke = getStroke (layer);
+    return yup::StrokeType (getFloat (stroke, Ids::width), getStrokeJoin (stroke), getStrokeCap (stroke)).withPosition (getStrokePosition (stroke));
+}
+
+inline yup::ImageSampling getImageSampling (const yup::DataTree& paint)
+{
+    return { static_cast<yup::ImageWrap> (indexOfName (imageWrapNames, getString (paint, Ids::wrapX))),
+             static_cast<yup::ImageWrap> (indexOfName (imageWrapNames, getString (paint, Ids::wrapY))),
+             static_cast<yup::ImageFilter> (indexOfName (imageFilterNames, getString (paint, Ids::filter))) };
+}
+
+/** The base64 encoded file of an image paint: the one loaded into the document, or the bundled logo. */
+inline yup::String getPaintImageData (const yup::DataTree& paint)
+{
+    if (auto data = getString (paint, Ids::image); data.isNotEmpty())
+        return data;
+
+    static const auto logoData = []
+    {
+        yup::MemoryBlock bytes;
+        getAssetPath ("data/logo.png").loadFileAsData (bytes);
+        return yup::Base64::toBase64 (bytes.getData(), bytes.getSize());
+    }();
+
+    return logoData;
+}
+
+struct DecodedImage
+{
+    yup::String data;
+    yup::Image image;
+};
+
+inline std::unordered_map<const void*, DecodedImage>& getDecodedPaintImages()
+{
+    static std::unordered_map<const void*, DecodedImage> decodedImages;
+    return decodedImages;
+}
+
+/** Frees the decoded images and their GPU textures while the graphics context still exists. */
+inline void clearPaintImageCache()
+{
+    getDecodedPaintImages().clear();
+}
+
+/** The decoded image of an image paint, decoded once per distinct file.
+
+    Returned by reference so the image keeps its GPU texture from frame to frame. The cache is
+    keyed by the base64 string's buffer, which stays shared while the property is unchanged,
+    and holds on to that string so the address is never reused for another file.
+*/
+inline const yup::Image& getPaintImage (const yup::DataTree& paint)
+{
+    auto& decodedImages = getDecodedPaintImages();
+
+    const auto data = getPaintImageData (paint);
+    const auto* key = data.getCharPointer().getAddress();
+
+    if (auto cached = decodedImages.find (key); cached != decodedImages.end())
+        return cached->second.image;
+
+    yup::MemoryBlock bytes;
+    yup::MemoryOutputStream output (bytes, false);
+    yup::Base64::convertFromBase64 (output, data);
+    output.flush();
+
+    auto image = yup::Image::loadFromData ({ static_cast<const yup::uint8*> (bytes.getData()), bytes.getSize() });
+
+    auto& entry = decodedImages[key];
+    entry.data = data;
+    entry.image = image.wasOk() ? image.getValue() : yup::Image();
+    return entry.image;
+}
+
+/** Maps the image's pixels to the document: scaled, skewed, rotated, then moved to the x1/y1 handle. */
+inline yup::AffineTransform getPaintImageTransform (const yup::DataTree& paint)
+{
+    const auto origin = getPoint (paint, Ids::x1, Ids::y1);
+    const auto skew = yup::AffineTransform (1.0f, std::tan (yup::degreesToRadians (getFloat (paint, Ids::imageSkewX))), 0.0f,
+                                            std::tan (yup::degreesToRadians (getFloat (paint, Ids::imageSkewY))), 1.0f, 0.0f);
+
+    return yup::AffineTransform::scaling (getFloat (paint, Ids::imageScale))
+        .followedBy (skew)
+        .rotated (yup::degreesToRadians (getFloat (paint, Ids::imageRotation)))
+        .translated (origin.getX(), origin.getY());
+}
+
+/** The end handle of a paint: x2/y2 for gradients, the image's top-right corner for images. */
+inline yup::Point<float> getPaintHandleEnd (const yup::DataTree& paint)
+{
+    if (getString (paint, Ids::kind) != "image")
+        return getPoint (paint, Ids::x2, Ids::y2);
+
+    return yup::Point<float> (static_cast<float> (getPaintImage (paint).getWidth()), 0.0f).transformed (getPaintImageTransform (paint));
 }
 
 //==============================================================================
@@ -739,7 +920,21 @@ public:
         const auto oldKind = getString (paint, Ids::kind);
         setProperty (paint, Ids::kind, newKind);
 
-        if (! isGradientKind (newKind) || newKind == oldKind)
+        if (newKind == oldKind)
+            return;
+
+        if (newKind == "image")
+        {
+            // Start with the image spanning the layer's width
+            setPoint (paint, Ids::x1, Ids::y1, layerBounds.getTopLeft());
+
+            if (const auto& image = getPaintImage (paint); image.getWidth() > 0)
+                setProperty (paint, Ids::imageScale, yup::jlimit (0.01f, 20.0f, layerBounds.getWidth() / static_cast<float> (image.getWidth())));
+
+            return;
+        }
+
+        if (! isGradientKind (newKind))
             return;
 
         if (paint.getNumChildren() < 2)
@@ -764,6 +959,30 @@ public:
             setPoint (paint, Ids::x1, Ids::y1, center);
             setPoint (paint, Ids::x2, Ids::y2, center.translated (yup::jmax (layerBounds.getWidth(), layerBounds.getHeight()) * 0.5f, 0.0f));
         }
+    }
+
+    /** Moves the end handle of a paint: x2/y2 for gradients, scale and rotation for images, keeping their skew. */
+    void setPaintHandleEnd (yup::DataTree paint, yup::Point<float> end)
+    {
+        if (getString (paint, Ids::kind) != "image")
+        {
+            setPoint (paint, Ids::x2, Ids::y2, end);
+            return;
+        }
+
+        const auto& image = getPaintImage (paint);
+        const auto edge = end - getPoint (paint, Ids::x1, Ids::y1);
+        const float length = std::hypot (edge.getX(), edge.getY());
+        if (image.getWidth() <= 0 || length <= 0.0f)
+            return;
+
+        // The image's top edge is scaled, then sheared by the vertical skew, then rotated
+        const float skewY = std::tan (yup::degreesToRadians (getFloat (paint, Ids::imageSkewY)));
+        const float scale = length / (static_cast<float> (image.getWidth()) * std::sqrt (1.0f + skewY * skewY));
+        const float rotation = yup::radiansToDegrees (std::atan2 (edge.getY(), edge.getX()) - std::atan (skewY));
+
+        setProperty (paint, Ids::imageScale, yup::jlimit (0.01f, 20.0f, scale));
+        setProperty (paint, Ids::imageRotation, std::remainder (rotation, 360.0f));
     }
 
     /** Translates every vertex and gradient endpoint of a layer. */

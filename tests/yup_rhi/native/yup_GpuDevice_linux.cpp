@@ -1151,3 +1151,43 @@ TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFromGlslInvalidSourceFails)
     EXPECT_TRUE (result.failed());
 }
 #endif
+
+// --------------------------------------------------------------------------
+// Frame descriptor options reaching the OpenGL backend
+// --------------------------------------------------------------------------
+
+TEST_F (GpuDeviceOpenGLTests, FrameLoadOpsAndDitherModesReachTheBackend)
+{
+    constexpr int size = 8;
+    auto target = device->createRenderableTarget (size, size);
+    ASSERT_NE (target, nullptr);
+
+    // Runs a frame with nothing drawn, and returns the top left pixel as RGBA
+    const auto renderEmptyFrame = [&] (GpuFrameDescriptor desc)
+    {
+        desc.renderTargetWidth = static_cast<uint32_t> (size);
+        desc.renderTargetHeight = static_cast<uint32_t> (size);
+
+        device->beginOffscreen (*target, desc);
+        device->endOffscreen (*target);
+
+        std::vector<uint8_t> pixels (static_cast<std::size_t> (size * size * 4));
+        EXPECT_TRUE (device->readOffscreenPixels (*target, pixels.data(), pixels.size()));
+        return std::array<uint8_t, 4> { pixels[0], pixels[1], pixels[2], pixels[3] };
+    };
+
+    const std::array<uint8_t, 4> green { 0, 255, 0, 255 };
+    const std::array<uint8_t, 4> magenta { 255, 0, 255, 255 };
+
+    EXPECT_EQ (green, renderEmptyFrame ({ .loadOp = GpuLoadOp::clear, .clearColor = GpuColor (0.0f, 1.0f, 0.0f) }));
+
+    // Load keeps what the previous frame left, ignoring the clear color
+    EXPECT_EQ (green, renderEmptyFrame ({ .loadOp = GpuLoadOp::load, .clearColor = GpuColor (1.0f, 0.0f, 1.0f) }));
+
+    // Don't care leaves the contents undefined, but the frame still completes
+    renderEmptyFrame ({ .loadOp = GpuLoadOp::dontCare });
+
+    // Dithering only applies to gradients: a plain clear is exact with or without it
+    EXPECT_EQ (magenta, renderEmptyFrame ({ .clearColor = GpuColor (1.0f, 0.0f, 1.0f), .ditherMode = GpuDitherMode::none }));
+    EXPECT_EQ (green, renderEmptyFrame ({ .clearColor = GpuColor (0.0f, 1.0f, 0.0f), .ditherMode = GpuDitherMode::interleavedGradientNoise }));
+}

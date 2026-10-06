@@ -121,6 +121,7 @@ public:
         if (offscreenTextureView == nullptr || renderTarget == nullptr)
             return;
 
+        this->frameDescriptor = frameDescriptor;
         renderTarget->setTargetTextureView (offscreenTextureView, offscreenTexture);
         getRenderContext()->beginFrame (frameDescriptor);
     }

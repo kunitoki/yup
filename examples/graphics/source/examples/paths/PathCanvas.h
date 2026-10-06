@@ -121,8 +121,14 @@ public:
             g.fillRect (artboard);
 
             g.setClipPath (artboard);
-            for (const auto& layer : document.getRoot())
-                drawLayer (g, layer);
+
+            // Clip and mask layers are not drawn, they act on the layer below them
+            const auto& root = document.getRoot();
+            for (int i = 0; i < root.getNumChildren(); ++i)
+            {
+                if (const auto layer = root.getChild (i); ! isModifierLayer (layer))
+                    drawLayer (g, layer, getModifierLayers (root, i));
+            }
         }
 
         // The overlay is drawn in view coordinates, so handles keep their size whatever the view scale
@@ -234,7 +240,7 @@ public:
                     if (drag.kind == DragKind::gradientStart)
                         document.setPoint (drag.node, Ids::x1, Ids::y1, getPoint (drag.node, Ids::x1, Ids::y1) + delta);
                     else
-                        document.setPoint (drag.node, Ids::x2, Ids::y2, getPoint (drag.node, Ids::x2, Ids::y2) + delta);
+                        document.setPaintHandleEnd (drag.node, getPaintHandleEnd (drag.node) + delta);
                 });
                 break;
 
@@ -562,13 +568,13 @@ private:
         {
             for (const auto& paint : { getFill (layer), getStroke (layer) })
             {
-                if (! isGradientKind (getString (paint, Ids::kind)))
+                if (! hasPaintHandles (getString (paint, Ids::kind)))
                     continue;
 
                 if (p.distanceTo (getPoint (paint, Ids::x1, Ids::y1)) <= radius)
                     return { HitKind::gradientStart, paint, layer };
 
-                if (p.distanceTo (getPoint (paint, Ids::x2, Ids::y2)) <= radius)
+                if (p.distanceTo (getPaintHandleEnd (paint)) <= radius)
                     return { HitKind::gradientEnd, paint, layer };
             }
 
@@ -633,10 +639,19 @@ private:
     //==============================================================================
     static void setPaint (yup::Graphics& g, const yup::DataTree& paint, bool asStroke)
     {
-        if (getString (paint, Ids::kind) == "solid")
+        const auto kind = getString (paint, Ids::kind);
+
+        if (kind == "solid")
         {
             const auto paintColor = PathEditor::getColor (paint, Ids::color);
             asStroke ? g.setStrokeColor (paintColor) : g.setFillColor (paintColor);
+        }
+        else if (kind == "image")
+        {
+            const auto& image = getPaintImage (paint);
+            const auto transform = getPaintImageTransform (paint);
+            const auto sampling = getImageSampling (paint);
+            asStroke ? g.setStrokeImage (image, transform, sampling) : g.setFillImage (image, transform, sampling);
         }
         else
         {
@@ -653,6 +668,8 @@ private:
         const float strokeWidth = getFloat (stroke, Ids::width);
 
         g.setBlendMode (blendMode);
+        g.setAdditiveAmount (getFloat (layer, Ids::additiveAmount));
+        g.setTint (PathEditor::getColor (layer, Ids::tint));
         g.setFeather (feather);
 
         if (isPaintVisible (fill))
@@ -666,7 +683,7 @@ private:
 
         if (feather > 0.0f)
         {
-            // Feather only applies to fills: fill the outline of the stroke instead.
+            // Feather only applies to fills: fill the outline of the stroke instead, which is always centered.
             setPaint (g, stroke, false);
             g.fillPath (path.createStrokePolygon (strokeWidth, getStrokeJoin (stroke), getStrokeCap (stroke)));
             return;
@@ -676,10 +693,11 @@ private:
         g.setStrokeWidth (strokeWidth);
         g.setStrokeJoin (getStrokeJoin (stroke));
         g.setStrokeCap (getStrokeCap (stroke));
+        g.setStrokePosition (getStrokePosition (stroke));
         g.strokePath (path);
     }
 
-    static void drawLayer (yup::Graphics& g, const yup::DataTree& layer)
+    static void drawLayer (yup::Graphics& g, const yup::DataTree& layer, const std::vector<yup::DataTree>& modifiers)
     {
         const float opacity = getFloat (layer, Ids::opacity);
         if (! getBool (layer, Ids::visible) || opacity <= 0.0f)
@@ -689,31 +707,54 @@ private:
         if (path.isEmpty())
             return;
 
+        const auto state = g.saveState();
+
+        for (const auto& modifier : modifiers)
+        {
+            if (getString (modifier, Ids::useAs) == "clip-fill")
+                g.setClipPath (buildPath (modifier));
+            else if (getString (modifier, Ids::useAs) == "clip-stroke")
+                g.setClipStroke (buildPath (modifier), getClipStrokeType (modifier));
+        }
+
         const auto stroke = getStroke (layer);
         const bool overlapping = isPaintVisible (getFill (layer)) && isPaintVisible (stroke) && getFloat (stroke, Ids::width) > 0.0f;
+        const bool masked = std::any_of (modifiers.begin(), modifiers.end(), isMaskLayer);
 
-        if (opacity < 1.0f && overlapping)
+        if (masked || (opacity < 1.0f && overlapping))
         {
             // Fill and stroke overlap: composite them as a group, like SVG opacity on the element
             // Miter tips reach up to twice the stroke width from the vertex (miter limit 4)
             const float padding = getFloat (stroke, Ids::width) * 2.0f + getFloat (layer, Ids::feather) * 2.0f + 2.0f;
             const auto area = path.getBounds().enlarged (padding);
+            const auto toLayer = yup::AffineTransform::translation (-area.getX(), -area.getY());
 
             auto transparency = g.beginTransparencyLayer (area, opacity);
             if (transparency.isValid())
             {
                 auto& layerGraphics = transparency.getGraphics();
-                layerGraphics.setTransform (yup::AffineTransform::translation (-area.getX(), -area.getY()));
+                layerGraphics.setTransform (toLayer);
                 renderLayerContent (layerGraphics, layer, path, yup::BlendMode::SrcOver);
 
-                const auto state = g.saveState();
+                // Each mask layer adds a mask, and the masks multiply
+                for (const auto& modifier : modifiers)
+                {
+                    auto* mask = isMaskLayer (modifier) ? transparency.addMask (getLayerMaskMode (modifier)) : nullptr;
+                    if (mask == nullptr)
+                        continue;
+
+                    mask->setTransform (toLayer);
+                    mask->setOpacity (getFloat (modifier, Ids::opacity));
+                    renderLayerContent (*mask, modifier, buildPath (modifier), yup::BlendMode::SrcOver);
+                }
+
                 g.setBlendMode (getBlendMode (layer));
+                g.setAdditiveAmount (getFloat (layer, Ids::additiveAmount));
                 transparency.commit();
                 return;
             }
         }
 
-        const auto state = g.saveState();
         g.setOpacity (opacity);
         renderLayerContent (g, layer, path, getBlendMode (layer));
     }
@@ -789,11 +830,11 @@ private:
 
     void drawGradientHandles (yup::Graphics& g, const yup::DataTree& paint, yup::Color handleColor) const
     {
-        if (! isGradientKind (getString (paint, Ids::kind)))
+        if (! hasPaintHandles (getString (paint, Ids::kind)))
             return;
 
         const auto start = toView (getPoint (paint, Ids::x1, Ids::y1));
-        const auto end = toView (getPoint (paint, Ids::x2, Ids::y2));
+        const auto end = toView (getPaintHandleEnd (paint));
 
         g.setStrokeColor (yup::Colors::black.withAlpha (0.5f));
         g.setStrokeWidth (3.0f);

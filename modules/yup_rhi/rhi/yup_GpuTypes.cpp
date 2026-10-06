@@ -52,6 +52,16 @@ rive::gpu::DitherMode toRiveDitherMode (GpuDitherMode mode) noexcept
     }
 }
 
+/** Converts GpuTriangulationThresholds to the rive::gpu::TriangulationThresholds Rive expects. */
+rive::gpu::TriangulationThresholds toRiveTriangulationThresholds (const GpuTriangulationThresholds& thresholds) noexcept
+{
+    rive::gpu::TriangulationThresholds result;
+    result.minArea = thresholds.minArea;
+    result.maxVerbs = thresholds.maxVerbs;
+    result.frameBudgetMs = thresholds.frameBudgetMs;
+    return result;
+}
+
 /** Converts a GpuFrameDescriptor to the rive::gpu::RenderContext::FrameDescriptor Rive expects. */
 rive::gpu::RenderContext::FrameDescriptor toRiveFrameDescriptor (const GpuFrameDescriptor& desc) noexcept
 {
@@ -66,6 +76,7 @@ rive::gpu::RenderContext::FrameDescriptor toRiveFrameDescriptor (const GpuFrameD
     frameDesc.msaaSampleCount = desc.msaaSampleCount;
     frameDesc.disableRasterOrdering = desc.disableRasterOrdering;
     frameDesc.ditherMode = toRiveDitherMode (desc.ditherMode);
+    frameDesc.triangulationThresholds = toRiveTriangulationThresholds (desc.triangulationThresholds);
     frameDesc.virtualTileWidth = desc.virtualTileWidth;
     frameDesc.virtualTileHeight = desc.virtualTileHeight;
     frameDesc.wireframe = desc.wireframe;

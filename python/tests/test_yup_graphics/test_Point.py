@@ -507,3 +507,9 @@ def test_to_string():
     assert repr(a) == "yup.Point[float](1.1, 2.8)"
     assert str(a) == "1.1, 2.8"
 """
+
+#==================================================================================================
+
+def test_str_of_int_and_float_points():
+    assert str(yup.Point[int](3, 4)) == "3, 4"
+    assert str(yup.Point[float](1.5, 2.5)).startswith("1.5, 2.5")

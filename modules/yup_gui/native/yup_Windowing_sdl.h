@@ -100,6 +100,8 @@ public:
     void enableAtomicMode (bool shouldBeEnabled) override;
     bool isWireframeEnabled() const override;
     void enableWireframe (bool shouldBeEnabled) override;
+    GpuTriangulationThresholds getTriangulationThresholds() const override;
+    void setTriangulationThresholds (const GpuTriangulationThresholds& thresholds) override;
 
     //==============================================================================
     void repaint() override;
@@ -361,6 +363,8 @@ private:
     double lastRenderTimeSeconds = 0.0;
     std::atomic<bool> renderAtomicMode = false;
     std::atomic<bool> renderWireframe = false;
+    GpuTriangulationThresholds triangulationThresholds;
+    mutable SpinLock triangulationThresholdsLock;
     bool updateOnlyWhenFocused = false;
     bool shouldCaptureMouse = false;
     bool mouseCaptureActive = false;

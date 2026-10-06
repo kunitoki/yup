@@ -1,0 +1,157 @@
+<!--
+
+  Artboard Lab - a fixture for the yup::Artboard paths the other fixtures miss.
+
+  "Machine" (200x200, default) runs a state machine with the deprecated inputs
+  `toggle` (bool), `level` (number), `fire` and `reset` (triggers). `fire` moves
+  the layer from Idle to Fired, whose entry reports two events: `payload`
+  (amount = 5, label = "hello", flag = true) and `single` (count = 1). `reset`
+  moves it back to Idle. The artboard binds no view model.
+
+    Group     node at (100, 60) holding two 20x20 shapes, Left at x = -30 and
+              Right at x = +30, so its shapes span (60..140, 50..70)
+    Empty     node at (40, 150) with no shapes
+    Left Fill the fill of Left, a component that is not a transform
+
+  "Timeline" (100x100) has no state machine and one 30 frame animation at
+  60 fps, so it plays as a 0.5 second linear animation. It binds no view model.
+
+  View models: `Item` (label, amount), `Store` (one property of every value
+  type plus a nested Item and a list of Items), `Chain` (which nests itself, so
+  a fresh instance leaves `next` empty) and the global `Theme` (title = "Hello").
+
+-->
+<Rive version="1" kind="fragment">
+    <Artboard defaultStateMachineId="1:1" width="200" height="200" name="Machine" id="0:1">
+        <Node x="100" y="60" name="Group" id="0:10">
+            <Shape x="-30" y="0" name="Left" id="0:11">
+                <Rectangle width="20" height="20" name="Path"/>
+                <Fill name="Left Fill" id="0:13">
+                    <SolidColor colorValue="FF57A5E0" name="Color"/>
+                </Fill>
+            </Shape>
+            <Shape x="30" y="0" name="Right" id="0:12">
+                <Rectangle width="20" height="20" name="Path"/>
+                <Fill name="Right Fill">
+                    <SolidColor colorValue="FFE0A557" name="Color"/>
+                </Fill>
+            </Shape>
+        </Node>
+
+        <Node x="40" y="150" name="Empty" id="0:20"/>
+
+        <Event name="payload" id="0:30">
+            <CustomPropertyNumber propertyValue="5" name="amount"/>
+            <CustomPropertyString propertyValue="hello" name="label"/>
+            <CustomPropertyBoolean propertyValue="true" name="flag"/>
+        </Event>
+
+        <Event name="single" id="0:31">
+            <CustomPropertyNumber propertyValue="1" name="count"/>
+        </Event>
+
+        <StateMachine name="State Machine 1" id="1:1">
+            <StateMachineBool name="toggle" id="1:10"/>
+            <StateMachineNumber name="level" id="1:11"/>
+            <StateMachineTrigger name="fire" id="1:12"/>
+            <StateMachineTrigger name="reset" id="1:13"/>
+
+            <StateMachineLayer name="Layer 1" id="1:2">
+                <AnyState x="480" y="-120"/>
+                <ExitState x="640" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="1:20"/>
+                </EntryState>
+
+                <AnimationState x="160" animationId="2:1" id="1:20">
+                    <StateTransition stateToId="1:21">
+                        <TransitionTriggerCondition inputId="1:12"/>
+                    </StateTransition>
+                </AnimationState>
+
+                <AnimationState x="320" animationId="2:2" id="1:21">
+                    <StateMachineFireEvent eventId="0:30" occursValue="atStart"/>
+                    <StateMachineFireEvent eventId="0:31" occursValue="atStart"/>
+                    <StateTransition stateToId="1:20">
+                        <TransitionTriggerCondition inputId="1:13"/>
+                    </StateTransition>
+                </AnimationState>
+            </StateMachineLayer>
+        </StateMachine>
+
+        <LinearAnimation duration="60" loopValue="loop" name="Idle" id="2:1"/>
+        <LinearAnimation duration="60" loopValue="loop" name="Fired" id="2:2"/>
+    </Artboard>
+
+    <Artboard x="400" y="0" width="100" height="100" name="Timeline" id="0:2">
+        <Shape x="50" y="50" name="Dot" id="0:40">
+            <Ellipse width="20" height="20" name="Path"/>
+            <Fill name="Fill">
+                <SolidColor colorValue="FFFFFFFF" name="Color"/>
+            </Fill>
+        </Shape>
+
+        <LinearAnimation duration="30" fps="60" name="Move" id="2:3"/>
+    </Artboard>
+
+    <DataEnumCustom name="Mode" id="6:1">
+        <DataEnumValue key="off" value="Off" id="6:2"/>
+        <DataEnumValue key="on" value="On" id="6:3"/>
+        <DataEnumValue key="auto" value="Automatic" id="6:4"/>
+    </DataEnumCustom>
+
+    <ViewModel defaultInstanceId="5:2" name="Item" id="5:1">
+        <ViewModelPropertyString name="label" id="5:3"/>
+        <ViewModelPropertyNumber name="amount" id="5:4"/>
+        <ViewModelInstance exports="true" name="Default" id="5:2">
+            <ViewModelInstanceString propertyValue="item" viewModelPropertyId="5:3"/>
+            <ViewModelInstanceNumber propertyValue="0" viewModelPropertyId="5:4"/>
+        </ViewModelInstance>
+        <ViewModelInstance exports="true" name="First" id="5:5">
+            <ViewModelInstanceString propertyValue="first" viewModelPropertyId="5:3"/>
+            <ViewModelInstanceNumber propertyValue="1" viewModelPropertyId="5:4"/>
+        </ViewModelInstance>
+        <ViewModelInstance exports="true" name="Second" id="5:6">
+            <ViewModelInstanceString propertyValue="second" viewModelPropertyId="5:3"/>
+            <ViewModelInstanceNumber propertyValue="2" viewModelPropertyId="5:4"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <ViewModel defaultInstanceId="5:11" name="Store" id="5:10">
+        <ViewModelPropertyBoolean name="open" id="5:12"/>
+        <ViewModelPropertyNumber name="total" id="5:13"/>
+        <ViewModelPropertyString name="title" id="5:14"/>
+        <ViewModelPropertyColor name="tint" id="5:15"/>
+        <ViewModelPropertyEnumCustom enumId="6:1" name="mode" id="5:16"/>
+        <ViewModelPropertyTrigger name="ping" id="5:17"/>
+        <ViewModelPropertyViewModel viewModelReferenceId="5:1" name="featured" id="5:18"/>
+        <ViewModelPropertyList name="items" id="5:19"/>
+        <ViewModelInstance exports="true" name="Default" id="5:11">
+            <ViewModelInstanceBoolean propertyValue="true" viewModelPropertyId="5:12"/>
+            <ViewModelInstanceNumber propertyValue="12" viewModelPropertyId="5:13"/>
+            <ViewModelInstanceString propertyValue="Shop" viewModelPropertyId="5:14"/>
+            <ViewModelInstanceColor propertyValue="FF336699" viewModelPropertyId="5:15"/>
+            <ViewModelInstanceEnum propertyValue="6:3" viewModelPropertyId="5:16"/>
+            <ViewModelInstanceViewModel propertyValue="5:2" viewModelPropertyId="5:18"/>
+            <ViewModelInstanceList viewModelPropertyId="5:19">
+                <ViewModelInstanceListItem viewModelId="5:1" viewModelInstanceId="5:5"/>
+                <ViewModelInstanceListItem viewModelId="5:1" viewModelInstanceId="5:6"/>
+            </ViewModelInstanceList>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <ViewModel defaultInstanceId="5:31" name="Chain" id="5:30">
+        <ViewModelPropertyString name="label" id="5:32"/>
+        <ViewModelPropertyViewModel viewModelReferenceId="5:30" name="next" id="5:33"/>
+        <ViewModelInstance exports="true" name="Default" id="5:31">
+            <ViewModelInstanceString propertyValue="head" viewModelPropertyId="5:32"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <ViewModel viewModelType="global" defaultInstanceId="5:41" name="Theme" id="5:40">
+        <ViewModelPropertyString name="title" id="5:42"/>
+        <ViewModelInstance exports="true" name="Default" id="5:41">
+            <ViewModelInstanceString propertyValue="Hello" viewModelPropertyId="5:42"/>
+        </ViewModelInstance>
+    </ViewModel>
+</Rive>

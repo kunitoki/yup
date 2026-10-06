@@ -95,3 +95,9 @@ def pump_until(app, predicate, timeout_seconds = 5.0, slice_ms = 5):
             return predicate()
 
         app.processEvents(slice_ms)
+
+#==================================================================================================
+
+def get_test_data_file(relative_path: str) -> yup.File:
+    """Returns a file from the C++ test data folder, tests/data at the repository root."""
+    return yup.File(str(Path(os.path.abspath(__file__)).parents[2] / "tests" / "data" / relative_path))

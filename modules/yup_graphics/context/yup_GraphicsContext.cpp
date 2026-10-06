@@ -32,6 +32,25 @@ bool GraphicsContext::isGpuAvailable() const noexcept
 }
 
 //==============================================================================
+void GraphicsContext::suspendFrame()
+{
+    auto* renderContext = getRenderContext();
+    if (renderContext == nullptr)
+        return;
+
+    auto* commandBuffer = renderContext->impl()->makeCommandBuffer();
+    renderContext->flush ({ .renderTarget = getRenderTarget(), .externalCommandBuffer = commandBuffer });
+    renderContext->impl()->commitCommandBuffer (commandBuffer);
+}
+
+void GraphicsContext::resumeFrame()
+{
+    auto descriptor = frameDescriptor;
+    descriptor.loadAction = rive::gpu::LoadAction::preserveRenderTarget;
+    begin (descriptor);
+}
+
+//==============================================================================
 std::unique_ptr<GraphicsContext> yup_constructHeadlessGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
 #if YUP_RIVE_USE_METAL && YUP_APPLE
 std::unique_ptr<GraphicsContext> yup_constructMetalGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});

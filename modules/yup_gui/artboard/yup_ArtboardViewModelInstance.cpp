@@ -121,9 +121,14 @@ ResolvedPath resolvePath (rive::ViewModelInstance* root, const Array<String>& se
             current = nested.get();
             value = nullptr;
         }
-        else
+        else if (propertyValue->is<rive::ViewModelInstanceList>() && isIndexSegment (segments.getReference (i + 1)))
         {
             value = propertyValue;
+        }
+        else
+        {
+            // Only a list index can follow a value: nothing else lives below it
+            return {};
         }
     }
 
@@ -375,15 +380,8 @@ std::optional<bool> ArtboardViewModelInstance::getBoolProperty (StringRef nameOr
 
 std::optional<double> ArtboardViewModelInstance::getNumberProperty (StringRef nameOrPath) const
 {
-    const auto value = getProperty (nameOrPath);
-    if (value.isDouble())
-        return static_cast<double> (value);
-
-    if (value.isInt())
-        return static_cast<double> (static_cast<int> (value));
-
-    if (value.isInt64())
-        return static_cast<double> (static_cast<int64> (value));
+    if (auto* number = resolveAs<rive::ViewModelInstanceNumber> (impl->instance, nameOrPath))
+        return static_cast<double> (number->propertyValue());
 
     return std::nullopt;
 }
@@ -512,6 +510,73 @@ bool ArtboardViewModelInstance::setColorProperty (StringRef nameOrPath, const Co
 bool ArtboardViewModelInstance::setEnumProperty (StringRef nameOrPath, StringRef valueName)
 {
     return setProperty (nameOrPath, var (String (valueName)));
+}
+
+//==============================================================================
+
+bool ArtboardViewModelInstance::setImageProperty (StringRef nameOrPath, Span<const uint8> encodedBytes)
+{
+    auto* imageValue = resolveAs<rive::ViewModelInstanceAssetImage> (impl->instance, nameOrPath);
+    auto* factory = file != nullptr ? file->getFactory() : nullptr;
+    if (imageValue == nullptr || factory == nullptr)
+        return false;
+
+    file->bindDeferredRecordingThread();
+
+    auto renderImage = factory->decodeImage ({ encodedBytes.data(), encodedBytes.size() });
+    if (renderImage == nullptr)
+        return false;
+
+    imageValue->value (renderImage.get());
+    return true;
+}
+
+bool ArtboardViewModelInstance::setImageProperty (StringRef nameOrPath, const Image& image)
+{
+    auto* imageValue = resolveAs<rive::ViewModelInstanceAssetImage> (impl->instance, nameOrPath);
+    auto* renderContext = file != nullptr ? file->getRenderContext() : nullptr;
+    if (imageValue == nullptr || renderContext == nullptr)
+        return false;
+
+    auto texture = image.getOrCreateTexture (*renderContext);
+    if (texture == nullptr)
+        return false;
+
+    const auto renderImage = rive::make_rcp<rive::RiveRenderImage> (std::move (texture));
+    imageValue->value (renderImage.get());
+    return true;
+}
+
+bool ArtboardViewModelInstance::setFontProperty (StringRef nameOrPath, Span<const uint8> encodedBytes)
+{
+    const auto font = Font::loadFontFromData (encodedBytes);
+    return font.wasOk() && setFontProperty (nameOrPath, font.getValue());
+}
+
+bool ArtboardViewModelInstance::setFontProperty (StringRef nameOrPath, const Font& font)
+{
+    auto* fontValue = resolveAs<rive::ViewModelInstanceAssetFont> (impl->instance, nameOrPath);
+    auto riveFont = font.getFont();
+    if (fontValue == nullptr || riveFont == nullptr)
+        return false;
+
+    fontValue->value (riveFont.get());
+    return true;
+}
+
+bool ArtboardViewModelInstance::setBlobProperty (StringRef nameOrPath, Span<const uint8> bytes)
+{
+    auto* blobValue = resolveAs<rive::ViewModelInstanceAssetBlob> (impl->instance, nameOrPath);
+    if (blobValue == nullptr)
+        return false;
+
+    auto blob = rive::make_rcp<rive::BlobAsset>();
+    rive::SimpleArray<uint8_t> blobBytes (bytes.data(), bytes.size());
+    if (! blob->decode (blobBytes, nullptr))
+        return false;
+
+    blobValue->value (blob.get());
+    return true;
 }
 
 //==============================================================================

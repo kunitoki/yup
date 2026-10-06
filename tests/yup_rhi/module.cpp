@@ -30,6 +30,7 @@
 #include "yup_GpuPipeline.cpp"
 #include "yup_GpuPipelineMocked.cpp"
 #include "yup_GpuComputePass.cpp"
+#include "yup_GpuFrameDescriptor.cpp"
 
 #if YUP_LINUX
 #include "native/yup_GpuDevice_linux.cpp"

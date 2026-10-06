@@ -243,3 +243,12 @@ def test_std_function_hooks_are_assignable():
     assert target.onItemDropped(details) is True
 
     assert seen == ["enter", "hello"]
+
+
+def test_repr_summarises_the_payload():
+    data = yup.DragAndDropData().withText("dragged")
+    assert repr(data).endswith('files=0 uris=0 text="dragged">')
+
+
+def test_default_details_have_no_source_component():
+    assert yup.DragAndDropSourceDetails().sourceComponent is None

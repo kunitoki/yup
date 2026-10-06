@@ -92,6 +92,12 @@ public:
 
     void enableWireframe (bool) override {}
 
+    GpuTriangulationThresholds getTriangulationThresholds() const override { return thresholds; }
+
+    void setTriangulationThresholds (const GpuTriangulationThresholds& newThresholds) override { thresholds = newThresholds; }
+
+    GpuTriangulationThresholds thresholds;
+
     void repaint() override
     {
         repaintAreas.clearQuick();

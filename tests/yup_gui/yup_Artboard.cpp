@@ -2621,9 +2621,10 @@ TEST_F (ArtboardLayoutTests, LoadedArtboardReportsDurationAndViewModelState)
     if (artboardFile->getNumViewModels() == 0)
         EXPECT_TRUE (artboard->getViewModelName().isEmpty());
 
-    // A null instance is rejected without touching the scene.
+    // A null instance is rejected and leaves the current binding alone.
+    const auto bound = artboard->getBoundViewModelInstance();
     EXPECT_FALSE (artboard->bindViewModelInstance (nullptr));
-    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+    EXPECT_EQ (bound.get(), artboard->getBoundViewModelInstance().get());
 }
 
 TEST_F (ArtboardLayoutTests, RefreshDisplayAdvancesUnlessPausingWhileHidden)
@@ -2638,4 +2639,1295 @@ TEST_F (ArtboardLayoutTests, RefreshDisplayAdvancesUnlessPausingWhileHidden)
     artboard->setPaused (true);
     EXPECT_TRUE (artboard->isPaused());
     EXPECT_NO_THROW (artboard->refreshDisplay (0.016));
+}
+
+//==============================================================================
+// Artboard input tests (require tests/data/rive/artboard-input.riv)
+//
+// artboard-input.riv's 400x400 "Input" artboard writes every reaction into its
+// `Input` view model: clicking "Button A" / "Button B" sets clickedA / clickedB,
+// focusing "First", "Second" or the text field sets `focused`, and the field's
+// text is bound two-way to `text`. "Viewport" is a clamped vertical scroll view
+// whose first row is "scrollItem". See tests/data/rive/artboard-input/scene.rml.
+//==============================================================================
+
+class ArtboardInputTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        const auto file = getTestDataRiveDirectory().getChildFile ("artboard-input.riv");
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/artboard-input.riv";
+            return;
+        }
+
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+        artboard = std::make_unique<Artboard> ("testArtboard", artboardFile);
+        artboard->setFitting (Fitting::scaleToFit);
+        artboard->setBounds (0.0f, 0.0f, 400.0f, 400.0f);
+
+        instance = artboardFile->createArtboardViewModelInstance ("Input", "Default");
+        ASSERT_NE (nullptr, instance);
+        ASSERT_TRUE (artboard->bindViewModelInstance (instance));
+
+        settle();
+    }
+
+    // Focus listeners and two-way binds land on the next advance.
+    void settle()
+    {
+        artboard->advanceAndApply (0.0f);
+    }
+
+    static MouseEvent mouseAt (Point<float> position, MouseEvent::Buttons buttons = MouseEvent::noButtons)
+    {
+        return MouseEvent (buttons, KeyModifiers(), position);
+    }
+
+    static MouseEvent touchAt (Point<float> position, int touchIndex)
+    {
+        return MouseEvent (MouseEvent::leftButton, KeyModifiers(), position).withTouchIndex (touchIndex);
+    }
+
+    void click (Point<float> position, MouseEvent::Buttons button = MouseEvent::leftButton)
+    {
+        artboard->mouseMove (mouseAt (position));
+        artboard->mouseDown (mouseAt (position, button));
+        artboard->mouseUp (mouseAt (position));
+        settle();
+    }
+
+    void press (int keyCode, KeyModifiers modifiers = KeyModifiers())
+    {
+        const KeyPress key (keyCode, modifiers);
+        artboard->keyDown (key, {});
+        artboard->keyUp (key, {});
+        settle();
+    }
+
+    void wheel (Point<float> position, float deltaY)
+    {
+        artboard->mouseWheel (mouseAt (position), MouseWheelData (0.0f, deltaY));
+        settle();
+    }
+
+    double clickedA() const { return instance->getNumberProperty ("clickedA").value_or (-1.0); }
+
+    double clickedB() const { return instance->getNumberProperty ("clickedB").value_or (-1.0); }
+
+    double hoveredB() const { return instance->getNumberProperty ("hoveredB").value_or (-1.0); }
+
+    String focused() const { return instance->getStringProperty ("focused").value_or ("<missing>"); }
+
+    String text() const { return instance->getStringProperty ("text").value_or ("<missing>"); }
+
+    float scrollItemTop() const { return artboard->getNodeBounds ("scrollItem").getY(); }
+
+    const Point<float> buttonA { 60.0f, 40.0f };
+    const Point<float> buttonB { 180.0f, 40.0f };
+    const Point<float> field { 120.0f, 175.0f };
+    const Point<float> viewport { 120.0f, 295.0f };
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+    std::unique_ptr<Artboard> artboard;
+    ArtboardViewModelInstance::Ptr instance;
+};
+
+TEST_F (ArtboardInputTests, LeftClickFiresClickListener)
+{
+    EXPECT_EQ (0.0, clickedA());
+
+    click (buttonA);
+
+    EXPECT_EQ (1.0, clickedA());
+    EXPECT_EQ (0.0, clickedB());
+}
+
+TEST_F (ArtboardInputTests, RightAndMiddleClickDoNotFirePrimaryListener)
+{
+    // Single-type listeners only respond to the primary button.
+    click (buttonA, MouseEvent::rightButton);
+    click (buttonA, MouseEvent::middleButton);
+
+    EXPECT_EQ (0.0, clickedA());
+}
+
+TEST_F (ArtboardInputTests, ReleaseOfSecondButtonDuringDragDoesNotSendPrimaryUp)
+{
+    artboard->mouseDown (mouseAt (buttonA, MouseEvent::leftButton));
+    artboard->mouseDown (mouseAt (buttonA, static_cast<MouseEvent::Buttons> (MouseEvent::leftButton | MouseEvent::rightButton)));
+
+    // mouseUp reports the buttons still held: releasing right leaves left down.
+    artboard->mouseUp (mouseAt (buttonA, MouseEvent::leftButton));
+    settle();
+
+    // Had the right release reached Rive as a primary up, A would have clicked.
+    EXPECT_EQ (0.0, clickedA());
+
+    artboard->mouseDrag (mouseAt (buttonB, MouseEvent::leftButton));
+    artboard->mouseUp (mouseAt (buttonB));
+    settle();
+
+    EXPECT_EQ (0.0, clickedA());
+}
+
+TEST_F (ArtboardInputTests, TouchPointersAreIndependent)
+{
+    artboard->mouseDown (touchAt (buttonA, 0));
+    artboard->mouseDown (touchAt (buttonB, 1));
+    artboard->mouseUp (touchAt (buttonA, 0));
+    artboard->mouseUp (touchAt (buttonB, 1));
+    settle();
+
+    EXPECT_EQ (1.0, clickedA());
+    EXPECT_EQ (1.0, clickedB());
+}
+
+TEST_F (ArtboardInputTests, MouseAndFirstFingerAreIndependent)
+{
+    artboard->mouseDown (mouseAt (buttonA, MouseEvent::leftButton));
+    artboard->mouseDown (touchAt (buttonB, 0));
+    artboard->mouseUp (touchAt (buttonB, 0));
+    artboard->mouseUp (mouseAt (buttonA));
+    settle();
+
+    // Had finger 0 shared the mouse's pointer, its press would have reset the mouse's.
+    EXPECT_EQ (1.0, clickedA());
+    EXPECT_EQ (1.0, clickedB());
+}
+
+TEST_F (ArtboardInputTests, TouchesNeverHover)
+{
+    // After lifting the first finger, the window re-evaluates what is under it
+    // with the touch event, which must not bring a hover back.
+    const auto lifted = MouseEvent (MouseEvent::noButtons, KeyModifiers(), buttonB).withTouchIndex (0);
+    artboard->mouseEnter (lifted);
+    artboard->mouseMove (lifted);
+    settle();
+
+    EXPECT_EQ (0.0, hoveredB());
+
+    artboard->mouseMove (mouseAt (buttonB));
+    settle();
+
+    EXPECT_EQ (1.0, hoveredB());
+}
+
+TEST_F (ArtboardInputTests, WheelScrollsScrollView)
+{
+    const auto initialTop = scrollItemTop();
+
+    // A wheel turned towards the user reveals later content.
+    wheel (viewport, -1.0f);
+    EXPECT_LT (scrollItemTop(), initialTop - 1.0f);
+
+    wheel (viewport, 1.0f);
+    EXPECT_NEAR (initialTop, scrollItemTop(), 0.5f);
+}
+
+TEST_F (ArtboardInputTests, WheelOutsideBoundsIsIgnored)
+{
+    // Unscaled and pinned top left in a shorter component, the bottom of the
+    // viewport hangs below the component's bounds.
+    artboard->setFitting (Fitting::none);
+    artboard->setJustification (Justification::topLeft);
+    artboard->setBounds (0.0f, 0.0f, 400.0f, 300.0f);
+    settle();
+
+    const auto initialTop = scrollItemTop();
+
+    wheel ({ 120.0f, 320.0f }, -1.0f);
+    EXPECT_NEAR (initialTop, scrollItemTop(), 0.5f);
+
+    // The same wheel inside the bounds does scroll.
+    wheel ({ 120.0f, 250.0f }, -1.0f);
+    EXPECT_LT (scrollItemTop(), initialTop - 1.0f);
+}
+
+TEST_F (ArtboardInputTests, WantsKeyboardFocusFollowsFocusNodes)
+{
+    EXPECT_TRUE (artboard->getWantsKeyboardFocus());
+
+    const auto layoutFile = getTestDataRiveDirectory().getChildFile ("layout-ui.riv");
+    if (auto result = ArtboardFile::load (layoutFile, factory); result.wasOk())
+    {
+        artboard->setFile (result.getValue());
+        EXPECT_FALSE (artboard->getWantsKeyboardFocus());
+    }
+
+    artboard->setFile (artboardFile);
+    EXPECT_TRUE (artboard->getWantsKeyboardFocus());
+
+    artboard->clear();
+    EXPECT_FALSE (artboard->getWantsKeyboardFocus());
+}
+
+TEST_F (ArtboardInputTests, TabMovesFocusForwardAndShiftTabBackward)
+{
+    press (KeyPress::tabKey);
+    EXPECT_EQ ("first", focused());
+
+    press (KeyPress::tabKey);
+    EXPECT_EQ ("second", focused());
+
+    press (KeyPress::tabKey);
+    EXPECT_EQ ("field", focused());
+
+    press (KeyPress::tabKey, KeyModifiers (KeyModifiers::shiftMask));
+    EXPECT_EQ ("second", focused());
+}
+
+TEST_F (ArtboardInputTests, PressFocusesFocusableNodes)
+{
+    click ({ 60.0f, 110.0f });
+    EXPECT_EQ ("first", focused());
+
+    click ({ 180.0f, 110.0f });
+    EXPECT_EQ ("second", focused());
+
+    click (field);
+    EXPECT_EQ ("field", focused());
+}
+
+TEST_F (ArtboardInputTests, TextInputReachesFocusedField)
+{
+    click (field);
+    ASSERT_EQ ("field", focused());
+
+    artboard->textInput ("abc");
+    settle();
+    EXPECT_EQ ("abc", text());
+
+    press (KeyPress::backspaceKey);
+    EXPECT_EQ ("ab", text());
+}
+
+TEST_F (ArtboardInputTests, CutAndPasteUseClipboard)
+{
+    const auto previousClipboard = SystemClipboard::getTextFromClipboard();
+
+    SystemClipboard::copyTextToClipboard ("probe");
+    if (SystemClipboard::getTextFromClipboard() != "probe")
+        GTEST_SKIP() << "System clipboard unavailable";
+
+    click (field);
+    artboard->textInput ("abc");
+    settle();
+    ASSERT_EQ ("abc", text());
+
+    // Shift+Home selects to the line start without Rive's platform-specific
+    // select-all modifier.
+    press (KeyPress::homeKey, KeyModifiers (KeyModifiers::shiftMask));
+
+    press (KeyPress::textXKey, KeyModifiers (KeyModifiers::commandMask));
+    EXPECT_EQ ("", text());
+    EXPECT_EQ ("abc", SystemClipboard::getTextFromClipboard());
+
+    press (KeyPress::textVKey, KeyModifiers (KeyModifiers::controlMask));
+    EXPECT_EQ ("abc", text());
+
+    SystemClipboard::copyTextToClipboard (previousClipboard);
+}
+
+TEST_F (ArtboardInputTests, AltGraphLettersAreNotClipboardShortcuts)
+{
+    click (field);
+    artboard->textInput ("abc");
+    settle();
+    press (KeyPress::homeKey, KeyModifiers (KeyModifiers::shiftMask));
+
+    // AltGr arrives as Ctrl+Alt, and AltGr+X types a letter on some layouts.
+    press (KeyPress::textXKey, KeyModifiers (KeyModifiers::controlMask | KeyModifiers::altMask));
+
+    EXPECT_EQ ("abc", text());
+}
+
+TEST_F (ArtboardInputTests, FocusLostClearsRiveFocus)
+{
+    click (field);
+    artboard->textInput ("a");
+    settle();
+    ASSERT_EQ ("a", text());
+
+    artboard->focusLost();
+
+    artboard->textInput ("x");
+    settle();
+    EXPECT_EQ ("a", text());
+}
+
+TEST_F (ArtboardInputTests, KeyboardAndWheelHandlersDoNotCrashWithoutFile)
+{
+    artboard->clear();
+
+    EXPECT_NO_THROW (artboard->mouseWheel (mouseAt (viewport), MouseWheelData (0.0f, -1.0f)));
+    EXPECT_NO_THROW (artboard->keyDown (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_NO_THROW (artboard->keyUp (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_NO_THROW (artboard->textInput ("x"));
+    EXPECT_NO_THROW (artboard->focusGained());
+    EXPECT_NO_THROW (artboard->focusLost());
+}
+
+//==============================================================================
+// Auto-binding and global view models (require tests/data/rive/viewmodel-globals.riv)
+//
+// The "Globals" artboard is designed against "Main" (count = 7), and the file
+// declares the global "Theme" view model (title = "Hello").
+//==============================================================================
+
+class ArtboardViewModelAutoBindTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        artboardFile = loadGlobalsFile();
+        if (artboardFile == nullptr)
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/viewmodel-globals.riv";
+            return;
+        }
+
+        artboard = std::make_unique<Artboard> ("globals", artboardFile);
+        artboard->setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+    }
+
+    std::shared_ptr<ArtboardFile> loadGlobalsFile()
+    {
+        auto result = ArtboardFile::load (getTestDataRiveDirectory().getChildFile ("viewmodel-globals.riv"), factory);
+        return result.wasOk() ? result.getValue() : nullptr;
+    }
+
+    rive::ViewModelInstance* sharedTheme() const
+    {
+        auto theme = artboardFile->getGlobalViewModelInstance ("Theme");
+        return theme != nullptr ? theme->internalRiveInstance() : nullptr;
+    }
+
+    static rive::ViewModelInstance* riveInstanceOf (const ArtboardViewModelInstance::Ptr& instance)
+    {
+        return instance != nullptr ? instance->internalRiveInstance() : nullptr;
+    }
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+    std::unique_ptr<Artboard> artboard;
+};
+
+TEST_F (ArtboardViewModelAutoBindTests, SetFileBindsTheAuthoredDefaultInstance)
+{
+    auto bound = artboard->getBoundViewModelInstance();
+    ASSERT_NE (nullptr, bound.get());
+
+    EXPECT_EQ (String ("Main"), bound->getName());
+    EXPECT_EQ (std::optional<double> (7.0), bound->getNumberProperty ("count"));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, ArtboardsShareTheFileGlobals)
+{
+    Artboard other ("other", artboardFile);
+
+    ASSERT_NE (nullptr, sharedTheme());
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (other.getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, OverrideAppliesToOneArtboardAndNullRestoresTheShared)
+{
+    Artboard other ("other", artboardFile);
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+    ASSERT_NE (nullptr, custom.get());
+
+    EXPECT_TRUE (artboard->setGlobalViewModelInstance ("Theme", custom));
+    EXPECT_EQ (custom->internalRiveInstance(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (other.getGlobalViewModelInstance ("Theme")));
+
+    EXPECT_TRUE (artboard->setGlobalViewModelInstance ("Theme", nullptr));
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, SetGlobalRejectsUnknownNamesAndForeignInstances)
+{
+    auto foreignFile = loadGlobalsFile();
+    ASSERT_NE (nullptr, foreignFile);
+    auto foreign = foreignFile->createArtboardViewModelInstance ("Theme");
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+
+    EXPECT_FALSE (artboard->setGlobalViewModelInstance ("Main", custom));
+    EXPECT_FALSE (artboard->setGlobalViewModelInstance ("Missing", custom));
+    EXPECT_FALSE (artboard->setGlobalViewModelInstance ("Theme", foreign));
+
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, RebindingTheMainInstanceKeepsTheGlobals)
+{
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+    ASSERT_TRUE (artboard->setGlobalViewModelInstance ("Theme", custom));
+
+    auto main = artboardFile->createArtboardViewModelInstance ("Main");
+    ASSERT_TRUE (artboard->bindViewModelInstance (main));
+
+    EXPECT_EQ (main.get(), artboard->getBoundViewModelInstance().get());
+    EXPECT_EQ (custom->internalRiveInstance(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, OverrideAfterUnbindWaitsForTheNextBind)
+{
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+    artboard->unbindViewModelInstance();
+
+    // Binding only the globals here would make Rive bind a default main instance of its own.
+    EXPECT_TRUE (artboard->setGlobalViewModelInstance ("Theme", custom));
+    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+    EXPECT_EQ (nullptr, artboard->getGlobalViewModelInstance ("Theme").get());
+
+    ASSERT_TRUE (artboard->bindViewModelInstance (artboardFile->createArtboardViewModelInstance ("Main")));
+    EXPECT_EQ (custom->internalRiveInstance(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, RebindingAfterUnbindRestoresTheSharedGlobals)
+{
+    artboard->unbindViewModelInstance();
+    EXPECT_EQ (nullptr, artboard->getGlobalViewModelInstance ("Theme").get());
+
+    ASSERT_TRUE (artboard->bindViewModelInstance (artboardFile->createArtboardViewModelInstance ("Main")));
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, NullInstanceLeavesTheAutoBoundInstance)
+{
+    const auto bound = artboard->getBoundViewModelInstance();
+    ASSERT_NE (nullptr, bound.get());
+
+    EXPECT_FALSE (artboard->bindViewModelInstance (nullptr));
+    EXPECT_EQ (bound.get(), artboard->getBoundViewModelInstance().get());
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, SetFileDropsGlobalOverrides)
+{
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+    ASSERT_TRUE (artboard->setGlobalViewModelInstance ("Theme", custom));
+
+    artboard->setFile (artboardFile);
+
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, ClearUnbindsEverything)
+{
+    artboard->clear();
+
+    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+    EXPECT_EQ (nullptr, artboard->getGlobalViewModelInstance ("Theme").get());
+    EXPECT_FALSE (artboard->setGlobalViewModelInstance ("Theme", nullptr));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, GlobalWritesSurviveAdvancing)
+{
+    auto theme = artboardFile->getGlobalViewModelInstance ("Theme");
+    ASSERT_TRUE (theme->setStringProperty ("title", "World"));
+
+    for (int frame = 0; frame < 5; ++frame)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+
+    EXPECT_EQ (std::optional<String> ("World"),
+               artboard->getGlobalViewModelInstance ("Theme")->getStringProperty ("title"));
+}
+
+//==============================================================================
+// Text input rectangle
+//==============================================================================
+
+TEST_F (ArtboardTests, TextInputRectIsTheArtboardInScreenCoordinates)
+{
+    Component parent ("parent");
+    parent.setBounds (30.0f, 40.0f, 300.0f, 300.0f);
+    parent.addAndMakeVisible (*artboard);
+    artboard->setBounds (10.0f, 20.0f, 100.0f, 80.0f);
+
+    const auto rect = artboard->getTextInputRect();
+
+    EXPECT_EQ (artboard->localToScreen (artboard->getLocalBounds()), rect);
+    EXPECT_EQ (parent.localToScreen (artboard->getPosition()), rect.getTopLeft());
+    EXPECT_FLOAT_EQ (100.0f, rect.getWidth());
+    EXPECT_FLOAT_EQ (80.0f, rect.getHeight());
+
+    parent.removeChildComponent (artboard.get());
+}
+
+//==============================================================================
+// Keys Rive has no code for (artboard-input.riv)
+//==============================================================================
+
+TEST_F (ArtboardInputTests, KeysWithoutARiveCodeLeaveFocusAlone)
+{
+    press (KeyPress::tabKey);
+    ASSERT_EQ ("first", focused());
+
+    // Codes outside the GLFW ranges Rive shares with YUP are dropped on the way
+    // down and on the way up, rather than reaching the state machine as some
+    // other key.
+    constexpr int unmappedKey = 0x10ffff;
+    press (unmappedKey);
+    press (unmappedKey, KeyModifiers (KeyModifiers::shiftMask));
+    EXPECT_EQ ("first", focused());
+
+    // A modified key with no text field focused is no clipboard shortcut, so it
+    // reaches Rive with its modifiers, which leave a focused button alone.
+    press (KeyPress::homeKey, KeyModifiers (KeyModifiers::commandMask | KeyModifiers::controlMask | KeyModifiers::altMask));
+    EXPECT_EQ ("first", focused());
+}
+
+//==============================================================================
+// Keyboard focus held through a native window (artboard-input.riv)
+//
+// Focus is only reported through a native component, so these attach a minimal
+// one that records the focused component and nothing else.
+//==============================================================================
+
+namespace yup
+{
+
+template <>
+class ComponentTestHelper<Artboard>
+{
+public:
+    static void attachNative (Component& component, ComponentNative* native) { component.native = native; }
+
+    static void detachNative (Component& component) { component.native = nullptr; }
+};
+
+} // namespace yup
+
+class ArtboardInputFocusTests : public ArtboardInputTests
+{
+protected:
+    class FocusRecordingNative final : public ComponentNative
+    {
+    public:
+        explicit FocusRecordingNative (Component& component)
+            : ComponentNative (component, defaultFlags)
+        {
+        }
+
+        void setTitle (const String&) override {}
+
+        String getTitle() const override { return {}; }
+
+        void setVisible (bool) override {}
+
+        bool isVisible() const override { return false; }
+
+        void toFront() override {}
+
+        void setSize (const Size<int>&) override {}
+
+        Size<int> getSize() const override { return {}; }
+
+        Size<int> getContentSize() const override { return {}; }
+
+        Point<int> getPosition() const override { return {}; }
+
+        void setPosition (const Point<int>&) override {}
+
+        Rectangle<int> getBounds() const override { return {}; }
+
+        void setBounds (const Rectangle<int>&) override {}
+
+        Rectangle<int> getSafeAreaBounds() const override { return {}; }
+
+        void setFullScreen (bool) override {}
+
+        bool isFullScreen() const override { return false; }
+
+        bool isDecorated() const override { return false; }
+
+        void setOpacity (float) override {}
+
+        float getOpacity() const override { return 1.0f; }
+
+        void setFocusedComponent (Component* component, FocusChangeType) override { focusedComponent = component; }
+
+        Component* getFocusedComponent() const override { return focusedComponent; }
+
+        bool isContinuousRepaintingEnabled() const override { return false; }
+
+        void enableContinuousRepainting (bool) override {}
+
+        bool isAtomicModeEnabled() const override { return false; }
+
+        void enableAtomicMode (bool) override {}
+
+        bool isWireframeEnabled() const override { return false; }
+
+        void enableWireframe (bool) override {}
+
+        GpuTriangulationThresholds getTriangulationThresholds() const override { return thresholds; }
+
+        void setTriangulationThresholds (const GpuTriangulationThresholds& newThresholds) override { thresholds = newThresholds; }
+
+        void repaint() override {}
+
+        void repaint (const Rectangle<float>&) override {}
+
+        const RectangleList<float>& getRepaintAreas() const override { return repaintAreas; }
+
+        void startTextInput (Component&) override {}
+
+        void stopTextInput (Component&) override {}
+
+        void updateTextInputRect (Component&) override {}
+
+        float getScaleDpi() const override { return 1.0f; }
+
+        float getCurrentFrameRate() const override { return 60.0f; }
+
+        float getDesiredFrameRate() const override { return 60.0f; }
+
+        void setDesiredFrameRate (float) override {}
+
+        bool isVsyncEnabled() const override { return false; }
+
+        void setVsyncEnabled (bool) override {}
+
+        void* getNativeHandle() const override { return nullptr; }
+
+        rive::Factory* getFactory() override { return nullptr; }
+
+        GraphicsContext* getGraphicsContext() override { return nullptr; }
+
+        void setGlobalMouseCaptureActive (bool) override {}
+
+        void cancelCurrentMouseGesture() override {}
+
+    private:
+        Component* focusedComponent = nullptr;
+        GpuTriangulationThresholds thresholds;
+        RectangleList<float> repaintAreas;
+    };
+
+    void SetUp() override
+    {
+        ArtboardInputTests::SetUp();
+        if (IsSkipped() || HasFatalFailure() || artboard == nullptr)
+            return;
+
+        ComponentTestHelper<Artboard>::attachNative (*artboard, new FocusRecordingNative (*artboard));
+
+        artboard->takeKeyboardFocus();
+        ASSERT_TRUE (artboard->hasKeyboardFocus());
+    }
+
+    void TearDown() override
+    {
+        if (artboard != nullptr)
+            ComponentTestHelper<Artboard>::detachNative (*artboard);
+    }
+};
+
+TEST_F (ArtboardInputFocusTests, OnlyAFocusedTextFieldAsksForTextInput)
+{
+    EXPECT_FALSE (artboard->isTextInputActive());
+
+    click (field);
+    ASSERT_EQ ("field", focused());
+
+    // Regaining window focus re-syncs the text input with Rive's focus.
+    artboard->focusGained();
+    EXPECT_TRUE (artboard->isTextInputActive());
+
+    // A focusable button takes no text, so no on-screen keyboard is kept up for it.
+    click ({ 60.0f, 110.0f });
+    ASSERT_EQ ("first", focused());
+
+    artboard->focusGained();
+    EXPECT_FALSE (artboard->isTextInputActive());
+}
+
+TEST_F (ArtboardInputFocusTests, ClearGivesUpKeyboardFocus)
+{
+    artboard->clear();
+    EXPECT_FALSE (artboard->hasKeyboardFocus());
+
+    // Reloading makes the artboard want focus again, which must not find it
+    // still held from before the clear.
+    artboard->setFile (artboardFile);
+    ASSERT_TRUE (artboard->getWantsKeyboardFocus());
+    EXPECT_FALSE (artboard->hasKeyboardFocus());
+}
+
+//==============================================================================
+// Artboard against tests/data/rive/artboard-lab.riv
+//
+// "Machine" (200x200, the default) runs a state machine with the inputs toggle
+// (bool), level (number), fire and reset (triggers). fire moves it to a state
+// whose entry reports the events payload (amount = 5, label = "hello",
+// flag = true) and single (count = 1); reset moves it back. Its "Group" node
+// at (100, 60) holds two 20x20 shapes at x = -30 and +30, "Empty" is a node at
+// (40, 150) with no shapes and "Left Fill" is a fill, not a transform.
+// "Timeline" (100x100) has no state machine, only a 0.5 second animation.
+// Neither artboard binds a view model, while the file declares several and the
+// global "Theme". See tests/data/rive/artboard-lab/scene.rml.
+//
+// Shown scaled to fit in 400x200, Machine sits centered 100 to the right.
+//==============================================================================
+
+class ArtboardLabTests : public ::testing::Test
+{
+protected:
+    struct Report
+    {
+        String eventName;
+        String propertyName;
+        var oldValue;
+        var newValue;
+    };
+
+    class RecordingArtboard : public Artboard
+    {
+    public:
+        using Artboard::Artboard;
+
+        void propertyChanged (const String& eventName, const String& propertyName, const var& oldValue, const var& newValue) override
+        {
+            virtualReports.push_back ({ eventName, propertyName, oldValue, newValue });
+        }
+
+        std::vector<Report> virtualReports;
+    };
+
+    class RecordingRenderer final : public rive::Renderer
+    {
+    public:
+        using rive::Renderer::drawImage;
+        using rive::Renderer::drawImageMesh;
+
+        void save() override { ++saves; }
+
+        void restore() override { ++restores; }
+
+        void transform (const rive::Mat2D& matrix) override { transforms.push_back (matrix); }
+
+        void drawPath (rive::RenderPath*, rive::RenderPaint*) override { ++paths; }
+
+        void clipPath (rive::RenderPath*) override {}
+
+        void drawImage (const rive::RenderImage*, rive::ImageSampler, rive::BlendMode, float) override {}
+
+        void drawImageMesh (const rive::RenderImage*,
+                            rive::ImageSampler,
+                            rive::rcp<rive::RenderBuffer>,
+                            rive::rcp<rive::RenderBuffer>,
+                            rive::rcp<rive::RenderBuffer>,
+                            uint32_t,
+                            uint32_t,
+                            rive::BlendMode,
+                            float) override {}
+
+        void modulateOpacity (float) override {}
+
+        int saves = 0;
+        int restores = 0;
+        int paths = 0;
+        std::vector<rive::Mat2D> transforms;
+    };
+
+    void SetUp() override
+    {
+        context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+        ASSERT_NE (nullptr, context);
+
+        const auto file = getTestDataRiveDirectory().getChildFile ("artboard-lab.riv");
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/artboard-lab.riv";
+            return;
+        }
+
+        // The headless factory makes real (no-op) paths, so the scene can be drawn.
+        auto result = ArtboardFile::load (file, *context->getFactory());
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+
+        artboard = std::make_unique<RecordingArtboard> ("lab");
+        artboard->onPropertyChanged = [this] (Artboard&, const String& eventName, const String& propertyName, const var& oldValue, const var& newValue)
+        {
+            reports.push_back ({ eventName, propertyName, oldValue, newValue });
+        };
+
+        artboard->setFile (artboardFile);
+        artboard->setBounds (0.0f, 0.0f, 400.0f, 200.0f);
+    }
+
+    void fire (const char* triggerName)
+    {
+        artboard->triggerInput (triggerName);
+        artboard->advanceAndApply (0.016f);
+    }
+
+    static DynamicObject* findInput (const var& inputs, const String& name)
+    {
+        if (auto* array = inputs.getArray())
+            for (const auto& input : *array)
+                if (auto* object = input.getDynamicObject(); object != nullptr && object->getProperty ("id").toString() == name)
+                    return object;
+
+        return nullptr;
+    }
+
+    static var inputValue (const Artboard& target, const String& name)
+    {
+        const auto inputs = target.getAllInputs();
+
+        if (auto* object = findInput (inputs, name))
+            return object->getProperty ("value");
+
+        return {};
+    }
+
+    int countReports (const String& eventName) const
+    {
+        return static_cast<int> (std::count_if (reports.begin(), reports.end(), [&] (const Report& report)
+        {
+            return report.eventName == eventName;
+        }));
+    }
+
+    const Report* findReport (const String& eventName, const String& propertyName) const
+    {
+        for (const auto& report : reports)
+            if (report.eventName == eventName && report.propertyName == propertyName)
+                return std::addressof (report);
+
+        return nullptr;
+    }
+
+    rive::ViewModelInstance* sharedTheme() const
+    {
+        auto theme = artboardFile->getGlobalViewModelInstance ("Theme");
+        return theme != nullptr ? theme->internalRiveInstance() : nullptr;
+    }
+
+    rive::ViewModelInstance* boundTheme() const
+    {
+        auto theme = artboard->getGlobalViewModelInstance ("Theme");
+        return theme != nullptr ? theme->internalRiveInstance() : nullptr;
+    }
+
+    static void expectBounds (const Rectangle<float>& expected, const Rectangle<float>& actual)
+    {
+        EXPECT_NEAR (expected.getX(), actual.getX(), 0.01f);
+        EXPECT_NEAR (expected.getY(), actual.getY(), 0.01f);
+        EXPECT_NEAR (expected.getWidth(), actual.getWidth(), 0.01f);
+        EXPECT_NEAR (expected.getHeight(), actual.getHeight(), 0.01f);
+    }
+
+    static void expectMatrix (const rive::Mat2D& expected, const rive::Mat2D& actual)
+    {
+        for (std::size_t i = 0; i < 6; ++i)
+            EXPECT_NEAR (expected[i], actual[i], 0.0001f) << i;
+    }
+
+    std::unique_ptr<GraphicsContext> context;
+    std::shared_ptr<ArtboardFile> artboardFile;
+    std::unique_ptr<RecordingArtboard> artboard;
+    std::vector<Report> reports;
+};
+
+TEST_F (ArtboardLabTests, GetAllInputsDescribesEveryInputKind)
+{
+    const auto inputs = artboard->getAllInputs();
+    ASSERT_TRUE (inputs.isArray());
+    EXPECT_EQ (4, inputs.getArray()->size());
+
+    auto* toggle = findInput (inputs, "toggle");
+    ASSERT_NE (nullptr, toggle);
+    EXPECT_EQ (String ("boolean"), toggle->getProperty ("type").toString());
+    EXPECT_TRUE (toggle->getProperty ("value").isBool());
+    EXPECT_FALSE (static_cast<bool> (toggle->getProperty ("value")));
+
+    auto* level = findInput (inputs, "level");
+    ASSERT_NE (nullptr, level);
+    EXPECT_EQ (String ("number"), level->getProperty ("type").toString());
+    EXPECT_EQ (var (0.0), level->getProperty ("value"));
+
+    for (const auto* name : { "fire", "reset" })
+    {
+        auto* trigger = findInput (inputs, name);
+        ASSERT_NE (nullptr, trigger) << name;
+        EXPECT_EQ (String ("trigger"), trigger->getProperty ("type").toString()) << name;
+        EXPECT_FALSE (trigger->hasProperty ("value")) << name;
+    }
+}
+
+TEST_F (ArtboardLabTests, TypedInputSettersWriteTheStateMachine)
+{
+    ASSERT_TRUE (artboard->hasBoolInput ("toggle"));
+    ASSERT_TRUE (artboard->hasNumberInput ("level"));
+    ASSERT_TRUE (artboard->hasTriggerInput ("fire"));
+
+    artboard->setBoolInput ("toggle", true);
+    artboard->setNumberInput ("level", 2.5);
+
+    EXPECT_EQ (var (true), inputValue (*artboard, "toggle"));
+    EXPECT_EQ (var (2.5), inputValue (*artboard, "level"));
+
+    // A name of the wrong kind writes nothing.
+    artboard->setBoolInput ("level", false);
+    artboard->setNumberInput ("toggle", 0.0);
+    EXPECT_EQ (var (true), inputValue (*artboard, "toggle"));
+    EXPECT_EQ (var (2.5), inputValue (*artboard, "level"));
+}
+
+TEST_F (ArtboardLabTests, SetInputWritesEveryInputKind)
+{
+    artboard->setInput ("toggle", var (true));
+    EXPECT_EQ (var (true), inputValue (*artboard, "toggle"));
+
+    artboard->setInput ("level", var (4));
+    EXPECT_EQ (var (4.0), inputValue (*artboard, "level"));
+
+    artboard->setInput ("level", var (1.5));
+    EXPECT_EQ (var (1.5), inputValue (*artboard, "level"));
+
+    // A trigger ignores the value and fires, which here reports the events.
+    artboard->setInput ("fire", var());
+    artboard->advanceAndApply (0.016f);
+    EXPECT_EQ (1, countReports ("single"));
+}
+
+TEST_F (ArtboardLabTests, SetAllInputsAppliesASnapshotToAnotherArtboard)
+{
+    artboard->setBoolInput ("toggle", true);
+    artboard->setNumberInput ("level", 3.0);
+
+    Artboard other ("other", artboardFile);
+    other.setAllInputs (artboard->getAllInputs());
+
+    EXPECT_EQ (var (true), inputValue (other, "toggle"));
+    EXPECT_EQ (var (3.0), inputValue (other, "level"));
+}
+
+TEST_F (ArtboardLabTests, FiredEventsReportTheirCustomProperties)
+{
+    EXPECT_TRUE (reports.empty());
+
+    fire ("fire");
+
+    const auto* count = findReport ("single", "count");
+    ASSERT_NE (nullptr, count);
+    EXPECT_TRUE (count->oldValue.isVoid());
+    EXPECT_EQ (var (1.0), count->newValue);
+
+    const auto* amount = findReport ("payload", "amount");
+    ASSERT_NE (nullptr, amount);
+    EXPECT_EQ (var (5.0), amount->newValue);
+
+    const auto* label = findReport ("payload", "label");
+    ASSERT_NE (nullptr, label);
+    EXPECT_EQ (var ("hello"), label->newValue);
+
+    const auto* flag = findReport ("payload", "flag");
+    ASSERT_NE (nullptr, flag);
+    EXPECT_EQ (var (true), flag->newValue);
+
+    // The virtual hook sees exactly what the callback sees.
+    ASSERT_EQ (reports.size(), artboard->virtualReports.size());
+    for (std::size_t i = 0; i < reports.size(); ++i)
+    {
+        EXPECT_EQ (reports[i].eventName, artboard->virtualReports[i].eventName);
+        EXPECT_EQ (reports[i].propertyName, artboard->virtualReports[i].propertyName);
+        EXPECT_EQ (reports[i].newValue, artboard->virtualReports[i].newValue);
+    }
+}
+
+TEST_F (ArtboardLabTests, AnEventReportedAgainUnchangedIsNotReportedTwice)
+{
+    fire ("fire");
+    ASSERT_EQ (1, countReports ("single"));
+
+    fire ("reset");
+    fire ("fire");
+
+    EXPECT_EQ (1, countReports ("single"));
+}
+
+TEST_F (ArtboardLabTests, EachCustomPropertyOfAnEventIsTrackedOnItsOwn)
+{
+    fire ("fire");
+
+    // The first time an event is seen, none of its properties has a previous value.
+    for (const auto& report : reports)
+        if (report.eventName == "payload")
+            EXPECT_TRUE (report.oldValue.isVoid()) << report.propertyName;
+
+    const auto firstReports = countReports ("payload");
+    EXPECT_EQ (3, firstReports);
+
+    // Reported again with the same values, nothing has changed.
+    fire ("reset");
+    fire ("fire");
+
+    EXPECT_EQ (firstReports, countReports ("payload"));
+}
+
+TEST_F (ArtboardLabTests, NodeBoundsCoverShapesNodesAndPlainComponents)
+{
+    ASSERT_NE (nullptr, artboard->findNode ("Left Fill").get());
+
+    // A node holding shapes spans them all; a shape spans its own geometry.
+    expectBounds ({ 160.0f, 50.0f, 80.0f, 20.0f }, artboard->getNodeBounds ("Group"));
+    expectBounds ({ 160.0f, 50.0f, 20.0f, 20.0f }, artboard->getNodeBounds ("Left"));
+
+    // With nothing to measure, a unit rect sits at the node, or at the artboard
+    // origin for a component that is not a transform.
+    expectBounds ({ 140.0f, 150.0f, 1.0f, 1.0f }, artboard->getNodeBounds ("Empty"));
+    expectBounds ({ 100.0f, 0.0f, 1.0f, 1.0f }, artboard->getNodeBounds ("Left Fill"));
+}
+
+TEST_F (ArtboardLabTests, AComponentFollowingAPlainComponentIsNotRotated)
+{
+    Component follower ("follower");
+
+    ASSERT_TRUE (artboard->attachComponentToNode ("Left Fill", &follower, Artboard::NodeAttachmentOptions().withApplyTransform (true)));
+
+    expectBounds ({ 100.0f, 0.0f, 1.0f, 1.0f }, follower.getBounds());
+    EXPECT_TRUE (follower.getTransform().isIdentity());
+}
+
+TEST_F (ArtboardLabTests, ResizingOneOfSeveralAttachedComponentsRederivesItsOwnPosition)
+{
+    const auto centered = Artboard::NodeAttachmentOptions()
+                              .withMode (Artboard::NodeAttachmentOptions::Mode::trackPosition)
+                              .withJustificationPivot (Justification::center);
+
+    Component onGroup ("onGroup");
+    Component onEmpty ("onEmpty");
+    onGroup.setSize (20.0f, 20.0f);
+    onEmpty.setSize (10.0f, 10.0f);
+
+    ASSERT_TRUE (artboard->attachComponentToNode ("Group", &onGroup, centered));
+    ASSERT_TRUE (artboard->attachComponentToNode ("Empty", &onEmpty, centered));
+
+    const auto group = artboard->getNodeBounds ("Group");
+    const auto empty = artboard->getNodeBounds ("Empty");
+
+    // Each resize looks its own attachment up among the others.
+    onGroup.setSize (40.0f, 40.0f);
+    onEmpty.setSize (30.0f, 30.0f);
+
+    expectBounds ({ group.getX() - 20.0f, group.getY() - 20.0f, 40.0f, 40.0f }, onGroup.getBounds());
+    expectBounds ({ empty.getX() - 15.0f, empty.getY() - 15.0f, 30.0f, 30.0f }, onEmpty.getBounds());
+}
+
+TEST_F (ArtboardLabTests, ResizingAnAttachedComponentAfterClearKeepsTheNewBounds)
+{
+    Component follower ("follower");
+    ASSERT_TRUE (artboard->attachComponentToNode ("Group", &follower));
+
+    artboard->clear();
+
+    // With no node left to follow, the resize is not overwritten.
+    follower.setBounds (1.0f, 2.0f, 30.0f, 40.0f);
+    expectBounds ({ 1.0f, 2.0f, 30.0f, 40.0f }, follower.getBounds());
+}
+
+TEST_F (ArtboardLabTests, AListenerClearingTheArtboardStopsTheRemainingNotifications)
+{
+    int calls = 0;
+
+    const auto clearing = [&] (Artboard& self, const String&, const ArtboardNode::Ptr&)
+    {
+        ++calls;
+        self.clear();
+    };
+
+    artboard->setNodeBoundsListener ("Group", clearing);
+    artboard->setNodeBoundsListener ("Empty", clearing);
+
+    // Both nodes move with the centered artboard, but the first listener unloads it.
+    artboard->setBounds (0.0f, 0.0f, 600.0f, 200.0f);
+
+    EXPECT_EQ (1, calls);
+    EXPECT_TRUE (artboard->getNodeBounds ("Group").isEmpty());
+}
+
+TEST_F (ArtboardLabTests, AnArtboardWithoutAViewModelBindsOnlyTheGlobals)
+{
+    // The file declares view models, but this artboard is designed against none.
+    EXPECT_TRUE (artboard->getViewModelName().isEmpty());
+    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+
+    ASSERT_NE (nullptr, sharedTheme());
+    EXPECT_EQ (sharedTheme(), boundTheme());
+}
+
+TEST_F (ArtboardLabTests, AnArtboardWithoutAStateMachinePlaysItsFirstAnimation)
+{
+    artboard->setFile (artboardFile, "Timeline");
+
+    EXPECT_FLOAT_EQ (0.5f, artboard->durationSeconds());
+    EXPECT_TRUE (artboard->getAllInputs().isVoid());
+    EXPECT_FALSE (artboard->hasTriggerInput ("fire"));
+    EXPECT_FALSE (artboard->getWantsKeyboardFocus());
+    EXPECT_FALSE (artboard->getNodeBounds ("Dot").isEmpty());
+}
+
+TEST_F (ArtboardLabTests, AnArtboardWithoutAStateMachineBindsTheGlobalsItself)
+{
+    artboard->setFile (artboardFile, "Timeline");
+
+    ASSERT_NE (nullptr, sharedTheme());
+    EXPECT_EQ (sharedTheme(), boundTheme());
+
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+    ASSERT_NE (nullptr, custom.get());
+
+    EXPECT_TRUE (artboard->setGlobalViewModelInstance ("Theme", custom));
+    EXPECT_EQ (custom->internalRiveInstance(), boundTheme());
+}
+
+TEST_F (ArtboardLabTests, KeysReachNothingWithoutAStateMachine)
+{
+    artboard->setFile (artboardFile, "Timeline");
+
+    EXPECT_NO_THROW (artboard->keyDown (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_NO_THROW (artboard->keyUp (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_NO_THROW (artboard->textInput ("x"));
+    EXPECT_TRUE (reports.empty());
+}
+
+TEST_F (ArtboardLabTests, PaintDrawsTheSceneThroughTheContextScaleAndViewTransform)
+{
+    RecordingRenderer renderer;
+    Graphics g (*context, renderer, 2.0f);
+
+    artboard->paint (g);
+
+    ASSERT_GE (renderer.transforms.size(), 2u);
+    expectMatrix (rive::Mat2D (2.0f, 0.0f, 0.0f, 2.0f, 0.0f, 0.0f), renderer.transforms[0]);
+    expectMatrix (rive::Mat2D (1.0f, 0.0f, 0.0f, 1.0f, 100.0f, 0.0f), renderer.transforms[1]);
+
+    // Both shapes of the group are drawn, and every save is restored.
+    EXPECT_GE (renderer.paths, 2);
+    EXPECT_EQ (renderer.saves, renderer.restores);
+}
+
+TEST_F (ArtboardLabTests, PaintDrawsNothingOnceCleared)
+{
+    artboard->clear();
+
+    RecordingRenderer renderer;
+    Graphics g (*context, renderer);
+
+    artboard->paint (g);
+
+    EXPECT_TRUE (renderer.transforms.empty());
+    EXPECT_EQ (0, renderer.paths);
+}
+
+//==============================================================================
+// GPU rendering (Metal only)
+//
+// A file carrying scripts, loaded with a render context that exposes an ore
+// context, is imported through a deferred recording session: the artboard
+// records into its own screen target and paint() replays that frame into the
+// frame being drawn. These skip wherever no Metal device is available.
+//==============================================================================
+
+class ArtboardGpuTests : public ::testing::Test
+{
+protected:
+    static void SetUpTestSuite()
+    {
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        if (gpuContext != nullptr && GpuCanvas::create (*gpuContext, 64, 64) == nullptr)
+            gpuContext.reset();
+    }
+
+    static void TearDownTestSuite()
+    {
+        gpuContext.reset();
+    }
+
+    void SetUp() override
+    {
+        if (gpuContext == nullptr || gpuContext->getRenderContext() == nullptr)
+            GTEST_SKIP() << "No Metal GPU context available";
+    }
+
+    static std::shared_ptr<ArtboardFile> load (const char* fileName)
+    {
+        auto result = ArtboardFile::load (getTestDataRiveDirectory().getChildFile (fileName), *gpuContext->getRenderContext());
+        return result.wasOk() ? result.getValue() : nullptr;
+    }
+
+    inline static std::unique_ptr<GraphicsContext> gpuContext;
+};
+
+TEST_F (ArtboardGpuTests, ScriptedArtboardsShareTheFilesRecordingSession)
+{
+#ifndef WITH_RIVE_SCRIPTING
+    GTEST_SKIP() << "tests/data/rive/viewmodel-lab.riv ships ScriptAssets, which needs Rive built with WITH_RIVE_SCRIPTING";
+#endif
+
+    auto artboardFile = load ("viewmodel-lab.riv");
+    ASSERT_NE (nullptr, artboardFile);
+
+    // Only a render context with an ore context records scripted files.
+    EXPECT_EQ (gpuContext->getRenderContext(), artboardFile->getRenderContext());
+    if (artboardFile->getFactory() == artboardFile->getRenderContext())
+        GTEST_SKIP() << "The render context records no scripted frames";
+
+    // Scripted artboards replay their recording only into the window frame, so nothing is
+    // painted here: each artboard takes a screen target of the session and hands it back
+    {
+        Artboard first ("first");
+        first.setFile (artboardFile, "ViewModel Lab");
+        first.setBounds (0.0f, 0.0f, 230.0f, 240.0f);
+        first.advanceAndApply (0.016f);
+        EXPECT_FALSE (first.getViewModelName().isEmpty());
+
+        Artboard second ("second");
+        second.setFile (artboardFile, "ViewModel Lab");
+        second.advanceAndApply (0.016f);
+        EXPECT_EQ (first.getViewModelName(), second.getViewModelName());
+
+        // Replacing the file hands the screen target back before taking a new one
+        first.setFile (artboardFile, "ViewModel Lab");
+        first.advanceAndApply (0.016f);
+        EXPECT_EQ (second.getViewModelName(), first.getViewModelName());
+    }
+
+    // The file outlives the artboards that released their screen targets.
+    EXPECT_NE (nullptr, artboardFile->getRiveFile());
+}
+
+TEST_F (ArtboardGpuTests, ImagePropertyUploadsThroughTheRenderContext)
+{
+    auto artboardFile = load ("viewmodel-assets.riv");
+    ASSERT_NE (nullptr, artboardFile);
+    ASSERT_NE (nullptr, artboardFile->getRenderContext());
+
+    auto instance = artboardFile->createArtboardViewModelInstance ("Assets");
+    ASSERT_NE (nullptr, instance.get());
+
+    const Image image (4, 4);
+    EXPECT_TRUE (instance->setImageProperty ("image", image));
+    EXPECT_FALSE (instance->setImageProperty ("font", image));
 }

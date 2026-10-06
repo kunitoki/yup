@@ -360,6 +360,13 @@ TEST (StyledTextTests, HorizontalAlignFromJustificationCenteredRight)
     EXPECT_EQ (StyledText::right, align);
 }
 
+TEST (StyledTextTests, HorizontalAlignFromJustificationWithoutHorizontalFlagIsLeft)
+{
+    auto align = StyledText::horizontalAlignFromJustification (Justification::top);
+
+    EXPECT_EQ (StyledText::left, align);
+}
+
 TEST (StyledTextTests, VerticalAlignFromJustificationTop)
 {
     auto align = StyledText::verticalAlignFromJustification (Justification::top);
@@ -1291,4 +1298,442 @@ TEST (StyledTextTests, AdjacentLineMovementWorksAcrossWraps)
     const int textEnd = fixture.content.length();
     const int downFromEnd = fixture.text.getGlyphIndexOnAdjacentLine (textEnd, true);
     EXPECT_EQ (textEnd, downFromEnd);
+}
+
+// ==============================================================================
+// Line breaking (Unicode UAX #14 rules)
+// ==============================================================================
+
+class StyledTextLineBreakTests : public ::testing::Test
+{
+protected:
+    static void shape (StyledText& text, const String& string, float maxWidth)
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize ({ maxWidth, 400.0f });
+        modifier.appendText (string, loadStyledTextTestFont());
+    }
+
+    /** The x position of a character when nothing wraps. */
+    static float unwrappedX (const String& string, int characterIndex)
+    {
+        StyledText text;
+        shape (text, string, 10000.0f);
+        return text.getCaretBounds (characterIndex).getX();
+    }
+
+    static float lineY (const StyledText& text, int characterIndex)
+    {
+        return text.getCaretBounds (characterIndex).getY();
+    }
+};
+
+TEST_F (StyledTextLineBreakTests, BreaksAfterAHyphen)
+{
+    const String string = "well-known";
+    const int afterHyphen = string.indexOfChar ('k');
+
+    // Room for "well-kn": splitting the word where it overflows would keep "kn" on the first
+    // line, breaking after the hyphen moves all of "known" down
+    StyledText text;
+    shape (text, string, unwrappedX (string, afterHyphen + 2) + 1.0f);
+
+    // A caret exactly at a wrap can report the end of the previous line, so look one character in
+    EXPECT_FLOAT_EQ (lineY (text, 0), lineY (text, afterHyphen - 1));
+    EXPECT_GT (lineY (text, afterHyphen + 1), lineY (text, 0));
+}
+
+TEST_F (StyledTextLineBreakTests, CjkTextWrapsBetweenCharacters)
+{
+    // A short word, then six ideographs: "a \u65e5\u672c\u8a9e\u306e\u6587\u7ae0"
+    const String string = String::fromUTF8 ("a \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\xe3\x81\xae\xe6\x96\x87\xe7\xab\xa0");
+    const int firstIdeograph = 2;
+
+    const float roomForTwo = unwrappedX (string, firstIdeograph + 2);
+    if (roomForTwo <= unwrappedX (string, firstIdeograph))
+        GTEST_SKIP() << "The test font gives these characters no width";
+
+    // Room for "a" and two ideographs: breaking only at spaces would move the whole run down,
+    // breaking between ideographs keeps the first two on the first line
+    StyledText text;
+    shape (text, string, roomForTwo + 1.0f);
+
+    EXPECT_FLOAT_EQ (lineY (text, 0), lineY (text, firstIdeograph));
+    EXPECT_GT (lineY (text, firstIdeograph + 3), lineY (text, 0));
+}
+
+TEST_F (StyledTextLineBreakTests, NewlineAlwaysBreaks)
+{
+    const String string = "one\ntwo";
+
+    StyledText text;
+    shape (text, string, 10000.0f);
+
+    EXPECT_GT (lineY (text, string.indexOfChar ('t')), lineY (text, 0));
+}
+
+// ==============================================================================
+// Glyph Outline Tests
+// ==============================================================================
+
+class StyledTextGlyphOutlineTests : public ::testing::Test
+{
+protected:
+    /** The bounds of the outlines drawn for a string. */
+    static Rectangle<float> outlineBounds (const String& string, const Font& font)
+    {
+        StyledText text;
+        {
+            auto modifier = text.startUpdate();
+            modifier.appendText (string, font);
+        }
+
+        const auto styles = text.getRenderStyles();
+        if (styles.empty())
+            return {};
+
+        const auto& bounds = static_cast<rive::RiveRenderPath*> (styles[0]->path.get())->getBounds();
+        return { bounds.left(), bounds.top(), bounds.width(), bounds.height() };
+    }
+};
+
+TEST_F (StyledTextGlyphOutlineTests, OutlinesFollowVariableFontAxesAcrossManyFonts)
+{
+    const auto font = loadStyledTextTestFont (32.0f);
+    const auto weight = font.getAxisDescription ("wght");
+    ASSERT_TRUE (weight.has_value());
+
+    const auto light = outlineBounds ("abc", font.withAxisValue ("wght", weight->minimumValue));
+    const auto heavy = outlineBounds ("abc", font.withAxisValue ("wght", weight->maximumValue));
+    ASSERT_FALSE (light.isEmpty());
+    EXPECT_NE (light, heavy);
+
+    // Every axis change makes a new font: more of them than any outline cache keeps
+    for (int i = 0; i < 64; ++i)
+        outlineBounds ("abc", font.withAxisValue ("wght", jmap (static_cast<float> (i), 0.0f, 63.0f, weight->minimumValue, weight->maximumValue)));
+
+    EXPECT_EQ (light, outlineBounds ("abc", font.withAxisValue ("wght", weight->minimumValue)));
+    EXPECT_EQ (heavy, outlineBounds ("abc", font.withAxisValue ("wght", weight->maximumValue)));
+}
+
+// ==============================================================================
+// Color Emoji Tests
+// ==============================================================================
+
+class StyledTextColorEmojiTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        previousFallback = Font::getColorEmojiFallbackFont();
+
+        auto emojiFont = Font::loadColorEmojiSystemFont();
+        if (emojiFont.failed())
+            GTEST_SKIP() << "No system color emoji font: " << emojiFont.getErrorMessage();
+
+        Font::setColorEmojiFallbackFont (emojiFont.getValue());
+    }
+
+    void TearDown() override
+    {
+        Font::setColorEmojiFallbackFont (previousFallback);
+    }
+
+    static void shape (StyledText& text, const String& string)
+    {
+        auto modifier = text.startUpdate();
+        modifier.appendText (string, Colors::black, loadStyledTextTestFont (32.0f));
+    }
+
+    static String grinningFace()
+    {
+        return String::fromUTF8 ("\xf0\x9f\x98\x80");
+    }
+
+    Font previousFallback;
+};
+
+TEST_F (StyledTextColorEmojiTests, EmojiMissingFromTheTextFontUsesTheFallbackFont)
+{
+    StyledText text;
+    shape (text, "a" + grinningFace());
+
+    EXPECT_EQ (1, text.getNumColorGlyphs());
+}
+
+TEST_F (StyledTextColorEmojiTests, EmojiAddsNoOutline)
+{
+    StyledText text;
+    shape (text, grinningFace());
+
+    EXPECT_EQ (1, text.getNumColorGlyphs());
+    EXPECT_TRUE (text.getRenderStyles().empty());
+}
+
+TEST_F (StyledTextColorEmojiTests, TextWithoutEmojiHasNoColorGlyphs)
+{
+    StyledText text;
+    shape (text, "abc");
+
+    EXPECT_EQ (0, text.getNumColorGlyphs());
+    EXPECT_FALSE (text.getRenderStyles().empty());
+}
+
+TEST_F (StyledTextColorEmojiTests, ConsecutiveEmojiKeepTheirOwnCharacterPositions)
+{
+    const auto partyPopper = String::fromUTF8 ("\xf0\x9f\x8e\x89");
+
+    StyledText text;
+    shape (text, "a" + grinningFace() + partyPopper + "b");
+
+    EXPECT_EQ (2, text.getNumColorGlyphs());
+    EXPECT_LT (text.getCaretBounds (1).getX(), text.getCaretBounds (2).getX());
+    EXPECT_LT (text.getCaretBounds (2).getX(), text.getCaretBounds (3).getX());
+}
+
+TEST_F (StyledTextColorEmojiTests, ClearRemovesColorGlyphs)
+{
+    StyledText text;
+    shape (text, grinningFace());
+
+    text.startUpdate().clear();
+
+    EXPECT_EQ (0, text.getNumColorGlyphs());
+}
+
+TEST_F (StyledTextColorEmojiTests, ClearedFallbackLeavesEmojiMissing)
+{
+    Font::setColorEmojiFallbackFont (Font());
+
+    StyledText text;
+    shape (text, grinningFace());
+
+    EXPECT_EQ (0, text.getNumColorGlyphs());
+}
+
+// ==============================================================================
+// Layout Tests
+// ==============================================================================
+
+class StyledTextLayoutTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        // Characters missing from the test font stay missing, whatever emoji font the system has
+        previousFallback = Font::getColorEmojiFallbackFont();
+        Font::setColorEmojiFallbackFont (Font());
+    }
+
+    void TearDown() override
+    {
+        Font::setColorEmojiFallbackFont (previousFallback);
+    }
+
+    static void shape (StyledText& text,
+                       const String& string,
+                       Size<float> maxSize = { 400.0f, 400.0f },
+                       StyledText::TextOverflow overflow = StyledText::visible)
+    {
+        auto modifier = text.startUpdate();
+        modifier.setMaxSize (maxSize);
+        modifier.setOverflow (overflow);
+        modifier.appendText (string, loadStyledTextTestFont());
+    }
+
+    static float lineCenterY (const rive::OrderedLine& line)
+    {
+        return line.y() + (line.glyphLine().top + line.glyphLine().bottom) * 0.5f;
+    }
+
+    static int countGlyphs (const rive::OrderedLine& line)
+    {
+        int numGlyphs = 0;
+        for (const auto& [run, glyphIndex] : line)
+        {
+            if (glyphIndex < run->glyphs.size())
+                ++numGlyphs;
+        }
+
+        return numGlyphs;
+    }
+
+    /** The COLR test font, where "A" is a color glyph. */
+    static Font loadColorGlyphFont()
+    {
+        auto result = Font::loadFontFromFile (getStyledTextTestFontFile().getSiblingFile ("YupColrTest.ttf"));
+        EXPECT_TRUE (result.wasOk()); // can't use ASSERT_* here: it returns void, but this function returns Font
+        return result.getValue().withHeight (24.0f);
+    }
+
+    Font previousFallback;
+};
+
+TEST_F (StyledTextLayoutTests, AppendTextWithARivePaintGroupsGlyphsByPaint)
+{
+    const auto font = loadStyledTextTestFont();
+    const rive::rcp<rive::RenderPaint> firstPaint = rive::make_rcp<rive::RiveRenderPaint>();
+    const rive::rcp<rive::RenderPaint> secondPaint = rive::make_rcp<rive::RiveRenderPaint>();
+
+    StyledText text;
+    {
+        auto modifier = text.startUpdate();
+        modifier.appendText ("ab", firstPaint, font);
+        modifier.appendText ("cd", secondPaint, font);
+        modifier.appendText ("ef", firstPaint, font);
+    }
+
+    // Runs drawn with the same paint share one outline
+    const auto styles = text.getRenderStyles();
+    ASSERT_EQ (2u, styles.size());
+    EXPECT_EQ (firstPaint.get(), styles[0]->paint.get());
+    EXPECT_EQ (secondPaint.get(), styles[1]->paint.get());
+}
+
+TEST_F (StyledTextLayoutTests, EllipsisEndsTheFirstLineWhenNoLineFits)
+{
+    const String string = "one\ntwo\nthree";
+
+    StyledText full;
+    shape (full, string, { 400.0f, 1.0f }, StyledText::visible);
+
+    StyledText truncated;
+    shape (truncated, string, { 400.0f, 1.0f }, StyledText::ellipsis);
+
+    ASSERT_EQ (3u, full.getOrderedLines().size());
+    ASSERT_EQ (1u, truncated.getOrderedLines().size());
+
+    // The only line laid out is the first one, followed by the ellipsis
+    EXPECT_GT (countGlyphs (truncated.getOrderedLines()[0]), countGlyphs (full.getOrderedLines()[0]));
+}
+
+TEST_F (StyledTextLayoutTests, CaretPastTheEllipsisStaysAtTheEndOfTheVisibleText)
+{
+    StyledText text;
+    shape (text, "one\ntwo\nthree", { 400.0f, 1.0f }, StyledText::ellipsis);
+
+    ASSERT_EQ (1u, text.getOrderedLines().size());
+
+    const auto endOfVisibleText = text.getCaretBounds (1000);
+    ASSERT_FALSE (endOfVisibleText.isEmpty());
+
+    // The newline after "two" ends a line cut away by the ellipsis
+    EXPECT_EQ (endOfVisibleText, text.getCaretBounds (7));
+    EXPECT_FLOAT_EQ (text.getCaretBounds (0).getY(), endOfVisibleText.getY());
+    EXPECT_GT (endOfVisibleText.getX(), text.getCaretBounds (2).getX());
+}
+
+TEST_F (StyledTextLayoutTests, AdjacentLineMovementStopsAtTheEllipsisLine)
+{
+    const String string = "one\ntwo\nthree";
+
+    StyledText text;
+    shape (text, string, { 400.0f, 1.0f }, StyledText::ellipsis);
+
+    ASSERT_EQ (1u, text.getOrderedLines().size());
+
+    // The lines past the ellipsis are not laid out, so there is no line to move to
+    EXPECT_EQ (string.length(), text.getGlyphIndexOnAdjacentLine (1, true));
+    EXPECT_EQ (0, text.getGlyphIndexOnAdjacentLine (1, false));
+}
+
+TEST_F (StyledTextLayoutTests, JustifiedLinesStretchToTheWidestLine)
+{
+    // Narrow enough for the test font to wrap the sentence over several lines
+    auto justified = makeWrappedText (40.0f, StyledText::justified);
+    ASSERT_GE (justified.numLines, 3);
+
+    const auto widestLine = justified.text.getComputedTextBounds().getWidth();
+    const auto justifiedLines = justified.text.getSelectionRectangles (0, justified.content.length());
+    ASSERT_EQ (static_cast<std::size_t> (justified.numLines), justifiedLines.size());
+
+    // Every line but the last spreads its glyphs to end at the widest line
+    for (std::size_t i = 0; i + 1 < justifiedLines.size(); ++i)
+        EXPECT_NEAR (widestLine, justifiedLines[i].getRight(), 0.5f);
+
+    // Left aligned, at least one of those lines ends before
+    auto left = makeWrappedText (40.0f, StyledText::left);
+    const auto leftLines = left.text.getSelectionRectangles (0, left.content.length());
+    ASSERT_EQ (justifiedLines.size(), leftLines.size());
+
+    float shortestLine = widestLine;
+    for (std::size_t i = 0; i + 1 < leftLines.size(); ++i)
+        shortestLine = jmin (shortestLine, leftLines[i].getRight());
+
+    EXPECT_LT (shortestLine, widestLine - 1.0f);
+}
+
+TEST_F (StyledTextLayoutTests, NegativeCaretIndexClampsToTheStart)
+{
+    StyledText text;
+    shape (text, "Hello");
+
+    const auto caret = text.getCaretBounds (-5);
+
+    EXPECT_FALSE (caret.isEmpty());
+    EXPECT_EQ (text.getCaretBounds (0), caret);
+}
+
+TEST_F (StyledTextLayoutTests, CaretInsideTheLastClusterOfALineIsAtTheLineEnd)
+{
+    // "abe" and U+0301 COMBINING ACUTE ACCENT: the accent is in the same glyph cluster as the "e"
+    StyledText text;
+    shape (text, String::fromUTF8 ("abe\xcc\x81\nxy"));
+
+    ASSERT_EQ (2u, text.getOrderedLines().size());
+
+    const auto insideCluster = text.getCaretBounds (3);
+    ASSERT_FALSE (insideCluster.isEmpty());
+
+    EXPECT_FLOAT_EQ (text.getCaretBounds (4).getX(), insideCluster.getX());
+    EXPECT_FLOAT_EQ (text.getCaretBounds (0).getY(), insideCluster.getY());
+    EXPECT_GT (insideCluster.getX(), text.getCaretBounds (2).getX());
+}
+
+TEST_F (StyledTextLayoutTests, MovingDownFromAWhitespaceOnlyLineGoesToTheNextLineStart)
+{
+    StyledText text;
+    shape (text, "   \nabc");
+
+    ASSERT_EQ (2u, text.getOrderedLines().size());
+
+    // Below the end of the spaces would be inside "abc": the caret goes to its start instead
+    EXPECT_EQ (4, text.getGlyphIndexOnAdjacentLine (3, true));
+}
+
+TEST_F (StyledTextLayoutTests, ClickOnAnEmptyLineReturnsItsNewline)
+{
+    StyledText text;
+    shape (text, "one\n\ntwo");
+
+    const auto lines = text.getOrderedLines();
+    ASSERT_EQ (3u, lines.size());
+    ASSERT_EQ (0, countGlyphs (lines[1]));
+
+    const float emptyLineY = lineCenterY (lines[1]);
+
+    // The second newline, at index 4, is the only character of the empty line
+    EXPECT_EQ (4, text.getGlyphIndexAtPosition ({ -5.0f, emptyLineY }));
+    EXPECT_EQ (4, text.getGlyphIndexAtPosition ({ 50.0f, emptyLineY }));
+}
+
+TEST_F (StyledTextLayoutTests, RepeatedColorGlyphsAreAllDrawnInColor)
+{
+    const auto font = loadColorGlyphFont();
+
+    StyledText first;
+    {
+        auto modifier = first.startUpdate();
+        modifier.appendText ("AA", font);
+    }
+
+    StyledText second;
+    {
+        auto modifier = second.startUpdate();
+        modifier.appendText ("A", font);
+    }
+
+    EXPECT_EQ (2, first.getNumColorGlyphs());
+    EXPECT_TRUE (first.getRenderStyles().empty());
+    EXPECT_EQ (1, second.getNumColorGlyphs());
 }
