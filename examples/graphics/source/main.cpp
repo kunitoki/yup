@@ -145,6 +145,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
 #include "examples/DragAndDrop.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Emoji
+#include "examples/Emoji.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
 #include "examples/FileChooser.h"
 #endif
@@ -160,11 +163,11 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
 #include "examples/Images.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ImageMesh
+#include "examples/ImageMesh.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
 #include "examples/Layout.h"
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
-#include "examples/LayoutFonts.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ListBox
 #include "examples/ListBox.h"
@@ -349,6 +352,9 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
         addDemo ("Drag and Drop", [] { return std::make_unique<DragAndDropDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Emoji
+        addDemo ("Emoji", [] { return std::make_unique<EmojiDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
         addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
 #endif
@@ -364,11 +370,11 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
         addDemo ("Images", [] { return std::make_unique<ImagesDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ImageMesh
+        addDemo ("Image Mesh", [] { return std::make_unique<ImageMeshDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
         addDemo ("Layout", [] { return std::make_unique<LayoutExample>(); });
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
-        addDemo ("Layout Fonts", [] { return std::make_unique<LayoutFontsExample>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ListBox
         addDemo ("List Box", [] { return std::make_unique<ListBoxDemo>(); });

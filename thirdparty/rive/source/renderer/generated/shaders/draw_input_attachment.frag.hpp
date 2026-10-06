@@ -7,12 +7,12 @@ namespace gpu {
 namespace glsl {
 const char draw_input_attachment_frag[] = R"===(#ifdef FB
 layout(input_attachment_index=0,
-#ifdef SE
-binding=SE,
+#ifdef HF
+binding=HF,
 #else
 binding=0,
 #endif
-set=E3)uniform lowp subpassInput Ah;layout(location=0)out i jb;void main(){jb=subpassLoad(Ah);}
+set=C3) uniform lowp subpassInput cj;layout(location=0) out i bc;void main(){bc=subpassLoad(cj);}
 #endif
 )===";
 } // namespace glsl

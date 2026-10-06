@@ -13,18 +13,20 @@ layout(constant_id = NESTED_CLIPPING_SPECIALIZATION_IDX) const
 layout(constant_id = HSL_BLEND_MODES_SPECIALIZATION_IDX) const
     bool EnableHSLBlendModes = true;
 layout(constant_id = DITHER_SPECIALIZATION_IDX) const bool EnableDither = true;
+layout(constant_id = MODULATED_IMAGE_SPECIALIZATION_IDX) const
+    bool EnableModulatedImage = true;
 layout(constant_id = CLOCKWISE_FILL_SPECIALIZATION_IDX) const
     bool ClockwiseFill = true;
+layout(constant_id = NESTED_CLIP_UPDATE_ONLY_SPECIALIZATION_IDX) const
+    bool NestedClipUpdateOnly = false;
 layout(constant_id = BORROWED_COVERAGE_PASS_SPECIALIZATION_IDX) const
     bool BorrowedCoveragePrepass = false;
-layout(constant_id = NESTED_CLIP_UPDATE_ONLY_IDX) const
-    bool NestedClipUpdateOnly = false;
-layout(constant_id = VULKAN_VENDOR_ARM_SPECIALIZATION_IDX) const
-    bool VulkanVendorARM = false;
 layout(constant_id = STORE_COLOR_CLEAR_SPECIALIZATION_IDX) const
     bool StoreColorClear = false;
 layout(constant_id = LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX) const
     bool LoadColorFromDstTexture = false;
+layout(constant_id = VULKAN_VENDOR_ARM_SPECIALIZATION_IDX) const
+    bool VulkanVendorARM = false;
 
 #define @ENABLE_CLIPPING EnableClipping
 #define @ENABLE_CLIP_RECT EnableClipRect
@@ -35,9 +37,10 @@ layout(constant_id = LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX) const
 #define @ENABLE_NESTED_CLIPPING EnableNestedClipping
 #define @ENABLE_HSL_BLEND_MODES EnableHSLBlendModes
 #define @ENABLE_DITHER EnableDither
+#define @ENABLE_MODULATED_IMAGE EnableModulatedImage
 #define @CLOCKWISE_FILL ClockwiseFill
-#define @BORROWED_COVERAGE_PASS BorrowedCoveragePrepass
 #define @NESTED_CLIP_UPDATE_ONLY NestedClipUpdateOnly
-#define @VULKAN_VENDOR_ARM VulkanVendorARM
+#define @BORROWED_COVERAGE_PASS BorrowedCoveragePrepass
 #define @STORE_COLOR_CLEAR StoreColorClear
 #define @LOAD_COLOR_FROM_DST_TEXTURE LoadColorFromDstTexture
+#define @VULKAN_VENDOR_ARM VulkanVendorARM

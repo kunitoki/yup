@@ -8,11 +8,13 @@
 #include "rive/gesture_click_phase.hpp"
 #include "rive/listener_type.hpp"
 #include "rive/math/vec2d.hpp"
+#include "rive/pointer_button.hpp"
 #include "rive/process_event_result.hpp"
 
 namespace rive
 {
 class Component;
+class DraggableProxy;
 class HitComponent;
 class StateMachineListener;
 
@@ -21,7 +23,12 @@ class _PointerData
 public:
     bool isHovered = false;
     bool isPrevHovered = false;
+    // Whether this pointer has actually dragged since it went down. Per pointer
+    // rather than per group: the phase it is tested against is per pointer too,
+    // so a group-wide flag lets one pointer end another's drag.
+    bool hasDragged = false;
     GestureClickPhase phase = GestureClickPhase::out;
+    PointerButton button = PointerButton::primary;
     Vec2D* previousPosition() { return &m_previousPosition; }
 
 private:
@@ -40,6 +47,15 @@ public:
     void hover(int id);
     void reset(int pointerId);
     void releaseEvent(int pointerId);
+    /// Ends whatever gesture pointerId has in flight. Returns true when a drag
+    /// was live for it, leaving the caller to dispatch the matching dragEnd
+    /// once every group has been cancelled.
+    virtual bool cancelPointer(int pointerId, Vec2D position, float timeStamp);
+    /// Cancels every pointer this group is tracking, appending to dragEnded the
+    /// ids that still owe a dragEnd along with the button that dragged.
+    void cancelPointers(Vec2D position,
+                        float timeStamp,
+                        std::vector<std::pair<int, PointerButton>>& dragEnded);
     virtual void enable(int pointerId = 0);
     virtual void disable(int pointerId = 0);
     bool isConsumed() { return m_isConsumed; }
@@ -47,20 +63,30 @@ public:
     virtual bool needsDownListener(Component* drawable);
     virtual bool needsUpListener(Component* drawable);
 
+    /// The scroll proxy this group drives, or nullptr. Only draggable groups
+    /// answer; scroll dispatch uses it to find a target without walking
+    /// listeners it can't drive.
+    virtual DraggableProxy* scrollProxy() { return nullptr; }
+
     virtual ProcessEventResult processEvent(
         Component* component,
         Vec2D position,
         int pointerId,
         ListenerType hitEvent,
+        PointerButton button,
         bool canHit,
         float timeStamp,
         StateMachineInstance* stateMachineInstance);
     const StateMachineListener* listener() const { return m_listener; };
 
+protected:
+    /// The data for an already-tracked pointer, or nullptr. Unlike
+    /// pointerData() this never starts tracking one.
+    _PointerData* findPointerData(int id);
+
 private:
     // Consumed listeners aren't processed again in the current frame
     bool m_isConsumed = false;
-    bool m_hasDragged = false;
     const StateMachineListener* m_listener;
     std::unordered_map<int, _PointerData*> m_pointers;
     std::vector<_PointerData*> m_pointersPool;

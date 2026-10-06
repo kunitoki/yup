@@ -55,6 +55,7 @@
 #define createmetatable createmetatable_vec
 #include "upstream/VM/src/lveclib.cpp"
 #undef createmetatable
+#include "upstream/VM/src/lvector.cpp"
 #include "upstream/VM/src/lvmexecute.cpp"
 #include "upstream/VM/src/lvmload.cpp"
 #include "upstream/VM/src/lvmutils.cpp"

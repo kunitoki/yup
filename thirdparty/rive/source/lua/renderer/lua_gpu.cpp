@@ -2,11 +2,20 @@
 #if defined(RIVE_CANVAS) && defined(RIVE_ORE)
 #include "lualib.h"
 #include "rive/lua/rive_lua_libs.hpp"
+#ifdef RIVE_WASM_MODULE
+#include "rive/wasm/module_render.hpp"
+#endif
+#include "rive/renderer/ore/ore_bind_group_layout.hpp"
+#include "rive/renderer/ore/ore_deferred_bind_groups.hpp"
+#include "rive/renderer/ore/ore_script_guards.hpp"
 #include "rive/renderer/ore/ore_binding_map.hpp"
 #include "rive/renderer/ore/ore_context.hpp"
 #include "rive/renderer/ore/ore_rstb_entry_container.hpp"
 #include "rive/renderer/ore/ore_render_pass.hpp"
+#include "rive/renderer/ore/cmd/ore_deferred_render_pass.hpp"
 #include "rive/renderer/ore/ore_shader_module.hpp"
+#include "rive/renderer/cmd/deferred_canvas_host.hpp"
+#include "rive/renderer/cmd/deferred_render_resource.hpp"
 #include "rive/renderer/render_canvas.hpp"
 #include "rive/renderer/render_context.hpp"
 #include "rive/renderer/render_context_impl.hpp"
@@ -18,6 +27,7 @@
 #include "rive/shapes/paint/color.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <stdio.h>
 #include <string>
@@ -505,6 +515,18 @@ static Context* getOreContext(lua_State* L)
         static_cast<ScriptingContext*>(lua_getthreaddata(L))->oreContext());
 }
 
+/// Whether a capability gate below can be decided at all. A recording context
+/// with no replay device attached yet holds Features' own initializers, which
+/// deny nearly everything; gating on those would reject an operation the
+/// replay device very likely supports. These gates are diagnostics — the real
+/// backend is the authority — so an undecidable one lets the call through
+/// rather than inventing a refusal, which is the same fiction as inventing a
+/// capability, only in the direction that breaks working content.
+static bool features_are_known(Context* oreCtx)
+{
+    return oreCtx != nullptr && oreCtx->featuresKnown();
+}
+
 /// RSTB ShaderTarget the active ore backend consumes.
 static ShaderTarget currentShaderTarget(Context* oreCtx)
 {
@@ -564,17 +586,18 @@ static bool buildShaderEntries(Context* oreCtx,
     auto fsGLFixupBlob = (target == ShaderTarget::glsl) ? asset.findShader(15)
                                                         : Span<const uint8_t>{};
 
-    // Texture-sampler pairs, applied to every module created below.
-    std::vector<ShaderModule::TextureSamplerPair> pairVec;
+    // Texture-sampler pairs, handed to every module created below through the
+    // desc so deferred replay rebuilds them too.
+    std::vector<uint8_t> pairBytes;
     {
         auto pairs = asset.textureSamplerPairs();
-        pairVec.reserve(pairs.size());
+        pairBytes.reserve(pairs.size() * 4);
         for (size_t i = 0; i < pairs.size(); i++)
         {
-            pairVec.push_back({pairs[i].texGroup,
-                               pairs[i].texBinding,
-                               pairs[i].sampGroup,
-                               pairs[i].sampBinding});
+            pairBytes.push_back(pairs[i].texGroup);
+            pairBytes.push_back(pairs[i].texBinding);
+            pairBytes.push_back(pairs[i].sampGroup);
+            pairBytes.push_back(pairs[i].sampBinding);
         }
     }
 
@@ -596,6 +619,9 @@ static bool buildShaderEntries(Context* oreCtx,
                 (v.stage == 0) ? ShaderStage::vertex : ShaderStage::fragment;
             desc.bindingMapBytes = bindingMapBytes;
             desc.bindingMapSize = bindingMapSize;
+            desc.texSamplerPairBytes =
+                pairBytes.empty() ? nullptr : pairBytes.data();
+            desc.texSamplerPairSize = (uint32_t)pairBytes.size();
             desc.shaderAssetId = assetId;
             if (target == ShaderTarget::hlsl)
             {
@@ -611,11 +637,10 @@ static bool buildShaderEntries(Context* oreCtx,
                 desc.glFixupBytes = fx.empty() ? nullptr : fx.data();
                 desc.glFixupSize = static_cast<uint32_t>(fx.size());
             }
+
             auto mod = oreCtx->makeShaderModule(desc);
             if (!mod)
                 return false;
-            if (!pairVec.empty())
-                mod->m_textureSamplerPairs = pairVec;
             ScriptedShaderEntry e;
             e.stage = v.stage;
             e.logical = v.logical;
@@ -642,12 +667,12 @@ static bool buildShaderEntries(Context* oreCtx,
     desc.codeSize = srcLen;
     desc.bindingMapBytes = bindingMapBytes;
     desc.bindingMapSize = bindingMapSize;
+    desc.texSamplerPairBytes = pairBytes.empty() ? nullptr : pairBytes.data();
+    desc.texSamplerPairSize = (uint32_t)pairBytes.size();
     desc.shaderAssetId = assetId;
     auto mod = oreCtx->makeShaderModule(desc);
     if (!mod)
         return false;
-    if (!pairVec.empty())
-        mod->m_textureSamplerPairs = pairVec;
     for (const auto& v : views)
     {
         ScriptedShaderEntry e;
@@ -686,10 +711,11 @@ static bool makeShaderFromRstb(Context* oreCtx,
 /// ShaderAsset from file->assets() (runtime .riv path).
 /// Populates both vertex and fragment modules on the ScriptedShader.
 /// Returns true on success.
-bool lua_gpu_load_shader_by_name(ScriptedShader* out,
-                                 ScriptingContext* context,
-                                 const char* name,
-                                 ShaderAsset* fileAsset)
+bool lua_gpu_load_shader_by_name(
+    ScriptedShader* out,
+    ScriptingContext* context,
+    const ScriptingContext::ScopedAssetReference& reference,
+    ShaderAsset* fileAsset)
 {
     Context* oreCtx = static_cast<Context*>(
         context != nullptr ? context->oreContext() : nullptr);
@@ -699,7 +725,7 @@ bool lua_gpu_load_shader_by_name(ScriptedShader* out,
     // per-VM on the ScriptingContext.
     if (context != nullptr)
     {
-        const auto* rstb = context->findShaderRstb(name);
+        const auto* rstb = context->findShaderRstb(reference);
         if (rstb != nullptr)
         {
             return makeShaderFromRstb(oreCtx,
@@ -720,12 +746,44 @@ bool lua_gpu_load_shader_by_name(ScriptedShader* out,
     return false;
 }
 
+ShaderAsset* lua_gpu_find_shader_asset(
+    File* file,
+    const ScriptingContext::ScopedAssetReference& reference)
+{
+    if (file == nullptr)
+    {
+        return nullptr;
+    }
+    ShaderAsset* found = nullptr;
+    int bestRank = 0;
+    for (const auto& asset : file->assets())
+    {
+        if (!asset->is<ShaderAsset>())
+        {
+            continue;
+        }
+        auto* shaderAsset = asset->as<ShaderAsset>();
+        const std::string& folderPath = shaderAsset->folderPath();
+        std::string registered = folderPath.empty()
+                                     ? shaderAsset->name()
+                                     : folderPath + "/" + shaderAsset->name();
+        int rank = reference.match(registered, shaderAsset->name());
+        if (rank > bestRank)
+        {
+            bestRank = rank;
+            found = shaderAsset;
+        }
+    }
+    return found;
+}
+
 int lua_gpu_push_shader_by_name(lua_State* L, const char* name)
 {
     auto* context = static_cast<ScriptingContext*>(lua_getthreaddata(L));
+    ScriptingContext::ScopedAssetReference reference(L, name);
 
-    // Resolve the file-side ShaderAsset by name. Without this, the lookup
-    // falls back to the editor-only RSTB cache which is empty at runtime.
+    // Resolve the file-side ShaderAsset. Without this, the lookup falls
+    // back to the editor-only RSTB cache which is empty at runtime.
     ShaderAsset* fileAsset = nullptr;
     if (context != nullptr)
     {
@@ -733,30 +791,14 @@ int lua_gpu_push_shader_by_name(lua_State* L, const char* name)
         {
             if (auto* scriptAsset = scriptedObject->scriptAsset())
             {
-                if (File* file = scriptAsset->file())
-                {
-                    for (const auto& asset : file->assets())
-                    {
-                        if (asset->is<ShaderAsset>())
-                        {
-                            auto* sa = asset->as<ShaderAsset>();
-                            // match folderPath/name or bare name
-                            const std::string& fp = sa->folderPath();
-                            if (sa->name() == name ||
-                                (!fp.empty() && fp + "/" + sa->name() == name))
-                            {
-                                fileAsset = sa;
-                                break;
-                            }
-                        }
-                    }
-                }
+                fileAsset =
+                    lua_gpu_find_shader_asset(scriptAsset->file(), reference);
             }
         }
     }
 
     auto* scripted = lua_newrive<ScriptedShader>(L);
-    if (!lua_gpu_load_shader_by_name(scripted, context, name, fileAsset))
+    if (!lua_gpu_load_shader_by_name(scripted, context, reference, fileAsset))
     {
         lua_pop(L, 1);
         return 0;
@@ -976,7 +1018,7 @@ static void lua_checksamplecount(lua_State* L, uint32_t sampleCount)
                    "sampleCount must be a power of two (got %u)",
                    sampleCount);
     auto* ctx = getOreContext(L);
-    if (ctx)
+    if (features_are_known(ctx))
     {
         uint32_t maxSamples = ctx->features().maxSamples;
         if (sampleCount > maxSamples)
@@ -1031,7 +1073,7 @@ static int gputexture_construct(lua_State* L)
     // Gate float render targets: without the matching capability they make an
     // incomplete FBO that renders black. Sampled-only float textures are fine.
     // 16-bit floats need half-float, 32-bit and packed need full float.
-    if (desc.renderTarget)
+    if (desc.renderTarget && features_are_known(ctx))
     {
         FloatColorClass fc = floatColorClass(desc.format);
         const Features& feat = ctx->features();
@@ -1071,8 +1113,8 @@ static int gputexture_view(lua_State* L)
 
     TextureViewDesc viewDesc;
     viewDesc.texture = self->texture.get();
-    viewDesc.mipCount = self->texture->numMipmaps();
-    viewDesc.layerCount = self->texture->depthOrArrayLayers();
+    viewDesc.mipCount = 0;
+    viewDesc.layerCount = 0;
 
     // Map TextureType -> TextureViewDimension
     switch (self->texture->type())
@@ -1108,14 +1150,11 @@ static int gputexture_view(lua_State* L)
         viewDesc.baseMipLevel = static_cast<uint32_t>(
             lua_getoptionalnumberfield(L, 2, "baseMipLevel", 0));
         viewDesc.mipCount = static_cast<uint32_t>(
-            lua_getoptionalnumberfield(L, 2, "mipCount", viewDesc.mipCount));
+            lua_getoptionalnumberfield(L, 2, "mipCount", 0));
         viewDesc.baseLayer = static_cast<uint32_t>(
             lua_getoptionalnumberfield(L, 2, "baseLayer", 0));
         viewDesc.layerCount = static_cast<uint32_t>(
-            lua_getoptionalnumberfield(L,
-                                       2,
-                                       "layerCount",
-                                       viewDesc.layerCount));
+            lua_getoptionalnumberfield(L, 2, "layerCount", 0));
     }
 
     auto* ctx = getOreContext(L);
@@ -1150,16 +1189,11 @@ static int gputexture_upload(lua_State* L)
 
     TextureDataDesc uploadDesc;
     uploadDesc.data = data;
+    uploadDesc.dataSize = static_cast<uint32_t>(len);
     uploadDesc.width = static_cast<uint32_t>(
-        lua_getoptionalnumberfield(L,
-                                   descIdx,
-                                   "width",
-                                   self->texture->width()));
+        lua_getoptionalnumberfield(L, descIdx, "width", 0));
     uploadDesc.height = static_cast<uint32_t>(
-        lua_getoptionalnumberfield(L,
-                                   descIdx,
-                                   "height",
-                                   self->texture->height()));
+        lua_getoptionalnumberfield(L, descIdx, "height", 0));
     uploadDesc.depth = static_cast<uint32_t>(
         lua_getoptionalnumberfield(L, descIdx, "depth", 1));
     uploadDesc.x =
@@ -1177,85 +1211,11 @@ static int gputexture_upload(lua_State* L)
     uploadDesc.rowsPerImage = static_cast<uint32_t>(
         lua_getoptionalnumberfield(L, descIdx, "rowsPerImage", 0));
 
-    // Validate region/level/layer against the texture's actual dimensions —
-    // out-of-range values trip backend asserts (Metal API Validation, D3D12
-    // GPU hangs, Vulkan validation). Per the
-    // `feedback_lua_gpu_misuse_validation` rule, surface as luaL_error.
-    if (uploadDesc.mipLevel >= self->texture->numMipmaps())
+    std::string error;
+    if (!self->texture->upload(uploadDesc, &error))
     {
-        luaL_error(L,
-                   "upload: mipLevel %u out of range [0, %u)",
-                   uploadDesc.mipLevel,
-                   self->texture->numMipmaps());
+        luaL_error(L, "%s", error.c_str());
     }
-    if (uploadDesc.layer >= self->texture->depthOrArrayLayers())
-    {
-        luaL_error(L,
-                   "upload: layer %u out of range [0, %u)",
-                   uploadDesc.layer,
-                   self->texture->depthOrArrayLayers());
-    }
-    // Mip-level dimensions: floor-div-by-2 per level, min 1.
-    uint32_t mipW = std::max(1u, self->texture->width() >> uploadDesc.mipLevel);
-    uint32_t mipH =
-        std::max(1u, self->texture->height() >> uploadDesc.mipLevel);
-    if (uploadDesc.x > mipW || uploadDesc.width > mipW - uploadDesc.x)
-    {
-        luaL_error(L,
-                   "upload: x+width (%u+%u) exceeds mip %u width %u",
-                   uploadDesc.x,
-                   uploadDesc.width,
-                   uploadDesc.mipLevel,
-                   mipW);
-    }
-    if (uploadDesc.y > mipH || uploadDesc.height > mipH - uploadDesc.y)
-    {
-        luaL_error(L,
-                   "upload: y+height (%u+%u) exceeds mip %u height %u",
-                   uploadDesc.y,
-                   uploadDesc.height,
-                   uploadDesc.mipLevel,
-                   mipH);
-    }
-
-    // Compute a tightly-packed bytesPerRow when the caller omits it.
-    if (uploadDesc.bytesPerRow == 0)
-    {
-        uint32_t bpt = textureFormatBytesPerTexel(self->texture->format());
-        if (bpt == 0)
-        {
-            luaL_error(L,
-                       "upload: bytesPerRow must be provided for "
-                       "block-compressed formats");
-        }
-        uploadDesc.bytesPerRow = uploadDesc.width * bpt;
-    }
-
-    // Default rowsPerImage to height so Metal's bytesPerImage is correct.
-    if (uploadDesc.rowsPerImage == 0)
-    {
-        uploadDesc.rowsPerImage = uploadDesc.height;
-    }
-
-    // Validate the data buffer is large enough to cover the region.
-    // GPUs read past the supplied bytes if we don't catch it here; on
-    // Metal the validation layer aborts, on others it's a silent OOB.
-    const uint64_t requiredBytes =
-        static_cast<uint64_t>(uploadDesc.bytesPerRow) *
-        uploadDesc.rowsPerImage * std::max(1u, uploadDesc.depth);
-    if (len < requiredBytes)
-    {
-        luaL_error(L,
-                   "upload: data buffer is %zu bytes but region requires "
-                   "%llu (bytesPerRow=%u * rowsPerImage=%u * depth=%u)",
-                   len,
-                   static_cast<unsigned long long>(requiredBytes),
-                   uploadDesc.bytesPerRow,
-                   uploadDesc.rowsPerImage,
-                   std::max(1u, uploadDesc.depth));
-    }
-
-    self->texture->upload(uploadDesc);
     return 0;
 }
 
@@ -1407,7 +1367,8 @@ static int gpusampler_construct(lua_State* L)
                        "two in [1, 16] (got %u)",
                        a);
         }
-        if (a > 1 && !getOreContext(L)->features().anisotropicFiltering)
+        if (a > 1 && features_are_known(getOreContext(L)) &&
+            !getOreContext(L)->features().anisotropicFiltering)
         {
             luaL_error(L,
                        "GPUSampler.new: maxAnisotropy=%u requires "
@@ -1442,126 +1403,6 @@ ScriptedGPUBindGroup::~ScriptedGPUBindGroup() {}
 // GPUBindGroupLayout.new — explicit BindGroupLayout (Phase E).
 // ============================================================================
 
-// Map binding-map types to layout-entry types. These mirror the GM helper
-// `makeLayoutFromShader` so Lua-built layouts validate the same way as
-// C++-built ones.
-static BindingKind bindingKindFromResource(ResourceKind k)
-{
-    switch (k)
-    {
-        case ResourceKind::UniformBuffer:
-            return BindingKind::uniformBuffer;
-        case ResourceKind::StorageBufferRO:
-            return BindingKind::storageBufferRO;
-        case ResourceKind::StorageBufferRW:
-            return BindingKind::storageBufferRW;
-        case ResourceKind::SampledTexture:
-            return BindingKind::sampledTexture;
-        case ResourceKind::StorageTexture:
-            return BindingKind::storageTexture;
-        case ResourceKind::Sampler:
-            return BindingKind::sampler;
-        case ResourceKind::ComparisonSampler:
-            return BindingKind::comparisonSampler;
-    }
-    return BindingKind::uniformBuffer;
-}
-
-static TextureViewDimension viewDimFromBindingMap(TextureViewDim d)
-{
-    switch (d)
-    {
-        case TextureViewDim::Cube:
-            return TextureViewDimension::cube;
-        case TextureViewDim::CubeArray:
-            return TextureViewDimension::cubeArray;
-        case TextureViewDim::D3:
-            return TextureViewDimension::texture3D;
-        case TextureViewDim::D2Array:
-            return TextureViewDimension::array2D;
-        case TextureViewDim::D1:
-        case TextureViewDim::D2:
-        case TextureViewDim::Undefined:
-            return TextureViewDimension::texture2D;
-    }
-    return TextureViewDimension::texture2D;
-}
-
-static BindGroupLayoutEntry::SampleType sampleTypeFromBindingMap(
-    TextureSampleType s)
-{
-    switch (s)
-    {
-        case TextureSampleType::UnfilterableFloat:
-            return BindGroupLayoutEntry::SampleType::floatUnfilterable;
-        case TextureSampleType::Depth:
-            return BindGroupLayoutEntry::SampleType::depth;
-        case TextureSampleType::Sint:
-            return BindGroupLayoutEntry::SampleType::sint;
-        case TextureSampleType::Uint:
-            return BindGroupLayoutEntry::SampleType::uint;
-        case TextureSampleType::Float:
-        case TextureSampleType::Undefined:
-            return BindGroupLayoutEntry::SampleType::floatFilterable;
-    }
-    return BindGroupLayoutEntry::SampleType::floatFilterable;
-}
-
-// Walk a shader's BindingMap for the given group, populating layout entries
-// with kind / visibility / texture metadata / native slots — the same path the
-// GM helper takes. Returns the entry count actually filled.
-static uint32_t populateEntriesFromShader(BindGroupLayoutEntry* entries,
-                                          uint32_t maxEntries,
-                                          const ore::ShaderModule* shader,
-                                          uint32_t group,
-                                          const uint32_t* dynamicUBOBindings,
-                                          uint32_t dynamicUBOCount)
-{
-    if (shader == nullptr)
-        return 0;
-    auto isDynamic = [&](uint32_t binding) -> bool {
-        for (uint32_t i = 0; i < dynamicUBOCount; ++i)
-            if (dynamicUBOBindings[i] == binding)
-                return true;
-        return false;
-    };
-    const BindingMap& bm = shader->m_bindingMap;
-    uint32_t n = 0;
-    for (size_t i = 0; i < bm.size() && n < maxEntries; ++i)
-    {
-        const BindingMap::Entry& e = bm.at(i);
-        if (e.group != group)
-            continue;
-        BindGroupLayoutEntry& out = entries[n++];
-        out.binding = e.binding;
-        out.kind = bindingKindFromResource(e.kind);
-        uint8_t vis = 0;
-        if (e.stageMask & BindingMap::kStageVertex)
-            vis |= StageVisibility::kVertex;
-        if (e.stageMask & BindingMap::kStageFragment)
-            vis |= StageVisibility::kFragment;
-        if (e.stageMask & BindingMap::kStageCompute)
-            vis |= StageVisibility::kCompute;
-        out.visibility.mask = vis;
-        out.hasDynamicOffset =
-            (out.kind == BindingKind::uniformBuffer && isDynamic(e.binding));
-        out.textureViewDim = viewDimFromBindingMap(e.textureViewDim);
-        out.textureSampleType = sampleTypeFromBindingMap(e.textureSampleType);
-        out.textureMultisampled = e.textureMultisampled;
-        const uint16_t vs =
-            e.backendSlot[static_cast<size_t>(BindingMap::Stage::VS)];
-        const uint16_t fs =
-            e.backendSlot[static_cast<size_t>(BindingMap::Stage::FS)];
-        out.nativeSlotVS = (vs == BindingMap::kAbsent)
-                               ? BindGroupLayoutEntry::kNativeSlotAbsent
-                               : static_cast<uint32_t>(vs);
-        out.nativeSlotFS = (fs == BindingMap::kAbsent)
-                               ? BindGroupLayoutEntry::kNativeSlotAbsent
-                               : static_cast<uint32_t>(fs);
-    }
-    return n;
-}
-
 static int gpubindgrouplayout_construct(lua_State* L)
 {
     Context* oreCtx = getOreContext(L);
@@ -1571,10 +1412,9 @@ static int gpubindgrouplayout_construct(lua_State* L)
     luaL_checktype(L, 1, LUA_TTABLE);
     int descIdx = 1;
 
-    BindGroupLayoutDesc desc;
-    desc.groupIndex = static_cast<uint32_t>(
+    uint32_t groupIndex = static_cast<uint32_t>(
         lua_getoptionalnumberfield(L, descIdx, "groupIndex", 0));
-    if (desc.groupIndex >= ore::kMaxBindGroups)
+    if (groupIndex >= ore::kMaxBindGroups)
         luaL_error(L,
                    "GPUBindGroupLayout.new: groupIndex must be in [0, %u)",
                    ore::kMaxBindGroups);
@@ -1592,7 +1432,6 @@ static int gpubindgrouplayout_construct(lua_State* L)
                    "a loaded module");
 
     static constexpr int kMaxEntries = 16;
-    BindGroupLayoutEntry entries[kMaxEntries]{};
 
     // Optional `dynamicUBOs`: array of WGSL @binding values whose UBO
     // entries should set hasDynamicOffset.
@@ -1614,19 +1453,41 @@ static int gpubindgrouplayout_construct(lua_State* L)
     }
     lua_pop(L, 1); // dynamicUBOs
 
-    // Vertex module carries the merged binding map for both stages —
-    // the same module the GM helper walks.
-    uint32_t entryCount = populateEntriesFromShader(entries,
-                                                    kMaxEntries,
-                                                    scripted->vertexMod(),
-                                                    desc.groupIndex,
-                                                    dynUBOs,
-                                                    dynUBOCount);
+    // Optional `fragment`: the Shader carrying the fragment stage when the
+    // pipeline's stages live in different files. Its slots are only in its
+    // own map, so a layout built without it cannot resolve them.
+    //
+    // Resolved through the fragment entry rather than `fragmentMod()`, which
+    // answers with the vertex module when a shader has no @fragment — that
+    // would fold a vertex-only file's bindings in as fragment ones.
+    const ore::ShaderModule* fragmentModule = scripted->fragmentMod();
+    lua_getfield(L, descIdx, "fragment");
+    if (!lua_isnil(L, -1))
+    {
+        auto* fragmentScripted = lua_torive<ScriptedShader>(L, -1);
+        const ScriptedShaderEntry* fragmentEntry =
+            fragmentScripted != nullptr ? fragmentScripted->firstOfStage(1)
+                                        : nullptr;
+        if (fragmentEntry == nullptr)
+        {
+            luaL_error(L,
+                       "GPUBindGroupLayout.new: 'fragment' must be a Shader "
+                       "with a @fragment entry point");
+        }
+        fragmentModule = fragmentEntry->module.get();
+    }
+    lua_pop(L, 1);
 
-    desc.entries = entries;
-    desc.entryCount = entryCount;
-
-    rcp<BindGroupLayout> layout = oreCtx->makeBindGroupLayout(desc);
+    const BindingMap bindingMap =
+        bindingMapForStages(scripted->vertexMod(), fragmentModule);
+    rcp<BindGroupLayout> layout =
+        makeBindGroupLayoutFromBindingMap(*oreCtx,
+                                          bindingMap,
+                                          groupIndex,
+                                          dynUBOs,
+                                          dynUBOCount,
+                                          scripted->vertexMod(),
+                                          fragmentModule);
     if (!layout)
     {
         const std::string& err = oreCtx->lastError();
@@ -2166,7 +2027,12 @@ static int gpupipeline_construct(lua_State* L)
         // Auto path: scan the binding map for unique groups, build a
         // layout per group. Sparse-group shaders are supported (e.g.
         // group 0 + group 2 → autoLayouts[1] is null/empty).
-        const BindingMap& bm = vsShader->vertexMod()->m_bindingMap;
+        //
+        // Merged across both stages, so a fragment compiled from another
+        // file contributes its own bindings and slots — matching WebGPU,
+        // where `layout: 'auto'` derives from every stage.
+        const BindingMap bm =
+            bindingMapForStages(desc.vertexModule, desc.fragmentModule);
         uint32_t maxGroup = 0;
         bool seen[ore::kMaxBindGroups] = {};
         for (size_t i = 0; i < bm.size(); ++i)
@@ -2179,23 +2045,18 @@ static int gpupipeline_construct(lua_State* L)
                 maxGroup = g + 1;
         }
         autoLayouts.resize(maxGroup);
-        static constexpr int kMaxEntries = 16;
         for (uint32_t g = 0; g < maxGroup; ++g)
         {
             if (!seen[g])
                 continue;
-            BindGroupLayoutEntry entries[kMaxEntries]{};
-            uint32_t n = populateEntriesFromShader(entries,
-                                                   kMaxEntries,
-                                                   vsShader->vertexMod(),
-                                                   g,
-                                                   nullptr,
-                                                   0);
-            BindGroupLayoutDesc lDesc;
-            lDesc.groupIndex = g;
-            lDesc.entries = entries;
-            lDesc.entryCount = n;
-            autoLayouts[g] = getOreContext(L)->makeBindGroupLayout(lDesc);
+            autoLayouts[g] =
+                makeBindGroupLayoutFromBindingMap(*getOreContext(L),
+                                                  bm,
+                                                  g,
+                                                  nullptr,
+                                                  0,
+                                                  desc.vertexModule,
+                                                  desc.fragmentModule);
             layoutPtrs[g] = autoLayouts[g].get();
         }
         layoutCount = maxGroup;
@@ -2306,34 +2167,34 @@ static int gpupipeline_namecall(lua_State* L)
 // GPURenderPass
 // ============================================================================
 
-static void validate_render_pass(lua_State* L, ScriptedGPURenderPass* self)
+// False for a pass that drops its commands, like one begun on a frame with no
+// target.
+static bool validate_render_pass(lua_State* L, ScriptedGPURenderPass* self)
 {
-    // pass->isFinished() catches the case where a *previous*
-    // beginRenderPass auto-finished this pass (because the script forgot
-    // to :finish() before opening the next one). The wrapper's own
-    // m_finished is still false there.
-    if (self->m_finished || !self->pass || self->pass->isFinished())
+    // The pass finishes without the wrapper when the pass it was begun
+    // inside finishes first, or when the script call that began it returns.
+    if (self->m_finished || (self->pass && self->pass->isFinished()))
     {
-        luaL_error(L,
-                   "render pass expired — already finished, or auto-"
-                   "finished by a subsequent beginRenderPass");
+        luaL_error(L, "render pass expired: it was already finished");
     }
+    return self->pass != nullptr;
 }
 
 static void validate_pipeline_set(lua_State* L, ScriptedGPURenderPass* self)
 {
     if (!self->m_pipelineSet)
     {
-        luaL_error(L,
-                   "setPipeline must be called before draw/setVertexBuffer/"
-                   "setBindGroup");
+        luaL_error(L, ore::kGuardSetPipelineBeforeDraw);
     }
 }
 
 static int gpurenderpass_setpipeline(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
+    if (!validate_render_pass(L, self))
+    {
+        return 0;
+    }
     auto* pipeline = lua_torive<ScriptedGPUPipeline>(L, 2);
     if (pipeline->sampleCount != self->sampleCount)
     {
@@ -2351,6 +2212,10 @@ static int gpurenderpass_setpipeline(lua_State* L)
     if (oreCtx)
         oreCtx->clearLastError();
     self->pass->setPipeline(pipeline->pipeline.get());
+    if (self->deferredBindGroups != nullptr)
+    {
+        self->deferredBindGroups->flush(self->pass.get());
+    }
     if (oreCtx && !oreCtx->lastError().empty())
     {
         luaL_error(L, "setPipeline: %s", oreCtx->lastError().c_str());
@@ -2362,14 +2227,20 @@ static int gpurenderpass_setpipeline(lua_State* L)
 static int gpurenderpass_setvertexbuffer(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
+    if (!validate_render_pass(L, self))
+    {
+        return 0;
+    }
     // Note: WebGPU / Metal / Vulkan / D3D11 all permit `setVertexBuffer`
     // before `setPipeline` — vertex-buffer state is layered onto whatever
     // pipeline is current at draw time. Don't gate on `m_pipelineSet`.
     uint32_t slot = static_cast<uint32_t>(luaL_checkunsigned(L, 2));
-    if (slot > 7)
+    if (slot >= ore::kMaxVertexBufferSlots)
     {
-        luaL_error(L, "setVertexBuffer: slot must be 0-7 (got %u)", slot);
+        luaL_error(L,
+                   ore::kGuardVertexSlotRangeFormat,
+                   ore::kMaxVertexBufferSlots - 1,
+                   slot);
     }
     auto* buffer = lua_torive<ScriptedGPUBuffer>(L, 3);
     self->pass->setVertexBuffer(slot, buffer->buffer.get());
@@ -2379,7 +2250,10 @@ static int gpurenderpass_setvertexbuffer(lua_State* L)
 static int gpurenderpass_setindexbuffer(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
+    if (!validate_render_pass(L, self))
+    {
+        return 0;
+    }
     auto* buffer = lua_torive<ScriptedGPUBuffer>(L, 2);
     IndexFormat fmt = IndexFormat::uint16;
     if (lua_isstring(L, 3))
@@ -2395,80 +2269,94 @@ static int gpurenderpass_setindexbuffer(lua_State* L)
 static int gpurenderpass_setbindgroup(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
-    uint32_t groupIndex = static_cast<uint32_t>(luaL_checkunsigned(L, 2));
-    if (groupIndex >= ore::kMaxBindGroups)
+    if (!validate_render_pass(L, self))
     {
-        luaL_error(L,
-                   "setBindGroup: groupIndex must be in [0, %u) (got %u)",
-                   ore::kMaxBindGroups,
-                   groupIndex);
+        return 0;
     }
+    uint32_t groupIndex = static_cast<uint32_t>(luaL_checkunsigned(L, 2));
     auto* bg = lua_torive<ScriptedGPUBindGroup>(L, 3);
 
-    // Parse optional dynamic offsets array.
-    //
     // WebGPU contract: `dynamicOffsets[i]` corresponds to the i-th dynamic
     // entry in the BindGroupLayout, ordered by ascending `@binding`.
-    // The count must equal the BindGroup's dynamic-offset count exactly,
-    // and each value must be aligned to `minUniformBufferOffsetAlignment`
-    // (256 bytes — D3D11.1's `firstConstant` requirement, D3D12's CBV
-    // alignment, Vulkan's adapter-default minimum). Validate here so a
-    // misuse error surfaces on the Lua call site instead of a backend
-    // assert / silent misbind.
-    constexpr uint32_t kDynamicOffsetAlign = 256;
-    uint32_t dynamicOffsets[8] = {};
+    uint32_t dynamicOffsets[ore::kMaxDynamicOffsets] = {};
     uint32_t dynamicOffsetCount = 0;
     if (lua_istable(L, 4))
     {
         int tbl = 4;
         int n = (int)lua_objlen(L, tbl);
-        if (n > 8)
+        if (n > (int)ore::kMaxDynamicOffsets)
         {
             luaL_error(L,
-                       "setBindGroup: dynamicOffsets count %d exceeds "
-                       "maximum of 8",
-                       n);
+                       ore::kGuardDynamicOffsetCountFormat,
+                       (unsigned)n,
+                       ore::kMaxDynamicOffsets);
         }
         for (int i = 0; i < n; i++)
         {
             lua_rawgeti(L, tbl, i + 1);
-            uint32_t off = static_cast<uint32_t>(lua_tonumber(L, -1));
+            dynamicOffsets[dynamicOffsetCount++] =
+                static_cast<uint32_t>(lua_tonumber(L, -1));
             lua_pop(L, 1);
-            if ((off % kDynamicOffsetAlign) != 0)
-            {
-                luaL_error(L,
-                           "setBindGroup: dynamicOffsets[%d] = %u is not a "
-                           "multiple of %u (alignment requirement)",
-                           i,
-                           off,
-                           kDynamicOffsetAlign);
-            }
-            dynamicOffsets[dynamicOffsetCount++] = off;
         }
     }
 
-    if (bg->bindGroup &&
-        dynamicOffsetCount != bg->bindGroup->dynamicOffsetCount())
+    // Validate here so a misuse surfaces on the Lua call site instead of a
+    // backend assert or a silent misbind.
+    Context* oreCtx = getOreContext(L);
+    // luaL_error longjmps past destructors, so the message leaves the
+    // std::string before raising.
+    char message[256] = {};
     {
-        luaL_error(L,
-                   "setBindGroup: dynamicOffsets count %u does not match the "
-                   "BindGroup's declared dynamic UBO count %u",
-                   dynamicOffsetCount,
-                   bg->bindGroup->dynamicOffsetCount());
+        std::string err;
+        if (!ore::validateSetBindGroup(
+                groupIndex,
+                bg->bindGroup.get(),
+                dynamicOffsets,
+                dynamicOffsetCount,
+                ore::scriptDynamicOffsetAlignment(oreCtx),
+                &err))
+        {
+            snprintf(message, sizeof(message), "%s", err.c_str());
+        }
+    }
+    if (message[0] != '\0')
+    {
+        luaL_error(L, "%s", message);
     }
 
+    if (!self->m_pipelineSet)
+    {
+        if (self->deferredBindGroups == nullptr)
+        {
+            self->deferredBindGroups =
+                std::make_unique<ore::DeferredBindGroups>();
+        }
+        self->deferredBindGroups->defer(groupIndex,
+                                        bg->bindGroup.get(),
+                                        dynamicOffsets,
+                                        dynamicOffsetCount);
+        return 0;
+    }
+    if (oreCtx)
+        oreCtx->clearLastError();
     self->pass->setBindGroup(groupIndex,
                              bg->bindGroup.get(),
                              dynamicOffsetCount > 0 ? dynamicOffsets : nullptr,
                              dynamicOffsetCount);
+    if (oreCtx && !oreCtx->lastError().empty())
+    {
+        luaL_error(L, "setBindGroup: %s", oreCtx->lastError().c_str());
+    }
     return 0;
 }
 
 static int gpurenderpass_setviewport(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
+    if (!validate_render_pass(L, self))
+    {
+        return 0;
+    }
     float x = static_cast<float>(luaL_checknumber(L, 2));
     float y = static_cast<float>(luaL_checknumber(L, 3));
     float w = static_cast<float>(luaL_checknumber(L, 4));
@@ -2480,7 +2368,10 @@ static int gpurenderpass_setviewport(lua_State* L)
 static int gpurenderpass_setscissorrect(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
+    if (!validate_render_pass(L, self))
+    {
+        return 0;
+    }
     uint32_t x = static_cast<uint32_t>(luaL_checkunsigned(L, 2));
     uint32_t y = static_cast<uint32_t>(luaL_checkunsigned(L, 3));
     uint32_t w = static_cast<uint32_t>(luaL_checkunsigned(L, 4));
@@ -2492,7 +2383,10 @@ static int gpurenderpass_setscissorrect(lua_State* L)
 static int gpurenderpass_setstencilreference(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
+    if (!validate_render_pass(L, self))
+    {
+        return 0;
+    }
     uint32_t ref = static_cast<uint32_t>(luaL_checkunsigned(L, 2));
     self->pass->setStencilReference(ref);
     return 0;
@@ -2501,7 +2395,10 @@ static int gpurenderpass_setstencilreference(lua_State* L)
 static int gpurenderpass_setblendcolor(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
+    if (!validate_render_pass(L, self))
+    {
+        return 0;
+    }
     float r = static_cast<float>(luaL_checknumber(L, 2));
     float g = static_cast<float>(luaL_checknumber(L, 3));
     float b = static_cast<float>(luaL_checknumber(L, 4));
@@ -2515,7 +2412,10 @@ static int gpurenderpass_setblendcolor(lua_State* L)
 static int gpurenderpass_draw(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
+    if (!validate_render_pass(L, self))
+    {
+        return 0;
+    }
     validate_pipeline_set(L, self);
     uint32_t vertexCount = static_cast<uint32_t>(luaL_checkunsigned(L, 2));
     uint32_t instanceCount =
@@ -2524,12 +2424,10 @@ static int gpurenderpass_draw(lua_State* L)
         lua_isnumber(L, 4) ? static_cast<uint32_t>(lua_tonumber(L, 4)) : 0;
     uint32_t firstInstance =
         lua_isnumber(L, 5) ? static_cast<uint32_t>(lua_tonumber(L, 5)) : 0;
-    if (firstInstance > 0 && !getOreContext(L)->features().drawBaseInstance)
+    if (firstInstance > 0 && features_are_known(getOreContext(L)) &&
+        !getOreContext(L)->features().drawBaseInstance)
     {
-        luaL_error(L,
-                   "draw: firstInstance=%u requires the drawBaseInstance "
-                   "feature, which the active backend does not support",
-                   firstInstance);
+        luaL_error(L, ore::kGuardFirstInstanceFormat, "draw", firstInstance);
     }
     self->pass->draw(vertexCount, instanceCount, firstVertex, firstInstance);
     self->drawCallCount++;
@@ -2541,7 +2439,10 @@ static int gpurenderpass_draw(lua_State* L)
 static int gpurenderpass_drawindexed(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
+    if (!validate_render_pass(L, self))
+    {
+        return 0;
+    }
     validate_pipeline_set(L, self);
     uint32_t indexCount = static_cast<uint32_t>(luaL_checkunsigned(L, 2));
     uint32_t instanceCount =
@@ -2552,20 +2453,17 @@ static int gpurenderpass_drawindexed(lua_State* L)
         lua_isnumber(L, 5) ? static_cast<int32_t>(lua_tointeger(L, 5)) : 0;
     uint32_t firstInstance =
         lua_isnumber(L, 6) ? static_cast<uint32_t>(lua_tonumber(L, 6)) : 0;
-    if (baseVertex != 0 && !getOreContext(L)->features().drawBaseInstance)
+    if (baseVertex != 0 && features_are_known(getOreContext(L)) &&
+        !getOreContext(L)->features().drawBaseInstance)
     {
-        luaL_error(L,
-                   "drawIndexed: baseVertex=%d requires the "
-                   "drawBaseInstance feature, which the active backend "
-                   "does not support",
-                   baseVertex);
+        luaL_error(L, ore::kGuardBaseVertexFormat, "drawIndexed", baseVertex);
     }
-    if (firstInstance > 0 && !getOreContext(L)->features().drawBaseInstance)
+    if (firstInstance > 0 && features_are_known(getOreContext(L)) &&
+        !getOreContext(L)->features().drawBaseInstance)
     {
         luaL_error(L,
-                   "drawIndexed: firstInstance=%u requires the "
-                   "drawBaseInstance feature, which the active backend "
-                   "does not support",
+                   ore::kGuardFirstInstanceFormat,
+                   "drawIndexed",
                    firstInstance);
     }
     self->pass->drawIndexed(indexCount,
@@ -2580,14 +2478,11 @@ static int gpurenderpass_drawindexed(lua_State* L)
 static int gpurenderpass_finish(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPURenderPass>(L, 1);
-    validate_render_pass(L, self);
-    self->pass->finish();
+    if (validate_render_pass(L, self))
+    {
+        self->pass->finish();
+    }
     self->m_finished = true;
-    // Clear the context's active pass pointer so the next beginRenderPass
-    // doesn't see a stale (already-finished) pass.
-    Context* oreCtx = getOreContext(L);
-    if (oreCtx && oreCtx->activeRenderPass() == self->pass.get())
-        oreCtx->setActiveRenderPass(nullptr);
     return 0;
 }
 
@@ -2642,17 +2537,8 @@ ScriptedGPUCanvas::~ScriptedGPUCanvas()
     }
 }
 
-ScriptedGPURenderPass::~ScriptedGPURenderPass()
-{
-    // If the script GC'd the wrapper without :finish(), drop the active-
-    // pass slot before unique_ptr destroys the backend RenderPass — else
-    // ore::Context::activeRenderPass() would dangle into the next
-    // beginRenderPass.
-    if (m_context && pass && m_context->activeRenderPass() == pass.get())
-    {
-        m_context->setActiveRenderPass(nullptr);
-    }
-}
+ScriptedGPURenderPass::ScriptedGPURenderPass() = default;
+ScriptedGPURenderPass::~ScriptedGPURenderPass() = default;
 
 ScriptedCanvas::~ScriptedCanvas()
 {
@@ -2686,39 +2572,56 @@ static StoreOp lua_tostoreop_str(const char* s)
     return StoreOp::store;
 }
 
-// canvas:beginRenderPass(desc) — open a render pass against this canvas.
+// target:beginRenderPass(desc) — open a render pass against a GPUTarget.
 //
 // `desc` is required: at least one color attachment or a depthStencil
 // attachment must be supplied. Every attachment carries its own view, and
 // sampleCount is derived from those views (all attachments must share one
 // sampleCount, matching WebGPU validation).
 //
-// Color attachment `view` is optional: when omitted it defaults to the
-// receiving canvas's own colorView. Provide an explicit view for cases
+// Color attachment `view` is optional: when omitted it defaults to
+// targetView, the receiver's own view. Provide an explicit view for cases
 // where the target differs (e.g. MSAA: view = msaa:view(),
 // resolveTarget = canvas:colorView()).
-int gpucanvas_beginrenderpass(lua_State* L)
+static Context* check_beginrenderpass(lua_State* L, const char* typeName)
 {
-    auto* self = lua_torive<ScriptedGPUCanvas>(L, 1);
-
     Context* oreCtx = getOreContext(L);
     if (oreCtx == nullptr)
     {
-        luaL_error(L, "GPUCanvas:beginRenderPass() requires a GPU context");
+        luaL_error(L, "%s:beginRenderPass() requires a GPU context", typeName);
     }
 
     auto* scriptingContext =
         static_cast<ScriptingContext*>(lua_getthreaddata(L));
-    if (scriptingContext == nullptr || !scriptingContext->canvasDrawingPhase())
+    // Recording brackets the pass; an immediate context cannot nest a pass
+    // inside the open screen frame.
+    if (scriptingContext == nullptr || !oreCtx->isRecording())
     {
         luaL_error(L,
-                   "GPUCanvas:beginRenderPass() called outside drawing phase");
+                   "%s:beginRenderPass() requires the deferred recorder",
+                   typeName);
     }
 
     luaL_checktype(L, 2, LUA_TTABLE);
+    return oreCtx;
+}
+
+// A host target that is hidden this frame has no view, so a pass that omits
+// one drops after validating, as the module lane does.
+static int gputarget_beginrenderpass(lua_State* L,
+                                     const char* typeName,
+                                     ore::TextureView* targetView,
+                                     bool hostTarget = false)
+{
+    Context* oreCtx = check_beginrenderpass(L, typeName);
 
     RenderPassDesc passDesc{};
     passDesc.colorCount = 0;
+    bool dropped = false;
+    // Left on the stack so the label lives without an owning string, which a
+    // Lua error would unwind past.
+    lua_getfield(L, 2, "label");
+    passDesc.label = lua_isstring(L, -1) ? lua_tostring(L, -1) : nullptr;
 
     // Tracks the first attachment we see (any color slot or depth) and
     // becomes the pass's authoritative sampleCount. Subsequent attachments
@@ -2765,10 +2668,14 @@ int gpucanvas_beginrenderpass(lua_State* L)
             ore::TextureView* viewPtr = nullptr;
             if (lua_isnil(L, -1))
             {
-                // Sugar: omitting `view` defaults to the receiving canvas's
-                // own colorView. Errors only if the canvas is deferred
-                // (zero-sized — no backing texture).
-                if (!self->oreColorView)
+                // Sugar: omitting `view` defaults to the receiver's own
+                // view. Errors only if a canvas is deferred (zero-sized — no
+                // backing texture).
+                if (targetView == nullptr && hostTarget)
+                {
+                    dropped = true;
+                }
+                else if (targetView == nullptr)
                 {
                     luaL_error(L,
                                "beginRenderPass: color[%d].view omitted but "
@@ -2777,7 +2684,7 @@ int gpucanvas_beginrenderpass(lua_State* L)
                                "before drawing, or pass an explicit view.",
                                slot + 1);
                 }
-                viewPtr = self->oreColorView.get();
+                viewPtr = targetView;
             }
             else
             {
@@ -2792,9 +2699,13 @@ int gpucanvas_beginrenderpass(lua_State* L)
                 viewPtr = tv->view.get();
             }
             passDesc.colorAttachments[slot].view = viewPtr;
-            char colorLabel[32];
-            snprintf(colorLabel, sizeof(colorLabel), "color[%d]", slot + 1);
-            recordSampleCount(viewPtr->texture()->sampleCount(), colorLabel);
+            if (viewPtr != nullptr)
+            {
+                char colorLabel[32];
+                snprintf(colorLabel, sizeof(colorLabel), "color[%d]", slot + 1);
+                recordSampleCount(viewPtr->texture()->sampleCount(),
+                                  colorLabel);
+            }
             lua_pop(L, 1); // view
 
             // resolveTarget (optional — for MSAA). Source view must be
@@ -2959,63 +2870,177 @@ int gpucanvas_beginrenderpass(lua_State* L)
                    "color attachment or a depthStencil attachment");
     }
 
-    // Metal (and other backends) only allow one active encoder per command
-    // buffer. If a previous pass was left open, finish it before opening
-    // a new encoder.
-    if (oreCtx->activeRenderPass() && !oreCtx->activeRenderPass()->isFinished())
+    if (dropped)
     {
-        oreCtx->activeRenderPass()->finish();
-        oreCtx->setActiveRenderPass(nullptr);
+        lua_newrive<ScriptedGPURenderPass>(L);
+        return 1;
     }
-
+    oreCtx->clearLastError();
+    auto pass = ore::cmd::beginRecordedRenderPass(*oreCtx, passDesc);
+    // A pass refused without an error drops, like one with no target.
+    if (pass == nullptr && !oreCtx->lastError().empty())
+    {
+        luaL_error(L, "beginRenderPass: %s", oreCtx->lastError().c_str());
+    }
     auto* rp = lua_newrive<ScriptedGPURenderPass>(L);
-    rp->pass = oreCtx->beginRenderPass(passDesc);
-    rp->m_context = oreCtx;
+    rp->pass = std::move(pass);
     rp->m_finished = false;
     rp->sampleCount =
         passSampleCount < 1 ? 1u : static_cast<uint32_t>(passSampleCount);
-    rp->label = passDesc.label ? passDesc.label : "";
+    rp->label = passDesc.label != nullptr ? passDesc.label : "";
     rp->drawCallCount = 0;
-    oreCtx->setActiveRenderPass(rp->pass.get());
     return 1;
 }
 
-// Recreate the underlying RenderCanvas at a new size, then re-wrap its backing
-// texture for use in ORE render passes.  The handle's `.image` ref continues to
-// point to the updated canvas image. Resizing to zero in either dimension
-// drops the backing texture and leaves the canvas in a deferred state.
-static int gpucanvashandle_resize(lua_State* L)
+static int gpucanvas_beginrenderpass(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPUCanvas>(L, 1);
-    uint32_t w = static_cast<uint32_t>(luaL_checkunsigned(L, 2));
-    uint32_t h = static_cast<uint32_t>(luaL_checkunsigned(L, 3));
+    return gputarget_beginrenderpass(L,
+                                     ScriptedGPUCanvas::luaName,
+                                     self->oreColorView.get());
+}
 
-    if (self->renderCtx == nullptr)
+static int hosttarget_beginrenderpass(lua_State* L)
+{
+    lua_torive<ScriptedGPUTarget>(L, 1);
+    Context* oreCtx = check_beginrenderpass(L, ScriptedGPUTarget::luaName);
+    // A Lua error longjmps past any rcp still on the stack, so drop ours before
+    // the pass can raise; the context keeps the view alive.
+    TextureView* view = oreCtx->targetView().get();
+    return gputarget_beginrenderpass(L, ScriptedGPUTarget::luaName, view, true);
+}
+
+// The fields every GPUTarget answers from the view it renders into, or 0 when
+// the atom is not one of them.
+static int gputarget_pushfield(lua_State* L,
+                               int atom,
+                               const rcp<TextureView>& view)
+{
+    Texture* texture = view != nullptr ? view->texture() : nullptr;
+    switch (atom)
     {
-        luaL_error(L, "GPUCanvas: renderCtx not initialized");
+        case (int)LuaAtoms::width:
+            lua_pushnumber(L, texture != nullptr ? texture->width() : 0);
+            return 1;
+        case (int)LuaAtoms::height:
+            lua_pushnumber(L, texture != nullptr ? texture->height() : 0);
+            return 1;
+        case (int)LuaAtoms::format:
+            // A deferred canvas reports the format makeRenderCanvas allocates.
+            lua_pushstring(L,
+                           lua_totextureformatstring(
+                               texture != nullptr ? texture->format()
+                                                  : TextureFormat::rgba8unorm));
+            return 1;
+        case (int)LuaAtoms::sampleCount:
+            lua_pushnumber(L, texture != nullptr ? texture->sampleCount() : 1);
+            return 1;
+        case (int)LuaAtoms::view:
+            if (view == nullptr)
+            {
+                lua_pushnil(L);
+                return 1;
+            }
+            lua_newrive<ScriptedGPUTextureView>(L)->view = view;
+            return 1;
+    }
+    return 0;
+}
+
+static int hosttarget_index(lua_State* L)
+{
+    int atom;
+    const char* key = lua_tostringatom(L, 2, &atom);
+    if (!key)
+    {
+        luaL_typeerrorL(L, 2, lua_typename(L, LUA_TSTRING));
+    }
+    lua_torive<ScriptedGPUTarget>(L, 1);
+    Context* oreCtx = getOreContext(L);
+    if (int pushed = gputarget_pushfield(
+            L,
+            atom,
+            oreCtx != nullptr ? oreCtx->targetView() : nullptr))
+    {
+        return pushed;
+    }
+    luaL_error(L, "'%s' is not a valid index of GPUTarget", key);
+    return 0;
+}
+
+static int hosttarget_namecall(lua_State* L)
+{
+    int atom;
+    const char* str = lua_namecallatom(L, &atom);
+    if (str != nullptr && atom == (int)LuaAtoms::beginRenderPass)
+    {
+        return hosttarget_beginrenderpass(L);
+    }
+    luaL_error(L,
+               "%s is not a valid method of %s",
+               str,
+               ScriptedGPUTarget::luaName);
+    return 0;
+}
+
+rcp<gpu::RenderCanvas> rive::allocScriptRenderCanvas(gpu::RenderContext* rc,
+                                                     ScriptingContext* ctx,
+                                                     uint32_t width,
+                                                     uint32_t height)
+{
+    assert(rc != nullptr);
+    assert(ctx != nullptr);
+    if (auto* deferredHost = ctx->deferredCanvasHost())
+    {
+        return deferredHost->makeContentCanvas(width, height);
+    }
+    if (ctx->renderContextIsLateBound())
+    {
+        return rc->makeDeferredRenderCanvas(width, height);
+    }
+    return rc->makeRenderCanvas(width, height);
+}
+
+// The device a canvas should allocate against right now, which is not
+// necessarily the one that existed when the handle was made: web builds one per
+// render texture and attaches it after the file has imported.
+static gpu::RenderContext* liveRenderContext(ScriptingContext* scriptingCtx)
+{
+    if (scriptingCtx == nullptr)
+    {
+        return nullptr;
+    }
+    return static_cast<gpu::RenderContext*>(scriptingCtx->renderContext());
+}
+
+// Allocates the backing for a pending size, if there is one and a device has
+// turned up to allocate it against. Errors only on a device that is present and
+// refuses; a device that has not arrived yet leaves the request pending, which
+// is what makes a size-less canvas usable on a host that attaches late.
+static void gpucanvas_satisfyPending(lua_State* L, ScriptedGPUCanvas* self)
+{
+    if (self->pendingWidth == 0 || self->pendingHeight == 0)
+    {
+        return;
+    }
+    auto* scriptingCtx = static_cast<ScriptingContext*>(lua_getthreaddata(L));
+    auto* renderCtx = liveRenderContext(scriptingCtx);
+    if (renderCtx == nullptr)
+    {
+        return;
     }
     auto* oreCtx = getOreContext(L);
     if (oreCtx == nullptr)
     {
-        luaL_error(L, "GPUCanvas: GPU context not initialized");
+        return;
     }
-
-    if (w == 0 || h == 0)
-    {
-        if (self->m_L != nullptr && self->m_imageRef != LUA_NOREF)
-        {
-            lua_unref(self->m_L, self->m_imageRef);
-            self->m_imageRef = LUA_NOREF;
-        }
-        self->canvas = nullptr;
-        self->oreColorView = nullptr;
-        return 0;
-    }
+    self->renderCtx = renderCtx;
+    uint32_t w = self->pendingWidth, h = self->pendingHeight;
 
     // Allocate and wrap the new backing BEFORE touching the existing
     // canvas/view/imageRef. If either step throws (via luaL_error), the
     // canvas keeps its previous, still-valid backing.
-    auto newCanvas = self->renderCtx->makeRenderCanvas(w, h);
+    auto newCanvas = allocScriptRenderCanvas(renderCtx, scriptingCtx, w, h);
     if (!newCanvas)
     {
         luaL_error(L, "GPUCanvas:resize() failed to create RenderCanvas");
@@ -3033,19 +3058,93 @@ static int gpucanvashandle_resize(lua_State* L)
     }
     self->canvas = std::move(newCanvas);
     self->oreColorView = std::move(newColorView);
+    self->pendingWidth = 0;
+    self->pendingHeight = 0;
 
     auto* img = lua_newrive<ScriptedImage>(L);
     img->image =
         ref_rcp(static_cast<RenderImage*>(self->canvas->renderImage()));
+    img->sourceCanvas = self->canvas;
     self->m_imageRef = lua_ref(L, -1);
     lua_pop(L, 1); // pop image
+}
 
+// Recreate the underlying RenderCanvas at a new size, then re-wrap its backing
+// texture for use in ORE render passes.  The handle's `.image` ref continues to
+// point to the updated canvas image. Resizing to zero in either dimension
+// drops the backing texture and leaves the canvas in a deferred state.
+static int gpucanvashandle_resize(lua_State* L)
+{
+    auto* self = lua_torive<ScriptedGPUCanvas>(L, 1);
+    uint32_t w = static_cast<uint32_t>(luaL_checkunsigned(L, 2));
+    uint32_t h = static_cast<uint32_t>(luaL_checkunsigned(L, 3));
+
+    if (w == 0 || h == 0)
+    {
+        if (self->m_L != nullptr && self->m_imageRef != LUA_NOREF)
+        {
+            lua_unref(self->m_L, self->m_imageRef);
+            self->m_imageRef = LUA_NOREF;
+        }
+        self->canvas = nullptr;
+        self->oreColorView = nullptr;
+        self->pendingWidth = 0;
+        self->pendingHeight = 0;
+        return 0;
+    }
+
+    // Generators call resize() every frame, so recreating on an unchanged
+    // size would churn a new texture per frame and stall the render thread.
+    if (self->canvas != nullptr && self->canvas->width() == w &&
+        self->canvas->height() == h)
+    {
+        return 0;
+    }
+
+#ifdef RIVE_WASM_MODULE
+    // Module side the real canvas lives host side; recreate it through the
+    // seam and rewrap the view and presentable image.
+    if (self->canvas != nullptr)
+    {
+        auto resized = wasmModuleResizeCanvas(self->canvas, w, h);
+        if (resized.canvas == nullptr)
+        {
+            luaL_error(L, "GPUCanvas:resize() failed host side");
+        }
+        self->canvas = std::move(resized.canvas);
+        self->oreColorView = std::move(resized.colorView);
+        if (self->m_L != nullptr && self->m_imageRef != LUA_NOREF)
+        {
+            lua_unref(self->m_L, self->m_imageRef);
+            self->m_imageRef = LUA_NOREF;
+        }
+        uint32_t imageHandle = wasmModuleCanvasImageHandle(self->canvas);
+        if (imageHandle != 0)
+        {
+            auto* img = lua_newrive<ScriptedImage>(L);
+            img->image = makeWasmModuleRenderImage(imageHandle);
+            img->sourceCanvas = self->canvas;
+            self->m_imageRef = lua_ref(L, -1);
+            lua_pop(L, 1);
+        }
+        return 0;
+    }
+#endif
+
+    // A generator resizes once, when layout hands it the real size. On web that
+    // still precedes the render texture's attach, so the request is recorded
+    // and satisfied on first use rather than refused for a device the contract
+    // did not require at init either.
+    self->pendingWidth = w;
+    self->pendingHeight = h;
+    gpucanvas_satisfyPending(L, self);
     return 0;
 }
 
 static int gpucanvashandle_colorview(lua_State* L)
 {
     auto* self = lua_torive<ScriptedGPUCanvas>(L, 1);
+    gpucanvas_satisfyPending(L, self);
     if (!self->oreColorView)
     {
         luaL_error(L,
@@ -3057,11 +3156,15 @@ static int gpucanvashandle_colorview(lua_State* L)
     return 1;
 }
 
+// A canvas has a size from the moment resize() is called; only the texture may
+// still be pending. Reporting zero here instead would break the generator that
+// sizes its depth and MSAA attachments off canvas.width the same frame.
 static void gpucanvashandle_direct_width(void* udata, void* result)
 {
     auto* self = (ScriptedGPUCanvas*)udata;
     lua_userdatadirectfield_setnumber(result,
-                                      self->canvas ? self->canvas->width() : 0);
+                                      self->canvas ? self->canvas->width()
+                                                   : self->pendingWidth);
 }
 
 static void gpucanvashandle_direct_height(void* udata, void* result)
@@ -3069,7 +3172,7 @@ static void gpucanvashandle_direct_height(void* udata, void* result)
     auto* self = (ScriptedGPUCanvas*)udata;
     lua_userdatadirectfield_setnumber(result,
                                       self->canvas ? self->canvas->height()
-                                                   : 0);
+                                                   : self->pendingHeight);
 }
 
 static int gpucanvashandle_index(lua_State* L)
@@ -3081,6 +3184,9 @@ static int gpucanvashandle_index(lua_State* L)
         luaL_typeerrorL(L, 2, lua_typename(L, LUA_TSTRING));
     }
     auto* self = lua_torive<ScriptedGPUCanvas>(L, 1);
+    // Every field below reads the backing, and a generator reads them each
+    // frame, so this is where a size pending on a late device is honoured.
+    gpucanvas_satisfyPending(L, self);
     switch (atom)
     {
         case (int)LuaAtoms::image:
@@ -3092,23 +3198,19 @@ static int gpucanvashandle_index(lua_State* L)
             lua_pushnil(L);
             return 1;
         case (int)LuaAtoms::width:
-            lua_pushnumber(L, self->canvas ? self->canvas->width() : 0);
+            lua_pushnumber(L,
+                           self->canvas ? self->canvas->width()
+                                        : self->pendingWidth);
             return 1;
         case (int)LuaAtoms::height:
-            lua_pushnumber(L, self->canvas ? self->canvas->height() : 0);
+            lua_pushnumber(L,
+                           self->canvas ? self->canvas->height()
+                                        : self->pendingHeight);
             return 1;
-        case (int)LuaAtoms::format:
-            // Realized canvas reports its texture format. Deferred canvas
-            // reports the format makeRenderCanvas always allocates.
-            if (self->oreColorView && self->oreColorView->texture())
-                lua_pushstring(L,
-                               lua_totextureformatstring(
-                                   self->oreColorView->texture()->format()));
-            else
-                lua_pushstring(
-                    L,
-                    lua_totextureformatstring(TextureFormat::rgba8unorm));
-            return 1;
+    }
+    if (int pushed = gputarget_pushfield(L, atom, self->oreColorView))
+    {
+        return pushed;
     }
     luaL_error(L, "'%s' is not a valid index of GPUCanvas", key);
     return 0;
@@ -3143,6 +3245,52 @@ static int gpucanvashandle_namecall(lua_State* L)
 // Canvas (2D Rive renderer canvas)
 // ============================================================================
 
+// The 2D counterpart of gpucanvas_satisfyPending, for the same reason: a
+// size-less canvas is legal, and on web the device shows up after layout has
+// already handed the generator its real size.
+static void canvas_satisfyPending(lua_State* L, ScriptedCanvas* self)
+{
+    if (self->pendingWidth == 0 || self->pendingHeight == 0)
+    {
+        return;
+    }
+    auto* scriptingCtx = static_cast<ScriptingContext*>(lua_getthreaddata(L));
+    auto* renderCtx = liveRenderContext(scriptingCtx);
+    if (renderCtx == nullptr)
+    {
+        return;
+    }
+    self->renderCtx = renderCtx;
+
+    // Allocate the new backing BEFORE touching the existing canvas/imageRef.
+    // If allocation throws (via luaL_error), the canvas keeps its previous,
+    // still-valid backing.
+    auto newCanvas = allocScriptRenderCanvas(renderCtx,
+                                             scriptingCtx,
+                                             self->pendingWidth,
+                                             self->pendingHeight);
+    if (!newCanvas)
+    {
+        luaL_error(L, "Canvas:resize() failed to create RenderCanvas");
+    }
+
+    if (self->m_L != nullptr && self->m_imageRef != LUA_NOREF)
+    {
+        lua_unref(self->m_L, self->m_imageRef);
+        self->m_imageRef = LUA_NOREF;
+    }
+    self->canvas = std::move(newCanvas);
+    self->pendingWidth = 0;
+    self->pendingHeight = 0;
+
+    auto* img = lua_newrive<ScriptedImage>(L);
+    img->image =
+        ref_rcp(static_cast<RenderImage*>(self->canvas->renderImage()));
+    img->sourceCanvas = self->canvas;
+    self->m_imageRef = lua_ref(L, -1);
+    lua_pop(L, 1);
+}
+
 // Recreate the underlying RenderCanvas at a new size. Must not be called
 // between beginFrame() and endFrame(). Resizing to zero in either dimension
 // drops the backing texture and leaves the canvas in a deferred state.
@@ -3152,10 +3300,6 @@ static int canvashandle_resize(lua_State* L)
     uint32_t w = static_cast<uint32_t>(luaL_checkunsigned(L, 2));
     uint32_t h = static_cast<uint32_t>(luaL_checkunsigned(L, 3));
 
-    if (self->renderCtx == nullptr)
-    {
-        luaL_error(L, "Canvas: renderCtx not initialized");
-    }
     if (self->m_state != CanvasState::Idle)
     {
         luaL_error(L, "Canvas:resize() called during an active frame");
@@ -3169,31 +3313,21 @@ static int canvashandle_resize(lua_State* L)
             self->m_imageRef = LUA_NOREF;
         }
         self->canvas = nullptr;
+        self->pendingWidth = 0;
+        self->pendingHeight = 0;
         return 0;
     }
 
-    // Allocate the new backing BEFORE touching the existing canvas/imageRef.
-    // If makeRenderCanvas throws (via luaL_error), the canvas keeps its
-    // previous, still-valid backing.
-    auto newCanvas = self->renderCtx->makeRenderCanvas(w, h);
-    if (!newCanvas)
+    // Resizing to an unchanged size would churn a new texture per frame.
+    if (self->canvas != nullptr && self->canvas->width() == w &&
+        self->canvas->height() == h)
     {
-        luaL_error(L, "Canvas:resize() failed to create RenderCanvas");
+        return 0;
     }
 
-    if (self->m_L != nullptr && self->m_imageRef != LUA_NOREF)
-    {
-        lua_unref(self->m_L, self->m_imageRef);
-        self->m_imageRef = LUA_NOREF;
-    }
-    self->canvas = std::move(newCanvas);
-
-    auto* img = lua_newrive<ScriptedImage>(L);
-    img->image =
-        ref_rcp(static_cast<RenderImage*>(self->canvas->renderImage()));
-    self->m_imageRef = lua_ref(L, -1);
-    lua_pop(L, 1);
-
+    self->pendingWidth = w;
+    self->pendingHeight = h;
+    canvas_satisfyPending(L, self);
     return 0;
 }
 
@@ -3206,15 +3340,20 @@ static int canvashandle_resize(lua_State* L)
 static int canvashandle_beginframe(lua_State* L)
 {
     auto* self = lua_torive<ScriptedCanvas>(L, 1);
+    canvas_satisfyPending(L, self);
     if (self->renderCtx == nullptr)
     {
         luaL_error(L, "Canvas: renderCtx not initialized");
     }
     auto* scriptingContext =
         static_cast<ScriptingContext*>(lua_getthreaddata(L));
-    if (scriptingContext == nullptr || !scriptingContext->canvasDrawingPhase())
+    // Recording brackets the content instead of opening a real frame; an
+    // immediate context cannot nest one inside the open screen frame.
+    Context* recordingOre = getOreContext(L);
+    if (scriptingContext == nullptr || recordingOre == nullptr ||
+        !recordingOre->isRecording())
     {
-        luaL_error(L, "Canvas:beginFrame() called outside drawing phase");
+        luaL_error(L, "Canvas:beginFrame() requires the deferred recorder");
     }
     if (self->m_state != CanvasState::Idle)
     {
@@ -3244,16 +3383,35 @@ static int canvashandle_beginframe(lua_State* L)
         lua_pop(L, 1);
     }
 
-    self->renderCtx->beginFrame(desc);
-
-    // Allocate a RiveRenderer that issues into this render context.
-    // Deleted in endFrame() (or in the destructor if endFrame is never called).
-    self->m_riveRenderer = new RiveRenderer(self->renderCtx);
+    // A deferred host hands back a recorder instead of opening a real
+    // RenderContext frame, the real canvas frame opens at replay.
+    Renderer* renderer = nullptr;
+    if (auto* host = scriptingContext->deferredCanvasHost())
+    {
+        self->m_deferredHost = host;
+        renderer =
+            host->beginCanvasContent(self->canvas.get(), desc.clearColor);
+    }
+    else
+    {
+        self->renderCtx->beginFrame(desc);
+        // Allocate a RiveRenderer that issues into this render context. Deleted
+        // in endFrame() (or in the destructor if endFrame is never called).
+        self->m_riveRenderer = new RiveRenderer(self->renderCtx);
+        renderer = self->m_riveRenderer;
+    }
     self->m_state = CanvasState::Rendering;
 
-    // Push a non-owning ScriptedRenderer wrapping our RiveRenderer and keep a
+    // Track the open frame on the context so the post-error cleanup can close
+    // it if the script never reaches endFrame. The ref also pins the canvas.
+    lua_pushvalue(L, 1);
+    self->m_openFrameRef = lua_ref(L, -1);
+    lua_pop(L, 1);
+    scriptingContext->registerOpenCanvasFrame(self->m_openFrameRef);
+
+    // Push a non-owning ScriptedRenderer wrapping our renderer and keep a
     // registry ref so the Lua object stays alive until endFrame().
-    lua_newrive<ScriptedRenderer>(L, self->m_riveRenderer);
+    lua_newrive<ScriptedRenderer>(L, renderer);
     lua_pushvalue(L, -1);
     self->m_rendererRef = lua_ref(L, -1);
     lua_pop(L, 1); // pop the extra copy used for ref; original stays on stack
@@ -3261,14 +3419,18 @@ static int canvashandle_beginframe(lua_State* L)
     return 1; // returns the ScriptedRenderer
 }
 
-// Flush all pending Rive draw calls for this frame to the canvas render target,
-// then release the renderer.  Must be called after beginFrame().
-static int canvashandle_endframe(lua_State* L)
+// The body of Canvas:endFrame, shared with the post-error orphan cleanup.
+static void canvasEndFrameImpl(lua_State* L, ScriptedCanvas* self)
 {
-    auto* self = lua_torive<ScriptedCanvas>(L, 1);
-    if (self->m_state != CanvasState::Rendering)
+    if (self->m_openFrameRef != LUA_NOREF)
     {
-        luaL_error(L, "Canvas:endFrame() called without beginFrame()");
+        auto* context = static_cast<ScriptingContext*>(lua_getthreaddata(L));
+        if (context != nullptr)
+        {
+            context->unregisterOpenCanvasFrame(self->m_openFrameRef);
+        }
+        lua_unref(L, self->m_openFrameRef);
+        self->m_openFrameRef = LUA_NOREF;
     }
 
     // Null out the ScriptedRenderer's pointer so it can no longer issue draws.
@@ -3284,6 +3446,15 @@ static int canvashandle_endframe(lua_State* L)
         lua_pop(L, 1);
         lua_unref(self->m_L, self->m_rendererRef);
         self->m_rendererRef = LUA_NOREF;
+    }
+
+    // Close the content bracket, the real canvas frame flushes at replay.
+    if (self->m_deferredHost != nullptr)
+    {
+        self->m_deferredHost->endCanvasContent(self->canvas.get());
+        self->m_deferredHost = nullptr;
+        self->m_state = CanvasState::Idle;
+        return;
     }
 
     // Create a command buffer, flush the render context into the canvas
@@ -3303,7 +3474,18 @@ static int canvashandle_endframe(lua_State* L)
     delete self->m_riveRenderer;
     self->m_riveRenderer = nullptr;
     self->m_state = CanvasState::Idle;
+}
 
+// Flush all pending Rive draw calls for this frame to the canvas render target,
+// then release the renderer.  Must be called after beginFrame().
+static int canvashandle_endframe(lua_State* L)
+{
+    auto* self = lua_torive<ScriptedCanvas>(L, 1);
+    if (self->m_state != CanvasState::Rendering)
+    {
+        luaL_error(L, "Canvas:endFrame() called without beginFrame()");
+    }
+    canvasEndFrameImpl(L, self);
     return 0;
 }
 
@@ -3311,7 +3493,8 @@ static void canvashandle_direct_width(void* udata, void* result)
 {
     auto* self = (ScriptedCanvas*)udata;
     lua_userdatadirectfield_setnumber(result,
-                                      self->canvas ? self->canvas->width() : 0);
+                                      self->canvas ? self->canvas->width()
+                                                   : self->pendingWidth);
 }
 
 static void canvashandle_direct_height(void* udata, void* result)
@@ -3319,7 +3502,7 @@ static void canvashandle_direct_height(void* udata, void* result)
     auto* self = (ScriptedCanvas*)udata;
     lua_userdatadirectfield_setnumber(result,
                                       self->canvas ? self->canvas->height()
-                                                   : 0);
+                                                   : self->pendingHeight);
 }
 
 static int canvashandle_index(lua_State* L)
@@ -3331,6 +3514,7 @@ static int canvashandle_index(lua_State* L)
         luaL_typeerrorL(L, 2, lua_typename(L, LUA_TSTRING));
     }
     auto* self = lua_torive<ScriptedCanvas>(L, 1);
+    canvas_satisfyPending(L, self);
     switch (atom)
     {
         case (int)LuaAtoms::image:
@@ -3342,10 +3526,14 @@ static int canvashandle_index(lua_State* L)
             lua_pushnil(L);
             return 1;
         case (int)LuaAtoms::width:
-            lua_pushnumber(L, self->canvas ? self->canvas->width() : 0);
+            lua_pushnumber(L,
+                           self->canvas ? self->canvas->width()
+                                        : self->pendingWidth);
             return 1;
         case (int)LuaAtoms::height:
-            lua_pushnumber(L, self->canvas ? self->canvas->height() : 0);
+            lua_pushnumber(L,
+                           self->canvas ? self->canvas->height()
+                                        : self->pendingHeight);
             return 1;
     }
     luaL_error(L, "'%s' is not a valid index of Canvas", key);
@@ -3565,6 +3753,18 @@ int luaopen_rive_gpu(lua_State* L)
                                            gpucanvashandle_direct_height);
     }
 
+    // GPUTarget (no public constructor — created via context:gpuTarget())
+    {
+        luaL_register(L, ScriptedGPUTarget::luaName, empty);
+        lua_register_rive<ScriptedGPUTarget>(L);
+        lua_pushcfunction(L, hosttarget_namecall, nullptr);
+        lua_setfield(L, -2, "__namecall");
+        lua_pushcfunction(L, hosttarget_index, nullptr);
+        lua_setfield(L, -2, "__index");
+        lua_setreadonly(L, -1, true);
+        lua_pop(L, 1);
+    }
+
     // Canvas (no public constructor — created via context:canvas())
     {
         luaL_register(L, ScriptedCanvas::luaName, empty);
@@ -3612,20 +3812,6 @@ int riveImageViewImpl(lua_State* L)
         return 0;
     }
 
-    // Safe cast — returns nullptr if the image isn't GPU-backed.
-    auto* riveImage = lite_rtti_cast<RiveRenderImage*>(self->image.get());
-    if (!riveImage)
-    {
-        luaL_error(L, "Image is not a GPU-backed RiveRenderImage");
-        return 0;
-    }
-    gpu::Texture* sourceGpuTex = riveImage->getTexture();
-    if (!sourceGpuTex)
-    {
-        luaL_error(L, "Image GPU texture not available");
-        return 0;
-    }
-
     // Get ore::Context from scripting context.
     auto* ctx = static_cast<ScriptingContext*>(lua_getthreaddata(L));
     auto* oreCtx = static_cast<ore::Context*>(ctx->oreContext());
@@ -3635,45 +3821,76 @@ int riveImageViewImpl(lua_State* L)
         return 0;
     }
 
-    if (!self->cachedOreView)
+    if (!self->cachedOreView && oreCtx->isRecording())
     {
-        // GL canvas-import boundary: on GL/WebGL, sampling a Rive 2D
-        // RenderCanvas as a WGSL texture requires a Y-flipped companion
-        // because PLS renders the canvas bottom-up while WGSL expects
-        // V=0 at the visual top of the image. The render context's
-        // getCanvasImportMirror returns nullptr on every backend except
-        // GL — on GL it lazily allocates a companion texture, registers
-        // a per-flush blit hook, and returns the companion image. We
-        // cache the companion's RiveRenderImage so the companion stays
-        // alive as long as this ScriptedImage does.
-        //
-        // See dev/ore_canvas_import_invariant.md.
-        gpu::Texture* texToWrap = sourceGpuTex;
-#if defined(ORE_BACKEND_GL)
+        // Image:view() must not touch the driver while recording, so record
+        // by resource id and let the consumer wrap at replay. Ordered like
+        // the immediate branch below: provenance first, because a canvas
+        // image carries no distinguishing rtti — RenderCanvasImage and
+        // DeferredRenderCanvasImage both report RiveRenderImage's tag, so a
+        // type test would misread a decoded asset as a canvas on any backend
+        // whose factory hands back a real RiveRenderImage.
+        if (self->sourceCanvas != nullptr)
         {
-            auto* renderCtx =
-                static_cast<gpu::RenderContext*>(ctx->renderContext());
-            self->cachedMirrorImage =
-                getCanvasImportMirrorGL(renderCtx,
-                                        sourceGpuTex,
+            self->cachedOreView =
+                oreCtx->recordWrapCanvasImage(self->sourceCanvas.get(),
+                                              self->image->width(),
+                                              self->image->height());
+        }
+        else if (auto* deferredImage =
+                     lite_rtti_cast<rive::cmd::DeferredRenderImage*>(
+                         self->image.get()))
+        {
+            self->cachedOreView =
+                oreCtx->recordWrapImageView(deferredImage->id(),
+                                            self->image->width(),
+                                            self->image->height());
+        }
+        else
+        {
+            // Neither a canvas nor something this recorder created: a file
+            // asset decoded through the immediate factory. The registry
+            // carries it to replay.
+            self->cachedOreView =
+                oreCtx->recordWrapForeignImageView(self->image.get(),
+                                                   self->image->width(),
+                                                   self->image->height());
+        }
+        if (!self->cachedOreView)
+        {
+            luaL_error(L, "Image:view() recording failed");
+            return 0;
+        }
+    }
+    else if (!self->cachedOreView)
+    {
+        // A canvas imports through the backend's own sampling wrap.
+        if (self->sourceCanvas != nullptr)
+        {
+            self->cachedOreView =
+                oreCtx->wrapCanvasSampleView(self->sourceCanvas.get());
+        }
+        else
+        {
+            // Immediate mode requires a live GPU backed image.
+            auto* riveImage =
+                lite_rtti_cast<RiveRenderImage*>(self->image.get());
+            if (!riveImage)
+            {
+                luaL_error(L, "Image is not a GPU-backed RiveRenderImage");
+                return 0;
+            }
+            gpu::Texture* sourceGpuTex = riveImage->getTexture();
+            if (!sourceGpuTex)
+            {
+                luaL_error(L, "Image GPU texture not available");
+                return 0;
+            }
+            self->cachedOreView =
+                oreCtx->wrapRiveTexture(sourceGpuTex,
                                         self->image->width(),
                                         self->image->height());
-            if (self->cachedMirrorImage != nullptr)
-            {
-                auto* mirrorRive = lite_rtti_cast<RiveRenderImage*>(
-                    self->cachedMirrorImage.get());
-                if (mirrorRive != nullptr &&
-                    mirrorRive->getTexture() != nullptr)
-                {
-                    texToWrap = mirrorRive->getTexture();
-                }
-            }
         }
-#endif // ORE_BACKEND_GL
-
-        self->cachedOreView = oreCtx->wrapRiveTexture(texToWrap,
-                                                      self->image->width(),
-                                                      self->image->height());
         if (!self->cachedOreView)
         {
             luaL_error(L, "Image:view() not supported on this backend");
@@ -3692,24 +3909,75 @@ int riveImageViewImpl(lua_State* L)
 
 namespace rive
 {
-void rive_lua_closeOrphanRenderPass(lua_State* L)
+ScriptCallGpuScope rive_lua_enterScriptCallGpuScope(lua_State* L)
+{
+    ScriptCallGpuScope scope;
+    auto* context = static_cast<ScriptingContext*>(lua_getthreaddata(L));
+    if (context == nullptr)
+    {
+        return scope;
+    }
+    scope.openCanvasFrameToken = context->nextOpenCanvasFrameToken();
+    if (auto* oreCtx = static_cast<ore::Context*>(context->oreContext()))
+    {
+        scope.openRenderPassToken = oreCtx->nextRenderPassToken();
+    }
+    return scope;
+}
+
+static void closeOrphanRenderPasses(lua_State* L, uint64_t token)
 {
     auto* context = static_cast<ScriptingContext*>(lua_getthreaddata(L));
     if (context == nullptr)
         return;
     auto* oreCtx = static_cast<ore::Context*>(context->oreContext());
-    if (oreCtx == nullptr)
+    if (oreCtx == nullptr || oreCtx->finishOpenRenderPassesFrom(token) == 0)
         return;
-    auto* pass = oreCtx->activeRenderPass();
-    if (pass == nullptr || pass->isFinished())
-        return;
-    pass->finish();
-    oreCtx->setActiveRenderPass(nullptr);
     lua_pushstring(L,
                    "GPU render pass left open at script return. "
                    "Call :finish() on render passes before returning.");
     context->printError(L);
     lua_pop(L, 1);
+}
+
+static void closeOrphanCanvasFrames(lua_State* L, uint64_t token)
+{
+    auto* context = static_cast<ScriptingContext*>(lua_getthreaddata(L));
+    if (context == nullptr)
+    {
+        return;
+    }
+    auto refs = context->takeOpenCanvasFramesFrom(token);
+    if (refs.empty())
+    {
+        return;
+    }
+    for (int ref : refs)
+    {
+        rive_lua_pushRef(L, ref);
+        if (!lua_isnil(L, -1))
+        {
+            auto* canvas = lua_torive<ScriptedCanvas>(L, -1);
+            if (canvas != nullptr && canvas->m_state == CanvasState::Rendering)
+            {
+                // Also releases the refs, including this one.
+                canvasEndFrameImpl(L, canvas);
+            }
+        }
+        lua_pop(L, 1);
+    }
+    lua_pushstring(L,
+                   "Canvas frame left open at script return. "
+                   "Call canvas:endFrame() before returning.");
+    context->printError(L);
+    lua_pop(L, 1);
+}
+
+void rive_lua_exitScriptCallGpuScope(lua_State* L,
+                                     const ScriptCallGpuScope& scope)
+{
+    closeOrphanRenderPasses(L, scope.openRenderPassToken);
+    closeOrphanCanvasFrames(L, scope.openCanvasFrameToken);
 }
 } // namespace rive
 

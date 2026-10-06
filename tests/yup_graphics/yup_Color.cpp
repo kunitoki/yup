@@ -1190,3 +1190,135 @@ TEST (ColorTests, MixWith_RgbUsesSrcOver)
     const auto expected = base.blendedWith (other.withMultipliedAlpha (amount), BlendMode::SrcOver);
     EXPECT_EQ (rgbMix.getARGB(), expected.getARGB());
 }
+
+TEST (ColorTests, Additive_Blend_Adds_And_Clamps)
+{
+    EXPECT_EQ (Color (0xff404040).blendedWith (Color (0xff302010), BlendMode::Additive), Color (0xff706050));
+    EXPECT_EQ (Color (0xffc0c0c0).blendedWith (Color (0xff808080), BlendMode::Additive), Color (0xffffffff));
+}
+
+TEST (ColorTests, Additive_Blend_Adds_Premultiplied_Like_The_Renderer)
+{
+    // Half transparent white adds half of its color: 0.5 + 0.5 grey saturates to white.
+    EXPECT_EQ (Color (0xff808080).blendedWith (Color (0x80ffffff), BlendMode::Additive), Color (0xffffffff));
+
+    // Two half transparent colors add their alphas too.
+    const auto result = Color (0x80000000).blendedWith (Color (0x80000000), BlendMode::Additive);
+    EXPECT_EQ (result.getAlpha(), 0xff);
+}
+
+TEST (ColorTests, HSL_String_Parsing_NegativeHueWrapsAround)
+{
+    // A negative hue wraps around the color wheel: -0.25 is the same as 0.75
+    const auto negative = Color::fromString ("hsl(-0.25, 1, 0.5)");
+    const auto wrapped = Color::fromHSL (0.75f, 1.0f, 0.5f);
+
+    EXPECT_NEAR (negative.getRed(), wrapped.getRed(), 1);
+    EXPECT_EQ (negative.getGreen(), wrapped.getGreen());
+    EXPECT_EQ (negative.getBlue(), wrapped.getBlue());
+    EXPECT_EQ (negative.getGreen(), 0);
+    EXPECT_EQ (negative.getBlue(), 255);
+}
+
+TEST (ColorTests, HSLuv_ZeroLuminanceIsBlackAndFullLuminanceIsWhite)
+{
+    // Saturation has no chroma to scale at the luminance extremes
+    EXPECT_EQ (Color::fromHSLuv (0.3f, 1.0f, 0.0f), Color (0xff000000));
+
+    const auto white = Color::fromHSLuv (0.3f, 1.0f, 1.0f);
+    EXPECT_NEAR (white.getRed(), 255, 1);
+    EXPECT_NEAR (white.getGreen(), 255, 1);
+    EXPECT_NEAR (white.getBlue(), 255, 1);
+    EXPECT_EQ (white.getAlpha(), 255);
+}
+
+TEST (ColorTests, HSLuv_VeryDarkLuminanceUsesTheLinearSegment)
+{
+    // Luminance up to 8 (of 100) maps linearly to relative luminance
+    const auto dark = Color::fromHSLuv (0.0f, 0.0f, 0.05f);
+
+    EXPECT_NEAR (dark.getRed(), 17, 1);
+    EXPECT_EQ (dark.getRed(), dark.getGreen());
+    EXPECT_EQ (dark.getGreen(), dark.getBlue());
+
+    const auto [h, s, l] = dark.toHSLuv();
+    EXPECT_NEAR (l, 0.05f, 0.005f);
+}
+
+TEST (ColorTests, BlendWith_HueOntoGrayKeepsTheGray)
+{
+    const Color gray (0xff666666);
+
+    // A gray backdrop has no saturation for the source hue to show through
+    EXPECT_EQ (gray.blendedWith (Color (0xffff0000), BlendMode::Hue), gray);
+
+    // A gray source carries no saturation: it desaturates the backdrop, keeping its lightness
+    const auto backdrop = Color::fromHSL (0.0f, 0.8f, 0.5f);
+    const auto desaturated = backdrop.blendedWith (gray, BlendMode::Saturation);
+
+    EXPECT_EQ (desaturated.getRed(), desaturated.getGreen());
+    EXPECT_EQ (desaturated.getGreen(), desaturated.getBlue());
+    EXPECT_NEAR (desaturated.getRedFloat(), std::get<2> (backdrop.toHSL()), 1.0f / 255.0f);
+}
+
+TEST (ColorTests, BlendWith_HueTakesAGreenDominantSourceHue)
+{
+    const auto backdrop = Color::fromHSL (0.0f, 0.8f, 0.5f);
+    const auto source = Color::fromHSL (0.25f, 0.6f, 0.5f);
+
+    const auto result = backdrop.blendedWith (source, BlendMode::Hue);
+
+    const auto [h, s, l] = result.toHSL();
+    EXPECT_NEAR (h, std::get<0> (source.toHSL()), 0.01f);
+    EXPECT_NEAR (s, std::get<1> (backdrop.toHSL()), 0.02f);
+    EXPECT_NEAR (l, std::get<2> (backdrop.toHSL()), 0.01f);
+
+    // Hue 0.25 at the backdrop saturation and lightness is about (0.5, 0.9, 0.1)
+    EXPECT_NEAR (result.getRed(), 127, 2);
+    EXPECT_NEAR (result.getGreen(), 229, 2);
+    EXPECT_NEAR (result.getBlue(), 25, 2);
+}
+
+TEST (ColorTests, BlendWith_ChannelModesWithDarkSource)
+{
+    // A source at or below 0.5 takes the other branch of the HardLight and SoftLight curves
+    const Color backdrop (0xff999999);
+    const Color source (0xff666666);
+
+    const BlendMode modes[] = {
+        BlendMode::SrcOver,
+        BlendMode::Screen,
+        BlendMode::Overlay,
+        BlendMode::Darken,
+        BlendMode::Lighten,
+        BlendMode::ColorDodge,
+        BlendMode::ColorBurn,
+        BlendMode::HardLight,
+        BlendMode::SoftLight,
+        BlendMode::Difference,
+        BlendMode::Exclusion,
+        BlendMode::Multiply
+    };
+
+    for (const auto mode : modes)
+    {
+        const auto blended = backdrop.blendedWith (source, mode);
+        const double expected = blendChannelExpected (mode, backdrop.getRedFloat(), source.getRedFloat());
+        EXPECT_NEAR (blended.getRedFloat(), expected, 1.0f / 255.0f);
+        EXPECT_NEAR (blended.getGreenFloat(), expected, 1.0f / 255.0f);
+        EXPECT_NEAR (blended.getBlueFloat(), expected, 1.0f / 255.0f);
+    }
+}
+
+TEST (ColorTests, MixWith_RgbEndpointsReturnEitherColor)
+{
+    const Color base (128, 40, 80, 120);
+    const Color other (200, 200, 20, 40);
+
+    EXPECT_EQ (base.mixedWith (other, 0.0f, ColorSpace::RGB), base);
+    EXPECT_EQ (base.mixedWith (other, -0.5f, ColorSpace::RGB), base);
+
+    // The other color replaces this one, alpha included, rather than being composited over it
+    EXPECT_EQ (base.mixedWith (other, 1.0f, ColorSpace::RGB), other);
+    EXPECT_EQ (base.mixedWith (other, 2.0f, ColorSpace::RGB), other);
+}

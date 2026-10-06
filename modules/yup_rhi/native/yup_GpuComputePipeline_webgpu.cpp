@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
 
 namespace yup
 {
@@ -59,12 +59,7 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineWebGPU (GpuDevi
     const std::string wgslSource (reinterpret_cast<const char*> (source.code.data()), source.code.size());
     const char* entryPointName = source.entryPoint.isNotEmpty() ? source.entryPoint.toRawUTF8() : "main";
 
-    wgpu::Device device;
-#if YUP_EMSCRIPTEN && RIVE_WEBGPU
-    device = static_cast<GpuDeviceWebGPU&> (ctx).getWgpuDevice();
-#elif YUP_RIVE_USE_DAWN
-    device = static_cast<GpuDeviceDawn&> (ctx).getDevice();
-#endif
+    wgpu::Device device = static_cast<GpuDeviceWebGPU&> (ctx).getWgpuDevice();
 
     wgpu::ShaderSourceWGSL wgslDesc {};
     wgslDesc.code = wgslSource.c_str();
@@ -91,4 +86,4 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineWebGPU (GpuDevi
 
 } // namespace yup
 
-#endif // WebGPU / Dawn
+#endif // YUP_EMSCRIPTEN && RIVE_WEBGPU

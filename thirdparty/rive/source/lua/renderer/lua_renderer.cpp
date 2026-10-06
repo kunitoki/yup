@@ -63,6 +63,18 @@ void ScriptedRenderer::clipPath(lua_State* L, ScriptedPathData* path)
     m_renderer->clipPath(path->renderPath(L));
 }
 
+void ScriptedRenderer::modulateOpacity(lua_State* L, float opacity)
+{
+    validate(L);
+    m_renderer->modulateOpacity(opacity);
+}
+
+void ScriptedRenderer::modulateColor(lua_State* L, ColorInt color, bool replace)
+{
+    validate(L);
+    m_renderer->modulateColor(color, replace);
+}
+
 static int renderer_drawImage(lua_State* L)
 {
     auto scriptedRenderer = lua_torive<ScriptedRenderer>(L, 1);
@@ -109,6 +121,41 @@ static int renderer_drawImageMesh(lua_State* L)
                             (uint32_t)scriptedTriangleBuffer->values.size(),
                             blendMode,
                             opacity);
+
+    return 0;
+}
+
+static int renderer_drawImageMeshInstanced(lua_State* L)
+{
+    auto scriptedRenderer = lua_torive<ScriptedRenderer>(L, 1);
+    auto scriptedImage = lua_torive<ScriptedImage>(L, 2);
+    auto scriptedSampler = lua_torive<ScriptedImageSampler>(L, 3);
+    auto scriptedVertexBuffer = lua_torive<ScriptedVertexBuffer>(L, 4);
+    auto scriptedUVBuffer = lua_torive<ScriptedVertexBuffer>(L, 5);
+    auto scriptedTriangleBuffer = lua_torive<ScriptedTriangleBuffer>(L, 6);
+    auto scriptedInstances = lua_torive<ScriptedImageMeshInstances>(L, 7);
+
+    // Ensure the buffers are created before drawing
+    ScriptingContext* context =
+        static_cast<ScriptingContext*>(lua_getthreaddata(L));
+    Factory* factory = context->factory();
+    scriptedVertexBuffer->update(factory);
+    scriptedUVBuffer->update(factory);
+    scriptedTriangleBuffer->update(factory);
+
+    auto renderer = scriptedRenderer->validate(L);
+    // Everything set() and resize() staged since the last draw goes over in
+    // one commit.
+    scriptedInstances->commit();
+    renderer->drawImageMeshInstanced(
+        scriptedImage->image.get(),
+        scriptedSampler->sampler,
+        scriptedVertexBuffer->vertexBuffer,
+        scriptedUVBuffer->vertexBuffer,
+        scriptedTriangleBuffer->indexBuffer,
+        (uint32_t)scriptedVertexBuffer->values.size(),
+        (uint32_t)scriptedTriangleBuffer->values.size(),
+        scriptedInstances->instances);
 
     return 0;
 }
@@ -167,6 +214,22 @@ static int renderer_transform(lua_State* L)
     return 0;
 }
 
+static int renderer_modulateOpacity(lua_State* L)
+{
+    auto scriptedRenderer = lua_torive<ScriptedRenderer>(L, 1);
+    auto opacity = float(luaL_checknumber(L, 2));
+    scriptedRenderer->modulateOpacity(L, opacity);
+    return 0;
+}
+
+static int renderer_modulateColor(lua_State* L, bool replace)
+{
+    auto scriptedRenderer = lua_torive<ScriptedRenderer>(L, 1);
+    auto color = (ColorInt)luaL_checkunsigned(L, 2);
+    scriptedRenderer->modulateColor(L, color, replace);
+    return 0;
+}
+
 static int renderer_namecall(lua_State* L)
 {
     int atom;
@@ -185,10 +248,18 @@ static int renderer_namecall(lua_State* L)
                 return renderer_clip_path(L);
             case (int)LuaAtoms::transform:
                 return renderer_transform(L);
+            case (int)LuaAtoms::modulateOpacity:
+                return renderer_modulateOpacity(L);
+            case (int)LuaAtoms::modulateColor:
+                return renderer_modulateColor(L, false);
+            case (int)LuaAtoms::setColorModulation:
+                return renderer_modulateColor(L, true);
             case (int)LuaAtoms::drawImage:
                 return renderer_drawImage(L);
             case (int)LuaAtoms::drawImageMesh:
                 return renderer_drawImageMesh(L);
+            case (int)LuaAtoms::drawImageMeshInstanced:
+                return renderer_drawImageMeshInstanced(L);
         }
     }
 

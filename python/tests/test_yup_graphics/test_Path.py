@@ -188,3 +188,21 @@ def test_path_iteration():
 
     # Test third segment
     assert segments[2].verb == yup.Path.Verb.Close
+
+#==================================================================================================
+
+def test_path_bool_and_repr():
+    p = yup.Path()
+    assert not bool(p)
+
+    p.moveTo(0.0, 0.0)
+    p.lineTo(10.0, 10.0)
+    assert bool(p)
+    assert repr(p).startswith("yup.Path('")
+
+    for segment in p:
+        assert repr(segment).startswith("Path.Segment(")
+
+def test_path_segment_repr():
+    segment = yup.Path.Segment(yup.Path.Verb.LineTo, yup.Point[float](1.0, 2.0))
+    assert repr(segment).startswith("Path.Segment(")

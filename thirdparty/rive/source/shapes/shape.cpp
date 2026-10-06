@@ -3,7 +3,10 @@
 #include "rive/shapes/deformer.hpp"
 #include "rive/shapes/path.hpp"
 #include "rive/shapes/points_path.hpp"
+#include "rive/shapes/parametric_path.hpp"
 #include "rive/shapes/shape.hpp"
+#include "rive/shapes/paint/paint_outset.hpp"
+#include "rive/layout/layout_participant.hpp"
 #include "rive/shapes/clipping_shape.hpp"
 #include "rive/shapes/paint/blend_mode.hpp"
 #include "rive/shapes/paint/shape_paint.hpp"
@@ -14,6 +17,7 @@
 #include "rive/math/raw_path.hpp"
 #include "rive/profiler/profiler_macros.h"
 #include <algorithm>
+#include <limits>
 
 using namespace rive;
 
@@ -24,6 +28,12 @@ void Shape::addPath(Path* path)
     // Make sure the path is not already in the shape.
     assert(std::find(m_Paths.begin(), m_Paths.end(), path) == m_Paths.end());
     m_Paths.push_back(path);
+    if (path->is<PointsPath>() && path->as<PointsPath>()->skin() != nullptr)
+    {
+        // Bones deform a skinned path whether or not the shape is visible.
+        addFlags(PathFlags::neverDeferUpdate);
+    }
+    invalidateIntrinsicBounds();
 }
 
 void Shape::addFlags(PathFlags flags) { m_pathFlags |= flags; }
@@ -34,21 +44,22 @@ bool Shape::isFlagged(PathFlags flags) const
 
 bool Shape::canDeferPathUpdate()
 {
-    auto canDefer =
-        renderOpacity() == 0 &&
-        !isFlagged(PathFlags::clipping | PathFlags::neverDeferUpdate);
-    if (canDefer)
+    if (renderOpacity() != 0 ||
+        isFlagged(PathFlags::clipping | PathFlags::neverDeferUpdate))
     {
-        // If we have a dependent Skin, don't defer the update
-        for (auto d : dependents())
+        return false;
+    }
+#ifdef WITH_RIVE_EDITOR
+    // Skins come and go under the editor, after addPath set its flag.
+    for (auto path : m_Paths)
+    {
+        if (path->is<PointsPath>() && path->as<PointsPath>()->skin() != nullptr)
         {
-            if (d->is<PointsPath>() && d->as<PointsPath>()->skin() != nullptr)
-            {
-                return false;
-            }
+            return false;
         }
     }
-    return canDefer;
+#endif
+    return true;
 }
 
 void Shape::update(ComponentDirt value)
@@ -68,6 +79,8 @@ bool Shape::collapse(bool value)
         return false;
     }
     m_PathComposer.collapse(value);
+    // Collapsed paths are skipped when measuring, so the bounds change.
+    invalidateIntrinsicBounds();
     return true;
 }
 
@@ -100,6 +113,12 @@ void Shape::pathChanged()
 {
     m_PathComposer.addDirt(ComponentDirt::Path, true);
     m_WorldLength = -1;
+    // Drop the local bounds here rather than only in markBoundsDirty(): this is
+    // raised for every input they have (Path geometry and Path transform), and
+    // it still fires when the composer defers its update (a transparent,
+    // non-clipping shape), where markBoundsDirty() never runs.
+    m_LocalBoundsClean = false;
+    invalidateIntrinsicBounds();
     for (auto constraint : constraints())
     {
         constraint->addDirt(ComponentDirt::Path);
@@ -137,7 +156,8 @@ void Shape::addToRawPath(RawPath& path, const Mat2D* transform)
 void Shape::draw(Renderer* renderer)
 {
     RIVE_PROF_SCOPE_L(2)
-    auto needsSaveOperation = m_needsSaveOperation || m_ShapePaints.size() > 1;
+    auto needsSaveOperation =
+        Drawable::needsSaveOperation() || m_ShapePaints.size() > 1;
     for (auto shapePaint : m_ShapePaints)
     {
         if (!shapePaint->isVisible())
@@ -263,18 +283,57 @@ void Shape::buildDependencies()
 {
     // Make sure to propagate the call to PathComposer as it's no longer part of
     // Core and owned only by the Shape.
+#ifdef WITH_RIVE_EDITOR
+    // PathComposer is constructed as a Shape member; it's not a Core in the
+    // arena and not reachable via parentId. Component::onAddedDirty's
+    // editor branch (parentId chain walk) leaves its m_Artboard null and
+    // m_DependencyHelper.m_dependecyRoot uninitialized. Any subsequent
+    // `addDirt` from `m_PathComposer` (e.g. Shape::pathChanged →
+    // m_PathComposer.addDirt(Path, true)) calls onComponentDirty on a
+    // garbage pointer and crashes. The runtime path side-steps this
+    // because Component::onAddedDirty's runtime branch sets
+    // `m_Artboard = static_cast<Artboard*>(context)` unconditionally
+    // before any subsequent addDirt path runs. Mirror that here:
+    // forward Shape's wired artboard to its owned PathComposer.
+    if (artboard() != nullptr)
+    {
+        m_PathComposer.setArtboardForEditor(artboard());
+    }
+    // PathComposer isn't an arena Core (lives as a value member of
+    // Shape), so editor_native's Pass B-prep-dependents `forEachLive`
+    // sweep doesn't reach it — its `m_Dependents` accumulates entries
+    // across batches and never gets cleaned. Components that depend
+    // on PathComposer (e.g. ClippingShape, via
+    // `shape->pathComposer()->addDependent(this)` in their
+    // buildDependencies) leave dangling pointers after they're freed,
+    // and the next dirt cascade through pathComposer crashes on the
+    // stale entries. Mirror Pass B-prep's effect here so PathComposer
+    // also starts each batch with a clean dependents list — Pass B's
+    // buildDependencies loop re-adds the live edges (this calls
+    // `PathComposer::buildDependencies` below, and per-type editor
+    // overrides like `ClippingShape`, `Feather`, `FollowPathConstraint`,
+    // `TextFollowPathModifier` re-register themselves in their own
+    // buildDependencies calls).
+    m_PathComposer.editorClearDependents();
+#endif
     m_PathComposer.buildDependencies();
 
     Super::buildDependencies();
 
-    // Set the blend mode on all the shape paints. If we ever animate this
-    // property, we'll need to update it in the update cycle/mark dirty when the
-    // blend mode changes.
+    syncShapePaintBlendModes();
+}
+
+void Shape::syncShapePaintBlendModes()
+{
     for (auto paint : m_ShapePaints)
     {
-        paint->blendMode(blendMode());
+        paint->blendMode(blendMode(), additiveAmount());
     }
 }
+
+// blendModeValue itself never animates, but additiveAmount does (and data
+// binds), so the buildDependencies sync above is not enough on its own.
+void Shape::additiveAmountChanged() { syncShapePaintBlendModes(); }
 
 StatusCode Shape::onAddedDirty(CoreContext* context)
 {
@@ -283,8 +342,32 @@ StatusCode Shape::onAddedDirty(CoreContext* context)
     {
         return code;
     }
+#ifdef WITH_RIVE_EDITOR
+    // PathComposer is a Shape value-member, not in the arena, with no
+    // CoopId. `Component::onAddedDirty`'s editor branch tries to
+    // resolve its (empty) `parentId()` and returns MissingObject,
+    // which propagates here and gets the entire Shape culled in
+    // Pass 4-cull, leaving the artboard with zero drawables.
+    //
+    // Mirrors Dart `Shape` (rive_core/lib/shapes/shape.dart:374-380),
+    // which only propagates `buildDependencies()` to pathComposer —
+    // never `onAddedDirty`. The runtime branch's optimization
+    // (`m_Artboard = static_cast<Artboard*>(context)` via Component's
+    // runtime branch) makes onAddedDirty work in runtime build only.
+    // In editor mode, PathComposer's artboard wiring happens via the
+    // `setArtboardForEditor` workaround in `Shape::buildDependencies`.
+    //
+    // TODO(value-member helpers): a more general fix would be to give
+    // value-member helpers like PathComposer an arena registration so
+    // `Component::onAddedDirty`'s editor branch can detect "no arena,
+    // run runtime branch instead." Would auto-handle future helpers
+    // without per-callsite ifdefs. For now, mirror Dart with a
+    // targeted skip.
+    return StatusCode::Ok;
+#else
     // This ensures context propagates to path composer too.
     return m_PathComposer.onAddedDirty(context);
+#endif
 }
 
 StatusCode Shape::onAddedClean(CoreContext* context)
@@ -327,68 +410,62 @@ bool Shape::willDraw() { return Super::willDraw() && renderOpacity() != 0.0f; }
 
 // Do constraints need to be marked as dirty too? From tests it doesn't seem
 // they do.
-void Shape::pathCollapseChanged() { m_PathComposer.pathCollapseChanged(); }
-
-class ComputeBoundsCommandPath : public CommandPath
+void Shape::pathCollapseChanged()
 {
-public:
-    ComputeBoundsCommandPath() {}
+    // Collapsed paths are skipped when measuring, so which paths are in the
+    // bounds just changed. Drop the cache here for the same reason
+    // pathChanged() does: the composer's update, and with it markBoundsDirty(),
+    // is deferred for a transparent, non-clipping shape.
+    m_LocalBoundsClean = false;
+    m_PathComposer.pathCollapseChanged();
+}
 
-    AABB bounds(const Mat2D& xform)
+BoundsFidelity Shape::paintedWorldBounds(AABB* out)
+{
+    AABB bounds = worldBounds();
+    if (bounds.isEmptyOrNaN())
     {
-        m_rawPath.transformInPlace(xform);
-        return m_rawPath.bounds();
+        // Every path collapsed, so worldBounds() is still the forExpansion()
+        // sentinel -- (+FLT_MAX, +FLT_MAX, -FLT_MAX, -FLT_MAX). Hand back an
+        // empty box instead: nothing is painted, and letting the sentinel out
+        // would blow any union it lands in out to the float range.
+        *out = AABB();
+        return BoundsFidelity::exact;
     }
 
-    void rewind() override { m_rawPath.rewind(); }
-    void fillRule(FillRule value) override {}
-    void addPath(CommandPath* path, const Mat2D& transform) override
+    // worldBounds() is geometry. A stroke straddles it, a miter join overshoots
+    // the corners, a feather blurs outward past all of it -- so pad by the
+    // furthest-reaching paint.
+    const PaintReach reach = shapePaintsWorldReach(this, worldTransform());
+    if (reach.worldOutset > 0.0f)
     {
-        assert(false);
+        bounds = bounds.outset(reach.worldOutset, reach.worldOutset);
     }
-
-    void moveTo(float x, float y) override { m_rawPath.moveTo(x, y); }
-    void lineTo(float x, float y) override { m_rawPath.lineTo(x, y); }
-    void cubicTo(float ox, float oy, float ix, float iy, float x, float y)
-        override
-    {
-        m_rawPath.cubicTo(ox, oy, ix, iy, x, y);
-    }
-    void close() override { m_rawPath.close(); }
-
-    RenderPath* renderPath() override
-    {
-        assert(false);
-        return nullptr;
-    }
-
-    const RenderPath* renderPath() const override
-    {
-        assert(false);
-        return nullptr;
-    }
-
-private:
-    RawPath m_rawPath;
-};
+    *out = bounds;
+    return reach.trustworthy ? BoundsFidelity::exact
+                             : BoundsFidelity::approximate;
+}
 
 AABB Shape::computeWorldBounds(const Mat2D* xform) const
 {
     bool first = true;
     AABB computedBounds = AABB::forExpansion();
 
-    ComputeBoundsCommandPath boundsCalculator;
     for (auto path : m_Paths)
     {
         if (path->isCollapsed())
         {
             continue;
         }
-        path->rawPath().addTo(&boundsCalculator);
-
-        AABB aabb = boundsCalculator.bounds(
-            xform == nullptr ? path->pathTransform()
-                             : path->pathTransform() * *xform);
+        // The control point hull, transformed: Mat2D::mapBoundingBox fuses the
+        // transform and the min/max into one SIMD pass over the points, so we
+        // never copy the path just to measure it. (A Path's raw path only ever
+        // holds moves, lines and cubics, so there are no quadratic control
+        // points needing conversion first.)
+        const Mat2D transform = xform == nullptr
+                                    ? path->pathTransform()
+                                    : *xform * path->pathTransform();
+        AABB aabb = transform.mapBoundingBox(path->rawPath().points());
 
         if (first)
         {
@@ -399,7 +476,6 @@ AABB Shape::computeWorldBounds(const Mat2D* xform) const
         {
             computedBounds.expand(aabb);
         }
-        boundsCalculator.rewind();
     }
 
     return computedBounds;
@@ -412,11 +488,130 @@ AABB Shape::computeLocalBounds() const
     return computeWorldBounds(&inverseWorld);
 }
 
+AABB Shape::computeIntrinsicBounds() const
+{
+    // Only a participant caches (and only a participant calls this); without
+    // one we just compute, so a plain Shape stores nothing.
+    auto* participant = layoutParticipant();
+    if (participant != nullptr && participant->hostBoundsValid())
+    {
+        return participant->hostBounds();
+    }
+    // Like computeWorldBounds but in this shape's local space, using each
+    // path's local transform directly instead of round-tripping through our
+    // (non-invertible when the layout fold is 0) world transform.
+    bool first = true;
+    AABB computedBounds = AABB::forExpansion();
+
+    RawPath pendingPath;
+    bool usedPendingBuild = false;
+    for (auto path : m_Paths)
+    {
+        if (path->isCollapsed())
+        {
+            continue;
+        }
+        AABB aabb;
+        AABB propertyBounds;
+        if (!path->needsPathBuild())
+        {
+            aabb = path->rawPath().preciseBounds(path->transform());
+        }
+        else if (path->tryPropertyBounds(propertyBounds))
+        {
+            // Layout (and a participant's fit scale) runs before Path::update
+            // in the update pass. A parametric path only positions its vertices
+            // there, so building it here would measure an unpositioned path —
+            // take its declared box instead, which is what it will occupy.
+            usedPendingBuild = true;
+            aabb = path->transform().mapBoundingBox(propertyBounds);
+        }
+        else
+        {
+            // Vertex-driven: the vertices are authored, so building a throwaway
+            // copy measures real geometry. Without this a fill participant
+            // computes a scale of 1 and renders at its hugged size on frame 1.
+            usedPendingBuild = true;
+            pendingPath.rewind();
+            path->buildPath(pendingPath);
+            aabb = pendingPath.preciseBounds(path->transform());
+        }
+        // An empty (vertex-less) path leaves preciseBounds at its expansion
+        // sentinel, which is inverted (+/-FLT_MAX). Folding that in would
+        // poison the bounds, and a participant's anchor derives from them —
+        // pushing its world translation to -FLT_MAX. Written as !(>= 0) so a
+        // NaN is rejected too; a real but degenerate path (zero width or
+        // height) still counts.
+        if (!(aabb.width() >= 0.0f && aabb.height() >= 0.0f))
+        {
+            continue;
+        }
+        if (first)
+        {
+            first = false;
+            computedBounds = aabb;
+        }
+        else
+        {
+            computedBounds.expand(aabb);
+        }
+    }
+
+    AABB bounds = first ? AABB() : computedBounds;
+    if (participant != nullptr)
+    {
+        // Anything measured before its build is provisional: a declared box can
+        // be wider than the precise geometry (a polygon is inscribed in it).
+        // Return it, but don't cache it, so the precise bounds win once the
+        // paths build — nothing invalidates on the build itself, only when dirt
+        // is added.
+        participant->hostBounds(bounds, /*cache*/ !usedPendingBuild);
+    }
+    return bounds;
+}
+
+void Shape::invalidateIntrinsicBounds()
+{
+    if (auto* participant = layoutParticipant())
+    {
+        participant->invalidateHostBounds();
+    }
+}
+
+static ParametricPath* firstParametricPath(std::vector<Path*>& paths)
+{
+    for (auto path : paths)
+    {
+        if (path->is<ParametricPath>())
+        {
+            return path->as<ParametricPath>();
+        }
+    }
+    return nullptr;
+}
+
 Vec2D Shape::measureLayout(float width,
                            LayoutMeasureMode widthMode,
                            float height,
                            LayoutMeasureMode heightMode)
 {
+#ifdef WITH_RIVE_LAYOUT
+    // A participant sizes to its combined bounds (all paths); controlSize then
+    // scales those bounds to fill the slot. Clamps to the available space like
+    // the parametric path below, so hug means the same thing in both models.
+    if (isParticipatingInLayout())
+    {
+        AABB bounds = computeIntrinsicBounds();
+        return Vec2D(std::min(widthMode == LayoutMeasureMode::undefined
+                                  ? std::numeric_limits<float>::max()
+                                  : width,
+                              bounds.width()),
+                     std::min(heightMode == LayoutMeasureMode::undefined
+                                  ? std::numeric_limits<float>::max()
+                                  : height,
+                              bounds.height()));
+    }
+#endif
     Vec2D size = Vec2D();
     for (auto path : m_Paths)
     {
@@ -426,6 +621,125 @@ Vec2D Shape::measureLayout(float width,
             Vec2D(std::max(size.x, measured.x), std::max(size.y, measured.y));
     }
     return size;
+}
+
+void Shape::controlSize(Vec2D size,
+                        LayoutScaleType widthScaleType,
+                        LayoutScaleType heightScaleType,
+                        LayoutDirection direction)
+{
+#ifdef WITH_RIVE_LAYOUT
+    // A participant scales its combined bounds to fill the slot.
+    if (isParticipatingInLayout())
+    {
+        updateLayoutScale(size);
+        return;
+    }
+#endif
+    // Content: a parametric shape's size lives on its ParametricPath child.
+    if (auto* path = firstParametricPath(m_Paths))
+    {
+        path->controlSize(size, widthScaleType, heightScaleType, direction);
+    }
+}
+
+void Shape::updateLayoutScale(Vec2D size)
+{
+    // Only reached from the participant branch of controlSize.
+    auto* participant = layoutParticipant();
+    if (participant == nullptr)
+    {
+        return;
+    }
+    AABB bounds = computeIntrinsicBounds();
+    float w = bounds.width();
+    float h = bounds.height();
+    // intrinsicBounds is from local geometry (not the world round-trip) so it
+    // stays valid even at scale 0.
+    float newScaleX = w > 0.0f ? size.x / w : 1.0f;
+    float newScaleY = h > 0.0f ? size.y / h : 1.0f;
+    if (newScaleX != participant->hostScaleX() ||
+        newScaleY != participant->hostScaleY())
+    {
+        participant->hostScale(newScaleX, newScaleY);
+        markWorldTransformDirty();
+    }
+}
+
+void Shape::addChild(Component* component)
+{
+    Super::addChild(component);
+    if (component->is<LayoutParticipant>())
+    {
+        m_hasLayoutParticipant = true;
+    }
+}
+
+// The whole shape scales to fit, so place the scaled combined-bounds top-left
+// at the slot (the origin is irrelevant once we scale).
+LayoutParticipant* Shape::layoutParticipant() const
+{
+#ifndef WITH_RIVE_EDITOR
+    // Children are fixed at runtime and few shapes have one to look for.
+    if (!m_hasLayoutParticipant)
+    {
+        return nullptr;
+    }
+#endif
+    for (auto* child : children())
+    {
+        if (child->is<LayoutParticipant>())
+        {
+            return child->as<LayoutParticipant>();
+        }
+    }
+    return nullptr;
+}
+
+bool Shape::isParticipatingInLayout() const
+{
+    return layoutParticipant() != nullptr;
+}
+
+Vec2D Shape::layoutBaseTranslation(LayoutParticipant* participant) const
+{
+    assert(participant != nullptr);
+    AABB intrinsic = computeIntrinsicBounds();
+    return Vec2D(participant->resolvedLeft() -
+                     intrinsic.left() * participant->hostScaleX(),
+                 participant->resolvedTop() -
+                     intrinsic.top() * participant->hostScaleY());
+}
+
+void Shape::composeWorldTransform()
+{
+#ifdef WITH_RIVE_LAYOUT
+    auto* participant = layoutParticipant();
+    if (participant != nullptr && m_ParentTransformComponent != nullptr)
+    {
+        // Scale innermost so it fits the geometry to the resolved box, with
+        // our own transform composing on top.
+        float scaleX = participant->hostScaleX();
+        float scaleY = participant->hostScaleY();
+        Mat2D base = Mat2D::fromTranslation(layoutBaseTranslation(participant));
+        m_WorldTransform = m_ParentTransformComponent->worldTransform() * base *
+                           m_Transform * Mat2D::fromScale(scaleX, scaleY);
+        return;
+    }
+#endif
+    Super::composeWorldTransform();
+}
+
+void Shape::updateConstraints()
+{
+#ifdef WITH_RIVE_LAYOUT
+    auto* participant = layoutParticipant();
+    if (participant != nullptr)
+    {
+        participant->applyLayoutConstraints();
+    }
+#endif
+    Super::updateConstraints();
 }
 
 ShapePaintPath* Shape::worldPath() { return m_PathComposer.worldPath(); }

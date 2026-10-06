@@ -30,7 +30,7 @@ std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplD3D11 (GpuDevice&);
 #endif
-#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplWebGPU (GpuDevice&);
 #endif
 #if YUP_RHI_USE_GL_COMPUTE
@@ -99,10 +99,6 @@ GpuComputePass GpuComputePass::begin (GpuDevice::Ptr ctx)
 #endif
 
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
-        case GpuPlatform::WebGPU:
-            pass.impl = yup_createComputePassImplWebGPU (*ctx);
-            break;
-#elif YUP_RIVE_USE_DAWN
         case GpuPlatform::WebGPU:
             pass.impl = yup_createComputePassImplWebGPU (*ctx);
             break;

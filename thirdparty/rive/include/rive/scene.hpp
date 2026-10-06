@@ -7,6 +7,8 @@
 #include "rive/animation/keyed_callback_reporter.hpp"
 #include "rive/core/field_types/core_callback_type.hpp"
 #include "rive/hit_result.hpp"
+#include "rive/pointer_button.hpp"
+#include "rive/scroll_event.hpp"
 #include "rive/refcnt.hpp"
 #include <string>
 
@@ -52,12 +54,24 @@ public:
     virtual void bindViewModelInstance(
         rcp<ViewModelInstance> viewModelInstance);
 
-    virtual HitResult pointerDown(Vec2D, int pointerId = 0);
+    virtual HitResult pointerDown(
+        Vec2D,
+        int pointerId = 0,
+        PointerButton button = PointerButton::primary);
     virtual HitResult pointerMove(Vec2D position,
                                   float timeStamp = 0,
                                   int pointerId = 0);
-    virtual HitResult pointerUp(Vec2D, int pointerId = 0);
+    virtual HitResult pointerUp(Vec2D,
+                                int pointerId = 0,
+                                PointerButton button = PointerButton::primary);
     virtual HitResult pointerExit(Vec2D, int pointerId = 0);
+    /// Indirect scroll input -- a wheel, or a trackpad gesture the platform
+    /// already classified as a scroll. Direct touch scrolling stays on the
+    /// pointer path.
+    virtual HitResult pointerScroll(Vec2D position,
+                                    const ScrollEvent& event,
+                                    float timeStamp = 0,
+                                    int pointerId = 0);
 
     virtual size_t inputCount() const;
     virtual SMIInput* input(size_t index) const;

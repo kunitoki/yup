@@ -110,7 +110,7 @@ struct GpuBuffer::Impl
     ComPtr<ID3D11Buffer> d3dReadbackStaging;
 #endif
 
-#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
     struct ReadbackSlot
     {
         wgpu::Buffer staging;
@@ -183,7 +183,7 @@ bool GpuBuffer::isValid() const noexcept
         if (i->d3dStorageBuffer != nullptr)
             return true;
 #endif
-#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
         if (i->webgpuStorageBuffer != nullptr)
             return true;
 #endif

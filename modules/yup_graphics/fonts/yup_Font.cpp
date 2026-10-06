@@ -45,6 +45,73 @@ ResultValue<Font> loadSystemUIFont (CTFontUIFontType fontType)
 }
 #endif
 
+#if YUP_APPLE
+ResultValue<Font> loadAppleColorEmojiFont()
+{
+    if (auto emojiFont = CTFontCreateWithName (CFSTR ("AppleColorEmoji"), 0.0, nullptr))
+    {
+        auto releaseEmojiFont = ErasedScopeGuard ([emojiFont]
+        {
+            CFRelease (emojiFont);
+        });
+
+        // Shaped by HarfBuzz: CoreText shaping reports fallback runs in UTF-16 offsets, which
+        // overrun the text for emoji outside the basic multilingual plane
+        if (auto font = HBFont::FromSystem (const_cast<void*> (static_cast<const void*> (emojiFont)), false, 400, 100))
+            return yup::makeResultValueOk (Font (std::move (font)));
+    }
+
+    return yup::makeResultValueFail ("Unable to load the Apple Color Emoji font");
+}
+#endif
+
+struct ColorEmojiFallback
+{
+    CriticalSection lock;
+    rive::rcp<rive::Font> font;
+    bool isResolved = false;
+};
+
+ColorEmojiFallback& getColorEmojiFallback()
+{
+    static ColorEmojiFallback fallback;
+    return fallback;
+}
+
+rive::rcp<rive::Font> getColorEmojiFallbackFontLoadingOnce()
+{
+    auto& fallback = getColorEmojiFallback();
+    const ScopedLock sl (fallback.lock);
+
+    if (! fallback.isResolved)
+    {
+        fallback.isResolved = true;
+
+        if (auto result = Font::loadColorEmojiSystemFont(); result.wasOk())
+            fallback.font = result.getValue().getFont();
+    }
+
+    return fallback.font;
+}
+
+rive::rcp<rive::Font> findFallbackFont (rive::Unichar missing, uint32_t fallbackIndex, const rive::Font* requestingFont)
+{
+    if (fallbackIndex > 0)
+        return nullptr;
+
+    auto font = getColorEmojiFallbackFontLoadingOnce();
+    if (font == nullptr || font.get() == requestingFont || ! font->hasGlyph (missing))
+        return nullptr;
+
+    return font;
+}
+
+[[maybe_unused]] const bool isFallbackFontInstalled = []
+{
+    rive::Font::gFallbackProc = findFallbackFont;
+    return true;
+}();
+
 uint32_t axisTagFromString (StringRef tagName)
 {
     uint32_t tag = 0;
@@ -169,6 +236,50 @@ ResultValue<Font> Font::loadSerifSystemTextFont()
     return yup::makeResultValueFail ("No system serif font available on this platform");
 
 #endif
+}
+
+ResultValue<Font> Font::loadColorEmojiSystemFont()
+{
+#if YUP_APPLE
+    auto result = loadAppleColorEmojiFont();
+
+#elif YUP_WINDOWS
+    auto result = loadFontFromFirstAvailableFile ({ R"(C:\Windows\Fonts\seguiemj.ttf)" });
+
+#elif YUP_ANDROID
+    auto result = loadFontFromFirstAvailableFile ({ "/system/fonts/NotoColorEmoji.ttf",
+                                                    "/system/fonts/NotoColorEmojiLegacy.ttf" });
+
+#elif YUP_LINUX
+    auto result = loadFontFromFirstAvailableFile ({ "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+                                                    "/usr/share/fonts/noto/NotoColorEmoji.ttf",
+                                                    "/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf",
+                                                    "/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf",
+                                                    "/usr/share/fonts/truetype/noto-color-emoji/NotoColorEmoji.ttf" });
+
+#else
+    auto result = ResultValue<Font> (yup::makeResultValueFail ("No system color emoji font available on this platform"));
+
+#endif
+
+    if (result.wasOk() && ! result.getValue().getFont()->hasColorGlyphs())
+        return yup::makeResultValueFail ("The system emoji font has no color glyphs");
+
+    return result;
+}
+
+void Font::setColorEmojiFallbackFont (const Font& font)
+{
+    auto& fallback = getColorEmojiFallback();
+    const ScopedLock sl (fallback.lock);
+
+    fallback.font = font.getFont();
+    fallback.isResolved = true;
+}
+
+Font Font::getColorEmojiFallbackFont()
+{
+    return Font (getColorEmojiFallbackFontLoadingOnce());
 }
 
 ResultValue<Font> Font::loadMonospaceSystemTextFont()
@@ -483,7 +594,7 @@ Font Font::withFeature (Feature feature) const
     std::vector<rive::Font::Feature> realFeatures;
     realFeatures.push_back (rive::Font::Feature { feature.tag, feature.value });
 
-    return Font (font->withOptions ({}, realFeatures));
+    return Font (font->withOptions ({}, realFeatures), height);
 }
 
 Font Font::withFeatures (std::initializer_list<Feature> features) const
@@ -497,7 +608,7 @@ Font Font::withFeatures (std::initializer_list<Feature> features) const
     for (const auto& feature : features)
         realFeatures.push_back (rive::Font::Feature { feature.tag, feature.value });
 
-    return Font (font->withOptions ({}, realFeatures));
+    return Font (font->withOptions ({}, realFeatures), height);
 }
 
 //==============================================================================

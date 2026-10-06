@@ -18,7 +18,7 @@ using Microsoft::WRL::ComPtr;
 namespace rive::ore
 {
 
-void TextureD3D12::upload(const TextureDataDesc& data)
+void TextureD3D12::uploadImpl(const TextureDataDesc& data)
 {
 #if defined(ORE_BACKEND_D3D12)
     assert(m_d3dOreContext != nullptr);
@@ -34,96 +34,16 @@ void TextureD3D12::upload(const TextureDataDesc& data)
             "upload: cannot upload into an external (canvas-wrapped) texture");
         return;
     }
-    if (data.data == nullptr)
-    {
-        ctx->setLastError("upload: data is null");
-        return;
-    }
-
     const uint32_t bpt = textureFormatBytesPerTexel(m_format);
-    // mipLevel must index a declared level.
-    if (data.mipLevel >= m_numMipmaps)
-    {
-        ctx->setLastError("upload: mipLevel (%u) >= numMipmaps (%u)",
-                          data.mipLevel,
-                          m_numMipmaps);
-        return;
-    }
-    // layer must index a declared slice (1 for non-array/non-cube).
-    if (data.layer >= m_depthOrArrayLayers)
-    {
-        ctx->setLastError("upload: layer (%u) >= depthOrArrayLayers (%u)",
-                          data.layer,
-                          m_depthOrArrayLayers);
-        return;
-    }
-    // Mip-adjusted extents (floor(max(1, dim >> mipLevel))).
-    const uint32_t mipWidth =
-        (m_width >> data.mipLevel) > 0 ? (m_width >> data.mipLevel) : 1u;
-    const uint32_t mipHeight =
-        (m_height >> data.mipLevel) > 0 ? (m_height >> data.mipLevel) : 1u;
-    const uint32_t width = data.width > 0 ? data.width : mipWidth;
-    const uint32_t height = data.height > 0 ? data.height : mipHeight;
-    // Only 3D carries depth > 1. The 2D family picks its slice via the
-    // subresource index and uploads at depth 1.
-    const uint32_t maxDepth =
-        m_type == TextureType::texture3D ? m_depthOrArrayLayers : 1u;
-    const uint32_t depth = data.depth > 0 ? data.depth : maxDepth;
-    // Region must fit the mip extent. 64-bit so a big offset can't wrap.
-    if (static_cast<uint64_t>(data.x) + width > mipWidth ||
-        static_cast<uint64_t>(data.y) + height > mipHeight)
-    {
-        ctx->setLastError("upload: region (x=%u y=%u w=%u h=%u) out of bounds "
-                          "for mip %u (%ux%u)",
-                          data.x,
-                          data.y,
-                          width,
-                          height,
-                          data.mipLevel,
-                          mipWidth,
-                          mipHeight);
-        return;
-    }
-    if (static_cast<uint64_t>(data.z) + depth > maxDepth)
-    {
-        ctx->setLastError(
-            "upload: z-region (z=%u depth=%u) out of bounds (maxDepth=%u)",
-            data.z,
-            depth,
-            maxDepth);
-        return;
-    }
-    // bytesPerTexel == 0 is block-compressed. No block-aware path yet.
+    // No block-aware path yet.
     if (bpt == 0)
     {
         ctx->setLastError("upload: block-compressed formats not yet supported");
         return;
     }
-    if (data.bytesPerRow != 0 && (data.bytesPerRow % bpt) != 0)
-    {
-        ctx->setLastError("upload: bytesPerRow (%u) must be a whole number of "
-                          "texels (bytesPerTexel=%u)",
-                          data.bytesPerRow,
-                          bpt);
-        return;
-    }
-    if (data.bytesPerRow != 0 &&
-        data.bytesPerRow < static_cast<uint64_t>(width) * bpt)
-    {
-        ctx->setLastError(
-            "upload: bytesPerRow (%u) < width * bytesPerTexel (%llu)",
-            data.bytesPerRow,
-            static_cast<unsigned long long>(static_cast<uint64_t>(width) *
-                                            bpt));
-        return;
-    }
-    if (data.rowsPerImage > 0 && data.rowsPerImage < height)
-    {
-        ctx->setLastError("upload: rowsPerImage (%u) < height (%u)",
-                          data.rowsPerImage,
-                          height);
-        return;
-    }
+    const uint32_t width = data.width;
+    const uint32_t height = data.height;
+    const uint32_t depth = data.depth;
 
     // Subresource index: mipSlice + arraySlice * MipLevels. Transposing it
     // only works when MipLevels == 1.
@@ -133,12 +53,8 @@ void TextureD3D12::upload(const TextureDataDesc& data)
 
     // Stage just the caller region: caller pitch on read, 256-aligned pitch on
     // write. 64-bit so the total can't wrap before the uint32_t guard.
-    const uint64_t srcRow = data.bytesPerRow != 0
-                                ? data.bytesPerRow
-                                : static_cast<uint64_t>(width) * bpt;
-    const uint32_t rowsPerImage =
-        data.rowsPerImage > 0 ? data.rowsPerImage : height;
-    const uint64_t srcSliceStride = srcRow * rowsPerImage;
+    const uint64_t srcRow = data.bytesPerRow;
+    const uint64_t srcSliceStride = srcRow * data.rowsPerImage;
     const uint64_t copyRowBytes = static_cast<uint64_t>(width) * bpt;
     const uint64_t dstRowPitch =
         (copyRowBytes + (D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)) &
@@ -214,26 +130,6 @@ void TextureD3D12::upload(const TextureDataDesc& data)
     }
     m_uploadBuffer->m_d3dBuffer->Unmap(0, nullptr);
 
-    // If the texture is not in COPY_DEST state, transition it.
-    if (m_d3dCurrentState != D3D12_RESOURCE_STATE_COPY_DEST)
-    {
-        D3D12_RESOURCE_BARRIER barrier = {};
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Transition.pResource = m_d3dTexture.Get();
-        barrier.Transition.StateBefore = m_d3dCurrentState;
-        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
-        barrier.Transition.Subresource =
-            D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        ctx->m_d3dCmdList->ResourceBarrier(1, &barrier);
-        m_d3dCurrentState = D3D12_RESOURCE_STATE_COPY_DEST;
-    }
-
-    // Copy the whole staged region to (x, y, z). No src box needed.
-    D3D12_TEXTURE_COPY_LOCATION dst_loc = {};
-    dst_loc.pResource = m_d3dTexture.Get();
-    dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    dst_loc.SubresourceIndex = subresource;
-
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
     footprint.Offset = 0;
     footprint.Footprint.Format = texDesc.Format;
@@ -242,32 +138,17 @@ void TextureD3D12::upload(const TextureDataDesc& data)
     footprint.Footprint.Depth = depth;
     footprint.Footprint.RowPitch = static_cast<UINT>(dstRowPitch);
 
-    D3D12_TEXTURE_COPY_LOCATION src_loc = {};
-    src_loc.pResource = m_uploadBuffer->m_d3dBuffer.Get();
-    src_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    src_loc.PlacedFootprint = footprint;
-
-    ctx->m_d3dCmdList->CopyTextureRegion(&dst_loc,
-                                         data.x,
-                                         data.y,
-                                         data.z,
-                                         &src_loc,
-                                         nullptr);
-
-    // Transition to PIXEL_SHADER_RESOURCE so it's ready to sample without
-    // an explicit barrier in the render pass.
-    {
-        D3D12_RESOURCE_BARRIER barrier = {};
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Transition.pResource = m_d3dTexture.Get();
-        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        barrier.Transition.StateAfter =
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-        barrier.Transition.Subresource =
-            D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        ctx->m_d3dCmdList->ResourceBarrier(1, &barrier);
-        m_d3dCurrentState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    }
+    // Callers stage uploads before an Ore frame, when the host command list is
+    // closed, so queue the copy to record onto a live list once one opens.
+    ctx->d3d12QueuePendingTextureUpload({
+        ref_rcp(this),
+        m_uploadBuffer,
+        footprint,
+        subresource,
+        data.x,
+        data.y,
+        data.z,
+    });
 #else
     (void)data;
 #endif

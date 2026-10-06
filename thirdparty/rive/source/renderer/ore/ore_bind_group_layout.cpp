@@ -2,10 +2,17 @@
  * Copyright 2026 Rive
  */
 
+#include "rive/renderer/ore/ore_bind_group.hpp"
 #include "rive/renderer/ore/ore_bind_group_layout.hpp"
 #include "rive/renderer/ore/ore_binding_map.hpp"
+#include "rive/renderer/ore/ore_context.hpp"
+#include "rive/renderer/ore/ore_script_guards.hpp"
+#include "rive/renderer/ore/ore_shader_module.hpp"
 
+#include <algorithm>
+#include <cstdio>
 #include <sstream>
+#include <vector>
 
 namespace rive::ore
 {
@@ -27,6 +34,355 @@ bool BindGroupLayout::hasDynamicOffset(uint32_t binding) const
     const BindGroupLayoutEntry* e = findEntry(binding);
     return e != nullptr && e->kind == BindingKind::uniformBuffer &&
            e->hasDynamicOffset;
+}
+
+// Map binding-map types to layout-entry types.
+static BindingKind bindingKindFromResource(ResourceKind k)
+{
+    switch (k)
+    {
+        case ResourceKind::UniformBuffer:
+            return BindingKind::uniformBuffer;
+        case ResourceKind::StorageBufferRO:
+            return BindingKind::storageBufferRO;
+        case ResourceKind::StorageBufferRW:
+            return BindingKind::storageBufferRW;
+        case ResourceKind::SampledTexture:
+            return BindingKind::sampledTexture;
+        case ResourceKind::StorageTexture:
+            return BindingKind::storageTexture;
+        case ResourceKind::Sampler:
+            return BindingKind::sampler;
+        case ResourceKind::ComparisonSampler:
+            return BindingKind::comparisonSampler;
+    }
+    return BindingKind::uniformBuffer;
+}
+
+static TextureViewDimension viewDimFromBindingMap(TextureViewDim d)
+{
+    switch (d)
+    {
+        case TextureViewDim::Cube:
+            return TextureViewDimension::cube;
+        case TextureViewDim::CubeArray:
+            return TextureViewDimension::cubeArray;
+        case TextureViewDim::D3:
+            return TextureViewDimension::texture3D;
+        case TextureViewDim::D2Array:
+            return TextureViewDimension::array2D;
+        case TextureViewDim::D1:
+        case TextureViewDim::D2:
+        case TextureViewDim::Undefined:
+            return TextureViewDimension::texture2D;
+    }
+    return TextureViewDimension::texture2D;
+}
+
+static BindGroupLayoutEntry::SampleType sampleTypeFromBindingMap(
+    TextureSampleType s)
+{
+    switch (s)
+    {
+        case TextureSampleType::UnfilterableFloat:
+            return BindGroupLayoutEntry::SampleType::floatUnfilterable;
+        case TextureSampleType::Depth:
+            return BindGroupLayoutEntry::SampleType::depth;
+        case TextureSampleType::Sint:
+            return BindGroupLayoutEntry::SampleType::sint;
+        case TextureSampleType::Uint:
+            return BindGroupLayoutEntry::SampleType::uint;
+        case TextureSampleType::Float:
+        case TextureSampleType::Undefined:
+            return BindGroupLayoutEntry::SampleType::floatFilterable;
+    }
+    return BindGroupLayoutEntry::SampleType::floatFilterable;
+}
+
+// Per-entry backends hand each stage its own ShaderModule even for a
+// combined file, and those two parse the same sidecar. Layout ids are
+// content hashes, so matching ids mean the merge would rebuild the map it
+// started from — and drop the ids that keep the layout interned.
+static bool sameBakedLayout(const BindingMap& a, const BindingMap& b)
+{
+    if (a.groupLayoutCount() == 0 ||
+        a.groupLayoutCount() != b.groupLayoutCount())
+    {
+        return false;
+    }
+    for (size_t i = 0; i < a.groupLayoutCount(); ++i)
+    {
+        const BindingMap::GroupLayout& ga = a.groupLayoutAt(i);
+        const BindingMap::GroupLayout& gb = b.groupLayoutAt(i);
+        if (ga.group != gb.group || ga.layoutId != gb.layoutId ||
+            ga.layoutId == BindingMap::kNoLayoutId)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+BindingMap bindingMapForStages(const ShaderModule* vertex,
+                               const ShaderModule* fragment)
+{
+    if (vertex == nullptr)
+        return fragment != nullptr ? fragment->m_bindingMap : BindingMap();
+    if (fragment == nullptr || fragment == vertex ||
+        sameBakedLayout(vertex->m_bindingMap, fragment->m_bindingMap))
+    {
+        return vertex->m_bindingMap;
+    }
+    BindingMap merged = vertex->m_bindingMap;
+    merged.replaceStage(fragment->m_bindingMap, BindingMap::Stage::FS);
+    return merged;
+}
+
+uint32_t populateBindGroupLayoutEntries(BindGroupLayoutEntry* entries,
+                                        uint32_t maxEntries,
+                                        const BindingMap& bm,
+                                        uint32_t groupIndex,
+                                        const uint32_t* dynamicUBOBindings,
+                                        uint32_t dynamicUBOCount)
+{
+    auto isDynamic = [&](uint32_t binding) -> bool {
+        for (uint32_t i = 0; i < dynamicUBOCount; ++i)
+            if (dynamicUBOBindings[i] == binding)
+                return true;
+        return false;
+    };
+    uint32_t n = 0;
+    for (size_t i = 0; i < bm.size(); ++i)
+    {
+        const BindingMap::Entry& e = bm.at(i);
+        if (e.group != groupIndex)
+            continue;
+        // Keep counting past the buffer so the caller can size up instead
+        // of quietly losing bindings.
+        const uint32_t index = n++;
+        if (index >= maxEntries)
+            continue;
+        BindGroupLayoutEntry& out = entries[index];
+        out.binding = e.binding;
+        out.kind = bindingKindFromResource(e.kind);
+        // Mirror the shader's declared visibility — narrower than this
+        // would be rejected by validateLayoutsAgainstBindingMap.
+        uint8_t vis = 0;
+        if (e.stageMask & BindingMap::kStageVertex)
+            vis |= StageVisibility::kVertex;
+        if (e.stageMask & BindingMap::kStageFragment)
+            vis |= StageVisibility::kFragment;
+        if (e.stageMask & BindingMap::kStageCompute)
+            vis |= StageVisibility::kCompute;
+        out.visibility.mask = vis;
+        out.hasDynamicOffset =
+            (out.kind == BindingKind::uniformBuffer && isDynamic(e.binding));
+        // Texture reflection — required for validation to accept cube /
+        // 3D / array textures that don't match the texture2D default.
+        out.textureViewDim = viewDimFromBindingMap(e.textureViewDim);
+        out.textureSampleType = sampleTypeFromBindingMap(e.textureSampleType);
+        out.textureMultisampled = e.textureMultisampled;
+        out.minBindingSize = e.minBindingSize;
+        // Pre-resolve native slots from the shader's binding map.
+        const uint16_t vs =
+            e.backendSlot[static_cast<size_t>(BindingMap::Stage::VS)];
+        const uint16_t fs =
+            e.backendSlot[static_cast<size_t>(BindingMap::Stage::FS)];
+        out.nativeSlotVS = (vs == BindingMap::kAbsent)
+                               ? BindGroupLayoutEntry::kNativeSlotAbsent
+                               : static_cast<uint32_t>(vs);
+        out.nativeSlotFS = (fs == BindingMap::kAbsent)
+                               ? BindGroupLayoutEntry::kNativeSlotAbsent
+                               : static_cast<uint32_t>(fs);
+    }
+    return n;
+}
+
+uint32_t populateBindGroupLayoutEntriesFromShader(
+    BindGroupLayoutEntry* entries,
+    uint32_t maxEntries,
+    const ShaderModule* shader,
+    uint32_t groupIndex,
+    const uint32_t* dynamicUBOBindings,
+    uint32_t dynamicUBOCount)
+{
+    if (shader == nullptr)
+        return 0;
+    return populateBindGroupLayoutEntries(entries,
+                                          maxEntries,
+                                          shader->m_bindingMap,
+                                          groupIndex,
+                                          dynamicUBOBindings,
+                                          dynamicUBOCount);
+}
+
+// WebGPU rejects a filtering-typed sampler binding statically paired with a
+// depth texture. A sampler whose every pairing across the given modules
+// reads a depth texture declares non-filtering; mixed use keeps filtering
+// and surfaces as the WebGPU validation error the spec mandates.
+static bool samplerPairsDepthOnly(const BindingMap& bm,
+                                  const ShaderModule* vertexPairSource,
+                                  const ShaderModule* fragmentPairSource,
+                                  uint32_t groupIndex,
+                                  uint32_t binding)
+{
+    const ShaderModule* modules[2] = {
+        vertexPairSource,
+        fragmentPairSource != vertexPairSource ? fragmentPairSource : nullptr};
+    bool paired = false;
+    for (const ShaderModule* module : modules)
+    {
+        if (module == nullptr)
+            continue;
+        for (const auto& p : module->m_textureSamplerPairs)
+        {
+            if (p.samplerGroup != groupIndex || p.samplerBinding != binding)
+                continue;
+            const BindingMap::Entry* tex =
+                bm.lookupEntry(p.textureGroup, p.textureBinding);
+            if (tex == nullptr ||
+                tex->textureSampleType != TextureSampleType::Depth)
+                return false;
+            paired = true;
+        }
+    }
+    return paired;
+}
+
+// The group's non-filtering sampler bindings, gathered once for both the
+// intern id and the entry flags.
+static std::vector<uint32_t> collectDepthOnlySamplers(
+    const BindingMap& bm,
+    const ShaderModule* vertexPairSource,
+    const ShaderModule* fragmentPairSource,
+    uint32_t groupIndex)
+{
+    std::vector<uint32_t> bindings;
+    for (size_t i = 0; i < bm.size(); ++i)
+    {
+        const BindingMap::Entry& e = bm.at(i);
+        if (e.group == groupIndex && e.kind == ResourceKind::Sampler &&
+            samplerPairsDepthOnly(bm,
+                                  vertexPairSource,
+                                  fragmentPairSource,
+                                  groupIndex,
+                                  e.binding))
+            bindings.push_back(e.binding);
+    }
+    return bindings;
+}
+
+// Distinguishes a non-filtering-sampler layout from its twins in the intern
+// table; the pairing is module state the baked id cannot see. Folded per
+// flagged binding so two maps that flag different samplers intern apart.
+static constexpr uint64_t kNonFilteringLayoutIdSalt = 0x9e3779b97f4a7c15ull;
+
+static uint64_t saltLayoutId(uint64_t layoutId,
+                             const std::vector<uint32_t>& nonFiltering)
+{
+    for (uint32_t binding : nonFiltering)
+    {
+        layoutId = (layoutId ^ (kNonFilteringLayoutIdSalt + binding)) *
+                   0x100000001b3ull;
+    }
+    return layoutId;
+}
+
+rcp<BindGroupLayout> makeBindGroupLayoutFromBindingMap(
+    Context& ctx,
+    const BindingMap& bindingMap,
+    uint32_t groupIndex,
+    const uint32_t* dynamicUBOBindings,
+    uint32_t dynamicUBOCount,
+    const ShaderModule* vertexPairSource,
+    const ShaderModule* fragmentPairSource)
+{
+    std::vector<uint32_t> nonFiltering;
+    if (vertexPairSource != nullptr || fragmentPairSource != nullptr)
+    {
+        nonFiltering = collectDepthOnlySamplers(bindingMap,
+                                                vertexPairSource,
+                                                fragmentPairSource,
+                                                groupIndex);
+    }
+
+    // The baked id never covers dynamic offsets, so those skip interning.
+    // A map merged across two modules carries no ids either, so split-stage
+    // pipelines build their layouts fresh.
+    uint64_t layoutId = dynamicUBOCount == 0
+                            ? bindingMap.layoutIdForGroup(groupIndex)
+                            : BindingMap::kNoLayoutId;
+    if (layoutId != BindingMap::kNoLayoutId && !nonFiltering.empty())
+    {
+        layoutId = saltLayoutId(layoutId, nonFiltering);
+    }
+    if (layoutId != BindingMap::kNoLayoutId)
+    {
+        if (rcp<BindGroupLayout> hit =
+                ctx.findInternedBindGroupLayout(layoutId))
+            return hit;
+    }
+
+    static constexpr uint32_t kInlineEntries = 16;
+    BindGroupLayoutEntry inlineEntries[kInlineEntries]{};
+    const uint32_t n = populateBindGroupLayoutEntries(inlineEntries,
+                                                      kInlineEntries,
+                                                      bindingMap,
+                                                      groupIndex,
+                                                      dynamicUBOBindings,
+                                                      dynamicUBOCount);
+
+    // Wide groups spill to the heap. Layout creation is setup-time, so the
+    // second walk is not worth a cap.
+    std::vector<BindGroupLayoutEntry> spilled;
+    BindGroupLayoutEntry* entries = inlineEntries;
+    if (n > kInlineEntries)
+    {
+        spilled.resize(n);
+        populateBindGroupLayoutEntries(spilled.data(),
+                                       n,
+                                       bindingMap,
+                                       groupIndex,
+                                       dynamicUBOBindings,
+                                       dynamicUBOCount);
+        entries = spilled.data();
+    }
+
+    for (uint32_t i = 0; i < n && !nonFiltering.empty(); ++i)
+    {
+        BindGroupLayoutEntry& e = entries[i];
+        e.samplerNonFiltering =
+            e.kind == BindingKind::sampler &&
+            std::find(nonFiltering.begin(), nonFiltering.end(), e.binding) !=
+                nonFiltering.end();
+    }
+
+    BindGroupLayoutDesc desc;
+    desc.groupIndex = groupIndex;
+    desc.entries = entries;
+    desc.entryCount = n;
+    rcp<BindGroupLayout> layout = ctx.makeBindGroupLayout(desc);
+    if (layout != nullptr && layoutId != BindingMap::kNoLayoutId)
+        ctx.internBindGroupLayout(layoutId, layout);
+    return layout;
+}
+
+rcp<BindGroupLayout> makeBindGroupLayoutFromShader(
+    Context& ctx,
+    const ShaderModule* shader,
+    uint32_t groupIndex,
+    const uint32_t* dynamicUBOBindings,
+    uint32_t dynamicUBOCount)
+{
+    static const BindingMap kEmpty;
+    return makeBindGroupLayoutFromBindingMap(
+        ctx,
+        shader != nullptr ? shader->m_bindingMap : kEmpty,
+        groupIndex,
+        dynamicUBOBindings,
+        dynamicUBOCount,
+        shader,
+        nullptr);
 }
 
 // Map ore::BindingKind (public layout API) ↔ ore::ResourceKind (binding-map
@@ -226,6 +582,102 @@ bool validateLayoutsAgainstBindingMap(const BindingMap& bindingMap,
     return true;
 }
 
+namespace
+{
+// GL / D3D12 give buffers, textures and samplers each their own numbering,
+// so a slot only clashes with another slot of the same kind.
+uint8_t slotKindBucket(ResourceKind kind)
+{
+    switch (kind)
+    {
+        case ResourceKind::UniformBuffer:
+        case ResourceKind::StorageBufferRO:
+        case ResourceKind::StorageBufferRW:
+            return 0;
+        case ResourceKind::SampledTexture:
+        case ResourceKind::StorageTexture:
+            return 1;
+        case ResourceKind::Sampler:
+        case ResourceKind::ComparisonSampler:
+            return 2;
+    }
+    return 0;
+}
+} // namespace
+
+bool validateSplitStageSlots(bool stagesCompiledApart,
+                             const BindingMap& mergedMap,
+                             NativeSlotScope scope,
+                             std::string* outError)
+{
+    if (!stagesCompiledApart || scope == NativeSlotScope::perStage)
+        return true;
+
+    struct Claim
+    {
+        uint32_t scopeKey;
+        uint32_t slot;
+        uint8_t group;
+        uint8_t binding;
+    };
+    std::vector<Claim> claimed;
+    claimed.reserve(mergedMap.size());
+
+    for (size_t i = 0; i < mergedMap.size(); ++i)
+    {
+        const BindingMap::Entry& e = mergedMap.at(i);
+        // Mirror what every stage-sharing backend binds with: the vertex
+        // slot when there is one, otherwise the fragment's.
+        const uint16_t vs =
+            e.backendSlot[static_cast<size_t>(BindingMap::Stage::VS)];
+        const uint16_t fs =
+            e.backendSlot[static_cast<size_t>(BindingMap::Stage::FS)];
+        // A binding both stages read, numbered differently by each file.
+        // Only one number survives into the layout, so the other stage's
+        // compiled source reads whatever sits at the number it baked.
+        if (vs != BindingMap::kAbsent && fs != BindingMap::kAbsent && vs != fs)
+        {
+            std::ostringstream oss;
+            oss << "@group(" << static_cast<uint32_t>(e.group) << ") @binding("
+                << static_cast<uint32_t>(e.binding)
+                << "): the vertex module put it on native slot " << vs
+                << " and the fragment module on " << fs
+                << ", and this backend shares one slot namespace between the "
+                   "stages. Declare the same bindings in both files, or "
+                   "compile both stages from one shader";
+            if (outError != nullptr)
+                *outError = oss.str();
+            return false;
+        }
+        const uint16_t slot = vs != BindingMap::kAbsent ? vs : fs;
+        if (slot == BindingMap::kAbsent)
+            continue;
+        const uint32_t scopeKey = scope == NativeSlotScope::perGroup
+                                      ? e.group
+                                      : slotKindBucket(e.kind);
+        for (const Claim& c : claimed)
+        {
+            if (c.scopeKey != scopeKey || c.slot != slot)
+                continue;
+            std::ostringstream oss;
+            oss << "@group(" << static_cast<uint32_t>(e.group) << ") @binding("
+                << static_cast<uint32_t>(e.binding) << ") and @group("
+                << static_cast<uint32_t>(c.group) << ") @binding("
+                << static_cast<uint32_t>(c.binding)
+                << ") both land on native slot " << slot
+                << ": the vertex and fragment modules were compiled apart, "
+                   "and this backend shares one slot namespace between them. "
+                   "Declare the same bindings in both, or compile both stages "
+                   "from one shader";
+            if (outError != nullptr)
+                *outError = oss.str();
+            return false;
+        }
+        claimed.push_back({scopeKey, slot, e.group, e.binding});
+    }
+    return true;
+}
+
 bool validateColorRequiresFragment(uint32_t colorCount,
                                    bool hasFragmentModule,
                                    std::string* outError)
@@ -239,6 +691,277 @@ bool validateColorRequiresFragment(uint32_t colorCount,
         return false;
     }
     return true;
+}
+
+bool validateStagesAgree(const BindingMap& vertexMap,
+                         const BindingMap& fragmentMap,
+                         std::string* outError)
+{
+    auto fail = [&](const BindingMap::Entry& e, const char* what) {
+        std::ostringstream oss;
+        oss << "@group(" << static_cast<uint32_t>(e.group) << ") @binding("
+            << static_cast<uint32_t>(e.binding)
+            << "): the vertex and fragment files declare it with a different "
+            << what
+            << ". A pipeline carries one declaration per binding, so the stage "
+               "that loses reads what the other one bound";
+        if (outError != nullptr)
+            *outError = oss.str();
+        return false;
+    };
+
+    for (size_t f = 0; f < fragmentMap.size(); ++f)
+    {
+        const BindingMap::Entry& fs = fragmentMap.at(f);
+        for (size_t v = 0; v < vertexMap.size(); ++v)
+        {
+            const BindingMap::Entry& vs = vertexMap.at(v);
+            if (vs.group != fs.group || vs.binding != fs.binding)
+                continue;
+            // Sampler and comparison sampler are one category to every
+            // caller, matching `BindingMap::lookup`.
+            const bool bothSamplers =
+                (vs.kind == ResourceKind::Sampler ||
+                 vs.kind == ResourceKind::ComparisonSampler) &&
+                (fs.kind == ResourceKind::Sampler ||
+                 fs.kind == ResourceKind::ComparisonSampler);
+            if (vs.kind != fs.kind && !bothSamplers)
+                return fail(fs, "kind");
+            if (vs.textureViewDim != TextureViewDim::Undefined &&
+                fs.textureViewDim != TextureViewDim::Undefined &&
+                vs.textureViewDim != fs.textureViewDim)
+            {
+                return fail(fs, "texture dimension");
+            }
+            if (vs.textureSampleType != TextureSampleType::Undefined &&
+                fs.textureSampleType != TextureSampleType::Undefined &&
+                vs.textureSampleType != fs.textureSampleType)
+            {
+                return fail(fs, "texture sample type");
+            }
+            if (vs.minBindingSize != 0 && fs.minBindingSize != 0 &&
+                vs.minBindingSize != fs.minBindingSize)
+            {
+                return fail(fs, "uniform block size");
+            }
+            break;
+        }
+    }
+    return true;
+}
+
+bool validatePipelineDesc(const PipelineDesc& desc,
+                          const BindingMap& mergedMap,
+                          NativeSlotScope scope,
+                          std::string* outError)
+{
+    const bool stagesCompiledApart = desc.vertexModule != nullptr &&
+                                     desc.fragmentModule != nullptr &&
+                                     desc.vertexModule != desc.fragmentModule;
+    // Ahead of the layout check: a disagreement here means the merged map
+    // itself is wrong, and a layout complaint would only describe the
+    // symptom.
+    if (stagesCompiledApart &&
+        !validateStagesAgree(desc.vertexModule->m_bindingMap,
+                             desc.fragmentModule->m_bindingMap,
+                             outError))
+    {
+        return false;
+    }
+    return validateLayoutsAgainstBindingMap(mergedMap,
+                                            desc.bindGroupLayouts,
+                                            desc.bindGroupLayoutCount,
+                                            outError) &&
+           validateColorRequiresFragment(desc.colorCount,
+                                         desc.fragmentModule != nullptr,
+                                         outError) &&
+           validateSplitStageSlots(stagesCompiledApart,
+                                   mergedMap,
+                                   scope,
+                                   outError);
+}
+
+} // namespace rive::ore
+
+namespace rive::ore
+{
+
+// snprintf, not a stream: the wasm module lane links this too, and libc++
+// stream formatting drags locale imports the host does not provide.
+bool validateBindGroupDesc(const BindGroupDesc& desc, std::string* outError)
+{
+    // A null layout is the backend's own error to name.
+    if (desc.layout == nullptr)
+        return true;
+    for (uint32_t i = 0; i < desc.uboCount; ++i)
+    {
+        const BindGroupDesc::UBOEntry& ubo = desc.ubos[i];
+        const BindGroupLayoutEntry* entry = desc.layout->findEntry(ubo.slot);
+        if (entry == nullptr || entry->kind != BindingKind::uniformBuffer ||
+            ubo.buffer == nullptr)
+        {
+            continue;
+        }
+        const uint64_t bufferSize = ubo.buffer->size();
+        char message[192];
+        if (ubo.offset > bufferSize ||
+            uint64_t(ubo.offset) + ubo.size > bufferSize)
+        {
+            snprintf(message,
+                     sizeof(message),
+                     "@group(%u) @binding(%u): offset %u + size %u exceeds "
+                     "the %llu byte buffer",
+                     desc.layout->groupIndex(),
+                     ubo.slot,
+                     ubo.offset,
+                     ubo.size,
+                     static_cast<unsigned long long>(bufferSize));
+            if (outError != nullptr)
+                *outError = message;
+            return false;
+        }
+        const uint64_t bound =
+            ubo.size != 0 ? ubo.size : bufferSize - ubo.offset;
+        if (bound < entry->minBindingSize)
+        {
+            snprintf(message,
+                     sizeof(message),
+                     "@group(%u) @binding(%u): binds %llu bytes but the "
+                     "shader's uniform block needs %u",
+                     desc.layout->groupIndex(),
+                     ubo.slot,
+                     static_cast<unsigned long long>(bound),
+                     entry->minBindingSize);
+            if (outError != nullptr)
+                *outError = message;
+            return false;
+        }
+    }
+    return true;
+}
+
+void BindGroup::recordDynamicRanges(const BindGroupDesc& desc)
+{
+    m_dynamicRanges.clear();
+    if (desc.layout == nullptr)
+        return;
+    for (uint32_t i = 0; i < desc.uboCount; ++i)
+    {
+        const BindGroupDesc::UBOEntry& ubo = desc.ubos[i];
+        if (ubo.buffer != nullptr && desc.layout->hasDynamicOffset(ubo.slot))
+        {
+            const uint64_t bufferSize = ubo.buffer->size();
+            // Size 0 spans the rest of the buffer.
+            const uint64_t size = ubo.size != 0 ? ubo.size
+                                  : bufferSize > ubo.offset
+                                      ? bufferSize - ubo.offset
+                                      : 0;
+            m_dynamicRanges.push_back(
+                {ubo.slot, ubo.offset, (uint32_t)size, bufferSize});
+        }
+    }
+    std::sort(m_dynamicRanges.begin(),
+              m_dynamicRanges.end(),
+              [](const DynamicUBORange& a, const DynamicUBORange& b) {
+                  return a.slot < b.slot;
+              });
+}
+
+bool validateSetBindGroup(uint32_t groupIndex,
+                          const BindGroup* group,
+                          const uint32_t* offsets,
+                          uint32_t offsetCount,
+                          uint32_t alignment,
+                          std::string* outError)
+{
+    char message[192];
+    auto fail = [&]() {
+        if (outError != nullptr)
+            *outError = message;
+        return false;
+    };
+    if (groupIndex >= kMaxBindGroups)
+    {
+        snprintf(message,
+                 sizeof(message),
+                 "setBindGroup: groupIndex must be in [0, %u) (got %u)",
+                 kMaxBindGroups,
+                 groupIndex);
+        return fail();
+    }
+    if (offsetCount > kMaxDynamicOffsets)
+    {
+        snprintf(message,
+                 sizeof(message),
+                 kGuardDynamicOffsetCountFormat,
+                 offsetCount,
+                 kMaxDynamicOffsets);
+        return fail();
+    }
+    if (group == nullptr)
+        return true;
+    if (group->layout() != nullptr && group->groupIndex() != groupIndex)
+    {
+        snprintf(message,
+                 sizeof(message),
+                 "setBindGroup: BindGroup was made for group %u, not %u",
+                 group->groupIndex(),
+                 groupIndex);
+        return fail();
+    }
+    if (offsetCount != group->dynamicOffsetCount())
+    {
+        snprintf(message,
+                 sizeof(message),
+                 "setBindGroup: dynamicOffsets count %u does not match the "
+                 "BindGroup's declared dynamic UBO count %u",
+                 offsetCount,
+                 group->dynamicOffsetCount());
+        return fail();
+    }
+    // A group missing a dynamic UBO its layout declares cannot pair ranges
+    // with offsets, so only the alignment is checked then.
+    const auto& ranges = group->dynamicRanges();
+    const bool paired = ranges.size() == offsetCount;
+    for (uint32_t i = 0; i < offsetCount; ++i)
+    {
+        if (alignment != 0 && offsets[i] % alignment != 0)
+        {
+            snprintf(message,
+                     sizeof(message),
+                     "setBindGroup: dynamicOffsets[%u] = %u is not a "
+                     "multiple of %u (alignment requirement)",
+                     i,
+                     offsets[i],
+                     alignment);
+            return fail();
+        }
+        if (paired)
+        {
+            const auto& range = ranges[i];
+            if (uint64_t(offsets[i]) + range.offset + range.size >
+                range.bufferSize)
+            {
+                snprintf(message,
+                         sizeof(message),
+                         "setBindGroup: dynamicOffsets[%u] = %u moves "
+                         "@binding(%u) past the end of its %llu byte buffer",
+                         i,
+                         offsets[i],
+                         range.slot,
+                         static_cast<unsigned long long>(range.bufferSize));
+                return fail();
+            }
+        }
+    }
+    return true;
+}
+
+uint32_t scriptDynamicOffsetAlignment(const Context* context)
+{
+    return context != nullptr && context->featuresKnown()
+               ? context->features().minUniformBufferOffsetAlignment
+               : Features{}.minUniformBufferOffsetAlignment;
 }
 
 } // namespace rive::ore

@@ -582,3 +582,32 @@ void YGNode::reset() {
 
   *this = YGNode{getConfig()};
 }
+
+// rive: yoga 3.x-style helper used by the grid backport (#1894)
+bool YGNode::hasDefiniteLength(YGDimension dimension, float ownerSize) {
+  auto usedValue =
+      YGResolveValue(getResolvedDimension(dimension), ownerSize);
+  return !usedValue.isUndefined() && usedValue.unwrap() >= 0.0f;
+}
+
+YGFloatOptional YGNode::getResolvedDimension(
+    YGDirection /*direction*/,
+    YGDimension dimension,
+    float referenceLength,
+    float /*ownerWidth*/) const {
+  // 2.x has no box-sizing; content-box adjustment does not apply
+  return YGResolveValue(getResolvedDimension(dimension), referenceLength);
+}
+
+float YGNode::relativePosition(
+    YGFlexDirection axis,
+    YGDirection direction,
+    float axisSize) const {
+  const YGFlexDirection resolvedAxis = YGResolveFlexDirection(axis, direction);
+  if (isLeadingPositionDefined(resolvedAxis)) {
+    auto pos = getLeadingPosition(resolvedAxis, axisSize);
+    return pos.isUndefined() ? 0.0f : pos.unwrap();
+  }
+  auto pos = getTrailingPosition(resolvedAxis, axisSize);
+  return pos.isUndefined() ? 0.0f : -pos.unwrap();
+}

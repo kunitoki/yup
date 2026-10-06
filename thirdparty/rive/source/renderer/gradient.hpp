@@ -17,7 +17,7 @@ namespace rive::gpu
 template <typename T> class GradDataArray
 {
 public:
-    static_assert(std::is_standard_layout_v<T>);
+    static_assert(std::is_trivial_v<T> && std::is_standard_layout<T>());
 
     GradDataArray(const T data[], size_t count)
     {
@@ -93,8 +93,10 @@ public:
 
     // Get or create a modulated variant of this gradient.
     // Caches the last-used modulated gradient for efficient reuse when the same
-    // opacity is requested multiple times (e.g., multiple draws in one frame).
-    rcp<Gradient> getModulated(float opacity) const;
+    // modulation is requested multiple times (e.g., multiple draws in one
+    // frame).
+    rcp<Gradient> getModulated(float opacity,
+                               ColorInt color = 0xFFFFFFFF) const;
 
 private:
     Gradient(PaintType paintType,
@@ -125,6 +127,7 @@ private:
     mutable rcp<Gradient> m_lastModulatedGradient;
     mutable float m_lastModulatedOpacity =
         -1.0f; // -1 as sentinel (valid range is 0..1)
+    mutable ColorInt m_lastModulatedColor = 0xFFFFFFFF;
 };
 
 } // namespace rive::gpu

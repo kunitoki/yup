@@ -105,7 +105,23 @@ public:
         /** Returns the offscreen Graphics target used to draw this layer's contents. */
         Graphics& getGraphics() const noexcept;
 
+        /** Adds a mask: an offscreen Graphics whose drawing masks this layer when it is committed.
+
+            The mask has the layer's size and layer-local coordinates, like getGraphics().
+            Each call adds another mask, and the masks multiply: the layer shows only where
+            every mask lets it through. Where the GPU cannot apply masks, the layer is
+            composited unmasked.
+
+            @param mode How this mask's pixels turn into the layer's visibility.
+            @return The mask Graphics, owned by the layer, or nullptr if the layer is invalid
+                    or no offscreen target could be created for the mask.
+        */
+        Graphics* addMask (LayerMaskMode mode = LayerMaskMode::Alpha);
+
         /** Commits the offscreen contents and composites them back to the parent Graphics.
+
+            This destroys the layer's Graphics and its masks, so any saveState()
+            taken on them must end before committing.
 
             Returns false if the layer is invalid, has already been committed, or the
             offscreen target could not be finalized.
@@ -120,7 +136,14 @@ public:
         Graphics* parent = nullptr;
         Rectangle<float> targetArea;
         float opacity = 1.0f;
+        struct Mask
+        {
+            std::unique_ptr<Graphics> graphics;
+            LayerMaskMode mode;
+        };
+
         std::unique_ptr<Graphics> graphics;
+        std::vector<Mask> masks;
         bool committed = false;
     };
 
@@ -222,6 +245,21 @@ public:
     */
     [[nodiscard]] TransparencyLayer beginTransparencyLayer (Rectangle<float> targetArea, float opacity = 1.0f);
 
+    /** Sets a color multiplied into everything drawn afterwards.
+
+        The tint applies to fills, strokes, text and images, and is scoped by
+        saveState() like the opacity. Opaque white leaves colors unchanged.
+
+        @param tint The color to multiply in.
+    */
+    void setTint (Color tint);
+
+    /** Retrieves the current tint.
+
+        @return The color multiplied into subsequent drawing, opaque white by default.
+    */
+    Color getTint() const;
+
     //==============================================================================
     /** Sets the current drawing fill color.
 
@@ -247,6 +285,20 @@ public:
     */
     ColorGradient getFillColorGradient() const;
 
+    /** Fills subsequent shapes and text with an image.
+
+        The image replaces the fill color or gradient until one of those is set
+        again. The image's GPU texture is created now, and kept by the image for
+        later frames, so pass the same Image each frame rather than a fresh copy.
+
+        @param image          The image to paint with.
+        @param imageTransform Maps image pixels to the drawing's coordinates. The
+                              identity places the image at its natural size with
+                              its top-left corner at the origin.
+        @param sampling       How the image repeats and is filtered.
+    */
+    void setFillImage (const Image& image, const AffineTransform& imageTransform = {}, ImageSampling sampling = {});
+
     //==============================================================================
     /** Sets the current drawing stroke color.
 
@@ -271,6 +323,20 @@ public:
         @return The current color gradient for stroke drawing.
     */
     ColorGradient getStrokeColorGradient() const;
+
+    /** Strokes subsequent shapes and text with an image.
+
+        The image replaces the stroke color or gradient until one of those is set
+        again. The image's GPU texture is created now, and kept by the image for
+        later frames, so pass the same Image each frame rather than a fresh copy.
+
+        @param image          The image to paint with.
+        @param imageTransform Maps image pixels to the drawing's coordinates. The
+                              identity places the image at its natural size with
+                              its top-left corner at the origin.
+        @param sampling       How the image repeats and is filtered.
+    */
+    void setStrokeImage (const Image& image, const AffineTransform& imageTransform = {}, ImageSampling sampling = {});
 
     //==============================================================================
     /** Sets the stroke type for subsequent drawing operations.
@@ -321,6 +387,21 @@ public:
     */
     StrokeCap getStrokeCap() const;
 
+    /** Sets where strokes are drawn relative to the edge of their path.
+
+        Inside and outside strokes need an enclosed area, so open paths (such as
+        lines) are treated as closed; a line stroked inside draws nothing.
+
+        @param position Inside, centered on, or outside the path's edge.
+    */
+    void setStrokePosition (StrokePosition position);
+
+    /** Retrieves where strokes are drawn relative to the edge of their path.
+
+        @return The stroke position, StrokePosition::Center by default.
+    */
+    StrokePosition getStrokePosition() const;
+
     /** Sets the miter limit used when drawing stroked paths with miter joins.
         The miter limit controls when miter joins are clipped to bevel joins.
         The SVG default is 4.0. The value is clamped to a minimum of 1.0.
@@ -339,6 +420,19 @@ public:
         @return The current blend mode.
     */
     BlendMode getBlendMode() const;
+
+    /** Sets how strongly BlendMode::Additive adds to what is already drawn.
+
+        @param amount From 0 (like BlendMode::SrcOver) to 1 (fully additive, the default).
+                      Other blend modes ignore it.
+    */
+    void setAdditiveAmount (float amount);
+
+    /** Retrieves the strength of BlendMode::Additive.
+
+        @return The additive amount, between 0 and 1.
+    */
+    float getAdditiveAmount() const;
 
     //==============================================================================
     /** Defines the area within which drawing operations are clipped.
@@ -396,6 +490,25 @@ public:
         @param clipPath The path to clip to, in local coordinates.
     */
     void setClipPath (const Path& clipPath);
+
+    /** Intersects the clip with the outline of a stroked path.
+
+        The stroke is placed under the current transform, so its width scales with it.
+        Its position decides which side of the path is kept: an inside stroke clips to
+        the inner band only. getClipPath() then returns that band.
+
+        @param path   The path to stroke.
+        @param stroke The width, join, cap and position of the stroke.
+    */
+    void setClipStroke (const Path& path, const StrokeType& stroke);
+
+    /** Intersects the clip with the outline of a path stroked with the current stroke type.
+
+        @param path The path to stroke.
+
+        @see setClipStroke, getStrokeType
+    */
+    void setClipStroke (const Path& path);
 
     /** Retrieves the last clip path set with setClipPath().
 
@@ -606,6 +719,30 @@ public:
     */
     void drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea);
 
+    /** Draws an image mapped onto a triangle mesh.
+
+        The mesh is drawn with the current transform, opacity, tint, blend mode and additive
+        amount. Nothing is drawn if the mesh is not valid (see ImageMesh::isValid()).
+
+        @param image    The image to map onto the mesh.
+        @param mesh     The mesh, whose GPU buffers are kept for the next draw.
+        @param sampling How the image repeats and is filtered.
+    */
+    void drawImageMesh (const Image& image, const ImageMesh& mesh, ImageSampling sampling = {});
+
+    /** Draws many copies of an image mesh in a single call.
+
+        Each copy has its own transform, texture coordinate offset and scale, opacity and
+        additive amount. The current transform, opacity and tint apply to all of them; the
+        blend mode does not, copies are always drawn over what is below (or added to it).
+
+        @param image     The image to map onto the mesh.
+        @param mesh      The mesh every copy uses.
+        @param instances The copies to draw.
+        @param sampling  How the image repeats and is filtered.
+    */
+    void drawImageMeshInstanced (const Image& image, const ImageMesh& mesh, Span<const ImageMeshInstance> instances, ImageSampling sampling = {});
+
     //==============================================================================
     /** Draws an attributed text.
 
@@ -686,6 +823,18 @@ public:
     rive::Renderer* getRenderer();
 
 private:
+    // Holds the texture rather than the Image: copying an Image drops its GPU texture.
+    struct ImagePaint
+    {
+        rive::rcp<rive::gpu::Texture> texture;
+        int width = 0;
+        int height = 0;
+        AffineTransform transform;
+        ImageSampling sampling;
+    };
+
+    ImagePaint makeImagePaint (const Image& image, const AffineTransform& imageTransform, ImageSampling sampling);
+
     struct RenderOptions
     {
         RenderOptions() noexcept = default;
@@ -779,9 +928,15 @@ private:
         Rectangle<float> drawingArea;
         AffineTransform transform;
         Path clipPath;
+        std::optional<StrokeType> clipStroke;
         AffineTransform clipTransform;
         BlendMode blendMode = BlendMode::SrcOver;
+        float additiveAmount = 1.0f;
         float opacity = 1.0f;
+        Color tint = 0xffffffff;
+        StrokePosition strokePosition = StrokePosition::Center;
+        std::optional<ImagePaint> fillImage;
+        std::optional<ImagePaint> strokeImage;
         bool isCurrentFillColor = true;
         bool isCurrentStrokeColor = true;
     };
@@ -795,11 +950,20 @@ private:
 
     void clipPath (rive::RawPath& path);
 
+    bool setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset = {});
+    bool setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset = {});
+    void setupPaintBlend (rive::RiveRenderPaint& paint, const RenderOptions& options);
+    bool setupImagePaint (rive::RiveRenderPaint& paint, const ImagePaint& imagePaint, Point<float> imageOffset);
+    void applyModulation (const RenderOptions& options);
     void renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
     void renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
     bool renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea);
 
-    void renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
+    void renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint, bool replacesStylePaints);
+    void renderColorGlyphs (const StyledText& text, const rive::RiveRenderPaint* paint, std::vector<const StyledText::ColorGlyph*>& groupedGlyphs);
+    void renderColorGlyphGroup (const StyledText& text, const Rectangle<float>& rect, const StyledText::ColorGlyph& colorGlyph, rive::ColorInt foregroundColor);
+    void renderColorGlyphLayer (const StyledText::ColorGlyphLayer& glyphLayer, rive::ColorInt foregroundColor, rive::BlendMode blendMode, float additiveness);
+    void renderColorGlyphImage (const Image& image, const rive::Font::ColorGlyphLayer& layer, rive::BlendMode blendMode, float additiveness);
 
     GraphicsContext& context;
 

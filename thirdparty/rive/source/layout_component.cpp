@@ -4,15 +4,20 @@
 #include "rive/constraints/layout_constraint.hpp"
 #include "rive/drawable.hpp"
 #include "rive/factory.hpp"
+#include "rive/importers/import_stack.hpp"
 #include "rive/intrinsically_sizeable.hpp"
 #include "rive/layout_component.hpp"
+#include "rive/component_origin.hpp"
+#include "rive/layout/grid_track.hpp"
+#include "rive/layout/layout_style_applier.hpp"
 #include "rive/nested_artboard_layout.hpp"
 #include "rive/node.hpp"
 #include "rive/math/aabb.hpp"
+#include "rive/shapes/path.hpp"
 #include "rive/shapes/paint/fill.hpp"
 #include "rive/shapes/paint/shape_paint.hpp"
 #include "rive/shapes/paint/stroke.hpp"
-#include "rive/shapes/rectangle.hpp"
+#include "rive/solo.hpp"
 #include "rive/layout/layout_data.hpp"
 #include "rive/layout/layout_component_style.hpp"
 #ifdef WITH_RIVE_LAYOUT
@@ -24,9 +29,160 @@
 
 using namespace rive;
 
+#ifdef WITH_RIVE_LAYOUT
+void LayoutComponent::addLayoutStyleApplier(LayoutStyleApplier* applier)
+{
+    if (m_layoutData != nullptr)
+    {
+        m_layoutData->addApplier(applier);
+    }
+}
+#endif
+
+bool rive::isTransparentLayoutContainer(Component* component)
+{
+    return component->coreType() == NodeBase::typeKey || component->is<Solo>();
+}
+
+bool rive::joinsLayoutThroughContainer(Component* component)
+{
+    if (!component->is<ArtboardComponentList>())
+    {
+        return true;
+    }
+    auto flags =
+        static_cast<DrawableFlag>(component->as<Drawable>()->drawableFlags());
+    return (flags & DrawableFlag::ParticipatesInLayout) ==
+           DrawableFlag::ParticipatesInLayout;
+}
+
+namespace
+{
+// Whether content-sizing stops here. Narrower than
+// isTransparentLayoutContainer: a plain group is a barrier (its contents are
+// free content), but a Solo is not — its children content-size just as direct
+// children of the layout do.
+bool stopsContentSizing(Component* component)
+{
+    return component->coreType() == NodeBase::typeKey;
+}
+
+// Visit every provider that belongs to a layout — its direct children, plus any
+// nested inside transparent containers; depth-first, so layout order follows
+// hierarchy order. Nested LayoutComponents and providers are leaves here (they
+// own their subtree). Every child-walking layout pass goes through this, so a
+// nested participant is collected, sized, cascaded and re-synced like a direct
+// child.
+template <typename F>
+void forEachLayoutProvider(Component* from, F&& visit, bool nested = false)
+{
+    // A Solo only lets its active child through.
+    if (from->is<Solo>())
+    {
+        if (auto* active = from->as<Solo>()->activeComponent())
+        {
+            if (auto* provider = LayoutNodeProvider::from(active))
+            {
+                if (!nested || joinsLayoutThroughContainer(active))
+                {
+                    visit(active, provider);
+                }
+            }
+            else if (isTransparentLayoutContainer(active))
+            {
+                forEachLayoutProvider(active, visit, true);
+            }
+        }
+        return;
+    }
+    for (auto* child : from->as<ContainerComponent>()->children())
+    {
+        if (auto* provider = LayoutNodeProvider::from(child))
+        {
+            if (!nested || joinsLayoutThroughContainer(child))
+            {
+                visit(child, provider);
+            }
+        }
+        else if (isTransparentLayoutContainer(child))
+        {
+            forEachLayoutProvider(child, visit, true);
+        }
+    }
+}
+
+// Only reached when the HasComponentOrigin flag says one exists, so the common
+// case never walks.
+ComponentOrigin* originChild(const ContainerComponent* owner)
+{
+    for (auto* child : owner->children())
+    {
+        if (child->is<ComponentOrigin>())
+        {
+            return child->as<ComponentOrigin>();
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
+LayoutComponent* rive::contentSizingLayout(Component* parent)
+{
+    for (Component* p = parent; p != nullptr; p = p->parent())
+    {
+        if (p->is<LayoutComponent>())
+        {
+            return p->as<LayoutComponent>();
+        }
+        // A group stops content sizing; a provider is sized by the engine.
+        if (stopsContentSizing(p) || LayoutNodeProvider::from(p) != nullptr)
+        {
+            return nullptr;
+        }
+        auto* sizeable = IntrinsicallySizeable::from(p);
+        if (sizeable != nullptr && !sizeable->shouldPropagateSizeToChildren())
+        {
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+LayoutComponent* rive::owningLayout(Component* component)
+{
+    for (Component* p = component; p != nullptr; p = p->parent())
+    {
+        if (p->is<LayoutComponent>())
+        {
+            return p->as<LayoutComponent>();
+        }
+    }
+    return nullptr;
+}
+
 #if defined(WITH_RIVE_LAYOUT) && defined(WITH_RIVE_TOOLS) && defined(DEBUG)
 uint32_t LayoutData::count = 0;
 #endif
+
+float LayoutComponent::pivotOriginX() const
+{
+    if (!hasLayoutFlag(LayoutComponentFlags::HasComponentOrigin))
+    {
+        return 0.0f;
+    }
+    auto* origin = originChild(this);
+    return origin != nullptr ? origin->originX() : 0.0f;
+}
+
+float LayoutComponent::pivotOriginY() const
+{
+    if (!hasLayoutFlag(LayoutComponentFlags::HasComponentOrigin))
+    {
+        return 0.0f;
+    }
+    auto* origin = originChild(this);
+    return origin != nullptr ? origin->originY() : 0.0f;
+}
 
 void LayoutComponent::buildDependencies()
 {
@@ -35,14 +191,21 @@ void LayoutComponent::buildDependencies()
     {
         parent()->addDependent(this);
     }
-    // Set the blend mode on all the shape paints. If we ever animate this
-    // property, we'll need to update it in the update cycle/mark dirty when the
-    // blend mode changes.
+    syncShapePaintBlendModes();
+}
+
+void LayoutComponent::syncShapePaintBlendModes()
+{
     for (auto paint : m_ShapePaints)
     {
-        paint->blendMode(blendMode());
+        paint->blendMode(blendMode(), additiveAmount());
     }
 }
+
+// blendModeValue itself never animates, but additiveAmount does (and data
+// binds), so the buildDependencies sync above is not enough on its own. Any
+// ForegroundLayoutDrawable child re-reads us in its own draw().
+void LayoutComponent::additiveAmountChanged() { syncShapePaintBlendModes(); }
 
 Core* LayoutComponent::hitTest(HitInfo*, const Mat2D&) { return nullptr; }
 
@@ -79,36 +242,163 @@ bool LayoutComponent::hitTestPoint(const Vec2D& position,
     return false;
 }
 
+StatusCode LayoutComponent::import(ImportStack& importStack)
+{
+    // Files exported before 7.3 composed a layout's transform from the solved
+    // slot alone, so any stored rotation/scale was written but never applied.
+    // Keep that legacy behavior for those files; newer files compose it on top
+    // of the slot. See File::minorVersion.
+    int major = importStack.majorVersion();
+    int minor = importStack.minorVersion();
+    setLayoutFlag(LayoutComponentFlags::ComposeTransform,
+                  major > 7 || (major == 7 && minor >= 3));
+    return Super::import(importStack);
+}
+
+Core* LayoutComponent::clone() const
+{
+    LayoutComponent* twin = LayoutComponentBase::clone()->as<LayoutComponent>();
+    twin->setLayoutFlag(LayoutComponentFlags::ComposeTransform,
+                        hasLayoutFlag(LayoutComponentFlags::ComposeTransform));
+    // The clip-may-be-dynamic (KeyedObject::onAddedDirty) and listener-target
+    // (StateMachineListener::onAddedClean) reasons for ForceDrawableProxy are
+    // stamped only on the source, since instances share animations and state
+    // machines. Carry the flag so an instance's proxy is still injected before
+    // its first sort. (The scroll-interaction reason re-marks per instance in
+    // buildDependencies, so carrying it here is a harmless no-op for that
+    // case.)
+    twin->setLayoutFlag(
+        LayoutComponentFlags::ForceDrawableProxy,
+        hasLayoutFlag(LayoutComponentFlags::ForceDrawableProxy));
+    return twin;
+}
+
+bool LayoutComponent::composesLayoutOffset() const
+{
+    return hasLayoutFlag(LayoutComponentFlags::ComposeTransform) &&
+           !is<Artboard>();
+}
+
+Vec2D LayoutComponent::localAnchor() const
+{
+    if (!hasLayoutFlag(LayoutComponentFlags::HasComponentOrigin) ||
+        is<Artboard>())
+    {
+        return Vec2D();
+    }
+    return originOffset();
+}
+
+Vec2D LayoutComponent::originOffset() const
+{
+    return Vec2D(pivotOriginX() * m_layout.width(),
+                 pivotOriginY() * m_layout.height());
+}
+
+Vec2D LayoutComponent::layoutTranslation() const
+{
+    // Our own origin deliberately does not enter here: contents sit within
+    // our box whatever it is, so nothing inside has to compensate. An
+    // artboard's origin does define where its local zero sits, so step back
+    // by it to align to its box.
+    auto location = Vec2D(m_layout.left(), m_layout.top());
+    if (parent() != nullptr && parent()->is<Artboard>())
+    {
+        auto art = parent()->as<Artboard>();
+        location -= Vec2D(art->layoutWidth() * art->originX(),
+                          art->layoutHeight() * art->originY());
+    }
+    return location;
+}
+
+Mat2D LayoutComponent::buildOwnTransform() const
+{
+    // Outermost, matching TransformComponent's T * R * S, so the offset is
+    // not rotated or scaled by our own transform.
+    Mat2D own =
+        composesLayoutOffset()
+            ? Mat2D::fromTranslation(Vec2D(NodeBase::x(), NodeBase::y()))
+            : Mat2D();
+
+    // Pivot about the origin. The box stays put, so wrap rather than fold
+    // into the frame.
+    if (hasLayoutFlag(LayoutComponentFlags::ComposeTransform) &&
+        (rotation() != 0.0f || scaleX() != 1.0f || scaleY() != 1.0f))
+    {
+        Mat2D local =
+            rotation() != 0.0f ? Mat2D::fromRotation(rotation()) : Mat2D();
+        local.scaleByValues(scaleX(), scaleY());
+        auto pivot = originOffset();
+        if (pivot.x != 0.0f || pivot.y != 0.0f)
+        {
+            local = Mat2D::multiply(
+                Mat2D::fromTranslate(pivot.x, pivot.y),
+                Mat2D::multiply(local,
+                                Mat2D::fromTranslate(-pivot.x, -pivot.y)));
+        }
+        own = Mat2D::multiply(own, local);
+    }
+    return own;
+}
+
+// Same unrooted guard as Node's — nothing to be relative to yet.
+float LayoutComponent::computedRootX()
+{
+    if (artboard() == nullptr)
+    {
+        return 0.0f;
+    }
+    return artboard()->rootTransform(worldTransform() * localAnchor()).x;
+}
+
+float LayoutComponent::computedRootY()
+{
+    if (artboard() == nullptr)
+    {
+        return 0.0f;
+    }
+    return artboard()->rootTransform(worldTransform() * localAnchor()).y;
+}
+
+void LayoutComponent::updateTransform() { m_Transform = buildOwnTransform(); }
+
+void LayoutComponent::composeWorldTransform()
+{
+    Mat2D parentWorld =
+        parent() != nullptr && parent()->is<WorldTransformComponent>()
+            ? parent()->as<WorldTransformComponent>()->worldTransform()
+            : Mat2D();
+    // Insert where the layout placed us, the same shape Shape/Text/Image
+    // use for a participant.
+    Mat2D base = Mat2D::fromTranslation(layoutTranslation());
+    m_WorldTransform =
+        Mat2D::multiply(Mat2D::multiply(parentWorld, base), m_Transform);
+}
+
 void LayoutComponent::update(ComponentDirt value)
 {
-    Super::update(value);
 #ifdef WITH_RIVE_LAYOUT
     if (value == ComponentDirt::Filthy)
     {
-        // Use this to prevent layout animation on startup
+        // First update: jump straight to the layout's target instead of
+        // animating in from zero. Done before Super's pass below, which
+        // composes our world transform from m_layout.
         interruptAnimation();
     }
 #endif
+    // m_Transform rotates and scales us about our origin, which sits at a
+    // fraction of our solved size (see buildOwnTransform). A new layout solve
+    // marks only WorldTransform dirty, so also pass Transform dirt: Super then
+    // rebuilds m_Transform before it composes the world transform and applies
+    // our constraints. Don't add a second pass after it -- ScrollConstraint
+    // counts the children it constrains to decide when to virtualize.
+    Super::update(parent() != nullptr &&
+                          hasDirt(value, ComponentDirt::WorldTransform)
+                      ? value | ComponentDirt::Transform
+                      : value);
     if (hasDirt(value, ComponentDirt::RenderOpacity))
     {
         propagateOpacity(childOpacity());
-    }
-    if (parent() != nullptr && hasDirt(value, ComponentDirt::WorldTransform))
-    {
-        Mat2D parentWorld =
-            parent()->is<WorldTransformComponent>()
-                ? (parent()->as<WorldTransformComponent>())->worldTransform()
-                : Mat2D();
-        auto location = Vec2D(m_layout.left(), m_layout.top());
-        if (parent()->is<Artboard>())
-        {
-            auto art = parent()->as<Artboard>();
-            location -= Vec2D(art->layoutWidth() * art->originX(),
-                              art->layoutHeight() * art->originY());
-        }
-        auto transform = Mat2D::fromTranslation(location);
-        m_WorldTransform = Mat2D::multiply(parentWorld, transform);
-        updateConstraints();
     }
     if (hasDirt(value,
                 ComponentDirt::Path | ComponentDirt::WorldTransform |
@@ -117,35 +407,92 @@ void LayoutComponent::update(ComponentDirt value)
         updateRenderPath();
     }
 
-    m_positionLeftChanged = false;
-    m_positionTopChanged = false;
+    setLayoutFlag(LayoutComponentFlags::PositionLeftChanged, false);
+    setLayoutFlag(LayoutComponentFlags::PositionTopChanged, false);
 }
 
 void LayoutComponent::widthOverride(float width, int unitValue, bool isRow)
 {
     m_widthOverride = width;
-    m_widthUnitValueOverride = unitValue;
-    m_parentIsRow = isRow;
+    m_widthUnitValueOverride = static_cast<int8_t>(unitValue);
+    setLayoutFlag(LayoutComponentFlags::ParentIsRow, isRow);
     markLayoutNodeDirty();
 }
 
 void LayoutComponent::heightOverride(float height, int unitValue, bool isRow)
 {
     m_heightOverride = height;
-    m_heightUnitValueOverride = unitValue;
-    m_parentIsRow = isRow;
+    m_heightUnitValueOverride = static_cast<int8_t>(unitValue);
+    setLayoutFlag(LayoutComponentFlags::ParentIsRow, isRow);
     markLayoutNodeDirty();
 }
 
 void LayoutComponent::parentIsRow(bool isRow)
 {
-    m_parentIsRow = isRow;
+    setLayoutFlag(LayoutComponentFlags::ParentIsRow, isRow);
+    markLayoutNodeDirty();
+}
+
+#ifdef WITH_RIVE_LAYOUT
+LayoutScaleType LayoutComponent::effectiveWidthScaleType()
+{
+    if (canHaveOverrides() && m_widthUnitValueOverride != -1)
+    {
+        switch (YGUnit(m_widthUnitValueOverride))
+        {
+            case YGUnitPoint:
+            case YGUnitPercent:
+                return LayoutScaleType::fixed;
+            case YGUnitAuto:
+                return hasLayoutFlag(
+                           LayoutComponentFlags::WidthIntrinsicallySizeOverride)
+                           ? LayoutScaleType::hug
+                           : LayoutScaleType::fill;
+            default:
+                break;
+        }
+    }
+    return m_style != nullptr ? m_style->widthScaleType()
+                              : LayoutScaleType::fixed;
+}
+
+LayoutScaleType LayoutComponent::effectiveHeightScaleType()
+{
+    if (canHaveOverrides() && m_heightUnitValueOverride != -1)
+    {
+        switch (YGUnit(m_heightUnitValueOverride))
+        {
+            case YGUnitPoint:
+            case YGUnitPercent:
+                return LayoutScaleType::fixed;
+            case YGUnitAuto:
+                return hasLayoutFlag(LayoutComponentFlags::
+                                         HeightIntrinsicallySizeOverride)
+                           ? LayoutScaleType::hug
+                           : LayoutScaleType::fill;
+            default:
+                break;
+        }
+    }
+    return m_style != nullptr ? m_style->heightScaleType()
+                              : LayoutScaleType::fixed;
+}
+#endif
+
+void LayoutComponent::parentIsStack(bool isStack)
+{
+    if (hasLayoutFlag(LayoutComponentFlags::ParentIsStack) == isStack)
+    {
+        return;
+    }
+    setLayoutFlag(LayoutComponentFlags::ParentIsStack, isStack);
     markLayoutNodeDirty();
 }
 
 void LayoutComponent::widthIntrinsicallySizeOverride(bool intrinsic)
 {
-    m_widthIntrinsicallySizeOverride = intrinsic;
+    setLayoutFlag(LayoutComponentFlags::WidthIntrinsicallySizeOverride,
+                  intrinsic);
     // If we have an intrinsically sized override, set units to auto
     // otherwise set to points
     m_widthUnitValueOverride = intrinsic ? 3 : 1;
@@ -154,7 +501,8 @@ void LayoutComponent::widthIntrinsicallySizeOverride(bool intrinsic)
 
 void LayoutComponent::heightIntrinsicallySizeOverride(bool intrinsic)
 {
-    m_heightIntrinsicallySizeOverride = intrinsic;
+    setLayoutFlag(LayoutComponentFlags::HeightIntrinsicallySizeOverride,
+                  intrinsic);
     // If we have an intrinsically sized override, set units to auto
     // otherwise set to points
     m_heightUnitValueOverride = intrinsic ? 3 : 1;
@@ -185,9 +533,9 @@ void LayoutComponent::forcedHeight(float height)
 
 void LayoutComponent::updateConstraints()
 {
-    if (m_layoutConstraints.size() > 0)
+    if (layoutConstraints().size() > 0)
     {
-        for (auto parentConstraint : m_layoutConstraints)
+        for (auto parentConstraint : layoutConstraints())
         {
             parentConstraint->constrainChild(this);
         }
@@ -252,8 +600,7 @@ bool LayoutComponent::collapse(bool value)
 
 #ifdef WITH_RIVE_LAYOUT
 
-LayoutComponent::LayoutComponent() :
-    m_layoutData(new LayoutData()), m_proxy(this)
+LayoutComponent::LayoutComponent() : m_layoutData(new LayoutData())
 {
     m_layoutData->node.getConfig()->setPointScaleFactor(0);
 }
@@ -295,6 +642,12 @@ StatusCode LayoutComponent::onAddedDirty(CoreContext* context)
     }
     m_style = static_cast<LayoutComponentStyle*>(coreStyle);
     addChild(m_style);
+#ifdef WITH_RIVE_LAYOUT
+    refreshStyleDisplayHidden();
+    // We contribute sizing the style cannot see; it contributes the rest.
+    addLayoutStyleApplier(this);
+    addLayoutStyleApplier(m_style);
+#endif
 
     return StatusCode::Ok;
 }
@@ -306,21 +659,38 @@ StatusCode LayoutComponent::onAddedClean(CoreContext* context)
     {
         return code;
     }
-    markLayoutStyleDirty();
-    m_backgroundRect.originX(0);
-    m_backgroundRect.originY(0);
-    syncLayoutChildren();
-    propagateCollapse(isCollapsed());
+#ifdef WITH_RIVE_EDITOR
+    // Coop-apply hydration: skip the render/layout side effects — the
+    // graph is partial here and they re-fire when the renderer attaches
+    // and the first pump runs. Runtime .riv imports are marked validated
+    // at read time and never see a pump, so they must run the wiring now
+    // or Yoga layout stays NaN.
+    if (hasValidated())
+#endif
+    {
+        markLayoutStyleDirty();
+        syncLayoutChildren();
+        propagateCollapse(isCollapsed());
+    }
     return StatusCode::Ok;
 }
 
 void LayoutComponent::drawProxy(Renderer* renderer)
 {
-    if (clip())
+    // Pair the save/clip here with the restore in draw(). Record whether we
+    // actually saved so draw() never restores a save that wasn't issued. Set OR
+    // clear it every time the proxy draws: the proxy is injected once and stays
+    // in the draw order, so a later pass where clip() is off must clear a stale
+    // true from an earlier pass. (When the proxy isn't in the draw order at
+    // all, this never runs, the flag stays false, and draw() skips the
+    // restore.)
+    const bool saveForClip = clip();
+    if (saveForClip)
     {
         renderer->save();
-        renderer->clipPath(m_worldPath.renderPath(this));
+        renderer->clipPath(mutableRenderPaths().world.renderPath(this));
     }
+    setLayoutFlag(LayoutComponentFlags::ClipSaved, saveForClip);
     for (auto shapePaint : m_ShapePaints)
     {
         if (!shapePaint->shouldDraw())
@@ -338,9 +708,13 @@ void LayoutComponent::drawProxy(Renderer* renderer)
 
 void LayoutComponent::draw(Renderer* renderer)
 {
-    // Restore clip before drawing stroke so we don't clip the stroke
-    if (clip())
+    // Restore clip before drawing stroke so we don't clip the stroke. Pair the
+    // restore with drawProxy()'s save via ClipSaved rather than clip(): if the
+    // proxy wasn't in the draw order (so drawProxy() never saved) but clip() is
+    // true, restoring here would underflow the renderer's save stack.
+    if (hasLayoutFlag(LayoutComponentFlags::ClipSaved))
     {
+        setLayoutFlag(LayoutComponentFlags::ClipSaved, false);
         renderer->restore();
     }
 }
@@ -351,33 +725,55 @@ void LayoutComponent::updateRenderPath()
     {
         return;
     }
-    m_backgroundRect.width(m_layout.width());
-    m_backgroundRect.height(m_layout.height());
+    if (m_ShapePaints.empty() && !clip() &&
+        !hasLayoutFlag(LayoutComponentFlags::HasForegroundDrawable))
+    {
+        return;
+    }
+    float tl = 0.0f, tr = 0.0f, br = 0.0f, bl = 0.0f;
     if (style() != nullptr)
     {
-        bool isLTR = actualDirection() != LayoutDirection::rtl;
-        auto linkedValue = style()->cornerRadiusTL();
-        auto tl = isLTR ? style()->cornerRadiusTL() : style()->cornerRadiusTR();
-        auto tr = isLTR ? style()->cornerRadiusTR() : style()->cornerRadiusTL();
-        auto bl = isLTR ? style()->cornerRadiusBL() : style()->cornerRadiusBR();
-        auto br = isLTR ? style()->cornerRadiusBR() : style()->cornerRadiusBL();
-        m_backgroundRect.linkCornerRadius(style()->linkCornerRadius());
-        m_backgroundRect.cornerRadiusTL(
-            style()->linkCornerRadius() ? linkedValue : tl);
-        m_backgroundRect.cornerRadiusTR(
-            style()->linkCornerRadius() ? linkedValue : tr);
-        m_backgroundRect.cornerRadiusBL(
-            style()->linkCornerRadius() ? linkedValue : bl);
-        m_backgroundRect.cornerRadiusBR(
-            style()->linkCornerRadius() ? linkedValue : br);
+        const bool isLTR = actualDirection() != LayoutDirection::rtl;
+        if (style()->linkCornerRadius())
+        {
+            tl = tr = br = bl = style()->cornerRadiusTL();
+        }
+        else
+        {
+            tl = isLTR ? style()->cornerRadiusTL() : style()->cornerRadiusTR();
+            tr = isLTR ? style()->cornerRadiusTR() : style()->cornerRadiusTL();
+            bl = isLTR ? style()->cornerRadiusBL() : style()->cornerRadiusBR();
+            br = isLTR ? style()->cornerRadiusBR() : style()->cornerRadiusBL();
+        }
     }
-    m_backgroundRect.update(ComponentDirt::Path);
 
-    m_localPath.rewind();
-    m_localPath.addPath(m_backgroundRect.rawPath());
+    auto& renderPaths = mutableRenderPaths();
+    renderPaths.background.rewind();
+    Path::addRoundedRect(
+        renderPaths.background,
+        AABB::fromLTWH(0.0f, 0.0f, m_layout.width(), m_layout.height()),
+        tl,
+        tr,
+        br,
+        bl);
+    // Drop empty segments, such as the zero-length sides of a pill. local's
+    // addPath would drop them anyway; doing it here makes local an exact copy
+    // of the background, so the two can be compared below.
+    renderPaths.background.pruneEmptySegments();
 
-    m_worldPath.rewind(false, FillRule::clockwise);
-    m_worldPath.addPath(m_backgroundRect.rawPath(), &m_WorldTransform);
+    // Moving a layout leaves its background as it was. Keep local then:
+    // rewinding it would hand the renderer identical geometry and discard the
+    // tessellation it cached for it. Compare rather than trust the dirt that
+    // got us here: a layout tween resizes with only WorldTransform dirt. world
+    // always rebuilds, since it bakes in the world transform.
+    if (!(*renderPaths.local.rawPath() == renderPaths.background))
+    {
+        renderPaths.local.rewind();
+        renderPaths.local.addPath(renderPaths.background);
+    }
+
+    renderPaths.world.rewind(false, FillRule::clockwise);
+    renderPaths.world.addPath(renderPaths.background, &m_WorldTransform);
 
     for (auto shapePaint : m_ShapePaints)
     {
@@ -398,11 +794,17 @@ static YGSize measureFunc(YGNode* node,
                           float height,
                           YGMeasureMode heightMode)
 {
-    Vec2D size = ((LayoutComponent*)node->getContext())
-                     ->measureLayout(width,
-                                     (LayoutMeasureMode)widthMode,
-                                     height,
-                                     (LayoutMeasureMode)heightMode);
+    const bool probing = YGConfigIsMeasuringMinContent(node->getConfig());
+    Vec2D size =
+        ((LayoutComponent*)node->getContext())
+            ->measureLayout(width,
+                            measureModeForContent((LayoutMeasureMode)widthMode,
+                                                  width,
+                                                  probing),
+                            height,
+                            measureModeForContent((LayoutMeasureMode)heightMode,
+                                                  height,
+                                                  probing));
 
     return YGSize{size.x, size.y};
 }
@@ -412,6 +814,29 @@ Vec2D LayoutComponent::measureLayout(float width,
                                      float height,
                                      LayoutMeasureMode heightMode)
 {
+    if (m_style != nullptr && m_style->hugUnbounded())
+    {
+        // Per axis: a fill axis leaves flexBasis auto, so its measure feeds
+        // yoga's basis for the line. Widening it there would move this item's
+        // share of the remainder -- a fill axis the option never promised to
+        // touch.
+        bool widthHugs = effectiveWidthScaleType() == LayoutScaleType::hug;
+        bool heightHugs = effectiveHeightScaleType() == LayoutScaleType::hug;
+        // Legacy files encode hug as fixed on BOTH axes plus
+        // intrinsicallySized.
+        if (!widthHugs && !heightHugs)
+        {
+            widthHugs = heightHugs = m_style->intrinsicallySized();
+        }
+        if (widthHugs)
+        {
+            widthMode = unboundMeasureMode(widthMode);
+        }
+        if (heightHugs)
+        {
+            heightMode = unboundMeasureMode(heightMode);
+        }
+    }
     Vec2D size = Vec2D();
     for (auto child : children())
     {
@@ -431,6 +856,15 @@ Vec2D LayoutComponent::measureLayout(float width,
         }
     }
     return size;
+}
+
+bool LayoutComponent::effectiveParentIsRow()
+{
+    if (canHaveOverrides())
+    {
+        return hasLayoutFlag(LayoutComponentFlags::ParentIsRow);
+    }
+    return layoutParent() != nullptr ? layoutParent()->mainAxisIsRow() : true;
 }
 
 bool LayoutComponent::mainAxisIsRow()
@@ -453,17 +887,18 @@ bool LayoutComponent::mainAxisIsColumn()
            style()->flexDirection() == YGFlexDirectionColumnReverse;
 }
 
+bool LayoutComponent::isStackContainer()
+{
+    return style() != nullptr && style()->isStack();
+}
+
 bool LayoutComponent::isLeaf()
 {
-    for (auto child : children())
-    {
-        auto layout = LayoutNodeProvider::from(child);
-        if (layout != nullptr)
-        {
-            return false;
-        }
-    }
-    return true;
+    bool leaf = true;
+    forEachLayoutProvider(this, [&leaf](Component*, LayoutNodeProvider*) {
+        leaf = false;
+    });
+    return leaf;
 }
 
 void* LayoutComponent::layoutNode(int index)
@@ -475,23 +910,37 @@ void* LayoutComponent::layoutNode(int index)
     return nullptr;
 }
 
-void LayoutComponent::syncStyle()
+#ifdef WITH_RIVE_LAYOUT
+// Tracks come from GridTrack children, which the style cannot walk. A stack has
+// no authored tracks — the style sets up its implicit cell instead.
+void LayoutComponent::applyContainerStyle(YGStyle& ygStyle,
+                                          const LayoutSyncContext& context)
 {
-    if (m_style == nullptr || m_layoutData == nullptr)
+    if (m_style == nullptr || m_style->isStack())
     {
         return;
     }
-    YGNode& ygNode = m_layoutData->node;
-    YGStyle& ygStyle = m_layoutData->style;
-    if (m_style->intrinsicallySized() && isLeaf())
+    GridTrack::syncContainerStyle(ygStyle, this, m_style->justifyItemsValue());
+}
+#endif
+
+#ifdef WITH_RIVE_LAYOUT
+// This layout's own size and how it sits in its parent's flow. On the
+// component, not the style, because it reads width()/height(), the
+// NestedArtboardLayout overrides and the forced dimensions.
+//
+// Not shared with LayoutParticipant::applyBaseStyle: the participant has no
+// flexBasis, no overrides and its own fractionalWidth, so merging would change
+// behaviour.
+void LayoutComponent::applyBaseStyle(YGStyle& ygStyle,
+                                     const LayoutSyncContext& context)
+{
+    if (m_style == nullptr)
     {
-        ygNode.setContext(this);
-        ygNode.setMeasureFunc(measureFunc);
+        return;
     }
-    else
-    {
-        ygNode.setMeasureFunc(nullptr);
-    }
+    const bool parentIsRow = context.parentIsRow;
+    const bool parentIsGridLike = context.parentIsGrid;
 
     // Derive the unit the layout engine needs from the persisted unit + scale
     // type.
@@ -532,8 +981,6 @@ void LayoutComponent::syncStyle()
     auto realHeightScaleType = m_style->heightScaleType();
     auto realHeightUnits =
         effectiveUnits(realHeightScaleType, m_style->heightUnits());
-    auto parentIsRow =
-        layoutParent() != nullptr ? layoutParent()->mainAxisIsRow() : true;
 
     // If we have override width/height values, use those.
     // Currently we only use these for Artboards that are part of a
@@ -549,53 +996,15 @@ void LayoutComponent::syncStyle()
         {
             realHeight = m_heightOverride;
         }
-        parentIsRow = m_parentIsRow;
-
         if (m_widthUnitValueOverride != -1)
         {
             realWidthUnits = YGUnit(m_widthUnitValueOverride);
-            switch (realWidthUnits)
-            {
-                case YGUnitPoint:
-                case YGUnitPercent:
-                    realWidthScaleType = LayoutScaleType::fixed;
-                    break;
-                case YGUnitAuto:
-                    if (m_widthIntrinsicallySizeOverride)
-                    {
-                        realWidthScaleType = LayoutScaleType::hug;
-                    }
-                    else
-                    {
-                        realWidthScaleType = LayoutScaleType::fill;
-                    }
-                    break;
-                default:
-                    break;
-            }
+            realWidthScaleType = effectiveWidthScaleType();
         }
         if (m_heightUnitValueOverride != -1)
         {
             realHeightUnits = YGUnit(m_heightUnitValueOverride);
-            switch (realHeightUnits)
-            {
-                case YGUnitPoint:
-                case YGUnitPercent:
-                    realHeightScaleType = LayoutScaleType::fixed;
-                    break;
-                case YGUnitAuto:
-                    if (m_heightIntrinsicallySizeOverride)
-                    {
-                        realHeightScaleType = LayoutScaleType::hug;
-                    }
-                    else
-                    {
-                        realHeightScaleType = LayoutScaleType::fill;
-                    }
-                    break;
-                default:
-                    break;
-            }
+            realHeightScaleType = effectiveHeightScaleType();
         }
     }
     if (!std::isnan(m_forcedWidth))
@@ -619,261 +1028,184 @@ void LayoutComponent::syncStyle()
             YGValue{std::max(0.0f, realHeight), realHeightUnits};
     }
 
-    switch (realWidthScaleType)
+    if (parentIsGridLike)
     {
-        case LayoutScaleType::fixed:
-            if (parentIsRow)
-            {
-                ygStyle.flexGrow() = YGFloatOptional(0);
-                ygStyle.flexShrink() = YGFloatOptional(0);
-                ygStyle.flexBasis() = YGValue{m_style->flexBasis(), YGUnitAuto};
-            }
-            else
-            {
-                ygStyle.alignSelf() = YGAlignAuto;
-            }
-            break;
-        case LayoutScaleType::fill:
-            if (parentIsRow)
-            {
-                ygStyle.flexGrow() = YGFloatOptional(fractionalWidth());
-                ygStyle.flexShrink() = YGFloatOptional(fractionalWidth());
-                ygStyle.flexBasis() =
-                    YGValue{m_style->flexBasis(), m_style->flexBasisUnits()};
-            }
-            else
-            {
-                ygStyle.alignSelf() = YGAlignStretch;
-            }
-            break;
-        case LayoutScaleType::hug:
-            if (parentIsRow)
-            {
-                ygStyle.flexGrow() = YGFloatOptional(0);
-                ygStyle.flexShrink() = YGFloatOptional(0);
-                ygStyle.flexBasis() = YGValue{m_style->flexBasis(), YGUnitAuto};
-            }
-            else
-            {
-                ygStyle.alignSelf() = YGAlignAuto;
-            }
-            break;
-        default:
-            break;
+        // Grid/stack: size per-axis. fill stretches that axis (width ->
+        // justifySelf after grid placement below, height -> alignSelf);
+        // non-fill stays auto so the container alignment positions us. flexGrow
+        // ignored.
+        ygStyle.flexGrow() = YGFloatOptional(0);
+        ygStyle.flexShrink() = YGFloatOptional(0);
+        ygStyle.alignSelf() = realHeightScaleType == LayoutScaleType::fill
+                                  ? YGAlignStretch
+                                  : YGAlignAuto;
+    }
+    else
+    {
+        switch (realWidthScaleType)
+        {
+            case LayoutScaleType::fixed:
+                if (parentIsRow)
+                {
+                    ygStyle.flexGrow() = YGFloatOptional(0);
+                    ygStyle.flexShrink() = YGFloatOptional(0);
+                    ygStyle.flexBasis() =
+                        YGValue{m_style->flexBasis(), YGUnitAuto};
+                }
+                else
+                {
+                    ygStyle.alignSelf() = YGAlignAuto;
+                }
+                break;
+            case LayoutScaleType::fill:
+                if (parentIsRow)
+                {
+                    ygStyle.flexGrow() = YGFloatOptional(fractionalWidth());
+                    ygStyle.flexShrink() = YGFloatOptional(fractionalWidth());
+                    ygStyle.flexBasis() = YGValue{m_style->flexBasis(),
+                                                  m_style->flexBasisUnits()};
+                }
+                else
+                {
+                    ygStyle.alignSelf() = YGAlignStretch;
+                }
+                break;
+            case LayoutScaleType::hug:
+                if (parentIsRow)
+                {
+                    ygStyle.flexGrow() = YGFloatOptional(0);
+                    ygStyle.flexShrink() = YGFloatOptional(0);
+                    ygStyle.flexBasis() =
+                        YGValue{m_style->flexBasis(), YGUnitAuto};
+                }
+                else
+                {
+                    ygStyle.alignSelf() = YGAlignAuto;
+                }
+                break;
+            default:
+                break;
+        }
+
+        switch (realHeightScaleType)
+        {
+            case LayoutScaleType::fixed:
+                if (!parentIsRow)
+                {
+                    ygStyle.flexGrow() = YGFloatOptional(0);
+                    ygStyle.flexShrink() = YGFloatOptional(0);
+                    ygStyle.flexBasis() =
+                        YGValue{m_style->flexBasis(), YGUnitAuto};
+                }
+                else
+                {
+                    ygStyle.alignSelf() = YGAlignAuto;
+                }
+                break;
+            case LayoutScaleType::fill:
+                if (!parentIsRow)
+                {
+                    ygStyle.flexGrow() = YGFloatOptional(fractionalHeight());
+                    ygStyle.flexShrink() = YGFloatOptional(fractionalHeight());
+                    ygStyle.flexBasis() = YGValue{m_style->flexBasis(),
+                                                  m_style->flexBasisUnits()};
+                }
+                else
+                {
+                    ygStyle.alignSelf() = YGAlignStretch;
+                }
+                break;
+            case LayoutScaleType::hug:
+                if (!parentIsRow)
+                {
+                    ygStyle.flexGrow() = YGFloatOptional(0);
+                    ygStyle.flexShrink() = YGFloatOptional(0);
+                    ygStyle.flexBasis() =
+                        YGValue{m_style->flexBasis(), YGUnitAuto};
+                }
+                else
+                {
+                    ygStyle.alignSelf() = YGAlignAuto;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+}
+#endif
+
+void LayoutComponent::syncStyle()
+{
+    if (m_style == nullptr || m_layoutData == nullptr)
+    {
+        return;
+    }
+    YGNode& ygNode = m_layoutData->node;
+    // Appliers write straight into the node's own style; no scratch copy.
+    YGStyle& ygStyle = m_layoutData->style();
+    if (m_style->intrinsicallySized() && isLeaf())
+    {
+        ygNode.setContext(this);
+        ygNode.setMeasureFunc(measureFunc);
+    }
+    else
+    {
+        ygNode.setMeasureFunc(nullptr);
     }
 
-    switch (realHeightScaleType)
-    {
-        case LayoutScaleType::fixed:
-            if (!parentIsRow)
-            {
-                ygStyle.flexGrow() = YGFloatOptional(0);
-                ygStyle.flexShrink() = YGFloatOptional(0);
-                ygStyle.flexBasis() = YGValue{m_style->flexBasis(), YGUnitAuto};
-            }
-            else
-            {
-                ygStyle.alignSelf() = YGAlignAuto;
-            }
-            break;
-        case LayoutScaleType::fill:
-            if (!parentIsRow)
-            {
-                ygStyle.flexGrow() = YGFloatOptional(fractionalHeight());
-                ygStyle.flexShrink() = YGFloatOptional(fractionalHeight());
-                ygStyle.flexBasis() =
-                    YGValue{m_style->flexBasis(), m_style->flexBasisUnits()};
-            }
-            else
-            {
-                ygStyle.alignSelf() = YGAlignStretch;
-            }
-            break;
-        case LayoutScaleType::hug:
-            if (!parentIsRow)
-            {
-                ygStyle.flexGrow() = YGFloatOptional(0);
-                ygStyle.flexShrink() = YGFloatOptional(0);
-                ygStyle.flexBasis() = YGValue{m_style->flexBasis(), YGUnitAuto};
-            }
-            else
-            {
-                ygStyle.alignSelf() = YGAlignAuto;
-            }
-            break;
-        default:
-            break;
-    }
+    // Our owning layout may sit above a transparent container (group/Solo), so
+    // walk up for it rather than reading the immediate parent — a grouped item
+    // is still laid out by the container and needs its context. Cached because
+    // layoutParent() walks the chain on each call.
+    auto* parentLayout = layoutParent();
+    auto* parentLayoutStyle =
+        parentLayout != nullptr ? parentLayout->style() : nullptr;
+    // A hosted artboard (list item, nested artboard layout) has no parent() to
+    // walk, so its host pushes the container's stack state in. Only stack is
+    // pushed: a grid already auto-places these nodes correctly, and claiming
+    // grid here would move them off the flex sizing path they use today.
+    bool parentIsStack =
+        parentLayoutStyle != nullptr
+            ? parentLayoutStyle->isStack()
+            : (canHaveOverrides() &&
+               hasLayoutFlag(LayoutComponentFlags::ParentIsStack));
+    bool parentIsGridLike = parentLayoutStyle != nullptr
+                                ? parentLayoutStyle->isGrid()
+                                : parentIsStack;
+    uint32_t containerJustifyItems =
+        parentLayoutStyle != nullptr ? parentLayoutStyle->justifyItemsValue()
+                                     : (uint32_t)YGJustifyStretch;
+    // Every style write is an applier now; resolve the context and run them.
+    LayoutSyncContext syncContext;
+    syncContext.parentIsGrid = parentIsGridLike;
+    syncContext.parentIsStack = parentIsStack;
+    syncContext.containerJustifyItems = containerJustifyItems;
+    auto widthScale = effectiveWidthScaleType();
+    syncContext.widthFills = widthScale == LayoutScaleType::fill;
+    syncContext.inlineHugs = widthScale == LayoutScaleType::hug;
+    syncContext.parentIsRow = effectiveParentIsRow();
+    syncContext.isLTR = actualDirection() != LayoutDirection::rtl;
+    syncContext.hasLayoutParent = layoutParent() != nullptr;
+    m_layoutData->applyLayoutStyles(ygStyle, syncContext);
 
-    bool isRowForAlignment = mainAxisIsRow();
-    switch (m_style->alignmentType())
-    {
-        case LayoutAlignmentType::topLeft:
-        case LayoutAlignmentType::topCenter:
-        case LayoutAlignmentType::topRight:
-            if (isRowForAlignment)
-            {
-                ygStyle.alignItems() = YGAlignFlexStart;
-                ygStyle.alignContent() = YGAlignFlexStart;
-            }
-            else
-            {
-                ygStyle.justifyContent() = YGJustifyFlexStart;
-            }
-            break;
-        case LayoutAlignmentType::centerLeft:
-        case LayoutAlignmentType::center:
-        case LayoutAlignmentType::centerRight:
-            if (isRowForAlignment)
-            {
-                ygStyle.alignItems() = YGAlignCenter;
-                ygStyle.alignContent() = YGAlignCenter;
-            }
-            else
-            {
-                ygStyle.justifyContent() = YGJustifyCenter;
-            }
-            break;
-        case LayoutAlignmentType::bottomLeft:
-        case LayoutAlignmentType::bottomCenter:
-        case LayoutAlignmentType::bottomRight:
-            if (isRowForAlignment)
-            {
-                ygStyle.alignItems() = YGAlignFlexEnd;
-                ygStyle.alignContent() = YGAlignFlexEnd;
-            }
-            else
-            {
-                ygStyle.justifyContent() = YGJustifyFlexEnd;
-            }
-            break;
-        default:
-            break;
-    }
-    switch (m_style->alignmentType())
-    {
-        case LayoutAlignmentType::topLeft:
-        case LayoutAlignmentType::centerLeft:
-        case LayoutAlignmentType::bottomLeft:
-            if (isRowForAlignment)
-            {
-                ygStyle.justifyContent() = YGJustifyFlexStart;
-            }
-            else
-            {
-                ygStyle.alignItems() = YGAlignFlexStart;
-                ygStyle.alignContent() = YGAlignFlexStart;
-            }
-            break;
-        case LayoutAlignmentType::topCenter:
-        case LayoutAlignmentType::center:
-        case LayoutAlignmentType::bottomCenter:
-            if (isRowForAlignment)
-            {
-                ygStyle.justifyContent() = YGJustifyCenter;
-            }
-            else
-            {
-                ygStyle.alignItems() = YGAlignCenter;
-                ygStyle.alignContent() = YGAlignCenter;
-            }
-            break;
-        case LayoutAlignmentType::topRight:
-        case LayoutAlignmentType::centerRight:
-        case LayoutAlignmentType::bottomRight:
-            if (isRowForAlignment)
-            {
-                ygStyle.justifyContent() = YGJustifyFlexEnd;
-            }
-            else
-            {
-                ygStyle.alignItems() = YGAlignFlexEnd;
-                ygStyle.alignContent() = YGAlignFlexEnd;
-            }
-            break;
-        case LayoutAlignmentType::spaceBetweenStart:
-            ygStyle.alignItems() = YGAlignFlexStart;
-            ygStyle.alignContent() = YGAlignFlexStart;
-            ygStyle.justifyContent() = YGJustifySpaceBetween;
-            break;
-        case LayoutAlignmentType::spaceBetweenCenter:
-            ygStyle.alignItems() = YGAlignCenter;
-            ygStyle.alignContent() = YGAlignCenter;
-            ygStyle.justifyContent() = YGJustifySpaceBetween;
-            break;
-        case LayoutAlignmentType::spaceBetweenEnd:
-            ygStyle.alignItems() = YGAlignFlexEnd;
-            ygStyle.alignContent() = YGAlignFlexEnd;
-            ygStyle.justifyContent() = YGJustifySpaceBetween;
-            break;
-    }
-
-    ygStyle.minDimensions()[YGDimensionWidth] =
-        YGValue{m_style->minWidth(), m_style->minWidthUnits()};
-    ygStyle.minDimensions()[YGDimensionHeight] =
-        YGValue{m_style->minHeight(), m_style->minHeightUnits()};
-    ygStyle.maxDimensions()[YGDimensionWidth] =
-        YGValue{m_style->maxWidth(), m_style->maxWidthUnits()};
-    ygStyle.maxDimensions()[YGDimensionHeight] =
-        YGValue{m_style->maxHeight(), m_style->maxHeightUnits()};
-    ygStyle.gap()[YGGutterColumn] =
-        YGValue{m_style->gapHorizontal(), m_style->gapHorizontalUnits()};
-    ygStyle.gap()[YGGutterRow] =
-        YGValue{m_style->gapVertical(), m_style->gapVerticalUnits()};
-
-    bool isLTR = actualDirection() != LayoutDirection::rtl;
-    auto startEdge = isLTR ? YGEdgeLeft : YGEdgeRight;
-    auto endEdge = isLTR ? YGEdgeRight : YGEdgeLeft;
-    ygStyle.border()[startEdge] =
-        YGValue{m_style->borderLeft(), m_style->borderLeftUnits()};
-    ygStyle.border()[endEdge] =
-        YGValue{m_style->borderRight(), m_style->borderRightUnits()};
-    ygStyle.border()[YGEdgeTop] =
-        YGValue{m_style->borderTop(), m_style->borderTopUnits()};
-    ygStyle.border()[YGEdgeBottom] =
-        YGValue{m_style->borderBottom(), m_style->borderBottomUnits()};
-
-    bool hasLayoutParent = layoutParent() != nullptr;
-    ygStyle.margin()[startEdge] =
-        YGValue{m_style->marginLeft(),
-                hasLayoutParent ? m_style->marginLeftUnits() : YGUnitPoint};
-    ygStyle.margin()[endEdge] =
-        YGValue{m_style->marginRight(),
-                hasLayoutParent ? m_style->marginRightUnits() : YGUnitPoint};
-    ygStyle.margin()[YGEdgeTop] =
-        YGValue{m_style->marginTop(),
-                hasLayoutParent ? m_style->marginTopUnits() : YGUnitPoint};
-    ygStyle.margin()[YGEdgeBottom] =
-        YGValue{m_style->marginBottom(),
-                hasLayoutParent ? m_style->marginBottomUnits() : YGUnitPoint};
-
-    ygStyle.padding()[startEdge] =
-        YGValue{m_style->paddingLeft(), m_style->paddingLeftUnits()};
-    ygStyle.padding()[endEdge] =
-        YGValue{m_style->paddingRight(), m_style->paddingRightUnits()};
-    ygStyle.padding()[YGEdgeTop] =
-        YGValue{m_style->paddingTop(), m_style->paddingTopUnits()};
-    ygStyle.padding()[YGEdgeBottom] =
-        YGValue{m_style->paddingBottom(), m_style->paddingBottomUnits()};
-    ygStyle.position()[startEdge] =
-        YGValue{m_style->positionLeft(), m_style->positionLeftUnits()};
-    ygStyle.position()[endEdge] =
-        YGValue{m_style->positionRight(), m_style->positionRightUnits()};
-    ygStyle.position()[YGEdgeTop] =
-        YGValue{m_style->positionTop(), m_style->positionTopUnits()};
-    ygStyle.position()[YGEdgeBottom] =
-        YGValue{m_style->positionBottom(), m_style->positionBottomUnits()};
-
-    ygStyle.display() = m_style->display();
-    ygStyle.positionType() = m_style->positionType();
-    ygStyle.flex() = YGFloatOptional(m_style->flex());
-    ygStyle.flexDirection() = m_style->flexDirection();
-    ygStyle.flexWrap() = m_style->flexWrap();
-    ygStyle.direction() = m_style->direction();
-    ygStyle.aspectRatio() = YGFloatOptional(
-        m_style->aspectRatio() > 0 ? m_style->aspectRatio() : NAN);
-
-    ygNode.setStyle(ygStyle);
+    // Sync the styles of participant children that provide their
+    // own layout node (including any nested inside transparent groups).
+    // LayoutComponent children sync their own styles through the dirty-layout
+    // set; these have no such entry.
+    forEachLayoutProvider(this,
+                          [](Component* child, LayoutNodeProvider* provider) {
+                              switch (child->coreType())
+                              {
+                                  case LayoutComponentBase::typeKey:
+                                  case NestedArtboardLayoutBase::typeKey:
+                                  case ArtboardComponentListBase::typeKey:
+                                      break;
+                                  default:
+                                      provider->syncStyleChanges();
+                                      break;
+                              }
+                          });
 }
 
 void LayoutComponent::clearLayoutChildren()
@@ -887,47 +1219,38 @@ void LayoutComponent::syncLayoutChildren()
     YGNode& ourNode = m_layoutData->node;
     YGNodeRemoveAllChildren(&ourNode);
     int index = 0;
-    for (auto child : children())
-    {
-        YGNode* node = nullptr;
-        switch (child->coreType())
-        {
-            case LayoutComponentBase::typeKey:
-                node = &child->as<LayoutComponent>()->m_layoutData->node;
+    forEachLayoutProvider(
+        this,
+        [&ourNode, &index](Component*, LayoutNodeProvider* provider) {
+            for (size_t i = 0; i < provider->numLayoutNodes(); i++)
+            {
+                auto* node = static_cast<YGNode*>(provider->layoutNode((int)i));
                 if (node != nullptr)
                 {
                     ourNode.insertChild(node, index++);
                     node->setOwner(&ourNode);
                     ourNode.markDirtyAndPropagate();
                 }
-                break;
-            case NestedArtboardLayoutBase::typeKey:
-                node = static_cast<YGNode*>(
-                    child->as<NestedArtboardLayout>()->layoutNode(0));
-                if (node != nullptr)
-                {
-                    ourNode.insertChild(node, index++);
-                    node->setOwner(&ourNode);
-                    ourNode.markDirtyAndPropagate();
-                }
-                break;
-            case ArtboardComponentListBase::typeKey:
-                auto list = child->as<ArtboardComponentList>();
-                for (int i = 0; i < list->artboardCount(); i++)
-                {
-                    node = static_cast<YGNode*>(list->layoutNode(i));
-                    if (node != nullptr)
-                    {
-                        ourNode.insertChild(node, index++);
-                        node->setOwner(&ourNode);
-                        ourNode.markDirtyAndPropagate();
-                    }
-                }
-                break;
-        }
-    }
+            }
+        });
     markLayoutNodeDirty();
 }
+
+#ifdef WITH_RIVE_TOOLS
+bool LayoutComponent::collectsForLayout(Component* child)
+{
+    // Runs the real walk rather than a copy of the rule.
+    bool found = false;
+    forEachLayoutProvider(this,
+                          [child, &found](Component* c, LayoutNodeProvider*) {
+                              if (c == child)
+                              {
+                                  found = true;
+                              }
+                          });
+    return found;
+}
+#endif
 
 void LayoutComponent::propagateSize() { propagateSizeToChildren(this); }
 
@@ -939,8 +1262,17 @@ void LayoutComponent::propagateSizeToChildren(ContainerComponent* component)
     }
     for (auto child : component->children())
     {
-        if (child->is<LayoutComponent>() ||
-            child->coreType() == NodeBase::typeKey)
+        // Don't content-size nested layouts, or groups — a group's contents are
+        // free content, never content-sized from here. A Solo is not a barrier:
+        // its children content-size as direct children would. A participating
+        // child is caught by the provider check below.
+        if (child->is<LayoutComponent>() || stopsContentSizing(child))
+        {
+            continue;
+        }
+        // A participating child owns its own layout node and is sized by the
+        // layout engine, not by controlSize — skip it.
+        if (LayoutNodeProvider::from(child) != nullptr)
         {
             continue;
         }
@@ -987,11 +1319,19 @@ void LayoutComponent::calculateLayoutInternal(float availableWidth,
 
 bool LayoutComponent::styleDisplayHidden() const
 {
-    if (m_style == nullptr)
-    {
-        return false;
-    }
-    return m_style->display() == YGDisplayNone;
+#ifdef WITH_RIVE_EDITOR
+    // The editor can change a style under us without telling this layout, so
+    // read it every time there.
+    return m_style != nullptr && m_style->display() == YGDisplayNone;
+#else
+    return hasLayoutFlag(LayoutComponentFlags::StyleDisplayHidden);
+#endif
+}
+
+void LayoutComponent::refreshStyleDisplayHidden()
+{
+    setLayoutFlag(LayoutComponentFlags::StyleDisplayHidden,
+                  m_style != nullptr && m_style->display() == YGDisplayNone);
 }
 
 LayoutDirection LayoutComponent::actualDirection()
@@ -1048,22 +1388,18 @@ void LayoutComponent::updateLayoutBounds(bool animate)
     }
     node.setHasNewLayout(false);
 
-    for (auto child : children())
-    {
-        auto layout = LayoutNodeProvider::from(child);
-        if (layout != nullptr)
-        {
-            layout->updateLayoutBounds(animate);
-        }
-    }
+    forEachLayoutProvider(this,
+                          [animate](Component*, LayoutNodeProvider* provider) {
+                              provider->updateLayoutBounds(animate);
+                          });
 
-    auto yogaLayout = node.getLayout();
+    const auto& yogaLayout = node.getLayout();
     Layout newLayout = layoutFromYoga(yogaLayout);
     m_layoutPadding = layoutPaddingFromYoga(yogaLayout);
 
-    if (m_justAddedToHost)
+    if (hasLayoutFlag(LayoutComponentFlags::JustAddedToHost))
     {
-        m_justAddedToHost = false;
+        setLayoutFlag(LayoutComponentFlags::JustAddedToHost, false);
         // In cases were we have a host (ie, Component List, etc), we
         // don't want to animate the x/y/width/height because the initial
         // x/y/width/height will have been 0,0,0,0 within the parent host.
@@ -1075,33 +1411,47 @@ void LayoutComponent::updateLayoutBounds(bool animate)
         // this may be useful in adding support for animate in/out of
         // items in an ArtboardHost.
         m_layout = newLayout;
-        auto animationData = currentAnimationData();
-        animationData->from = newLayout;
-        animationData->to = newLayout;
-        animationData->elapsedSeconds = 0.0f;
+        // Unallocated, from/to already read as m_layout, which we just set --
+        // there is nothing to snap.
+        if (auto* animationData = currentAnimationData())
+        {
+            animationData->from = newLayout;
+            animationData->to = newLayout;
+            animationData->elapsedSeconds = 0.0f;
+        }
         propagateSize();
         markWorldTransformDirty();
-        m_forceUpdateLayoutBounds = false;
+        setLayoutFlag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
         return;
     }
 
     if (animate && animates())
     {
+        // Test the target before allocating: with no state the target reads
+        // as m_layout, so a layout that solves to the bounds it already has
+        // never pays for the block just because its style can animate.
         auto animationData = currentAnimationData();
-        if (newLayout != animationData->to || m_forceUpdateLayoutBounds)
+        const Layout& target =
+            animationData != nullptr ? animationData->to : m_layout;
+        if (newLayout != target ||
+            hasLayoutFlag(LayoutComponentFlags::ForceUpdateLayoutBounds))
         {
+            // Committed to retargeting now, so realize the state.
+            ensureAnimation();
+            animationData = currentAnimationData();
             if (animationData->elapsedSeconds != 0.0f)
             {
-                if (m_isSmoothingAnimation)
+                if (hasLayoutFlag(LayoutComponentFlags::IsSmoothingAnimation))
                 {
                     // we were already smoothening.
-                    m_animationDataA.copy(m_animationDataB);
+                    m_animation->a.copy(m_animation->b);
                 }
-                m_isSmoothingAnimation = true;
+                setLayoutFlag(LayoutComponentFlags::IsSmoothingAnimation, true);
             }
             else
             {
-                m_isSmoothingAnimation = false;
+                setLayoutFlag(LayoutComponentFlags::IsSmoothingAnimation,
+                              false);
             }
             animationData = currentAnimationData();
             animationData->from = m_layout;
@@ -1111,7 +1461,8 @@ void LayoutComponent::updateLayoutBounds(bool animate)
             markWorldTransformDirty();
         }
     }
-    else if (newLayout != m_layout || m_forceUpdateLayoutBounds)
+    else if (newLayout != m_layout ||
+             hasLayoutFlag(LayoutComponentFlags::ForceUpdateLayoutBounds))
     {
         if (m_layout.width() != newLayout.width() ||
             m_layout.height() != newLayout.height())
@@ -1119,17 +1470,37 @@ void LayoutComponent::updateLayoutBounds(bool animate)
             // Width changed, we need to rebuild the path.
             addDirt(ComponentDirt::Path);
         }
-        m_animationDataA.to = m_layout = newLayout;
+        m_layout = newLayout;
+        if (m_animation != nullptr)
+        {
+            // Keep the animate path's retarget check honest: while we are not
+            // animating, `to` tracks m_layout (which is what the unallocated
+            // case reports anyway).
+            m_animation->a.to = newLayout;
+        }
 
         propagateSize();
         markWorldTransformDirty();
     }
-    m_forceUpdateLayoutBounds = false;
+    setLayoutFlag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
+}
+
+AdvancingComponent::QuietState LayoutComponent::quietState()
+{
+    // The early outs of advanceComponent and applyInterpolation.
+    auto animationData = currentAnimationData();
+    if (isCollapsed() || animationData == nullptr || !animates() ||
+        m_style == nullptr || animationData->to == m_layout)
+    {
+        return QuietState::quiet;
+    }
+    return QuietState::busy;
 }
 
 bool LayoutComponent::advanceComponent(float elapsedSeconds, AdvanceFlags flags)
 {
-    if ((flags & AdvanceFlags::NewFrame) != AdvanceFlags::NewFrame)
+    if ((flags & AdvanceFlags::NewFrame) != AdvanceFlags::NewFrame ||
+        isCollapsed())
     {
         return false;
     }
@@ -1170,8 +1541,12 @@ KeyFrameInterpolator* LayoutComponent::interpolator()
     switch (m_style->animationStyle())
     {
         case LayoutAnimationStyle::inherit:
-            return m_inheritedInterpolator != nullptr ? m_inheritedInterpolator
-                                                      : m_style->interpolator();
+        {
+            auto* inherited = m_animation != nullptr
+                                  ? m_animation->inheritedInterpolator
+                                  : nullptr;
+            return inherited != nullptr ? inherited : m_style->interpolator();
+        }
         case LayoutAnimationStyle::custom:
             return m_style->interpolator();
         default:
@@ -1189,7 +1564,8 @@ LayoutStyleInterpolation LayoutComponent::interpolation()
     switch (m_style->animationStyle())
     {
         case LayoutAnimationStyle::inherit:
-            return m_inheritedInterpolation;
+            return m_animation != nullptr ? m_animation->inheritedInterpolation
+                                          : defaultInterpolation;
         case LayoutAnimationStyle::custom:
             return m_style->interpolation();
         default:
@@ -1206,7 +1582,9 @@ float LayoutComponent::interpolationTime()
     switch (m_style->animationStyle())
     {
         case LayoutAnimationStyle::inherit:
-            return m_inheritedInterpolationTime;
+            return m_animation != nullptr
+                       ? m_animation->inheritedInterpolationTime
+                       : 0;
         case LayoutAnimationStyle::custom:
             return m_style->interpolationTime();
         default:
@@ -1248,24 +1626,13 @@ bool LayoutComponent::cascadeLayoutStyle(
         addDirt(ComponentDirt::Path);
         updated = true;
     }
-    for (auto child : children())
-    {
-        if (child->is<LayoutComponent>())
-        {
-            child->as<LayoutComponent>()->cascadeLayoutStyle(
-                interpolation(),
-                interpolator(),
-                interpolationTime(),
-                actualDirection());
-        }
-        else if (auto provider = LayoutNodeProvider::from(child))
-        {
-            provider->cascadeLayoutStyle(interpolation(),
-                                         interpolator(),
-                                         interpolationTime(),
-                                         actualDirection());
-        }
-    }
+    forEachLayoutProvider(this,
+                          [this](Component*, LayoutNodeProvider* provider) {
+                              provider->cascadeLayoutStyle(interpolation(),
+                                                           interpolator(),
+                                                           interpolationTime(),
+                                                           actualDirection());
+                          });
     return updated;
 }
 
@@ -1274,13 +1641,25 @@ bool LayoutComponent::setInheritedInterpolation(
     KeyFrameInterpolator* inheritedInterpolator,
     float inheritedInterpolationTime)
 {
-    if (inheritedInterpolation != m_inheritedInterpolation ||
-        inheritedInterpolator != m_inheritedInterpolator ||
-        inheritedInterpolationTime != m_inheritedInterpolationTime)
+    if (m_animation == nullptr)
     {
-        m_inheritedInterpolation = inheritedInterpolation;
-        m_inheritedInterpolator = inheritedInterpolator;
-        m_inheritedInterpolationTime = inheritedInterpolationTime;
+        // An all-default cascade is what an unallocated layout already
+        // reports, so storing it would change nothing but the footprint.
+        if (inheritedInterpolation == LayoutStyleInterpolation::hold &&
+            inheritedInterpolator == nullptr &&
+            inheritedInterpolationTime == 0.0f)
+        {
+            return false;
+        }
+        ensureAnimation();
+    }
+    if (inheritedInterpolation != m_animation->inheritedInterpolation ||
+        inheritedInterpolator != m_animation->inheritedInterpolator ||
+        inheritedInterpolationTime != m_animation->inheritedInterpolationTime)
+    {
+        m_animation->inheritedInterpolation = inheritedInterpolation;
+        m_animation->inheritedInterpolator = inheritedInterpolator;
+        m_animation->inheritedInterpolationTime = inheritedInterpolationTime;
         return true;
     }
     return false;
@@ -1288,14 +1667,40 @@ bool LayoutComponent::setInheritedInterpolation(
 
 void LayoutComponent::clearInheritedInterpolation()
 {
-    m_inheritedInterpolation = LayoutStyleInterpolation::hold;
-    m_inheritedInterpolator = nullptr;
-    m_inheritedInterpolationTime = 0;
+    if (m_animation == nullptr)
+    {
+        // Already reporting the cleared values.
+        return;
+    }
+    m_animation->inheritedInterpolation = LayoutStyleInterpolation::hold;
+    m_animation->inheritedInterpolator = nullptr;
+    m_animation->inheritedInterpolationTime = 0;
 }
 
 LayoutAnimationData* LayoutComponent::currentAnimationData()
 {
-    return m_isSmoothingAnimation ? &m_animationDataB : &m_animationDataA;
+    if (m_animation == nullptr)
+    {
+        return nullptr;
+    }
+    return hasLayoutFlag(LayoutComponentFlags::IsSmoothingAnimation)
+               ? &m_animation->b
+               : &m_animation->a;
+}
+
+LayoutAnimation& LayoutComponent::ensureAnimation()
+{
+    if (m_animation == nullptr)
+    {
+        m_animation = std::make_unique<LayoutAnimation>();
+        // While unallocated the accessors report from/to as m_layout. Seed the
+        // real state identically so realizing it is never observable -- in
+        // particular the animate path's `newLayout != to` retarget check must
+        // not fire just because we allocated.
+        m_animation->a.from = m_animation->a.to = m_layout;
+        m_animation->b.from = m_animation->b.to = m_layout;
+    }
+    return *m_animation;
 }
 
 void LayoutAnimationData::copy(const LayoutAnimationData& source)
@@ -1308,33 +1713,35 @@ void LayoutAnimationData::copy(const LayoutAnimationData& source)
 bool LayoutComponent::applyInterpolation(float elapsedSeconds, bool animate)
 {
     auto animationData = currentAnimationData();
-    if (!animate || !animates() || m_style == nullptr ||
-        animationData->to == m_layout)
+    // No state means nothing was ever retargeted: `to` reads as m_layout, so
+    // the original `to == m_layout` bail-out holds by construction.
+    if (animationData == nullptr || !animate || !animates() ||
+        m_style == nullptr || animationData->to == m_layout)
     {
         return false;
     }
-    if (m_isSmoothingAnimation)
+    if (hasLayoutFlag(LayoutComponentFlags::IsSmoothingAnimation))
     {
-        float f = std::fmin(1.0f,
-                            interpolationTime() > 0.0f
-                                ? m_animationDataA.elapsedSeconds /
-                                      interpolationTime()
-                                : 1.0f);
+        float f =
+            std::fmin(1.0f,
+                      interpolationTime() > 0.0f
+                          ? m_animation->a.elapsedSeconds / interpolationTime()
+                          : 1.0f);
 
         if (interpolation() != LayoutStyleInterpolation::linear &&
             interpolator() != nullptr)
         {
             f = interpolator()->transform(f);
         }
-        m_animationDataB.from = m_animationDataA.interpolate(f);
+        m_animation->b.from = m_animation->a.interpolate(f);
         if (f == 1.0f)
         {
-            m_animationDataA.copy(m_animationDataB);
-            m_isSmoothingAnimation = false;
+            m_animation->a.copy(m_animation->b);
+            setLayoutFlag(LayoutComponentFlags::IsSmoothingAnimation, false);
         }
         else
         {
-            m_animationDataA.elapsedSeconds += elapsedSeconds;
+            m_animation->a.elapsedSeconds += elapsedSeconds;
         }
     }
 
@@ -1349,16 +1756,16 @@ bool LayoutComponent::applyInterpolation(float elapsedSeconds, bool animate)
         }
         m_layout = animationData->to;
 
-        if (m_isSmoothingAnimation)
+        if (hasLayoutFlag(LayoutComponentFlags::IsSmoothingAnimation))
         {
-            m_isSmoothingAnimation = false;
-            m_animationDataA.copy(m_animationDataB);
-            m_animationDataA.elapsedSeconds = m_animationDataB.elapsedSeconds =
+            setLayoutFlag(LayoutComponentFlags::IsSmoothingAnimation, false);
+            m_animation->a.copy(m_animation->b);
+            m_animation->a.elapsedSeconds = m_animation->b.elapsedSeconds =
                 0.0f;
         }
         else
         {
-            m_animationDataA.elapsedSeconds = 0.0f;
+            m_animation->a.elapsedSeconds = 0.0f;
         }
         propagateSize();
         markWorldTransformDirty();
@@ -1392,8 +1799,15 @@ bool LayoutComponent::applyInterpolation(float elapsedSeconds, bool animate)
     animationData->elapsedSeconds += elapsedSeconds;
     if (f != 1)
     {
-        // Do we really need to mark the layout node dirty!!??
-        markLayoutNodeDirty();
+        // The tween moves m_layout toward a target the last solve already
+        // produced, and changes nothing Yoga reads, so a layout needs no new
+        // solve while it runs. An artboard is the exception: a host that lays
+        // it out (a list, a nested artboard layout) only learns its new size
+        // through markLayoutDirty, which markLayoutNodeDirty calls.
+        if (is<Artboard>())
+        {
+            markLayoutNodeDirty();
+        }
         return true;
     }
     return false;
@@ -1403,7 +1817,10 @@ void LayoutComponent::interruptAnimation()
 {
     if (animates())
     {
-        m_layout = currentAnimationData()->to;
+        if (auto* animationData = currentAnimationData())
+        {
+            m_layout = animationData->to;
+        }
         propagateSize();
     }
 }
@@ -1412,7 +1829,8 @@ void LayoutComponent::markLayoutNodeDirty(bool shouldForceUpdateLayoutBounds)
 {
     if (shouldForceUpdateLayoutBounds == true)
     {
-        m_forceUpdateLayoutBounds = shouldForceUpdateLayoutBounds;
+        setLayoutFlag(LayoutComponentFlags::ForceUpdateLayoutBounds,
+                      shouldForceUpdateLayoutBounds);
     }
     m_layoutData->node.markDirtyAndPropagate();
     artboard()->markLayoutDirty(this);
@@ -1439,11 +1857,11 @@ void LayoutComponent::positionTypeChanged()
         // Preserve computed position only if left/top were not explicitly keyed
         // this frame. If keyed, honor those values and only set units
         // appropriately.
-        if (!m_positionLeftChanged)
+        if (!hasLayoutFlag(LayoutComponentFlags::PositionLeftChanged))
         {
             m_style->positionLeft(layoutBounds().left());
         }
-        if (!m_positionTopChanged)
+        if (!hasLayoutFlag(LayoutComponentFlags::PositionTopChanged))
         {
             m_style->positionTop(layoutBounds().top());
         }
@@ -1486,21 +1904,30 @@ void LayoutComponent::displayChanged()
     {
         return;
     }
+    refreshStyleDisplayHidden();
     propagateCollapse(isCollapsed());
     markLayoutNodeDirty();
+}
+
+void LayoutComponent::syncChildProviderStyles()
+{
+    forEachLayoutProvider(this, [](Component*, LayoutNodeProvider* provider) {
+        provider->syncStyleChanges();
+        provider->markLayoutNodeDirty();
+    });
 }
 
 void LayoutComponent::flexDirectionChanged()
 {
     markLayoutNodeDirty();
-    for (Component* child : children())
-    {
-        auto layout = LayoutNodeProvider::from(child);
-        if (layout != nullptr)
-        {
-            layout->markLayoutNodeDirty();
-        }
-    }
+    syncChildProviderStyles();
+}
+
+// Switching grid/flex/stack changes how each child's style maps to yoga.
+void LayoutComponent::layoutTypeChanged()
+{
+    markLayoutNodeDirty();
+    syncChildProviderStyles();
 }
 
 void LayoutComponent::directionChanged()
@@ -1509,9 +1936,7 @@ void LayoutComponent::directionChanged()
     markLayoutNodeDirty(true);
 }
 #else
-LayoutComponent::LayoutComponent() :
-    m_layoutData(new LayoutData()), m_proxy(this)
-{}
+LayoutComponent::LayoutComponent() : m_layoutData(new LayoutData()) {}
 
 float LayoutComponent::gapHorizontal() { return 0; }
 float LayoutComponent::gapVertical() { return 0; }
@@ -1535,12 +1960,18 @@ bool LayoutComponent::advanceComponent(float elapsedSeconds, AdvanceFlags flags)
     return false;
 }
 
+AdvancingComponent::QuietState LayoutComponent::quietState()
+{
+    return QuietState::quiet;
+}
+
 void LayoutComponent::markLayoutNodeDirty(bool shouldForceUpdateLayoutBounds) {}
 void LayoutComponent::markLayoutStyleDirty() {}
 void LayoutComponent::onDirty(ComponentDirt value) {}
 bool LayoutComponent::mainAxisIsRow() { return true; }
 
 bool LayoutComponent::mainAxisIsColumn() { return false; }
+bool LayoutComponent::isStackContainer() { return false; }
 void LayoutComponent::calculateLayoutInternal(float availableWidth,
                                               float availableHeight)
 {}
@@ -1559,15 +1990,39 @@ LayoutComponent::~LayoutComponent()
 #endif
 }
 
-void LayoutComponent::clipChanged() { markLayoutNodeDirty(); }
+void LayoutComponent::clipChanged()
+{
+    markLayoutNodeDirty();
+    addDirt(ComponentDirt::Path);
+}
 void LayoutComponent::widthChanged() { markLayoutNodeDirty(); }
 void LayoutComponent::heightChanged() { markLayoutNodeDirty(); }
 void LayoutComponent::styleIdChanged() { markLayoutNodeDirty(); }
 void LayoutComponent::fractionalWidthChanged() { markLayoutNodeDirty(); }
 void LayoutComponent::fractionalHeightChanged() { markLayoutNodeDirty(); }
 
-ShapePaintPath* LayoutComponent::worldPath() { return &m_worldPath; }
-ShapePaintPath* LayoutComponent::localPath() { return &m_localPath; }
-ShapePaintPath* LayoutComponent::localClockwisePath() { return &m_localPath; }
+ShapePaintPath* LayoutComponent::worldPath()
+{
+    return m_renderPaths != nullptr ? &m_renderPaths->world : nullptr;
+}
+ShapePaintPath* LayoutComponent::localPath()
+{
+    return m_renderPaths != nullptr ? &m_renderPaths->local : nullptr;
+}
+ShapePaintPath* LayoutComponent::localClockwisePath()
+{
+    return m_renderPaths != nullptr ? &m_renderPaths->local : nullptr;
+}
 
 Component* LayoutComponent::pathBuilder() { return this; }
+
+BoundsFidelity LayoutComponent::paintedWorldBounds(AABB* out)
+{
+    // localBounds() through worldTransform(), deliberately NOT worldBounds():
+    // that one reads only transform[4] and [5], so it silently drops rotation
+    // and scale and would under-report a rotated layout.
+    //
+    // Corner radius and clip() only ever shrink what is painted, so ignoring
+    // both keeps this an over-estimate.
+    return paintedBoundsFromLocal(localBounds(), worldTransform(), this, out);
+}

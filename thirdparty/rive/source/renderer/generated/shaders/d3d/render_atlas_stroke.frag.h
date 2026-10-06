@@ -7,8 +7,8 @@
 //
 // Name                                 Type  Format         Dim      HLSL Bind  Count
 // ------------------------------ ---------- ------- ----------- -------------- ------
-// T9                                sampler      NA          NA            s10      1 
-// QC                                texture   float     1darray            t10      1 
+// wa                                sampler      NA          NA             s9      1 
+// YC                                texture   float     1darray             t9      1 
 //
 //
 //
@@ -28,17 +28,17 @@
 //
 ps_5_0
 dcl_globalFlags refactoringAllowed
-dcl_sampler s10, mode_default
-dcl_resource_texture1darray (float,float,float,float) t10
+dcl_sampler s9, mode_default
+dcl_resource_texture1darray (float,float,float,float) t9
 dcl_input_ps linear noperspective v0.xy
 dcl_output o0.x
 dcl_temps 1
 add r0.x, v0.x, l(3.000000)
 mov r0.yw, l(0,0,0,0)
-sample_l_indexable(texture1darray)(float,float,float,float) r0.x, r0.xyxx, t10.xyzw, s10, l(0.000000)
+sample_l_indexable(texture1darray)(float,float,float,float) r0.x, r0.xyxx, t9.xyzw, s9, l(0.000000)
 add r0.x, -r0.x, l(1.000000)
 add r0.z, -v0.y, l(1.000000)
-sample_l_indexable(texture1darray)(float,float,float,float) r0.y, r0.zwzz, t10.yxzw, s10, l(0.000000)
+sample_l_indexable(texture1darray)(float,float,float,float) r0.y, r0.zwzz, t9.yxzw, s9, l(0.000000)
 add o0.x, -r0.y, r0.x
 ret 
 // Approximately 8 instruction slots used
@@ -46,10 +46,10 @@ ret
 
 const BYTE g_main[] =
 {
-     68,  88,  66,  67, 194,  80, 
-    240, 180, 198,  31,  49,  54, 
-    176,  11, 143,   3, 188, 119, 
-    250,  52,   1,   0,   0,   0, 
+     68,  88,  66,  67, 244,   0, 
+     90,  95,  63, 223, 224, 202, 
+    225,  37,  93, 164,  64, 140, 
+    222,  49,   1,   0,   0,   0, 
     104,   3,   0,   0,   5,   0, 
       0,   0,  52,   0,   0,   0, 
     232,   0,   0,   0,  64,   1, 
@@ -69,15 +69,15 @@ const BYTE g_main[] =
     124,   0,   0,   0,   3,   0, 
       0,   0,   0,   0,   0,   0, 
       0,   0,   0,   0,   0,   0, 
-      0,   0,  10,   0,   0,   0, 
+      0,   0,   9,   0,   0,   0, 
       1,   0,   0,   0,   1,   0, 
       0,   0, 127,   0,   0,   0, 
       2,   0,   0,   0,   5,   0, 
       0,   0,   3,   0,   0,   0, 
-    255, 255, 255, 255,  10,   0, 
+    255, 255, 255, 255,   9,   0, 
       0,   0,   1,   0,   0,   0, 
-      1,   0,   0,   0,  84,  57, 
-      0,  81,  67,   0,  77, 105, 
+      1,   0,   0,   0, 119,  97, 
+      0,  89,  67,   0,  77, 105, 
      99, 114, 111, 115, 111, 102, 
     116,  32,  40,  82,  41,  32, 
      72,  76,  83,  76,  32,  83, 
@@ -112,9 +112,9 @@ const BYTE g_main[] =
       0,   0,  80,   0,   0,   0, 
      84,   0,   0,   0, 106,   8, 
       0,   1,  90,   0,   0,   3, 
-      0,  96,  16,   0,  10,   0, 
+      0,  96,  16,   0,   9,   0, 
       0,   0,  88,  56,   0,   4, 
-      0, 112,  16,   0,  10,   0, 
+      0, 112,  16,   0,   9,   0, 
       0,   0,  85,  85,   0,   0, 
      98,  32,   0,   3,  50,  16, 
      16,   0,   0,   0,   0,   0, 
@@ -136,9 +136,9 @@ const BYTE g_main[] =
      21,   0,  18,   0,  16,   0, 
       0,   0,   0,   0,  70,   0, 
      16,   0,   0,   0,   0,   0, 
-     70, 126,  16,   0,  10,   0, 
+     70, 126,  16,   0,   9,   0, 
       0,   0,   0,  96,  16,   0, 
-     10,   0,   0,   0,   1,  64, 
+      9,   0,   0,   0,   1,  64, 
       0,   0,   0,   0,   0,   0, 
       0,   0,   0,   8,  18,   0, 
      16,   0,   0,   0,   0,   0, 
@@ -156,8 +156,8 @@ const BYTE g_main[] =
      16,   0,   0,   0,   0,   0, 
     230,  10,  16,   0,   0,   0, 
       0,   0,  22, 126,  16,   0, 
-     10,   0,   0,   0,   0,  96, 
-     16,   0,  10,   0,   0,   0, 
+      9,   0,   0,   0,   0,  96, 
+     16,   0,   9,   0,   0,   0, 
       1,  64,   0,   0,   0,   0, 
       0,   0,   0,   0,   0,   8, 
      18,  32,  16,   0,   0,   0, 

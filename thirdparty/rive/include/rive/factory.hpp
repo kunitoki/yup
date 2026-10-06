@@ -14,6 +14,7 @@
 
 #include <stdio.h>
 #include <cstdint>
+#include <vector>
 
 namespace rive
 {
@@ -22,6 +23,10 @@ class RawPath;
 namespace ore
 {
 class Context;
+}
+namespace cmd
+{
+class DeferredCanvasHost;
 }
 
 class Factory
@@ -33,6 +38,11 @@ public:
     virtual rcp<RenderBuffer> makeRenderBuffer(RenderBufferType,
                                                RenderBufferFlags,
                                                size_t sizeInBytes) = 0;
+
+    virtual rcp<ImageMeshInstances> makeImageMeshInstances(size_t count)
+    {
+        return make_rcp<ImageMeshInstances>(count);
+    }
 
     virtual rcp<RenderShader> makeLinearGradient(
         float sx,
@@ -69,7 +79,55 @@ public:
     // shifting existing vtable slots.
     virtual ore::Context* ore() { return nullptr; }
 
+    // The GPU render context an import through this factory should give its
+    // scripts, as a Factory so this header stays free of gpu types. A render
+    // context answers with itself; a recording session answers with the one it
+    // records for, which on web is null until a render texture attaches, so
+    // callers that deferred an allocation ask again rather than caching the
+    // null they saw at import. Null means the importer cannot route GPU
+    // scripting.
+    virtual Factory* renderContext() { return nullptr; }
+
+    // Set when script canvas work must record rather than issue. Null means
+    // scripts draw straight to the driver.
+    virtual cmd::DeferredCanvasHost* deferredCanvasHost() { return nullptr; }
+
+    // A host that can hand out an offscreen frame to draw into, used by
+    // features that rasterize into a texture rather than to the screen (e.g.
+    // an artboard caching itself as a bitmap). A recording session doubles as
+    // one, which is the default.
+    //
+    // Kept separate from deferredCanvasHost() on purpose: that one answers
+    // "content is being recorded for a later replay", and the scripting layer
+    // keys canvas allocation and frame handling off it. A renderer that draws
+    // immediately can serve this hook, but must not answer that one.
+    virtual cmd::DeferredCanvasHost* canvasContentHost()
+    {
+        return deferredCanvasHost();
+    }
+
+    // Whether THIS device can apply a layer mask. Distinct from the hook of the
+    // same name on DeferredCanvasHost, which is the one a caller about to
+    // rasterize asks: that one is about the canvas being handed out, this one
+    // is about the device, and the two are different objects whenever a factory
+    // delegates its host elsewhere.
+    //
+    // It exists for exactly one caller. A recording session has to ask the
+    // context it will replay against, and all it holds is a Factory* -- which
+    // in a Canvas-2D build is not a render context at all, so it must dispatch
+    // rather than cast.
+    //
+    // No by default, matching the host hook and for the same reason: the
+    // default Renderer::applyLayerMask is itself a no-op, so a factory that has
+    // not answered is one whose renderer will drop the op -- and a yes here
+    // reaches a session, which reports support, which has the caller crop to
+    // the mask box on the way to dropping it. That is exactly the Canvas-2D
+    // case: its factory is not a render context and its renderer cannot apply
+    // the op. RenderContext and SerializingFactory opt in.
+    virtual bool supportsLayerMask() const { return false; }
+
     rcp<Font> decodeFont(Span<const uint8_t>);
+    rcp<Font> decodeFont(std::vector<uint8_t>&&);
 
     rcp<AudioSource> decodeAudio(Span<const uint8_t>);
 

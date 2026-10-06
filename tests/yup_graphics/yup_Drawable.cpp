@@ -2175,6 +2175,9 @@ protected:
     class RecordingRenderer : public rive::Renderer
     {
     public:
+        using rive::Renderer::drawImage;
+        using rive::Renderer::drawImageMesh;
+
         void save() override { opacityStack.push_back (opacityStack.back()); }
 
         void restore() override

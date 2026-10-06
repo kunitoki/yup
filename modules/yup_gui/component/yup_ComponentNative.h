@@ -506,6 +506,18 @@ public:
     */
     virtual void enableWireframe (bool shouldBeEnabld) = 0;
 
+    /** Returns when this window's renderer triangulates filled paths on the CPU. */
+    virtual GpuTriangulationThresholds getTriangulationThresholds() const = 0;
+
+    /** Sets when this window's renderer triangulates filled paths on the CPU.
+
+        Applied from the next frame. Lower budgets or higher thresholds save CPU time on
+        busy frames; a budget of 0 turns triangulation off.
+
+        @param thresholds The area, complexity and per-frame time limits to use.
+    */
+    virtual void setTriangulationThresholds (const GpuTriangulationThresholds& thresholds) = 0;
+
     //==============================================================================
     /** Requests a repaint of the entire component. */
     virtual void repaint() = 0;
@@ -620,7 +632,6 @@ public:
         Overrides Options::withVSync() at runtime; the change takes effect before the next frame.
         With vsync the presentation waits for the display refresh (GL swap interval, Metal display
         sync, D3D present interval) and the window renders at the display rate, disabled it paces to
-        getDesiredFrameRate(). Dawn keeps the mode its device was created with and stays paced to
         getDesiredFrameRate().
 
         On the web the browser always presents on the display refresh, so this chooses the pacing

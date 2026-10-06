@@ -1,0 +1,5 @@
+name: viewmodel-assets
+main: Assets
+logs:
+  file: build/rive.log
+  problems: build/problems.log

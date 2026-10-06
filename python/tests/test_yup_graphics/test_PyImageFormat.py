@@ -209,3 +209,18 @@ def test_manager_gives_the_reader_the_stream_it_opened(tmp_path):
 
     assert first == second
     assert first[:4] == _MAGIC
+
+#==================================================================================================
+
+def test_output_bytes_need_an_in_memory_writer(tmp_path):
+    manager = yup.ImageFormatManager()
+    manager.registerFormat(YupRawFormat())
+
+    # The manager hands the format a file stream, so this writer is not in-memory.
+    writer = manager.createWriterFor(yup.File(str(tmp_path / "file_backed.yupr")))
+    assert writer is not None
+
+    with pytest.raises(ValueError):
+        writer.getOutputBytes()
+
+    del writer

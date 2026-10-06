@@ -787,6 +787,22 @@ void SDLComponentNative::enableWireframe (bool shouldBeEnabled)
     repaint();
 }
 
+GpuTriangulationThresholds SDLComponentNative::getTriangulationThresholds() const
+{
+    const SpinLock::ScopedLockType lock (triangulationThresholdsLock);
+    return triangulationThresholds;
+}
+
+void SDLComponentNative::setTriangulationThresholds (const GpuTriangulationThresholds& thresholds)
+{
+    {
+        const SpinLock::ScopedLockType lock (triangulationThresholdsLock);
+        triangulationThresholds = thresholds;
+    }
+
+    repaint();
+}
+
 //==============================================================================
 
 void SDLComponentNative::repaint()
@@ -1244,6 +1260,13 @@ bool SDLComponentNative::renderFrame()
         frameDescriptor.clearColor = clearColor.getARGB();
         frameDescriptor.disableRasterOrdering = renderAtomicMode.load (std::memory_order_relaxed);
         frameDescriptor.wireframe = renderWireframe.load (std::memory_order_relaxed);
+
+        {
+            const auto thresholds = getTriangulationThresholds();
+            frameDescriptor.triangulationThresholds.minArea = thresholds.minArea;
+            frameDescriptor.triangulationThresholds.maxVerbs = thresholds.maxVerbs;
+            frameDescriptor.triangulationThresholds.frameBudgetMs = thresholds.frameBudgetMs;
+        }
         frameDescriptor.fillsDisabled = false;
         frameDescriptor.strokesDisabled = false;
 

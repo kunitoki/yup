@@ -347,3 +347,33 @@ TEST (StrokeTypeTests, All_Combinations)
         }
     }
 }
+TEST (StrokeTypeTests, Position_Defaults_To_Center)
+{
+    EXPECT_EQ (StrokeType().getPosition(), StrokePosition::Center);
+    EXPECT_EQ (StrokeType (2.0f, StrokeJoin::Round, StrokeCap::Square).getPosition(), StrokePosition::Center);
+}
+
+TEST (StrokeTypeTests, With_Position_Keeps_Other_Fields)
+{
+    const auto stroke = StrokeType (3.0f, StrokeJoin::Bevel, StrokeCap::Round).withPosition (StrokePosition::Inside);
+
+    EXPECT_EQ (stroke.getPosition(), StrokePosition::Inside);
+    EXPECT_FLOAT_EQ (stroke.getWidth(), 3.0f);
+    EXPECT_EQ (stroke.getJoin(), StrokeJoin::Bevel);
+    EXPECT_EQ (stroke.getCap(), StrokeCap::Round);
+}
+
+TEST (StrokeTypeTests, Other_Withers_Keep_Position)
+{
+    const auto stroke = StrokeType().withPosition (StrokePosition::Outside);
+
+    EXPECT_EQ (stroke.withWidth (4.0f).getPosition(), StrokePosition::Outside);
+    EXPECT_EQ (stroke.withJoin (StrokeJoin::Round).getPosition(), StrokePosition::Outside);
+    EXPECT_EQ (stroke.withCap (StrokeCap::Square).getPosition(), StrokePosition::Outside);
+}
+
+TEST (StrokeTypeTests, Equality_Includes_Position)
+{
+    EXPECT_NE (StrokeType(), StrokeType().withPosition (StrokePosition::Outside));
+    EXPECT_EQ (StrokeType().withPosition (StrokePosition::Inside), StrokeType().withPosition (StrokePosition::Inside));
+}

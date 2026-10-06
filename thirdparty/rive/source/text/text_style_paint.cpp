@@ -56,7 +56,8 @@ void TextStylePaint::draw(Renderer* renderer, const Mat2D& worldTransform)
         {
             continue;
         }
-        shapePaint->blendMode(parent()->as<Text>()->blendMode());
+        shapePaint->blendMode(parent()->as<Text>()->blendMode(),
+                              parent()->as<Text>()->additiveAmount());
 
         // For blend modes to work, opaque paths render first
         auto itr = m_opacityPaths.find(1.0f);
@@ -86,10 +87,11 @@ void TextStylePaint::draw(Renderer* renderer, const Mat2D& worldTransform)
             }
             RenderPaint* renderPaint = m_paintPool[paintIndex++].get();
             shapePaint->applyTo(renderPaint, itr->first);
-            if (auto feather = shapePaint->feather())
-            {
-                renderPaint->feather(feather->strength());
-            }
+            // Pooled paints are shared across shape paints; always set feather
+            // so one paint's feather doesn't leak into the others.
+            auto feather = shapePaint->feather();
+            renderPaint->feather(feather != nullptr ? feather->strength()
+                                                    : 0.0f);
             ShapePaintPath& path = itr->second;
             shapePaint->draw(renderer,
                              &path,

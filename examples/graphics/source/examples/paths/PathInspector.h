@@ -878,6 +878,13 @@ public:
             });
         addRow ("", visibleToggle);
 
+        fillComboBox (useAsCombo, useAsNames);
+        bindComboBox (useAsCombo, "Use layer as", [this] (int id)
+        {
+            document.setProperty (layer, Ids::useAs, useAsNames[id - 1]);
+        });
+        addRow ("Use as", useAsCombo);
+
         setupSlider (opacitySlider, 0.0, 1.0, 0.01, 1.0);
         bindSlider (opacitySlider, "Layer opacity", [this] (double value)
         {
@@ -891,6 +898,31 @@ public:
             document.setProperty (layer, Ids::blendMode, blendModeNames[id - 1]);
         });
         addRow ("Blend", blendCombo);
+
+        setupSlider (additiveSlider, 0.0, 1.0, 0.01, 1.0);
+        bindSlider (additiveSlider, "Additive amount", [this] (double value)
+        {
+            document.setProperty (layer, Ids::additiveAmount, value);
+        });
+        addRow ("Additive", additiveSlider);
+
+        tintField.onChange = [this] (yup::Color newColor)
+        {
+            document.change ("Change tint", [&]
+            {
+                document.setProperty (layer, Ids::tint, newColor.toString());
+            });
+        };
+        tintField.onGestureStart = [this]
+        {
+            if (! document.isGestureActive())
+                document.beginGesture ("Change tint");
+        };
+        tintField.onGestureEnd = [this]
+        {
+            document.endGesture();
+        };
+        addRow ("Tint", tintField, ColorField::preferredHeight);
 
         setupSlider (featherSlider, 0.0, 100.0, 0.5, 0.0);
         bindSlider (featherSlider, "Layer feather", [this] (double value)
@@ -917,8 +949,12 @@ public:
             nameEditor.setText (getString (layer, Ids::name), yup::dontSendNotification);
 
         visibleToggle.setToggleState (getBool (layer, Ids::visible), yup::dontSendNotification);
+        useAsCombo.setSelectedId (indexOfName (useAsNames, getString (layer, Ids::useAs)) + 1, yup::dontSendNotification);
         opacitySlider.setValue (getFloat (layer, Ids::opacity), yup::dontSendNotification);
         blendCombo.setSelectedId (indexOfName (blendModeNames, getString (layer, Ids::blendMode)) + 1, yup::dontSendNotification);
+        setRowVisible (additiveSlider, PathEditor::getBlendMode (layer) == yup::BlendMode::Additive);
+        additiveSlider.setValue (getFloat (layer, Ids::additiveAmount), yup::dontSendNotification);
+        tintField.setColor (PathEditor::getColor (layer, Ids::tint));
         featherSlider.setValue (getFloat (layer, Ids::feather), yup::dontSendNotification);
         fillRuleCombo.setSelectedId (indexOfName (fillRuleNames, getString (layer, Ids::fillRule)) + 1, yup::dontSendNotification);
     }
@@ -927,8 +963,11 @@ private:
     yup::DataTree layer;
     yup::TextEditor nameEditor;
     yup::ToggleButton visibleToggle;
+    yup::ComboBox useAsCombo;
     yup::Slider opacitySlider { yup::Slider::LinearHorizontal };
     yup::ComboBox blendCombo;
+    yup::Slider additiveSlider { yup::Slider::LinearHorizontal };
+    ColorField tintField;
     yup::Slider featherSlider { yup::Slider::LinearHorizontal };
     yup::ComboBox fillRuleCombo;
 };
@@ -979,6 +1018,41 @@ public:
         };
         addRow ("Color", colorField, ColorField::preferredHeight);
 
+        imageButton.setButtonText ("Choose...");
+        imageButton.onClick = [this]
+        {
+            chooseImage();
+        };
+        addRow ("Image", imageButton);
+
+        addImageSlider (imageXSlider, "X", -1000.0, 2000.0, 0.5, 0.0, Ids::x1);
+        addImageSlider (imageYSlider, "Y", -1000.0, 2000.0, 0.5, 0.0, Ids::y1);
+        addImageSlider (imageScaleSlider, "Scale", 0.01, 20.0, 0.01, 1.0, Ids::imageScale);
+        addImageSlider (imageRotationSlider, "Rotation", -180.0, 180.0, 1.0, 0.0, Ids::imageRotation);
+        addImageSlider (imageSkewXSlider, "Skew X", -60.0, 60.0, 1.0, 0.0, Ids::imageSkewX);
+        addImageSlider (imageSkewYSlider, "Skew Y", -60.0, 60.0, 1.0, 0.0, Ids::imageSkewY);
+
+        fillComboBox (wrapXCombo, imageWrapNames);
+        bindComboBox (wrapXCombo, "Image wrap", [this] (int id)
+        {
+            document.setProperty (paintNode, Ids::wrapX, imageWrapNames[id - 1]);
+        });
+        addRow ("Wrap X", wrapXCombo);
+
+        fillComboBox (wrapYCombo, imageWrapNames);
+        bindComboBox (wrapYCombo, "Image wrap", [this] (int id)
+        {
+            document.setProperty (paintNode, Ids::wrapY, imageWrapNames[id - 1]);
+        });
+        addRow ("Wrap Y", wrapYCombo);
+
+        fillComboBox (filterCombo, imageFilterNames);
+        bindComboBox (filterCombo, "Image filter", [this] (int id)
+        {
+            document.setProperty (paintNode, Ids::filter, imageFilterNames[id - 1]);
+        });
+        addRow ("Sampling", filterCombo);
+
         if (! isStroke)
             return;
 
@@ -1002,6 +1076,13 @@ public:
             document.setProperty (paintNode, Ids::cap, strokeCapNames[id - 1]);
         });
         addRow ("Cap", capCombo);
+
+        fillComboBox (positionCombo, strokePositionNames);
+        bindComboBox (positionCombo, "Stroke position", [this] (int id)
+        {
+            document.setProperty (paintNode, Ids::position, strokePositionNames[id - 1]);
+        });
+        addRow ("Position", positionCombo);
     }
 
     void setLayer (const yup::DataTree& newLayer)
@@ -1014,11 +1095,31 @@ public:
         const auto kind = getString (paintNode, Ids::kind);
         const bool visible = kind != "none";
         const bool gradient = isGradientKind (kind);
+        const bool image = kind == "image";
 
         kindCombo.setSelectedId (indexOfName (paintKindNames, kind) + 1, yup::dontSendNotification);
 
         setRowVisible (stopsBar, gradient);
-        setRowVisible (colorField, visible);
+        setRowVisible (colorField, visible && ! image);
+
+        for (auto* imageEditor : getImageEditors())
+            setRowVisible (*imageEditor, image);
+
+        // The image can be moved anywhere on the page or a page away from it
+        const auto& root = document.getRoot();
+        imageXSlider.setRange (-getFloat (root, Ids::width), getFloat (root, Ids::width) * 2.0, 0.5);
+        imageYSlider.setRange (-getFloat (root, Ids::height), getFloat (root, Ids::height) * 2.0, 0.5);
+
+        imageXSlider.setValue (getFloat (paintNode, Ids::x1), yup::dontSendNotification);
+        imageYSlider.setValue (getFloat (paintNode, Ids::y1), yup::dontSendNotification);
+        imageScaleSlider.setValue (getFloat (paintNode, Ids::imageScale), yup::dontSendNotification);
+        imageRotationSlider.setValue (getFloat (paintNode, Ids::imageRotation), yup::dontSendNotification);
+        imageSkewXSlider.setValue (getFloat (paintNode, Ids::imageSkewX), yup::dontSendNotification);
+        imageSkewYSlider.setValue (getFloat (paintNode, Ids::imageSkewY), yup::dontSendNotification);
+
+        wrapXCombo.setSelectedId (indexOfName (imageWrapNames, getString (paintNode, Ids::wrapX)) + 1, yup::dontSendNotification);
+        wrapYCombo.setSelectedId (indexOfName (imageWrapNames, getString (paintNode, Ids::wrapY)) + 1, yup::dontSendNotification);
+        filterCombo.setSelectedId (indexOfName (imageFilterNames, getString (paintNode, Ids::filter)) + 1, yup::dontSendNotification);
 
         if (gradient)
             stopsBar.setPaint (paintNode);
@@ -1031,13 +1132,58 @@ public:
         setRowVisible (widthSlider, visible);
         setRowVisible (joinCombo, visible);
         setRowVisible (capCombo, visible);
+        setRowVisible (positionCombo, visible);
 
         widthSlider.setValue (getFloat (paintNode, Ids::width), yup::dontSendNotification);
         joinCombo.setSelectedId (indexOfName (strokeJoinNames, getString (paintNode, Ids::join)) + 1, yup::dontSendNotification);
         capCombo.setSelectedId (indexOfName (strokeCapNames, getString (paintNode, Ids::cap)) + 1, yup::dontSendNotification);
+        positionCombo.setSelectedId (indexOfName (strokePositionNames, getString (paintNode, Ids::position)) + 1, yup::dontSendNotification);
     }
 
 private:
+    void addImageSlider (yup::Slider& slider, const yup::String& label, double minimum, double maximum, double interval, double defaultValue, yup::Identifier id)
+    {
+        setupSlider (slider, minimum, maximum, interval, defaultValue);
+        bindSlider (slider, "Image " + label.toLowerCase(), [this, id] (double value)
+        {
+            document.setProperty (paintNode, id, value);
+        });
+        addRow (label, slider);
+    }
+
+    std::array<yup::Component*, 10> getImageEditors()
+    {
+        return { &imageButton, &imageXSlider, &imageYSlider, &imageScaleSlider, &imageRotationSlider,
+                 &imageSkewXSlider, &imageSkewYSlider, &wrapXCombo, &wrapYCombo, &filterCombo };
+    }
+
+    /** Stores the chosen file in the document, so undo and the SVG export keep it. */
+    void chooseImage()
+    {
+        fileChooser = yup::FileChooser::create ("Choose image", yup::File(), "*.png;*.jpg;*.jpeg;*.webp;*.gif");
+
+        // The inspector can be destroyed (switching demos) while the dialog is open
+        fileChooser->browseForFileToOpen ([weakThis = yup::WeakReference<yup::Component> (this), paint = paintNode] (bool success, const yup::Array<yup::File>& results)
+        {
+            auto* self = dynamic_cast<PaintSection*> (weakThis.get());
+            if (self == nullptr || ! success || results.isEmpty())
+                return;
+
+            yup::MemoryBlock bytes;
+            if (! results.getFirst().loadFileAsData (bytes))
+                return;
+
+            const auto image = yup::Image::loadFromData ({ static_cast<const yup::uint8*> (bytes.getData()), bytes.getSize() });
+            if (image.failed())
+                return;
+
+            self->document.edit ("Choose image", [&]
+            {
+                self->document.setProperty (paint, Ids::image, yup::Base64::toBase64 (bytes.getData(), bytes.getSize()));
+            });
+        });
+    }
+
     void refreshColorField()
     {
         const auto source = isGradientKind (getString (paintNode, Ids::kind)) ? stopsBar.getSelectedStop() : paintNode;
@@ -1054,6 +1200,18 @@ private:
     yup::Slider widthSlider { yup::Slider::LinearHorizontal };
     yup::ComboBox joinCombo;
     yup::ComboBox capCombo;
+    yup::ComboBox positionCombo;
+    yup::TextButton imageButton;
+    yup::Slider imageXSlider { yup::Slider::LinearHorizontal };
+    yup::Slider imageYSlider { yup::Slider::LinearHorizontal };
+    yup::Slider imageScaleSlider { yup::Slider::LinearHorizontal };
+    yup::Slider imageRotationSlider { yup::Slider::LinearHorizontal };
+    yup::Slider imageSkewXSlider { yup::Slider::LinearHorizontal };
+    yup::Slider imageSkewYSlider { yup::Slider::LinearHorizontal };
+    yup::ComboBox wrapXCombo;
+    yup::ComboBox wrapYCombo;
+    yup::ComboBox filterCombo;
+    yup::FileChooser::Ptr fileChooser;
 };
 
 //==============================================================================

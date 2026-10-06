@@ -32,6 +32,25 @@ bool GraphicsContext::isGpuAvailable() const noexcept
 }
 
 //==============================================================================
+void GraphicsContext::suspendFrame()
+{
+    auto* renderContext = getRenderContext();
+    if (renderContext == nullptr)
+        return;
+
+    auto* commandBuffer = renderContext->impl()->makeCommandBuffer();
+    renderContext->flush ({ .renderTarget = getRenderTarget(), .externalCommandBuffer = commandBuffer });
+    renderContext->impl()->commitCommandBuffer (commandBuffer);
+}
+
+void GraphicsContext::resumeFrame()
+{
+    auto descriptor = frameDescriptor;
+    descriptor.loadAction = rive::gpu::LoadAction::preserveRenderTarget;
+    begin (descriptor);
+}
+
+//==============================================================================
 std::unique_ptr<GraphicsContext> yup_constructHeadlessGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
 #if YUP_RIVE_USE_METAL && YUP_APPLE
 std::unique_ptr<GraphicsContext> yup_constructMetalGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
@@ -44,8 +63,6 @@ std::unique_ptr<GraphicsContext> yup_constructOpenGLGraphicsContext (GpuDevice::
 #endif
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
 std::unique_ptr<GraphicsContext> yup_constructWebGPUGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
-#elif YUP_RIVE_USE_DAWN
-std::unique_ptr<GraphicsContext> yup_constructDawnGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
 #endif
 
 //==============================================================================
@@ -77,9 +94,6 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (GpuPlatform gra
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
         case GpuPlatform::WebGPU:
             return yup_constructWebGPUGraphicsContext (options, std::move (existingGpu));
-#elif YUP_RIVE_USE_DAWN
-        case GpuPlatform::WebGPU:
-            return yup_constructDawnGraphicsContext (options, std::move (existingGpu));
 #endif
 
         default:

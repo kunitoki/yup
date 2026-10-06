@@ -55,6 +55,7 @@
 #include <rive/transform_component.hpp>
 #include <rive/node.hpp>
 #include <rive/shapes/shape.hpp>
+#include <rive/shapes/rectangle.hpp>
 #include <rive/shapes/ellipse.hpp>
 #include <rive/shapes/image.hpp>
 #include <rive/text/text.hpp>
@@ -73,6 +74,8 @@
 #include <rive/viewmodel/viewmodel_property_viewmodel.hpp>
 #include <rive/viewmodel/viewmodel_property_symbol_list_index.hpp>
 #include <rive/viewmodel/viewmodel_property_asset_image.hpp>
+#include <rive/viewmodel/viewmodel_property_asset_font.hpp>
+#include <rive/viewmodel/viewmodel_property_asset_blob.hpp>
 #include <rive/viewmodel/viewmodel_property_artboard.hpp>
 #include <rive/viewmodel/viewmodel_instance.hpp>
 #include <rive/viewmodel/viewmodel_instance_value.hpp>
@@ -85,6 +88,15 @@
 #include <rive/viewmodel/viewmodel_instance_list.hpp>
 #include <rive/viewmodel/viewmodel_instance_list_item.hpp>
 #include <rive/viewmodel/viewmodel_instance_viewmodel.hpp>
+#include <rive/viewmodel/viewmodel_instance_asset_image.hpp>
+#include <rive/viewmodel/viewmodel_instance_asset_font.hpp>
+#include <rive/viewmodel/viewmodel_instance_asset_blob.hpp>
+#include <rive/assets/blob_asset.hpp>
+#include <rive/assets/script_asset.hpp>
+#include <rive/renderer/render_context.hpp>
+#include <rive/renderer/rive_render_image.hpp>
+#include <rive/renderer/cmd/deferred_host.hpp>
+#include <rive/view_model_type.hpp>
 #include <rive/math/transform_components.hpp>
 
 //==============================================================================

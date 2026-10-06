@@ -1,0 +1,20 @@
+<!--
+
+  ViewModel Assets - a fixture for the asset view model property types.
+
+  One artboard bound to the `Assets` view model, which declares one property per
+  asset kind: an image, a font and a blob.
+
+-->
+<Rive version="1" kind="fragment">
+    <Artboard viewModelId="5:1" viewModelInstanceId="5:2" width="64" height="64" name="Assets" id="0:1">
+    </Artboard>
+
+    <ViewModel defaultInstanceId="5:2" name="Assets" id="5:1">
+        <ViewModelPropertyAssetImage name="image" id="5:3"/>
+        <ViewModelPropertyAssetFont name="font" id="5:4"/>
+        <ViewModelPropertyAssetBlob name="blob" id="5:5"/>
+        <ViewModelInstance exports="true" name="Default" id="5:2">
+        </ViewModelInstance>
+    </ViewModel>
+</Rive>

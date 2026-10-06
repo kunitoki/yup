@@ -40,12 +40,8 @@ void NestedStateMachine::initializeAnimation(ArtboardInstance* artboard)
                 auto* parentFM = parentArtboard->focusManager();
                 m_StateMachineInstance->setExternalFocusManager(parentFM);
 
-                // Find closest focus node (handles artboard boundaries)
-                auto parentNode =
-                    FocusData::findClosestFocusNode(nestedArtboard);
-
-                // Build nested artboard's focus tree under parent
-                artboard->buildFocusTree(parentFM, parentNode);
+                nestedArtboard->syncNestedFocusTree(
+                    FocusData::findClosestFocusNode(nestedArtboard));
             }
         }
     }
@@ -75,6 +71,15 @@ bool NestedStateMachine::hitTest(Vec2D position) const
     return false;
 }
 
+bool NestedStateMachine::hitTestBounded(Vec2D position) const
+{
+    if (m_StateMachineInstance != nullptr)
+    {
+        return m_StateMachineInstance->hitTestBounded(position);
+    }
+    return false;
+}
+
 HitResult NestedStateMachine::pointerMove(Vec2D position,
                                           float timeStamp,
                                           int pointerId)
@@ -88,22 +93,78 @@ HitResult NestedStateMachine::pointerMove(Vec2D position,
     return HitResult::none;
 }
 
-HitResult NestedStateMachine::pointerDown(Vec2D position, int pointerId)
+HitResult NestedStateMachine::pointerDown(Vec2D position,
+                                          int pointerId,
+                                          PointerButton button)
 {
     if (m_StateMachineInstance != nullptr)
     {
-        return m_StateMachineInstance->pointerDown(position, pointerId);
+        return m_StateMachineInstance->pointerDown(position, pointerId, button);
     }
     return HitResult::none;
 }
 
-HitResult NestedStateMachine::pointerUp(Vec2D position, int pointerId)
+HitResult NestedStateMachine::pointerUp(Vec2D position,
+                                        int pointerId,
+                                        PointerButton button)
 {
     if (m_StateMachineInstance != nullptr)
     {
-        return m_StateMachineInstance->pointerUp(position, pointerId);
+        return m_StateMachineInstance->pointerUp(position, pointerId, button);
     }
     return HitResult::none;
+}
+HitResult NestedStateMachine::pointerScroll(Vec2D position,
+                                            const ScrollEvent& event,
+                                            float timeStamp,
+                                            int pointerId)
+{
+    if (m_StateMachineInstance != nullptr)
+    {
+        return m_StateMachineInstance->pointerScroll(position,
+                                                     event,
+                                                     timeStamp,
+                                                     pointerId);
+    }
+    return HitResult::none;
+}
+
+bool NestedStateMachine::wantsScroll(Vec2D position, const ScrollEvent& event)
+{
+    return m_StateMachineInstance != nullptr &&
+           m_StateMachineInstance->wantsScroll(position, event);
+}
+
+bool NestedStateMachine::hasScrollTargetAt(Vec2D position)
+{
+    return m_StateMachineInstance != nullptr &&
+           m_StateMachineInstance->hasScrollTargetAt(position);
+}
+
+bool NestedStateMachine::listensToButtonAt(Vec2D position, PointerButton button)
+{
+    return m_StateMachineInstance != nullptr &&
+           m_StateMachineInstance->listensToButtonAt(position, button);
+}
+
+bool NestedStateMachine::scrollOccludedAt(Vec2D position)
+{
+    return m_StateMachineInstance != nullptr &&
+           m_StateMachineInstance->scrollOccludedAt(position);
+}
+
+void NestedStateMachine::cancelScroll()
+{
+    if (m_StateMachineInstance != nullptr)
+    {
+        m_StateMachineInstance->cancelScroll();
+    }
+}
+
+bool NestedStateMachine::hasScrollLatch()
+{
+    return m_StateMachineInstance != nullptr &&
+           m_StateMachineInstance->hasScrollLatch();
 }
 
 HitResult NestedStateMachine::pointerExit(Vec2D position, int pointerId)
@@ -117,25 +178,31 @@ HitResult NestedStateMachine::pointerExit(Vec2D position, int pointerId)
 
 HitResult NestedStateMachine::dragStart(Vec2D position,
                                         float timeStamp,
-                                        int pointerId)
+                                        int pointerId,
+                                        PointerButton button)
 {
     if (m_StateMachineInstance != nullptr)
     {
         return m_StateMachineInstance->dragStart(position,
                                                  timeStamp,
                                                  true,
-                                                 pointerId);
+                                                 pointerId,
+                                                 button);
     }
     return HitResult::none;
 }
 
 HitResult NestedStateMachine::dragEnd(Vec2D position,
                                       float timeStamp,
-                                      int pointerId)
+                                      int pointerId,
+                                      PointerButton button)
 {
     if (m_StateMachineInstance != nullptr)
     {
-        return m_StateMachineInstance->dragEnd(position, timeStamp, pointerId);
+        return m_StateMachineInstance->dragEnd(position,
+                                               timeStamp,
+                                               pointerId,
+                                               button);
     }
     return HitResult::none;
 }

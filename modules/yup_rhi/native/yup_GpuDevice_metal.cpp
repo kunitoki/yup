@@ -47,6 +47,11 @@ public:
 
         renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (device, renderContexOptions);
         oreContext = rive::ore::ContextMetal::Make (device, queue);
+
+        // Scripted canvases and their GPU passes are submitted through the render context's own
+        // queue, which must be the one the window frame is flushed on so Metal orders them.
+        if (renderContext != nullptr)
+            renderContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>()->setCommandQueue (queue);
     }
 
     //==============================================================================

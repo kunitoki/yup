@@ -155,6 +155,29 @@ public:
     */
     virtual void end (void* nativeHandle) = 0;
 
+    /** Flushes the open frame into the context's render target, without presenting it.
+
+        Lets work that needs GPU frames of its own run in the middle of a frame, such as the
+        offscreen canvases of a scripted Rive file. What was drawn so far is kept: call
+        resumeFrame() to reopen the frame on top of it before drawing again, then end() as
+        usual. Renderers created with makeRenderer() stay valid across the pair and keep
+        their transform and clip state.
+
+        Only call this between begin() and end(), and pair every call with resumeFrame().
+
+        @see resumeFrame
+    */
+    virtual void suspendFrame();
+
+    /** Reopens a frame closed by suspendFrame(), preserving what it already drew.
+
+        The frame is begun again with the descriptor last passed to begin(), loading the
+        render target instead of clearing it.
+
+        @see suspendFrame
+    */
+    virtual void resumeFrame();
+
     /** Performs periodic operations, potentially related to animation or state updates. */
     virtual void tick() {}
 
@@ -163,7 +186,7 @@ public:
 
         Overrides the Options::vsync the context was created with. Call it from the thread that
         renders, between frames. Backends whose presentation mode is fixed when the device is
-        created (Dawn, WebGPU) and OpenGL, where the window owns the swap interval, ignore it.
+        created (WebGPU) and OpenGL, where the window owns the swap interval, ignore it.
 
         @param shouldEnable True to present on the display refresh, false to present immediately.
 
@@ -188,6 +211,9 @@ public:
     static std::unique_ptr<GraphicsContext> createContext (GpuPlatform graphicsApi,
                                                            Options options,
                                                            GpuDevice::Ptr existingGpu = {});
+protected:
+    /** The descriptor last passed to begin(), which backends store so resumeFrame() can reopen the frame. */
+    rive::gpu::RenderContext::FrameDescriptor frameDescriptor;
 };
 
 } // namespace yup

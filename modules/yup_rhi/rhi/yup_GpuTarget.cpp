@@ -144,7 +144,6 @@ GpuTexture::Ptr GpuTarget::asTexture()
     if (auto canvas = target.getRenderCanvas())
     {
         cachedTexture = GpuTexture::fromRenderCanvas (ctx, std::move (canvas), w, h);
-        cachedTexture->sampledTexture = target.getSampledTexture();
     }
     else if (auto tex = target.adoptAsTexture())
     {

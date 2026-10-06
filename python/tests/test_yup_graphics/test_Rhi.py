@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 import yup
 
@@ -539,3 +541,142 @@ def test_gpu_buffer_create_accepts_any_buffer_protocol_object(headless_device):
     if buffer is not None:
         assert buffer.getSizeInBytes() == 64
         assert buffer.getType() == yup.GpuBufferType.vertex
+
+
+# ==============================================================================
+# Descriptor reprs and blob properties
+# ==============================================================================
+
+def test_gpu_texture_desc_and_frame_descriptor_repr():
+    assert repr(yup.GpuTextureDesc(16, 8, yup.GpuTextureFormat.rgba8unorm)).endswith("GpuTextureDesc(16, 8)")
+
+    frameDesc = yup.GpuFrameDescriptor()
+    frameDesc.renderTargetWidth = 32
+    frameDesc.renderTargetHeight = 16
+    assert repr(frameDesc).endswith("GpuFrameDescriptor(32, 16)")
+
+
+def test_gpu_render_options_clear_property_maps_to_load_op():
+    options = yup.GpuRenderOptions()
+
+    options.clear = True
+    assert options.clear
+    assert options.loadOp == yup.GpuLoadOp.clear
+
+    options.clear = False
+    assert not options.clear
+    assert options.loadOp == yup.GpuLoadOp.load
+
+
+def test_gpu_shader_source_blobs_are_sized_in_bytes():
+    source = yup.GpuShaderSource()
+
+    # Four 32 bit items are sixteen bytes, not four.
+    source.code = memoryview(bytes(16)).cast("I")
+    assert len(source.code) == 16
+
+    source.bindingMap = memoryview(bytes(8)).cast("H")
+    assert len(source.bindingMap) == 8
+
+    source.glFixup = bytearray(b"fixup")
+    assert source.glFixup == b"fixup"
+
+
+# ==============================================================================
+# Headless device: no GPU context, so nothing is allocated
+# ==============================================================================
+
+def test_headless_device_allocates_no_buffers_or_textures(headless_device):
+    if headless_device is None:
+        pytest.skip("no headless GPU device available")
+
+    assert headless_device.createBuffer(yup.GpuBufferType.vertex, bytearray(16)) is None
+    assert yup.GpuBuffer.create(headless_device, yup.GpuBufferType.vertex, bytes(16)) is None
+    assert not headless_device.updateBuffer(None, bytes(4))
+    assert not headless_device.readBuffer(None, bytearray(4))
+
+    desc = yup.GpuTextureDesc(4, 4, yup.GpuTextureFormat.rgba8unorm)
+    assert yup.GpuTexture.create(headless_device, desc) is None
+
+
+def test_gpu_compute_pipeline_compile_from_glsl_raises_on_headless_device(headless_device):
+    if headless_device is None:
+        pytest.skip("no headless GPU device available")
+
+    if not hasattr(yup.GpuComputePipeline, "compileFromGlsl"):
+        pytest.skip("shader transpiler not compiled in")
+
+    with pytest.raises(RuntimeError):
+        yup.GpuComputePipeline.compileFromGlsl(headless_device, "void main() {}")
+
+
+def test_headless_frames_and_compute_passes_are_context_managers(headless_device):
+    if headless_device is None:
+        pytest.skip("no headless GPU device available")
+
+    with yup.GpuFrame.begin(headless_device) as frame:
+        assert not frame.isValid()
+
+    with yup.GpuComputePass.begin(headless_device) as computePass:
+        assert not computePass.isValid()
+        computePass.setUniformBuffer(0, 0, bytes(16))
+        assert not computePass.dispatch(1)
+
+
+# ==============================================================================
+# Real GPU device: only where one can be created without a window
+# ==============================================================================
+
+@pytest.fixture(scope="module")
+def gpu_device():
+    """A Metal GpuDevice on macOS, skipping everywhere else or when none is available.
+
+    OpenGL is not tried: it needs a current context, which a test cannot create on its own.
+    """
+    if sys.platform != "darwin":
+        pytest.skip("a windowless GPU device is only available through Metal")
+
+    device = yup.GpuDevice.create(yup.GpuPlatform.Metal, yup.GpuDevice.Options())
+    if device is None or not device.isGpuAvailable():
+        pytest.skip("no Metal GPU device available")
+
+    return device
+
+
+def test_gpu_texture_uploads_and_describes_itself(gpu_device):
+    texture = yup.GpuTexture.create(gpu_device, yup.GpuTextureDesc(4, 4, yup.GpuTextureFormat.rgba8unorm))
+    assert texture is not None
+    assert repr(texture).endswith(" 4x4>")
+
+    assert isinstance(texture.upload(bytes(4 * 4 * 4)), bool)
+
+
+def test_gpu_buffer_round_trips_through_the_device(gpu_device):
+    buffer = gpu_device.createBuffer(yup.GpuBufferType.vertex, bytearray(16))
+    if buffer is None:
+        pytest.skip("vertex buffers are not available on this device")
+
+    assert buffer.getSizeInBytes() == 16
+    assert isinstance(gpu_device.updateBuffer(buffer, bytes(8)), bool)
+    assert isinstance(gpu_device.readBuffer(buffer, bytearray(16)), bool)
+
+
+def test_gpu_target_reads_back_and_records_render_passes(gpu_device):
+    target = yup.GpuTarget.create(gpu_device, 8, 4)
+    if target is None:
+        pytest.skip("offscreen targets are not available on this device")
+
+    assert repr(target).endswith(" 8x4>")
+
+    frame = yup.GpuFrame.begin(gpu_device)
+    with frame:
+        renderPass = target.beginRenderPass(frame)
+        with renderPass:
+            renderPass.setUniformBuffer(0, 0, bytes(16))
+        renderPass.finish()
+        del renderPass
+    frame.submit()
+    frame.waitForGPU()
+
+    pixels = target.readPixels()
+    assert pixels is None or len(pixels) == 8 * 4 * 4

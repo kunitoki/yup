@@ -176,7 +176,6 @@ private:
     mutable std::vector<CachedView> viewCache;
     mutable rive::rcp<rive::gpu::Texture> gpuTexture;
     rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
-    rive::rcp<rive::gpu::Texture> sampledTexture;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuTexture)
 };

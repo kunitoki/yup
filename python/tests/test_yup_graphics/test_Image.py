@@ -132,3 +132,45 @@ def test_repr():
     assert "3x2" in repr(yup.Image(3, 2))
     assert "null" in repr(yup.Image())
     assert "valid" in repr(yup.Image(3, 2))
+
+#==================================================================================================
+
+def _read_test_png() -> bytes:
+    from utilities import get_test_data_file
+
+    file = get_test_data_file("images/file_example.png")
+    if not file.existsAsFile():
+        pytest.skip("tests/data/images/file_example.png is not available")
+
+    with open(file.getFullPathName(), "rb") as stream:
+        return stream.read()
+
+def test_pixel_data_raw_and_rgba_bytes():
+    image = yup.Image(2, 3, yup.PixelFormat.RGBA)
+    pixelData = image.getPixelData()
+
+    assert len(pixelData.getRawData()) == len(image.getRawData())
+    assert len(pixelData.toRGBA()) == 2 * 3 * 4
+    assert len(pixelData.toRGBA(False)) == 2 * 3 * 4
+
+def test_repr_names_the_pixel_format():
+    assert repr(yup.Image(2, 2, yup.PixelFormat.RGBA)).endswith("RGBA)")
+    assert repr(yup.Image(2, 2, yup.PixelFormat.RGB)).endswith("RGB)")
+    assert repr(yup.Image(2, 2, yup.PixelFormat.Grayscale)).endswith("Grayscale)")
+
+def test_load_from_data_decodes_png():
+    if not hasattr(yup, "PngImageFormat"):
+        pytest.skip("PNG support not compiled in")
+
+    data = _read_test_png()
+
+    image = yup.Image.loadFromData(data)
+    assert image.isValid()
+
+    withOptions = yup.Image.loadFromData(data, yup.ImageFormat.Options().withMetadata(True))
+    assert withOptions.getWidth() == image.getWidth()
+    assert withOptions.getHeight() == image.getHeight()
+
+def test_load_from_data_with_options_rejects_garbage():
+    with pytest.raises(ValueError):
+        yup.Image.loadFromData(b"this is definitely not a valid image payload", yup.ImageFormat.Options())

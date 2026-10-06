@@ -35,6 +35,7 @@ enum struct LayoutPassReason : int {
   kMeasureChild = 5,
   kAbsMeasureChild = 6,
   kFlexMeasure = 7,
+  kGridLayout = 8, // rive: grid backport (facebook/yoga #1894)
   COUNT
 };
 

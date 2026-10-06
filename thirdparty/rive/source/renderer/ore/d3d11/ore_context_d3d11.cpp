@@ -437,6 +437,12 @@ rcp<Buffer> ContextD3D11::d3d11MakeBuffer(const BufferDesc& desc)
 
     auto buffer = rcp<BufferD3D11>(new BufferD3D11(desc.size, desc.usage));
     buffer->m_d3d11Context = m_d3d11Context.Get();
+    // A later partial update rewrites the whole buffer, so it needs these.
+    if (!desc.immutable && desc.data != nullptr)
+    {
+        auto bytes = static_cast<const uint8_t*>(desc.data);
+        buffer->m_shadow.assign(bytes, bytes + desc.size);
+    }
 
     D3D11_BUFFER_DESC bd{};
     bd.ByteWidth = desc.size;
@@ -816,13 +822,10 @@ rcp<Pipeline> ContextD3D11::d3d11MakePipeline(const PipelineDesc& desc,
     // --- Validate user-supplied layouts against shader binding map ---
     {
         std::string err;
-        if (!validateLayoutsAgainstBindingMap(pipeline->m_bindingMap,
-                                              desc.bindGroupLayouts,
-                                              desc.bindGroupLayoutCount,
-                                              &err) ||
-            !validateColorRequiresFragment(desc.colorCount,
-                                           desc.fragmentModule != nullptr,
-                                           &err))
+        if (!validatePipelineDesc(desc,
+                                  pipeline->m_bindingMap,
+                                  NativeSlotScope::perStage,
+                                  &err))
         {
             if (outError)
                 *outError = err;
@@ -1050,6 +1053,11 @@ rcp<BindGroup> ContextD3D11::d3d11MakeBindGroup(const BindGroupDesc& desc)
         setLastError("makeBindGroup: BindGroupDesc::layout is null");
         return nullptr;
     }
+    if (std::string err; !validateBindGroupDesc(desc, &err))
+    {
+        setLastError("makeBindGroup: %s", err.c_str());
+        return nullptr;
+    }
     BindGroupLayout* layout = desc.layout;
     const uint32_t groupIndex = layout->groupIndex();
     if (groupIndex >= kMaxBindGroups)
@@ -1062,6 +1070,7 @@ rcp<BindGroup> ContextD3D11::d3d11MakeBindGroup(const BindGroupDesc& desc)
     auto bg = rcp<BindGroupD3D11>(new BindGroupD3D11());
     bg->m_context = this;
     bg->m_layoutRef = ref_rcp(layout);
+    bg->recordDynamicRanges(desc);
 
     // D3D11 has separate VS / PS register namespaces (b0 in VS vs b0 in PS
     // are independent). HLSL SM5.0 has no register spaces, so all groups
@@ -1284,13 +1293,13 @@ std::unique_ptr<RenderPass> ContextD3D11::d3d11BeginRenderPass(
         uint32_t w = 0, h = 0;
         if (desc.colorCount > 0 && desc.colorAttachments[0].view)
         {
-            w = desc.colorAttachments[0].view->texture()->width();
-            h = desc.colorAttachments[0].view->texture()->height();
+            w = desc.colorAttachments[0].view->width();
+            h = desc.colorAttachments[0].view->height();
         }
         else if (desc.depthStencil.view)
         {
-            w = desc.depthStencil.view->texture()->width();
-            h = desc.depthStencil.view->texture()->height();
+            w = desc.depthStencil.view->width();
+            h = desc.depthStencil.view->height();
         }
         if (w > 0 && h > 0)
         {
@@ -1345,17 +1354,20 @@ std::unique_ptr<RenderPass> ContextD3D11::d3d11BeginRenderPass(
 }
 
 // ============================================================================
-// d3d11WrapCanvasTexture
+// d3d11WrapTarget
 // ============================================================================
 
-rcp<TextureView> ContextD3D11::d3d11WrapCanvasTexture(gpu::RenderCanvas* canvas)
+rcp<TextureView> ContextD3D11::d3d11WrapTarget(gpu::RenderTarget* target,
+                                               bool canvas)
 {
-    assert(canvas != nullptr);
+    assert(target != nullptr);
 
-    auto* d3dTarget =
-        static_cast<gpu::RenderTargetD3D*>(canvas->renderTarget());
+    auto* d3dTarget = static_cast<gpu::RenderTargetD3D*>(target);
     ID3D11Texture2D* d3dTex = d3dTarget->targetTexture();
-    assert(d3dTex != nullptr);
+    if (d3dTex == nullptr)
+    {
+        return nullptr;
+    }
 
     D3D11_TEXTURE2D_DESC d3dDesc{};
     d3dTex->GetDesc(&d3dDesc);
@@ -1377,8 +1389,8 @@ rcp<TextureView> ContextD3D11::d3d11WrapCanvasTexture(gpu::RenderCanvas* canvas)
     }
 
     TextureDesc texDesc{};
-    texDesc.width = canvas->width();
-    texDesc.height = canvas->height();
+    texDesc.width = target->width();
+    texDesc.height = target->height();
     texDesc.format = oreFormat;
     texDesc.type = TextureType::texture2D;
     texDesc.renderTarget = true;
@@ -1401,6 +1413,27 @@ rcp<TextureView> ContextD3D11::d3d11WrapCanvasTexture(gpu::RenderCanvas* canvas)
         new TextureViewD3D11(std::move(texture), viewDesc));
     // Borrow the existing RTV from the D3D render target (AddRefs via ComPtr).
     view->m_d3dRTV = d3dTarget->targetRTV();
+
+    if (!canvas)
+    {
+        return view;
+    }
+
+    // SRV so a later pass can sample the canvas after rendering into it;
+    // without it a bind group samples an unbound view and reads black.
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+    srvDesc.Format = d3dDesc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    ComPtr<ID3D11Device> device;
+    m_d3d11Context->GetDevice(device.GetAddressOf());
+    if (FAILED(device->CreateShaderResourceView(
+            d3dTex,
+            &srvDesc,
+            view->m_d3dSRV.ReleaseAndGetAddressOf())))
+        return nullptr;
+
     return view;
 }
 
@@ -1501,6 +1534,7 @@ std::unique_ptr<ContextD3D11> ContextD3D11::Make(ID3D11Device* device,
     // Populate features for D3D11 feature level 11.0.
     Features& f = ctx->m_features;
     f.colorBufferFloat = true;
+    f.colorBufferHalfFloat = true;
     f.perTargetBlend = true;
     f.perTargetWriteMask = true;
     f.textureViewSampling = true;
@@ -1544,7 +1578,7 @@ rcp<Texture> ContextD3D11::makeTexture(const TextureDesc& desc)
     return d3d11MakeTexture(desc);
 }
 
-rcp<TextureView> ContextD3D11::makeTextureView(const TextureViewDesc& desc)
+rcp<TextureView> ContextD3D11::makeTextureViewImpl(const TextureViewDesc& desc)
 {
     return d3d11MakeTextureView(desc);
 }
@@ -1580,13 +1614,18 @@ std::unique_ptr<RenderPass> ContextD3D11::beginRenderPass(
     const RenderPassDesc& desc,
     std::string* outError)
 {
-    finishActiveRenderPass();
     return d3d11BeginRenderPass(desc, outError);
 }
 
 rcp<TextureView> ContextD3D11::wrapCanvasTexture(gpu::RenderCanvas* canvas)
 {
-    return d3d11WrapCanvasTexture(canvas);
+    assert(canvas != nullptr);
+    return d3d11WrapTarget(canvas->renderTarget(), true);
+}
+
+rcp<TextureView> ContextD3D11::wrapRenderTarget(gpu::RenderTarget* target)
+{
+    return target != nullptr ? d3d11WrapTarget(target, false) : nullptr;
 }
 
 rcp<TextureView> ContextD3D11::wrapRiveTexture(gpu::Texture* gpuTex,

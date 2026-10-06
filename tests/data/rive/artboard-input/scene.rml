@@ -1,0 +1,287 @@
+<!--
+
+  Artboard Input - a fixture for the input yup::Artboard forwards to Rive.
+
+  One 400x400 artboard bound to the `Input` view model. Every reaction writes a
+  literal into the view model through a ListenerViewModelChange, so a host can
+  drive the artboard and read the result back from the bound instance.
+
+    Button A    (20..100, 20..60)    click  -> clickedA = 1
+    Button B    (140..220, 20..60)   click  -> clickedB = 1, enter / exit -> hoveredB = 1 / 0
+    First       (20..100, 90..130)   focus  -> focused = "first"; a press focuses it
+    Second      (140..220, 90..130)  focus  -> focused = "second"; a press focuses it
+    Field       (20..220, 160..190)  single line TextInput, `text` bound two-way,
+                                     focus  -> focused = "field"; a press focuses it
+    Viewport    (20..220, 220..370)  clamped vertical scroll view, whose content
+                                     is five 200x60 rows; the first is `scrollItem`
+
+  Tab traversal follows document order: First, Second, then the field. The
+  Status panel (240..390, 20..150) prints the view model, so a host that binds
+  an instance can check the input by eye.
+
+-->
+<Rive version="1" kind="fragment">
+    <Artboard defaultStateMachineId="1:1" viewModelId="5:1" viewModelInstanceId="5:2" clip="true" width="400" height="400" name="Input" id="0:1">
+        <Fill name="Background">
+            <SolidColor colorValue="FF11141A" name="Color"/>
+        </Fill>
+        <ClampedScrollPhysics name="Scroll Physics" id="0:90"/>
+
+        <Shape x="60" y="40" name="Button A" id="0:10">
+            <Rectangle width="80" height="40" name="Path"/>
+            <Fill name="Fill">
+                <SolidColor colorValue="FF57A5E0" name="Color"/>
+            </Fill>
+        </Shape>
+
+        <Shape x="180" y="40" name="Button B" id="0:11">
+            <Rectangle width="80" height="40" name="Path"/>
+            <Fill name="Fill">
+                <SolidColor colorValue="FFE0A557" name="Color"/>
+            </Fill>
+        </Shape>
+
+        <Shape x="60" y="110" name="First" id="0:20">
+            <Rectangle width="80" height="40" name="Path"/>
+            <Fill name="Fill">
+                <SolidColor colorValue="FF57E0A5" name="Color"/>
+            </Fill>
+            <FocusData canFocus="true" canTouch="true" canTraverse="true" id="0:21"/>
+        </Shape>
+
+        <Shape x="180" y="110" name="Second" id="0:22">
+            <Rectangle width="80" height="40" name="Path"/>
+            <Fill name="Fill">
+                <SolidColor colorValue="FFA557E0" name="Color"/>
+            </Fill>
+            <FocusData canFocus="true" canTouch="true" canTraverse="true" id="0:23"/>
+        </Shape>
+
+        <LayoutComponent width="200" height="30" clip="true" styleId="0:31" name="Field" id="0:30">
+            <LayoutComponentStyle positionTypeValue="absolute" positionLeft="20" positionLeftUnitsValue="points" positionTop="160" positionTopUnitsValue="points" layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" name="Field Style" id="0:31"/>
+            <Fill name="Fill">
+                <SolidColor colorValue="FFFFFFFF" name="Color"/>
+            </Fill>
+            <TextInput multiline="false" verticalAlignValue="middle" name="Text Input" id="0:32">
+                <TextStyle fontSize="16" fontAssetId="7:1" familyName="Karla" name="Field Text Style" id="0:33"/>
+                <TextInputText name="Text">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF000000" name="Color"/>
+                    </Fill>
+                </TextInputText>
+                <TextInputSelection name="Selection">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="5557A5E0" name="Color"/>
+                    </Fill>
+                </TextInputSelection>
+                <TextInputCursor name="Cursor">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF000000" name="Color"/>
+                    </Fill>
+                </TextInputCursor>
+                <FocusData canFocus="true" canTouch="true" canTraverse="true" id="0:34"/>
+                <DataBindContext sourcePathIds="5:1-5:6" propertyKey="817" twoWay="true" sourceToTargetRunsFirst="true"/>
+            </TextInput>
+        </LayoutComponent>
+
+        <LayoutComponent width="200" height="150" clip="true" styleId="0:41" name="Viewport" id="0:40">
+            <LayoutComponentStyle positionTypeValue="absolute" positionLeft="20" positionLeftUnitsValue="points" positionTop="220" positionTopUnitsValue="points" layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" flexDirectionValue="column" name="Viewport Style" id="0:41"/>
+            <LayoutComponent width="200" styleId="0:43" name="Content" id="0:42">
+                <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="hug" flexDirectionValue="column" name="Content Style" id="0:43"/>
+                <ScrollConstraint directionValue="vertical" physicsTypeValue="clamped" physicsId="0:90" name="Scroll"/>
+                <LayoutComponent width="200" height="60" styleId="0:45" name="scrollItem" id="0:44">
+                    <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" name="Row Style" id="0:45"/>
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF2A3040" name="Color"/>
+                    </Fill>
+                </LayoutComponent>
+                <LayoutComponent width="200" height="60" styleId="0:47" name="Row 2" id="0:46">
+                    <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" name="Row Style" id="0:47"/>
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF3A4050" name="Color"/>
+                    </Fill>
+                </LayoutComponent>
+                <LayoutComponent width="200" height="60" styleId="0:49" name="Row 3" id="0:48">
+                    <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" name="Row Style" id="0:49"/>
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF2A3040" name="Color"/>
+                    </Fill>
+                </LayoutComponent>
+                <LayoutComponent width="200" height="60" styleId="0:51" name="Row 4" id="0:50">
+                    <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" name="Row Style" id="0:51"/>
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF3A4050" name="Color"/>
+                    </Fill>
+                </LayoutComponent>
+                <LayoutComponent width="200" height="60" styleId="0:53" name="Row 5" id="0:52">
+                    <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" name="Row Style" id="0:53"/>
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF2A3040" name="Color"/>
+                    </Fill>
+                </LayoutComponent>
+            </LayoutComponent>
+        </LayoutComponent>
+
+        <!-- Live view of the view model, for checking the input by hand. -->
+        <LayoutComponent width="150" height="130" clip="false" styleId="0:61" name="Status" id="0:60">
+            <LayoutComponentStyle positionTypeValue="absolute" positionLeft="240" positionLeftUnitsValue="points" positionTop="20" positionTopUnitsValue="points" layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" flexDirectionValue="column" gapVertical="6" gapVerticalUnitsValue="points" name="Status Style" id="0:61"/>
+            <Text width="150" height="18" sizingValue="autoHeight" name="clickedA Line" id="0:70">
+                <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="hug" width="150" name="clickedA Line Layout"/>
+                <TextStylePaint fontSize="14" fontAssetId="7:1" familyName="Karla" name="clickedA Paint" id="0:71">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                    </Fill>
+                </TextStylePaint>
+                <TextValueRun styleId="0:71" text="clickedA: " name="Label"/>
+                <TextValueRun styleId="0:71" text="-" name="Value" id="0:72">
+                    <DataBindContext sourcePathIds="5:1-5:3" propertyKey="268" converterId="6:1"/>
+                </TextValueRun>
+            </Text>
+            <Text width="150" height="18" sizingValue="autoHeight" name="clickedB Line" id="0:73">
+                <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="hug" width="150" name="clickedB Line Layout"/>
+                <TextStylePaint fontSize="14" fontAssetId="7:1" familyName="Karla" name="clickedB Paint" id="0:74">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                    </Fill>
+                </TextStylePaint>
+                <TextValueRun styleId="0:74" text="clickedB: " name="Label"/>
+                <TextValueRun styleId="0:74" text="-" name="Value" id="0:75">
+                    <DataBindContext sourcePathIds="5:1-5:4" propertyKey="268" converterId="6:1"/>
+                </TextValueRun>
+            </Text>
+            <Text width="150" height="18" sizingValue="autoHeight" name="hoveredB Line" id="0:76">
+                <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="hug" width="150" name="hoveredB Line Layout"/>
+                <TextStylePaint fontSize="14" fontAssetId="7:1" familyName="Karla" name="hoveredB Paint" id="0:77">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                    </Fill>
+                </TextStylePaint>
+                <TextValueRun styleId="0:77" text="hoveredB: " name="Label"/>
+                <TextValueRun styleId="0:77" text="-" name="Value" id="0:78">
+                    <DataBindContext sourcePathIds="5:1-5:7" propertyKey="268" converterId="6:1"/>
+                </TextValueRun>
+            </Text>
+            <Text width="150" height="18" sizingValue="autoHeight" name="focused Line" id="0:79">
+                <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="hug" width="150" name="focused Line Layout"/>
+                <TextStylePaint fontSize="14" fontAssetId="7:1" familyName="Karla" name="focused Paint" id="0:80">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                    </Fill>
+                </TextStylePaint>
+                <TextValueRun styleId="0:80" text="focused: " name="Label"/>
+                <TextValueRun styleId="0:80" text="-" name="Value" id="0:81">
+                    <DataBindContext sourcePathIds="5:1-5:5" propertyKey="268"/>
+                </TextValueRun>
+            </Text>
+            <Text width="150" height="18" sizingValue="autoHeight" name="text Line" id="0:82">
+                <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="hug" width="150" name="text Line Layout"/>
+                <TextStylePaint fontSize="14" fontAssetId="7:1" familyName="Karla" name="text Paint" id="0:83">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                    </Fill>
+                </TextStylePaint>
+                <TextValueRun styleId="0:83" text="text: " name="Label"/>
+                <TextValueRun styleId="0:83" text="-" name="Value" id="0:84">
+                    <DataBindContext sourcePathIds="5:1-5:6" propertyKey="268"/>
+                </TextValueRun>
+            </Text>
+        </LayoutComponent>
+
+        <StateMachine name="State Machine 1" id="1:1">
+            <StateMachineListenerSingle targetId="0:10" listenerTypeValue="click" name="Click A" id="1:10">
+                <ListenerViewModelChange>
+                    <BindablePropertyNumber propertyValue="1">
+                        <DataBindContext sourcePathIds="5:1-5:3" propertyKey="636" direction="true"/>
+                    </BindablePropertyNumber>
+                </ListenerViewModelChange>
+            </StateMachineListenerSingle>
+            <StateMachineListenerSingle targetId="0:11" listenerTypeValue="click" name="Click B" id="1:11">
+                <ListenerViewModelChange>
+                    <BindablePropertyNumber propertyValue="1">
+                        <DataBindContext sourcePathIds="5:1-5:4" propertyKey="636" direction="true"/>
+                    </BindablePropertyNumber>
+                </ListenerViewModelChange>
+            </StateMachineListenerSingle>
+            <StateMachineListenerSingle targetId="0:11" listenerTypeValue="enter" name="Hover B" id="1:16">
+                <ListenerViewModelChange>
+                    <BindablePropertyNumber propertyValue="1">
+                        <DataBindContext sourcePathIds="5:1-5:7" propertyKey="636" direction="true"/>
+                    </BindablePropertyNumber>
+                </ListenerViewModelChange>
+            </StateMachineListenerSingle>
+            <StateMachineListenerSingle targetId="0:11" listenerTypeValue="exit" name="Unhover B" id="1:17">
+                <ListenerViewModelChange>
+                    <BindablePropertyNumber propertyValue="0">
+                        <DataBindContext sourcePathIds="5:1-5:7" propertyKey="636" direction="true"/>
+                    </BindablePropertyNumber>
+                </ListenerViewModelChange>
+            </StateMachineListenerSingle>
+            <StateMachineListenerSingle targetId="0:20" listenerTypeValue="focus" name="Focus First" id="1:12">
+                <ListenerViewModelChange>
+                    <BindablePropertyString propertyValue="first">
+                        <DataBindContext sourcePathIds="5:1-5:5" propertyKey="635" direction="true"/>
+                    </BindablePropertyString>
+                </ListenerViewModelChange>
+            </StateMachineListenerSingle>
+            <StateMachineListenerSingle targetId="0:22" listenerTypeValue="focus" name="Focus Second" id="1:13">
+                <ListenerViewModelChange>
+                    <BindablePropertyString propertyValue="second">
+                        <DataBindContext sourcePathIds="5:1-5:5" propertyKey="635" direction="true"/>
+                    </BindablePropertyString>
+                </ListenerViewModelChange>
+            </StateMachineListenerSingle>
+            <StateMachineListenerSingle targetId="0:32" listenerTypeValue="focus" name="Focus Field" id="1:14">
+                <ListenerViewModelChange>
+                    <BindablePropertyString propertyValue="field">
+                        <DataBindContext sourcePathIds="5:1-5:5" propertyKey="635" direction="true"/>
+                    </BindablePropertyString>
+                </ListenerViewModelChange>
+            </StateMachineListenerSingle>
+            <!-- Rive does not focus a FocusData on a press by itself, so each
+                 focusable node gets a press listener, as the editor's TextInput
+                 component does. -->
+            <StateMachineListener targetId="0:20" name="Press First" id="1:18">
+                <ListenerInputType listenerTypeValue="down"/>
+                <FocusActionTarget targetId="0:20"/>
+            </StateMachineListener>
+            <StateMachineListener targetId="0:22" name="Press Second" id="1:19">
+                <ListenerInputType listenerTypeValue="down"/>
+                <FocusActionTarget targetId="0:22"/>
+            </StateMachineListener>
+            <StateMachineListener targetId="0:30" name="Press Field" id="1:15">
+                <ListenerInputType listenerTypeValue="down"/>
+                <FocusActionTarget targetId="0:32"/>
+            </StateMachineListener>
+            <!-- Keys and text only reach a TextInput through a keyboard and text
+                 listener on it; the editor's TextInput component carries one too. -->
+            <StateMachineListener targetId="0:32" name="Field Keyboard" id="1:20">
+                <ListenerInputTypeKeyboard listenerTypeValue="keyboard"/>
+                <ListenerInputTypeText listenerTypeValue="textInput"/>
+            </StateMachineListener>
+            <StateMachineLayer name="Layer 1" id="1:2">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState/>
+            </StateMachineLayer>
+        </StateMachine>
+    </Artboard>
+
+    <ViewModel defaultInstanceId="5:2" name="Input" id="5:1">
+        <ViewModelPropertyNumber name="clickedA" id="5:3"/>
+        <ViewModelPropertyNumber name="clickedB" id="5:4"/>
+        <ViewModelPropertyString name="focused" id="5:5"/>
+        <ViewModelPropertyString name="text" id="5:6"/>
+        <ViewModelPropertyNumber name="hoveredB" id="5:7"/>
+        <ViewModelInstance exports="true" name="Default" id="5:2">
+            <ViewModelInstanceNumber propertyValue="0" viewModelPropertyId="5:3"/>
+            <ViewModelInstanceNumber propertyValue="0" viewModelPropertyId="5:4"/>
+            <ViewModelInstanceString propertyValue="" viewModelPropertyId="5:5"/>
+            <ViewModelInstanceString propertyValue="" viewModelPropertyId="5:6"/>
+            <ViewModelInstanceNumber propertyValue="0" viewModelPropertyId="5:7"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <DataConverterToString decimals="0" round="true" name="Number text" id="6:1"/>
+
+    <FontAsset file="../viewmodel-lab/assets/karla.ttf" name="Karla" id="7:1"/>
+</Rive>

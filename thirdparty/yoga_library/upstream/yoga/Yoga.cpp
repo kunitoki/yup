@@ -18,6 +18,7 @@
 #include "YGNode.h"
 #include "YGNodePrint.h"
 #include "Yoga-internal.h"
+#include "yoga/grid/GridLayout.h"
 #include "event/event.h"
 
 using namespace facebook::yoga;
@@ -216,7 +217,7 @@ struct YogaWrapperWithCleanup {
 } // namespace
 
 YOGA_EXPORT YGConfigRef YGConfigGetDefault() {
-  static YogaWrapperWithCleanup defaultWrapper = YogaWrapperWithCleanup();
+  static auto defaultWrapper = YogaWrapperWithCleanup();
   return defaultWrapper.defaultConfig;
 }
 
@@ -776,6 +777,15 @@ YOGA_EXPORT void YGNodeStyleSetGap(
   updateIndexedStyleProp<MSVC_HINT(gap)>(node, &YGStyle::gap, gutter, length);
 }
 
+// rive: grid backport; percent gap resolution is grid-only in 2.x
+YOGA_EXPORT void YGNodeStyleSetGapPercent(
+    const YGNodeRef node,
+    const YGGutter gutter,
+    const float gapLength) {
+  auto length = detail::CompactValue::ofMaybe<YGUnitPercent>(gapLength);
+  updateIndexedStyleProp<MSVC_HINT(gap)>(node, &YGStyle::gap, gutter, length);
+}
+
 YOGA_EXPORT float YGNodeStyleGetGap(
     const YGNodeConstRef node,
     const YGGutter gutter) {
@@ -803,6 +813,365 @@ YOGA_EXPORT void YGNodeStyleSetAspectRatio(
     const float aspectRatio) {
   updateStyle<MSVC_HINT(aspectRatio)>(
       node, &YGStyle::aspectRatio, YGFloatOptional{aspectRatio});
+}
+
+// rive: grid style backport (facebook/yoga PR #1893)
+
+YOGA_EXPORT void YGNodeStyleSetJustifyItems(
+    const YGNodeRef node,
+    const YGJustify justifyItems) {
+  updateStyle(
+      node,
+      justifyItems,
+      [](YGStyle& s, YGJustify x) { return s.justifyItems() != x; },
+      [](YGStyle& s, YGJustify x) { s.setJustifyItems(x); });
+}
+YOGA_EXPORT YGJustify YGNodeStyleGetJustifyItems(const YGNodeConstRef node) {
+  return node->getStyle().justifyItems();
+}
+
+YOGA_EXPORT void YGNodeStyleSetJustifySelf(
+    const YGNodeRef node,
+    const YGJustify justifySelf) {
+  updateStyle(
+      node,
+      justifySelf,
+      [](YGStyle& s, YGJustify x) { return s.justifySelf() != x; },
+      [](YGStyle& s, YGJustify x) { s.setJustifySelf(x); });
+}
+YOGA_EXPORT YGJustify YGNodeStyleGetJustifySelf(const YGNodeConstRef node) {
+  return node->getStyle().justifySelf();
+}
+
+// Grid Item Placement Properties
+
+namespace {
+
+using facebook::yoga::GridLine;
+using facebook::yoga::GridTrackSize;
+using facebook::yoga::StyleSizeLength;
+
+void updateGridLine(
+    YGNodeRef node,
+    const GridLine& (YGStyle::*get)() const,
+    void (YGStyle::*set)(GridLine),
+    GridLine value) {
+  if ((node->getStyle().*get)() != value) {
+    (node->getStyle().*set)(value);
+    node->markDirtyAndPropagate();
+  }
+}
+
+GridTrackSize gridTrackSizeFromTypeAndValue(YGGridTrackType type, float value) {
+  switch (type) {
+    case YGGridTrackTypePoints:
+      return GridTrackSize::length(value);
+    case YGGridTrackTypePercent:
+      return GridTrackSize::percent(value);
+    case YGGridTrackTypeFr:
+      return GridTrackSize::fr(value);
+    case YGGridTrackTypeAuto:
+    case YGGridTrackTypeMinmax:
+      return GridTrackSize::auto_();
+  }
+  return GridTrackSize::auto_();
+}
+
+StyleSizeLength styleSizeLengthFromTypeAndValue(
+    YGGridTrackType type,
+    float value) {
+  switch (type) {
+    case YGGridTrackTypePoints:
+      return StyleSizeLength::points(value);
+    case YGGridTrackTypePercent:
+      return StyleSizeLength::percent(value);
+    case YGGridTrackTypeFr:
+      return StyleSizeLength::stretch(value);
+    case YGGridTrackTypeAuto:
+    case YGGridTrackTypeMinmax:
+      return StyleSizeLength::ofAuto();
+  }
+  return StyleSizeLength::ofAuto();
+}
+
+// rive: bounds-checked (upstream indexes unchecked; see facebook/yoga #1973)
+bool checkTrackIndex(YGNodeRef node, size_t index, size_t count) {
+  YGAssertWithNode(node, index < count, "Grid track index out of bounds");
+  return index < count;
+}
+
+} // namespace
+
+YOGA_EXPORT void YGNodeStyleSetGridColumnStart(
+    const YGNodeRef node,
+    const int32_t gridColumnStart) {
+  updateGridLine(
+      node,
+      &YGStyle::gridColumnStart,
+      &YGStyle::setGridColumnStart,
+      GridLine::fromInteger(gridColumnStart));
+}
+YOGA_EXPORT void YGNodeStyleSetGridColumnStartAuto(const YGNodeRef node) {
+  updateGridLine(
+      node,
+      &YGStyle::gridColumnStart,
+      &YGStyle::setGridColumnStart,
+      GridLine::auto_());
+}
+YOGA_EXPORT void YGNodeStyleSetGridColumnStartSpan(
+    const YGNodeRef node,
+    const int32_t span) {
+  updateGridLine(
+      node,
+      &YGStyle::gridColumnStart,
+      &YGStyle::setGridColumnStart,
+      GridLine::span(span));
+}
+YOGA_EXPORT int32_t YGNodeStyleGetGridColumnStart(const YGNodeConstRef node) {
+  const auto& gridLine = node->getStyle().gridColumnStart();
+  return gridLine.isInteger() ? gridLine.integer : 0;
+}
+
+YOGA_EXPORT void YGNodeStyleSetGridColumnEnd(
+    const YGNodeRef node,
+    const int32_t gridColumnEnd) {
+  updateGridLine(
+      node,
+      &YGStyle::gridColumnEnd,
+      &YGStyle::setGridColumnEnd,
+      GridLine::fromInteger(gridColumnEnd));
+}
+YOGA_EXPORT void YGNodeStyleSetGridColumnEndAuto(const YGNodeRef node) {
+  updateGridLine(
+      node,
+      &YGStyle::gridColumnEnd,
+      &YGStyle::setGridColumnEnd,
+      GridLine::auto_());
+}
+YOGA_EXPORT void YGNodeStyleSetGridColumnEndSpan(
+    const YGNodeRef node,
+    const int32_t span) {
+  updateGridLine(
+      node,
+      &YGStyle::gridColumnEnd,
+      &YGStyle::setGridColumnEnd,
+      GridLine::span(span));
+}
+YOGA_EXPORT int32_t YGNodeStyleGetGridColumnEnd(const YGNodeConstRef node) {
+  const auto& gridLine = node->getStyle().gridColumnEnd();
+  return gridLine.isInteger() ? gridLine.integer : 0;
+}
+
+YOGA_EXPORT void YGNodeStyleSetGridRowStart(
+    const YGNodeRef node,
+    const int32_t gridRowStart) {
+  updateGridLine(
+      node,
+      &YGStyle::gridRowStart,
+      &YGStyle::setGridRowStart,
+      GridLine::fromInteger(gridRowStart));
+}
+YOGA_EXPORT void YGNodeStyleSetGridRowStartAuto(const YGNodeRef node) {
+  updateGridLine(
+      node,
+      &YGStyle::gridRowStart,
+      &YGStyle::setGridRowStart,
+      GridLine::auto_());
+}
+YOGA_EXPORT void YGNodeStyleSetGridRowStartSpan(
+    const YGNodeRef node,
+    const int32_t span) {
+  updateGridLine(
+      node,
+      &YGStyle::gridRowStart,
+      &YGStyle::setGridRowStart,
+      GridLine::span(span));
+}
+YOGA_EXPORT int32_t YGNodeStyleGetGridRowStart(const YGNodeConstRef node) {
+  const auto& gridLine = node->getStyle().gridRowStart();
+  return gridLine.isInteger() ? gridLine.integer : 0;
+}
+
+YOGA_EXPORT void YGNodeStyleSetGridRowEnd(
+    const YGNodeRef node,
+    const int32_t gridRowEnd) {
+  updateGridLine(
+      node,
+      &YGStyle::gridRowEnd,
+      &YGStyle::setGridRowEnd,
+      GridLine::fromInteger(gridRowEnd));
+}
+YOGA_EXPORT void YGNodeStyleSetGridRowEndAuto(const YGNodeRef node) {
+  updateGridLine(
+      node,
+      &YGStyle::gridRowEnd,
+      &YGStyle::setGridRowEnd,
+      GridLine::auto_());
+}
+YOGA_EXPORT void YGNodeStyleSetGridRowEndSpan(
+    const YGNodeRef node,
+    const int32_t span) {
+  updateGridLine(
+      node,
+      &YGStyle::gridRowEnd,
+      &YGStyle::setGridRowEnd,
+      GridLine::span(span));
+}
+YOGA_EXPORT int32_t YGNodeStyleGetGridRowEnd(const YGNodeConstRef node) {
+  const auto& gridLine = node->getStyle().gridRowEnd();
+  return gridLine.isInteger() ? gridLine.integer : 0;
+}
+
+// Grid Container Properties
+
+YOGA_EXPORT void YGNodeStyleSetGridTemplateColumnsCount(
+    const YGNodeRef node,
+    const size_t count) {
+  node->getStyle().resizeGridTemplateColumns(count);
+  node->markDirtyAndPropagate();
+}
+YOGA_EXPORT void YGNodeStyleSetGridTemplateColumn(
+    const YGNodeRef node,
+    const size_t index,
+    const YGGridTrackType type,
+    const float value) {
+  if (!checkTrackIndex(
+          node, index, node->getStyle().gridTemplateColumns().size())) {
+    return;
+  }
+  node->getStyle().setGridTemplateColumnAt(
+      index, gridTrackSizeFromTypeAndValue(type, value));
+  node->markDirtyAndPropagate();
+}
+YOGA_EXPORT void YGNodeStyleSetGridTemplateColumnMinMax(
+    const YGNodeRef node,
+    const size_t index,
+    const YGGridTrackType minType,
+    const float minValue,
+    const YGGridTrackType maxType,
+    const float maxValue) {
+  if (!checkTrackIndex(
+          node, index, node->getStyle().gridTemplateColumns().size())) {
+    return;
+  }
+  node->getStyle().setGridTemplateColumnAt(
+      index,
+      GridTrackSize::minmax(
+          styleSizeLengthFromTypeAndValue(minType, minValue),
+          styleSizeLengthFromTypeAndValue(maxType, maxValue)));
+  node->markDirtyAndPropagate();
+}
+
+YOGA_EXPORT void YGNodeStyleSetGridTemplateRowsCount(
+    const YGNodeRef node,
+    const size_t count) {
+  node->getStyle().resizeGridTemplateRows(count);
+  node->markDirtyAndPropagate();
+}
+YOGA_EXPORT void YGNodeStyleSetGridTemplateRow(
+    const YGNodeRef node,
+    const size_t index,
+    const YGGridTrackType type,
+    const float value) {
+  if (!checkTrackIndex(
+          node, index, node->getStyle().gridTemplateRows().size())) {
+    return;
+  }
+  node->getStyle().setGridTemplateRowAt(
+      index, gridTrackSizeFromTypeAndValue(type, value));
+  node->markDirtyAndPropagate();
+}
+YOGA_EXPORT void YGNodeStyleSetGridTemplateRowMinMax(
+    const YGNodeRef node,
+    const size_t index,
+    const YGGridTrackType minType,
+    const float minValue,
+    const YGGridTrackType maxType,
+    const float maxValue) {
+  if (!checkTrackIndex(
+          node, index, node->getStyle().gridTemplateRows().size())) {
+    return;
+  }
+  node->getStyle().setGridTemplateRowAt(
+      index,
+      GridTrackSize::minmax(
+          styleSizeLengthFromTypeAndValue(minType, minValue),
+          styleSizeLengthFromTypeAndValue(maxType, maxValue)));
+  node->markDirtyAndPropagate();
+}
+
+YOGA_EXPORT void YGNodeStyleSetGridAutoColumnsCount(
+    const YGNodeRef node,
+    const size_t count) {
+  node->getStyle().resizeGridAutoColumns(count);
+  node->markDirtyAndPropagate();
+}
+YOGA_EXPORT void YGNodeStyleSetGridAutoColumn(
+    const YGNodeRef node,
+    const size_t index,
+    const YGGridTrackType type,
+    const float value) {
+  if (!checkTrackIndex(
+          node, index, node->getStyle().gridAutoColumns().size())) {
+    return;
+  }
+  node->getStyle().setGridAutoColumnAt(
+      index, gridTrackSizeFromTypeAndValue(type, value));
+  node->markDirtyAndPropagate();
+}
+YOGA_EXPORT void YGNodeStyleSetGridAutoColumnMinMax(
+    const YGNodeRef node,
+    const size_t index,
+    const YGGridTrackType minType,
+    const float minValue,
+    const YGGridTrackType maxType,
+    const float maxValue) {
+  if (!checkTrackIndex(
+          node, index, node->getStyle().gridAutoColumns().size())) {
+    return;
+  }
+  node->getStyle().setGridAutoColumnAt(
+      index,
+      GridTrackSize::minmax(
+          styleSizeLengthFromTypeAndValue(minType, minValue),
+          styleSizeLengthFromTypeAndValue(maxType, maxValue)));
+  node->markDirtyAndPropagate();
+}
+
+YOGA_EXPORT void YGNodeStyleSetGridAutoRowsCount(
+    const YGNodeRef node,
+    const size_t count) {
+  node->getStyle().resizeGridAutoRows(count);
+  node->markDirtyAndPropagate();
+}
+YOGA_EXPORT void YGNodeStyleSetGridAutoRow(
+    const YGNodeRef node,
+    const size_t index,
+    const YGGridTrackType type,
+    const float value) {
+  if (!checkTrackIndex(node, index, node->getStyle().gridAutoRows().size())) {
+    return;
+  }
+  node->getStyle().setGridAutoRowAt(
+      index, gridTrackSizeFromTypeAndValue(type, value));
+  node->markDirtyAndPropagate();
+}
+YOGA_EXPORT void YGNodeStyleSetGridAutoRowMinMax(
+    const YGNodeRef node,
+    const size_t index,
+    const YGGridTrackType minType,
+    const float minValue,
+    const YGGridTrackType maxType,
+    const float maxValue) {
+  if (!checkTrackIndex(node, index, node->getStyle().gridAutoRows().size())) {
+    return;
+  }
+  node->getStyle().setGridAutoRowAt(
+      index,
+      GridTrackSize::minmax(
+          styleSizeLengthFromTypeAndValue(minType, minValue),
+          styleSizeLengthFromTypeAndValue(maxType, maxValue)));
+  node->markDirtyAndPropagate();
 }
 
 YOGA_EXPORT void YGNodeStyleSetWidth(YGNodeRef node, float points) {
@@ -964,6 +1333,28 @@ YG_NODE_LAYOUT_RESOLVED_PROPERTY_IMPL(float, Margin, margin)
 YG_NODE_LAYOUT_RESOLVED_PROPERTY_IMPL(float, Border, border)
 YG_NODE_LAYOUT_RESOLVED_PROPERTY_IMPL(float, Padding, padding)
 
+YOGA_EXPORT uint32_t YGNodeLayoutGetGridColumnLineCount(const YGNodeRef node) {
+  return static_cast<uint32_t>(node->getLayout().gridColumnLineOffsets.size());
+}
+
+YOGA_EXPORT float YGNodeLayoutGetGridColumnLineOffset(
+    const YGNodeRef node,
+    const uint32_t index) {
+  const auto& offsets = node->getLayout().gridColumnLineOffsets;
+  return index < offsets.size() ? offsets[index] : YGUndefined;
+}
+
+YOGA_EXPORT uint32_t YGNodeLayoutGetGridRowLineCount(const YGNodeRef node) {
+  return static_cast<uint32_t>(node->getLayout().gridRowLineOffsets.size());
+}
+
+YOGA_EXPORT float YGNodeLayoutGetGridRowLineOffset(
+    const YGNodeRef node,
+    const uint32_t index) {
+  const auto& offsets = node->getLayout().gridRowLineOffsets;
+  return index < offsets.size() ? offsets[index] : YGUndefined;
+}
+
 std::atomic<uint32_t> gCurrentGenerationCount(0);
 
 bool YGLayoutNodeInternal(
@@ -1014,7 +1405,7 @@ static const std::array<YGEdge, 4> pos = {{
 static const std::array<YGDimension, 4> dim = {
     {YGDimensionHeight, YGDimensionHeight, YGDimensionWidth, YGDimensionWidth}};
 
-static inline float YGNodePaddingAndBorderForAxis(
+float YGNodePaddingAndBorderForAxis(
     const YGNodeConstRef node,
     const YGFlexDirection axis,
     const float widthSize) {
@@ -1023,7 +1414,7 @@ static inline float YGNodePaddingAndBorderForAxis(
       .unwrap();
 }
 
-static inline YGAlign YGNodeAlignItem(const YGNode* node, const YGNode* child) {
+YGAlign YGNodeAlignItem(const YGNode* node, const YGNode* child) {
   const YGAlign align = child->getStyle().alignSelf() == YGAlignAuto
       ? node->getStyle().alignItems()
       : child->getStyle().alignSelf();
@@ -1034,7 +1425,7 @@ static inline YGAlign YGNodeAlignItem(const YGNode* node, const YGNode* child) {
   return align;
 }
 
-static float YGBaseline(const YGNodeRef node, void* layoutContext) {
+float YGBaseline(const YGNodeRef node, void* layoutContext) {
   if (node->hasBaselineFunc()) {
 
     Event::publish<Event::NodeBaselineStart>(node);
@@ -1168,7 +1559,7 @@ static YGFloatOptional YGNodeBoundAxisWithinMinAndMax(
 
 // Like YGNodeBoundAxisWithinMinAndMax but also ensures that the value doesn't
 // go below the padding and border amount.
-static inline float YGNodeBoundAxis(
+float YGNodeBoundAxis(
     const YGNodeRef node,
     const YGFlexDirection axis,
     const float value,
@@ -1181,7 +1572,7 @@ static inline float YGNodeBoundAxis(
       YGNodePaddingAndBorderForAxis(node, axis, widthSize));
 }
 
-static void YGNodeSetChildTrailingPosition(
+void YGNodeSetChildTrailingPosition(
     const YGNodeRef node,
     const YGNodeRef child,
     const YGFlexDirection axis) {
@@ -1192,7 +1583,7 @@ static void YGNodeSetChildTrailingPosition(
       trailing[axis]);
 }
 
-static void YGConstrainMaxSizeForMode(
+void YGConstrainMaxSizeForMode(
     const YGNodeConstRef node,
     const enum YGFlexDirection axis,
     const float ownerAxisSize,
@@ -1418,7 +1809,7 @@ static void YGNodeComputeFlexBasisForChild(
   child->setLayoutComputedFlexBasisGeneration(generationCount);
 }
 
-static void YGNodeAbsoluteLayoutChild(
+void YGNodeAbsoluteLayoutChild(
     const YGNodeRef node,
     const YGNodeRef child,
     const float width,
@@ -1837,7 +2228,7 @@ static bool YGNodeFixedSizeSetMeasuredDimensions(
   return false;
 }
 
-static void YGZeroOutLayoutRecursively(
+void YGZeroOutLayoutRecursively(
     const YGNodeRef node,
     void* layoutContext) {
   node->getLayout() = {};
@@ -1849,7 +2240,7 @@ static void YGZeroOutLayoutRecursively(
       YGZeroOutLayoutRecursively, layoutContext);
 }
 
-static float YGNodeCalculateAvailableInnerDim(
+float YGNodeCalculateAvailableInnerDim(
     const YGNodeConstRef node,
     const YGDimension dimension,
     const float availableDim,
@@ -2523,6 +2914,12 @@ static void YGJustifyMainAxis(
         break;
       case YGJustifyFlexStart:
         break;
+      // rive: grid backport values; no-op in flexbox (matches upstream #1893)
+      case YGJustifyAuto:
+      case YGJustifyStretch:
+      case YGJustifyStart:
+      case YGJustifyEnd:
+        break;
     }
   }
 
@@ -2847,6 +3244,27 @@ static void YGNodelayoutImpl(
   node->cloneChildrenIfNeeded(layoutContext);
   // Reset layout flags, as they could have changed.
   node->setLayoutHadOverflow(false);
+
+  // rive: grid backport (facebook/yoga #1894)
+  if (node->getStyle().display() == YGDisplayGrid) {
+    facebook::yoga::calculateGridLayoutInternal(
+        node,
+        availableWidth,
+        availableHeight,
+        ownerDirection,
+        widthMeasureMode,
+        heightMeasureMode,
+        ownerWidth,
+        ownerHeight,
+        performLayout,
+        reason,
+        config,
+        layoutMarkerData,
+        layoutContext,
+        depth,
+        generationCount);
+    return;
+  }
 
   // STEP 1: CALCULATE VALUES FOR REMAINDER OF ALGORITHM
   const YGFlexDirection mainAxis =
@@ -3305,6 +3723,10 @@ static void YGNodelayoutImpl(
             crossDimLead = remainingAlignContentDim / (lineCount - 1);
           }
           break;
+        // rive: grid backport values; no-op in flexbox (matches upstream #1893)
+        case YGAlignStart:
+        case YGAlignEnd:
+        case YGAlignSpaceEvenly:
         case YGAlignAuto:
         case YGAlignFlexStart:
         case YGAlignBaseline:
@@ -3370,6 +3792,11 @@ static void YGNodelayoutImpl(
           }
           if (child->getStyle().positionType() != YGPositionTypeAbsolute) {
             switch (YGNodeAlignItem(node, child)) {
+              // rive: grid backport values; not yet implemented (upstream #1893)
+              case YGAlignStart:
+              case YGAlignEnd:
+              case YGAlignSpaceEvenly:
+                break;
               case YGAlignFlexStart: {
                 child->setLayoutPosition(
                     currentLead +
@@ -4104,6 +4531,10 @@ YOGA_EXPORT void YGConfigSetPointScaleFactor(
 
 YOGA_EXPORT float YGConfigGetPointScaleFactor(const YGConfigRef config) {
   return config->getPointScaleFactor();
+}
+
+YOGA_EXPORT bool YGConfigIsMeasuringMinContent(const YGConfigRef config) {
+  return config->isMeasuringMinContent();
 }
 
 static void YGRoundToPixelGrid(
