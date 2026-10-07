@@ -650,7 +650,7 @@ protected:
         return ids;
     }
 
-    void pushFingerEvent (Uint32 type) const
+    void pushFingerEvent (SDL_EventType type) const
     {
         SDL_Event event {};
         event.tfinger.type = type;

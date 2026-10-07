@@ -22,6 +22,8 @@
 namespace yup
 {
 
+void yup_finishComputePass (GpuComputePass::Impl& pass);
+
 //==============================================================================
 
 struct GpuFrame::Impl
@@ -36,6 +38,10 @@ struct GpuFrame::Impl
     /** The ore pass currently open in this frame. Ore no longer finishes a previous pass by
         itself, and Metal and D3D12 allow one open encoder at a time. */
     rive::ore::RenderPass* openPass = nullptr;
+
+    /** The compute pass recording into this frame. Dispatches cannot run inside a render
+        pass, so beginning one finishes it, and so does submitting the frame. */
+    GpuComputePass::Impl* openComputePass = nullptr;
 
     std::vector<rive::rcp<rive::ore::Buffer>> liveBuffers;
     std::vector<rive::rcp<rive::ore::TextureView>> liveViews;
@@ -190,6 +196,9 @@ bool GpuFrame::submit()
 
     if (i->openPass != nullptr)
         i->openPass->finish();
+
+    if (i->openComputePass != nullptr)
+        yup_finishComputePass (*i->openComputePass);
 
     i->oreCtx->endFrame();
     i->device->submitFrameCommands (i->commandBuffer);

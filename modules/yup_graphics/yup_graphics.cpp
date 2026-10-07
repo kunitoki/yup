@@ -124,6 +124,8 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 #include <yup_rhi/native/yup_VulkanDevice.h>
 
+#include "native/yup_PresentShader_vulkan_vert.h"
+#include "native/yup_PresentShader_vulkan_frag.h"
 #include "native/yup_GraphicsContext_vulkan.cpp"
 #endif
 

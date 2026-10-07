@@ -27,10 +27,11 @@ namespace yup
 //==============================================================================
 /** Records dispatches into a command buffer of the device ring, submitted by finish().
 
-    Like the Metal pass, it owns its command buffer instead of joining a GpuFrame: the
-    queue orders it before any frame submitted later. Everything its commands reference
-    (pipelines, storage buffers, uniform buffers, descriptor pools) is kept alive until
-    the GPU completes them.
+    A pass begun on a device owns a ring command buffer, submitted by finish(): like
+    on Metal, the queue orders it before any frame submitted later. A pass begun on a
+    GpuFrame records into the frame's command buffer instead, and is submitted with it.
+    Everything its commands reference (pipelines, storage buffers, uniform buffers,
+    descriptor pools) is kept alive until the GPU completes them.
 */
 class GpuComputePassImplVulkan final : public GpuComputePass::Impl
 {
@@ -39,6 +40,15 @@ public:
         : device (deviceToUse)
         , vulkanDevice (deviceToUse.getVulkanDevice())
     {
+    }
+
+    /** Records into a frame's command buffer, which the frame submits. */
+    GpuComputePassImplVulkan (GpuDeviceVulkan& deviceToUse, VkCommandBuffer frameCommandBuffer, uint64_t frameGeneration)
+        : GpuComputePassImplVulkan (deviceToUse)
+    {
+        commands.commandBuffer = frameCommandBuffer;
+        commands.frameNumber = frameGeneration;
+        joinsFrame = true;
     }
 
     ~GpuComputePassImplVulkan() override
@@ -94,6 +104,13 @@ private:
         if (! commands.isValid())
             return;
 
+        // A frame submitted before its pass finished already carries the dispatches
+        if (joinsFrame && ! vulkanDevice.isRecording (commands.commandBuffer, commands.frameNumber))
+        {
+            releaseWhenComplete();
+            return;
+        }
+
         const auto& fn = vulkanDevice.getFunctions();
 
         // Make the results visible to whatever reads them next: draws, copies or the host
@@ -114,8 +131,15 @@ private:
                                0,
                                nullptr);
 
-        vulkanDevice.submitCommands (commands.commandBuffer);
+        // A frame's command buffer is submitted by the frame
+        if (! joinsFrame)
+            vulkanDevice.submitCommands (commands.commandBuffer);
 
+        releaseWhenComplete();
+    }
+
+    void releaseWhenComplete()
+    {
         vulkanDevice.runWhenComplete (commands.commandBuffer,
                                       [&vk = vulkanDevice,
                                        pools = std::move (descriptorPools),
@@ -156,9 +180,17 @@ private:
             commands = vulkanDevice.beginCommands();
             if (! commands.isValid())
                 return false;
+        }
+        else if (joinsFrame && ! vulkanDevice.isRecording (commands.commandBuffer, commands.frameNumber))
+        {
+            jassertfalse; // The frame this pass records into was already submitted
+            return false;
+        }
 
-            // Earlier submissions may have written the buffers this pass reads; host writes
-            // are made visible by the submission itself
+        if (std::exchange (firstDispatch, false))
+        {
+            // Earlier work may have written the buffers this pass reads; host writes are
+            // made visible by the submission itself
             srcStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
             barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         }
@@ -290,6 +322,9 @@ private:
             // The native buffer, not the GpuBuffer: that one holds its device, which a pending
             // handler would then keep alive
             referencedResources.storageBuffers.push_back (impl->vkStorageBuffer.buffer);
+
+            impl->vkStorageBuffer.lastUseCommands = commands.commandBuffer;
+            impl->vkStorageBuffer.lastUseGeneration = commands.frameNumber;
             return *impl->vkStorageBuffer.buffer;
         }
 
@@ -328,6 +363,8 @@ private:
     GpuDeviceVulkan& device;
     VulkanDevice& vulkanDevice;
     VulkanDevice::Commands commands;
+    bool joinsFrame = false;
+    bool firstDispatch = true;
     std::vector<VkDescriptorPool> descriptorPools;
     ReferencedResources referencedResources;
 };
@@ -337,6 +374,11 @@ private:
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplVulkan (GpuDevice& ctx)
 {
     return std::make_unique<GpuComputePassImplVulkan> (static_cast<GpuDeviceVulkan&> (ctx));
+}
+
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplVulkan (GpuDevice& ctx, void* commandBuffer, uint64_t generation)
+{
+    return std::make_unique<GpuComputePassImplVulkan> (static_cast<GpuDeviceVulkan&> (ctx), static_cast<VkCommandBuffer> (commandBuffer), generation);
 }
 
 } // namespace yup

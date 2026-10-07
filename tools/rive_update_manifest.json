@@ -310,6 +310,21 @@
           }
         },
         {
+          "path": "include/rive/renderer/ore/ore_context_metal.hpp",
+          "note": "expose the frame command buffer, so YUP compute passes begun on a GpuFrame encode into it instead of committing their own",
+          "already_contains": "id<MTLCommandBuffer> commandBuffer() const { return m_mtlCommandBuffer; }",
+          "replace": {
+            "from": [
+              "    id<MTLDevice> device() const { return m_mtlDevice; }"
+            ],
+            "to": [
+              "    id<MTLDevice> device() const { return m_mtlDevice; }",
+              "    // The command buffer of the frame being recorded, nil outside a frame.",
+              "    id<MTLCommandBuffer> commandBuffer() const { return m_mtlCommandBuffer; }"
+            ]
+          }
+        },
+        {
           "path": "source/renderer/vulkan/common_layouts.hpp",
           "note": "add the missing include guard: several Vulkan sources include this header and YUP compiles them into one unity translation unit (rive_vulkan.cpp)",
           "already_contains": "#pragma once\n\n#include \"rive/renderer/gpu.hpp\"",

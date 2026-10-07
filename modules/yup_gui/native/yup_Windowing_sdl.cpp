@@ -255,7 +255,10 @@ SDLComponentNative::SDLComponentNative (Component& component,
 
 #if YUP_RIVE_USE_VULKAN
     if (currentGraphicsApi == GpuPlatform::Vulkan)
+    {
         graphicsOptions.vulkan = makeVulkanOptions (window);
+        graphicsOptions.vulkan.transparent = options.flags.test (transparentWindow);
+    }
 #endif
 
     context = GraphicsContext::createContext (currentGraphicsApi, graphicsOptions);

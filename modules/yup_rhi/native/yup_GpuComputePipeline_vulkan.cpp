@@ -112,18 +112,35 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineVulkan (GpuDevi
 
     // SPIR-V carries no layout of its own that Vulkan can create pipelines from, the
     // binding map built from the shader reflection describes it
-    if (source.bindingMap.empty())
-        return makeResultValueFail ("Vulkan compute pipelines need the shader binding map");
+    auto bindingMapBlob = source.bindingMap;
+    auto wgs = workgroupSize;
+
+    if (bindingMapBlob.empty())
+    {
+#if YUP_ENABLE_SHADER_TRANSPILER
+        auto reflection = ShaderTranspiler().reflectFromSPIRV (MemoryBlock (source.code.data(), source.code.size()), ShaderLanguage::spirv);
+        if (reflection.failed())
+            return makeResultValueFail ("SPIR-V reflection failed: " + reflection.getErrorMessage());
+
+        bindingMapBlob = makeShaderBindingMapBlob (reflection.getReference(), ShaderStage::compute);
+
+        const auto& reflWgs = reflection.getReference().workgroupSize;
+        if (wgs.x == 1 && wgs.y == 1 && wgs.z == 1 && reflWgs.x > 0 && reflWgs.y > 0 && reflWgs.z > 0)
+            wgs = GpuWorkgroupSize { reflWgs.x, reflWgs.y, reflWgs.z };
+#else
+        return makeResultValueFail ("Vulkan compute pipelines need the shader binding map, or YUP_ENABLE_SHADER_TRANSPILER to reflect it");
+#endif
+    }
 
     rive::ore::BindingMap bindingMap;
-    if (! rive::ore::BindingMap::fromBlob (source.bindingMap.data(), source.bindingMap.size(), &bindingMap))
+    if (! rive::ore::BindingMap::fromBlob (bindingMapBlob.data(), bindingMapBlob.size(), &bindingMap))
         return makeResultValueFail ("Compute shader binding map is unreadable");
 
     const auto& vulkanDevice = static_cast<GpuDeviceVulkan&> (ctx).getVulkanDevice();
     const auto& fn = vulkanDevice.getFunctions();
     const auto device = vulkanDevice.getDevice();
 
-    auto pipeline = ReferenceCountedObjectPtr<GpuComputePipelineVulkan> (new GpuComputePipelineVulkan (vulkanDevice, workgroupSize));
+    auto pipeline = ReferenceCountedObjectPtr<GpuComputePipelineVulkan> (new GpuComputePipelineVulkan (vulkanDevice, wgs));
 
     uint32_t groupCount = 0;
     for (size_t i = 0; i < bindingMap.size(); ++i)

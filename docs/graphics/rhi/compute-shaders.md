@@ -88,6 +88,30 @@ pass.dispatch (groupsX, 1, 1);
 pass.finish(); // commits work to the GPU
 ```
 
+To feed render passes from compute results in the same frame, begin the pass on
+the frame with `GpuComputePass::begin (frame)`. On Metal and Vulkan the
+dispatches are encoded into the frame's command buffer, and on Direct3D 11 into
+the immediate context the frame draws with, so they run in order with the
+frame's render passes and are submitted with the frame:
+
+```cpp
+auto frame = GpuFrame::begin (device);
+
+auto pass = GpuComputePass::begin (frame);
+pass.setPipeline (pipeline);
+pass.setStorageBuffer (0, 0, particles);
+pass.dispatch (groupsX, 1, 1);
+
+auto renderPass = target->beginRenderPass (frame); // its draws see the dispatch
+// ...
+frame.submit(); // readBuffer sees the results from here on
+```
+
+A frame records one pass at a time: a render pass drawing on the frame finishes
+the compute pass, and beginning a compute pass closes the open render pass,
+which reopens on its next draw. OpenGL and WebGPU begin a standalone pass, as
+above.
+
 ## Storage buffers
 
 Storage buffers (`GpuBufferType::storage`) are read-write GPU buffers for compute

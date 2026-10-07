@@ -174,6 +174,8 @@ public:
 
     bool isComputeAvailable() const noexcept override { return true; }
 
+    bool isDeviceLost() const noexcept override { return vulkanDevice->isDeviceLost(); }
+
     void runOnGraphicsContext (const std::function<void()>& fn) const override
     {
         withDevice ([&]
@@ -232,9 +234,17 @@ public:
 
         return withDevice ([&]
                            {
+            const auto& storageBuffer = impl->vkStorageBuffer;
+
+            // The pass or frame that last used the buffer must be submitted before reading it
+            const auto stillRecording = vulkanDevice->isRecording (storageBuffer.lastUseCommands, storageBuffer.lastUseGeneration);
+            jassert (! stillRecording);
+            if (stillRecording)
+                return false;
+
             // Compute passes end with a barrier making shader writes visible to the host,
-            // waiting for the queue makes them available
-            vulkanDevice->waitIdle();
+            // waiting for the last one that used the buffer makes them available
+            vulkanDevice->waitForCommands (storageBuffer.lastUseCommands, storageBuffer.lastUseGeneration);
 
             auto& storage = *impl->vkStorageBuffer.buffer;
             storage.invalidateContents();
@@ -265,8 +275,8 @@ public:
 
         return withDevice ([&]
                            {
-            // In-flight dispatches may still read the previous contents
-            vulkanDevice->waitIdle();
+            // A dispatch still executing may read the previous contents
+            vulkanDevice->waitForCommands (impl->vkStorageBuffer.lastUseCommands, impl->vkStorageBuffer.lastUseGeneration);
 
             auto& storage = *impl->vkStorageBuffer.buffer;
             std::memcpy (storage.contents(), data, byteSize);

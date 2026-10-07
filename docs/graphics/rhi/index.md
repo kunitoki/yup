@@ -54,16 +54,24 @@ Things to know when targeting it:
 - **Shaders are SPIR-V.** `compileFromBundle` picks the bundle's `spirv`
   variant, see [the `spirv` target](offline-shaders.md#the-spirv-target), and
   `compileFromGlsl` compiles straight to SPIR-V. Compute pipelines need the shader
-  binding map to build their layout, which both of these provide; a hand-made
-  `GpuShaderSource` must carry it in `bindingMap`.
+  binding map to build their layout, which both of these provide. A hand-made
+  `GpuShaderSource` without a `bindingMap` is reflected when the pipeline is
+  compiled, which needs the shader transpiler (`YUP_ENABLE_SHADER_TRANSPILER`).
 - **One queue.** Rive, `GpuFrame`, offscreen readbacks and compute passes all
   submit to a single queue, so work runs in the order it was submitted. Like on
-  Metal, a `GpuComputePass` submits its own command buffer when it finishes.
+  Metal, a `GpuComputePass` submits its own command buffer when it finishes. A
+  pass begun with `GpuComputePass::begin (frame)` records into the frame's
+  command buffer instead and is submitted with it, as on Metal, so render passes
+  recorded after it in the same frame use its results.
 - **One frame counter.** Every submission takes a frame generation from the
   device, and resources are released once the GPU is known to have finished with
   them, so any number of `GpuFrame`s may be open at once.
 - **Storage buffers are host visible.** `GpuDevice::readBuffer` and
-  `updateBuffer` wait for the queue, then map them directly.
+  `updateBuffer` wait only for the last submission that used the buffer, then
+  map it directly.
+- **Device loss.** When the driver reports the device lost (a GPU reset or a
+  driver crash), `GpuDevice::isDeviceLost` turns true and the device stops
+  submitting work instead of hanging. Create a new device to render again.
 
 ## In this area
 

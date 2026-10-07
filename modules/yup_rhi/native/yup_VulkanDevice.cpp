@@ -552,7 +552,9 @@ VkCommandBuffer VulkanDevice::beginCommands (uint64_t generation)
 
         if (slot != nullptr)
         {
-            functions.WaitForFences (device, 1, &slot->fence, VK_TRUE, UINT64_MAX);
+            if (! isDeviceLost())
+                checkResult (functions.WaitForFences (device, 1, &slot->fence, VK_TRUE, UINT64_MAX));
+
             completeSlot (*slot);
         }
     }
@@ -617,7 +619,7 @@ bool VulkanDevice::submitCommands (VkCommandBuffer commandBuffer,
     // A command buffer that cannot be submitted completes immediately, so its handlers still run
     slot->state = CommandSlot::State::idle;
 
-    if (functions.EndCommandBuffer (commandBuffer) != VK_SUCCESS)
+    if (isDeviceLost() || functions.EndCommandBuffer (commandBuffer) != VK_SUCCESS)
     {
         completeSlot (*slot);
         return false;
@@ -641,7 +643,7 @@ bool VulkanDevice::submitCommands (VkCommandBuffer commandBuffer,
         submitInfo.pSignalSemaphores = &signalSemaphore;
     }
 
-    if (functions.QueueSubmit (queue, 1, &submitInfo, slot->fence) != VK_SUCCESS)
+    if (checkResult (functions.QueueSubmit (queue, 1, &submitInfo, slot->fence)) != VK_SUCCESS)
     {
         Logger::outputDebugString ("Vulkan: queue submission failed");
         completeSlot (*slot);
@@ -652,7 +654,7 @@ bool VulkanDevice::submitCommands (VkCommandBuffer commandBuffer,
     return true;
 }
 
-void VulkanDevice::waitForCommands (VkCommandBuffer commandBuffer)
+void VulkanDevice::waitForCommands (VkCommandBuffer commandBuffer, uint64_t generation)
 {
     const ScopedLock sl (lock);
 
@@ -660,8 +662,21 @@ void VulkanDevice::waitForCommands (VkCommandBuffer commandBuffer)
     if (slot == nullptr || slot->state != CommandSlot::State::submitted)
         return;
 
-    functions.WaitForFences (device, 1, &slot->fence, VK_TRUE, UINT64_MAX);
+    if (generation != 0 && slot->generation != generation)
+        return;
+
+    if (! isDeviceLost())
+        checkResult (functions.WaitForFences (device, 1, &slot->fence, VK_TRUE, UINT64_MAX));
+
     completeSlot (*slot);
+}
+
+bool VulkanDevice::isRecording (VkCommandBuffer commandBuffer, uint64_t generation) const
+{
+    const ScopedLock sl (lock);
+
+    const auto* slot = findSlot (commandBuffer);
+    return slot != nullptr && slot->state == CommandSlot::State::recording && slot->generation == generation;
 }
 
 void VulkanDevice::runWhenComplete (VkCommandBuffer commandBuffer, std::function<void()> fn)
@@ -701,7 +716,8 @@ void VulkanDevice::waitIdle()
 {
     const ScopedLock sl (lock);
 
-    functions.QueueWaitIdle (queue);
+    if (! isDeviceLost())
+        checkResult (functions.QueueWaitIdle (queue));
 
     // Command buffers still recording belong to open frames and stay theirs
     for (const auto& slot : commandSlots)
@@ -709,6 +725,14 @@ void VulkanDevice::waitIdle()
         if (slot->state == CommandSlot::State::submitted)
             completeSlot (*slot);
     }
+}
+
+VkResult VulkanDevice::checkResult (VkResult result) const
+{
+    if (result == VK_ERROR_DEVICE_LOST && ! deviceLost.exchange (true))
+        Logger::outputDebugString ("Vulkan: the device was lost, rendering stops");
+
+    return result;
 }
 
 //==============================================================================
@@ -728,7 +752,11 @@ void VulkanDevice::reclaimCompletedSlots() const
 {
     for (const auto& slot : commandSlots)
     {
-        if (slot->state == CommandSlot::State::submitted && functions.GetFenceStatus (device, slot->fence) == VK_SUCCESS)
+        if (slot->state != CommandSlot::State::submitted)
+            continue;
+
+        // A lost device never signals its fences, everything submitted counts as done
+        if (isDeviceLost() || checkResult (functions.GetFenceStatus (device, slot->fence)) != VK_NOT_READY)
             completeSlot (*slot);
     }
 }

@@ -80,6 +80,13 @@ TEST_F (GpuDeviceErrorTests, CreateWithInvalidApiReturnsNull)
     EXPECT_EQ (ctx, nullptr);
 }
 
+TEST_F (GpuDeviceErrorTests, HeadlessDeviceIsNeverLost)
+{
+    auto ctx = GpuDevice::create (GpuPlatform::Headless, {});
+    ASSERT_NE (ctx, nullptr);
+    EXPECT_FALSE (ctx->isDeviceLost());
+}
+
 #if YUP_ANDROID || YUP_LINUX
 TEST_F (GpuDeviceErrorTests, CreateOpenGLWithoutAWindowHasNoCompute)
 {
@@ -106,6 +113,7 @@ TEST_F (GpuDeviceErrorTests, CreateVulkanWithoutAWindowLoadsTheSystemLoader)
     ASSERT_NE (ctx, nullptr);
     EXPECT_EQ (ctx->getPlatform(), GpuPlatform::Vulkan);
     EXPECT_TRUE (ctx->isComputeAvailable());
+    EXPECT_FALSE (ctx->isDeviceLost());
 }
 #endif
 

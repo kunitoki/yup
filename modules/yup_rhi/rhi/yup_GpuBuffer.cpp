@@ -113,6 +113,8 @@ struct VulkanStorageBuffer
 
             buffer = std::move (other.buffer);
             device = std::move (other.device);
+            lastUseCommands = std::exchange (other.lastUseCommands, VK_NULL_HANDLE);
+            lastUseGeneration = std::exchange (other.lastUseGeneration, 0);
         }
 
         return *this;
@@ -125,6 +127,11 @@ struct VulkanStorageBuffer
 
     rive::rcp<rive::gpu::vkutil::Buffer> buffer;
     ReferenceCountedObjectPtr<GpuDevice> device;
+
+    /** The command buffer and generation of the last work that bound the buffer, which
+        reads and updates wait for instead of the whole queue. */
+    VkCommandBuffer lastUseCommands = VK_NULL_HANDLE;
+    uint64_t lastUseGeneration = 0;
 
     VulkanStorageBuffer (const VulkanStorageBuffer&) = delete;
     VulkanStorageBuffer& operator= (const VulkanStorageBuffer&) = delete;

@@ -61,6 +61,31 @@ public:
     */
     static GpuComputePass begin (GpuDevice::Ptr ctx);
 
+    /** Begins a compute pass that records into a frame.
+
+        On Metal and Vulkan the dispatches are encoded into the frame's command
+        buffer, and on Direct3D 11 into the immediate context the frame draws with.
+        Either way they run in order with the frame's render passes: passes begun
+        before read nothing the dispatches write, passes begun after see all of it.
+        The work is submitted with the frame, so storage buffers the pass writes can
+        be read back with GpuDevice::readBuffer once the frame is submitted.
+
+        A frame records one pass at a time. A render pass still open in the frame is
+        closed first, the same way beginning another render pass closes it, and its
+        next draw reopens it keeping what it drew. The compute pass is finished in
+        turn when a render pass draws or another compute pass begins on the frame,
+        or the frame is submitted. After that it is no longer valid, and finish()
+        returns false.
+
+        OpenGL and WebGPU begin a standalone pass, exactly like
+        begin (GpuDevice::Ptr), and submit it on finish().
+
+        @param frame  A valid frame that was not submitted yet.
+        @returns      A GpuComputePass ready for binding and dispatch, or an invalid
+                      pass if the frame is invalid or compute is unavailable.
+    */
+    static GpuComputePass begin (GpuFrame& frame);
+
     //==============================================================================
     /** Move constructor. */
     GpuComputePass (GpuComputePass&&) noexcept;

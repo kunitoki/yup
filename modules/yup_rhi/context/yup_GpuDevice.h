@@ -79,6 +79,10 @@ public:
 
         /** Destroys a surface returned by createSurface. */
         std::function<void (void* instance, uint64 surface)> destroySurface;
+
+        /** True when the window composites with what is behind it, so the swapchain
+            keeps the alpha of what is drawn instead of presenting opaque. */
+        bool transparent = false;
     };
 
     //==============================================================================
@@ -269,6 +273,15 @@ public:
         ES. Some GPU features and limits are then reduced. Always false on other backends.
     */
     virtual bool isCompatibilityMode() const noexcept { return false; }
+
+    /** Returns true once the GPU device was lost, after a driver reset or a GPU hang.
+
+        A lost device stays lost: its frames, offscreen renders and compute passes do
+        nothing and its windows stop presenting, rather than hanging on the GPU. A new
+        device has to be created to render again. Only reported by Vulkan; every other
+        backend returns false.
+    */
+    virtual bool isDeviceLost() const noexcept { return false; }
 
     //==============================================================================
     /** Returns true if textures of the given format can be created and sampled.

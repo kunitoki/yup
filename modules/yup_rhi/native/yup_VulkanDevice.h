@@ -156,8 +156,18 @@ public:
                          VkSemaphore signalSemaphore = VK_NULL_HANDLE);
 
     /** Blocks until the GPU finished a submitted command buffer. Returns at once for
-        a command buffer that is still recording. */
-    void waitForCommands (VkCommandBuffer commandBuffer);
+        a command buffer that is still recording.
+
+        @param commandBuffer  The command buffer to wait for.
+        @param generation     The generation it was taken for, or 0 for whichever work
+                              it holds. When the ring reused the command buffer for a
+                              later generation, the work asked for already completed.
+    */
+    void waitForCommands (VkCommandBuffer commandBuffer, uint64_t generation = 0);
+
+    /** True while @p commandBuffer still records the work of @p generation, so more
+        commands can be added to it. */
+    bool isRecording (VkCommandBuffer commandBuffer, uint64_t generation) const;
 
     /** Runs @p fn once the GPU finished the work recorded in @p commandBuffer, to
         release what its commands still reference. Must be called with getLock() held. */
@@ -171,6 +181,19 @@ public:
 
     /** Waits for the queue to drain and runs every pending completion handler. */
     void waitIdle();
+
+    /** True once the driver reported VK_ERROR_DEVICE_LOST.
+
+        A lost device never comes back: submissions are dropped and nothing waits
+        on the GPU any more, so rendering stops instead of hanging.
+    */
+    bool isDeviceLost() const noexcept { return deviceLost.load (std::memory_order_relaxed); }
+
+    /** Records @p result, marking the device lost on VK_ERROR_DEVICE_LOST.
+
+        @returns @p result, so calls can be wrapped.
+    */
+    VkResult checkResult (VkResult result) const;
 
     //==============================================================================
     /** The entry points YUP calls itself. Rive's VulkanContext loads its own. */
@@ -214,6 +237,21 @@ X (CmdClearColorImage)                 \
 X (CmdBindPipeline)                    \
 X (CmdBindDescriptorSets)              \
 X (CmdDispatch)                        \
+X (CmdBeginRenderPass)                 \
+X (CmdEndRenderPass)                   \
+X (CmdDraw)                            \
+X (CmdSetViewport)                     \
+X (CmdSetScissor)                      \
+X (CmdPushConstants)                   \
+X (CreateImageView)                    \
+X (DestroyImageView)                   \
+X (CreateRenderPass)                   \
+X (DestroyRenderPass)                  \
+X (CreateFramebuffer)                  \
+X (DestroyFramebuffer)                 \
+X (CreateSampler)                      \
+X (DestroySampler)                     \
+X (CreateGraphicsPipelines)            \
 X (CreateShaderModule)                 \
 X (DestroyShaderModule)                \
 X (CreateDescriptorSetLayout)          \
@@ -283,6 +321,7 @@ private:
     VkCommandPool commandPool = VK_NULL_HANDLE;
     mutable std::vector<std::unique_ptr<CommandSlot>> commandSlots;
     mutable uint64_t lastSafeFrameNumber = 0;
+    mutable std::atomic<bool> deviceLost { false };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VulkanDevice)
 };

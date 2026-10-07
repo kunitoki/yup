@@ -77,6 +77,18 @@ auto options = yup::ComponentNative::Options()
 A requested API the device can't provide falls back to the platform list, and a
 line is logged. `GpuDevice::isPlatformSupported` runs the same check.
 
+**Presenting.** A window renders into an offscreen canvas that a small pass
+copies to the swapchain. That pass also:
+
+- rotates the image on Android, so the compositor never has to when the device
+  is turned (the swapchain matches the display orientation),
+- presents correctly to sRGB swapchains, when the surface offers no plain UNORM format, and
+- keeps the alpha for windows created with `ComponentNative::transparentWindow`,
+  when the surface supports compositing with alpha.
+
+If the GPU is lost, the window stops presenting and `GpuDevice::isDeviceLost`
+reports it; the app keeps running.
+
 **Building it.** The `YUP_ENABLE_VULKAN` CMake option compiles the backend. It
 defaults to ON for Android and OFF elsewhere; pass `-DYUP_ENABLE_VULKAN=ON` to
 build it on Linux, Windows or macOS (macOS also needs MoltenVK). With
