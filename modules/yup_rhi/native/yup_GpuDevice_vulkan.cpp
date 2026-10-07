@@ -33,6 +33,8 @@ namespace
     process and kept, or nullptr when there is no loader. */
 PFN_vkGetInstanceProcAddr getSystemInstanceProcAddr()
 {
+    static DynamicLibrary vulkanLibrary;
+
     static const auto getInstanceProcAddr = []() -> PFN_vkGetInstanceProcAddr
     {
         const char* const names[] = {
@@ -48,18 +50,16 @@ PFN_vkGetInstanceProcAddr getSystemInstanceProcAddr()
 #endif
         };
 
-        DynamicLibrary loader;
-
         for (const auto* name : names)
         {
-            if (! loader.open (name))
+            if (! vulkanLibrary.open (name))
                 continue;
 
-            if (auto* function = loader.getFunction ("vkGetInstanceProcAddr"))
+            if (auto* function = vulkanLibrary.getFunction ("vkGetInstanceProcAddr"))
                 return reinterpret_cast<PFN_vkGetInstanceProcAddr> (function);
         }
 
-        loader.close();
+        vulkanLibrary.close();
         return nullptr;
     }();
 
