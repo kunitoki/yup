@@ -2696,8 +2696,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             auto mouseButton = toMouseButton (event->button.button);
             auto keyModifiers = toKeyModifiers (SDL_GetModState());
 
-            if (event->button.windowID == SDL_GetWindowID (window) || lastComponentClicked != nullptr)
-                processEvent ([this, cursorPosition, mouseButton, keyModifiers] { handleMouseUp (cursorPosition, mouseButton, keyModifiers); });
+            processEvent ([this, windowID = event->button.windowID, cursorPosition, mouseButton, keyModifiers]
+            {
+                if (windowID == SDL_GetWindowID (window) || lastComponentClicked != nullptr)
+                    handleMouseUp (cursorPosition, mouseButton, keyModifiers);
+            });
 
             break;
         }
@@ -2706,11 +2709,10 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_MOUSE_WHEEL " << event->wheel.x << " " << event->wheel.y);
 
-            auto cursorPosition = getCursorPosition();
             auto wheelDelta = MouseWheelData { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) };
 
             if (event->wheel.windowID == SDL_GetWindowID (window))
-                processEvent ([this, cursorPosition, wheelDelta] { handleMouseWheel (cursorPosition, wheelDelta); });
+                processEvent ([this, wheelDelta] { handleMouseWheel (getCursorPosition(), wheelDelta); });
 
             break;
         }
@@ -2719,10 +2721,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_DOWN " << static_cast<int64> (event->tfinger.fingerID));
 
-            if (event->tfinger.windowID == SDL_GetWindowID (window))
+            processEvent ([this, finger = event->tfinger]
             {
-                handleTouchDown (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure);
-            }
+                if (finger.windowID == SDL_GetWindowID (window))
+                    handleTouchDown (finger.fingerID, getTouchPosition (finger), finger.pressure);
+            });
 
             break;
         }
@@ -2731,11 +2734,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_MOTION " << static_cast<int64> (event->tfinger.fingerID));
 
-            if (event->tfinger.windowID == SDL_GetWindowID (window)
-                || findTouchFingerIndex (event->tfinger.fingerID) >= 0)
+            processEvent ([this, finger = event->tfinger]
             {
-                handleTouchMove (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure);
-            }
+                if (finger.windowID == SDL_GetWindowID (window) || findTouchFingerIndex (finger.fingerID) >= 0)
+                    handleTouchMove (finger.fingerID, getTouchPosition (finger), finger.pressure);
+            });
 
             break;
         }
@@ -2744,11 +2747,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_UP " << static_cast<int64> (event->tfinger.fingerID));
 
-            if (event->tfinger.windowID == SDL_GetWindowID (window)
-                || findTouchFingerIndex (event->tfinger.fingerID) >= 0)
+            processEvent ([this, finger = event->tfinger]
             {
-                handleTouchUp (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure);
-            }
+                if (finger.windowID == SDL_GetWindowID (window) || findTouchFingerIndex (finger.fingerID) >= 0)
+                    handleTouchUp (finger.fingerID, getTouchPosition (finger), finger.pressure);
+            });
 
             break;
         }
@@ -2757,13 +2760,13 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_CANCELED " << static_cast<int64> (event->tfinger.fingerID));
 
-            if (event->tfinger.windowID == SDL_GetWindowID (window)
-                || findTouchFingerIndex (event->tfinger.fingerID) >= 0)
+            processEvent ([this, finger = event->tfinger]
             {
                 // Deliver the finger up so components can clean up, but never as a
                 // click: a cancel must not feed double-click detection.
-                handleTouchUp (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure, true);
-            }
+                if (finger.windowID == SDL_GetWindowID (window) || findTouchFingerIndex (finger.fingerID) >= 0)
+                    handleTouchUp (finger.fingerID, getTouchPosition (finger), finger.pressure, true);
+            });
 
             break;
         }
@@ -2772,12 +2775,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_KEY_DOWN " << (int) (event->key.key) << " " << event->key.scancode);
 
-            auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.mod);
             auto keyPress = toKeyPress (event->key.key, event->key.scancode, modifiers);
 
             if (event->key.windowID == SDL_GetWindowID (window))
-                processEvent ([this, cursorPosition, keyPress] { handleKeyDown (keyPress, cursorPosition); });
+                processEvent ([this, keyPress] { handleKeyDown (keyPress, getCursorPosition()); });
 
             break;
         }
@@ -2786,12 +2788,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_KEY_UP " << (int) (event->key.key) << " " << event->key.scancode);
 
-            auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.mod);
             auto keyPress = toKeyPress (event->key.key, event->key.scancode, modifiers);
 
             if (event->key.windowID == SDL_GetWindowID (window))
-                processEvent ([this, cursorPosition, keyPress] { handleKeyUp (keyPress, cursorPosition); });
+                processEvent ([this, keyPress] { handleKeyUp (keyPress, getCursorPosition()); });
 
             break;
         }

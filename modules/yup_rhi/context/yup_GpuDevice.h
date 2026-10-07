@@ -59,8 +59,9 @@ public:
     */
     struct VulkanOptions
     {
-        /** The loader entry point (@c PFN_vkGetInstanceProcAddr). Without it the
-            Vulkan backend is unavailable. */
+        /** The loader entry point (@c PFN_vkGetInstanceProcAddr). When null, the
+            device loads the system Vulkan loader itself, so a device without a
+            window needs no windowing layer. */
         void* getInstanceProcAddr = nullptr;
 
         /** Instance extensions the window surfaces need, such as @c VK_KHR_surface

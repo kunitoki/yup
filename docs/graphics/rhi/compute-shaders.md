@@ -8,7 +8,7 @@ framebuffer, or graphics pipeline.
 ## Availability
 
 Compute shaders are available on backends that expose
-`GpuDevice::isComputeAvailable() == true`: **Metal**, **Direct3D 11**,
+`GpuDevice::isComputeAvailable() == true`: **Metal**, **Direct3D 11**, **Vulkan**,
 **WebGPU** (Emscripten), and **OpenGL 4.3+** / **OpenGL ES 3.1+**.
 
 Compute is **not** available on the Headless backend, nor on WebGL2 (Emscripten
@@ -24,6 +24,7 @@ does not yet expose compute dispatch, so `GpuComputePipeline` and
 | ------------ | -------------------------------------- | ---------------------------------- |
 | Metal        | `MTLComputePipelineState`              | `dispatchThreadgroups:`            |
 | Direct3D 11  | `ID3D11ComputeShader`                  | `ID3D11DeviceContext::Dispatch()`  |
+| Vulkan       | SPIR-V compute `VkPipeline`            | `vkCmdDispatch()`                  |
 | WebGPU       | `wgpu::ComputePipeline`                | `DispatchWorkgroups()`             |
 | OpenGL       | `GL_COMPUTE_SHADER` + program link     | `glDispatchCompute()`              |
 
@@ -154,7 +155,11 @@ the GPU:
 5. Results are routed to the audio output
 
 The compute shader runs on the audio I/O thread, using a dedicated `GpuDevice`
-that does not share state with the render thread. The tiny per-block
+that does not share state with the render thread. It needs no window: a Vulkan
+device created without `GpuDevice::Options::vulkan` loads the system Vulkan loader
+itself. An OpenGL device needs a context current on the creating thread and a
+`loaderFunction`; without them it reports no compute, and the demo plays the
+audio unprocessed. The tiny per-block
 parameters (gain, mix) stay a uniform buffer bound via `setUniformBuffer()` —
 `dispatch()` allocates a small temporary buffer for it on every call, but at
 16 bytes that's negligible next to the audio-block-sized input buffer that

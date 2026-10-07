@@ -29,10 +29,49 @@ namespace
 
 //==============================================================================
 
+/** Returns vkGetInstanceProcAddr from the system Vulkan loader, opened once for the
+    process and kept, or nullptr when there is no loader. */
+PFN_vkGetInstanceProcAddr getSystemInstanceProcAddr()
+{
+    static const auto getInstanceProcAddr = []() -> PFN_vkGetInstanceProcAddr
+    {
+        const char* const names[] = {
+#if YUP_WINDOWS
+            "vulkan-1.dll",
+#elif YUP_APPLE
+            "libvulkan.1.dylib",
+            "libvulkan.dylib",
+            "libMoltenVK.dylib",
+#else
+            "libvulkan.so.1",
+            "libvulkan.so",
+#endif
+        };
+
+        DynamicLibrary loader;
+
+        for (const auto* name : names)
+        {
+            if (! loader.open (name))
+                continue;
+
+            if (auto* function = loader.getFunction ("vkGetInstanceProcAddr"))
+                return reinterpret_cast<PFN_vkGetInstanceProcAddr> (function);
+        }
+
+        loader.close();
+        return nullptr;
+    }();
+
+    return getInstanceProcAddr;
+}
+
 VulkanDevice::Options toVulkanDeviceOptions (const GpuDevice::Options& options)
 {
     VulkanDevice::Options result;
-    result.getInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr> (options.vulkan.getInstanceProcAddr);
+    result.getInstanceProcAddr = options.vulkan.getInstanceProcAddr != nullptr
+                                   ? reinterpret_cast<PFN_vkGetInstanceProcAddr> (options.vulkan.getInstanceProcAddr)
+                                   : getSystemInstanceProcAddr();
     result.instanceExtensions = options.vulkan.instanceExtensions;
 
     if (options.vulkan.presentationSupport)

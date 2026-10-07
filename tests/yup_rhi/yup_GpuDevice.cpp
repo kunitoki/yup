@@ -23,6 +23,8 @@
 
 #include <yup_rhi/yup_rhi.h>
 
+#include <thread>
+
 using namespace yup;
 using ::testing::_;
 using ::testing::Invoke;
@@ -77,6 +79,35 @@ TEST_F (GpuDeviceErrorTests, CreateWithInvalidApiReturnsNull)
     auto ctx = GpuDevice::create (invalidApi, {});
     EXPECT_EQ (ctx, nullptr);
 }
+
+#if YUP_ANDROID || YUP_LINUX
+TEST_F (GpuDeviceErrorTests, CreateOpenGLWithoutAWindowHasNoCompute)
+{
+    // A fresh thread has no GL context current, and no window provides a loader function
+    std::thread ([]
+    {
+        GpuDevice::Options options;
+        options.allowHeadlessRendering = true;
+
+        auto ctx = GpuDevice::create (GpuPlatform::OpenGL, options);
+        EXPECT_TRUE (ctx == nullptr || ! ctx->isComputeAvailable());
+    }).join();
+}
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+TEST_F (GpuDeviceErrorTests, CreateVulkanWithoutAWindowLoadsTheSystemLoader)
+{
+    // No loader is passed in: the device finds the system one
+    if (! GpuDevice::isPlatformSupported (GpuPlatform::Vulkan, {}))
+        GTEST_SKIP() << "no Vulkan loader or driver in this environment";
+
+    auto ctx = GpuDevice::create (GpuPlatform::Vulkan, {});
+    ASSERT_NE (ctx, nullptr);
+    EXPECT_EQ (ctx->getPlatform(), GpuPlatform::Vulkan);
+    EXPECT_TRUE (ctx->isComputeAvailable());
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // readBuffer — default returns false
