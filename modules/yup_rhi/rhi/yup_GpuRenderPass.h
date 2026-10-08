@@ -89,6 +89,35 @@ public:
     */
     void setTexture (int group, int binding, GpuTexture::Ptr texture);
 
+    /** Binds a range of mip levels and layers of a texture to the given (group, binding) slot.
+
+        Shaders only see the levels @p view selects: lod 0 is @c view.baseMipLevel,
+        and levels outside @c baseMipLevel .. baseMipLevel + mipCount - 1 are never
+        sampled. This is how a pass reads one mip level while rendering into
+        another level of the same texture, as mip-chain generation and bloom do.
+        If the same slot is set more than once the later call wins.
+
+        A view of a cube or array texture must set @c dimension and @c layerCount to
+        match the shader's sampler type, since the defaults describe one 2D layer.
+
+        @param group    The uniform group index (0..N).
+        @param binding  The uniform binding index (0..N).
+        @param texture  The GpuTexture to bind.
+        @param view     The mip levels and layers to expose. Must lie inside the texture.
+
+        @note On OpenGL / OpenGL ES only the mip range is honored, applied to the
+              texture object for the duration of the pass; a layer range is not, and
+              the whole set of layers stays visible. Because the range belongs to the
+              texture object, binding one texture to two slots of the same draw with
+              different mip ranges (or one narrowed and one whole) samples the range
+              applied last in both slots. Bind distinct textures instead.
+
+        @note Debug builds assert on every backend when a draw binds one texture to
+              two slots with different views, so code that works elsewhere stays
+              portable to OpenGL, which cannot honor it.
+    */
+    void setTexture (int group, int binding, GpuTexture::Ptr texture, const GpuTextureViewDesc& view);
+
     /** Binds a sampler to the given (group, binding) slot.
 
         Sampler slots the caller never sets keep the pipeline's default linear /
@@ -113,6 +142,26 @@ public:
         @param byteSize  Number of bytes to upload (must be greater than zero).
     */
     void setUniformBuffer (int group, int binding, const void* data, size_t byteSize);
+
+    /** Binds a storage buffer for read-only access in the vertex and fragment shaders.
+
+        The shader must declare the block `readonly`, e.g.
+        `layout(std430, set = 0, binding = 0) readonly buffer Lights { vec4 colors[]; };`,
+        otherwise the draw asserts, encodes nothing and returns false; the pass stays valid for
+        later draws. The same happens when the backend has no native handle for the buffer. The buffer stays alive until the GPU
+        has finished with it (the frame keeps it, or on Vulkan Rive's resource purgatory
+        keeps its native buffer), so the caller may drop it right after the draw. If the
+        same slot is set more than once the later call wins.
+
+        Only available when GpuDevice::isFragmentStorageBufferAvailable() returns
+        true, currently on Metal, Direct3D 11, Vulkan and WebGPU; on other devices the
+        call is ignored with an assertion.
+
+        @param group    The uniform group index (0..N).
+        @param binding  The uniform binding index (0..N).
+        @param buffer   A buffer created with GpuBufferType::storage.
+    */
+    void setStorageBuffer (int group, int binding, GpuBuffer::Ptr buffer);
 
     /** Binds a vertex buffer to the given slot for custom geometry rendering.
     
@@ -237,7 +286,8 @@ public:
         @param firstVertex    Index of the first vertex to draw.
         @param firstInstance  Index of the first instance to draw.
 
-        @returns true on success; false if invalid.
+        @returns true on success; false if invalid or a bound storage buffer cannot be
+                 bound (see setStorageBuffer()).
     */
     bool draw (uint32_t vertexCount,
                uint32_t instanceCount = 1,
@@ -255,7 +305,8 @@ public:
         @param baseVertex     Value added to every index before indexing the vertex buffers.
         @param firstInstance  Index of the first instance to draw.
 
-        @returns true on success; false if invalid or no index buffer is bound.
+        @returns true on success; false if invalid, no index buffer is bound or a bound
+                 storage buffer cannot be bound (see setStorageBuffer()).
     */
     bool drawIndexed (uint32_t indexCount,
                       uint32_t instanceCount = 1,

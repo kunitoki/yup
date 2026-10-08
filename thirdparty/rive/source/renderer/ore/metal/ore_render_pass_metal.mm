@@ -218,6 +218,17 @@ void RenderPassMetal::setBindGroup(uint32_t groupIndex,
         if (s.fsSlot != BindingMap::kAbsent)
             [m_mtlEncoder setFragmentSamplerState:s.sampler atIndex:s.fsSlot];
     }
+    for (auto& sb : bgMetal->m_mtlStorageBuffers)
+    {
+        if (sb.vsSlot != BindingMap::kAbsent)
+            [m_mtlEncoder setVertexBuffer:sb.buffer
+                                   offset:sb.offset
+                                  atIndex:sb.vsSlot];
+        if (sb.fsSlot != BindingMap::kAbsent)
+            [m_mtlEncoder setFragmentBuffer:sb.buffer
+                                     offset:sb.offset
+                                    atIndex:sb.fsSlot];
+    }
 }
 
 void RenderPassMetal::setViewport(

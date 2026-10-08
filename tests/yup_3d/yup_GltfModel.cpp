@@ -361,6 +361,96 @@ TEST_F (GltfModelTests, ColorsWithThreeComponentsAreOpaque)
     EXPECT_FLOAT_EQ (vertex.color[3], 1.0f);
 }
 
+TEST_F (GltfModelTests, ReadsTangents)
+{
+    const auto normals = toDataUri (toBlock<float> ({ 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f }));
+    const auto tangents = toDataUri (toBlock<float> ({ 1.0f, 0.0f, 0.0f, -1.0f, 2.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.5f }));
+
+    auto result = loadJson (String (R"({
+        "asset": { "version": "2.0" },
+        "scene": 0,
+        "scenes": [ { "nodes": [ 0 ] } ],
+        "nodes": [ { "mesh": 0 } ],
+        "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TANGENT": 2 } } ] } ],
+        "buffers": [ { "uri": "$P", "byteLength": 36 }, { "uri": "$N", "byteLength": 36 }, { "uri": "$T", "byteLength": 48 } ],
+        "bufferViews": [ { "buffer": 0, "byteLength": 36 }, { "buffer": 1, "byteLength": 36 }, { "buffer": 2, "byteLength": 48 } ],
+        "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+                       { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+                       { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" } ]
+    })")
+                                .replace ("$P", positionsUri())
+                                .replace ("$N", normals)
+                                .replace ("$T", tangents));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& vertices = result.getReference().getMeshes()[0]->getPrimitive (0).vertices;
+    ASSERT_EQ (vertices.size(), 3u);
+    EXPECT_EQ (vertices[0].tangent, (std::array<float, 4> { 1.0f, 0.0f, 0.0f, -1.0f }));
+
+    // The direction is normalized, and the handedness is forced to one sign or the other
+    EXPECT_FLOAT_EQ (vertices[1].tangent[0], 1.0f);
+    EXPECT_FLOAT_EQ (vertices[1].tangent[3], -1.0f);
+    EXPECT_FLOAT_EQ (vertices[2].tangent[3], 1.0f);
+}
+
+TEST_F (GltfModelTests, TangentWithoutNormalsIsIgnored)
+{
+    // glTF: when normals are not specified, tangents shall be ignored. These are malformed too (three
+    // components): reading them would warn
+    const auto tangents = toDataUri (toBlock<float> ({ 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f }));
+
+    auto result = loadJson (String (R"({
+        "asset": { "version": "2.0" },
+        "scene": 0,
+        "scenes": [ { "nodes": [ 0 ] } ],
+        "nodes": [ { "mesh": 0 } ],
+        "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "TANGENT": 1 } } ] } ],
+        "buffers": [ { "uri": "$P", "byteLength": 36 }, { "uri": "$T", "byteLength": 36 } ],
+        "bufferViews": [ { "buffer": 0, "byteLength": 36 }, { "buffer": 1, "byteLength": 36 } ],
+        "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+                       { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" } ]
+    })")
+                                .replace ("$P", positionsUri())
+                                .replace ("$T", tangents));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto warnings = result.getReference().getWarnings().joinIntoString ("\n");
+    EXPECT_FALSE (warnings.contains ("TANGENT")) << warnings;
+
+    // Flat normals are generated, and generated frames drop authored tangents
+    for (const auto& vertex : result.getReference().getMeshes()[0]->getPrimitive (0).vertices)
+        EXPECT_EQ (vertex.tangent[3], 0.0f);
+}
+
+TEST_F (GltfModelTests, DegenerateTangentsAreDropped)
+{
+    const auto normals = toDataUri (toBlock<float> ({ 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f }));
+    const auto nan = std::numeric_limits<float>::quiet_NaN();
+    const auto inf = std::numeric_limits<float>::infinity();
+    const auto tangents = toDataUri (toBlock<float> ({ 0.0f, 0.0f, 0.0f, 1.0f, nan, 0.0f, 0.0f, 1.0f, inf, 0.0f, 0.0f, 1.0f }));
+
+    auto result = loadJson (String (R"({
+        "asset": { "version": "2.0" },
+        "scene": 0,
+        "scenes": [ { "nodes": [ 0 ] } ],
+        "nodes": [ { "mesh": 0 } ],
+        "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TANGENT": 2 } } ] } ],
+        "buffers": [ { "uri": "$P", "byteLength": 36 }, { "uri": "$N", "byteLength": 36 }, { "uri": "$T", "byteLength": 48 } ],
+        "bufferViews": [ { "buffer": 0, "byteLength": 36 }, { "buffer": 1, "byteLength": 36 }, { "buffer": 2, "byteLength": 48 } ],
+        "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+                       { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+                       { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" } ]
+    })")
+                                .replace ("$P", positionsUri())
+                                .replace ("$N", normals)
+                                .replace ("$T", tangents));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    // Zero, NaN and infinite directions have no frame to give: the vertices fall back to the derivative frame
+    for (const auto& vertex : result.getReference().getMeshes()[0]->getPrimitive (0).vertices)
+        EXPECT_EQ (vertex.tangent, (std::array<float, 4> { 0.0f, 0.0f, 0.0f, 0.0f }));
+}
+
 TEST_F (GltfModelTests, BuildsHierarchyWithTrs)
 {
     auto result = loadJson (R"({
@@ -669,6 +759,135 @@ TEST_F (GltfModelTests, FailsOnUnsupportedRequiredExtensions)
 
     ASSERT_TRUE (result.failed());
     EXPECT_TRUE (result.getErrorMessage().contains ("KHR_draco_mesh_compression"));
+}
+
+TEST_F (GltfModelTests, ReadsKhrMaterialExtensions)
+{
+    auto result = loadJson (triangleJson (R"(, "material": 0)", R"(,
+        "extensionsUsed": [ "KHR_materials_emissive_strength", "KHR_materials_ior", "KHR_materials_specular" ],
+        "materials": [ {
+            "emissiveFactor": [ 1, 1, 1 ],
+            "extensions": {
+                "KHR_materials_emissive_strength": { "emissiveStrength": 5 },
+                "KHR_materials_ior": { "ior": 1.33 },
+                "KHR_materials_specular": { "specularFactor": 0.5, "specularColorFactor": [ 1, 0.5, 0.25 ] }
+            }
+        } ])"));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& material = *result.getReference().getMaterials()[0];
+    EXPECT_FLOAT_EQ (material.emissiveStrength, 5.0f);
+    EXPECT_FLOAT_EQ (material.ior, 1.33f);
+    EXPECT_FLOAT_EQ (material.specularFactor, 0.5f);
+    EXPECT_FLOAT_EQ (material.specularColorFactor[0], 1.0f);
+    EXPECT_FLOAT_EQ (material.specularColorFactor[1], 0.5f);
+    EXPECT_FLOAT_EQ (material.specularColorFactor[2], 0.25f);
+}
+
+TEST_F (GltfModelTests, KhrMaterialExtensionsDefaultWhenAbsent)
+{
+    auto result = loadJson (triangleJson (R"(, "material": 0)", R"(, "materials": [ {} ])"));
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& material = *result.getReference().getMaterials()[0];
+    EXPECT_FLOAT_EQ (material.emissiveStrength, 1.0f);
+    EXPECT_FLOAT_EQ (material.ior, 1.5f);
+    EXPECT_FLOAT_EQ (material.specularFactor, 1.0f);
+    EXPECT_FLOAT_EQ (material.specularColorFactor[0], 1.0f);
+    EXPECT_FLOAT_EQ (material.specularColorFactor[1], 1.0f);
+    EXPECT_FLOAT_EQ (material.specularColorFactor[2], 1.0f);
+}
+
+TEST_F (GltfModelTests, IntegerExtensionValuesAreRead)
+{
+    // JSON numbers without a fraction arrive as integers
+    auto result = loadJson (triangleJson (R"(, "material": 0)", R"(,
+        "materials": [ { "extensions": { "KHR_materials_ior": { "ior": 2 } } } ])"));
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_FLOAT_EQ (result.getReference().getMaterials()[0]->ior, 2.0f);
+}
+
+TEST_F (GltfModelTests, IorZeroMeansTotalReflection)
+{
+    // KHR_materials_ior reserves 0 for an infinite index of refraction, kept as is
+    auto result = loadJson (triangleJson (R"(, "material": 0)", R"(,
+        "materials": [ { "extensions": { "KHR_materials_ior": { "ior": 0 } } } ])"));
+    ASSERT_TRUE (result.wasOk());
+    EXPECT_FLOAT_EQ (result.getReference().getMaterials()[0]->ior, 0.0f);
+}
+
+TEST_F (GltfModelTests, ShortSpecularColorIsIgnored)
+{
+    auto result = loadJson (triangleJson (R"(, "material": 0)", R"(,
+        "materials": [ { "extensions": { "KHR_materials_specular": { "specularColorFactor": [ 0.5, 0.5 ] } } } ])"));
+    ASSERT_TRUE (result.wasOk());
+
+    const auto& material = *result.getReference().getMaterials()[0];
+    EXPECT_FLOAT_EQ (material.specularColorFactor[0], 1.0f);
+    EXPECT_FLOAT_EQ (material.specularColorFactor[1], 1.0f);
+    EXPECT_FLOAT_EQ (material.specularColorFactor[2], 1.0f);
+}
+
+TEST_F (GltfModelTests, RequiredKhrMaterialExtensionsAreSupported)
+{
+    for (const auto* name : { "KHR_materials_emissive_strength", "KHR_materials_ior", "KHR_materials_specular" })
+    {
+        auto result = loadJson (triangleJson ({}, String (R"(, "extensionsRequired": [ "$NAME" ], "extensionsUsed": [ "$NAME" ])").replace ("$NAME", name)));
+        EXPECT_TRUE (result.wasOk()) << name << ": " << result.getErrorMessage();
+    }
+}
+
+TEST_F (GltfModelTests, LoadsKhrMaterialsFixture)
+{
+    auto result = GltfModel::loadFromFile (getDataDirectory().getChildFile ("khr_materials.gltf"));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& material = *result.getReference().getMaterials()[0];
+    EXPECT_FLOAT_EQ (material.emissiveStrength, 5.0f);
+    EXPECT_FLOAT_EQ (material.ior, 1.33f);
+    EXPECT_FLOAT_EQ (material.specularFactor, 0.5f);
+    EXPECT_FLOAT_EQ (material.specularColorFactor[2], 0.25f);
+}
+
+TEST_F (GltfModelTests, OutOfRangeKhrMaterialValuesAreLimited)
+{
+    auto result = loadJson (triangleJson (R"(, "material": 0)", R"(,
+        "materials": [ { "extensions": {
+            "KHR_materials_emissive_strength": { "emissiveStrength": -3 },
+            "KHR_materials_ior": { "ior": 0.5 },
+            "KHR_materials_specular": { "specularFactor": 2, "specularColorFactor": [ -1, 0.5, 2 ] }
+        } }, { "extensions": {
+            "KHR_materials_ior": { "ior": -2 },
+            "KHR_materials_specular": { "specularFactor": -0.5 }
+        } } ])"));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& materials = result.getReference().getMaterials();
+    ASSERT_EQ (materials.size(), 2u);
+
+    // Limited to the extension schemas; an ior between 0 and 1 is undefined, so it is the default
+    EXPECT_FLOAT_EQ (materials[0]->emissiveStrength, 0.0f);
+    EXPECT_FLOAT_EQ (materials[0]->ior, 1.5f);
+    EXPECT_FLOAT_EQ (materials[0]->specularFactor, 1.0f);
+    EXPECT_FLOAT_EQ (materials[0]->specularColorFactor[0], 0.0f);
+    EXPECT_FLOAT_EQ (materials[0]->specularColorFactor[1], 0.5f);
+    EXPECT_FLOAT_EQ (materials[0]->specularColorFactor[2], 2.0f);
+
+    EXPECT_FLOAT_EQ (materials[1]->ior, 1.5f);
+    EXPECT_FLOAT_EQ (materials[1]->specularFactor, 0.0f);
+}
+
+TEST_F (GltfModelTests, IgnoredSpecularTexturesAreReported)
+{
+    auto result = loadJson (triangleJson (R"(, "material": 0)", R"(,
+        "materials": [ { "extensions": { "KHR_materials_specular": {
+            "specularTexture": { "index": 0 }, "specularColorTexture": { "index": 0 } } } } ])"));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto warnings = result.getReference().getWarnings().joinIntoString ("\n");
+    EXPECT_EQ (result.getReference().getWarnings().size(), 2) << warnings;
+    EXPECT_TRUE (warnings.contains ("specularTexture")) << warnings;
+    EXPECT_TRUE (warnings.contains ("specularColorTexture")) << warnings;
 }
 
 TEST_F (GltfModelTests, FailsOnMissingFile)

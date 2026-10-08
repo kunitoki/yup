@@ -1,0 +1,154 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+namespace yup
+{
+
+//==============================================================================
+namespace
+{
+
+// Labels are ignored. GpuTextureDesc::storage joins the comparison in Phase 2.
+bool isSamePooledTextureDesc (const GpuTextureDesc& a, const GpuTextureDesc& b) noexcept
+{
+    return a.width == b.width
+        && a.height == b.height
+        && a.format == b.format
+        && a.type == b.type
+        && a.depthOrArrayLayers == b.depthOrArrayLayers
+        && a.mipLevels == b.mipLevels
+        && a.sampleCount == b.sampleCount
+        && a.renderTarget == b.renderTarget;
+}
+
+} // namespace
+
+//==============================================================================
+FrameResources::FrameResources (GpuDevice::Ptr device)
+    : device (std::move (device))
+{
+}
+
+//==============================================================================
+void FrameResources::beginFrame (int widthPx, int heightPx)
+{
+    if (widthPx != width || heightPx != height)
+    {
+        transients.clear();
+        histories.clear();
+    }
+
+    width = widthPx;
+    height = heightPx;
+}
+
+GpuTexture::Ptr FrameResources::acquire (const GpuTextureDesc& desc)
+{
+    for (auto& transient : transients)
+    {
+        if (! transient.acquired && isSamePooledTextureDesc (transient.desc, desc))
+        {
+            transient.acquired = true;
+            return transient.texture;
+        }
+    }
+
+    auto texture = GpuTexture::create (device, desc);
+    if (texture == nullptr)
+        return nullptr;
+
+    transients.push_back ({ desc, texture, true });
+    return texture;
+}
+
+//==============================================================================
+FrameResources::History FrameResources::getHistory (StringRef name, const GpuTextureDesc& desc)
+{
+    auto pair = std::find_if (histories.begin(), histories.end(), [&] (const HistoryPair& h)
+    {
+        return h.name == name;
+    });
+
+    if (pair == histories.end())
+    {
+        histories.push_back ({ String (name), desc });
+        pair = std::prev (histories.end());
+    }
+
+    if (pair->textures[0] == nullptr || pair->textures[1] == nullptr || ! isSamePooledTextureDesc (pair->desc, desc))
+    {
+        pair->desc = desc;
+        pair->textures[0] = GpuTexture::create (device, desc);
+        pair->textures[1] = GpuTexture::create (device, desc);
+        pair->valid = false;
+    }
+
+    pair->used = true;
+    return { pair->textures[1 - pair->writeIndex], pair->textures[pair->writeIndex], pair->valid };
+}
+
+void FrameResources::invalidateHistory() noexcept
+{
+    for (auto& pair : histories)
+    {
+        // A pair already read this frame was written from the stale history: the next frame can't trust it either
+        pair.invalidatedAfterUse = pair.invalidatedAfterUse || pair.used;
+        pair.valid = false;
+    }
+}
+
+//==============================================================================
+void FrameResources::endFrame()
+{
+    std::erase_if (transients, [] (const Transient& t)
+    {
+        return ! t.acquired;
+    });
+
+    for (auto& transient : transients)
+        transient.acquired = false;
+
+    std::erase_if (histories, [] (const HistoryPair& pair)
+    {
+        return ! pair.used;
+    });
+
+    for (auto& pair : histories)
+    {
+        pair.writeIndex = 1 - pair.writeIndex;
+        pair.valid = ! pair.invalidatedAfterUse;
+        pair.invalidatedAfterUse = false;
+        pair.used = false;
+    }
+}
+
+//==============================================================================
+int FrameResources::getWidth() const noexcept
+{
+    return width;
+}
+
+int FrameResources::getHeight() const noexcept
+{
+    return height;
+}
+
+} // namespace yup

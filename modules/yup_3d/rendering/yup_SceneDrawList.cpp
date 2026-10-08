@@ -37,10 +37,13 @@ static bool isMirroringTransform (const Matrix4& m) noexcept
 
 SceneDrawList::SceneDrawList()
     : defaultMaterial (new Material())
+    , defaultLight (std::make_unique<LightNode>())
 {
     defaultMaterial->name = "default";
     defaultMaterial->metallicFactor = 0.0f;
     defaultMaterial->roughnessFactor = 0.5f;
+
+    defaultLight->intensity = 3.0f;
 }
 
 SceneDrawList::~SceneDrawList() = default;
@@ -49,9 +52,17 @@ SceneDrawList::~SceneDrawList() = default;
 
 void SceneDrawList::build (const EntityNode& root, const Matrix4& view)
 {
+    build (root, view, BuildOptions {});
+}
+
+void SceneDrawList::build (const EntityNode& root, const Matrix4& view, const BuildOptions& options)
+{
     clear();
 
     collect (root, root.getWorldMatrix(), nullptr, view);
+
+    if (options.addDefaultLight && lights.empty())
+        lights.push_back ({ defaultLight.get(), {}, Vector3<float> (-0.35f, -0.75f, -0.55f).normalized() });
 
     const auto less = std::less<const Material*>();
 
@@ -106,6 +117,7 @@ void SceneDrawList::collect (const EntityNode& entity, const Matrix4& world, con
             DrawItem item;
             item.world = world;
             item.mesh = node.mesh.get();
+            item.node = &node;
             item.primitiveIndex = i;
             item.primitive = &primitive;
             item.material = overrideMaterial != nullptr     ? overrideMaterial

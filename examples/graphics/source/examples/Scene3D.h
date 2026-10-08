@@ -69,6 +69,20 @@ public:
         freeMovementLabel.setText ("Free movement", yup::dontSendNotification);
         addAndMakeVisible (freeMovementLabel);
 
+        settingsToggle.setButtonText ("Render settings");
+        settingsToggle.onClick = [this]
+        {
+            settingsPanel.setVisible (settingsToggle.getToggleState());
+            resized();
+        };
+        addAndMakeVisible (settingsToggle);
+
+        view.onFramePainted = [this]
+        {
+            settingsPanel.refresh();
+        };
+        addChildComponent (settingsPanel);
+
         // The camera can't move freely while it frames the screen
         view.onScreenZoomChanged = [this] (bool isZoomedOnScreen)
         {
@@ -93,6 +107,7 @@ public:
         auto bounds = getLocalBounds().reduced (10.0f);
 
         auto toolbar = bounds.removeFromTop (30.0f);
+        settingsToggle.setBounds (toolbar.removeFromRight (140.0f));
         treeToggle.setBounds (toolbar.removeFromLeft (140.0f));
         toolbar.removeFromLeft (16.0f);
         freeMovementSwitch.setBounds (toolbar.removeFromLeft (44.0f).reduced (0.0f, 5.0f));
@@ -105,6 +120,12 @@ public:
         {
             sceneTree.setBounds (bounds.removeFromLeft (260.0f));
             bounds.removeFromLeft (6.0f);
+        }
+
+        if (settingsPanel.isVisible())
+        {
+            settingsPanel.setBounds (bounds.removeFromRight (250.0f));
+            bounds.removeFromRight (6.0f);
         }
 
         view.setBounds (bounds);
@@ -127,8 +148,13 @@ private:
             startTimer (2500);
         }
 
+        /** True once after each repaint of the screen, so its texture is only replaced when it changed. */
+        bool consumeRedrawn() noexcept { return std::exchange (redrawn, false); }
+
         void paint (yup::Graphics& g) override
         {
+            redrawn = true;
+
             g.setFillColor (backgroundColor);
             g.fillAll();
 
@@ -350,6 +376,7 @@ private:
         } };
 
         bool booting = true;
+        bool redrawn = false;
         int tab = 1;
         int mode = 0;
         int selectedRow = -1;
@@ -511,6 +538,12 @@ private:
         /** Called when the camera zooms onto the screen or back out. */
         std::function<void (bool isZoomedOnScreen)> onScreenZoomChanged;
 
+        /** Called at the end of every paint, once the renderer holds the capabilities of the frame. */
+        std::function<void()> onFramePainted;
+
+        /** The graphics backend of the last paint. */
+        yup::GpuPlatform getPlatform() const noexcept { return platform; }
+
         /** Lets the mouse orbit, pan and zoom the camera, or brings it back to the top view.
 
             Ignored while zoomed onto the screen.
@@ -546,21 +579,44 @@ private:
                 getTargetPose().applyTo (*cameraEntity);
         }
 
+        /** Renders the next paint 300 times offscreen at 1920x1080 and reports the average frame time. */
+        void requestBenchmark()
+        {
+            benchmarkPending = true;
+            repaint();
+        }
+
         void paint (yup::Graphics& g) override
         {
             auto& context = g.getGraphicsContext();
             if (context.isGpuAvailable())
             {
+                platform = context.getGpuDevice()->getPlatform();
                 faceplate.updateTexture (context);
 
+                // Every new texture restarts the TAA accumulation, so only hand over actual changes
                 if (lcdTexture != nullptr)
-                    lcdTexture->setGpuTexture (lcd.renderToTexture (context, lcdTextureScale));
+                {
+                    auto texture = lcd.renderToTexture (context, lcdTextureScale);
+                    if (lcd.consumeRedrawn())
+                        lcdTexture->setGpuTexture (std::move (texture));
+                }
+            }
+
+            if (benchmarkPending && context.isGpuAvailable() && getScene() != nullptr)
+            {
+                benchmarkPending = false;
+                status = runBenchmark (context);
+                yup::Logger::outputDebugString (status);
             }
 
             yup::SceneComponent::paint (g);
 
             // Input is mapped with the camera that was actually drawn
             updateScreenMapping();
+
+            if (onFramePainted)
+                onFramePainted();
         }
 
         void paintOverChildren (yup::Graphics& g) override
@@ -879,6 +935,33 @@ private:
                 onScreenZoomChanged (zoomedOnScreen);
         }
 
+        yup::String runBenchmark (yup::GraphicsContext& context)
+        {
+            constexpr int numFrames = 300;
+            constexpr int width = 1920;
+            constexpr int height = 1080;
+
+            yup::SceneRenderer benchmarkRenderer;
+            const auto start = yup::Time::getMillisecondCounterHiRes();
+
+            yup::GpuTexture::Ptr texture;
+            for (int i = 0; i < numFrames; ++i)
+                texture = benchmarkRenderer.render (context.getGpuDevice(), *getScene(), width, height);
+
+            // Reading the last frame back waits for the GPU to finish all of them
+            auto canvas = yup::GpuCanvas::create (context, width, height);
+            if (texture == nullptr || canvas == nullptr)
+                return "Benchmark failed: " + benchmarkRenderer.getLastError();
+
+            auto& g = canvas->beginDraw();
+            g.drawTexture (texture, { 0.0f, 0.0f, static_cast<float> (width), static_cast<float> (height) });
+            const auto image = canvas->asImage();
+
+            const auto elapsed = yup::Time::getMillisecondCounterHiRes() - start;
+            return yup::String::formatted ("Benchmark: %d frames at %dx%d, %.3f ms/frame",
+                                           numFrames, width, height, elapsed / numFrames);
+        }
+
         void updateStatus()
         {
             if (screenEntity == nullptr)
@@ -943,6 +1026,9 @@ private:
         yup::BoundingBox deviceBounds { { -1.0f, -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f } };
 
         bool zoomedOnScreen = false;
+
+        bool benchmarkPending = false;
+        yup::GpuPlatform platform = yup::GpuPlatform::Headless;
         yup::String status;
 
         bool freeMovement = false;
@@ -954,6 +1040,228 @@ private:
         DragMode dragMode = DragMode::none;
         yup::Point<float> lastDragPosition;
         float dragDistance = 0.0f;
+    };
+
+    //==============================================================================
+    /** Edits the render settings of the scene shown by a view, and reports the tier in effect. */
+    class RenderSettingsPanel final : public yup::Component
+    {
+    public:
+        explicit RenderSettingsPanel (MpcView& viewToControl)
+            : yup::Component ("renderSettingsPanel")
+            , view (viewToControl)
+        {
+            auto* scene = view.getScene().get();
+            const auto settings = scene->getRenderSettings();
+
+            tierLabel.setText ("Tier", yup::dontSendNotification);
+            tierCombo.addItem ("Automatic", 1);
+            tierCombo.addItem ("Raster", 2);
+            tierCombo.addItem ("Full", 3);
+            tierCombo.setSelectedId (static_cast<int> (settings.tier) + 1, yup::dontSendNotification);
+            tierCombo.onSelectedItemChanged = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.tier = static_cast<yup::RenderSettings::TierPreference> (tierCombo.getSelectedId() - 1);
+                });
+            };
+
+            taaLabel.setText ("TAA samples", yup::dontSendNotification);
+            taaSlider.setRange (1.0, 32.0, 1.0);
+            taaSlider.setNumDecimalPlacesToDisplay (0);
+            taaSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
+            taaSlider.setValue (settings.taaSamples, yup::dontSendNotification);
+            taaSlider.onValueChanged = [this] (double value)
+            {
+                editSettings ([value] (yup::RenderSettings& s)
+                {
+                    s.taaSamples = static_cast<int> (value);
+                });
+            };
+
+            bloomLabel.setText ("Bloom", yup::dontSendNotification);
+            bloomToggle.setButtonText ("Enabled");
+            bloomToggle.setToggleState (settings.bloom, yup::dontSendNotification);
+            bloomToggle.onClick = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.bloom = bloomToggle.getToggleState();
+                });
+            };
+
+            const auto setupBloomSlider = [this] (yup::Label& label, const char* text, yup::Slider& slider, double maximum, double value, auto field)
+            {
+                label.setText (text, yup::dontSendNotification);
+                slider.setRange (0.0, maximum, 0.0);
+                slider.setNumDecimalPlacesToDisplay (2);
+                slider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
+                slider.setValue (value, yup::dontSendNotification);
+                slider.onValueChanged = [this, field] (double newValue)
+                {
+                    editSettings ([field, newValue] (yup::RenderSettings& s)
+                    {
+                        s.*field = static_cast<float> (newValue);
+                    });
+                };
+            };
+
+            setupBloomSlider (bloomThresholdLabel, "Bloom threshold", bloomThresholdSlider, 4.0, settings.bloomThreshold, &yup::RenderSettings::bloomThreshold);
+            setupBloomSlider (bloomIntensityLabel, "Bloom intensity", bloomIntensitySlider, 1.0, settings.bloomIntensity, &yup::RenderSettings::bloomIntensity);
+            setupBloomSlider (bloomRadiusLabel, "Bloom radius", bloomRadiusSlider, 1.0, settings.bloomRadius, &yup::RenderSettings::bloomRadius);
+            bloomIntensitySlider.setSkewFactorFromMidpoint (0.1);
+
+            toneMappingLabel.setText ("Tone mapping", yup::dontSendNotification);
+            toneMappingCombo.addItem ("Reinhard", 1);
+            toneMappingCombo.addItem ("ACES", 2);
+            toneMappingCombo.addItem ("AgX", 3);
+            toneMappingCombo.setSelectedId (static_cast<int> (scene->getToneMapping()) + 1, yup::dontSendNotification);
+            toneMappingCombo.onSelectedItemChanged = [this]
+            {
+                view.getScene()->setToneMapping (static_cast<yup::Scene::ToneMapping> (toneMappingCombo.getSelectedId() - 1));
+                view.repaint();
+            };
+
+            exposureLabel.setText ("Exposure", yup::dontSendNotification);
+            exposureSlider.setRange (0.1, 8.0, 0.0);
+            exposureSlider.setSkewFactorFromMidpoint (1.0);
+            exposureSlider.setNumDecimalPlacesToDisplay (2);
+            exposureSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
+            exposureSlider.setValue (scene->getExposure(), yup::dontSendNotification);
+            exposureSlider.onValueChanged = [this] (double value)
+            {
+                view.getScene()->setExposure (static_cast<float> (value));
+                view.repaint();
+            };
+
+            benchmarkButton.onClick = [this]
+            {
+                view.requestBenchmark();
+            };
+
+            for (auto* child : std::initializer_list<yup::Component*> { &tierLabel, &tierCombo, &taaLabel, &taaSlider, &bloomLabel, &bloomToggle, &bloomThresholdLabel, &bloomThresholdSlider,
+                                                                        &bloomIntensityLabel, &bloomIntensitySlider, &bloomRadiusLabel, &bloomRadiusSlider, &toneMappingLabel, &toneMappingCombo, &exposureLabel, &exposureSlider, &statusLabel, &detailLabel, &benchmarkButton })
+                addAndMakeVisible (*child);
+        }
+
+        /** Updates the status and the enabled state of the controls from what the last frame ran with. */
+        void refresh()
+        {
+            const auto* capabilities = view.getRenderer().getCapabilities();
+            if (capabilities == nullptr)
+                return;
+
+            const auto settings = view.getScene()->getRenderSettings();
+            const auto isFull = capabilities->getTier() == yup::RenderCapabilities::Tier::full;
+            const auto canTaa = capabilities->isAvailable (yup::RenderCapabilities::Feature::temporalAntiAliasing);
+
+            const auto detail = isFull ? (view.getRenderer().isConverged() ? yup::String ("TAA converged") : yup::String ("TAA accumulating"))
+                                       : "MSAA " + yup::String (view.getRenderer().getSampleCount()) + "x";
+
+            setLabelText (statusLabel, "Tier: " + yup::String (isFull ? "full" : "raster") + " (" + getPlatformName (view.getPlatform()) + ")");
+            setLabelText (detailLabel, detail);
+            setLabelText (taaLabel, canTaa ? yup::String ("TAA samples") : yup::String ("TAA samples (needs the full tier)"));
+
+            if (taaSlider.isEnabled() != canTaa)
+            {
+                taaSlider.setEnabled (canTaa);
+                taaLabel.setEnabled (canTaa);
+            }
+
+            const auto canBloom = capabilities->isAvailable (yup::RenderCapabilities::Feature::bloom);
+            setLabelText (bloomLabel, canBloom ? yup::String ("Bloom") : yup::String ("Bloom (needs MSAA half-float targets)"));
+
+            if (bloomToggle.isEnabled() != canBloom)
+            {
+                for (auto* control : std::initializer_list<yup::Component*> { &bloomLabel, &bloomToggle, &bloomThresholdLabel, &bloomThresholdSlider,
+                                                                              &bloomIntensityLabel, &bloomIntensitySlider, &bloomRadiusLabel, &bloomRadiusSlider })
+                    control->setEnabled (canBloom);
+            }
+        }
+
+        void paint (yup::Graphics& g) override
+        {
+            g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
+            g.fillAll();
+        }
+
+        void resized() override
+        {
+            auto bounds = getLocalBounds().reduced (8.0f);
+            constexpr float rowHeight = 24.0f;
+
+            for (auto [label, control] : { std::pair<yup::Component*, yup::Component*> { &tierLabel, &tierCombo },
+                                           { &taaLabel, &taaSlider },
+                                           { &bloomLabel, &bloomToggle },
+                                           { &bloomThresholdLabel, &bloomThresholdSlider },
+                                           { &bloomIntensityLabel, &bloomIntensitySlider },
+                                           { &bloomRadiusLabel, &bloomRadiusSlider },
+                                           { &toneMappingLabel, &toneMappingCombo },
+                                           { &exposureLabel, &exposureSlider } })
+            {
+                label->setBounds (bounds.removeFromTop (rowHeight));
+                control->setBounds (bounds.removeFromTop (rowHeight));
+                bounds.removeFromTop (8.0f);
+            }
+
+            statusLabel.setBounds (bounds.removeFromTop (rowHeight));
+            detailLabel.setBounds (bounds.removeFromTop (rowHeight));
+            bounds.removeFromTop (8.0f);
+            benchmarkButton.setBounds (bounds.removeFromTop (rowHeight).removeFromLeft (110.0f));
+        }
+
+    private:
+        template <class Callback>
+        void editSettings (Callback&& edit)
+        {
+            auto settings = view.getScene()->getRenderSettings();
+            edit (settings);
+            view.getScene()->setRenderSettings (settings);
+            view.repaint();
+        }
+
+        static void setLabelText (yup::Label& label, const yup::String& text)
+        {
+            if (label.getText() != text)
+                label.setText (text, yup::dontSendNotification);
+        }
+
+        static yup::String getPlatformName (yup::GpuPlatform platform)
+        {
+            switch (platform)
+            {
+                case yup::GpuPlatform::OpenGL:   return "OpenGL";
+                case yup::GpuPlatform::OpenGLES: return "OpenGL ES";
+                case yup::GpuPlatform::Direct3D: return "Direct3D";
+                case yup::GpuPlatform::Metal:    return "Metal";
+                case yup::GpuPlatform::WebGPU:   return "WebGPU";
+                case yup::GpuPlatform::Vulkan:   return "Vulkan";
+                default:                         return "Headless";
+            }
+        }
+
+        MpcView& view;
+
+        yup::Label tierLabel { "tierLabel" };
+        yup::ComboBox tierCombo { "tierCombo" };
+        yup::Label taaLabel { "taaLabel" };
+        yup::Slider taaSlider { yup::Slider::LinearHorizontal, "taaSlider" };
+        yup::Label bloomLabel { "bloomLabel" };
+        yup::ToggleButton bloomToggle { "bloomToggle" };
+        yup::Label bloomThresholdLabel { "bloomThresholdLabel" };
+        yup::Slider bloomThresholdSlider { yup::Slider::LinearHorizontal, "bloomThresholdSlider" };
+        yup::Label bloomIntensityLabel { "bloomIntensityLabel" };
+        yup::Slider bloomIntensitySlider { yup::Slider::LinearHorizontal, "bloomIntensitySlider" };
+        yup::Label bloomRadiusLabel { "bloomRadiusLabel" };
+        yup::Slider bloomRadiusSlider { yup::Slider::LinearHorizontal, "bloomRadiusSlider" };
+        yup::Label toneMappingLabel { "toneMappingLabel" };
+        yup::ComboBox toneMappingCombo { "toneMappingCombo" };
+        yup::Label exposureLabel { "exposureLabel" };
+        yup::Slider exposureSlider { yup::Slider::LinearHorizontal, "exposureSlider" };
+        yup::Label statusLabel { "statusLabel" };
+        yup::Label detailLabel { "detailLabel" };
+        yup::TextButton benchmarkButton { "Benchmark" };
     };
 
     //==============================================================================
@@ -1020,8 +1328,10 @@ private:
     yup::ToggleButton treeToggle { "treeToggle" };
     yup::SwitchButton freeMovementSwitch { "freeMovementSwitch" };
     yup::Label freeMovementLabel { "freeMovementLabel" };
+    yup::ToggleButton settingsToggle { "settingsToggle" };
     yup::TreeView sceneTree { "sceneTree" };
     MpcView view;
+    RenderSettingsPanel settingsPanel { view };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scene3DDemo)
 };

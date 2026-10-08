@@ -76,8 +76,10 @@ pass.finish();
 | `isValid()`                                        | True if the pass holds a valid encoding target.                       |
 | `setPipeline (pipeline)`                           | Sets the compiled pipeline used by subsequent draws.                  |
 | `setTexture (group, binding, texture)`             | Binds a texture to a `(group, binding)` slot; last write wins.        |
+| `setTexture (group, binding, texture, view)`       | Binds only the mip levels and layers `view` selects (see below).      |
 | `setSampler (group, binding, sampler)`             | Overrides the pipeline's default sampler for a slot.                  |
 | `setUniformBuffer (group, binding, data, size)`    | Copies uniform data to a slot immediately; last write wins.           |
+| `setStorageBuffer (group, binding, buffer)`        | Binds a storage buffer for read-only shader access (see below).       |
 | `setVertexBuffer (slot, buffer)`                   | Binds a vertex buffer for custom geometry.                            |
 | `setIndexBuffer (format, buffer)`                  | Binds an index buffer for `drawIndexed()`.                            |
 | `setColorAttachment (index, texture, …)`           | Binds an extra colour attachment (MRT); index 1..3.                   |
@@ -108,6 +110,55 @@ pass.setUniformBuffer (0, 1, &blurParams, sizeof blurParams);
 pass.draw (3); // fullscreen triangle
 pass.finish();
 ```
+
+### Sampling one mip level
+
+To read one level of a texture while rendering into another level of the same
+texture (a downsample chain or bloom), bind a narrowed view. The shader sees only
+the selected levels, so lod 0 is the view's `baseMipLevel`:
+
+```cpp
+auto nextLevel = GpuTarget::createFromTexture (device, chain, { /* mip */ level + 1, /* layer */ 0 });
+
+auto pass = nextLevel->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+pass.setPipeline (downsamplePipeline);
+pass.setTexture (0, 0, chain, GpuTextureViewDesc (level, 0)); // samples mip `level` only
+pass.draw (3);
+pass.finish();
+```
+
+A view of a cube or array texture must also set `dimension` and `layerCount`. On
+OpenGL and OpenGL ES the mip range is honored but a layer range is not, and one
+texture should not be bound to two slots of the same draw with different mip
+ranges: both slots would see the range applied last. Since OpenGL cannot honor
+it, debug builds assert on every backend when a draw binds one texture to two
+slots with different views, which keeps the code portable.
+
+### Reading storage buffers
+
+Vertex and fragment shaders can read a `GpuBufferType::storage` buffer, such as
+one a compute pass filled. Declare the block `readonly`; a draw meeting a
+writable block asserts, draws nothing and returns `false`:
+
+```glsl
+layout(std430, set = 0, binding = 0) readonly buffer Lights { vec4 colors[]; };
+```
+
+```cpp
+if (device->isFragmentStorageBufferAvailable())
+    pass.setStorageBuffer (0, 0, lightsBuffer);
+```
+
+The buffer stays alive until the GPU has finished with it, even if you drop it
+right after the draw. Fragment storage buffers are currently available on Metal,
+Direct3D 11, Vulkan and WebGPU. Elsewhere
+`isFragmentStorageBufferAvailable()` returns false and `setStorageBuffer` is
+ignored with an assertion; OpenGL, OpenGL ES and WebGL2 are raster-only and never
+support them.
+
+On WebGPU, availability follows the device's `maxStorageBuffersInFragmentStage`
+limit. Core devices always provide them, while a compatibility mode device (see
+`GpuDevice::isCompatibilityMode()`) may report none.
 
 ## `GpuRenderOptions`
 

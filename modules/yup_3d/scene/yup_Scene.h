@@ -109,7 +109,8 @@ public:
     enum class ToneMapping
     {
         reinhard, ///< Soft roll-off of the highlights, keeps the colors flat.
-        aces      ///< The ACES filmic curve: more contrast and saturation, photographic highlights.
+        aces,     ///< The ACES filmic curve: more contrast and saturation, photographic highlights.
+        agx       ///< AgX: the filmic default of modern renderers, keeps saturated highlights from skewing.
     };
 
     /** Returns how the lit colors are mapped into the displayable range. */
@@ -153,6 +154,13 @@ public:
     void setEnvironmentBlur (float newBlur) noexcept { environmentBlur = jlimit (0.0f, 1.0f, newBlur); }
 
     //==============================================================================
+    /** Returns the settings that choose how this scene is rendered. */
+    const RenderSettings& getRenderSettings() const noexcept { return renderSettings; }
+
+    /** Changes the settings that choose how this scene is rendered. */
+    void setRenderSettings (const RenderSettings& newSettings) noexcept { renderSettings = newSettings; }
+
+    //==============================================================================
     /** Calls Node::update() on every part of every visible entity, depth-first.
 
         Parts must not attach or detach parts of their own entity from update().
@@ -175,6 +183,7 @@ private:
     float environmentIntensity = 1.0f;
     bool environmentVisible = false;
     float environmentBlur = 0.0f;
+    RenderSettings renderSettings;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scene)
 };

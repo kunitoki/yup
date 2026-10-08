@@ -35,6 +35,9 @@ namespace yup
     The items point into the meshes and materials of the tree: they stay valid until the tree
     changes or the list is built again.
 
+    getLights() can hold a light that is not in the tree: when BuildOptions::addDefaultLight is
+    set and the tree has no LightNode, it holds the default light owned by the list.
+
     @see SceneRenderer
 */
 class YUP_API SceneDrawList
@@ -46,6 +49,7 @@ public:
     {
         Matrix4 world;                               ///< Model to world transform.
         Mesh* mesh = nullptr;                        ///< The mesh owning the primitive.
+        MeshNode* node = nullptr;                    ///< The part drawing the mesh, which keeps its previous transform.
         int primitiveIndex = 0;                      ///< The primitive within the mesh.
         const Mesh::Primitive* primitive = nullptr;  ///< The primitive.
         const Material* material = nullptr;          ///< The resolved material, never nullptr.
@@ -61,6 +65,15 @@ public:
         Vector3<float> direction;                    ///< Unit direction the light shines towards, the entity -Z.
     };
 
+    /** Options for build(). */
+    struct BuildOptions
+    {
+        /** Adds a light owned by the list when the tree has no LightNode, see Scene::isUsingDefaultLight():
+            a white directional light of intensity 3, shining towards (-0.35, -0.75, -0.55), that casts no shadows.
+        */
+        bool addDefaultLight = false;
+    };
+
     //==============================================================================
     /** Creates an empty list. */
     SceneDrawList();
@@ -71,9 +84,13 @@ public:
     //==============================================================================
     /** Rebuilds the list from an entity tree.
 
-        @param root  The root of the tree. Its own world matrix is used as the starting point.
-        @param view  The view matrix, used to sort blended items by distance.
+        @param root     The root of the tree. Its own world matrix is used as the starting point.
+        @param view     The view matrix, used to sort blended items by distance.
+        @param options  What to add beyond the tree.
     */
+    void build (const EntityNode& root, const Matrix4& view, const BuildOptions& options);
+
+    /** Rebuilds the list from an entity tree with the default BuildOptions. */
     void build (const EntityNode& root, const Matrix4& view);
 
     /** Empties the list. */
@@ -99,6 +116,7 @@ private:
     std::vector<DrawItem> blendItems;
     std::vector<Light> lights;
     Material::Ptr defaultMaterial;
+    std::unique_ptr<LightNode> defaultLight;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneDrawList)
 };

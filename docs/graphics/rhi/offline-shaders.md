@@ -17,9 +17,12 @@ the active graphics API.
 
 WGSL variants are produced via a direct GLSL→WGSL transpiler - no SPIRV-Cross WGSL
 backend is needed. Reflection data still originates from SPIR-V: resources keep
-their GLSL bindings in every target, and the extra sampler a combined image
-sampler needs in WGSL follows the rule described in
-[GLSL on the WebGPU target](wgsl-shaders.md#bindings).
+their GLSL bindings in the WGSL and SPIR-V targets, and the extra sampler a
+combined image sampler needs in WGSL follows the rule described in
+[GLSL on the WebGPU target](wgsl-shaders.md#bindings). A bundle built with
+`--vert` and `--frag` together is one graphics pipeline, so its MSL, HLSL, GLSL
+and ESSL variants get their slots assigned across both stages, as described in
+[Several bind groups](pipelines.md#several-bind-groups).
 ```
 
 ## The `spirv` target

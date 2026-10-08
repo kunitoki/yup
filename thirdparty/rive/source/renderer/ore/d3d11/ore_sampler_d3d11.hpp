@@ -13,6 +13,8 @@ public:
     SamplerD3D11() = default;
     ~SamplerD3D11() override = default; // ComPtr released automatically
 
+    ID3D11SamplerState* d3dSampler() const { return m_d3dSampler.Get(); }
+
 private:
     friend class ContextD3D11;
     Microsoft::WRL::ComPtr<ID3D11SamplerState> m_d3dSampler;

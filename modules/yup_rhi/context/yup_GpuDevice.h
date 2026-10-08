@@ -266,6 +266,21 @@ public:
     */
     virtual bool isComputeAvailable() const noexcept { return false; }
 
+    /** Returns true if fragment shaders can read storage buffers.
+
+        Desktop OpenGL, OpenGL ES and WebGL2 are raster-only and always return
+        false, as does the headless backend.
+    */
+    virtual bool isFragmentStorageBufferAvailable() const noexcept { return false; }
+
+    /** Returns true if compute shaders can write storage textures that later
+        passes sample.
+
+        Desktop OpenGL, OpenGL ES and WebGL2 are raster-only and always return
+        false, as does the headless backend.
+    */
+    virtual bool isStorageTextureAvailable() const noexcept { return false; }
+
     /** Returns true if the device is a WebGPU device created in compatibility mode.
 
         The web page falls back to compatibility mode when the browser cannot provide a
@@ -299,7 +314,9 @@ public:
         Float render targets are extension-gated on OpenGL ES and WebGL2
         (@c GL_EXT_color_buffer_float), so a demo that renders into an
         rgba16float or rg16float target must probe this and fall back to an
-        8-bit encoding rather than silently rendering black.
+        8-bit encoding rather than silently rendering black. With only
+        @c GL_EXT_color_buffer_half_float the 16-bit float formats render, but
+        r11g11b10float still needs @c GL_EXT_color_buffer_float.
 
         @param format  The format to probe.
     */
@@ -313,6 +330,27 @@ public:
         Always a power of two, and 1 when no GPU context is available.
     */
     uint32_t getMaximumSampleCount() const noexcept;
+
+    /** Returns the highest MSAA sample count supported for render targets of the
+        given format.
+
+        On OpenGL ES and WebGL2 a renderable float format can allow fewer samples
+        than rgba8unorm, so probe the format a target actually uses rather than
+        relying on getMaximumSampleCount().
+
+        @param format  The format to probe.
+
+        @returns 0 when the format is not renderable (see isFormatRenderable()),
+                 otherwise a power of two of at least 1.
+    */
+    virtual uint32_t getMaximumSampleCount (GpuTextureFormat format) const noexcept;
+
+    /** Returns how many color attachments a render pass can bind at once.
+
+        Between 1 and 4 on every backend, capped at 4 so the same pass layout
+        works everywhere, and 0 when no GPU context is available.
+    */
+    uint32_t getMaximumColorAttachments() const noexcept;
 
     /** Runs GPU compute work with the backend's compute context current on the
         calling thread.
@@ -597,12 +635,16 @@ private:
     /** Transient resources of one submitted frame, held until the GPU is known to
         have finished with them.
 
-        A frame's texture views, samplers and pooled uniform buffers are still
-        referenced by the commands it submitted, so they cannot be released the
+        A frame's texture views, samplers, pooled uniform buffers and bound storage
+        buffers are still referenced by the commands it submitted, so they cannot be released the
         moment submit() returns. Blocking on the GPU to find out when they are
         free costs a full pipeline stall every frame; instead each frame hands its
         resources here tagged with a generation, and a generation is released once
         enough later frames have begun that the GPU cannot still be reading it.
+
+        Vulkan storage buffers are not retired here: Rive's resource purgatory
+        already keeps their native buffers until the GPU is done, and a retired
+        GpuBuffer, which holds its device, would keep the device alive forever.
 
         The count is a safety margin, not a correctness requirement on the
         backends YUP ships: Metal retains resources on the command buffer, OpenGL
@@ -619,13 +661,15 @@ private:
         std::vector<rive::rcp<rive::ore::Buffer>> buffers;
         std::vector<rive::rcp<rive::ore::TextureView>> views;
         std::vector<rive::rcp<rive::ore::Sampler>> samplers;
+        std::vector<ReferenceCountedObjectPtr<GpuBuffer>> storageBuffers;
     };
 
     /** Takes ownership of a submitted frame's transient resources. */
     void retireFrameResources (uint64_t generation,
                                std::vector<rive::rcp<rive::ore::Buffer>> buffers,
                                std::vector<rive::rcp<rive::ore::TextureView>> views,
-                               std::vector<rive::rcp<rive::ore::Sampler>> samplers);
+                               std::vector<rive::rcp<rive::ore::Sampler>> samplers,
+                               std::vector<ReferenceCountedObjectPtr<GpuBuffer>> storageBuffers);
 
     /** Releases every retired generation up to and including @p generation. */
     void releaseRetiredFrames (uint64_t generation);

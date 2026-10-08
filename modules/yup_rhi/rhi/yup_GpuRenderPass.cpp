@@ -31,6 +31,7 @@ struct GpuRenderPass::Impl
         int group;
         int binding;
         GpuTexture::Ptr texture;
+        std::optional<GpuTextureViewDesc> view;
     };
 
     struct SamplerBinding
@@ -47,6 +48,13 @@ struct GpuRenderPass::Impl
         std::vector<uint8_t> data;
     };
 
+    struct StorageBinding
+    {
+        int group;
+        int binding;
+        GpuBuffer::Ptr buffer;
+    };
+
     struct VertexBinding
     {
         int slot;
@@ -61,6 +69,14 @@ struct GpuRenderPass::Impl
         GpuRenderOptions options;
         GpuTexture::Ptr resolveTexture;
         GpuTextureViewDesc resolveView;
+    };
+
+    /** The bind group a draw built for a group, reused by later draws until one of
+        its bindings changes or a pipeline switch changes the group's layout or default samplers. */
+    struct GroupCache
+    {
+        rive::rcp<rive::ore::BindGroup> group;
+        bool dirty = true;
     };
 
     rive::ore::Context* oreCtx = nullptr;
@@ -101,6 +117,7 @@ struct GpuRenderPass::Impl
     std::vector<TextureBinding> textureBindings;
     std::vector<SamplerBinding> samplerBindings;
     std::vector<UboBinding> uboBindings;
+    std::vector<StorageBinding> storageBindings;
     std::vector<VertexBinding> vertexBindings;
 
     GpuBuffer::Ptr indexBuffer;
@@ -112,6 +129,21 @@ struct GpuRenderPass::Impl
         Opened lazily by the first draw and held until finish(), so a pass costs
         one command encoder rather than one per draw. */
     std::unique_ptr<rive::ore::RenderPass> orePass;
+
+    /** Groups 0..3; any higher group is rebuilt by every draw. */
+    std::array<GroupCache, 4> groupCaches;
+
+    void markGroupDirty (int group) noexcept
+    {
+        if (group >= 0 && group < (int) groupCaches.size())
+            groupCaches[(size_t) group].dirty = true;
+    }
+
+    static bool layoutDeclares (const rive::ore::BindGroupLayout& layout, uint32_t binding, bool asTexture);
+
+    /** OpenGL applies a sampled mip range to the texture object, so one texture bound
+        with two different views in a draw would sample the last range in both slots. */
+    void assertNoConflictingTextureViews() const;
 
     bool encode (uint32_t count, bool indexed, uint32_t instanceCount, uint32_t first, int32_t baseVertex, uint32_t firstInstance);
 
@@ -267,6 +299,51 @@ void GpuRenderPass::Impl::applyPassState (rive::ore::RenderPass& renderPass) con
 
 //==============================================================================
 
+bool GpuRenderPass::Impl::layoutDeclares (const rive::ore::BindGroupLayout& layout, uint32_t binding, bool asTexture)
+{
+    for (const auto& e : layout.entries())
+    {
+        if (e.binding != binding)
+            continue;
+
+        return asTexture ? (e.kind == rive::ore::BindingKind::sampledTexture
+                            || e.kind == rive::ore::BindingKind::storageTexture)
+                         : (e.kind == rive::ore::BindingKind::uniformBuffer);
+    }
+
+    return false;
+}
+
+void GpuRenderPass::Impl::assertNoConflictingTextureViews() const
+{
+    const auto isBound = [this] (const TextureBinding& tb)
+    {
+        return tb.texture != nullptr
+            && tb.group >= 0
+            && (size_t) tb.group < oreLayouts->size()
+            && (*oreLayouts)[(size_t) tb.group] != nullptr
+            && layoutDeclares (*(*oreLayouts)[(size_t) tb.group], (uint32_t) tb.binding, true);
+    };
+
+    for (size_t a = 0; a < textureBindings.size(); ++a)
+    {
+        const auto& first = textureBindings[a];
+        if (! isBound (first))
+            continue;
+
+        for (size_t b = a + 1; b < textureBindings.size(); ++b)
+        {
+            const auto& second = textureBindings[b];
+            if (second.texture != first.texture || ! isBound (second))
+                continue;
+
+            jassertquiet (first.view.value_or (first.texture->getWholeTextureViewDesc()) == second.view.value_or (second.texture->getWholeTextureViewDesc()));
+        }
+    }
+}
+
+//==============================================================================
+
 bool GpuRenderPass::Impl::encode (uint32_t count,
                                   bool indexed,
                                   uint32_t instanceCount,
@@ -287,13 +364,25 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
 
     std::vector<std::pair<uint32_t, rive::rcp<rive::ore::BindGroup>>> bindGroups;
 
-    const bool hasAnyBindings = ! uboBindings.empty() || ! textureBindings.empty();
+    const bool hasAnyBindings = ! uboBindings.empty() || ! textureBindings.empty() || ! storageBindings.empty();
+
+#if YUP_DEBUG
+    assertNoConflictingTextureViews();
+#endif
 
     for (uint32_t groupIdx = 0; groupIdx < layouts.size(); ++groupIdx)
     {
         auto* layout = layouts[groupIdx].get();
         if (layout == nullptr)
             continue;
+
+        // Resources bound into a cached group were retained by this frame when it was built.
+        auto* cache = groupIdx < groupCaches.size() ? &groupCaches[groupIdx] : nullptr;
+        if (cache != nullptr && ! cache->dirty)
+        {
+            bindGroups.push_back ({ groupIdx, cache->group });
+            continue;
+        }
 
         const std::vector<GpuPipeline::Impl::SamplerBinding>* groupSamplers = nullptr;
         if (oreSamplers != nullptr && groupIdx < oreSamplers->size())
@@ -304,31 +393,22 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
         if (! hasAnyBindings && ! layoutHasSamplers)
             continue;
 
-        auto layoutDeclares = [layout] (uint32_t binding, bool asTexture)
-        {
-            for (const auto& e : layout->entries())
-            {
-                if (e.binding != binding)
-                    continue;
-
-                return asTexture ? (e.kind == rive::ore::BindingKind::sampledTexture
-                                    || e.kind == rive::ore::BindingKind::storageTexture)
-                                 : (e.kind == rive::ore::BindingKind::uniformBuffer);
-            }
-
-            return false;
-        };
+        // A group missing a declared resource is rebuilt by the next draw instead of being reused
+        bool anySkipped = false;
 
         // UBO entries for this group.
         std::vector<rive::ore::BindGroupDesc::UBOEntry> uboEntries;
         for (const auto& ub : uboBindings)
         {
-            if (ub.group != (int) groupIdx || ! layoutDeclares ((uint32_t) ub.binding, false))
+            if (ub.group != (int) groupIdx || ! layoutDeclares (*layout, (uint32_t) ub.binding, false))
                 continue;
 
             auto buf = framePools->acquireUniformBuffer (ub.data.data(), ub.data.size());
             if (buf == nullptr)
+            {
+                anySkipped = true;
                 continue;
+            }
 
             rive::ore::BindGroupDesc::UBOEntry entry;
             entry.slot = (uint32_t) ub.binding;
@@ -342,18 +422,77 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
         std::vector<rive::ore::BindGroupDesc::TexEntry> texEntries;
         for (const auto& tb : textureBindings)
         {
-            if (tb.group != (int) groupIdx || tb.texture == nullptr || ! layoutDeclares ((uint32_t) tb.binding, true))
+            if (tb.group != (int) groupIdx || tb.texture == nullptr || ! layoutDeclares (*layout, (uint32_t) tb.binding, true))
                 continue;
 
-            auto view = tb.texture->getOrCreateSamplingView (*oreCtx);
+            auto view = tb.view.has_value() ? tb.texture->getOrCreateView (*oreCtx, false, *tb.view)
+                                            : tb.texture->getOrCreateSamplingView (*oreCtx);
             if (view == nullptr)
+            {
+                anySkipped = true;
                 continue;
+            }
 
             rive::ore::BindGroupDesc::TexEntry entry;
             entry.slot = (uint32_t) tb.binding;
             entry.view = view.get();
             texEntries.push_back (entry);
             framePools->liveViews.push_back (std::move (view));
+        }
+
+        // Storage buffer entries for this group. Ore takes native handles and does
+        // not retain them, so the frame keeps the buffers alive, except on Vulkan
+        // where Rive's resource purgatory keeps the native buffer instead.
+        std::vector<rive::ore::BindGroupDesc::StorageEntry> storageEntries;
+        for (const auto& sb : storageBindings)
+        {
+            if (sb.group != (int) groupIdx || sb.buffer == nullptr)
+                continue;
+
+            const auto* layoutEntry = layout->findEntry ((uint32_t) sb.binding);
+            if (layoutEntry == nullptr)
+                continue;
+
+            // Render passes only read storage buffers: the shader must declare the block readonly.
+            // Drawing with the declared buffer unbound is undefined on Vulkan and Metal, so skip the draw.
+            jassert (layoutEntry->kind == rive::ore::BindingKind::storageBufferRO);
+            if (layoutEntry->kind != rive::ore::BindingKind::storageBufferRO)
+                return false;
+
+            auto* bufferImpl = sb.buffer->getImpl();
+            auto* nativeBuffer = bufferImpl != nullptr ? bufferImpl->getNativeStorageHandleForRead() : nullptr;
+            if (nativeBuffer == nullptr)
+            {
+                YUP_DBG ("GpuRenderPass: storage buffer at group " << sb.group << " binding " << sb.binding << " has no native handle on this backend");
+                jassertfalse;
+                return false;
+            }
+
+            rive::ore::BindGroupDesc::StorageEntry entry;
+            entry.slot = (uint32_t) sb.binding;
+            entry.nativeBuffer = nativeBuffer;
+            entry.offset = 0;
+            entry.size = sb.buffer->getSizeInBytes();
+            storageEntries.push_back (entry);
+
+#if YUP_RIVE_USE_VULKAN
+            // Reads and updates of the buffer wait for this frame. A dropped Vulkan buffer already
+            // waits in Rive's resource purgatory until the GPU is done with it, and a retired frame
+            // holding the GpuBuffer would keep the device alive through the buffer's reference
+            if (auto& storage = bufferImpl->vkStorageBuffer; storage.buffer != nullptr)
+            {
+                // A frame begun before the last use's work must not move the stamp back
+                if (framePools->generation > storage.lastUseGeneration)
+                {
+                    storage.lastUseCommands = static_cast<VkCommandBuffer> (framePools->commandBuffer);
+                    storage.lastUseGeneration = framePools->generation;
+                }
+
+                continue;
+            }
+#endif
+
+            framePools->liveStorageBuffers.push_back (sb.buffer);
         }
 
         // Sampler entries: the pipeline's per-layout defaults, with any slot the
@@ -392,8 +531,16 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
         bgDesc.textureCount = (uint32_t) texEntries.size();
         bgDesc.samplers = sampEntries.empty() ? nullptr : sampEntries.data();
         bgDesc.samplerCount = (uint32_t) sampEntries.size();
+        bgDesc.storageBuffers = storageEntries.empty() ? nullptr : storageEntries.data();
+        bgDesc.storageBufferCount = (uint32_t) storageEntries.size();
 
         auto bg = oreCtx->makeBindGroup (bgDesc);
+
+        if (cache != nullptr)
+        {
+            cache->group = bg;
+            cache->dirty = bg == nullptr || anySkipped;
+        }
 
         if (bg == nullptr)
         {
@@ -490,9 +637,12 @@ void GpuRenderPass::setPipeline (GpuPipeline::Ptr pipeline)
     if (i == nullptr)
         return;
 
-    i->pipelineRef = pipeline;
+    // Held until the comparison below is done, so the outgoing pipeline's layouts stay alive
+    const auto previous = std::exchange (i->pipelineRef, pipeline);
+    const auto* previousImpl = previous != nullptr ? previous->getImpl() : nullptr;
+    const auto* pipeImpl = pipeline->getImpl();
 
-    if (auto* pipeImpl = pipeline->getImpl())
+    if (pipeImpl != nullptr)
     {
         i->orePipeline = pipeImpl->pipeline.get();
         i->oreLayouts = &pipeImpl->layouts;
@@ -504,6 +654,13 @@ void GpuRenderPass::setPipeline (GpuPipeline::Ptr pipeline)
         i->oreLayouts = nullptr;
         i->oreSamplers = nullptr;
     }
+
+    // A group stays valid only while every switch keeps its layout entries and default samplers
+    for (size_t group = 0; group < i->groupCaches.size(); ++group)
+    {
+        if (pipeImpl == nullptr || previousImpl == nullptr || ! pipeImpl->sharesGroupWith (*previousImpl, group))
+            i->groupCaches[group].dirty = true;
+    }
 }
 
 void GpuRenderPass::setTexture (int group, int binding, GpuTexture::Ptr texture)
@@ -512,16 +669,50 @@ void GpuRenderPass::setTexture (int group, int binding, GpuTexture::Ptr texture)
     if (i == nullptr)
         return;
 
+    i->markGroupDirty (group);
+
     for (auto& tb : i->textureBindings)
     {
         if (tb.group == group && tb.binding == binding)
         {
             tb.texture = std::move (texture);
+            tb.view = std::nullopt;
             return;
         }
     }
 
-    i->textureBindings.push_back ({ group, binding, std::move (texture) });
+    i->textureBindings.push_back ({ group, binding, std::move (texture), std::nullopt });
+}
+
+void GpuRenderPass::setTexture (int group, int binding, GpuTexture::Ptr texture, const GpuTextureViewDesc& view)
+{
+    auto* i = getImpl();
+    if (i == nullptr)
+        return;
+
+    const bool inRange = texture == nullptr
+                      || (view.mipCount > 0
+                          && view.layerCount > 0
+                          && view.baseMipLevel + view.mipCount <= texture->getMipLevels()
+                          && view.baseLayer + view.layerCount <= texture->getDepthOrArrayLayers());
+
+    jassert (inRange);
+    if (! inRange)
+        return;
+
+    i->markGroupDirty (group);
+
+    for (auto& tb : i->textureBindings)
+    {
+        if (tb.group == group && tb.binding == binding)
+        {
+            tb.texture = std::move (texture);
+            tb.view = view;
+            return;
+        }
+    }
+
+    i->textureBindings.push_back ({ group, binding, std::move (texture), view });
 }
 
 void GpuRenderPass::setSampler (int group, int binding, GpuSampler::Ptr sampler)
@@ -529,6 +720,8 @@ void GpuRenderPass::setSampler (int group, int binding, GpuSampler::Ptr sampler)
     auto* i = getImpl();
     if (i == nullptr)
         return;
+
+    i->markGroupDirty (group);
 
     for (auto& sb : i->samplerBindings)
     {
@@ -552,20 +745,57 @@ void GpuRenderPass::setUniformBuffer (int group, int binding, const void* data, 
     if (data == nullptr || byteSize == 0)
         return;
 
+    const auto* bytes = static_cast<const uint8_t*> (data);
+
     for (auto& ub : i->uboBindings)
     {
         if (ub.group == group && ub.binding == binding)
         {
-            ub.data.assign (static_cast<const uint8_t*> (data), static_cast<const uint8_t*> (data) + byteSize);
+            if (std::equal (ub.data.begin(), ub.data.end(), bytes, bytes + byteSize))
+                return;
+
+            ub.data.assign (bytes, bytes + byteSize);
+            i->markGroupDirty (group);
             return;
         }
     }
 
+    i->markGroupDirty (group);
+
     Impl::UboBinding ub;
     ub.group = group;
     ub.binding = binding;
-    ub.data.assign (static_cast<const uint8_t*> (data), static_cast<const uint8_t*> (data) + byteSize);
+    ub.data.assign (bytes, bytes + byteSize);
     i->uboBindings.push_back (std::move (ub));
+}
+
+void GpuRenderPass::setStorageBuffer (int group, int binding, GpuBuffer::Ptr buffer)
+{
+    auto* i = getImpl();
+    if (i == nullptr)
+        return;
+
+    const bool supported = i->framePools != nullptr && i->framePools->device != nullptr && i->framePools->device->isFragmentStorageBufferAvailable();
+    jassert (supported);
+    if (! supported)
+        return;
+
+    jassert (buffer == nullptr || buffer->getType() == GpuBufferType::storage);
+    if (buffer != nullptr && buffer->getType() != GpuBufferType::storage)
+        return;
+
+    i->markGroupDirty (group);
+
+    for (auto& sb : i->storageBindings)
+    {
+        if (sb.group == group && sb.binding == binding)
+        {
+            sb.buffer = std::move (buffer);
+            return;
+        }
+    }
+
+    i->storageBindings.push_back ({ group, binding, std::move (buffer) });
 }
 
 void GpuRenderPass::setVertexBuffer (int slot, GpuBuffer::Ptr buffer)

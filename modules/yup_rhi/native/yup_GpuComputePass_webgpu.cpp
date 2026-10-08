@@ -21,6 +21,9 @@
 
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
 
+#include "ore/wgpu/ore_sampler_wgpu.hpp"
+#include "ore/wgpu/ore_texture_wgpu.hpp"
+
 namespace yup
 {
 
@@ -29,9 +32,10 @@ namespace yup
 class GpuComputePassImplWebGPU final : public GpuComputePass::Impl
 {
 public:
-    GpuComputePassImplWebGPU (wgpu::Device dev, wgpu::Queue q)
+    GpuComputePassImplWebGPU (wgpu::Device dev, wgpu::Queue q, rive::ore::Context* oreCtx)
         : device (dev)
         , queue (q)
+        , oreCtx (oreCtx)
     {
         if (device == nullptr || queue == nullptr)
             return;
@@ -60,30 +64,76 @@ public:
         if (pipe == nullptr || pipe->getPipeline() == nullptr)
             return false;
 
-        pass.SetPipeline (pipe->getPipeline());
+        using Layout = WgslBindingLayout;
 
-        std::vector<wgpu::BindGroupEntry> entries;
+        const auto& groupLayouts = pipe->getGroupLayouts();
+        std::vector<std::vector<wgpu::BindGroupEntry>> groups (groupLayouts.size());
+
+        // The entry for a binding the shader declares as a resource @p accepts, or nullptr
+        auto addEntry = [&] (int group, int binding, auto&& accepts) -> wgpu::BindGroupEntry*
+        {
+            const auto* resource = pipe->findResource (group, binding);
+            if (resource == nullptr || ! accepts (*resource))
+            {
+                YUP_DBG ("GpuComputePass: the shader declares no matching resource at group " << group << ", binding " << binding);
+                return nullptr;
+            }
+
+            auto& entry = groups[resource->group].emplace_back();
+            entry.binding = resource->binding;
+            return std::addressof (entry);
+        };
+
+        auto isKind = [] (Layout::ResourceKind kind)
+        {
+            return [kind] (const Layout::Entry& resource) { return resource.kind == kind; };
+        };
+
+        auto isBuffer = [] (bool uniform)
+        {
+            return [uniform] (const Layout::Entry& resource)
+            {
+                return resource.kind == Layout::ResourceKind::buffer && (resource.bufferType == Layout::BufferType::uniform) == uniform;
+            };
+        };
+
+        auto addTextureView = [&] (rive::rcp<rive::ore::TextureView> view, int group, int binding, Layout::ResourceKind kind)
+        {
+            auto* viewWGPU = rive::lite_rtti_cast<rive::ore::TextureViewWGPU*> (view.get());
+            if (viewWGPU == nullptr || viewWGPU->wgpuTextureView() == nullptr)
+                return;
+
+            if (auto* entry = addEntry (group, binding, isKind (kind)))
+                entry->textureView = viewWGPU->wgpuTextureView();
+        };
 
         for (auto& sb : storageBindings)
         {
-            if (sb.buffer == nullptr)
-                continue;
-
-            auto* bufImpl = sb.buffer->getImpl();
+            auto* bufImpl = sb.buffer != nullptr ? sb.buffer->getImpl() : nullptr;
             if (bufImpl == nullptr || bufImpl->webgpuStorageBuffer == nullptr)
                 continue;
 
-            wgpu::BindGroupEntry e {};
-            e.binding = static_cast<uint32_t> (sb.binding);
-            e.buffer = bufImpl->webgpuStorageBuffer;
-            e.offset = 0;
-            e.size = bufImpl->webgpuStorageBuffer.GetSize();
-            entries.push_back (e);
+            // WebGPU binds storage buffers in multiples of 4 bytes
+            const auto size = bufImpl->webgpuStorageBuffer.GetSize();
+            jassert (size % 4 == 0);
+            if (size % 4 != 0)
+                continue;
+
+            if (auto* entry = addEntry (sb.group, sb.binding, isBuffer (false)))
+            {
+                entry->buffer = bufImpl->webgpuStorageBuffer;
+                entry->offset = 0;
+                entry->size = size;
+            }
         }
 
         for (auto& ub : uboBindings)
         {
             if (ub.data.empty())
+                continue;
+
+            auto* entry = addEntry (ub.group, ub.binding, isBuffer (true));
+            if (entry == nullptr)
                 continue;
 
             wgpu::BufferDescriptor bd {};
@@ -92,37 +142,70 @@ public:
             bd.label = "GpuComputePass UBO";
 
             wgpu::Buffer buf = device.CreateBuffer (&bd);
-            if (buf == nullptr)
-                continue;
-
             queue.WriteBuffer (buf, 0, ub.data.data(), ub.data.size());
 
-            wgpu::BindGroupEntry e {};
-            e.binding = static_cast<uint32_t> (ub.binding);
-            e.buffer = buf;
-            e.offset = 0;
-            e.size = ub.data.size();
-            entries.push_back (e);
+            entry->buffer = buf;
+            entry->offset = 0;
+            entry->size = ub.data.size();
 
             tempUniformBuffers.push_back (std::move (buf));
         }
 
-        if (! entries.empty())
+        if (oreCtx != nullptr)
         {
-            // When the pipeline was created with an implicit layout (the default),
-            // we must use its layout for bind groups — not a manually-built one.
-            wgpu::BindGroupLayout layout = pipe->getPipeline().GetBindGroupLayout (0);
-            if (layout != nullptr)
+            for (auto& tb : texBindings)
             {
-                wgpu::BindGroupDescriptor bgDesc {};
-                bgDesc.layout = layout;
-                bgDesc.entryCount = entries.size();
-                bgDesc.entries = entries.data();
-
-                wgpu::BindGroup bg = device.CreateBindGroup (&bgDesc);
-                if (bg != nullptr)
-                    pass.SetBindGroup (0, bg, 0, nullptr);
+                if (tb.texture != nullptr)
+                    addTextureView (tb.texture->getOrCreateSamplingView (*oreCtx), tb.group, tb.binding, Layout::ResourceKind::texture);
             }
+
+            for (auto& sb : storageTexBindings)
+            {
+                if (sb.texture != nullptr)
+                    addTextureView (sb.texture->getOrCreateView (*oreCtx, false, sb.view), sb.group, sb.binding, Layout::ResourceKind::storageTexture);
+            }
+        }
+
+        for (auto& sb : samplerBindings)
+        {
+            if (sb.sampler == nullptr)
+                continue;
+
+            auto* samplerWGPU = rive::lite_rtti_cast<rive::ore::SamplerWGPU*> (sb.sampler->getOreSampler().get());
+            if (samplerWGPU == nullptr || samplerWGPU->wgpuSampler() == nullptr)
+                continue;
+
+            if (auto* entry = addEntry (sb.group, sb.binding, isKind (Layout::ResourceKind::sampler)))
+                entry->sampler = samplerWGPU->wgpuSampler();
+        }
+
+        // A bind group must provide every resource of its layout, or the whole submission is dropped
+        for (const auto& resource : pipe->getResources())
+        {
+            const auto& entries = groups[resource.group];
+            const bool bound = std::any_of (entries.begin(), entries.end(), [&] (const auto& entry)
+            {
+                return entry.binding == resource.binding;
+            });
+
+            if (! bound)
+            {
+                YUP_DBG ("GpuComputePass: '" << resource.name << "' (group " << (int) resource.group << ", binding " << (int) resource.binding << ") is not bound");
+                jassertfalse;
+                return false;
+            }
+        }
+
+        pass.SetPipeline (pipe->getPipeline());
+
+        for (size_t group = 0; group < groups.size(); ++group)
+        {
+            wgpu::BindGroupDescriptor bgDesc {};
+            bgDesc.layout = groupLayouts[group];
+            bgDesc.entryCount = groups[group].size();
+            bgDesc.entries = groups[group].data();
+
+            pass.SetBindGroup (static_cast<uint32_t> (group), device.CreateBindGroup (&bgDesc), 0, nullptr);
         }
 
         pass.DispatchWorkgroups (groupsX, groupsY, groupsZ);
@@ -157,6 +240,7 @@ public:
 private:
     wgpu::Device device;
     wgpu::Queue queue;
+    rive::ore::Context* oreCtx = nullptr;
     wgpu::CommandEncoder encoder;
     wgpu::ComputePassEncoder pass;
     std::vector<wgpu::Buffer> tempUniformBuffers;
@@ -167,7 +251,7 @@ private:
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplWebGPU (GpuDevice& ctx)
 {
     auto& wc = static_cast<GpuDeviceWebGPU&> (ctx);
-    return std::make_unique<GpuComputePassImplWebGPU> (wc.getWgpuDevice(), wc.getWgpuQueue());
+    return std::make_unique<GpuComputePassImplWebGPU> (wc.getWgpuDevice(), wc.getWgpuQueue(), wc.getGpuContext());
 }
 
 } // namespace yup

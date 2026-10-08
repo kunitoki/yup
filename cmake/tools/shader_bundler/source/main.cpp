@@ -369,9 +369,9 @@ static int runCompileMode (const ArgumentList& args)
     for (const auto& inc : getPrefixedValues (args, "-I"))
         options.includePaths.push_back (resolveFile (inc).getFullPathName());
 
-    // -- Compile every stage and merge into a single bundle
-    ShaderBundleCompiler compiler;
-    ShaderBundle bundle;
+    // -- Compile every stage in one request, so a vertex + fragment pair gets its native slots assigned together
+    ShaderBundleCompileRequest request;
+    request.sourceLanguage = sourceLanguage;
 
     for (const auto& [stage, path] : stages)
     {
@@ -381,36 +381,30 @@ static int runCompileMode (const ArgumentList& args)
             return 1;
         }
 
-        const String source = path.loadFileAsString();
-        if (source.isEmpty())
+        ShaderBundleEntry entry;
+        entry.stage = stage;
+        entry.targetLanguages = targetLanguages;
+        entry.options = options;
+        entry.source = path.loadFileAsString();
+
+        if (entry.source.isEmpty())
         {
             log->writeToLog (stageToString (stage) + " shader file is empty: " + path.getFullPathName());
             return 1;
         }
 
-        ShaderBundleEntry entry;
-        entry.stage = stage;
-        entry.targetLanguages = targetLanguages;
-        entry.options = options;
-
-        ShaderBundleCompileRequest request;
-        request.source = source;
-        request.sourceLanguage = sourceLanguage;
-        request.entries.push_back (entry);
-
-        auto result = compiler.compile (request);
-        if (result.failed())
-        {
-            log->writeToLog (stageToString (stage) + " shader compilation failed: " + result.getErrorMessage());
-            return 1;
-        }
-
-        for (const auto& info : result.getReference().getShaders())
-            bundle.addShader (info);
-
-        if (const auto* spirv = result.getReference().getSPIRV (stage))
-            bundle.setSPIRV (stage, sourceLanguage, *spirv);
+        request.entries.push_back (std::move (entry));
     }
+
+    ShaderBundleCompiler compiler;
+    auto result = compiler.compile (request);
+    if (result.failed())
+    {
+        log->writeToLog ("Shader compilation failed: " + result.getErrorMessage());
+        return 1;
+    }
+
+    const ShaderBundle& bundle = result.getReference();
 
     // Persist to file
     const auto saveResult = bundle.saveToFile (outputPath);
@@ -597,7 +591,13 @@ int main (int argc, char* argv[])
 {
     ArgumentList args (argc, argv);
 
-    if (args.containsOption ("--help|-h"))
+    // Matched exactly: as a short option, -h would also match any -I or -D argument containing an h
+    const auto wantsHelp = std::any_of (args.arguments.begin(), args.arguments.end(), [] (const auto& arg)
+    {
+        return arg.text == "--help" || arg.text == "-h";
+    });
+
+    if (wantsHelp)
     {
         printUsage();
         return 0;

@@ -114,12 +114,11 @@ public:
         @returns A GpuTarget, or nullptr if the texture is not a render target or
                  the view is out of range.
 
-        @warning A narrowed view is honoured for attachments on every backend, but
-                 **not for sampling** on OpenGL / OpenGL ES, which has no GLES3
-                 glTextureView and silently falls back to the base texture. Never
-                 read one mip level by binding a narrowed view - bind the whole
-                 texture and use an explicit @c textureLod() with a GpuSampler
-                 whose minLod / maxLod clamp to that level.
+        @warning A narrowed view is honored for attachments on every backend. To
+                 sample one, bind it with GpuRenderPass::setTexture (group, binding,
+                 texture, view). On OpenGL / OpenGL ES, which has no GLES3
+                 glTextureView, sampling honors the view's mip range but **not a
+                 layer range**: every layer of the texture stays visible.
     */
     static GpuTarget::Ptr createFromTexture (GpuDevice::Ptr ctx,
                                              GpuTexture::Ptr texture,

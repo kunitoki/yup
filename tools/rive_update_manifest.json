@@ -238,6 +238,47 @@
           }
         },
         {
+          "path": "source/renderer/ore/gl/ore_context_gl.cpp",
+          "note": "Ore GL features: report float and half-float color attachments on desktop GL, where they are core since 3.0 and the ES-only GL_EXT_color_buffer_float is never listed",
+          "already_contains": "#ifdef RIVE_DESKTOP_GL\n    f.colorBufferFloat = true;",
+          "replace": {
+            "from": [
+              "    f.astc = false;",
+              "",
+              "    // Query limits."
+            ],
+            "to": [
+              "    f.astc = false;",
+              "",
+              "#ifdef RIVE_DESKTOP_GL",
+              "    f.colorBufferFloat = true;",
+              "    f.colorBufferHalfFloat = true;",
+              "#endif",
+              "",
+              "    // Query limits."
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_context_gl.cpp",
+          "note": "Ore GL features: detect GL_EXT_color_buffer_half_float on OpenGL ES, which makes 16-bit float color attachments renderable without the full-float extension",
+          "already_contains": "        else if (strcmp(ext, \"GL_EXT_color_buffer_half_float\") == 0)",
+          "replace": {
+            "from": [
+              "            f.colorBufferHalfFloat = true;",
+              "        }",
+              "        else if (strcmp(ext, \"GL_EXT_texture_filter_anisotropic\") == 0)"
+            ],
+            "to": [
+              "            f.colorBufferHalfFloat = true;",
+              "        }",
+              "        else if (strcmp(ext, \"GL_EXT_color_buffer_half_float\") == 0)",
+              "            f.colorBufferHalfFloat = true;",
+              "        else if (strcmp(ext, \"GL_EXT_texture_filter_anisotropic\") == 0)"
+            ]
+          }
+        },
+        {
           "path": "include/rive/renderer/ore/ore_binding_map.hpp",
           "note": "Ore BindingMap: expose the tooling-only construction and serialization API (push/finalize/toBlob) under RIVE_ORE_BINDING_MAP_TOOLS, since YUP builds binding maps at runtime from SPIR-V reflection",
           "already_contains": "RIVE_ORE_BINDING_MAP_TOOLS",
@@ -338,6 +379,895 @@
               "",
               "#include \"rive/renderer/gpu.hpp\"",
               "#include \"rive/renderer/vulkan/vkutil.hpp\""
+            ]
+          }
+        },
+        {
+          "path": "include/rive/renderer/ore/ore_types.hpp",
+          "note": "Ore TextureDesc: add the storage flag, so YUP can allocate textures that compute shaders write (GpuTextureDesc::storage)",
+          "already_contains": "    bool storage = false;",
+          "replace": {
+            "from": [
+              "    bool renderTarget = false;",
+              "    uint32_t numMipmaps = 1;"
+            ],
+            "to": [
+              "    bool renderTarget = false;",
+              "    bool storage = false;",
+              "    uint32_t numMipmaps = 1;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_context_metal.mm",
+          "note": "Ore Metal makeTexture: add MTLTextureUsageShaderWrite for storage textures, so YUP compute passes can write them",
+          "already_contains": "    if (desc.storage)",
+          "replace": {
+            "from": [
+              "    if (desc.renderTarget)",
+              "    {",
+              "        td.usage |= MTLTextureUsageRenderTarget;",
+              "    }",
+              ""
+            ],
+            "to": [
+              "    if (desc.renderTarget)",
+              "    {",
+              "        td.usage |= MTLTextureUsageRenderTarget;",
+              "    }",
+              "",
+              "    if (desc.storage)",
+              "    {",
+              "        td.usage |= MTLTextureUsageShaderWrite;",
+              "    }",
+              ""
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_sampler_metal.hpp",
+          "note": "Ore Metal sampler: expose the native MTLSamplerState, so YUP compute passes can bind samplers with setSamplerState",
+          "already_contains": "    id<MTLSamplerState> mtlSampler() const { return m_mtlSampler; }",
+          "replace": {
+            "from": [
+              "    ~SamplerMetal() override = default; // ARC releases m_mtlSampler"
+            ],
+            "to": [
+              "    ~SamplerMetal() override = default; // ARC releases m_mtlSampler",
+              "    id<MTLSamplerState> mtlSampler() const { return m_mtlSampler; }"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_bind_group_gl.hpp",
+          "note": "Ore GL bind group: forward-declare TextureGL for the sampled mip range a texture binding carries",
+          "already_contains": "class RenderPassGL;\nclass TextureGL;",
+          "replace": {
+            "from": [
+              "class ContextGL;",
+              "class RenderPassGL;",
+              "",
+              "class BindGroupGL"
+            ],
+            "to": [
+              "class ContextGL;",
+              "class RenderPassGL;",
+              "class TextureGL;",
+              "",
+              "class BindGroupGL"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_bind_group_gl.hpp",
+          "note": "Ore GL bind group: a texture binding carries its TextureGL and the view's mip range, so a narrowed sampling view can be applied as TEXTURE_BASE_LEVEL / MAX_LEVEL",
+          "already_contains": "        TextureGL* textureGL = nullptr;",
+          "replace": {
+            "from": [
+              "        uint32_t slot = 0;        // texture unit",
+              "    };",
+              "    struct GLSamplerBinding"
+            ],
+            "to": [
+              "        uint32_t slot = 0;        // texture unit",
+              "        TextureGL* textureGL = nullptr;",
+              "        int baseLevel = 0;",
+              "        int maxLevel = 1000; // GL's default TEXTURE_MAX_LEVEL",
+              "    };",
+              "    struct GLSamplerBinding"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_texture_gl.hpp",
+          "note": "Ore GL texture: forward-declare RenderPassGL, which applies and restores sampled mip ranges",
+          "already_contains": "class ContextGL;\nclass RenderPassGL;\n\nclass TextureGL",
+          "replace": {
+            "from": [
+              "class ContextGL;",
+              "",
+              "class TextureGL"
+            ],
+            "to": [
+              "class ContextGL;",
+              "class RenderPassGL;",
+              "",
+              "class TextureGL"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_texture_gl.hpp",
+          "note": "Ore GL texture: cache the TEXTURE_BASE_LEVEL / MAX_LEVEL last applied by a narrowed sampling view, so RenderPassGL only touches the texture object when the range changes",
+          "already_contains": "    friend class RenderPassGL;",
+          "replace": {
+            "from": [
+              "    friend class ContextGL;",
+              "    unsigned int m_glTexture = 0;",
+              "    unsigned int m_glRenderbuffer = 0;",
+              "    unsigned int m_glTarget = 0; // GLenum",
+              "    bool m_glOwnsTexture = false;",
+              "};"
+            ],
+            "to": [
+              "    friend class ContextGL;",
+              "    friend class RenderPassGL;",
+              "    unsigned int m_glTexture = 0;",
+              "    unsigned int m_glRenderbuffer = 0;",
+              "    unsigned int m_glTarget = 0; // GLenum",
+              "    bool m_glOwnsTexture = false;",
+              "    int m_boundBaseLevel = 0;",
+              "    int m_boundMaxLevel = 1000;",
+              "};"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_context_gl.cpp",
+          "note": "Ore GL makeBindGroup: record a sampling view's narrowed mip range on the texture binding, since GLES3 has no glTextureView",
+          "already_contains": "        binding.textureGL = texGL;",
+          "replace": {
+            "from": [
+              "        binding.binding = entry.slot;",
+              "        if (!nativeSlot(entry.slot, BindingKind::sampledTexture, &binding.slot))"
+            ],
+            "to": [
+              "        binding.binding = entry.slot;",
+              "        binding.textureGL = texGL;",
+              "        {",
+              "            const uint32_t base = viewGL->baseMipLevel();",
+              "            const uint32_t count = viewGL->mipCount() != 0",
+              "                                       ? viewGL->mipCount()",
+              "                                       : texGL->numMipmaps() - base;",
+              "            if (base != 0 || count < texGL->numMipmaps())",
+              "            {",
+              "                binding.baseLevel = static_cast<int>(base);",
+              "                binding.maxLevel = static_cast<int>(base + count - 1);",
+              "            }",
+              "        }",
+              "        if (!nativeSlot(entry.slot, BindingKind::sampledTexture, &binding.slot))"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_render_pass_gl.hpp",
+          "note": "Ore GL render pass: include TextureGL and <vector> for the list of textures whose mip range a narrowed view changed",
+          "already_contains": "#include \"ore_texture_gl.hpp\"",
+          "replace": {
+            "from": [
+              "#include \"rive/refcnt.hpp\"",
+              "#include <cstdint>",
+              ""
+            ],
+            "to": [
+              "#include \"rive/refcnt.hpp\"",
+              "#include \"ore_texture_gl.hpp\"",
+              "#include <cstdint>",
+              "#include <vector>",
+              ""
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_render_pass_gl.hpp",
+          "note": "Ore GL render pass: remember the textures a narrowed sampling view changed, so finish() can restore their full mip range",
+          "already_contains": "    std::vector<rcp<TextureGL>> m_narrowedTextures;",
+          "replace": {
+            "from": [
+              "    GLResolveEntry m_glResolves[4];",
+              "};"
+            ],
+            "to": [
+              "    GLResolveEntry m_glResolves[4];",
+              "    std::vector<rcp<TextureGL>> m_narrowedTextures;",
+              "};"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_render_pass_gl.cpp",
+          "note": "Ore GL setBindGroup: apply a sampling view's mip range as TEXTURE_BASE_LEVEL / MAX_LEVEL, which WebGL2 uses for feedback-loop detection, and remember the texture for restoring",
+          "already_contains": "        auto* texGL = tex.textureGL;",
+          "replace": {
+            "from": [
+              "        glBindTexture(tex.target, tex.texture);",
+              "",
+              "        if (!m_usedSamplers || tex.slot > m_maxSamplerSlot)"
+            ],
+            "to": [
+              "        glBindTexture(tex.target, tex.texture);",
+              "",
+              "        auto* texGL = tex.textureGL;",
+              "        if (texGL != nullptr && (texGL->m_boundBaseLevel != tex.baseLevel ||",
+              "                                 texGL->m_boundMaxLevel != tex.maxLevel))",
+              "        {",
+              "            glTexParameteri(tex.target, GL_TEXTURE_BASE_LEVEL, tex.baseLevel);",
+              "            glTexParameteri(tex.target, GL_TEXTURE_MAX_LEVEL, tex.maxLevel);",
+              "            texGL->m_boundBaseLevel = tex.baseLevel;",
+              "            texGL->m_boundMaxLevel = tex.maxLevel;",
+              "",
+              "            bool remembered = false;",
+              "            for (const auto& narrowed : m_narrowedTextures)",
+              "                remembered = remembered || narrowed.get() == texGL;",
+              "            if (!remembered)",
+              "                m_narrowedTextures.push_back(ref_rcp(texGL));",
+              "        }",
+              "",
+              "        if (!m_usedSamplers || tex.slot > m_maxSamplerSlot)"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_render_pass_gl.cpp",
+          "note": "Ore GL finish: restore TEXTURE_BASE_LEVEL / MAX_LEVEL on every texture a narrowed view touched, so the range never leaks into Rive or later whole-texture binds",
+          "already_contains": "    if (!m_narrowedTextures.empty())",
+          "replace": {
+            "from": [
+              "    releaseBoundResources();",
+              "",
+              "    glDisable(GL_SCISSOR_TEST);"
+            ],
+            "to": [
+              "    releaseBoundResources();",
+              "",
+              "    if (!m_narrowedTextures.empty())",
+              "    {",
+              "        glActiveTexture(GL_TEXTURE0);",
+              "        for (const auto& texGL : m_narrowedTextures)",
+              "        {",
+              "            glBindTexture(texGL->m_glTarget, texGL->m_glTexture);",
+              "            glTexParameteri(texGL->m_glTarget, GL_TEXTURE_BASE_LEVEL, 0);",
+              "            glTexParameteri(texGL->m_glTarget, GL_TEXTURE_MAX_LEVEL, 1000);",
+              "            glBindTexture(texGL->m_glTarget, 0);",
+              "            texGL->m_boundBaseLevel = 0;",
+              "            texGL->m_boundMaxLevel = 1000;",
+              "        }",
+              "        m_narrowedTextures.clear();",
+              "    }",
+              "",
+              "    glDisable(GL_SCISSOR_TEST);"
+            ]
+          }
+        },
+        {
+          "path": "include/rive/renderer/ore/ore_types.hpp",
+          "note": "Ore BindGroupDesc: add read-only storage buffer entries, passed as native handles since YUP creates storage buffers outside ore (GpuRenderPass::setStorageBuffer)",
+          "already_contains": "    const StorageEntry* storageBuffers = nullptr;",
+          "replace": {
+            "from": [
+              "    const SampEntry* samplers = nullptr;",
+              "    uint32_t samplerCount = 0;",
+              "    const char* label = nullptr;",
+              "};"
+            ],
+            "to": [
+              "    const SampEntry* samplers = nullptr;",
+              "    uint32_t samplerCount = 0;",
+              "    struct StorageEntry",
+              "    {",
+              "        uint32_t slot = 0;",
+              "        void* nativeBuffer = nullptr;",
+              "        uint64_t offset = 0;",
+              "        uint64_t size = 0;",
+              "    };",
+              "    const StorageEntry* storageBuffers = nullptr;",
+              "    uint32_t storageBufferCount = 0;",
+              "    const char* label = nullptr;",
+              "};"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_bind_group_metal.hpp",
+          "note": "Ore Metal bind group: declare the read-only storage buffer binding (native MTLBuffer, offset and per-stage slots)",
+          "already_contains": "    struct MTLStorageBinding",
+          "replace": {
+            "from": [
+              "        id<MTLSamplerState> sampler = nil;",
+              "        uint16_t vsSlot = BindingMap::kAbsent;",
+              "        uint16_t fsSlot = BindingMap::kAbsent;",
+              "    };",
+              ""
+            ],
+            "to": [
+              "        id<MTLSamplerState> sampler = nil;",
+              "        uint16_t vsSlot = BindingMap::kAbsent;",
+              "        uint16_t fsSlot = BindingMap::kAbsent;",
+              "    };",
+              "    struct MTLStorageBinding",
+              "    {",
+              "        id<MTLBuffer> buffer = nil;",
+              "        uint64_t offset = 0;",
+              "        uint16_t vsSlot = BindingMap::kAbsent;",
+              "        uint16_t fsSlot = BindingMap::kAbsent;",
+              "    };",
+              ""
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_bind_group_metal.hpp",
+          "note": "Ore Metal bind group: hold the read-only storage buffer bindings",
+          "already_contains": "    std::vector<MTLStorageBinding> m_mtlStorageBuffers;",
+          "replace": {
+            "from": [
+              "    std::vector<MTLSamplerBinding> m_mtlSamplers;",
+              "};"
+            ],
+            "to": [
+              "    std::vector<MTLSamplerBinding> m_mtlSamplers;",
+              "    std::vector<MTLStorageBinding> m_mtlStorageBuffers;",
+              "};"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_context_metal.mm",
+          "note": "Ore Metal makeBindGroup: resolve the per-stage slots of each read-only storage buffer entry, whose native handle is an id<MTLBuffer>",
+          "already_contains": "    bg->m_mtlStorageBuffers.reserve(desc.storageBufferCount);",
+          "replace": {
+            "from": [
+              "        bg->m_mtlSamplers.push_back(binding);",
+              "        bg->m_retainedSamplers.push_back(ref_rcp(s.sampler));",
+              "    }",
+              "",
+              "    return bg;"
+            ],
+            "to": [
+              "        bg->m_mtlSamplers.push_back(binding);",
+              "        bg->m_retainedSamplers.push_back(ref_rcp(s.sampler));",
+              "    }",
+              "",
+              "    bg->m_mtlStorageBuffers.reserve(desc.storageBufferCount);",
+              "    for (uint32_t i = 0; i < desc.storageBufferCount; i++)",
+              "    {",
+              "        const auto& s = desc.storageBuffers[i];",
+              "        BindGroupMetal::MTLStorageBinding binding;",
+              "        binding.buffer = (__bridge id<MTLBuffer>)s.nativeBuffer;",
+              "        binding.offset = s.offset;",
+              "        if (binding.buffer == nil ||",
+              "            !lookupStages(s.slot,",
+              "                          BindingKind::storageBufferRO,",
+              "                          &binding.vsSlot,",
+              "                          &binding.fsSlot))",
+              "            continue;",
+              "        bg->m_mtlStorageBuffers.push_back(binding);",
+              "    }",
+              "",
+              "    return bg;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_render_pass_metal.mm",
+          "note": "Ore Metal setBindGroup: bind each read-only storage buffer to the vertex and fragment stages that read it",
+          "already_contains": "    for (auto& sb : bgMetal->m_mtlStorageBuffers)",
+          "replace": {
+            "from": [
+              "            [m_mtlEncoder setFragmentSamplerState:s.sampler atIndex:s.fsSlot];",
+              "    }",
+              "}"
+            ],
+            "to": [
+              "            [m_mtlEncoder setFragmentSamplerState:s.sampler atIndex:s.fsSlot];",
+              "    }",
+              "    for (auto& sb : bgMetal->m_mtlStorageBuffers)",
+              "    {",
+              "        if (sb.vsSlot != BindingMap::kAbsent)",
+              "            [m_mtlEncoder setVertexBuffer:sb.buffer",
+              "                                   offset:sb.offset",
+              "                                  atIndex:sb.vsSlot];",
+              "        if (sb.fsSlot != BindingMap::kAbsent)",
+              "            [m_mtlEncoder setFragmentBuffer:sb.buffer",
+              "                                     offset:sb.offset",
+              "                                    atIndex:sb.fsSlot];",
+              "    }",
+              "}"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/d3d11/ore_context_d3d11.cpp",
+          "note": "Ore D3D11 makeTexture: storage textures get D3D11_BIND_UNORDERED_ACCESS, so YUP compute passes can write them through a UAV",
+          "already_contains": "    if (desc.storage)\n        bindFlags |= D3D11_BIND_UNORDERED_ACCESS;",
+          "replace": {
+            "from": [
+              "    else if (desc.renderTarget)",
+              "        bindFlags |= D3D11_BIND_RENDER_TARGET;"
+            ],
+            "to": [
+              "    else if (desc.renderTarget)",
+              "        bindFlags |= D3D11_BIND_RENDER_TARGET;",
+              "    if (desc.storage)",
+              "        bindFlags |= D3D11_BIND_UNORDERED_ACCESS;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/d3d11/ore_context_d3d11.cpp",
+          "note": "Ore D3D11 makeBindGroup: resolve read-only storage buffer SRVs (BindGroupDesc::storageBuffers) to per-stage t registers",
+          "already_contains": "    bg->m_d3d11StorageBuffers.reserve(desc.storageBufferCount);",
+          "replace": {
+            "from": [
+              "        bg->m_d3d11Samplers.push_back(binding);",
+              "        bg->m_retainedSamplers.push_back(ref_rcp(entry.sampler));",
+              "    }",
+              "",
+              "    return bg;"
+            ],
+            "to": [
+              "        bg->m_d3d11Samplers.push_back(binding);",
+              "        bg->m_retainedSamplers.push_back(ref_rcp(entry.sampler));",
+              "    }",
+              "",
+              "    bg->m_d3d11StorageBuffers.reserve(desc.storageBufferCount);",
+              "    for (uint32_t i = 0; i < desc.storageBufferCount; ++i)",
+              "    {",
+              "        const auto& entry = desc.storageBuffers[i];",
+              "        BindGroupD3D11::D3D11TexBinding binding{};",
+              "        binding.srv =",
+              "            static_cast<ID3D11ShaderResourceView*>(entry.nativeBuffer);",
+              "        if (binding.srv == nullptr ||",
+              "            !lookupStages(entry.slot,",
+              "                          BindingKind::storageBufferRO,",
+              "                          &binding.vsSlot,",
+              "                          &binding.psSlot))",
+              "            continue;",
+              "        bg->m_d3d11StorageBuffers.push_back(binding);",
+              "    }",
+              "",
+              "    return bg;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/d3d11/ore_bind_group_d3d11.hpp",
+          "note": "Ore D3D11 bind group: hold the read-only storage buffer SRVs with their per-stage slots",
+          "already_contains": "    std::vector<D3D11TexBinding> m_d3d11StorageBuffers;",
+          "replace": {
+            "from": [
+              "    std::vector<D3D11SamplerBinding> m_d3d11Samplers;",
+              "};"
+            ],
+            "to": [
+              "    std::vector<D3D11SamplerBinding> m_d3d11Samplers;",
+              "    std::vector<D3D11TexBinding> m_d3d11StorageBuffers;",
+              "};"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/d3d11/ore_render_pass_d3d11.cpp",
+          "note": "Ore D3D11 render pass setBindGroup: bind read-only storage buffer SRVs with VSSetShaderResources / PSSetShaderResources",
+          "already_contains": "    for (const auto& storage : bg->m_d3d11StorageBuffers)",
+          "replace": {
+            "from": [
+              "            m_d3d11Context->PSSetShaderResources(tex.psSlot, 1, &tex.srv);",
+              "    }",
+              "",
+              "    for (const auto& samp : bg->m_d3d11Samplers)"
+            ],
+            "to": [
+              "            m_d3d11Context->PSSetShaderResources(tex.psSlot, 1, &tex.srv);",
+              "    }",
+              "",
+              "    for (const auto& storage : bg->m_d3d11StorageBuffers)",
+              "    {",
+              "        if (storage.vsSlot != BindingMap::kAbsent)",
+              "            m_d3d11Context->VSSetShaderResources(storage.vsSlot,",
+              "                                                 1,",
+              "                                                 &storage.srv);",
+              "        if (storage.psSlot != BindingMap::kAbsent)",
+              "            m_d3d11Context->PSSetShaderResources(storage.psSlot,",
+              "                                                 1,",
+              "                                                 &storage.srv);",
+              "    }",
+              "",
+              "    for (const auto& samp : bg->m_d3d11Samplers)"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/d3d11/ore_texture_d3d11.hpp",
+          "note": "Ore D3D11 texture view: expose the native SRV, so YUP compute passes can bind sampled textures and build storage UAVs",
+          "already_contains": "    ID3D11ShaderResourceView* d3dSRV() const { return m_d3dSRV.Get(); }",
+          "replace": {
+            "from": [
+              "    ~TextureViewD3D11() override = default; // ComPtrs released automatically",
+              "",
+              "private:"
+            ],
+            "to": [
+              "    ~TextureViewD3D11() override = default; // ComPtrs released automatically",
+              "",
+              "    ID3D11ShaderResourceView* d3dSRV() const { return m_d3dSRV.Get(); }",
+              "",
+              "private:"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/d3d11/ore_sampler_d3d11.hpp",
+          "note": "Ore D3D11 sampler: expose the native sampler state, so YUP compute passes can bind samplers with CSSetSamplers",
+          "already_contains": "    ID3D11SamplerState* d3dSampler() const { return m_d3dSampler.Get(); }",
+          "replace": {
+            "from": [
+              "    ~SamplerD3D11() override = default; // ComPtr released automatically",
+              "",
+              "private:"
+            ],
+            "to": [
+              "    ~SamplerD3D11() override = default; // ComPtr released automatically",
+              "",
+              "    ID3D11SamplerState* d3dSampler() const { return m_d3dSampler.Get(); }",
+              "",
+              "private:"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/vulkan/ore_texture_vulkan.hpp",
+          "note": "Ore Vulkan TextureVulkan: expose the image, its tracked layout and its written subresources, so compute work recorded outside ore can transition it and report back",
+          "already_contains": "    void vkSetLayout(VkImageLayout layout) { m_vkLayout = layout; }",
+          "replace": {
+            "from": [
+              "    void uploadImpl(const TextureDataDesc& data) override;",
+              "",
+              "private:"
+            ],
+            "to": [
+              "    void uploadImpl(const TextureDataDesc& data) override;",
+              "",
+              "    VkImage vkImage() const { return m_vkImage; }",
+              "    VkImageLayout vkLayout() const { return m_vkLayout; }",
+              "    void vkSetLayout(VkImageLayout layout) { m_vkLayout = layout; }",
+              "    bool vkWasWritten(uint32_t mip, uint32_t layer) const",
+              "    {",
+              "        size_t i = static_cast<size_t>(layer) * m_numMipmaps + mip;",
+              "        return i < m_vkWritten.size() && m_vkWritten[i];",
+              "    }",
+              "    void vkMarkWrittenExternally(uint32_t mip, uint32_t layer)",
+              "    {",
+              "        vkMarkWritten(mip, layer);",
+              "    }",
+              "",
+              "private:"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/vulkan/ore_texture_vulkan.hpp",
+          "note": "Ore Vulkan TextureViewVulkan: expose the image view for descriptors written outside ore",
+          "already_contains": "    VkImageView vkImageView() const { return m_vkImageView; }",
+          "replace": {
+            "from": [
+              "        return {aspect, baseMipLevel(), 1, baseLayer(), layerCount()};",
+              "    }"
+            ],
+            "to": [
+              "        return {aspect, baseMipLevel(), 1, baseLayer(), layerCount()};",
+              "    }",
+              "",
+              "    VkImageView vkImageView() const { return m_vkImageView; }"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/vulkan/ore_sampler_vulkan.hpp",
+          "note": "Ore Vulkan SamplerVulkan: expose the sampler for descriptors written outside ore",
+          "already_contains": "    VkSampler vkSampler() const { return m_vkSampler; }",
+          "replace": {
+            "from": [
+              "    ~SamplerVulkan() override;"
+            ],
+            "to": [
+              "    ~SamplerVulkan() override;",
+              "",
+              "    VkSampler vkSampler() const { return m_vkSampler; }"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/vulkan/ore_context_vulkan.cpp",
+          "note": "Ore Vulkan makeTexture: add storage usage for textures written as storage images",
+          "already_contains": "        usage |= VK_IMAGE_USAGE_STORAGE_BIT;",
+          "replace": {
+            "from": [
+              "                      : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;",
+              "    }"
+            ],
+            "to": [
+              "                      : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;",
+              "    }",
+              "    if (desc.storage)",
+              "        usage |= VK_IMAGE_USAGE_STORAGE_BIT;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/vulkan/ore_context_vulkan.cpp",
+          "note": "Ore Vulkan makeBindGroup: record a storage buffer write for each read-only storage entry, whose native handle points to a VkBuffer",
+          "already_contains": "        w.buffer = *static_cast<const VkBuffer*>(sb.nativeBuffer);",
+          "replace": {
+            "from": [
+              "    // Resolve once now to preserve fail-fast on device OOM (matching the WGPU"
+            ],
+            "to": [
+              "    for (uint32_t i = 0; i < desc.storageBufferCount; ++i)",
+              "    {",
+              "        const auto& sb = desc.storageBuffers[i];",
+              "        uint32_t dstBinding = 0;",
+              "        if (sb.nativeBuffer == nullptr ||",
+              "            !resolveLayout(sb.slot,",
+              "                           BindingKind::storageBufferRO,",
+              "                           &dstBinding))",
+              "            continue;",
+              "",
+              "        BindGroupVulkan::StorageWrite w;",
+              "        w.buffer = *static_cast<const VkBuffer*>(sb.nativeBuffer);",
+              "        w.dstBinding = dstBinding;",
+              "        w.offset = sb.offset;",
+              "        w.range = sb.size > 0 ? sb.size : VK_WHOLE_SIZE;",
+              "        bg->m_storageWrites.push_back(w);",
+              "    }",
+              "",
+              "    // Resolve once now to preserve fail-fast on device OOM (matching the WGPU"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/vulkan/ore_bind_group_vulkan.hpp",
+          "note": "Ore Vulkan BindGroupVulkan: keep the storage buffer writes in the replayable write recipe",
+          "already_contains": "    std::vector<StorageWrite> m_storageWrites;",
+          "replace": {
+            "from": [
+              "    std::vector<UBOWrite> m_uboWrites;",
+              "    std::vector<ImageWrite> m_imageWrites;"
+            ],
+            "to": [
+              "    struct StorageWrite",
+              "    {",
+              "        VkBuffer buffer;",
+              "        uint32_t dstBinding;",
+              "        VkDeviceSize offset;",
+              "        VkDeviceSize range;",
+              "    };",
+              "    std::vector<UBOWrite> m_uboWrites;",
+              "    std::vector<ImageWrite> m_imageWrites;",
+              "    std::vector<StorageWrite> m_storageWrites;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/vulkan/ore_bind_group_vulkan.cpp",
+          "note": "Ore Vulkan resolveDescriptorSet: count the storage buffer writes against the write capacity",
+          "already_contains": "               m_storageWrites.size() <=",
+          "replace": {
+            "from": [
+              "    assert(m_uboWrites.size() + m_imageWrites.size() <= kMaxWrites);"
+            ],
+            "to": [
+              "    assert(m_uboWrites.size() + m_imageWrites.size() +",
+              "               m_storageWrites.size() <=",
+              "           kMaxWrites);"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/vulkan/ore_bind_group_vulkan.cpp",
+          "note": "Ore Vulkan resolveDescriptorSet: write the read-only storage buffers into every set",
+          "already_contains": "    for (const auto& s : m_storageWrites)",
+          "replace": {
+            "from": [
+              "    if (writeIdx > 0)",
+              "        ctx->m_vk->UpdateDescriptorSets(ctx->m_vk->device,"
+            ],
+            "to": [
+              "    for (const auto& s : m_storageWrites)",
+              "    {",
+              "        VkDescriptorBufferInfo& bi = bufferInfos[writeIdx];",
+              "        bi.buffer = s.buffer;",
+              "        bi.offset = s.offset;",
+              "        bi.range = s.range;",
+              "",
+              "        VkWriteDescriptorSet& w = writes[writeIdx++];",
+              "        w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;",
+              "        w.dstSet = alloc.set;",
+              "        w.dstBinding = s.dstBinding;",
+              "        w.dstArrayElement = 0;",
+              "        w.descriptorCount = 1;",
+              "        w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;",
+              "        w.pBufferInfo = &bi;",
+              "    }",
+              "",
+              "    if (writeIdx > 0)",
+              "        ctx->m_vk->UpdateDescriptorSets(ctx->m_vk->device,"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/wgpu/ore_context_wgpu.cpp",
+          "note": "Ore WebGPU makeTexture: storage textures get StorageBinding usage so compute shaders can write them",
+          "already_contains": "        usage |= wgpu::TextureUsage::StorageBinding;",
+          "replace": {
+            "from": [
+              "    if (desc.renderTarget)",
+              "        usage |= wgpu::TextureUsage::RenderAttachment;",
+              "",
+              "    wgpu::TextureDescriptor wDesc{};"
+            ],
+            "to": [
+              "    if (desc.renderTarget)",
+              "        usage |= wgpu::TextureUsage::RenderAttachment;",
+              "    if (desc.storage)",
+              "        usage |= wgpu::TextureUsage::StorageBinding;",
+              "",
+              "    wgpu::TextureDescriptor wDesc{};"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/wgpu/ore_context_wgpu.cpp",
+          "note": "Ore WebGPU makeBindGroup: record read-only storage buffers passed as native WGPUBuffer handles",
+          "already_contains": "             wgpu::Buffer(static_cast<WGPUBuffer>(sb.nativeBuffer)),",
+          "replace": {
+            "from": [
+              "        bg->m_sampEntries.push_back({samp.slot, sampler->m_wgpuSampler});",
+              "        bg->m_retainedSamplers.push_back(ref_rcp(sampler));",
+              "    }",
+              ""
+            ],
+            "to": [
+              "        bg->m_sampEntries.push_back({samp.slot, sampler->m_wgpuSampler});",
+              "        bg->m_retainedSamplers.push_back(ref_rcp(sampler));",
+              "    }",
+              "",
+              "    for (uint32_t i = 0; i < desc.storageBufferCount; ++i)",
+              "    {",
+              "        const auto& sb = desc.storageBuffers[i];",
+              "        if (sb.nativeBuffer == nullptr ||",
+              "            !checkLayout(sb.slot, BindingKind::storageBufferRO))",
+              "            continue;",
+              "        bg->m_storageEntries.push_back(",
+              "            {sb.slot,",
+              "             wgpu::Buffer(static_cast<WGPUBuffer>(sb.nativeBuffer)),",
+              "             sb.offset,",
+              "             sb.size});",
+              "    }",
+              ""
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/wgpu/ore_bind_group_wgpu.hpp",
+          "note": "Ore WebGPU BindGroupWGPU: storage buffer entries for the bind group recipe",
+          "already_contains": "    std::vector<StorageEntry> m_storageEntries;",
+          "replace": {
+            "from": [
+              "        wgpu::Sampler sampler;",
+              "    };",
+              "    std::vector<UBOEntry> m_uboEntries;",
+              "    std::vector<TexEntry> m_texEntries;",
+              "    std::vector<SampEntry> m_sampEntries;"
+            ],
+            "to": [
+              "        wgpu::Sampler sampler;",
+              "    };",
+              "    struct StorageEntry",
+              "    {",
+              "        uint32_t binding;",
+              "        wgpu::Buffer buffer;",
+              "        uint64_t offset;",
+              "        uint64_t size;",
+              "    };",
+              "    std::vector<UBOEntry> m_uboEntries;",
+              "    std::vector<TexEntry> m_texEntries;",
+              "    std::vector<SampEntry> m_sampEntries;",
+              "    std::vector<StorageEntry> m_storageEntries;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/wgpu/ore_bind_group_wgpu.cpp",
+          "note": "Ore WebGPU resolveBindGroup: reserve room for the storage buffer entries",
+          "already_contains": "                    m_sampEntries.size() + m_storageEntries.size());",
+          "replace": {
+            "from": [
+              "    entries.reserve(m_uboEntries.size() + m_texEntries.size() +",
+              "                    m_sampEntries.size());"
+            ],
+            "to": [
+              "    entries.reserve(m_uboEntries.size() + m_texEntries.size() +",
+              "                    m_sampEntries.size() + m_storageEntries.size());"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/wgpu/ore_bind_group_wgpu.cpp",
+          "note": "Ore WebGPU resolveBindGroup: add the read-only storage buffer entries",
+          "already_contains": "    for (const auto& sb : m_storageEntries)",
+          "replace": {
+            "from": [
+              "        e.sampler = s.sampler;",
+              "        entries.push_back(e);",
+              "    }",
+              ""
+            ],
+            "to": [
+              "        e.sampler = s.sampler;",
+              "        entries.push_back(e);",
+              "    }",
+              "    for (const auto& sb : m_storageEntries)",
+              "    {",
+              "        wgpu::BindGroupEntry e{};",
+              "        e.binding = sb.binding;",
+              "        e.buffer = sb.buffer;",
+              "        e.offset = sb.offset;",
+              "        e.size = sb.size;",
+              "        entries.push_back(e);",
+              "    }",
+              ""
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/wgpu/ore_texture_wgpu.hpp",
+          "note": "Ore WebGPU TextureViewWGPU: public accessor for the native view so compute passes can bind it",
+          "already_contains": "    const wgpu::TextureView& wgpuTextureView() const",
+          "replace": {
+            "from": [
+              "        default; // wgpu::TextureView RAII destructor releases",
+              "",
+              "private:"
+            ],
+            "to": [
+              "        default; // wgpu::TextureView RAII destructor releases",
+              "",
+              "    const wgpu::TextureView& wgpuTextureView() const",
+              "    {",
+              "        return m_wgpuTextureView;",
+              "    }",
+              "",
+              "private:"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/wgpu/ore_sampler_wgpu.hpp",
+          "note": "Ore WebGPU SamplerWGPU: public accessor for the native sampler so compute passes can bind it",
+          "already_contains": "    const wgpu::Sampler& wgpuSampler() const { return m_wgpuSampler; }",
+          "replace": {
+            "from": [
+              "    ~SamplerWGPU() override = default; // wgpu::Sampler RAII destructor releases",
+              "",
+              "private:"
+            ],
+            "to": [
+              "    ~SamplerWGPU() override = default; // wgpu::Sampler RAII destructor releases",
+              "",
+              "    const wgpu::Sampler& wgpuSampler() const { return m_wgpuSampler; }",
+              "",
+              "private:"
             ]
           }
         }

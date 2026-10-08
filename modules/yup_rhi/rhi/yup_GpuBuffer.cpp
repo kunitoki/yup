@@ -167,6 +167,7 @@ struct GpuBuffer::Impl
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
     ComPtr<ID3D11Buffer> d3dStorageBuffer;
     ComPtr<ID3D11UnorderedAccessView> d3dUav;
+    ComPtr<ID3D11ShaderResourceView> d3dSrv;
     ComPtr<ID3D11Buffer> d3dReadbackStaging;
 #endif
 
@@ -199,6 +200,33 @@ struct GpuBuffer::Impl
 #if YUP_RIVE_USE_VULKAN
     VulkanStorageBuffer vkStorageBuffer;
 #endif
+
+    /** The native handle a render pass binds for read-only storage access, or nullptr. */
+    void* getNativeStorageHandleForRead() const noexcept
+    {
+#if YUP_RIVE_USE_METAL && YUP_APPLE
+        if (mtlStorageBuffer != nil)
+            return (__bridge void*) mtlStorageBuffer;
+#endif
+
+#if YUP_RIVE_USE_D3D && YUP_WINDOWS
+        if (d3dSrv != nullptr)
+            return d3dSrv.Get();
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+        // A pointer to the VkBuffer, which is a 64-bit handle even on 32-bit ABIs
+        if (vkStorageBuffer.buffer != nullptr)
+            return const_cast<VkBuffer*> (vkStorageBuffer.buffer->vkBufferAddressOf());
+#endif
+
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
+        if (webgpuStorageBuffer != nullptr)
+            return webgpuStorageBuffer.Get();
+#endif
+
+        return nullptr;
+    }
 };
 
 //==============================================================================

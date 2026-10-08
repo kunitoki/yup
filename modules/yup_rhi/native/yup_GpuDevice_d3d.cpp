@@ -57,6 +57,10 @@ public:
 
     bool isComputeAvailable() const noexcept override { return true; }
 
+    bool isFragmentStorageBufferAvailable() const noexcept override { return true; }
+
+    bool isStorageTextureAvailable() const noexcept override { return true; }
+
     ID3D11Device* getD3DDevice() const noexcept { return gpu.Get(); }
 
     ID3D11DeviceContext* getD3DDeviceContext() const noexcept { return gpuContext.Get(); }
@@ -97,7 +101,18 @@ public:
             if (FAILED (hr) || uav == nullptr)
                 return nullptr;
 
-            return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .d3dStorageBuffer = std::move (d3dBuffer), .d3dUav = std::move (uav) });
+            D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc {};
+            srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
+            srvDesc.BufferEx.NumElements = static_cast<UINT> (byteSize / 4);
+            srvDesc.BufferEx.Flags = D3D11_BUFFEREX_SRV_FLAG_RAW;
+
+            ComPtr<ID3D11ShaderResourceView> srv;
+            hr = gpu->CreateShaderResourceView (d3dBuffer.Get(), &srvDesc, srv.ReleaseAndGetAddressOf());
+            if (FAILED (hr) || srv == nullptr)
+                return nullptr;
+
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .d3dStorageBuffer = std::move (d3dBuffer), .d3dUav = std::move (uav), .d3dSrv = std::move (srv) });
         }
 
         return GpuDevice::createBuffer (type, data, byteSize);

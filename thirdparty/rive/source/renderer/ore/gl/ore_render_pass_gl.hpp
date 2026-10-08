@@ -2,7 +2,9 @@
 #include "rive/renderer/ore/ore_render_pass.hpp"
 #include "rive/renderer/ore/ore_pipeline.hpp"
 #include "rive/refcnt.hpp"
+#include "ore_texture_gl.hpp"
 #include <cstdint>
+#include <vector>
 
 namespace rive::ore
 {
@@ -99,5 +101,6 @@ private:
     uint32_t m_glStencilRef = 0;
     uint32_t m_glResolveCount = 0;
     GLResolveEntry m_glResolves[4];
+    std::vector<rcp<TextureGL>> m_narrowedTextures;
 };
 } // namespace rive::ore

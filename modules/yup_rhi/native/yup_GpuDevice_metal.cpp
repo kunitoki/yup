@@ -70,6 +70,10 @@ public:
 
     bool isComputeAvailable() const noexcept override { return true; }
 
+    bool isFragmentStorageBufferAvailable() const noexcept override { return true; }
+
+    bool isStorageTextureAvailable() const noexcept override { return true; }
+
     //==============================================================================
 
     ReferenceCountedObjectPtr<GpuBuffer> createBuffer (GpuBufferType type, const void* data, size_t byteSize) override

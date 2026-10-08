@@ -69,6 +69,7 @@
 //==============================================================================
 #include "shading/yup_ShaderTypes.h"
 #include "shading/yup_ShaderBundle.h"
+#include "shading/yup_WgslBindingLayout.h"
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 #include "wgsl/yup_GlslAst.h"

@@ -174,6 +174,10 @@ public:
 
     bool isComputeAvailable() const noexcept override { return true; }
 
+    bool isFragmentStorageBufferAvailable() const noexcept override { return true; }
+
+    bool isStorageTextureAvailable() const noexcept override { return true; }
+
     bool isDeviceLost() const noexcept override { return vulkanDevice->isDeviceLost(); }
 
     void runOnGraphicsContext (const std::function<void()>& fn) const override

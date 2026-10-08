@@ -1,0 +1,100 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#pragma once
+
+namespace yup
+{
+
+//==============================================================================
+/** Forward shading of draw items: the environment background, then opaque and blended surfaces.
+
+    Bindings follow the set 0 (view) / set 1 (pass) / set 2 (draw and material) convention, so the
+    per-frame sets are built once per pipeline change and only set 2 changes per draw.
+
+    Pipelines are compiled lazily per color and depth format, sample count and velocity output.
+
+    @internal
+*/
+class YUP_API ForwardPass
+{
+public:
+    //==============================================================================
+    /** What the color target receives. */
+    enum class Output
+    {
+        ldrInline,     ///< Exposed, tone mapped and sRGB encoded, for rgba8unorm.
+        hdrReversible, ///< Exposed and reversibly tone mapped (c / (1 + luma)), for rgba16float, over a transparent clear.
+        hdrLinear      ///< Exposed radiance, for rgba16float, premultiplied by coverage alpha over a transparent clear.
+    };
+
+    /** The attachments of the pass. */
+    struct Targets
+    {
+        GpuTexture::Ptr color;    ///< rgba8 / rgba16f, multisampled on raster.
+        GpuTexture::Ptr resolve;  ///< Single-sampled resolve target, or nullptr.
+        GpuTexture::Ptr depth;    ///< Depth, with the sample count of color.
+        GpuTexture::Ptr velocity; ///< Full tier only (attachment 1), else nullptr.
+    };
+
+    //==============================================================================
+    /** Creates a pass. GPU objects are created by prepare(). */
+    ForwardPass();
+
+    /** Destructor. */
+    ~ForwardPass();
+
+    //==============================================================================
+    /** Creates the default textures and samplers, and compiles the pipelines for these targets.
+
+        Compiles once per target formats, sample count and velocity output, remembering a failure
+        instead of retrying every frame.
+    */
+    Result prepare (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount);
+
+    /** Draws the background, then @p opaque then @p blend items.
+
+        @returns False if the pipelines for @p targets could not be prepared or the pass could not begin.
+    */
+    bool render (const GpuDevice::Ptr& device, GpuFrame& frame, const Scene& scene, const ViewData& view,
+                 Span<const SceneDrawList::Light> lights, Span<const SceneDrawList::DrawItem> opaque,
+                 Span<const SceneDrawList::DrawItem> blend, const ShadowRenderer::Result& shadow,
+                 const Targets& targets, Output output, uint32_t sampleCount);
+
+private:
+    struct Variant;
+
+    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount);
+    Result createDefaults (const GpuDevice::Ptr& device);
+
+    std::vector<std::unique_ptr<Variant>> variants;
+    std::optional<Result> defaults;
+    GpuTexture::Ptr whiteTexture;
+    GpuTexture::Ptr blackTexture;
+    GpuTexture::Ptr flatNormalTexture;
+    GpuSampler::Ptr defaultSampler;
+    GpuSampler::Ptr pointClampSampler;
+    GpuTarget::Ptr surface;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ForwardPass)
+};
+
+} // namespace yup

@@ -50,6 +50,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <map>
@@ -64,6 +65,7 @@
 
 #include "scene/yup_Node.h"
 #include "resources/yup_BoundingBox.h"
+#include "resources/yup_HalfFloat.h"
 #include "resources/yup_Texture.h"
 #include "resources/yup_EnvironmentMap.h"
 #include "resources/yup_Material.h"
@@ -73,8 +75,19 @@
 #include "nodes/yup_MaterialNode.h"
 #include "nodes/yup_CameraNode.h"
 #include "nodes/yup_LightNode.h"
+#include "rendering/yup_RenderSettings.h"
+#include "rendering/yup_RenderCapabilities.h"
 #include "scene/yup_Scene.h"
 #include "gltf/yup_GltfModel.h"
 #include "rendering/yup_SceneDrawList.h"
+#include "rendering/yup_GpuSceneData.h"
+#include "resources/yup_LtcTables.h"
+#include "rendering/yup_ViewData.h"
+#include "rendering/yup_FrameResources.h"
+#include "rendering/yup_FullscreenPass.h"
+#include "rendering/yup_TemporalAA.h"
+#include "rendering/yup_ToneMapping.h"
+#include "rendering/yup_Bloom.h"
+#include "rendering/yup_PostChain.h"
 #include "rendering/yup_SceneRenderer.h"
 #include "rendering/yup_SceneComponent.h"

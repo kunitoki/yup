@@ -28,7 +28,7 @@ namespace yup
     Shading follows the glTF metallic-roughness model (GGX distribution, Smith visibility,
     Schlick Fresnel) with KHR_lights_punctual lights, a flat ambient term, normal mapping,
     alpha masking and blending, and double-sided materials. The result is exposed, tone mapped
-    with Reinhard or ACES (see Scene::setToneMapping) and sRGB encoded into an rgba8unorm texture.
+    with Reinhard, ACES or AgX (see Scene::setToneMapping) and sRGB encoded into an rgba8unorm texture.
 
     With a Scene::setEnvironment(), surfaces reflect the environment, blurred by their roughness,
     and receive its diffuse light; Scene::setEnvironmentVisible() also draws it behind the scene.
@@ -36,12 +36,22 @@ namespace yup
     The first directional LightNode with LightNode::castsShadows set casts shadows of the opaque
     items, from a shadowMapSize square map fitted around them and filtered softly.
 
-    Geometry edges are antialiased with MSAA, 4 samples by default, resolved into the returned
-    texture. Highlights of very smooth surfaces are widened where normals change quickly across
-    a pixel, to keep them from sparkling.
+    The tier comes from RenderSettings::tier and the device, see RenderCapabilities. The raster
+    tier antialiases geometry edges with MSAA, 4 samples by default, resolved into the returned
+    texture, and tone maps inline. The full tier shades one sample per pixel into a half-float
+    scene color with screen-space motion, antialiases it by accumulating jittered frames (temporal
+    anti-aliasing, see RenderSettings::taaSamples and isConverged()), then tone maps it in a post pass.
+    RenderSettings::bloom adds a glow around highlights on both tiers. On the raster tier it needs
+    multisampled half-float targets (see RenderCapabilities): the multisampled scene color is then
+    rendered in half float and tone mapped after the resolve, as on the full tier, instead of
+    inline. The background color is display-referred on both tiers: it shows exactly as picked,
+    never tone mapped. Silhouettes and transparent surfaces over the background blend with it after
+    tone mapping on every path, so they look the same on both tiers and with or without bloom.
+    Highlights of very smooth surfaces are widened where normals change quickly across a pixel, to
+    keep them from sparkling.
 
     The color and depth targets are kept between frames and created again when the size, the
-    sample count or the device changes, so render() can be called every frame.
+    tier, the raster sample count or the device changes, so render() can be called every frame.
 
     @see SceneComponent, SceneDrawList
 */
@@ -77,11 +87,70 @@ public:
     /** Returns why the last render failed, or an empty string if it succeeded. */
     const String& getLastError() const noexcept { return lastError; }
 
+    /** Returns the capabilities the last render ran with, or nullptr before the first render.
+
+        The pointer stays valid until the next render.
+    */
+    const RenderCapabilities* getCapabilities() const noexcept;
+
+    /** Returns false while rendering the same scene again would still refine the image.
+
+        The full tier accumulates RenderSettings::taaSamples jittered frames, then keeps the result
+        until something changes. Changes come in three kinds:
+        - most changes restart the convergence: the camera, entity transforms, new content in a
+          Texture (see Texture::setGpuTexture()), lights, the ambient light, the default light,
+          materials, the meshes drawn, exposure and the environment. The accumulated history is
+          kept, reprojected and clipped to the new frames, so moving parts blend in smoothly and
+          still parts stay antialiased. Once nothing changes any more, the history counts as one
+          frame of the accumulation that follows;
+        - the size, the tier, RenderSettings::taaSamples and restartAccumulation() discard the
+          history, and the accumulation starts over from the next frame alone;
+        - tone mapping and the bloom settings apply after the accumulation, so changing them
+          neither restarts nor discards it.
+
+        Repaint until this returns true, see SceneComponent. Always true on the raster tier, before
+        the first render and after a failed one.
+
+        @see restartAccumulation
+    */
+    bool isConverged() const noexcept;
+
+    /** Discards the accumulated history, so the next renders start over from the next frame alone
+        and isConverged() is false.
+
+        Call it after changes the renderer cannot see: vertices edited in place in a Mesh, or
+        a GpuTexture redrawn without calling Texture::setGpuTexture(). Also call it after a large
+        change, such as a camera cut: changes that only restart the convergence keep the history,
+        and silhouettes keep a faint trace of the image before them.
+    */
+    void restartAccumulation() noexcept;
+
     //==============================================================================
-    /** Changes the number of MSAA samples per pixel.
+    /** @internal Intermediate textures of the last frame, for tests and debug views. */
+    enum class PassOutput
+    {
+        sceneColor, ///< Full: the rgba16float scene color after temporal anti-aliasing, before the other post effects. Raster: the resolved forward output, rgba16float reversibly tone mapped when bloom is on.
+        velocity    ///< Full: the rg16float screen-space motion, current uv minus previous uv, both unjittered, uv from the top-left. Raster: none.
+    };
+
+    /** @internal Returns an intermediate texture of the last frame, valid until the next render,
+        or nullptr when the tier has none or the last render failed.
+    */
+    GpuTexture::Ptr getPassOutput (PassOutput output) const;
+
+    /** @internal Test hook, not for production use: edits the facts read from the device before
+        every render decides its tier and features, so tests can simulate weaker devices.
+
+        @param newOverride  Called with a copy of the device facts at each render, or empty to use them as read.
+    */
+    void setDeviceFactsOverride (std::function<void (RenderCapabilities::DeviceFacts&)> newOverride);
+
+    //==============================================================================
+    /** Changes the number of MSAA samples per pixel of the raster tier.
 
         The count is rounded down to a power of two and limited to what the device supports,
-        see GpuDevice::getMaximumSampleCount(). 1 disables multisampling.
+        see GpuDevice::getMaximumSampleCount(). 1 disables multisampling. The full tier always
+        renders one sample per pixel, and a change keeps its temporal accumulation.
 
         @param newSampleCount The requested sample count, 1 or above.
     */
@@ -94,6 +163,7 @@ private:
     struct Impl;
 
     std::unique_ptr<Impl> impl;
+    std::function<void (RenderCapabilities::DeviceFacts&)> deviceFactsOverride;
     String lastError;
     int sampleCount = 4;
 

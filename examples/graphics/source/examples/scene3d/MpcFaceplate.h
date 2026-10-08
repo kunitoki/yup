@@ -121,6 +121,10 @@ public:
         if (gpuTexture == nullptr)
             return;
 
+        // Every new texture restarts the TAA accumulation, so only hand over actual changes
+        if (! std::exchange (redrawn, false))
+            return;
+
         if (texture != nullptr)
         {
             texture->setGpuTexture (std::move (gpuTexture));
@@ -139,6 +143,8 @@ public:
     //==============================================================================
     void paint (yup::Graphics& g) override
     {
+        redrawn = true;
+
         g.addTransform (yup::AffineTransform::scaling (getWidth() / designWidth));
 
         paintBody (g);
@@ -774,6 +780,7 @@ private:
     std::vector<Part> parts;
     std::vector<yup::Material::Ptr> materials;
     yup::Texture::Ptr texture;
+    bool redrawn = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MpcFaceplate)
 };

@@ -73,9 +73,26 @@ struct GpuComputePass::Impl
         GpuTexture::Ptr texture;
     };
 
+    struct StorageTexBinding
+    {
+        int group;
+        int binding;
+        GpuTexture::Ptr texture;
+        GpuTextureViewDesc view;
+    };
+
+    struct SamplerBinding
+    {
+        int group;
+        int binding;
+        GpuSampler::Ptr sampler;
+    };
+
     std::vector<StorageBinding> storageBindings;
     std::vector<UboBinding> uboBindings;
     std::vector<TexBinding> texBindings;
+    std::vector<StorageTexBinding> storageTexBindings;
+    std::vector<SamplerBinding> samplerBindings;
 
     virtual ~Impl() = default;
 
@@ -300,6 +317,68 @@ void GpuComputePass::setTexture (int group, int binding, GpuTexture::Ptr texture
     }
 
     impl->texBindings.push_back ({ group, binding, std::move (texture) });
+}
+
+void GpuComputePass::setStorageTexture (int group, int binding, GpuTexture::Ptr texture, const GpuTextureViewDesc& view)
+{
+    if (! impl)
+        return;
+
+    jassert (texture == nullptr || texture->isStorage());
+    if (texture != nullptr && ! texture->isStorage())
+        return;
+
+    // Cube faces have no storage view common to every backend
+    jassert (texture == nullptr || texture->getType() != GpuTextureType::cube);
+    if (texture != nullptr && texture->getType() == GpuTextureType::cube)
+        return;
+
+    // A storage view is a single level; array and 3D textures bind every layer of it
+    GpuTextureViewDesc levelView;
+    if (texture != nullptr)
+    {
+        const auto type = texture->getType();
+        const bool wholeLevel = type == GpuTextureType::array2D || type == GpuTextureType::texture3D;
+
+        jassert (view.baseMipLevel < texture->getMipLevels());
+        jassert (wholeLevel || view.baseLayer < texture->getDepthOrArrayLayers());
+        if (view.baseMipLevel >= texture->getMipLevels() || (! wholeLevel && view.baseLayer >= texture->getDepthOrArrayLayers()))
+            return;
+
+        levelView.dimension = wholeLevel ? GpuPipelineHelpers::defaultViewDimension (type) : GpuTextureViewDimension::texture2D;
+        levelView.baseMipLevel = view.baseMipLevel;
+        levelView.baseLayer = wholeLevel ? 0 : view.baseLayer;
+        levelView.layerCount = type == GpuTextureType::array2D ? texture->getDepthOrArrayLayers() : 1;
+    }
+
+    for (auto& sb : impl->storageTexBindings)
+    {
+        if (sb.group == group && sb.binding == binding)
+        {
+            sb.texture = std::move (texture);
+            sb.view = levelView;
+            return;
+        }
+    }
+
+    impl->storageTexBindings.push_back ({ group, binding, std::move (texture), levelView });
+}
+
+void GpuComputePass::setSampler (int group, int binding, GpuSampler::Ptr sampler)
+{
+    if (! impl)
+        return;
+
+    for (auto& sb : impl->samplerBindings)
+    {
+        if (sb.group == group && sb.binding == binding)
+        {
+            sb.sampler = std::move (sampler);
+            return;
+        }
+    }
+
+    impl->samplerBindings.push_back ({ group, binding, std::move (sampler) });
 }
 
 //==============================================================================

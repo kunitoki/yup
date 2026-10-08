@@ -47,6 +47,8 @@ void SceneComponent::setScene (Scene::Ptr newScene)
 
 void SceneComponent::paint (Graphics& g)
 {
+    rendered = false;
+
     const auto bounds = getLocalBounds();
     const auto background = scene != nullptr ? scene->getBackgroundColor() : Color (0xff000000);
 
@@ -73,6 +75,7 @@ void SceneComponent::paint (Graphics& g)
         if (auto texture = renderer.render (context.getGpuDevice(), *scene, width, height))
         {
             g.drawTexture (texture, bounds);
+            rendered = true;
             return;
         }
 
@@ -85,11 +88,16 @@ void SceneComponent::paint (Graphics& g)
 
 void SceneComponent::refreshDisplay (double lastFrameTimeSeconds)
 {
-    if (! continuousUpdates || scene == nullptr)
+    if (scene == nullptr)
         return;
 
-    scene->update (lastFrameTimeSeconds);
-    repaint();
+    if (continuousUpdates)
+        scene->update (lastFrameTimeSeconds);
+
+    // Frames still accumulating are requested here, as paint() must not call repaint(). Only after
+    // a paint that rendered: a hidden or empty component would never converge
+    if (continuousUpdates || (rendered && ! renderer.isConverged()))
+        repaint();
 }
 
 } // namespace yup

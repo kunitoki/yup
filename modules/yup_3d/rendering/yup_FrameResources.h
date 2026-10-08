@@ -1,0 +1,128 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#pragma once
+
+namespace yup
+{
+
+//==============================================================================
+/** The textures a renderer needs from frame to frame.
+
+    Transient textures are pooled by descriptor: a texture acquired in one frame is handed back by
+    the same acquire() in the next one, and released after a frame that did not acquire it.
+    History textures are ping-pong pairs kept across frames, for effects that read last frame's
+    output such as temporal anti-aliasing, and released after a frame that did not use them.
+
+    Descriptors match on width, height, format, type, depth or layer count, mip levels, sample count
+    and render target flag; labels are ignored.
+
+    @code
+    resources.beginFrame (width, height);
+    auto sceneColor = resources.acquire (GpuTextureDesc (width, height, GpuTextureFormat::rgba16float, true));
+    auto history = resources.getHistory ("taa", GpuTextureDesc (width, height, GpuTextureFormat::rgba16float, true));
+    // ... render into sceneColor, resolve into history.write, reading history.read when history.valid
+    resources.endFrame();
+    @endcode
+
+    @internal
+*/
+class YUP_API FrameResources
+{
+public:
+    //==============================================================================
+    /** Creates the pool for a device. */
+    explicit FrameResources (GpuDevice::Ptr device);
+
+    //==============================================================================
+    /** Starts a frame; a size change releases every texture and history. */
+    void beginFrame (int widthPx, int heightPx);
+
+    /** A transient texture for this frame. The same descriptor gets the same texture back next frame;
+        two acquires of one descriptor within a frame get two textures.
+
+        @returns The texture, or nullptr when the device cannot create it.
+    */
+    GpuTexture::Ptr acquire (const GpuTextureDesc& desc);
+
+    //==============================================================================
+    /** A ping-pong pair kept across frames: read() is last frame's write(). */
+    struct History
+    {
+        GpuTexture::Ptr read;
+        GpuTexture::Ptr write;
+        bool valid = false; ///< False on the first frame after creation, a resize or invalidateHistory().
+    };
+
+    /** Returns the history pair called @p name, creating it on first use.
+
+        Calls within one frame return the same pair. A different descriptor reallocates the pair,
+        which is then invalid.
+    */
+    History getHistory (StringRef name, const GpuTextureDesc& desc);
+
+    /** Marks every history invalid, so the next getHistory() reports it as such. The textures are kept.
+
+        A history already fetched this frame stays invalid in the next frame too, since this frame's
+        write was computed from the stale contents.
+    */
+    void invalidateHistory() noexcept;
+
+    //==============================================================================
+    /** Releases transients not acquired and histories not used this frame, and swaps the used histories. */
+    void endFrame();
+
+    //==============================================================================
+    /** Returns the width passed to the last beginFrame(). */
+    int getWidth() const noexcept;
+
+    /** Returns the height passed to the last beginFrame(). */
+    int getHeight() const noexcept;
+
+private:
+    struct Transient
+    {
+        GpuTextureDesc desc;
+        GpuTexture::Ptr texture;
+        bool acquired = false;
+    };
+
+    struct HistoryPair
+    {
+        String name;
+        GpuTextureDesc desc;
+        GpuTexture::Ptr textures[2];
+        int writeIndex = 0;
+        bool valid = false;
+        bool used = false;
+        bool invalidatedAfterUse = false;
+    };
+
+    GpuDevice::Ptr device;
+    std::vector<Transient> transients;
+    std::vector<HistoryPair> histories;
+    int width = 0;
+    int height = 0;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FrameResources)
+};
+
+} // namespace yup

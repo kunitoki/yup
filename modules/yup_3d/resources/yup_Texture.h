@@ -30,8 +30,8 @@ namespace yup
     device asks.
 
     A texture can also live only on the GPU, for example to show a Component rendered with
-    Component::renderToTexture() on a mesh: create it from a GpuTexture and replace it with
-    setGpuTexture() whenever the content changes.
+    Component::renderToTexture() on a mesh: create it from a GpuTexture and call setGpuTexture()
+    whenever the content changes, even when it was redrawn into the same GpuTexture.
 
     Color textures (base color and emissive) hold sRGB values: mark them with @a isSrgb so the
     renderer decodes them to linear before lighting. Data textures (normals, metallic-roughness,
@@ -86,6 +86,15 @@ public:
     */
     void setGpuTexture (GpuTexture::Ptr newTexture);
 
+    /** Returns how many times setGpuTexture() was called.
+
+        Call setGpuTexture() again after redrawing the content in place, even with the same
+        GpuTexture: renderers compare this count to notice the new content. Only call it when the
+        content actually changed: every call restarts the temporal accumulation of the full tier,
+        so calling it on every paint keeps the view repainting forever.
+    */
+    uint64 getChangeCount() const noexcept { return changeCount; }
+
     //==============================================================================
     /** Returns the GPU texture for a device, uploading it with its mip chain if needed.
 
@@ -126,6 +135,7 @@ private:
     GpuDevice::Ptr cachedDevice;
     GpuTexture::Ptr gpuTexture;
     GpuSampler::Ptr gpuSampler;
+    uint64 changeCount = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Texture)
 };

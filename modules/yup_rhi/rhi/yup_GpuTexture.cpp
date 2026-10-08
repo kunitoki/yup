@@ -40,9 +40,16 @@ uint32_t mipExtent (uint32_t base, uint32_t level)
     return jmax (1u, base >> level);
 }
 
+// Regenerate with: just shader_bundler (see the header of the .inc)
+constexpr uint8_t mipDownsampleShaderBundle[] = {
+#include "../shaders/yup_GpuMipDownsample.inc"
+};
+
 } // namespace
 
 //==============================================================================
+
+GpuTexture::GpuTexture() = default;
 
 GpuTexture::Ptr GpuTexture::create (ReferenceCountedObjectPtr<GpuDevice> device, const GpuTextureDesc& desc)
 {
@@ -68,6 +75,9 @@ GpuTexture::Ptr GpuTexture::create (ReferenceCountedObjectPtr<GpuDevice> device,
     if (desc.sampleCount > 1 && ! desc.renderTarget)
         return nullptr;
 
+    if (desc.storage && (desc.sampleCount > 1 || isDepthStencilFormat (desc.format) || ! device->isStorageTextureAvailable()))
+        return nullptr;
+
     rive::ore::TextureDesc oreDesc;
     oreDesc.width = desc.width;
     oreDesc.height = desc.height;
@@ -75,6 +85,7 @@ GpuTexture::Ptr GpuTexture::create (ReferenceCountedObjectPtr<GpuDevice> device,
     oreDesc.format = GpuPipelineHelpers::toOreTextureFormat (desc.format);
     oreDesc.type = GpuPipelineHelpers::toOreTextureType (desc.type);
     oreDesc.renderTarget = desc.renderTarget;
+    oreDesc.storage = desc.storage;
     oreDesc.numMipmaps = desc.mipLevels;
     oreDesc.sampleCount = desc.sampleCount;
     oreDesc.label = desc.label.isNotEmpty() ? desc.label.toRawUTF8() : nullptr;
@@ -94,6 +105,7 @@ GpuTexture::Ptr GpuTexture::create (ReferenceCountedObjectPtr<GpuDevice> device,
     t->width = (int) desc.width;
     t->height = (int) desc.height;
     t->renderTarget = desc.renderTarget;
+    t->storage = desc.storage;
     t->format = desc.format;
     t->type = desc.type;
     t->mipLevels = desc.mipLevels;
@@ -110,6 +122,7 @@ GpuTexture::~GpuTexture()
     device->runOnGraphicsContext ([this]
     {
         viewCache.clear();
+        mipPipelines.clear();
 
         oreTexture = nullptr;
         gpuTexture = nullptr;
@@ -190,6 +203,62 @@ rive::rcp<rive::ore::TextureView> GpuTexture::getOrCreateView (rive::ore::Contex
         viewCache.push_back ({ viewDesc, forRenderTarget, view });
 
     return view;
+}
+
+//==============================================================================
+
+bool GpuTexture::generateMips (GpuFrame& frame)
+{
+    if (! renderTarget || mipLevels < 2 || sampleCount != 1 || isDepthStencilFormat (format) || type != GpuTextureType::texture2D || device == nullptr || ! isValid())
+        return false;
+
+    auto entry = std::find_if (mipPipelines.begin(), mipPipelines.end(), [this] (const auto& item) { return item.first == format; });
+    if (entry == mipPipelines.end())
+    {
+        auto bundle = ShaderBundle::loadFromData (mipDownsampleShaderBundle, sizeof (mipDownsampleShaderBundle));
+        if (bundle.failed())
+            return false;
+
+        GpuPipelineOptions options;
+        options.topology = GpuPrimitiveTopology::triangleList;
+        options.cullMode = GpuCullMode::none;
+        auto& colorTarget = options.colorTargets.emplace_back();
+        colorTarget.format = format;
+        colorTarget.blendEnabled = false;
+
+        auto pipeline = GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
+        if (pipeline.failed())
+            return false;
+
+        mipPipelines.emplace_back (format, pipeline.getValue());
+        entry = std::prev (mipPipelines.end());
+    }
+
+    auto sampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::clampToEdge));
+    if (sampler == nullptr)
+        return false;
+
+    for (uint32_t level = 1; level < mipLevels; ++level)
+    {
+        auto target = GpuTarget::createFromTexture (device, this, GpuTextureViewDesc (level, 0));
+        if (target == nullptr)
+            return false;
+
+        const float inverseSize[4] = { 1.0f / static_cast<float> (mipExtent (static_cast<uint32_t> (width), level)),
+                                       1.0f / static_cast<float> (mipExtent (static_cast<uint32_t> (height), level)),
+                                       0.0f,
+                                       0.0f };
+
+        auto pass = target->beginRenderPass (frame, { GpuLoadOp::dontCare, GpuStoreOp::store });
+        pass.setPipeline (entry->second);
+        pass.setTexture (0, 0, this, GpuTextureViewDesc (level - 1, 0));
+        pass.setSampler (0, 1, sampler);
+        pass.setUniformBuffer (0, 2, inverseSize, sizeof (inverseSize));
+        pass.draw (3);
+        pass.finish();
+    }
+
+    return true;
 }
 
 //==============================================================================
@@ -329,6 +398,11 @@ bool GpuTexture::isValid() const noexcept
 bool GpuTexture::isRenderTarget() const noexcept
 {
     return renderTarget;
+}
+
+bool GpuTexture::isStorage() const noexcept
+{
+    return storage;
 }
 
 } // namespace yup

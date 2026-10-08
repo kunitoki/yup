@@ -47,6 +47,9 @@ struct GpuFrame::Impl
     std::vector<rive::rcp<rive::ore::TextureView>> liveViews;
     std::vector<rive::rcp<rive::ore::Sampler>> liveSamplers;
 
+    /** Storage buffers bound by render passes. Ore only holds their native handles. */
+    std::vector<GpuBuffer::Ptr> liveStorageBuffers;
+
     rive::rcp<rive::ore::Buffer> acquireUniformBuffer (const void* data, size_t byteSize);
 
     /** Hands the transient resources to the device, to be freed once enough later
@@ -87,12 +90,14 @@ void GpuFrame::Impl::retire()
         device->retireFrameResources (generation,
                                       std::move (liveBuffers),
                                       std::move (liveViews),
-                                      std::move (liveSamplers));
+                                      std::move (liveSamplers),
+                                      std::move (liveStorageBuffers));
     }
 
     liveBuffers.clear();
     liveViews.clear();
     liveSamplers.clear();
+    liveStorageBuffers.clear();
 }
 
 void GpuFrame::Impl::releaseNow()
@@ -109,6 +114,7 @@ void GpuFrame::Impl::releaseNow()
     liveBuffers.clear();
     liveViews.clear();
     liveSamplers.clear();
+    liveStorageBuffers.clear();
 }
 
 //==============================================================================

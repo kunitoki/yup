@@ -426,7 +426,17 @@ struct GpuPipeline::Impl
     {
         uint32_t binding;
         rive::rcp<rive::ore::Sampler> sampler;
+        rive::ore::SamplerDesc desc;
     };
+
+    /** True when a bind group built for @p group of @p other is also valid for this pipeline.
+
+        Every backend reads a bind group's native slots from its layout entries, so equal
+        entries and equal default samplers make the group interchangeable between pipelines.
+        This relies on ore::RenderPass::setBindGroup not comparing layouts by pointer (it does
+        not today, despite the comment in ore_pipeline.hpp); recheck on every Rive update.
+    */
+    bool sharesGroupWith (const Impl& other, size_t group) const;
 
     rive::ore::Context* oreCtx = nullptr;
     rive::rcp<rive::ore::ShaderModule> vertModule;
@@ -442,6 +452,45 @@ struct GpuPipeline::Impl
     std::string vertexEntryPointStorage;
     std::string fragmentEntryPointStorage;
 };
+
+bool GpuPipeline::Impl::sharesGroupWith (const Impl& other, size_t group) const
+{
+    const auto* layout = group < layouts.size() ? layouts[group].get() : nullptr;
+    const auto* otherLayout = group < other.layouts.size() ? other.layouts[group].get() : nullptr;
+
+    if (layout == nullptr || otherLayout == nullptr)
+        return layout == otherLayout;
+
+    // Ore asserts BindGroupLayoutEntry has no padding, so equal bytes mean equal entries
+    const auto& entries = layout->entries();
+    const auto& otherEntries = otherLayout->entries();
+
+    if (layout->groupIndex() != otherLayout->groupIndex()
+        || entries.size() != otherEntries.size()
+        || (! entries.empty() && std::memcmp (entries.data(), otherEntries.data(), entries.size() * sizeof (entries[0])) != 0))
+    {
+        return false;
+    }
+
+    const auto sameSampler = [] (const SamplerBinding& a, const SamplerBinding& b)
+    {
+        return a.binding == b.binding
+            && a.desc.minFilter == b.desc.minFilter
+            && a.desc.magFilter == b.desc.magFilter
+            && a.desc.mipmapFilter == b.desc.mipmapFilter
+            && a.desc.wrapU == b.desc.wrapU
+            && a.desc.wrapV == b.desc.wrapV
+            && a.desc.wrapW == b.desc.wrapW
+            && a.desc.compare == b.desc.compare
+            && exactlyEqual (a.desc.minLod, b.desc.minLod)
+            && exactlyEqual (a.desc.maxLod, b.desc.maxLod)
+            && a.desc.maxAnisotropy == b.desc.maxAnisotropy;
+    };
+
+    const auto& samplers = samplersPerGroup[group];
+    const auto& otherSamplers = other.samplersPerGroup[group];
+    return std::equal (samplers.begin(), samplers.end(), otherSamplers.begin(), otherSamplers.end(), sameSampler);
+}
 
 //==============================================================================
 
@@ -496,6 +545,8 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
         desc.bindingMapSize = (uint32_t) src.bindingMap.size();
         desc.glFixupBytes = src.glFixup.empty() ? nullptr : src.glFixup.data();
         desc.glFixupSize = (uint32_t) src.glFixup.size();
+        desc.texSamplerPairBytes = src.glTextureSamplerPairs.empty() ? nullptr : src.glTextureSamplerPairs.data();
+        desc.texSamplerPairSize = (uint32_t) src.glTextureSamplerPairs.size();
 
         switch (src.language)
         {
@@ -848,7 +899,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
                 sd.compare = rive::ore::CompareFunction::lessEqual;
 
             if (auto sampler = oreCtx->makeSampler (sd))
-                implRef->samplersPerGroup[g].push_back ({ entry.binding, std::move (sampler) });
+                implRef->samplersPerGroup[g].push_back ({ entry.binding, std::move (sampler), sd });
         }
     }
 
@@ -934,12 +985,15 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
     auto fsMap = makeShaderBindingMapBlob (fsInfo->reflection, ShaderStage::fragment);
 
     // GL / GLES bind UBO blocks and sampler units by name after linking, so
-    // build the name→slot fixup table for the GLSL/ESSL targets.
-    std::vector<uint8_t> vsFixup, fsFixup;
+    // build the name→slot fixup table for the GLSL/ESSL targets, plus the
+    // texture each sampler is combined with to bind it on every unit it serves.
+    std::vector<uint8_t> vsFixup, fsFixup, vsPairs, fsPairs;
     if (gpuLang == GpuShaderLanguage::glsl)
     {
         vsFixup = makeGLFixupBlob (vsInfo->reflection);
         fsFixup = makeGLFixupBlob (fsInfo->reflection);
+        vsPairs = makeGLTextureSamplerPairsBlob (vsInfo->reflection);
+        fsPairs = makeGLTextureSamplerPairsBlob (fsInfo->reflection);
     }
 
     // SPIRV-Cross renames the GLSL "main" entry point to "main0" in MSL.
@@ -956,6 +1010,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
     vs.code = shaderCodeBytes (*vsInfo);
     vs.bindingMap = vsMap;
     vs.glFixup = vsFixup;
+    vs.glTextureSamplerPairs = vsPairs;
     vs.entryPoint = resolveEntry (*vsInfo);
 
     GpuShaderSource fs;
@@ -963,6 +1018,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
     fs.code = shaderCodeBytes (*fsInfo);
     fs.bindingMap = fsMap;
     fs.glFixup = fsFixup;
+    fs.glTextureSamplerPairs = fsPairs;
     fs.entryPoint = resolveEntry (*fsInfo);
 
     return compile (ctx, vs, fs, pipelineOptions);
@@ -977,48 +1033,29 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromGlsl (GpuDevice::Ptr ctx,
 {
     const auto targetLang = shaderLanguageForApi (ctx->getPlatform());
 
-    ShaderBundleCompiler compiler;
-
-    auto makeEntry = [&] (ShaderStage stage)
+    // Both stages go in one request, so the pipeline's native slots are assigned together
+    auto makeEntry = [&] (ShaderStage stage, const String& source)
     {
         ShaderBundleEntry entry;
         entry.stage = stage;
         entry.targetLanguages = { targetLang };
         entry.options.spirvOptimization = SpvOptimizationMode::none;
+        entry.source = source;
         return entry;
     };
 
-    auto vsBundle = [&]
-    {
-        ShaderBundleCompileRequest request;
-        request.source = vertexGlsl;
-        request.sourceLanguage = ShaderLanguage::glsl;
-        request.entries.push_back (makeEntry (ShaderStage::vertex));
-        return compiler.compile (request);
-    }();
+    ShaderBundleCompileRequest request;
+    request.sourceLanguage = ShaderLanguage::glsl;
+    request.entries.push_back (makeEntry (ShaderStage::vertex, vertexGlsl));
+    request.entries.push_back (makeEntry (ShaderStage::fragment, fragmentGlsl));
 
-    if (vsBundle.failed())
-        return makeResultValueFail ("Vertex shader compile failed: " + vsBundle.getErrorMessage());
+    ShaderBundleCompiler compiler;
+    auto bundle = compiler.compile (request);
 
-    auto fsBundle = [&]
-    {
-        ShaderBundleCompileRequest request;
-        request.source = fragmentGlsl;
-        request.sourceLanguage = ShaderLanguage::glsl;
-        request.entries.push_back (makeEntry (ShaderStage::fragment));
-        return compiler.compile (request);
-    }();
+    if (bundle.failed())
+        return makeResultValueFail ("Shader compile failed: " + bundle.getErrorMessage());
 
-    if (fsBundle.failed())
-        return makeResultValueFail ("Fragment shader compile failed: " + fsBundle.getErrorMessage());
-
-    ShaderBundle bundle;
-    for (const auto& info : vsBundle.getReference().getShaders())
-        bundle.addShader (info);
-    for (const auto& info : fsBundle.getReference().getShaders())
-        bundle.addShader (info);
-
-    return compileFromBundle (ctx, bundle, pipelineOptions);
+    return compileFromBundle (ctx, bundle.getReference(), pipelineOptions);
 }
 
 #endif

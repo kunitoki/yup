@@ -20,40 +20,34 @@
 */
 
 #version 450
+#extension GL_GOOGLE_include_directive : require
 
-// Must match FrameData in yup_SceneRenderer.cpp and yup_SceneRendererShader.frag
-layout(set = 0, binding = 0) uniform FrameData
-{
-    mat4 view;
-    mat4 projection;
-    vec4 cameraPosition;      // xyz
-    vec4 ambient;             // rgb linear ambient, w exposure
-    vec4 lightInfo;           // x light count
-    vec4 lightPositions[8];   // xyz world position, w type (0 directional, 1 point, 2 spot)
-    vec4 lightDirections[8];  // xyz unit direction the light shines towards, w range (0 infinite)
-    vec4 lightColors[8];      // rgb linear color, w intensity
-    vec4 lightSpots[8];       // x cone scale, y cone offset
-    mat4 shadowMatrix;        // world to shadow map clip space, depth from 0 to 1
-    vec4 shadowInfo;          // x shadowed light index (-1 for none), y texel size, z normal offset, w depth bias
-    vec4 environmentInfo;     // x intensity (0 for none), y last level, z tone mapping (0 Reinhard, 1 ACES)
-    vec4 irradiance[9];       // rgb coefficients of the environment diffuse light
-} frame;
+#include "lib/view.glsl"
 
-layout(set = 0, binding = 1) uniform DrawData
+// Must match ForwardDrawBlock in yup_ForwardPass.cpp
+layout(set = 2, binding = 0) uniform DrawBlock
 {
     mat4 model;
     mat4 normalMatrix;        // inverse transpose of the model matrix
+    mat4 previousModel;       // the model matrix of the previous frame
 } draw;
 
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec2 a_uv;
 layout(location = 3) in vec4 a_color;
+layout(location = 4) in vec4 a_tangent; // xyz unit tangent, w handedness; all zero for none
 
 layout(location = 0) out vec3 v_worldPosition;
 layout(location = 1) out vec3 v_normal;
 layout(location = 2) out vec2 v_uv;
 layout(location = 3) out vec4 v_color;
+layout(location = 6) out vec4 v_tangent; // world-space xyz, w handedness; zero selects the derivative frame
+
+#ifdef YUP_3D_TIER_FULL
+layout(location = 4) out vec4 v_currentClip;
+layout(location = 5) out vec4 v_previousClip;
+#endif
 
 void main()
 {
@@ -64,5 +58,16 @@ void main()
     v_uv = a_uv;
     v_color = a_color;
 
-    gl_Position = frame.projection * (frame.view * worldPosition);
+    // Tangents follow the surface, so they take the model matrix, not the normal matrix. A mirroring
+    // model matrix reverses the handedness of the frame
+    bool hasTangent = a_tangent.w != 0.0 && dot(a_tangent.xyz, a_tangent.xyz) > 0.0;
+    float handedness = a_tangent.w * sign(determinant(mat3(draw.model)));
+    v_tangent = hasTangent ? vec4(normalize((draw.model * vec4(a_tangent.xyz, 0.0)).xyz), handedness) : vec4(0.0);
+
+#ifdef YUP_3D_TIER_FULL
+    v_currentClip = view.unjitteredViewProjection * worldPosition;
+    v_previousClip = view.previousViewProjection * (draw.previousModel * vec4(a_position, 1.0));
+#endif
+
+    gl_Position = view.projection * (view.view * worldPosition);
 }

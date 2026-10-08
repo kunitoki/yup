@@ -478,6 +478,10 @@ def test_gpu_device_capability_probes_are_bound(headless_device):
         headless_device.isFormatRenderable(yup.GpuTextureFormat.rgba8unorm), bool
     )
     assert headless_device.getMaximumSampleCount() >= 1
+    assert headless_device.getMaximumSampleCount(yup.GpuTextureFormat.rgba8unorm) == 0
+    assert headless_device.getMaximumColorAttachments() == 0
+    assert headless_device.isFragmentStorageBufferAvailable() is False
+    assert headless_device.isStorageTextureAvailable() is False
     assert headless_device.getPlatform() == yup.GpuPlatform.Headless
 
 
@@ -488,6 +492,28 @@ def test_gpu_device_capability_probes_are_bound(headless_device):
 def test_gpu_target_begin_render_pass_is_bound():
     # Was entirely unbound, so both python/demos GPU scripts died on this call.
     assert hasattr(yup.GpuTarget, "beginRenderPass")
+
+
+def test_gpu_render_pass_set_texture_binds_both_overloads():
+    # A pass cannot be begun without a GPU, so check the bound signatures instead:
+    # the whole-texture overload and the one taking a sampling view.
+    doc = yup.GpuRenderPass.setTexture.__doc__
+    assert "Overloaded function" in doc
+    assert "view" in doc
+    assert "GpuTextureViewDesc" in doc
+
+
+def test_gpu_storage_apis_are_bound():
+    # Passes cannot be begun without a GPU, so check the bound signatures.
+    desc = yup.GpuTextureDesc()
+    assert desc.storage is False
+    desc.storage = True
+    assert desc.storage is True
+    assert hasattr(yup.GpuTexture, "isStorage")
+    assert "GpuTexture" in yup.GpuComputePass.setStorageTexture.__doc__
+    assert "view" in yup.GpuComputePass.setStorageTexture.__doc__
+    assert "GpuSampler" in yup.GpuComputePass.setSampler.__doc__
+    assert "GpuBuffer" in yup.GpuRenderPass.setStorageBuffer.__doc__
 
 
 def test_gpu_pipeline_compile_from_glsl_raises_on_bad_source(headless_device):

@@ -45,7 +45,11 @@ protected:
 
 TEST_F (MeshTests, VertexIsTightlyPacked)
 {
-    EXPECT_EQ (sizeof (Mesh::Vertex), 48u);
+    EXPECT_EQ (sizeof (Mesh::Vertex), 64u);
+    EXPECT_EQ (offsetof (Mesh::Vertex, tangent), 48u);
+
+    Mesh::Vertex vertex;
+    EXPECT_EQ (vertex.tangent, (std::array<float, 4> { 0.0f, 0.0f, 0.0f, 0.0f }));
 }
 
 TEST_F (MeshTests, NewMeshIsEmpty)
@@ -106,6 +110,20 @@ TEST_F (MeshTests, MissingNormalsAreGeneratedFlat)
         expectNear (primitive.vertices[primitive.indices[(size_t) i]].normal, { 0.0f, 1.0f, 0.0f });
 
     expectNear (primitive.vertices[primitive.indices[4]].position, { 0.0f, 0.0f, 1.0f });
+}
+
+TEST_F (MeshTests, GeneratedFlatNormalsDropTangents)
+{
+    std::vector<Mesh::Vertex> vertices { vertexAt (0.0f, 0.0f, 0.0f), vertexAt (1.0f, 0.0f, 0.0f), vertexAt (0.0f, 1.0f, 0.0f) };
+    for (auto& vertex : vertices)
+        vertex.tangent = { 1.0f, 0.0f, 0.0f, 1.0f };
+
+    Mesh mesh;
+    mesh.addPrimitive (vertices, {});
+
+    // No normals were given: the generated flat frame cannot trust tangents authored for another one
+    for (const auto& vertex : mesh.getPrimitive (0).vertices)
+        EXPECT_EQ (vertex.tangent, (std::array<float, 4> { 0.0f, 0.0f, 0.0f, 0.0f }));
 }
 
 TEST_F (MeshTests, BoundsCoverEveryPrimitive)

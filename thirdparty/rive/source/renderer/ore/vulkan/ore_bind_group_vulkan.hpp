@@ -47,8 +47,16 @@ private:
         VkImageLayout imageLayout;
         VkSampler sampler;
     };
+    struct StorageWrite
+    {
+        VkBuffer buffer;
+        uint32_t dstBinding;
+        VkDeviceSize offset;
+        VkDeviceSize range;
+    };
     std::vector<UBOWrite> m_uboWrites;
     std::vector<ImageWrite> m_imageWrites;
+    std::vector<StorageWrite> m_storageWrites;
 
     VkDescriptorSetLayout m_vkDSL = VK_NULL_HANDLE;
 

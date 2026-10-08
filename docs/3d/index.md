@@ -141,6 +141,10 @@ void paint (yup::Graphics& g) override // in a SceneComponent subclass
 }
 ```
 
+Only call `setGpuTexture()` when the content really changed, for example after
+redrawing the component: every call restarts the temporal accumulation of the
+full tier, so calling it on every paint keeps the view repainting forever.
+
 Mark the component with `setManuallyComposited (true)` and map input onto it with
 a `MeshSurfaceMapper`, as the Scene 3D example does for the screen of its model.
 
@@ -170,7 +174,9 @@ What is converted:
 - triangle primitives with `POSITION`, `NORMAL`, `TEXCOORD_0` and `COLOR_0`,
   dense or sparse, any component type including normalized integers;
 - metallic-roughness materials with their five textures, alpha mode and
-  double-sided flag;
+  double-sided flag, plus the factors of `KHR_materials_emissive_strength`,
+  `KHR_materials_ior` and `KHR_materials_specular` (their textures are ignored,
+  with a warning);
 - images stored in buffer views, data URIs or external files, including
   `EXT_texture_webp` sources;
 - nodes with their transforms (a `matrix` is split into translation, rotation and
@@ -229,7 +235,8 @@ default directional light is used unless you turn it off with
 
 `SceneComponent` draws only when it repaints: call `repaint()` after changing the
 scene. For animated scenes, `setContinuousUpdates (true)` calls `Scene::update()`
-and repaints on every display frame.
+and repaints on every display frame. On the full tier it also keeps repainting by
+itself until the image has converged, see [Platform tiers](#platform-tiers).
 
 ### Rendering
 
@@ -243,7 +250,8 @@ Image quality:
 
 - **MSAA** antialiases geometry edges with 4 samples per pixel by default.
   Change it with `getRenderer().setSampleCount (n)`; the count is limited to what
-  the device supports, and 1 turns multisampling off.
+  the device supports, and 1 turns multisampling off. It only affects the raster
+  tier: the full tier antialiases with TAA instead.
 - **Specular antialiasing** widens the highlights of very smooth surfaces where
   the normal changes quickly across a pixel, so they don't sparkle while moving.
 - **Anisotropic filtering** keeps glTF textures sharp at grazing angles on
@@ -281,6 +289,8 @@ show as sharp glints on smooth surfaces and as broad highlights on rough ones.
   to 1, like a shallow depth of field.
 - `setToneMapping (Scene::ToneMapping::aces)` maps the light with the ACES
   filmic curve, which suits bright environments better than the default Reinhard.
+  `Scene::ToneMapping::agx` is a third option, a filmic curve that keeps very
+  saturated highlights from skewing in hue. See [Render settings](#render-settings).
 
 ### Shadows
 
@@ -299,3 +309,121 @@ scene->getRoot()->addChild (sun);
 
 Point and spot lights don't cast shadows. Skinning and animation are not
 available yet.
+
+## Render settings
+
+`RenderSettings` chooses how a scene is rendered. Set it on the scene, then
+repaint:
+
+```cpp
+yup::RenderSettings settings;
+settings.bloom = true;
+settings.bloomIntensity = 0.1f;
+settings.taaSamples = 8;
+
+scene->setRenderSettings (settings);
+scene->setToneMapping (yup::Scene::ToneMapping::agx);
+scene->setExposure (1.2f);
+```
+
+| Setting          | Default     | What it does                                                                                   |
+| ---------------- | ----------- | ---------------------------------------------------------------------------------------------- |
+| `tier`           | `automatic` | `automatic`, `raster` or `full`, see [Platform tiers](#platform-tiers).                        |
+| `taaSamples`     | 16          | Full tier: how many jittered frames are accumulated before the image is final. Fewer converge sooner and antialias less. |
+| `bloom`          | off         | Glow around bright highlights, see [Post effects](#post-effects).                              |
+| `bloomThreshold` | 1.0         | Exposed radiance above which pixels glow.                                                      |
+| `bloomIntensity` | 0.05        | How much of the blurred glow is added to the image.                                            |
+| `bloomRadius`    | 0.85        | From 0 to 1: how far the glow spreads.                                                         |
+
+Settings a device or tier cannot provide are ignored instead of failing. Ask
+`getRenderer().getCapabilities()` what is in effect after a frame was rendered:
+it returns `nullptr` before the first one.
+
+```cpp
+if (auto* caps = view.getRenderer().getCapabilities())
+{
+    auto tier = caps->getTier(); // RenderCapabilities::Tier::raster or ::full
+    bool glows = caps->isEnabled (yup::RenderCapabilities::Feature::bloom, scene->getRenderSettings());
+}
+```
+
+Related scene settings:
+
+- **Exposure** (`Scene::setExposure`) multiplies the light before tone mapping.
+- **Tone mapping** (`Scene::setToneMapping`) maps the exposed light into the
+  displayable range: `reinhard` (the default) rolls highlights off softly,
+  `aces` adds contrast and saturation, and `agx` is a filmic curve that keeps
+  saturated highlights from skewing. AgX is YUP's own fit of the look, opt-in
+  like ACES.
+- **Background color** (`Scene::setBackgroundColor`) is display-referred on both
+  tiers: it is never tone mapped nor affected by exposure, and shows exactly as
+  set.
+
+## Platform tiers
+
+The renderer has two tiers, picked per device from the `tier` preference:
+
+- **Raster** draws the scene straight to the target with forward shading and
+  MSAA. It runs everywhere, and its output is the baseline the full tier is
+  compared against.
+- **Full** renders to an HDR (half-float) scene color, antialiases it with
+  temporal anti-aliasing (TAA), applies post effects and tone maps last.
+
+| Device                                  | `automatic`                     | `full` requested               |
+| --------------------------------------- | ------------------------------- | ------------------------------ |
+| Metal on desktop                        | Full                            | Full                           |
+| Metal on iOS                            | Raster                          | Full                           |
+| Direct3D 11, Vulkan, WebGPU             | Raster, for now                 | Raster, for now                |
+| OpenGL, OpenGL ES, WebGL2               | Raster                          | Raster                         |
+
+`automatic` picks the full tier on desktop GPUs that pass the capability checks
+(half-float render targets, enough color attachments and a verified backend).
+Today only Metal is verified; Direct3D 11, Vulkan and WebGPU stay on raster until
+the full tier is validated on them. OpenGL and OpenGL ES never run the full
+tier. Mobile defaults to raster. Asking for `full` on a device that cannot run it
+falls back to raster.
+
+### Temporal anti-aliasing
+
+On the full tier a still image is not final after the first frame. Each frame is
+rendered with a slightly different sub-pixel offset and blended into a history,
+so after `taaSamples` frames the edges are smooth and the image stops changing.
+
+- `SceneComponent` keeps repainting by itself until the image has converged, then
+  goes idle. `getRenderer().isConverged()` tells whether it has; it is always
+  true on the raster tier.
+- Most changes keep the history and only restart the convergence, so animated
+  scenes stay smooth: moving the camera or objects, changing the content of a
+  `Texture`, a material, a light, the ambient light, the environment or the
+  exposure. Once the scene is still again, the history counts as a single
+  frame among the `taaSamples` that follow, so edges keep only a faint trace of
+  the image before the change. After a large change, such as a cut to another
+  shot, call `restartAccumulation()`.
+- Changing the size of the view, the tier or `taaSamples` discards the history,
+  and the image starts over.
+- Tone mapping and the bloom settings are applied after the accumulation, so
+  changing them neither restarts nor discards it.
+- When you change something the renderer cannot see, such as vertices edited in
+  place in a `Mesh`, or a `GpuTexture` redrawn without calling
+  `Texture::setGpuTexture()`, call `getRenderer().restartAccumulation()`. It
+  discards the history, and the image starts over.
+- Calling `Texture::setGpuTexture()` on every frame stops the image from ever
+  converging, and the component then repaints forever. Call it only when the
+  content changed.
+
+## Post effects
+
+**Bloom** adds a soft glow around highlights brighter than `bloomThreshold`. It
+works on both tiers:
+
+- On the full tier it is always available.
+- On the raster tier it needs multisampled half-float render targets at the
+  current sample count (`setSampleCount`). When the device lacks them, bloom is
+  unavailable and the image is unchanged; the capabilities report it through
+  `isAvailable (RenderCapabilities::Feature::bloom)`.
+- Turning bloom on in the raster tier makes the scene render in half float and
+  tone map after antialiasing. Silhouettes and transparent surfaces over the
+  background still look as they do without bloom. Where two surfaces meet inside
+  a pixel, the brighter one weighs a little less than without bloom.
+- The glow strength depends somewhat on the resolution of the view: the same
+  intensity looks a little different at different sizes.

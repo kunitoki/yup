@@ -345,3 +345,56 @@ TEST_F (SceneDrawListTests, RebuildingReplacesThePreviousItems)
     drawList.clear();
     EXPECT_TRUE (drawList.getOpaqueItems().empty());
 }
+
+TEST_F (SceneDrawListTests, ItemsPointToTheirMeshNode)
+{
+    auto first = makeEntity();
+    auto second = makeEntity();
+    root->addChild (first);
+    root->addChild (second);
+
+    auto& firstNode = first->attach<MeshNode> (makeTriangle());
+    auto& transparentNode = second->attach<MeshNode> (makeTriangle (makeMaterial ("glass", Material::AlphaMode::blend)));
+
+    drawList.build (*root, {});
+
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
+    ASSERT_EQ (drawList.getBlendItems().size(), 1u);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].node, &firstNode);
+    EXPECT_EQ (drawList.getBlendItems()[0].node, &transparentNode);
+}
+
+TEST_F (SceneDrawListTests, NewMeshNodesHaveNoPreviousStamp)
+{
+    const MeshNode node (makeTriangle());
+
+    EXPECT_EQ (node.previousStamp, 0u);
+    EXPECT_TRUE (node.previousWorld.approximatelyEqualTo (Matrix4()));
+}
+
+TEST_F (SceneDrawListTests, DefaultLightIsAddedOnlyWhenAskedAndTreeHasNone)
+{
+    auto entity = makeEntity();
+    entity->attach<MeshNode> (makeTriangle());
+    root->addChild (entity);
+
+    drawList.build (*root, {});
+    EXPECT_TRUE (drawList.getLights().empty());
+
+    drawList.build (*root, {}, { true });
+    ASSERT_EQ (drawList.getLights().size(), 1u);
+    EXPECT_EQ (drawList.getLights()[0].node->getEntity(), nullptr);
+    EXPECT_EQ (drawList.getLights()[0].node->type, LightNode::Type::directional);
+    EXPECT_EQ (drawList.getLights()[0].node->color, (std::array<float, 3> { 1.0f, 1.0f, 1.0f }));
+    EXPECT_FLOAT_EQ (drawList.getLights()[0].node->intensity, 3.0f);
+    EXPECT_FALSE (drawList.getLights()[0].node->castsShadows);
+    expectNear (drawList.getLights()[0].direction, Vector3<float> (-0.35f, -0.75f, -0.55f).normalized());
+
+    auto lamp = makeEntity();
+    lamp->attach<LightNode> (LightNode::Type::point);
+    root->addChild (lamp);
+
+    drawList.build (*root, {}, { true });
+    ASSERT_EQ (drawList.getLights().size(), 1u);
+    EXPECT_EQ (drawList.getLights()[0].node->type, LightNode::Type::point);
+}

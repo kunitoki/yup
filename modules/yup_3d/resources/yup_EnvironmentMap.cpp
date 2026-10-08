@@ -26,29 +26,6 @@ namespace
 {
 
 //==============================================================================
-uint16 floatToHalf (float value) noexcept
-{
-    uint32 bits = 0;
-    std::memcpy (&bits, &value, sizeof (bits));
-
-    const auto sign = static_cast<uint16> ((bits >> 16) & 0x8000u);
-    const auto exponent = static_cast<int> ((bits >> 23) & 0xffu) - 127 + 15;
-    const auto mantissa = bits & 0x7fffffu;
-
-    if (exponent <= 0)
-        return sign; // Too small for a normal half: flushed to zero
-
-    if (exponent >= 31)
-        return static_cast<uint16> (sign | 0x7bffu); // Clamped to the largest finite half
-
-    // Round to nearest
-    auto half = static_cast<uint32> (sign) | (static_cast<uint32> (exponent) << 10) | (mantissa >> 13);
-    if ((mantissa & 0x1000u) != 0)
-        ++half;
-
-    return static_cast<uint16> (jmin (half, static_cast<uint32> (sign | 0x7bffu)));
-}
-
 /** Halves a level, averaging each 2x2 block by the solid angle of its texels. */
 std::vector<float> downsampleLevel (const std::vector<float>& source, int sourceWidth, int sourceHeight)
 {

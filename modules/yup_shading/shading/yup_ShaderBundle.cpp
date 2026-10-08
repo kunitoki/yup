@@ -49,6 +49,7 @@ constexpr uint32_t kFourCC_VART = makeFourCC ('V', 'A', 'R', 'T');
 constexpr uint32_t kFourCC_REFL = makeFourCC ('R', 'E', 'F', 'L');
 constexpr uint32_t kFourCC_ISRC = makeFourCC ('I', 'S', 'R', 'C');
 constexpr uint32_t kFourCC_BINY = makeFourCC ('B', 'I', 'N', 'Y');
+constexpr uint32_t kFourCC_SBRO = makeFourCC ('S', 'B', 'R', 'O');
 
 constexpr uint32_t kCurrentVersion = 2;
 
@@ -238,6 +239,15 @@ Result ShaderBundle::saveToStream (OutputStream& stream) const
                                 BinaryOutputArchive reflArchive (reflBuf);
                                 detail::doSave (reflArchive, info.reflection);
                                 writeBinaryChunk (buf, kFourCC_REFL, MemoryBlock (reflBuf.getData(), reflBuf.getDataSize()));
+
+                                // The REFL archive is positional, so a field added to it would break
+                                // older bundles: the read-only flags travel in their own chunk.
+                                if (! info.reflection.storageBuffers.empty())
+                                    writeChunk (kFourCC_SBRO, [&]
+                                    {
+                                        for (const auto& sb : info.reflection.storageBuffers)
+                                            buf.writeBool (sb.readOnly);
+                                    });
                             });
                         }
                     });
@@ -304,6 +314,8 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
         info.entryPoint = readStringRaw (vartStream);
         info.source = readStringRaw (vartStream);
 
+        std::vector<bool> storageReadOnly;
+
         iterateChunks (vartStream, [&] (uint32_t fourcc, MemoryInputStream& sub)
         {
             if (fourcc == kFourCC_ISRC)
@@ -324,7 +336,16 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
                 BinaryInputArchive archive (sub);
                 detail::doLoad (archive, info.reflection);
             }
+            else if (fourcc == kFourCC_SBRO)
+            {
+                while (! sub.isExhausted())
+                    storageReadOnly.push_back (sub.readBool());
+            }
         });
+
+        // Bundles written before SBRO existed leave every storage buffer writable.
+        for (size_t i = 0; i < storageReadOnly.size() && i < info.reflection.storageBuffers.size(); ++i)
+            info.reflection.storageBuffers[i].readOnly = storageReadOnly[i];
 
         bundle.shaders.push_back (std::move (info));
     };

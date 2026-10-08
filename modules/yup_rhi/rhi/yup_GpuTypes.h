@@ -101,6 +101,14 @@ struct GpuShaderSource
         backend. Produced by makeGLFixupBlob(). */
     std::vector<uint8> glFixup;
 
+    /** Optional GL texture-sampler pair table (GLSL/ESSL only).
+
+        Lists which texture each sampler is combined with, so the OpenGL
+        backend binds a sampler used with several textures on each of their
+        texture units. Ignored by every non-GL backend. Produced by
+        makeGLTextureSamplerPairsBlob(). */
+    std::vector<uint8> glTextureSamplerPairs;
+
     /** Override the stage entry-point name. Empty → "vs_main" / "fs_main". */
     String entryPoint;
 };
@@ -407,6 +415,15 @@ struct GpuTextureDesc
 
     /** Whether the texture may be used as a render pass attachment. */
     bool renderTarget = false;
+
+    /** Whether compute shaders may write the texture as a storage image, bound
+        with GpuComputePass::setStorageTexture(). Storage textures can still be
+        sampled by later passes.
+
+        @warning Requires GpuDevice::isStorageTextureAvailable(), and cannot be
+                 combined with a sampleCount above 1 or a depth / stencil
+                 format; GpuTexture::create() returns nullptr otherwise. */
+    bool storage = false;
 
     /** Number of mip levels to allocate. Storage is allocated for all of them;
         nothing generates their contents - render or upload each level. */

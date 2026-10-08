@@ -32,6 +32,7 @@
 
 //==============================================================================
 #include "shading/yup_ShaderBundle.cpp"
+#include "shading/yup_WgslBindingLayout.cpp"
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 #include <glslang/glslang.h>

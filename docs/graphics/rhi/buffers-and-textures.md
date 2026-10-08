@@ -87,10 +87,25 @@ ASTC block formats. Availability is not uniform:
 // Block-compressed formats depend on the device.
 if (! device->isFormatSupported (GpuTextureFormat::bc7unorm)) { ... }
 
-// Float *render targets* are extension-gated on OpenGL ES / WebGL2.
+// Float *render targets* are extension-gated on OpenGL ES / WebGL2. There
+// r11g11b10float also needs full float rendering, not just half float.
 auto hdrFormat = device->isFormatRenderable (GpuTextureFormat::rgba16float)
                    ? GpuTextureFormat::rgba16float
                    : GpuTextureFormat::rgba8unorm;
+```
+
+### Generating mip levels
+
+`GpuTexture::generateMips (frame)` fills levels 1 and up by downsampling the level
+above, starting from level 0. It encodes one render pass per level into the frame,
+so level 0 must hold its final contents by the time the frame is submitted. The
+texture must be a single-sampled 2D `renderTarget` with more than one level;
+otherwise it returns false and changes nothing. Array, cube and 3D textures are
+not supported: render each level yourself, as above.
+
+```cpp
+auto frame = GpuFrame::begin (device);
+bool ok = texture->generateMips (frame);
 ```
 
 ### Uploading pixels

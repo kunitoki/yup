@@ -70,6 +70,11 @@ public:
     std::array<float, 3> emissiveFactor { 0.0f, 0.0f, 0.0f }; ///< Linear RGB emitted light.
     Texture::Ptr emissiveTexture;                        ///< sRGB emitted light.
 
+    float emissiveStrength = 1.0f;                       ///< KHR_materials_emissive_strength, multiplies emissiveFactor.
+    float ior = 1.5f;                                    ///< KHR_materials_ior, index of refraction of dielectrics (0 for infinite: full reflection).
+    float specularFactor = 1.0f;                         ///< KHR_materials_specular, strength of the dielectric specular.
+    std::array<float, 3> specularColorFactor { 1.0f, 1.0f, 1.0f }; ///< KHR_materials_specular, linear F0 color of dielectrics.
+
     AlphaMode alphaMode = AlphaMode::opaque;             ///< How alpha is used.
     float alphaCutoff = 0.5f;                            ///< Threshold for AlphaMode::mask.
     bool doubleSided = false;                            ///< True to draw back faces too, with flipped normals.

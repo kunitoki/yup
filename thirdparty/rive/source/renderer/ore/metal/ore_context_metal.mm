@@ -488,6 +488,11 @@ inline rcp<Texture> ContextMetal::mtlMakeTexture(const TextureDesc& desc)
         td.usage |= MTLTextureUsageRenderTarget;
     }
 
+    if (desc.storage)
+    {
+        td.usage |= MTLTextureUsageShaderWrite;
+    }
+
     TextureFormat fmt = desc.format;
     if (fmt == TextureFormat::depth24plusStencil8 ||
         fmt == TextureFormat::depth32floatStencil8)
@@ -975,6 +980,22 @@ inline rcp<BindGroup> ContextMetal::mtlMakeBindGroup(const BindGroupDesc& desc)
             continue;
         bg->m_mtlSamplers.push_back(binding);
         bg->m_retainedSamplers.push_back(ref_rcp(s.sampler));
+    }
+
+    bg->m_mtlStorageBuffers.reserve(desc.storageBufferCount);
+    for (uint32_t i = 0; i < desc.storageBufferCount; i++)
+    {
+        const auto& s = desc.storageBuffers[i];
+        BindGroupMetal::MTLStorageBinding binding;
+        binding.buffer = (__bridge id<MTLBuffer>)s.nativeBuffer;
+        binding.offset = s.offset;
+        if (binding.buffer == nil ||
+            !lookupStages(s.slot,
+                          BindingKind::storageBufferRO,
+                          &binding.vsSlot,
+                          &binding.fsSlot))
+            continue;
+        bg->m_mtlStorageBuffers.push_back(binding);
     }
 
     return bg;

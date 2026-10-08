@@ -1130,6 +1130,8 @@ rcp<Texture> ContextVulkan::makeTexture(const TextureDesc& desc)
         usage |= isDS ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
                       : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     }
+    if (desc.storage)
+        usage |= VK_IMAGE_USAGE_STORAGE_BIT;
 
     VkImageType imageType = VK_IMAGE_TYPE_2D;
     VkImageCreateFlags createFlags = 0;
@@ -1569,6 +1571,24 @@ rcp<BindGroup> ContextVulkan::makeBindGroup(const BindGroupDesc& desc)
         bg->m_imageWrites.push_back(w);
 
         bg->m_retainedSamplers.push_back(ref_rcp(samp.sampler));
+    }
+
+    for (uint32_t i = 0; i < desc.storageBufferCount; ++i)
+    {
+        const auto& sb = desc.storageBuffers[i];
+        uint32_t dstBinding = 0;
+        if (sb.nativeBuffer == nullptr ||
+            !resolveLayout(sb.slot,
+                           BindingKind::storageBufferRO,
+                           &dstBinding))
+            continue;
+
+        BindGroupVulkan::StorageWrite w;
+        w.buffer = *static_cast<const VkBuffer*>(sb.nativeBuffer);
+        w.dstBinding = dstBinding;
+        w.offset = sb.offset;
+        w.range = sb.size > 0 ? sb.size : VK_WHOLE_SIZE;
+        bg->m_storageWrites.push_back(w);
     }
 
     // Resolve once now to preserve fail-fast on device OOM (matching the WGPU

@@ -182,13 +182,16 @@ bool GpuDevice::isFormatRenderable (GpuTextureFormat format) const noexcept
         case GpuTextureFormat::rgba32float:
         case GpuTextureFormat::rg32float:
         case GpuTextureFormat::r32float:
+        // EXT_color_buffer_float lists R11F_G11F_B10F, EXT_color_buffer_half_float does not
+        // (https://registry.khronos.org/OpenGL/extensions/EXT/EXT_color_buffer_float.txt,
+        //  https://registry.khronos.org/OpenGL/extensions/EXT/EXT_color_buffer_half_float.txt).
+        case GpuTextureFormat::r11g11b10float:
             return features.colorBufferFloat;
 
         // WebGL2 can expose half-float attachments without the full-float ones.
         case GpuTextureFormat::rgba16float:
         case GpuTextureFormat::rg16float:
         case GpuTextureFormat::r16float:
-        case GpuTextureFormat::r11g11b10float:
             return features.colorBufferFloat || features.colorBufferHalfFloat;
 
         // Block-compressed formats are never renderable.
@@ -216,7 +219,18 @@ bool GpuDevice::isAnisotropicFilteringAvailable() const noexcept
 uint32_t GpuDevice::getMaximumSampleCount() const noexcept
 {
     auto* oreCtx = getGpuContext();
-    return oreCtx != nullptr ? oreCtx->features().maxSamples : 1u;
+    return oreCtx != nullptr ? std::bit_floor (oreCtx->features().maxSamples) : 1u;
+}
+
+uint32_t GpuDevice::getMaximumSampleCount (GpuTextureFormat format) const noexcept
+{
+    return isFormatRenderable (format) ? getMaximumSampleCount() : 0u;
+}
+
+uint32_t GpuDevice::getMaximumColorAttachments() const noexcept
+{
+    auto* oreCtx = getGpuContext();
+    return oreCtx != nullptr ? jlimit (1u, 4u, oreCtx->features().maxColorAttachments) : 0u;
 }
 
 //==============================================================================
@@ -337,12 +351,13 @@ void GpuDevice::waitFrameCommands (void*)
 void GpuDevice::retireFrameResources (uint64_t generation,
                                       std::vector<rive::rcp<rive::ore::Buffer>> buffers,
                                       std::vector<rive::rcp<rive::ore::TextureView>> views,
-                                      std::vector<rive::rcp<rive::ore::Sampler>> samplers)
+                                      std::vector<rive::rcp<rive::ore::Sampler>> samplers,
+                                      std::vector<ReferenceCountedObjectPtr<GpuBuffer>> storageBuffers)
 {
-    if (buffers.empty() && views.empty() && samplers.empty())
+    if (buffers.empty() && views.empty() && samplers.empty() && storageBuffers.empty())
         return;
 
-    retiredFrames.push_back ({ generation, std::move (buffers), std::move (views), std::move (samplers) });
+    retiredFrames.push_back ({ generation, std::move (buffers), std::move (views), std::move (samplers), std::move (storageBuffers) });
 }
 
 void GpuDevice::releaseRetiredFrames (uint64_t generation)

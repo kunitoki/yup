@@ -588,6 +588,8 @@ rcp<Texture> ContextWGPU::makeTexture(const TextureDesc& desc)
         wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopyDst;
     if (desc.renderTarget)
         usage |= wgpu::TextureUsage::RenderAttachment;
+    if (desc.storage)
+        usage |= wgpu::TextureUsage::StorageBinding;
 
     wgpu::TextureDescriptor wDesc{};
     wDesc.label = desc.label;
@@ -1071,6 +1073,19 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
         assert(sampler != nullptr);
         bg->m_sampEntries.push_back({samp.slot, sampler->m_wgpuSampler});
         bg->m_retainedSamplers.push_back(ref_rcp(sampler));
+    }
+
+    for (uint32_t i = 0; i < desc.storageBufferCount; ++i)
+    {
+        const auto& sb = desc.storageBuffers[i];
+        if (sb.nativeBuffer == nullptr ||
+            !checkLayout(sb.slot, BindingKind::storageBufferRO))
+            continue;
+        bg->m_storageEntries.push_back(
+            {sb.slot,
+             wgpu::Buffer(static_cast<WGPUBuffer>(sb.nativeBuffer)),
+             sb.offset,
+             sb.size});
     }
 
     // Build the initial bind group against the current backings.

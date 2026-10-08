@@ -31,8 +31,9 @@ namespace yup
     it the keyboard focus, so mouse wheel events reach it.
 
     By default the scene is drawn only when the component repaints: call repaint() after
-    changing it. With setContinuousUpdates (true) the component calls Scene::update() and
-    repaints on every display frame, for animated scenes.
+    changing it. The full tier then keeps repainting on its own until its temporal anti-aliasing
+    has converged, see SceneRenderer::isConverged(). With setContinuousUpdates (true) the
+    component calls Scene::update() and repaints on every display frame, for animated scenes.
 
     @see Scene, SceneRenderer
 */
@@ -79,6 +80,7 @@ private:
     Scene::Ptr scene;
     SceneRenderer renderer;
     bool continuousUpdates = false;
+    bool rendered = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneComponent)
 };

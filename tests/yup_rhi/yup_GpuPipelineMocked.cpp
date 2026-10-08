@@ -836,6 +836,96 @@ protected:
         return GpuFrame::begin (headlessCtx);
     }
 
+    /** A resource both stages of a pipeline declare, on the same native slot. */
+    static rive::ore::BindingMap::Entry makeBinding (uint32_t group, uint32_t binding, rive::ore::ResourceKind kind, uint16_t slot)
+    {
+        rive::ore::BindingMap::Entry e;
+        e.group = group;
+        e.binding = binding;
+        e.kind = kind;
+        e.stageMask = rive::ore::BindingMap::kStageVertex | rive::ore::BindingMap::kStageFragment;
+        e.backendSlot[0] = slot;
+        e.backendSlot[1] = slot;
+        return e;
+    }
+
+    /** Compiles a pipeline whose stages declare @p bindings, with one layout per declared group
+        mirroring the description compile() asks for. */
+    GpuPipeline::Ptr compilePipeline (const std::vector<rive::ore::BindingMap::Entry>& bindings)
+    {
+        auto module = rive::make_rcp<TestOreShaderModule>();
+        for (const auto& e : bindings)
+            module->m_bindingMap.push (e);
+        module->m_bindingMap.finalize();
+
+        EXPECT_CALL (*mockOreCtx, makeShaderModule (_))
+            .Times (2)
+            .WillRepeatedly (Return (module));
+        ON_CALL (*mockOreCtx, makeBindGroupLayout (_))
+            .WillByDefault (Invoke ([] (const rive::ore::BindGroupLayoutDesc& desc) -> rive::rcp<rive::ore::BindGroupLayout>
+        {
+            return rive::make_rcp<TestOreBindGroupLayout> (desc);
+        }));
+        EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
+            .WillOnce (Return (rive::make_rcp<TestOrePipeline>()));
+
+        auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
+        EXPECT_TRUE (compileResult.wasOk());
+        return compileResult.getValue();
+    }
+
+    /** Compiles a pipeline declaring one uniform buffer at binding 0 of groups 0, 1 and 2, on
+        native slots counted up from @p firstSlot. */
+    GpuPipeline::Ptr compileThreeGroupPipeline (uint16_t firstSlot = 0)
+    {
+        std::vector<rive::ore::BindingMap::Entry> bindings;
+        for (uint32_t group = 0; group < 3; ++group)
+            bindings.push_back (makeBinding (group, 0, rive::ore::ResourceKind::UniformBuffer, (uint16_t) (firstSlot + group)));
+
+        return compilePipeline (bindings);
+    }
+
+    /** Serves the passes, views and uniform buffers draws ask for, counting bind groups made and bound. */
+    void serveDraws (int& bindGroupsMade, int& bindGroupsBound)
+    {
+        ON_CALL (*mockOreCtx, wrapRiveTexture (_, _, _))
+            .WillByDefault (Invoke ([] (rive::gpu::Texture*, uint32_t, uint32_t)
+        {
+            return rive::make_rcp<TestOreTextureView>();
+        }));
+        ON_CALL (*mockOreCtx, beginRenderPass (_, _))
+            .WillByDefault (Invoke ([&bindGroupsBound] (const rive::ore::RenderPassDesc&, std::string*)
+        {
+            auto* renderPass = new NiceMock<MockOreRenderPass>();
+            ON_CALL (*renderPass, setBindGroup (_, _, _, _))
+                .WillByDefault (Invoke ([&bindGroupsBound] (uint32_t, rive::ore::BindGroup*, const uint32_t*, uint32_t)
+            {
+                ++bindGroupsBound;
+            }));
+            return std::unique_ptr<rive::ore::RenderPass> (renderPass);
+        }));
+        ON_CALL (*mockOreCtx, makeBuffer (_))
+            .WillByDefault (Invoke ([] (const rive::ore::BufferDesc& desc) -> rive::rcp<rive::ore::Buffer>
+        {
+            return rive::make_rcp<NiceMock<MockOreBuffer>> (desc.size);
+        }));
+        ON_CALL (*mockOreCtx, makeBindGroup (_))
+            .WillByDefault (Invoke ([&bindGroupsMade] (const rive::ore::BindGroupDesc&) -> rive::rcp<rive::ore::BindGroup>
+        {
+            ++bindGroupsMade;
+            return rive::make_rcp<TestOreBindGroup>();
+        }));
+    }
+
+    /** A mocked device reporting fragment storage buffers, so setStorageBuffer() keeps its bindings. */
+    class StorageBufferGpuDevice : public OreAndTargetGpuDevice
+    {
+    public:
+        using OreAndTargetGpuDevice::OreAndTargetGpuDevice;
+
+        bool isFragmentStorageBufferAvailable() const noexcept override { return true; }
+    };
+
     std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
     GpuDevice::Ptr ctx;
     yup::GpuDevice::Ptr headlessCtx;
@@ -1160,6 +1250,429 @@ TEST_F (GpuRenderPassMockTests, UniformBuffersAreRecycledAcrossFrames)
         frame.submit();
         frame.waitForGPU();
     }
+}
+
+TEST_F (GpuRenderPassMockTests, UnchangedGroupsReuseTheirBindGroup)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileThreeGroupPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    const float view[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float drawA[4] = { 5.0f, 6.0f, 7.0f, 8.0f };
+    const float drawB[4] = { 9.0f, 10.0f, 11.0f, 12.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    pass.setUniformBuffer (0, 0, view, sizeof (view));
+    pass.setUniformBuffer (1, 0, view, sizeof (view));
+    pass.setUniformBuffer (2, 0, drawA, sizeof (drawA));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 3);
+    EXPECT_EQ (bound, 3);
+
+    pass.setUniformBuffer (2, 0, drawB, sizeof (drawB));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 4);
+    EXPECT_EQ (bound, 6);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, IdenticalUniformBytesDoNotRebuildTheGroup)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileThreeGroupPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float same[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    for (int group = 0; group < 3; ++group)
+        pass.setUniformBuffer (group, 0, uniforms, sizeof (uniforms));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 3);
+
+    pass.setUniformBuffer (0, 0, same, sizeof (same));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 3);
+    EXPECT_EQ (bound, 6);
+
+    // Same leading bytes but a different size is a change
+    pass.setUniformBuffer (0, 0, same, sizeof (float) * 2);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 4);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, EverySetterDirtiesOnlyItsGroup)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileThreeGroupPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    for (int group = 0; group < 3; ++group)
+        pass.setUniformBuffer (group, 0, uniforms, sizeof (uniforms));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 3);
+
+    pass.setTexture (1, 1, nullptr);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 4);
+
+    pass.setTexture (2, 1, nullptr, GpuTextureViewDesc());
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 5);
+
+    pass.setSampler (0, 2, nullptr);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 6);
+
+    // A group the pipeline does not declare touches no bind group
+    pass.setTexture (7, 0, nullptr);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 6);
+    EXPECT_EQ (bound, 15);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, ChangingThePipelineLayoutRebuildsEveryGroup)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    // Every group of the second pipeline declares the same resource on another native slot
+    auto first = compileThreeGroupPipeline();
+    auto second = compileThreeGroupPipeline (3);
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (first);
+    for (int group = 0; group < 3; ++group)
+        pass.setUniformBuffer (group, 0, uniforms, sizeof (uniforms));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 3);
+
+    pass.setPipeline (first);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 3);
+
+    pass.setPipeline (second);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 6);
+
+    pass.setPipeline (first);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 9);
+    EXPECT_EQ (bound, 12);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, PipelinesSharingAGroupLayoutReuseItsBindGroup)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    // Every compile creates its own default samplers, equal in all but identity
+    ON_CALL (*mockOreCtx, makeSampler (_))
+        .WillByDefault (Invoke ([] (const rive::ore::SamplerDesc&) -> rive::rcp<rive::ore::Sampler>
+    {
+        return rive::make_rcp<TestOreSampler>();
+    }));
+
+    using RK = rive::ore::ResourceKind;
+    auto first = compilePipeline ({ makeBinding (0, 0, RK::UniformBuffer, 0),
+                                    makeBinding (0, 1, RK::Sampler, 0),
+                                    makeBinding (2, 0, RK::UniformBuffer, 1) });
+    auto second = compilePipeline ({ makeBinding (0, 0, RK::UniformBuffer, 0),
+                                     makeBinding (0, 1, RK::Sampler, 0),
+                                     makeBinding (2, 0, RK::UniformBuffer, 1),
+                                     makeBinding (2, 1, RK::SampledTexture, 0) });
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (first);
+    pass.setUniformBuffer (0, 0, uniforms, sizeof (uniforms));
+    pass.setUniformBuffer (2, 0, uniforms, sizeof (uniforms));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 2);
+
+    // Only group 2, whose layout differs, is rebuilt
+    pass.setPipeline (second);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 3);
+
+    pass.setPipeline (first);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 4);
+    EXPECT_EQ (bound, 6);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, EqualLayoutsWithDifferentDefaultSamplersRebuildTheGroup)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    using RK = rive::ore::ResourceKind;
+    const std::vector<rive::ore::BindingMap::Entry> bindings { makeBinding (0, 0, RK::UniformBuffer, 0),
+                                                               makeBinding (0, 1, RK::Sampler, 0) };
+
+    // The first pipeline is left without a default sampler, the second gets one
+    EXPECT_CALL (*mockOreCtx, makeSampler (_))
+        .WillOnce (Return (rive::rcp<rive::ore::Sampler>()));
+    auto first = compilePipeline (bindings);
+
+    auto secondSampler = rive::make_rcp<TestOreSampler>();
+    EXPECT_CALL (*mockOreCtx, makeSampler (_))
+        .WillOnce (Return (secondSampler));
+    auto second = compilePipeline (bindings);
+
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    const rive::ore::Sampler* boundSampler = nullptr;
+    ON_CALL (*mockOreCtx, makeBindGroup (_))
+        .WillByDefault (Invoke ([&made, &boundSampler] (const rive::ore::BindGroupDesc& desc) -> rive::rcp<rive::ore::BindGroup>
+    {
+        ++made;
+        boundSampler = desc.samplerCount > 0 ? desc.samplers[0].sampler : nullptr;
+        return rive::make_rcp<TestOreBindGroup>();
+    }));
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (first);
+    pass.setUniformBuffer (0, 0, uniforms, sizeof (uniforms));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 1);
+    EXPECT_EQ (boundSampler, nullptr);
+
+    pass.setPipeline (second);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 2);
+    EXPECT_EQ (boundSampler, secondSampler.get());
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, SetStorageBufferOnUnsupportedDeviceIsIgnored)
+{
+    // A storage buffer with a native handle, which this mocked device must still refuse to bind
+    auto storageDevice = GpuDevice::create (GpuPlatform::Metal, {});
+    if (storageDevice == nullptr || ! storageDevice->isFragmentStorageBufferAvailable())
+        GTEST_SKIP() << "No device with fragment storage buffers to create the buffer on";
+
+    const float color[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+    auto buffer = storageDevice->createBuffer (GpuBufferType::storage, color, sizeof (color));
+    ASSERT_NE (buffer, nullptr);
+
+    ASSERT_FALSE (ctx->isFragmentStorageBufferAvailable());
+
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto bgl = rive::make_rcp<TestOreBindGroupLayout>();
+    bgl->addEntry (0, rive::ore::BindingKind::storageBufferRO);
+
+    EXPECT_CALL (*mockOreCtx, makeShaderModule (_))
+        .WillOnce (Return (makeShaderModuleWithBindingMap()))
+        .WillOnce (Return (makeShaderModuleWithBindingMap()));
+    EXPECT_CALL (*mockOreCtx, makeBindGroupLayout (_))
+        .WillOnce (Return (bgl));
+    EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
+        .WillOnce (Return (rive::make_rcp<TestOrePipeline>()));
+
+    auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
+    ASSERT_TRUE (compileResult.wasOk());
+
+    ON_CALL (*mockOreCtx, wrapRiveTexture (_, _, _))
+        .WillByDefault (Invoke ([] (rive::gpu::Texture*, uint32_t, uint32_t)
+    {
+        return rive::make_rcp<TestOreTextureView>();
+    }));
+    ON_CALL (*mockOreCtx, beginRenderPass (_, _))
+        .WillByDefault (Invoke ([] (const rive::ore::RenderPassDesc&, std::string*)
+    {
+        return std::unique_ptr<rive::ore::RenderPass> (new NiceMock<MockOreRenderPass>());
+    }));
+    ON_CALL (*mockOreCtx, makeBindGroup (_))
+        .WillByDefault (Invoke ([] (const rive::ore::BindGroupDesc& desc)
+    {
+        EXPECT_EQ (0u, desc.storageBufferCount);
+        return rive::make_rcp<TestOreBindGroup>();
+    }));
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compileResult.getValue());
+    pass.setStorageBuffer (0, 0, buffer);
+    EXPECT_TRUE (pass.draw (3));
+    pass.finish();
+    frame.submit();
+    frame.waitForGPU();
+
+    EXPECT_EQ (buffer->getReferenceCount(), 1);
+}
+
+TEST_F (GpuRenderPassMockTests, StorageBufferMeetingAWritableBlockSkipsTheDraw)
+{
+    auto storageDevice = GpuDevice::create (GpuPlatform::Metal, {});
+    if (storageDevice == nullptr || ! storageDevice->isFragmentStorageBufferAvailable())
+        GTEST_SKIP() << "No device with fragment storage buffers to create the buffer on";
+
+    const float color[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+    auto buffer = storageDevice->createBuffer (GpuBufferType::storage, color, sizeof (color));
+    ASSERT_NE (buffer, nullptr);
+
+    ctx = new StorageBufferGpuDevice (mockOreCtx.get(), MockOffscreenTarget::withGpuTexture (256, 128));
+
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    // Render passes only bind read-only storage buffers
+    auto bgl = rive::make_rcp<TestOreBindGroupLayout>();
+    bgl->addEntry (0, rive::ore::BindingKind::storageBufferRW);
+
+    EXPECT_CALL (*mockOreCtx, makeShaderModule (_))
+        .WillOnce (Return (makeShaderModuleWithBindingMap()))
+        .WillOnce (Return (makeShaderModuleWithBindingMap()));
+    EXPECT_CALL (*mockOreCtx, makeBindGroupLayout (_))
+        .WillOnce (Return (bgl));
+    EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
+        .WillOnce (Return (rive::make_rcp<TestOrePipeline>()));
+
+    auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
+    ASSERT_TRUE (compileResult.wasOk());
+
+    int made = 0, bound = 0, draws = 0;
+    serveDraws (made, bound);
+    ON_CALL (*mockOreCtx, beginRenderPass (_, _))
+        .WillByDefault (Invoke ([&draws] (const rive::ore::RenderPassDesc&, std::string*)
+    {
+        auto* renderPass = new NiceMock<MockOreRenderPass>();
+        ON_CALL (*renderPass, draw (_, _, _, _))
+            .WillByDefault (Invoke ([&draws] (uint32_t, uint32_t, uint32_t, uint32_t)
+        {
+            ++draws;
+        }));
+        return std::unique_ptr<rive::ore::RenderPass> (renderPass);
+    }));
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compileResult.getValue());
+    pass.setStorageBuffer (0, 0, buffer);
+    EXPECT_FALSE (pass.draw (3));
+    EXPECT_EQ (draws, 0);
+    EXPECT_TRUE (pass.isValid());
+
+    // The pass keeps drawing once the offending binding is cleared
+    pass.setStorageBuffer (0, 0, nullptr);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (draws, 1);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, GroupMissingADeclaredResourceIsRebuiltByTheNextDraw)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileThreeGroupPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    // The first uniform buffer cannot be allocated, so its group is built without it
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .WillOnce (ReturnNull())
+        .WillRepeatedly (Invoke ([] (const rive::ore::BufferDesc& desc) -> rive::rcp<rive::ore::Buffer>
+    {
+        return rive::make_rcp<NiceMock<MockOreBuffer>> (desc.size);
+    }));
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    for (int group = 0; group < 3; ++group)
+        pass.setUniformBuffer (group, 0, uniforms, sizeof (uniforms));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 3);
+
+    // Nothing changed, but the incomplete group must not be reused
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 4);
+
+    pass.finish();
+    frame.submit();
 }
 
 TEST_F (GpuRenderPassMockTests, SetPipelineOnValidPassStoresPipeline)

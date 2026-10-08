@@ -26,6 +26,7 @@
 
 #include "yup_GpuDevice.cpp"
 #include "yup_GpuTarget.cpp"
+// Defines GpuReadbackFixture: keep it ahead of yup_GpuComputePass.cpp and native/yup_GpuDevice_linux.cpp
 #include "yup_GpuTexture.cpp"
 #include "yup_GpuPipeline.cpp"
 #include "yup_GpuPipelineMocked.cpp"

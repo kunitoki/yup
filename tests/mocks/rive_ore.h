@@ -146,6 +146,13 @@ struct TestOreBindGroupLayout : public rive::ore::BindGroupLayout
 {
     TestOreBindGroupLayout() = default;
 
+    /** Mirrors a layout description, as a backend's makeBindGroupLayout() does. */
+    explicit TestOreBindGroupLayout (const rive::ore::BindGroupLayoutDesc& desc)
+    {
+        m_groupIndex = desc.groupIndex;
+        m_entries.assign (desc.entries, desc.entries + desc.entryCount);
+    }
+
     /** Declares a binding, so tests can exercise layout-driven code paths. */
     void addEntry (uint32_t binding, rive::ore::BindingKind kind)
     {

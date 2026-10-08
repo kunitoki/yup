@@ -95,6 +95,7 @@ struct GpuShaderSource
     Span<const uint8> code;                               // source/bytecode
     Span<const uint8> bindingMap;                         // mandatory RSTB sidecar
     Span<const uint8> glFixup;                            // GL-only name→slot table
+    Span<const uint8> glTextureSamplerPairs;              // GL-only texture-sampler pairs
     String            entryPoint;                         // empty → "vs_main" / "fs_main"
 };
 ```
@@ -102,7 +103,7 @@ struct GpuShaderSource
 `GpuShaderLanguage` values: `wgsl` (WebGPU), `glsl` (GLES 3.0+, GL path only),
 `msl` (Metal only), `hlsl` (Direct3D only).
 
-The three blob fields **own their data** (`std::vector<uint8>`), so a descriptor
+The blob fields **own their data** (`std::vector<uint8>`), so a descriptor
 built from temporaries stays valid for as long as the descriptor does.
 `gpuShaderSourceBytes()` builds one from source text:
 
@@ -150,6 +151,39 @@ validates against the shader itself - so a `textureCube`, `texture3D`,
 > ...
 > vec3 c = textureLod (samplerCube (u_env, u_samp), direction, lod).rgb;
 > ```
+
+### Several bind groups
+
+A graphics pipeline can spread its resources over several bind groups
+(`set = 0, 1, 2...`) on every backend, and the groups may reuse binding
+numbers: `layout(set = 0, binding = 0)` and `layout(set = 2, binding = 0)` are
+two different resources, bound with `pass.setUniformBuffer (0, 0, ...)` and
+`pass.setUniformBuffer (2, 0, ...)`.
+
+Metal, Direct3D 11 and OpenGL have no descriptor sets, so `compileFromGlsl()`
+and `yup_shader_bundler` assign their native slots automatically when the
+vertex and fragment stages are compiled together. Each kind of resource
+(buffers, textures, samplers) is numbered in (set, binding) order across both
+stages, and a resource both stages use gets the same slot in each. Vulkan and
+WebGPU keep the sets as they are. When you drive `ShaderBundleCompiler`
+yourself, put the vertex and fragment entries in the same request, each with
+its own `ShaderBundleEntry::source`.
+
+Switching pipelines inside a render pass only rebuilds the bind groups of the
+sets the two pipelines declare differently. A set declared identically in both
+(same resources, stages, native slots and default samplers) keeps its bind
+group. Declare the per-view resources the same way in every variant of a
+pipeline, for example in `set = 0`, and their bind group is built once and
+reused across the switches.
+
+GLSL combines each texture with its sampler on the texture's unit, so on
+OpenGL a sampler used with several textures is bound on each of their units.
+`compileFromBundle()` passes the pairs to the GL backend in
+`GpuShaderSource::glTextureSamplerPairs`, built by
+`makeGLTextureSamplerPairsBlob()`.
+
+Compute pipelines are not renumbered: a compute shader's resources bind at
+their declared binding, as described in [Compute shaders](compute-shaders.md).
 
 ### The GL fixup blob
 

@@ -26,427 +26,446 @@ namespace
 {
 
 //==============================================================================
-/*
-
-// The scene, shadow and background shaders are precompiled into .ysl bundles embedded in
-// yup_SceneRendererShader.inc, yup_SceneShadowShader.inc and yup_SceneBackgroundShader.inc
-// (do not edit by hand). Regenerate them after changing their .vert / .frag with (absolute
-// paths, the recipe runs in the shader bundler folder):
-
-   for name in SceneRendererShader SceneShadowShader SceneBackgroundShader; do
-     just shader_bundler \
-        --vert   "$PWD/modules/yup_3d/shaders/yup_$name.vert" \
-        --frag   "$PWD/modules/yup_3d/shaders/yup_$name.frag" \
-        --output /tmp/yup_$name.ysl \
-        --target-langs glsl,essl,hlsl,msl,spirv,wgsl
-
-     # then embed the bundle bytes into the .inc (keep the two-line comment header)
-     xxd -i /tmp/yup_$name.ysl \
-        | sed -e '1d' -e '/^};/d' -e '/_len =/d' -e '/^[[:space:]]*$/d' \
-        > /tmp/yup_$name.inc.body
-     { echo "// Generated shader bundle (yup_$name.ysl) - do not edit by hand."; \
-       echo '// Regenerate with the command at the top of yup_SceneRenderer.cpp.'; \
-       cat /tmp/yup_$name.inc.body; } \
-        > modules/yup_3d/shaders/yup_$name.inc
-   done
-
+/** FNV-1a over the values a frame depends on. Floats are canonicalized first, so 0 and -0, and
+    NaNs of any payload, hash the same.
 */
-
-constexpr uint8_t sceneRendererShaderBundle[] = {
-#include "../shaders/yup_SceneRendererShader.inc"
-};
-constexpr uint8_t sceneShadowShaderBundle[] = {
-#include "../shaders/yup_SceneShadowShader.inc"
-};
-constexpr uint8_t sceneBackgroundShaderBundle[] = {
-#include "../shaders/yup_SceneBackgroundShader.inc"
-};
-
-//==============================================================================
-// std140 mirrors of the uniform blocks in yup_SceneRendererShader.vert / .frag
-
-struct SceneFrameData
+class FrameSignature
 {
-    float view[16];
-    float projection[16];
-    float cameraPosition[4];
-    float ambient[4];
-    float lightInfo[4];
-    float lightPositions[SceneRenderer::maxLights][4];
-    float lightDirections[SceneRenderer::maxLights][4];
-    float lightColors[SceneRenderer::maxLights][4];
-    float lightSpots[SceneRenderer::maxLights][4];
-    float shadowMatrix[16];
-    float shadowInfo[4];
-    float environmentInfo[4];
-    float irradiance[9][4];
+public:
+    void addBits (uint64 value) noexcept
+    {
+        addBytes (value, 8);
+    }
+
+    void addFloat (float value) noexcept
+    {
+        auto bits = std::bit_cast<uint32> (value);
+
+        if ((bits & 0x7f800000u) == 0x7f800000u && (bits & 0x007fffffu) != 0)
+            bits = 0x7fc00000u;
+        else if (bits == 0x80000000u)
+            bits = 0;
+
+        addBytes (bits, 4);
+    }
+
+    void addFloats (Span<const float> values) noexcept
+    {
+        for (const auto value : values)
+            addFloat (value);
+    }
+
+    void addPointer (const void* pointer) noexcept
+    {
+        addBits (static_cast<uint64> (reinterpret_cast<uintptr_t> (pointer)));
+    }
+
+    void addVector (const Vector3<float>& vector) noexcept
+    {
+        addFloat (vector.getX());
+        addFloat (vector.getY());
+        addFloat (vector.getZ());
+    }
+
+    void addMatrix (const Matrix4& matrix) noexcept
+    {
+        addFloats (Span<const float> (matrix.getData(), 16));
+    }
+
+    uint64 get() const noexcept { return hash; }
+
+    /** The hash through the splitmix64 finalizer. Sums of plain FNV-1a hashes of similar items
+        cancel out (two primitives of one mesh changing together leave the sum unchanged), sums of
+        finalized ones don't.
+    */
+    uint64 getFinalized() const noexcept
+    {
+        auto z = hash;
+        z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ull;
+        z = (z ^ (z >> 27)) * 0x94d049bb133111ebull;
+        return z ^ (z >> 31);
+    }
+
+private:
+    void addBytes (uint64 value, int count) noexcept
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            hash ^= (value >> (i * 8)) & 0xff;
+            hash *= 1099511628211ull;
+        }
+    }
+
+    uint64 hash = 14695981039346656037ull;
 };
 
-struct SceneShadowData
+std::array<const Texture::Ptr*, 5> getMaterialTextures (const Material& material) noexcept
 {
-    float shadowMatrix[16];
-};
-
-struct SceneBackgroundData
-{
-    float inverseViewProjection[16];
-    float info[4];
-};
-
-struct SceneDrawData
-{
-    float model[16];
-    float normalMatrix[16];
-};
-
-struct SceneMaterialData
-{
-    float baseColorFactor[4];
-    float emissiveFactor[4];
-    float params[4];
-    float flags[4];
-};
-
-static_assert (sizeof (SceneFrameData) == 928 && sizeof (SceneFrameData) % 16 == 0);
-static_assert (sizeof (SceneShadowData) == 64);
-static_assert (sizeof (SceneBackgroundData) == 80);
-static_assert (sizeof (SceneDrawData) == 128);
-static_assert (sizeof (SceneMaterialData) == 64);
-
-float sceneSrgbToLinear (float value) noexcept
-{
-    return value <= 0.04045f ? value / 12.92f : std::pow ((value + 0.055f) / 1.055f, 2.4f);
+    return { &material.baseColorTexture, &material.metallicRoughnessTexture, &material.normalTexture,
+             &material.occlusionTexture, &material.emissiveTexture };
 }
 
-void copySceneMatrix (const Matrix4& matrix, float* destination) noexcept
+void addMaterialSignature (FrameSignature& signature, const Material& material)
 {
-    std::copy_n (matrix.getData(), 16, destination);
-}
+    signature.addPointer (&material);
+    signature.addFloats (material.baseColorFactor);
+    signature.addFloats (material.emissiveFactor);
+    signature.addFloat (material.metallicFactor);
+    signature.addFloat (material.roughnessFactor);
+    signature.addFloat (material.normalScale);
+    signature.addFloat (material.occlusionStrength);
+    signature.addFloat (material.alphaCutoff);
+    signature.addBits (static_cast<uint64> (material.alphaMode));
+    signature.addBits (material.doubleSided ? 1u : 0u);
+    signature.addFloat (material.emissiveStrength);
+    signature.addFloat (material.ior);
+    signature.addFloat (material.specularFactor);
+    signature.addFloats (material.specularColorFactor);
 
-GpuTexture::Ptr createSolidSceneTexture (const GpuDevice::Ptr& device, uint32 rgba)
-{
-    auto texture = GpuTexture::create (device, GpuTextureDesc (1, 1, GpuTextureFormat::rgba8unorm));
-    if (texture == nullptr)
-        return nullptr;
-
-    const uint8 texel[] = { static_cast<uint8> (rgba >> 24), static_cast<uint8> (rgba >> 16), static_cast<uint8> (rgba >> 8), static_cast<uint8> (rgba) };
-
-    GpuTextureDataDesc data;
-    data.data = texel;
-    return texture->upload (data) ? texture : nullptr;
+    for (const auto* texture : getMaterialTextures (material))
+        signature.addPointer (texture->get());
 }
 
 } // namespace
 
 //==============================================================================
-
 struct SceneRenderer::Impl
 {
-    GpuDevice::Ptr device;
-    std::array<GpuPipeline::Ptr, 8> pipelines; // [blend * 4 + doubleSided * 2 + mirrored]
-    uint32_t sampleCount = 1;
-    GpuTarget::Ptr colorTarget;
-    GpuTarget::Ptr multisampledTarget;
-    GpuTexture::Ptr depthTexture;
-    GpuTexture::Ptr whiteTexture;
-    GpuTexture::Ptr blackTexture;
-    GpuTexture::Ptr flatNormalTexture;
-    GpuSampler::Ptr defaultSampler;
-    GpuPipeline::Ptr shadowPipeline;
-    GpuPipeline::Ptr backgroundPipeline;
-    GpuTarget::Ptr shadowTarget;
-    GpuTexture::Ptr shadowDepthTexture;
-    SceneDrawList drawList;
-    std::optional<Result> preparation;
-
-    static size_t getPipelineIndex (const SceneDrawList::DrawItem& item) noexcept
+    Impl (GpuDevice::Ptr deviceToUse, uint32_t samples)
+        : device (std::move (deviceToUse))
+        , sampleCount (samples)
+        , deviceFacts (RenderCapabilities::queryDevice (*device))
+        , frameResources (device)
     {
-        return (item.material->alphaMode == Material::AlphaMode::blend ? 4u : 0u)
-             + (item.material->doubleSided ? 2u : 0u)
-             + (item.mirrored ? 1u : 0u);
     }
 
-    /** Creates the pipelines and default textures once, remembering a failure instead of retrying every frame. */
-    Result prepareResources()
+    /** Creates the pipelines once per target formats, remembering a failure instead of retrying every frame. */
+    Result prepareResources (const ForwardPass::Targets& targets, uint32_t forwardSamples)
     {
-        if (! preparation)
-            preparation = createResources();
+        if (auto result = shadowRenderer.prepare (device); result.failed())
+            return result;
 
-        return *preparation;
+        return forwardPass.prepare (device, targets, forwardSamples);
     }
 
-    Result createResources()
+    /** The canvas-backed colorTarget of both tiers, plus the depth of the raster tier. */
+    bool prepareTargets (int width, int height, bool raster)
     {
-        whiteTexture = createSolidSceneTexture (device, 0xffffffff);
-        blackTexture = createSolidSceneTexture (device, 0x000000ff);
-        flatNormalTexture = createSolidSceneTexture (device, 0x8080ffff);
-        defaultSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::repeat));
-
-        if (whiteTexture == nullptr || blackTexture == nullptr || flatNormalTexture == nullptr || defaultSampler == nullptr)
-            return Result::fail ("Unable to create the default scene textures");
-
-        auto bundle = ShaderBundle::loadFromData (sceneRendererShaderBundle, sizeof (sceneRendererShaderBundle));
-        if (bundle.failed())
-            return Result::fail ("Unable to load the scene shader bundle: " + bundle.getErrorMessage());
-
-        for (size_t index = 0; index < pipelines.size(); ++index)
-        {
-            const auto blend = (index & 4) != 0;
-            const auto doubleSided = (index & 2) != 0;
-            const auto mirrored = (index & 1) != 0;
-
-            GpuPipelineOptions options;
-            options.vertexBuffers.emplace_back (
-                static_cast<uint32_t> (sizeof (Mesh::Vertex)),
-                GpuVertexStepMode::vertex,
-                std::vector<GpuVertexAttribute> {
-                    { GpuVertexFormat::float3, static_cast<uint32_t> (offsetof (Mesh::Vertex, position)), 0 },
-                    { GpuVertexFormat::float3, static_cast<uint32_t> (offsetof (Mesh::Vertex, normal)), 1 },
-                    { GpuVertexFormat::float2, static_cast<uint32_t> (offsetof (Mesh::Vertex, uv)), 2 },
-                    { GpuVertexFormat::float4, static_cast<uint32_t> (offsetof (Mesh::Vertex, color)), 3 },
-                });
-            options.topology = GpuPrimitiveTopology::triangleList;
-            options.indexFormat = GpuIndexFormat::uint32;
-            options.cullMode = doubleSided ? GpuCullMode::none : GpuCullMode::back;
-
-            // A mirroring transform reverses the winding of the triangles on screen
-            options.winding = mirrored ? GpuFaceWinding::clockwise : GpuFaceWinding::counterClockwise;
-
-            auto& target = options.colorTargets.emplace_back();
-            target.format = GpuTextureFormat::rgba8unorm;
-            target.blendEnabled = blend;
-
-            options.depthStencil.enabled = true;
-            options.depthStencil.format = GpuTextureFormat::depth24plusStencil8;
-            options.depthStencil.depthCompare = GpuCompareFunction::lessEqual;
-            options.depthStencil.depthWriteEnabled = ! blend;
-            options.sampleCount = sampleCount;
-
-            auto result = GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
-            if (result.failed())
-                return Result::fail ("Unable to compile the scene pipeline: " + result.getErrorMessage());
-
-            pipelines[index] = result.getValue();
-        }
-
-        // Depth seen from the shadow casting light, packed into rgba8unorm; the body of a model
-        // can mix windings, so nothing is culled
-        auto shadowBundle = ShaderBundle::loadFromData (sceneShadowShaderBundle, sizeof (sceneShadowShaderBundle));
-        if (shadowBundle.failed())
-            return Result::fail ("Unable to load the shadow shader bundle: " + shadowBundle.getErrorMessage());
-
-        GpuPipelineOptions shadowOptions;
-        shadowOptions.vertexBuffers.emplace_back (
-            static_cast<uint32_t> (sizeof (Mesh::Vertex)),
-            GpuVertexStepMode::vertex,
-            std::vector<GpuVertexAttribute> { { GpuVertexFormat::float3, static_cast<uint32_t> (offsetof (Mesh::Vertex, position)), 0 } });
-        shadowOptions.topology = GpuPrimitiveTopology::triangleList;
-        shadowOptions.indexFormat = GpuIndexFormat::uint32;
-        shadowOptions.cullMode = GpuCullMode::none;
-        auto& shadowTarget = shadowOptions.colorTargets.emplace_back();
-        shadowTarget.format = GpuTextureFormat::rgba8unorm;
-        shadowTarget.blendEnabled = false; // The packed depth uses all four channels, alpha included
-        shadowOptions.depthStencil.enabled = true;
-        shadowOptions.depthStencil.format = GpuTextureFormat::depth24plusStencil8;
-        shadowOptions.depthStencil.depthCompare = GpuCompareFunction::lessEqual;
-        shadowOptions.depthStencil.depthWriteEnabled = true;
-
-        auto shadowResult = GpuPipeline::compileFromBundle (device, shadowBundle.getReference(), shadowOptions);
-        if (shadowResult.failed())
-            return Result::fail ("Unable to compile the shadow pipeline: " + shadowResult.getErrorMessage());
-
-        shadowPipeline = shadowResult.getValue();
-
-        // The environment behind everything: drawn first, without testing or writing depth
-        auto backgroundBundle = ShaderBundle::loadFromData (sceneBackgroundShaderBundle, sizeof (sceneBackgroundShaderBundle));
-        if (backgroundBundle.failed())
-            return Result::fail ("Unable to load the background shader bundle: " + backgroundBundle.getErrorMessage());
-
-        GpuPipelineOptions backgroundOptions;
-        backgroundOptions.topology = GpuPrimitiveTopology::triangleList;
-        backgroundOptions.cullMode = GpuCullMode::none;
-        auto& backgroundTarget = backgroundOptions.colorTargets.emplace_back();
-        backgroundTarget.format = GpuTextureFormat::rgba8unorm;
-        backgroundTarget.blendEnabled = false;
-        backgroundOptions.depthStencil.enabled = true;
-        backgroundOptions.depthStencil.format = GpuTextureFormat::depth24plusStencil8;
-        backgroundOptions.depthStencil.depthCompare = GpuCompareFunction::always;
-        backgroundOptions.depthStencil.depthWriteEnabled = false;
-        backgroundOptions.sampleCount = sampleCount;
-
-        auto backgroundResult = GpuPipeline::compileFromBundle (device, backgroundBundle.getReference(), backgroundOptions);
-        if (backgroundResult.failed())
-            return Result::fail ("Unable to compile the background pipeline: " + backgroundResult.getErrorMessage());
-
-        backgroundPipeline = backgroundResult.getValue();
-
-        return Result::ok();
-    }
-
-    bool prepareTargets (int width, int height)
-    {
-        if (colorTarget != nullptr && colorTarget->getWidth() == width && colorTarget->getHeight() == height)
+        if (colorTarget != nullptr && colorTarget->getWidth() == width && colorTarget->getHeight() == height
+            && (depthTexture != nullptr) == raster)
             return true;
 
         const auto w = static_cast<uint32_t> (width);
         const auto h = static_cast<uint32_t> (height);
 
-        // With MSAA the pass draws into multisampled color and depth, resolved into colorTarget
+        colorTarget = GpuTarget::create (device, width, height);
+        depthTexture = nullptr;
+
+        if (! raster)
+            return colorTarget != nullptr;
+
+        // With MSAA the pass draws into multisampled depth, and color from getForwardTargets()
         GpuTextureDesc depthDesc (w, h, GpuTextureFormat::depth24plusStencil8, true);
         depthDesc.sampleCount = sampleCount;
         depthDesc.label = "SceneRenderer depth";
 
-        colorTarget = GpuTarget::create (device, width, height);
         depthTexture = GpuTexture::create (device, depthDesc);
-        multisampledTarget = nullptr;
-
-        if (sampleCount > 1)
-        {
-            GpuTextureDesc colorDesc (w, h, GpuTextureFormat::rgba8unorm, true);
-            colorDesc.sampleCount = sampleCount;
-            colorDesc.label = "SceneRenderer multisampled color";
-
-            multisampledTarget = GpuTarget::create (device, colorDesc);
-            if (multisampledTarget == nullptr)
-                return false;
-        }
 
         return colorTarget != nullptr && depthTexture != nullptr;
     }
 
-    bool prepareShadowTarget()
+    /** Raster: the MSAA rgba8 color from the frame pool, released after a frame without it (raster
+        HDR), resolved into the canvas-backed colorTarget. Without MSAA, colorTarget itself.
+    */
+    ForwardPass::Targets getForwardTargets()
     {
-        if (shadowTarget != nullptr && shadowDepthTexture != nullptr)
-            return true;
+        ForwardPass::Targets targets;
+        targets.color = colorTarget->asTexture();
+        targets.depth = depthTexture;
 
-        const auto size = static_cast<uint32_t> (shadowMapSize);
+        if (sampleCount > 1)
+        {
+            GpuTextureDesc desc (static_cast<uint32_t> (colorTarget->getWidth()), static_cast<uint32_t> (colorTarget->getHeight()), GpuTextureFormat::rgba8unorm, true);
+            desc.sampleCount = sampleCount;
+            desc.label = "SceneRenderer multisampled color";
 
-        GpuTextureDesc colorDesc (size, size, GpuTextureFormat::rgba8unorm, true);
-        colorDesc.label = "SceneRenderer shadow map";
+            targets.resolve = targets.color;
+            targets.color = frameResources.acquire (desc);
+        }
 
-        GpuTextureDesc depthDesc (size, size, GpuTextureFormat::depth24plusStencil8, true);
-        depthDesc.label = "SceneRenderer shadow depth";
-
-        shadowTarget = GpuTarget::create (device, colorDesc);
-        shadowDepthTexture = GpuTexture::create (device, depthDesc);
-
-        return shadowTarget != nullptr && shadowDepthTexture != nullptr;
+        return targets;
     }
 
-    void bindTexture (GpuRenderPass& pass, int textureBinding, const Texture::Ptr& texture, const GpuTexture::Ptr& fallback)
+    /** Raster HDR opt-in: rgba16float color with the raster sample count, resolved into a
+        single-sampled one when multisampled, from the frame pool. The depth stays the raster one.
+    */
+    ForwardPass::Targets acquireRasterHdrTargets (int width, int height)
     {
-        if (texture != nullptr)
-        {
-            auto gpuTexture = texture->getGpuTexture (device);
-            auto gpuSampler = texture->getGpuSampler (device);
+        GpuTextureDesc desc (static_cast<uint32_t> (width), static_cast<uint32_t> (height), GpuTextureFormat::rgba16float, true);
+        desc.label = "SceneRenderer HDR scene color";
 
-            if (gpuTexture != nullptr && gpuSampler != nullptr)
+        ForwardPass::Targets targets;
+        targets.color = frameResources.acquire (desc);
+        targets.depth = depthTexture;
+
+        if (sampleCount > 1 && targets.color != nullptr)
+        {
+            desc.sampleCount = sampleCount;
+            desc.label = "SceneRenderer multisampled HDR scene color";
+
+            targets.resolve = targets.color;
+            targets.color = frameResources.acquire (desc);
+        }
+
+        return targets;
+    }
+
+    /** Full: single-sampled HDR scene color, sampled depth and velocity, from the frame pool. */
+    ForwardPass::Targets acquireFullTargets (int width, int height)
+    {
+        const auto acquire = [&] (GpuTextureFormat format, const char* label)
+        {
+            GpuTextureDesc desc (static_cast<uint32_t> (width), static_cast<uint32_t> (height), format, true);
+            desc.label = label;
+            return frameResources.acquire (desc);
+        };
+
+        ForwardPass::Targets targets;
+        targets.color = acquire (GpuTextureFormat::rgba16float, "SceneRenderer scene color");
+        targets.depth = acquire (GpuTextureFormat::depth32float, "SceneRenderer depth");
+        targets.velocity = acquire (GpuTextureFormat::rg16float, "SceneRenderer velocity");
+        return targets;
+    }
+
+    /** Nodes this renderer did not draw in its previous frame have no motion: their previous world is the current one. */
+    void resolvePreviousTransforms()
+    {
+        for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
+        {
+            for (const auto& item : items)
             {
-                pass.setTexture (0, textureBinding, gpuTexture);
-                pass.setSampler (0, textureBinding + 5, gpuSampler);
-                return;
+                if (item.node != nullptr && (lastStamp == 0 || item.node->previousStamp != lastStamp))
+                    item.node->previousWorld = item.world;
+            }
+        }
+    }
+
+    /** Stamps every drawn node with this frame, so the next frame of this renderer reads its transform as the previous one. */
+    void commitPreviousTransforms (uint64 stamp)
+    {
+        for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
+        {
+            for (const auto& item : items)
+            {
+                if (item.node != nullptr)
+                {
+                    item.node->previousWorld = item.world;
+                    item.node->previousStamp = stamp;
+                }
             }
         }
 
-        pass.setTexture (0, textureBinding, fallback);
-        pass.setSampler (0, textureBinding + 5, defaultSampler);
+        lastStamp = stamp;
     }
 
-    static SceneFrameData makeFrameData (const Scene& scene, Span<const SceneDrawList::Light> lights, const Matrix4& view, const Matrix4& projection, const Vector3<float>& cameraPosition)
+    /** Adds one signature per draw item, summed: the lists are sorted by state and view distance,
+        so a camera move or a transform can reorder them without anything else changing.
+    */
+    template <class AddItem>
+    void addItemSignatures (FrameSignature& signature, AddItem&& addItem) const
     {
-        SceneFrameData frameData {};
-
-        copySceneMatrix (view, frameData.view);
-        copySceneMatrix (projection, frameData.projection);
-
-        frameData.cameraPosition[0] = cameraPosition.getX();
-        frameData.cameraPosition[1] = cameraPosition.getY();
-        frameData.cameraPosition[2] = cameraPosition.getZ();
-
-        const auto ambient = scene.getAmbientColor();
-        frameData.ambient[0] = sceneSrgbToLinear (ambient.getRedFloat());
-        frameData.ambient[1] = sceneSrgbToLinear (ambient.getGreenFloat());
-        frameData.ambient[2] = sceneSrgbToLinear (ambient.getBlueFloat());
-        frameData.ambient[3] = scene.getExposure();
-
-        int count = 0;
-        for (const auto& light : lights)
+        for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
         {
-            if (count == maxLights)
-                break;
+            uint64 sum = 0;
 
+            for (const auto& item : items)
+            {
+                FrameSignature itemSignature;
+                addItem (itemSignature, item);
+                sum += itemSignature.getFinalized();
+            }
+
+            signature.addBits (items.size());
+            signature.addBits (sum);
+        }
+    }
+
+    /** The changes that discard the history, which no longer fits the frame. */
+    uint64 getInvalidatingSignature (int width, int height, int taaSamples) const
+    {
+        FrameSignature signature;
+        signature.addBits (static_cast<uint64> (width));
+        signature.addBits (static_cast<uint64> (height));
+        signature.addBits (static_cast<uint64> (capabilities->getTier()));
+        signature.addBits (static_cast<uint64> (taaSamples));
+        return signature.get();
+    }
+
+    /** Everything else shaping the scene color before TAA. A change restarts the convergence and
+        keeps the history, which TAA reprojects and clips to the new frame. Tone mapping and bloom
+        run after TAA, so their settings are left out.
+    */
+    uint64 getRestartingSignature (const Scene& scene) const
+    {
+        FrameSignature signature;
+        signature.addMatrix (viewData.getUnjitteredViewProjection());
+        signature.addFloat (scene.getExposure());
+        signature.addBits (scene.getAmbientColor().getARGB());
+        signature.addPointer (scene.getEnvironment().get());
+        signature.addFloat (scene.getEnvironmentIntensity());
+        signature.addFloat (scene.getEnvironmentBlur());
+        signature.addBits (scene.isEnvironmentVisible() ? 1u : 0u);
+
+        // RenderSettings fields shaping the scene color before TAA go here: none yet, bloom runs after it
+
+        // Each item's transform is hashed with what it draws, so swapping transforms between items still counts
+        addItemSignatures (signature, [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
+        {
+            itemSignature.addMatrix (item.world);
+            itemSignature.addPointer (item.mesh);
+            itemSignature.addBits (static_cast<uint64> (item.primitiveIndex));
+            addMaterialSignature (itemSignature, *item.material);
+
+            for (const auto* texture : getMaterialTextures (*item.material))
+                itemSignature.addBits (*texture != nullptr ? (*texture)->getChangeCount() : 0u);
+        });
+
+        signature.addBits (drawList.getLights().size());
+
+        for (const auto& light : drawList.getLights())
+        {
             const auto& node = *light.node;
-            const auto i = static_cast<size_t> (count++);
-
-            frameData.lightPositions[i][0] = light.position.getX();
-            frameData.lightPositions[i][1] = light.position.getY();
-            frameData.lightPositions[i][2] = light.position.getZ();
-            frameData.lightPositions[i][3] = static_cast<float> (node.type);
-
-            frameData.lightDirections[i][0] = light.direction.getX();
-            frameData.lightDirections[i][1] = light.direction.getY();
-            frameData.lightDirections[i][2] = light.direction.getZ();
-            frameData.lightDirections[i][3] = node.range;
-
-            frameData.lightColors[i][0] = node.color[0];
-            frameData.lightColors[i][1] = node.color[1];
-            frameData.lightColors[i][2] = node.color[2];
-            frameData.lightColors[i][3] = node.intensity;
-
-            // KHR_lights_punctual cone falloff: clamp (cos * scale + offset)
-            const auto cosOuter = std::cos (node.outerConeAngle);
-            const auto cosInner = std::cos (node.innerConeAngle);
-            const auto scale = 1.0f / jmax (0.001f, cosInner - cosOuter);
-            frameData.lightSpots[i][0] = scale;
-            frameData.lightSpots[i][1] = -cosOuter * scale;
+            signature.addBits (static_cast<uint64> (node.type));
+            signature.addFloats (node.color);
+            signature.addFloat (node.intensity);
+            signature.addFloat (node.range);
+            signature.addFloat (node.innerConeAngle);
+            signature.addFloat (node.outerConeAngle);
+            signature.addFloat (node.radius);
+            signature.addBits (node.castsShadows ? 1u : 0u);
+            signature.addVector (light.position);
+            signature.addVector (light.direction);
         }
 
-        if (count == 0 && scene.isUsingDefaultLight())
-        {
-            const auto direction = Vector3<float> (-0.35f, -0.75f, -0.55f).normalized();
-
-            frameData.lightDirections[0][0] = direction.getX();
-            frameData.lightDirections[0][1] = direction.getY();
-            frameData.lightDirections[0][2] = direction.getZ();
-            frameData.lightColors[0][0] = frameData.lightColors[0][1] = frameData.lightColors[0][2] = 1.0f;
-            frameData.lightColors[0][3] = 3.0f;
-            count = 1;
-        }
-
-        frameData.lightInfo[0] = static_cast<float> (count);
-        return frameData;
+        return signature.get();
     }
 
-    static SceneMaterialData makeMaterialData (const Material& material, bool hasNormalTexture)
+    /** Full tier: compares this frame with the previous one. A new size, tier or TAA sample count
+        discards the history and starts over; any other change only restarts the convergence. The
+        first unchanged frame after changes counts the history as a single sample, so the frames
+        that follow average it out instead of keeping a share of the image before the changes.
+    */
+    void trackChanges (const Scene& scene, const RenderSettings& settings, int width, int height)
     {
-        SceneMaterialData data {};
+        const auto invalidating = getInvalidatingSignature (width, height, settings.taaSamples);
+        const auto restarting = getRestartingSignature (scene);
 
-        std::copy (material.baseColorFactor.begin(), material.baseColorFactor.end(), data.baseColorFactor);
-        std::copy (material.emissiveFactor.begin(), material.emissiveFactor.end(), data.emissiveFactor);
-        data.emissiveFactor[3] = material.alphaCutoff;
+        if (! hasSignature || invalidating != invalidatingSignature)
+        {
+            accumulatedSamples = 0;
+            stillSamples = 0;
+            changing = false;
+            frameResources.invalidateHistory();
+        }
+        else if (restarting != restartingSignature)
+        {
+            stillSamples = 0;
+            changing = true;
+        }
+        else if (changing)
+        {
+            accumulatedSamples = 1;
+            changing = false;
+        }
 
-        data.params[0] = material.metallicFactor;
-        data.params[1] = material.roughnessFactor;
-        data.params[2] = material.normalScale;
-        data.params[3] = material.occlusionStrength;
-
-        data.flags[0] = static_cast<float> (material.alphaMode);
-        data.flags[1] = material.baseColorTexture != nullptr && material.baseColorTexture->isSrgb() ? 1.0f : 0.0f;
-        data.flags[2] = material.emissiveTexture != nullptr && material.emissiveTexture->isSrgb() ? 1.0f : 0.0f;
-        data.flags[3] = hasNormalTexture ? 1.0f : 0.0f;
-
-        return data;
+        hasSignature = true;
+        invalidatingSignature = invalidating;
+        restartingSignature = restarting;
     }
+
+    /** The TAA sample index: kept at the end of the ramp while things change, so the history still counts. */
+    int getTemporalSampleIndex() const noexcept
+    {
+        if (stillSamples >= samplesToConverge)
+            return samplesToConverge;
+
+        return jmin (accumulatedSamples, samplesToConverge - 1);
+    }
+
+    /** Frame stamps shared by every renderer, so two renderers never take each other's frames as their own. */
+    static inline std::atomic<uint64> nextStamp { 0 };
+
+    GpuDevice::Ptr device;
+    uint32_t sampleCount = 1;
+    RenderCapabilities::DeviceFacts deviceFacts;
+    std::optional<RenderCapabilities> capabilities;
+    FrameResources frameResources;
+    ViewData viewData;
+    SceneDrawList drawList;
+    ShadowRenderer shadowRenderer;
+    ForwardPass forwardPass;
+    PostChain postChain;
+    GpuTarget::Ptr colorTarget;
+    GpuTexture::Ptr depthTexture;
+    GpuTexture::Ptr sceneColorOutput;
+    GpuTexture::Ptr velocityOutput;
+    uint64 frameIndex = 0;
+    uint64 lastStamp = 0;
+    uint64 invalidatingSignature = 0;
+    uint64 restartingSignature = 0;
+    bool hasSignature = false;
+    bool changing = false;      // the previous frames restarted the convergence, see trackChanges()
+    int samplesToConverge = 0;  // full: the TAA samples (1 without TAA), raster: 0
+    int accumulatedSamples = 0; // frames in the history since its last reset
+    int stillSamples = 0;       // frames since anything last changed
 };
 
 //==============================================================================
 
-SceneRenderer::SceneRenderer()
-    : impl (std::make_unique<Impl>())
-{
-}
+SceneRenderer::SceneRenderer() = default;
 
 SceneRenderer::~SceneRenderer() = default;
+
+//==============================================================================
+const RenderCapabilities* SceneRenderer::getCapabilities() const noexcept
+{
+    return impl != nullptr && impl->capabilities.has_value() ? &*impl->capabilities : nullptr;
+}
+
+bool SceneRenderer::isConverged() const noexcept
+{
+    return impl == nullptr || lastError.isNotEmpty() || impl->stillSamples >= impl->samplesToConverge;
+}
+
+void SceneRenderer::restartAccumulation() noexcept
+{
+    if (impl == nullptr)
+        return;
+
+    // The next render sees no previous signature, so it discards the history and starts over
+    impl->hasSignature = false;
+    impl->accumulatedSamples = 0;
+    impl->stillSamples = 0;
+}
+
+GpuTexture::Ptr SceneRenderer::getPassOutput (PassOutput output) const
+{
+    if (impl == nullptr)
+        return nullptr;
+
+    switch (output)
+    {
+        case PassOutput::sceneColor: return impl->sceneColorOutput;
+        case PassOutput::velocity: return impl->velocityOutput;
+    }
+
+    return nullptr;
+}
+
+void SceneRenderer::setDeviceFactsOverride (std::function<void (RenderCapabilities::DeviceFacts&)> newOverride)
+{
+    deviceFactsOverride = std::move (newOverride);
+}
 
 //==============================================================================
 
@@ -454,6 +473,13 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 {
     const auto fail = [this] (const String& error) -> GpuTexture::Ptr
     {
+        // A failed frame leaves no pass outputs behind
+        if (impl != nullptr)
+        {
+            impl->sceneColorOutput = nullptr;
+            impl->velocityOutput = nullptr;
+        }
+
         lastError = error;
         return nullptr;
     };
@@ -466,247 +492,110 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     while (samples * 2 <= static_cast<uint32_t> (sampleCount) && samples * 2 <= device->getMaximumSampleCount())
         samples *= 2;
 
-    if (device != impl->device || samples != impl->sampleCount)
+    if (impl == nullptr || device != impl->device)
     {
-        impl = std::make_unique<Impl>();
-        impl->device = device;
+        impl = std::make_unique<Impl> (device, samples);
+    }
+    else if (samples != impl->sampleCount)
+    {
+        // Only the multisampled raster depth depends on the sample count, and prepareTargets()
+        // recreates the raster targets without it. The full tier keeps its targets and accumulation
         impl->sampleCount = samples;
+        impl->depthTexture = nullptr;
     }
 
-    if (auto result = impl->prepareResources(); result.failed())
-        return fail (result.getErrorMessage());
+    auto deviceFacts = impl->deviceFacts;
+    if (deviceFactsOverride)
+        deviceFactsOverride (deviceFacts);
 
-    if (! impl->prepareTargets (widthPx, heightPx))
+    const auto& settings = scene.getRenderSettings();
+    impl->capabilities.emplace (deviceFacts, settings, samples);
+
+    // The full tier shades one sample per pixel into HDR targets, then runs the post chain. The
+    // raster tier does the same with its samples only for effects needing HDR, like bloom
+    const auto full = impl->capabilities->getTier() == RenderCapabilities::Tier::full;
+    const auto hdr = impl->capabilities->isEnabled (RenderCapabilities::Feature::hdrSceneColor, settings);
+    const auto forwardSamples = full ? 1u : samples;
+    const auto temporalAntiAliasing = impl->capabilities->isEnabled (RenderCapabilities::Feature::temporalAntiAliasing, settings);
+
+    if (! impl->prepareTargets (widthPx, heightPx, ! full))
         return fail ("Unable to create the render targets");
 
-    // Camera: the active one, or a default perspective camera at (0, 0, 5) looking at the origin
-    const auto aspect = static_cast<float> (widthPx) / static_cast<float> (heightPx);
-    Matrix4 view;
-    Matrix4 projection;
-    Vector3<float> cameraPosition;
+    // A new size releases the pool's textures, which the post effects' render targets would keep alive
+    if (widthPx != impl->frameResources.getWidth() || heightPx != impl->frameResources.getHeight())
+        impl->postChain.releaseTargets();
 
-    if (auto* camera = scene.getActiveCamera())
+    impl->frameResources.beginFrame (widthPx, heightPx);
+
+    // Every exit from here on ends the frame of the resource pool
+    const auto failFrame = [&] (const String& error)
     {
-        const auto cameraWorld = camera->getEntity() != nullptr ? camera->getEntity()->getWorldMatrix() : Matrix4();
-        view = cameraWorld.inverted();
-        projection = camera->getProjectionMatrix (aspect);
-        cameraPosition = cameraWorld.transformPoint ({});
-    }
-    else
-    {
-        cameraPosition = { 0.0f, 0.0f, 5.0f };
-        view = Matrix4::lookAt (cameraPosition, {}, { 0.0f, 1.0f, 0.0f });
-        projection = CameraNode().getProjectionMatrix (aspect);
-    }
+        // The history may not have been written: the next frame starts over
+        impl->frameResources.invalidateHistory();
+        impl->postChain.releaseTargets();
+        impl->frameResources.endFrame();
+        impl->hasSignature = false;
+        return fail (error);
+    };
+
+    const auto targets = full ? impl->acquireFullTargets (widthPx, heightPx)
+                              : (hdr ? impl->acquireRasterHdrTargets (widthPx, heightPx) : impl->getForwardTargets());
+    if (targets.color == nullptr || targets.depth == nullptr || (full && targets.velocity == nullptr))
+        return failFrame ("Unable to create the scene targets");
+
+    if (auto result = impl->prepareResources (targets, forwardSamples); result.failed())
+        return failFrame (result.getErrorMessage());
+
+    const auto stamp = ++Impl::nextStamp;
+
+    // The jitter cycles with the frame index: any taaSamples consecutive frames cover every point
+    impl->viewData.update (scene, widthPx, heightPx, temporalAntiAliasing, settings.taaSamples, impl->frameIndex++);
 
     auto& drawList = impl->drawList;
-    drawList.build (*scene.getRoot(), view);
+    drawList.build (*scene.getRoot(), impl->viewData.getView(), { scene.isUsingDefaultLight() });
+    impl->resolvePreviousTransforms();
 
-    auto frameData = Impl::makeFrameData (scene, drawList.getLights(), view, projection, cameraPosition);
+    // Before TAA fetches its history, so a change invalidates it for this very frame
+    impl->samplesToConverge = full ? (temporalAntiAliasing ? settings.taaSamples : 1) : 0;
+    impl->hasSignature = impl->hasSignature && full;
 
-    // The environment, uploaded the first time a device draws it
-    GpuTexture::Ptr environmentTexture;
-    GpuSampler::Ptr environmentSampler;
-    const auto& environment = scene.getEnvironment();
-
-    if (environment != nullptr && scene.getEnvironmentIntensity() > 0.0f)
-    {
-        environmentTexture = environment->getGpuTexture (device);
-        environmentSampler = environment->getGpuSampler (device);
-    }
-
-    const auto hasEnvironment = environmentTexture != nullptr && environmentSampler != nullptr;
-    const auto lastLevel = hasEnvironment ? static_cast<float> (environment->getNumLevels() - 1) : 0.0f;
-    const auto aces = scene.getToneMapping() == Scene::ToneMapping::aces;
-
-    frameData.environmentInfo[0] = hasEnvironment ? scene.getEnvironmentIntensity() : 0.0f;
-    frameData.environmentInfo[1] = lastLevel;
-    frameData.environmentInfo[2] = aces ? 1.0f : 0.0f;
-
-    if (hasEnvironment)
-    {
-        const auto& coefficients = environment->getIrradianceCoefficients();
-
-        for (size_t i = 0; i < coefficients.size(); ++i)
-        {
-            frameData.irradiance[i][0] = coefficients[i].getX();
-            frameData.irradiance[i][1] = coefficients[i].getY();
-            frameData.irradiance[i][2] = coefficients[i].getZ();
-        }
-    }
-
-    // The first shadow casting directional light shading the frame, fitted to the opaque items
-    int shadowLight = -1;
-    Matrix4 shadowMatrix;
-
-    {
-        const auto lights = drawList.getLights();
-        const auto numLights = jmin (static_cast<int> (lights.size()), maxLights);
-
-        for (int i = 0; i < numLights && shadowLight < 0; ++i)
-        {
-            const auto& node = *lights[static_cast<size_t> (i)].node;
-            if (node.castsShadows && node.type == LightNode::Type::directional)
-                shadowLight = i;
-        }
-
-        BoundingBox bounds;
-        for (const auto& item : drawList.getOpaqueItems())
-            bounds.expand (item.primitive->bounds.transformedBy (item.world));
-
-        if (shadowLight >= 0 && ! bounds.isEmpty() && impl->prepareShadowTarget())
-        {
-            const auto center = bounds.getCenter();
-            const auto radius = jmax (0.001f, bounds.getRadius());
-            const auto direction = lights[static_cast<size_t> (shadowLight)].direction.normalized();
-            const auto up = std::abs (direction.getY()) < 0.99f ? Vector3<float> (0.0f, 1.0f, 0.0f) : Vector3<float> (1.0f, 0.0f, 0.0f);
-
-            // Orthographic around the bounding sphere: the depth from 0 to 1 is linear
-            const auto lightView = Matrix4::lookAt (center - direction * (radius * 2.0f), center, up);
-            const auto lightProjection = Matrix4::orthographic (-radius, radius, -radius, radius, radius, radius * 3.0f);
-            shadowMatrix = lightView.followedBy (lightProjection);
-
-            // A texel covers 2 * radius / size in the world, and 1 / size of the depth range
-            const auto texel = 1.0f / static_cast<float> (shadowMapSize);
-            copySceneMatrix (shadowMatrix, frameData.shadowMatrix);
-            frameData.shadowInfo[1] = texel;
-            frameData.shadowInfo[2] = 1.5f * 2.0f * radius * texel;
-            frameData.shadowInfo[3] = 1.5f * texel;
-        }
-        else
-        {
-            shadowLight = -1;
-        }
-
-        frameData.shadowInfo[0] = static_cast<float> (shadowLight);
-    }
+    if (full)
+        impl->trackChanges (scene, settings, widthPx, heightPx);
 
     auto frame = GpuFrame::begin (device);
     if (! frame.isValid())
-        return fail ("Unable to begin a GPU frame");
+        return failFrame ("Unable to begin a GPU frame");
 
-    const auto bindGeometry = [&] (GpuRenderPass& pass, const SceneDrawList::DrawItem& item)
+    const auto shadow = impl->shadowRenderer.render (device, frame, drawList);
+    if (shadow.error.isNotEmpty())
+        return failFrame (shadow.error);
+
+    const auto output = full ? ForwardPass::Output::hdrLinear : (hdr ? ForwardPass::Output::hdrReversible : ForwardPass::Output::ldrInline);
+    if (! impl->forwardPass.render (device, frame, scene, impl->viewData, drawList.getLights(), drawList.getOpaqueItems(), drawList.getBlendItems(),
+                                    shadow, targets, output, forwardSamples))
+        return failFrame ("Unable to render the forward pass");
+
+    if (! hdr)
+        impl->postChain.releaseTargets();
+
+    if (hdr)
     {
-        auto vertexBuffer = item.mesh->getVertexBuffer (device, item.primitiveIndex);
-        auto indexBuffer = item.mesh->getIndexBuffer (device, item.primitiveIndex);
-        if (vertexBuffer == nullptr || indexBuffer == nullptr)
-            return false;
-
-        pass.setVertexBuffer (0, vertexBuffer);
-        pass.setIndexBuffer (GpuIndexFormat::uint32, indexBuffer);
-        return true;
-    };
-
-    if (shadowLight >= 0)
-    {
-        // Cleared to the far depth, so nothing outside the drawn items shadows
-        auto pass = impl->shadowTarget->beginRenderPass (frame, { true, Colors::white });
-        if (! pass.isValid())
-            return fail ("Unable to begin the shadow pass");
-
-        pass.setDepthStencilAttachment (impl->shadowDepthTexture);
-        pass.setPipeline (impl->shadowPipeline);
-
-        SceneShadowData shadowData {};
-        copySceneMatrix (shadowMatrix, shadowData.shadowMatrix);
-
-        for (const auto& item : drawList.getOpaqueItems())
-        {
-            SceneDrawData drawData {};
-            copySceneMatrix (item.world, drawData.model);
-
-            pass.setUniformBuffer (0, 0, &shadowData, sizeof (shadowData));
-            pass.setUniformBuffer (0, 1, &drawData, sizeof (drawData));
-
-            if (bindGeometry (pass, item))
-                pass.drawIndexed (static_cast<uint32_t> (item.primitive->indices.size()));
-        }
-
-        pass.finish();
-    }
-
-    {
-        auto& surface = impl->multisampledTarget != nullptr ? impl->multisampledTarget : impl->colorTarget;
-
-        auto pass = surface->beginRenderPass (frame, { true, scene.getBackgroundColor() });
-        if (! pass.isValid())
-            return fail ("Unable to begin the render pass");
-
-        if (impl->multisampledTarget != nullptr)
-            pass.setResolveTarget (0, impl->colorTarget->asTexture());
-
-        pass.setDepthStencilAttachment (impl->depthTexture);
-
-        GpuPipeline* currentPipeline = nullptr;
-
-        if (hasEnvironment && scene.isEnvironmentVisible())
-        {
-            SceneBackgroundData backgroundData {};
-            copySceneMatrix (view.followedBy (projection).inverted(), backgroundData.inverseViewProjection);
-            backgroundData.info[0] = scene.getEnvironmentIntensity();
-            backgroundData.info[1] = scene.getEnvironmentBlur() * lastLevel;
-            backgroundData.info[2] = aces ? 1.0f : 0.0f;
-            backgroundData.info[3] = scene.getExposure();
-
-            pass.setPipeline (impl->backgroundPipeline);
-            currentPipeline = impl->backgroundPipeline.get();
-
-            pass.setUniformBuffer (0, 0, &backgroundData, sizeof (backgroundData));
-            pass.setTexture (0, 1, environmentTexture);
-            pass.setSampler (0, 2, environmentSampler);
-            pass.draw (3);
-        }
-
-        const auto shadowTexture = shadowLight >= 0 ? impl->shadowTarget->asTexture() : impl->whiteTexture;
-
-        const auto drawItems = [&] (Span<const SceneDrawList::DrawItem> items)
-        {
-            for (const auto& item : items)
-            {
-                const auto& material = *item.material;
-                const auto& pipeline = impl->pipelines[Impl::getPipelineIndex (item)];
-
-                if (pipeline.get() != currentPipeline)
-                {
-                    pass.setPipeline (pipeline);
-                    currentPipeline = pipeline.get();
-                }
-
-                SceneDrawData drawData {};
-                copySceneMatrix (item.world, drawData.model);
-                copySceneMatrix (item.world.inverted().transposed(), drawData.normalMatrix);
-
-                const auto normalTexture = material.normalTexture != nullptr ? material.normalTexture->getGpuTexture (device) : nullptr;
-                const auto materialData = Impl::makeMaterialData (material, normalTexture != nullptr);
-
-                pass.setUniformBuffer (0, 0, &frameData, sizeof (frameData));
-                pass.setUniformBuffer (0, 1, &drawData, sizeof (drawData));
-                pass.setUniformBuffer (0, 2, &materialData, sizeof (materialData));
-
-                impl->bindTexture (pass, 3, material.baseColorTexture, impl->whiteTexture);
-                impl->bindTexture (pass, 4, material.metallicRoughnessTexture, impl->whiteTexture);
-                impl->bindTexture (pass, 5, material.normalTexture, impl->flatNormalTexture);
-                impl->bindTexture (pass, 6, material.occlusionTexture, impl->whiteTexture);
-                impl->bindTexture (pass, 7, material.emissiveTexture, impl->whiteTexture);
-
-                // Bound even when unused: every declared resource must be. The shadow map is
-                // read with texelFetch, so it needs no sampler of its own
-                pass.setTexture (0, 13, hasEnvironment ? environmentTexture : impl->blackTexture);
-                pass.setTexture (0, 14, shadowTexture);
-                pass.setSampler (0, 15, hasEnvironment ? environmentSampler : impl->defaultSampler);
-
-                if (bindGeometry (pass, item))
-                    pass.drawIndexed (static_cast<uint32_t> (item.primitive->indices.size()));
-            }
-        };
-
-        drawItems (drawList.getOpaqueItems());
-        drawItems (drawList.getBlendItems());
-
-        pass.finish();
+        // Raster: the resolved color, reversibly tone mapped, and no depth or motion for the post effects
+        const auto sceneColor = targets.resolve != nullptr ? targets.resolve : targets.color;
+        const PostChain::Inputs inputs { sceneColor, full ? targets.depth : nullptr, targets.velocity, ! full, scene.getBackgroundColor(), impl->getTemporalSampleIndex() };
+        if (! impl->postChain.render (device, frame, *impl->capabilities, settings, impl->viewData, impl->frameResources, inputs, impl->colorTarget->asTexture()))
+            return failFrame ("Unable to render the post effects");
     }
 
     frame.submit();
+    impl->commitPreviousTransforms (stamp);
+    impl->frameResources.endFrame();
+
+    impl->accumulatedSamples = jmin (impl->accumulatedSamples + 1, impl->samplesToConverge);
+    impl->stillSamples = jmin (impl->stillSamples + 1, impl->samplesToConverge);
+
+    impl->sceneColorOutput = hdr ? impl->postChain.getResolvedColor() : impl->colorTarget->asTexture();
+    impl->velocityOutput = targets.velocity;
 
     lastError = {};
     return impl->colorTarget->asTexture();

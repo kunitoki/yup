@@ -81,6 +81,12 @@ public:
 private:
     //==============================================================================
     friend class GpuRenderPass;
+    friend class GpuComputePass;
+    friend class GpuComputePassImplMetal;
+    friend class GpuComputePassImplD3D11;
+    friend class GpuComputePassImplGL;
+    friend class GpuComputePassImplWebGPU;
+    friend class GpuComputePassImplVulkan;
 
     GpuSampler() = default;
 

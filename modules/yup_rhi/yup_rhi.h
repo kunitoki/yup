@@ -72,6 +72,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 
 //==============================================================================
+#include <bit>
 #include <memory>
 #include <optional>
 #include <vector>

@@ -64,16 +64,21 @@ auto mip  = GpuTarget::createFromTexture (device, texture, { /* mip */ 2, /* lay
 
 `createFromTexture()` is what makes **render-to-mip** and **render-to-cube-face**
 possible: point the view at a mip level and a layer (a cube face *is* a layer),
-and every draw in a pass begun on that target lands there. Since nothing
-generates mip contents automatically, a mip chain is built by rendering each
-level in turn - which is also what a roughness-varying IBL prefilter wants.
+and every draw in a pass begun on that target lands there. Mip contents are not
+generated automatically (`GpuTexture::generateMips` covers plain 2D textures), so
+a cube or array mip chain is built by rendering each level in turn - which is also what a roughness-varying IBL prefilter wants.
 
-> **Narrowed views are for attachments only, never for sampling.** OpenGL ES 3
-> has no `glTextureView`, so a mip- or layer-narrowed view silently falls back to
-> the base texture when *read* - binding one to sample mip 2 quietly samples mip 0
-> instead, with no error. Attachment targeting is unaffected. To read one level
-> of a chain, bind the whole texture and use an explicit `textureLod()` together
-> with a `GpuSampler` whose `minLod`/`maxLod` clamp to that level.
+> **To read one level of a chain, bind a narrowed view with
+> `GpuRenderPass::setTexture (group, binding, texture, view)`.** The shader then
+> sees only the selected levels, and lod 0 is `view.baseMipLevel`. This is what
+> lets a pass sample level N while it renders into level N + 1 of the same
+> texture. Do not bind the whole texture and clamp it with a sampler's
+> `minLod`/`maxLod` instead: WebGL2 still reports that as a feedback loop and
+> drops the draw.
+>
+> On OpenGL and OpenGL ES, which have no texture views, only the **mip range** of
+> a sampled view is honored. A layer range is not: every layer of an array or cube
+> texture stays visible to the shader. Attachments honor both on every backend.
 
 `readPixels()` is only supported for canvas-backed targets; targets over a
 directly allocated texture return false, because there is no texture readback
