@@ -130,7 +130,7 @@ void main() { color = vec4(uv, 0.0, 1.0); })");
     auto frame = GpuFrame::begin (device);
     EXPECT_TRUE (pass.draw (frame, target, {}, nullptr, GpuColor::transparentBlack()));
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     const auto image = readBack (target);
     ASSERT_TRUE (image.isValid());
@@ -187,7 +187,7 @@ void main() { color = texture(sampler2D(source, sourceSampler), uv); })");
         renderPass.setSampler (0, 1, sampler);
     }));
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     // The first uploaded row is v = 0, which uv maps to the top of the frame
     const auto image = readBack (copy);
@@ -228,7 +228,7 @@ void main() { first = vec4(1.0, 0.0, 0.0, 1.0); second = vec4(0.0, 1.0, 0.0, 1.0
         renderPass.setColorAttachment (1, second, { true, GpuColor::transparentBlack() });
     }, GpuColor::transparentBlack()));
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     const auto firstImage = readBack (first);
     const auto secondImage = readBack (second);
@@ -265,7 +265,7 @@ void main() { color = vec4(1.0); })");
         auto frame = GpuFrame::begin (device);
         EXPECT_TRUE (pass.draw (frame, texture, view, nullptr, GpuColor::transparentBlack()));
         frame.submit();
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
     };
 
     GpuTextureDesc desc (size, size, GpuTextureFormat::rgba8unorm, true);

@@ -526,7 +526,7 @@ void main()
         EXPECT_TRUE (pass.draw (3));
         pass.finish();
         EXPECT_TRUE (frame.submit());
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
 
         return target->readPixels (pixel.data(), pixel.size()) ? pixel : std::vector<uint8_t>();
     };

@@ -485,6 +485,43 @@ protected:
     {
         return std::find (platforms.begin(), platforms.end(), GetParam()) != platforms.end();
     }
+
+    static constexpr std::array<float, 4> red { 1.0f, 0.0f, 0.0f, 1.0f };
+    static constexpr std::array<float, 4> green { 0.0f, 1.0f, 0.0f, 1.0f };
+    static constexpr std::array<float, 4> blue { 0.0f, 0.0f, 1.0f, 1.0f };
+
+    /** Copies source[0] into destination[0]. */
+    static constexpr const char* copyColorSource = R"(#version 450
+layout(local_size_x = 1) in;
+layout(std430, set = 0, binding = 0) readonly buffer Source { vec4 source[]; };
+layout(std430, set = 0, binding = 1) buffer Destination { vec4 destination[]; };
+void main() { destination[0] = source[0]; })";
+
+    /** Fills @p target with colors[0] of @p colors, read by storageColorFragment, in @p frame. */
+    void drawStorageColor (GpuFrame& frame, GpuTarget& target, const GpuPipeline::Ptr& pipeline, const GpuBuffer::Ptr& colors)
+    {
+        auto pass = target.beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+        pass.setPipeline (pipeline);
+        pass.setStorageBuffer (0, 0, colors);
+        EXPECT_TRUE (pass.draw (3));
+        pass.finish();
+    }
+
+    /** The RGBA8 pixels of a 4x4 @p target. */
+    static std::vector<uint8_t> readTarget (GpuTarget& target)
+    {
+        std::vector<uint8_t> pixels (4 * 4 * 4);
+        EXPECT_TRUE (target.readPixels (pixels.data(), pixels.size()));
+        return pixels;
+    }
+
+    /** Expects the pixel at (x, y) of a 4x4 RGBA8 readback to be @p expected. */
+    static void expectPixel (const std::vector<uint8_t>& pixels, int x, int y, const std::array<float, 4>& expected)
+    {
+        const auto index = static_cast<size_t> ((y * 4 + x) * 4);
+        for (size_t channel = 0; channel < 4; ++channel)
+            EXPECT_NEAR (pixels[index + channel], expected[channel] * 255.0f, 5.0f) << "pixel " << x << "," << y << " channel " << channel;
+    }
 };
 
 INSTANTIATE_TEST_SUITE_P (GpuComputePass,
@@ -551,7 +588,7 @@ void main() { imageStore (target, ivec2 (gl_GlobalInvocationID.xy), vec4 (0.0, 1
     EXPECT_TRUE (pass.draw (3));
     pass.finish();
     EXPECT_TRUE (frame.submit());
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     std::vector<uint8_t> pixels (4 * 4 * 4);
     ASSERT_TRUE (target->readPixels (pixels.data(), pixels.size()));
@@ -587,6 +624,214 @@ TEST_P (GpuComputePassBackendTests, FragmentReadsAStorageBuffer)
         ASSERT_EQ (pixels.size(), 4u * 4u * 4u);
         expectEveryPixel (pixels, { 0, 0, 255, 255 });
     }
+}
+
+TEST_P (GpuComputePassBackendTests, StorageUpdateBetweenFramesKeepsWhatTheEarlierFrameRead)
+{
+    if (! runsOn ({ GpuPlatform::Metal }))
+        GTEST_SKIP() << "Not verified on " << getPlatformName (GetParam());
+
+    auto colors = device->createBuffer (GpuBufferType::storage, red.data(), sizeof (red));
+    auto pipeline = compileRenderPipeline (storageColorFragment);
+    auto first = GpuTarget::create (device, 4, 4);
+    auto second = GpuTarget::create (device, 4, 4);
+    ASSERT_TRUE (colors != nullptr && pipeline != nullptr && first != nullptr && second != nullptr);
+
+    // The first frame is submitted only after the update, so its draw reads the buffer for sure
+    // once the update has happened: the update cannot write where that draw reads
+    auto firstFrame = GpuFrame::begin (device);
+    drawStorageColor (firstFrame, *first, pipeline, colors);
+
+    EXPECT_TRUE (device->updateBuffer (colors, blue.data(), sizeof (blue)));
+
+    auto secondFrame = GpuFrame::begin (device);
+    drawStorageColor (secondFrame, *second, pipeline, colors);
+
+    EXPECT_TRUE (device->updateBuffer (colors, green.data(), sizeof (green)));
+
+    firstFrame.submit();
+    secondFrame.submit();
+    EXPECT_TRUE (firstFrame.waitForGPU().wasOk());
+    EXPECT_TRUE (secondFrame.waitForGPU().wasOk());
+
+    expectPixel (readTarget (*first), 1, 1, red);
+    expectPixel (readTarget (*second), 1, 1, blue);
+}
+
+TEST_P (GpuComputePassBackendTests, StorageUpdateWithinAFrameKeepsWhatEarlierPassesRead)
+{
+    if (! runsOn ({ GpuPlatform::Metal }))
+        GTEST_SKIP() << "Not verified on " << getPlatformName (GetParam());
+
+    auto colors = device->createBuffer (GpuBufferType::storage, red.data(), sizeof (red));
+    auto pipeline = compileRenderPipeline (storageColorFragment);
+    auto first = GpuTarget::create (device, 4, 4);
+    auto second = GpuTarget::create (device, 4, 4);
+    ASSERT_TRUE (colors != nullptr && pipeline != nullptr && first != nullptr && second != nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    drawStorageColor (frame, *first, pipeline, colors);
+    EXPECT_TRUE (device->updateBuffer (colors, blue.data(), sizeof (blue)));
+    drawStorageColor (frame, *second, pipeline, colors);
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    expectPixel (readTarget (*first), 1, 1, red);
+    expectPixel (readTarget (*second), 1, 1, blue);
+}
+
+TEST_P (GpuComputePassBackendTests, StorageUpdateWithinAPassIsSeenByLaterDraws)
+{
+    if (! runsOn ({ GpuPlatform::Metal }))
+        GTEST_SKIP() << "Not verified on " << getPlatformName (GetParam());
+
+    auto colors = device->createBuffer (GpuBufferType::storage, red.data(), sizeof (red));
+    auto pipeline = compileRenderPipeline (storageColorFragment);
+    auto target = GpuTarget::create (device, 4, 4);
+    ASSERT_TRUE (colors != nullptr && pipeline != nullptr && target != nullptr);
+
+    // The second draw reuses the pass's bindings, and has to pick up the buffer's new contents
+    auto frame = GpuFrame::begin (device);
+    auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+    pass.setPipeline (pipeline);
+    pass.setStorageBuffer (0, 0, colors);
+    pass.setViewport (0.0f, 0.0f, 2.0f, 4.0f);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_TRUE (device->updateBuffer (colors, blue.data(), sizeof (blue)));
+    pass.setViewport (2.0f, 0.0f, 2.0f, 4.0f);
+    EXPECT_TRUE (pass.draw (3));
+    pass.finish();
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    const auto pixels = readTarget (*target);
+    expectPixel (pixels, 0, 1, red);
+    expectPixel (pixels, 3, 1, blue);
+}
+
+TEST_P (GpuComputePassBackendTests, StorageUpdateAfterAStandaloneDispatchKeepsWhatAFrameRead)
+{
+    if (! runsOn ({ GpuPlatform::Metal }))
+        GTEST_SKIP() << "Not verified on " << getPlatformName (GetParam());
+
+    auto colors = device->createBuffer (GpuBufferType::storage, red.data(), sizeof (red));
+    auto copied = device->createBuffer (GpuBufferType::storage, green.data(), sizeof (green));
+    auto pipeline = compileRenderPipeline (storageColorFragment);
+    auto copy = GpuComputePipeline::compileFromGlsl (device, copyColorSource, GpuWorkgroupSize { 1, 1, 1 });
+    auto target = GpuTarget::create (device, 4, 4);
+    ASSERT_TRUE (colors != nullptr && copied != nullptr && pipeline != nullptr && target != nullptr);
+    ASSERT_TRUE (copy.wasOk()) << copy.getErrorMessage();
+
+    // The frame reads the buffer, then a standalone pass submitted and finished after it uses it
+    // too: the update still must not write where the not yet submitted frame reads
+    auto frame = GpuFrame::begin (device);
+    drawStorageColor (frame, *target, pipeline, colors);
+
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (copy.getValue());
+    pass.setStorageBuffer (0, 0, colors);
+    pass.setStorageBuffer (0, 1, copied);
+    EXPECT_TRUE (pass.dispatch (1, 1, 1));
+    EXPECT_TRUE (pass.finish());
+
+    std::array<float, 4> copiedBack {};
+    EXPECT_TRUE (device->readBuffer (copied, copiedBack.data(), sizeof (copiedBack)));
+    EXPECT_EQ (copiedBack, red);
+
+    EXPECT_TRUE (device->updateBuffer (colors, blue.data(), sizeof (blue)));
+
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+    expectPixel (readTarget (*target), 1, 1, red);
+}
+
+TEST_P (GpuComputePassBackendTests, StorageUpdateKeepsWhatAnEarlierDispatchOfTheFrameRead)
+{
+    if (! runsOn ({ GpuPlatform::Metal }))
+        GTEST_SKIP() << "Not verified on " << getPlatformName (GetParam());
+
+    auto colors = device->createBuffer (GpuBufferType::storage, red.data(), sizeof (red));
+    auto copied = device->createBuffer (GpuBufferType::storage, green.data(), sizeof (green));
+    auto copy = GpuComputePipeline::compileFromGlsl (device, copyColorSource, GpuWorkgroupSize { 1, 1, 1 });
+    ASSERT_TRUE (colors != nullptr && copied != nullptr);
+    ASSERT_TRUE (copy.wasOk()) << copy.getErrorMessage();
+
+    auto frame = GpuFrame::begin (device);
+    {
+        auto pass = GpuComputePass::begin (frame);
+        ASSERT_TRUE (pass.isValid());
+        pass.setPipeline (copy.getValue());
+        pass.setStorageBuffer (0, 0, colors);
+        pass.setStorageBuffer (0, 1, copied);
+        EXPECT_TRUE (pass.dispatch (1, 1, 1));
+    }
+
+    EXPECT_TRUE (device->updateBuffer (colors, blue.data(), sizeof (blue)));
+
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    std::array<float, 4> copiedBack {};
+    EXPECT_TRUE (device->readBuffer (copied, copiedBack.data(), sizeof (copiedBack)));
+    EXPECT_EQ (copiedBack, red);
+}
+
+TEST_P (GpuComputePassBackendTests, RepeatedStorageUpdatesWhileInFlightKeepEveryFramesContents)
+{
+    if (! runsOn ({ GpuPlatform::Metal }))
+        GTEST_SKIP() << "Not verified on " << getPlatformName (GetParam());
+
+    const std::array<std::array<float, 4>, 3> cycle { red, green, blue };
+
+    auto colors = device->createBuffer (GpuBufferType::storage, cycle[0].data(), sizeof (cycle[0]));
+    auto pipeline = compileRenderPipeline (storageColorFragment);
+    auto target = GpuTarget::create (device, 4, 4);
+    ASSERT_TRUE (colors != nullptr && pipeline != nullptr && target != nullptr);
+
+    // Every update happens while a frame still records a read, so each one moves to a backing
+    // the GPU finished with: after the first frames those are recycled spares
+    for (size_t index = 0; index < 12; ++index)
+    {
+        auto frame = GpuFrame::begin (device);
+        drawStorageColor (frame, *target, pipeline, colors);
+
+        const auto& next = cycle[(index + 1) % cycle.size()];
+        EXPECT_TRUE (device->updateBuffer (colors, next.data(), sizeof (next)));
+
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+        expectPixel (readTarget (*target), 1, 1, cycle[index % cycle.size()]);
+    }
+}
+
+TEST_P (GpuComputePassBackendTests, PartialStorageUpdateWhileInFlightKeepsTheRest)
+{
+    if (! runsOn ({ GpuPlatform::Metal }))
+        GTEST_SKIP() << "Not verified on " << getPlatformName (GetParam());
+
+    std::array<float, 8> contents {};
+    std::copy (red.begin(), red.end(), contents.begin());
+    std::copy (green.begin(), green.end(), contents.begin() + 4);
+
+    auto colors = device->createBuffer (GpuBufferType::storage, contents.data(), sizeof (contents));
+    auto pipeline = compileRenderPipeline (storageColorFragment);
+    auto target = GpuTarget::create (device, 4, 4);
+    ASSERT_TRUE (colors != nullptr && pipeline != nullptr && target != nullptr);
+
+    // The frame still records, so its pass reads the buffer when it runs: the update moves elsewhere
+    auto frame = GpuFrame::begin (device);
+    drawStorageColor (frame, *target, pipeline, colors);
+    EXPECT_TRUE (device->updateBuffer (colors, blue.data(), sizeof (blue)));
+
+    std::array<float, 8> readBack {};
+    EXPECT_TRUE (device->readBuffer (colors, readBack.data(), sizeof (readBack)));
+    EXPECT_EQ (std::vector<float> (readBack.begin(), readBack.begin() + 4), std::vector<float> (blue.begin(), blue.end()));
+    EXPECT_EQ (std::vector<float> (readBack.begin() + 4, readBack.end()), std::vector<float> (green.begin(), green.end()));
+
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+    expectPixel (readTarget (*target), 1, 1, red);
 }
 
 TEST_P (GpuComputePassBackendTests, ComputeWriteIsReadByLaterFragmentPass)
@@ -629,7 +874,7 @@ void main() { colors[0] = vec4 (0.0, 0.0, 1.0, 1.0); })",
     EXPECT_TRUE (pass.draw (3));
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     std::vector<uint8_t> pixels (4 * 4 * 4);
     ASSERT_TRUE (target->readPixels (pixels.data(), pixels.size()));
@@ -847,7 +1092,7 @@ TEST_F (GpuComputePassVulkanTests, ComputeWriteToOneMipKeepsTheOtherLevels)
         EXPECT_TRUE (pass.dispatch (1, 1, 1));
     }
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     if (const auto texel = fetchTexel (texture, 0))
         EXPECT_EQ (*texel, (Texel { 1.0f, 0.0f, 0.0f, 1.0f }));
@@ -931,7 +1176,7 @@ TEST_F (GpuComputePassVulkanTests, StorageBufferDroppedRightAfterTheDrawIsStillR
     colors = nullptr;
 
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     std::vector<uint8_t> pixels (4 * 4 * 4);
     ASSERT_TRUE (target->readPixels (pixels.data(), pixels.size()));
@@ -1146,7 +1391,7 @@ void main() { color = vertexColor; })",
     EXPECT_TRUE (pass.draw (3));
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     std::vector<uint8_t> pixels (4 * 4 * 4);
     ASSERT_TRUE (target->readPixels (pixels.data(), pixels.size()));

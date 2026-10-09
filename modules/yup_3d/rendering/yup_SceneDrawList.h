@@ -38,11 +38,18 @@ namespace yup
     getLights() can hold a light that is not in the tree: when BuildOptions::addDefaultLight is
     set and the tree has no LightNode, it holds the default light owned by the list.
 
+    With BuildOptions::selectLightsPerDraw, every item also lists the lights shading it: the
+    maxLightsPerDraw most influential ones, see selectLights().
+
     @see SceneRenderer
 */
 class YUP_API SceneDrawList
 {
 public:
+    //==============================================================================
+    /** The most lights shading one draw item. */
+    static constexpr int maxLightsPerDraw = 8;
+
     //==============================================================================
     /** One primitive to draw. */
     struct DrawItem
@@ -55,6 +62,8 @@ public:
         const Material* material = nullptr;          ///< The resolved material, never nullptr.
         float viewDistance = 0.0f;                   ///< Distance of the bounds center along the view direction.
         bool mirrored = false;                       ///< True if the world transform mirrors, which reverses the winding.
+        std::array<uint16, maxLightsPerDraw> lightIndices {}; ///< Indices into getLights(), most influential first, see BuildOptions::selectLightsPerDraw.
+        int numLights = 0;                           ///< How many lightIndices are valid.
     };
 
     /** One light, in world space. */
@@ -72,6 +81,9 @@ public:
             a white directional light of intensity 3, shining towards (-0.35, -0.75, -0.55), that casts no shadows.
         */
         bool addDefaultLight = false;
+
+        /** Fills DrawItem::lightIndices and DrawItem::numLights of every item with selectLights(). */
+        bool selectLightsPerDraw = false;
     };
 
     //==============================================================================
@@ -109,12 +121,42 @@ public:
     /** Returns the material used by primitives without a material and without an override. */
     const Material& getDefaultMaterial() const noexcept { return *defaultMaterial; }
 
+    //==============================================================================
+    /** Picks up to maxLightsPerDraw lights for an object with the given world bounds, by influence.
+
+        Directional lights come first, by intensity times color luminance. Then come the point and
+        spot lights whose effective range (GpuSceneData::getEffectiveRange()) reaches the bounds, by
+        intensity * luminance / max (squared distance to the bounds, radius^2 + 1e-4). Dark lights
+        of every type (GpuSceneData::isDark()) are skipped, and so are spot lights whose cone,
+        widened to a sphere bound, misses the bounds. Ties keep the lower index.
+
+        @param worldBounds  The bounds of the object, in world space.
+        @param lights       The lights to pick from.
+        @param indices      Receives the indices into @p lights, most influential first.
+
+        @returns How many indices were written.
+    */
+    static int selectLights (const BoundingBox& worldBounds, Span<const Light> lights, std::array<uint16, maxLightsPerDraw>& indices);
+
 private:
+    /** What selectLights() ranks a light by, computed once per light rather than per draw. */
+    struct LightRanking
+    {
+        float power = 0.0f;    // intensity * color luminance
+        float range = 0.0f;    // GpuSceneData::getEffectiveRange()
+        float cosOuter = 0.0f; // the cosine of the outer cone angle of a spot light
+        bool dark = true;      // GpuSceneData::isDark()
+    };
+
+    static void rankLights (Span<const Light> lights, std::vector<LightRanking>& rankings);
+    static int selectLights (const BoundingBox& worldBounds, Span<const Light> lights, Span<const LightRanking> rankings, std::array<uint16, maxLightsPerDraw>& indices);
+
     void collect (const EntityNode& entity, const Matrix4& world, const Material* overrideMaterial, const Matrix4& view);
 
     std::vector<DrawItem> opaqueItems;
     std::vector<DrawItem> blendItems;
     std::vector<Light> lights;
+    std::vector<LightRanking> lightRankings;
     Material::Ptr defaultMaterial;
     std::unique_ptr<LightNode> defaultLight;
 

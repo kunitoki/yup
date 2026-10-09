@@ -75,7 +75,7 @@ void ViewData::update (const Scene& scene, int widthPx, int heightPx, bool jitte
         jitter = getJitter (frameIndex, taaSamples);
 
     const auto jitterNdc = Point<float> { 2.0f * jitter.getX() / width, 2.0f * jitter.getY() / height };
-    const auto jitteredProjection = projection.followedBy (Matrix4::translation ({ jitterNdc.getX(), jitterNdc.getY(), 0.0f }));
+    jitteredProjection = projection.followedBy (Matrix4::translation ({ jitterNdc.getX(), jitterNdc.getY(), 0.0f }));
     const auto jitteredViewProjection = view.followedBy (jitteredProjection);
     const auto currentUnjittered = view.followedBy (projection);
 

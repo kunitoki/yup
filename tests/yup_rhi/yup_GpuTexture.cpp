@@ -445,6 +445,41 @@ TEST_F (GpuTextureMockTests, UploadOfCompressedDataWithARowStrideSucceeds)
     EXPECT_EQ (captured.bytesPerRow, 64u);
 }
 
+TEST_F (GpuTextureMockTests, UploadFailsWhenTheBackendReportsAnError)
+{
+    rive::ore::TextureDesc ignored {};
+    auto oreTexture = expectTextureCreation (&ignored);
+    EXPECT_CALL (*oreTexture, uploadImpl (_)).WillOnce (Invoke ([this] (const rive::ore::TextureDataDesc&)
+    {
+        mockOreCtx->setLastError ("upload: rejected");
+    }));
+
+    auto texture = GpuTexture::create (ctx, makeRenderTargetDesc (16, 16));
+    ASSERT_NE (texture, nullptr);
+
+    std::vector<uint8_t> pixels (16 * 16 * 4, 0);
+    GpuTextureDataDesc data;
+    data.data = pixels.data();
+    EXPECT_FALSE (texture->upload (data));
+}
+
+TEST_F (GpuTextureMockTests, UploadIgnoresAnErrorLeftByEarlierWork)
+{
+    rive::ore::TextureDesc ignored {};
+    auto oreTexture = expectTextureCreation (&ignored);
+    EXPECT_CALL (*oreTexture, uploadImpl (_));
+
+    auto texture = GpuTexture::create (ctx, makeRenderTargetDesc (16, 16));
+    ASSERT_NE (texture, nullptr);
+
+    mockOreCtx->setLastError ("stale");
+
+    std::vector<uint8_t> pixels (16 * 16 * 4, 0);
+    GpuTextureDataDesc data;
+    data.data = pixels.data();
+    EXPECT_TRUE (texture->upload (data));
+}
+
 // ==============================================================================
 // GpuSampler
 // ==============================================================================
@@ -1089,7 +1124,7 @@ void main()
         EXPECT_TRUE (pass.draw (3));
         pass.finish();
         EXPECT_TRUE (frame.submit());
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
 
         std::vector<uint8_t> pixels (static_cast<size_t> (size * size * 4));
         if (! target->readPixels (pixels.data(), pixels.size()))
@@ -1108,7 +1143,7 @@ void main()
         auto pass = target->beginRenderPass (frame, { true, color });
         pass.finish();
         EXPECT_TRUE (frame.submit());
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
     }
 
     /** Clears one layer of a depth render target to @p depth. */
@@ -1127,7 +1162,7 @@ void main()
         pass.setDepthStencilAttachment (depthTexture, depthOptions, GpuTextureViewDesc (0, layer));
         pass.finish();
         frame.submit();
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
         return true;
     }
 
@@ -1160,6 +1195,9 @@ protected:
         if (device == nullptr || ! device->isGpuAvailable())
             GTEST_SKIP() << "No Metal device available";
     }
+
+    /** The readback row showing texture row @p row of a 4x4 level: fullscreenVertex puts v = 0 at the bottom. */
+    static int readbackRow (int row) { return 3 - row; }
 };
 
 TEST_F (GpuTextureMetalTests, SamplesOneMipThroughANarrowedView)
@@ -1194,7 +1232,7 @@ TEST_F (GpuTextureMetalTests, GenerateMipsFillsEveryLevelFromTheBase)
     auto frame = GpuFrame::begin (device);
     ASSERT_TRUE (texture->generateMips (frame));
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     const auto pixels = drawIntoReadback (sampleLodZeroFragment, 1, [&] (GpuRenderPass& pass)
     {
@@ -1231,7 +1269,7 @@ TEST_F (GpuTextureMetalTests, GenerateMipsKeepsTheOrientationOfEveryLevel)
     auto frame = GpuFrame::begin (device);
     ASSERT_TRUE (texture->generateMips (frame));
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     const auto readLevel = [&] (uint32_t level)
     {
@@ -1259,6 +1297,127 @@ TEST_F (GpuTextureMetalTests, GenerateMipsKeepsTheOrientationOfEveryLevel)
     }
 }
 
+TEST_F (GpuTextureMetalTests, UploadIntoARenderTargetWritesTheRequestedMipRegion)
+{
+    GpuTextureDesc desc (8, 8, GpuTextureFormat::rgba8unorm, true);
+    desc.mipLevels = 2;
+    auto texture = GpuTexture::create (device, desc);
+    ASSERT_NE (texture, nullptr);
+    clearMip (texture, 1, GpuColor (0.0f, 0.0f, 0.0f, 1.0f));
+
+    // Two rows of two texels, red green over blue white, with a padded row stride
+    // and no padding after the last row.
+    const uint8_t region[] = { 255, 0, 0, 255, 0, 255, 0, 255, 128, 128, 128, 128, 0, 0, 255, 255, 255, 255, 255, 255 };
+
+    GpuTextureDataDesc data;
+    data.data = region;
+    data.mipLevel = 1;
+    data.x = 2;
+    data.y = 1;
+    data.width = 2;
+    data.height = 2;
+    data.bytesPerRow = 12;
+    ASSERT_TRUE (texture->upload (data));
+
+    const auto pixels = drawIntoReadback (sampleLodZeroFragment, 4, [&] (GpuRenderPass& pass)
+    {
+        pass.setTexture (0, 0, texture, GpuTextureViewDesc (1, 0));
+    });
+    ASSERT_FALSE (pixels.empty());
+
+    for (int row = 0; row < 4; ++row)
+    {
+        for (int column = 0; column < 4; ++column)
+        {
+            uint8_t expected[4] = { 0, 0, 0, 255 };
+            if (row >= 1 && row <= 2 && column >= 2)
+                std::memcpy (expected, region + (row - 1) * 12 + (column - 2) * 4, 4);
+
+            const auto* texel = pixels.data() + (readbackRow (row) * 4 + column) * 4;
+            for (int channel = 0; channel < 4; ++channel)
+                EXPECT_NEAR (texel[channel], expected[channel], 2) << "row " << row << " column " << column << " channel " << channel;
+        }
+    }
+}
+
+TEST_F (GpuTextureMetalTests, UploadIntoA3DRenderTargetWritesTheRequestedSlices)
+{
+    GpuTextureDesc desc (4, 4, GpuTextureFormat::rgba8unorm, true);
+    desc.type = GpuTextureType::texture3D;
+    desc.depthOrArrayLayers = 4;
+    auto volume = GpuTexture::create (device, desc);
+    ASSERT_NE (volume, nullptr);
+
+    // Slices 1 and 2: red encodes the row, blue the column, green the slice
+    std::vector<uint8_t> texels (4 * 4 * 2 * 4);
+    for (int slice = 0; slice < 2; ++slice)
+    {
+        for (int row = 0; row < 4; ++row)
+        {
+            for (int column = 0; column < 4; ++column)
+            {
+                auto* texel = texels.data() + ((slice * 4 + row) * 4 + column) * 4;
+                texel[0] = static_cast<uint8_t> (row * 64);
+                texel[1] = static_cast<uint8_t> (80 + slice * 80);
+                texel[2] = static_cast<uint8_t> (column * 64);
+                texel[3] = 255;
+            }
+        }
+    }
+
+    GpuTextureDataDesc data;
+    data.data = texels.data();
+    data.z = 1;
+    data.depth = 2;
+    ASSERT_TRUE (volume->upload (data));
+
+    auto sampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
+    ASSERT_NE (sampler, nullptr);
+
+    for (int slice = 0; slice < 2; ++slice)
+    {
+        const auto w = String ((slice + 1.5f) / 4.0f);
+        const auto pixels = drawIntoReadback (R"(#version 450
+layout(set = 0, binding = 0) uniform texture3D volume;
+layout(set = 0, binding = 1) uniform sampler volumeSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main() { color = textureLod (sampler3D (volume, volumeSampler), vec3 (uv, )" + w + R"(), 0.0); })",
+                                              4,
+                                              [&] (GpuRenderPass& pass)
+        {
+            pass.setTexture (0, 0, volume);
+            pass.setSampler (0, 1, sampler);
+        });
+        ASSERT_FALSE (pixels.empty());
+
+        for (int row = 0; row < 4; ++row)
+        {
+            for (int column = 0; column < 4; ++column)
+            {
+                const auto* expected = texels.data() + ((slice * 4 + row) * 4 + column) * 4;
+                const auto* texel = pixels.data() + (readbackRow (row) * 4 + column) * 4;
+                for (int channel = 0; channel < 4; ++channel)
+                    EXPECT_NEAR (texel[channel], expected[channel], 2) << "slice " << slice << " row " << row << " column " << column << " channel " << channel;
+            }
+        }
+    }
+}
+
+TEST_F (GpuTextureMetalTests, UploadIntoACombinedDepthStencilRenderTargetFails)
+{
+    for (auto format : { GpuTextureFormat::depth24plusStencil8, GpuTextureFormat::depth32floatStencil8 })
+    {
+        auto texture = GpuTexture::create (device, GpuTextureDesc (8, 8, format, true));
+        ASSERT_NE (texture, nullptr);
+
+        std::vector<uint8_t> texels (8 * 8 * 8, 0);
+        GpuTextureDataDesc data;
+        data.data = texels.data();
+        EXPECT_FALSE (texture->upload (data)) << (int) format;
+    }
+}
+
 TEST_F (GpuTextureMetalTests, GenerateMipsReachesTheLastLevelOfAnOddSizedTexture)
 {
     GpuTextureDesc desc (5, 5, GpuTextureFormat::rgba8unorm, true);
@@ -1270,7 +1429,7 @@ TEST_F (GpuTextureMetalTests, GenerateMipsReachesTheLastLevelOfAnOddSizedTexture
     auto frame = GpuFrame::begin (device);
     ASSERT_TRUE (texture->generateMips (frame));
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     const auto pixels = drawIntoReadback (sampleLodZeroFragment, 1, [&] (GpuRenderPass& pass)
     {

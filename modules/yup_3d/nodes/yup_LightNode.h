@@ -27,7 +27,10 @@ namespace yup
 
     Lights follow KHR_lights_punctual: they shine down the -Z axis of their entity, and point
     and spot lights fall off with the inverse square of the distance. Every LightNode slot of
-    every visible entity contributes, up to the limit of the renderer.
+    every visible entity contributes. On the raster tier each draw is shaded by the
+    SceneDrawList::maxLightsPerDraw lights that influence it most, see SceneDrawList::selectLights().
+    On the full tier every light reaching a surface shades it, up to 63 point and spot lights per
+    screen-space cluster.
 
     @see SceneRenderer, EntityNode
 */
@@ -57,7 +60,7 @@ public:
     float range = 0.0f;                                             ///< Distance where point and spot lights reach zero, 0 for infinite.
     float innerConeAngle = 0.0f;                                    ///< Spot angle from the axis where the falloff starts.
     float outerConeAngle = MathConstants<float>::pi * 0.25f;        ///< Spot angle from the axis where the light ends.
-    float radius = 0.0f;                                            ///< Size of the emitter, 0 for a punctual light: the sphere radius in world units for point and spot lights, the angular radius in radians for a directional light.
+    float radius = 0.0f;                                            ///< Size of the emitter, 0 for a punctual light: the sphere radius in world units for point and spot lights (spot lights keep their cone), the angular radius in radians for a directional light.
     bool castsShadows = false;                                      ///< True for a directional light to cast shadows, see SceneRenderer.
 };
 

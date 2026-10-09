@@ -96,6 +96,7 @@ private:
     id<MTLDevice> m_mtlDevice = nil;
     id<MTLCommandQueue> m_mtlQueue = nil;
     id<MTLCommandBuffer> m_mtlCommandBuffer = nil;
+    bool m_ownsCommandBuffer = true;
 
     std::vector<rcp<BindGroup>> m_deferredBindGroups;
 

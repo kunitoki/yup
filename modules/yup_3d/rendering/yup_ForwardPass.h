@@ -28,9 +28,13 @@ namespace yup
 /** Forward shading of draw items: the environment background, then opaque and blended surfaces.
 
     Bindings follow the set 0 (view) / set 1 (pass) / set 2 (draw and material) convention, so the
-    per-frame sets are built once per pipeline change and only set 2 changes per draw.
+    per-frame sets are built once per pipeline change and only set 2 changes per draw. Set 1 holds
+    the LightingInputs at bindings 0-5 (the area light tables at 4 and 5, read through the set 0
+    linearClamp sampler at binding 1), and on the full tier the lights and the light lists of the
+    clusters at bindings 6 and 7; raster draws read their own light list at set 2 binding 12.
 
-    Pipelines are compiled lazily per color and depth format, sample count and velocity output.
+    Pipelines are compiled lazily per color and depth format, sample count and velocity output: the
+    full tier variant is the one with a velocity target, and draws blended items only.
 
     @internal
 */
@@ -70,14 +74,30 @@ public:
     */
     Result prepare (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount);
 
-    /** Draws the background, then @p opaque then @p blend items.
+    /** Draws @p opaque then @p blend items, after clearing the targets and drawing the visible
+        environment when @p clear is set, or over the loaded targets otherwise.
+
+        On the raster tier each item is lit by the lights its SceneDrawList::DrawItem::lightIndices
+        pick from LightingInputs::packedLights; on the full tier by the lights of the clusters, from
+        LightingInputs::lights and LightingInputs::clusterLights.
+
+        @param device       The device to draw with.
+        @param frame        The frame to record into.
+        @param view         The camera of the frame.
+        @param lighting     What the surfaces are lit by.
+        @param opaque       The opaque and masked items, writing depth. Raster only: must be empty with a velocity target.
+        @param blend        The blended items, testing depth without writing it.
+        @param targets      The attachments.
+        @param output       What the color target receives.
+        @param sampleCount  The sample count of the attachments.
+        @param clear        The color to clear to, or empty to load the color, depth and velocity
+                            drawn before (no environment is drawn then).
 
         @returns False if the pipelines for @p targets could not be prepared or the pass could not begin.
     */
-    bool render (const GpuDevice::Ptr& device, GpuFrame& frame, const Scene& scene, const ViewData& view,
-                 Span<const SceneDrawList::Light> lights, Span<const SceneDrawList::DrawItem> opaque,
-                 Span<const SceneDrawList::DrawItem> blend, const ShadowRenderer::Result& shadow,
-                 const Targets& targets, Output output, uint32_t sampleCount);
+    bool render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, const LightingInputs& lighting,
+                 Span<const SceneDrawList::DrawItem> opaque, Span<const SceneDrawList::DrawItem> blend,
+                 const Targets& targets, Output output, uint32_t sampleCount, std::optional<GpuColor> clear);
 
 private:
     struct Variant;
@@ -87,11 +107,10 @@ private:
 
     std::vector<std::unique_ptr<Variant>> variants;
     std::optional<Result> defaults;
-    GpuTexture::Ptr whiteTexture;
+    GeometryBindings geometry;
     GpuTexture::Ptr blackTexture;
-    GpuTexture::Ptr flatNormalTexture;
-    GpuSampler::Ptr defaultSampler;
     GpuSampler::Ptr pointClampSampler;
+    GpuSampler::Ptr linearClampSampler;
     GpuTarget::Ptr surface;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ForwardPass)

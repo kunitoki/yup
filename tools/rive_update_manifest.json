@@ -1270,6 +1270,220 @@
               "private:"
             ]
           }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_texture_metal.hpp",
+          "note": "Ore Metal texture: hold the owning ContextMetal, so an upload into a private storage texture can reach the device and command queue",
+          "already_contains": "    id<MTLTexture> m_mtlTexture = nil;\n    ContextMetal* m_ctx = nullptr;",
+          "replace": {
+            "from": [
+              "    id<MTLTexture> m_mtlTexture = nil;",
+              "};"
+            ],
+            "to": [
+              "    id<MTLTexture> m_mtlTexture = nil;",
+              "    ContextMetal* m_ctx = nullptr;",
+              "};"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_context_metal.mm",
+          "note": "Ore Metal makeTexture: record the owning context on the texture, needed by uploads into private (render target) textures",
+          "already_contains": "new TextureMetal(desc));\n    texture->m_ctx = this;",
+          "replace": {
+            "from": [
+              "    auto texture = rcp<TextureMetal>(new TextureMetal(desc));"
+            ],
+            "to": [
+              "    auto texture = rcp<TextureMetal>(new TextureMetal(desc));",
+              "    texture->m_ctx = this;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_context_metal.mm",
+          "note": "Ore Metal wrapRenderTarget/wrapCanvasTexture: record the owning context on the wrapped texture, so an upload into the private target texture does not dereference a null context",
+          "already_contains": "    texture->m_mtlTexture = mtlTexture;\n    texture->m_ctx = this;",
+          "replace": {
+            "from": [
+              "    auto texture = rcp<TextureMetal>(new TextureMetal(texDesc));",
+              "    texture->m_mtlTexture = mtlTexture;"
+            ],
+            "to": [
+              "    auto texture = rcp<TextureMetal>(new TextureMetal(texDesc));",
+              "    texture->m_mtlTexture = mtlTexture;",
+              "    texture->m_ctx = this;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_context_metal.mm",
+          "note": "Ore Metal wrapRiveTexture: record the owning context on the borrowed texture, which may be private, so uploads into it can blit",
+          "already_contains": "    texture->m_mtlTexture = mtlTex; // Borrow — caller owns via RenderImage.\n    texture->m_ctx = this;",
+          "replace": {
+            "from": [
+              "    auto texture = rcp<TextureMetal>(new TextureMetal(texDesc));",
+              "    texture->m_mtlTexture = mtlTex; // Borrow — caller owns via RenderImage."
+            ],
+            "to": [
+              "    auto texture = rcp<TextureMetal>(new TextureMetal(texDesc));",
+              "    texture->m_mtlTexture = mtlTex; // Borrow — caller owns via RenderImage.",
+              "    texture->m_ctx = this;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_texture_metal.mm",
+          "note": "Ore Metal texture upload: include the Metal context, whose device and command queue the private storage upload path uses",
+          "already_contains": "#include \"rive/renderer/ore/ore_context_metal.hpp\"",
+          "replace": {
+            "from": [
+              "#include \"ore_texture_metal.hpp\"",
+              "#include \"rive/rive_types.hpp\""
+            ],
+            "to": [
+              "#include \"ore_texture_metal.hpp\"",
+              "#include \"rive/renderer/ore/ore_context_metal.hpp\"",
+              "#include \"rive/rive_types.hpp\""
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_texture_metal.mm",
+          "note": "Ore Metal texture upload: Metal forbids replaceRegion on MTLStorageModePrivate textures (render targets are private), and Metal API Validation aborts on it. Stage the bytes in a shared MTLBuffer and blit them into the requested mip, slice and region on the context queue, then wait, keeping replaceRegion's synchronous semantics. Shared and managed textures keep replaceRegion. The staging buffer covers only the bytes replaceRegion would read, since GpuTexture::upload does not pass dataSize. Combined depth-stencil formats (a plain buffer copy cannot fill them) and block-compressed formats are refused, and a failed staging allocation, command buffer creation or blit is reported, all through setLastError, which GpuTexture::upload turns into false.",
+          "already_contains": "    if (m_mtlTexture.storageMode == MTLStorageModePrivate)",
+          "replace": {
+            "from": [
+              "            : 0;",
+              "",
+              "    [m_mtlTexture replaceRegion:region"
+            ],
+            "to": [
+              "            : 0;",
+              "",
+              "    if (m_mtlTexture.storageMode == MTLStorageModePrivate)",
+              "    {",
+              "        assert(m_ctx != nullptr);",
+              "        if (m_format == TextureFormat::depth24plusStencil8 ||",
+              "            m_format == TextureFormat::depth32floatStencil8)",
+              "        {",
+              "            m_ctx->setLastError(",
+              "                \"upload: combined depth-stencil formats are not supported \"",
+              "                \"on private textures\");",
+              "            return;",
+              "        }",
+              "        const uint32_t bpt = textureFormatBytesPerTexel(m_format);",
+              "        if (bpt == 0)",
+              "        {",
+              "            m_ctx->setLastError(\"upload: block-compressed formats are not \"",
+              "                                \"supported on private textures\");",
+              "            return;",
+              "        }",
+              "        const NSUInteger stagingSize =",
+              "            mtlBytesPerImage * (data.depth - 1) +",
+              "            static_cast<NSUInteger>(data.bytesPerRow) * (data.height - 1) +",
+              "            static_cast<NSUInteger>(data.width) * bpt;",
+              "        @autoreleasepool",
+              "        {",
+              "            id<MTLBuffer> staging =",
+              "                [m_ctx->device() newBufferWithBytes:data.data",
+              "                                             length:stagingSize",
+              "                                            options:MTLResourceStorageModeShared];",
+              "            if (staging == nil)",
+              "            {",
+              "                m_ctx->setLastError(",
+              "                    \"upload: staging buffer allocation failed (size=%llu)\",",
+              "                    static_cast<unsigned long long>(stagingSize));",
+              "                return;",
+              "            }",
+              "            id<MTLCommandBuffer> commandBuffer = [m_ctx->m_mtlQueue commandBuffer];",
+              "            if (commandBuffer == nil)",
+              "            {",
+              "                m_ctx->setLastError(\"upload: command buffer creation failed\");",
+              "                return;",
+              "            }",
+              "            id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];",
+              "            [blit copyFromBuffer:staging",
+              "                       sourceOffset:0",
+              "                  sourceBytesPerRow:data.bytesPerRow",
+              "                sourceBytesPerImage:mtlBytesPerImage",
+              "                         sourceSize:MTLSizeMake(",
+              "                                        data.width, data.height, data.depth)",
+              "                          toTexture:m_mtlTexture",
+              "                   destinationSlice:data.layer",
+              "                   destinationLevel:data.mipLevel",
+              "                  destinationOrigin:MTLOriginMake(data.x, data.y, data.z)];",
+              "            [blit endEncoding];",
+              "            [commandBuffer commit];",
+              "            [commandBuffer waitUntilCompleted];",
+              "            if (commandBuffer.status == MTLCommandBufferStatusError)",
+              "            {",
+              "                m_ctx->setLastError(",
+              "                    \"upload: blit failed: %s\",",
+              "                    commandBuffer.error.localizedDescription.UTF8String",
+              "                        ?: \"unknown\");",
+              "            }",
+              "        }",
+              "        return;",
+              "    }",
+              "",
+              "    [m_mtlTexture replaceRegion:region"
+            ]
+          }
+        },
+        {
+          "path": "include/rive/renderer/ore/ore_context_metal.hpp",
+          "note": "Ore Metal context: remember whether the frame command buffer was created by the context or handed in through FrameDescriptor::externalCommandBuffer, so endFrame commits only the ones it owns",
+          "already_contains": "    id<MTLCommandBuffer> m_mtlCommandBuffer = nil;\n    bool m_ownsCommandBuffer = true;",
+          "replace": {
+            "from": [
+              "    id<MTLCommandBuffer> m_mtlCommandBuffer = nil;"
+            ],
+            "to": [
+              "    id<MTLCommandBuffer> m_mtlCommandBuffer = nil;",
+              "    bool m_ownsCommandBuffer = true;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_context_metal.mm",
+          "note": "Ore Metal beginFrame: honor FrameDescriptor::externalCommandBuffer like the Vulkan and D3D12 contexts, so YUP owns the frame command buffer (created with encoder execution status, committed and waited on by GpuDevice, and checked for MTLCommandBufferStatusError so GPU failures are reported instead of silently producing blank frames). Without an external one the context still creates its own. A nil command buffer, e.g. from a nil queue once the GPU ran out of memory, is reported through setLastError so GpuFrame::begin fails instead of tripping the mtlBeginRenderPass assert later",
+          "already_contains": "    m_ownsCommandBuffer = desc.externalCommandBuffer == nullptr;",
+          "replace": {
+            "from": [
+              "void ContextMetal::beginFrame(const FrameDescriptor&)",
+              "{",
+              "    m_mtlCommandBuffer = [m_mtlQueue commandBuffer];"
+            ],
+            "to": [
+              "void ContextMetal::beginFrame(const FrameDescriptor& desc)",
+              "{",
+              "    m_ownsCommandBuffer = desc.externalCommandBuffer == nullptr;",
+              "    m_mtlCommandBuffer =",
+              "        m_ownsCommandBuffer",
+              "            ? [m_mtlQueue commandBuffer]",
+              "            : (__bridge id<MTLCommandBuffer>)desc.externalCommandBuffer;",
+              "    if (m_mtlCommandBuffer == nil)",
+              "        setLastError(\"ore: Metal command buffer creation failed\");"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_context_metal.mm",
+          "note": "Ore Metal endFrame: commit only a command buffer the context created; an external one is committed by its owner after endFrame, which is still free to add completion handlers to it",
+          "already_contains": "        if (m_ownsCommandBuffer)\n            [m_mtlCommandBuffer commit];",
+          "replace": {
+            "from": [
+              "        [m_mtlCommandBuffer commit];",
+              "        m_mtlCommandBuffer = nil;"
+            ],
+            "to": [
+              "        if (m_ownsCommandBuffer)",
+              "            [m_mtlCommandBuffer commit];",
+              "        m_mtlCommandBuffer = nil;"
+            ]
+          }
         }
       ],
       "shader_generation": {

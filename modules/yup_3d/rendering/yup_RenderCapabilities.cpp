@@ -61,7 +61,9 @@ RenderCapabilities::Tier RenderCapabilities::selectTier (const DeviceFacts& fact
     if (preference == RenderSettings::TierPreference::raster)
         return Tier::raster;
 
-    if (! (facts.rgba16floatRenderable && facts.colorAttachments >= 4 && passedInteropSpike (facts.platform)))
+    // Clustered lights need compute and storage buffers readable from fragment shaders
+    if (! (facts.rgba16floatRenderable && facts.colorAttachments >= 4 && facts.compute && facts.fragmentStorageBuffers
+           && passedInteropSpike (facts.platform)))
         return Tier::raster;
 
     if (preference == RenderSettings::TierPreference::full)

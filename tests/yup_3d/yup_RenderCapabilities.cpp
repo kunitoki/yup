@@ -147,3 +147,16 @@ TEST_F (RenderCapabilitiesTests, FullDefaultsAreHdrAndTaa)
     EXPECT_TRUE (caps.isEnabled (Feature::temporalAntiAliasing, settings));
     EXPECT_FALSE (caps.isEnabled (Feature::bloom, settings));
 }
+
+TEST_F (RenderCapabilitiesTests, FullTierNeedsComputeAndFragmentStorageBuffers)
+{
+    auto facts = desktopMetal();
+    EXPECT_EQ (RenderCapabilities::selectTier (facts, Preference::automatic), Tier::full);
+
+    facts.compute = false;
+    EXPECT_EQ (RenderCapabilities::selectTier (facts, Preference::full), Tier::raster);
+
+    facts.compute = true;
+    facts.fragmentStorageBuffers = false;
+    EXPECT_EQ (RenderCapabilities::selectTier (facts, Preference::full), Tier::raster);
+}

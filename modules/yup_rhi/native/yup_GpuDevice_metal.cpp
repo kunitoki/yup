@@ -147,28 +147,17 @@ public:
         if (impl == nullptr)
             return false;
 
-        // Storage buffers: write directly into the shared MTLBuffer.
+        // Storage buffers: write into the shared MTLBuffer, or into another backing when work
+        // that may still read it is in flight, so the update never waits for the GPU
         if (impl->mtlStorageBuffer != nil)
         {
             if (byteSize > buffer->getSizeInBytes())
                 return false;
 
-            YUP_AUTORELEASEPOOL
-            {
-                // Serialise after all prior GPU work with a blit, then write.
-                id<MTLBuffer> stagingBuf = [device newBufferWithLength:4
-                                                               options:MTLResourceStorageModeShared];
+            if (impl->mtlUses.isInFlight() && ! swapStorageBacking (*impl, byteSize))
+                return false;
 
-                id<MTLCommandBuffer> cmd = [queue commandBuffer];
-                id<MTLBlitCommandEncoder> blit = [cmd blitCommandEncoder];
-                [blit fillBuffer:stagingBuf range:NSMakeRange (0, 4) value:0];
-                [blit endEncoding];
-                [cmd commit];
-                [cmd waitUntilCompleted];
-
-                std::memcpy ([impl->mtlStorageBuffer contents], data, byteSize);
-            }
-
+            std::memcpy ([impl->mtlStorageBuffer contents], data, byteSize);
             return true;
         }
 
@@ -238,9 +227,13 @@ public:
         if (rc == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
             return;
 
-        id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
-        rc->flush ({ .renderTarget = target.getRenderTarget(), .externalCommandBuffer = (__bridge void*) commandBuffer });
-        [commandBuffer commit];
+        YUP_AUTORELEASEPOOL
+        {
+            id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
+            rc->flush ({ .renderTarget = target.getRenderTarget(), .externalCommandBuffer = (__bridge void*) commandBuffer });
+            [commandBuffer commit];
+        }
+
         target.contextSlot->frameActive = false;
     }
 
@@ -305,25 +298,36 @@ public:
         if (dstSize < bytesPerRow * h)
             return false;
 
-        id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
+        YUP_AUTORELEASEPOOL
+        {
+            id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
+            if (commandBuffer == nil)
+                return false;
 
-        id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
-        [blitEncoder copyFromTexture:srcTexture
-                         sourceSlice:0
-                         sourceLevel:0
-                        sourceOrigin:MTLOriginMake (0, 0, 0)
-                          sourceSize:MTLSizeMake (w, h, 1)
-                           toTexture:target.stagingTexture
-                    destinationSlice:0
-                    destinationLevel:0
-                   destinationOrigin:MTLOriginMake (0, 0, 0)];
+            id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
+            [blitEncoder copyFromTexture:srcTexture
+                             sourceSlice:0
+                             sourceLevel:0
+                            sourceOrigin:MTLOriginMake (0, 0, 0)
+                              sourceSize:MTLSizeMake (w, h, 1)
+                               toTexture:target.stagingTexture
+                        destinationSlice:0
+                        destinationLevel:0
+                       destinationOrigin:MTLOriginMake (0, 0, 0)];
 #if YUP_MAC
-        [blitEncoder synchronizeResource:target.stagingTexture];
+            [blitEncoder synchronizeResource:target.stagingTexture];
 #endif
-        [blitEncoder endEncoding];
+            [blitEncoder endEncoding];
 
-        [commandBuffer commit];
-        [commandBuffer waitUntilCompleted];
+            [commandBuffer commit];
+            [commandBuffer waitUntilCompleted];
+
+            if (commandBuffer.status == MTLCommandBufferStatusError)
+            {
+                YUP_DBG ("GpuDeviceMetal: readback failed: " << describeFailure (commandBuffer));
+                return false;
+            }
+        }
 
         [target.stagingTexture getBytes:dst
                             bytesPerRow:bytesPerRow
@@ -344,7 +348,157 @@ public:
 
     void* getNativeCommandQueue() const noexcept override { return (__bridge void*) queue; }
 
+    /** True when the device and its command queue were created. */
+    bool isUsable() const noexcept { return device != nil && queue != nil && oreContext != nullptr; }
+
+protected:
+    //==============================================================================
+    /** Frames record into command buffers owned here rather than by ore, so their
+        GPU status can be checked once they complete. */
+    bool reportsFrameCompletion() const noexcept override { return true; }
+
+    void* beginFrameCommands (uint64_t generation) override
+    {
+        id<MTLCommandBuffer> commandBuffer = nil;
+
+        YUP_AUTORELEASEPOOL
+        {
+#if YUP_DEBUG
+            // Names the encoder that faulted, at a runtime cost only debug builds pay
+            if (@available (macOS 11.0, iOS 14.0, *))
+            {
+                MTLCommandBufferDescriptor* descriptor = [MTLCommandBufferDescriptor new];
+                descriptor.errorOptions = MTLCommandBufferErrorOptionEncoderExecutionStatus;
+                commandBuffer = [queue commandBufferWithDescriptor:descriptor];
+            }
+#endif
+
+            if (commandBuffer == nil)
+                commandBuffer = [queue commandBuffer];
+        }
+
+        if (commandBuffer == nil)
+            return nullptr;
+
+        // Not the device: the handler may run after it was destroyed, when the destructor could
+        // not create the command buffer it waits for the handlers with
+        const auto completeFrame = getFrameCompletion();
+
+        [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completed)
+        {
+            completeFrame (generation, completed.status == MTLCommandBufferStatusError
+                                           ? Result::fail (describeFailure (completed))
+                                           : Result::ok());
+        }];
+
+        return (__bridge_retained void*) commandBuffer;
+    }
+
+    Result submitFrameCommands (void* commandBuffer) override
+    {
+        if (commandBuffer == nullptr)
+            return Result::ok();
+
+        YUP_AUTORELEASEPOOL
+        {
+            [(__bridge id<MTLCommandBuffer>) commandBuffer commit];
+        }
+
+        return Result::ok();
+    }
+
+    Result waitFrameCommands (void* commandBuffer) override
+    {
+        if (commandBuffer == nullptr)
+            return Result::ok();
+
+        id<MTLCommandBuffer> frameCommands = (__bridge id<MTLCommandBuffer>) commandBuffer;
+
+        // Waiting on a command buffer that was never committed would never return
+        if (frameCommands.status == MTLCommandBufferStatusNotEnqueued)
+            return Result::ok();
+
+        [frameCommands waitUntilCompleted];
+
+        if (frameCommands.status == MTLCommandBufferStatusError)
+            return Result::fail (describeFailure (frameCommands));
+
+        return Result::ok();
+    }
+
+    void releaseFrameCommands (void* commandBuffer) override
+    {
+        if (commandBuffer != nullptr)
+            CFRelease (commandBuffer);
+    }
+
 private:
+    /** Makes a backing no in-flight work uses the storage buffer's current one. Earlier backings
+        are recycled once their last use completed, so steady updates stop allocating after a
+        pool miss or two. The old contents are carried over when the update does not cover the
+        whole buffer. At most framesInFlight spares are kept: a dropped one stays alive as long
+        as a command buffer still uses it, since Metal retains what it encoded. */
+    bool swapStorageBacking (GpuBuffer::Impl& impl, size_t updateSize)
+    {
+        auto& spares = impl.mtlSpareBackings;
+        auto idle = std::find_if (spares.begin(), spares.end(), [] (const auto& spare)
+        {
+            return ! spare.uses.isInFlight();
+        });
+
+        id<MTLBuffer> fresh = nil;
+        if (idle != spares.end())
+        {
+            fresh = idle->buffer;
+            spares.erase (idle);
+        }
+        else
+        {
+            fresh = [device newBufferWithLength:impl.byteSize options:MTLResourceStorageModeShared];
+            if (fresh == nil)
+                return false;
+        }
+
+        if (updateSize < impl.byteSize)
+            std::memcpy ([fresh contents], [impl.mtlStorageBuffer contents], impl.byteSize);
+
+        spares.push_back ({ impl.mtlStorageBuffer, std::move (impl.mtlUses) });
+        impl.mtlStorageBuffer = fresh;
+        impl.mtlUses = {};
+
+        if (spares.size() > framesInFlight)
+            spares.erase (spares.begin());
+
+        return true;
+    }
+
+    /** Describes why a command buffer failed, naming the encoders that faulted when known. */
+    static String describeFailure (id<MTLCommandBuffer> commandBuffer)
+    {
+        String message ("Metal command buffer failed");
+
+        YUP_AUTORELEASEPOOL
+        {
+            NSError* error = commandBuffer.error;
+            if (error == nil)
+                return message;
+
+            message << ": " << String::fromUTF8 (error.localizedDescription.UTF8String);
+
+            if (@available (macOS 11.0, iOS 14.0, *))
+            {
+                NSArray* encoderInfos = error.userInfo[MTLCommandBufferEncoderInfoErrorKey];
+                for (id<MTLCommandBufferEncoderInfo> info in encoderInfos)
+                {
+                    if (info.errorState == MTLCommandEncoderErrorStateFaulted)
+                        message << " (encoder '" << String::fromUTF8 (info.label.UTF8String) << "' faulted)";
+                }
+            }
+        }
+
+        return message;
+    }
+
     struct OffscreenContextSlot
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
@@ -411,16 +565,20 @@ private:
         runs after every earlier one. */
     void waitForCompletedHandlers()
     {
-        id<MTLCommandBuffer> fence = [queue commandBuffer];
-        if (fence == nil)
-            return;
-
         dispatch_semaphore_t done = dispatch_semaphore_create (0);
-        [fence addCompletedHandler:^(id<MTLCommandBuffer>)
+
+        YUP_AUTORELEASEPOOL
         {
-            dispatch_semaphore_signal (done);
-        }];
-        [fence commit];
+            id<MTLCommandBuffer> fence = [queue commandBuffer];
+            if (fence == nil)
+                return;
+
+            [fence addCompletedHandler:^(id<MTLCommandBuffer>)
+            {
+                dispatch_semaphore_signal (done);
+            }];
+            [fence commit];
+        }
 
         dispatch_semaphore_wait (done, DISPATCH_TIME_FOREVER);
     }
@@ -466,7 +624,11 @@ private:
 
 std::unique_ptr<GpuDevice> yup_constructMetalGpuDevice (GpuDevice::Options options)
 {
-    return std::make_unique<GpuDeviceMetal> (options);
+    auto device = std::make_unique<GpuDeviceMetal> (options);
+    if (! device->isUsable())
+        return nullptr;
+
+    return device;
 }
 
 } // namespace yup

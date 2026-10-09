@@ -97,7 +97,9 @@ public:
         @param data  The source pixels and the destination region.
 
         @returns True if the upload was encoded, false if this texture cannot be
-                 uploaded to or the descriptor is out of bounds.
+                 uploaded to, the descriptor is out of bounds, or the backend
+                 rejected the upload (e.g. a combined depth-stencil render target
+                 on Metal).
     */
     bool upload (const GpuTextureDataDesc& data);
 

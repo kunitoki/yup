@@ -204,8 +204,15 @@ TEST_F (GpuSceneDataTests, DarkPointLightHasZeroRange)
     black.color = { 0.0f, 0.0f, 0.0f };
     negative.intensity = -1.0f;
 
+    // A node range does not make a dark light reach anything
+    LightNode rangedUnlit (LightNode::Type::point), rangedBlack (LightNode::Type::spot);
+    rangedUnlit.range = 3.0f;
+    rangedUnlit.intensity = 0.0f;
+    rangedBlack.range = 3.0f;
+    rangedBlack.color = { 0.0f, 0.0f, 0.0f };
+
     // Contributes nothing anywhere: the range is zero, whatever its sign, so culling can drop it
-    for (const auto* node : { &unlit, &black, &negative })
+    for (const auto* node : { &unlit, &black, &negative, &rangedUnlit, &rangedBlack })
     {
         EXPECT_EQ (GpuSceneData::getEffectiveRange (*node), 0.0f);
 

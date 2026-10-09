@@ -43,7 +43,7 @@ public:
     {
         GpuTexture::Ptr map;           ///< The packed depth, or nullptr when nothing casts.
         Matrix4 shadowMatrix;          ///< World to shadow map clip space, depth from 0 to 1.
-        float shadowInfo[4] = { -1.0f, 0.0f, 0.0f, 0.0f }; ///< Shadowed light index (-1 for none), texel size, normal offset, depth bias.
+        float shadowInfo[4] = { -1.0f, 0.0f, 0.0f, 0.0f }; ///< Shadowed light index into SceneDrawList::getLights() (-1 for none), texel size, normal offset, depth bias.
         String error;                  ///< Why the shadow pass could not be recorded, empty on success.
     };
 

@@ -73,12 +73,14 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 #include <bit>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
 
 //==============================================================================
 #include "rhi/yup_GpuTypes.h"
+#include "rhi/yup_GpuFrameStatus.h"
 #include "context/yup_OffscreenTarget.h"
 #include "context/yup_RenderableTarget.h"
 #include "context/yup_GpuDevice.h"

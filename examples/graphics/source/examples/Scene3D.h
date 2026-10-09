@@ -42,9 +42,10 @@
     screen material. Clicking the screen animates the camera onto it, with a custom Node part
     ticked by Scene::update(); from there clicks are mapped onto the LCD through a
     MeshSurfaceMapper, and clicking outside it zooms back out.
-    The scene is only redrawn continuously while the camera moves. The "Scene tree" button
-    shows the entity tree of the scene, and "Free movement" lets the mouse orbit, pan and zoom
-    the camera.
+    The scene is only redrawn continuously while the camera or the light show moves. The "Scene
+    tree" button shows the entity tree of the scene, and "Free movement" lets the mouse orbit,
+    pan and zoom the camera. "Render settings" edits how it is rendered, the angular size of the
+    key light, and turns on a light show of 64 colored point lights orbiting the device.
 */
 class Scene3DDemo : public yup::Component
 {
@@ -461,6 +462,48 @@ private:
     };
 
     //==============================================================================
+    /** A part that flies the children of its entity along elliptic orbits over a box, ticked by Scene::update().
+
+        Child i orbits at its own height, size, speed and direction, so the lights it carries sweep
+        over the whole device.
+    */
+    class LightShowAnimator final : public yup::Node
+    {
+    public:
+        explicit LightShowAnimator (const yup::BoundingBox& boxToOrbit)
+            : box (boxToOrbit)
+        {
+        }
+
+        void update (double deltaSeconds) override
+        {
+            time += yup::jmin (deltaSeconds, 1.0 / 30.0);
+
+            const auto center = box.getCenter();
+            const auto halfSize = box.getSize() * 0.5f;
+            const auto children = getEntity()->getChildren();
+
+            for (size_t i = 0; i < children.size(); ++i)
+            {
+                const auto index = static_cast<float> (i);
+                const auto ring = static_cast<float> (i % 4);
+                const auto scale = 0.3f + 0.25f * ring;
+                const auto speed = (i % 2 == 0 ? 0.35f : -0.25f) * (1.0f + 0.15f * ring);
+                const auto angle = index * 2.39996f + speed * static_cast<float> (time);
+                const auto height = halfSize.getY() * (0.6f + 0.25f * ring);
+
+                children[i]->setPosition ({ center.getX() + std::cos (angle) * halfSize.getX() * scale,
+                                            center.getY() + height,
+                                            center.getZ() + std::sin (angle) * halfSize.getZ() * scale });
+            }
+        }
+
+    private:
+        yup::BoundingBox box;
+        double time = 0.0;
+    };
+
+    //==============================================================================
     /** The 3D view: shows the device from the top, and zooms onto its screen to operate the LCD. */
     class MpcView final : public yup::SceneComponent
     {
@@ -482,6 +525,7 @@ private:
 
                 auto gltfRoot = model.getReference().createEntity();
                 scene->getRoot()->addChild (gltfRoot);
+                tuneMaterials (*gltfRoot);
 
                 auto* device = gltfRoot->findChild ("Cube");
                 if (device != nullptr)
@@ -511,21 +555,39 @@ private:
             scene->getRoot()->addChild (cameraEntity);
             scene->setActiveCamera (cameraEntity.get());
 
-            // Lit like a product shot: the studio gives the reflections and the soft light, a key
-            // light along its main soft box, front left above the device, gives the shadows
+            // Lit like a product shot: one large, low key light from the back left, its soft box in the
+            // studio, rakes across the panel and casts long shadows; the dim studio fills the rest
             auto keyLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("keyLight"));
             auto& keyLight = keyLightEntity->attach<yup::LightNode>();
             keyLight.castsShadows = true;
-            keyLight.intensity = 2.4f;
-            keyLight.color = { 1.0f, 0.98f, 0.95f };
-            CameraPose::lookingAt (directionFromDegrees (35.0f, 50.0f) * 10.0f, {}, { 0.0f, 1.0f, 0.0f }).applyTo (*keyLightEntity);
+            keyLight.intensity = 4.0f;
+            keyLight.radius = 0.08f;
+            keyLight.color = { 1.0f, 0.96f, 0.9f };
+            CameraPose::lookingAt (directionFromDegrees (studioKeyAzimuthDegrees, studioKeyElevationDegrees) * 10.0f, {}, { 0.0f, 1.0f, 0.0f }).applyTo (*keyLightEntity);
             scene->getRoot()->addChild (keyLightEntity);
 
+            lightShow = new yup::EntityNode ("lightShow");
+            lightShow->setVisible (false);
+            lightShow->attach<LightShowAnimator> (deviceBounds);
+
+            for (int i = 0; i < numShowLights; ++i)
+            {
+                auto showLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("showLight"));
+                auto& showLight = showLightEntity->attach<yup::LightNode> (yup::LightNode::Type::point);
+                const auto color = yup::Color::fromHSV (static_cast<float> (i) / static_cast<float> (numShowLights), 0.85f, 1.0f);
+                showLight.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
+                showLight.intensity = 0.5f;
+                showLight.range = 0.5f;
+                lightShow->addChild (showLightEntity);
+            }
+
+            scene->getRoot()->addChild (lightShow);
+
             scene->setEnvironment (createStudioEnvironment());
-            scene->setEnvironmentIntensity (0.7f);
+            scene->setEnvironmentIntensity (0.35f);
             scene->setAmbientColor (yup::Colors::black);
-            scene->setExposure (0.6f);
-            scene->setToneMapping (yup::Scene::ToneMapping::aces);
+            scene->setExposure (1.1f);
+            scene->setToneMapping (yup::Scene::ToneMapping::agx);
             scene->setEnvironmentVisible (true);
             scene->setEnvironmentBlur (0.5f);
 
@@ -568,6 +630,17 @@ private:
             animator->animateTo (getTargetPose(), zoomSeconds);
             setContinuousUpdates (true);
             updateStatus();
+            repaint();
+        }
+
+        /** Shows or hides the light show: small colored point lights orbiting the device. */
+        void setLightShow (bool shouldShow)
+        {
+            lightShow->setVisible (shouldShow);
+
+            if (shouldShow)
+                setContinuousUpdates (true);
+
             repaint();
         }
 
@@ -621,19 +694,21 @@ private:
 
         void paintOverChildren (yup::Graphics& g) override
         {
+            const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
+            auto area = getLocalBounds().reduced (10.0f).withHeight (24.0f);
+            const auto numLights = countLights (*getScene()->getRoot());
+
             g.setFillColor (yup::Colors::white.withAlpha (0.7f));
-            g.fillFittedText (status,
-                              yup::ApplicationTheme::getGlobalTheme()->getDefaultFont(),
-                              getLocalBounds().reduced (10.0f).withHeight (24.0f),
-                              yup::Justification::topLeft);
+            g.fillFittedText (yup::String (numLights) + (numLights == 1 ? " light" : " lights"), font, area.removeFromRight (80.0f), yup::Justification::topRight);
+            g.fillFittedText (status, font, area, yup::Justification::topLeft);
         }
 
         void refreshDisplay (double lastFrameTimeSeconds) override
         {
             yup::SceneComponent::refreshDisplay (lastFrameTimeSeconds);
 
-            // Only animate while the camera moves, the scene is static otherwise
-            if (! animator->isAnimating())
+            // Only animate while the camera or the light show moves, the scene is static otherwise
+            if (! animator->isAnimating() && ! lightShow->isVisible())
                 setContinuousUpdates (false);
         }
 
@@ -838,6 +913,43 @@ private:
             screenEntity = &device;
         }
 
+        /** Makes the painted panel matte and the black knobs glossy, for soft highlights under the studio. */
+        static void tuneMaterials (const yup::EntityNode& entity)
+        {
+            if (auto* meshNode = entity.getNode<yup::MeshNode>(); meshNode != nullptr && meshNode->mesh != nullptr)
+            {
+                for (const auto& primitive : meshNode->mesh->getPrimitives())
+                {
+                    if (primitive.material == nullptr)
+                        continue;
+
+                    auto& material = *primitive.material;
+
+                    if (material.name == "Faceplate" || material.name == "Case")
+                        material.roughnessFactor = 0.7f;
+                    else if (material.name == "Knob Rubber" || material.name == "Black Plastic")
+                        material.roughnessFactor = 0.22f;
+                }
+            }
+
+            for (const auto& child : entity.getChildren())
+                tuneMaterials (*child);
+        }
+
+        /** The number of lights in the visible part of a tree. */
+        static int countLights (const yup::EntityNode& entity)
+        {
+            if (! entity.isVisible())
+                return 0;
+
+            auto count = entity.getNumNodes<yup::LightNode>();
+
+            for (const auto& child : entity.getChildren())
+                count += countLights (*child);
+
+            return count;
+        }
+
         //==============================================================================
         float getAspectRatio() const
         {
@@ -997,6 +1109,7 @@ private:
         static constexpr double zoomSeconds = 0.7;
         static constexpr float minOrbitPitch = 0.05f;
         static constexpr float maxOrbitPitch = 1.56f;
+        static constexpr int numShowLights = 64;
 
         enum class DragMode
         {
@@ -1018,6 +1131,8 @@ private:
         yup::EntityNode::Ptr cameraEntity;
         yup::CameraNode* cameraNode = nullptr;
         CameraAnimator* animator = nullptr;
+
+        yup::EntityNode::Ptr lightShow;
 
         yup::EntityNode* screenEntity = nullptr;
         yup::Vector3<float> screenCenter;
@@ -1135,13 +1250,38 @@ private:
                 view.repaint();
             };
 
+            keyLightSizeLabel.setText ("Key light angular size", yup::dontSendNotification);
+            keyLightSizeSlider.setRange (0.0, 0.1, 0.0);
+            keyLightSizeSlider.setNumDecimalPlacesToDisplay (3);
+            keyLightSizeSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
+
+            if (auto* keyLight = findKeyLight())
+                keyLightSizeSlider.setValue (keyLight->radius, yup::dontSendNotification);
+
+            keyLightSizeSlider.onValueChanged = [this] (double value)
+            {
+                if (auto* keyLight = findKeyLight())
+                {
+                    keyLight->radius = static_cast<float> (value);
+                    view.repaint();
+                }
+            };
+
+            lightShowLabel.setText ("Light show", yup::dontSendNotification);
+            lightShowToggle.setButtonText ("64 orbiting lights");
+            lightShowToggle.onClick = [this]
+            {
+                view.setLightShow (lightShowToggle.getToggleState());
+            };
+
             benchmarkButton.onClick = [this]
             {
                 view.requestBenchmark();
             };
 
             for (auto* child : std::initializer_list<yup::Component*> { &tierLabel, &tierCombo, &taaLabel, &taaSlider, &bloomLabel, &bloomToggle, &bloomThresholdLabel, &bloomThresholdSlider,
-                                                                        &bloomIntensityLabel, &bloomIntensitySlider, &bloomRadiusLabel, &bloomRadiusSlider, &toneMappingLabel, &toneMappingCombo, &exposureLabel, &exposureSlider, &statusLabel, &detailLabel, &benchmarkButton })
+                                                                        &bloomIntensityLabel, &bloomIntensitySlider, &bloomRadiusLabel, &bloomRadiusSlider, &toneMappingLabel, &toneMappingCombo, &exposureLabel, &exposureSlider,
+                                                                        &keyLightSizeLabel, &keyLightSizeSlider, &lightShowLabel, &lightShowToggle, &statusLabel, &detailLabel, &benchmarkButton })
                 addAndMakeVisible (*child);
         }
 
@@ -1198,7 +1338,9 @@ private:
                                            { &bloomIntensityLabel, &bloomIntensitySlider },
                                            { &bloomRadiusLabel, &bloomRadiusSlider },
                                            { &toneMappingLabel, &toneMappingCombo },
-                                           { &exposureLabel, &exposureSlider } })
+                                           { &exposureLabel, &exposureSlider },
+                                           { &keyLightSizeLabel, &keyLightSizeSlider },
+                                           { &lightShowLabel, &lightShowToggle } })
             {
                 label->setBounds (bounds.removeFromTop (rowHeight));
                 control->setBounds (bounds.removeFromTop (rowHeight));
@@ -1212,6 +1354,13 @@ private:
         }
 
     private:
+        /** The light the scene setup names "keyLight". */
+        yup::LightNode* findKeyLight() const
+        {
+            auto* entity = view.getScene()->getRoot()->findChild ("keyLight");
+            return entity != nullptr ? entity->getNode<yup::LightNode>() : nullptr;
+        }
+
         template <class Callback>
         void editSettings (Callback&& edit)
         {
@@ -1259,6 +1408,10 @@ private:
         yup::ComboBox toneMappingCombo { "toneMappingCombo" };
         yup::Label exposureLabel { "exposureLabel" };
         yup::Slider exposureSlider { yup::Slider::LinearHorizontal, "exposureSlider" };
+        yup::Label keyLightSizeLabel { "keyLightSizeLabel" };
+        yup::Slider keyLightSizeSlider { yup::Slider::LinearHorizontal, "keyLightSizeSlider" };
+        yup::Label lightShowLabel { "lightShowLabel" };
+        yup::ToggleButton lightShowToggle { "lightShowToggle" };
         yup::Label statusLabel { "statusLabel" };
         yup::Label detailLabel { "detailLabel" };
         yup::TextButton benchmarkButton { "Benchmark" };

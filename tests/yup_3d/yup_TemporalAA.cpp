@@ -94,7 +94,7 @@ void main() { color = vec4(uintBitsToFloat(0x7fc00000u)); })",
     auto frame = GpuFrame::begin (device);
     ASSERT_TRUE (temporalAA.render (device, frame, view, resources, current, zeros, zeros, 1, 16, output));
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
     resources.endFrame();
 
     // The history is ignored: the output is the current frame, not a blend with a laundered NaN
@@ -136,7 +136,7 @@ TEST_F (TemporalAATests, BlendWeighsColorsByLumaAndKeepsCoverageLinear)
         auto frame = GpuFrame::begin (device);
         EXPECT_TRUE (temporalAA.render (device, frame, view, resources, current, zeros, zeros, 1, 16, output));
         frame.submit();
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
         resources.endFrame();
 
         const auto image = runFullscreen (R"(#version 450

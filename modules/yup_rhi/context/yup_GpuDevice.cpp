@@ -311,6 +311,24 @@ GpuDevice::~GpuDevice()
     // be destroyed after the ore context that created them.
     jassert (uniformBufferPool.isEmpty());
     jassert (retiredFrames.empty());
+
+    // A frame that never completed would leave its waiters blocked forever
+    std::map<uint64_t, std::shared_ptr<GpuFrameStatus::Block>> abandoned;
+
+    {
+        const ScopedLock sl (*frameStatuses->lock);
+        abandoned.swap (frameStatuses->pending);
+        frameStatuses->unclaimedFailures.clear();
+
+        for (auto& [generation, block] : abandoned)
+        {
+            block->completed = true;
+            block->result = Result::fail ("The device was destroyed before the frame completed");
+        }
+    }
+
+    for (auto& [generation, block] : abandoned)
+        block->done.signal();
 }
 
 void GpuDevice::releasePooledResources() noexcept
@@ -340,12 +358,106 @@ void* GpuDevice::beginFrameCommands (uint64_t)
     return nullptr;
 }
 
-void GpuDevice::submitFrameCommands (void*)
+Result GpuDevice::submitFrameCommands (void*)
+{
+    return Result::ok();
+}
+
+Result GpuDevice::waitFrameCommands (void*)
+{
+    return Result::ok();
+}
+
+void GpuDevice::releaseFrameCommands (void*)
 {
 }
 
-void GpuDevice::waitFrameCommands (void*)
+//==============================================================================
+
+Result GpuDevice::takeGpuFailure()
 {
+    const ScopedLock sl (*frameStatuses->lock);
+
+    auto result = Result::ok();
+    for (auto& block : frameStatuses->unclaimedFailures)
+    {
+        if (block->claimed)
+            continue;
+
+        block->claimed = true;
+        result = block->result;
+        break;
+    }
+
+    frameStatuses->unclaimedFailures.clear();
+    return result;
+}
+
+void GpuDevice::failNextFrameForTesting (const String& error)
+{
+    const ScopedLock sl (*frameStatuses->lock);
+    frameStatuses->nextFrameFailure = error;
+}
+
+GpuFrameStatus GpuDevice::beginFrameStatus (uint64_t generation)
+{
+    auto block = std::make_shared<GpuFrameStatus::Block>();
+    block->lock = frameStatuses->lock;
+
+    const ScopedLock sl (*frameStatuses->lock);
+    block->injectedFailure = std::exchange (frameStatuses->nextFrameFailure, {});
+    frameStatuses->pending[generation] = block;
+
+    return GpuFrameStatus (std::move (block));
+}
+
+void GpuDevice::completeFrameStatus (uint64_t generation, const Result& result)
+{
+    frameStatuses->complete (generation, result);
+}
+
+std::function<void (uint64_t, const Result&)> GpuDevice::getFrameCompletion() const
+{
+    return [statuses = frameStatuses] (uint64_t generation, const Result& result)
+    {
+        statuses->complete (generation, result);
+    };
+}
+
+void GpuDevice::FrameStatuses::complete (uint64_t generation, const Result& result)
+{
+    std::shared_ptr<GpuFrameStatus::Block> block;
+
+    {
+        const ScopedLock sl (*lock);
+
+        const auto found = pending.find (generation);
+        if (found == pending.end())
+            return;
+
+        block = std::move (found->second);
+        pending.erase (found);
+
+        block->completed = true;
+        block->result = block->injectedFailure.isNotEmpty() ? Result::fail (block->injectedFailure) : result;
+
+        if (block->result.failed())
+        {
+            YUP_DBG ("GpuDevice: frame " << (int64) generation << " failed: " << block->result.getErrorMessage());
+
+            // Only the first unclaimed failure is reported, so the list never grows
+            unclaimedFailures.erase (std::remove_if (unclaimedFailures.begin(), unclaimedFailures.end(), [] (const auto& unclaimed)
+            {
+                return unclaimed->claimed;
+            }),
+                                     unclaimedFailures.end());
+
+            if (! block->claimed && unclaimedFailures.empty())
+                unclaimedFailures.push_back (block);
+        }
+    }
+
+    block->done.signal();
 }
 
 void GpuDevice::retireFrameResources (uint64_t generation,

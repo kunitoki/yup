@@ -44,6 +44,7 @@ public:
         YUP_AUTORELEASEPOOL
         {
             encoder = [commandBufferToEncode computeCommandEncoder];
+            encodedInto = commandBufferToEncode;
             if (encoder != nil && commitOnFinish)
                 commandBuffer = commandBufferToEncode;
         }
@@ -89,6 +90,7 @@ public:
                 [encoder setBuffer:bufImpl->mtlStorageBuffer
                             offset:0
                            atIndex:slotIndex (sb.group, sb.binding)];
+                bufImpl->mtlUses.add (encodedInto);
             }
 
             for (auto& ub : uboBindings)
@@ -165,6 +167,7 @@ public:
                 commandBuffer = nil;
             }
 
+            encodedInto = nil;
             tempBuffers.clear();
             boundViews.clear();
         }
@@ -193,6 +196,7 @@ private:
     id<MTLDevice> device = nil;
     rive::ore::Context* oreCtx = nullptr;
     id<MTLCommandBuffer> commandBuffer = nil;
+    id<MTLCommandBuffer> encodedInto = nil;
     id<MTLComputeCommandEncoder> encoder = nil;
     std::vector<id<MTLBuffer>> tempBuffers;
     std::vector<rive::rcp<rive::ore::TextureView>> boundViews;

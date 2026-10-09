@@ -633,7 +633,9 @@ private:
             clearSurface (frame, bloomTemp, black[0], black[1], black[2], black[3]);
 
             frame.submit();
-            frame.waitForGPU();
+
+            if (const auto result = frame.waitForGPU(); result.failed())
+                YUP_DBG ("FluidSimulationDemo: clearing the simulation failed: " << result.getErrorMessage());
         }
     }
 

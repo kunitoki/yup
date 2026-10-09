@@ -182,14 +182,17 @@ GpuComputePass GpuComputePass::begin (GpuFrame& frame)
         return begin (frameImpl->device);
 
     // Dispatches cannot run inside a render pass, and Metal allows one open encoder at a time
-    if (frameImpl->openPass != nullptr)
+    YUP_AUTORELEASEPOOL
     {
-        frameImpl->openPass->finish();
-        frameImpl->openPass = nullptr;
-    }
+        if (frameImpl->openPass != nullptr)
+        {
+            frameImpl->openPass->finish();
+            frameImpl->openPass = nullptr;
+        }
 
-    if (frameImpl->openComputePass != nullptr)
-        yup_finishComputePass (*frameImpl->openComputePass);
+        if (frameImpl->openComputePass != nullptr)
+            yup_finishComputePass (*frameImpl->openComputePass);
+    }
 
     GpuComputePass pass;
 

@@ -38,129 +38,22 @@ constexpr uint8_t forwardPassFullShaderBundle[] = {
 constexpr uint8_t backgroundShaderBundle[] = {
 #include "../shaders/yup_Background.inc"
 };
-constexpr uint8_t backgroundFullShaderBundle[] = {
-#include "../shaders/yup_Background_full.inc"
-};
 
 //==============================================================================
-// std140 mirrors of the uniform blocks in yup_ForwardPass.vert / .frag and yup_Background.frag
-
-// LightingBlock of yup_ForwardPass.frag and yup_Background.frag. environmentInfo: x intensity
-// (0 for none), y last level, z background blur level, w output mode (ForwardPass::Output)
-struct ForwardLightingBlock
+// std140 mirror of LightListBlock in lib/lights.glsl, the lights of one raster draw, count in x
+// (set 1: LightingInputs, set 2 draw and material: GeometryBindings)
+struct ForwardLightListBlock
 {
-    float ambient[4];
-    float lightInfo[4];
-    float lightPositions[SceneRenderer::maxLights][4];
-    float lightDirections[SceneRenderer::maxLights][4];
-    float lightColors[SceneRenderer::maxLights][4];
-    float lightSpots[SceneRenderer::maxLights][4];
-    float shadowMatrix[16];
-    float shadowInfo[4];
-    float environmentInfo[4];
-    float irradiance[9][4];
+    GpuLight lights[SceneDrawList::maxLightsPerDraw];
+    float count[4];
 };
 
-struct ForwardDrawBlock
-{
-    float model[16];
-    float normalMatrix[16];
-    float previousModel[16];
-};
-
-struct ForwardMaterialBlock
-{
-    float baseColorFactor[4];
-    float emissiveFactor[4];
-    float params[4];
-    float flags[4];
-    GpuMaterial extension; // specular, extended
-};
-
-static_assert (sizeof (ForwardLightingBlock) == 784);
-static_assert (sizeof (ForwardDrawBlock) == 192);
-static_assert (sizeof (ForwardMaterialBlock) == 96);
-static_assert (offsetof (ForwardMaterialBlock, extension) == 64);
-
-float forwardSrgbToLinear (float value) noexcept
-{
-    return value <= 0.04045f ? value / 12.92f : std::pow ((value + 0.055f) / 1.055f, 2.4f);
-}
-
-void copyForwardMatrix (const Matrix4& matrix, float* destination) noexcept
-{
-    std::copy_n (matrix.getData(), 16, destination);
-}
-
-GpuTexture::Ptr createSolidForwardTexture (const GpuDevice::Ptr& device, uint32 rgba)
-{
-    auto texture = GpuTexture::create (device, GpuTextureDesc (1, 1, GpuTextureFormat::rgba8unorm));
-    if (texture == nullptr)
-        return nullptr;
-
-    const uint8 texel[] = { static_cast<uint8> (rgba >> 24), static_cast<uint8> (rgba >> 16), static_cast<uint8> (rgba >> 8), static_cast<uint8> (rgba) };
-
-    GpuTextureDataDesc data;
-    data.data = texel;
-    return texture->upload (data) ? texture : nullptr;
-}
+static_assert (sizeof (ForwardLightListBlock) == 528);
 
 size_t getForwardPipelineIndex (const SceneDrawList::DrawItem& item) noexcept
 {
-    return (item.material->alphaMode == Material::AlphaMode::blend ? 4u : 0u)
-         + (item.material->doubleSided ? 2u : 0u)
-         + (item.mirrored ? 1u : 0u);
-}
-
-ForwardLightingBlock makeForwardLightingBlock (const Scene& scene, Span<const SceneDrawList::Light> lights)
-{
-    ForwardLightingBlock block {};
-
-    const auto ambient = scene.getAmbientColor();
-    block.ambient[0] = forwardSrgbToLinear (ambient.getRedFloat());
-    block.ambient[1] = forwardSrgbToLinear (ambient.getGreenFloat());
-    block.ambient[2] = forwardSrgbToLinear (ambient.getBlueFloat());
-
-    int count = 0;
-    for (const auto& light : lights)
-    {
-        if (count == SceneRenderer::maxLights)
-            break;
-
-        const auto packed = GpuSceneData::packLight (light, -1);
-        const auto i = static_cast<size_t> (count++);
-
-        std::copy_n (packed.positionType, 4, block.lightPositions[i]);
-        std::copy_n (packed.directionRange, 4, block.lightDirections[i]);
-        std::copy_n (packed.colorIntensity, 4, block.lightColors[i]);
-        std::copy_n (packed.spotRadiusShadow, 4, block.lightSpots[i]);
-    }
-
-    block.lightInfo[0] = static_cast<float> (count);
-    return block;
-}
-
-ForwardMaterialBlock makeForwardMaterialBlock (const Material& material, bool hasNormalTexture)
-{
-    ForwardMaterialBlock block {};
-
-    std::copy (material.baseColorFactor.begin(), material.baseColorFactor.end(), block.baseColorFactor);
-    std::copy (material.emissiveFactor.begin(), material.emissiveFactor.end(), block.emissiveFactor);
-    block.emissiveFactor[3] = material.alphaCutoff;
-
-    block.params[0] = material.metallicFactor;
-    block.params[1] = material.roughnessFactor;
-    block.params[2] = material.normalScale;
-    block.params[3] = material.occlusionStrength;
-
-    block.flags[0] = static_cast<float> (material.alphaMode);
-    block.flags[1] = material.baseColorTexture != nullptr && material.baseColorTexture->isSrgb() ? 1.0f : 0.0f;
-    block.flags[2] = material.emissiveTexture != nullptr && material.emissiveTexture->isSrgb() ? 1.0f : 0.0f;
-    block.flags[3] = hasNormalTexture ? 1.0f : 0.0f;
-
-    block.extension = GpuSceneData::packMaterial (material);
-
-    return block;
+    return (item.material->alphaMode == Material::AlphaMode::blend ? GeometryBindings::numRasterStates : 0u)
+         + GeometryBindings::getRasterState (item);
 }
 
 } // namespace
@@ -173,8 +66,8 @@ struct ForwardPass::Variant
     uint32_t sampleCount = 1;
     bool velocity = false;
 
-    std::array<GpuPipeline::Ptr, 8> pipelines; // [blend * 4 + doubleSided * 2 + mirrored]
-    GpuPipeline::Ptr background;
+    std::array<GpuPipeline::Ptr, 2 * GeometryBindings::numRasterStates> pipelines; // [blend * 4 + raster state], blend only on full
+    GpuPipeline::Ptr background; // Raster only: the full tier shows the environment from LightingPass
     String error;
 
     bool matches (const Targets& targets, uint32_t samples) const noexcept
@@ -206,29 +99,13 @@ struct ForwardPass::Variant
             }
         };
 
-        for (size_t index = 0; index < pipelines.size(); ++index)
+        // The full tier draws its opaque items into the G-buffer, so only its blended ones come here
+        for (size_t index = velocity ? GeometryBindings::numRasterStates : 0; index < pipelines.size(); ++index)
         {
-            const auto blend = (index & 4) != 0;
-            const auto doubleSided = (index & 2) != 0;
-            const auto mirrored = (index & 1) != 0;
+            const auto blend = index >= GeometryBindings::numRasterStates;
 
             GpuPipelineOptions options;
-            options.vertexBuffers.emplace_back (
-                static_cast<uint32_t> (sizeof (Mesh::Vertex)),
-                GpuVertexStepMode::vertex,
-                std::vector<GpuVertexAttribute> {
-                    { GpuVertexFormat::float3, static_cast<uint32_t> (offsetof (Mesh::Vertex, position)), 0 },
-                    { GpuVertexFormat::float3, static_cast<uint32_t> (offsetof (Mesh::Vertex, normal)), 1 },
-                    { GpuVertexFormat::float2, static_cast<uint32_t> (offsetof (Mesh::Vertex, uv)), 2 },
-                    { GpuVertexFormat::float4, static_cast<uint32_t> (offsetof (Mesh::Vertex, color)), 3 },
-                    { GpuVertexFormat::float4, static_cast<uint32_t> (offsetof (Mesh::Vertex, tangent)), 4 },
-                });
-            options.topology = GpuPrimitiveTopology::triangleList;
-            options.indexFormat = GpuIndexFormat::uint32;
-            options.cullMode = doubleSided ? GpuCullMode::none : GpuCullMode::back;
-
-            // A mirroring transform reverses the winding of the triangles on screen
-            options.winding = mirrored ? GpuFaceWinding::clockwise : GpuFaceWinding::counterClockwise;
+            GeometryBindings::setPipelineGeometry (options, index % GeometryBindings::numRasterStates);
 
             addColorTargets (options, blend);
 
@@ -245,9 +122,11 @@ struct ForwardPass::Variant
             pipelines[index] = result.getValue();
         }
 
+        if (velocity)
+            return {};
+
         // The environment behind everything: drawn first, without testing or writing depth
-        auto backgroundBundle = velocity ? ShaderBundle::loadFromData (backgroundFullShaderBundle, sizeof (backgroundFullShaderBundle))
-                                         : ShaderBundle::loadFromData (backgroundShaderBundle, sizeof (backgroundShaderBundle));
+        auto backgroundBundle = ShaderBundle::loadFromData (backgroundShaderBundle, sizeof (backgroundShaderBundle));
         if (backgroundBundle.failed())
             return "Unable to load the background shader bundle: " + backgroundBundle.getErrorMessage();
 
@@ -278,13 +157,14 @@ ForwardPass::~ForwardPass() = default;
 //==============================================================================
 Result ForwardPass::createDefaults (const GpuDevice::Ptr& device)
 {
-    whiteTexture = createSolidForwardTexture (device, 0xffffffff);
-    blackTexture = createSolidForwardTexture (device, 0x000000ff);
-    flatNormalTexture = createSolidForwardTexture (device, 0x8080ffff);
-    defaultSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::repeat));
-    pointClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
+    if (auto result = geometry.prepare (device); result.failed())
+        return result;
 
-    if (whiteTexture == nullptr || blackTexture == nullptr || flatNormalTexture == nullptr || defaultSampler == nullptr || pointClampSampler == nullptr)
+    blackTexture = GeometryBindings::createSolidTexture (device, 0x000000ff);
+    pointClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
+    linearClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::clampToEdge));
+
+    if (blackTexture == nullptr || pointClampSampler == nullptr || linearClampSampler == nullptr)
         return Result::fail ("Unable to create the default scene textures");
 
     return Result::ok();
@@ -332,10 +212,9 @@ Result ForwardPass::prepare (const GpuDevice::Ptr& device, const Targets& target
 }
 
 //==============================================================================
-bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Scene& scene, const ViewData& view,
-                          Span<const SceneDrawList::Light> lights, Span<const SceneDrawList::DrawItem> opaque,
-                          Span<const SceneDrawList::DrawItem> blend, const ShadowRenderer::Result& shadow,
-                          const Targets& targets, Output output, uint32_t sampleCount)
+bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, const LightingInputs& lighting,
+                          Span<const SceneDrawList::DrawItem> opaque, Span<const SceneDrawList::DrawItem> blend,
+                          const Targets& targets, Output output, uint32_t sampleCount, std::optional<GpuColor> clear)
 {
     const auto prepared = prepareVariant (device, targets, sampleCount);
     if (prepared.failed())
@@ -343,51 +222,27 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const S
 
     const auto& variant = *prepared.getValue();
 
+    // Over the loaded targets, nothing to draw leaves them as they are
+    if (! clear.has_value() && opaque.empty() && blend.empty())
+        return true;
+
+    if (variant.velocity && (lighting.lights == nullptr || lighting.clusterLights == nullptr || ! opaque.empty()))
+    {
+        jassert (opaque.empty()); // The full tier shades its opaque items through GBufferPass and LightingPass
+        return false;
+    }
+
     if (surface == nullptr || surface->asTexture() != targets.color)
         surface = GpuTarget::createFromTexture (device, targets.color);
 
     if (surface == nullptr)
         return false;
 
-    // The environment, uploaded the first time a device draws it
-    GpuTexture::Ptr environmentTexture;
-    GpuSampler::Ptr environmentSampler;
-    const auto& environment = scene.getEnvironment();
+    auto block = lighting.block;
+    block.environmentInfo[3] = static_cast<float> (output);
 
-    if (environment != nullptr && scene.getEnvironmentIntensity() > 0.0f)
-    {
-        environmentTexture = environment->getGpuTexture (device);
-        environmentSampler = environment->getGpuSampler (device);
-    }
-
-    const auto hasEnvironment = environmentTexture != nullptr && environmentSampler != nullptr;
-    const auto lastLevel = hasEnvironment ? static_cast<float> (environment->getNumLevels() - 1) : 0.0f;
-
-    auto lighting = makeForwardLightingBlock (scene, lights);
-    copyForwardMatrix (shadow.shadowMatrix, lighting.shadowMatrix);
-    std::copy_n (shadow.shadowInfo, 4, lighting.shadowInfo);
-
-    lighting.environmentInfo[0] = hasEnvironment ? scene.getEnvironmentIntensity() : 0.0f;
-    lighting.environmentInfo[1] = lastLevel;
-    lighting.environmentInfo[2] = scene.getEnvironmentBlur() * lastLevel;
-    lighting.environmentInfo[3] = static_cast<float> (output);
-
-    if (hasEnvironment)
-    {
-        const auto& coefficients = environment->getIrradianceCoefficients();
-
-        for (size_t i = 0; i < coefficients.size(); ++i)
-        {
-            lighting.irradiance[i][0] = coefficients[i].getX();
-            lighting.irradiance[i][1] = coefficients[i].getY();
-            lighting.irradiance[i][2] = coefficients[i].getZ();
-        }
-    }
-
-    // HDR scene color starts transparent: ToneMapping composites the display-referred background under it
-    const auto clearColor = output == Output::ldrInline ? GpuColor (scene.getBackgroundColor()) : GpuColor::transparentBlack();
-
-    auto pass = surface->beginRenderPass (frame, { true, clearColor });
+    const auto load = GpuRenderOptions (GpuLoadOp::load, GpuStoreOp::store);
+    auto pass = surface->beginRenderPass (frame, clear.has_value() ? GpuRenderOptions (true, *clear) : load);
     if (! pass.isValid())
         return false;
 
@@ -395,21 +250,34 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const S
         pass.setResolveTarget (0, targets.resolve);
 
     if (targets.velocity != nullptr)
-        pass.setColorAttachment (1, targets.velocity, { true, GpuColor::transparentBlack() });
+        pass.setColorAttachment (1, targets.velocity, clear.has_value() ? GpuRenderOptions (true, GpuColor::transparentBlack()) : load);
 
-    pass.setDepthStencilAttachment (targets.depth);
+    GpuDepthStencilOptions depthOptions;
+    if (! clear.has_value())
+        depthOptions.depthLoadOp = GpuLoadOp::load;
+
+    pass.setDepthStencilAttachment (targets.depth, depthOptions);
 
     // Per-frame sets, bound once: every declared resource must be bound, even when unused
     pass.setUniformBuffer (0, 0, &view.getBlock(), sizeof (ViewData::Block));
+    pass.setSampler (0, 1, linearClampSampler);
     pass.setSampler (0, 3, pointClampSampler);
-    pass.setUniformBuffer (1, 0, &lighting, sizeof (lighting));
-    pass.setTexture (1, 1, hasEnvironment ? environmentTexture : blackTexture);
-    pass.setSampler (1, 2, hasEnvironment ? environmentSampler : defaultSampler);
-    pass.setTexture (1, 3, shadow.map != nullptr ? shadow.map : whiteTexture);
+    pass.setUniformBuffer (1, 0, &block, sizeof (block));
+    pass.setTexture (1, 1, lighting.environment != nullptr ? lighting.environment : blackTexture);
+    pass.setSampler (1, 2, lighting.environmentSampler != nullptr ? lighting.environmentSampler : geometry.getDefaultSampler());
+    pass.setTexture (1, 3, lighting.shadowMap != nullptr ? lighting.shadowMap : geometry.getWhiteTexture());
+    pass.setTexture (1, 4, lighting.ltcMatrix != nullptr ? lighting.ltcMatrix : blackTexture);
+    pass.setTexture (1, 5, lighting.ltcAmplitude != nullptr ? lighting.ltcAmplitude : blackTexture);
+
+    if (variant.velocity)
+    {
+        pass.setStorageBuffer (1, 6, lighting.lights);
+        pass.setStorageBuffer (1, 7, lighting.clusterLights);
+    }
 
     GpuPipeline* currentPipeline = nullptr;
 
-    if (hasEnvironment && scene.isEnvironmentVisible())
+    if (clear.has_value() && variant.background != nullptr && lighting.isEnvironmentVisible())
     {
         pass.setPipeline (variant.background);
         currentPipeline = variant.background.get();
@@ -417,30 +285,10 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const S
         pass.draw (3);
     }
 
-    const auto bindTexture = [&] (int textureBinding, const Texture::Ptr& texture, const GpuTexture::Ptr& fallback)
-    {
-        if (texture != nullptr)
-        {
-            auto gpuTexture = texture->getGpuTexture (device);
-            auto gpuSampler = texture->getGpuSampler (device);
-
-            if (gpuTexture != nullptr && gpuSampler != nullptr)
-            {
-                pass.setTexture (2, textureBinding, gpuTexture);
-                pass.setSampler (2, textureBinding + 5, gpuSampler);
-                return;
-            }
-        }
-
-        pass.setTexture (2, textureBinding, fallback);
-        pass.setSampler (2, textureBinding + 5, defaultSampler);
-    };
-
     const auto drawItems = [&] (Span<const SceneDrawList::DrawItem> items)
     {
         for (const auto& item : items)
         {
-            const auto& material = *item.material;
             const auto& pipeline = variant.pipelines[getForwardPipelineIndex (item)];
 
             if (pipeline.get() != currentPipeline)
@@ -449,32 +297,18 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const S
                 currentPipeline = pipeline.get();
             }
 
-            // SceneRenderer resolves MeshNode::previousWorld against its frame stamps before drawing
-            ForwardDrawBlock draw {};
-            copyForwardMatrix (item.world, draw.model);
-            copyForwardMatrix (item.world.inverted().transposed(), draw.normalMatrix);
-            copyForwardMatrix (item.node != nullptr ? item.node->previousWorld : item.world, draw.previousModel);
+            if (! variant.velocity)
+            {
+                ForwardLightListBlock lightList {};
+                for (size_t i = 0; i < static_cast<size_t> (item.numLights); ++i)
+                    lightList.lights[i] = lighting.getPackedLight (item.lightIndices[i]);
 
-            const auto normalTexture = material.normalTexture != nullptr ? material.normalTexture->getGpuTexture (device) : nullptr;
-            const auto materialBlock = makeForwardMaterialBlock (material, normalTexture != nullptr);
+                lightList.count[0] = static_cast<float> (item.numLights);
 
-            pass.setUniformBuffer (2, 0, &draw, sizeof (draw));
-            pass.setUniformBuffer (2, 1, &materialBlock, sizeof (materialBlock));
+                pass.setUniformBuffer (2, 12, &lightList, sizeof (lightList));
+            }
 
-            bindTexture (2, material.baseColorTexture, whiteTexture);
-            bindTexture (3, material.metallicRoughnessTexture, whiteTexture);
-            bindTexture (4, material.normalTexture, flatNormalTexture);
-            bindTexture (5, material.occlusionTexture, whiteTexture);
-            bindTexture (6, material.emissiveTexture, whiteTexture);
-
-            auto vertexBuffer = item.mesh->getVertexBuffer (device, item.primitiveIndex);
-            auto indexBuffer = item.mesh->getIndexBuffer (device, item.primitiveIndex);
-            if (vertexBuffer == nullptr || indexBuffer == nullptr)
-                continue;
-
-            pass.setVertexBuffer (0, vertexBuffer);
-            pass.setIndexBuffer (GpuIndexFormat::uint32, indexBuffer);
-            pass.drawIndexed (static_cast<uint32_t> (item.primitive->indices.size()));
+            geometry.draw (pass, device, item, 0);
         }
     };
 

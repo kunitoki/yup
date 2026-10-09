@@ -233,4 +233,109 @@ TEST_F (FrameResourcesMetalTests, HistoryUnusedForAFrameIsReleased)
     EXPECT_NE (h3.read, h1.write);
     resources.endFrame();
 }
+
+TEST_F (FrameResourcesMetalTests, DescriptorsDifferingOnlyByStorageGetDistinctTextures)
+{
+    FrameResources resources (device);
+    const GpuTextureDesc plain (64, 64, GpuTextureFormat::rgba16float);
+    auto storage = plain;
+    storage.storage = true;
+
+    // Holding the first texture keeps its address from being handed to the second
+    resources.beginFrame (64, 64);
+    auto first = resources.acquire (plain);
+    resources.endFrame();
+
+    resources.beginFrame (64, 64);
+    auto second = resources.acquire (storage);
+    ASSERT_NE (second, nullptr);
+    EXPECT_NE (second, first);
+    EXPECT_TRUE (second->isStorage());
+    resources.endFrame();
+}
+
+TEST_F (FrameResourcesMetalTests, StorageBuffersRotateOverTheFramesInFlight)
+{
+    FrameResources resources (device);
+    std::vector<GpuBuffer::Ptr> buffers;
+
+    for (int frame = 0; frame < 4; ++frame)
+    {
+        resources.beginFrame (64, 64);
+        auto buffer = resources.acquireStorageBuffer (FrameResources::StorageSlot::lights, 256);
+        ASSERT_NE (buffer, nullptr);
+        EXPECT_EQ (buffer->getType(), GpuBufferType::storage);
+        EXPECT_EQ (resources.acquireStorageBuffer (FrameResources::StorageSlot::lights, 256), buffer);
+        buffers.push_back (buffer);
+        resources.endFrame();
+    }
+
+    EXPECT_NE (buffers[0], buffers[1]);
+    EXPECT_NE (buffers[1], buffers[2]);
+    EXPECT_NE (buffers[0], buffers[2]);
+    EXPECT_EQ (buffers[3], buffers[0]);
+}
+
+TEST_F (FrameResourcesMetalTests, StorageBufferGrowsToTheNextPowerOfTwoOnItsTurn)
+{
+    FrameResources resources (device);
+
+    resources.beginFrame (64, 64);
+    auto small = resources.acquireStorageBuffer (FrameResources::StorageSlot::lights, 100);
+    ASSERT_NE (small, nullptr);
+    EXPECT_EQ (small->getSizeInBytes(), 128u);
+    resources.endFrame();
+
+    // Acquired every frame, so the ring is kept and its turn comes back to the small buffer
+    for (int frame = 0; frame < 2; ++frame)
+    {
+        resources.beginFrame (64, 64);
+        EXPECT_NE (resources.acquireStorageBuffer (FrameResources::StorageSlot::lights, 100), nullptr);
+        resources.endFrame();
+    }
+
+    resources.beginFrame (64, 64);
+    auto grown = resources.acquireStorageBuffer (FrameResources::StorageSlot::lights, 1000);
+    ASSERT_NE (grown, nullptr);
+    EXPECT_NE (grown, small);
+    EXPECT_EQ (grown->getSizeInBytes(), 1024u);
+    EXPECT_EQ (small->getReferenceCount(), 1);
+    EXPECT_EQ (resources.acquireStorageBuffer (FrameResources::StorageSlot::lights, 512), grown);
+    resources.endFrame();
+}
+
+TEST_F (FrameResourcesMetalTests, StorageSlotsAreIndependent)
+{
+    FrameResources resources (device);
+
+    resources.beginFrame (64, 64);
+    auto lights = resources.acquireStorageBuffer (FrameResources::StorageSlot::lights, 256);
+    auto clusterLights = resources.acquireStorageBuffer (FrameResources::StorageSlot::clusterLights, 256);
+    auto materials = resources.acquireStorageBuffer (FrameResources::StorageSlot::materials, 256);
+    ASSERT_NE (lights, nullptr);
+    EXPECT_NE (lights, clusterLights);
+    EXPECT_NE (lights, materials);
+    EXPECT_NE (clusterLights, materials);
+    resources.endFrame();
+}
+
+TEST_F (FrameResourcesMetalTests, StorageSlotsNotAcquiredInAFrameAreReleased)
+{
+    FrameResources resources (device);
+
+    resources.beginFrame (64, 64);
+    auto lights = resources.acquireStorageBuffer (FrameResources::StorageSlot::lights, 256);
+    auto materials = resources.acquireStorageBuffer (FrameResources::StorageSlot::materials, 256);
+    ASSERT_NE (lights, nullptr);
+    ASSERT_NE (materials, nullptr);
+    resources.endFrame();
+
+    // Only the materials are acquired again: the whole lights ring goes, the materials ring stays
+    resources.beginFrame (64, 64);
+    EXPECT_NE (resources.acquireStorageBuffer (FrameResources::StorageSlot::materials, 256), nullptr);
+    resources.endFrame();
+
+    EXPECT_EQ (lights->getReferenceCount(), 1);
+    EXPECT_GT (materials->getReferenceCount(), 1);
+}
 #endif

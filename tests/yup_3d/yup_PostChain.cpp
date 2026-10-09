@@ -72,7 +72,7 @@ TEST_F (PostChainMetalTests, TurningBloomOffReleasesItsTargets)
         auto frame = GpuFrame::begin (device);
         EXPECT_TRUE (chain.render (device, frame, capabilities, settings, view, resources, inputs, output));
         frame.submit();
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
     };
 
     resources.beginFrame (size, size);
@@ -122,7 +122,7 @@ TEST_F (PostChainMetalTests, ResizingReleasesTheTargetsOfTheLastSize)
         auto frame = GpuFrame::begin (device);
         EXPECT_TRUE (chain.render (device, frame, capabilities, settings, view, resources, inputs, output));
         frame.submit();
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
         resources.endFrame();
     };
 

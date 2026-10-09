@@ -139,7 +139,7 @@ GpuTextureViewDesc GpuTexture::getWholeTextureViewDesc() const noexcept
     desc.baseMipLevel = 0;
     desc.mipCount = mipLevels;
     desc.baseLayer = 0;
-    desc.layerCount = depthOrArrayLayers;
+    desc.layerCount = type == GpuTextureType::texture3D ? 1 : depthOrArrayLayers;
     return desc;
 }
 
@@ -296,10 +296,15 @@ bool GpuTexture::upload (const GpuTextureDataDesc& data)
     if (texelSize == 0 && data.bytesPerRow == 0)
         return false;
 
+    auto* oreCtx = device->getGpuContext();
+    if (oreCtx == nullptr)
+        return false;
+
     bool uploaded = false;
     device->runOnGraphicsContext ([&]
     {
-        uploaded = oreTexture->upload (oreData);
+        oreCtx->clearLastError();
+        uploaded = oreTexture->upload (oreData) && oreCtx->lastError().empty();
     });
 
     return uploaded;

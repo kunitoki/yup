@@ -398,3 +398,205 @@ TEST_F (SceneDrawListTests, DefaultLightIsAddedOnlyWhenAskedAndTreeHasNone)
     ASSERT_EQ (drawList.getLights().size(), 1u);
     EXPECT_EQ (drawList.getLights()[0].node->type, LightNode::Type::point);
 }
+
+class SceneDrawListSelectionTests : public SceneDrawListTests
+{
+protected:
+    static SceneDrawList::Light makeLight (const LightNode& node, Vector3<float> position)
+    {
+        return { &node, position, { 0.0f, 0.0f, -1.0f } };
+    }
+
+    static BoundingBox unitBoxAt (Vector3<float> center)
+    {
+        BoundingBox box;
+        box.expand (center - Vector3<float> (0.5f, 0.5f, 0.5f));
+        box.expand (center + Vector3<float> (0.5f, 0.5f, 0.5f));
+        return box;
+    }
+};
+
+TEST_F (SceneDrawListSelectionTests, PicksTheEightMostInfluentialLights)
+{
+    std::vector<std::unique_ptr<LightNode>> nodes;
+    std::vector<SceneDrawList::Light> lights;
+
+    for (int i = 0; i < 12; ++i)
+    {
+        auto& node = *nodes.emplace_back (std::make_unique<LightNode> (LightNode::Type::point));
+        node.intensity = 1.0f;
+        lights.push_back (makeLight (node, { 1.0f + static_cast<float> (i), 0.0f, 0.0f })); // farther and farther
+    }
+
+    std::array<uint16, SceneDrawList::maxLightsPerDraw> indices {};
+    const auto count = SceneDrawList::selectLights (unitBoxAt ({}), lights, indices);
+
+    ASSERT_EQ (count, 8);
+    for (int i = 0; i < 8; ++i)
+        EXPECT_EQ (indices[static_cast<size_t> (i)], i);
+}
+
+TEST_F (SceneDrawListSelectionTests, PicksTheEightMostInfluentialLightsListedLast)
+{
+    std::vector<std::unique_ptr<LightNode>> nodes;
+    std::vector<SceneDrawList::Light> lights;
+
+    // Nearer and nearer: every light from the ninth on evicts the least influential slot
+    for (int i = 0; i < 12; ++i)
+    {
+        auto& node = *nodes.emplace_back (std::make_unique<LightNode> (LightNode::Type::point));
+        lights.push_back (makeLight (node, { 12.0f - static_cast<float> (i), 0.0f, 0.0f }));
+    }
+
+    std::array<uint16, SceneDrawList::maxLightsPerDraw> indices {};
+    const auto count = SceneDrawList::selectLights (unitBoxAt ({}), lights, indices);
+
+    ASSERT_EQ (count, 8);
+    for (int i = 0; i < 8; ++i)
+        EXPECT_EQ (indices[static_cast<size_t> (i)], 11 - i);
+}
+
+TEST_F (SceneDrawListSelectionTests, DirectionalLightsComeFirst)
+{
+    LightNode nearLight (LightNode::Type::point), sun;
+    nearLight.intensity = 1000.0f;
+    sun.intensity = 0.1f;
+
+    const SceneDrawList::Light lights[] = { makeLight (nearLight, { 0.6f, 0.0f, 0.0f }), makeLight (sun, {}) };
+
+    std::array<uint16, SceneDrawList::maxLightsPerDraw> indices {};
+    ASSERT_EQ (SceneDrawList::selectLights (unitBoxAt ({}), lights, indices), 2);
+    EXPECT_EQ (indices[0], 1);
+}
+
+TEST_F (SceneDrawListSelectionTests, LightsOutOfRangeAreSkipped)
+{
+    LightNode point (LightNode::Type::point);
+    point.range = 1.0f;
+
+    const SceneDrawList::Light lights[] = { makeLight (point, { 3.0f, 0.0f, 0.0f }) };
+
+    std::array<uint16, SceneDrawList::maxLightsPerDraw> indices {};
+    EXPECT_EQ (SceneDrawList::selectLights (unitBoxAt ({}), lights, indices), 0);
+}
+
+TEST_F (SceneDrawListSelectionTests, SpotConeMissingTheBoundsIsSkipped)
+{
+    LightNode spot (LightNode::Type::spot);
+    spot.range = 10.0f;
+    spot.outerConeAngle = 0.2f;
+
+    // At +X 3 units, pointing further +X: the box at the origin is behind it
+    const SceneDrawList::Light lights[] = { { &spot, { 3.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } } };
+
+    std::array<uint16, SceneDrawList::maxLightsPerDraw> indices {};
+    EXPECT_EQ (SceneDrawList::selectLights (unitBoxAt ({}), lights, indices), 0);
+}
+
+TEST_F (SceneDrawListSelectionTests, SpotConeReachingTheBoundsIsSelected)
+{
+    LightNode spot (LightNode::Type::spot);
+    spot.range = 10.0f;
+    spot.outerConeAngle = 0.2f;
+
+    // At +X 3 units, pointing back at the box at the origin
+    const SceneDrawList::Light lights[] = { { &spot, { 3.0f, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f } } };
+
+    std::array<uint16, SceneDrawList::maxLightsPerDraw> indices {};
+    ASSERT_EQ (SceneDrawList::selectLights (unitBoxAt ({}), lights, indices), 1);
+    EXPECT_EQ (indices[0], 0);
+}
+
+TEST_F (SceneDrawListSelectionTests, TiesKeepTheLowerIndex)
+{
+    LightNode a (LightNode::Type::point), b (LightNode::Type::point);
+    const SceneDrawList::Light lights[] = { makeLight (a, { 2.0f, 0.0f, 0.0f }), makeLight (b, { -2.0f, 0.0f, 0.0f }) };
+
+    std::array<uint16, SceneDrawList::maxLightsPerDraw> indices {};
+    ASSERT_EQ (SceneDrawList::selectLights (unitBoxAt ({}), lights, indices), 2);
+    EXPECT_EQ (indices[0], 0);
+    EXPECT_EQ (indices[1], 1);
+}
+
+TEST_F (SceneDrawListSelectionTests, DarkPointAndSpotLightsAreSkippedEvenInsideTheBounds)
+{
+    // Both pack an effective range of 0: a distance of 0 to the bounds must not keep them
+    LightNode dark (LightNode::Type::point), black (LightNode::Type::spot), lit (LightNode::Type::point);
+    dark.intensity = 0.0f;
+    black.color = { 0.0f, 0.0f, 0.0f };
+
+    const SceneDrawList::Light lights[] = { makeLight (dark, {}), makeLight (black, {}), makeLight (lit, {}) };
+
+    std::array<uint16, SceneDrawList::maxLightsPerDraw> indices {};
+    ASSERT_EQ (SceneDrawList::selectLights (unitBoxAt ({}), lights, indices), 1);
+    EXPECT_EQ (indices[0], 2);
+}
+
+TEST_F (SceneDrawListSelectionTests, DarkLightsOfEveryTypeTakeNoSlot)
+{
+    // Dark directional lights would rank first and fill every slot; dark lights with a range would
+    // reach the bounds. None of them may keep the lit point light out
+    std::vector<std::unique_ptr<LightNode>> nodes;
+    std::vector<SceneDrawList::Light> lights;
+
+    for (int i = 0; i < 8; ++i)
+    {
+        auto& sun = *nodes.emplace_back (std::make_unique<LightNode>());
+        if (i % 2 == 0)
+            sun.intensity = 0.0f;
+        else
+            sun.color = { 0.0f, 0.0f, 0.0f };
+
+        lights.push_back (makeLight (sun, {}));
+    }
+
+    auto& ranged = *nodes.emplace_back (std::make_unique<LightNode> (LightNode::Type::point));
+    ranged.range = 5.0f;
+    ranged.intensity = 0.0f;
+    lights.push_back (makeLight (ranged, {}));
+
+    auto& lit = *nodes.emplace_back (std::make_unique<LightNode> (LightNode::Type::point));
+    lights.push_back (makeLight (lit, { 1.0f, 0.0f, 0.0f }));
+
+    std::array<uint16, SceneDrawList::maxLightsPerDraw> indices {};
+    ASSERT_EQ (SceneDrawList::selectLights (unitBoxAt ({}), lights, indices), 1);
+    EXPECT_EQ (indices[0], 9);
+}
+
+TEST_F (SceneDrawListTests, DefaultLightIsSelectedForEveryDraw)
+{
+    auto entity = makeEntity();
+    entity->attach<MeshNode> (makeTriangle());
+    root->addChild (entity);
+
+    drawList.build (*root, {}, { true, true });
+
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].numLights, 1);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].lightIndices[0], 0);
+}
+
+TEST_F (SceneDrawListTests, BlendedItemsSelectLightsToo)
+{
+    auto entity = makeEntity();
+    entity->attach<MeshNode> (makeTriangle (makeMaterial ("glass", Material::AlphaMode::blend)));
+    entity->attach<LightNode> (LightNode::Type::point);
+    root->addChild (entity);
+
+    drawList.build (*root, {}, { false, true });
+
+    ASSERT_EQ (drawList.getBlendItems().size(), 1u);
+    EXPECT_EQ (drawList.getBlendItems()[0].numLights, 1);
+    EXPECT_EQ (drawList.getBlendItems()[0].lightIndices[0], 0);
+}
+
+TEST_F (SceneDrawListTests, PerDrawSelectionIsSkippedUnlessAsked)
+{
+    auto entity = makeEntity();
+    entity->attach<MeshNode> (makeTriangle());
+    entity->attach<LightNode> (LightNode::Type::point);
+    root->addChild (entity);
+
+    drawList.build (*root, {}, { false, false });
+    EXPECT_EQ (drawList.getOpaqueItems()[0].numLights, 0);
+}

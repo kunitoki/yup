@@ -31,6 +31,7 @@
 #include "yup_GpuPipeline.cpp"
 #include "yup_GpuPipelineMocked.cpp"
 #include "yup_GpuComputePass.cpp"
+#include "yup_GpuFrame.cpp"
 #include "yup_GpuFrameDescriptor.cpp"
 
 #if YUP_LINUX

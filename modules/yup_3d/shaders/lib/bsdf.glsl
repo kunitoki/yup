@@ -111,6 +111,21 @@ struct BsdfSurface
     float nDotV;         // dot(n, v), kept above zero
 };
 
+// The surface of a glTF material, shared by the forward and the deferred shading. specular is the
+// KHR_materials_specular color (rgb) and factor (w), which scales the whole dielectric reflectance,
+// grazing incidence included
+BsdfSurface bsdfMaterialSurface(vec3 n, vec3 v, vec3 baseColor, float metallic, float ior, vec4 specular, float alpha2)
+{
+    vec3 dielectricF0 = bsdfDielectricF0(ior, specular.rgb, specular.w);
+    float dielectricF90 = specular.w;
+    vec3 f0 = mix(dielectricF0, baseColor, metallic);
+    vec3 f90 = mix(vec3(dielectricF90), vec3(1.0), metallic);
+    vec3 diffuseColor = baseColor * (1.0 - metallic);
+    float nDotV = max(dot(n, v), 0.0001);
+
+    return BsdfSurface(n, v, diffuseColor, f0, f90, dielectricF0, dielectricF90, alpha2, nDotV);
+}
+
 // Reflected radiance for a unit light direction l and unit incoming radiance: the diffuse and
 // specular lobes times nDotL, 0 when the light is behind the surface
 vec3 bsdfEvaluate(BsdfSurface s, vec3 l)

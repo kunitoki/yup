@@ -140,10 +140,34 @@ struct SceneRenderer::Impl
     }
 
     /** Creates the pipelines once per target formats, remembering a failure instead of retrying every frame. */
-    Result prepareResources (const ForwardPass::Targets& targets, uint32_t forwardSamples)
+    Result prepareResources (const ForwardPass::Targets& targets, uint32_t forwardSamples, bool full, bool failAreaLightTables)
     {
         if (auto result = shadowRenderer.prepare (device); result.failed())
             return result;
+
+        if (! ltcTablesAttempted)
+        {
+            ltcTablesAttempted = true;
+            ltcMatrix = failAreaLightTables ? nullptr : LtcTables::createMatrixTexture (device);
+            ltcAmplitude = failAreaLightTables ? nullptr : LtcTables::createAmplitudeTexture (device);
+
+            // The passes bind black tables instead, which leave area lights their diffuse light only
+            if (ltcMatrix == nullptr || ltcAmplitude == nullptr)
+            {
+                YUP_DBG ("SceneRenderer: unable to create the area light tables, area lights render without specular light");
+                ltcMatrix = nullptr;
+                ltcAmplitude = nullptr;
+            }
+        }
+
+        if (full)
+        {
+            if (auto result = gbufferPass.prepare (device); result.failed())
+                return result;
+
+            if (auto result = lightingPass.prepare (device); result.failed())
+                return result;
+        }
 
         return forwardPass.prepare (device, targets, forwardSamples);
     }
@@ -235,6 +259,42 @@ struct SceneRenderer::Impl
         targets.depth = acquire (GpuTextureFormat::depth32float, "SceneRenderer depth");
         targets.velocity = acquire (GpuTextureFormat::rg16float, "SceneRenderer velocity");
         return targets;
+    }
+
+    /** Copies @p items into this frame's storage buffer of @p slot, once per frame and slot. The
+        buffer has room for one item even without any, as the shader arrays it is bound to need.
+    */
+    template <class Item>
+    GpuBuffer::Ptr uploadStorageBuffer (FrameResources::StorageSlot slot, Span<const Item> items)
+    {
+        auto buffer = frameResources.acquireStorageBuffer (slot, jmax (items.size(), size_t (1)) * sizeof (Item));
+        if (buffer == nullptr || (! items.empty() && ! device->updateBuffer (buffer, items.data(), items.size() * sizeof (Item))))
+            return nullptr;
+
+        return buffer;
+    }
+
+    /** Full: uploads the packed lights and lists the ones reaching each cluster of the view, for
+        the shading passes to read through @p lighting.
+    */
+    bool cullLights (GpuFrame& frame, LightingInputs& lighting)
+    {
+        const auto& packed = lighting.packedLights;
+        const auto numLights = static_cast<int> (packed.size());
+        const auto firstLocalLight = static_cast<int> (std::count_if (packed.begin(), packed.end(), [] (const GpuLight& light)
+        {
+            return light.positionType[3] < 0.5f;
+        }));
+
+        const auto grid = LightClusters::getGrid (viewData);
+        LightClusters::packGrid (grid, numLights, firstLocalLight, lighting.block.clusterGrid, lighting.block.clusterDepth);
+
+        lighting.lights = uploadStorageBuffer (FrameResources::StorageSlot::lights, Span<const GpuLight> (packed));
+        lighting.clusterLights = frameResources.acquireStorageBuffer (FrameResources::StorageSlot::clusterLights, LightClusters::getClusterBufferSize (grid));
+
+        return lighting.lights != nullptr && lighting.clusterLights != nullptr
+            && lightClusters.dispatch (frame, device, grid, lighting.lights, numLights, firstLocalLight,
+                                       viewData.getView(), viewData.getJitteredProjection().inverted(), lighting.clusterLights);
     }
 
     /** Nodes this renderer did not draw in its previous frame have no motion: their previous world is the current one. */
@@ -403,12 +463,20 @@ struct SceneRenderer::Impl
     ViewData viewData;
     SceneDrawList drawList;
     ShadowRenderer shadowRenderer;
+    LightClusters lightClusters;
+    GBufferPass gbufferPass;
+    MaterialTable materialTable;
+    LightingPass lightingPass;
     ForwardPass forwardPass;
     PostChain postChain;
     GpuTarget::Ptr colorTarget;
     GpuTexture::Ptr depthTexture;
+    GpuTexture::Ptr ltcMatrix;    // The area light tables of this renderer and device, created once, or nullptr if that failed
+    GpuTexture::Ptr ltcAmplitude;
+    bool ltcTablesAttempted = false;
     GpuTexture::Ptr sceneColorOutput;
     GpuTexture::Ptr velocityOutput;
+    GpuTexture::Ptr gbufferNormalOutput;
     uint64 frameIndex = 0;
     uint64 lastStamp = 0;
     uint64 invalidatingSignature = 0;
@@ -418,6 +486,41 @@ struct SceneRenderer::Impl
     int samplesToConverge = 0;  // full: the TAA samples (1 without TAA), raster: 0
     int accumulatedSamples = 0; // frames in the history since its last reset
     int stillSamples = 0;       // frames since anything last changed
+
+    /** The GPU outcomes of this renderer's submitted frames not yet known to have succeeded. */
+    std::vector<GpuFrameStatus> pendingFrames;
+
+    /** Forgets the frames the GPU finished, waiting for all when @p wait is set. On a failure the
+        targets and history were left unwritten, so the history is discarded. */
+    Result takeFinishedFrames (bool wait)
+    {
+        auto result = Result::ok();
+
+        for (auto it = pendingFrames.begin(); it != pendingFrames.end();)
+        {
+            const auto outcome = wait ? std::optional<Result> (it->wait()) : it->poll();
+            if (! outcome.has_value())
+            {
+                ++it;
+                continue;
+            }
+
+            if (outcome->failed() && result.wasOk())
+                result = *outcome;
+
+            it = pendingFrames.erase (it);
+        }
+
+        if (result.failed())
+        {
+            frameResources.invalidateHistory();
+            hasSignature = false;
+            accumulatedSamples = 0;
+            stillSamples = 0;
+        }
+
+        return result;
+    }
 };
 
 //==============================================================================
@@ -435,6 +538,14 @@ const RenderCapabilities* SceneRenderer::getCapabilities() const noexcept
 bool SceneRenderer::isConverged() const noexcept
 {
     return impl == nullptr || lastError.isNotEmpty() || impl->stillSamples >= impl->samplesToConverge;
+}
+
+Result SceneRenderer::waitForGPU()
+{
+    if (impl == nullptr)
+        return Result::ok();
+
+    return impl->takeFinishedFrames (true);
 }
 
 void SceneRenderer::restartAccumulation() noexcept
@@ -457,6 +568,7 @@ GpuTexture::Ptr SceneRenderer::getPassOutput (PassOutput output) const
     {
         case PassOutput::sceneColor: return impl->sceneColorOutput;
         case PassOutput::velocity: return impl->velocityOutput;
+        case PassOutput::gbufferNormal: return impl->gbufferNormalOutput;
     }
 
     return nullptr;
@@ -478,11 +590,19 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         {
             impl->sceneColorOutput = nullptr;
             impl->velocityOutput = nullptr;
+            impl->gbufferNormalOutput = nullptr;
         }
 
         lastError = error;
         return nullptr;
     };
+
+    // A frame of this renderer the GPU failed to execute left its history unwritten: it was
+    // discarded, and this frame renders anew rather than leaving the caller without an image
+    lastGpuFailure = {};
+    if (impl != nullptr)
+        if (const auto gpuResult = impl->takeFinishedFrames (false); gpuResult.failed())
+            lastGpuFailure = gpuResult.getErrorMessage();
 
     if (device == nullptr || widthPx <= 0 || heightPx <= 0)
         return fail ("No device, or an empty size");
@@ -521,9 +641,13 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (! impl->prepareTargets (widthPx, heightPx, ! full))
         return fail ("Unable to create the render targets");
 
-    // A new size releases the pool's textures, which the post effects' render targets would keep alive
+    // A new size releases the pool's textures, which the fullscreen passes' render targets would keep alive
     if (widthPx != impl->frameResources.getWidth() || heightPx != impl->frameResources.getHeight())
+    {
         impl->postChain.releaseTargets();
+        impl->gbufferPass.releaseTargets();
+        impl->lightingPass.releaseTargets();
+    }
 
     impl->frameResources.beginFrame (widthPx, heightPx);
 
@@ -533,6 +657,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         // The history may not have been written: the next frame starts over
         impl->frameResources.invalidateHistory();
         impl->postChain.releaseTargets();
+        impl->gbufferPass.releaseTargets();
+        impl->lightingPass.releaseTargets();
         impl->frameResources.endFrame();
         impl->hasSignature = false;
         return fail (error);
@@ -543,7 +669,12 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (targets.color == nullptr || targets.depth == nullptr || (full && targets.velocity == nullptr))
         return failFrame ("Unable to create the scene targets");
 
-    if (auto result = impl->prepareResources (targets, forwardSamples); result.failed())
+    // Full: the G-buffer shares the depth and velocity the blended items are drawn over
+    const auto gbuffer = full ? GBufferPass::acquireTargets (impl->frameResources, targets.velocity, targets.depth) : GBufferPass::Targets();
+    if (full && (gbuffer.albedoOcclusion == nullptr || gbuffer.normalRoughness == nullptr || gbuffer.emissionMaterial == nullptr))
+        return failFrame ("Unable to create the G-buffer targets");
+
+    if (auto result = impl->prepareResources (targets, forwardSamples, full, failAreaLightTables); result.failed())
         return failFrame (result.getErrorMessage());
 
     const auto stamp = ++Impl::nextStamp;
@@ -552,7 +683,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->viewData.update (scene, widthPx, heightPx, temporalAntiAliasing, settings.taaSamples, impl->frameIndex++);
 
     auto& drawList = impl->drawList;
-    drawList.build (*scene.getRoot(), impl->viewData.getView(), { scene.isUsingDefaultLight() });
+    // The raster tier lights each draw with its own selection, the full tier through the clusters
+    drawList.build (*scene.getRoot(), impl->viewData.getView(), { scene.isUsingDefaultLight(), ! full });
     impl->resolvePreviousTransforms();
 
     // Before TAA fetches its history, so a change invalidates it for this very frame
@@ -566,13 +698,50 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (! frame.isValid())
         return failFrame ("Unable to begin a GPU frame");
 
+    impl->pendingFrames.push_back (frame.getStatus());
+
     const auto shadow = impl->shadowRenderer.render (device, frame, drawList);
     if (shadow.error.isNotEmpty())
         return failFrame (shadow.error);
 
+    auto lighting = LightingInputs::create (device, scene, drawList.getLights(), shadow);
+    lighting.ltcMatrix = impl->ltcMatrix;
+    lighting.ltcAmplitude = impl->ltcAmplitude;
     const auto output = full ? ForwardPass::Output::hdrLinear : (hdr ? ForwardPass::Output::hdrReversible : ForwardPass::Output::ldrInline);
-    if (! impl->forwardPass.render (device, frame, scene, impl->viewData, drawList.getLights(), drawList.getOpaqueItems(), drawList.getBlendItems(),
-                                    shadow, targets, output, forwardSamples))
+
+    if (full)
+    {
+        // Lights culled into clusters, the opaque items into the G-buffer, shaded once per pixel
+        if (! impl->cullLights (frame, lighting))
+            return failFrame ("Unable to cull the lights");
+
+        if (! impl->gbufferPass.render (frame, impl->viewData, drawList.getOpaqueItems(), impl->materialTable, gbuffer))
+            return failFrame ("Unable to render the G-buffer");
+
+        // Uploaded once the G-buffer draws have numbered the materials
+        lighting.materials = impl->uploadStorageBuffer (FrameResources::StorageSlot::materials, impl->materialTable.getEntries());
+        if (lighting.materials == nullptr)
+            return failFrame ("Unable to upload the material table");
+
+        if (! impl->lightingPass.render (frame, impl->viewData, gbuffer, lighting, targets.color))
+            return failFrame ("Unable to render the lighting pass");
+
+        impl->lightingPass.trimUnusedTargets();
+    }
+    else
+    {
+        impl->gbufferPass.releaseTargets();
+        impl->lightingPass.releaseTargets();
+    }
+
+    // Raster: every item over the cleared targets, HDR scene color starting transparent for tone
+    // mapping to composite the display-referred background under it. Full: the blended items over
+    // the shaded G-buffer, depth tested against it, writing their motion over its velocity
+    const auto clear = full ? std::optional<GpuColor>()
+                            : std::optional<GpuColor> (output == ForwardPass::Output::ldrInline ? GpuColor (scene.getBackgroundColor()) : GpuColor::transparentBlack());
+    const auto opaque = full ? Span<const SceneDrawList::DrawItem>() : drawList.getOpaqueItems();
+
+    if (! impl->forwardPass.render (device, frame, impl->viewData, lighting, opaque, drawList.getBlendItems(), targets, output, forwardSamples, clear))
         return failFrame ("Unable to render the forward pass");
 
     if (! hdr)
@@ -596,6 +765,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
     impl->sceneColorOutput = hdr ? impl->postChain.getResolvedColor() : impl->colorTarget->asTexture();
     impl->velocityOutput = targets.velocity;
+    impl->gbufferNormalOutput = gbuffer.normalRoughness;
 
     lastError = {};
     return impl->colorTarget->asTexture();

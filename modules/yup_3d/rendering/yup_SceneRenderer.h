@@ -41,6 +41,9 @@ namespace yup
     texture, and tone maps inline. The full tier shades one sample per pixel into a half-float
     scene color with screen-space motion, antialiases it by accumulating jittered frames (temporal
     anti-aliasing, see RenderSettings::taaSamples and isConverged()), then tone maps it in a post pass.
+    It shades opaque surfaces once per pixel from a G-buffer (deferred shading), with the same
+    lighting model as blended surfaces, and lights every surface with the lights reaching it, up
+    to 63 point and spot lights per screen-space cluster.
     RenderSettings::bloom adds a glow around highlights on both tiers. On the raster tier it needs
     multisampled half-float targets (see RenderCapabilities): the multisampled scene color is then
     rendered in half float and tone mapped after the resolve, as on the full tier, instead of
@@ -59,9 +62,6 @@ class YUP_API SceneRenderer
 {
 public:
     //==============================================================================
-    /** The maximum number of lights shading a frame. Extra lights are ignored. */
-    static constexpr int maxLights = 8;
-
     /** The width and height, in texels, of the shadow map. */
     static constexpr int shadowMapSize = 2048;
 
@@ -80,9 +80,26 @@ public:
         @param widthPx   The width of the result in pixels.
         @param heightPx  The height of the result in pixels.
 
+        Frames are not waited on, so a frame of this renderer the GPU failed to execute is only
+        found by its next render, which restarts the accumulation, still renders, and reports the
+        failure through getLastGpuFailure(); see also waitForGPU().
+
         @return The rendered texture, valid until the next render, or nullptr on failure; see getLastError().
     */
     GpuTexture::Ptr render (const GpuDevice::Ptr& device, Scene& scene, int widthPx, int heightPx);
+
+    /** Blocks until the GPU finished every frame this renderer submitted.
+
+        @returns Result::ok(), or the first failure of those frames, which then restarts the
+                 accumulation and is not reported again by the next render. Only this renderer's
+                 frames count.
+    */
+    Result waitForGPU();
+
+    /** Returns the failure of an earlier frame of this renderer that the last render found and
+        recovered from by starting the accumulation over, or an empty string.
+    */
+    const String& getLastGpuFailure() const noexcept { return lastGpuFailure; }
 
     /** Returns why the last render failed, or an empty string if it succeeded. */
     const String& getLastError() const noexcept { return lastError; }
@@ -130,7 +147,8 @@ public:
     enum class PassOutput
     {
         sceneColor, ///< Full: the rgba16float scene color after temporal anti-aliasing, before the other post effects. Raster: the resolved forward output, rgba16float reversibly tone mapped when bloom is on.
-        velocity    ///< Full: the rg16float screen-space motion, current uv minus previous uv, both unjittered, uv from the top-left. Raster: none.
+        velocity,     ///< Full: the rg16float screen-space motion, current uv minus previous uv, both unjittered, uv from the top-left. Raster: none.
+        gbufferNormal ///< Full: the rgba16float G-buffer RT1, the octahedral shading normal in xy, the filtered roughness in z and metallic in w, 0 where nothing was drawn. Raster: none.
     };
 
     /** @internal Returns an intermediate texture of the last frame, valid until the next render,
@@ -144,6 +162,12 @@ public:
         @param newOverride  Called with a copy of the device facts at each render, or empty to use them as read.
     */
     void setDeviceFactsOverride (std::function<void (RenderCapabilities::DeviceFacts&)> newOverride);
+
+    /** @internal Test hook, not for production use: from the next device this renderer sets up
+        on, its area light tables fail to create, as if the device could not create them. Call it
+        before the first render. Frames still render, with area lights lighting only diffusely.
+    */
+    void failAreaLightTablesForTesting() noexcept { failAreaLightTables = true; }
 
     //==============================================================================
     /** Changes the number of MSAA samples per pixel of the raster tier.
@@ -165,7 +189,9 @@ private:
     std::unique_ptr<Impl> impl;
     std::function<void (RenderCapabilities::DeviceFacts&)> deviceFactsOverride;
     String lastError;
+    String lastGpuFailure;
     int sampleCount = 4;
+    bool failAreaLightTables = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneRenderer)
 };

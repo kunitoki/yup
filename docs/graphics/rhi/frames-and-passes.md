@@ -29,10 +29,25 @@ frame.submit();
 | ----------------- | ------------------------------------------------------------------------ |
 | `isValid()`       | True if the frame holds a valid GPU context.                             |
 | `submit()`        | Submits all passes recorded since `begin()`. Idempotent; does not block. |
-| `waitForGPU()`    | Blocks until submitted work completes and releases transient resources.  |
+| `waitForGPU()`    | Submits if needed, waits for the frame's work, releases transient resources, returns a `Result`. |
+| `getStatus()`     | The frame's GPU outcome, to check later without blocking.                |
 
 `submit()` returns `false` if the frame is invalid or was already submitted. The
 destructor submits the frame automatically if you have not already done so.
+
+`waitForGPU()` blocks on Metal and Vulkan. On OpenGL, Direct3D 11 and WebGPU the
+work is already ordered for any later readback, so it returns at once. It fails
+when the frame could not be submitted or, on Metal, when the GPU could not execute
+it (for instance when it ran out of memory), instead of letting you read back a
+blank target.
+
+To learn the outcome without blocking, keep `getStatus()` and `poll()` it later,
+for instance before the next frame. A frame that was waited on or whose status
+was taken reports its failure there only; the failures of other frames are
+collected by `GpuDevice::takeGpuFailure()`. `SceneRenderer` checks its own frames
+this way: its next `render()` starts the accumulation over, still renders, and
+reports the failure through `getLastGpuFailure()`; `SceneRenderer::waitForGPU()`
+waits for them.
 
 ```{warning}
 Do not submit a frame while one of its render passes is still open. Finish every

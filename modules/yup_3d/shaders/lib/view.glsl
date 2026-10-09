@@ -38,4 +38,31 @@ layout(set = 0, binding = 0) uniform ViewBlock
     vec4 clipPlanes;               // near, far, frame index, tone mapping operator (0 Reinhard, 1 ACES, 2 AgX)
 } view;
 
+// The screen-space motion between two clip positions, current uv minus previous uv, with uv from
+// the top-left
+vec2 viewVelocity(vec4 currentClip, vec4 previousClip)
+{
+    return (currentClip.xy / currentClip.w - previousClip.xy / previousClip.w) * vec2(0.5, -0.5);
+}
+
+// The unit direction away from the camera through a clip position, for perspective and orthographic
+// cameras. It joins two finite points of the ray, at NDC depths 0 and 0.5 as LightClusters does:
+// NDC depth 1 lies at infinity with an infinite far plane
+vec3 viewDirection(vec2 clip)
+{
+    vec4 nearPoint = view.inverseViewProjection * vec4(clip, 0.0, 1.0);
+    vec4 middlePoint = view.inverseViewProjection * vec4(clip, 0.5, 1.0);
+    return normalize(middlePoint.xyz / middlePoint.w - nearPoint.xyz / nearPoint.w);
+}
+
+// The motion of the background through a clip position: a direction at infinity, which only the
+// camera rotation moves. Orthographic cameras put it at w = 0, where it does not move at all
+vec2 viewBackgroundVelocity(vec2 clip)
+{
+    vec3 d = viewDirection(clip);
+    vec4 current = view.unjitteredViewProjection * vec4(d, 0.0);
+    vec4 previous = view.previousViewProjection * vec4(d, 0.0);
+    return current.w > 1.0e-6 && previous.w > 1.0e-6 ? viewVelocity(current, previous) : vec2(0.0);
+}
+
 #endif

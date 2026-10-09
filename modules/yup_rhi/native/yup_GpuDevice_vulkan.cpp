@@ -495,16 +495,23 @@ protected:
         return vulkanDevice->beginCommands (generation);
     }
 
-    void submitFrameCommands (void* commandBuffer) override
+    Result submitFrameCommands (void* commandBuffer) override
     {
-        if (commandBuffer != nullptr)
-            vulkanDevice->submitCommands (static_cast<VkCommandBuffer> (commandBuffer));
+        if (commandBuffer != nullptr && ! vulkanDevice->submitCommands (static_cast<VkCommandBuffer> (commandBuffer)))
+            return Result::fail (vulkanDevice->isDeviceLost() ? "The Vulkan device was lost" : "The frame could not be submitted");
+
+        return Result::ok();
     }
 
-    void waitFrameCommands (void* commandBuffer) override
+    Result waitFrameCommands (void* commandBuffer) override
     {
         if (commandBuffer != nullptr)
             vulkanDevice->waitForCommands (static_cast<VkCommandBuffer> (commandBuffer));
+
+        if (vulkanDevice->isDeviceLost())
+            return Result::fail ("The Vulkan device was lost");
+
+        return Result::ok();
     }
 
 private:

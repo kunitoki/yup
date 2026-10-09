@@ -77,7 +77,38 @@ struct GpuRenderPass::Impl
     {
         rive::rcp<rive::ore::BindGroup> group;
         bool dirty = true;
+
+        /** The native storage buffers the group was built with: an update may swap a buffer's backing. */
+        std::vector<void*> storageHandles;
     };
+
+    /** Calls @p visit with the native handle of every storage buffer bound to @p group, in binding order. */
+    template <typename Visitor>
+    void forEachStorageHandle (uint32_t group, Visitor&& visit) const
+    {
+        for (const auto& sb : storageBindings)
+        {
+            if (sb.group != (int) group || sb.buffer == nullptr)
+                continue;
+
+            const auto* bufferImpl = sb.buffer->getImpl();
+            visit (bufferImpl != nullptr ? bufferImpl->getNativeStorageHandleForRead() : nullptr);
+        }
+    }
+
+    bool storageHandlesMatch (uint32_t group, const GroupCache& cache) const
+    {
+        size_t index = 0;
+        bool matches = true;
+
+        forEachStorageHandle (group, [&] (void* handle)
+        {
+            matches = matches && index < cache.storageHandles.size() && cache.storageHandles[index] == handle;
+            ++index;
+        });
+
+        return matches && index == cache.storageHandles.size();
+    }
 
     rive::ore::Context* oreCtx = nullptr;
     GpuFrame::Impl* framePools = nullptr;
@@ -179,13 +210,17 @@ bool GpuRenderPass::Impl::ensurePassOpen()
     if (! buildRenderPassDesc (rpDesc))
         return false;
 
-    if (framePools->openPass != nullptr)
-        framePools->openPass->finish();
+    YUP_AUTORELEASEPOOL
+    {
+        if (framePools->openPass != nullptr)
+            framePools->openPass->finish();
 
-    if (framePools->openComputePass != nullptr)
-        yup_finishComputePass (*framePools->openComputePass);
+        if (framePools->openComputePass != nullptr)
+            yup_finishComputePass (*framePools->openComputePass);
 
-    orePass = oreCtx->beginRenderPass (rpDesc);
+        orePass = oreCtx->beginRenderPass (rpDesc);
+    }
+
     if (orePass == nullptr)
         return false;
 
@@ -198,7 +233,10 @@ void GpuRenderPass::Impl::closePass()
     if (orePass == nullptr)
         return;
 
-    orePass->finish();
+    YUP_AUTORELEASEPOOL
+    {
+        orePass->finish();
+    }
 
     if (framePools != nullptr && framePools->openPass == orePass.get())
         framePools->openPass = nullptr;
@@ -378,7 +416,7 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
 
         // Resources bound into a cached group were retained by this frame when it was built.
         auto* cache = groupIdx < groupCaches.size() ? &groupCaches[groupIdx] : nullptr;
-        if (cache != nullptr && ! cache->dirty)
+        if (cache != nullptr && ! cache->dirty && storageHandlesMatch (groupIdx, *cache))
         {
             bindGroups.push_back ({ groupIdx, cache->group });
             continue;
@@ -492,6 +530,12 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
             }
 #endif
 
+#if YUP_RIVE_USE_METAL && YUP_APPLE
+            // An update while this frame may still read the buffer swaps its backing instead of waiting
+            if (bufferImpl->mtlStorageBuffer != nil)
+                bufferImpl->mtlUses.add ((__bridge id<MTLCommandBuffer>) framePools->commandBuffer);
+#endif
+
             framePools->liveStorageBuffers.push_back (sb.buffer);
         }
 
@@ -540,6 +584,8 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
         {
             cache->group = bg;
             cache->dirty = bg == nullptr || anySkipped;
+            cache->storageHandles.clear();
+            forEachStorageHandle (groupIdx, [cache] (void* handle) { cache->storageHandles.push_back (handle); });
         }
 
         if (bg == nullptr)

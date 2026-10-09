@@ -76,6 +76,9 @@ public:
     /** Returns the projection matrix, unjittered. */
     const Matrix4& getProjection() const noexcept { return projection; }
 
+    /** Returns the projection matrix as rasterized: jittered when update() was asked to. */
+    const Matrix4& getJitteredProjection() const noexcept { return jitteredProjection; }
+
     /** Returns the view projection matrix, unjittered. */
     const Matrix4& getUnjitteredViewProjection() const noexcept { return unjitteredViewProjection; }
 
@@ -96,6 +99,7 @@ private:
     Block block {};
     Matrix4 view;
     Matrix4 projection;
+    Matrix4 jitteredProjection;
     Matrix4 unjitteredViewProjection;
     Vector3<float> cameraPosition;
     Point<float> previousJitter;

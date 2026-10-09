@@ -438,7 +438,7 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassClearColor)
     ASSERT_TRUE (pass.isValid());
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     // Read back the pixels — they should be green.
     std::vector<uint8_t> pixels (64 * 64 * 4);
@@ -1023,7 +1023,7 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassDrawWithVertexAndIndexBuffers)
 
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 #endif
 }
 
@@ -1083,7 +1083,7 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassSetUniformBufferAndTexture)
 
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 #endif
 }
 
@@ -1246,7 +1246,7 @@ TEST_F (GpuTextureOpenGLTests, GenerateMipsFillsEveryLevelFromTheBase)
     auto frame = GpuFrame::begin (device);
     ASSERT_TRUE (texture->generateMips (frame));
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     const auto pixels = drawIntoReadback (sampleLodZeroFragment, 1, [&] (GpuRenderPass& pass)
     {
@@ -1283,7 +1283,7 @@ TEST_F (GpuTextureOpenGLTests, GenerateMipsKeepsTheOrientationOfEveryLevel)
     auto frame = GpuFrame::begin (device);
     ASSERT_TRUE (texture->generateMips (frame));
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     const auto readLevel = [&] (uint32_t level)
     {
@@ -1322,7 +1322,7 @@ TEST_F (GpuTextureOpenGLTests, GenerateMipsReachesTheLastLevelOfAnOddSizedTextur
     auto frame = GpuFrame::begin (device);
     ASSERT_TRUE (texture->generateMips (frame));
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     const auto pixels = drawIntoReadback (sampleLodZeroFragment, 1, [&] (GpuRenderPass& pass)
     {
@@ -1411,7 +1411,7 @@ TEST_F (GpuTextureOpenGLTests, NarrowedViewLeavesNoMipRangeOnTheTexture)
 
         pass.finish();
         frame.submit();
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
     }
 
     activeTexture (textureUnit0);
@@ -1453,7 +1453,7 @@ TEST_F (GpuTextureOpenGLTests, RendersIntoMipWhileSamplingThePreviousMip)
         EXPECT_TRUE (pass.draw (3));
         pass.finish();
         frame.submit();
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
     }
 
     const auto pixels = drawIntoReadback (sampleLodZeroFragment, 4, [&] (GpuRenderPass& pass)

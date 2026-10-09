@@ -65,7 +65,7 @@ How several parts of one type behave:
 | Part           | Several slots                                                        |
 | -------------- | -------------------------------------------------------------------- |
 | `MeshNode`     | Every slot is drawn.                                                 |
-| `LightNode`    | Every slot lights the scene, up to `SceneRenderer::maxLights` lights. |
+| `LightNode`    | Every slot lights the scene, see [Lights](#lights).                  |
 | `MaterialNode` | Only the lowest slot overrides; the others are free for your use.    |
 | `CameraNode`   | Pick one with `Scene::setActiveCamera (entity, slot)`.               |
 
@@ -171,12 +171,18 @@ someEntity->addChild (model.getReference().createEntity());
 
 What is converted:
 
-- triangle primitives with `POSITION`, `NORMAL`, `TEXCOORD_0` and `COLOR_0`,
-  dense or sparse, any component type including normalized integers;
+- triangle primitives with `POSITION`, `NORMAL`, `TANGENT`, `TEXCOORD_0` and
+  `COLOR_0`, dense or sparse, any component type including normalized integers.
+  Normal maps follow the authored tangents; without them, the tangent frame is
+  derived from the texture coordinates;
 - metallic-roughness materials with their five textures, alpha mode and
-  double-sided flag, plus the factors of `KHR_materials_emissive_strength`,
-  `KHR_materials_ior` and `KHR_materials_specular` (their textures are ignored,
-  with a warning);
+  double-sided flag, plus the factors of three material extensions (their
+  textures are ignored, with a warning):
+  - `KHR_materials_emissive_strength` multiplies the emissive color, for
+    emitters brighter than 1, such as screens and lamps that glow with bloom;
+  - `KHR_materials_ior` sets the index of refraction of non-metals, which
+    changes how strongly they reflect when seen head-on;
+  - `KHR_materials_specular` scales and tints those reflections;
 - images stored in buffer views, data URIs or external files, including
   `EXT_texture_webp` sources;
 - nodes with their transforms (a `matrix` is split into translation, rotation and
@@ -242,9 +248,16 @@ itself until the image has converged, see [Platform tiers](#platform-tiers).
 
 `SceneRenderer` renders a scene into a texture and can be used without a
 component. Shading follows the glTF BRDF (GGX, Smith, Schlick) with punctual
-lights, a flat ambient term, environment lighting, shadows, normal mapping, alpha
-masking and blending, and double-sided materials; the result is exposed, tone
-mapped and sRGB encoded.
+and area lights, a flat ambient term, environment lighting, shadows, normal
+mapping, alpha masking and blending, and double-sided materials; the result is
+exposed, tone mapped and sRGB encoded.
+
+**Deferred and forward.** On the full tier, opaque and masked materials are
+drawn once into a set of intermediate targets, then shaded in a single pass per
+pixel, so overlapping objects and many lights cost little. Blended materials are
+drawn after that with forward shading, over the shaded image. On the raster tier
+every material is drawn with forward shading. Both paths shade with the same
+model, so a material looks the same on either tier.
 
 Image quality:
 
@@ -256,6 +269,43 @@ Image quality:
   the normal changes quickly across a pixel, so they don't sparkle while moving.
 - **Anisotropic filtering** keeps glTF textures sharp at grazing angles on
   devices that support it.
+
+### Lights
+
+A scene can hold any number of `LightNode`s: directional lights, in lux, and
+point and spot lights, in candela. A point or spot light stops at its `range`,
+or where it gets too dim to see when it has none. Which lights shade a surface
+depends on the tier:
+
+- **Full:** every light reaching a surface shades it. Directional lights reach
+  everything; the view is split into small blocks, and each block is shaded by up
+  to 63 of the point and spot lights reaching it.
+- **Raster:** each object is lit by its 8 most influential lights: directional
+  lights first, then the brightest and nearest point and spot lights that reach
+  it.
+
+#### Area lights
+
+Give a `LightNode` a `radius` to turn it into an area light, on both tiers. Its
+highlights widen and soften on smooth surfaces. A small or distant emitter gives
+the same light as the punctual one; a large, close one is integrated over its
+whole size, without the part a surface's horizon hides:
+
+- point lights become spheres of that radius, in world units;
+- spot lights become spheres of that radius too, still limited by their cone;
+- directional lights become a disk in the sky, `radius` being its angular radius
+  in radians (the sun is about 0.0047).
+
+```cpp
+auto& bulb = lamp->attach<yup::LightNode> (yup::LightNode::Type::point);
+bulb.radius = 0.1f;
+```
+
+A radius of 0, the default, keeps the light punctual. The area light code is
+compiled into the shaders whether a scene uses it or not, so even scenes
+without area lights carry it. Very smooth surfaces seen at
+grazing angles can show a misplaced highlight under an area light. The radius softens the light and its highlights, not the shadows:
+their edges stay as sharp as those of a punctual light.
 
 ### Environment lighting and reflections
 
@@ -295,7 +345,7 @@ show as sharp glints on smooth surfaces and as broad highlights on rough ones.
 ### Shadows
 
 Set `castsShadows` on a directional `LightNode` to make it cast shadows. The
-first such light shading the frame renders the opaque items into a shadow map of
+first such light in the scene renders the opaque items into a shadow map of
 `SceneRenderer::shadowMapSize` texels, fitted around them, and their shadows are
 softened by a small filter.
 
@@ -377,7 +427,8 @@ The renderer has two tiers, picked per device from the `tier` preference:
 | OpenGL, OpenGL ES, WebGL2               | Raster                          | Raster                         |
 
 `automatic` picks the full tier on desktop GPUs that pass the capability checks
-(half-float render targets, enough color attachments and a verified backend).
+(half-float render targets, enough color attachments, compute shaders with storage
+buffers readable from fragment shaders, and a verified backend).
 Today only Metal is verified; Direct3D 11, Vulkan and WebGPU stay on raster until
 the full tier is validated on them. OpenGL and OpenGL ES never run the full
 tier. Mobile defaults to raster. Asking for `full` on a device that cannot run it

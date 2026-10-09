@@ -1076,7 +1076,7 @@ TEST_F (GpuPipelineMultiSetMetalTests, KeepsEqualBindingNumbersOfDifferentSetsAp
     pass.draw (3);
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     std::vector<uint8> pixels (size * size * 4);
     ASSERT_TRUE (target->readPixels (pixels.data(), pixels.size()));
@@ -1148,7 +1148,7 @@ void main()
     pass.draw (3);
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     std::vector<uint8> pixels (size * size * 4);
     ASSERT_TRUE (target->readPixels (pixels.data(), pixels.size()));
@@ -1207,7 +1207,7 @@ void main()
     pass.draw (3);
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     std::vector<uint8> pixels (size * size * 4);
     ASSERT_TRUE (target->readPixels (pixels.data(), pixels.size()));

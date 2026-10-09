@@ -1,0 +1,157 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "lib/light_types.glsl"
+
+layout(local_size_x = 64) in;
+
+// Mirrored by ClusterBlock in yup_LightClusters.cpp
+layout(set = 0, binding = 0) uniform ClusterBlock
+{
+    mat4 view;
+    mat4 inverseProjection;   // jittered, as rasterized
+    vec4 grid;                // tilesX, tilesY, slices, number of lights
+    vec4 depth;               // near, far, firstLocalLight, 1 when the last slice is open (infinite far plane)
+} cluster;
+
+layout(set = 0, binding = 1) readonly buffer Lights { GpuLight lights[]; };
+layout(set = 0, binding = 2) writeonly buffer ClusterLights { uint clusterLights[]; };
+
+const uint maxLightsPerCluster = 63u;
+const float openBound = 3.402823466e38; // the largest float, as in LightClusters::getClusterBounds
+
+float depthForSlice(float slice)
+{
+    return cluster.depth.x * pow(cluster.depth.y / cluster.depth.x, slice / cluster.grid.z);
+}
+
+vec3 unproject(vec2 ndc, float depth)
+{
+    vec4 point = cluster.inverseProjection * vec4(ndc, depth, 1.0);
+    return point.xyz / point.w;
+}
+
+float distanceSquared(vec3 boundsMin, vec3 boundsMax, vec3 point)
+{
+    vec3 distance = max(max(boundsMin - point, vec3(0.0)), point - boundsMax);
+    return dot(distance, distance);
+}
+
+// Mirrors LightClusters::intersects and GpuSceneData::lightReachesBox: the range sphere, and for a
+// spot the sphere bounding its cone (Wronski, "Cull that cone", 2017)
+bool reachesCluster(GpuLight light, vec3 boundsMin, vec3 boundsMax)
+{
+    if (light.positionType.w < 0.5)
+        return false;
+
+    float range = abs(light.directionRange.w);
+    vec3 position = (cluster.view * vec4(light.positionType.xyz, 1.0)).xyz;
+    if (!(range > 0.0) || distanceSquared(boundsMin, boundsMax, position) > range * range)
+        return false;
+
+    if (light.positionType.w < 1.5)
+        return true;
+
+    float cosOuter = -light.spotRadiusShadow.y / light.spotRadiusShadow.x;
+    if (cosOuter <= 0.0)
+        return true;
+
+    bool narrow = cosOuter >= 0.70710678;
+    float radius = narrow ? range * 0.5 / cosOuter : range * sqrt(max(0.0, 1.0 - cosOuter * cosOuter));
+    float offset = narrow ? radius : range * cosOuter;
+    vec3 direction = (cluster.view * vec4(light.directionRange.xyz, 0.0)).xyz;
+
+    return distanceSquared(boundsMin, boundsMax, position + direction * offset) <= radius * radius;
+}
+
+// Clustered light culling (Olsson et al., "Clustered Deferred and Forward Shading", HPG 2012):
+// one thread per cluster lists the point and spot lights reaching its view-space bounds, in
+// ascending order and without atomics, exactly as LightClusters::assign does on the CPU
+void main()
+{
+    int tilesX = int(cluster.grid.x);
+    int tilesY = int(cluster.grid.y);
+    int slices = int(cluster.grid.z);
+
+    int index = int(gl_GlobalInvocationID.x);
+    if (index >= tilesX * tilesY * slices)
+        return;
+
+    int x = index % tilesX;
+    int y = (index / tilesX) % tilesY;
+    int slice = index / (tilesX * tilesY);
+
+    float depths[2] = float[2](depthForSlice(float(slice)), depthForSlice(float(slice + 1)));
+    bool openFar = cluster.depth.w > 0.5 && slice == slices - 1;
+
+    vec3 boundsMin = vec3(openBound);
+    vec3 boundsMax = vec3(-openBound);
+    bvec3 openMin = bvec3(false);
+    bvec3 openMax = bvec3(false);
+
+    for (int corner = 0; corner < 4; ++corner)
+    {
+        // Tile row 0 is the top of the screen, NDC y = +1
+        vec2 ndc = vec2(-1.0 + 2.0 * float(x + (corner & 1)) / float(tilesX),
+                        1.0 - 2.0 * float(y + (corner >> 1)) / float(tilesY));
+
+        // Two finite points of the corner ray: NDC depth 1 is at infinity with an infinite far plane
+        vec3 a = unproject(ndc, 0.0);
+        vec3 b = unproject(ndc, 0.5);
+
+        for (int k = 0; k < 2; ++k)
+        {
+            if (k == 1 && openFar)
+            {
+                // The ray runs to infinity: open the bounds on each axis it moves along
+                vec3 direction = (b - a) / (a.z - b.z);
+                openMin = bvec3(uvec3(openMin) | uvec3(lessThan(direction, vec3(0.0))));
+                openMax = bvec3(uvec3(openMax) | uvec3(greaterThan(direction, vec3(0.0))));
+                continue;
+            }
+
+            vec3 point = a + (b - a) * ((-depths[k] - a.z) / (b.z - a.z));
+            boundsMin = min(boundsMin, point);
+            boundsMax = max(boundsMax, point);
+        }
+    }
+
+    boundsMin = mix(boundsMin, vec3(-openBound), openMin);
+    boundsMax = mix(boundsMax, vec3(openBound), openMax);
+
+    uint base = uint(index) * 64u;
+    uint count = 0u;
+    int numLights = int(cluster.grid.w);
+
+    for (int i = max(int(cluster.depth.z), 0); i < numLights && count < maxLightsPerCluster; ++i)
+    {
+        if (reachesCluster(lights[i], boundsMin, boundsMax))
+        {
+            clusterLights[base + 1u + count] = uint(i);
+            ++count;
+        }
+    }
+
+    clusterLights[base] = count;
+}

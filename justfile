@@ -130,7 +130,7 @@ shader_bundler *COMPILE_ARGS:
   build/yup_shader_bundler {{COMPILE_ARGS}}
 
 [doc("regenerate the yup_3d shader bundles (entries are Name or Name:DEF1+DEF2)")]
-yup3d_shaders: (_shader_bundles "yup3d_shaders" "modules/yup_3d/shaders" "ForwardPass ForwardPass:YUP_3D_TIER_FULL Background Background:YUP_3D_TIER_FULL ShadowPass TemporalAA ToneMapping BloomDownsample BloomUpsample")
+yup3d_shaders: (_shader_bundles "yup3d_shaders" "modules/yup_3d/shaders" "ForwardPass ForwardPass:YUP_3D_TIER_FULL Background GBufferPass:YUP_3D_TIER_FULL GBufferBackground LightingPass:YUP_3D_TIER_FULL ShadowPass TemporalAA ToneMapping BloomDownsample BloomUpsample LightClusters")
 
 [doc("regenerate the yup_rhi shader bundles")]
 yup_rhi_shaders: (_shader_bundles "yup_rhi_shaders" "modules/yup_rhi/shaders" "GpuMipDownsample")

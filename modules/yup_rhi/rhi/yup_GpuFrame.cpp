@@ -35,6 +35,15 @@ struct GpuFrame::Impl
     bool submitted = false;
     bool released = false;
 
+    /** What waitForGPU() reported, returned again by later calls. */
+    Result gpuResult = Result::ok();
+
+    /** The GPU outcome of the frame, completed by the device. */
+    GpuFrameStatus status;
+
+    /** Marks the outcome as read by its own owner, so the device does not report it. */
+    void claimStatus();
+
     /** The ore pass currently open in this frame. Ore no longer finishes a previous pass by
         itself, and Metal and D3D12 allow one open encoder at a time. */
     rive::ore::RenderPass* openPass = nullptr;
@@ -59,6 +68,9 @@ struct GpuFrame::Impl
     /** Frees the transient resources immediately. Only valid once the GPU is
         known to be idle. */
     void releaseNow();
+
+    /** Hands the frame's command buffer back to the device. */
+    void releaseCommands();
 };
 
 //==============================================================================
@@ -84,6 +96,7 @@ void GpuFrame::Impl::retire()
         return;
 
     released = true;
+    releaseCommands();
 
     if (device != nullptr)
     {
@@ -106,6 +119,7 @@ void GpuFrame::Impl::releaseNow()
         return;
 
     released = true;
+    releaseCommands();
 
     if (device != nullptr)
         for (auto& buffer : liveBuffers)
@@ -115,6 +129,21 @@ void GpuFrame::Impl::releaseNow()
     liveViews.clear();
     liveSamplers.clear();
     liveStorageBuffers.clear();
+}
+
+void GpuFrame::Impl::claimStatus()
+{
+    if (auto& block = status.block)
+    {
+        const ScopedLock sl (*block->lock);
+        block->claimed = true;
+    }
+}
+
+void GpuFrame::Impl::releaseCommands()
+{
+    if (device != nullptr && commandBuffer != nullptr)
+        device->releaseFrameCommands (std::exchange (commandBuffer, nullptr));
 }
 
 //==============================================================================
@@ -150,12 +179,34 @@ GpuFrame GpuFrame::begin (GpuDevice::Ptr ctx)
     i->generation = ctx->beginFrameGeneration();
     i->commandBuffer = ctx->beginFrameCommands (i->generation);
 
+    // A Metal frame records into the device's command buffer, so it has nothing to record into
+    if (i->commandBuffer == nullptr && ctx->getPlatform() == GpuPlatform::Metal)
+    {
+        YUP_DBG ("GpuFrame: no command buffer for the frame");
+        i->submitted = true;
+        return {};
+    }
+
     rive::ore::Context::FrameDescriptor frameDesc;
     frameDesc.externalCommandBuffer = i->commandBuffer;
     frameDesc.safeFrameNumber = ctx->getSafeFrameGeneration();
     frameDesc.currentFrameNumber = i->generation;
 
-    oreCtx->beginFrame (frameDesc);
+    oreCtx->clearLastError();
+
+    YUP_AUTORELEASEPOOL
+    {
+        oreCtx->beginFrame (frameDesc);
+    }
+
+    if (! oreCtx->lastError().empty())
+    {
+        YUP_DBG ("GpuFrame: " << String (oreCtx->lastError()));
+        i->submitted = true;
+        return {};
+    }
+
+    i->status = ctx->beginFrameStatus (i->generation);
     return frame;
 }
 
@@ -200,29 +251,65 @@ bool GpuFrame::submit()
     if (i == nullptr || i->oreCtx == nullptr || i->submitted)
         return false;
 
-    if (i->openPass != nullptr)
-        i->openPass->finish();
+    if (auto& block = i->status.block)
+    {
+        const ScopedLock sl (*block->lock);
+        block->submitted = true;
+    }
 
-    if (i->openComputePass != nullptr)
-        yup_finishComputePass (*i->openComputePass);
+    auto submitted = Result::ok();
 
-    i->oreCtx->endFrame();
-    i->device->submitFrameCommands (i->commandBuffer);
+    // Encoders and command buffers are autoreleased, and would otherwise keep their
+    // queue and every resource they reference alive until the caller's pool drains
+    YUP_AUTORELEASEPOOL
+    {
+        if (i->openPass != nullptr)
+            i->openPass->finish();
+
+        if (i->openComputePass != nullptr)
+            yup_finishComputePass (*i->openComputePass);
+
+        i->oreCtx->endFrame();
+        submitted = i->device->submitFrameCommands (i->commandBuffer);
+    }
+
     i->submitted = true;
+
+    if (submitted.failed() || ! i->device->reportsFrameCompletion())
+        i->device->completeFrameStatus (i->generation, submitted);
 
     return true;
 }
 
-void GpuFrame::waitForGPU()
+Result GpuFrame::waitForGPU()
 {
     auto* i = getImpl();
-    if (i == nullptr || i->oreCtx == nullptr || i->released)
-        return;
+    if (i == nullptr || i->oreCtx == nullptr)
+        return Result::fail ("The frame is not valid");
+
+    if (i->released)
+        return i->gpuResult;
+
+    i->claimStatus();
+    submit();
 
     i->oreCtx->waitForGPU();
-    i->device->waitFrameCommands (i->commandBuffer);
+    const auto waited = i->device->waitFrameCommands (i->commandBuffer);
+    const auto completed = i->status.wait();
+    i->gpuResult = waited.failed() ? waited : completed;
 
     i->releaseNow();
+    return i->gpuResult;
+}
+
+GpuFrameStatus GpuFrame::getStatus()
+{
+    auto* i = getImpl();
+    if (i == nullptr)
+        return {};
+
+    i->claimStatus();
+    return i->status;
 }
 
 } // namespace yup

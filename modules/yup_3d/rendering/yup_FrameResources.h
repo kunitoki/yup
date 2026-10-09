@@ -25,15 +25,19 @@ namespace yup
 {
 
 //==============================================================================
-/** The textures a renderer needs from frame to frame.
+/** The textures and storage buffers a renderer needs from frame to frame.
 
     Transient textures are pooled by descriptor: a texture acquired in one frame is handed back by
     the same acquire() in the next one, and released after a frame that did not acquire it.
     History textures are ping-pong pairs kept across frames, for effects that read last frame's
     output such as temporal anti-aliasing, and released after a frame that did not use them.
 
-    Descriptors match on width, height, format, type, depth or layer count, mip levels, sample count
-    and render target flag; labels are ignored.
+    Descriptors match on width, height, format, type, depth or layer count, mip levels, sample count,
+    render target and storage flags; labels are ignored.
+
+    Storage buffers rotate over a ring of three per slot, advanced by every beginFrame(), so the
+    CPU writes a different buffer from the ones the previous frames bound. The whole ring of a slot
+    is released after a frame that did not acquire it.
 
     @code
     resources.beginFrame (width, height);
@@ -87,7 +91,31 @@ public:
     void invalidateHistory() noexcept;
 
     //==============================================================================
-    /** Releases transients not acquired and histories not used this frame, and swaps the used histories. */
+    /** The storage buffers a frame can acquire. */
+    enum class StorageSlot
+    {
+        lights,        ///< The packed lights.
+        clusterLights, ///< The light lists of the clusters.
+        materials      ///< The material table.
+    };
+
+    /** A storage buffer of at least @p byteSize for this frame. Contents are undefined until written.
+
+        Each slot rotates over a ring of three buffers, one step per beginFrame() call: the ring
+        counts calls, not frames the GPU finished. Write each slot once per frame with
+        GpuDevice::updateBuffer(), before the first pass binding it is recorded: the contents are
+        then visible to the whole frame when it executes, and a frame retains the buffers it binds.
+
+        Acquiring a slot again within one frame returns the same buffer, unless @p byteSize no
+        longer fits: a buffer too small is replaced by a new one of the next power of two size,
+        including by a larger acquire later in the same frame.
+
+        @returns The buffer, or nullptr when the device cannot create it.
+    */
+    GpuBuffer::Ptr acquireStorageBuffer (StorageSlot slot, size_t byteSize);
+
+    //==============================================================================
+    /** Releases transients and storage slots not acquired and histories not used this frame, and swaps the used histories. */
     void endFrame();
 
     //==============================================================================
@@ -116,9 +144,16 @@ private:
         bool invalidatedAfterUse = false;
     };
 
+    // One buffer per frame the device keeps in flight (GpuDevice::framesInFlight)
+    static constexpr size_t storageRingSize = 3;
+    static constexpr size_t numStorageSlots = 3;
+
     GpuDevice::Ptr device;
     std::vector<Transient> transients;
     std::vector<HistoryPair> histories;
+    std::array<std::array<GpuBuffer::Ptr, storageRingSize>, numStorageSlots> storageBuffers;
+    std::array<bool, numStorageSlots> storageAcquired {};
+    uint64 frameCounter = 0;
     int width = 0;
     int height = 0;
 

@@ -64,6 +64,17 @@ void SceneDrawList::build (const EntityNode& root, const Matrix4& view, const Bu
     if (options.addDefaultLight && lights.empty())
         lights.push_back ({ defaultLight.get(), {}, Vector3<float> (-0.35f, -0.75f, -0.55f).normalized() });
 
+    if (options.selectLightsPerDraw)
+    {
+        rankLights (lights, lightRankings);
+
+        for (auto* items : { &opaqueItems, &blendItems })
+        {
+            for (auto& item : *items)
+                item.numLights = selectLights (item.primitive->bounds.transformedBy (item.world), lights, lightRankings, item.lightIndices);
+        }
+    }
+
     const auto less = std::less<const Material*>();
 
     std::stable_sort (opaqueItems.begin(), opaqueItems.end(), [&less] (const DrawItem& a, const DrawItem& b)
@@ -81,6 +92,80 @@ void SceneDrawList::build (const EntityNode& root, const Matrix4& view, const Bu
     {
         return a.viewDistance > b.viewDistance;
     });
+}
+
+void SceneDrawList::rankLights (Span<const Light> lights, std::vector<LightRanking>& rankings)
+{
+    rankings.clear();
+
+    for (const auto& light : lights)
+    {
+        const auto& node = *light.node;
+        rankings.push_back ({ node.intensity * (0.2126f * node.color[0] + 0.7152f * node.color[1] + 0.0722f * node.color[2]),
+                              GpuSceneData::getEffectiveRange (node),
+                              std::cos (node.outerConeAngle),
+                              GpuSceneData::isDark (node) });
+    }
+}
+
+int SceneDrawList::selectLights (const BoundingBox& worldBounds, Span<const Light> lights, std::array<uint16, maxLightsPerDraw>& indices)
+{
+    std::vector<LightRanking> rankings;
+    rankLights (lights, rankings);
+    return selectLights (worldBounds, lights, rankings, indices);
+}
+
+int SceneDrawList::selectLights (const BoundingBox& worldBounds, Span<const Light> lights, Span<const LightRanking> rankings, std::array<uint16, maxLightsPerDraw>& indices)
+{
+    // How much a light matters to the object, directional lights first, or nothing if it cannot reach it
+    const auto getLightRank = [&worldBounds] (const Light& light, const LightRanking& ranking) -> std::optional<std::pair<bool, float>>
+    {
+        if (ranking.dark)
+            return std::nullopt;
+
+        const auto& node = *light.node;
+        if (node.type == LightNode::Type::directional)
+            return std::pair { true, ranking.power };
+
+        if (! GpuSceneData::lightReachesBox (worldBounds, light.position, light.direction, ranking.range, node.type == LightNode::Type::spot, ranking.cosOuter))
+            return std::nullopt;
+
+        const auto distanceSquared = worldBounds.getDistanceSquared (light.position);
+        return std::pair { false, ranking.power / jmax (distanceSquared, node.radius * node.radius + 1.0e-4f) };
+    };
+
+    std::array<std::pair<bool, float>, maxLightsPerDraw> ranks {};
+    size_t count = 0;
+
+    const auto numLights = jmin (lights.size(), static_cast<size_t> (std::numeric_limits<uint16>::max()) + 1);
+
+    // An insertion sort into the slots: only a greater rank moves ahead, so ties keep the lower index
+    for (size_t index = 0; index < numLights; ++index)
+    {
+        const auto rank = getLightRank (lights[index], rankings[index]);
+        if (! rank.has_value())
+            continue;
+
+        auto slot = count;
+        while (slot > 0 && ranks[slot - 1] < *rank)
+            --slot;
+
+        if (slot == ranks.size())
+            continue;
+
+        count = jmin (count + 1, ranks.size());
+
+        for (auto i = count - 1; i > slot; --i)
+        {
+            ranks[i] = ranks[i - 1];
+            indices[i] = indices[i - 1];
+        }
+
+        ranks[slot] = *rank;
+        indices[slot] = static_cast<uint16> (index);
+    }
+
+    return static_cast<int> (count);
 }
 
 void SceneDrawList::clear()

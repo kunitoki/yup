@@ -26,7 +26,7 @@ namespace yup
 namespace
 {
 
-// Labels are ignored. GpuTextureDesc::storage joins the comparison in Phase 2.
+// Labels are ignored
 bool isSamePooledTextureDesc (const GpuTextureDesc& a, const GpuTextureDesc& b) noexcept
 {
     return a.width == b.width
@@ -36,7 +36,8 @@ bool isSamePooledTextureDesc (const GpuTextureDesc& a, const GpuTextureDesc& b) 
         && a.depthOrArrayLayers == b.depthOrArrayLayers
         && a.mipLevels == b.mipLevels
         && a.sampleCount == b.sampleCount
-        && a.renderTarget == b.renderTarget;
+        && a.renderTarget == b.renderTarget
+        && a.storage == b.storage;
 }
 
 } // namespace
@@ -50,6 +51,8 @@ FrameResources::FrameResources (GpuDevice::Ptr device)
 //==============================================================================
 void FrameResources::beginFrame (int widthPx, int heightPx)
 {
+    ++frameCounter;
+
     if (widthPx != width || heightPx != height)
     {
         transients.clear();
@@ -116,6 +119,22 @@ void FrameResources::invalidateHistory() noexcept
 }
 
 //==============================================================================
+GpuBuffer::Ptr FrameResources::acquireStorageBuffer (StorageSlot slot, size_t byteSize)
+{
+    storageAcquired[static_cast<size_t> (slot)] = true;
+
+    auto& buffer = storageBuffers[static_cast<size_t> (slot)][frameCounter % storageRingSize];
+
+    if (buffer == nullptr || buffer->getSizeInBytes() < byteSize)
+    {
+        const std::vector<uint8> zeros (std::bit_ceil (jmax (byteSize, size_t (4))));
+        buffer = device->createBuffer (GpuBufferType::storage, zeros.data(), zeros.size());
+    }
+
+    return buffer;
+}
+
+//==============================================================================
 void FrameResources::endFrame()
 {
     std::erase_if (transients, [] (const Transient& t)
@@ -137,6 +156,15 @@ void FrameResources::endFrame()
         pair.valid = ! pair.invalidatedAfterUse;
         pair.invalidatedAfterUse = false;
         pair.used = false;
+    }
+
+    // The frames in flight retain the buffers they bound
+    for (size_t slot = 0; slot < numStorageSlots; ++slot)
+    {
+        if (! storageAcquired[slot])
+            storageBuffers[slot] = {};
+
+        storageAcquired[slot] = false;
     }
 }
 

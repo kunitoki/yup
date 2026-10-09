@@ -84,6 +84,17 @@ TEST_F (BoundingBoxTests, CenterSizeAndRadius)
     EXPECT_NEAR (box.getRadius(), std::sqrt (48.0f) * 0.5f, 1.0e-5f);
 }
 
+TEST_F (BoundingBoxTests, DistanceSquaredIsZeroInsideAndPerAxisOutside)
+{
+    const BoundingBox box ({ -1.0f, 0.0f, 2.0f }, { 3.0f, 4.0f, 6.0f });
+
+    EXPECT_EQ (box.getDistanceSquared ({ 1.0f, 2.0f, 4.0f }), 0.0f);
+    EXPECT_EQ (box.getDistanceSquared ({ 3.0f, 4.0f, 6.0f }), 0.0f);
+    EXPECT_FLOAT_EQ (box.getDistanceSquared ({ 5.0f, 2.0f, 4.0f }), 4.0f);
+    EXPECT_FLOAT_EQ (box.getDistanceSquared ({ -2.0f, -1.0f, 4.0f }), 2.0f);
+    EXPECT_FLOAT_EQ (box.getDistanceSquared ({ 4.0f, 6.0f, 0.0f }), 1.0f + 4.0f + 4.0f);
+}
+
 TEST_F (BoundingBoxTests, TransformedByNonUniformScaleAndTranslation)
 {
     const BoundingBox box ({ -1.0f, -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f });

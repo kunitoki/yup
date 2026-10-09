@@ -67,7 +67,11 @@ public:
     /** Returns true when the backend passed the interop spike required by the full tier. */
     static bool passedInteropSpike (GpuPlatform platform) noexcept;
 
-    /** Picks the tier a device runs for a given preference. */
+    /** Picks the tier a device runs for a given preference.
+
+        The full tier needs rgba16float render targets, four color attachments, compute and storage
+        buffers readable from fragment shaders, on a backend that passed its interop spike.
+    */
     static Tier selectTier (const DeviceFacts& facts, RenderSettings::TierPreference preference) noexcept;
 
     /** Creates the capabilities for a device and settings.

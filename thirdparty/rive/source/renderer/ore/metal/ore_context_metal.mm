@@ -501,6 +501,7 @@ inline rcp<Texture> ContextMetal::mtlMakeTexture(const TextureDesc& desc)
     }
 
     auto texture = rcp<TextureMetal>(new TextureMetal(desc));
+    texture->m_ctx = this;
 #if RIVE_OBJC_EXCEPTIONS
     @try
     {
@@ -1137,6 +1138,7 @@ inline rcp<TextureView> ContextMetal::mtlWrapTarget(gpu::RenderTarget* target)
 
     auto texture = rcp<TextureMetal>(new TextureMetal(texDesc));
     texture->m_mtlTexture = mtlTexture;
+    texture->m_ctx = this;
 
     TextureViewDesc viewDesc{};
     viewDesc.texture = texture.get();
@@ -1173,9 +1175,15 @@ std::unique_ptr<ContextMetal> ContextMetal::Make(id<MTLDevice> device,
     return ctx;
 }
 
-void ContextMetal::beginFrame(const FrameDescriptor&)
+void ContextMetal::beginFrame(const FrameDescriptor& desc)
 {
-    m_mtlCommandBuffer = [m_mtlQueue commandBuffer];
+    m_ownsCommandBuffer = desc.externalCommandBuffer == nullptr;
+    m_mtlCommandBuffer =
+        m_ownsCommandBuffer
+            ? [m_mtlQueue commandBuffer]
+            : (__bridge id<MTLCommandBuffer>)desc.externalCommandBuffer;
+    if (m_mtlCommandBuffer == nil)
+        setLastError("ore: Metal command buffer creation failed");
     // Serial of the command buffer about to be recorded.
     ++m_currentSerial;
     m_pendingFrame.reset();
@@ -1225,7 +1233,8 @@ void ContextMetal::endFrame()
           {
           }
         }];
-        [m_mtlCommandBuffer commit];
+        if (m_ownsCommandBuffer)
+            [m_mtlCommandBuffer commit];
         m_mtlCommandBuffer = nil;
     }
 }
@@ -1365,6 +1374,7 @@ rcp<TextureView> ContextMetal::wrapRiveTexture(gpu::Texture* gpuTex,
 
     auto texture = rcp<TextureMetal>(new TextureMetal(texDesc));
     texture->m_mtlTexture = mtlTex; // Borrow — caller owns via RenderImage.
+    texture->m_ctx = this;
 
     TextureViewDesc viewDesc{};
     viewDesc.texture = texture.get();

@@ -76,17 +76,35 @@ public:
     /** Intensity a light contributes below which it is culled, in the same unit as the lit color. */
     static constexpr float lightCutoff = 0.005f;
 
-    /** The distance beyond which a point or spot light is culled: its range when set, otherwise
-        where intensity * the brightest color channel / d^2 drops under lightCutoff. Directional
-        lights return 0 (unbounded).
+    /** True when a light of any type contributes nothing: an intensity of 0 or less, or no color
+        channel above 0. Dark lights are culled everywhere and never take a light slot.
+    */
+    static bool isDark (const LightNode& light) noexcept;
+
+    /** The distance beyond which a point or spot light is culled: 0 for a dark light (see isDark()),
+        its range when set, otherwise where intensity * the brightest color channel / d^2 drops
+        under lightCutoff. Directional lights return 0 (unbounded).
     */
     static float getEffectiveRange (const LightNode& light) noexcept;
 
+    /** True when a point or spot light can reach a box: the box must meet the sphere of @p range
+        around the light and, for a spot light, the sphere bounding its cone (Wronski, "Cull that
+        cone", 2017). A range of 0 reaches nothing. Box, position and direction share one space.
+
+        @param box        The box to test.
+        @param position   The position of the light.
+        @param direction  The unit direction a spot light shines towards.
+        @param range      The effective range of the light.
+        @param isSpot     True for a spot light.
+        @param cosOuter   The cosine of the outer cone angle of a spot light.
+    */
+    static bool lightReachesBox (const BoundingBox& box, const Vector3<float>& position, const Vector3<float>& direction, float range, bool isSpot, float cosOuter) noexcept;
+
     /** Packs a light. @p shadowIndex is the shadow map slot or -1.
 
-        directionRange.w is 0 for a directional light, the node range when it is set, and minus
-        the effective range otherwise: the shaders cull at abs (w) and window the falloff only
-        where w > 0, as for a light with a range.
+        directionRange.w is 0 for a directional light and for a dark one (see isDark()), the node
+        range when it is set, and minus the effective range otherwise: the shaders cull at abs (w)
+        and window the falloff only where w > 0, as for a light with a range.
     */
     static GpuLight packLight (const SceneDrawList::Light& light, int shadowIndex) noexcept;
 

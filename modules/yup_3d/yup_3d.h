@@ -58,6 +58,7 @@
 #include <numeric>
 #include <optional>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -81,10 +82,14 @@
 #include "gltf/yup_GltfModel.h"
 #include "rendering/yup_SceneDrawList.h"
 #include "rendering/yup_GpuSceneData.h"
+#include "rendering/yup_MaterialTable.h"
+#include "rendering/yup_GeometryBindings.h"
 #include "resources/yup_LtcTables.h"
 #include "rendering/yup_ViewData.h"
 #include "rendering/yup_FrameResources.h"
+#include "rendering/yup_LightClusters.h"
 #include "rendering/yup_FullscreenPass.h"
+#include "rendering/yup_GBufferPass.h"
 #include "rendering/yup_TemporalAA.h"
 #include "rendering/yup_ToneMapping.h"
 #include "rendering/yup_Bloom.h"

@@ -67,6 +67,19 @@ TEST_F (ViewDataTests, UnjitteredWhenNotRequested)
                              std::begin (view.getBlock().unjitteredViewProjection)));
 }
 
+TEST_F (ViewDataTests, JitteredProjectionIsTheRasterizedOne)
+{
+    Scene scene;
+    ViewData view;
+
+    view.update (scene, 100, 50, false, 16, 3);
+    EXPECT_TRUE (std::equal (view.getJitteredProjection().getData(), view.getJitteredProjection().getData() + 16, view.getProjection().getData()));
+
+    view.update (scene, 100, 50, true, 16, 3);
+    EXPECT_TRUE (std::equal (view.getJitteredProjection().getData(), view.getJitteredProjection().getData() + 16, view.getBlock().projection));
+    EXPECT_FALSE (std::equal (view.getJitteredProjection().getData(), view.getJitteredProjection().getData() + 16, view.getProjection().getData()));
+}
+
 TEST_F (ViewDataTests, PreviousIsLastFramesUnjitteredMatrix)
 {
     Scene scene;

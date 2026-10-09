@@ -65,16 +65,38 @@ Vector3<float> GpuSceneData::decodeOctahedral (Point<float> encoded) noexcept
 }
 
 //==============================================================================
+bool GpuSceneData::isDark (const LightNode& light) noexcept
+{
+    return ! (light.intensity > 0.0f && jmax (light.color[0], light.color[1], light.color[2]) > 0.0f);
+}
+
 float GpuSceneData::getEffectiveRange (const LightNode& light) noexcept
 {
-    if (light.type == LightNode::Type::directional)
+    if (light.type == LightNode::Type::directional || isDark (light))
         return 0.0f;
 
     if (light.range > 0.0f)
         return light.range;
 
     const auto brightest = jmax (light.color[0], light.color[1], light.color[2]);
-    return std::sqrt (jmax (0.0f, light.intensity * brightest) / lightCutoff);
+    return std::sqrt (light.intensity * brightest / lightCutoff);
+}
+
+bool GpuSceneData::lightReachesBox (const BoundingBox& box, const Vector3<float>& position, const Vector3<float>& direction, float range, bool isSpot, float cosOuter) noexcept
+{
+    if (! (range > 0.0f) || box.getDistanceSquared (position) > range * range)
+        return false;
+
+    // A narrow cone is bounded by the sphere through its apex and rim, a wide one by the sphere
+    // around its rim; past 90 degrees only the range sphere bounds it
+    if (! isSpot || cosOuter <= 0.0f)
+        return true;
+
+    const auto narrow = cosOuter >= 0.70710678f;
+    const auto radius = narrow ? range * 0.5f / cosOuter : range * std::sqrt (jmax (0.0f, 1.0f - cosOuter * cosOuter));
+    const auto offset = narrow ? radius : range * cosOuter;
+
+    return box.getDistanceSquared (position + direction * offset) <= radius * radius;
 }
 
 GpuLight GpuSceneData::packLight (const SceneDrawList::Light& light, int shadowIndex) noexcept

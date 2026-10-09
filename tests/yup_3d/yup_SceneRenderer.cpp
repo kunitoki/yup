@@ -33,6 +33,7 @@
 #include <array>
 #include <bit>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <set>
 
@@ -121,6 +122,108 @@ TEST_F (SceneRendererAgxMirrorTests, MirrorMatchesFitScriptOnSaturatedRed)
     EXPECT_NEAR (levels[2], 33, 1);
 }
 
+/** CPU only: the area light references, by brute-force quadrature over sphere caps, and a mirror of
+    lightsClippedCap in lib/lights.glsl checked against them. */
+class SceneRendererAreaLightMathTests : public ::testing::Test
+{
+public:
+    /** Mirror of lightsClippedCap: the clamped cosine over a cap divided by pi, from len = sin^2 of
+        its angular radius and the cosine z of its axis with the normal. */
+    static double clippedCap (double len, double z)
+    {
+        len = std::min (len, 0.9999);
+        if (z * z >= len)
+            return len * std::max (z, 0.0);
+
+        const auto sinTheta = std::sqrt (1.0 - z * z);
+        const auto x = std::sqrt (1.0 / len - 1.0);
+        const auto y = std::clamp (-x * z / sinTheta, -1.0, 1.0);
+        const auto s = sinTheta * std::sqrt (1.0 - y * y);
+        return std::max ((z * std::acos (y) - x * s) * len + std::atan2 (s, x), 0.0) / MathConstants<double>::pi;
+    }
+
+    /** Integrates @p f (l) over the cap of angular radius @p sigma around the unit @p axis, with the normal along +z. */
+    template <typename Function>
+    static double integrateCap (std::array<double, 3> axis, double sigma, Function&& f)
+    {
+        // An orthonormal frame around the axis
+        const std::array<double, 3> helper = std::abs (axis[2]) < 0.9 ? std::array<double, 3> { 0.0, 0.0, 1.0 } : std::array<double, 3> { 1.0, 0.0, 0.0 };
+        std::array<double, 3> t1 { axis[1] * helper[2] - axis[2] * helper[1], axis[2] * helper[0] - axis[0] * helper[2], axis[0] * helper[1] - axis[1] * helper[0] };
+        const auto length = std::sqrt (t1[0] * t1[0] + t1[1] * t1[1] + t1[2] * t1[2]);
+        for (auto& value : t1)
+            value /= length;
+
+        const std::array<double, 3> t2 { axis[1] * t1[2] - axis[2] * t1[1], axis[2] * t1[0] - axis[0] * t1[2], axis[0] * t1[1] - axis[1] * t1[0] };
+
+        constexpr int steps = 600;
+        const auto du = sigma / steps;
+        const auto dphi = MathConstants<double>::twoPi / steps;
+
+        auto sum = 0.0;
+        for (int i = 0; i < steps; ++i)
+        {
+            const auto u = (i + 0.5) * du;
+            for (int j = 0; j < steps; ++j)
+            {
+                const auto phi = (j + 0.5) * dphi;
+                std::array<double, 3> l;
+                for (int k = 0; k < 3; ++k)
+                    l[k] = std::cos (u) * axis[k] + std::sin (u) * (std::cos (phi) * t1[k] + std::sin (phi) * t2[k]);
+
+                sum += f (l) * std::sin (u) * du * dphi;
+            }
+        }
+
+        return sum;
+    }
+
+    /** The clamped cosine over a cap whose axis makes the angle @p theta with the normal, divided by pi. */
+    static double capQuadrature (double sigma, double theta)
+    {
+        return integrateCap ({ std::sin (theta), 0.0, std::cos (theta) }, sigma, [] (const auto& l)
+        {
+            return std::max (l[2], 0.0);
+        }) / MathConstants<double>::pi;
+    }
+
+    /** The GGX lobe of lib/bsdf.glsl without Fresnel, D V cos, integrated over a cap around @p axis,
+        for the view (sqrt (1 - nDotV^2), 0, nDotV) and the GGX alpha @p alpha. */
+    static double ggxCapQuadrature (double nDotV, double alpha, std::array<double, 3> axis, double sigma)
+    {
+        const std::array<double, 3> v { std::sqrt (1.0 - nDotV * nDotV), 0.0, nDotV };
+        const auto alpha2 = alpha * alpha;
+
+        return integrateCap (axis, sigma, [&] (const auto& l)
+        {
+            const auto nDotL = l[2];
+            if (nDotL <= 0.0)
+                return 0.0;
+
+            std::array<double, 3> h { v[0] + l[0], v[1] + l[1], v[2] + l[2] };
+            const auto nDotH = h[2] / std::sqrt (h[0] * h[0] + h[1] * h[1] + h[2] * h[2]);
+            const auto d = nDotH * nDotH * (alpha2 - 1.0) + 1.0;
+            const auto distribution = alpha2 / (MathConstants<double>::pi * d * d);
+            const auto ggxV = nDotL * std::sqrt (nDotV * nDotV * (1.0 - alpha2) + alpha2);
+            const auto ggxL = nDotV * std::sqrt (nDotL * nDotL * (1.0 - alpha2) + alpha2);
+            return distribution * 0.5 / (ggxV + ggxL) * nDotL;
+        });
+    }
+};
+
+TEST_F (SceneRendererAreaLightMathTests, ClippedCapMatchesQuadrature)
+{
+    // Caps above, across and below the horizon, small to nearly a hemisphere
+    for (const auto sigma : { 0.05, 0.2, 0.44, 0.8, 1.2 })
+    {
+        for (const auto theta : { 0.0, 0.5, 1.0, 1.3, 1.5, 1.57, 1.7, 2.0, 2.5 })
+        {
+            const auto len = std::sin (sigma) * std::sin (sigma);
+            const auto exact = capQuadrature (sigma, theta);
+            EXPECT_NEAR (clippedCap (len, std::cos (theta)), exact, 1.0e-4 * len + 1.0e-7) << "sigma " << sigma << ", theta " << theta;
+        }
+    }
+}
+
 /** CPU only: the reflection of the precompiled forward bundles. */
 class SceneRendererBundleTests : public ::testing::Test
 {
@@ -164,10 +267,18 @@ protected:
         return load (data, sizeof (data));
     }
 
-    static ShaderBundle backgroundFull()
+    static ShaderBundle lightingPassFull()
     {
         static constexpr uint8 data[] = {
-#include <yup_3d/shaders/yup_Background_full.inc>
+#include <yup_3d/shaders/yup_LightingPass_full.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle gbufferPassFull()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_GBufferPass_full.inc>
         };
         return load (data, sizeof (data));
     }
@@ -215,13 +326,26 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
 
         EXPECT_EQ (countResources (vertex->reflection).sampledImages, 0);
         EXPECT_EQ (countResources (vertex->reflection).uniformBlocks, 2);
-        EXPECT_EQ (countResources (fragment->reflection).sampledImages, 7);
-        EXPECT_EQ (countResources (fragment->reflection).uniformBlocks, 3);
+        EXPECT_EQ (countResources (fragment->reflection).sampledImages, 9);
+        EXPECT_EQ (countResources (fragment->reflection).uniformBlocks, 4);
+    }
+
+    // The full tier geometry bundles: the forward pass without the raster light list, and the G-buffer
+    for (const auto& [name, bundle, textures, blocks] : { std::tuple { "ForwardPass_full", forwardPassFull(), 9, 3 },
+                                                          std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 1 } })
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+        EXPECT_EQ (countResources (fragment->reflection).sampledImages, textures) << name;
+        EXPECT_EQ (countResources (fragment->reflection).uniformBlocks, blocks) << name;
     }
 
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass", forwardPass() },
+        { "ForwardPass_full", forwardPassFull() },
         { "Background", background() },
+        { "GBufferPass_full", gbufferPassFull() },
+        { "LightingPass_full", lightingPassFull() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -255,7 +379,6 @@ TEST_F (SceneRendererBundleTests, OnlyFullVariantsWriteVelocity)
     const auto raster = forwardPass();
     const auto full = forwardPassFull();
     const auto rasterBackground = background();
-    const auto fullBackground = backgroundFull();
 
     for (const auto* reflection : { fragmentOf (raster), fragmentOf (rasterBackground) })
     {
@@ -264,12 +387,11 @@ TEST_F (SceneRendererBundleTests, OnlyFullVariantsWriteVelocity)
         EXPECT_FALSE (writesLocation (*reflection, 1));
     }
 
-    for (const auto* reflection : { fragmentOf (full), fragmentOf (fullBackground) })
-    {
-        ASSERT_NE (reflection, nullptr);
-        EXPECT_TRUE (writesLocation (*reflection, 0));
-        EXPECT_TRUE (writesLocation (*reflection, 1));
-    }
+    // Blended items keep writing their motion over the deferred surfaces
+    const auto* reflection = fragmentOf (full);
+    ASSERT_NE (reflection, nullptr);
+    EXPECT_TRUE (writesLocation (*reflection, 0));
+    EXPECT_TRUE (writesLocation (*reflection, 1));
 }
 
 TEST_F (SceneRendererBundleTests, MaterialBlockEndsWithTheGpuMaterial)
@@ -292,6 +414,112 @@ TEST_F (SceneRendererBundleTests, MaterialBlockEndsWithTheGpuMaterial)
 
         EXPECT_EQ (offsets["specular"], 64u);
         EXPECT_EQ (offsets["extended"], 64u + static_cast<uint32_t> (offsetof (GpuMaterial, extended)));
+    }
+}
+
+TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
+{
+    // One declaration in lib/lighting.glsl: the background reads environmentInfo where the surfaces do
+    const std::pair<const char*, ShaderBundle> bundles[] = {
+        { "ForwardPass", forwardPass() },
+        { "ForwardPass_full", forwardPassFull() },
+        { "Background", background() },
+        { "LightingPass_full", lightingPassFull() },
+    };
+
+    for (const auto& [name, bundle] : bundles)
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+
+        const auto& blocks = fragment->reflection.uniformBuffers;
+        const auto block = std::find_if (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 1 && b.binding == 0; });
+        ASSERT_NE (block, blocks.end()) << name;
+        EXPECT_EQ (block->blockSize, 288u) << name;
+
+        std::map<String, uint32_t> offsets;
+        for (const auto& member : block->members)
+            offsets[member.name] = member.offset;
+
+        EXPECT_EQ (offsets["shadowInfo"], 80u) << name;
+        EXPECT_EQ (offsets["environmentInfo"], 96u) << name;
+        EXPECT_EQ (offsets["irradiance"], 112u) << name;
+        EXPECT_EQ (offsets["clusterGrid"], 256u) << name;
+        EXPECT_EQ (offsets["clusterDepth"], 272u) << name;
+    }
+}
+
+TEST_F (SceneRendererBundleTests, RasterLightListBlockIs528Bytes)
+{
+    // Eight 64 byte GpuLight then the count: the array size bounds the per-draw light loop
+    const auto bundle = forwardPass();
+    const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+    ASSERT_NE (fragment, nullptr);
+
+    const auto& blocks = fragment->reflection.uniformBuffers;
+    const auto block = std::find_if (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 2 && b.binding == 12; });
+    ASSERT_NE (block, blocks.end());
+    EXPECT_EQ (block->blockSize, 528u);
+    EXPECT_EQ (block->blockSize, static_cast<uint32_t> (SceneDrawList::maxLightsPerDraw * sizeof (GpuLight) + 16));
+
+    std::map<String, uint32_t> offsets;
+    for (const auto& member : block->members)
+        offsets[member.name] = member.offset;
+
+    ASSERT_EQ (offsets.count ("count"), 1u);
+    EXPECT_EQ (offsets["count"], 512u);
+
+    EXPECT_TRUE (fragment->reflection.storageBuffers.empty());
+}
+
+TEST_F (SceneRendererBundleTests, FullForwardPassReadsTheClusteredLights)
+{
+    // No per-draw list on the full tier: every light in a storage buffer at set 1 binding 6, and
+    // the light lists of the clusters at binding 7, both read only
+    const auto bundle = forwardPassFull();
+    const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+    ASSERT_NE (fragment, nullptr);
+
+    const auto& blocks = fragment->reflection.uniformBuffers;
+    EXPECT_TRUE (std::none_of (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 2 && b.binding == 12; }));
+
+    std::vector<uint32_t> bindings;
+    for (const auto& buffer : fragment->reflection.storageBuffers)
+    {
+        EXPECT_EQ (buffer.set, 1u) << buffer.name;
+        EXPECT_TRUE (buffer.readOnly) << buffer.name;
+        bindings.push_back (buffer.binding);
+    }
+
+    std::sort (bindings.begin(), bindings.end());
+    EXPECT_EQ (bindings, (std::vector<uint32_t> { 6, 7 }));
+}
+
+TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
+{
+    // Both forward variants read the area light tables at set 1 bindings 4 and 5 through the set 0
+    // linearClamp sampler. RasterBundlesStayWithinBudget counts the two tables in the raster budget
+    const std::pair<const char*, ShaderBundle> bundles[] = {
+        { "ForwardPass", forwardPass() },
+        { "ForwardPass_full", forwardPassFull() },
+    };
+
+    const auto declares = [] (const std::vector<ShaderReflection::ResourceBinding>& resources, uint32_t set, uint32_t binding)
+    {
+        return std::any_of (resources.begin(), resources.end(), [&] (const auto& resource)
+        {
+            return resource.set == set && resource.binding == binding;
+        });
+    };
+
+    for (const auto& [name, bundle] : bundles)
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 4)) << name << ": ltcMatrix";
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 5)) << name << ": ltcAmplitude";
+        EXPECT_TRUE (declares (fragment->reflection.separateSamplers, 0, 1)) << name << ": linearClamp";
     }
 }
 
@@ -687,10 +915,45 @@ protected:
         }
     }
 
+    /** Each baseline scene on the raster tier stays within 0.5% of the pixels of the Phase 0 image of @p platform. */
+    void checkMatchesPhaseZeroBaseline (const String& platform)
+    {
+        const std::pair<const char*, void (*) (Scene&)> scenes[] = {
+            { "shadows", buildShadowsScene },
+            { "materials", buildMaterialsScene },
+            { "edges", buildEdgesScene },
+        };
+
+        for (const auto& [name, build] : scenes)
+        {
+            Scene scene;
+            build (scene);
+
+            RenderSettings settings;
+            settings.tier = RenderSettings::TierPreference::raster;
+            scene.setRenderSettings (settings);
+
+            SceneRenderer renderer;
+            const auto image = renderToImage (renderer, scene, 128);
+            ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
+
+            const auto differing = countBaselineDifferences (image, platform + "_" + name + ".png");
+            ASSERT_GE (differing, 0) << "capture the Phase 0 baselines first";
+
+            RecordProperty ((String (name) + "Differing").toStdString(), differing);
+            EXPECT_LE (differing, 128 * 128 / 200) << name; // At most 0.5% of the pixels beyond 2 levels
+        }
+    }
+
     /** Renders and reads the pixels back through a canvas. */
     Image renderToImage (SceneRenderer& renderer, Scene& scene, int size)
     {
         auto texture = renderer.render (device, scene, size, size);
+
+        // A frame the GPU failed to execute reads back blank, without a CPU side error
+        const auto gpuResult = renderer.waitForGPU();
+        EXPECT_TRUE (gpuResult.wasOk()) << gpuResult.getErrorMessage();
+
         return texture != nullptr ? readBack (texture) : Image();
     }
 
@@ -707,6 +970,198 @@ protected:
         auto& g = canvas->beginDraw();
         g.drawTexture (texture, { 0.0f, 0.0f, static_cast<float> (width), static_cast<float> (height) });
         return canvas->asImage();
+    }
+
+    /** Adds a square plate facing the default camera, 2 units wide, drawn with @p material, and returns its entity. */
+    static EntityNode* addPlate (Scene& scene, Material::Ptr material)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { -1.0f, -1.0f, 0.0f };
+        vertices[1].position = { 1.0f, -1.0f, 0.0f };
+        vertices[2].position = { 1.0f, 1.0f, 0.0f };
+        vertices[3].position = { -1.0f, 1.0f, 0.0f };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        auto mesh = Mesh::Ptr (new Mesh ("plate"));
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, std::move (material));
+
+        auto entity = EntityNode::Ptr (new EntityNode ("plate"));
+        entity->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (entity);
+        return entity.get();
+    }
+
+    /** Selects the full tier, accumulating @p taaSamples jittered frames (1 disables TAA). */
+    static void setFullTierTaa (Scene& scene, int taaSamples)
+    {
+        auto settings = scene.getRenderSettings();
+        settings.tier = RenderSettings::TierPreference::full;
+        settings.taaSamples = taaSamples;
+        scene.setRenderSettings (settings);
+    }
+
+    /** A 16x16 grid of white quads, 0.45 apart and 0.24 wide, each lit by its own red point light
+        0.15 in front of its center with a range of 0.4: the nearest other light is 0.47 away from a
+        quad center, out of range. The camera looks at the grid from 9 units, so at 256x256 the quad
+        centers are the pixels of getLightGridCenter(). The quads are one primitive when @p oneDraw
+        is set, and one primitive each otherwise.
+    */
+    static void buildLightGridScene (Scene& scene, bool oneDraw)
+    {
+        auto material = Material::Ptr (new Material());
+        material->metallicFactor = 0.0f;
+
+        auto mesh = Mesh::Ptr (new Mesh ("grid"));
+        std::vector<Mesh::Vertex> vertices;
+        std::vector<uint32> indices;
+
+        for (int row = 0; row < 16; ++row)
+        {
+            for (int column = 0; column < 16; ++column)
+            {
+                const auto center = getLightGridPosition (column, row);
+                const auto first = static_cast<uint32> (vertices.size());
+
+                for (const auto& corner : { Vector3<float> (-0.12f, -0.12f, 0.0f), Vector3<float> (0.12f, -0.12f, 0.0f),
+                                            Vector3<float> (0.12f, 0.12f, 0.0f), Vector3<float> (-0.12f, 0.12f, 0.0f) })
+                {
+                    auto& vertex = vertices.emplace_back();
+                    vertex.position = center + corner;
+                    vertex.normal = { 0.0f, 0.0f, 1.0f };
+                }
+
+                for (const auto index : { 0u, 1u, 2u, 0u, 2u, 3u })
+                    indices.push_back (first + index);
+
+                if (! oneDraw)
+                {
+                    mesh->addPrimitive (std::move (vertices), std::move (indices), material);
+                    vertices.clear();
+                    indices.clear();
+                }
+
+                auto light = EntityNode::Ptr (new EntityNode ("light"));
+                auto& node = light->attach<LightNode> (LightNode::Type::point);
+                node.color = { 1.0f, 0.0f, 0.0f };
+                node.range = 0.4f;
+                light->setPosition (center + Vector3<float> (0.0f, 0.0f, 0.15f));
+                scene.getRoot()->addChild (light);
+            }
+        }
+
+        if (oneDraw)
+            mesh->addPrimitive (std::move (vertices), std::move (indices), material);
+
+        auto grid = EntityNode::Ptr (new EntityNode ("grid"));
+        grid->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (grid);
+
+        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        camera->attach<CameraNode>();
+        camera->setPosition ({ 0.0f, 0.0f, 9.0f });
+        scene.getRoot()->addChild (camera);
+        scene.setActiveCamera (camera.get());
+
+        scene.setAmbientColor (Colors::black);
+    }
+
+    /** The world position of a quad center of buildLightGridScene(). */
+    static Vector3<float> getLightGridPosition (int column, int row)
+    {
+        return { 0.45f * (static_cast<float> (column) - 7.5f), 0.45f * (static_cast<float> (row) - 7.5f), 0.0f };
+    }
+
+    /** The pixel of a quad center of buildLightGridScene() at 256x256: the camera sees 2 tan (0.4) * 9
+        world units. The grid is symmetric, so this is the same quad center whichever way rows are read.
+    */
+    static Point<int> getLightGridCenter (int column, int row)
+    {
+        const auto pixelsPerUnit = 256.0f / (18.0f * std::tan (0.4f));
+        const auto position = getLightGridPosition (column, row);
+        return { static_cast<int> (128.0f + position.getX() * pixelsPerUnit), static_cast<int> (128.0f - position.getY() * pixelsPerUnit) };
+    }
+
+    /** The quad centers of buildLightGridScene() with a red level of at least 100 at 256x256. */
+    static int countLitGridQuads (const Image& image)
+    {
+        int lit = 0;
+        for (int row = 0; row < 16; ++row)
+        {
+            for (int column = 0; column < 16; ++column)
+            {
+                const auto pixel = getLightGridCenter (column, row);
+                lit += image.getPixelColor (pixel.getX(), pixel.getY()).getRed() >= 100 ? 1 : 0;
+            }
+        }
+
+        return lit;
+    }
+
+    /** More than eight lights shade one scene on @p tier. */
+    void checkShadesMoreThanEightLightsPerScene (RenderSettings::TierPreference tier)
+    {
+        // A 4x4 grid of small white quads, 0.6 apart, each lit by its own red point light 0.3 in front
+        // of it with a range of 0.6: a neighbour's light is 0.67 away from a quad center, out of range
+        auto material = Material::Ptr (new Material());
+        material->metallicFactor = 0.0f;
+
+        Scene scene;
+        scene.setAmbientColor (Colors::black);
+        setTier (scene, tier);
+
+        std::vector<Vector3<float>> centers;
+        for (int row = 0; row < 4; ++row)
+            for (int column = 0; column < 4; ++column)
+                centers.push_back ({ 0.6f * static_cast<float> (column) - 0.9f, 0.6f * static_cast<float> (row) - 0.9f, 0.0f });
+
+        for (const auto& center : centers)
+        {
+            std::vector<Mesh::Vertex> vertices (4);
+            vertices[0].position = center + Vector3<float> (-0.2f, -0.2f, 0.0f);
+            vertices[1].position = center + Vector3<float> (0.2f, -0.2f, 0.0f);
+            vertices[2].position = center + Vector3<float> (0.2f, 0.2f, 0.0f);
+            vertices[3].position = center + Vector3<float> (-0.2f, 0.2f, 0.0f);
+
+            for (auto& vertex : vertices)
+                vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+            auto mesh = Mesh::Ptr (new Mesh ("quad"));
+            mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
+
+            auto quad = EntityNode::Ptr (new EntityNode ("quad"));
+            quad->attach<MeshNode> (mesh);
+            scene.getRoot()->addChild (quad);
+
+            auto light = EntityNode::Ptr (new EntityNode ("light"));
+            auto& node = light->attach<LightNode> (LightNode::Type::point);
+            node.color = { 1.0f, 0.0f, 0.0f };
+            node.range = 0.6f;
+            light->setPosition (center + Vector3<float> (0.0f, 0.0f, 0.3f));
+            scene.getRoot()->addChild (light);
+        }
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+        // The default camera sees 2 tan (0.4) * 5 world units over the 128 pixels; the grid is
+        // symmetric, so the centers are the same pixels whichever way the rows are read back
+        const auto pixelsPerUnit = 128.0f / (10.0f * std::tan (0.4f));
+        int lit = 0;
+
+        for (const auto& center : centers)
+        {
+            const auto x = static_cast<int> (64.0f + center.getX() * pixelsPerUnit);
+            const auto y = static_cast<int> (64.0f - center.getY() * pixelsPerUnit);
+            const auto red = static_cast<int> (image.getPixelColor (x, y).getRed());
+
+            EXPECT_GE (red, 100) << "quad at " << center.getX() << ", " << center.getY();
+            lit += red >= 100 ? 1 : 0;
+        }
+
+        RecordProperty ("litQuads", lit);
     }
 
 #if YUP_ENABLE_SHADER_TRANSPILER
@@ -780,7 +1235,7 @@ protected:
             }
         }, GpuColor::transparentBlack());
         frame.submit();
-        frame.waitForGPU();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
 
         return drawn;
     }
@@ -838,6 +1293,32 @@ void main()
         return false;
     }
 
+    /** Writes @p expression, a vec4 computed from the texel t of @p texture, into an rgba8 image of
+        its size. @p functions are GLSL declared before main(). */
+    Image mapTexels (const GpuTexture::Ptr& texture, const String& expression, const String& functions = {})
+    {
+        return runFullscreen ("#version 450\n" + functions + R"(
+layout(set = 0, binding = 0) uniform texture2D source;
+layout(set = 0, binding = 1) uniform sampler sourceSampler;
+layout(location = 0) out vec4 color;
+void main()
+{
+    vec4 t = texelFetch(sampler2D(source, sourceSampler), ivec2(gl_FragCoord.xy), 0);
+    color = )" + expression + R"(;
+})",
+                              texture);
+    }
+
+    /** The shading normal of a G-buffer RT1 decoded through lib/octahedral.glsl, as n * 0.5 + 0.5 in rgb. */
+    Image readGBufferNormal (const GpuTexture::Ptr& normalRoughness)
+    {
+        const auto octahedral = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory()
+                                    .getChildFile ("modules/yup_3d/shaders/lib/octahedral.glsl")
+                                    .loadFileAsString();
+
+        return mapTexels (normalRoughness, "vec4(octahedralDecode(t.xy) * 0.5 + 0.5, 1.0)", octahedral);
+    }
+
     /** The rg16float velocity as signed 8 bit levels of v * @p scale + 0.5, x in red and y in green:
         zero velocity reads 127 or 128. */
     Image readVelocity (const GpuTexture::Ptr& velocity, float scale)
@@ -853,6 +1334,282 @@ void main()
                                   + R"() + 0.5, 0.0, 1.0);
 })",
                               velocity);
+    }
+
+    /** Renders @p scene at @p size x @p size with raw radiance in the scene color (no temporal
+        anti-aliasing on full, the rgba16float bloom path on raster), and returns the exposed luma of
+        every pixel, row by row from the top, or nothing if the frame failed.
+    */
+    std::vector<double> renderLuma (Scene& scene, int size, RenderSettings::TierPreference tier)
+    {
+        if (tier == RenderSettings::TierPreference::full)
+            setFullTierTaa (scene, 1);
+        else
+        {
+            setTier (scene, RenderSettings::TierPreference::raster);
+            setBloom (scene, true);
+        }
+
+        SceneRenderer renderer;
+        const auto sceneColor = renderer.render (device, scene, size, size) != nullptr ? renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor) : nullptr;
+        if (sceneColor == nullptr)
+        {
+            ADD_FAILURE() << renderer.getLastError();
+            return {};
+        }
+
+        // Raster scene color is reversibly tone mapped and premultiplied by the MSAA coverage. The
+        // luma goes out as 16 bits of its log2 over [-20, 20]: the high byte in red, the low in green
+        const auto color = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory()
+                               .getChildFile ("modules/yup_3d/shaders/lib/color.glsl")
+                               .loadFileAsString();
+
+        const auto radiance = tier == RenderSettings::TierPreference::full ? "t.rgb" : "yupUnpremultiplyInverse(t)";
+        const auto image = mapTexels (sceneColor, String ("encodeLuma(") + radiance + ")", color + R"(
+vec4 encodeLuma(vec3 c)
+{
+    float e = clamp((log2(max(yupLuma(c), 1.0e-6)) + 20.0) / 40.0, 0.0, 1.0) * 255.0;
+    return vec4(floor(e) / 255.0, fract(e), 0.0, 1.0);
+})");
+
+        if (! image.isValid())
+        {
+            ADD_FAILURE() << "Unable to read the scene color back";
+            return {};
+        }
+
+        std::vector<double> luma;
+        for (int y = 0; y < size; ++y)
+        {
+            for (int x = 0; x < size; ++x)
+            {
+                const auto texel = image.getPixelColor (x, y);
+                const auto e = (texel.getRed() + texel.getGreen() / 255.0) / 255.0;
+                luma.push_back (e > 0.0 ? std::exp2 (e * 40.0 - 20.0) : 0.0);
+            }
+        }
+
+        return luma;
+    }
+
+    /** The mean of @p luma, an image @p size pixels wide from renderLuma(), within @p area. */
+    static double meanLuma (const std::vector<double>& luma, int size, Rectangle<int> area)
+    {
+        if (luma.empty())
+            return -1.0;
+
+        auto sum = 0.0;
+        for (int y = area.getY(); y < area.getBottom(); ++y)
+            for (int x = area.getX(); x < area.getRight(); ++x)
+                sum += luma[static_cast<size_t> (y * size + x)];
+
+        return sum / static_cast<double> (area.getWidth() * area.getHeight());
+    }
+
+    /** The 256 light grid keeps every quad lit and the scene color finite on @p tier, through the rgba16float path on raster. */
+    void checkSceneColorHasNoNaN (RenderSettings::TierPreference tier)
+    {
+        // The 256 light grid, one draw per quad, plus a zero-area triangle (which draws no fragments
+        // and only exercises the bounds, the light selection and the clusters) and a light at the
+        // camera position, the real shading stress
+        Scene scene;
+        buildLightGridScene (scene, false);
+
+        std::vector<Mesh::Vertex> vertices (3);
+        for (auto& vertex : vertices)
+        {
+            vertex.position = { 0.1f, 0.1f, 0.2f };
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+        }
+
+        auto mesh = Mesh::Ptr (new Mesh ("degenerate"));
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2 });
+        auto degenerate = EntityNode::Ptr (new EntityNode ("degenerate"));
+        degenerate->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (degenerate);
+
+        auto atCamera = EntityNode::Ptr (new EntityNode ("atCamera"));
+        atCamera->attach<LightNode> (LightNode::Type::point).intensity = 10.0f;
+        atCamera->setPosition ({ 0.0f, 0.0f, 9.0f });
+        scene.getRoot()->addChild (atCamera);
+
+        // Scene color holds raw radiance on full without temporal anti-aliasing. Raster rgba8 hides
+        // non-finite values, but a NaN pixel reads black there: every quad center must stay lit
+        const auto full = tier == RenderSettings::TierPreference::full;
+        if (full)
+            setFullTierTaa (scene, 1);
+        else
+            setTier (scene, RenderSettings::TierPreference::raster);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 256);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+        const auto lit = countLitGridQuads (image);
+        RecordProperty ("litQuads", lit);
+        EXPECT_EQ (lit, 256);
+
+        // Raw radiance: the full tier's scene color, and the raster rgba16float bloom path
+        if (! full)
+        {
+            setBloom (scene, true);
+            ASSERT_NE (renderer.render (device, scene, 256, 256), nullptr) << renderer.getLastError();
+        }
+
+        const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+        ASSERT_NE (sceneColor, nullptr);
+        EXPECT_EQ (sceneColor->getFormat(), GpuTextureFormat::rgba16float);
+        EXPECT_TRUE (isFiniteTexture (sceneColor));
+        EXPECT_FALSE (isSaturatedTexture (sceneColor));
+    }
+
+    /** A point light of tiny radius shades like the punctual one on @p tier. */
+    void checkTinyRadiusMatchesPunctual (RenderSettings::TierPreference tier)
+    {
+        // A point light of radius 0.001 one unit over a rough plate shades through the area path: its
+        // sphere radiance I / (pi r^2) over the solid angle it subtends converges to the inverse square law
+        const auto meanAt = [this, tier] (float radius)
+        {
+            auto material = Material::Ptr (new Material());
+            material->baseColorFactor = { 0.8f, 0.8f, 0.8f, 1.0f };
+            material->metallicFactor = 0.0f;
+            material->roughnessFactor = 0.5f;
+
+            Scene scene;
+            addPlate (scene, material);
+            scene.setAmbientColor (Colors::black);
+
+            auto light = EntityNode::Ptr (new EntityNode ("point"));
+            light->attach<LightNode> (LightNode::Type::point).radius = radius;
+            light->setPosition ({ 0.0f, 0.0f, 1.0f });
+            scene.getRoot()->addChild (light);
+
+            return meanLuma (renderLuma (scene, 128, tier), 128, { 40, 40, 48, 48 });
+        };
+
+        const auto punctual = meanAt (0.0f);
+        const auto area = meanAt (0.001f);
+        RecordProperty ("punctual", String (punctual, 4).toStdString());
+        RecordProperty ("area", String (area, 4).toStdString());
+
+        ASSERT_GT (punctual, 0.05);
+        EXPECT_NEAR (area / punctual, 1.0, 0.02);
+    }
+
+    /** A light radius widens the highlight without changing its energy on @p tier. */
+    void checkRadiusWidensTheHighlight (RenderSettings::TierPreference tier)
+    {
+        // A smooth dark plate seen at 45 degrees mirrors a point light towards the camera. A radius of
+        // 0.3 spreads the highlight over more bright pixels (luma above 1.4, a level of 200 once Reinhard
+        // tone mapped) while the energy it reflects stays within 10%
+        const auto highlightAt = [this, tier] (float radius)
+        {
+            auto material = Material::Ptr (new Material());
+            material->baseColorFactor = { 0.05f, 0.05f, 0.05f, 1.0f };
+            material->metallicFactor = 0.0f;
+            material->roughnessFactor = 0.1f;
+
+            Scene scene;
+            auto* plate = addPlate (scene, material);
+            scene.setAmbientColor (Colors::black);
+
+            const auto tilt = Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, -MathConstants<float>::pi * 0.25f);
+            plate->setRotation (tilt);
+
+            // The camera direction from the plate center, mirrored about its normal
+            const auto normal = tilt.rotate ({ 0.0f, 0.0f, 1.0f });
+            const Vector3<float> toCamera { 0.0f, 0.0f, 1.0f };
+            const auto mirrored = normal * (2.0f * normal.dotProduct (toCamera)) - toCamera;
+
+            auto light = EntityNode::Ptr (new EntityNode ("point"));
+            auto& node = light->attach<LightNode> (LightNode::Type::point);
+            node.intensity = 20.0f;
+            node.radius = radius;
+            light->setPosition (mirrored * 1.5f);
+            scene.getRoot()->addChild (light);
+
+            const auto luma = renderLuma (scene, 256, tier);
+            const auto bright = std::count_if (luma.begin(), luma.end(), [] (double value) { return value > 1.4; });
+            return std::pair { static_cast<int> (bright), std::accumulate (luma.begin(), luma.end(), 0.0) };
+        };
+
+        const auto [sharpPixels, sharpEnergy] = highlightAt (0.0f);
+        const auto [widePixels, wideEnergy] = highlightAt (0.3f);
+        RecordProperty ("sharpPixels", sharpPixels);
+        RecordProperty ("widePixels", widePixels);
+        RecordProperty ("sharpEnergy", String (sharpEnergy, 1).toStdString());
+        RecordProperty ("wideEnergy", String (wideEnergy, 1).toStdString());
+
+        EXPECT_GT (sharpPixels, 0);
+        EXPECT_GT (widePixels, sharpPixels);
+        ASSERT_GT (sharpEnergy, 0.0);
+        EXPECT_NEAR (wideEnergy / sharpEnergy, 1.0, 0.1);
+    }
+
+    /** Area lights stay finite on @p tier, through the rgba16float path on raster. */
+    void checkAreaLightsStayFinite (RenderSettings::TierPreference tier)
+    {
+        // A smooth plate inside a sphere light, touching another, under a spot disk and a grazing sun
+        // disk, over a gray ambient light so every plate pixel stays lit
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.5f, 0.5f, 0.5f, 1.0f };
+        material->metallicFactor = 0.0f;
+        material->roughnessFactor = 0.0f;
+
+        Scene scene;
+        addPlate (scene, material);
+        scene.setAmbientColor (Color (0xff404040));
+
+        const auto addLight = [&] (LightNode::Type type, float radius, Vector3<float> position, const Quaternion& rotation)
+        {
+            auto light = EntityNode::Ptr (new EntityNode ("light"));
+            auto& node = light->attach<LightNode> (type);
+            node.intensity = 3.0f;
+            node.radius = radius;
+            light->setPosition (position);
+            light->setRotation (rotation);
+            scene.getRoot()->addChild (light);
+        };
+
+        addLight (LightNode::Type::point, 0.3f, { 0.0f, 0.0f, 0.05f }, Quaternion::identity());
+        addLight (LightNode::Type::point, 0.1f, { 0.5f, -0.5f, 0.0f }, Quaternion::identity());
+        addLight (LightNode::Type::spot, 0.2f, { -0.5f, 0.5f, 0.3f }, Quaternion::identity());
+        addLight (LightNode::Type::directional, 0.3f, {}, Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 1.55f));
+
+        // Scene color holds raw radiance on full without temporal anti-aliasing. Raster rgba8 hides
+        // non-finite values, but a NaN pixel reads black there
+        const auto full = tier == RenderSettings::TierPreference::full;
+        if (full)
+            setFullTierTaa (scene, 1);
+        else
+            setTier (scene, RenderSettings::TierPreference::raster);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+        auto darkest = 255.0;
+        for (int y = 40; y < 88; ++y)
+            for (int x = 40; x < 88; ++x)
+                darkest = jmin (darkest, meanLuminance (image, { x, y, 1, 1 }));
+
+        RecordProperty ("darkest", String (darkest, 1).toStdString());
+        EXPECT_GT (darkest, 10.0);
+
+        // Raw radiance: the full tier's scene color, and the raster rgba16float bloom path. On Metal the
+        // raster path stores a NaN as about 1 (min (NaN, 65504) then the reversible tone map), so there
+        // the black rgba8 pixel above is what catches it
+        if (! full)
+        {
+            setBloom (scene, true);
+            ASSERT_NE (renderer.render (device, scene, 128, 128), nullptr) << renderer.getLastError();
+        }
+
+        const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+        ASSERT_NE (sceneColor, nullptr);
+        EXPECT_EQ (sceneColor->getFormat(), GpuTextureFormat::rgba16float);
+        EXPECT_TRUE (isFiniteTexture (sceneColor));
+        EXPECT_FALSE (isSaturatedTexture (sceneColor));
     }
 #endif
 
@@ -876,14 +1633,6 @@ protected:
             GTEST_SKIP() << "No Metal graphics context available";
     }
 
-    /** Selects the full tier, accumulating @p taaSamples jittered frames (1 disables TAA). */
-    static void setFullTierTaa (Scene& scene, int taaSamples)
-    {
-        auto settings = scene.getRenderSettings();
-        settings.tier = RenderSettings::TierPreference::full;
-        settings.taaSamples = taaSamples;
-        scene.setRenderSettings (settings);
-    }
 
     /** The gray levels along row 40 of the edges scene at 128x128, which crosses the background (red
         26), the plate (red 151 to 153) and two silhouettes. The flat areas vary by a level or two, so
@@ -917,24 +1666,45 @@ protected:
         return image.isValid() ? image.getPixelColor (1, 1) : Color();
     }
 
-    /** Adds a square plate facing the default camera, 2 units wide, drawn with @p material. */
-    static void addPlate (Scene& scene, Material::Ptr material)
+    /** A rough white metal plate and a smoother dielectric plate in front of it, lit by a sphere
+        point light, a spot disk and a sun disk the front plate shadows. The back plate is larger
+        than the frame region DeferredMatchesForwardForOpaque compares, so its silhouettes, where
+        MSAA and TAA differ, stay out of it. */
+    static void buildAreaLightsScene (Scene& scene)
     {
-        std::vector<Mesh::Vertex> vertices (4);
-        vertices[0].position = { -1.0f, -1.0f, 0.0f };
-        vertices[1].position = { 1.0f, -1.0f, 0.0f };
-        vertices[2].position = { 1.0f, 1.0f, 0.0f };
-        vertices[3].position = { -1.0f, 1.0f, 0.0f };
+        const auto addScaledPlate = [&] (Material::Ptr material, float scale, Vector3<float> position)
+        {
+            auto* plate = addPlate (scene, std::move (material));
+            plate->setScale ({ scale, scale, 1.0f });
+            plate->setPosition (position);
+        };
 
-        for (auto& vertex : vertices)
-            vertex.normal = { 0.0f, 0.0f, 1.0f };
+        auto metal = Material::Ptr (new Material());
+        metal->roughnessFactor = 0.6f;
 
-        auto mesh = Mesh::Ptr (new Mesh ("plate"));
-        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, std::move (material));
+        auto dielectric = Material::Ptr (new Material());
+        dielectric->baseColorFactor = { 0.6f, 0.3f, 0.2f, 1.0f };
+        dielectric->metallicFactor = 0.0f;
+        dielectric->roughnessFactor = 0.3f;
 
-        auto entity = EntityNode::Ptr (new EntityNode ("plate"));
-        entity->attach<MeshNode> (mesh);
-        scene.getRoot()->addChild (entity);
+        addScaledPlate (metal, 1.3f, {});
+        addScaledPlate (dielectric, 0.3f, { 0.3f, -0.3f, 0.3f });
+
+        const auto addLight = [&] (LightNode::Type type, float intensity, float radius, Vector3<float> position, const Quaternion& rotation)
+        {
+            auto light = EntityNode::Ptr (new EntityNode ("light"));
+            auto& node = light->attach<LightNode> (type);
+            node.intensity = intensity;
+            node.radius = radius;
+            node.castsShadows = type == LightNode::Type::directional;
+            light->setPosition (position);
+            light->setRotation (rotation);
+            scene.getRoot()->addChild (light);
+        };
+
+        addLight (LightNode::Type::point, 1.0f, 0.25f, { 0.4f, 0.3f, 1.0f }, Quaternion::identity());
+        addLight (LightNode::Type::spot, 1.5f, 0.15f, { -0.4f, -0.3f, 1.2f }, Quaternion::identity());
+        addLight (LightNode::Type::directional, 0.5f, 0.05f, {}, Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f));
     }
 
     /** The linear radiance behind an 8 bit level that was Reinhard tone mapped and sRGB encoded. */
@@ -946,22 +1716,24 @@ protected:
     }
 
     /** A rough (roughness 1) plate drawn with @p material and lit head-on by a white sun of
-        intensity 2, without ambient light: the mean linear radiance of the 8x8 pixels at the
-        center, where the normal, the view and the light directions coincide. There
-        D = 1 / pi, V = 1 / 4 and F = f0, so the radiance is 2 (f0 / 4 + diffuseColor * weight) / pi.
+        intensity @p sunIntensity, under @p ambient light: the mean linear radiance of the 8x8
+        pixels at the center, where the normal, the view and the light directions coincide. There
+        D = 1 / pi, V = 1 / 4 and F = f0, so the sun adds 2 (f0 / 4 + diffuseColor * weight) / pi
+        at the default intensity of 2.
     */
-    std::array<double, 3> renderHeadOnRadiance (Material::Ptr material, RenderSettings::TierPreference tier)
+    std::array<double, 3> renderHeadOnRadiance (Material::Ptr material, RenderSettings::TierPreference tier,
+                                                float sunIntensity = 2.0f, Color ambient = Colors::black)
     {
         material->roughnessFactor = 1.0f;
 
         Scene scene;
         addPlate (scene, std::move (material));
-        scene.setAmbientColor (Colors::black);
+        scene.setAmbientColor (ambient);
         scene.setToneMapping (Scene::ToneMapping::reinhard);
         setTier (scene, tier);
 
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
-        sun->attach<LightNode>().intensity = 2.0f;
+        sun->attach<LightNode>().intensity = sunIntensity;
         scene.getRoot()->addChild (sun);
 
         SceneRenderer renderer;
@@ -1156,31 +1928,7 @@ TEST_F (SceneRendererMetalTests, CapturesBaselineScenes)
 
 TEST_F (SceneRendererMetalTests, MatchesPhaseZeroBaselineOnRaster)
 {
-    const std::pair<const char*, void (*) (Scene&)> scenes[] = {
-        { "shadows", buildShadowsScene },
-        { "materials", buildMaterialsScene },
-        { "edges", buildEdgesScene },
-    };
-
-    for (const auto& [name, build] : scenes)
-    {
-        Scene scene;
-        build (scene);
-
-        RenderSettings settings;
-        settings.tier = RenderSettings::TierPreference::raster;
-        scene.setRenderSettings (settings);
-
-        SceneRenderer renderer;
-        const auto image = renderToImage (renderer, scene, 128);
-        ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
-
-        const auto differing = countBaselineDifferences (image, String ("metal_") + name + ".png");
-        ASSERT_GE (differing, 0) << "capture the Phase 0 baselines first";
-
-        RecordProperty ((String (name) + "Differing").toStdString(), differing);
-        EXPECT_LE (differing, 128 * 128 / 200) << name; // At most 0.5% of the pixels beyond 2 levels
-    }
+    checkMatchesPhaseZeroBaseline ("metal");
 }
 
 TEST_F (SceneRendererMetalTests, RasterBloomOffStaysOnTheBaseline)
@@ -1220,6 +1968,32 @@ TEST_F (SceneRendererMetalTests, RasterBloomOffStaysOnTheBaseline)
         RecordProperty ((String (name) + "Differing").toStdString(), differing);
         EXPECT_EQ (differing, 0) << name;
     }
+}
+
+TEST_F (SceneRendererMetalTests, ShadowCastingLightAfterEightOthersCasts)
+{
+    // Eight dark lights come first in the list and the shadow casting sun ninth: the frame must
+    // still match the shadows baseline, shadow included
+    Scene scene;
+    for (int i = 0; i < 8; ++i)
+    {
+        auto lamp = EntityNode::Ptr (new EntityNode ("lamp"));
+        lamp->attach<LightNode> (LightNode::Type::point).intensity = 0.0f;
+        scene.getRoot()->addChild (lamp);
+    }
+
+    buildShadowsScene (scene);
+    setTier (scene, RenderSettings::TierPreference::raster);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, 128);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    const auto differing = countBaselineDifferences (image, "metal_shadows.png");
+    ASSERT_GE (differing, 0) << "capture the Phase 0 baselines first";
+
+    RecordProperty ("shadowsDiffering", differing);
+    EXPECT_EQ (differing, 0);
 }
 
 TEST_F (SceneRendererMetalTests, RasterBloomIsUnavailableWhenHalfFloatCannotMultisample)
@@ -1632,6 +2406,92 @@ TEST_F (SceneRendererMetalTests, ConvergesThenRestartsOnChange)
     expectConvergesAfterFourRenders ("camera");
 }
 
+TEST_F (SceneRendererMetalTests, GpuFailureOfOneRendererDoesNotFailAnother)
+{
+    Scene scene;
+    buildEdgesScene (scene);
+
+    SceneRenderer first, second;
+    ASSERT_NE (first.render (device, scene, 32, 32), nullptr) << first.getLastError();
+    ASSERT_NE (second.render (device, scene, 32, 32), nullptr) << second.getLastError();
+    ASSERT_TRUE (first.waitForGPU().wasOk());
+    ASSERT_TRUE (second.waitForGPU().wasOk());
+
+    // Only the first renderer's next frame fails
+    device->failNextFrameForTesting ("injected failure");
+    EXPECT_NE (first.render (device, scene, 32, 32), nullptr) << first.getLastError();
+    EXPECT_NE (second.render (device, scene, 32, 32), nullptr) << second.getLastError();
+    EXPECT_TRUE (second.waitForGPU().wasOk());
+    EXPECT_NE (second.render (device, scene, 32, 32), nullptr) << second.getLastError();
+
+    EXPECT_TRUE (second.getLastGpuFailure().isEmpty());
+
+    // The failure is found by the next render of its own renderer, which still renders, and by nobody else
+    EXPECT_NE (first.render (device, scene, 32, 32), nullptr) << first.getLastError();
+    EXPECT_EQ (first.getLastGpuFailure(), "injected failure");
+    EXPECT_TRUE (device->takeGpuFailure().wasOk());
+
+    EXPECT_NE (first.render (device, scene, 32, 32), nullptr) << first.getLastError();
+    EXPECT_TRUE (first.getLastGpuFailure().isEmpty());
+    EXPECT_TRUE (first.waitForGPU().wasOk());
+}
+
+TEST_F (SceneRendererMetalTests, GpuFailureStillRendersTheNextFrame)
+{
+    Scene scene;
+    buildEdgesScene (scene);
+    setFullTierTaa (scene, 4);
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    device->failNextFrameForTesting ("injected failure");
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    // Frames complete in order, so once a later frame did the failed one has too
+    {
+        auto fence = GpuFrame::begin (device);
+        EXPECT_TRUE (fence.waitForGPU().wasOk());
+    }
+
+    auto texture = renderer.render (device, scene, 64, 64);
+    ASSERT_NE (texture, nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getLastGpuFailure(), "injected failure");
+    EXPECT_TRUE (renderer.getLastError().isEmpty());
+
+    // The history starts over, so the renderer keeps refining (and a component repainting)
+    EXPECT_FALSE (renderer.isConverged());
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+    const auto image = readBack (texture);
+    ASSERT_TRUE (image.isValid());
+
+    bool drewSomething = false;
+    for (int y = 0; y < 64 && ! drewSomething; y += 2)
+        for (int x = 0; x < 64 && ! drewSomething; x += 2)
+            drewSomething = image.getPixelColor (x, y) != scene.getBackgroundColor();
+
+    EXPECT_TRUE (drewSomething);
+}
+
+TEST_F (SceneRendererMetalTests, WaitForGpuReportsTheRenderersFailureOnce)
+{
+    Scene scene;
+    buildEdgesScene (scene);
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 32, 32), nullptr) << renderer.getLastError();
+    ASSERT_TRUE (renderer.waitForGPU().wasOk());
+
+    device->failNextFrameForTesting ("injected failure");
+    EXPECT_NE (renderer.render (device, scene, 32, 32), nullptr);
+
+    EXPECT_EQ (renderer.waitForGPU().getErrorMessage(), "injected failure");
+    EXPECT_NE (renderer.render (device, scene, 32, 32), nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.getLastGpuFailure().isEmpty());
+    EXPECT_TRUE (device->takeGpuFailure().wasOk());
+}
+
 TEST_F (SceneRendererMetalTests, ConvergedFrameStopsChanging)
 {
     Scene scene;
@@ -1646,18 +2506,29 @@ TEST_F (SceneRendererMetalTests, ConvergedFrameStopsChanging)
     ASSERT_TRUE (converged.isValid()) << renderer.getLastError();
     ASSERT_TRUE (renderer.isConverged());
 
-    // Further frames keep the history as it is, whatever the jitter
+    const auto countChanged = [] (const Image& a, const Image& b)
+    {
+        int differing = 0;
+        for (int y = 0; y < 64; ++y)
+            for (int x = 0; x < 64; ++x)
+                differing += a.getPixelColor (x, y) != b.getPixelColor (x, y) ? 1 : 0;
+
+        return differing;
+    };
+
+    // Further frames keep the history as it is, whatever the jitter. Each frame is checked against
+    // the converged one and the one before, so a failure tells a restart from a one-frame glitch
+    auto previous = converged;
     for (int i = 0; i < 3; ++i)
     {
         const auto image = renderToImage (renderer, scene, 64);
         ASSERT_TRUE (image.isValid()) << renderer.getLastError();
 
-        int differing = 0;
-        for (int y = 0; y < 64; ++y)
-            for (int x = 0; x < 64; ++x)
-                differing += image.getPixelColor (x, y) != converged.getPixelColor (x, y) ? 1 : 0;
+        EXPECT_TRUE (renderer.isConverged()) << "frame " << i << ": the history restarted";
+        EXPECT_EQ (countChanged (image, converged), 0) << "frame " << i << ": pixels differing from the converged frame";
+        EXPECT_EQ (countChanged (image, previous), 0) << "frame " << i << ": pixels differing from the previous frame";
 
-        EXPECT_EQ (differing, 0) << "frame " << i;
+        previous = image;
     }
 }
 
@@ -2335,6 +3206,92 @@ TEST_F (SceneRendererMetalTests, VelocityIsZeroForAStaticSceneAndCameraMotionOth
     EXPECT_EQ (velocityDeviation (up.getPixelColor (32, 32).getRed()), 0);
 }
 
+TEST_F (SceneRendererMetalTests, InfiniteFarPlaneSkyMovesWithTheCameraRotation)
+{
+    // Turning a glTF camera without zfar (an infinite far plane) moves the sky on screen exactly as
+    // it does through the same camera with a distant far plane
+    const auto renderTurning = [this] (float zFar)
+    {
+        Scene scene;
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.setEnvironmentVisible (true);
+        setTier (scene, RenderSettings::TierPreference::full);
+
+        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto& node = camera->attach<CameraNode>();
+        node.zNear = 0.05f;
+        node.zFar = zFar;
+        scene.getRoot()->addChild (camera);
+        scene.setActiveCamera (camera.get());
+
+        SceneRenderer renderer;
+        EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+        camera->setRotation (Quaternion::fromAxisAngle (Vector3<float> (0.3f, 1.0f, 0.0f).normalized(), 0.05f));
+        EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+        return readVelocity (renderer.getPassOutput (SceneRenderer::PassOutput::velocity), 4.0f);
+    };
+
+    const auto infinite = renderTurning (0.0f);
+    const auto finite = renderTurning (1.0e5f);
+    ASSERT_TRUE (infinite.isValid());
+    ASSERT_TRUE (finite.isValid());
+
+    // A turn of 0.05 rad moves the sky by about 0.06 of the frame: not vacuous
+    EXPECT_GT (velocityDeviation (finite.getPixelColor (32, 32).getRed()), 20);
+    EXPECT_GT (velocityDeviation (infinite.getPixelColor (32, 32).getRed()), 20);
+    EXPECT_EQ (countDifferences (infinite, finite), 0);
+}
+
+TEST_F (SceneRendererMetalTests, BlendedItemsKeepTheDeferredVelocityAroundThem)
+{
+    // The blended items draw over the G-buffer velocity: texels outside them keep the motion the
+    // G-buffer wrote, which a cleared velocity attachment would zero
+    Scene scene;
+    buildShadowsScene (scene);
+    setTier (scene, RenderSettings::TierPreference::full);
+
+    std::vector<Mesh::Vertex> vertices (4);
+    vertices[0].position = { -0.9f, 0.5f, 0.6f };
+    vertices[1].position = { -0.5f, 0.5f, 0.6f };
+    vertices[2].position = { -0.5f, 0.9f, 0.6f };
+    vertices[3].position = { -0.9f, 0.9f, 0.6f };
+    for (auto& vertex : vertices)
+        vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+    auto material = Material::Ptr (new Material());
+    material->baseColorFactor = { 0.0f, 0.0f, 1.0f, 0.5f };
+    material->alphaMode = Material::AlphaMode::blend;
+
+    auto mesh = Mesh::Ptr (new Mesh ("blended"));
+    mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
+    auto blended = EntityNode::Ptr (new EntityNode ("blended"));
+    blended->attach<MeshNode> (mesh);
+    scene.getRoot()->addChild (blended);
+
+    auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+    camera->attach<CameraNode>();
+    camera->setPosition ({ 0.0f, 0.0f, 5.0f });
+    scene.getRoot()->addChild (camera);
+    scene.setActiveCamera (camera.get());
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    // Moving the camera right moves the scene left on screen: x decreases everywhere
+    camera->setPosition ({ 0.1f, 0.0f, 5.0f });
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    const auto moved = readVelocity (renderer.getPassOutput (SceneRenderer::PassOutput::velocity), 1000.0f);
+    ASSERT_TRUE (moved.isValid());
+
+    // The opaque plate at the center, away from the blended quad in the top-left corner, then the quad
+    EXPECT_LT (moved.getPixelColor (40, 40).getRed(), 64);
+    EXPECT_LT (moved.getPixelColor (20, 20).getRed(), 64);
+}
+
 TEST_F (SceneRendererMetalTests, TwoRenderersKeepIndependentHistory)
 {
     Scene scene;
@@ -2420,10 +3377,12 @@ TEST_F (SceneRendererMetalTests, FailedRenderClearsThePassOutputs)
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr);
     EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::velocity), nullptr);
+    EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::gbufferNormal), nullptr);
 
     EXPECT_EQ (renderer.render (device, scene, 0, 64), nullptr);
     EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr);
     EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::velocity), nullptr);
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::gbufferNormal), nullptr);
 
     // Rendering again would fail again: nothing to wait for
     EXPECT_TRUE (renderer.isConverged());
@@ -2538,6 +3497,152 @@ TEST_F (SceneRendererMetalTests, FullTierWithoutTaaKeepsOverflowingHighlightsFin
 }
 #endif
 
+TEST_F (SceneRendererMetalTests, DeferredMatchesForwardForOpaque)
+{
+    // The lighting pass shades the G-buffer with the BSDF and the light code of the forward pass:
+    // the interior of each baseline scene matches a forced raster frame, away from the edges where
+    // MSAA and TAA differ. The mean over the interior catches global drift, the 8x8 blocks of
+    // opaque texels catch a local one. The blended quad of the materials scene is drawn forward on
+    // both tiers but blended in linear light on full only, so its blocks are left out
+    const struct
+    {
+        const char* name;
+        void (*build) (Scene&);
+        Rectangle<int> blended;
+    } scenes[] = {
+        { "shadows", buildShadowsScene, {} },
+        { "materials", buildMaterialsScene, { 74, 53, 24, 24 } },
+        { "areaLights", buildAreaLightsScene, {} },
+    };
+
+    for (const auto& [name, build, blended] : scenes)
+    {
+        Image images[2];
+
+        for (const auto tier : { RenderSettings::TierPreference::full, RenderSettings::TierPreference::raster })
+        {
+            Scene scene;
+            build (scene);
+            setTier (scene, tier);
+
+            SceneRenderer renderer;
+            auto& image = images[tier == RenderSettings::TierPreference::full ? 0 : 1];
+            image = renderToImage (renderer, scene, 128);
+            ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
+            ASSERT_EQ (renderer.getCapabilities()->getTier() == RenderCapabilities::Tier::full, tier == RenderSettings::TierPreference::full) << name;
+        }
+
+        const auto full = meanLuminance (images[0], { 32, 32, 64, 64 });
+        const auto raster = meanLuminance (images[1], { 32, 32, 64, 64 });
+        const auto difference = std::abs (full - raster) / raster;
+        RecordProperty ((String (name) + "Difference").toStdString(), String (difference * 100.0, 2).toStdString());
+        EXPECT_LE (difference, 0.03) << name << ": full " << full << ", raster " << raster;
+
+        auto largestBlockDifference = 0.0;
+        for (int y = 32; y < 96; y += 8)
+        {
+            for (int x = 32; x < 96; x += 8)
+            {
+                const Rectangle<int> block (x, y, 8, 8);
+                if (block.intersects (blended))
+                    continue;
+
+                largestBlockDifference = jmax (largestBlockDifference, std::abs (meanLuminance (images[0], block) - meanLuminance (images[1], block)));
+            }
+        }
+
+        RecordProperty ((String (name) + "LargestBlockDifference").toStdString(), String (largestBlockDifference, 2).toStdString());
+        // Measured at most 1.1 levels of luma (half float roughness, 8 bit base color, the jitter of
+        // the first TAA frame); a local shading error moves a block by tens of levels
+        EXPECT_LE (largestBlockDifference, 4.0) << name;
+    }
+}
+
+TEST_F (SceneRendererMetalTests, FullTierShadesManyLights)
+{
+    // 256 lights on a single draw: more than any per-draw light list holds, so the full tier must
+    // find each fragment's lights through the clusters
+    Scene scene;
+    buildLightGridScene (scene, true);
+    setTier (scene, RenderSettings::TierPreference::full);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, 256);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    const auto lit = countLitGridQuads (image);
+    RecordProperty ("litQuads", lit);
+    EXPECT_EQ (lit, 256);
+}
+
+TEST_F (SceneRendererMetalTests, FullTierRendersWithoutAnyLight)
+{
+    // No light and no default light: the light and cluster buffers stay empty, emission still shows.
+    // A light buffer smaller than one GpuLight renders fine without validation: this test only
+    // fails on it under Metal API validation (MTL_DEBUG_LAYER=1)
+    Scene scene;
+    buildGlowScene (scene, 0.5f);
+    scene.setUsingDefaultLight (false);
+    setTier (scene, RenderSettings::TierPreference::full);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, 128);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+    EXPECT_GT (image.getPixelColor (64, 64).getRed(), 100);
+    EXPECT_EQ (image.getPixelColor (4, 4).getRed(), 0);
+}
+
+TEST_F (SceneRendererMetalTests, BackgroundIsKeptBehindLitPixels)
+{
+    // A corner shows the environment: 0.5 through ACES is 0.616, 206 once sRGB encoded
+    {
+        Scene scene;
+        buildShadowsScene (scene);
+        setTier (scene, RenderSettings::TierPreference::full);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+        const auto corner = image.getPixelColor (1, 1);
+        EXPECT_NEAR (corner.getRed(), 206, 3);
+        EXPECT_NEAR (corner.getGreen(), 206, 3);
+        EXPECT_NEAR (corner.getBlue(), 206, 3);
+    }
+
+    // A red sky over a blue ground: the full tier shows each where the raster tier does
+    Image images[2];
+
+    for (const auto tier : { RenderSettings::TierPreference::full, RenderSettings::TierPreference::raster })
+    {
+        Scene scene;
+        buildShadowsScene (scene);
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& d)
+        {
+            return d.getY() > 0.0f ? Vector3<float> (0.8f, 0.1f, 0.05f) : Vector3<float> (0.05f, 0.1f, 0.8f);
+        }, 32, 3));
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        images[tier == RenderSettings::TierPreference::full ? 0 : 1] = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (images[tier == RenderSettings::TierPreference::full ? 0 : 1].isValid()) << renderer.getLastError();
+    }
+
+    const auto top = images[0].getPixelColor (1, 1);
+    const auto bottom = images[0].getPixelColor (1, 62);
+    EXPECT_GT (top.getRed(), top.getBlue() + 50);
+    EXPECT_GT (bottom.getBlue(), bottom.getRed() + 50);
+
+    for (const auto& [x, y] : { std::pair { 1, 1 }, std::pair { 1, 62 }, std::pair { 62, 1 }, std::pair { 62, 62 } })
+    {
+        const auto full = images[0].getPixelColor (x, y);
+        const auto raster = images[1].getPixelColor (x, y);
+        EXPECT_NEAR (full.getRed(), raster.getRed(), 3) << x << ", " << y;
+        EXPECT_NEAR (full.getGreen(), raster.getGreen(), 3) << x << ", " << y;
+        EXPECT_NEAR (full.getBlue(), raster.getBlue(), 3) << x << ", " << y;
+    }
+}
+
 class SceneRendererTierTests : public SceneRendererMetalTests
     , public ::testing::WithParamInterface<RenderSettings::TierPreference>
 {
@@ -2614,6 +3719,12 @@ protected:
 
         // The plate covers about 60 px of the frame
         return meanLuminance (image, { 49, 49, 30, 30 });
+    }
+
+    /** renderLuma() on the tier of the test parameter. */
+    std::vector<double> renderLuma (Scene& scene, int size)
+    {
+        return SceneRendererBaselineScenes::renderLuma (scene, size, GetParam());
     }
 #endif
 };
@@ -2877,6 +3988,126 @@ TEST_P (SceneRendererTierTests, DiffuseLiesUnderTheDielectricLayerOnly)
     EXPECT_NEAR (red, expected, 0.02);
 }
 
+TEST_P (SceneRendererTierTests, AmbientDiffuseLiesUnderTheDielectricLayer)
+{
+    // Ambient light only. A white dielectric reflects f0 and diffuses what its layer leaves,
+    // 1 - f0: all of the ambient light, whatever its ior. An ior of 0 reflects everything, f0 = 1,
+    // where an unweighted diffuse would double the energy
+    const auto ambient = Color (static_cast<uint8> (128), static_cast<uint8> (128), static_cast<uint8> (128));
+    const auto linearAmbient = std::pow ((128.0 / 255.0 + 0.055) / 1.055, 2.4);
+
+    const auto mirror = renderHeadOnRadiance (makeDielectric (1.0f, 0.0f, 1.0f), GetParam(), 0.0f, ambient)[1];
+    const auto plastic = renderHeadOnRadiance (makeDielectric (1.0f, 1.5f, 1.0f), GetParam(), 0.0f, ambient)[1];
+    RecordProperty ("mirror", String (mirror, 4).toStdString());
+    RecordProperty ("plastic", String (plastic, 4).toStdString());
+
+    EXPECT_NEAR (mirror, linearAmbient, 0.01);
+    EXPECT_NEAR (plastic, linearAmbient, 0.01);
+}
+
+TEST_P (SceneRendererTierTests, DrawsFindTheirLightsWhenDirectionalLightsArePackedFirst)
+{
+    // The point light comes first in the list, but the sun is packed first: the plate, out of
+    // the point light's range, selects only the sun, which must reach it through the packed order
+    auto material = Material::Ptr (new Material());
+    material->metallicFactor = 0.0f;
+
+    Scene scene;
+    scene.setAmbientColor (Colors::black);
+    setTier (scene, GetParam());
+
+    auto lamp = EntityNode::Ptr (new EntityNode ("lamp"));
+    auto& point = lamp->attach<LightNode> (LightNode::Type::point);
+    point.color = { 1.0f, 0.0f, 0.0f };
+    point.intensity = 100.0f;
+    point.range = 1.0f;
+    lamp->setPosition ({ 10.0f, 0.0f, 1.0f });
+    scene.getRoot()->addChild (lamp);
+
+    auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+    auto& sunLight = sun->attach<LightNode>();
+    sunLight.color = { 0.0f, 1.0f, 0.0f };
+    sunLight.intensity = 2.0f;
+    scene.getRoot()->addChild (sun);
+
+    addPlate (scene, material);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, 64);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    const auto center = image.getPixelColor (32, 32);
+    EXPECT_GE (static_cast<int> (center.getGreen()), 100);
+    EXPECT_LE (static_cast<int> (center.getRed()), 10);
+}
+
+TEST_P (SceneRendererTierTests, ShadesMoreThanEightLightsPerScene)
+{
+    checkShadesMoreThanEightLightsPerScene (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, BlendItemsDrawOverDeferred)
+{
+    // A half transparent blue quad in front of a white plate tints it, and one behind the plate is
+    // hidden by the depth the plate wrote
+    const auto addQuad = [] (Scene& scene, float x, float z)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { x - 0.3f, -0.3f, z };
+        vertices[1].position = { x + 0.3f, -0.3f, z };
+        vertices[2].position = { x + 0.3f, 0.3f, z };
+        vertices[3].position = { x - 0.3f, 0.3f, z };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.0f, 0.0f, 1.0f, 0.5f };
+        material->alphaMode = Material::AlphaMode::blend;
+
+        auto mesh = Mesh::Ptr (new Mesh ("blended"));
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
+
+        auto entity = EntityNode::Ptr (new EntityNode ("blended"));
+        entity->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (entity);
+    };
+
+    auto white = Material::Ptr (new Material());
+    white->metallicFactor = 0.0f;
+
+    Scene scene;
+    addPlate (scene, white);
+    addQuad (scene, 0.0f, 0.5f);
+    addQuad (scene, -0.6f, -0.5f);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, 64);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    // The plate alone is gray. The full tier blends in linear light and the raster tier after tone
+    // mapping, so the mix differs between them, but both darken the red and keep more blue
+    const auto plate = image.getPixelColor (44, 32);
+    const auto tinted = image.getPixelColor (32, 32);
+    EXPECT_NEAR (plate.getRed(), plate.getBlue(), 4);
+    EXPECT_GT (static_cast<int> (tinted.getBlue()), static_cast<int> (tinted.getRed()) + 10);
+    EXPECT_LT (static_cast<int> (tinted.getRed()), static_cast<int> (plate.getRed()) - 20);
+    EXPECT_GT (tinted.getRed(), 0);
+
+    // The hidden quad would cover about 5 px around (24, 32)
+    const auto hidden = image.getPixelColor (24, 32);
+    EXPECT_NEAR (hidden.getRed(), plate.getRed(), 4);
+    EXPECT_NEAR (hidden.getBlue(), plate.getBlue(), 4);
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_P (SceneRendererTierTests, SceneColorHasNoNaN)
+{
+    checkSceneColorHasNoNaN (GetParam());
+}
+#endif
+
 #if YUP_ENABLE_SHADER_TRANSPILER
 TEST_P (SceneRendererTierTests, RendersEveryBaselineSceneWithoutNonFiniteValues)
 {
@@ -2967,6 +4198,371 @@ TEST_P (SceneRendererTierTests, BitangentHandednessSurvivesMirroring)
     EXPECT_NEAR (mirroredTangentFrame, tangentFrame, tangentFrame * 0.02);
     EXPECT_NEAR (mirroredDerivativeFrame, tangentFrame, tangentFrame * 0.02);
 }
+
+TEST_P (SceneRendererTierTests, GBufferNormalFacesTheCamera)
+{
+    Scene scene;
+    buildShadowsScene (scene);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    const auto normalRoughness = renderer.getPassOutput (SceneRenderer::PassOutput::gbufferNormal);
+    if (GetParam() == RenderSettings::TierPreference::raster)
+    {
+        EXPECT_EQ (normalRoughness, nullptr);
+        return;
+    }
+
+    ASSERT_NE (normalRoughness, nullptr);
+    EXPECT_EQ (normalRoughness->getFormat(), GpuTextureFormat::rgba16float);
+
+    // The plates face the camera: +Z
+    const auto normal = readGBufferNormal (normalRoughness).getPixelColor (32, 32);
+    EXPECT_NEAR (normal.getRed(), 128, 3);
+    EXPECT_NEAR (normal.getGreen(), 128, 3);
+    EXPECT_NEAR (normal.getBlue(), 255, 3);
+
+    // A cleared texel decodes to +Z as well: only drawn texels have a roughness
+    const auto roughness = mapTexels (normalRoughness, "vec4(t.z, 0.0, 0.0, 1.0)");
+    ASSERT_TRUE (roughness.isValid());
+    EXPECT_GT (roughness.getPixelColor (32, 32).getRed(), 64);
+    EXPECT_EQ (roughness.getPixelColor (1, 1).getRed(), 0);
+}
+#endif
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_P (SceneRendererTierTests, TinyRadiusMatchesPunctual)
+{
+    checkTinyRadiusMatchesPunctual (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, RadiusWidensTheHighlight)
+{
+    checkRadiusWidensTheHighlight (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, SunDiskSoftensNothingButSpecular)
+{
+    // A sun of angular radius 0.01 is a disk of radiance I / (pi sin^2 radius), so a rough plate
+    // receives the illuminance of the punctual sun, I
+    const auto meanAt = [this] (float radius)
+    {
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.8f, 0.8f, 0.8f, 1.0f };
+        material->metallicFactor = 0.0f;
+        material->roughnessFactor = 1.0f;
+
+        Scene scene;
+        addPlate (scene, material);
+        scene.setAmbientColor (Colors::black);
+
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto& node = sun->attach<LightNode>();
+        node.intensity = 2.0f;
+        node.radius = radius;
+        sun->setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 0.5f));
+        scene.getRoot()->addChild (sun);
+
+        return meanLuma (renderLuma (scene, 128), 128, { 40, 40, 48, 48 });
+    };
+
+    const auto punctual = meanAt (0.0f);
+    const auto disk = meanAt (0.01f);
+    RecordProperty ("punctual", String (punctual, 4).toStdString());
+    RecordProperty ("disk", String (disk, 4).toStdString());
+
+    ASSERT_GT (punctual, 0.05);
+    EXPECT_NEAR (disk / punctual, 1.0, 0.01);
+}
+
+TEST_P (SceneRendererTierTests, AreaLightsStayFinite)
+{
+    checkAreaLightsStayFinite (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, LargeLowSphereLightDiffuseIsExact)
+{
+    // A sphere light of angular radius 25 degrees, its center 17 degrees over a diffuse-only plate:
+    // the horizon cuts its cap, and the plate center receives albedo / pi times the radiance
+    // I / (pi r^2) integrated over the clipped cap, by quadrature
+    const auto sigma = MathConstants<double>::pi * 25.0 / 180.0;
+    const auto elevation = MathConstants<double>::pi * 17.0 / 180.0;
+    const auto distance = 10.0;
+    const auto radius = distance * std::sin (sigma);
+    const auto intensity = 400.0;
+    const auto albedo = 0.8;
+
+    auto material = Material::Ptr (new Material());
+    material->baseColorFactor = { static_cast<float> (albedo), static_cast<float> (albedo), static_cast<float> (albedo), 1.0f };
+    material->metallicFactor = 0.0f;
+    material->roughnessFactor = 1.0f;
+    material->specularFactor = 0.0f;
+
+    Scene scene;
+    addPlate (scene, material);
+    scene.setAmbientColor (Colors::black);
+
+    auto light = EntityNode::Ptr (new EntityNode ("sphere"));
+    auto& node = light->attach<LightNode> (LightNode::Type::point);
+    node.intensity = static_cast<float> (intensity);
+    node.radius = static_cast<float> (radius);
+    light->setPosition ({ static_cast<float> (distance * std::cos (elevation)), 0.0f, static_cast<float> (distance * std::sin (elevation)) });
+    scene.getRoot()->addChild (light);
+
+    const auto measured = meanLuma (renderLuma (scene, 128), 128, { 63, 63, 2, 2 });
+    const auto radiance = intensity / (MathConstants<double>::pi * radius * radius);
+    const auto expected = albedo * radiance * SceneRendererAreaLightMathTests::capQuadrature (sigma, MathConstants<double>::halfPi - elevation);
+    RecordProperty ("measured", String (measured, 4).toStdString());
+    RecordProperty ("expected", String (expected, 4).toStdString());
+
+    ASSERT_GT (expected, 0.1);
+    EXPECT_NEAR (measured / expected, 1.0, 0.03);
+}
+
+TEST_P (SceneRendererTierTests, SphereLightSpecularMatchesGgx)
+{
+    // A white metal plate (f0 = f90 = 1) seen at n.v = 0.5 mirrors a sphere light of angular radius
+    // 10 degrees: the LTC specular matches the GGX lobe integrated over the cap by quadrature, within
+    // the fit error at roughness 0.5
+    const auto sigma = MathConstants<double>::pi * 10.0 / 180.0;
+    const auto distance = 3.0;
+    const auto radius = distance * std::sin (sigma);
+    const auto intensity = 2.0;
+    const auto roughness = 0.5;
+
+    auto material = Material::Ptr (new Material());
+    material->metallicFactor = 1.0f;
+    material->roughnessFactor = static_cast<float> (roughness);
+
+    Scene scene;
+    auto* plate = addPlate (scene, material);
+    scene.setAmbientColor (Colors::black);
+
+    // Tilted so the normal makes 60 degrees with the direction to the camera
+    const auto tilt = Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, -MathConstants<float>::pi / 3.0f);
+    plate->setRotation (tilt);
+
+    const auto normal = tilt.rotate ({ 0.0f, 0.0f, 1.0f });
+    const Vector3<float> toCamera { 0.0f, 0.0f, 1.0f };
+    const auto mirrored = normal * (2.0f * normal.dotProduct (toCamera)) - toCamera;
+
+    auto light = EntityNode::Ptr (new EntityNode ("sphere"));
+    auto& node = light->attach<LightNode> (LightNode::Type::point);
+    node.intensity = static_cast<float> (intensity);
+    node.radius = static_cast<float> (radius);
+    light->setPosition (mirrored * static_cast<float> (distance));
+    scene.getRoot()->addChild (light);
+
+    const auto measured = meanLuma (renderLuma (scene, 128), 128, { 63, 63, 2, 2 });
+    const auto radiance = intensity / (MathConstants<double>::pi * radius * radius);
+    const auto expected = radiance * SceneRendererAreaLightMathTests::ggxCapQuadrature (0.5, roughness * roughness, { -std::sqrt (0.75), 0.0, 0.5 }, sigma);
+    RecordProperty ("measured", String (measured, 4).toStdString());
+    RecordProperty ("expected", String (expected, 4).toStdString());
+
+    ASSERT_GT (expected, 0.1);
+    EXPECT_NEAR (measured / expected, 1.0, 0.1);
+}
+
+TEST_P (SceneRendererTierTests, TinySpotMatchesPunctualOffAxis)
+{
+    // A spot of radius 0.001 is a sphere under the cone of its center: 35 degrees off its axis, near
+    // the 45 degree edge of its cone, it lights the plate like the punctual spot
+    const auto meanAt = [this] (float radius)
+    {
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.8f, 0.8f, 0.8f, 1.0f };
+        material->metallicFactor = 0.0f;
+        material->roughnessFactor = 0.5f;
+
+        Scene scene;
+        addPlate (scene, material);
+        scene.setAmbientColor (Colors::black);
+
+        auto light = EntityNode::Ptr (new EntityNode ("spot"));
+        auto& node = light->attach<LightNode> (LightNode::Type::spot);
+        node.intensity = 5.0f;
+        node.radius = radius;
+        light->setPosition ({ 0.0f, 0.0f, 1.0f });
+        scene.getRoot()->addChild (light);
+
+        // The plate point at tan (35 degrees) = 0.7 along x
+        return meanLuma (renderLuma (scene, 128), 128, { 84, 62, 2, 4 });
+    };
+
+    const auto punctual = meanAt (0.0f);
+    const auto area = meanAt (0.001f);
+    RecordProperty ("punctual", String (punctual, 4).toStdString());
+    RecordProperty ("area", String (area, 4).toStdString());
+
+    ASSERT_GT (punctual, 0.01);
+    EXPECT_NEAR (area / punctual, 1.0, 0.02);
+}
+
+TEST_P (SceneRendererTierTests, SunDiskWidensTheHighlight)
+{
+    // A sun shining down the view mirrors off a smooth black plate into a small highlight; an angular
+    // radius of 0.05 spreads it over more bright pixels
+    const auto brightPixelsAt = [this] (float radius)
+    {
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.0f, 0.0f, 0.0f, 1.0f };
+        material->metallicFactor = 0.0f;
+        material->roughnessFactor = 0.1f;
+
+        Scene scene;
+        addPlate (scene, material);
+        scene.setAmbientColor (Colors::black);
+
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        sun->attach<LightNode>().radius = radius;
+        scene.getRoot()->addChild (sun);
+
+        const auto luma = renderLuma (scene, 128);
+        return static_cast<int> (std::count_if (luma.begin(), luma.end(), [] (double value) { return value > 2.5; }));
+    };
+
+    const auto sharp = brightPixelsAt (0.0f);
+    const auto wide = brightPixelsAt (0.05f);
+    RecordProperty ("sharp", sharp);
+    RecordProperty ("wide", wide);
+
+    EXPECT_GT (sharp, 0);
+    EXPECT_GT (wide, 2 * sharp);
+}
+
+TEST_P (SceneRendererTierTests, InfiniteFarPlaneShowsTheEnvironment)
+{
+    // A glTF camera without zfar has an infinite far plane: the sky it shows must be finite and
+    // look exactly as through the same camera with a distant far plane. The environment changes
+    // with the direction, so a flipped or wrong sky direction shows
+    const auto full = GetParam() == RenderSettings::TierPreference::full;
+
+    const auto renderSky = [&] (float zFar)
+    {
+        Scene scene;
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& d)
+                                                  { return Vector3<float> (0.5f + 0.4f * d.getX(), 0.5f + 0.4f * d.getY(), 0.5f + 0.4f * d.getZ()); },
+                                                  64,
+                                                  3));
+        scene.setEnvironmentVisible (true);
+
+        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto& node = camera->attach<CameraNode>();
+        node.zNear = 0.05f;
+        node.zFar = zFar;
+        camera->setRotation (Quaternion::fromAxisAngle (Vector3<float> (1.0f, 1.0f, 0.0f).normalized(), 0.6f));
+        scene.getRoot()->addChild (camera);
+        scene.setActiveCamera (camera.get());
+
+        // Scene color holds raw radiance on full without temporal anti-aliasing
+        if (full)
+            setFullTierTaa (scene, 1);
+        else
+            setTier (scene, RenderSettings::TierPreference::raster);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+
+        if (full)
+        {
+            const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+            EXPECT_NE (sceneColor, nullptr);
+            EXPECT_TRUE (sceneColor != nullptr && isFiniteTexture (sceneColor)) << "zFar " << zFar;
+            EXPECT_FALSE (sceneColor == nullptr || isSaturatedTexture (sceneColor)) << "zFar " << zFar;
+        }
+
+        return image;
+    };
+
+    const auto infinite = renderSky (0.0f);
+    const auto finite = renderSky (1.0e5f);
+    ASSERT_TRUE (infinite.isValid());
+    ASSERT_TRUE (finite.isValid());
+
+    // Not vacuous: the sky varies across the frame, below white
+    const auto topLeft = meanLuminance (finite, { 0, 0, 8, 8 });
+    const auto bottomRight = meanLuminance (finite, { 56, 56, 8, 8 });
+    EXPECT_GT (std::abs (topLeft - bottomRight), 5.0);
+    EXPECT_LT (jmax (topLeft, bottomRight), 250.0);
+
+    EXPECT_EQ (countDifferences (infinite, finite), 0);
+}
+
+TEST_P (SceneRendererTierTests, RendersWithoutTheAreaLightTables)
+{
+    // When the area light tables cannot be created, frames still render: area lights lose their
+    // specular light, never their diffuse light, and nothing turns non-finite
+    const auto full = GetParam() == RenderSettings::TierPreference::full;
+
+    const auto render = [&] (bool withTables)
+    {
+        Scene scene;
+        buildAreaLightsScene (scene);
+
+        if (full)
+            setFullTierTaa (scene, 1);
+        else
+            setTier (scene, RenderSettings::TierPreference::raster);
+
+        SceneRenderer renderer;
+        if (! withTables)
+            renderer.failAreaLightTablesForTesting();
+
+        const auto image = renderToImage (renderer, scene, 128);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+
+        if (full)
+        {
+            const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+            EXPECT_NE (sceneColor, nullptr);
+            EXPECT_TRUE (sceneColor != nullptr && isFiniteTexture (sceneColor));
+            EXPECT_FALSE (sceneColor == nullptr || isSaturatedTexture (sceneColor));
+        }
+
+        return image;
+    };
+
+    const auto with = render (true);
+    const auto without = render (false);
+    ASSERT_TRUE (with.isValid());
+    ASSERT_TRUE (without.isValid());
+
+    // Only specular light is lost: no pixel brightens, some darken, and none goes black (a NaN
+    // reads black or white on Metal)
+    int brighter = 0, darker = 0;
+    auto darkest = 255.0;
+    for (int y = 0; y < 128; ++y)
+    {
+        for (int x = 0; x < 128; ++x)
+        {
+            const auto before = meanLuminance (with, { x, y, 1, 1 });
+            const auto after = meanLuminance (without, { x, y, 1, 1 });
+            brighter += after > before + 2.0 ? 1 : 0;
+            darker += after < before - 2.0 ? 1 : 0;
+            darkest = jmin (darkest, after);
+        }
+    }
+
+    RecordProperty ("darker", darker);
+    EXPECT_EQ (brighter, 0);
+    EXPECT_GT (darker, 100);
+    EXPECT_GT (darkest, 5.0);
+}
+
+TEST_P (SceneRendererTierTests, BaseColorAboveOneShadesAsOne)
+{
+    // glTF base colors lie within [0, 1]: a larger factor is clamped alike by the forward pass and
+    // the G-buffer, so both tiers agree
+    const auto one = renderHeadOnRadiance (makeDielectric (1.0f, 1.5f, 1.0f), GetParam());
+    const auto two = renderHeadOnRadiance (makeDielectric (2.0f, 1.5f, 1.0f), GetParam());
+
+    ASSERT_GT (one[0], 0.1);
+    for (size_t channel = 0; channel < 3; ++channel)
+        EXPECT_NEAR (two[channel] / one[channel], 1.0, 0.02) << "channel " << channel;
+}
 #endif
 
 INSTANTIATE_TEST_SUITE_P (SceneRendererTiers,
@@ -2976,6 +4572,144 @@ INSTANTIATE_TEST_SUITE_P (SceneRendererTiers,
                           {
                               return info.param == RenderSettings::TierPreference::full ? "full" : "raster";
                           });
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+/** GBufferPass on its own targets, read back before any other pass draws over the depth and
+    velocity it shares with them. */
+class GBufferPassMetalTests : public SceneRendererMetalTests
+{
+protected:
+    static constexpr int size = 64;
+
+    void SetUp() override
+    {
+        SceneRendererMetalTests::SetUp();
+        if (! IsSkipped())
+            frameResources = std::make_unique<FrameResources> (device);
+    }
+
+    /** A square of @p halfSize centered at (@p x, 0, 0), facing the default camera. */
+    static EntityNode::Ptr makeQuad (float x, float halfSize, Material::Ptr material)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { x - halfSize, -halfSize, 0.0f };
+        vertices[1].position = { x + halfSize, -halfSize, 0.0f };
+        vertices[2].position = { x + halfSize, halfSize, 0.0f };
+        vertices[3].position = { x - halfSize, halfSize, 0.0f };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        auto mesh = Mesh::Ptr (new Mesh ("quad"));
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
+
+        auto entity = EntityNode::Ptr (new EntityNode ("quad"));
+        entity->attach<MeshNode> (mesh);
+        return entity;
+    }
+
+    /** Draws the opaque items of @p scene, moved by @p motion since the previous frame, into the
+        targets of a frame. The previous view is the one of the previous call.
+    */
+    GBufferPass::Targets render (Scene& scene, Vector3<float> motion = {})
+    {
+        frameResources->beginFrame (size, size);
+
+        const auto acquire = [&] (GpuTextureFormat format)
+        {
+            return frameResources->acquire (GpuTextureDesc (static_cast<uint32_t> (size), static_cast<uint32_t> (size), format, true));
+        };
+
+        const auto targets = GBufferPass::acquireTargets (*frameResources, acquire (GpuTextureFormat::rg16float), acquire (GpuTextureFormat::depth32float));
+
+        view.update (scene, size, size, false, 1, 0);
+        drawList.build (*scene.getRoot(), view.getView());
+
+        for (const auto& item : drawList.getOpaqueItems())
+            item.node->previousWorld = item.world.followedBy (Matrix4::translation ({ -motion.getX(), -motion.getY(), -motion.getZ() }));
+
+        EXPECT_TRUE (gbufferPass.prepare (device).wasOk());
+
+        auto frame = GpuFrame::begin (device);
+        EXPECT_TRUE (gbufferPass.render (frame, view, drawList.getOpaqueItems(), materials, targets));
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+        frameResources->endFrame();
+        return targets;
+    }
+
+    std::unique_ptr<FrameResources> frameResources;
+    ViewData view;
+    SceneDrawList drawList;
+    GBufferPass gbufferPass;
+    MaterialTable materials;
+};
+
+TEST_F (GBufferPassMetalTests, MaskedTexelsAreNotWritten)
+{
+    const auto masked = [] (float alpha)
+    {
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.2f, 0.8f, 0.2f, alpha };
+        material->alphaMode = Material::AlphaMode::mask;
+        return material;
+    };
+
+    // Below and above the default 0.5 cutoff, centered at about x = 23 and x = 41
+    const auto cutOut = masked (0.2f);
+    const auto kept = masked (0.8f);
+
+    Scene scene;
+    scene.getRoot()->addChild (makeQuad (-0.6f, 0.4f, cutOut));
+    scene.getRoot()->addChild (makeQuad (0.6f, 0.4f, kept));
+
+    const auto targets = render (scene);
+
+    const auto ids = mapTexels (targets.emissionMaterial, "vec4(t.a / 255.0, 0.0, 0.0, 1.0)");
+    const auto cleared = mapTexels (targets.depth, "vec4(t.r >= 1.0 ? 1.0 : 0.0, 0.0, 0.0, 1.0)");
+    ASSERT_TRUE (ids.isValid());
+    ASSERT_TRUE (cleared.isValid());
+
+    const auto keptId = materials.getId (*kept);
+    EXPECT_GT (keptId, 0);
+    EXPECT_EQ (static_cast<int> (ids.getPixelColor (41, 32).getRed()), keptId);
+    EXPECT_EQ (cleared.getPixelColor (41, 32).getRed(), 0);
+
+    EXPECT_EQ (ids.getPixelColor (23, 32).getRed(), 0);
+    EXPECT_EQ (cleared.getPixelColor (23, 32).getRed(), 255);
+}
+
+TEST_F (GBufferPassMetalTests, BackgroundFillCoversOnlyTheEmptyTexels)
+{
+    Scene scene;
+    scene.getRoot()->addChild (makeQuad (0.0f, 0.5f, Material::Ptr (new Material())));
+
+    auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+    camera->attach<CameraNode>();
+    camera->setPosition ({ 0.0f, 0.0f, 5.0f });
+    scene.getRoot()->addChild (camera);
+    scene.setActiveCamera (camera.get());
+
+    // A still camera: the quad, moved right since the previous frame, is the only motion
+    const auto moved = readVelocity (render (scene, { 0.2f, 0.0f, 0.0f }).velocity, 1000.0f);
+    ASSERT_TRUE (moved.isValid());
+    EXPECT_GT (moved.getPixelColor (32, 32).getRed(), 192);
+    EXPECT_EQ (velocityDeviation (moved.getPixelColor (2, 32).getRed()), 0);
+    EXPECT_EQ (velocityDeviation (moved.getPixelColor (2, 32).getGreen()), 0);
+
+    // A turning camera moves the background
+    camera->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.05f));
+    const auto turned = readVelocity (render (scene).velocity, 1000.0f);
+    ASSERT_TRUE (turned.isValid());
+    EXPECT_GT (velocityDeviation (turned.getPixelColor (2, 32).getRed()), 64);
+
+    // And stops moving it once the camera stays
+    const auto still = readVelocity (render (scene).velocity, 1000.0f);
+    ASSERT_TRUE (still.isValid());
+    EXPECT_EQ (maxVelocityDeviation (still), 0);
+}
+#endif
 
 #endif
 
@@ -3036,4 +4770,36 @@ TEST_F (SceneRendererGLTests, CapturesBaselineScenes)
 {
     captureBaselineScenes ("gl");
 }
+
+TEST_F (SceneRendererGLTests, MatchesPhaseZeroBaselineOnRaster)
+{
+    for (const auto* name : { "shadows", "materials", "edges" })
+        if (! loadBaseline (String ("gl_") + name + ".png").isValid())
+            GTEST_SKIP() << "No gl_" << name << ".png baseline captured yet";
+
+    checkMatchesPhaseZeroBaseline ("gl");
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (SceneRendererGLTests, RasterShadesMoreThanEightLightsPerScene)
+{
+    checkShadesMoreThanEightLightsPerScene (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, TinyRadiusMatchesPunctual)
+{
+    checkTinyRadiusMatchesPunctual (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, SceneColorHasNoNaN)
+{
+    checkSceneColorHasNoNaN (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, AreaLightRadiusWidensTheHighlightAndStaysFinite)
+{
+    checkRadiusWidensTheHighlight (RenderSettings::TierPreference::raster);
+    checkAreaLightsStayFinite (RenderSettings::TierPreference::raster);
+}
+#endif
 #endif

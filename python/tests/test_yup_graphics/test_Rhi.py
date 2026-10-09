@@ -702,7 +702,7 @@ def test_gpu_target_reads_back_and_records_render_passes(gpu_device):
         renderPass.finish()
         del renderPass
     frame.submit()
-    frame.waitForGPU()
+    assert frame.waitForGPU().wasOk()
 
     pixels = target.readPixels()
     assert pixels is None or len(pixels) == 8 * 4 * 4

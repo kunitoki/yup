@@ -298,6 +298,27 @@ public:
     */
     virtual bool isDeviceLost() const noexcept { return false; }
 
+    /** Returns the first GPU execution failure of a frame nobody owns, and clears them.
+
+        Frames are submitted without waiting, so a frame the GPU fails to execute
+        (out of memory, a page fault, a timeout) is only known once it completed:
+        rendering that "succeeded" on the CPU may still have produced nothing. A
+        frame that was waited on with GpuFrame::waitForGPU(), or whose status was
+        taken with GpuFrame::getStatus(), reports its failure there only. Every other
+        failed frame ends up here.
+
+        Only Metal reports GPU execution failures; every other backend only fails
+        frames it could not submit.
+
+        @returns Result::ok() if no unowned frame failed, or the first failure.
+    */
+    Result takeGpuFailure();
+
+    /** @internal Test hook, not for production use: makes the next frame begun on this
+        device report @p error once it completes, as if the GPU had failed to execute it.
+    */
+    void failNextFrameForTesting (const String& error);
+
     //==============================================================================
     /** Returns true if textures of the given format can be created and sampled.
 
@@ -500,9 +521,18 @@ public:
     /** Overwrites storage buffer contents in place, without reallocating the buffer.
 
         The buffer must have been created with GpuBufferType::storage. Unlike
-        createBuffer(), this does not allocate a new native GPU resource — it
-        writes into the existing one, which is the only allocation-free way to
-        feed new data to a storage buffer every frame or audio callback.
+        createBuffer(), this keeps the buffer and, when the GPU is done with it,
+        writes into its existing native resource, which makes it the way to feed
+        new data to a storage buffer every frame or audio callback.
+
+        On Metal the update never waits for the GPU: while submitted or still
+        recording work may read the buffer, it moves to another backing, so that
+        work keeps the contents it was encoded with and later work sees the update.
+        That move allocates a backing on a pool miss: a few spares per buffer are
+        recycled once idle, so a steady per-frame update stops allocating after its
+        first frames. GPU writes still in flight to the old backing are not carried
+        over: read a buffer a compute pass writes back before updating it. One
+        thread must own both the updates of a buffer and the passes that bind it.
 
         @param buffer   A storage buffer to write into.
         @param data     Pointer to the source data to upload (must be non-null).
@@ -554,21 +584,50 @@ protected:
 
     //==============================================================================
     /** Provides the command buffer a GpuFrame records into, on backends where the
-        host owns command buffers (Vulkan).
+        host owns command buffers (Vulkan, Metal).
 
         Called by GpuFrame::begin() right after it took @p generation. The returned
-        handle is passed back to submitFrameCommands() and waitFrameCommands().
+        handle is passed back to submitFrameCommands() and waitFrameCommands(), and
+        finally to releaseFrameCommands().
 
         @returns The native command buffer, or nullptr to let the ore context
                  manage its own (the default).
     */
     virtual void* beginFrameCommands (uint64_t generation);
 
-    /** Submits the command buffer a frame recorded into. Does nothing by default. */
-    virtual void submitFrameCommands (void* commandBuffer);
+    /** Submits the command buffer a frame recorded into. Does nothing by default.
 
-    /** Waits until the GPU finished a submitted frame command buffer. Does nothing by default. */
-    virtual void waitFrameCommands (void* commandBuffer);
+        @returns Result::ok(), or why the frame could not be submitted.
+    */
+    virtual Result submitFrameCommands (void* commandBuffer);
+
+    /** Waits until the GPU finished a submitted frame command buffer.
+
+        @returns Result::ok(), or the failure the GPU reported executing it. Does
+                 nothing and returns Result::ok() by default.
+    */
+    virtual Result waitFrameCommands (void* commandBuffer);
+
+    /** Releases a command buffer handed out by beginFrameCommands(), once its frame
+        no longer needs it. Does nothing by default.
+    */
+    virtual void releaseFrameCommands (void* commandBuffer);
+
+    /** True when the backend calls completeFrameStatus() once the GPU finished a frame.
+        Otherwise a frame counts as complete as soon as it was submitted.
+    */
+    virtual bool reportsFrameCompletion() const noexcept { return false; }
+
+    /** Records the GPU outcome of the frame of @p generation, for its status, its waiter
+        or takeGpuFailure(). Thread safe.
+    */
+    void completeFrameStatus (uint64_t generation, const Result& result);
+
+    /** Returns a function doing what completeFrameStatus() does, which stays safe to call after
+        this device is gone: completion handlers capture it rather than the device, as they may
+        run after it was destroyed.
+    */
+    std::function<void (uint64_t generation, const Result& result)> getFrameCompletion() const;
 
     /** Pool of in-flight frames assumed by the default getSafeFrameGeneration(). */
     static constexpr uint64_t framesInFlight = 3;
@@ -676,6 +735,26 @@ private:
 
     uint64_t frameGeneration = 0;
     std::vector<RetiredFrame> retiredFrames;
+
+    /** Creates the status of the frame of @p generation, completed by completeFrameStatus(). */
+    GpuFrameStatus beginFrameStatus (uint64_t generation);
+
+    /** The frame statuses of this device, shared with the statuses and the completion handlers,
+        which may all outlive it. */
+    struct FrameStatuses
+    {
+        /** Guards every frame status of the device. */
+        std::shared_ptr<CriticalSection> lock = std::make_shared<CriticalSection>();
+        std::map<uint64_t, std::shared_ptr<GpuFrameStatus::Block>> pending;
+
+        /** At most the first failure nobody claimed yet. */
+        std::vector<std::shared_ptr<GpuFrameStatus::Block>> unclaimedFailures;
+        String nextFrameFailure;
+
+        void complete (uint64_t generation, const Result& result);
+    };
+
+    std::shared_ptr<FrameStatuses> frameStatuses = std::make_shared<FrameStatuses>();
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuDevice)
 };

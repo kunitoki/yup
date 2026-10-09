@@ -162,6 +162,63 @@ struct GpuBuffer::Impl
 
 #if YUP_RIVE_USE_METAL && YUP_APPLE
     id<MTLBuffer> mtlStorageBuffer = nil;
+
+    /** The command buffers that bound a backing, in any order: frames and standalone compute
+        passes commit independently. Weak, as a released command buffer has completed. */
+    struct MetalUses
+    {
+        std::vector<__weak id<MTLCommandBuffer>> commandBuffers;
+
+        void add (id<MTLCommandBuffer> commandBuffer)
+        {
+            if (commandBuffer == nil)
+                return;
+
+            prune();
+
+            for (id<MTLCommandBuffer> use : commandBuffers)
+                if (use == commandBuffer)
+                    return;
+
+            commandBuffers.push_back (commandBuffer);
+        }
+
+        bool isInFlight() const
+        {
+            for (id<MTLCommandBuffer> use : commandBuffers)
+                if (isPending (use))
+                    return true;
+
+            return false;
+        }
+
+        void prune()
+        {
+            commandBuffers.erase (std::remove_if (commandBuffers.begin(), commandBuffers.end(), [] (const auto& weakUse)
+            {
+                id<MTLCommandBuffer> use = weakUse;
+                return ! isPending (use);
+            }),
+                                  commandBuffers.end());
+        }
+
+        static bool isPending (id<MTLCommandBuffer> use)
+        {
+            return use != nil && use.status < MTLCommandBufferStatusCompleted;
+        }
+    };
+
+    /** The uses of mtlStorageBuffer, which an update must not overwrite while any is in flight. */
+    MetalUses mtlUses;
+
+    /** Backings an update swapped out while the GPU could still read them, reused once idle. */
+    struct MetalBacking
+    {
+        id<MTLBuffer> buffer = nil;
+        MetalUses uses;
+    };
+
+    std::vector<MetalBacking> mtlSpareBackings;
 #endif
 
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS

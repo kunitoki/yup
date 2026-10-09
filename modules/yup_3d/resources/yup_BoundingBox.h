@@ -122,6 +122,20 @@ public:
         return getSize().length() * 0.5f;
     }
 
+    /** Returns the squared distance from a point to the box, 0 when the point is inside it. */
+    float getDistanceSquared (const Vector3<float>& point) const noexcept
+    {
+        const auto axis = [] (float p, float low, float high)
+        {
+            return jmax (low - p, 0.0f, p - high);
+        };
+
+        return Vector3<float> (axis (point.getX(), minimum.getX(), maximum.getX()),
+                               axis (point.getY(), minimum.getY(), maximum.getY()),
+                               axis (point.getZ(), minimum.getZ(), maximum.getZ()))
+            .lengthSquared();
+    }
+
 private:
     Vector3<float> minimum { std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max() };
     Vector3<float> maximum { std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest() };

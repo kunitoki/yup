@@ -58,7 +58,8 @@ public:
     /** Begins a GPU frame on the given context.
 
         Returns an invalid frame (isValid() == false) if the context has no
-        GPU context available on this backend.
+        GPU context available on this backend, or the backend could not create
+        the frame's command buffer.
 
         @param ctx  A GpuDevice with GPU context available.
 
@@ -92,10 +93,11 @@ public:
     */
     bool submit();
 
-    /** Blocks the calling thread until all submitted GPU work has completed,
-        then releases the transient resources held for this frame.
+    /** Submits the frame if it was not yet, blocks the calling thread until its
+        GPU work has completed, then releases the transient resources held for it.
 
-        Idempotent: a second call is a no-op, so the stall is only ever paid once.
+        Idempotent: a second call does not wait again and returns the same result,
+        so the stall is only ever paid once.
 
         **Call this only when the CPU genuinely needs the results** - before a
         pixel or buffer readback, or before tearing down resources the frame
@@ -104,8 +106,24 @@ public:
         then hands the frame's texture views, uniform buffers and samplers to the
         device, which frees them once enough later frames have begun that the GPU
         cannot still be reading them.
+
+        @returns Result::ok() once the frame's work completed, or why it failed:
+                 it could not be submitted, or the GPU failed to execute it (only
+                 Metal reports that). The failure is not reported again by
+                 GpuDevice::takeGpuFailure(). Fails for an invalid frame.
     */
-    void waitForGPU();
+    Result waitForGPU();
+
+    /** Returns the GPU outcome of this frame, to check later without blocking.
+
+        Taking it makes this frame's failure reported through the returned status
+        (and waitForGPU()) only, never through GpuDevice::takeGpuFailure(): a
+        renderer that owns its frames checks them itself and is not confused by
+        the failures of anybody else's.
+
+        @returns The status, or an invalid one for an invalid frame.
+    */
+    GpuFrameStatus getStatus();
 
 private:
     friend class GpuCanvas;

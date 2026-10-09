@@ -145,18 +145,27 @@ a real-time thread such as an audio callback, unsafe: buffer allocation has
 unbounded, driver-dependent latency and can cause audible dropouts.
 
 `GpuDevice::updateBuffer()` writes new data into an *existing* storage buffer
-without reallocating it:
+instead of creating a new one:
 
 ```cpp
 // Once, outside the hot loop:
 auto buf = GpuBuffer::create (device, GpuBufferType::storage, initialData, byteSize);
 
-// Every frame / audio callback — no allocation:
+// Every frame / audio callback:
 device->updateBuffer (buf, newData, byteSize);
 ```
 
 `byteSize` must not exceed the buffer's original size. Supported on all
 compute-capable backends (Metal, D3D11, WebGPU, OpenGL).
+
+On Metal the update never waits for the GPU. While a submitted or still recording
+frame may read the buffer, the new contents go to another backing: work encoded
+earlier keeps what it bound, later draws and dispatches see the update, even
+within one frame or render pass. That allocates a backing on a pool miss; a few
+spares per buffer are recycled once idle, so a per-frame update stops allocating
+after its first frames. Data a compute pass is still writing to the old backing
+is not carried over, so read such a buffer back before updating it. Update a
+buffer and record the passes that bind it from the same thread.
 
 ### Binding indices on Metal and Direct3D 11
 
@@ -278,8 +287,9 @@ The `GpuAudioProcessingDemo` example demonstrates real-time audio processing on
 the GPU:
 
 1. `AudioIODeviceCallback` captures live audio input
-2. Audio samples are written into a preallocated `GpuBuffer` storage buffer via
-   `updateBuffer()` — no GPU allocation happens on the audio thread
+2. Audio samples are written into a ring of preallocated `GpuBuffer` storage
+   buffers via `updateBuffer()`; the GPU is done with a slot before it is
+   rewritten, so no GPU allocation happens on the audio thread
 3. A compute shader applies gain + soft clipping
 4. Processed samples are read back from the GPU
 5. Results are routed to the audio output

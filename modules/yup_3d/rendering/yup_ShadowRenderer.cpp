@@ -119,7 +119,7 @@ ShadowRenderer::Result ShadowRenderer::render (const GpuDevice::Ptr& device, Gpu
 
     // The first shadow casting directional light shading the frame, fitted to the opaque items
     const auto lights = drawList.getLights();
-    const auto numLights = jmin (static_cast<int> (lights.size()), SceneRenderer::maxLights);
+    const auto numLights = static_cast<int> (lights.size());
 
     int shadowLight = -1;
     for (int i = 0; i < numLights && shadowLight < 0; ++i)
