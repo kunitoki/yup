@@ -326,7 +326,9 @@ def main():
     else:
         changed_files = get_changed_files(args.base)
     if changed_files is not None:
-        print(f"Found {len(changed_files)} changed files.")
+        print(f"Found {len(changed_files)} changed files:")
+        for file_path in changed_files:
+            print(f"  {file_path}")
 
     graph = build_graph(REPO_ROOT, platform.get("deps", []) if platform else None)
     result = compute_affected(changed_files, config, graph, platform)
