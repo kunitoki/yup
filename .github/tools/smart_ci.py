@@ -9,19 +9,24 @@ example -> module mappings, then prints the set of components that must be built
 and tested for the change:
 
   - "full_build": true when a global file (build system, workflow, config,
-    test infrastructure) changed, when a file matches no rule, or when a changed
-    component cannot be resolved confidently. The workflow then builds and runs
-    everything.
+    test infrastructure) changed, when a file matches no rule, when a changed
+    component cannot be resolved confidently, when git cannot produce the diff,
+    or when --full is passed. The workflow then builds and runs everything.
   - "tests": the yup modules whose tests must run. Passed to cmake as
     YUP_TEST_MODULES, which links their optional and test deps on its own.
   - "examples": the examples that changed or that depend on an affected module
     or thirdparty target.
+  - "example_targets": with --platform, the build targets of each example.
+
+With --platform, the "platforms" section of the config restricts the result to
+that platform: native files of other platforms are ignored, only that platform's
+<platform>Deps header lines count, and only the examples it builds are listed.
 
 Usage:
     python3 .github/tools/smart_ci.py --base origin/main \
         --config .github/smart_ci_config.json --output affected.json
     python3 .github/tools/smart_ci.py --files modules/yup_core/yup_core.h \
-        --config .github/smart_ci_config.json --output affected.json
+        --platform mac --config .github/smart_ci_config.json --output affected.json
 
 The --files form skips git and is handy to preview what a change would trigger.
 """
@@ -49,7 +54,7 @@ def run_git(args):
 
 
 def get_changed_files(base):
-    """Return the files changed between base and HEAD (git diff base...HEAD)."""
+    """Return the files changed between base and HEAD (git diff base...HEAD), or None when git cannot diff."""
     if base == EMPTY_SHA:
         base = "origin/main"
 
@@ -63,8 +68,8 @@ def get_changed_files(base):
     try:
         result = run_git(["diff", "--name-only", f"{base}...HEAD"])
     except subprocess.CalledProcessError as error:
-        print(f"Error: could not diff against '{base}': {error.stderr.strip()}", file=sys.stderr)
-        sys.exit(1)
+        print(f"Warning: could not diff against '{base}', forcing a full build: {error.stderr.strip()}", file=sys.stderr)
+        return None
 
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
@@ -82,8 +87,11 @@ class ModuleGraph:
         self.example_deps = {}                   # example -> {deps}
 
 
-def parse_module_header(header):
-    """Return (dependency_tokens, test_dependency_tokens) from a module declaration block."""
+def parse_module_header(header, platform_deps=None):
+    """Return (dependency_tokens, test_dependency_tokens) from a module declaration block.
+
+    platform_deps names the <platform>Deps lines to honour; None honours all of them.
+    """
     try:
         text = header.read_text(errors="ignore")
     except OSError:
@@ -98,15 +106,16 @@ def parse_module_header(header):
         dep_match = HEADER_DEP_LINE_RE.match(line)
         if not dep_match:
             continue
+        key = dep_match.group(1)
         tokens = set(dep_match.group(2).replace(",", " ").split())
-        if dep_match.group(1) == "testDeps":
+        if key == "testDeps":
             test_deps |= tokens
-        else:
+        elif key in ("dependencies", "optionalDeps") or platform_deps is None or key in platform_deps:
             deps |= tokens
     return deps, test_deps
 
 
-def build_graph(root):
+def build_graph(root, platform_deps=None):
     graph = ModuleGraph()
 
     modules_dir = root / "modules"
@@ -133,7 +142,7 @@ def build_graph(root):
     # so optional edges propagate changes exactly like required ones.
     for module in known:
         folder = modules_dir if module in graph.yup_modules else thirdparty_dir
-        deps, test_deps = parse_module_header(folder / module / f"{module}.h")
+        deps, test_deps = parse_module_header(folder / module / f"{module}.h", platform_deps)
 
         for dep in deps & known:
             graph.dependents[dep].add(module)
@@ -158,8 +167,11 @@ def build_graph(root):
 # ---------------------------------------------------------------------------
 # Classification
 # ---------------------------------------------------------------------------
-def classify_file(file_path, config):
+def classify_file(file_path, config, platform_skip=()):
     """Return the (kind, name) hits for a file from the first matching rule, or None when no rule matches."""
+    if any(re.search(pattern, file_path) for pattern in platform_skip):
+        return []
+
     hits = []
     for rules in config.get("patterns", {}).values():
         for rule in rules:
@@ -198,15 +210,21 @@ def reverse_closure(start, reverse):
 # ---------------------------------------------------------------------------
 # Main computation
 # ---------------------------------------------------------------------------
-def compute_affected(changed_files, config, graph):
+def compute_affected(changed_files, config, graph, platform=None):
+    """changed_files of None means the diff is unknown, which is a full build."""
+    platform = platform or {}
+    platform_skip = platform.get("skip", [])
+    platform_examples = platform.get("examples", {})
+    supported_examples = set(platform_examples) & graph.examples if platform else graph.examples
+
     changed_yup = set()
     changed_tp = set()
     changed_examples = set()
     test_components = set()
-    full_build = False
+    full_build = changed_files is None
 
-    for file_path in changed_files:
-        hits = classify_file(file_path, config)
+    for file_path in changed_files or []:
+        hits = classify_file(file_path, config, platform_skip)
         if hits is None:
             print(f"Warning: '{file_path}' matches no rule, forcing a full build", file=sys.stderr)
             full_build = True
@@ -245,12 +263,17 @@ def compute_affected(changed_files, config, graph):
             print(f"Warning: example '{component}' is not known, forcing a full build", file=sys.stderr)
             full_build = True
 
-    if full_build:
+    def result(full, tests, examples):
+        examples = sorted(examples & supported_examples)
         return {
-            "full_build": True,
-            "tests": [],
-            "examples": sorted(graph.examples),
+            "full_build": full,
+            "tests": sorted(tests) if platform.get("tests", True) else [],
+            "examples": examples,
+            "example_targets": {example: platform_examples[example] for example in examples} if platform else {},
         }
+
+    if full_build:
+        return result(True, set(), graph.examples)
 
     # A code change (yup or thirdparty) affects every transitive dependent. Tests
     # also rerun when a module their testDeps name is affected; test-file changes
@@ -267,11 +290,7 @@ def compute_affected(changed_files, config, graph):
         if deps & code_affected:
             examples.add(example)
 
-    return {
-        "full_build": False,
-        "tests": sorted(test_set),
-        "examples": sorted(examples),
-    }
+    return result(False, test_set, examples)
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +302,8 @@ def main():
     parser.add_argument("--config", default=".github/smart_ci_config.json", help="Classification config")
     parser.add_argument("--output", required=True, help="Output JSON file")
     parser.add_argument("--files", nargs="*", help="Explicit changed files (skips git)")
+    parser.add_argument("--platform", help="Restrict the result to a platform of the config's 'platforms' section")
+    parser.add_argument("--full", action="store_true", help="Force a full build (skips git)")
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -291,11 +312,24 @@ def main():
         sys.exit(1)
     config = json.loads(config_path.read_text())
 
-    changed_files = args.files if args.files is not None else get_changed_files(args.base)
-    print(f"Found {len(changed_files)} changed files.")
+    platform = None
+    if args.platform:
+        platform = config.get("platforms", {}).get(args.platform)
+        if platform is None:
+            print(f"Error: platform '{args.platform}' is not in the config", file=sys.stderr)
+            sys.exit(1)
 
-    graph = build_graph(REPO_ROOT)
-    result = compute_affected(changed_files, config, graph)
+    if args.full:
+        changed_files = None
+    elif args.files is not None:
+        changed_files = args.files
+    else:
+        changed_files = get_changed_files(args.base)
+    if changed_files is not None:
+        print(f"Found {len(changed_files)} changed files.")
+
+    graph = build_graph(REPO_ROOT, platform.get("deps", []) if platform else None)
+    result = compute_affected(changed_files, config, graph, platform)
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)

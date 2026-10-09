@@ -5,6 +5,9 @@ on:
     paths:
       - "CMakeLists.txt"
       - "**/workflows/build_windows.yml"
+      - "**/.github/actions/smart_ci/**"
+      - "**/.github/tools/smart_ci.py"
+      - "**/.github/smart_ci_config.json"
       - "**/cmake/**"
       - "**/examples/**"
       - "**/modules/**"
@@ -24,6 +27,12 @@ on:
       - "!**/native/*_wasm.*"
     branches:
       - "**"
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base ref/sha to diff against (empty uses origin/main, or builds everything on main)
+        required: false
+        default: ""
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -33,72 +42,50 @@ env:
   ACTION_RUNNER: github-actions
 
 jobs:
-  build_tests_debug:
-    runs-on: windows-latest
-    timeout-minutes: 45
+  determine-components:
+    runs-on: ubuntu-latest
+    outputs:
+      test_modules: ${{ steps.smart-ci.outputs.test_modules }}
+      tests: ${{ steps.smart-ci.outputs.full_build == 'true' || steps.smart-ci.outputs.test_modules != '' }}
+      examples: ${{ steps.smart-ci.outputs.examples }}
+      example_targets: ${{ steps.smart-ci.outputs.example_targets }}
     steps:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-    - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
-    - working-directory: ${{ runner.workspace }}/build/tests/Debug
+    - id: smart-ci
+      uses: ./.github/actions/smart_ci
+      with:
+        platform: windows
+        base: ${{ inputs.base }}
+
+  build_tests:
+    runs-on: windows-latest
+    needs: [determine-components]
+    if: needs.determine-components.outputs.tests == 'true'
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+    steps:
+    - uses: actions/checkout@v6
+    - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON '-DYUP_TEST_MODULES=${{ needs.determine-components.outputs.test_modules }}'
+    - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/${{ matrix.config }}
       run: ./yup_tests.exe
       shell: bash
 
-  build_tests_release:
+  build_examples:
     runs-on: windows-latest
-    timeout-minutes: 45
+    needs: [determine-components]
+    if: needs.determine-components.outputs.examples != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJson(needs.determine-components.outputs.examples) }}
     steps:
     - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
-    - working-directory: ${{ runner.workspace }}/build/tests/Release
-      run: ./yup_tests.exe
-      shell: bash
-
-  build_console:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_console
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_console
-
-  build_app:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_app
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_app
-
-  build_graphics:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_graphics
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_graphics
-
-  build_plugin:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_clap_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_clap_plugin
-    #- run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_vst3_plugin
-    #- run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_vst3_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_standalone_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_standalone_plugin
+    - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_BUILD_TESTS=OFF -DYUP_BUILD_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(needs.determine-components.outputs.example_targets)[matrix.example] }}
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(needs.determine-components.outputs.example_targets)[matrix.example] }}

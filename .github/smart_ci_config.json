@@ -2,17 +2,20 @@
   "modules_root": "modules",
   "patterns": {
     "global": [
-      {"pattern": "^\\.github/.*", "targets": ["all"]},
+      {"pattern": "^\\.github/(actions/smart_ci/|tools/smart_ci\\.py$|smart_ci_config\\.json$|workflows/build_)", "targets": ["all"]},
       {"pattern": "^codecov\\.yml$", "targets": ["all"]},
       {"pattern": "^CMakeLists\\.txt$", "targets": ["all"]},
       {"pattern": "^cmake/.*", "targets": ["all"]},
       {"pattern": "^thirdparty/[^/]+$", "targets": ["all"]}
     ],
     "skip": [
+      {"pattern": "^\\.github/.*", "targets": []},
       {"pattern": "^docs/.*", "targets": []},
+      {"pattern": "^tools/.*", "targets": []},
+      {"pattern": "^website/.*", "targets": []},
       {"pattern": "^\\.vscode/.*", "targets": []},
       {"pattern": "^[^/]+\\.(md|svg|jpg|png)$", "targets": []},
-      {"pattern": "^(LICENSE|\\.clang-format|\\.editorconfig|\\.gitattributes|\\.gitignore|\\.readthedocs\\.yaml)$", "targets": []}
+      {"pattern": "^(LICENSE|justfile|\\.clang-format|\\.editorconfig|\\.gitattributes|\\.gitignore|\\.readthedocs\\.yaml)$", "targets": []}
     ],
     "module": [
       {"pattern": "^modules/yup_audio_plugin_client/.*", "targets": ["module:yup_audio_plugin_client", "examples:plugin"]},
@@ -27,10 +30,98 @@
       {"pattern": "^tests/([^/]+)/.*", "targets": ["tests:$1"]}
     ],
     "example": [
+      {"pattern": "^examples/graphics/data/synths/.*", "targets": ["examples:graphics", "tests:yup_dsp_jit"]},
       {"pattern": "^examples/([^/]+)/.*", "targets": ["examples:$1"]}
     ],
     "thirdparty": [
       {"pattern": "^thirdparty/([^/]+)/.*", "targets": ["thirdparty:$1"]}
     ]
+  },
+  "platforms": {
+    "mac": {
+      "deps": ["macDeps", "appleDeps"],
+      "tests": true,
+      "skip": [
+        "/native/(generated|java[^/]*)/",
+        "/native/[^/]*_(android|emscripten|linux|wasm|windows)\\.",
+        "/native/[^/]*_ios[^/]*\\."
+      ],
+      "examples": {
+        "console": "example_console",
+        "app": "example_app",
+        "graphics": "example_graphics",
+        "audiograph": "example_audiograph",
+        "plugin": "example_plugin_clap_plugin example_plugin_vst3_plugin example_plugin_standalone_plugin"
+      }
+    },
+    "ios": {
+      "deps": ["iosDeps", "iosSimDeps", "appleDeps"],
+      "tests": false,
+      "skip": [
+        "/native/(generated|java[^/]*)/",
+        "/native/[^/]*_(android|emscripten|linux|mac|wasm|windows)\\."
+      ],
+      "examples": {
+        "console": "example_console",
+        "app": "example_app",
+        "graphics": "example_graphics"
+      }
+    },
+    "linux": {
+      "deps": ["linuxDeps"],
+      "tests": true,
+      "skip": [
+        "/native/(generated|java[^/]*)/",
+        "/native/[^/]*_(android|apple|emscripten|mac|wasm|windows)\\.",
+        "/native/[^/]*_ios[^/]*\\."
+      ],
+      "examples": {
+        "console": "example_console",
+        "app": "example_app",
+        "graphics": "example_graphics",
+        "plugin": "example_plugin_clap_plugin example_plugin_standalone_plugin"
+      }
+    },
+    "windows": {
+      "deps": ["windowsDeps", "msftDeps"],
+      "tests": true,
+      "skip": [
+        "/native/(generated|java[^/]*)/",
+        "/native/[^/]*_(android|apple|emscripten|linux|mac|posix|wasm)\\.",
+        "/native/[^/]*_ios[^/]*\\."
+      ],
+      "examples": {
+        "console": "example_console",
+        "app": "example_app",
+        "graphics": "example_graphics",
+        "plugin": "example_plugin_clap_plugin example_plugin_standalone_plugin"
+      }
+    },
+    "wasm": {
+      "deps": ["wasmDeps"],
+      "tests": true,
+      "skip": [
+        "/native/(generated|java[^/]*)/",
+        "/native/[^/]*_(android|apple|linux|mac|windows)\\.",
+        "/native/[^/]*_ios[^/]*\\."
+      ],
+      "examples": {
+        "console": "example_console",
+        "app": "example_app",
+        "graphics": "example_graphics"
+      }
+    },
+    "android": {
+      "deps": ["androidDeps"],
+      "tests": false,
+      "skip": [
+        "/native/[^/]*_(apple|emscripten|linux|mac|wasm|windows)\\.",
+        "/native/[^/]*_ios[^/]*\\."
+      ],
+      "examples": {
+        "app": "app",
+        "graphics": "graphics"
+      }
+    }
   }
 }

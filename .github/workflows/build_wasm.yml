@@ -5,6 +5,9 @@ on:
     paths:
       - "CMakeLists.txt"
       - "**/workflows/build_wasm.yml"
+      - "**/.github/actions/smart_ci/**"
+      - "**/.github/tools/smart_ci.py"
+      - "**/.github/smart_ci_config.json"
       - "**/cmake/**"
       - "**/examples/**"
       - "**/modules/**"
@@ -21,6 +24,12 @@ on:
       - "!**/native/*_windows.*"
     branches:
       - "**"
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base ref/sha to diff against (empty uses origin/main, or builds everything on main)
+        required: false
+        default: ""
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -36,84 +45,62 @@ env:
   EMCC_SKIP_SANITY_CHECK: 1
 
 jobs:
-  build_tests_debug:
+  determine-components:
     runs-on: ubuntu-latest
+    outputs:
+      test_modules: ${{ steps.smart-ci.outputs.test_modules }}
+      tests: ${{ steps.smart-ci.outputs.full_build == 'true' || steps.smart-ci.outputs.test_modules != '' }}
+      examples: ${{ steps.smart-ci.outputs.examples }}
+      example_targets: ${{ steps.smart-ci.outputs.example_targets }}
     steps:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
+    - id: smart-ci
+      uses: ./.github/actions/smart_ci
+      with:
+        platform: wasm
+        base: ${{ inputs.base }}
+
+  build_tests:
+    runs-on: ubuntu-latest
+    needs: [determine-components]
+    if: needs.determine-components.outputs.tests == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+    steps:
+    - uses: actions/checkout@v6
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v15
       with:
         version: ${{ env.EM_VERSION }}
     - name: Configure
-      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
-    - working-directory: ${{ runner.workspace }}/build/tests/Debug
+      run: |
+        emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=OFF -DYUP_TEST_MODULES="${{ needs.determine-components.outputs.test_modules }}"
+    - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/${{ matrix.config }}
       run: node yup_tests.js
 
-  build_tests_release:
+  build_examples:
     runs-on: ubuntu-latest
+    needs: [determine-components]
+    if: needs.determine-components.outputs.examples != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJson(needs.determine-components.outputs.examples) }}
     steps:
     - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v15
       with:
         version: ${{ env.EM_VERSION }}
     - name: Configure
-      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
-    - working-directory: ${{ runner.workspace }}/build/tests/Release
-      run: node yup_tests.js
-
-  build_console:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v15
-      with:
-        version: ${{ env.EM_VERSION }}
-    - name: Configure
-      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_console
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_console
-
-  build_app:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v15
-      with:
-        version: ${{ env.EM_VERSION }}
-    - name: Configure
-      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_app
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_app
-
-  build_graphics:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v15
-      with:
-        version: ${{ env.EM_VERSION }}
-    - name: Configure
-      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_graphics
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_graphics
+      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_BUILD_TESTS=OFF -DYUP_BUILD_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(needs.determine-components.outputs.example_targets)[matrix.example] }}
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(needs.determine-components.outputs.example_targets)[matrix.example] }}
