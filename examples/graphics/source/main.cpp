@@ -193,6 +193,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
 #include "examples/PopupMenu.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Scene3D
+#include "examples/Scene3D.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ScrollBar
 #include "examples/ScrollBar.h"
 #endif
@@ -396,6 +399,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
         addDemo ("Popup Menu", [] { return std::make_unique<PopupMenuDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Scene3D
+        addDemo ("Scene 3D", [] { return std::make_unique<Scene3DDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ScrollBar
         addDemo ("ScrollBar", [] { return std::make_unique<ScrollBarDemo>(); });
