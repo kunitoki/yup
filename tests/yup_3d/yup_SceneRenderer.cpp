@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <iostream>
 #include <map>
 #include <numeric>
 #include <optional>
@@ -251,10 +252,26 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle forwardPassAreaLights()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_area_lights.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
     static ShaderBundle forwardPassFull()
     {
         static constexpr uint8 data[] = {
 #include <yup_3d/shaders/yup_ForwardPass_full.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle forwardPassFullAreaLights()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_full_area_lights.inc>
         };
         return load (data, sizeof (data));
     }
@@ -273,6 +290,23 @@ protected:
 #include <yup_3d/shaders/yup_LightingPass_full.inc>
         };
         return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassFullAreaLights()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    /** True if @p resources declare a resource at @p set and @p binding. */
+    static bool declares (const std::vector<ShaderReflection::ResourceBinding>& resources, uint32_t set, uint32_t binding)
+    {
+        return std::any_of (resources.begin(), resources.end(), [&] (const auto& resource)
+        {
+            return resource.set == set && resource.binding == binding;
+        });
     }
 
     static ShaderBundle gbufferPassFull()
@@ -316,22 +350,25 @@ protected:
 
 TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
 {
-    // The reflection counts what the shaders declare, so the budget check cannot pass on empty lists
+    // The reflection counts what the shaders declare, so the budget check cannot pass on empty
+    // lists. The area light variants add the two area light tables
+    for (const auto& [name, bundle, textures] : { std::tuple { "ForwardPass", forwardPass(), 7 },
+                                                  std::tuple { "ForwardPass_area_lights", forwardPassAreaLights(), 9 } })
     {
-        const auto bundle = forwardPass();
         const auto* vertex = bundle.findShader (ShaderStage::vertex, ShaderLanguage::spirv);
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
-        ASSERT_NE (vertex, nullptr);
-        ASSERT_NE (fragment, nullptr);
+        ASSERT_NE (vertex, nullptr) << name;
+        ASSERT_NE (fragment, nullptr) << name;
 
-        EXPECT_EQ (countResources (vertex->reflection).sampledImages, 0);
-        EXPECT_EQ (countResources (vertex->reflection).uniformBlocks, 2);
-        EXPECT_EQ (countResources (fragment->reflection).sampledImages, 9);
-        EXPECT_EQ (countResources (fragment->reflection).uniformBlocks, 4);
+        EXPECT_EQ (countResources (vertex->reflection).sampledImages, 0) << name;
+        EXPECT_EQ (countResources (vertex->reflection).uniformBlocks, 2) << name;
+        EXPECT_EQ (countResources (fragment->reflection).sampledImages, textures) << name;
+        EXPECT_EQ (countResources (fragment->reflection).uniformBlocks, 4) << name;
     }
 
     // The full tier geometry bundles: the forward pass without the raster light list, and the G-buffer
-    for (const auto& [name, bundle, textures, blocks] : { std::tuple { "ForwardPass_full", forwardPassFull(), 9, 3 },
+    for (const auto& [name, bundle, textures, blocks] : { std::tuple { "ForwardPass_full", forwardPassFull(), 7, 3 },
+                                                          std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 9, 3 },
                                                           std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 1 } })
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -342,10 +379,13 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
 
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass", forwardPass() },
+        { "ForwardPass_area_lights", forwardPassAreaLights() },
         { "ForwardPass_full", forwardPassFull() },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "Background", background() },
         { "GBufferPass_full", gbufferPassFull() },
         { "LightingPass_full", lightingPassFull() },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -377,10 +417,12 @@ TEST_F (SceneRendererBundleTests, OnlyFullVariantsWriteVelocity)
     };
 
     const auto raster = forwardPass();
+    const auto rasterAreaLights = forwardPassAreaLights();
     const auto full = forwardPassFull();
+    const auto fullAreaLights = forwardPassFullAreaLights();
     const auto rasterBackground = background();
 
-    for (const auto* reflection : { fragmentOf (raster), fragmentOf (rasterBackground) })
+    for (const auto* reflection : { fragmentOf (raster), fragmentOf (rasterAreaLights), fragmentOf (rasterBackground) })
     {
         ASSERT_NE (reflection, nullptr);
         EXPECT_TRUE (writesLocation (*reflection, 0));
@@ -388,15 +430,17 @@ TEST_F (SceneRendererBundleTests, OnlyFullVariantsWriteVelocity)
     }
 
     // Blended items keep writing their motion over the deferred surfaces
-    const auto* reflection = fragmentOf (full);
-    ASSERT_NE (reflection, nullptr);
-    EXPECT_TRUE (writesLocation (*reflection, 0));
-    EXPECT_TRUE (writesLocation (*reflection, 1));
+    for (const auto* reflection : { fragmentOf (full), fragmentOf (fullAreaLights) })
+    {
+        ASSERT_NE (reflection, nullptr);
+        EXPECT_TRUE (writesLocation (*reflection, 0));
+        EXPECT_TRUE (writesLocation (*reflection, 1));
+    }
 }
 
 TEST_F (SceneRendererBundleTests, MaterialBlockEndsWithTheGpuMaterial)
 {
-    const ShaderBundle bundles[] = { forwardPass(), forwardPassFull() };
+    const ShaderBundle bundles[] = { forwardPass(), forwardPassAreaLights(), forwardPassFull(), forwardPassFullAreaLights() };
 
     for (const auto& bundle : bundles)
     {
@@ -422,9 +466,12 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
     // One declaration in lib/lighting.glsl: the background reads environmentInfo where the surfaces do
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass", forwardPass() },
+        { "ForwardPass_area_lights", forwardPassAreaLights() },
         { "ForwardPass_full", forwardPassFull() },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "Background", background() },
         { "LightingPass_full", lightingPassFull() },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -497,19 +544,13 @@ TEST_F (SceneRendererBundleTests, FullForwardPassReadsTheClusteredLights)
 
 TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
 {
-    // Both forward variants read the area light tables at set 1 bindings 4 and 5 through the set 0
-    // linearClamp sampler. RasterBundlesStayWithinBudget counts the two tables in the raster budget
+    // The area light variants of the shading passes read the area light tables at set 1 bindings 4
+    // and 5 through the set 0 linearClamp sampler. RasterBundlesStayWithinBudget counts the two
+    // tables in the raster budget
     const std::pair<const char*, ShaderBundle> bundles[] = {
-        { "ForwardPass", forwardPass() },
-        { "ForwardPass_full", forwardPassFull() },
-    };
-
-    const auto declares = [] (const std::vector<ShaderReflection::ResourceBinding>& resources, uint32_t set, uint32_t binding)
-    {
-        return std::any_of (resources.begin(), resources.end(), [&] (const auto& resource)
-        {
-            return resource.set == set && resource.binding == binding;
-        });
+        { "ForwardPass_area_lights", forwardPassAreaLights() },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -520,6 +561,27 @@ TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
         EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 4)) << name << ": ltcMatrix";
         EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 5)) << name << ": ltcAmplitude";
         EXPECT_TRUE (declares (fragment->reflection.separateSamplers, 0, 1)) << name << ": linearClamp";
+    }
+}
+
+TEST_F (SceneRendererBundleTests, PunctualVariantsDeclareNoAreaLightTables)
+{
+    // Without YUP_3D_AREA_LIGHTS every light is punctual: neither the tables nor their sampler
+    const std::pair<const char*, ShaderBundle> bundles[] = {
+        { "ForwardPass", forwardPass() },
+        { "ForwardPass_full", forwardPassFull() },
+        { "LightingPass_full", lightingPassFull() },
+    };
+
+    for (const auto& [name, bundle] : bundles)
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+
+        EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 4)) << name << ": ltcMatrix";
+        EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 5)) << name << ": ltcAmplitude";
+        EXPECT_FALSE (declares (fragment->reflection.separateSamplers, 0, 1)) << name << ": linearClamp";
+        EXPECT_FALSE (fragment->reflection.separateSamplers.empty()) << name;
     }
 }
 
@@ -1868,6 +1930,82 @@ protected:
 
         return count > 0 ? sum / count : -1.0;
     }
+
+    /** Nine gray pads 0.4 wide and 0.55 apart, each its own draw, facing a camera 3 units away,
+        under 32 colored point lights of range 0.5 and intensity 0.5, like the light show of the
+        Scene3D demo. Returns the light entities, placed by moveOrbitingLights().
+    */
+    static std::vector<EntityNode*> buildOrbitingLightsScene (Scene& scene)
+    {
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.5f, 0.5f, 0.5f, 1.0f };
+        material->metallicFactor = 0.0f;
+        material->roughnessFactor = 0.7f;
+
+        for (int row = 0; row < 3; ++row)
+        {
+            for (int column = 0; column < 3; ++column)
+            {
+                auto* pad = addPlate (scene, material);
+                pad->setScale ({ 0.2f, 0.2f, 1.0f });
+                pad->setPosition ({ 0.55f * static_cast<float> (column - 1), 0.55f * static_cast<float> (row - 1), 0.0f });
+            }
+        }
+
+        std::vector<EntityNode*> lights;
+        for (int i = 0; i < 32; ++i)
+        {
+            auto light = EntityNode::Ptr (new EntityNode ("showLight"));
+            auto& node = light->attach<LightNode> (LightNode::Type::point);
+            const auto color = Color::fromHSV (static_cast<float> (i) / 32.0f, 0.85f, 1.0f);
+            node.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
+            node.intensity = 0.5f;
+            node.range = 0.5f;
+            scene.getRoot()->addChild (light);
+            lights.push_back (light.get());
+        }
+
+        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        camera->attach<CameraNode>();
+        camera->setPosition ({ 0.0f, 0.0f, 3.0f });
+        scene.getRoot()->addChild (camera);
+        scene.setActiveCamera (camera.get());
+
+        scene.setAmbientColor (Colors::black);
+        scene.setBackgroundColor (Colors::black);
+        return lights;
+    }
+
+    /** Places the lights of buildOrbitingLightsScene() at @p time seconds: four rings of orbits, alternating in direction, as in the demo. */
+    static void moveOrbitingLights (const std::vector<EntityNode*>& lights, double time)
+    {
+        for (size_t i = 0; i < lights.size(); ++i)
+        {
+            const auto ring = static_cast<float> (i % 4);
+            const auto speed = (i % 2 == 0 ? 0.35f : -0.25f) * (1.0f + 0.15f * ring);
+            const auto angle = static_cast<float> (i) * 2.39996f + speed * static_cast<float> (time);
+            const auto radius = 0.25f + 0.2f * ring;
+
+            lights[i]->setPosition ({ std::cos (angle) * radius, std::sin (angle) * radius, 0.1f + 0.05f * ring });
+        }
+    }
+
+    /** The largest difference of any channel of any pixel between two images, in 8 bit levels. */
+    static int maxChannelDifference (const Image& image, const Image& reference)
+    {
+        int difference = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+        {
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto a = image.getPixelColor (x, y);
+                const auto b = reference.getPixelColor (x, y);
+                difference = std::max ({ difference, std::abs (a.getRed() - b.getRed()), std::abs (a.getGreen() - b.getGreen()), std::abs (a.getBlue() - b.getBlue()) });
+            }
+        }
+
+        return difference;
+    }
 };
 
 TEST_F (SceneRendererMetalTests, AgxToneMapsTheEnvironment)
@@ -2796,6 +2934,36 @@ TEST_F (SceneRendererMetalTests, LightRadiusChangeRestartsTheFullTier)
     EXPECT_FALSE (renderer.isConverged());
 }
 
+TEST_F (SceneRendererMetalTests, AreaLightVariantSwitchRestartsAndConvergesAgain)
+{
+    // A radius switches the shading passes to their area light variant mid-session, and back when
+    // it goes: like any light change it restarts the convergence over the kept history, and no
+    // frame fails
+    Scene scene;
+    buildEdgesScene (scene);
+    setFullTierTaa (scene, 4);
+
+    auto* light = scene.getRoot()->findChild ("sun")->getNode<LightNode>();
+    ASSERT_NE (light, nullptr);
+
+    SceneRenderer renderer;
+    for (const auto radius : { 0.0f, 0.05f, 0.0f })
+    {
+        light->radius = radius;
+
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_FALSE (renderer.isConverged()) << radius;
+
+        for (int i = 0; i < 4; ++i)
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+        EXPECT_TRUE (renderer.isConverged()) << radius;
+    }
+
+    const auto gpuResult = renderer.waitForGPU();
+    EXPECT_TRUE (gpuResult.wasOk()) << gpuResult.getErrorMessage();
+}
+
 TEST_F (SceneRendererMetalTests, KhrMaterialChangesRestartAccumulation)
 {
     const std::pair<const char*, std::function<void (Material&)>> changes[] = {
@@ -3575,6 +3743,50 @@ TEST_F (SceneRendererMetalTests, FullTierShadesManyLights)
     EXPECT_EQ (lit, 256);
 }
 
+TEST_F (SceneRendererMetalTests, RasterLightSelectionDoesNotPopUnderMovingLights)
+{
+    // 32 lights orbiting over 9 pads: each pad has more candidates than the 8 slots of a raster
+    // draw, and lights crossing the selection cutoff or their range must fade instead of switching
+    // on or off within a frame. The full tier shades every light through the clusters: its largest
+    // change between two frames is what the motion alone produces
+    const auto measureLargestFrameChange = [this] (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        const auto lights = buildOrbitingLightsScene (scene);
+        setFullTierTaa (scene, 1);
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        Image previous;
+        int largest = 0;
+
+        for (int frame = 0; frame < 90; ++frame)
+        {
+            moveOrbitingLights (lights, frame / 30.0);
+
+            const auto image = renderToImage (renderer, scene, 128);
+            EXPECT_TRUE (image.isValid()) << renderer.getLastError();
+            if (! image.isValid())
+                return -1;
+
+            if (previous.isValid())
+                largest = jmax (largest, maxChannelDifference (image, previous));
+
+            previous = image;
+        }
+
+        return largest;
+    };
+
+    const auto raster = measureLargestFrameChange (RenderSettings::TierPreference::raster);
+    const auto full = measureLargestFrameChange (RenderSettings::TierPreference::full);
+    ASSERT_GT (full, 0);
+
+    RecordProperty ("rasterLargestFrameChange", raster);
+    RecordProperty ("fullLargestFrameChange", full);
+    EXPECT_LE (raster, 2 * full);
+}
+
 TEST_F (SceneRendererMetalTests, FullTierRendersWithoutAnyLight)
 {
     // No light and no default light: the light and cluster buffers stay empty, emission still shows.
@@ -3743,6 +3955,53 @@ TEST_P (SceneRendererTierTests, ReportsTheRequestedTier)
     const auto* capabilities = renderer.getCapabilities();
     ASSERT_NE (capabilities, nullptr);
     EXPECT_EQ (capabilities->getTier(), GetParam() == RenderSettings::TierPreference::full ? RenderCapabilities::Tier::full : RenderCapabilities::Tier::raster);
+}
+
+TEST_P (SceneRendererTierTests, AreaLightVariantFollowsTheLightRadius)
+{
+    // A sun mirrored off a smooth black plate turns from punctual into a disk and back within one
+    // renderer, each frame shading with the variant its lights need. The punctual variant ignores
+    // the radius, so only the area light variant widens the highlight; the punctual frames before
+    // and after the disk match, and the disk frame matches a renderer drawing it from the start
+    auto material = Material::Ptr (new Material());
+    material->baseColorFactor = { 0.0f, 0.0f, 0.0f, 1.0f };
+    material->metallicFactor = 0.0f;
+    material->roughnessFactor = 0.1f;
+
+    Scene scene;
+    addPlate (scene, material);
+    scene.setAmbientColor (Colors::black);
+
+    auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+    auto& light = sun->attach<LightNode>();
+    scene.getRoot()->addChild (sun);
+
+    // Without temporal anti-aliasing every full tier frame stands on its own
+    if (GetParam() == RenderSettings::TierPreference::full)
+        setFullTierTaa (scene, 1);
+    else
+        setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    std::array<Image, 3> frames;
+    const std::array<float, 3> radii { 0.0f, 0.05f, 0.0f };
+
+    for (size_t i = 0; i < frames.size(); ++i)
+    {
+        light.radius = radii[i];
+        frames[i] = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (frames[i].isValid()) << i << ": " << renderer.getLastError();
+    }
+
+    // The canvas read back dithers the frames by a level, within what countDifferences() ignores
+    EXPECT_EQ (countDifferences (frames[0], frames[2]), 0);
+    EXPECT_GT (countDifferences (frames[1], frames[0]), 0);
+
+    light.radius = 0.05f;
+    SceneRenderer fresh;
+    const auto disk = renderToImage (fresh, scene, 128);
+    ASSERT_TRUE (disk.isValid()) << fresh.getLastError();
+    EXPECT_EQ (countDifferences (frames[1], disk), 0);
 }
 
 TEST_P (SceneRendererTierTests, BloomBrightensAroundAnEmissiveQuad)
@@ -4710,6 +4969,193 @@ TEST_F (GBufferPassMetalTests, BackgroundFillCoversOnlyTheEmptyTexels)
     EXPECT_EQ (maxVelocityDeviation (still), 0);
 }
 #endif
+
+/** Frame times of the Scene3D light show, measured by hand: disabled in the normal suites. Run them
+    on a Release build with
+
+    GTEST_ALSO_RUN_DISABLED_TESTS=1 just test Release "SceneRendererBenchmarkTests.*"
+
+    The scene is the demo's: examples/graphics/data/gltf/mpc.glb seen from the top, the shadowed
+    key light, the orbiting show lights and a dim environment. Each configuration renders 30
+    warm-up frames, then times 120 queued frames by wall time up to the end of the last one on the
+    GPU: the GPU cost of a frame wherever the GPU is the limit.
+*/
+class SceneRendererBenchmarkTests : public SceneRendererMetalTests
+{
+protected:
+    /** mpc.glb lit like the Scene3D demo, its show lights moved by animate(). */
+    struct LightShow
+    {
+        Scene scene;
+        std::vector<EntityNode*> showLights;
+        BoundingBox bounds;
+        double time = 0.0;
+
+        /** Builds the scene, or returns false without the model. */
+        bool build (int numShowLights, float showRange, float keyRadius, RenderSettings::TierPreference tier, float aspectRatio)
+        {
+            const auto file = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory().getChildFile ("examples/graphics/data/gltf/mpc.glb");
+            auto model = GltfModel::loadFromFile (file);
+            if (model.failed())
+                return false;
+
+            auto root = model.getReference().createEntity();
+            scene.getRoot()->addChild (root);
+
+            auto* device = root->findChild ("Cube");
+            auto* framed = device != nullptr ? device : root.get();
+            root->setPosition (-framed->computeWorldBounds().getCenter());
+            bounds = framed->computeWorldBounds();
+
+            const auto lookAt = [] (EntityNode& entity, Vector3<float> eye, Vector3<float> target, Vector3<float> up)
+            {
+                entity.setPosition (eye);
+                entity.setRotation (Quaternion::fromRotationMatrix (Matrix4::lookAt (eye, target, up).inverted()));
+            };
+
+            // The top view of the demo, fitted to the aspect ratio
+            auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+            auto& cameraNode = camera->attach<CameraNode>();
+            const auto radius = jmax (0.001f, bounds.getRadius());
+            cameraNode.zNear = radius * 0.02f;
+            cameraNode.zFar = radius * 40.0f;
+
+            const auto tanHalfFov = std::tan (cameraNode.yFov * 0.5f);
+            const auto size = bounds.getSize();
+            const auto distance = jmax (size.getX() * 0.5f / tanHalfFov, size.getZ() * 0.5f / (tanHalfFov * aspectRatio)) * 1.03f;
+            const auto center = bounds.getCenter();
+            lookAt (*camera, center + Vector3<float> (0.0f, distance, 0.0f), center, { -1.0f, 0.0f, 0.0f });
+            scene.getRoot()->addChild (camera);
+            scene.setActiveCamera (camera.get());
+
+            auto key = EntityNode::Ptr (new EntityNode ("keyLight"));
+            auto& keyLight = key->attach<LightNode>();
+            keyLight.castsShadows = true;
+            keyLight.intensity = 4.0f;
+            keyLight.radius = keyRadius;
+            keyLight.color = { 1.0f, 0.96f, 0.9f };
+
+            const auto azimuth = degreesToRadians (120.0f);
+            const auto elevation = degreesToRadians (28.0f);
+            const Vector3<float> keyDirection (std::cos (elevation) * std::cos (azimuth), std::sin (elevation), std::cos (elevation) * std::sin (azimuth));
+            lookAt (*key, keyDirection * 10.0f, {}, { 0.0f, 1.0f, 0.0f });
+            scene.getRoot()->addChild (key);
+
+            for (int i = 0; i < numShowLights; ++i)
+            {
+                auto entity = EntityNode::Ptr (new EntityNode ("showLight"));
+                auto& showLight = entity->attach<LightNode> (LightNode::Type::point);
+                const auto color = Color::fromHSV (static_cast<float> (i) / static_cast<float> (numShowLights), 0.85f, 1.0f);
+                showLight.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
+                showLight.intensity = 0.5f;
+                showLight.range = showRange;
+                showLights.push_back (entity.get());
+                scene.getRoot()->addChild (entity);
+            }
+
+            scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& direction)
+            {
+                const auto up = jlimit (0.0f, 1.0f, direction.getY() * 0.5f + 0.5f);
+                return Vector3<float> (0.05f, 0.05f, 0.05f) + Vector3<float> (2.0f, 1.9f, 1.8f) * (up * up * up);
+            }));
+
+            scene.setEnvironmentIntensity (0.35f);
+            scene.setAmbientColor (Colors::black);
+            scene.setExposure (1.1f);
+            scene.setToneMapping (Scene::ToneMapping::agx);
+            scene.setEnvironmentVisible (true);
+            scene.setEnvironmentBlur (0.5f);
+            setTier (scene, tier);
+            return true;
+        }
+
+        /** Moves the show lights one 120 Hz frame further along the orbits of the demo's LightShowAnimator. */
+        void animate()
+        {
+            time += 1.0 / 120.0;
+
+            const auto center = bounds.getCenter();
+            const auto halfSize = bounds.getSize() * 0.5f;
+
+            for (size_t i = 0; i < showLights.size(); ++i)
+            {
+                const auto ring = static_cast<float> (i % 4);
+                const auto scale = 0.3f + 0.25f * ring;
+                const auto speed = (i % 2 == 0 ? 0.35f : -0.25f) * (1.0f + 0.15f * ring);
+                const auto angle = static_cast<float> (i) * 2.39996f + speed * static_cast<float> (time);
+                const auto height = halfSize.getY() * (0.6f + 0.25f * ring);
+
+                showLights[i]->setPosition ({ center.getX() + std::cos (angle) * halfSize.getX() * scale,
+                                              center.getY() + height,
+                                              center.getZ() + std::sin (angle) * halfSize.getZ() * scale });
+            }
+        }
+    };
+
+    /** The wall milliseconds per frame of 120 queued frames after 30 warm-up ones, or -1 on a failure. */
+    double timeFrames (LightShow& show, int width, int height)
+    {
+        SceneRenderer renderer;
+
+        const auto renderFrames = [&] (int count)
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                show.animate();
+                if (renderer.render (device, show.scene, width, height) == nullptr)
+                    return false;
+            }
+
+            return renderer.waitForGPU().wasOk();
+        };
+
+        if (! renderFrames (30))
+            return -1.0;
+
+        const auto start = Time::getMillisecondCounterHiRes();
+        if (! renderFrames (120))
+            return -1.0;
+
+        return (Time::getMillisecondCounterHiRes() - start) / 120.0;
+    }
+};
+
+TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
+{
+    const struct
+    {
+        const char* name;
+        RenderSettings::TierPreference tier;
+        int showLights;
+        float range;
+    } configs[] = {
+        { "full show64", RenderSettings::TierPreference::full, 64, 0.5f },
+        { "raster show64", RenderSettings::TierPreference::raster, 64, 0.5f },
+        { "raster key+7", RenderSettings::TierPreference::raster, 7, 0.5f },
+        { "full show64 range 0.35", RenderSettings::TierPreference::full, 64, 0.35f },
+        { "raster show16 range 0.35", RenderSettings::TierPreference::raster, 16, 0.35f },
+    };
+
+    for (const auto& [width, height] : { std::pair { 2560, 1600 }, std::pair { 3456, 2234 } })
+    {
+        for (const auto& config : configs)
+        {
+            for (const auto keyRadius : { 0.08f, 0.0f })
+            {
+                LightShow show;
+                if (! show.build (config.showLights, config.range, keyRadius, config.tier, static_cast<float> (width) / static_cast<float> (height)))
+                    GTEST_SKIP() << "mpc.glb is missing";
+
+                const auto milliseconds = timeFrames (show, width, height);
+                EXPECT_GT (milliseconds, 0.0) << config.name;
+
+                const auto label = String (config.name) + ", key radius " + String (keyRadius, 2) + ", " + String (width) + "x" + String (height);
+                RecordProperty (label.toStdString(), String (milliseconds, 3).toStdString());
+                std::cout << label.toStdString() << ": " << String (milliseconds, 3).toStdString() << " ms" << std::endl;
+            }
+        }
+    }
+}
 
 #endif
 

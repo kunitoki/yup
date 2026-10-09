@@ -33,6 +33,14 @@ float lightingSrgbToLinear (float value) noexcept
 } // namespace
 
 //==============================================================================
+bool LightingInputs::hasAreaLights (Span<const SceneDrawList::Light> lights) noexcept
+{
+    return std::any_of (lights.begin(), lights.end(), [] (const SceneDrawList::Light& light)
+    {
+        return light.node->radius > 0.0f;
+    });
+}
+
 LightingInputs LightingInputs::create (const GpuDevice::Ptr& device, const Scene& scene,
                                        Span<const SceneDrawList::Light> lights, const ShadowRenderer::Result& shadow)
 {
@@ -51,6 +59,8 @@ LightingInputs LightingInputs::create (const GpuDevice::Ptr& device, const Scene
     // The shadowed light gets shadow slot 0: draws pick theirs by list index through packedSlots
     std::vector<uint32> order;
     inputs.packedLights = GpuSceneData::packLights (lights, static_cast<int> (shadow.shadowInfo[0]), order);
+
+    inputs.areaLights = hasAreaLights (lights);
 
     inputs.packedSlots.resize (order.size());
     for (size_t slot = 0; slot < order.size(); ++slot)

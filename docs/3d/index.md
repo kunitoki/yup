@@ -282,7 +282,8 @@ depends on the tier:
   to 63 of the point and spot lights reaching it.
 - **Raster:** each object is lit by its 8 most influential lights: directional
   lights first, then the brightest and nearest point and spot lights that reach
-  it.
+  it. When more lights reach an object, the ones close to that cutoff are dimmed,
+  so a moving light fades in and out of an object instead of switching on or off.
 
 #### Area lights
 
@@ -301,9 +302,10 @@ auto& bulb = lamp->attach<yup::LightNode> (yup::LightNode::Type::point);
 bulb.radius = 0.1f;
 ```
 
-A radius of 0, the default, keeps the light punctual. The area light code is
-compiled into the shaders whether a scene uses it or not, so even scenes
-without area lights carry it. Very smooth surfaces seen at
+A radius of 0, the default, keeps the light punctual. Area lights have a cost:
+a frame where any light has a radius shades with the area light shaders, which
+are heavier for every pixel; when all radii are 0 the renderer switches back to
+the lighter punctual shaders. Very smooth surfaces seen at
 grazing angles can show a misplaced highlight under an area light. The radius softens the light and its highlights, not the shadows:
 their edges stay as sharp as those of a punctual light.
 

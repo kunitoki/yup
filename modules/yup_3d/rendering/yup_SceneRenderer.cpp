@@ -139,8 +139,8 @@ struct SceneRenderer::Impl
     {
     }
 
-    /** Creates the pipelines once per target formats, remembering a failure instead of retrying every frame. */
-    Result prepareResources (const ForwardPass::Targets& targets, uint32_t forwardSamples, bool full, bool failAreaLightTables)
+    /** Creates the pipelines once per target formats and area light variant, remembering a failure instead of retrying every frame. */
+    Result prepareResources (const ForwardPass::Targets& targets, uint32_t forwardSamples, bool full, bool areaLights, bool failAreaLightTables)
     {
         if (auto result = shadowRenderer.prepare (device); result.failed())
             return result;
@@ -165,11 +165,11 @@ struct SceneRenderer::Impl
             if (auto result = gbufferPass.prepare (device); result.failed())
                 return result;
 
-            if (auto result = lightingPass.prepare (device); result.failed())
+            if (auto result = lightingPass.prepare (device, areaLights); result.failed())
                 return result;
         }
 
-        return forwardPass.prepare (device, targets, forwardSamples);
+        return forwardPass.prepare (device, targets, forwardSamples, areaLights);
     }
 
     /** The canvas-backed colorTarget of both tiers, plus the depth of the raster tier. */
@@ -674,9 +674,6 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (full && (gbuffer.albedoOcclusion == nullptr || gbuffer.normalRoughness == nullptr || gbuffer.emissionMaterial == nullptr))
         return failFrame ("Unable to create the G-buffer targets");
 
-    if (auto result = impl->prepareResources (targets, forwardSamples, full, failAreaLightTables); result.failed())
-        return failFrame (result.getErrorMessage());
-
     const auto stamp = ++Impl::nextStamp;
 
     // The jitter cycles with the frame index: any taaSamples consecutive frames cover every point
@@ -685,6 +682,13 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     auto& drawList = impl->drawList;
     // The raster tier lights each draw with its own selection, the full tier through the clusters
     drawList.build (*scene.getRoot(), impl->viewData.getView(), { scene.isUsingDefaultLight(), ! full });
+
+    // A light with a radius selects the area light variants of the shading passes. Only a change
+    // of the lights switches variants, and the restarting signature hashes every light radius
+    const auto areaLights = LightingInputs::hasAreaLights (drawList.getLights());
+    if (auto result = impl->prepareResources (targets, forwardSamples, full, areaLights, failAreaLightTables); result.failed())
+        return failFrame (result.getErrorMessage());
+
     impl->resolvePreviousTransforms();
 
     // Before TAA fetches its history, so a change invalidates it for this very frame

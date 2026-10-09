@@ -33,8 +33,10 @@ namespace yup
     linearClamp sampler at binding 1), and on the full tier the lights and the light lists of the
     clusters at bindings 6 and 7; raster draws read their own light list at set 2 binding 12.
 
-    Pipelines are compiled lazily per color and depth format, sample count and velocity output: the
-    full tier variant is the one with a velocity target, and draws blended items only.
+    Pipelines are compiled lazily per color and depth format, sample count, velocity output and area
+    lights: the full tier variant is the one with a velocity target, and draws blended items only.
+    The area light variant (YUP_3D_AREA_LIGHTS) shades the frames where LightingInputs::areaLights
+    is set; only it declares and binds the area light tables and the linearClamp sampler.
 
     @internal
 */
@@ -54,7 +56,7 @@ public:
     struct Targets
     {
         GpuTexture::Ptr color;    ///< rgba8 / rgba16f, multisampled on raster.
-        GpuTexture::Ptr resolve;  ///< Single-sampled resolve target, or nullptr.
+        GpuTexture::Ptr resolve;  ///< Single-sampled resolve target, or nullptr. With one, color and depth are discarded once resolved.
         GpuTexture::Ptr depth;    ///< Depth, with the sample count of color.
         GpuTexture::Ptr velocity; ///< Full tier only (attachment 1), else nullptr.
     };
@@ -67,19 +69,22 @@ public:
     ~ForwardPass();
 
     //==============================================================================
-    /** Creates the default textures and samplers, and compiles the pipelines for these targets.
+    /** Creates the default textures and samplers, and compiles the pipelines for these targets,
+        with the area light variant when @p areaLights is set (see LightingInputs::areaLights).
 
-        Compiles once per target formats, sample count and velocity output, remembering a failure
-        instead of retrying every frame.
+        Compiles once per target formats, sample count, velocity output and area lights,
+        remembering a failure instead of retrying every frame.
     */
-    Result prepare (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount);
+    Result prepare (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights);
 
     /** Draws @p opaque then @p blend items, after clearing the targets and drawing the visible
         environment when @p clear is set, or over the loaded targets otherwise.
 
         On the raster tier each item is lit by the lights its SceneDrawList::DrawItem::lightIndices
-        pick from LightingInputs::packedLights; on the full tier by the lights of the clusters, from
-        LightingInputs::lights and LightingInputs::clusterLights.
+        pick from LightingInputs::packedLights, their intensities scaled by its
+        SceneDrawList::DrawItem::lightWeights; on the full tier by the lights of the clusters, from
+        LightingInputs::lights and LightingInputs::clusterLights. LightingInputs::areaLights picks
+        the area light variant, compiled the first time it is needed.
 
         @param device       The device to draw with.
         @param frame        The frame to record into.
@@ -102,7 +107,7 @@ public:
 private:
     struct Variant;
 
-    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount);
+    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights);
     Result createDefaults (const GpuDevice::Ptr& device);
 
     std::vector<std::unique_ptr<Variant>> variants;

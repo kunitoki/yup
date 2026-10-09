@@ -71,7 +71,7 @@ void SceneDrawList::build (const EntityNode& root, const Matrix4& view, const Bu
         for (auto* items : { &opaqueItems, &blendItems })
         {
             for (auto& item : *items)
-                item.numLights = selectLights (item.primitive->bounds.transformedBy (item.world), lights, lightRankings, item.lightIndices);
+                item.numLights = selectLights (item.primitive->bounds.transformedBy (item.world), lights, lightRankings, item.lightIndices, item.lightWeights);
         }
     }
 
@@ -112,10 +112,13 @@ int SceneDrawList::selectLights (const BoundingBox& worldBounds, Span<const Ligh
 {
     std::vector<LightRanking> rankings;
     rankLights (lights, rankings);
-    return selectLights (worldBounds, lights, rankings, indices);
+
+    std::array<float, maxLightsPerDraw> weights;
+    return selectLights (worldBounds, lights, rankings, indices, weights);
 }
 
-int SceneDrawList::selectLights (const BoundingBox& worldBounds, Span<const Light> lights, Span<const LightRanking> rankings, std::array<uint16, maxLightsPerDraw>& indices)
+int SceneDrawList::selectLights (const BoundingBox& worldBounds, Span<const Light> lights, Span<const LightRanking> rankings,
+                                 std::array<uint16, maxLightsPerDraw>& indices, std::array<float, maxLightsPerDraw>& weights)
 {
     // How much a light matters to the object, directional lights first, or nothing if it cannot reach it
     const auto getLightRank = [&worldBounds] (const Light& light, const LightRanking& ranking) -> std::optional<std::pair<bool, float>>
@@ -131,10 +134,24 @@ int SceneDrawList::selectLights (const BoundingBox& worldBounds, Span<const Ligh
             return std::nullopt;
 
         const auto distanceSquared = worldBounds.getDistanceSquared (light.position);
-        return std::pair { false, ranking.power / jmax (distanceSquared, node.radius * node.radius + 1.0e-4f) };
+
+        // The range window of the shaders: a light with a range ranks 0 at its edge, so it enters and leaves the selection smoothly
+        auto window = 1.0f;
+        if (node.range > 0.0f)
+        {
+            const auto ratioSquared = distanceSquared / (ranking.range * ranking.range);
+            window = 1.0f - ratioSquared * ratioSquared;
+
+            if (window <= 0.0f)
+                return std::nullopt;
+        }
+
+        return std::pair { false, window * ranking.power / jmax (distanceSquared, node.radius * node.radius + 1.0e-4f) };
     };
 
-    std::array<std::pair<bool, float>, maxLightsPerDraw> ranks {};
+    // One slot more than kept: the first light left out is where the kept ones fade out
+    std::array<std::pair<bool, float>, maxLightsPerDraw + 1> ranks {};
+    std::array<uint16, maxLightsPerDraw + 1> slots {};
     size_t count = 0;
 
     const auto numLights = jmin (lights.size(), static_cast<size_t> (std::numeric_limits<uint16>::max()) + 1);
@@ -158,14 +175,31 @@ int SceneDrawList::selectLights (const BoundingBox& worldBounds, Span<const Ligh
         for (auto i = count - 1; i > slot; --i)
         {
             ranks[i] = ranks[i - 1];
-            indices[i] = indices[i - 1];
+            slots[i] = slots[i - 1];
         }
 
         ranks[slot] = *rank;
-        indices[slot] = static_cast<uint16> (index);
+        slots[slot] = static_cast<uint16> (index);
     }
 
-    return static_cast<int> (count);
+    // A kept light fades out as its rank nears the one left out, so it never switches off within a frame
+    constexpr auto fadeRatio = 2.0f;
+    const auto& cutoff = ranks[maxLightsPerDraw];
+    const auto numKept = jmin (count, static_cast<size_t> (maxLightsPerDraw));
+
+    for (size_t i = 0; i < numKept; ++i)
+    {
+        indices[i] = slots[i];
+        weights[i] = 1.0f;
+
+        if (count > numKept && ranks[i].first == cutoff.first)
+        {
+            const auto t = jlimit (0.0f, 1.0f, (ranks[i].second - cutoff.second) / ((fadeRatio - 1.0f) * cutoff.second));
+            weights[i] = t * t * (3.0f - 2.0f * t);
+        }
+    }
+
+    return static_cast<int> (numKept);
 }
 
 void SceneDrawList::clear()

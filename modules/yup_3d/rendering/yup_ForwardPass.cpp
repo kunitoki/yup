@@ -32,8 +32,14 @@ namespace
 constexpr uint8_t forwardPassShaderBundle[] = {
 #include "../shaders/yup_ForwardPass.inc"
 };
+constexpr uint8_t forwardPassAreaLightsShaderBundle[] = {
+#include "../shaders/yup_ForwardPass_area_lights.inc"
+};
 constexpr uint8_t forwardPassFullShaderBundle[] = {
 #include "../shaders/yup_ForwardPass_full.inc"
+};
+constexpr uint8_t forwardPassFullAreaLightsShaderBundle[] = {
+#include "../shaders/yup_ForwardPass_full_area_lights.inc"
 };
 constexpr uint8_t backgroundShaderBundle[] = {
 #include "../shaders/yup_Background.inc"
@@ -65,23 +71,26 @@ struct ForwardPass::Variant
     GpuTextureFormat depthFormat;
     uint32_t sampleCount = 1;
     bool velocity = false;
+    bool areaLights = false;
 
     std::array<GpuPipeline::Ptr, 2 * GeometryBindings::numRasterStates> pipelines; // [blend * 4 + raster state], blend only on full
     GpuPipeline::Ptr background; // Raster only: the full tier shows the environment from LightingPass
     String error;
 
-    bool matches (const Targets& targets, uint32_t samples) const noexcept
+    bool matches (const Targets& targets, uint32_t samples, bool withAreaLights) const noexcept
     {
         return colorFormat == targets.color->getFormat()
             && depthFormat == targets.depth->getFormat()
             && sampleCount == samples
-            && velocity == (targets.velocity != nullptr);
+            && velocity == (targets.velocity != nullptr)
+            && areaLights == withAreaLights;
     }
 
     String compile (const GpuDevice::Ptr& device)
     {
-        auto bundle = velocity ? ShaderBundle::loadFromData (forwardPassFullShaderBundle, sizeof (forwardPassFullShaderBundle))
-                               : ShaderBundle::loadFromData (forwardPassShaderBundle, sizeof (forwardPassShaderBundle));
+        const auto load = [] (const auto& data) { return ShaderBundle::loadFromData (data, sizeof (data)); };
+        auto bundle = velocity ? (areaLights ? load (forwardPassFullAreaLightsShaderBundle) : load (forwardPassFullShaderBundle))
+                               : (areaLights ? load (forwardPassAreaLightsShaderBundle) : load (forwardPassShaderBundle));
         if (bundle.failed())
             return "Unable to load the scene shader bundle: " + bundle.getErrorMessage();
 
@@ -170,7 +179,7 @@ Result ForwardPass::createDefaults (const GpuDevice::Ptr& device)
     return Result::ok();
 }
 
-ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount)
+ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights)
 {
     if (device == nullptr || targets.color == nullptr || targets.depth == nullptr)
         return makeResultValueFail ("No device or no forward targets");
@@ -183,7 +192,7 @@ ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice:
 
     auto existing = std::find_if (variants.begin(), variants.end(), [&] (const auto& variant)
     {
-        return variant->matches (targets, sampleCount);
+        return variant->matches (targets, sampleCount, areaLights);
     });
 
     if (existing == variants.end())
@@ -193,6 +202,7 @@ ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice:
         variant->depthFormat = targets.depth->getFormat();
         variant->sampleCount = sampleCount;
         variant->velocity = targets.velocity != nullptr;
+        variant->areaLights = areaLights;
         variant->error = variant->compile (device);
 
         variants.push_back (std::move (variant));
@@ -205,9 +215,9 @@ ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice:
     return makeResultValueOk (existing->get());
 }
 
-Result ForwardPass::prepare (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount)
+Result ForwardPass::prepare (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights)
 {
-    const auto variant = prepareVariant (device, targets, sampleCount);
+    const auto variant = prepareVariant (device, targets, sampleCount, areaLights);
     return variant.failed() ? Result::fail (variant.getErrorMessage()) : Result::ok();
 }
 
@@ -216,7 +226,7 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
                           Span<const SceneDrawList::DrawItem> opaque, Span<const SceneDrawList::DrawItem> blend,
                           const Targets& targets, Output output, uint32_t sampleCount, std::optional<GpuColor> clear)
 {
-    const auto prepared = prepareVariant (device, targets, sampleCount);
+    const auto prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights);
     if (prepared.failed())
         return false;
 
@@ -241,8 +251,10 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     auto block = lighting.block;
     block.environmentInfo[3] = static_cast<float> (output);
 
+    // Once resolved, nothing reads the multisampled color and depth again
+    const auto storeOp = targets.resolve != nullptr ? GpuStoreOp::discard : GpuStoreOp::store;
     const auto load = GpuRenderOptions (GpuLoadOp::load, GpuStoreOp::store);
-    auto pass = surface->beginRenderPass (frame, clear.has_value() ? GpuRenderOptions (true, *clear) : load);
+    auto pass = surface->beginRenderPass (frame, GpuRenderOptions (clear.has_value() ? GpuLoadOp::clear : GpuLoadOp::load, storeOp, clear.value_or (GpuColor::transparentBlack())));
     if (! pass.isValid())
         return false;
 
@@ -253,6 +265,7 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
         pass.setColorAttachment (1, targets.velocity, clear.has_value() ? GpuRenderOptions (true, GpuColor::transparentBlack()) : load);
 
     GpuDepthStencilOptions depthOptions;
+    depthOptions.depthStoreOp = storeOp;
     if (! clear.has_value())
         depthOptions.depthLoadOp = GpuLoadOp::load;
 
@@ -260,14 +273,18 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
 
     // Per-frame sets, bound once: every declared resource must be bound, even when unused
     pass.setUniformBuffer (0, 0, &view.getBlock(), sizeof (ViewData::Block));
-    pass.setSampler (0, 1, linearClampSampler);
     pass.setSampler (0, 3, pointClampSampler);
     pass.setUniformBuffer (1, 0, &block, sizeof (block));
     pass.setTexture (1, 1, lighting.environment != nullptr ? lighting.environment : blackTexture);
     pass.setSampler (1, 2, lighting.environmentSampler != nullptr ? lighting.environmentSampler : geometry.getDefaultSampler());
     pass.setTexture (1, 3, lighting.shadowMap != nullptr ? lighting.shadowMap : geometry.getWhiteTexture());
-    pass.setTexture (1, 4, lighting.ltcMatrix != nullptr ? lighting.ltcMatrix : blackTexture);
-    pass.setTexture (1, 5, lighting.ltcAmplitude != nullptr ? lighting.ltcAmplitude : blackTexture);
+
+    if (variant.areaLights)
+    {
+        pass.setSampler (0, 1, linearClampSampler);
+        pass.setTexture (1, 4, lighting.ltcMatrix != nullptr ? lighting.ltcMatrix : blackTexture);
+        pass.setTexture (1, 5, lighting.ltcAmplitude != nullptr ? lighting.ltcAmplitude : blackTexture);
+    }
 
     if (variant.velocity)
     {
@@ -301,7 +318,10 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
             {
                 ForwardLightListBlock lightList {};
                 for (size_t i = 0; i < static_cast<size_t> (item.numLights); ++i)
+                {
                     lightList.lights[i] = lighting.getPackedLight (item.lightIndices[i]);
+                    lightList.lights[i].colorIntensity[3] *= item.lightWeights[i];
+                }
 
                 lightList.count[0] = static_cast<float> (item.numLights);
 

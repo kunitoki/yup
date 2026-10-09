@@ -35,7 +35,8 @@ namespace yup
     Set 1 binds the LightingInputs: 0 the LightingBlock, 1-2 the environment and its sampler, 3 the
     sun shadow map, 4-5 the area light tables (read through the set 0 linearClamp sampler at
     binding 1), 6 the lights, 7 the light lists of the clusters, 8 the material table; then the
-    G-buffer: 9-11 RT0-RT2 and 12 the depth.
+    G-buffer: 9-11 RT0-RT2 and 12 the depth. Only the area light variant (YUP_3D_AREA_LIGHTS), which
+    shades the frames where LightingInputs::areaLights is set, declares the tables and linearClamp.
 
     @internal
 */
@@ -50,27 +51,34 @@ public:
     ~LightingPass();
 
     //==============================================================================
-    /** Compiles the pipeline and creates the stand-in textures, once: a failure is remembered
-        instead of retried every frame.
+    /** Compiles the pipeline, of the area light variant when @p areaLights is set, and creates the
+        stand-in textures, once per variant: a failure is remembered instead of retried every frame.
     */
-    Result prepare (const GpuDevice::Ptr& device);
+    Result prepare (const GpuDevice::Ptr& device, bool areaLights);
 
-    /** Shades @p gbuffer into @p sceneColor, an rgba16float texture of its size.
+    /** Shades @p gbuffer into @p sceneColor, an rgba16float texture of its size, with the variant
+        LightingInputs::areaLights picks.
 
-        @returns False if the pass is not prepared, an input is missing or the draw could not be recorded.
+        @returns False if that variant is not prepared, an input is missing or the draw could not be recorded.
     */
     bool render (GpuFrame& frame, const ViewData& view, const GBufferPass::Targets& gbuffer,
                  const LightingInputs& lighting, const GpuTexture::Ptr& sceneColor);
 
     /** Releases the render targets not drawn into since the previous call: call it every frame the pass runs. */
-    void trimUnusedTargets() { pass.trimUnusedTargets(); }
+    void trimUnusedTargets();
 
     /** Releases every render target, for a frame without the pass, a resize or a failed frame. */
-    void releaseTargets() noexcept { pass.releaseTargets(); }
+    void releaseTargets() noexcept;
 
 private:
-    std::optional<Result> prepared;
-    FullscreenPass pass;
+    struct Variant
+    {
+        std::optional<Result> prepared;
+        FullscreenPass pass;
+    };
+
+    std::optional<Result> defaults;
+    std::array<Variant, 2> variants; // Punctual lights only, then with area lights
     GpuTexture::Ptr blackTexture;
     GpuTexture::Ptr whiteTexture;
     GpuSampler::Ptr pointClampSampler;

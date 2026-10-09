@@ -414,6 +414,65 @@ protected:
         box.expand (center + Vector3<float> (0.5f, 0.5f, 0.5f));
         return box;
     }
+
+    /** Adds a point light @p distance away from the triangle of addTriangle(), and returns its entity. */
+    EntityNode* addPointLight (float distance, float range = 0.0f)
+    {
+        auto entity = makeEntity();
+        entity->attach<LightNode> (LightNode::Type::point).range = range;
+        entity->setPosition ({ 0.5f, 0.5f, distance });
+        root->addChild (entity);
+        return entity.get();
+    }
+
+    /** Adds the triangle of makeTriangle(), in the z = 0 plane. */
+    void addTriangle()
+    {
+        auto entity = makeEntity();
+        entity->attach<MeshNode> (makeTriangle());
+        root->addChild (entity);
+    }
+
+    /** Builds the list and returns the weight of every light on its only item, 0 for a light it does not select. */
+    std::vector<float> buildEffectiveWeights()
+    {
+        drawList.build (*root, {}, { false, true });
+
+        std::vector<float> weights (drawList.getLights().size(), 0.0f);
+        const auto& item = drawList.getOpaqueItems()[0];
+        for (size_t i = 0; i < static_cast<size_t> (item.numLights); ++i)
+            weights[item.lightIndices[i]] = item.lightWeights[i];
+
+        return weights;
+    }
+
+    /** Sweeps a ninth light from 6 to 1.5 units towards the triangle, past 8 lights from 2 to 3.4
+        units away, and returns the largest change of the weight of any light between two steps
+        of 0.01.
+    */
+    float sweepNinthLight (float range)
+    {
+        addTriangle();
+        for (int i = 0; i < 8; ++i)
+            addPointLight (2.0f + 0.2f * static_cast<float> (i));
+
+        auto* sweeping = addPointLight (6.0f, range);
+
+        std::vector<float> previous;
+        auto largestStep = 0.0f;
+        for (int step = 0; step <= 450; ++step)
+        {
+            sweeping->setPosition ({ 0.5f, 0.5f, 6.0f - 0.01f * static_cast<float> (step) });
+
+            const auto weights = buildEffectiveWeights();
+            for (size_t i = 0; i < previous.size(); ++i)
+                largestStep = jmax (largestStep, std::abs (weights[i] - previous[i]));
+
+            previous = weights;
+        }
+
+        return largestStep;
+    }
 };
 
 TEST_F (SceneDrawListSelectionTests, PicksTheEightMostInfluentialLights)
@@ -561,6 +620,49 @@ TEST_F (SceneDrawListSelectionTests, DarkLightsOfEveryTypeTakeNoSlot)
     std::array<uint16, SceneDrawList::maxLightsPerDraw> indices {};
     ASSERT_EQ (SceneDrawList::selectLights (unitBoxAt ({}), lights, indices), 1);
     EXPECT_EQ (indices[0], 9);
+}
+
+TEST_F (SceneDrawListSelectionTests, EightLightsOrFewerKeepTheirFullIntensity)
+{
+    addTriangle();
+    for (int i = 0; i < 8; ++i)
+        addPointLight (2.0f + 0.01f * static_cast<float> (i));
+
+    drawList.build (*root, {}, { false, true });
+
+    const auto& item = drawList.getOpaqueItems()[0];
+    ASSERT_EQ (item.numLights, 8);
+    for (const auto weight : item.lightWeights)
+        EXPECT_EQ (weight, 1.0f);
+}
+
+TEST_F (SceneDrawListSelectionTests, LightsFadeOutTowardsTheFirstLightLeftOut)
+{
+    // Seven near lights, then two tied: the eighth slot ranks the same as the light left out
+    addTriangle();
+    for (int i = 0; i < 7; ++i)
+        addPointLight (1.0f);
+
+    addPointLight (5.0f);
+    addPointLight (5.0f);
+
+    const auto weights = buildEffectiveWeights();
+    for (int i = 0; i < 7; ++i)
+        EXPECT_EQ (weights[static_cast<size_t> (i)], 1.0f);
+
+    EXPECT_EQ (weights[7], 0.0f);
+    EXPECT_EQ (weights[8], 0.0f);
+}
+
+TEST_F (SceneDrawListSelectionTests, LightCrossingTheCutoffChangesWeightsInSmallSteps)
+{
+    EXPECT_LT (sweepNinthLight (0.0f), 0.05f);
+}
+
+TEST_F (SceneDrawListSelectionTests, LightEnteringItsRangeChangesWeightsInSmallSteps)
+{
+    // The light reaches the triangle from 4 units: it must rank 0 there, not 1 / 16
+    EXPECT_LT (sweepNinthLight (4.0f), 0.05f);
 }
 
 TEST_F (SceneDrawListTests, DefaultLightIsSelectedForEveryDraw)

@@ -45,7 +45,8 @@
     The scene is only redrawn continuously while the camera or the light show moves. The "Scene
     tree" button shows the entity tree of the scene, and "Free movement" lets the mouse orbit,
     pan and zoom the camera. "Render settings" edits how it is rendered, the angular size of the
-    key light, and turns on a light show of 64 colored point lights orbiting the device.
+    key light, and turns on a light show of colored point lights orbiting the device: 64 on the
+    full tier, 16 on the raster tier, which shades every draw with its own short list of lights.
 */
 class Scene3DDemo : public yup::Component
 {
@@ -569,17 +570,7 @@ private:
             lightShow = new yup::EntityNode ("lightShow");
             lightShow->setVisible (false);
             lightShow->attach<LightShowAnimator> (deviceBounds);
-
-            for (int i = 0; i < numShowLights; ++i)
-            {
-                auto showLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("showLight"));
-                auto& showLight = showLightEntity->attach<yup::LightNode> (yup::LightNode::Type::point);
-                const auto color = yup::Color::fromHSV (static_cast<float> (i) / static_cast<float> (numShowLights), 0.85f, 1.0f);
-                showLight.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
-                showLight.intensity = 0.5f;
-                showLight.range = 0.5f;
-                lightShow->addChild (showLightEntity);
-            }
+            setNumShowLights (numShowLightsFull);
 
             scene->getRoot()->addChild (lightShow);
 
@@ -632,6 +623,9 @@ private:
             updateStatus();
             repaint();
         }
+
+        /** The number of lights of the light show, shown or not. */
+        int getNumShowLights() const noexcept { return lightShow->getNumChildren(); }
 
         /** Shows or hides the light show: small colored point lights orbiting the device. */
         void setLightShow (bool shouldShow)
@@ -687,6 +681,14 @@ private:
 
             // Input is mapped with the camera that was actually drawn
             updateScreenMapping();
+
+            // The raster tier shades each draw with its own short list of lights: fewer show lights keep it fast
+            if (const auto* capabilities = getRenderer().getCapabilities(); capabilities != nullptr)
+            {
+                const auto isFull = capabilities->getTier() == yup::RenderCapabilities::Tier::full;
+                if (setNumShowLights (isFull ? numShowLightsFull : numShowLightsRaster))
+                    repaint();
+            }
 
             if (onFramePainted)
                 onFramePainted();
@@ -936,6 +938,31 @@ private:
                 tuneMaterials (*child);
         }
 
+        /** Rebuilds the light show with @p count lights, their hues around the color wheel, or
+            returns false if it already has as many. LightShowAnimator spreads them over its orbits.
+        */
+        bool setNumShowLights (int count)
+        {
+            if (lightShow->getNumChildren() == count)
+                return false;
+
+            while (lightShow->getNumChildren() > 0)
+                lightShow->removeChild (lightShow->getChild (0));
+
+            for (int i = 0; i < count; ++i)
+            {
+                auto showLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("showLight"));
+                auto& showLight = showLightEntity->attach<yup::LightNode> (yup::LightNode::Type::point);
+                const auto color = yup::Color::fromHSV (static_cast<float> (i) / static_cast<float> (count), 0.85f, 1.0f);
+                showLight.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
+                showLight.intensity = 0.5f;
+                showLight.range = 0.5f;
+                lightShow->addChild (showLightEntity);
+            }
+
+            return true;
+        }
+
         /** The number of lights in the visible part of a tree. */
         static int countLights (const yup::EntityNode& entity)
         {
@@ -1109,7 +1136,8 @@ private:
         static constexpr double zoomSeconds = 0.7;
         static constexpr float minOrbitPitch = 0.05f;
         static constexpr float maxOrbitPitch = 1.56f;
-        static constexpr int numShowLights = 64;
+        static constexpr int numShowLightsFull = 64;
+        static constexpr int numShowLightsRaster = 16;
 
         enum class DragMode
         {
@@ -1268,7 +1296,7 @@ private:
             };
 
             lightShowLabel.setText ("Light show", yup::dontSendNotification);
-            lightShowToggle.setButtonText ("64 orbiting lights");
+            lightShowToggle.setButtonText (yup::String (view.getNumShowLights()) + " orbiting lights");
             lightShowToggle.onClick = [this]
             {
                 view.setLightShow (lightShowToggle.getToggleState());
@@ -1300,6 +1328,11 @@ private:
                                        : "MSAA " + yup::String (view.getRenderer().getSampleCount()) + "x";
 
             setLabelText (statusLabel, "Tier: " + yup::String (isFull ? "full" : "raster") + " (" + getPlatformName (view.getPlatform()) + ")");
+
+            const auto lightShowText = yup::String (view.getNumShowLights()) + " orbiting lights";
+            if (lightShowToggle.getButtonText() != lightShowText)
+                lightShowToggle.setButtonText (lightShowText);
+
             setLabelText (detailLabel, detail);
             setLabelText (taaLabel, canTaa ? yup::String ("TAA samples") : yup::String ("TAA samples (needs the full tier)"));
 

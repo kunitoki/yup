@@ -58,6 +58,11 @@ struct YUP_API LightingInputs
     static LightingInputs create (const GpuDevice::Ptr& device, const Scene& scene,
                                   Span<const SceneDrawList::Light> lights, const ShadowRenderer::Result& shadow);
 
+    /** True when a light of @p lights has a radius: the frame then shades with the area light
+        variants of ForwardPass and LightingPass, the only ones reading the area light tables.
+    */
+    static bool hasAreaLights (Span<const SceneDrawList::Light> lights) noexcept;
+
     /** True when the environment shows behind the scene. */
     bool isEnvironmentVisible() const noexcept { return block.ambient[3] > 0.5f; }
 
@@ -71,6 +76,7 @@ struct YUP_API LightingInputs
     GpuTexture::Ptr shadowMap;           ///< The packed sun depth (set 1 binding 3), or nullptr when nothing casts.
     GpuTexture::Ptr ltcMatrix;           ///< The area light inverse matrices (set 1 binding 4), from LtcTables::createMatrixTexture().
     GpuTexture::Ptr ltcAmplitude;        ///< The area light amplitudes (set 1 binding 5), from LtcTables::createAmplitudeTexture().
+    bool areaLights = false;             ///< hasAreaLights() of the lights: the passes shade with their area light variant, and bind ltcMatrix and ltcAmplitude.
     std::vector<GpuLight> packedLights;  ///< Every light, directional ones first.
     std::vector<uint32> packedSlots;     ///< For each SceneDrawList::getLights() index, its slot in packedLights.
     GpuBuffer::Ptr lights;               ///< Full tier: packedLights in a storage buffer (set 1 binding 6).

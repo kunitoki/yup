@@ -39,7 +39,7 @@ namespace yup
     set and the tree has no LightNode, it holds the default light owned by the list.
 
     With BuildOptions::selectLightsPerDraw, every item also lists the lights shading it: the
-    maxLightsPerDraw most influential ones, see selectLights().
+    maxLightsPerDraw most influential ones, faded out near the cutoff, see selectLights().
 
     @see SceneRenderer
 */
@@ -63,6 +63,7 @@ public:
         float viewDistance = 0.0f;                   ///< Distance of the bounds center along the view direction.
         bool mirrored = false;                       ///< True if the world transform mirrors, which reverses the winding.
         std::array<uint16, maxLightsPerDraw> lightIndices {}; ///< Indices into getLights(), most influential first, see BuildOptions::selectLightsPerDraw.
+        std::array<float, maxLightsPerDraw> lightWeights = [] { std::array<float, maxLightsPerDraw> ones; ones.fill (1.0f); return ones; }(); ///< What scales the intensity of each of lightIndices, see selectLights().
         int numLights = 0;                           ///< How many lightIndices are valid.
     };
 
@@ -82,7 +83,7 @@ public:
         */
         bool addDefaultLight = false;
 
-        /** Fills DrawItem::lightIndices and DrawItem::numLights of every item with selectLights(). */
+        /** Fills DrawItem::lightIndices, DrawItem::lightWeights and DrawItem::numLights of every item with selectLights(). */
         bool selectLightsPerDraw = false;
     };
 
@@ -126,9 +127,18 @@ public:
 
         Directional lights come first, by intensity times color luminance. Then come the point and
         spot lights whose effective range (GpuSceneData::getEffectiveRange()) reaches the bounds, by
-        intensity * luminance / max (squared distance to the bounds, radius^2 + 1e-4). Dark lights
+        intensity * luminance / max (squared distance to the bounds, radius^2 + 1e-4). A light with
+        a range is also scaled by the window of the shaders, 1 - (distance / range)^4, so it ranks
+        0 at the edge of its range and enters or leaves the selection there without a jump. Dark lights
         of every type (GpuSceneData::isDark()) are skipped, and so are spot lights whose cone,
         widened to a sphere bound, misses the bounds. Ties keep the lower index.
+
+        When more lights qualify than fit, build() also gives each picked light a weight that
+        scales its intensity (DrawItem::lightWeights), so a light crossing the cutoff fades instead of switching on or off
+        within a frame: smoothstep (c, 2 c, rank), where c is the rank of the first light left
+        out. A light at least twice as influential as that one keeps its full intensity, and so
+        does every light when at most maxLightsPerDraw qualify, or a directional light when the
+        light left out is not directional.
 
         @param worldBounds  The bounds of the object, in world space.
         @param lights       The lights to pick from.
@@ -149,7 +159,8 @@ private:
     };
 
     static void rankLights (Span<const Light> lights, std::vector<LightRanking>& rankings);
-    static int selectLights (const BoundingBox& worldBounds, Span<const Light> lights, Span<const LightRanking> rankings, std::array<uint16, maxLightsPerDraw>& indices);
+    static int selectLights (const BoundingBox& worldBounds, Span<const Light> lights, Span<const LightRanking> rankings,
+                             std::array<uint16, maxLightsPerDraw>& indices, std::array<float, maxLightsPerDraw>& weights);
 
     void collect (const EntityNode& entity, const Matrix4& world, const Material* overrideMaterial, const Matrix4& view);
 

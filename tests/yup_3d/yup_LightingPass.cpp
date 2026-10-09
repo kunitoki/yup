@@ -40,15 +40,29 @@ protected:
         return shader != nullptr ? &shader->reflection : nullptr;
     }
 
+    static ShaderBundle load (const uint8* data, size_t size)
+    {
+        auto bundle = ShaderBundle::loadFromData (data, size);
+        EXPECT_TRUE (bundle.wasOk()) << bundle.getErrorMessage();
+        return bundle.wasOk() ? std::move (bundle.getReference()) : ShaderBundle();
+    }
+
     static ShaderBundle lightingPass()
     {
         static constexpr uint8 data[] = {
 #include <yup_3d/shaders/yup_LightingPass_full.inc>
         };
 
-        auto bundle = ShaderBundle::loadFromData (data, sizeof (data));
-        EXPECT_TRUE (bundle.wasOk()) << bundle.getErrorMessage();
-        return bundle.wasOk() ? std::move (bundle.getReference()) : ShaderBundle();
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassAreaLights()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights.inc>
+        };
+
+        return load (data, sizeof (data));
     }
 
     /** The (set, binding) pairs of @p resources, sorted. */
@@ -65,25 +79,38 @@ protected:
 
 TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
 {
-    const auto bundle = lightingPass();
-    const auto* fragment = fragmentOf (bundle);
-    ASSERT_NE (fragment, nullptr);
-
     using Bindings = std::vector<std::pair<uint32_t, uint32_t>>;
 
-    // The ViewBlock and the LightingBlock
-    EXPECT_EQ (bindingsOf (fragment->uniformBuffers), (Bindings { { 0, 0 }, { 1, 0 } }));
+    // The environment, the shadow map and, in the area light variant only, the two area light
+    // tables read through linearClamp, then RT0-RT2 and the depth: at most the 8 textures a bind group holds
+    const struct
+    {
+        const char* name;
+        ShaderBundle bundle;
+        Bindings images;
+        Bindings samplers;
+    } variants[] = {
+        { "punctual", lightingPass(), { { 1, 1 }, { 1, 3 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 } }, { { 0, 3 }, { 1, 2 } } },
+        { "area lights", lightingPassAreaLights(), { { 1, 1 }, { 1, 3 }, { 1, 4 }, { 1, 5 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 } }, { { 0, 1 }, { 0, 3 }, { 1, 2 } } },
+    };
 
-    // The environment, the shadow map and the two area light tables, then RT0-RT2 and the depth:
-    // the 8 textures a bind group holds at most
-    EXPECT_EQ (bindingsOf (fragment->separateImages), (Bindings { { 1, 1 }, { 1, 3 }, { 1, 4 }, { 1, 5 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 } }));
-    EXPECT_EQ (bindingsOf (fragment->separateSamplers), (Bindings { { 0, 1 }, { 0, 3 }, { 1, 2 } }));
-    EXPECT_TRUE (fragment->sampledImages.empty());
+    for (const auto& variant : variants)
+    {
+        const auto* fragment = fragmentOf (variant.bundle);
+        ASSERT_NE (fragment, nullptr) << variant.name;
 
-    // The lights, the light lists of the clusters and the material table, read only
-    EXPECT_EQ (bindingsOf (fragment->storageBuffers), (Bindings { { 1, 6 }, { 1, 7 }, { 1, 8 } }));
-    for (const auto& buffer : fragment->storageBuffers)
-        EXPECT_TRUE (buffer.readOnly) << buffer.name;
+        // The ViewBlock and the LightingBlock
+        EXPECT_EQ (bindingsOf (fragment->uniformBuffers), (Bindings { { 0, 0 }, { 1, 0 } })) << variant.name;
+
+        EXPECT_EQ (bindingsOf (fragment->separateImages), variant.images) << variant.name;
+        EXPECT_EQ (bindingsOf (fragment->separateSamplers), variant.samplers) << variant.name;
+        EXPECT_TRUE (fragment->sampledImages.empty()) << variant.name;
+
+        // The lights, the light lists of the clusters and the material table, read only
+        EXPECT_EQ (bindingsOf (fragment->storageBuffers), (Bindings { { 1, 6 }, { 1, 7 }, { 1, 8 } })) << variant.name;
+        for (const auto& buffer : fragment->storageBuffers)
+            EXPECT_TRUE (buffer.readOnly) << variant.name << ": " << buffer.name;
+    }
 }
 
 TEST_F (LightingPassTests, MaterialTableEntriesMirrorGpuMaterial)

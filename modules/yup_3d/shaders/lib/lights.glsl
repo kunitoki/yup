@@ -28,18 +28,22 @@
 
 // Punctual lights after KHR_lights_punctual (Khronos glTF 2.0 extension): inverse square falloff,
 // windowed by the range, and a smooth spot cone. Lights with a radius are area lights, shaded with
-// linearly transformed cosines (lightsEvaluateArea). One directional light can be shadowed from the
-// packed sun depth map, filtered with a 4x4 tent.
+// linearly transformed cosines (lightsEvaluateArea), compiled only with YUP_3D_AREA_LIGHTS: without
+// it every light is punctual, and the passes pick that variant for frames whose lights all have a
+// radius of 0. One directional light can be shadowed from the packed sun depth map, filtered with a
+// 4x4 tent.
 // The raster tier loops over the lights each draw selected. The full tier loops over every
 // directional light, then over the lights of the fragment's cluster (Olsson et al., "Clustered
 // Deferred and Forward Shading", HPG 2012), listed by the LightClusters compute pass.
 
 #include "lib/light_types.glsl"
 
+#ifdef YUP_3D_AREA_LIGHTS
 // The area light tables of LtcTables, read through the shared linear sampler
 layout(set = 0, binding = 1) uniform sampler linearClamp;
 layout(set = 1, binding = 4) uniform texture2D u_ltcMatrix;    // inverse matrices m00, m02, m11, m20 (m22 = 1)
 layout(set = 1, binding = 5) uniform texture2D u_ltcAmplitude; // lobe magnitude, its Fresnel part
+#endif
 
 #ifdef YUP_3D_TIER_FULL
 // Every light, directional ones first (GpuSceneData::packLights), and the light lists of the
@@ -138,6 +142,7 @@ vec3 lightIncoming(GpuLight light, vec3 worldPosition, out vec3 l)
     return light.colorIntensity.rgb * (light.colorIntensity.w * attenuation);
 }
 
+#ifdef YUP_3D_AREA_LIGHTS
 // The clamped cosine integrated over a sphere cap, divided by pi, from its unclipped form factor
 // len = sin^2 of its angular radius and the cosine z of its axis with the normal. Exact: cos z len
 // while the cap lies above the horizon, then the closed form of the cap clipped by it (J. Snyder,
@@ -304,11 +309,14 @@ vec3 lightsEvaluateArea(GpuLight light, BsdfSurface s, vec3 worldPosition)
 
     return incoming * (diffuse + specular);
 }
+#endif
 
 // What one light reflects: the BSDF times its incoming radiance, the light with shadow index 0
-// shadowed by the sun map. Lights with a radius take the area path, the others the punctual one
+// shadowed by the sun map. Lights with a radius take the area path (YUP_3D_AREA_LIGHTS only), the
+// others the punctual one
 vec3 lightsShadeLight(BsdfSurface s, GpuLight light, vec3 worldPosition, vec3 geometricNormal)
 {
+#ifdef YUP_3D_AREA_LIGHTS
     if (light.spotRadiusShadow.z > 0.0)
     {
         vec3 reflected = lightsEvaluateArea(light, s, worldPosition);
@@ -319,6 +327,7 @@ vec3 lightsShadeLight(BsdfSurface s, GpuLight light, vec3 worldPosition, vec3 ge
 
         return reflected;
     }
+#endif
 
     vec3 l;
     vec3 incoming = lightIncoming(light, worldPosition, l);
