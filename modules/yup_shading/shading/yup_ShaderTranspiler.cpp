@@ -1764,6 +1764,32 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
                 return makeResultValueOk (std::move (ref));
             }
 
+            case ShaderLanguage::spirv:
+            {
+                auto compiler = createSpirvCompiler (words, wordCount);
+                auto ref = extractReflection (*compiler);
+
+                // Vulkan binds the module's own set/binding numbers. Only resources the entry
+                // point uses count: glslang gives unused unbound ones a colliding binding 0,
+                // which would make the descriptor set layout invalid
+                const auto active = compiler->get_active_interface_variables();
+
+                for (auto* resources : { &ref.uniformBuffers, &ref.storageBuffers, &ref.sampledImages, &ref.separateImages,
+                                         &ref.separateSamplers, &ref.storageImages })
+                {
+                    resources->erase (std::remove_if (resources->begin(), resources->end(), [&active] (const auto& r)
+                                      {
+                                          return active.count (r.resourceId) == 0;
+                                      }),
+                                      resources->end());
+
+                    for (auto& r : *resources)
+                        r.backendSlot = r.binding;
+                }
+
+                return makeResultValueOk (std::move (ref));
+            }
+
             case ShaderLanguage::wgsl:
             {
                 auto compiler = createSpirvCompiler (words, wordCount);

@@ -116,7 +116,7 @@ YUP is usable for experimentation, examples, prototypes, and contributors who ar
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
 | **OpenGL 4.2**           | :white_check_mark: |                    | :white_check_mark: |                    |                           |                       |
 | **OpenGL ES3.1**         |                    |                    | :construction:     |                    | :white_check_mark:        |                       |
-| **WebGL2 (GLES3.0)**     |                    |                    |                    | :white_check_mark: |                           |                       |
+| **WebGL2 (GLES3.1)**     |                    |                    |                    | :white_check_mark: |                           |                       |
 | **Metal**                |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
 | **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
 | **Vulkan**               | :construction:     |                    | :construction:     |                    | :white_check_mark:        |                       |
