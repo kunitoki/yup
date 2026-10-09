@@ -583,7 +583,7 @@ void FragmentOverlay::onRequestPermissionsResultCallback (JNIEnv* env, FragmentO
     }
 
     t.onRequestPermissionsResult (requestCode,
-                                  javaStringArrayToYup (LocalRef<jobjectArray> (jPermissions)),
+                                  javaStringArrayToYup (LocalRef<jobjectArray> ((jobjectArray) env->NewLocalRef (jPermissions))),
                                   grantResults);
 }
 

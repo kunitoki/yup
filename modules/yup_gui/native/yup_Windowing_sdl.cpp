@@ -37,7 +37,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
     : ComponentNative (component, options.flags)
     , Thread ("YUP Render Thread", renderThreadStackSize)
     , parentWindow (parent)
-    , currentGraphicsApi (getGraphicsContextApi (options.graphicsApi))
+    , currentGraphicsApi (resolveGraphicsApi (options.graphicsApi))
     , clearColor (options.clearColor.value_or (Colors::black))
     , screenBounds (component.getBounds().to<int>())
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
@@ -224,8 +224,9 @@ SDLComponentNative::SDLComponentNative (Component& component,
 
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created GL context");
     }
-    else
+    else if (currentGraphicsApi != GpuPlatform::Vulkan)
     {
+        // Vulkan picks its present mode on the swapchain instead
         SDL_SetWindowSurfaceVSync (window, vsyncEnabled ? SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE : SDL_WINDOW_SURFACE_VSYNC_DISABLED);
     }
 
@@ -251,6 +252,14 @@ SDLComponentNative::SDLComponentNative (Component& component,
         if (guard->native != nullptr)
             guard->native->runWithComputeContext (fn);
     };
+
+#if YUP_RIVE_USE_VULKAN
+    if (currentGraphicsApi == GpuPlatform::Vulkan)
+    {
+        graphicsOptions.vulkan = makeVulkanOptions (window);
+        graphicsOptions.vulkan.transparent = options.flags.test (transparentWindow);
+    }
+#endif
 
     context = GraphicsContext::createContext (currentGraphicsApi, graphicsOptions);
     if (context == nullptr)
@@ -920,7 +929,7 @@ void SDLComponentNative::setVsyncEnabled (bool shouldEnable)
         return;
 
 #if ! YUP_EMSCRIPTEN
-    if (currentGraphicsApi != GpuPlatform::OpenGL && currentGraphicsApi != GpuPlatform::OpenGLES && window != nullptr)
+    if (currentGraphicsApi != GpuPlatform::OpenGL && currentGraphicsApi != GpuPlatform::OpenGLES && currentGraphicsApi != GpuPlatform::Vulkan && window != nullptr)
         SDL_SetWindowSurfaceVSync (window, shouldEnable ? SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE : SDL_WINDOW_SURFACE_VSYNC_DISABLED);
 #endif
 
@@ -2690,8 +2699,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             auto mouseButton = toMouseButton (event->button.button);
             auto keyModifiers = toKeyModifiers (SDL_GetModState());
 
-            if (event->button.windowID == SDL_GetWindowID (window) || lastComponentClicked != nullptr)
-                processEvent ([this, cursorPosition, mouseButton, keyModifiers] { handleMouseUp (cursorPosition, mouseButton, keyModifiers); });
+            processEvent ([this, windowID = event->button.windowID, cursorPosition, mouseButton, keyModifiers]
+            {
+                if (windowID == SDL_GetWindowID (window) || lastComponentClicked != nullptr)
+                    handleMouseUp (cursorPosition, mouseButton, keyModifiers);
+            });
 
             break;
         }
@@ -2700,11 +2712,10 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_MOUSE_WHEEL " << event->wheel.x << " " << event->wheel.y);
 
-            auto cursorPosition = getCursorPosition();
             auto wheelDelta = MouseWheelData { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) };
 
             if (event->wheel.windowID == SDL_GetWindowID (window))
-                processEvent ([this, cursorPosition, wheelDelta] { handleMouseWheel (cursorPosition, wheelDelta); });
+                processEvent ([this, wheelDelta] { handleMouseWheel (getCursorPosition(), wheelDelta); });
 
             break;
         }
@@ -2713,10 +2724,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_DOWN " << static_cast<int64> (event->tfinger.fingerID));
 
-            if (event->tfinger.windowID == SDL_GetWindowID (window))
+            processEvent ([this, finger = event->tfinger]
             {
-                handleTouchDown (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure);
-            }
+                if (finger.windowID == SDL_GetWindowID (window))
+                    handleTouchDown (finger.fingerID, getTouchPosition (finger), finger.pressure);
+            });
 
             break;
         }
@@ -2725,11 +2737,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_MOTION " << static_cast<int64> (event->tfinger.fingerID));
 
-            if (event->tfinger.windowID == SDL_GetWindowID (window)
-                || findTouchFingerIndex (event->tfinger.fingerID) >= 0)
+            processEvent ([this, finger = event->tfinger]
             {
-                handleTouchMove (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure);
-            }
+                if (finger.windowID == SDL_GetWindowID (window) || findTouchFingerIndex (finger.fingerID) >= 0)
+                    handleTouchMove (finger.fingerID, getTouchPosition (finger), finger.pressure);
+            });
 
             break;
         }
@@ -2738,11 +2750,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_UP " << static_cast<int64> (event->tfinger.fingerID));
 
-            if (event->tfinger.windowID == SDL_GetWindowID (window)
-                || findTouchFingerIndex (event->tfinger.fingerID) >= 0)
+            processEvent ([this, finger = event->tfinger]
             {
-                handleTouchUp (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure);
-            }
+                if (finger.windowID == SDL_GetWindowID (window) || findTouchFingerIndex (finger.fingerID) >= 0)
+                    handleTouchUp (finger.fingerID, getTouchPosition (finger), finger.pressure);
+            });
 
             break;
         }
@@ -2751,13 +2763,13 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_CANCELED " << static_cast<int64> (event->tfinger.fingerID));
 
-            if (event->tfinger.windowID == SDL_GetWindowID (window)
-                || findTouchFingerIndex (event->tfinger.fingerID) >= 0)
+            processEvent ([this, finger = event->tfinger]
             {
                 // Deliver the finger up so components can clean up, but never as a
                 // click: a cancel must not feed double-click detection.
-                handleTouchUp (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure, true);
-            }
+                if (finger.windowID == SDL_GetWindowID (window) || findTouchFingerIndex (finger.fingerID) >= 0)
+                    handleTouchUp (finger.fingerID, getTouchPosition (finger), finger.pressure, true);
+            });
 
             break;
         }
@@ -2766,12 +2778,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_KEY_DOWN " << (int) (event->key.key) << " " << event->key.scancode);
 
-            auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.mod);
             auto keyPress = toKeyPress (event->key.key, event->key.scancode, modifiers);
 
             if (event->key.windowID == SDL_GetWindowID (window))
-                processEvent ([this, cursorPosition, keyPress] { handleKeyDown (keyPress, cursorPosition); });
+                processEvent ([this, keyPress] { handleKeyDown (keyPress, getCursorPosition()); });
 
             break;
         }
@@ -2780,12 +2791,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_KEY_UP " << (int) (event->key.key) << " " << event->key.scancode);
 
-            auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.mod);
             auto keyPress = toKeyPress (event->key.key, event->key.scancode, modifiers);
 
             if (event->key.windowID == SDL_GetWindowID (window))
-                processEvent ([this, cursorPosition, keyPress] { handleKeyUp (keyPress, cursorPosition); });
+                processEvent ([this, keyPress] { handleKeyUp (keyPress, getCursorPosition()); });
 
             break;
         }
@@ -2943,7 +2953,13 @@ bool SDLComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WILL_ENTER_BACKGROUND");
 
-            static_cast<SDLComponentNative*> (userdata)->stopRendering();
+            auto* nativeComponent = static_cast<SDLComponentNative*> (userdata);
+            nativeComponent->stopRendering();
+
+            // The native window is about to go away, surfaces created on it must go first
+            if (nativeComponent->context != nullptr)
+                nativeComponent->context->detachFromWindow();
+
             return true;
         }
 
@@ -2956,7 +2972,18 @@ bool SDLComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
                 if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
                 {
                     if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
+                    {
+                        if (nativeComponent->context != nullptr)
+                        {
+                            const auto contentSize = nativeComponent->getContentSize();
+                            nativeComponent->context->attachToWindow (nativeComponent->getNativeHandle(),
+                                                                      contentSize.getWidth(),
+                                                                      contentSize.getHeight(),
+                                                                      nativeComponent->getScaleDpi());
+                        }
+
                         nativeComponent->startRendering();
+                    }
                     else
                         YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown native component");
                 }

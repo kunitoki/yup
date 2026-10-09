@@ -1,7 +1,7 @@
 # Graphics
 
 The graphics stack renders 2D vector content and GPU-accelerated scenes across
-Metal, Direct3D, OpenGL / OpenGL ES, WebGL and WebGPU (WASM / Emscripten), and Vulkan (in progress).
+Metal, Direct3D, OpenGL / OpenGL ES, WebGL and WebGPU (WASM / Emscripten), and Vulkan.
 It is built on the open source [Rive](https://rive.app/) renderer.
 
 **Modules covered:** `yup_rhi`, `yup_graphics`, `yup_shading`, `yup_animation`.
@@ -35,7 +35,7 @@ The `yup_graphics` and `yup_rhi` modules provide:
 - **`GpuDevice`** (`yup_rhi`) - a reference-counted GPU device abstraction that
   owns the native GPU device and command queue without requiring a window.
   Created via `GpuDevice::create(GpuPlatform, Options)`. Supports
-  `GpuPlatform::Metal`, `Direct3D`, `OpenGL`, `OpenGLES`, `WebGPU`, and `Headless`.
+  `GpuPlatform::Metal`, `Direct3D`, `OpenGL`, `OpenGLES`, `WebGPU`, `Vulkan`, and `Headless`.
   Use `GpuDevice` directly for GPU compute (e.g. audio DSP on the GPU) — no window needed.
 - **`GraphicsContext`** (`yup_graphics`) - wraps a `GpuDevice` and adds the
   window/swapchain layer plus Rive vector rendering. Created via
@@ -51,6 +51,51 @@ The `yup_graphics` and `yup_rhi` modules provide:
 ```{note}
 YUP uses American English: it is `Color` (not `Colour`) and `center` (not `centre`).
 ```
+
+## Vulkan
+
+Vulkan is the default graphics API on Android, with OpenGL ES as the fallback.
+On the other platforms it can be built in and requested explicitly.
+
+**Requirements.** Vulkan 1.1 (1.3 on PowerVR GPUs), and Android 10 on Android.
+The Vulkan loader is never linked: SDL resolves it when a window is created, so
+a device without a Vulkan driver keeps working and simply uses the fallback.
+
+**Fallback.** Each platform has an ordered list of graphics APIs, and a window
+uses the first one the device supports. On Android that is Vulkan, then OpenGL
+ES. The check runs before the window exists, because an Android window can only
+ever be rendered by one API.
+
+**Forcing a backend.** Request one for a window with
+`ComponentNative::Options::withGraphicsApi`:
+
+```cpp
+auto options = yup::ComponentNative::Options()
+                   .withGraphicsApi (yup::GpuPlatform::OpenGLES);
+```
+
+A requested API the device can't provide falls back to the platform list, and a
+line is logged. `GpuDevice::isPlatformSupported` runs the same check.
+
+**Presenting.** A window renders into an offscreen canvas that a small pass
+copies to the swapchain. That pass also:
+
+- rotates the image on Android, so the compositor never has to when the device
+  is turned (the swapchain matches the display orientation),
+- presents correctly to sRGB swapchains, when the surface offers no plain UNORM format, and
+- keeps the alpha for windows created with `ComponentNative::transparentWindow`,
+  when the surface supports compositing with alpha.
+
+If the GPU is lost, the window stops presenting and `GpuDevice::isDeviceLost`
+reports it; the app keeps running.
+
+**Building it.** The `YUP_ENABLE_VULKAN` CMake option compiles the backend. It
+defaults to ON for Android and OFF elsewhere; pass `-DYUP_ENABLE_VULKAN=ON` to
+build it on Linux, Windows or macOS (macOS also needs MoltenVK). With
+`just ninja OFF ON` the host build uses it. For Android debug builds,
+`-DYUP_ANDROID_VALIDATION_LAYERS=ON` packages the Khronos validation layer
+(`YUP_ANDROID_VALIDATION_LAYERS_PATH` points at the unzipped Android release of
+Vulkan-ValidationLayers), and its messages show up in logcat.
 
 ## Related areas
 

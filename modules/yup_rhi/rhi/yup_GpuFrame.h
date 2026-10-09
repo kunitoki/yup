@@ -111,6 +111,7 @@ private:
     friend class GpuCanvas;
     friend class GpuTarget;
     friend class GpuRenderPass;
+    friend class GpuComputePass;
 
     GpuFrame() = default;
 

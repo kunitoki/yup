@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- Vulkan backend (`GpuPlatform::Vulkan`), built with the new `YUP_ENABLE_VULKAN` CMake option (ON by default on Android). Rive renders through a Vulkan swapchain; the loader is resolved at runtime, through SDL for windows or by the device itself without one, and never linked, so devices without a Vulkan driver fall back to OpenGL ES. `GpuDevice::isPlatformSupported` probes an API before a window exists, `GpuDevice::Options::vulkan` carries the windowing hooks, and `GraphicsContext::detachFromWindow` releases the surface when an Android app moves to the background. `YUP_ANDROID_VALIDATION_LAYERS` packages the Khronos validation layer into Android debug builds.
+- Vulkan runs the RHI too: `GpuPipeline`, `GpuFrame` and `yup_3d` through Rive's ore layer, and native `GpuComputePipeline` / `GpuComputePass` with host visible storage buffers.
+- Shader bundles gain a `spirv` target: `ShaderInfo::binary` holds the Vulkan SPIR-V module, compiled with the vertex Y output flipped (`TranspileOptions::spirvInvertY`), and `ShaderBundle::getSPIRV` returns a stage's intermediate SPIR-V, which `yup_shader_bundler` now keeps. The embedded `yup_3d` and spectrogram bundles include it.
+- **Behavior change** Vulkan is the default graphics API on Android, ahead of OpenGL ES. A window picks the first API of its platform's list the device supports, and an API requested with `ComponentNative::Options::withGraphicsApi` that is unavailable falls back to that list instead of failing.
+- Vulkan windows pre-rotate to the display orientation on Android, present to sRGB swapchains, and keep their alpha when created with `ComponentNative::transparentWindow`.
+- `GpuDevice::isDeviceLost` reports a lost Vulkan device, which then stops submitting work instead of hanging; its windows stop presenting.
+- `GpuComputePass::begin (GpuFrame&)` records the dispatches into the frame on Metal, Vulkan and Direct3D 11, in order with its render passes and submitted with it; OpenGL and WebGPU begin a standalone pass. `GpuDevice::readBuffer` / `updateBuffer` on Vulkan wait only for the last submission that used the buffer, and a SPIR-V compute `GpuShaderSource` without a `bindingMap` is reflected at compile time.
+
 - `yup_3d`: 3D scenes of `EntityNode`s with attached parts, glTF 2.0 / GLB loading through the new `tinygltf` module, and PBR rendering in a `SceneComponent`. Adds `Quaternion` to `yup_graphics` and a Scene 3D demo.
 - `yup_3d`: environment lighting and shadows. `EnvironmentMap` bakes reflections and diffuse light from any radiance function, set with `Scene::setEnvironment` and optionally drawn behind the scene; directional lights with `LightNode::castsShadows` cast filtered shadows; `Scene::setToneMapping` adds the ACES filmic curve. The Scene 3D demo shows a painted MPC-style device lit by a photo studio.
 - Fixed `Graphics::fillFittedText` drawing every run of a `StyledText` in the fill color when only some runs were appended with their own color: those runs now keep it, and only the others use the fill.
@@ -29,6 +37,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Module declarations accept `vsToolOverrides` (`extension=Tool` pairs) to set the Visual Studio build tool of a module's non-source files. The rive module uses `hlsl=None`, so MSBuild no longer tries to compile its vendored HLSL shader sources.
 - Removed the Dawn backend: its `GraphicsContext`, `GpuDevice` and compute paths, and the `YUP_RIVE_USE_DAWN` config. WebGPU is only available on Emscripten.
 - Fixed a crash on macOS and iOS when a window closed while its last frame was still rendering on the GPU: the Metal render context could be freed before its completion handlers ran.
+- Fixed touch input on Android being handled on the Java UI thread instead of the message thread. It raced the render thread, which tripped message thread assertions and crashed with use-after-free and pure virtual calls while pages or effects changed. Soft keyboard keys and mouse wheel events no longer read the cursor position off the message thread either.
+- Fixed a crash on Android when an OpenGL `GpuDevice` was created on a thread with no EGL context current, as the GPU Audio Processing demo does when windows render with Vulkan. The device is now created without a renderer and reports no compute.
+- A Vulkan `GpuDevice` created without `GpuDevice::Options::vulkan::getInstanceProcAddr` loads the system Vulkan loader itself, so devices without a window, like compute-only ones, need no windowing layer. The GPU Audio Processing demo runs its compute shader on Vulkan where it is built in, and its status shows the backend or that the audio plays unprocessed.
+- Fixed a crash creating a desktop OpenGL `GpuDevice` without `GpuDevice::Options::loaderFunction`: the device is now created without a renderer and reports no compute.
+- Fixed an Android JNI warning ("Attempt to remove non-JNI local reference") after a permission request: the result callback deleted the reference Java passed in.
 - Fixed a data race in `MessageManagerLock` when a thread waiting for the lock is told to exit, reported by ThreadSanitizer while windows stop their render thread.
 - **Behavior change** Fills and clip paths now follow the path's non-zero or even-odd fill rule. Window rendering forced Rive's clockwise rule on every fill, which dropped the parts of self-intersecting or overlapping paths winding against the rest of the path; this can also change the Rive interlock mode a backend uses. Feathered fills, which Rive only draws clockwise, go through the new `Path::createFillPolygon` first.
 - Fixed WebAssembly windows not re-evaluating a stationary pointer when painted content moved under it, so hover and cursor didn't follow widgets displaced by effects such as the Component Effects wave.
@@ -458,6 +471,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Thirdparty
 
+- New `vulkan_library` module (`thirdparty/vulkan_library`): Khronos Vulkan-Headers `vulkan-sdk-1.4.321` and Vulkan Memory Allocator `v3.3.0`, header-only, the versions the Rive runtime builds against (pinned in `thirdparty/vulkan_vendor_versions.json`).
 - New `asmjit_library` module (`thirdparty/asmjit_library`): AsmJit machine-code generation library (core, x86, AArch64 and ujit backends), statically linked via the YUP module system.
 
 ### Breaking changes

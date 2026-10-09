@@ -39,6 +39,8 @@ ShaderLanguage cacheShaderLanguageForApi (GpuPlatform api)
             return ShaderLanguage::essl;
         case GpuPlatform::WebGPU:
             return ShaderLanguage::wgsl;
+        case GpuPlatform::Vulkan:
+            return ShaderLanguage::spirv;
         default:
             return ShaderLanguage::glsl;
     }
@@ -124,13 +126,19 @@ String GpuPipelineCache::generateCacheKey (const ShaderBundle& bundle,
     String payload;
     payload << "api:" << (int) api;
 
+    // Binary targets carry no source text, their module bytes tell variants apart
+    auto binaryDigest = [] (const ShaderInfo& info)
+    {
+        return info.binary.isEmpty() ? String() : SHA1 (info.binary.getData(), info.binary.getSize()).toHexString();
+    };
+
     if (vs != nullptr)
-        payload << "|vs:" << vs->source << "|vse:" << vs->entryPoint;
+        payload << "|vs:" << vs->source << "|vsb:" << binaryDigest (*vs) << "|vse:" << vs->entryPoint;
     else
         payload << "|vs:<none>";
 
     if (fs != nullptr)
-        payload << "|fs:" << fs->source << "|fse:" << fs->entryPoint;
+        payload << "|fs:" << fs->source << "|fsb:" << binaryDigest (*fs) << "|fse:" << fs->entryPoint;
     else
         payload << "|fs:<none>";
 

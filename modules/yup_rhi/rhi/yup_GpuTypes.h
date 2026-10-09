@@ -31,17 +31,19 @@ enum class GpuPlatform
     OpenGLES, ///< Specifies the use of OpenGL ES (GLES 3.0+) for rendering (Android, WASM).
     Direct3D, ///< Specifies the use of Direct3D for rendering.
     Metal,    ///< Specifies the use of Metal for rendering.
-    WebGPU    ///< Specifies the use of WebGPU (native browser WebGPU on Emscripten).
+    WebGPU,   ///< Specifies the use of WebGPU (native browser WebGPU on Emscripten).
+    Vulkan    ///< Specifies the use of Vulkan 1.1+ for rendering (built with the YUP_ENABLE_VULKAN CMake option).
 };
 
 //==============================================================================
 /** Identifies the shading language of a GpuShaderSource code block. */
 enum class GpuShaderLanguage : uint8_t
 {
-    wgsl = 0, ///< WGSL (WebGPU Shading Language).
-    glsl = 1, ///< GLSL (GLES 3.0+, GL path only).
-    msl = 2,  ///< MSL (Metal Shading Language, Metal backend only).
-    hlsl = 3, ///< HLSL (DirectX Shading Language, DirectX backend only).
+    wgsl = 0,  ///< WGSL (WebGPU Shading Language).
+    glsl = 1,  ///< GLSL (GLES 3.0+, GL path only).
+    msl = 2,   ///< MSL (Metal Shading Language, Metal backend only).
+    hlsl = 3,  ///< HLSL (DirectX Shading Language, DirectX backend only).
+    spirv = 4, ///< SPIR-V binary module (Vulkan backend only), code holds the 32-bit words.
 };
 
 //==============================================================================

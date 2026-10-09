@@ -606,6 +606,16 @@ TEST_F (GpuFrameMockTests, SubmitCallsOreEndFrame)
     EXPECT_TRUE (frame.submit());
 }
 
+TEST_F (GpuFrameMockTests, ComputePassOnSubmittedFrameIsInvalid)
+{
+    auto frame = GpuFrame::begin (ctx);
+    ASSERT_TRUE (frame.isValid());
+    ASSERT_TRUE (frame.submit());
+
+    auto pass = GpuComputePass::begin (frame);
+    EXPECT_FALSE (pass.isValid());
+}
+
 TEST_F (GpuFrameMockTests, SubmitIsIdempotent)
 {
     EXPECT_CALL (*mockOreCtx, beginFrame (_));

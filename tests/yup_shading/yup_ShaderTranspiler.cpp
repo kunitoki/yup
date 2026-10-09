@@ -2911,16 +2911,29 @@ TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_TooSmallWithTargetLanguageFails)
     EXPECT_TRUE (result.getErrorMessage().contains ("too small"));
 }
 
-TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_UnsupportedTargetLanguageFails)
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_SpirvTargetDropsUnusedResources)
 {
-    auto spirv = transpiler->compileToSPIRV (
-        kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl);
-    ASSERT_TRUE (spirv.wasOk());
+    const char* source = R"glsl(
+#version 450
+layout(set = 0, binding = 1) uniform Used { vec4 color; };
+layout(set = 0, binding = 3) uniform Unused { vec4 other; };
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = color;
+}
+)glsl";
+
+    auto spirv = transpiler->compileToSPIRV (source, ShaderStage::fragment, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk()) << spirv.getErrorMessage();
 
     auto result = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::spirv);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
-    EXPECT_TRUE (result.failed());
-    EXPECT_TRUE (result.getErrorMessage().contains ("Unsupported target language"));
+    // Vulkan binds the module's own numbers, and only what the entry point uses
+    ASSERT_EQ (result.getReference().uniformBuffers.size(), 1u);
+    EXPECT_EQ (result.getReference().uniformBuffers[0].binding, 1u);
+    EXPECT_EQ (result.getReference().uniformBuffers[0].backendSlot, 1u);
 }
 
 TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_CorruptBinaryWithTargetLanguageFails)

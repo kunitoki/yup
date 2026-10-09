@@ -407,6 +407,9 @@ static int runCompileMode (const ArgumentList& args)
 
         for (const auto& info : result.getReference().getShaders())
             bundle.addShader (info);
+
+        if (const auto* spirv = result.getReference().getSPIRV (stage))
+            bundle.setSPIRV (stage, sourceLanguage, *spirv);
     }
 
     // Persist to file
@@ -514,7 +517,8 @@ static int runInspectMode (const ArgumentList& args)
             log->writeToLog ("  " + stageToString (shader.stage)
                            + " :: " + languageToString (shader.language)
                            + "  entry=" + shader.entryPoint
-                           + "  source=" + String ((int) shader.source.length()) + " bytes");
+                           + "  source=" + String ((int) shader.source.length()) + " bytes"
+                           + (shader.binary.isEmpty() ? String() : "  binary=" + String ((int) shader.binary.getSize()) + " bytes"));
         }
         return 0;
     }
@@ -567,7 +571,8 @@ static int runInspectMode (const ArgumentList& args)
             log->writeToLog (stageToString (shader.stage)
                            + " :: " + languageToString (shader.language)
                            + "  entry=" + shader.entryPoint
-                           + "  source=" + String ((int) shader.source.length()) + " bytes");
+                           + "  source=" + String ((int) shader.source.length()) + " bytes"
+                           + (shader.binary.isEmpty() ? String() : "  binary=" + String ((int) shader.binary.getSize()) + " bytes"));
         }
 
         if (doInfo)

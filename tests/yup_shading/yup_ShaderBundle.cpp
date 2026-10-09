@@ -346,6 +346,69 @@ TEST_F (ShaderBundleTests, SPIRVStoredAndRecovered)
     EXPECT_EQ (loaded.getReference().getShaders().size(), 1u);
 }
 
+TEST_F (ShaderBundleTests, GetSPIRVReturnsStageModuleAfterRoundtrip)
+{
+    ShaderBundle original;
+
+    MemoryBlock spirv (16, false);
+    for (size_t i = 0; i < 16; ++i)
+        static_cast<uint8_t*> (spirv.getData())[i] = static_cast<uint8_t> (i);
+
+    original.setSPIRV (ShaderStage::vertex, ShaderLanguage::glsl, spirv);
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::msl));
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+
+    auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    const auto* recovered = loaded.getReference().getSPIRV (ShaderStage::vertex);
+    ASSERT_NE (recovered, nullptr);
+    EXPECT_EQ (*recovered, spirv);
+}
+
+TEST_F (ShaderBundleTests, GetSPIRVReturnsNullForMissingStage)
+{
+    ShaderBundle bundle;
+    bundle.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::msl));
+
+    EXPECT_EQ (bundle.getSPIRV (ShaderStage::vertex), nullptr);
+    EXPECT_EQ (bundle.getSPIRV (ShaderStage::fragment), nullptr);
+}
+
+TEST_F (ShaderBundleTests, RoundtripBinaryPayloadPreserved)
+{
+    auto info = makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::spirv);
+    info.source = {};
+
+    // Odd length, so the chunk padding is exercised too
+    MemoryBlock binary (13, false);
+    for (size_t i = 0; i < binary.getSize(); ++i)
+        static_cast<uint8_t*> (binary.getData())[i] = static_cast<uint8_t> (0xa0 + i);
+
+    info.binary = binary;
+
+    ShaderBundle original;
+    original.addShader (info);
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::msl));
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+
+    auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    const auto* spirvInfo = loaded.getReference().findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+    ASSERT_NE (spirvInfo, nullptr);
+    EXPECT_EQ (spirvInfo->binary, binary);
+    EXPECT_TRUE (spirvInfo->source.isEmpty());
+
+    const auto* mslInfo = loaded.getReference().findShader (ShaderStage::fragment, ShaderLanguage::msl);
+    ASSERT_NE (mslInfo, nullptr);
+    EXPECT_TRUE (mslInfo->binary.isEmpty());
+}
+
 TEST_F (ShaderBundleTests, RoundtripAllThreeLanguages)
 {
     ShaderBundle original;
@@ -942,6 +1005,176 @@ TEST_F (ShaderBundleCompilerTests, CompileWithSpirvDebugInfoSucceeds)
     const auto* info = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::glsl);
     ASSERT_NE (info, nullptr);
     EXPECT_FALSE (info->source.isEmpty());
+}
+
+TEST_F (ShaderBundleCompilerTests, CompileVertexToSpirvEmitsVulkanModule)
+{
+    ShaderBundleCompiler compiler (transpiler);
+
+    ShaderBundleCompileRequest req;
+    req.source = kShaderBundleMinimalVertexGLSL;
+    req.sourceLanguage = ShaderLanguage::glsl;
+
+    ShaderBundleEntry entry;
+    entry.stage = ShaderStage::vertex;
+    entry.targetLanguages = { ShaderLanguage::spirv };
+    req.entries.push_back (entry);
+
+    auto result = compiler.compile (req);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* info = result.getReference().findShader (ShaderStage::vertex, ShaderLanguage::spirv);
+    ASSERT_NE (info, nullptr);
+
+    // A SPIR-V module, not the GLSL it was compiled from
+    EXPECT_TRUE (info->source.isEmpty());
+    ASSERT_GE (info->binary.getSize(), 5 * sizeof (uint32_t));
+    EXPECT_EQ (info->binary.getSize() % sizeof (uint32_t), 0u);
+
+    uint32_t magic = 0;
+    std::memcpy (&magic, info->binary.getData(), sizeof (magic));
+    EXPECT_EQ (magic, 0x07230203u);
+
+    EXPECT_EQ (info->entryPoint, "main");
+    ASSERT_FALSE (info->reflection.entryPoints.empty());
+    EXPECT_EQ (info->reflection.entryPoints.front().name, "main");
+    EXPECT_EQ (info->reflection.entryPoints.front().stage, ShaderStage::vertex);
+}
+
+TEST_F (ShaderBundleCompilerTests, CompileVertexToSpirvBakesInTheVulkanYFlip)
+{
+    ShaderBundleCompiler compiler (transpiler);
+
+    // A constant position could fold the negation away, so read it from an attribute
+    const char* source = R"glsl(
+#version 450
+layout(location = 0) in vec4 position;
+void main()
+{
+    gl_Position = position;
+}
+)glsl";
+
+    ShaderBundleCompileRequest req;
+    req.source = source;
+    req.sourceLanguage = ShaderLanguage::glsl;
+
+    ShaderBundleEntry entry;
+    entry.stage = ShaderStage::vertex;
+    entry.targetLanguages = { ShaderLanguage::spirv };
+    req.entries.push_back (entry);
+
+    auto result = compiler.compile (req);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* info = result.getReference().findShader (ShaderStage::vertex, ShaderLanguage::spirv);
+    const auto* intermediate = result.getReference().getSPIRV (ShaderStage::vertex);
+    ASSERT_NE (info, nullptr);
+    ASSERT_NE (intermediate, nullptr);
+
+    // The Vulkan module negates gl_Position.y, the module the text targets came from does not
+    EXPECT_NE (info->binary, *intermediate);
+
+    TranspileOptions flipped;
+    flipped.spirvInvertY = true;
+
+    auto expected = transpiler->compileToSPIRV (source, ShaderStage::vertex, ShaderLanguage::glsl, flipped);
+    ASSERT_TRUE (expected.wasOk()) << expected.getErrorMessage();
+    EXPECT_EQ (info->binary, expected.getReference());
+}
+
+TEST_F (ShaderBundleCompilerTests, CompileFragmentToSpirvKeepsTheIntermediateModule)
+{
+    ShaderBundleCompiler compiler (transpiler);
+
+    ShaderBundleCompileRequest req;
+    req.source = kShaderBundleMinimalFragmentGLSL;
+    req.sourceLanguage = ShaderLanguage::glsl;
+
+    ShaderBundleEntry entry;
+    entry.stage = ShaderStage::fragment;
+    entry.targetLanguages = { ShaderLanguage::spirv };
+    req.entries.push_back (entry);
+
+    auto result = compiler.compile (req);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* info = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+    const auto* intermediate = result.getReference().getSPIRV (ShaderStage::fragment);
+    ASSERT_NE (info, nullptr);
+    ASSERT_NE (intermediate, nullptr);
+
+    // The Y flip only touches vertex outputs
+    EXPECT_EQ (info->binary, *intermediate);
+}
+
+TEST_F (ShaderBundleCompilerTests, CompileSpirvReflectsBindingsAsVulkanSlots)
+{
+    ShaderBundleCompiler compiler (transpiler);
+
+    ShaderBundleCompileRequest req;
+    req.source = R"glsl(
+#version 450
+layout(set = 0, binding = 2) uniform Params { vec4 tint; };
+layout(set = 0, binding = 5) uniform texture2D u_texture;
+layout(set = 0, binding = 7) uniform sampler s_texture;
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = tint * texture(sampler2D(u_texture, s_texture), vec2(0.5));
+}
+)glsl";
+    req.sourceLanguage = ShaderLanguage::glsl;
+
+    ShaderBundleEntry entry;
+    entry.stage = ShaderStage::fragment;
+    entry.targetLanguages = { ShaderLanguage::spirv };
+    req.entries.push_back (entry);
+
+    auto result = compiler.compile (req);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* info = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+    ASSERT_NE (info, nullptr);
+
+    const auto& reflection = info->reflection;
+    ASSERT_EQ (reflection.uniformBuffers.size(), 1u);
+    ASSERT_EQ (reflection.separateImages.size(), 1u);
+    ASSERT_EQ (reflection.separateSamplers.size(), 1u);
+
+    EXPECT_EQ (reflection.uniformBuffers[0].backendSlot, 2u);
+    EXPECT_EQ (reflection.separateImages[0].backendSlot, 5u);
+    EXPECT_EQ (reflection.separateSamplers[0].backendSlot, 7u);
+}
+
+TEST_F (ShaderBundleCompilerTests, CompiledSpirvSurvivesRoundtrip)
+{
+    ShaderBundleCompiler compiler (transpiler);
+
+    ShaderBundleCompileRequest req;
+    req.source = kShaderBundleMinimalVertexGLSL;
+    req.sourceLanguage = ShaderLanguage::glsl;
+
+    ShaderBundleEntry entry;
+    entry.stage = ShaderStage::vertex;
+    entry.targetLanguages = { ShaderLanguage::spirv, ShaderLanguage::msl };
+    req.entries.push_back (entry);
+
+    auto result = compiler.compile (req);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    MemoryBlock mem;
+    ASSERT_TRUE (result.getReference().saveToMemoryBlock (mem).wasOk());
+
+    auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    const auto* original = result.getReference().findShader (ShaderStage::vertex, ShaderLanguage::spirv);
+    const auto* recovered = loaded.getReference().findShader (ShaderStage::vertex, ShaderLanguage::spirv);
+    ASSERT_NE (original, nullptr);
+    ASSERT_NE (recovered, nullptr);
+    EXPECT_EQ (recovered->binary, original->binary);
+    EXPECT_EQ (recovered->entryPoint, original->entryPoint);
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER

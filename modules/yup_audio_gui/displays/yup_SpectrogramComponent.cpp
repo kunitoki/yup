@@ -36,7 +36,7 @@ namespace
        --vert  modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.vert \
        --frag  modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.frag \
        --output /tmp/yup_SpectrogramComponentShader.ysl \
-       --target-langs glsl,essl,hlsl,msl,wgsl
+       --target-langs glsl,essl,hlsl,msl,spirv,wgsl
 
 // then embed the bundle bytes into the .inc (keep the two-line comment header):
 

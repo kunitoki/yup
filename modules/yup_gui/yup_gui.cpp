@@ -105,6 +105,9 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_system.h>
 #include <SDL3/SDL_video.h>
+#if YUP_RIVE_USE_VULKAN
+#include <SDL3/SDL_vulkan.h>
+#endif
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL_main.h>
 

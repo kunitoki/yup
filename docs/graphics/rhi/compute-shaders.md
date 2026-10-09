@@ -8,7 +8,7 @@ framebuffer, or graphics pipeline.
 ## Availability
 
 Compute shaders are available on backends that expose
-`GpuDevice::isComputeAvailable() == true`: **Metal**, **Direct3D 11**,
+`GpuDevice::isComputeAvailable() == true`: **Metal**, **Direct3D 11**, **Vulkan**,
 **WebGPU** (Emscripten), and **OpenGL 4.3+** / **OpenGL ES 3.1+**.
 
 Compute is **not** available on the Headless backend, nor on WebGL2 (Emscripten
@@ -24,6 +24,7 @@ does not yet expose compute dispatch, so `GpuComputePipeline` and
 | ------------ | -------------------------------------- | ---------------------------------- |
 | Metal        | `MTLComputePipelineState`              | `dispatchThreadgroups:`            |
 | Direct3D 11  | `ID3D11ComputeShader`                  | `ID3D11DeviceContext::Dispatch()`  |
+| Vulkan       | SPIR-V compute `VkPipeline`            | `vkCmdDispatch()`                  |
 | WebGPU       | `wgpu::ComputePipeline`                | `DispatchWorkgroups()`             |
 | OpenGL       | `GL_COMPUTE_SHADER` + program link     | `glDispatchCompute()`              |
 
@@ -86,6 +87,30 @@ uint32_t groupsX = (numElements + 255) / 256; // workgroupSize.x = 256
 pass.dispatch (groupsX, 1, 1);
 pass.finish(); // commits work to the GPU
 ```
+
+To feed render passes from compute results in the same frame, begin the pass on
+the frame with `GpuComputePass::begin (frame)`. On Metal and Vulkan the
+dispatches are encoded into the frame's command buffer, and on Direct3D 11 into
+the immediate context the frame draws with, so they run in order with the
+frame's render passes and are submitted with the frame:
+
+```cpp
+auto frame = GpuFrame::begin (device);
+
+auto pass = GpuComputePass::begin (frame);
+pass.setPipeline (pipeline);
+pass.setStorageBuffer (0, 0, particles);
+pass.dispatch (groupsX, 1, 1);
+
+auto renderPass = target->beginRenderPass (frame); // its draws see the dispatch
+// ...
+frame.submit(); // readBuffer sees the results from here on
+```
+
+A frame records one pass at a time: a render pass drawing on the frame finishes
+the compute pass, and beginning a compute pass closes the open render pass,
+which reopens on its next draw. OpenGL and WebGPU begin a standalone pass, as
+above.
 
 ## Storage buffers
 
@@ -154,7 +179,11 @@ the GPU:
 5. Results are routed to the audio output
 
 The compute shader runs on the audio I/O thread, using a dedicated `GpuDevice`
-that does not share state with the render thread. The tiny per-block
+that does not share state with the render thread. It needs no window: a Vulkan
+device created without `GpuDevice::Options::vulkan` loads the system Vulkan loader
+itself. An OpenGL device needs a context current on the creating thread and a
+`loaderFunction`; without them it reports no compute, and the demo plays the
+audio unprocessed. The tiny per-block
 parameters (gain, mix) stay a uniform buffer bound via `setUniformBuffer()` —
 `dispatch()` allocates a small temporary buffer for it on every call, but at
 16 bytes that's negligible next to the audio-block-sized input buffer that

@@ -28,6 +28,7 @@ android {
                 arguments += "-DANDROID_CPP_FEATURES=rtti exceptions"
                 arguments += "-DANDROID_ALLOW_UNDEFINED_SYMBOLS=FALSE"
                 arguments += "-DANDROID_PIE=ON"
+                arguments += "-DYUP_ENABLE_VULKAN=@YUP_ENABLE_VULKAN@"
             }
         }
     }

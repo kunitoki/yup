@@ -1165,10 +1165,30 @@ ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
     glslang::TShader shader (glslStage);
     shader.setEnvInput (toGlslangSource (sourceLang), glslStage, glslang::EShClientVulkan, 100);
 
-    auto sourceUtf8 = source.toStdString();
-    const char* srcPtr = sourceUtf8.c_str();
-    const int srcLen = static_cast<int> (sourceUtf8.length());
-    shader.setStringsWithLengths (&srcPtr, &srcLen, 1);
+    // glslang only implements invertY for HLSL. GLSL entry points get wrapped instead: the
+    // preamble renames the shader's entry point, and an appended one calls it, then flips Y
+    const bool invertY = options.spirvInvertY && stage == ShaderStage::vertex;
+    const bool wrapEntryPoint = invertY && sourceLang != ShaderLanguage::hlsl;
+
+    const auto entryName = options.entryPoint.isNotEmpty() ? options.entryPoint : String ("main");
+    const auto wrappedEntryName = "yup_spirv_inverted_" + entryName;
+
+    String entryWrapper;
+    if (wrapEntryPoint)
+    {
+        entryWrapper << "\n#undef " << entryName << "\n"
+                     << "void " << entryName << "()\n"
+                     << "{\n"
+                     << "    " << wrappedEntryName << "();\n"
+                     << "    gl_Position.y = -gl_Position.y;\n"
+                     << "}\n";
+    }
+
+    const auto sourceUtf8 = source.toStdString();
+    const auto wrapperUtf8 = entryWrapper.toStdString();
+    const char* srcPtrs[] = { sourceUtf8.c_str(), wrapperUtf8.c_str() };
+    const int srcLens[] = { static_cast<int> (sourceUtf8.length()), static_cast<int> (wrapperUtf8.length()) };
+    shader.setStringsWithLengths (srcPtrs, srcLens, wrapEntryPoint ? 2 : 1);
 
     if (options.entryPoint.isNotEmpty())
         shader.setEntryPoint (options.entryPoint.toRawUTF8());
@@ -1179,8 +1199,14 @@ ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
     // order, the same rule the WGSL transpiler applies, instead of all landing on binding 0
     shader.setAutoMapBindings (true);
 
+    if (invertY && ! wrapEntryPoint)
+        shader.setInvertY (true);
+
     // Inject defines as a preamble
     String preamble;
+
+    if (wrapEntryPoint)
+        preamble << "#define " << entryName << " " << wrappedEntryName << "\n";
 
     HashMap<String, String>::Iterator i (options.defines);
     while (i.next())
@@ -1588,6 +1614,32 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
 
                 auto ref = extractReflection (compiler);
                 fillHLSLBackendSlots (hlslSource, ref);
+
+                return makeResultValueOk (std::move (ref));
+            }
+
+            case ShaderLanguage::spirv:
+            {
+                auto compiler = createSpirvCompiler (words, wordCount);
+                auto ref = extractReflection (*compiler);
+
+                // Vulkan binds the module's own set/binding numbers. Only resources the entry
+                // point uses count: glslang gives unused unbound ones a colliding binding 0,
+                // which would make the descriptor set layout invalid
+                const auto active = compiler->get_active_interface_variables();
+
+                for (auto* resources : { &ref.uniformBuffers, &ref.storageBuffers, &ref.sampledImages, &ref.separateImages,
+                                         &ref.separateSamplers, &ref.storageImages })
+                {
+                    resources->erase (std::remove_if (resources->begin(), resources->end(), [&active] (const auto& r)
+                                      {
+                                          return active.count (r.resourceId) == 0;
+                                      }),
+                                      resources->end());
+
+                    for (auto& r : *resources)
+                        r.backendSlot = r.binding;
+                }
 
                 return makeResultValueOk (std::move (ref));
             }

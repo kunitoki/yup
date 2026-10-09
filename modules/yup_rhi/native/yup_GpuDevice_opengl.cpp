@@ -25,6 +25,10 @@
 #include "rive/renderer/gl/render_target_gl.hpp"
 #include "rive/renderer/ore/ore_context_gl.hpp"
 
+#if YUP_ANDROID
+#include <EGL/egl.h>
+#endif
+
 #if YUP_EMSCRIPTEN
 #include <emscripten/html5.h>
 #endif
@@ -79,6 +83,12 @@ public:
         : options (options)
     {
 #if RIVE_DESKTOP_GL
+        if (options.loaderFunction == nullptr)
+        {
+            fprintf (stderr, "No GL loader function, GL device unavailable.\n");
+            return;
+        }
+
         if (! gladLoadCustomLoader ((GLADloadfunc) options.loaderFunction))
         {
             fprintf (stderr, "Failed to initialize glad.\n");
@@ -90,6 +100,14 @@ public:
         if (emscripten_webgl_get_current_context() == 0)
         {
             fprintf (stderr, "No current WebGL context, GL device unavailable.\n");
+            return;
+        }
+#endif
+
+#if YUP_ANDROID
+        if (eglGetCurrentContext() == EGL_NO_CONTEXT)
+        {
+            fprintf (stderr, "No current EGL context, GL device unavailable.\n");
             return;
         }
 #endif

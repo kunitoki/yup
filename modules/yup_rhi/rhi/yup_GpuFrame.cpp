@@ -22,6 +22,8 @@
 namespace yup
 {
 
+void yup_finishComputePass (GpuComputePass::Impl& pass);
+
 //==============================================================================
 
 struct GpuFrame::Impl
@@ -29,12 +31,17 @@ struct GpuFrame::Impl
     GpuDevice::Ptr device;
     rive::ore::Context* oreCtx = nullptr;
     uint64_t generation = 0;
+    void* commandBuffer = nullptr;
     bool submitted = false;
     bool released = false;
 
     /** The ore pass currently open in this frame. Ore no longer finishes a previous pass by
         itself, and Metal and D3D12 allow one open encoder at a time. */
     rive::ore::RenderPass* openPass = nullptr;
+
+    /** The compute pass recording into this frame. Dispatches cannot run inside a render
+        pass, so beginning one finishes it, and so does submitting the frame. */
+    GpuComputePass::Impl* openComputePass = nullptr;
 
     std::vector<rive::rcp<rive::ore::Buffer>> liveBuffers;
     std::vector<rive::rcp<rive::ore::TextureView>> liveViews;
@@ -135,9 +142,10 @@ GpuFrame GpuFrame::begin (GpuDevice::Ptr ctx)
     i->device = ctx;
     i->oreCtx = oreCtx;
     i->generation = ctx->beginFrameGeneration();
+    i->commandBuffer = ctx->beginFrameCommands (i->generation);
 
     rive::ore::Context::FrameDescriptor frameDesc;
-    frameDesc.externalCommandBuffer = nullptr;
+    frameDesc.externalCommandBuffer = i->commandBuffer;
     frameDesc.safeFrameNumber = ctx->getSafeFrameGeneration();
     frameDesc.currentFrameNumber = i->generation;
 
@@ -189,7 +197,11 @@ bool GpuFrame::submit()
     if (i->openPass != nullptr)
         i->openPass->finish();
 
+    if (i->openComputePass != nullptr)
+        yup_finishComputePass (*i->openComputePass);
+
     i->oreCtx->endFrame();
+    i->device->submitFrameCommands (i->commandBuffer);
     i->submitted = true;
 
     return true;
@@ -202,6 +214,7 @@ void GpuFrame::waitForGPU()
         return;
 
     i->oreCtx->waitForGPU();
+    i->device->waitFrameCommands (i->commandBuffer);
 
     i->releaseNow();
 }
