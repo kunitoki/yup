@@ -62,6 +62,21 @@ public:
     float outerConeAngle = MathConstants<float>::pi * 0.25f;        ///< Spot angle from the axis where the light ends.
     float radius = 0.0f;                                            ///< Size of the emitter, 0 for a punctual light: the sphere radius in world units for point and spot lights (spot lights keep their cone), the angular radius in radians for a directional light.
     bool castsShadows = false;                                      ///< True for a directional light to cast shadows, see SceneRenderer.
+
+    /** A multiplier on the automatic depth bias of the shadow maps, which follows their texel size.
+        Raise it when lit surfaces show shadow acne, lower it when shadows detach from their casters;
+        0 disables the automatic bias. Both tiers.
+    */
+    float shadowBias = 1.0f;
+
+    /** True to add short screen-space contact shadows where objects meet, finer than the shadow maps
+        resolve. Independent of castsShadows. Full tier only, with RenderSettings::contactShadows on:
+        raster ignores it, which is not an error.
+    */
+    bool contactShadows = false;
+
+    float contactShadowDistance = 0.2f;   ///< How far a contact shadow ray marches towards the light, in world units, negative counts as 0. Full tier only, see contactShadows.
+    float contactShadowThickness = 0.05f; ///< How deep a surface hit by a contact shadow ray is assumed to be, in world units, negative counts as 0. Full tier only, see contactShadows.
 };
 
 } // namespace yup

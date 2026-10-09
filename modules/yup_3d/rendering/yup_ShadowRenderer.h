@@ -25,12 +25,19 @@ namespace yup
 {
 
 //==============================================================================
-/** Renders the sun shadow map of a frame.
+/** Renders the shadow maps of a frame and writes the shadow records the shading passes read.
 
-    The first directional light with LightNode::castsShadows, among the lights shading the frame,
-    is fitted with an orthographic projection around the bounding sphere of the opaque items. Its
-    depth is packed into the four channels of a SceneRenderer::shadowMapSize square rgba8unorm
-    map, which every backend can render to and read with texelFetch.
+    The first directional light with LightNode::castsShadows that is not dark (GpuSceneData::isDark())
+    is the sun. Its cascades (ShadowCascades, RenderCapabilities::getCascadeCount(), one for an
+    orthographic camera) are fitted to the receivers (opaque, masked and blended items) and the
+    casters (opaque and masked items), and rendered depth only, with slope-scaled depth bias, into
+    the layers of one depth32float array texture of RenderCapabilities::getShadowResolution() texels.
+    Masked casters discard the texels their material cuts out.
+
+    The renderer owns the cascade texture: it is created when a sun casts, kept while it fits, and
+    released when no sun casts. Its maps are rendered again only when the casters, the shadow
+    casting lights, the shadow settings or the cascade fit change (Inputs::signature and the
+    cascade matrices); invalidate() forgets them, for frames the GPU did not execute.
 
     @internal
 */
@@ -38,38 +45,68 @@ class YUP_API ShadowRenderer
 {
 public:
     //==============================================================================
-    /** The map of a frame and how to read it. */
-    struct Result
+    /** What the shadows of a frame depend on. */
+    struct Inputs
     {
-        GpuTexture::Ptr map;           ///< The packed depth, or nullptr when nothing casts.
-        Matrix4 shadowMatrix;          ///< World to shadow map clip space, depth from 0 to 1.
-        float shadowInfo[4] = { -1.0f, 0.0f, 0.0f, 0.0f }; ///< Shadowed light index into SceneDrawList::getLights() (-1 for none), texel size, normal offset, depth bias.
-        String error;                  ///< Why the shadow pass could not be recorded, empty on success.
+        const SceneDrawList& drawList;          ///< The items and lights of the frame.
+        const ViewData& view;                   ///< The camera the cascades are fitted to.
+        const RenderCapabilities& capabilities; ///< The tier: its cascade count and temporal anti-aliasing.
+        const RenderSettings& settings;         ///< The shadow settings.
+        uint64 signature = 0;                   ///< A hash of what the maps depend on besides the cascade fit: the casters, the shadow casting lights and the settings.
+        bool enabled = true;                    ///< False when the shadow comparison sampler is missing: nothing is shadowed.
     };
 
     //==============================================================================
-    /** Creates a renderer. GPU objects are created by prepare(). */
+    /** Creates a renderer. GPU objects are created by prepare() and render(). */
     ShadowRenderer();
 
     /** Destructor. */
     ~ShadowRenderer();
 
     //==============================================================================
-    /** Compiles the shadow pipeline once, remembering a failure instead of retrying every frame. */
-    yup::Result prepare (const GpuDevice::Ptr& device);
+    /** Compiles the opaque and masked shadow pipelines once, remembering a failure instead of retrying every frame. */
+    Result prepare (const GpuDevice::Ptr& device);
 
-    /** Today's single packed sun map, moved verbatim. Returns an empty map when nothing casts, and
-        sets Result::error when the shadow pass cannot begin.
+    /** Renders every shadow map the frame needs into @p frame, unless the maps it holds still fit,
+        and writes the shadow records of the frame into @p out.
+
+        @returns A failure when the cascade texture cannot be created or a shadow pass cannot be
+                 recorded; the frame must then be abandoned.
     */
-    Result render (const GpuDevice::Ptr& device, GpuFrame& frame, const SceneDrawList& drawList);
+    Result render (const GpuDevice::Ptr& device, GpuFrame& frame, const Inputs& inputs, GpuShadowData& out);
+
+    /** The sun cascades of the last render(): a depth32float array texture, or a one layer
+        placeholder when no sun casts. */
+    GpuTexture::Ptr getCascadeTexture() const noexcept;
+
+    /** For each light of the last render()'s draw list, its first shadow record, -1 when unshadowed. */
+    Span<const int> getShadowRecordIndices() const noexcept { return recordIndices; }
+
+    /** Forgets the rendered maps, so the next render() draws them again: for frames the GPU failed
+        to execute, or that were abandoned after their shadow passes were recorded. */
+    void invalidate() noexcept;
+
+    /** @internal The number of render() calls that drew shadow maps, for tests. */
+    int getNumRenderedFrames() const noexcept { return numRenderedFrames; }
 
 private:
-    bool prepareTarget (const GpuDevice::Ptr& device);
+    struct RenderedState;
 
-    GpuPipeline::Ptr pipeline;
-    GpuTarget::Ptr target;
-    GpuTexture::Ptr depthTexture;
-    std::optional<yup::Result> preparation;
+    Result preparePlaceholder (const GpuDevice::Ptr& device, GpuFrame& frame);
+    bool prepareCascades (const GpuDevice::Ptr& device, int resolution, int numCascades);
+    Result renderCascade (const GpuDevice::Ptr& device, GpuFrame& frame, const SceneDrawList& drawList, int layer, const Matrix4& viewProjection);
+
+    GeometryBindings geometry;
+    GpuPipeline::Ptr opaquePipeline;
+    GpuPipeline::Ptr maskedPipeline;
+    std::optional<Result> preparation;
+    GpuTexture::Ptr cascades;
+    std::vector<GpuTarget::Ptr> layerTargets;
+    GpuTexture::Ptr placeholder;
+    bool placeholderCleared = false;
+    std::unique_ptr<RenderedState> rendered;
+    std::vector<int> recordIndices;
+    int numRenderedFrames = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShadowRenderer)
 };

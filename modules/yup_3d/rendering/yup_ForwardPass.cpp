@@ -170,10 +170,8 @@ Result ForwardPass::createDefaults (const GpuDevice::Ptr& device)
         return result;
 
     blackTexture = GeometryBindings::createSolidTexture (device, 0x000000ff);
-    pointClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
-    linearClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::clampToEdge));
 
-    if (blackTexture == nullptr || pointClampSampler == nullptr || linearClampSampler == nullptr)
+    if (blackTexture == nullptr)
         return Result::fail ("Unable to create the default scene textures");
 
     return Result::ok();
@@ -236,6 +234,9 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     if (! clear.has_value() && opaque.empty() && blend.empty())
         return true;
 
+    if (lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.shadowCascades == nullptr)
+        return false;
+
     if (variant.velocity && (lighting.lights == nullptr || lighting.clusterLights == nullptr || ! opaque.empty()))
     {
         jassert (opaque.empty()); // The full tier shades its opaque items through GBufferPass and LightingPass
@@ -273,17 +274,22 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
 
     // Per-frame sets, bound once: every declared resource must be bound, even when unused
     pass.setUniformBuffer (0, 0, &view.getBlock(), sizeof (ViewData::Block));
-    pass.setSampler (0, 3, pointClampSampler);
+    pass.setSampler (0, 3, lighting.samplers.pointClamp);
+    pass.setTexture (0, 6, lighting.environment != nullptr ? lighting.environment : blackTexture);
+    pass.setSampler (0, 14, lighting.environmentSampler != nullptr ? lighting.environmentSampler : geometry.getDefaultSampler());
     pass.setUniformBuffer (1, 0, &block, sizeof (block));
-    pass.setTexture (1, 1, lighting.environment != nullptr ? lighting.environment : blackTexture);
-    pass.setSampler (1, 2, lighting.environmentSampler != nullptr ? lighting.environmentSampler : geometry.getDefaultSampler());
-    pass.setTexture (1, 3, lighting.shadowMap != nullptr ? lighting.shadowMap : geometry.getWhiteTexture());
+    pass.setTexture (3, 0, lighting.shadowCascades);
+    pass.setUniformBuffer (3, 4, &lighting.shadows, sizeof (lighting.shadows));
+
+    // Without it no light has a shadow record, and the pipeline's own comparison sampler stays unread
+    if (lighting.samplers.shadowCompare != nullptr)
+        pass.setSampler (0, 4, lighting.samplers.shadowCompare);
 
     if (variant.areaLights)
     {
-        pass.setSampler (0, 1, linearClampSampler);
-        pass.setTexture (1, 4, lighting.ltcMatrix != nullptr ? lighting.ltcMatrix : blackTexture);
-        pass.setTexture (1, 5, lighting.ltcAmplitude != nullptr ? lighting.ltcAmplitude : blackTexture);
+        pass.setSampler (0, 1, lighting.samplers.linearClamp);
+        pass.setTexture (0, 7, lighting.ltcMatrix != nullptr ? lighting.ltcMatrix : blackTexture);
+        pass.setTexture (0, 11, lighting.ltcAmplitude != nullptr ? lighting.ltcAmplitude : blackTexture);
     }
 
     if (variant.velocity)

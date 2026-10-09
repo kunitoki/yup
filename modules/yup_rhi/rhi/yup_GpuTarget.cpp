@@ -166,7 +166,29 @@ bool GpuTarget::readPixels (void* dst, size_t byteSize)
 
 //==============================================================================
 
+bool GpuTarget::isDepthOnly() const noexcept
+{
+    return ownedTexture != nullptr && isDepthStencilFormat (ownedTexture->getFormat());
+}
+
 GpuRenderPass GpuTarget::beginRenderPass (GpuFrame& frame, const GpuRenderOptions& options)
+{
+    // A depth target begun this way always clears; load or keep it through the GpuDepthStencilOptions overload.
+    jassert (! isDepthOnly() || options.loadOp == GpuLoadOp::clear);
+
+    return beginPass (frame, options, {});
+}
+
+GpuRenderPass GpuTarget::beginRenderPass (GpuFrame& frame, const GpuDepthStencilOptions& depthOptions)
+{
+    jassert (isDepthOnly());
+    if (! isDepthOnly())
+        return GpuRenderPass();
+
+    return beginPass (frame, {}, depthOptions);
+}
+
+GpuRenderPass GpuTarget::beginPass (GpuFrame& frame, const GpuRenderOptions& options, const GpuDepthStencilOptions& depthOptions)
 {
     GpuRenderPass pass;
 
@@ -182,12 +204,23 @@ GpuRenderPass GpuTarget::beginRenderPass (GpuFrame& frame, const GpuRenderOption
     auto* i = pass.getImpl();
     i->oreCtx = frame.getImpl()->oreCtx;
     i->framePools = frame.getImpl();
-    i->colorAttachments[0].texture = tex;
-    i->colorAttachments[0].view = ownedView;
-    i->colorAttachments[0].options = options;
-    i->colorCount = 1;
     i->width = getWidth();
     i->height = getHeight();
+
+    if (isDepthOnly())
+    {
+        i->colorCount = 0;
+        i->depthTexture = tex;
+        i->depthView = ownedView;
+        i->depthOptions = depthOptions;
+    }
+    else
+    {
+        i->colorAttachments[0].texture = tex;
+        i->colorAttachments[0].view = ownedView;
+        i->colorAttachments[0].options = options;
+        i->colorCount = 1;
+    }
 
     return pass;
 }

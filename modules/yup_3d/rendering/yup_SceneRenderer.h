@@ -34,7 +34,10 @@ namespace yup
     and receive its diffuse light; Scene::setEnvironmentVisible() also draws it behind the scene.
 
     The first directional LightNode with LightNode::castsShadows set casts shadows of the opaque
-    items, from a shadowMapSize square map fitted around them and filtered softly.
+    items, from cascaded shadow maps: the view is cut into RenderSettings::sunCascades depth ranges,
+    each with its own map of RenderSettings::shadowResolution texels, so shadows stay sharp near the
+    camera and still reach far away. The maps are filtered softly and only drawn again when the
+    casters, the shadow casting light, the shadow settings or the camera change.
 
     The tier comes from RenderSettings::tier and the device, see RenderCapabilities. The raster
     tier antialiases geometry edges with MSAA, 4 samples by default, resolved into the returned
@@ -61,10 +64,6 @@ namespace yup
 class YUP_API SceneRenderer
 {
 public:
-    //==============================================================================
-    /** The width and height, in texels, of the shadow map. */
-    static constexpr int shadowMapSize = 2048;
-
     //==============================================================================
     /** Creates a renderer. GPU objects are created on the first render. */
     SceneRenderer();
@@ -132,8 +131,8 @@ public:
     */
     bool isConverged() const noexcept;
 
-    /** Discards the accumulated history, so the next renders start over from the next frame alone
-        and isConverged() is false.
+    /** Discards the accumulated history and the shadow maps, so the next renders start over from
+        the next frame alone and isConverged() is false.
 
         Call it after changes the renderer cannot see: vertices edited in place in a Mesh, or
         a GpuTexture redrawn without calling Texture::setGpuTexture(). Also call it after a large
@@ -156,6 +155,11 @@ public:
     */
     GpuTexture::Ptr getPassOutput (PassOutput output) const;
 
+    /** @internal The number of frames that drew shadow maps since the renderer set up its device,
+        for tests: still frames reuse the maps of the frame before.
+    */
+    int getShadowMapRenderCount() const noexcept;
+
     /** @internal Test hook, not for production use: edits the facts read from the device before
         every render decides its tier and features, so tests can simulate weaker devices.
 
@@ -168,6 +172,12 @@ public:
         before the first render. Frames still render, with area lights lighting only diffusely.
     */
     void failAreaLightTablesForTesting() noexcept { failAreaLightTables = true; }
+
+    /** @internal Test hook, not for production use: the shadow comparison sampler of this
+        renderer fails to create, as if the device could not create it. Call it before the first
+        render. Frames still render.
+    */
+    void failShadowCompareSamplerForTesting() noexcept { failShadowCompareSampler = true; }
 
     //==============================================================================
     /** Changes the number of MSAA samples per pixel of the raster tier.
@@ -192,6 +202,7 @@ private:
     String lastGpuFailure;
     int sampleCount = 4;
     bool failAreaLightTables = false;
+    bool failShadowCompareSampler = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneRenderer)
 };

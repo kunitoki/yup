@@ -28,10 +28,13 @@ namespace yup
 /** Forward shading of draw items: the environment background, then opaque and blended surfaces.
 
     Bindings follow the set 0 (view) / set 1 (pass) / set 2 (draw and material) convention, so the
-    per-frame sets are built once per pipeline change and only set 2 changes per draw. Set 1 holds
-    the LightingInputs at bindings 0-5 (the area light tables at 4 and 5, read through the set 0
-    linearClamp sampler at binding 1), and on the full tier the lights and the light lists of the
-    clusters at bindings 6 and 7; raster draws read their own light list at set 2 binding 12.
+    per-frame sets are built once per pipeline change and only set 2 changes per draw. Set 0 holds
+    the shared samplers and lookups of the LightingInputs: the environment at binding 6 with its
+    sampler at 14, the area light tables at 7 and 11, read through linearClamp at binding 1, and
+    shadowCompare at 4. Set 1 holds the LightingBlock at binding 0, and on the full tier the lights
+    and the light lists of the clusters at bindings 6 and 7; raster draws read their own light list
+    at set 2 binding 12. Set 3 holds the shadows: the sun cascades at binding 0 and the ShadowBlock
+    at 4.
 
     Pipelines are compiled lazily per color and depth format, sample count, velocity output and area
     lights: the full tier variant is the one with a velocity target, and draws blended items only.
@@ -69,7 +72,7 @@ public:
     ~ForwardPass();
 
     //==============================================================================
-    /** Creates the default textures and samplers, and compiles the pipelines for these targets,
+    /** Creates the default textures, and compiles the pipelines for these targets,
         with the area light variant when @p areaLights is set (see LightingInputs::areaLights).
 
         Compiles once per target formats, sample count, velocity output and area lights,
@@ -114,8 +117,6 @@ private:
     std::optional<Result> defaults;
     GeometryBindings geometry;
     GpuTexture::Ptr blackTexture;
-    GpuSampler::Ptr pointClampSampler;
-    GpuSampler::Ptr linearClampSampler;
     GpuTarget::Ptr surface;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ForwardPass)

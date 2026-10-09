@@ -59,10 +59,9 @@ Bloom::Bloom() = default;
 Bloom::~Bloom() = default;
 
 //==============================================================================
-Result Bloom::prepare (const GpuDevice::Ptr& device)
+Result Bloom::prepare (const GpuDevice::Ptr& device, const FrameResources::Samplers* samplers)
 {
-    linearClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::clampToEdge));
-    if (linearClampSampler == nullptr)
+    if (samplers == nullptr)
         return Result::fail ("Unable to create the bloom sampler");
 
     if (auto result = downsample.prepare (device, bloomDownsampleShaderBundle, sizeof (bloomDownsampleShaderBundle), GpuTextureFormat::rgba16float); result.failed())
@@ -78,11 +77,13 @@ GpuTexture::Ptr Bloom::render (const GpuDevice::Ptr& device, GpuFrame& frame, Fr
     if (device == nullptr || color == nullptr)
         return nullptr;
 
+    const auto* samplers = resources.getSamplers();
+
     // Compiled once, remembering a failure instead of retrying every frame
     if (! prepared.has_value())
-        prepared = prepare (device);
+        prepared = prepare (device, samplers);
 
-    if (prepared->failed())
+    if (prepared->failed() || samplers == nullptr)
         return nullptr;
 
     const auto acquire = [&] (int width, int height, const char* label)
@@ -133,7 +134,7 @@ GpuTexture::Ptr Bloom::render (const GpuDevice::Ptr& device, GpuFrame& frame, Fr
 
         if (! downsample.draw (frame, levels[static_cast<size_t> (i)], {}, [&] (GpuRenderPass& renderPass)
             {
-                renderPass.setSampler (0, 1, linearClampSampler);
+                renderPass.setSampler (0, 1, samplers->linearClamp);
                 renderPass.setUniformBuffer (1, 0, &block, sizeof (block));
                 renderPass.setTexture (1, 1, source);
             }, GpuColor::transparentBlack()))
@@ -154,7 +155,7 @@ GpuTexture::Ptr Bloom::render (const GpuDevice::Ptr& device, GpuFrame& frame, Fr
 
         return upsample.draw (frame, target, {}, [&] (GpuRenderPass& renderPass)
         {
-            renderPass.setSampler (0, 1, linearClampSampler);
+            renderPass.setSampler (0, 1, samplers->linearClamp);
             renderPass.setUniformBuffer (1, 0, &block, sizeof (block));
             renderPass.setTexture (1, 1, source);
         }, clear);

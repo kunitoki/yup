@@ -30,19 +30,20 @@
 // windowed by the range, and a smooth spot cone. Lights with a radius are area lights, shaded with
 // linearly transformed cosines (lightsEvaluateArea), compiled only with YUP_3D_AREA_LIGHTS: without
 // it every light is punctual, and the passes pick that variant for frames whose lights all have a
-// radius of 0. One directional light can be shadowed from the packed sun depth map, filtered with a
-// 4x4 tent.
+// radius of 0. Each light is shadowed through lib/shadows.glsl (shadowsVisibility), from its first
+// shadow record.
 // The raster tier loops over the lights each draw selected. The full tier loops over every
 // directional light, then over the lights of the fragment's cluster (Olsson et al., "Clustered
 // Deferred and Forward Shading", HPG 2012), listed by the LightClusters compute pass.
 
 #include "lib/light_types.glsl"
+#include "lib/shadows.glsl"
 
 #ifdef YUP_3D_AREA_LIGHTS
-// The area light tables of LtcTables, read through the shared linear sampler
+// The area light tables of LtcTables, set 0 lookups read through the shared linear sampler
 layout(set = 0, binding = 1) uniform sampler linearClamp;
-layout(set = 1, binding = 4) uniform texture2D u_ltcMatrix;    // inverse matrices m00, m02, m11, m20 (m22 = 1)
-layout(set = 1, binding = 5) uniform texture2D u_ltcAmplitude; // lobe magnitude, its Fresnel part
+layout(set = 0, binding = 7) uniform texture2D u_ltcMatrix;     // inverse matrices m00, m02, m11, m20 (m22 = 1)
+layout(set = 0, binding = 11) uniform texture2D u_ltcAmplitude; // lobe magnitude, its Fresnel part
 #endif
 
 #ifdef YUP_3D_TIER_FULL
@@ -59,50 +60,6 @@ layout(set = 2, binding = 12) uniform LightListBlock
     vec4 count;            // x number of lights
 } lightList;
 #endif
-
-float unpackDepth(vec4 rgba)
-{
-    return dot(rgba, vec4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 1.0 / 16581375.0));
-}
-
-float shadowVisibility(vec3 worldPosition, vec3 geometricNormal, vec3 l)
-{
-    // Offset along the normal, more where the light grazes the surface
-    float nDotL = clamp(dot(geometricNormal, l), 0.0, 1.0);
-    vec3 position = worldPosition + geometricNormal * (lighting.shadowInfo.z * (1.0 - nDotL));
-
-    vec4 clip = lighting.shadowMatrix * vec4(position, 1.0);
-    vec2 coords = vec2(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
-    if (coords.x <= 0.0 || coords.y <= 0.0 || coords.x >= 1.0 || coords.y >= 1.0 || clip.z >= 1.0)
-        return 1.0;
-
-    float texel = lighting.shadowInfo.y;
-    float depth = clip.z - lighting.shadowInfo.w;
-
-    // Bilinear comparisons over a 3x3 texel footprint: a 4x4 tent
-    vec2 grid = coords / texel - 0.5;
-    vec2 base = floor(grid);
-    vec2 f = grid - base;
-
-    int size = int(1.0 / texel + 0.5);
-    ivec2 origin = ivec2(base) - ivec2(1);
-
-    float lit = 0.0;
-    for (int j = 0; j < 4; ++j)
-    {
-        float wy = j == 0 ? 1.0 - f.y : (j == 3 ? f.y : 1.0);
-
-        for (int i = 0; i < 4; ++i)
-        {
-            float wx = i == 0 ? 1.0 - f.x : (i == 3 ? f.x : 1.0);
-            ivec2 position = clamp(origin + ivec2(i, j), ivec2(0), ivec2(size - 1));
-            float stored = unpackDepth(texelFetch(sampler2D(u_shadow, pointClamp), position, 0));
-            lit += wx * wy * (depth <= stored ? 1.0 : 0.0);
-        }
-    }
-
-    return lit / 9.0;
-}
 
 // Radiance arriving from one light, without the BSDF: color * intensity * attenuation, and the
 // unit vector to the light. Point and spot lights beyond abs (range) are culled, dark ones (a range
@@ -311,19 +268,17 @@ vec3 lightsEvaluateArea(GpuLight light, BsdfSurface s, vec3 worldPosition)
 }
 #endif
 
-// What one light reflects: the BSDF times its incoming radiance, the light with shadow index 0
-// shadowed by the sun map. Lights with a radius take the area path (YUP_3D_AREA_LIGHTS only), the
-// others the punctual one
+// What one light reflects: the BSDF times its incoming radiance and its shadow, looked up once towards
+// its center (shadowsVisibility). Lights with a radius take the area path (YUP_3D_AREA_LIGHTS only),
+// the others the punctual one
 vec3 lightsShadeLight(BsdfSurface s, GpuLight light, vec3 worldPosition, vec3 geometricNormal)
 {
 #ifdef YUP_3D_AREA_LIGHTS
     if (light.spotRadiusShadow.z > 0.0)
     {
         vec3 reflected = lightsEvaluateArea(light, s, worldPosition);
-
-        // Only the sun is shadowed, from its center
-        if (light.spotRadiusShadow.w == 0.0 && reflected != vec3(0.0))
-            reflected = reflected * shadowVisibility(worldPosition, geometricNormal, -light.directionRange.xyz);
+        if (reflected != vec3(0.0))
+            reflected = reflected * shadowsVisibility(light, worldPosition, geometricNormal);
 
         return reflected;
     }
@@ -334,12 +289,9 @@ vec3 lightsShadeLight(BsdfSurface s, GpuLight light, vec3 worldPosition, vec3 ge
     if (dot(s.n, l) <= 0.0 || incoming == vec3(0.0))
         return vec3(0.0);
 
-    if (light.spotRadiusShadow.w == 0.0)
-    {
-        incoming = incoming * shadowVisibility(worldPosition, geometricNormal, l);
-        if (incoming == vec3(0.0))
-            return vec3(0.0);
-    }
+    incoming = incoming * shadowsVisibility(light, worldPosition, geometricNormal);
+    if (incoming == vec3(0.0))
+        return vec3(0.0);
 
     return bsdfEvaluate(s, l) * incoming;
 }

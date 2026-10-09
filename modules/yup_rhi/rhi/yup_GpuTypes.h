@@ -628,6 +628,13 @@ struct GpuStencilFaceState
     Leave @c enabled false (the default) for post-process passes that don't
     need a depth/stencil buffer. Setting it true attaches a depth/stencil
     target using @c format.
+
+    The depth bias fields offset the depth each fragment writes and tests,
+    pushing it away from the viewer (the stored depth grows). Shadow map passes
+    use them to avoid self-shadowing acne. The total bias is
+    @c depthBias * r + @c depthBiasSlopeScale * m, where r is the smallest
+    resolvable difference of the depth format and m the polygon's maximum depth
+    slope, optionally limited by @c depthBiasClamp.
 */
 struct GpuDepthStencilState
 {
@@ -637,6 +644,27 @@ struct GpuDepthStencilState
     GpuTextureFormat format = GpuTextureFormat::depth24plusStencil8; ///< Depth/stencil format.
     GpuCompareFunction depthCompare = GpuCompareFunction::less;      ///< Depth comparison function.
     bool depthWriteEnabled = true;                                   ///< Enable depth writes.
+
+    /** Constant depth bias, in units of the depth format's smallest resolvable difference.
+
+        On unorm formats the unit is fixed (2^-16 for depth16unorm, 2^-24 for 24-bit
+        depth). On float formats it scales with depth: it is 2^(e - 23), where e is the
+        exponent of the polygon's largest depth, so the same bias moves far depths
+        more than near ones. depth24plusStencil8 maps to Depth32Float_Stencil8 on
+        Apple silicon, so there it follows the float rule.
+    */
+    int32_t depthBias = 0;
+
+    /** Depth bias scaled by the polygon's maximum depth slope. */
+    float depthBiasSlopeScale = 0.0f;
+
+    /** The largest total depth bias applied, or 0 for no limit.
+
+        Ignored where the backend has no bias clamp: OpenGL / OpenGL ES
+        (glPolygonOffset has no clamp parameter) and Vulkan devices without the
+        depthBiasClamp feature.
+    */
+    float depthBiasClamp = 0.0f;
 };
 
 //==============================================================================
@@ -664,8 +692,13 @@ struct GpuPipelineOptions
     GpuCullMode cullMode = GpuCullMode::none;
     GpuFaceWinding winding = GpuFaceWinding::counterClockwise;
 
-    /** Color targets. When empty, a single default alpha-blended rgba8unorm
-        target is used. At most four are supported; extra entries are ignored. */
+    /** Color targets. At most four are supported; extra entries are ignored.
+
+        When empty and @c depthStencil is enabled, the pipeline is depth-only: it
+        has no color output and draws into a pass begun on a depth-format
+        GpuTarget. When empty without depth, a single default alpha-blended
+        rgba8unorm target is used.
+    */
     std::vector<GpuColorTarget> colorTargets;
 
     GpuDepthStencilState depthStencil;
@@ -832,7 +865,7 @@ struct GpuRenderOptions
 //==============================================================================
 /** Per-depth/stencil-attachment options controlling load and store behaviour.
 
-    @see GpuRenderPass::setDepthStencilAttachment
+    @see GpuRenderPass::setDepthStencilAttachment, GpuTarget::beginRenderPass
 */
 struct GpuDepthStencilOptions
 {

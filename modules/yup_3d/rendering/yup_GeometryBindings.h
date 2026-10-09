@@ -97,9 +97,6 @@ public:
     */
     bool draw (GpuRenderPass& pass, const GpuDevice::Ptr& device, const SceneDrawList::DrawItem& item, int materialId) const;
 
-    /** The white texture standing in for missing textures, after prepare(). */
-    const GpuTexture::Ptr& getWhiteTexture() const noexcept { return whiteTexture; }
-
     /** The linear repeating sampler of the stand-in textures, after prepare(). */
     const GpuSampler::Ptr& getDefaultSampler() const noexcept { return defaultSampler; }
 

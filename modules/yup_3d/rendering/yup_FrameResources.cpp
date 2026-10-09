@@ -135,6 +135,27 @@ GpuBuffer::Ptr FrameResources::acquireStorageBuffer (StorageSlot slot, size_t by
 }
 
 //==============================================================================
+const FrameResources::Samplers* FrameResources::getSamplers()
+{
+    if (! samplersCreated.has_value())
+    {
+        GpuSamplerDesc compareDesc (GpuFilter::linear, GpuWrapMode::clampToEdge);
+        compareDesc.compare = GpuCompareFunction::lessEqual;
+
+        samplers.linearClamp = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::clampToEdge));
+        samplers.pointClamp = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
+        samplersCreated = samplers.linearClamp != nullptr && samplers.pointClamp != nullptr;
+
+        // Only the shadow maps read it: without it the frames still render, and the shadow passes check it
+        samplers.shadowCompare = failShadowCompareSampler ? nullptr : GpuSampler::create (device, compareDesc);
+        if (*samplersCreated && samplers.shadowCompare == nullptr)
+            YUP_DBG ("FrameResources: unable to create the shadow comparison sampler");
+    }
+
+    return *samplersCreated ? &samplers : nullptr;
+}
+
+//==============================================================================
 void FrameResources::endFrame()
 {
     std::erase_if (transients, [] (const Transient& t)

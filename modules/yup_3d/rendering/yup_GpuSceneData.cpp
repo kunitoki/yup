@@ -120,8 +120,10 @@ GpuLight GpuSceneData::packLight (const SceneDrawList::Light& light, int shadowI
     };
 }
 
-std::vector<GpuLight> GpuSceneData::packLights (Span<const SceneDrawList::Light> lights, int shadowedLight, std::vector<uint32>& order)
+std::vector<GpuLight> GpuSceneData::packLights (Span<const SceneDrawList::Light> lights, Span<const int> firstShadowRecord, std::vector<uint32>& order)
 {
+    jassert (firstShadowRecord.empty() || firstShadowRecord.size() == lights.size());
+
     order.resize (lights.size());
     std::iota (order.begin(), order.end(), 0u);
     std::stable_partition (order.begin(), order.end(), [&lights] (uint32 index)
@@ -133,7 +135,7 @@ std::vector<GpuLight> GpuSceneData::packLights (Span<const SceneDrawList::Light>
     packed.reserve (order.size());
 
     for (const auto index : order)
-        packed.push_back (packLight (lights[index], static_cast<int> (index) == shadowedLight ? 0 : -1));
+        packed.push_back (packLight (lights[index], index < firstShadowRecord.size() ? firstShadowRecord[index] : -1));
 
     return packed;
 }

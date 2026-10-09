@@ -523,7 +523,7 @@ TEST_F (LightClustersMetalTests, ClusterCullingMatchesCpuReference)
     sceneLights.insert (sceneLights.begin() + 140, { &rangedBlack, { -0.5f, 0.0f, -4.0f }, Vector3<float> (0.0f, 0.0f, -1.0f) });
 
     std::vector<uint32> order;
-    const auto lights = GpuSceneData::packLights (sceneLights, -1, order);
+    const auto lights = GpuSceneData::packLights (sceneLights, {}, order);
     const auto firstLocalLight = 1;
     ASSERT_EQ (lights[0].positionType[3], 0.0f);
     ASSERT_EQ (std::count_if (lights.begin(), lights.end(), [] (const GpuLight& light)

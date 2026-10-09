@@ -86,6 +86,8 @@
 #include "rendering/yup_GeometryBindings.h"
 #include "resources/yup_LtcTables.h"
 #include "rendering/yup_ViewData.h"
+#include "rendering/yup_ShadowAtlas.h"
+#include "rendering/yup_ShadowCascades.h"
 #include "rendering/yup_FrameResources.h"
 #include "rendering/yup_LightClusters.h"
 #include "rendering/yup_FullscreenPass.h"

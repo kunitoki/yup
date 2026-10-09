@@ -47,7 +47,9 @@ public:
     /** Returns the projection matrix for a viewport.
 
         @param aspectRatio     The viewport width divided by its height.
-        @param depthZeroToOne  True for a [0, 1] depth range, false for [-1, 1].
+        @param depthZeroToOne  True for a [0, 1] clip depth range, as every backend expects from shaders
+                               compiled by YUP's shader transpiler, OpenGL included. False for [-1, 1],
+                               only for shaders that reach OpenGL without the transpiler.
     */
     Matrix4 getProjectionMatrix (float aspectRatio, bool depthZeroToOne = true) const noexcept;
 

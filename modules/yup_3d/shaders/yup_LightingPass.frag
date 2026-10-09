@@ -21,6 +21,7 @@
 
 #version 450
 #extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_texture_shadow_lod : require
 
 #ifndef YUP_3D_TIER_FULL
 #error "The lighting pass is full tier only: bundle it as LightingPass:YUP_3D_TIER_FULL"

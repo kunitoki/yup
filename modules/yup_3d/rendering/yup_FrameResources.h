@@ -25,7 +25,7 @@ namespace yup
 {
 
 //==============================================================================
-/** The textures and storage buffers a renderer needs from frame to frame.
+/** The textures, storage buffers and shared samplers a renderer needs from frame to frame.
 
     Transient textures are pooled by descriptor: a texture acquired in one frame is handed back by
     the same acquire() in the next one, and released after a frame that did not acquire it.
@@ -38,6 +38,9 @@ namespace yup
     Storage buffers rotate over a ring of three per slot, advanced by every beginFrame(), so the
     CPU writes a different buffer from the ones the previous frames bound. The whole ring of a slot
     is released after a frame that did not acquire it.
+
+    The samplers every pass binds in set 0 are created once per pool, so every pass of a renderer
+    shares the same sampler objects.
 
     @code
     resources.beginFrame (width, height);
@@ -115,6 +118,30 @@ public:
     GpuBuffer::Ptr acquireStorageBuffer (StorageSlot slot, size_t byteSize);
 
     //==============================================================================
+    /** The samplers shared by the passes, bound in set 0. */
+    struct Samplers
+    {
+        GpuSampler::Ptr linearClamp;   ///< Set 0 binding 1: linear filtering, clamped to the edge.
+        GpuSampler::Ptr pointClamp;    ///< Set 0 binding 3: nearest filtering, clamped to the edge.
+        GpuSampler::Ptr shadowCompare; ///< Set 0 binding 4: linear filtering, clamped to the edge, comparing with lessEqual, or nullptr when the device cannot create it.
+    };
+
+    /** Returns the shared samplers, created by the first call.
+
+        Failures are remembered instead of retried every frame. Only linearClamp and pointClamp
+        decide the result: a missing shadowCompare leaves it nullptr in the samplers, and the
+        passes reading shadow maps check it themselves.
+
+        @returns The samplers, or nullptr when the device cannot create linearClamp or pointClamp.
+    */
+    const Samplers* getSamplers();
+
+    /** @internal Test hook, not for production use: the shadowCompare sampler fails to create, as
+        if the device could not create it. Call it before the first getSamplers().
+    */
+    void failShadowCompareSamplerForTesting() noexcept { failShadowCompareSampler = true; }
+
+    //==============================================================================
     /** Releases transients and storage slots not acquired and histories not used this frame, and swaps the used histories. */
     void endFrame();
 
@@ -153,6 +180,9 @@ private:
     std::vector<HistoryPair> histories;
     std::array<std::array<GpuBuffer::Ptr, storageRingSize>, numStorageSlots> storageBuffers;
     std::array<bool, numStorageSlots> storageAcquired {};
+    Samplers samplers;
+    std::optional<bool> samplersCreated;
+    bool failShadowCompareSampler = false;
     uint64 frameCounter = 0;
     int width = 0;
     int height = 0;

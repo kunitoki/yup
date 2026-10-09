@@ -658,6 +658,28 @@ TEST_F (GpuPipelineCacheTests, DifferentOptionsProduceDifferentKey)
     EXPECT_NE (keyA, keyB);
 }
 
+TEST_F (GpuPipelineCacheTests, DepthBiasProducesDifferentKeys)
+{
+    ShaderBundle bundle;
+
+    GpuPipelineOptions base;
+    base.depthStencil.enabled = true;
+
+    auto withBias = base;
+    withBias.depthStencil.depthBias = 2;
+
+    auto withSlope = base;
+    withSlope.depthStencil.depthBiasSlopeScale = 1.0f;
+
+    auto withClamp = base;
+    withClamp.depthStencil.depthBiasClamp = 0.01f;
+
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, base, GpuPlatform::Metal);
+    EXPECT_NE (key, GpuPipelineCache::generateCacheKey (bundle, withBias, GpuPlatform::Metal));
+    EXPECT_NE (key, GpuPipelineCache::generateCacheKey (bundle, withSlope, GpuPlatform::Metal));
+    EXPECT_NE (key, GpuPipelineCache::generateCacheKey (bundle, withClamp, GpuPlatform::Metal));
+}
+
 TEST_F (GpuPipelineCacheTests, StoreAndContainsAndCount)
 {
     GpuPipelineCache cache (*context);

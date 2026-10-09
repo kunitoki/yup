@@ -328,26 +328,23 @@ struct SceneRenderer::Impl
         lastStamp = stamp;
     }
 
-    /** Adds one signature per draw item, summed: the lists are sorted by state and view distance,
-        so a camera move or a transform can reorder them without anything else changing.
+    /** Adds one signature per draw item of @p items, summed: the lists are sorted by state and view
+        distance, so a camera move or a transform can reorder them without anything else changing.
     */
     template <class AddItem>
-    void addItemSignatures (FrameSignature& signature, AddItem&& addItem) const
+    static void addItemSignatures (FrameSignature& signature, Span<const SceneDrawList::DrawItem> items, AddItem&& addItem)
     {
-        for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
+        uint64 sum = 0;
+
+        for (const auto& item : items)
         {
-            uint64 sum = 0;
-
-            for (const auto& item : items)
-            {
-                FrameSignature itemSignature;
-                addItem (itemSignature, item);
-                sum += itemSignature.getFinalized();
-            }
-
-            signature.addBits (items.size());
-            signature.addBits (sum);
+            FrameSignature itemSignature;
+            addItem (itemSignature, item);
+            sum += itemSignature.getFinalized();
         }
+
+        signature.addBits (items.size());
+        signature.addBits (sum);
     }
 
     /** The changes that discard the history, which no longer fits the frame. */
@@ -365,7 +362,7 @@ struct SceneRenderer::Impl
         keeps the history, which TAA reprojects and clips to the new frame. Tone mapping and bloom
         run after TAA, so their settings are left out.
     */
-    uint64 getRestartingSignature (const Scene& scene) const
+    uint64 getRestartingSignature (const Scene& scene, const RenderSettings& settings) const
     {
         FrameSignature signature;
         signature.addMatrix (viewData.getUnjitteredViewProjection());
@@ -376,10 +373,14 @@ struct SceneRenderer::Impl
         signature.addFloat (scene.getEnvironmentBlur());
         signature.addBits (scene.isEnvironmentVisible() ? 1u : 0u);
 
-        // RenderSettings fields shaping the scene color before TAA go here: none yet, bloom runs after it
+        // The RenderSettings shaping the scene color before TAA, as the tier resolves them; bloom runs after it
+        signature.addBits (static_cast<uint64> (capabilities->getCascadeCount (settings)));
+        signature.addBits (static_cast<uint64> (RenderCapabilities::getShadowResolution (settings)));
+        signature.addBits (capabilities->isEnabled (RenderCapabilities::Feature::softShadows, settings) ? 1u : 0u);
+        signature.addBits (capabilities->isEnabled (RenderCapabilities::Feature::contactShadows, settings) ? 1u : 0u);
 
         // Each item's transform is hashed with what it draws, so swapping transforms between items still counts
-        addItemSignatures (signature, [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
+        const auto addItem = [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
         {
             itemSignature.addMatrix (item.world);
             itemSignature.addPointer (item.mesh);
@@ -388,7 +389,10 @@ struct SceneRenderer::Impl
 
             for (const auto* texture : getMaterialTextures (*item.material))
                 itemSignature.addBits (*texture != nullptr ? (*texture)->getChangeCount() : 0u);
-        });
+        };
+
+        for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
+            addItemSignatures (signature, items, addItem);
 
         signature.addBits (drawList.getLights().size());
 
@@ -403,6 +407,55 @@ struct SceneRenderer::Impl
             signature.addFloat (node.outerConeAngle);
             signature.addFloat (node.radius);
             signature.addBits (node.castsShadows ? 1u : 0u);
+            signature.addFloat (node.shadowBias);
+            signature.addBits (node.contactShadows ? 1u : 0u);
+            signature.addFloat (node.contactShadowDistance);
+            signature.addFloat (node.contactShadowThickness);
+            signature.addVector (light.position);
+            signature.addVector (light.direction);
+        }
+
+        return signature.get();
+    }
+
+    /** What the shadow maps depend on besides the cascade fit, which ShadowRenderer compares itself:
+        the casters (transforms, meshes and what alpha masking reads), the shadow casting lights and
+        the shadow settings of the tier.
+    */
+    uint64 getShadowSignature (const RenderSettings& settings) const
+    {
+        FrameSignature signature;
+        signature.addBits (static_cast<uint64> (capabilities->getTier()));
+        signature.addBits (static_cast<uint64> (capabilities->getCascadeCount (settings)));
+        signature.addBits (static_cast<uint64> (RenderCapabilities::getShadowResolution (settings)));
+
+        // The casters: the opaque and masked items
+        addItemSignatures (signature, drawList.getOpaqueItems(), [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
+        {
+            itemSignature.addMatrix (item.world);
+            itemSignature.addPointer (item.mesh);
+            itemSignature.addBits (static_cast<uint64> (item.primitiveIndex));
+
+            const auto& material = *item.material;
+            itemSignature.addBits (static_cast<uint64> (material.alphaMode));
+
+            if (material.alphaMode == Material::AlphaMode::mask)
+            {
+                itemSignature.addFloat (material.alphaCutoff);
+                itemSignature.addFloat (material.baseColorFactor[3]);
+                itemSignature.addPointer (material.baseColorTexture.get());
+                itemSignature.addBits (material.baseColorTexture != nullptr ? material.baseColorTexture->getChangeCount() : 0u);
+            }
+        });
+
+        for (const auto& light : drawList.getLights())
+        {
+            const auto& node = *light.node;
+            if (! node.castsShadows)
+                continue;
+
+            signature.addBits (static_cast<uint64> (node.type));
+            signature.addBits (GpuSceneData::isDark (node) ? 1u : 0u);
             signature.addVector (light.position);
             signature.addVector (light.direction);
         }
@@ -418,7 +471,7 @@ struct SceneRenderer::Impl
     void trackChanges (const Scene& scene, const RenderSettings& settings, int width, int height)
     {
         const auto invalidating = getInvalidatingSignature (width, height, settings.taaSamples);
-        const auto restarting = getRestartingSignature (scene);
+        const auto restarting = getRestartingSignature (scene, settings);
 
         if (! hasSignature || invalidating != invalidatingSignature)
         {
@@ -514,6 +567,7 @@ struct SceneRenderer::Impl
         if (result.failed())
         {
             frameResources.invalidateHistory();
+            shadowRenderer.invalidate();
             hasSignature = false;
             accumulatedSamples = 0;
             stillSamples = 0;
@@ -555,6 +609,7 @@ void SceneRenderer::restartAccumulation() noexcept
 
     // The next render sees no previous signature, so it discards the history and starts over
     impl->hasSignature = false;
+    impl->shadowRenderer.invalidate();
     impl->accumulatedSamples = 0;
     impl->stillSamples = 0;
 }
@@ -572,6 +627,11 @@ GpuTexture::Ptr SceneRenderer::getPassOutput (PassOutput output) const
     }
 
     return nullptr;
+}
+
+int SceneRenderer::getShadowMapRenderCount() const noexcept
+{
+    return impl != nullptr ? impl->shadowRenderer.getNumRenderedFrames() : 0;
 }
 
 void SceneRenderer::setDeviceFactsOverride (std::function<void (RenderCapabilities::DeviceFacts&)> newOverride)
@@ -654,8 +714,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     // Every exit from here on ends the frame of the resource pool
     const auto failFrame = [&] (const String& error)
     {
-        // The history may not have been written: the next frame starts over
+        // The history and the shadow maps may not have been written: the next frame starts over
         impl->frameResources.invalidateHistory();
+        impl->shadowRenderer.invalidate();
         impl->postChain.releaseTargets();
         impl->gbufferPass.releaseTargets();
         impl->lightingPass.releaseTargets();
@@ -704,13 +765,29 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
     impl->pendingFrames.push_back (frame.getStatus());
 
-    const auto shadow = impl->shadowRenderer.render (device, frame, drawList);
-    if (shadow.error.isNotEmpty())
-        return failFrame (shadow.error);
+    if (failShadowCompareSampler)
+        impl->frameResources.failShadowCompareSamplerForTesting();
 
-    auto lighting = LightingInputs::create (device, scene, drawList.getLights(), shadow);
+    const auto* samplers = impl->frameResources.getSamplers();
+    if (samplers == nullptr)
+        return failFrame ("Unable to create the shared samplers");
+
+    // Without the comparison sampler nothing can read a shadow map: the frame renders unshadowed
+    ShadowRenderer::Inputs shadowInputs { drawList, impl->viewData, *impl->capabilities, settings };
+    shadowInputs.signature = impl->getShadowSignature (settings);
+    shadowInputs.enabled = samplers->shadowCompare != nullptr;
+
+    GpuShadowData shadows;
+    if (auto result = impl->shadowRenderer.render (device, frame, shadowInputs, shadows); result.failed())
+        return failFrame (result.getErrorMessage());
+
+    auto lighting = LightingInputs::create (device, scene, drawList.getLights(), impl->shadowRenderer.getShadowRecordIndices());
+    lighting.shadowCascades = impl->shadowRenderer.getCascadeTexture();
+    lighting.shadows = shadows;
     lighting.ltcMatrix = impl->ltcMatrix;
     lighting.ltcAmplitude = impl->ltcAmplitude;
+    lighting.samplers = *samplers;
+
     const auto output = full ? ForwardPass::Output::hdrLinear : (hdr ? ForwardPass::Output::hdrReversible : ForwardPass::Output::ldrInline);
 
     if (full)

@@ -53,6 +53,8 @@
 #include "rendering/yup_GeometryBindings.cpp"
 #include "resources/yup_LtcTables.cpp"
 #include "rendering/yup_ViewData.cpp"
+#include "rendering/yup_ShadowAtlas.cpp"
+#include "rendering/yup_ShadowCascades.cpp"
 #include "rendering/yup_FrameResources.cpp"
 #include "rendering/yup_LightClusters.cpp"
 #include "rendering/yup_FullscreenPass.cpp"

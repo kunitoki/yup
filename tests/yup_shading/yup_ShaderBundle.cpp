@@ -610,21 +610,21 @@ TEST_F (ShaderBundleTests, LoadsBundleWithoutReadOnlyField)
 
         ++vertexVariants;
 
-        // ShadowData (mat4) at binding 0 and DrawData (two mat4) at binding 1: every field
-        // read after the first binding lands where it was written.
+        // The ViewBlock (set 0) and the DrawBlock (set 2), both at binding 0: every field read
+        // after the first block lands where it was written.
         const auto& ubos = info.reflection.uniformBuffers;
         ASSERT_EQ (ubos.size(), 2u) << "language " << (int) info.language;
 
         for (const auto& ubo : ubos)
         {
             EXPECT_TRUE (ubo.name.isNotEmpty());
-            EXPECT_EQ (ubo.set, 0u);
-            EXPECT_EQ (ubo.blockSize, ubo.binding == 0 ? 64u : 128u) << ubo.name;
+            EXPECT_EQ (ubo.binding, 0u);
+            EXPECT_EQ (ubo.blockSize, ubo.set == 0 ? 448u : 208u) << ubo.name;
             EXPECT_EQ (ubo.type, ShaderReflection::ResourceType::uniformBuffer);
         }
 
-        ASSERT_EQ (info.reflection.stageInputs.size(), 1u);
-        EXPECT_EQ (info.reflection.stageInputs[0].location, 0u);
+        // The five Mesh::Vertex attributes of lib/geometry.glsl
+        EXPECT_EQ (info.reflection.stageInputs.size(), 5u);
     }
 
     EXPECT_GT (vertexVariants, 0);

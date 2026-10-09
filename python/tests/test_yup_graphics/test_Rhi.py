@@ -238,6 +238,9 @@ def test_gpu_depth_stencil_state_defaults():
     assert dss.enabled is False
     assert dss.depthWriteEnabled is True
     assert dss.depthCompare == yup.GpuCompareFunction.less
+    assert dss.depthBias == 0
+    assert dss.depthBiasSlopeScale == 0.0
+    assert dss.depthBiasClamp == 0.0
 
 
 def test_gpu_pipeline_options_defaults():
@@ -492,6 +495,35 @@ def test_gpu_device_capability_probes_are_bound(headless_device):
 def test_gpu_target_begin_render_pass_is_bound():
     # Was entirely unbound, so both python/demos GPU scripts died on this call.
     assert hasattr(yup.GpuTarget, "beginRenderPass")
+
+
+def test_gpu_target_begin_render_pass_binds_the_depth_overload():
+    # Both overloads take (frame, options): GpuRenderOptions for color targets,
+    # GpuDepthStencilOptions for depth-only targets.
+    doc = yup.GpuTarget.beginRenderPass.__doc__
+    assert "Overloaded function" in doc
+    assert "GpuRenderOptions" in doc
+    assert "GpuDepthStencilOptions" in doc
+    assert "depthOptions" not in doc
+
+
+def test_gpu_target_depth_overload_opens_a_depth_only_pass():
+    device = yup.GpuDevice.create(yup.GpuPlatform.Metal, yup.GpuDevice.Options())
+    if device is None or not device.isGpuAvailable():
+        pytest.skip("no Metal device available")
+
+    desc = yup.GpuTextureDesc(8, 8, yup.GpuTextureFormat.depth32float, True)
+    depth = yup.GpuTexture.create(device, desc)
+    assert depth is not None
+
+    target = yup.GpuTarget.createFromTexture(device, depth)
+    assert target is not None
+
+    frame = yup.GpuFrame.begin(device)
+    pass_ = target.beginRenderPass(frame, options=yup.GpuDepthStencilOptions(0.5))
+    assert pass_.isValid()
+    assert pass_.finish()
+    assert frame.submit()
 
 
 def test_gpu_render_pass_set_texture_binds_both_overloads():

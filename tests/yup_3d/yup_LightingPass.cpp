@@ -81,8 +81,10 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
 {
     using Bindings = std::vector<std::pair<uint32_t, uint32_t>>;
 
-    // The environment, the shadow map and, in the area light variant only, the two area light
-    // tables read through linearClamp, then RT0-RT2 and the depth: at most the 8 textures a bind group holds
+    // Set 0 holds the shared lookups: the environment and its sampler, the shadow comparison
+    // sampler and, in the area light variant only, the two area light tables read through
+    // linearClamp. Set 1 holds RT0-RT2 and the depth, keeping their binding numbers, and set 3 the
+    // sun cascades
     const struct
     {
         const char* name;
@@ -90,8 +92,8 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
         Bindings images;
         Bindings samplers;
     } variants[] = {
-        { "punctual", lightingPass(), { { 1, 1 }, { 1, 3 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 } }, { { 0, 3 }, { 1, 2 } } },
-        { "area lights", lightingPassAreaLights(), { { 1, 1 }, { 1, 3 }, { 1, 4 }, { 1, 5 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 } }, { { 0, 1 }, { 0, 3 }, { 1, 2 } } },
+        { "punctual", lightingPass(), { { 0, 6 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 } }, { { 0, 3 }, { 0, 4 }, { 0, 14 } } },
+        { "area lights", lightingPassAreaLights(), { { 0, 6 }, { 0, 7 }, { 0, 11 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 }, { 0, 14 } } },
     };
 
     for (const auto& variant : variants)
@@ -99,12 +101,21 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
         const auto* fragment = fragmentOf (variant.bundle);
         ASSERT_NE (fragment, nullptr) << variant.name;
 
-        // The ViewBlock and the LightingBlock
-        EXPECT_EQ (bindingsOf (fragment->uniformBuffers), (Bindings { { 0, 0 }, { 1, 0 } })) << variant.name;
+        // The ViewBlock, the LightingBlock and the ShadowBlock
+        EXPECT_EQ (bindingsOf (fragment->uniformBuffers), (Bindings { { 0, 0 }, { 1, 0 }, { 3, 4 } })) << variant.name;
 
         EXPECT_EQ (bindingsOf (fragment->separateImages), variant.images) << variant.name;
         EXPECT_EQ (bindingsOf (fragment->separateSamplers), variant.samplers) << variant.name;
         EXPECT_TRUE (fragment->sampledImages.empty()) << variant.name;
+
+        // Each set stays within the 8 textures an ore bind group holds
+        std::map<uint32_t, int> texturesPerSet;
+        for (const auto& image : fragment->separateImages)
+            ++texturesPerSet[image.set];
+
+        EXPECT_LE (texturesPerSet[0], 8) << variant.name;
+        EXPECT_LE (texturesPerSet[1], 8) << variant.name;
+        EXPECT_LE (texturesPerSet[3], 8) << variant.name;
 
         // The lights, the light lists of the clusters and the material table, read only
         EXPECT_EQ (bindingsOf (fragment->storageBuffers), (Bindings { { 1, 6 }, { 1, 7 }, { 1, 8 } })) << variant.name;

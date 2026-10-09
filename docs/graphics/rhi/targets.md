@@ -43,6 +43,7 @@ if (target != nullptr)
 | ----------------------------------- | ------------------------------------------------------ |
 | `getWidth()` / `getHeight()`        | Target dimensions, at the mip level it renders into.   |
 | `beginRenderPass (frame, options)`  | Begins a render pass targeting the backing texture.    |
+| `beginRenderPass (frame, depthOptions)` | Begins a depth-only pass on a depth-format target. |
 | `asTexture()`                       | GPU-texture view of the rendered result.               |
 | `asImage()`                         | An `Image` with GPU texture + CPU pixels populated.    |
 | `readPixels (dst, byteSize)`        | Reads pixels back to CPU memory.                       |
@@ -79,6 +80,40 @@ a cube or array mip chain is built by rendering each level in turn - which is al
 > On OpenGL and OpenGL ES, which have no texture views, only the **mip range** of
 > a sampled view is honored. A layer range is not: every layer of an array or cube
 > texture stays visible to the shader. Attachments honor both on every backend.
+
+### Depth-only targets
+
+A target over a depth-format render texture renders depth only - the building
+block of shadow maps. Its passes have no color attachment: the texture view is
+the depth attachment, and the pass takes its depth load, store and clear value
+from a `GpuDepthStencilOptions` overload of `beginRenderPass`:
+
+```cpp
+GpuTextureDesc desc (2048, 2048, GpuTextureFormat::depth32float, true);
+desc.type = GpuTextureType::array2D;
+desc.depthOrArrayLayers = 4;
+auto cascades = GpuTexture::create (device, desc);
+
+// Render into layer 2, cleared to the far plane.
+auto target = GpuTarget::createFromTexture (device, cascades, { /* mip */ 0, /* layer */ 2 });
+auto pass = target->beginRenderPass (frame, GpuDepthStencilOptions (1.0f));
+pass.setPipeline (depthOnlyPipeline); // no color targets, depthStencil.enabled
+```
+
+- Width and height come from the depth view. `setViewport` and
+  `setScissorRect` work as usual, so one pass can fill several tiles of an atlas.
+- The `GpuRenderOptions` overload also works on a depth target: its color fields
+  are ignored, and depth is cleared to 1.0 and stored. Its load op must be
+  `clear`; use the `GpuDepthStencilOptions` overload to load existing depth.
+- Passing `GpuDepthStencilOptions` to a color target is a programming error: it
+  asserts and returns an invalid pass.
+- A depth-only pass takes no further attachments: `setColorAttachment`,
+  `setDepthStencilAttachment` and `setResolveTarget` assert and do nothing.
+- Every backend stores clip-space z directly (z in [0, 1]). On OpenGL and
+  OpenGL ES the shader transpiler remaps the vertex output to GL's [-1, 1]
+  clip range (spirv-cross `fixup_clipspace`), so the stored depth matches
+  Metal, D3D, Vulkan and WebGPU.
+- Pair it with a depth-only pipeline - see [Pipelines](pipelines.md#depth-only-pipelines-and-depth-bias).
 
 `readPixels()` is only supported for canvas-backed targets; targets over a
 directly allocated texture return false, because there is no texture readback

@@ -61,6 +61,19 @@ public:
     /** Returns the corner with the largest coordinates. */
     const Vector3<float>& getMax() const noexcept { return maximum; }
 
+    /** Returns one of the eight corners.
+
+        @param index  The corner, in [0, 8): bit 0 picks the maximum x, bit 1 the maximum y and bit 2 the maximum z.
+    */
+    Vector3<float> getCorner (int index) const noexcept
+    {
+        jassert (isPositiveAndBelow (index, 8));
+
+        return { (index & 1) != 0 ? maximum.getX() : minimum.getX(),
+                 (index & 2) != 0 ? maximum.getY() : minimum.getY(),
+                 (index & 4) != 0 ? maximum.getZ() : minimum.getZ() };
+    }
+
     //==============================================================================
     /** Grows the box to contain a point. */
     void expand (const Vector3<float>& point) noexcept
@@ -94,11 +107,7 @@ public:
         BoundingBox result;
 
         for (int corner = 0; corner < 8; ++corner)
-        {
-            result.expand (transform.transformPoint ({ (corner & 1) != 0 ? maximum.getX() : minimum.getX(),
-                                                       (corner & 2) != 0 ? maximum.getY() : minimum.getY(),
-                                                       (corner & 4) != 0 ? maximum.getZ() : minimum.getZ() }));
-        }
+            result.expand (transform.transformPoint (getCorner (corner)));
 
         return result;
     }

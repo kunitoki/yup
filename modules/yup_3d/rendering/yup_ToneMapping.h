@@ -57,11 +57,12 @@ public:
     /** Maps HDR @p source (exposed radiance, or reversibly tone-mapped when @p sourceIsReversible)
         to display sRGB into the rgba8 @p destination, over the display-encoded @p background.
 
-        @param glow  A linear rgba16float glow of the size of @p source, or nullptr for none.
+        @param resources  The pool the shared samplers come from.
+        @param glow       A linear rgba16float glow of the size of @p source, or nullptr for none.
 
         @returns False if the pipeline could not be prepared or the pass could not be recorded.
     */
-    bool render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view,
+    bool render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, FrameResources& resources,
                  const GpuTexture::Ptr& source, bool sourceIsReversible, const GpuTexture::Ptr& glow,
                  const GpuTexture::Ptr& destination, Color background);
 
@@ -78,10 +79,9 @@ public:
     }
 
 private:
-    Result prepare (const GpuDevice::Ptr& device, GpuTextureFormat format);
+    Result prepare (const GpuDevice::Ptr& device, GpuTextureFormat format, const FrameResources::Samplers* samplers);
 
     FullscreenPass pass;
-    GpuSampler::Ptr pointClampSampler;
     std::optional<Result> prepared;
     GpuTextureFormat preparedFormat = GpuTextureFormat::rgba8unorm;
 

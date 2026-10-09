@@ -29,7 +29,7 @@ struct GpuLight
     vec4 positionType;     // xyz world position, w type (0 directional, 1 point, 2 spot)
     vec4 directionRange;   // xyz unit direction the light shines towards, w range: 0 unbounded (directional), > 0 the node range, < 0 minus the effective range
     vec4 colorIntensity;   // rgb linear color, w intensity
-    vec4 spotRadiusShadow; // x cone scale, y cone offset, z radius, w shadow index (0 the sun map) or -1
+    vec4 spotRadiusShadow; // x cone scale, y cone offset, z radius, w first shadow record (lib/shadows.glsl) or -1
 };
 
 #endif

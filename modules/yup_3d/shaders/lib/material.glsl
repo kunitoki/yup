@@ -124,18 +124,32 @@ vec3 materialPerturbNormal(vec3 n, vec3 tangentNormal, float side)
     return normalize(mat3(t * side, b * side, n * side) * tangentNormal);
 }
 
+// The base color of the fragment: the factor times the texture, decoded from sRGB, and the vertex
+// color, rgb clamped to [0, 1]. Its alpha is what an alpha masked material compares with its cutoff
+vec4 materialBaseColor()
+{
+    vec4 baseColorSample = texture(sampler2D(u_baseColor, s_baseColor), v_uv);
+    if (material.flags.y > 0.5)
+        baseColorSample.rgb = yupSrgbToLinear(baseColorSample.rgb);
+
+    vec4 baseColor = material.baseColorFactor * baseColorSample * v_color;
+    baseColor.rgb = clamp(baseColor.rgb, 0.0, 1.0);
+    return baseColor;
+}
+
+// True when an alpha masked material cuts out a texel of base color alpha `alpha` (its cutoff is
+// MaterialBlock.emissiveFactor.w)
+bool materialIsCutOut(float alpha)
+{
+    return alpha < material.emissiveFactor.w;
+}
+
 // Samples the material of the fragment, discarding it when an alpha masked material cuts it out.
 // The screen-space derivatives (normal mapping, kernel roughness) are taken before the discard
 MaterialSurface materialEvaluate()
 {
     MaterialSurface s;
-
-    vec4 baseColorSample = texture(sampler2D(u_baseColor, s_baseColor), v_uv);
-    if (material.flags.y > 0.5)
-        baseColorSample.rgb = yupSrgbToLinear(baseColorSample.rgb);
-
-    s.baseColor = material.baseColorFactor * baseColorSample * v_color;
-    s.baseColor.rgb = clamp(s.baseColor.rgb, 0.0, 1.0);
+    s.baseColor = materialBaseColor();
 
     // The normal uses screen-space derivatives: compute it before any fragment is discarded
     float side = gl_FrontFacing ? 1.0 : -1.0;
@@ -162,7 +176,7 @@ MaterialSurface materialEvaluate()
     }
     else if (material.flags.x < 1.5)
     {
-        if (s.baseColor.a < material.emissiveFactor.w)
+        if (materialIsCutOut(s.baseColor.a))
             discard;
 
         s.baseColor.a = 1.0;

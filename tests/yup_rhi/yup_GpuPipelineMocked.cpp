@@ -262,6 +262,102 @@ TEST_F (GpuPipelineMockTests, CompileWithColorTargetAndDepthStencil)
     ASSERT_NE (result.getValue(), nullptr);
 }
 
+// --------------------------------------------------------------------------
+// compile – depth-only pipelines and depth bias
+// --------------------------------------------------------------------------
+
+class GpuPipelineDepthMockTests : public ::testing::Test
+{
+protected:
+    /** A mocked ore context reporting depth bias clamp support. */
+    class BiasClampOreContext : public MockOreContext
+    {
+    public:
+        BiasClampOreContext() { m_features.depthBiasClamp = true; }
+    };
+
+    /** Compiles through @p oreCtx and returns the PipelineDesc handed to ore. */
+    static rive::ore::PipelineDesc compileCapturing (MockOreContext& oreCtx, const GpuPipelineOptions& options)
+    {
+        rive::ore::PipelineDesc captured;
+
+        EXPECT_CALL (oreCtx, makeShaderModule (_))
+            .WillOnce (Return (makeShaderModuleWithBindingMap()))
+            .WillOnce (Return (makeShaderModuleWithBindingMap()));
+        EXPECT_CALL (oreCtx, makeBindGroupLayout (_))
+            .WillOnce (Return (rive::make_rcp<TestOreBindGroupLayout>()));
+        EXPECT_CALL (oreCtx, makePipeline (_, _))
+            .WillOnce (Invoke ([&captured] (const rive::ore::PipelineDesc& desc, std::string*)
+        {
+            captured = desc;
+            return rive::rcp<rive::ore::Pipeline> (rive::make_rcp<TestOrePipeline>());
+        }));
+
+        GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
+        const auto result = GpuPipeline::compile (device, makeShaderSource ("// VS"), makeShaderSource ("// FS"), options);
+        EXPECT_TRUE (result.wasOk());
+        return captured;
+    }
+
+    static GpuPipelineOptions depthOnlyOptions()
+    {
+        GpuPipelineOptions options;
+        options.depthStencil.enabled = true;
+        options.depthStencil.format = GpuTextureFormat::depth32float;
+        options.depthStencil.depthCompare = GpuCompareFunction::lessEqual;
+        return options;
+    }
+
+    static GpuPipelineOptions biasedOptions()
+    {
+        auto options = depthOnlyOptions();
+        options.depthStencil.depthBias = 4;
+        options.depthStencil.depthBiasSlopeScale = 1.5f;
+        options.depthStencil.depthBiasClamp = 0.01f;
+        return options;
+    }
+};
+
+TEST_F (GpuPipelineDepthMockTests, NoColorTargetsWithDepthBuildsADepthOnlyPipeline)
+{
+    NiceMock<MockOreContext> oreCtx;
+    const auto desc = compileCapturing (oreCtx, depthOnlyOptions());
+
+    EXPECT_EQ (desc.colorCount, 0u);
+    EXPECT_EQ (desc.depthStencil.format, rive::ore::TextureFormat::depth32float);
+    EXPECT_EQ (desc.depthStencil.depthCompare, rive::ore::CompareFunction::lessEqual);
+}
+
+TEST_F (GpuPipelineDepthMockTests, NoColorTargetsWithoutDepthKeepsTheDefaultTarget)
+{
+    NiceMock<MockOreContext> oreCtx;
+    const auto desc = compileCapturing (oreCtx, GpuPipelineOptions {});
+
+    EXPECT_EQ (desc.colorCount, 1u);
+    EXPECT_EQ (desc.colorTargets[0].format, rive::ore::TextureFormat::rgba8unorm);
+    EXPECT_TRUE (desc.colorTargets[0].blendEnabled);
+}
+
+TEST_F (GpuPipelineDepthMockTests, DepthBiasReachesTheBackend)
+{
+    NiceMock<BiasClampOreContext> oreCtx;
+    const auto desc = compileCapturing (oreCtx, biasedOptions());
+
+    EXPECT_EQ (desc.depthStencil.depthBias, 4);
+    EXPECT_FLOAT_EQ (desc.depthStencil.depthBiasSlopeScale, 1.5f);
+    EXPECT_FLOAT_EQ (desc.depthStencil.depthBiasClamp, 0.01f);
+}
+
+TEST_F (GpuPipelineDepthMockTests, DepthBiasClampIsDroppedWithoutBackendSupport)
+{
+    NiceMock<MockOreContext> oreCtx;
+    const auto desc = compileCapturing (oreCtx, biasedOptions());
+
+    EXPECT_EQ (desc.depthStencil.depthBias, 4);
+    EXPECT_FLOAT_EQ (desc.depthStencil.depthBiasSlopeScale, 1.5f);
+    EXPECT_FLOAT_EQ (desc.depthStencil.depthBiasClamp, 0.0f);
+}
+
 TEST_F (GpuPipelineMockTests, CompileWithVertexBuffers)
 {
     auto vsModule = makeShaderModuleWithBindingMap();
@@ -1517,6 +1613,10 @@ TEST_F (GpuRenderPassMockTests, EqualLayoutsWithDifferentDefaultSamplersRebuildT
 
 TEST_F (GpuRenderPassMockTests, SetStorageBufferOnUnsupportedDeviceIsIgnored)
 {
+#if YUP_ASSERTIONS_ENABLED
+    GTEST_SKIP() << "Binding a storage buffer on a device without fragment storage buffers triggers an assertion in assertion-enabled builds";
+#endif
+
     // A storage buffer with a native handle, which this mocked device must still refuse to bind
     auto storageDevice = GpuDevice::create (GpuPlatform::Metal, {});
     if (storageDevice == nullptr || ! storageDevice->isFragmentStorageBufferAvailable())
@@ -1577,6 +1677,10 @@ TEST_F (GpuRenderPassMockTests, SetStorageBufferOnUnsupportedDeviceIsIgnored)
 
 TEST_F (GpuRenderPassMockTests, StorageBufferMeetingAWritableBlockSkipsTheDraw)
 {
+#if YUP_ASSERTIONS_ENABLED
+    GTEST_SKIP() << "A storage buffer meeting a writable block triggers an assertion in assertion-enabled builds";
+#endif
+
     auto storageDevice = GpuDevice::create (GpuPlatform::Metal, {});
     if (storageDevice == nullptr || ! storageDevice->isFragmentStorageBufferAvailable())
         GTEST_SKIP() << "No device with fragment storage buffers to create the buffer on";

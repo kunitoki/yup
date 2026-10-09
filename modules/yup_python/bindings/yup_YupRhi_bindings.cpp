@@ -418,7 +418,10 @@ void registerYupRhiBindings (py::module_& m)
         .def_readwrite ("enabled", &GpuDepthStencilState::enabled)
         .def_readwrite ("format", &GpuDepthStencilState::format)
         .def_readwrite ("depthCompare", &GpuDepthStencilState::depthCompare)
-        .def_readwrite ("depthWriteEnabled", &GpuDepthStencilState::depthWriteEnabled);
+        .def_readwrite ("depthWriteEnabled", &GpuDepthStencilState::depthWriteEnabled)
+        .def_readwrite ("depthBias", &GpuDepthStencilState::depthBias)
+        .def_readwrite ("depthBiasSlopeScale", &GpuDepthStencilState::depthBiasSlopeScale)
+        .def_readwrite ("depthBiasClamp", &GpuDepthStencilState::depthBiasClamp);
 
     py::class_<GpuPipelineOptions> (m, "GpuPipelineOptions")
         .def (py::init<>())
@@ -708,8 +711,10 @@ void registerYupRhiBindings (py::module_& m)
         .def ("getHeight", &GpuTarget::getHeight)
         // A pass borrows both the target it draws into and the frame it records into,
         // so both have to outlive it.
-        .def ("beginRenderPass", &GpuTarget::beginRenderPass, "frame"_a, "options"_a = GpuRenderOptions {},
-              py::keep_alive<0, 1>(), py::keep_alive<0, 2>())
+        .def ("beginRenderPass", py::overload_cast<GpuFrame&, const GpuRenderOptions&> (&GpuTarget::beginRenderPass),
+              "frame"_a, "options"_a = GpuRenderOptions {}, py::keep_alive<0, 1>(), py::keep_alive<0, 2>())
+        .def ("beginRenderPass", py::overload_cast<GpuFrame&, const GpuDepthStencilOptions&> (&GpuTarget::beginRenderPass),
+              "frame"_a, "options"_a, py::keep_alive<0, 1>(), py::keep_alive<0, 2>())
         .def ("asTexture", &GpuTarget::asTexture)
         .def ("readPixels", [] (GpuTarget& self) -> py::object
         {

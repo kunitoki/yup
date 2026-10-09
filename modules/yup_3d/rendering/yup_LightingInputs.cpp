@@ -42,7 +42,7 @@ bool LightingInputs::hasAreaLights (Span<const SceneDrawList::Light> lights) noe
 }
 
 LightingInputs LightingInputs::create (const GpuDevice::Ptr& device, const Scene& scene,
-                                       Span<const SceneDrawList::Light> lights, const ShadowRenderer::Result& shadow)
+                                       Span<const SceneDrawList::Light> lights, Span<const int> firstShadowRecord)
 {
     LightingInputs inputs;
     auto& block = inputs.block;
@@ -52,13 +52,9 @@ LightingInputs LightingInputs::create (const GpuDevice::Ptr& device, const Scene
     block.ambient[1] = lightingSrgbToLinear (ambient.getGreenFloat());
     block.ambient[2] = lightingSrgbToLinear (ambient.getBlueFloat());
 
-    std::copy_n (shadow.shadowMatrix.getData(), 16, block.shadowMatrix);
-    std::copy_n (shadow.shadowInfo + 1, 3, block.shadowInfo + 1);
-    inputs.shadowMap = shadow.map;
-
-    // The shadowed light gets shadow slot 0: draws pick theirs by list index through packedSlots
+    // Draws pick their lights by list index through packedSlots
     std::vector<uint32> order;
-    inputs.packedLights = GpuSceneData::packLights (lights, static_cast<int> (shadow.shadowInfo[0]), order);
+    inputs.packedLights = GpuSceneData::packLights (lights, firstShadowRecord, order);
 
     inputs.areaLights = hasAreaLights (lights);
 

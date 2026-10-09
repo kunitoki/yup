@@ -73,7 +73,8 @@ void appendPipelineOptions (String& payload, const GpuPipelineOptions& o)
     }
 
     payload << "|ds:" << (int) o.depthStencil.enabled << ',' << (int) o.depthStencil.format
-            << ',' << (int) o.depthStencil.depthCompare << ',' << (int) o.depthStencil.depthWriteEnabled;
+            << ',' << (int) o.depthStencil.depthCompare << ',' << (int) o.depthStencil.depthWriteEnabled
+            << ',' << (int) o.depthStencil.depthBias << ',' << o.depthStencil.depthBiasSlopeScale << ',' << o.depthStencil.depthBiasClamp;
 
     auto appendFace = [&payload] (const GpuStencilFaceState& f)
     {

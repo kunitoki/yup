@@ -26,26 +26,24 @@
 #include "lib/bsdf.glsl"
 #include "lib/view.glsl"
 
-// The per-pass lighting inputs of the passes that shade, declared once: the set 1 LightingBlock
-// (mirrored by LightingInputs::Block in yup_LightingInputs.h), the environment, the sun shadow map,
-// and the set 0 point sampler the shadow map is read with. Then the environment lookups.
+// The lighting inputs of the passes that shade, declared once: the set 1 LightingBlock (mirrored
+// by LightingInputs::Block in yup_LightingInputs.h), the set 0 environment lookup with its interim
+// sampler, and the set 0 point sampler. Then the environment lookups. The shadows are declared by
+// lib/shadows.glsl, which lib/lights.glsl includes.
 
 layout(set = 0, binding = 3) uniform sampler pointClamp;
 
 layout(set = 1, binding = 0) uniform LightingBlock
 {
     vec4 ambient;             // rgb linear ambient, w 1 when the environment shows behind the scene (exposure is view.cameraPosition.w)
-    mat4 shadowMatrix;        // world to shadow map clip space, depth from 0 to 1
-    vec4 shadowInfo;          // x unused, y texel size, z normal offset, w depth bias
     vec4 environmentInfo;     // x intensity (0 for none), y last level, z background blur level, w output mode (0 ldrInline, 1 hdrReversible, 2 hdrLinear)
     vec4 irradiance[9];       // rgb coefficients of the environment diffuse light
     vec4 clusterGrid;         // full tier: tiles x, tiles y, depth slices, number of lights
     vec4 clusterDepth;        // full tier: near, far, number of directional lights, 1 when the last slice is open (infinite far plane)
 } lighting;
 
-layout(set = 1, binding = 1) uniform texture2D u_environment;
-layout(set = 1, binding = 2) uniform sampler s_environment;
-layout(set = 1, binding = 3) uniform texture2D u_shadow; // packed depth, read with texelFetch
+layout(set = 0, binding = 6) uniform texture2D u_environment;
+layout(set = 0, binding = 14) uniform sampler s_environment;
 
 // The environment towards a direction, from a latitude-longitude image: around the vertical axis
 // from +Z, and from the zenith down. atan is undefined at the poles, where both arguments are zero

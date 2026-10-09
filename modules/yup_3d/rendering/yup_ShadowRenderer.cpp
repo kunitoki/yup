@@ -25,27 +25,49 @@ namespace yup
 namespace
 {
 
-// Regenerate after changing shaders/yup_ShadowPass.vert / .frag with: just yup3d_shaders
+// Regenerate after changing shaders/yup_ShadowPass.vert / .frag or the libraries they include with: just yup3d_shaders
 constexpr uint8_t shadowPassShaderBundle[] = {
 #include "../shaders/yup_ShadowPass.inc"
 };
-
-// std140 mirrors of the uniform blocks in yup_ShadowPass.vert
-struct ShadowPassData
-{
-    float shadowMatrix[16];
+constexpr uint8_t shadowPassMaskedShaderBundle[] = {
+#include "../shaders/yup_ShadowPass_masked.inc"
 };
 
-struct ShadowPassDrawData
-{
-    float model[16];
-    float normalMatrix[16];
-};
+// Receivers compare against a depth offset towards the light by this many texels of the cascade,
+// times LightNode::shadowBias, and are moved along their normal by as many where the light grazes them
+constexpr float shadowBiasTexels = 1.5f;
 
-static_assert (sizeof (ShadowPassData) == 64);
-static_assert (sizeof (ShadowPassDrawData) == 128);
+// The share of each cascade's depth range over which it hands over to the next one
+constexpr float cascadeBlendBand = 0.1f;
+
+// filterInfo.w flag: the shadow noise rotates with the frame, for temporal anti-aliasing to average
+constexpr float temporalNoiseFlag = 2.0f;
+
+int findShadowedSun (Span<const SceneDrawList::Light> lights) noexcept
+{
+    for (size_t i = 0; i < lights.size(); ++i)
+    {
+        const auto& node = *lights[i].node;
+        if (node.castsShadows && node.type == LightNode::Type::directional && ! GpuSceneData::isDark (node))
+            return static_cast<int> (i);
+    }
+
+    return -1;
+}
 
 } // namespace
+
+//==============================================================================
+/** What the cascade texture holds: maps are drawn again only when one of these changes. */
+struct ShadowRenderer::RenderedState
+{
+    uint64 signature = 0;
+    int resolution = 0;
+    int numCascades = 0;
+    std::array<Matrix4, ShadowCascades::maxCascades> viewProjections;
+
+    bool operator== (const RenderedState&) const = default;
+};
 
 //==============================================================================
 ShadowRenderer::ShadowRenderer() = default;
@@ -53,142 +75,260 @@ ShadowRenderer::ShadowRenderer() = default;
 ShadowRenderer::~ShadowRenderer() = default;
 
 //==============================================================================
-yup::Result ShadowRenderer::prepare (const GpuDevice::Ptr& device)
+Result ShadowRenderer::prepare (const GpuDevice::Ptr& device)
 {
     if (preparation)
         return *preparation;
 
-    preparation = yup::Result::ok();
+    preparation = geometry.prepare (device);
+    if (preparation->failed())
+        return *preparation;
 
-    // Depth seen from the shadow casting light, packed into rgba8unorm; the body of a model
-    // can mix windings, so nothing is culled
-    auto bundle = ShaderBundle::loadFromData (shadowPassShaderBundle, sizeof (shadowPassShaderBundle));
-    if (bundle.failed())
-        return *(preparation = yup::Result::fail ("Unable to load the shadow shader bundle: " + bundle.getErrorMessage()));
+    for (const auto masked : { false, true })
+    {
+        auto bundle = masked ? ShaderBundle::loadFromData (shadowPassMaskedShaderBundle, sizeof (shadowPassMaskedShaderBundle))
+                             : ShaderBundle::loadFromData (shadowPassShaderBundle, sizeof (shadowPassShaderBundle));
+        if (bundle.failed())
+            return *(preparation = Result::fail ("Unable to load the shadow shader bundle: " + bundle.getErrorMessage()));
 
-    GpuPipelineOptions options;
-    options.vertexBuffers.emplace_back (
-        static_cast<uint32_t> (sizeof (Mesh::Vertex)),
-        GpuVertexStepMode::vertex,
-        std::vector<GpuVertexAttribute> { { GpuVertexFormat::float3, static_cast<uint32_t> (offsetof (Mesh::Vertex, position)), 0 } });
-    options.topology = GpuPrimitiveTopology::triangleList;
-    options.indexFormat = GpuIndexFormat::uint32;
-    options.cullMode = GpuCullMode::none;
-    auto& colorTarget = options.colorTargets.emplace_back();
-    colorTarget.format = GpuTextureFormat::rgba8unorm;
-    colorTarget.blendEnabled = false; // The packed depth uses all four channels, alpha included
-    options.depthStencil.enabled = true;
-    options.depthStencil.format = GpuTextureFormat::depth24plusStencil8;
-    options.depthStencil.depthCompare = GpuCompareFunction::lessEqual;
-    options.depthStencil.depthWriteEnabled = true;
+        // Depth only, pushed away from the light by the slope of each triangle. The body of a model
+        // can mix windings, so nothing is culled
+        GpuPipelineOptions options;
+        GeometryBindings::setPipelineGeometry (options, 0);
+        options.cullMode = GpuCullMode::none;
+        options.depthStencil.enabled = true;
+        options.depthStencil.format = GpuTextureFormat::depth32float;
+        options.depthStencil.depthCompare = GpuCompareFunction::lessEqual;
+        options.depthStencil.depthWriteEnabled = true;
+        options.depthStencil.depthBias = 1;
+        options.depthStencil.depthBiasSlopeScale = 1.5f;
 
-    auto compiled = GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
-    if (compiled.failed())
-        return *(preparation = yup::Result::fail ("Unable to compile the shadow pipeline: " + compiled.getErrorMessage()));
+        auto compiled = GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
+        if (compiled.failed())
+            return *(preparation = Result::fail ("Unable to compile the shadow pipeline: " + compiled.getErrorMessage()));
 
-    pipeline = compiled.getValue();
+        (masked ? maskedPipeline : opaquePipeline) = compiled.getValue();
+    }
+
     return *preparation;
 }
 
-bool ShadowRenderer::prepareTarget (const GpuDevice::Ptr& device)
+GpuTexture::Ptr ShadowRenderer::getCascadeTexture() const noexcept
 {
-    if (target != nullptr && depthTexture != nullptr)
-        return true;
+    return cascades != nullptr ? cascades : placeholder;
+}
 
-    const auto size = static_cast<uint32_t> (SceneRenderer::shadowMapSize);
-
-    GpuTextureDesc colorDesc (size, size, GpuTextureFormat::rgba8unorm, true);
-    colorDesc.label = "SceneRenderer shadow map";
-
-    GpuTextureDesc depthDesc (size, size, GpuTextureFormat::depth24plusStencil8, true);
-    depthDesc.label = "SceneRenderer shadow depth";
-
-    target = GpuTarget::create (device, colorDesc);
-    depthTexture = GpuTexture::create (device, depthDesc);
-
-    return target != nullptr && depthTexture != nullptr;
+void ShadowRenderer::invalidate() noexcept
+{
+    rendered.reset();
+    placeholderCleared = false;
 }
 
 //==============================================================================
-ShadowRenderer::Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, const SceneDrawList& drawList)
+Result ShadowRenderer::preparePlaceholder (const GpuDevice::Ptr& device, GpuFrame& frame)
 {
-    Result result;
-
-    if (pipeline == nullptr)
-        return result;
-
-    // The first shadow casting directional light shading the frame, fitted to the opaque items
-    const auto lights = drawList.getLights();
-    const auto numLights = static_cast<int> (lights.size());
-
-    int shadowLight = -1;
-    for (int i = 0; i < numLights && shadowLight < 0; ++i)
+    // A one layer array standing in for the cascades: the shaders never read it, since no light
+    // then has a cascade record, but every declared texture must be bound with its type
+    if (placeholder == nullptr)
     {
-        const auto& node = *lights[static_cast<size_t> (i)].node;
-        if (node.castsShadows && node.type == LightNode::Type::directional)
-            shadowLight = i;
+        GpuTextureDesc desc (1, 1, GpuTextureFormat::depth32float, true);
+        desc.type = GpuTextureType::array2D;
+        desc.label = "SceneRenderer shadow placeholder";
+
+        placeholder = GpuTexture::create (device, desc);
+        placeholderCleared = false;
+
+        if (placeholder == nullptr)
+            return Result::fail ("Unable to create the shadow placeholder");
     }
 
-    BoundingBox bounds;
-    for (const auto& item : drawList.getOpaqueItems())
-        bounds.expand (item.primitive->bounds.transformedBy (item.world));
+    if (placeholderCleared)
+        return Result::ok();
 
-    if (shadowLight < 0 || bounds.isEmpty() || ! prepareTarget (device))
-        return result;
+    auto target = GpuTarget::createFromTexture (device, placeholder, GpuTextureViewDesc (0, 0));
+    if (target == nullptr)
+        return Result::fail ("Unable to clear the shadow placeholder");
 
-    const auto center = bounds.getCenter();
-    const auto radius = jmax (0.001f, bounds.getRadius());
-    const auto direction = lights[static_cast<size_t> (shadowLight)].direction.normalized();
-    const auto up = std::abs (direction.getY()) < 0.99f ? Vector3<float> (0.0f, 1.0f, 0.0f) : Vector3<float> (1.0f, 0.0f, 0.0f);
+    auto pass = target->beginRenderPass (frame, GpuDepthStencilOptions (1.0f));
+    if (! pass.isValid() || ! pass.finish())
+        return Result::fail ("Unable to clear the shadow placeholder");
 
-    // Orthographic around the bounding sphere: the depth from 0 to 1 is linear
-    const auto lightView = Matrix4::lookAt (center - direction * (radius * 2.0f), center, up);
-    const auto lightProjection = Matrix4::orthographic (-radius, radius, -radius, radius, radius, radius * 3.0f);
-    const auto shadowMatrix = lightView.followedBy (lightProjection);
+    placeholderCleared = true;
+    return Result::ok();
+}
 
-    // Cleared to the far depth, so nothing outside the drawn items shadows
-    auto pass = target->beginRenderPass (frame, { true, Colors::white });
+bool ShadowRenderer::prepareCascades (const GpuDevice::Ptr& device, int resolution, int numCascades)
+{
+    const auto size = static_cast<uint32_t> (resolution);
+    const auto layers = static_cast<uint32_t> (numCascades);
+
+    if (cascades != nullptr && cascades->getWidth() == size && layerTargets.size() == layers)
+        return true;
+
+    rendered.reset();
+    layerTargets.clear();
+
+    GpuTextureDesc desc (size, size, GpuTextureFormat::depth32float, true);
+    desc.type = GpuTextureType::array2D;
+    desc.depthOrArrayLayers = layers;
+    desc.label = "SceneRenderer sun cascades";
+
+    cascades = GpuTexture::create (device, desc);
+    if (cascades == nullptr)
+        return false;
+
+    for (uint32_t layer = 0; layer < layers; ++layer)
+    {
+        auto target = GpuTarget::createFromTexture (device, cascades, GpuTextureViewDesc (0, layer));
+        if (target == nullptr)
+        {
+            cascades = nullptr;
+            layerTargets.clear();
+            return false;
+        }
+
+        layerTargets.push_back (std::move (target));
+    }
+
+    return true;
+}
+
+Result ShadowRenderer::renderCascade (const GpuDevice::Ptr& device, GpuFrame& frame, const SceneDrawList& drawList, int layer, const Matrix4& viewProjection)
+{
+    auto pass = layerTargets[static_cast<size_t> (layer)]->beginRenderPass (frame, GpuDepthStencilOptions (1.0f));
     if (! pass.isValid())
-    {
-        result.error = "Unable to begin the shadow pass";
-        return result;
-    }
+        return Result::fail ("Unable to begin the shadow pass");
 
-    pass.setDepthStencilAttachment (depthTexture);
-    pass.setPipeline (pipeline);
+    // lib/geometry.glsl transforms by projection * view: the whole light transform goes in the projection
+    ViewData::Block block {};
+    std::copy_n (Matrix4::identity().getData(), 16, block.view);
+    std::copy_n (viewProjection.getData(), 16, block.projection);
+    std::copy_n (viewProjection.getData(), 16, block.viewProjection);
+    pass.setUniformBuffer (0, 0, &block, sizeof (block));
 
-    ShadowPassData shadowData {};
-    std::copy_n (shadowMatrix.getData(), 16, shadowData.shadowMatrix);
-    pass.setUniformBuffer (0, 0, &shadowData, sizeof (shadowData));
+    GpuPipeline* currentPipeline = nullptr;
 
     for (const auto& item : drawList.getOpaqueItems())
     {
-        auto vertexBuffer = item.mesh->getVertexBuffer (device, item.primitiveIndex);
-        auto indexBuffer = item.mesh->getIndexBuffer (device, item.primitiveIndex);
-        if (vertexBuffer == nullptr || indexBuffer == nullptr)
-            continue;
+        const auto& pipeline = item.material->alphaMode == Material::AlphaMode::mask ? maskedPipeline : opaquePipeline;
+        if (pipeline.get() != currentPipeline)
+        {
+            pass.setPipeline (pipeline);
+            currentPipeline = pipeline.get();
+        }
 
-        ShadowPassDrawData drawData {};
-        std::copy_n (item.world.getData(), 16, drawData.model);
-        pass.setUniformBuffer (0, 1, &drawData, sizeof (drawData));
-
-        pass.setVertexBuffer (0, vertexBuffer);
-        pass.setIndexBuffer (GpuIndexFormat::uint32, indexBuffer);
-        pass.drawIndexed (static_cast<uint32_t> (item.primitive->indices.size()));
+        geometry.draw (pass, device, item, 0);
     }
 
-    pass.finish();
+    if (! pass.finish())
+        return Result::fail ("Unable to record the shadow pass");
 
-    // A texel covers 2 * radius / size in the world, and 1 / size of the depth range
-    const auto texel = 1.0f / static_cast<float> (SceneRenderer::shadowMapSize);
+    return Result::ok();
+}
 
-    result.map = target->asTexture();
-    result.shadowMatrix = shadowMatrix;
-    result.shadowInfo[0] = static_cast<float> (shadowLight);
-    result.shadowInfo[1] = texel;
-    result.shadowInfo[2] = 1.5f * 2.0f * radius * texel;
-    result.shadowInfo[3] = 1.5f * texel;
-    return result;
+//==============================================================================
+Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Inputs& inputs, GpuShadowData& out)
+{
+    out = {};
+
+    const auto lights = inputs.drawList.getLights();
+    recordIndices.assign (lights.size(), -1);
+
+    if (opaquePipeline == nullptr || maskedPipeline == nullptr)
+        return Result::fail ("The shadow pipelines are not prepared");
+
+    const auto sun = inputs.enabled ? findShadowedSun (lights) : -1;
+    const auto resolution = RenderCapabilities::getShadowResolution (inputs.settings);
+
+    ShadowCascades::Inputs cascadeInputs;
+    std::array<ShadowCascades::Cascade, ShadowCascades::maxCascades> fitted;
+    auto numCascades = 0;
+
+    if (sun >= 0)
+    {
+        cascadeInputs.setView (inputs.view);
+        cascadeInputs.lightDirection = lights[static_cast<size_t> (sun)].direction;
+        cascadeInputs.resolution = resolution;
+
+        // An orthographic camera sees every depth at the same scale: one cascade fits it
+        const auto orthographic = cascadeInputs.projection.getData()[15] == 1.0f;
+        cascadeInputs.count = orthographic ? 1 : inputs.capabilities.getCascadeCount (inputs.settings);
+
+        for (const auto& item : inputs.drawList.getOpaqueItems())
+        {
+            const auto bounds = item.primitive->bounds.transformedBy (item.world);
+            cascadeInputs.casterBounds.expand (bounds);
+            cascadeInputs.receiverBounds.expand (bounds);
+        }
+
+        for (const auto& item : inputs.drawList.getBlendItems())
+            cascadeInputs.receiverBounds.expand (item.primitive->bounds.transformedBy (item.world));
+
+        numCascades = ShadowCascades::build (cascadeInputs, fitted);
+    }
+
+    // Nothing casts: the cascades are released, and the placeholder stands in for them
+    if (numCascades == 0)
+    {
+        cascades = nullptr;
+        layerTargets.clear();
+        rendered.reset();
+        return preparePlaceholder (device, frame);
+    }
+
+    if (! prepareCascades (device, resolution, numCascades))
+        return Result::fail ("Unable to create the shadow cascades");
+
+    const auto& node = *lights[static_cast<size_t> (sun)].node;
+    const auto contactShadows = node.contactShadows && inputs.capabilities.isEnabled (RenderCapabilities::Feature::contactShadows, inputs.settings);
+
+    RenderedState state;
+    state.signature = inputs.signature;
+    state.resolution = resolution;
+    state.numCascades = numCascades;
+
+    for (int c = 0; c < numCascades; ++c)
+    {
+        const auto& cascade = fitted[static_cast<size_t> (c)];
+        auto& record = out.records[c];
+
+        // A constant world distance becomes a fraction of the cascade's depth range, which changes with the fit
+        const auto texel = cascade.texelWorldSize;
+        std::copy_n (cascade.viewProjection.getData(), 16, record.viewProjection);
+        record.atlasRect[0] = static_cast<float> (c);
+        record.atlasRect[2] = 1.0f;
+        record.atlasRect[3] = 1.0f / static_cast<float> (resolution);
+        record.params[0] = node.shadowBias * shadowBiasTexels * texel / cascade.depthRange;
+        record.params[1] = shadowBiasTexels * texel;
+        record.params[3] = cascade.depthRange;
+
+        out.cascadeSplits[c] = cascade.splitFar;
+        out.cascadeTexel[c] = texel;
+        state.viewProjections[static_cast<size_t> (c)] = cascade.viewProjection;
+    }
+
+    out.records[0].contact[0] = contactShadows ? jmax (0.0f, node.contactShadowDistance) : 0.0f;
+    out.records[0].contact[1] = jmax (0.0f, node.contactShadowThickness);
+
+    out.sunInfo[0] = static_cast<float> (numCascades);
+    out.sunInfo[2] = cascadeBlendBand;
+    out.sunInfo[3] = ShadowCascades::cutsOffReceivers (cascadeInputs) ? 1.0f : 0.0f;
+    out.filterInfo[3] = inputs.capabilities.isEnabled (RenderCapabilities::Feature::temporalAntiAliasing, inputs.settings) ? temporalNoiseFlag : 0.0f;
+
+    recordIndices[static_cast<size_t> (sun)] = 0;
+
+    if (rendered != nullptr && *rendered == state)
+        return Result::ok();
+
+    rendered.reset();
+
+    for (int c = 0; c < numCascades; ++c)
+        if (auto result = renderCascade (device, frame, inputs.drawList, c, fitted[static_cast<size_t> (c)].viewProjection); result.failed())
+            return result;
+
+    rendered = std::make_unique<RenderedState> (state);
+    ++numRenderedFrames;
+    return Result::ok();
 }
 
 } // namespace yup

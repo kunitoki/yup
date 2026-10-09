@@ -682,14 +682,6 @@ private:
             // Input is mapped with the camera that was actually drawn
             updateScreenMapping();
 
-            // The raster tier shades each draw with its own short list of lights: fewer show lights keep it fast
-            if (const auto* capabilities = getRenderer().getCapabilities(); capabilities != nullptr)
-            {
-                const auto isFull = capabilities->getTier() == yup::RenderCapabilities::Tier::full;
-                if (setNumShowLights (isFull ? numShowLightsFull : numShowLightsRaster))
-                    repaint();
-            }
-
             if (onFramePainted)
                 onFramePainted();
         }
@@ -708,6 +700,14 @@ private:
         void refreshDisplay (double lastFrameTimeSeconds) override
         {
             yup::SceneComponent::refreshDisplay (lastFrameTimeSeconds);
+
+            // The raster tier shades each draw with its own short list of lights: fewer show lights keep it fast
+            if (const auto* capabilities = getRenderer().getCapabilities(); capabilities != nullptr)
+            {
+                const auto isFull = capabilities->getTier() == yup::RenderCapabilities::Tier::full;
+                if (setNumShowLights (isFull ? numShowLightsFull : numShowLightsRaster))
+                    repaint();
+            }
 
             // Only animate while the camera or the light show moves, the scene is static otherwise
             if (! animator->isAnimating() && ! lightShow->isVisible())

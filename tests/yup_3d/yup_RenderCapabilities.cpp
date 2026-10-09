@@ -160,3 +160,62 @@ TEST_F (RenderCapabilitiesTests, FullTierNeedsComputeAndFragmentStorageBuffers)
     facts.fragmentStorageBuffers = false;
     EXPECT_EQ (RenderCapabilities::selectTier (facts, Preference::full), Tier::raster);
 }
+
+TEST_F (RenderCapabilitiesTests, SoftShadowsDefaultOnFullOffOnRaster)
+{
+    RenderSettings settings;
+    const RenderCapabilities full (desktopMetal(), settings, 4);
+    const RenderCapabilities raster (webgl2 (true, 4), settings, 4);
+
+    EXPECT_TRUE (full.isEnabled (Feature::softShadows, settings));
+    EXPECT_TRUE (raster.isAvailable (Feature::softShadows));
+    EXPECT_FALSE (raster.isEnabled (Feature::softShadows, settings));
+
+    settings.softShadows = true;
+    EXPECT_TRUE (raster.isEnabled (Feature::softShadows, settings));
+
+    settings.softShadows = false;
+    EXPECT_FALSE (full.isEnabled (Feature::softShadows, settings));
+}
+
+TEST_F (RenderCapabilitiesTests, ContactShadowsAreFullTierOnly)
+{
+    RenderSettings settings;
+    settings.contactShadows = true;
+
+    EXPECT_TRUE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::contactShadows, settings));
+    EXPECT_FALSE (RenderCapabilities (webgl2 (true, 4), settings, 4).isAvailable (Feature::contactShadows));
+    EXPECT_FALSE (RenderCapabilities (webgl2 (true, 4), settings, 4).isEnabled (Feature::contactShadows, settings));
+
+    settings.contactShadows = false;
+    EXPECT_FALSE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::contactShadows, settings));
+}
+
+TEST_F (RenderCapabilitiesTests, CascadeCountFollowsTierAndSettings)
+{
+    RenderSettings settings;
+    EXPECT_EQ (RenderCapabilities (desktopMetal(), settings, 4).getCascadeCount (settings), 4);
+    EXPECT_EQ (RenderCapabilities (webgl2 (true, 4), settings, 4).getCascadeCount (settings), RenderCapabilities::defaultRasterCascades);
+
+    settings.sunCascades = 9;
+    EXPECT_EQ (RenderCapabilities (desktopMetal(), settings, 4).getCascadeCount (settings), 4);
+    settings.sunCascades = 1;
+    EXPECT_EQ (RenderCapabilities (webgl2 (true, 4), settings, 4).getCascadeCount (settings), 1);
+    settings.sunCascades = -3;
+    EXPECT_EQ (RenderCapabilities (desktopMetal(), settings, 4).getCascadeCount (settings), 1);
+}
+
+TEST_F (RenderCapabilitiesTests, ShadowResolutionIsClamped)
+{
+    RenderSettings settings;
+    EXPECT_EQ (RenderCapabilities::getShadowResolution (settings), 2048);
+
+    settings.shadowResolution = 16;
+    EXPECT_EQ (RenderCapabilities::getShadowResolution (settings), RenderCapabilities::minShadowResolution);
+
+    settings.shadowResolution = 1 << 20;
+    EXPECT_EQ (RenderCapabilities::getShadowResolution (settings), RenderCapabilities::maxShadowResolution);
+
+    EXPECT_EQ (RenderCapabilities::minShadowResolution, 256);
+    EXPECT_EQ (RenderCapabilities::maxShadowResolution, 4096);
+}

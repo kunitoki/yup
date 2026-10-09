@@ -54,7 +54,7 @@ public:
 
         @param device             The device to render with.
         @param frame              The frame to record into.
-        @param resources          The pool the chain and the result are acquired from.
+        @param resources          The pool the chain, the result and the shared samplers are acquired from.
         @param settings           The bloom threshold, intensity and radius.
         @param color              The rgba16float exposed scene color, premultiplied by its coverage alpha.
         @param colorIsReversible  True when @p color is reversibly tone mapped (c / (1 + luma)).
@@ -80,11 +80,10 @@ public:
     }
 
 private:
-    Result prepare (const GpuDevice::Ptr& device);
+    Result prepare (const GpuDevice::Ptr& device, const FrameResources::Samplers* samplers);
 
     FullscreenPass downsample;
     FullscreenPass upsample;
-    GpuSampler::Ptr linearClampSampler;
     std::optional<Result> prepared;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Bloom)

@@ -1550,4 +1550,72 @@ void main()
     EXPECT_GE (pixels[center + 1], 250);
 }
 
+TEST_F (GpuTextureOpenGLTests, SameDepthTextureBindsForCompareAndRawReads)
+{
+    auto depth = makeClearedDepth (GpuTextureFormat::depth32float, 0.25f, 8);
+    ASSERT_NE (depth, nullptr);
+
+    GpuSamplerDesc compareDesc (GpuFilter::linear, GpuWrapMode::clampToEdge);
+    compareDesc.compare = GpuCompareFunction::lessEqual;
+    auto compareSampler = GpuSampler::create (device, compareDesc);
+    auto pointSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
+    ASSERT_NE (compareSampler, nullptr);
+    ASSERT_NE (pointSampler, nullptr);
+
+    // Two texture units holding the same texture, each with its own sampler object
+    const auto pixels = drawIntoReadback (dualBindingFragment, 8, [&] (GpuRenderPass& pass)
+    {
+        pass.setTexture (0, 0, depth);
+        pass.setTexture (0, 1, depth);
+        pass.setSampler (0, 2, compareSampler);
+        pass.setSampler (0, 3, pointSampler);
+    });
+
+    ASSERT_EQ (pixels.size(), 8u * 8u * 4u);
+    const auto center = (4u * 8u + 4u) * 4u;
+    EXPECT_GE (pixels[center + 0], 250);     // 0.2 <= 0.25
+    EXPECT_NEAR (pixels[center + 1], 64, 2); // 0.25 * 255
+}
+
+// The transpiler remaps GL's [-1, 1] clip range (fixup_clipspace), so clip depth 0.5 is stored as
+// 0.5 as on Metal: without the remap it would be stored as 0.75 and fail the probes
+
+TEST_F (GpuTextureOpenGLTests, DepthOnlyPassWritesALayerOfAnArray)
+{
+    auto depth = makeDepthArray (8);
+    ASSERT_NE (depth, nullptr);
+
+    ASSERT_TRUE (renderDepthOnly (depth, 0, 0.25f));
+    ASSERT_TRUE (renderDepthOnly (depth, 1, 1.0f, { compileDepthOnlyPipeline (0.5f) }));
+
+    const auto written = compareDepthLayer (depth, 1, GpuCompareFunction::lessEqual, 0.4f, 0.6f);
+    ASSERT_FALSE (written.empty());
+    EXPECT_GE (written[0], 250);
+    EXPECT_LE (written[1], 5);
+
+    const auto cleared = compareDepthLayer (depth, 0, GpuCompareFunction::lessEqual, 0.2f, 0.3f);
+    ASSERT_FALSE (cleared.empty());
+    EXPECT_GE (cleared[0], 250);
+    EXPECT_LE (cleared[1], 5);
+}
+
+TEST_F (GpuTextureOpenGLTests, DepthBiasShiftsWrittenDepth)
+{
+    auto depth = makeDepthArray (8);
+    ASSERT_NE (depth, nullptr);
+
+    ASSERT_TRUE (renderDepthOnly (depth, 0, 1.0f, { compileDepthOnlyPipeline (0.5f) }));
+    ASSERT_TRUE (renderDepthOnly (depth, 1, 1.0f, { compileDepthOnlyPipeline (0.5f, 1000) }));
+
+    const auto unbiased = compareDepthLayer (depth, 0, GpuCompareFunction::less, 0.5f, 0.51f);
+    ASSERT_FALSE (unbiased.empty());
+    EXPECT_LE (unbiased[0], 5);
+    EXPECT_LE (unbiased[1], 5);
+
+    const auto biased = compareDepthLayer (depth, 1, GpuCompareFunction::less, 0.5f, 0.51f);
+    ASSERT_FALSE (biased.empty());
+    EXPECT_GE (biased[0], 250);
+    EXPECT_LE (biased[1], 5);
+}
+
 #endif // YUP_ENABLE_SHADER_TRANSPILER

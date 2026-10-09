@@ -338,4 +338,64 @@ TEST_F (FrameResourcesMetalTests, StorageSlotsNotAcquiredInAFrameAreReleased)
     EXPECT_EQ (lights->getReferenceCount(), 1);
     EXPECT_GT (materials->getReferenceCount(), 1);
 }
+
+TEST_F (FrameResourcesMetalTests, SharedSamplersAreCreatedOnceForEveryPass)
+{
+    FrameResources resources (device);
+
+    resources.beginFrame (64, 64);
+    const auto* samplers = resources.getSamplers();
+    ASSERT_NE (samplers, nullptr);
+
+    const auto& linear = samplers->linearClamp->getDescription();
+    EXPECT_EQ (linear.minFilter, GpuFilter::linear);
+    EXPECT_EQ (linear.wrapU, GpuWrapMode::clampToEdge);
+    EXPECT_FALSE (linear.compare.has_value());
+
+    const auto& point = samplers->pointClamp->getDescription();
+    EXPECT_EQ (point.minFilter, GpuFilter::nearest);
+    EXPECT_EQ (point.wrapU, GpuWrapMode::clampToEdge);
+    EXPECT_FALSE (point.compare.has_value());
+
+    const auto& compare = samplers->shadowCompare->getDescription();
+    EXPECT_EQ (compare.minFilter, GpuFilter::linear);
+    EXPECT_EQ (compare.wrapU, GpuWrapMode::clampToEdge);
+    EXPECT_EQ (compare.compare, std::optional<GpuCompareFunction> (GpuCompareFunction::lessEqual));
+    resources.endFrame();
+
+    // A resize releases the textures, never the samplers
+    const auto linearClamp = samplers->linearClamp;
+    resources.beginFrame (32, 32);
+    ASSERT_EQ (resources.getSamplers(), samplers);
+    EXPECT_EQ (resources.getSamplers()->linearClamp, linearClamp);
+    resources.endFrame();
+}
+
+TEST_F (FrameResourcesMetalTests, ShadowCompareFailureKeepsTheOtherSamplersAndIsRemembered)
+{
+    FrameResources resources (device);
+    resources.failShadowCompareSamplerForTesting();
+
+    const auto* samplers = resources.getSamplers();
+    ASSERT_NE (samplers, nullptr);
+    EXPECT_NE (samplers->linearClamp, nullptr);
+    EXPECT_NE (samplers->pointClamp, nullptr);
+    EXPECT_EQ (samplers->shadowCompare, nullptr);
+
+    // Never retried: later calls keep the same samplers and the missing comparison sampler
+    const auto pointClamp = samplers->pointClamp;
+    for (int call = 0; call < 2; ++call)
+    {
+        ASSERT_EQ (resources.getSamplers(), samplers);
+        EXPECT_EQ (samplers->pointClamp, pointClamp);
+        EXPECT_EQ (samplers->shadowCompare, nullptr);
+    }
+}
 #endif
+
+TEST (FrameResourcesTests, NoSharedSamplersWithoutADevice)
+{
+    FrameResources resources (nullptr);
+    EXPECT_EQ (resources.getSamplers(), nullptr);
+    EXPECT_EQ (resources.getSamplers(), nullptr);
+}

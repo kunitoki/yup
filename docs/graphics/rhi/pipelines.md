@@ -214,7 +214,8 @@ struct GpuPipelineOptions
     GpuCullMode          cullMode    = GpuCullMode::none;
     GpuFaceWinding       winding     = GpuFaceWinding::counterClockwise;
 
-    std::vector<GpuColorTarget> colorTargets;  // up to 4; empty → one default target
+    std::vector<GpuColorTarget> colorTargets;  // up to 4; empty → one default target,
+                                               // or none when depth is enabled
 
     GpuDepthStencilState depthStencil;       // enabled = false by default
     GpuStencilFaceState  stencilFront, stencilBack;
@@ -285,6 +286,33 @@ Likewise `depthStencil.enabled` requires the pass to bind a depth attachment of
 `depthStencil.format` via `GpuRenderPass::setDepthStencilAttachment()`. A
 mismatch is rejected by the backend, which YUP surfaces as a debug assertion
 rather than letting the draw silently render nothing.
+
+### Depth-only pipelines and depth bias
+
+Leave `colorTargets` empty and enable `depthStencil` to build a **depth-only**
+pipeline, with no color output, for a [depth-only target](targets.md#depth-only-targets).
+The fragment shader may be empty. Without depth, an empty `colorTargets` still
+means one default `rgba8unorm` target.
+
+`GpuDepthStencilState` also carries a rasterizer depth bias, the usual cure for
+shadow acne:
+
+```cpp
+GpuPipelineOptions options;                       // no color targets
+options.cullMode = GpuCullMode::back;
+options.depthStencil.enabled = true;
+options.depthStencil.format = GpuTextureFormat::depth32float;
+options.depthStencil.depthCompare = GpuCompareFunction::lessEqual;
+options.depthStencil.depthBias = 2;               // constant, in depth-format units
+options.depthStencil.depthBiasSlopeScale = 1.5f;  // scaled by the polygon's depth slope
+options.depthStencil.depthBiasClamp = 0.0f;       // 0 = unclamped
+```
+
+- The bias is added to the written and tested depth, pushing it away from the
+  viewer (depth grows).
+- `depthBiasClamp` limits the total bias. It is ignored where the backend lacks
+  bias clamping: OpenGL / OpenGL ES (`glPolygonOffset` has no clamp) and Vulkan
+  devices without the `depthBiasClamp` feature.
 
 ## `GpuPipelineCache`
 

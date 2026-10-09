@@ -803,7 +803,11 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     // Color targets.
     jassert (pipelineOptions.colorTargets.size() <= 4);
 
-    if (pipelineOptions.colorTargets.empty())
+    if (pipelineOptions.colorTargets.empty() && pipelineOptions.depthStencil.enabled)
+    {
+        pipeDesc.colorCount = 0;
+    }
+    else if (pipelineOptions.colorTargets.empty())
     {
         pipeDesc.colorCount = 1;
         pipeDesc.colorTargets[0].format = rive::ore::TextureFormat::rgba8unorm;
@@ -841,6 +845,9 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
         pipeDesc.depthStencil.format = toOreTextureFormat (pipelineOptions.depthStencil.format);
         pipeDesc.depthStencil.depthCompare = toOreCompare (pipelineOptions.depthStencil.depthCompare);
         pipeDesc.depthStencil.depthWriteEnabled = pipelineOptions.depthStencil.depthWriteEnabled;
+        pipeDesc.depthStencil.depthBias = pipelineOptions.depthStencil.depthBias;
+        pipeDesc.depthStencil.depthBiasSlopeScale = pipelineOptions.depthStencil.depthBiasSlopeScale;
+        pipeDesc.depthStencil.depthBiasClamp = oreCtx->features().depthBiasClamp ? pipelineOptions.depthStencil.depthBiasClamp : 0.0f;
 
         auto fillStencilFace = [] (rive::ore::StencilFaceState& dst, const GpuStencilFaceState& src)
         {

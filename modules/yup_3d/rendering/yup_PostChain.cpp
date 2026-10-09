@@ -73,7 +73,7 @@ bool PostChain::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Ren
             return false;
     }
 
-    if (! toneMapping.render (device, frame, view, resolvedColor, inputs.colorIsReversible, glow, output, inputs.background))
+    if (! toneMapping.render (device, frame, view, resources, resolvedColor, inputs.colorIsReversible, glow, output, inputs.background))
         return false;
 
     // Targets of textures this frame no longer drew into, like the pool's after a resize, go now

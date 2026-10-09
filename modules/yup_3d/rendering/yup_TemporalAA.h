@@ -62,7 +62,7 @@ public:
         @param device       The device to render with.
         @param frame        The frame to record into.
         @param view         The view of this frame, with its jitter and viewport.
-        @param resources    The pool keeping the rgba16float history between frames.
+        @param resources    The pool keeping the rgba16float history between frames, and the shared samplers.
         @param current      This frame's rgba16float scene color, premultiplied by its coverage alpha.
         @param depth        This frame's depth32float depth.
         @param velocity     This frame's rg16float motion, current uv minus previous uv.
@@ -89,11 +89,9 @@ public:
     }
 
 private:
-    Result prepare (const GpuDevice::Ptr& device);
+    Result prepare (const GpuDevice::Ptr& device, const FrameResources::Samplers* samplers);
 
     FullscreenPass pass;
-    GpuSampler::Ptr linearClampSampler;
-    GpuSampler::Ptr pointClampSampler;
     std::optional<Result> prepared;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TemporalAA)

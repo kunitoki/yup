@@ -40,6 +40,8 @@
 #include "yup_SceneComponent.cpp"
 #include "yup_SceneDrawList.cpp"
 #include "yup_SceneRenderer.cpp"
+#include "yup_ShadowAtlas.cpp"
+#include "yup_ShadowCascades.cpp"
 #include "yup_TemporalAA.cpp"
 #include "yup_Texture.cpp"
 #include "yup_ViewData.cpp"

@@ -284,6 +284,22 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle shadowPass()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ShadowPass.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle shadowPassMasked()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ShadowPass_masked.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
     static ShaderBundle lightingPassFull()
     {
         static constexpr uint8 data[] = {
@@ -351,30 +367,40 @@ protected:
 TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
 {
     // The reflection counts what the shaders declare, so the budget check cannot pass on empty
-    // lists. The area light variants add the two area light tables
-    for (const auto& [name, bundle, textures] : { std::tuple { "ForwardPass", forwardPass(), 7 },
-                                                  std::tuple { "ForwardPass_area_lights", forwardPassAreaLights(), 9 } })
+    // lists. The area light variants add the two area light tables. The shared lookups (the
+    // environment and the area light tables) live in set 0, set 1 holds no texture, and set 3 the
+    // sun cascades, read with the ShadowBlock
+    for (const auto& [name, bundle, textures, lookups] : { std::tuple { "ForwardPass", forwardPass(), 7, 1 },
+                                                           std::tuple { "ForwardPass_area_lights", forwardPassAreaLights(), 9, 3 } })
     {
         const auto* vertex = bundle.findShader (ShaderStage::vertex, ShaderLanguage::spirv);
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (vertex, nullptr) << name;
         ASSERT_NE (fragment, nullptr) << name;
 
+        auto budget = countResources (fragment->reflection);
         EXPECT_EQ (countResources (vertex->reflection).sampledImages, 0) << name;
         EXPECT_EQ (countResources (vertex->reflection).uniformBlocks, 2) << name;
-        EXPECT_EQ (countResources (fragment->reflection).sampledImages, textures) << name;
-        EXPECT_EQ (countResources (fragment->reflection).uniformBlocks, 4) << name;
+        EXPECT_EQ (budget.sampledImages, textures) << name;
+        EXPECT_EQ (budget.uniformBlocks, 5) << name;
+        EXPECT_EQ (budget.texturesPerSet[0], lookups) << name;
+        EXPECT_EQ (budget.texturesPerSet[1], 0) << name;
+        EXPECT_EQ (budget.texturesPerSet[3], 1) << name;
+        EXPECT_EQ (budget.uniformBlocksPerSet[3], 1) << name;
     }
 
     // The full tier geometry bundles: the forward pass without the raster light list, and the G-buffer
-    for (const auto& [name, bundle, textures, blocks] : { std::tuple { "ForwardPass_full", forwardPassFull(), 7, 3 },
-                                                          std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 9, 3 },
-                                                          std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 1 } })
+    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 7, 4, 1 },
+                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 9, 4, 3 },
+                                                                   std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 1, 0 } })
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
-        EXPECT_EQ (countResources (fragment->reflection).sampledImages, textures) << name;
-        EXPECT_EQ (countResources (fragment->reflection).uniformBlocks, blocks) << name;
+
+        auto budget = countResources (fragment->reflection);
+        EXPECT_EQ (budget.sampledImages, textures) << name;
+        EXPECT_EQ (budget.uniformBlocks, blocks) << name;
+        EXPECT_EQ (budget.texturesPerSet[0], lookups) << name;
     }
 
     const std::pair<const char*, ShaderBundle> bundles[] = {
@@ -386,6 +412,8 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         { "GBufferPass_full", gbufferPassFull() },
         { "LightingPass_full", lightingPassFull() },
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
+        { "ShadowPass", shadowPass() },
+        { "ShadowPass_masked", shadowPassMasked() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -482,18 +510,153 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
         const auto& blocks = fragment->reflection.uniformBuffers;
         const auto block = std::find_if (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 1 && b.binding == 0; });
         ASSERT_NE (block, blocks.end()) << name;
-        EXPECT_EQ (block->blockSize, 288u) << name;
+        EXPECT_EQ (block->blockSize, 208u) << name;
 
         std::map<String, uint32_t> offsets;
         for (const auto& member : block->members)
             offsets[member.name] = member.offset;
 
-        EXPECT_EQ (offsets["shadowInfo"], 80u) << name;
-        EXPECT_EQ (offsets["environmentInfo"], 96u) << name;
-        EXPECT_EQ (offsets["irradiance"], 112u) << name;
-        EXPECT_EQ (offsets["clusterGrid"], 256u) << name;
-        EXPECT_EQ (offsets["clusterDepth"], 272u) << name;
+        // The shadow data lives in the ShadowBlock of set 3 since Phase 3
+        EXPECT_EQ (offsets.count ("shadowMatrix"), 0u) << name;
+        EXPECT_EQ (offsets.count ("shadowInfo"), 0u) << name;
+        EXPECT_EQ (offsets["environmentInfo"], 16u) << name;
+        EXPECT_EQ (offsets["irradiance"], 32u) << name;
+        EXPECT_EQ (offsets["clusterGrid"], 176u) << name;
+        EXPECT_EQ (offsets["clusterDepth"], 192u) << name;
     }
+}
+
+TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
+{
+    // One declaration in lib/shadows.glsl, mirrored by GpuShadowData: the ShadowBlock at set 3
+    // binding 4, and the sun cascades at set 3 binding 0 compared through shadowCompare at set 0
+    // binding 4. WebGPU needs them as a depth array texture and a comparison sampler, and Metal
+    // gives every texture and every sampler of a stage its own slot, whatever its set
+    const std::pair<const char*, ShaderBundle> bundles[] = {
+        { "ForwardPass", forwardPass() },
+        { "ForwardPass_area_lights", forwardPassAreaLights() },
+        { "ForwardPass_full", forwardPassFull() },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
+        { "LightingPass_full", lightingPassFull() },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
+    };
+
+    const auto distinctSlots = [] (const std::vector<ShaderReflection::ResourceBinding>& resources)
+    {
+        std::set<uint32_t> slots;
+        for (const auto& resource : resources)
+            slots.insert (resource.backendSlot);
+
+        return slots.size() == resources.size();
+    };
+
+    for (const auto& [name, bundle] : bundles)
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+
+        const auto& blocks = fragment->reflection.uniformBuffers;
+        const auto block = std::find_if (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 3 && b.binding == 4; });
+        ASSERT_NE (block, blocks.end()) << name;
+        EXPECT_EQ (block->blockSize, static_cast<uint32_t> (sizeof (GpuShadowData))) << name;
+
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 3, 0)) << name << ": shadowCascadesCompare";
+        EXPECT_TRUE (declares (fragment->reflection.separateSamplers, 0, 4)) << name << ": shadowCompare";
+
+        const auto* msl = bundle.findShader (ShaderStage::fragment, ShaderLanguage::msl);
+        ASSERT_NE (msl, nullptr) << name;
+        EXPECT_TRUE (distinctSlots (msl->reflection.separateImages)) << name;
+        EXPECT_TRUE (distinctSlots (msl->reflection.separateSamplers)) << name;
+
+        const auto* wgsl = bundle.findShader (ShaderStage::fragment, ShaderLanguage::wgsl);
+        ASSERT_NE (wgsl, nullptr) << name;
+
+        const auto layout = WgslBindingLayout::parse (wgsl->source);
+        ASSERT_TRUE (layout.wasOk()) << name << ": " << layout.getErrorMessage();
+
+        const auto find = [&layout] (uint32 group, uint32 binding) -> const WgslBindingLayout::Entry*
+        {
+            for (const auto& entry : layout.getReference())
+                if (entry.group == group && entry.binding == binding)
+                    return &entry;
+
+            return nullptr;
+        };
+
+        const auto* cascades = find (3, 0);
+        ASSERT_NE (cascades, nullptr) << name;
+        EXPECT_EQ (cascades->kind, WgslBindingLayout::ResourceKind::texture) << name;
+        EXPECT_EQ (cascades->sampleType, WgslBindingLayout::SampleType::depth) << name;
+        EXPECT_EQ (cascades->viewDimension, WgslBindingLayout::ViewDimension::array2D) << name;
+
+        const auto* compare = find (0, 4);
+        ASSERT_NE (compare, nullptr) << name;
+        EXPECT_EQ (compare->kind, WgslBindingLayout::ResourceKind::sampler) << name;
+        EXPECT_EQ (compare->samplerType, WgslBindingLayout::SamplerType::comparison) << name;
+
+        // No raw depth read of the cascades yet: soft shadows add it with its non-filtering sampler
+        EXPECT_EQ (find (3, 1), nullptr) << name;
+
+        // The reflection the render pipeline layouts are built from (ShaderBindingMap) types them alike:
+        // a depth texture and a comparison sampler, for every language
+        for (const auto language : { ShaderLanguage::spirv, ShaderLanguage::wgsl, ShaderLanguage::msl, ShaderLanguage::glsl })
+        {
+            const auto* shader = bundle.findShader (ShaderStage::fragment, language);
+            ASSERT_NE (shader, nullptr) << name;
+
+            const auto isDepth = [] (const std::vector<ShaderReflection::ResourceBinding>& resources, uint32_t set, uint32_t binding)
+            {
+                return std::any_of (resources.begin(), resources.end(), [&] (const auto& r) { return r.set == set && r.binding == binding && r.imageIsDepth; });
+            };
+
+            const auto& reflection = shader->reflection;
+            EXPECT_TRUE (isDepth (reflection.separateImages, 3, 0) || isDepth (reflection.sampledImages, 3, 0)) << name << " language " << (int) language;
+
+            if (language != ShaderLanguage::glsl)
+                EXPECT_TRUE (isDepth (reflection.separateSamplers, 0, 4)) << name << " language " << (int) language;
+        }
+    }
+
+    // The background shades nothing: no shadow resource reaches its pipeline
+    const auto rasterBackground = background();
+    for (const auto stage : { ShaderStage::vertex, ShaderStage::fragment })
+    {
+        const auto* shader = rasterBackground.findShader (stage, ShaderLanguage::spirv);
+        ASSERT_NE (shader, nullptr);
+
+        for (const auto* resources : { &shader->reflection.uniformBuffers, &shader->reflection.separateImages, &shader->reflection.separateSamplers })
+            for (const auto& resource : *resources)
+                EXPECT_FALSE (resource.set == 3 || (resource.set == 0 && resource.binding == 4)) << resource.name;
+    }
+}
+
+TEST_F (SceneRendererBundleTests, ShadowPassesDrawThroughTheGeometryStage)
+{
+    // Both shadow pipelines share the vertex stage of the mesh passes (lib/geometry.glsl): the
+    // ViewBlock of the shadow view and the DrawBlock. Opaque casters write depth only; masked ones
+    // read the alpha of their base color through the material bindings of set 2
+    for (const auto& [name, bundle] : { std::pair { "ShadowPass", shadowPass() }, std::pair { "ShadowPass_masked", shadowPassMasked() } })
+    {
+        const auto* vertex = bundle.findShader (ShaderStage::vertex, ShaderLanguage::spirv);
+        ASSERT_NE (vertex, nullptr) << name;
+        EXPECT_TRUE (declares (vertex->reflection.uniformBuffers, 0, 0)) << name;
+        EXPECT_TRUE (declares (vertex->reflection.uniformBuffers, 2, 0)) << name;
+    }
+
+    const auto opaque = shadowPass();
+    const auto* opaqueFragment = opaque.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+    ASSERT_NE (opaqueFragment, nullptr);
+    EXPECT_TRUE (opaqueFragment->reflection.uniformBuffers.empty());
+    EXPECT_TRUE (opaqueFragment->reflection.separateImages.empty());
+    EXPECT_TRUE (opaqueFragment->reflection.stageOutputs.empty());
+
+    const auto masked = shadowPassMasked();
+    const auto* maskedFragment = masked.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+    ASSERT_NE (maskedFragment, nullptr);
+    EXPECT_TRUE (declares (maskedFragment->reflection.uniformBuffers, 2, 1));
+    EXPECT_TRUE (declares (maskedFragment->reflection.separateImages, 2, 2));
+    EXPECT_TRUE (declares (maskedFragment->reflection.separateSamplers, 2, 7));
+    EXPECT_TRUE (maskedFragment->reflection.stageOutputs.empty());
 }
 
 TEST_F (SceneRendererBundleTests, RasterLightListBlockIs528Bytes)
@@ -544,9 +707,9 @@ TEST_F (SceneRendererBundleTests, FullForwardPassReadsTheClusteredLights)
 
 TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
 {
-    // The area light variants of the shading passes read the area light tables at set 1 bindings 4
-    // and 5 through the set 0 linearClamp sampler. RasterBundlesStayWithinBudget counts the two
-    // tables in the raster budget
+    // The area light variants of the shading passes read the area light tables, set 0 lookups at
+    // bindings 7 and 11, through the set 0 linearClamp sampler. RasterBundlesStayWithinBudget
+    // counts the two tables in the raster budget
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass_area_lights", forwardPassAreaLights() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
@@ -558,9 +721,36 @@ TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
 
-        EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 4)) << name << ": ltcMatrix";
-        EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 5)) << name << ": ltcAmplitude";
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 0, 7)) << name << ": ltcMatrix";
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 0, 11)) << name << ": ltcAmplitude";
         EXPECT_TRUE (declares (fragment->reflection.separateSamplers, 0, 1)) << name << ": linearClamp";
+        EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 4)) << name;
+        EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 5)) << name;
+    }
+}
+
+TEST_F (SceneRendererBundleTests, EveryShadingBundleReadsTheEnvironmentFromSetZero)
+{
+    // The environment is a set 0 lookup at binding 6, with its interim sampler at binding 14
+    const std::pair<const char*, ShaderBundle> bundles[] = {
+        { "ForwardPass", forwardPass() },
+        { "ForwardPass_area_lights", forwardPassAreaLights() },
+        { "ForwardPass_full", forwardPassFull() },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
+        { "Background", background() },
+        { "LightingPass_full", lightingPassFull() },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
+    };
+
+    for (const auto& [name, bundle] : bundles)
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 0, 6)) << name << ": environment";
+        EXPECT_TRUE (declares (fragment->reflection.separateSamplers, 0, 14)) << name << ": environment sampler";
+        EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 1)) << name;
+        EXPECT_FALSE (declares (fragment->reflection.separateSamplers, 1, 2)) << name;
     }
 }
 
@@ -578,8 +768,8 @@ TEST_F (SceneRendererBundleTests, PunctualVariantsDeclareNoAreaLightTables)
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
 
-        EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 4)) << name << ": ltcMatrix";
-        EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 5)) << name << ": ltcAmplitude";
+        EXPECT_FALSE (declares (fragment->reflection.separateImages, 0, 7)) << name << ": ltcMatrix";
+        EXPECT_FALSE (declares (fragment->reflection.separateImages, 0, 11)) << name << ": ltcAmplitude";
         EXPECT_FALSE (declares (fragment->reflection.separateSamplers, 0, 1)) << name << ": linearClamp";
         EXPECT_FALSE (fragment->reflection.separateSamplers.empty()) << name;
     }
@@ -702,6 +892,180 @@ protected:
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         sun->attach<LightNode>();
         scene.getRoot()->addChild (sun);
+    }
+
+    /** Places @p entity at @p eye with its -Z axis, which cameras look along and lights shine along, towards @p target. */
+    static void aimCamera (EntityNode& entity, Vector3<float> eye, Vector3<float> target, Vector3<float> up = { 0.0f, 1.0f, 0.0f })
+    {
+        entity.setPosition (eye);
+        entity.setRotation (Quaternion::fromRotationMatrix (Matrix4::lookAt (eye, target, up).inverted()));
+    }
+
+    /** The ground of the long shadow scenes: a 200 x 200 rough dielectric quad at y = 0, lit by a
+        shadow casting sun tilted 0.6 rad from vertical, so shadows fall towards +x, under an ambient
+        light of 0.05 and no environment. Returns the sun.
+    */
+    static LightNode& addLongGround (Scene& scene)
+    {
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.8f, 0.8f, 0.8f, 1.0f };
+        material->metallicFactor = 0.0f;
+        material->roughnessFactor = 1.0f;
+
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { -100.0f, 0.0f, 100.0f };
+        vertices[1].position = { 100.0f, 0.0f, 100.0f };
+        vertices[2].position = { 100.0f, 0.0f, -100.0f };
+        vertices[3].position = { -100.0f, 0.0f, -100.0f };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 1.0f, 0.0f };
+
+        auto mesh = Mesh::Ptr (new Mesh ("ground"));
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
+
+        auto ground = EntityNode::Ptr (new EntityNode ("ground"));
+        ground->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (ground);
+
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto& light = sun->attach<LightNode>();
+        light.castsShadows = true;
+        aimCamera (*sun, { -10.0f * std::sin (0.6f), 10.0f * std::cos (0.6f), 0.0f }, {});
+        scene.getRoot()->addChild (sun);
+
+        scene.setAmbientColor (Color (0xff3f3f3f)); // 0.05 once linear
+        return light;
+    }
+
+    /** A cube of half size @p halfSize centered on the origin, its faces wound counterclockwise seen from outside. */
+    static Mesh::Ptr makeBox (float halfSize, Material::Ptr material)
+    {
+        // Each face: its normal n and two axes u, v with u x v = n
+        const std::array<std::array<Vector3<float>, 3>, 6> faces { {
+            { Vector3<float> (1.0f, 0.0f, 0.0f), Vector3<float> (0.0f, 0.0f, -1.0f), Vector3<float> (0.0f, 1.0f, 0.0f) },
+            { Vector3<float> (-1.0f, 0.0f, 0.0f), Vector3<float> (0.0f, 0.0f, 1.0f), Vector3<float> (0.0f, 1.0f, 0.0f) },
+            { Vector3<float> (0.0f, 1.0f, 0.0f), Vector3<float> (1.0f, 0.0f, 0.0f), Vector3<float> (0.0f, 0.0f, -1.0f) },
+            { Vector3<float> (0.0f, -1.0f, 0.0f), Vector3<float> (1.0f, 0.0f, 0.0f), Vector3<float> (0.0f, 0.0f, 1.0f) },
+            { Vector3<float> (0.0f, 0.0f, 1.0f), Vector3<float> (1.0f, 0.0f, 0.0f), Vector3<float> (0.0f, 1.0f, 0.0f) },
+            { Vector3<float> (0.0f, 0.0f, -1.0f), Vector3<float> (-1.0f, 0.0f, 0.0f), Vector3<float> (0.0f, 1.0f, 0.0f) },
+        } };
+
+        std::vector<Mesh::Vertex> vertices;
+        std::vector<uint32> indices;
+
+        for (const auto& [n, u, v] : faces)
+        {
+            const auto first = static_cast<uint32> (vertices.size());
+            for (const auto& [a, b] : { std::pair { -1.0f, -1.0f }, std::pair { 1.0f, -1.0f }, std::pair { 1.0f, 1.0f }, std::pair { -1.0f, 1.0f } })
+            {
+                auto& vertex = vertices.emplace_back();
+                vertex.position = (n + u * a + v * b) * halfSize;
+                vertex.normal = n;
+            }
+
+            for (const auto index : { 0u, 1u, 2u, 0u, 2u, 3u })
+                indices.push_back (first + index);
+        }
+
+        auto mesh = Mesh::Ptr (new Mesh ("box"));
+        mesh->addPrimitive (std::move (vertices), std::move (indices), std::move (material));
+        return mesh;
+    }
+
+    /** A cube, the entity "caster", standing on the long ground at z = -casterDistance, seen from
+        above and in front. The cube and the camera scale with the distance, so the cube and the
+        shadow it casts beside it (towards +x) keep their size on screen: with k = casterDistance / 2
+        the cube is 0.25 k wide and the camera looks at its foot from (0, 2 k, 3 k) away. At 256 x 256
+        the shadow beside the cube covers about 14 x 11 px. A single shadow map fitted to the whole
+        ground has texels of about 0.14 m, so at 2 m the shadow spans about 1 x 2 of them.
+        The cube is drawn with @p casterMaterial, or a light gray dielectric. Returns the sun.
+    */
+    static LightNode& buildLongGroundScene (Scene& scene, float casterDistance, Material::Ptr casterMaterial = nullptr)
+    {
+        auto& sun = addLongGround (scene);
+        const auto k = casterDistance * 0.5f;
+        const auto size = 0.25f * k;
+
+        auto material = casterMaterial != nullptr ? std::move (casterMaterial) : Material::Ptr (new Material());
+        if (material->alphaMode == Material::AlphaMode::opaque)
+        {
+            material->baseColorFactor = { 0.8f, 0.8f, 0.8f, 1.0f };
+            material->metallicFactor = 0.0f;
+        }
+
+        auto caster = EntityNode::Ptr (new EntityNode ("caster"));
+        caster->attach<MeshNode> (makeBox (size * 0.5f, material));
+        caster->setPosition ({ 0.0f, size * 0.5f, -casterDistance });
+        scene.getRoot()->addChild (caster);
+
+        const Vector3<float> foot (0.0f, 0.0f, -casterDistance);
+        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        camera->attach<CameraNode>();
+        aimCamera (*camera, foot + Vector3<float> (0.0f, 2.0f * k, 3.0f * k), foot);
+        scene.getRoot()->addChild (camera);
+        scene.setActiveCamera (camera.get());
+
+        return sun;
+    }
+
+    /** The largest relative darkening of an 8x8 pixel window from @p unshadowed to @p shadowed,
+        (lit - shadowed) / lit in Rec.709 luma, over the windows with a lit luma above 10 levels.
+        Only the shadow tells the two images apart, so the caster itself never counts.
+    */
+    static double shadowContrast (const Image& unshadowed, const Image& shadowed)
+    {
+        auto contrast = 0.0;
+        for (int y = 0; y + 8 <= unshadowed.getHeight(); y += 2)
+        {
+            for (int x = 0; x + 8 <= unshadowed.getWidth(); x += 2)
+            {
+                const Rectangle<int> window (x, y, 8, 8);
+                const auto lit = meanLuminance (unshadowed, window);
+                if (lit > 10.0)
+                    contrast = jmax (contrast, (lit - meanLuminance (shadowed, window)) / lit);
+            }
+        }
+
+        return contrast;
+    }
+
+    /** The Rec.709 luma, from 0 to 1, of every pixel of column @p x from the top, 0 where it shows
+        @p background (within 2 levels in every channel). */
+    static std::vector<float> luminanceColumn (const Image& image, int x, Color background)
+    {
+        std::vector<float> column;
+        for (int y = 0; y < image.getHeight(); ++y)
+        {
+            const auto color = image.getPixelColor (x, y);
+            const auto isBackground = std::abs (color.getRed() - background.getRed()) <= 2
+                                   && std::abs (color.getGreen() - background.getGreen()) <= 2
+                                   && std::abs (color.getBlue() - background.getBlue()) <= 2;
+
+            column.push_back (isBackground ? 0.0f : static_cast<float> (meanLuminance (image, { x, y, 1, 1 }) / 255.0));
+        }
+
+        return column;
+    }
+
+    /** The median of the non-zero values of @p values, 0 without any. */
+    static float median (std::vector<float> values)
+    {
+        values.erase (std::remove (values.begin(), values.end(), 0.0f), values.end());
+        if (values.empty())
+            return 0.0f;
+
+        std::nth_element (values.begin(), values.begin() + static_cast<std::ptrdiff_t> (values.size() / 2), values.end());
+        return values[values.size() / 2];
+    }
+
+    /** Pins the shadow settings of tests comparing the tiers: no soft shadows and the raster cascade count on both. */
+    static void pinCrossTierShadows (Scene& scene)
+    {
+        auto settings = scene.getRenderSettings();
+        settings.softShadows = false;
+        settings.sunCascades = RenderCapabilities::defaultRasterCascades;
+        scene.setRenderSettings (settings);
     }
 
     /** The folder holding the baseline images, tests/data/yup_3d/baseline. */
@@ -912,6 +1276,75 @@ protected:
         return baseline.isValid() ? countDifferences (image, baseline) : -1;
     }
 
+    /** True for the pixels of @p image more than 2 levels away from @p reference in any channel. */
+    static std::vector<bool> differenceMask (const Image& image, const Image& reference)
+    {
+        std::vector<bool> mask;
+        for (int y = 0; y < image.getHeight(); ++y)
+        {
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto a = image.getPixelColor (x, y);
+                const auto b = reference.getPixelColor (x, y);
+                mask.push_back (std::abs (a.getRed() - b.getRed()) > 2 || std::abs (a.getGreen() - b.getGreen()) > 2 || std::abs (a.getBlue() - b.getBlue()) > 2);
+            }
+        }
+
+        return mask;
+    }
+
+    /** The shadows scene against its Phase 0 baseline @p platform_shadows.png by statistics, since
+        the cascades replaced the single map of Phase 0: the shadow darkens at least as much
+        (checkShadows), covers about the same pixels, and nothing differs outside of it. The shadow
+        is what tells each image apart from the scene rendered without it.
+    */
+    void checkShadowsAgainstBaseline (const Image& image, const String& platform)
+    {
+        const auto baseline = loadBaseline (platform + "_shadows.png");
+        ASSERT_TRUE (baseline.isValid()) << "capture the Phase 0 baselines first";
+
+        Scene scene;
+        buildShadowsScene (scene);
+        setTier (scene, RenderSettings::TierPreference::raster);
+        scene.getRoot()->findChild ("sun")->getNode<LightNode>()->castsShadows = false;
+
+        SceneRenderer renderer;
+        const auto unshadowed = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (unshadowed.isValid()) << renderer.getLastError();
+
+        checkShadows (image);
+
+        const auto margin = [] (const Image& shadowed)
+        {
+            return static_cast<int> (shadowed.getPixelColor (40, 60).getRed()) - static_cast<int> (shadowed.getPixelColor (50, 64).getRed());
+        };
+
+        RecordProperty ("baselineShadowMargin", margin (baseline));
+        EXPECT_GE (margin (image), margin (baseline));
+
+        const auto shadow = differenceMask (image, unshadowed);
+        const auto baselineShadow = differenceMask (baseline, unshadowed);
+        const auto differing = differenceMask (image, baseline);
+
+        int shadowPixels = 0, baselineShadowPixels = 0, differingOutside = 0;
+        for (size_t i = 0; i < shadow.size(); ++i)
+        {
+            shadowPixels += shadow[i] ? 1 : 0;
+            baselineShadowPixels += baselineShadow[i] ? 1 : 0;
+            differingOutside += differing[i] && ! shadow[i] && ! baselineShadow[i] ? 1 : 0;
+        }
+
+        RecordProperty ("shadowsDifferingFromBaseline", static_cast<int> (std::count (differing.begin(), differing.end(), true)));
+        RecordProperty ("shadowPixels", shadowPixels);
+        RecordProperty ("baselineShadowPixels", baselineShadowPixels);
+        RecordProperty ("differingOutsideShadows", differingOutside);
+
+        EXPECT_GT (baselineShadowPixels, 0);
+        EXPECT_GE (shadowPixels, baselineShadowPixels * 4 / 5);
+        EXPECT_LE (shadowPixels, baselineShadowPixels * 5 / 4);
+        EXPECT_EQ (differingOutside, 0);
+    }
+
     /** How far a readVelocity() level is from zero velocity (127.5): 0 for 127 and 128, up to 127. */
     static int velocityDeviation (uint8 level)
     {
@@ -977,7 +1410,8 @@ protected:
         }
     }
 
-    /** Each baseline scene on the raster tier stays within 0.5% of the pixels of the Phase 0 image of @p platform. */
+    /** Each baseline scene on the raster tier stays within 0.5% of the pixels of the Phase 0 image of
+        @p platform, except the shadows scene, checked by statistics (checkShadowsAgainstBaseline()). */
     void checkMatchesPhaseZeroBaseline (const String& platform)
     {
         const std::pair<const char*, void (*) (Scene&)> scenes[] = {
@@ -998,6 +1432,12 @@ protected:
             SceneRenderer renderer;
             const auto image = renderToImage (renderer, scene, 128);
             ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
+
+            if (String (name) == "shadows")
+            {
+                checkShadowsAgainstBaseline (image, platform);
+                continue;
+            }
 
             const auto differing = countBaselineDifferences (image, platform + "_" + name + ".png");
             ASSERT_GE (differing, 0) << "capture the Phase 0 baselines first";
@@ -1224,6 +1664,152 @@ protected:
         }
 
         RecordProperty ("litQuads", lit);
+    }
+
+    /** Renders @p scene at @p size x @p size, on the full tier until the accumulation converged, and reads it back. */
+    Image renderConverged (SceneRenderer& renderer, Scene& scene, int size)
+    {
+        for (int frame = 0; frame < 64; ++frame)
+            if (renderer.render (device, scene, size, size) == nullptr || renderer.isConverged())
+                break;
+
+        return renderToImage (renderer, scene, size);
+    }
+
+    /** buildLongGroundScene() on @p tier at 256 x 256, converged, with the sun casting shadows or
+        not and an angular radius of @p sunRadius, and the cube drawn with @p casterMaterial. */
+    Image renderLongGroundScene (RenderSettings::TierPreference tier, float casterDistance, bool castsShadows,
+                                 float sunRadius = 0.0f, Material::Ptr casterMaterial = nullptr)
+    {
+        Scene scene;
+        auto& sun = buildLongGroundScene (scene, casterDistance, std::move (casterMaterial));
+        sun.castsShadows = castsShadows;
+        sun.radius = sunRadius;
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        const auto image = renderConverged (renderer, scene, 256);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    }
+
+    /** The sun shadows a cube standing near the camera and one 60 m away on @p tier: beside each
+        cube the shadow darkens the ground by more than 35%. */
+    void checkSunShadowReachesNearAndFarCasters (RenderSettings::TierPreference tier)
+    {
+        for (const auto distance : { 2.0f, 60.0f })
+        {
+            const auto shadowed = renderLongGroundScene (tier, distance, true);
+            const auto unshadowed = renderLongGroundScene (tier, distance, false);
+            ASSERT_TRUE (shadowed.isValid() && unshadowed.isValid());
+
+            const auto contrast = shadowContrast (unshadowed, shadowed);
+            RecordProperty ((String ("contrastAt") + String (static_cast<int> (distance))).toStdString(), String (contrast, 3).toStdString());
+            EXPECT_GT (contrast, 0.35) << "caster at " << distance << " m";
+        }
+    }
+
+    /** A sun with an angular radius, shaded through the area light variant, still casts its shadow on @p tier. */
+    void checkAreaSunCastsAShadow (RenderSettings::TierPreference tier)
+    {
+        const auto shadowed = renderLongGroundScene (tier, 2.0f, true, 0.05f);
+        const auto unshadowed = renderLongGroundScene (tier, 2.0f, false, 0.05f);
+        ASSERT_TRUE (shadowed.isValid() && unshadowed.isValid());
+
+        const auto contrast = shadowContrast (unshadowed, shadowed);
+        RecordProperty ("contrast", String (contrast, 3).toStdString());
+        EXPECT_GT (contrast, 0.35);
+    }
+
+    /** An alpha masked cube casts its shadow on @p tier only where its material keeps the texels:
+        cut out entirely, it casts none. */
+    void checkMaskedCasterShadowsOnlyWhatItKeeps (RenderSettings::TierPreference tier)
+    {
+        const auto contrastWithAlpha = [&] (float alpha)
+        {
+            const auto material = [alpha]
+            {
+                auto masked = Material::Ptr (new Material());
+                masked->baseColorFactor = { 0.8f, 0.8f, 0.8f, alpha };
+                masked->metallicFactor = 0.0f;
+                masked->alphaMode = Material::AlphaMode::mask;
+                return masked;
+            };
+
+            const auto shadowed = renderLongGroundScene (tier, 2.0f, true, 0.0f, material());
+            const auto unshadowed = renderLongGroundScene (tier, 2.0f, false, 0.0f, material());
+            return shadowed.isValid() && unshadowed.isValid() ? shadowContrast (unshadowed, shadowed) : -1.0;
+        };
+
+        const auto kept = contrastWithAlpha (0.8f);
+        const auto cutOut = contrastWithAlpha (0.2f);
+        RecordProperty ("keptContrast", String (kept, 3).toStdString());
+        RecordProperty ("cutOutContrast", String (cutOut, 3).toStdString());
+
+        EXPECT_GT (kept, 0.35);
+        EXPECT_GE (cutOut, 0.0);
+        EXPECT_LT (cutOut, 0.02);
+    }
+
+    /** The long ground seen from 1.6 m above it towards the horizon, with nothing on it, is lit
+        on @p tier as if it cast no shadow: down five columns of the frame, from the far edge of the
+        ground to the bottom, no cascade hands over to the next with a darker band, and no acne
+        darkens the ground. The same view without shadows is the reference.
+    */
+    void checkCascadeTransitionHasNoSeam (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool castsShadows, Color& background)
+        {
+            Scene scene;
+            addLongGround (scene).castsShadows = castsShadows;
+            setTier (scene, tier);
+            background = scene.getBackgroundColor();
+
+            auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+            camera->attach<CameraNode>();
+            aimCamera (*camera, { 0.0f, 1.6f, 4.0f }, { 0.0f, 0.0f, -1000.0f });
+            scene.getRoot()->addChild (camera);
+            scene.setActiveCamera (camera.get());
+
+            SceneRenderer renderer;
+            const auto image = renderConverged (renderer, scene, 256);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            return image;
+        };
+
+        Color background;
+        const auto shadowed = render (true, background);
+        const auto unshadowed = render (false, background);
+        ASSERT_TRUE (shadowed.isValid() && unshadowed.isValid());
+
+        auto worst = 1.0f;
+        for (const auto x : { 64, 96, 128, 160, 192 })
+        {
+            // Antialiasing blends the far edge of the ground with the background: its first rows are left out
+            auto lit = luminanceColumn (unshadowed, x, background);
+            const auto column = luminanceColumn (shadowed, x, background);
+            const auto firstGround = std::find_if (lit.begin(), lit.end(), [] (float value) { return value > 0.0f; });
+            std::fill (firstGround, firstGround + std::min<std::ptrdiff_t> (4, std::distance (firstGround, lit.end())), 0.0f);
+
+            const auto groundRows = std::count_if (lit.begin(), lit.end(), [] (float value) { return value > 0.0f; });
+            EXPECT_GE (groundRows, 100) << "column " << x;
+
+            for (size_t row = 0; row < column.size(); ++row)
+            {
+                if (lit[row] <= 0.0f)
+                    continue;
+
+                worst = jmin (worst, column[row] / lit[row]);
+
+                if (column[row] < 0.95f * lit[row])
+                {
+                    ADD_FAILURE() << "column " << x << ", row " << row << ": " << column[row] << " against " << lit[row];
+                    break;
+                }
+            }
+        }
+
+        RecordProperty ("darkestRelative", String (worst, 3).toStdString());
     }
 
 #if YUP_ENABLE_SHADER_TRANSPILER
@@ -1673,6 +2259,45 @@ vec4 encodeLuma(vec3 c)
         EXPECT_TRUE (isFiniteTexture (sceneColor));
         EXPECT_FALSE (isSaturatedTexture (sceneColor));
     }
+
+    /** The ground in the shadow of the near cube of buildLongGroundScene() stays finite on @p tier,
+        in raw radiance: no temporal anti-aliasing on full, the rgba16float bloom path on raster. */
+    void checkShadowedRegionIsFinite (RenderSettings::TierPreference tier)
+    {
+        const auto full = tier == RenderSettings::TierPreference::full;
+
+        const auto render = [&] (bool castsShadows, GpuTexture::Ptr& sceneColor)
+        {
+            Scene scene;
+            buildLongGroundScene (scene, 2.0f).castsShadows = castsShadows;
+
+            if (full)
+                setFullTierTaa (scene, 1);
+            else
+            {
+                setTier (scene, RenderSettings::TierPreference::raster);
+                setBloom (scene, true);
+            }
+
+            SceneRenderer renderer;
+            const auto image = renderToImage (renderer, scene, 256);
+            sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+            return image;
+        };
+
+        GpuTexture::Ptr sceneColor, unshadowedColor;
+        const auto shadowed = render (true, sceneColor);
+        const auto unshadowed = render (false, unshadowedColor);
+        ASSERT_TRUE (shadowed.isValid() && unshadowed.isValid());
+        ASSERT_NE (sceneColor, nullptr);
+
+        // The checked frame does hold the shadow
+        EXPECT_GT (shadowContrast (unshadowed, shadowed), 0.35);
+
+        EXPECT_EQ (sceneColor->getFormat(), GpuTextureFormat::rgba16float);
+        EXPECT_TRUE (isFiniteTexture (sceneColor));
+        EXPECT_FALSE (isSaturatedTexture (sceneColor));
+    }
 #endif
 
     GpuDevice::Ptr device;
@@ -2100,6 +2725,13 @@ TEST_F (SceneRendererMetalTests, RasterBloomOffStaysOnTheBaseline)
         EXPECT_EQ (sceneColor->getFormat(), GpuTextureFormat::rgba8unorm) << name;
         EXPECT_FALSE (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::hdrSceneColor, settings)) << name;
 
+        // The cascades replaced the single map of the Phase 0 shadows
+        if (String (name) == "shadows")
+        {
+            checkShadowsAgainstBaseline (image, "metal");
+            continue;
+        }
+
         const auto differing = countBaselineDifferences (image, String ("metal_") + name + ".png");
         ASSERT_GE (differing, 0) << "capture the Phase 0 baselines first";
 
@@ -2111,25 +2743,33 @@ TEST_F (SceneRendererMetalTests, RasterBloomOffStaysOnTheBaseline)
 TEST_F (SceneRendererMetalTests, ShadowCastingLightAfterEightOthersCasts)
 {
     // Eight dark lights come first in the list and the shadow casting sun ninth: the frame must
-    // still match the shadows baseline, shadow included
-    Scene scene;
-    for (int i = 0; i < 8; ++i)
+    // still match the same scene without them, shadow included
+    const auto render = [this] (int numLamps)
     {
-        auto lamp = EntityNode::Ptr (new EntityNode ("lamp"));
-        lamp->attach<LightNode> (LightNode::Type::point).intensity = 0.0f;
-        scene.getRoot()->addChild (lamp);
-    }
+        Scene scene;
+        for (int i = 0; i < numLamps; ++i)
+        {
+            auto lamp = EntityNode::Ptr (new EntityNode ("lamp"));
+            lamp->attach<LightNode> (LightNode::Type::point).intensity = 0.0f;
+            scene.getRoot()->addChild (lamp);
+        }
 
-    buildShadowsScene (scene);
-    setTier (scene, RenderSettings::TierPreference::raster);
+        buildShadowsScene (scene);
+        setTier (scene, RenderSettings::TierPreference::raster);
 
-    SceneRenderer renderer;
-    const auto image = renderToImage (renderer, scene, 128);
-    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 128);
+        EXPECT_TRUE (image.isValid()) << renderer.getLastError();
+        return image;
+    };
 
-    const auto differing = countBaselineDifferences (image, "metal_shadows.png");
-    ASSERT_GE (differing, 0) << "capture the Phase 0 baselines first";
+    const auto withLamps = render (8);
+    const auto withoutLamps = render (0);
+    ASSERT_TRUE (withLamps.isValid() && withoutLamps.isValid());
 
+    checkShadows (withLamps);
+
+    const auto differing = countDifferences (withLamps, withoutLamps);
     RecordProperty ("shadowsDiffering", differing);
     EXPECT_EQ (differing, 0);
 }
@@ -2383,12 +3023,14 @@ TEST_F (SceneRendererMetalTests, FullTierMatchesRasterExposureAndToneMapping)
 
     for (const auto tier : { RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full })
     {
+        // Both tiers shadow alike: the raster cascades, no soft shadows, the full frame converged
         Scene scene;
         buildShadowsScene (scene);
         setTier (scene, tier);
+        pinCrossTierShadows (scene);
 
         SceneRenderer renderer;
-        const auto image = renderToImage (renderer, scene, 128);
+        const auto image = renderConverged (renderer, scene, 128);
         ASSERT_TRUE (image.isValid()) << renderer.getLastError();
 
         const auto* capabilities = renderer.getCapabilities();
@@ -2991,6 +3633,73 @@ TEST_F (SceneRendererMetalTests, KhrMaterialChangesRestartAccumulation)
         change (*material);
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
         EXPECT_FALSE (renderer.isConverged()) << name;
+    }
+}
+
+TEST_F (SceneRendererMetalTests, ShadowSettingsRestartAccumulation)
+{
+    // Each change moves the value the full tier resolves away from its default
+    const std::pair<const char*, std::function<void (RenderSettings&)>> changes[] = {
+        { "sunCascades", [] (RenderSettings& settings) { settings.sunCascades = 2; } },
+        { "shadowResolution", [] (RenderSettings& settings) { settings.shadowResolution = 1024; } },
+        { "softShadows", [] (RenderSettings& settings) { settings.softShadows = false; } },
+        { "contactShadows", [] (RenderSettings& settings) { settings.contactShadows = false; } },
+    };
+
+    for (const auto& [name, change] : changes)
+    {
+        Scene scene;
+        buildEdgesScene (scene);
+        setFullTierTaa (scene, 8);
+
+        SceneRenderer renderer;
+        for (int i = 0; i < 8; ++i)
+            ASSERT_NE (renderer.render (device, scene, 128, 128), nullptr) << renderer.getLastError();
+        ASSERT_TRUE (renderer.isConverged()) << name;
+
+        auto settings = scene.getRenderSettings();
+        change (settings);
+        scene.setRenderSettings (settings);
+
+        // Restarted, not invalidated: the first frame blends into the kept history, so its
+        // silhouettes still have partially covered pixels. A discarded history leaves none
+        const auto first = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (first.isValid()) << renderer.getLastError();
+        EXPECT_FALSE (renderer.isConverged()) << name;
+        EXPECT_GE (countIntermediatePixels (first, 40), 4) << name;
+    }
+}
+
+TEST_F (SceneRendererMetalTests, LightShadowFieldsRestartAccumulation)
+{
+    const std::pair<const char*, std::function<void (LightNode&)>> changes[] = {
+        { "shadowBias", [] (LightNode& light) { light.shadowBias = 2.0f; } },
+        { "contactShadows", [] (LightNode& light) { light.contactShadows = true; } },
+        { "contactShadowDistance", [] (LightNode& light) { light.contactShadowDistance = 0.5f; } },
+        { "contactShadowThickness", [] (LightNode& light) { light.contactShadowThickness = 0.1f; } },
+    };
+
+    for (const auto& [name, change] : changes)
+    {
+        Scene scene;
+        buildEdgesScene (scene);
+        setFullTierTaa (scene, 8);
+
+        auto* light = scene.getRoot()->findChild ("sun")->getNode<LightNode>();
+        ASSERT_NE (light, nullptr);
+
+        SceneRenderer renderer;
+        for (int i = 0; i < 8; ++i)
+            ASSERT_NE (renderer.render (device, scene, 128, 128), nullptr) << renderer.getLastError();
+        ASSERT_TRUE (renderer.isConverged()) << name;
+
+        change (*light);
+
+        // Restarted, not invalidated, see ShadowSettingsRestartAccumulation
+        const auto first = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (first.isValid()) << renderer.getLastError();
+        EXPECT_FALSE (renderer.isConverged()) << name;
+        EXPECT_GE (countIntermediatePixels (first, 40), 4) << name;
     }
 }
 
@@ -3689,13 +4398,15 @@ TEST_F (SceneRendererMetalTests, DeferredMatchesForwardForOpaque)
 
         for (const auto tier : { RenderSettings::TierPreference::full, RenderSettings::TierPreference::raster })
         {
+            // Both tiers shadow alike: the raster cascades, no soft shadows, the full frame converged
             Scene scene;
             build (scene);
             setTier (scene, tier);
+            pinCrossTierShadows (scene);
 
             SceneRenderer renderer;
             auto& image = images[tier == RenderSettings::TierPreference::full ? 0 : 1];
-            image = renderToImage (renderer, scene, 128);
+            image = renderConverged (renderer, scene, 128);
             ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
             ASSERT_EQ (renderer.getCapabilities()->getTier() == RenderCapabilities::Tier::full, tier == RenderSettings::TierPreference::full) << name;
         }
@@ -3720,8 +4431,8 @@ TEST_F (SceneRendererMetalTests, DeferredMatchesForwardForOpaque)
         }
 
         RecordProperty ((String (name) + "LargestBlockDifference").toStdString(), String (largestBlockDifference, 2).toStdString());
-        // Measured at most 1.1 levels of luma (half float roughness, 8 bit base color, the jitter of
-        // the first TAA frame); a local shading error moves a block by tens of levels
+        // Measured at most 1.7 levels of luma (half float roughness, 8 bit base color, the converged
+        // TAA average); a local shading error moves a block by tens of levels
         EXPECT_LE (largestBlockDifference, 4.0) << name;
     }
 }
@@ -4811,6 +5522,47 @@ TEST_P (SceneRendererTierTests, RendersWithoutTheAreaLightTables)
     EXPECT_GT (darkest, 5.0);
 }
 
+TEST_P (SceneRendererTierTests, RendersWithoutTheShadowCompareSampler)
+{
+    // A device unable to create the comparison sampler cannot read shadow maps: it renders every
+    // frame, without the shadows, as if the sun cast none
+    const auto full = GetParam() == RenderSettings::TierPreference::full;
+
+    const auto render = [&] (bool withSampler, bool castsShadows)
+    {
+        Scene scene;
+        buildShadowsScene (scene);
+        scene.getRoot()->findChild ("sun")->getNode<LightNode>()->castsShadows = castsShadows;
+
+        if (full)
+            setFullTierTaa (scene, 1);
+        else
+            setTier (scene, RenderSettings::TierPreference::raster);
+
+        SceneRenderer renderer;
+        if (! withSampler)
+            renderer.failShadowCompareSamplerForTesting();
+
+        // The failure is remembered, so the second frame renders like the first
+        Image image;
+        for (int frame = 0; frame < 2; ++frame)
+        {
+            image = renderToImage (renderer, scene, 128);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        }
+
+        return image;
+    };
+
+    const auto shadowed = render (true, true);
+    const auto withoutSampler = render (false, true);
+    const auto unshadowed = render (true, false);
+    ASSERT_TRUE (shadowed.isValid() && withoutSampler.isValid() && unshadowed.isValid());
+
+    EXPECT_EQ (countDifferences (withoutSampler, unshadowed), 0);
+    EXPECT_GT (countDifferences (shadowed, unshadowed), 0);
+}
+
 TEST_P (SceneRendererTierTests, BaseColorAboveOneShadesAsOne)
 {
     // glTF base colors lie within [0, 1]: a larger factor is clamped alike by the forward pass and
@@ -4821,6 +5573,117 @@ TEST_P (SceneRendererTierTests, BaseColorAboveOneShadesAsOne)
     ASSERT_GT (one[0], 0.1);
     for (size_t channel = 0; channel < 3; ++channel)
         EXPECT_NEAR (two[channel] / one[channel], 1.0, 0.02) << "channel " << channel;
+}
+#endif
+
+TEST_P (SceneRendererTierTests, SunShadowReachesNearAndFarCasters)
+{
+    checkSunShadowReachesNearAndFarCasters (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, CascadeTransitionHasNoSeam)
+{
+    checkCascadeTransitionHasNoSeam (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, AreaSunCastsAShadow)
+{
+    checkAreaSunCastsAShadow (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, MaskedCasterShadowsOnlyWhatItKeeps)
+{
+    checkMaskedCasterShadowsOnlyWhatItKeeps (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ShadowMapsRenderOnlyWhenTheShadowsChange)
+{
+    // A still scene draws its shadow maps once, a moved caster draws them again, and so does
+    // restartAccumulation(), for changes the renderer cannot see
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    for (int frame = 0; frame < 3; ++frame)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+
+    auto* caster = scene.getRoot()->findChild ("caster");
+    ASSERT_NE (caster, nullptr);
+    caster->setPosition (caster->getPosition() + Vector3<float> (0.05f, 0.0f, 0.0f));
+
+    for (int frame = 0; frame < 2; ++frame)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+
+    renderer.restartAccumulation();
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 3);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, MaskedCasterChangesDrawTheShadowMapsAgain)
+{
+    // A masked caster casts what its alpha test keeps: a new cutoff, base alpha or base color
+    // texture content changes the maps of an otherwise still scene
+    auto material = Material::Ptr (new Material());
+    material->baseColorFactor = { 0.8f, 0.8f, 0.8f, 0.8f };
+    material->alphaMode = Material::AlphaMode::mask;
+
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f, material);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    for (int frame = 0; frame < 2; ++frame)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+
+    material->alphaCutoff = 0.9f;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+
+    material->baseColorFactor[3] = 1.0f;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 3);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, GpuFailureDrawsTheShadowMapsAgain)
+{
+    // The frame drawing the maps failed on the GPU: the next frame cannot trust them
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    device->failNextFrameForTesting ("injected failure");
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+
+    // Frames complete in order, so once a later frame did the failed one has too
+    {
+        auto fence = GpuFrame::begin (device);
+        EXPECT_TRUE (fence.waitForGPU().wasOk());
+    }
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getLastGpuFailure(), "injected failure");
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_P (SceneRendererTierTests, ShadowedRegionIsFinite)
+{
+    checkShadowedRegionIsFinite (GetParam());
 }
 #endif
 
@@ -5007,12 +5870,6 @@ protected:
             root->setPosition (-framed->computeWorldBounds().getCenter());
             bounds = framed->computeWorldBounds();
 
-            const auto lookAt = [] (EntityNode& entity, Vector3<float> eye, Vector3<float> target, Vector3<float> up)
-            {
-                entity.setPosition (eye);
-                entity.setRotation (Quaternion::fromRotationMatrix (Matrix4::lookAt (eye, target, up).inverted()));
-            };
-
             // The top view of the demo, fitted to the aspect ratio
             auto camera = EntityNode::Ptr (new EntityNode ("camera"));
             auto& cameraNode = camera->attach<CameraNode>();
@@ -5024,7 +5881,7 @@ protected:
             const auto size = bounds.getSize();
             const auto distance = jmax (size.getX() * 0.5f / tanHalfFov, size.getZ() * 0.5f / (tanHalfFov * aspectRatio)) * 1.03f;
             const auto center = bounds.getCenter();
-            lookAt (*camera, center + Vector3<float> (0.0f, distance, 0.0f), center, { -1.0f, 0.0f, 0.0f });
+            aimCamera (*camera, center + Vector3<float> (0.0f, distance, 0.0f), center, { -1.0f, 0.0f, 0.0f });
             scene.getRoot()->addChild (camera);
             scene.setActiveCamera (camera.get());
 
@@ -5038,7 +5895,7 @@ protected:
             const auto azimuth = degreesToRadians (120.0f);
             const auto elevation = degreesToRadians (28.0f);
             const Vector3<float> keyDirection (std::cos (elevation) * std::cos (azimuth), std::sin (elevation), std::cos (elevation) * std::sin (azimuth));
-            lookAt (*key, keyDirection * 10.0f, {}, { 0.0f, 1.0f, 0.0f });
+            aimCamera (*key, keyDirection * 10.0f, {}, { 0.0f, 1.0f, 0.0f });
             scene.getRoot()->addChild (key);
 
             for (int i = 0; i < numShowLights; ++i)
@@ -5247,5 +6104,32 @@ TEST_F (SceneRendererGLTests, AreaLightRadiusWidensTheHighlightAndStaysFinite)
     checkRadiusWidensTheHighlight (RenderSettings::TierPreference::raster);
     checkAreaLightsStayFinite (RenderSettings::TierPreference::raster);
 }
+
+TEST_F (SceneRendererGLTests, ShadowedRegionIsFinite)
+{
+    checkShadowedRegionIsFinite (RenderSettings::TierPreference::raster);
+}
 #endif
+
+// With GL storing another depth than the shaders compute (clip z remapped differently on the two
+// sides) the near shadow disappears or the whole ground darkens: these two catch either way
+TEST_F (SceneRendererGLTests, SunShadowReachesNearAndFarCasters)
+{
+    checkSunShadowReachesNearAndFarCasters (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, CascadeTransitionHasNoSeam)
+{
+    checkCascadeTransitionHasNoSeam (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, AreaSunCastsAShadow)
+{
+    checkAreaSunCastsAShadow (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, MaskedCasterShadowsOnlyWhatItKeeps)
+{
+    checkMaskedCasterShadowsOnlyWhatItKeeps (RenderSettings::TierPreference::raster);
+}
 #endif

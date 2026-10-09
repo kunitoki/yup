@@ -44,8 +44,19 @@ public:
     {
         hdrSceneColor,        ///< Scene rendered to a half-float target before tone mapping.
         temporalAntiAliasing, ///< Jittered frames accumulated over time.
-        bloom                 ///< Glow around highlights.
+        bloom,                ///< Glow around highlights.
+        softShadows,          ///< Penumbrae from the light size: both tiers, on by default on full only.
+        contactShadows        ///< Screen-space contact shadows: full tier only.
     };
+
+    /** Shadow cascades of the sun on the raster tier when RenderSettings::sunCascades is 0. */
+    static constexpr int defaultRasterCascades = 2;
+
+    /** The smallest shadow map resolution, see getShadowResolution(). */
+    static constexpr int minShadowResolution = 256;
+
+    /** The largest shadow map resolution, see getShadowResolution(). */
+    static constexpr int maxShadowResolution = 4096;
 
     /** What the rendering decisions need to know about a device. */
     struct DeviceFacts
@@ -91,6 +102,21 @@ public:
 
     /** Returns true when the feature is available and switched on by the settings or the tier default. */
     bool isEnabled (Feature feature, const RenderSettings& settings) const noexcept;
+
+    /** Returns the number of sun shadow cascades, from 1 to 4.
+
+        RenderSettings::sunCascades 0 picks the tier default (4 on full, defaultRasterCascades on
+        raster); any other value is clamped to [1, 4].
+    */
+    int getCascadeCount (const RenderSettings& settings) const noexcept;
+
+    /** Returns RenderSettings::shadowResolution clamped to [minShadowResolution, maxShadowResolution].
+
+        Values inside the range are used as given: a resolution that is not a power of two is not
+        rounded. The cap bounds memory: one 4096 x 4096 depth32float map takes 64 MB and the sun
+        uses up to 4 of them, and there is no device query for a larger safe size.
+    */
+    static int getShadowResolution (const RenderSettings& settings) noexcept;
 
 private:
     DeviceFacts facts;

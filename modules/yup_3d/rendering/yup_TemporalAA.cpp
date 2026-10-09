@@ -55,11 +55,9 @@ TemporalAA::TemporalAA() = default;
 TemporalAA::~TemporalAA() = default;
 
 //==============================================================================
-Result TemporalAA::prepare (const GpuDevice::Ptr& device)
+Result TemporalAA::prepare (const GpuDevice::Ptr& device, const FrameResources::Samplers* samplers)
 {
-    linearClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::clampToEdge));
-    pointClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
-    if (linearClampSampler == nullptr || pointClampSampler == nullptr)
+    if (samplers == nullptr)
         return Result::fail ("Unable to create the temporal anti-aliasing samplers");
 
     // One color target for the output, one for the history of the next frame
@@ -77,11 +75,13 @@ bool TemporalAA::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Vi
     if (output->getFormat() != GpuTextureFormat::rgba16float)
         return false;
 
+    const auto* samplers = resources.getSamplers();
+
     // Compiled once, remembering a failure instead of retrying every frame
     if (! prepared.has_value())
-        prepared = prepare (device);
+        prepared = prepare (device, samplers);
 
-    if (prepared->failed())
+    if (prepared->failed() || samplers == nullptr)
         return false;
 
     GpuTextureDesc historyDesc (static_cast<uint32_t> (current->getWidth()), static_cast<uint32_t> (current->getHeight()), GpuTextureFormat::rgba16float, true);
@@ -101,8 +101,8 @@ bool TemporalAA::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Vi
         renderPass.setColorAttachment (1, history.write, { true, GpuColor::transparentBlack() });
 
         renderPass.setUniformBuffer (0, 0, &view.getBlock(), sizeof (ViewData::Block));
-        renderPass.setSampler (0, 1, linearClampSampler);
-        renderPass.setSampler (0, 3, pointClampSampler);
+        renderPass.setSampler (0, 1, samplers->linearClamp);
+        renderPass.setSampler (0, 3, samplers->pointClamp);
         renderPass.setUniformBuffer (1, 0, &block, sizeof (block));
         renderPass.setTexture (1, 1, current);
         renderPass.setTexture (1, 2, history.valid ? history.read : current);

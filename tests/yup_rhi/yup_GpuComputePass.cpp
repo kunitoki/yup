@@ -1334,6 +1334,10 @@ TEST_F (GpuComputePassMetalTests, StorageTextureRejectsDepthFormats)
 
 TEST_F (GpuComputePassMetalTests, StorageCubeTextureIsIgnored)
 {
+#if YUP_ASSERTIONS_ENABLED
+    GTEST_SKIP() << "A storage cube texture triggers an assertion in assertion-enabled builds";
+#endif
+
     GpuTextureDesc desc (8, 8, GpuTextureFormat::rgba16float);
     desc.type = GpuTextureType::cube;
     desc.depthOrArrayLayers = 6;

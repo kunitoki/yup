@@ -1448,6 +1448,10 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
                 glslOpts.vulkan_semantics = false;
                 glslOpts.vertex.flip_vert_y = ! options.flipVertY;
 
+                // Clip depth stays [0, 1] as on every other backend: GL's [-1, 1] range is remapped
+                // here, so the depth GL stores matches what the shaders compute and compare
+                glslOpts.vertex.fixup_clipspace = true;
+
                 if (es)
                     glslOpts.fragment.default_float_precision = spirv_cross::CompilerGLSL::Options::Highp;
 
@@ -1680,6 +1684,7 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
                                       : static_cast<uint32_t> (options.glslVersion);
                 glslOpts.vulkan_semantics = false;
                 glslOpts.vertex.flip_vert_y = options.flipVertY;
+                glslOpts.vertex.fixup_clipspace = true;
 
                 if (es)
                     glslOpts.fragment.default_float_precision = spirv_cross::CompilerGLSL::Options::Highp;
@@ -1734,32 +1739,6 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
 
                 auto ref = extractReflection (compiler);
                 fillHLSLBackendSlots (compiler, hlslSource, ref);
-
-                return makeResultValueOk (std::move (ref));
-            }
-
-            case ShaderLanguage::spirv:
-            {
-                auto compiler = createSpirvCompiler (words, wordCount);
-                auto ref = extractReflection (*compiler);
-
-                // Vulkan binds the module's own set/binding numbers. Only resources the entry
-                // point uses count: glslang gives unused unbound ones a colliding binding 0,
-                // which would make the descriptor set layout invalid
-                const auto active = compiler->get_active_interface_variables();
-
-                for (auto* resources : { &ref.uniformBuffers, &ref.storageBuffers, &ref.sampledImages, &ref.separateImages,
-                                         &ref.separateSamplers, &ref.storageImages })
-                {
-                    resources->erase (std::remove_if (resources->begin(), resources->end(), [&active] (const auto& r)
-                                      {
-                                          return active.count (r.resourceId) == 0;
-                                      }),
-                                      resources->end());
-
-                    for (auto& r : *resources)
-                        r.backendSlot = r.binding;
-                }
 
                 return makeResultValueOk (std::move (ref));
             }

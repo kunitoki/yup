@@ -114,6 +114,8 @@ struct GpuRenderPass::Impl
     GpuFrame::Impl* framePools = nullptr;
 
     // Attachment 0 is the surface the pass was begun on; 1..3 are MRT extras.
+    // A pass begun on a depth-only target has no color attachment at all, and
+    // its surface is the depth attachment.
     ColorAttachment colorAttachments[4];
     uint32_t colorCount = 1;
 
@@ -253,6 +255,9 @@ bool GpuRenderPass::Impl::buildRenderPassDesc (rive::ore::RenderPassDesc& rpDesc
     // Only the first encoded draw honours a clear; the rest load, so multiple
     // draws accumulate into one surface and share one depth buffer.
     const bool honourClears = encodeCount == 0;
+
+    if (colorCount == 0 && depthTexture == nullptr)
+        return false;
 
     rpDesc.colorCount = colorCount;
 
@@ -891,9 +896,9 @@ void GpuRenderPass::setColorAttachment (int index,
     // draw does - setting one afterwards would silently do nothing.
     jassert (i->orePass == nullptr);
 
-    // Index 0 belongs to the surface the pass was begun on.
-    jassert (index >= 1 && index < 4);
-    if (index < 1 || index >= 4)
+    // Index 0 belongs to the surface the pass was begun on; a depth-only pass takes none.
+    jassert (index >= 1 && index < 4 && i->colorCount > 0);
+    if (index < 1 || index >= 4 || i->colorCount == 0)
         return;
 
     jassert (texture == nullptr || texture->isRenderTarget());
@@ -923,6 +928,11 @@ void GpuRenderPass::setDepthStencilAttachment (GpuTexture::Ptr texture,
     jassert (texture == nullptr || isDepthStencilFormat (texture->getFormat()));
     jassert (texture == nullptr || texture->isRenderTarget());
 
+    // The depth attachment of a depth-only pass is the surface it was begun on.
+    jassert (i->colorCount > 0);
+    if (i->colorCount == 0)
+        return;
+
     i->depthTexture = std::move (texture);
     i->depthView = view;
     i->depthOptions = options;
@@ -935,8 +945,8 @@ void GpuRenderPass::setResolveTarget (int index, GpuTexture::Ptr texture, const 
         return;
 
     jassert (i->orePass == nullptr);
-    jassert (index >= 0 && index < 4);
-    if (index < 0 || index >= 4)
+    jassert (index >= 0 && index < 4 && i->colorCount > 0);
+    if (index < 0 || index >= 4 || i->colorCount == 0)
         return;
 
     i->colorAttachments[index].resolveTexture = std::move (texture);
@@ -1025,7 +1035,7 @@ bool GpuRenderPass::finish()
     if (i == nullptr || i->finished)
         return false;
 
-    const bool wantsClear = i->colorAttachments[0].options.loadOp == GpuLoadOp::clear
+    const bool wantsClear = (i->colorCount > 0 && i->colorAttachments[0].options.loadOp == GpuLoadOp::clear)
                          || (i->depthTexture != nullptr && i->depthOptions.depthLoadOp == GpuLoadOp::clear);
 
     if (i->encodeCount == 0 && wantsClear)

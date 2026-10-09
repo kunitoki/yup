@@ -183,17 +183,20 @@ TEST_F (GpuSceneDataTests, DirectionalLightsArePackedFirst)
     LightNode point (LightNode::Type::point), sun, spot (LightNode::Type::spot);
     const SceneDrawList::Light lights[] = { { &point, {}, { 0, 0, -1 } }, { &sun, {}, { 0, -1, 0 } }, { &spot, {}, { 0, 0, -1 } } };
 
+    // Each light carries its own first shadow record, whatever slot it is packed into
+    const int firstShadowRecord[] = { 6, 0, 12 };
+
     std::vector<uint32> order;
-    const auto packed = GpuSceneData::packLights (lights, 1, order);
+    const auto packed = GpuSceneData::packLights (lights, firstShadowRecord, order);
 
     ASSERT_EQ (packed.size(), 3u);
     EXPECT_EQ (order, (std::vector<uint32> { 1, 0, 2 }));
     EXPECT_FLOAT_EQ (packed[0].positionType[3], 0.0f);
     EXPECT_FLOAT_EQ (packed[1].positionType[3], 1.0f);
     EXPECT_FLOAT_EQ (packed[2].positionType[3], 2.0f);
-    EXPECT_FLOAT_EQ (packed[0].spotRadiusShadow[3], 0.0f); // the shadowed light (list index 1) gets shadow slot 0
-    EXPECT_FLOAT_EQ (packed[1].spotRadiusShadow[3], -1.0f);
-    EXPECT_FLOAT_EQ (packed[2].spotRadiusShadow[3], -1.0f);
+    EXPECT_FLOAT_EQ (packed[0].spotRadiusShadow[3], 0.0f);  // the sun, list index 1
+    EXPECT_FLOAT_EQ (packed[1].spotRadiusShadow[3], 6.0f);  // the point light, list index 0
+    EXPECT_FLOAT_EQ (packed[2].spotRadiusShadow[3], 12.0f); // the spot light, list index 2
 }
 
 TEST_F (GpuSceneDataTests, DarkPointLightHasZeroRange)
@@ -232,7 +235,7 @@ TEST_F (GpuSceneDataTests, PackLightsKeepsListOrderWithinEachGroup)
     };
 
     std::vector<uint32> order { 7, 7 }; // stale content is replaced
-    const auto packed = GpuSceneData::packLights (lights, -1, order);
+    const auto packed = GpuSceneData::packLights (lights, {}, order);
 
     ASSERT_EQ (packed.size(), 4u);
     EXPECT_EQ (order, (std::vector<uint32> { 1, 3, 0, 2 }));
@@ -241,12 +244,13 @@ TEST_F (GpuSceneDataTests, PackLightsKeepsListOrderWithinEachGroup)
     EXPECT_FLOAT_EQ (packed[2].positionType[3], 1.0f);
     EXPECT_FLOAT_EQ (packed[3].positionType[3], 2.0f);
 
-    // No shadowed light: every slot reads -1
+    // No shadow records: every slot reads -1
     for (const auto& light : packed)
         EXPECT_FLOAT_EQ (light.spotRadiusShadow[3], -1.0f);
 
-    // The second directional light shadowed: its packed slot, not its list index, holds slot 0
-    const auto shadowed = GpuSceneData::packLights (lights, 3, order);
+    // The second directional light shadowed: its packed slot, not its list index, holds record 0
+    const int firstShadowRecord[] = { -1, -1, -1, 0 };
+    const auto shadowed = GpuSceneData::packLights (lights, firstShadowRecord, order);
     EXPECT_FLOAT_EQ (shadowed[1].spotRadiusShadow[3], 0.0f);
     EXPECT_FLOAT_EQ (shadowed[0].spotRadiusShadow[3], -1.0f);
     EXPECT_FLOAT_EQ (shadowed[3].spotRadiusShadow[3], -1.0f);
@@ -256,6 +260,22 @@ TEST_F (GpuSceneDataTests, GpuMaterialLayoutIsStd430)
 {
     EXPECT_EQ (sizeof (GpuMaterial), 32u);
     EXPECT_EQ (offsetof (GpuMaterial, extended), 16u);
+}
+
+TEST_F (GpuSceneDataTests, ShadowBlocksAreStd140)
+{
+    EXPECT_EQ (sizeof (GpuShadowRecord), 112u);
+    EXPECT_EQ (offsetof (GpuShadowRecord, atlasRect), 64u);
+    EXPECT_EQ (offsetof (GpuShadowRecord, params), 80u);
+    EXPECT_EQ (offsetof (GpuShadowRecord, contact), 96u);
+
+    EXPECT_EQ (offsetof (GpuShadowData, cascadeTexel), 16u);
+    EXPECT_EQ (offsetof (GpuShadowData, sunInfo), 32u);
+    EXPECT_EQ (offsetof (GpuShadowData, filterInfo), 48u);
+    EXPECT_EQ (offsetof (GpuShadowData, records), 64u);
+    EXPECT_EQ (sizeof (GpuShadowData), 7232u);
+    EXPECT_EQ (sizeof (GpuShadowData) % 16, 0u);
+    EXPECT_LE (sizeof (GpuShadowData), 16384u); // the WebGL2 minimum uniform block size
 }
 
 TEST_F (GpuSceneDataTests, PacksDefaultMaterial)

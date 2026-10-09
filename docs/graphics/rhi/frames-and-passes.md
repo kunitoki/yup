@@ -201,7 +201,8 @@ The `{ bool, GpuColor }` form is a shorthand for `clear` versus `load`.
 
 Depth and stencil attachments have their own `GpuDepthStencilOptions` with
 independent load / store ops and clear values, passed to
-`setDepthStencilAttachment()`.
+`setDepthStencilAttachment()` - or to `GpuTarget::beginRenderPass()` when the
+target itself is a depth texture (see [depth-only targets](targets.md#depth-only-targets)).
 
 ```cpp
 // Clear to a solid background:

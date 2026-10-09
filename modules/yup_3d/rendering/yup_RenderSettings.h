@@ -48,6 +48,29 @@ struct YUP_API RenderSettings
     float bloomIntensity = 0.05f; ///< How much of the blurred glow is added.
     float bloomRadius = 0.85f;    ///< 0 to 1: how far the glow spreads.
 
+    /** Shadow cascades of the shadow casting directional light, from 1 to 4. More cascades keep
+        shadows sharp further away, at the cost of one depth pass each. 0 picks the tier default:
+        4 on full, RenderCapabilities::defaultRasterCascades on raster. See RenderCapabilities::getCascadeCount().
+    */
+    int sunCascades = 0;
+
+    /** Texels per side of each sun shadow cascade. Clamped to [256, 4096] on both tiers, see
+        RenderCapabilities::getShadowResolution().
+    */
+    int shadowResolution = 2048;
+
+    /** Soft shadows whose penumbra widens with the size of the light (LightNode::radius) and the
+        distance between the caster and the receiver. Unset picks the tier default: on for full, off
+        for raster, where true opts in to the same technique at a lower cost.
+    */
+    std::optional<bool> softShadows;
+
+    /** Short screen-space shadows at the contact of objects, for the lights that ask for them (see
+        LightNode::contactShadows). Full tier only: raster cannot provide them and ignores the setting,
+        which is not an error.
+    */
+    bool contactShadows = true;
+
     bool operator== (const RenderSettings&) const = default;
 };
 

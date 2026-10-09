@@ -4,7 +4,7 @@ codecov:
 coverage:
   precision: 2
   round: down
-  range: "70...100"
+  range: "80...100"
 
   status:
     project:
@@ -45,6 +45,7 @@ coverage:
         threshold: 5%
 
 flags:
+  yup_3d:                    { paths: [modules/yup_3d/], carryforward: true }
   yup_animation:             { paths: [modules/yup_animation/], carryforward: true }
   yup_audio_basics:          { paths: [modules/yup_audio_basics/], carryforward: true }
   yup_audio_devices:         { paths: [modules/yup_audio_devices/], carryforward: true }

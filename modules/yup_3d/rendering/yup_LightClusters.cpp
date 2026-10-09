@@ -57,7 +57,7 @@ LightClusters::Grid LightClusters::getGrid (const ViewData& view) noexcept
     Grid grid;
     grid.nearPlane = jmax (clipPlanes[0], 1.0e-4f);
     grid.infiniteFar = clipPlanes[1] <= 0.0f;
-    grid.farPlane = grid.infiniteFar ? 1000.0f : clipPlanes[1];
+    grid.farPlane = grid.infiniteFar ? ShadowCascades::maxShadowDistance : clipPlanes[1];
     return grid;
 }
 

@@ -87,7 +87,11 @@ bool RenderCapabilities::isAvailable (Feature feature) const noexcept
     switch (feature)
     {
         case Feature::temporalAntiAliasing:
+        case Feature::contactShadows:
             return false;
+
+        case Feature::softShadows:
+            return true;
 
         case Feature::hdrSceneColor:
         case Feature::bloom:
@@ -109,9 +113,28 @@ bool RenderCapabilities::isEnabled (Feature feature, const RenderSettings& setti
 
         case Feature::bloom:
             return isAvailable (feature) && settings.bloom;
+
+        case Feature::softShadows:
+            return isAvailable (feature) && settings.softShadows.value_or (tier == Tier::full);
+
+        case Feature::contactShadows:
+            return isAvailable (feature) && settings.contactShadows;
     }
 
     return false;
+}
+
+int RenderCapabilities::getCascadeCount (const RenderSettings& settings) const noexcept
+{
+    constexpr int maxCascades = 4;
+
+    const auto tierDefault = tier == Tier::full ? maxCascades : defaultRasterCascades;
+    return jlimit (1, maxCascades, settings.sunCascades != 0 ? settings.sunCascades : tierDefault);
+}
+
+int RenderCapabilities::getShadowResolution (const RenderSettings& settings) noexcept
+{
+    return jlimit (minShadowResolution, maxShadowResolution, settings.shadowResolution);
 }
 
 } // namespace yup

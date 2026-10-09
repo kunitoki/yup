@@ -46,11 +46,8 @@ Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights)
     if (! defaults)
     {
         blackTexture = GeometryBindings::createSolidTexture (device, 0x000000ff);
-        whiteTexture = GeometryBindings::createSolidTexture (device, 0xffffffff);
-        pointClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
-        linearClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::clampToEdge));
 
-        if (blackTexture == nullptr || whiteTexture == nullptr || pointClampSampler == nullptr || linearClampSampler == nullptr)
+        if (blackTexture == nullptr)
             defaults = Result::fail ("Unable to create the lighting pass textures");
         else
             defaults = Result::ok();
@@ -75,24 +72,30 @@ bool LightingPass::render (GpuFrame& frame, const ViewData& view, const GBufferP
     auto& variant = variants[lighting.areaLights ? 1 : 0];
     if (! variant.prepared.has_value() || variant.prepared->failed() || sceneColor == nullptr
         || gbuffer.albedoOcclusion == nullptr || gbuffer.normalRoughness == nullptr || gbuffer.emissionMaterial == nullptr || gbuffer.depth == nullptr
-        || lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.materials == nullptr)
+        || lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.materials == nullptr
+        || lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.shadowCascades == nullptr)
         return false;
 
     // Every pixel is written, so the scene color needs no clear
     return variant.pass.draw (frame, sceneColor, {}, [&] (GpuRenderPass& renderPass)
     {
         renderPass.setUniformBuffer (0, 0, &view.getBlock(), sizeof (ViewData::Block));
-        renderPass.setSampler (0, 3, pointClampSampler);
+        renderPass.setSampler (0, 3, lighting.samplers.pointClamp);
+        renderPass.setTexture (0, 6, lighting.environment != nullptr ? lighting.environment : blackTexture);
+        renderPass.setSampler (0, 14, lighting.environmentSampler != nullptr ? lighting.environmentSampler : lighting.samplers.pointClamp);
         renderPass.setUniformBuffer (1, 0, &lighting.block, sizeof (lighting.block));
-        renderPass.setTexture (1, 1, lighting.environment != nullptr ? lighting.environment : blackTexture);
-        renderPass.setSampler (1, 2, lighting.environmentSampler != nullptr ? lighting.environmentSampler : pointClampSampler);
-        renderPass.setTexture (1, 3, lighting.shadowMap != nullptr ? lighting.shadowMap : whiteTexture);
+        renderPass.setTexture (3, 0, lighting.shadowCascades);
+        renderPass.setUniformBuffer (3, 4, &lighting.shadows, sizeof (lighting.shadows));
+
+        // Without it no light has a shadow record, and the pipeline's own comparison sampler stays unread
+        if (lighting.samplers.shadowCompare != nullptr)
+            renderPass.setSampler (0, 4, lighting.samplers.shadowCompare);
 
         if (lighting.areaLights)
         {
-            renderPass.setSampler (0, 1, linearClampSampler);
-            renderPass.setTexture (1, 4, lighting.ltcMatrix != nullptr ? lighting.ltcMatrix : blackTexture);
-            renderPass.setTexture (1, 5, lighting.ltcAmplitude != nullptr ? lighting.ltcAmplitude : blackTexture);
+            renderPass.setSampler (0, 1, lighting.samplers.linearClamp);
+            renderPass.setTexture (0, 7, lighting.ltcMatrix != nullptr ? lighting.ltcMatrix : blackTexture);
+            renderPass.setTexture (0, 11, lighting.ltcAmplitude != nullptr ? lighting.ltcAmplitude : blackTexture);
         }
 
         renderPass.setStorageBuffer (1, 6, lighting.lights);

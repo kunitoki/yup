@@ -46,30 +46,31 @@ ToneMapping::ToneMapping() = default;
 ToneMapping::~ToneMapping() = default;
 
 //==============================================================================
-Result ToneMapping::prepare (const GpuDevice::Ptr& device, GpuTextureFormat format)
+Result ToneMapping::prepare (const GpuDevice::Ptr& device, GpuTextureFormat format, const FrameResources::Samplers* samplers)
 {
-    pointClampSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
-    if (pointClampSampler == nullptr)
+    if (samplers == nullptr)
         return Result::fail ("Unable to create the tone mapping sampler");
 
     return pass.prepare (device, toneMappingShaderBundle, sizeof (toneMappingShaderBundle), format);
 }
 
-bool ToneMapping::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view,
+bool ToneMapping::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, FrameResources& resources,
                           const GpuTexture::Ptr& source, bool sourceIsReversible, const GpuTexture::Ptr& glow,
                           const GpuTexture::Ptr& destination, Color background)
 {
     if (device == nullptr || source == nullptr || destination == nullptr)
         return false;
 
+    const auto* samplers = resources.getSamplers();
+
     // Compiled once per destination format, remembering a failure instead of retrying every frame
     if (! prepared.has_value() || preparedFormat != destination->getFormat())
     {
         preparedFormat = destination->getFormat();
-        prepared = prepare (device, preparedFormat);
+        prepared = prepare (device, preparedFormat, samplers);
     }
 
-    if (prepared->failed())
+    if (prepared->failed() || samplers == nullptr)
         return false;
 
     ToneMappingBlock block {};
@@ -84,7 +85,7 @@ bool ToneMapping::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     return pass.draw (frame, destination, {}, [&] (GpuRenderPass& renderPass)
     {
         renderPass.setUniformBuffer (0, 0, &view.getBlock(), sizeof (ViewData::Block));
-        renderPass.setSampler (0, 3, pointClampSampler);
+        renderPass.setSampler (0, 3, samplers->pointClamp);
         renderPass.setUniformBuffer (1, 0, &block, sizeof (block));
         renderPass.setTexture (1, 1, source);
 

@@ -787,6 +787,33 @@
           }
         },
         {
+          "path": "source/renderer/ore/metal/ore_render_pass_metal.mm",
+          "note": "Ore Metal setPipeline: set the depth bias for every pipeline, zero included. The bias is encoder state, so a pipeline without bias drawn after a biased one in the same render pass inherited its bias",
+          "already_contains": "    m_currentPipeline = ref_rcp(pipeline);\n\n    [m_mtlEncoder setDepthBias:(float)desc.depthStencil.depthBias",
+          "replace": {
+            "from": [
+              "    m_currentPipeline = ref_rcp(pipeline);",
+              "",
+              "    if (desc.depthStencil.depthBias != 0 ||",
+              "        desc.depthStencil.depthBiasSlopeScale != 0.0f)",
+              "    {",
+              "        [m_mtlEncoder setDepthBias:(float)desc.depthStencil.depthBias",
+              "                        slopeScale:desc.depthStencil.depthBiasSlopeScale",
+              "                             clamp:desc.depthStencil.depthBiasClamp];",
+              "    }",
+              "}"
+            ],
+            "to": [
+              "    m_currentPipeline = ref_rcp(pipeline);",
+              "",
+              "    [m_mtlEncoder setDepthBias:(float)desc.depthStencil.depthBias",
+              "                    slopeScale:desc.depthStencil.depthBiasSlopeScale",
+              "                         clamp:desc.depthStencil.depthBiasClamp];",
+              "}"
+            ]
+          }
+        },
+        {
           "path": "source/renderer/ore/d3d11/ore_context_d3d11.cpp",
           "note": "Ore D3D11 makeTexture: storage textures get D3D11_BIND_UNORDERED_ACCESS, so YUP compute passes can write them through a UAV",
           "already_contains": "    if (desc.storage)\n        bindFlags |= D3D11_BIND_UNORDERED_ACCESS;",

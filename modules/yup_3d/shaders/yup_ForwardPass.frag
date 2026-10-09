@@ -21,6 +21,7 @@
 
 #version 450
 #extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_texture_shadow_lod : require
 
 #include "lib/bsdf.glsl"
 #include "lib/color.glsl"
@@ -33,8 +34,8 @@
 // lights (the draw's own list, see lib/lights.glsl) and a flat ambient term.
 // The screen-space derivatives of the normal filter the highlights of smooth surfaces.
 // An optional environment adds reflections from a latitude-longitude image whose mip levels are
-// blurred per roughness, and diffuse light from nine spherical harmonics coefficients. One
-// directional light can be shadowed from a packed depth map, filtered with a 4x4 tent.
+// blurred per roughness, and diffuse light from nine spherical harmonics coefficients. The sun is
+// shadowed from its cascades (lib/shadows.glsl).
 // The result is exposed, then written per output mode: tone mapped (Reinhard, ACES or AgX) and
 // sRGB encoded for an rgba8unorm target, reversibly tone mapped, or linear.
 

@@ -20,20 +20,21 @@
 */
 
 #version 450
+#extension GL_GOOGLE_include_directive : require
 
-// Packs the depth into the four 8-bit channels of an rgba8unorm target, which every backend can
-// render to and sample with plain filtering.
+// Shadow casters write depth only. Alpha masked casters (bundled with YUP_3D_MASKED) discard the
+// texels their material cuts out, as the shading passes do.
 
-layout(location = 0) in float v_depth;
-
-layout(location = 0) out vec4 fragColor;
+#ifdef YUP_3D_MASKED
+#include "lib/material.glsl"
 
 void main()
 {
-    float depth = clamp(v_depth, 0.0, 0.99999);
-
-    vec4 packed = fract(vec4(1.0, 255.0, 65025.0, 16581375.0) * depth);
-    packed -= packed.yzww * vec4(1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0, 0.0);
-
-    fragColor = packed;
+    if (materialIsCutOut(materialBaseColor().a))
+        discard;
 }
+#else
+void main()
+{
+}
+#endif

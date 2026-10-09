@@ -143,13 +143,9 @@ void RenderPassMetal::setPipeline(Pipeline* pipeline)
     m_mtlPrimitiveType = orePrimitiveTopologyToMTL(desc.topology);
     m_currentPipeline = ref_rcp(pipeline);
 
-    if (desc.depthStencil.depthBias != 0 ||
-        desc.depthStencil.depthBiasSlopeScale != 0.0f)
-    {
-        [m_mtlEncoder setDepthBias:(float)desc.depthStencil.depthBias
-                        slopeScale:desc.depthStencil.depthBiasSlopeScale
-                             clamp:desc.depthStencil.depthBiasClamp];
-    }
+    [m_mtlEncoder setDepthBias:(float)desc.depthStencil.depthBias
+                    slopeScale:desc.depthStencil.depthBiasSlopeScale
+                         clamp:desc.depthStencil.depthBiasClamp];
 }
 
 void RenderPassMetal::setVertexBuffer(uint32_t slot,

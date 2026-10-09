@@ -32,11 +32,13 @@ namespace yup
     surface covers the texel and the environment is visible, and transparent black otherwise, for
     tone mapping to composite the background color under it.
 
-    Set 1 binds the LightingInputs: 0 the LightingBlock, 1-2 the environment and its sampler, 3 the
-    sun shadow map, 4-5 the area light tables (read through the set 0 linearClamp sampler at
-    binding 1), 6 the lights, 7 the light lists of the clusters, 8 the material table; then the
-    G-buffer: 9-11 RT0-RT2 and 12 the depth. Only the area light variant (YUP_3D_AREA_LIGHTS), which
-    shades the frames where LightingInputs::areaLights is set, declares the tables and linearClamp.
+    Set 0 binds the shared samplers and lookups of the LightingInputs: 4 shadowCompare, 6 the
+    environment with its sampler at 14, and 7 and 11 the area light tables, read through linearClamp
+    at binding 1. Set 1 binds the rest of them: 0 the LightingBlock, 6 the lights, 7 the light lists
+    of the clusters, 8 the material table; then the G-buffer: 9-11 RT0-RT2 and 12 the depth. Set 3
+    binds the shadows: 0 the sun cascades and 4 the ShadowBlock.
+    Only the area light variant (YUP_3D_AREA_LIGHTS), which shades the frames where
+    LightingInputs::areaLights is set, declares the tables and linearClamp.
 
     @internal
 */
@@ -80,9 +82,6 @@ private:
     std::optional<Result> defaults;
     std::array<Variant, 2> variants; // Punctual lights only, then with area lights
     GpuTexture::Ptr blackTexture;
-    GpuTexture::Ptr whiteTexture;
-    GpuSampler::Ptr pointClampSampler;
-    GpuSampler::Ptr linearClampSampler;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LightingPass)
 };
