@@ -247,6 +247,27 @@ flowchart LR
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
+## 3D
+
+3D scenes rendered through the RHI. See the [3D](3d/index.md) area.
+
+### yup_3d
+
+Entity trees with attached parts (meshes, cameras, lights, material overrides),
+glTF 2.0 loading through `tinygltf`, and static PBR rendering in a
+`SceneComponent`. glTF textures are decoded with the image formats
+`yup_graphics` has: link `libpng`, `libjpeg` and/or `libwebp` for the textures
+your assets use.
+
+```mermaid
+flowchart LR
+    yup_3d:::self --> yup_rhi
+    yup_3d --> yup_gui
+    yup_3d --> tinygltf:::ext
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
 ## Audio
 
 The audio-first stack. See the [Audio](audio/index.md) area.
@@ -445,6 +466,9 @@ flowchart TD
     gui[yup_gui] --> events
     gui --> data
     gui --> graphics
+
+    three[yup_3d] --> rhi
+    three --> gui
 
     ab[yup_audio_basics] --> core
     ab --> simd

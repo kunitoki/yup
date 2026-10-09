@@ -50,6 +50,10 @@ function (_yup_android_prepare_gradle)
     _yup_set_default (YUP_ANDROID_CMAKE_VERSION "${CMAKE_VERSION}")
     _yup_set_default (YUP_ANDROID_NDK_VERSION "27.2.12479018")
 
+    if (YUP_ANDROID_VALIDATION_LAYERS)
+        _yup_android_package_validation_layers ("${YUP_ANDROID_ABI}")
+    endif()
+
     _yup_join_list_with_separator ("${YUP_ANDROID_ABI}" "\n            " "abiFilters += \"" "\"" YUP_ANDROID_ABI)
     _yup_version_string_to_version_code (${YUP_ANDROID_APPLICATION_VERSION} YUP_ANDROID_APPLICATION_VERSION_CODE)
     file (RELATIVE_PATH YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_BINARY_DIR}/app" "${YUP_ANDROID_APPLICATION_PATH}")
@@ -92,6 +96,27 @@ function (_yup_android_prepare_gradle)
         endif()
     endif()
 
+endfunction()
+
+#==============================================================================
+
+function (_yup_android_package_validation_layers abis)
+    # The NDK stopped shipping the layer, take it from the Vulkan-ValidationLayers Android release
+    # archive (unzipped, one folder per ABI) when no path is given
+    set (YUP_ANDROID_VALIDATION_LAYERS_PATH "${ANDROID_NDK}/sources/third_party/vulkan/src/build-android/jniLibs"
+        CACHE PATH "Folder holding <abi>/libVkLayer_khronos_validation.so")
+
+    foreach (abi IN LISTS abis)
+        set (layer_file "${YUP_ANDROID_VALIDATION_LAYERS_PATH}/${abi}/libVkLayer_khronos_validation.so")
+        if (NOT EXISTS "${layer_file}")
+            _yup_message (WARNING "Vulkan validation layer not found for ${abi}: ${layer_file}")
+            continue()
+        endif()
+
+        # Only the debug source set picks it up, release packages never carry the layer
+        file (COPY "${layer_file}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/app/src/debug/jniLibs/${abi}")
+        _yup_message (STATUS "Packaging Vulkan validation layer for ${abi}")
+    endforeach()
 endfunction()
 
 #==============================================================================

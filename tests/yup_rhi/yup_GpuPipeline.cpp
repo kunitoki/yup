@@ -345,6 +345,37 @@ TEST_F (GpuPipelineCacheTests, DifferentApiProducesDifferentKey)
     EXPECT_NE (keyMetal, keyD3D);
 }
 
+TEST_F (GpuPipelineCacheTests, VulkanKeyTellsSpirvModulesApart)
+{
+    // SPIR-V variants carry no source text, only their module bytes differ
+    auto makeBundle = [] (uint8 firstByte)
+    {
+        ShaderBundle bundle;
+
+        for (const auto stage : { ShaderStage::vertex, ShaderStage::fragment })
+        {
+            ShaderInfo info;
+            info.stage = stage;
+            info.language = ShaderLanguage::spirv;
+            info.entryPoint = "main";
+            info.binary.setSize (8, true);
+            static_cast<uint8*> (info.binary.getData())[0] = firstByte;
+            bundle.addShader (std::move (info));
+        }
+
+        return bundle;
+    };
+
+    GpuPipelineOptions options;
+
+    const auto keyA = GpuPipelineCache::generateCacheKey (makeBundle (1), options, GpuPlatform::Vulkan);
+    const auto keyB = GpuPipelineCache::generateCacheKey (makeBundle (2), options, GpuPlatform::Vulkan);
+    const auto keyA2 = GpuPipelineCache::generateCacheKey (makeBundle (1), options, GpuPlatform::Vulkan);
+
+    EXPECT_NE (keyA, keyB);
+    EXPECT_EQ (keyA, keyA2);
+}
+
 TEST_F (GpuPipelineCacheTests, DifferentOptionsProduceDifferentKey)
 {
     ShaderBundle bundle;

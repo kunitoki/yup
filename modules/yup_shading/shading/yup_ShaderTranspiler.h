@@ -55,6 +55,11 @@ struct TranspileOptions
     /** When true, flip the Y coordinate in vertex output (MSL). */
     bool flipVertY = false;
 
+    /** When true, compileToSPIRV() negates @c gl_Position.y once a vertex shader's entry
+        point returns, mapping the Y-up clip space of the other targets onto Vulkan's
+        Y-down one. Ignored by the other stages. */
+    bool spirvInvertY = false;
+
     /** SPIR-V optimization mode (requires SPIRV-Tools linked into glslang). */
     SpvOptimizationMode spirvOptimization = SpvOptimizationMode::none;
 
@@ -86,6 +91,7 @@ struct TranspileOptions
                 << "|hlslSM:" << hlslShaderModel
                 << "|mslFBF:" << (mslUsesFramebufferFetch ? '1' : '0')
                 << "|flipY:" << (flipVertY ? '1' : '0')
+                << "|spvInvertY:" << (spirvInvertY ? '1' : '0')
                 << "|spvOpt:" << static_cast<int> (spirvOptimization)
                 << "|spvValidate:" << (spirvValidate ? '1' : '0')
                 << "|spvDebug:" << (spirvDebugInfo ? '1' : '0');

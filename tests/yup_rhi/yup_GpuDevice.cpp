@@ -23,6 +23,8 @@
 
 #include <yup_rhi/yup_rhi.h>
 
+#include <thread>
+
 using namespace yup;
 using ::testing::_;
 using ::testing::Invoke;
@@ -77,6 +79,43 @@ TEST_F (GpuDeviceErrorTests, CreateWithInvalidApiReturnsNull)
     auto ctx = GpuDevice::create (invalidApi, {});
     EXPECT_EQ (ctx, nullptr);
 }
+
+TEST_F (GpuDeviceErrorTests, HeadlessDeviceIsNeverLost)
+{
+    auto ctx = GpuDevice::create (GpuPlatform::Headless, {});
+    ASSERT_NE (ctx, nullptr);
+    EXPECT_FALSE (ctx->isDeviceLost());
+}
+
+#if YUP_ANDROID || YUP_LINUX
+TEST_F (GpuDeviceErrorTests, CreateOpenGLWithoutAWindowHasNoCompute)
+{
+    // A fresh thread has no GL context current, and no window provides a loader function
+    std::thread ([]
+    {
+        GpuDevice::Options options;
+        options.allowHeadlessRendering = true;
+
+        auto ctx = GpuDevice::create (GpuPlatform::OpenGL, options);
+        EXPECT_TRUE (ctx == nullptr || ! ctx->isComputeAvailable());
+    }).join();
+}
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+TEST_F (GpuDeviceErrorTests, CreateVulkanWithoutAWindowLoadsTheSystemLoader)
+{
+    // No loader is passed in: the device finds the system one
+    if (! GpuDevice::isPlatformSupported (GpuPlatform::Vulkan, {}))
+        GTEST_SKIP() << "no Vulkan loader or driver in this environment";
+
+    auto ctx = GpuDevice::create (GpuPlatform::Vulkan, {});
+    ASSERT_NE (ctx, nullptr);
+    EXPECT_EQ (ctx->getPlatform(), GpuPlatform::Vulkan);
+    EXPECT_TRUE (ctx->isComputeAvailable());
+    EXPECT_FALSE (ctx->isDeviceLost());
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // readBuffer — default returns false
@@ -343,6 +382,39 @@ TEST_F (GpuDeviceErrorTests, ComputePassSettersOnInvalidPassAreNoOps)
     EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, nullptr, 0));
     EXPECT_NO_THROW (pass.setTexture (0, 0, nullptr));
 }
+
+//==============================================================================
+// GpuDevice::isPlatformSupported
+//==============================================================================
+
+TEST (GpuDevicePlatformTests, HeadlessIsAlwaysSupported)
+{
+    EXPECT_TRUE (GpuDevice::isPlatformSupported (GpuPlatform::Headless, {}));
+}
+
+TEST (GpuDevicePlatformTests, InvalidPlatformIsUnsupported)
+{
+    EXPECT_FALSE (GpuDevice::isPlatformSupported (static_cast<GpuPlatform> (9999), {}));
+}
+
+#if ! YUP_EMSCRIPTEN
+TEST (GpuDevicePlatformTests, WebGpuIsUnsupportedOutsideTheBrowser)
+{
+    EXPECT_FALSE (GpuDevice::isPlatformSupported (GpuPlatform::WebGPU, {}));
+}
+#endif
+
+TEST (GpuDevicePlatformTests, VulkanWithoutLoaderIsUnsupported)
+{
+    // No vkGetInstanceProcAddr: there is nothing to probe, whether or not Vulkan is compiled in
+    EXPECT_FALSE (GpuDevice::isPlatformSupported (GpuPlatform::Vulkan, {}));
+}
+
+TEST (GpuDevicePlatformTests, CreateVulkanWithoutLoaderReturnsNull)
+{
+    EXPECT_EQ (GpuDevice::create (GpuPlatform::Vulkan, {}), nullptr);
+}
+
 
 //==============================================================================
 // gpuShaderSourceBytes

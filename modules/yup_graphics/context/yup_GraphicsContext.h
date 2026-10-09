@@ -128,6 +128,16 @@ public:
     */
     virtual void attachToWindow (void* nativeHandle, int width, int height, float dpiScale) {}
 
+    /** Releases the rendering surface from the native window, undoing attachToWindow().
+
+        Called when the window surface is about to go away while the context lives
+        on, such as an Android app moving to the background, which destroys the
+        native window. Rendering must be stopped before calling it; once the window
+        is back, attachToWindow() is called again and rendering resumes. Backends
+        whose surface outlives these transitions leave it as a no-op.
+    */
+    virtual void detachFromWindow() {}
+
     /** Handles changes in the size of the rendering surface.
 
         Unlike attachToWindow(), this runs on the render thread (so it must not

@@ -54,6 +54,14 @@ TEST_F (GpuComputePassHeadlessTests, BeginWithHeadlessDeviceReturnsInvalidPass)
     EXPECT_FALSE (pass.isValid());
 }
 
+TEST_F (GpuComputePassHeadlessTests, BeginOnInvalidFrameReturnsInvalidPass)
+{
+    auto frame = GpuFrame::begin (device);
+    ASSERT_FALSE (frame.isValid());
+
+    auto pass = GpuComputePass::begin (frame);
+    EXPECT_FALSE (pass.isValid());
+}
 
 TEST_F (GpuComputePassHeadlessTests, RunOnComputeContextRunsWorkSynchronously)
 {
@@ -275,3 +283,223 @@ TEST_F (GpuComputePipelineHeadlessTests, CompileFromGlslWithWorkgroupSize)
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER
+
+//==============================================================================
+// Vulkan - runs where a Vulkan loader and driver are available
+//==============================================================================
+
+#if YUP_RIVE_USE_VULKAN && YUP_ENABLE_SHADER_TRANSPILER
+
+class GpuComputePassVulkanTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        if (! GpuDevice::isPlatformSupported (GpuPlatform::Vulkan, {}))
+            GTEST_SKIP() << "no Vulkan loader or driver in this environment";
+
+        device = GpuDevice::create (GpuPlatform::Vulkan, {});
+        ASSERT_NE (device, nullptr);
+        ASSERT_TRUE (device->isComputeAvailable());
+    }
+
+    GpuComputePipeline::Ptr compileDoubler (bool withBindingMap)
+    {
+        static constexpr auto glsl = "#version 450\n"
+                                     "layout(local_size_x = 4) in;\n"
+                                     "layout(std430, set = 0, binding = 0) buffer Data { float values[]; };\n"
+                                     "void main() { values[gl_GlobalInvocationID.x] *= 2.0; }\n";
+
+        if (withBindingMap)
+        {
+            auto pipeline = GpuComputePipeline::compileFromGlsl (device, glsl);
+            return pipeline.wasOk() ? pipeline.getValue() : nullptr;
+        }
+
+        auto spirv = ShaderTranspiler().compileToSPIRV (glsl, ShaderStage::compute, ShaderLanguage::glsl);
+        if (spirv.failed())
+            return nullptr;
+
+        const auto& module = spirv.getReference();
+        auto* bytes = static_cast<const uint8*> (module.getData());
+
+        GpuShaderSource source;
+        source.language = GpuShaderLanguage::spirv;
+        source.code.assign (bytes, bytes + module.getSize());
+
+        auto pipeline = GpuComputePipeline::compile (device, source, {});
+        return pipeline.wasOk() ? pipeline.getValue() : nullptr;
+    }
+
+    GpuDevice::Ptr device;
+};
+
+TEST_F (GpuComputePassVulkanTests, CompilesSpirvWithoutBindingMapByReflectingIt)
+{
+    auto pipeline = compileDoubler (false);
+    ASSERT_NE (pipeline, nullptr);
+
+    const auto size = pipeline->getWorkgroupSize();
+    EXPECT_EQ (size.x, 4u);
+    EXPECT_EQ (size.y, 1u);
+    EXPECT_EQ (size.z, 1u);
+}
+
+TEST_F (GpuComputePassVulkanTests, PassBegunOnFrameRunsWhenTheFrameIsSubmitted)
+{
+    auto pipeline = compileDoubler (true);
+    ASSERT_NE (pipeline, nullptr);
+
+    float values[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    auto buffer = GpuBuffer::create (device, GpuBufferType::storage, values, sizeof (values));
+    ASSERT_NE (buffer, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (frame.isValid());
+
+    {
+        auto pass = GpuComputePass::begin (frame);
+        ASSERT_TRUE (pass.isValid());
+
+        pass.setPipeline (pipeline);
+        pass.setStorageBuffer (0, 0, buffer);
+        EXPECT_TRUE (pass.dispatch (1, 1, 1));
+        pass.finish();
+    }
+
+    ASSERT_TRUE (frame.submit());
+
+    float result[4] = {};
+    ASSERT_TRUE (device->readBuffer (buffer, result, sizeof (result)));
+    EXPECT_FLOAT_EQ (result[0], 2.0f);
+    EXPECT_FLOAT_EQ (result[1], 4.0f);
+    EXPECT_FLOAT_EQ (result[2], 6.0f);
+    EXPECT_FLOAT_EQ (result[3], 8.0f);
+}
+
+#endif // YUP_RIVE_USE_VULKAN && YUP_ENABLE_SHADER_TRANSPILER
+
+//==============================================================================
+// Metal - passes begun on a frame encode into its command buffer
+//==============================================================================
+
+#if YUP_APPLE && YUP_ENABLE_SHADER_TRANSPILER
+
+class GpuComputePassMetalTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        device = GpuDevice::create (GpuPlatform::Metal, {});
+        if (device == nullptr || ! device->isComputeAvailable())
+            GTEST_SKIP() << "No Metal compute device available";
+
+        auto compiled = GpuComputePipeline::compileFromGlsl (device,
+                                                             "#version 450\n"
+                                                             "layout(local_size_x = 4) in;\n"
+                                                             "layout(std430, set = 0, binding = 0) buffer Data { float values[]; };\n"
+                                                             "void main() { values[gl_GlobalInvocationID.x] *= 2.0; }\n");
+        ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+        pipeline = compiled.getValue();
+
+        buffer = GpuBuffer::create (device, GpuBufferType::storage, initialValues, sizeof (initialValues));
+        ASSERT_NE (buffer, nullptr);
+    }
+
+    void dispatchDoubler (GpuComputePass& pass)
+    {
+        pass.setPipeline (pipeline);
+        pass.setStorageBuffer (0, 0, buffer);
+        EXPECT_TRUE (pass.dispatch (1, 1, 1));
+    }
+
+    std::array<float, 4> readValues()
+    {
+        std::array<float, 4> values {};
+        EXPECT_TRUE (device->readBuffer (buffer, values.data(), sizeof (float) * values.size()));
+        return values;
+    }
+
+    static constexpr float initialValues[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    GpuDevice::Ptr device;
+    GpuComputePipeline::Ptr pipeline;
+    GpuBuffer::Ptr buffer;
+};
+
+TEST_F (GpuComputePassMetalTests, PassBegunOnFrameRunsWhenTheFrameIsSubmitted)
+{
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (frame.isValid());
+
+    auto pass = GpuComputePass::begin (frame);
+    ASSERT_TRUE (pass.isValid());
+
+    dispatchDoubler (pass);
+    EXPECT_TRUE (pass.finish());
+
+    // The dispatch waits for the frame's command buffer
+    EXPECT_EQ (readValues(), (std::array<float, 4> { 1.0f, 2.0f, 3.0f, 4.0f }));
+
+    ASSERT_TRUE (frame.submit());
+    EXPECT_EQ (readValues(), (std::array<float, 4> { 2.0f, 4.0f, 6.0f, 8.0f }));
+}
+
+TEST_F (GpuComputePassMetalTests, SubmittingTheFrameFinishesItsOpenPass)
+{
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (frame.isValid());
+
+    auto pass = GpuComputePass::begin (frame);
+    ASSERT_TRUE (pass.isValid());
+    dispatchDoubler (pass);
+
+    ASSERT_TRUE (frame.submit());
+
+    EXPECT_FALSE (pass.isValid());
+    EXPECT_FALSE (pass.dispatch (1, 1, 1));
+    EXPECT_FALSE (pass.finish());
+    EXPECT_EQ (readValues(), (std::array<float, 4> { 2.0f, 4.0f, 6.0f, 8.0f }));
+}
+
+TEST_F (GpuComputePassMetalTests, BeginningAnotherPassOnTheFrameFinishesTheOpenOne)
+{
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (frame.isValid());
+
+    auto first = GpuComputePass::begin (frame);
+    ASSERT_TRUE (first.isValid());
+    dispatchDoubler (first);
+
+    auto second = GpuComputePass::begin (frame);
+    ASSERT_TRUE (second.isValid());
+    EXPECT_FALSE (first.isValid());
+    dispatchDoubler (second);
+
+    ASSERT_TRUE (frame.submit());
+    EXPECT_EQ (readValues(), (std::array<float, 4> { 4.0f, 8.0f, 12.0f, 16.0f }));
+}
+
+TEST_F (GpuComputePassMetalTests, RenderPassOnTheFrameFinishesTheOpenPass)
+{
+    auto target = GpuTarget::create (device, 4, 4);
+    ASSERT_NE (target, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (frame.isValid());
+
+    auto pass = GpuComputePass::begin (frame);
+    ASSERT_TRUE (pass.isValid());
+    dispatchDoubler (pass);
+
+    // A clearing pass opens even without draws
+    auto renderPass = target->beginRenderPass (frame);
+    ASSERT_TRUE (renderPass.isValid());
+    EXPECT_TRUE (renderPass.finish());
+    EXPECT_FALSE (pass.isValid());
+
+    ASSERT_TRUE (frame.submit());
+    EXPECT_EQ (readValues(), (std::array<float, 4> { 2.0f, 4.0f, 6.0f, 8.0f }));
+}
+
+#endif // YUP_APPLE && YUP_ENABLE_SHADER_TRANSPILER

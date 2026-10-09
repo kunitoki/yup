@@ -65,6 +65,8 @@ public:
         return m_completedSerial->load(std::memory_order_relaxed);
     }
     id<MTLDevice> device() const { return m_mtlDevice; }
+    // The command buffer of the frame being recorded, nil outside a frame.
+    id<MTLCommandBuffer> commandBuffer() const { return m_mtlCommandBuffer; }
 
     ContextMetal(const ContextMetal&) = delete;
     ContextMetal& operator=(const ContextMetal&) = delete;

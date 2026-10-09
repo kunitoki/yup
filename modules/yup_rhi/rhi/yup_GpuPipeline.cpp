@@ -872,6 +872,8 @@ ShaderLanguage shaderLanguageForApi (GpuPlatform api)
             return ShaderLanguage::essl;
         case GpuPlatform::WebGPU:
             return ShaderLanguage::wgsl;
+        case GpuPlatform::Vulkan:
+            return ShaderLanguage::spirv;
         default:
             return ShaderLanguage::glsl;
     }
@@ -887,9 +889,21 @@ GpuShaderLanguage gpuShaderLanguageForApi (GpuPlatform api)
             return GpuShaderLanguage::hlsl;
         case GpuPlatform::WebGPU:
             return GpuShaderLanguage::wgsl;
+        case GpuPlatform::Vulkan:
+            return GpuShaderLanguage::spirv;
         default:
             return GpuShaderLanguage::glsl;
     }
+}
+
+/** The code of a bundle variant: the module bytes of binary targets, the source text otherwise. */
+std::vector<uint8> shaderCodeBytes (const ShaderInfo& info)
+{
+    if (info.language != ShaderLanguage::spirv)
+        return gpuShaderSourceBytes (info.source);
+
+    auto* bytes = static_cast<const uint8*> (info.binary.getData());
+    return std::vector<uint8> (bytes, bytes + info.binary.getSize());
 }
 
 } // namespace
@@ -939,14 +953,14 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
 
     GpuShaderSource vs;
     vs.language = gpuLang;
-    vs.code = gpuShaderSourceBytes (vsInfo->source);
+    vs.code = shaderCodeBytes (*vsInfo);
     vs.bindingMap = vsMap;
     vs.glFixup = vsFixup;
     vs.entryPoint = resolveEntry (*vsInfo);
 
     GpuShaderSource fs;
     fs.language = gpuLang;
-    fs.code = gpuShaderSourceBytes (fsInfo->source);
+    fs.code = shaderCodeBytes (*fsInfo);
     fs.bindingMap = fsMap;
     fs.glFixup = fsFixup;
     fs.entryPoint = resolveEntry (*fsInfo);

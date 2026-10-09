@@ -64,6 +64,9 @@ std::unique_ptr<GraphicsContext> yup_constructOpenGLGraphicsContext (GpuDevice::
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
 std::unique_ptr<GraphicsContext> yup_constructWebGPUGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
 #endif
+#if YUP_RIVE_USE_VULKAN
+std::unique_ptr<GraphicsContext> yup_constructVulkanGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
+#endif
 
 //==============================================================================
 std::unique_ptr<GraphicsContext> GraphicsContext::createContext (GpuPlatform graphicsApi,
@@ -94,6 +97,11 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (GpuPlatform gra
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
         case GpuPlatform::WebGPU:
             return yup_constructWebGPUGraphicsContext (options, std::move (existingGpu));
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+        case GpuPlatform::Vulkan:
+            return yup_constructVulkanGraphicsContext (options, std::move (existingGpu));
 #endif
 
         default:

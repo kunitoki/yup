@@ -1081,6 +1081,9 @@ macro (yup_add_default_modules modules_path)
     _yup_set_default (YUP_ARG_TARGET_DEFINITIONS "")
     _yup_set_default (YUP_ARG_ENABLE_PYTHON OFF)
     set (modules_definitions "${YUP_ARG_DEFINITIONS}")
+    if (YUP_ENABLE_VULKAN)
+        list (APPEND modules_definitions YUP_RIVE_USE_VULKAN=1)
+    endif()
 
     # ==== Thirdparty modules
     set (thirdparty_group "Thirdparty")

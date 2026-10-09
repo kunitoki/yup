@@ -102,7 +102,7 @@ if (YUP_PLATFORM_DESKTOP OR YUP_PLATFORM_EMSCRIPTEN)
 endif()
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
-    list (APPEND target_modules yup_gui yup_audio_gui)
+    list (APPEND target_modules yup_gui yup_audio_gui yup_3d tinygltf)
     if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
         list (APPEND target_modules yup_python)
     endif()

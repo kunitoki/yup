@@ -90,6 +90,18 @@ _yup_setup_platform()
 
 #==============================================================================
 
+# Graphics backends
+if (YUP_PLATFORM_ANDROID)
+    set (yup_enable_vulkan_default ON)
+else()
+    set (yup_enable_vulkan_default OFF)
+endif()
+
+option (YUP_ENABLE_VULKAN "Build the Vulkan renderer backend (the loader is resolved at runtime, never linked)" ${yup_enable_vulkan_default})
+option (YUP_ANDROID_VALIDATION_LAYERS "Package the Khronos validation layer from the NDK into Android debug builds" OFF)
+
+#==============================================================================
+
 # Common includes
 include (${CMAKE_CURRENT_LIST_DIR}/yup_utilities.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_dependencies.cmake)

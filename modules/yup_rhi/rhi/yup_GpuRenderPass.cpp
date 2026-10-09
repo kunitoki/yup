@@ -150,6 +150,9 @@ bool GpuRenderPass::Impl::ensurePassOpen()
     if (framePools->openPass != nullptr)
         framePools->openPass->finish();
 
+    if (framePools->openComputePass != nullptr)
+        yup_finishComputePass (*framePools->openComputePass);
+
     orePass = oreCtx->beginRenderPass (rpDesc);
     if (orePass == nullptr)
         return false;

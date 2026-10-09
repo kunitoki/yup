@@ -90,6 +90,66 @@ private:
 };
 #endif
 
+#if YUP_RIVE_USE_VULKAN
+/** A Vulkan storage buffer, dropped through the device so its release serializes
+    with the render thread: Rive's resource manager and VMA are not thread safe. */
+struct VulkanStorageBuffer
+{
+    VulkanStorageBuffer() = default;
+
+    VulkanStorageBuffer (rive::rcp<rive::gpu::vkutil::Buffer> buffer, ReferenceCountedObjectPtr<GpuDevice> device)
+        : buffer (std::move (buffer))
+        , device (std::move (device))
+    {
+    }
+
+    VulkanStorageBuffer (VulkanStorageBuffer&& other) noexcept = default;
+
+    VulkanStorageBuffer& operator= (VulkanStorageBuffer&& other) noexcept
+    {
+        if (this != &other)
+        {
+            release();
+
+            buffer = std::move (other.buffer);
+            device = std::move (other.device);
+            lastUseCommands = std::exchange (other.lastUseCommands, VK_NULL_HANDLE);
+            lastUseGeneration = std::exchange (other.lastUseGeneration, 0);
+        }
+
+        return *this;
+    }
+
+    ~VulkanStorageBuffer()
+    {
+        release();
+    }
+
+    rive::rcp<rive::gpu::vkutil::Buffer> buffer;
+    ReferenceCountedObjectPtr<GpuDevice> device;
+
+    /** The command buffer and generation of the last work that bound the buffer, which
+        reads and updates wait for instead of the whole queue. */
+    VkCommandBuffer lastUseCommands = VK_NULL_HANDLE;
+    uint64_t lastUseGeneration = 0;
+
+    VulkanStorageBuffer (const VulkanStorageBuffer&) = delete;
+    VulkanStorageBuffer& operator= (const VulkanStorageBuffer&) = delete;
+
+private:
+    void release() noexcept
+    {
+        if (buffer == nullptr || device == nullptr)
+            return;
+
+        device->runOnGraphicsContext ([this]
+        {
+            buffer = nullptr;
+        });
+    }
+};
+#endif
+
 } // namespace
 
 //==============================================================================
@@ -134,6 +194,10 @@ struct GpuBuffer::Impl
 
 #if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
     GlStorageBuffer glStorageBuffer;
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+    VulkanStorageBuffer vkStorageBuffer;
 #endif
 };
 
@@ -189,6 +253,10 @@ bool GpuBuffer::isValid() const noexcept
 #endif
 #if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
         if (i->glStorageBuffer.id != 0)
+            return true;
+#endif
+#if YUP_RIVE_USE_VULKAN
+        if (i->vkStorageBuffer.buffer != nullptr)
             return true;
 #endif
         return false;

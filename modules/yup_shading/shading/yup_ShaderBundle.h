@@ -44,8 +44,17 @@ struct ShaderInfo
     /** Name of the entry-point function (e.g. "main" or "vertexMain"). */
     String entryPoint;
 
-    /** Transpiled source code in @c language. */
+    /** Transpiled source code in @c language. Empty for binary targets, see @c binary. */
     String source;
+
+    /** Compiled module of binary targets, empty for text targets.
+
+        For ShaderLanguage::spirv this is the SPIR-V module the Vulkan backend loads.
+        It is compiled with the vertex Y output negated (TranspileOptions::spirvInvertY), which maps
+        the Y-up clip space every other target uses onto Vulkan's Y-down one, so it is
+        not the same module as getSPIRV(), which other targets were transpiled from.
+    */
+    MemoryBlock binary;
 
     /** Original Vulkan GLSL source used to compile this stage to SPIR-V.
         Populated by ShaderBundleCompiler; empty for bundles created without it.
@@ -111,6 +120,16 @@ public:
     /** Find the transpiled variant for a specific stage and target language.
         @returns Pointer to the matching ShaderInfo, or nullptr if not present. */
     const ShaderInfo* findShader (ShaderStage stage, ShaderLanguage language) const;
+
+    /** Returns the intermediate SPIR-V a stage was compiled to, the module every text
+        target of that stage was transpiled from.
+
+        Use findShader (stage, ShaderLanguage::spirv) for the module the Vulkan backend
+        loads instead, which differs in its clip space.
+
+        @returns The SPIR-V binary, or nullptr if the bundle carries none for @p stage.
+    */
+    const MemoryBlock* getSPIRV (ShaderStage stage) const;
 
     //==========================================================================
     /** Serialise the bundle to the YSLB RIFF binary format. */

@@ -26,6 +26,7 @@ concept guides, walkthroughs, and reference material.
 - [Graphics](graphics/index.md) - the graphics context, 2D drawing, the **RHI** GPU layer, shaders, fonts, SVG, and animation.
 - [Imaging](imaging/index.md) - bitmap images: pixels, loading, saving, and drawing.
 - [UI](ui/index.md) - components, windowing, events, layout, and widgets.
+- [3D](3d/index.md) - entity trees, glTF loading, and PBR scenes in a component.
 - [DSP](dsp/index.md) - filters, filter design, FFTs, dynamics, metering, onset detection, convolution, resampling, and time-stretching.
 - [Audio](audio/index.md) - audio devices, formats, DSP, the audio graph, processors, and plugin hosting/client wrappers.
 - [AI](ai/index.md) - the AI and LLM infrastructure.
@@ -55,6 +56,7 @@ data/index
 graphics/index
 imaging/index
 ui/index
+3d/index
 dsp/index
 audio/index
 scripting/index

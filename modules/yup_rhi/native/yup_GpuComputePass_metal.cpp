@@ -29,21 +29,19 @@ namespace yup
 class GpuComputePassImplMetal final : public GpuComputePass::Impl
 {
 public:
-    GpuComputePassImplMetal (id<MTLDevice> device, id<MTLCommandQueue> queue)
+    /** Encodes into @p commandBufferToEncode, and commits it on finish() when
+        @p commitOnFinish is set: a frame commits its own command buffer. */
+    GpuComputePassImplMetal (id<MTLDevice> device, id<MTLCommandBuffer> commandBufferToEncode, bool commitOnFinish)
         : device (device)
     {
-        if (device == nil || queue == nil)
+        if (device == nil || commandBufferToEncode == nil)
             return;
 
         YUP_AUTORELEASEPOOL
         {
-            commandBuffer = [queue commandBuffer];
-            if (commandBuffer == nil)
-                return;
-
-            encoder = [commandBuffer computeCommandEncoder];
-            if (encoder == nil)
-                commandBuffer = nil;
+            encoder = [commandBufferToEncode computeCommandEncoder];
+            if (encoder != nil && commitOnFinish)
+                commandBuffer = commandBufferToEncode;
         }
     }
 
@@ -151,8 +149,29 @@ std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&
 {
     auto& metalCtx = static_cast<GpuDeviceMetal&> (ctx);
 
-    auto impl = std::make_unique<GpuComputePassImplMetal> (metalCtx.getDevice(),
-                                                           metalCtx.getCommandQueue());
+    id<MTLCommandBuffer> commandBuffer = nil;
+    YUP_AUTORELEASEPOOL
+    {
+        commandBuffer = [metalCtx.getCommandQueue() commandBuffer];
+    }
+
+    auto impl = std::make_unique<GpuComputePassImplMetal> (metalCtx.getDevice(), commandBuffer, true);
+    if (! impl->isValid())
+        return nullptr;
+
+    return impl;
+}
+
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice& ctx, rive::ore::Context& frameContext)
+{
+    auto& metalCtx = static_cast<GpuDeviceMetal&> (ctx);
+
+    id<MTLCommandBuffer> frameCommandBuffer = static_cast<rive::ore::ContextMetal&> (frameContext).commandBuffer();
+    jassert (frameCommandBuffer != nil); // Only set between the frame's begin and its submission
+    if (frameCommandBuffer == nil)
+        return nullptr;
+
+    auto impl = std::make_unique<GpuComputePassImplMetal> (metalCtx.getDevice(), frameCommandBuffer, false);
     if (! impl->isValid())
         return nullptr;
 

@@ -23,6 +23,10 @@
 
 #include <yup_gui/yup_gui.h>
 
+#include <SDL3/SDL.h>
+
+#include <thread>
+
 using namespace yup;
 
 namespace
@@ -567,4 +571,123 @@ TEST_F (ComponentNativeConstructionTests, RunWithGraphicsContextRunsTheWorkInlin
     native.runWithGraphicsContext ([&] { ran = true; });
 
     EXPECT_TRUE (ran);
+}
+
+// ==============================================================================
+// Native touch input - delivered on the message thread
+// ==============================================================================
+
+/** Android delivers touches from its UI thread, not the message thread: a background thread pushing
+    the SDL event stands in for it, which works the same way on every platform. */
+class ComponentNativeTouchThreadTests : public ::testing::Test
+{
+protected:
+    class TouchRecorder final : public Component
+    {
+    public:
+        void paint (Graphics& g) override
+        {
+            g.setFillColor (Colors::black);
+            g.fillAll();
+        }
+
+        void mouseDown (const MouseEvent&) override
+        {
+            mouseDownOnMessageThread = MessageManager::getInstance()->isThisTheMessageThread();
+            ++mouseDownCount;
+        }
+
+        std::atomic<int> mouseDownCount { 0 };
+        std::atomic<bool> mouseDownOnMessageThread { false };
+    };
+
+    void SetUp() override
+    {
+        const auto windowsBefore = getWindowIds();
+
+        recorder.setBounds (0.0f, 0.0f, 200.0f, 200.0f);
+        recorder.setVisible (true);
+        recorder.addToDesktop (ComponentNative::Options{}
+                                   .withDecoration (false)
+                                   .withResizableWindow (false)
+                                   .withFocusable (false)
+                                   .withAllowedHighDensityDisplay (false)
+                                   .withTemporaryWindow (true));
+
+        auto* native = recorder.getNativeComponent();
+
+        if (native == nullptr || ! native->isVisible())
+            GTEST_SKIP() << "no usable native window in this environment";
+
+        for (const auto id : getWindowIds())
+        {
+            if (std::find (windowsBefore.begin(), windowsBefore.end(), id) == windowsBefore.end())
+                windowId = id;
+        }
+
+        if (windowId == 0)
+            GTEST_SKIP() << "the native window is not an SDL window";
+    }
+
+    void TearDown() override
+    {
+        recorder.removeFromDesktop();
+    }
+
+    static std::vector<SDL_WindowID> getWindowIds()
+    {
+        std::vector<SDL_WindowID> ids;
+
+        int count = 0;
+        if (auto* windows = SDL_GetWindows (&count))
+        {
+            for (int i = 0; i < count; ++i)
+                ids.push_back (SDL_GetWindowID (windows[i]));
+
+            SDL_free (windows);
+        }
+
+        return ids;
+    }
+
+    void pushFingerEvent (SDL_EventType type) const
+    {
+        SDL_Event event {};
+        event.tfinger.type = type;
+        event.tfinger.windowID = windowId;
+        event.tfinger.fingerID = fingerId;
+        event.tfinger.x = 0.5f;
+        event.tfinger.y = 0.5f;
+        event.tfinger.pressure = 1.0f;
+
+        SDL_PushEvent (&event);
+    }
+
+    void runDispatchLoopUntil (int millisecondsToRunFor)
+    {
+#if YUP_MODAL_LOOPS_PERMITTED
+        MessageManager::getInstance()->runDispatchLoopUntil (millisecondsToRunFor);
+#endif
+    }
+
+    static constexpr SDL_FingerID fingerId = 4242;
+
+    TouchRecorder recorder;
+    SDL_WindowID windowId = 0;
+};
+
+TEST_F (ComponentNativeTouchThreadTests, TouchFromAnotherThreadIsHandledOnTheMessageThread)
+{
+    std::thread ([this] { pushFingerEvent (SDL_EVENT_FINGER_DOWN); }).join();
+
+    // Nothing may reach the component from the pushing thread, it races the render thread there
+    EXPECT_EQ (0, recorder.mouseDownCount.load());
+
+    runDispatchLoopUntil (50);
+
+    EXPECT_EQ (1, recorder.mouseDownCount.load());
+    EXPECT_TRUE (recorder.mouseDownOnMessageThread.load());
+
+    pushFingerEvent (SDL_EVENT_FINGER_UP);
+    runDispatchLoopUntil (10);
 }

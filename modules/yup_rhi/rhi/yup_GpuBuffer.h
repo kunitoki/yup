@@ -82,12 +82,14 @@ private:
     friend class GpuDeviceD3D;
     friend class GpuDeviceGL;
     friend class GpuDeviceWebGPU;
+    friend class GpuDeviceVulkan;
     friend class GpuRenderPass;
     friend class GpuComputePass;
     friend class GpuComputePassImplMetal;
     friend class GpuComputePassImplD3D11;
     friend class GpuComputePassImplGL;
     friend class GpuComputePassImplWebGPU;
+    friend class GpuComputePassImplVulkan;
 
     struct Impl;
 

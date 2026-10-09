@@ -860,14 +860,13 @@ public:
                          bounds.getCenterY() - renderData[sample] * bounds.getHeight() * 0.45f);
         }
 
-        filledPath = path.createStrokePolygon (4.0f);
-
-        g.setFillColor (SynthTheme::accent().withAlpha (0.5f));
+        g.setStrokeColor (SynthTheme::accent().withAlpha (0.5f));
+        g.setStrokeWidth (4.0f);
         g.setFeather (8.0f);
-        g.fillPath (filledPath);
+        g.strokePath (path);
 
         g.setFeather (4.0f);
-        g.fillPath (filledPath);
+        g.strokePath (path);
 
         g.setFeather (0.0f);
         g.setStrokeColor (SynthTheme::accent());
@@ -878,7 +877,6 @@ public:
 private:
     std::vector<float> renderData;
     yup::Path path;
-    yup::Path filledPath;
 };
 
 //==============================================================================

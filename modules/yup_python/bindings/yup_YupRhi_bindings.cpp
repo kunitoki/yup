@@ -77,7 +77,8 @@ void registerYupRhiBindings (py::module_& m)
         .value ("OpenGLES", GpuPlatform::OpenGLES)
         .value ("Direct3D", GpuPlatform::Direct3D)
         .value ("Metal", GpuPlatform::Metal)
-        .value ("WebGPU", GpuPlatform::WebGPU);
+        .value ("WebGPU", GpuPlatform::WebGPU)
+        .value ("Vulkan", GpuPlatform::Vulkan);
 
     py::enum_<GpuShaderLanguage> (m, "GpuShaderLanguage")
         .value ("wgsl", GpuShaderLanguage::wgsl)
@@ -776,7 +777,8 @@ void registerYupRhiBindings (py::module_& m)
     // ============================================================================================ yup::GpuComputePass (move-only, context manager)
 
     py::class_<GpuComputePass> (m, "GpuComputePass")
-        .def_static ("begin", &GpuComputePass::begin, "device"_a, py::keep_alive<0, 1>())
+        .def_static ("begin", py::overload_cast<GpuDevice::Ptr> (&GpuComputePass::begin), "device"_a, py::keep_alive<0, 1>())
+        .def_static ("begin", py::overload_cast<GpuFrame&> (&GpuComputePass::begin), "frame"_a, py::keep_alive<0, 1>())
         .def ("isValid", &GpuComputePass::isValid)
         .def ("setPipeline", &GpuComputePass::setPipeline, "pipeline"_a)
         .def ("setStorageBuffer", &GpuComputePass::setStorageBuffer, "group"_a, "binding"_a, "buffer"_a)

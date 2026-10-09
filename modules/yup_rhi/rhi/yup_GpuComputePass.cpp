@@ -26,6 +26,7 @@ namespace yup
 
 #if YUP_RIVE_USE_METAL && YUP_APPLE
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&);
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&, rive::ore::Context& frameContext);
 #endif
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplD3D11 (GpuDevice&);
@@ -36,6 +37,10 @@ std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplWebGPU (GpuDevice
 #if YUP_RHI_USE_GL_COMPUTE
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplGL (GpuDevice&);
 #endif
+#if YUP_RIVE_USE_VULKAN
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplVulkan (GpuDevice&);
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplVulkan (GpuDevice&, void* commandBuffer, uint64_t generation);
+#endif
 
 //==============================================================================
 
@@ -43,6 +48,9 @@ struct GpuComputePass::Impl
 {
     GpuComputePipeline::Ptr pipelineRef;
     bool finished = false;
+
+    /** The frame this pass records into, until either of them finishes it. */
+    GpuFrame::Impl* frame = nullptr;
 
     struct StorageBinding
     {
@@ -75,6 +83,20 @@ struct GpuComputePass::Impl
     virtual bool dispatch (uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ) = 0;
     virtual void finish() = 0;
 };
+
+void yup_finishComputePass (GpuComputePass::Impl& pass)
+{
+    if (pass.finished)
+        return;
+
+    pass.finished = true;
+    pass.finish();
+
+    if (pass.frame != nullptr && pass.frame->openComputePass == &pass)
+        pass.frame->openComputePass = nullptr;
+
+    pass.frame = nullptr;
+}
 
 //==============================================================================
 
@@ -111,8 +133,77 @@ GpuComputePass GpuComputePass::begin (GpuDevice::Ptr ctx)
             break;
 #endif
 
+#if YUP_RIVE_USE_VULKAN
+        case GpuPlatform::Vulkan:
+            pass.impl = yup_createComputePassImplVulkan (*ctx);
+            break;
+#endif
+
         default:
             break;
+    }
+
+    return pass;
+}
+
+GpuComputePass GpuComputePass::begin (GpuFrame& frame)
+{
+    auto* frameImpl = frame.getImpl();
+    if (frameImpl == nullptr || frameImpl->device == nullptr || frameImpl->submitted || frameImpl->released)
+        return {};
+
+    auto& device = *frameImpl->device;
+    const auto platform = device.getPlatform();
+
+    // Direct3D 11 needs nothing to join: Rive and compute share the immediate context
+    const bool joinsFrame = device.isComputeAvailable()
+                         && (platform == GpuPlatform::Metal
+                             || platform == GpuPlatform::Direct3D
+                             || (platform == GpuPlatform::Vulkan && frameImpl->commandBuffer != nullptr));
+
+    if (! joinsFrame)
+        return begin (frameImpl->device);
+
+    // Dispatches cannot run inside a render pass, and Metal allows one open encoder at a time
+    if (frameImpl->openPass != nullptr)
+    {
+        frameImpl->openPass->finish();
+        frameImpl->openPass = nullptr;
+    }
+
+    if (frameImpl->openComputePass != nullptr)
+        yup_finishComputePass (*frameImpl->openComputePass);
+
+    GpuComputePass pass;
+
+    switch (platform)
+    {
+#if YUP_RIVE_USE_METAL && YUP_APPLE
+        case GpuPlatform::Metal:
+            pass.impl = yup_createComputePassImplMetal (device, *frameImpl->oreCtx);
+            break;
+#endif
+
+#if YUP_RIVE_USE_D3D && YUP_WINDOWS
+        case GpuPlatform::Direct3D:
+            pass.impl = yup_createComputePassImplD3D11 (device);
+            break;
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+        case GpuPlatform::Vulkan:
+            pass.impl = yup_createComputePassImplVulkan (device, frameImpl->commandBuffer, frameImpl->generation);
+            break;
+#endif
+
+        default:
+            break;
+    }
+
+    if (pass.impl != nullptr)
+    {
+        pass.impl->frame = frameImpl;
+        frameImpl->openComputePass = pass.impl.get();
     }
 
     return pass;
@@ -228,8 +319,7 @@ bool GpuComputePass::finish()
     if (impl == nullptr || impl->finished)
         return false;
 
-    impl->finished = true;
-    impl->finish();
+    yup_finishComputePass (*impl);
     impl.reset();
     return true;
 }

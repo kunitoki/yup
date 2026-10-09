@@ -76,7 +76,7 @@ private:
     backend.
 
     Requirements:
-    - A GpuDevice with compute shader support (Metal, D3D11, WebGPU, GL 4.3+)
+    - A GpuDevice with compute shader support (Metal, D3D11, Vulkan, WebGPU, GL 4.3+)
     - YUP_ENABLE_SHADER_TRANSPILER for online GLSL→native compilation
     - An audio file at examples/graphics/data/audio/break_boomblastic_92bpm.mp3
 */
@@ -175,6 +175,9 @@ public:
 #else
 #if YUP_WINDOWS
                 yup::GpuPlatform::Direct3D,
+#endif
+#if YUP_RIVE_USE_VULKAN
+                yup::GpuPlatform::Vulkan,
 #endif
                 yup::GpuPlatform::OpenGL,
 #endif
@@ -403,7 +406,32 @@ private:
         }
 
         deviceManager.addAudioCallback (this);
-        statusLabel->setText ("Audio + GPU compute active.", yup::dontSendNotification);
+
+        if (computeDevice != nullptr)
+            statusLabel->setText ("Audio + GPU compute active (" + getPlatformName (computeDevice->getPlatform()) + ").", yup::dontSendNotification);
+        else
+            statusLabel->setText ("Audio active, no GPU compute: playing unprocessed.", yup::dontSendNotification);
+    }
+
+    static yup::String getPlatformName (yup::GpuPlatform platform)
+    {
+        switch (platform)
+        {
+            case yup::GpuPlatform::Metal:
+                return "Metal";
+            case yup::GpuPlatform::Direct3D:
+                return "Direct3D";
+            case yup::GpuPlatform::OpenGL:
+                return "OpenGL";
+            case yup::GpuPlatform::OpenGLES:
+                return "OpenGL ES";
+            case yup::GpuPlatform::Vulkan:
+                return "Vulkan";
+            case yup::GpuPlatform::WebGPU:
+                return "WebGPU";
+            default:
+                return "unknown";
+        }
     }
 
     //==============================================================================
