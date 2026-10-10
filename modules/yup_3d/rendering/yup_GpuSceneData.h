@@ -92,7 +92,7 @@ struct YUP_API GpuShadowData
     float cascadeSplits[4];              ///< The view-space far distance of each cascade.
     float cascadeTexel[4];               ///< The world size of one texel of each cascade.
     float sunInfo[4];                    ///< Cascade count, unused (0), cascade blend band fraction, 1 when receivers lie beyond the last cascade (it then fades out).
-    float filterInfo[4];                 ///< Soft shadows (1 when on and a shadowed light has a radius, else 0), PCF taps, blocker search taps, flags (1 contact shadows, 2 temporal noise).
+    float filterInfo[4];                 ///< Soft shadows (1 when on and a light with a shadow map has a radius, else 0), PCF taps, blocker search taps, flags (1 contact shadows, 2 temporal noise).
     GpuShadowRecord records[maxRecords]; ///< The shadow map views, cascades first.
 };
 

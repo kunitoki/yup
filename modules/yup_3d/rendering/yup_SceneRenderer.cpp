@@ -139,8 +139,8 @@ struct SceneRenderer::Impl
     {
     }
 
-    /** Creates the pipelines once per target formats and area light variant, remembering a failure instead of retrying every frame. */
-    Result prepareResources (const ForwardPass::Targets& targets, uint32_t forwardSamples, bool full, bool areaLights, bool failAreaLightTables)
+    /** Creates the shadow and G-buffer pipelines and the area light tables once, remembering a failure instead of retrying every frame. */
+    Result prepareResources (bool full, bool failAreaLightTables)
     {
         if (auto result = shadowRenderer.prepare (device); result.failed())
             return result;
@@ -164,12 +164,24 @@ struct SceneRenderer::Impl
         {
             if (auto result = gbufferPass.prepare (device); result.failed())
                 return result;
+        }
 
-            if (auto result = lightingPass.prepare (device, areaLights); result.failed())
+        return Result::ok();
+    }
+
+    /** Compiles the default variants of the shading passes, for a frame shading with them: LightingPass
+        on full, and ForwardPass when @p forwardDraws (raster, or full with blended items). Once per
+        target formats and area light variant, remembering a failure instead of retrying every frame.
+    */
+    Result prepareDefaultShading (const ForwardPass::Targets& targets, uint32_t forwardSamples, bool full, bool areaLights, bool forwardDraws)
+    {
+        if (full)
+        {
+            if (auto result = lightingPass.prepare (device, areaLights, false); result.failed())
                 return result;
         }
 
-        return forwardPass.prepare (device, targets, forwardSamples, areaLights);
+        return forwardDraws ? forwardPass.prepare (device, targets, forwardSamples, areaLights) : Result::ok();
     }
 
     /** The canvas-backed colorTarget of both tiers, plus the depth of the raster tier. */
@@ -665,6 +677,11 @@ GpuShadowData SceneRenderer::getShadowData() const noexcept
     return impl != nullptr ? impl->shadowData : GpuShadowData {};
 }
 
+bool SceneRenderer::usesShadowFilters() const noexcept
+{
+    return impl != nullptr && impl->shadowRenderer.needsShadowFilters();
+}
+
 int SceneRenderer::getShadowRecordCount() const noexcept
 {
     return impl != nullptr ? impl->shadowRenderer.getNumRecords() : 0;
@@ -793,7 +810,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     // A light with a radius selects the area light variants of the shading passes. Only a change
     // of the lights switches variants, and the restarting signature hashes every light radius
     const auto areaLights = LightingInputs::hasAreaLights (drawList.getLights());
-    if (auto result = impl->prepareResources (targets, forwardSamples, full, areaLights, failAreaLightTables); result.failed())
+    if (auto result = impl->prepareResources (full, failAreaLightTables); result.failed())
         return failFrame (result.getErrorMessage());
 
     impl->resolvePreviousTransforms();
@@ -834,9 +851,18 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     lighting.shadowCascades = impl->shadowRenderer.getCascadeTexture();
     lighting.shadowAtlas = impl->shadowRenderer.getAtlasTexture();
     lighting.shadows = shadows;
+    lighting.shadowFilters = impl->shadowRenderer.needsShadowFilters();
     lighting.ltcMatrix = impl->ltcMatrix;
     lighting.ltcAmplitude = impl->ltcAmplitude;
     lighting.samplers = *samplers;
+
+    // The shading passes compile only the variants the frame shades with: the defaults here, so a
+    // failure tells why, the shadow filter variants in the passes, which fall back to the defaults
+    if (! lighting.shadowFilters)
+    {
+        if (auto result = impl->prepareDefaultShading (targets, forwardSamples, full, areaLights, ! full || ! drawList.getBlendItems().empty()); result.failed())
+            return failFrame (result.getErrorMessage());
+    }
 
     const auto output = full ? ForwardPass::Output::hdrLinear : (hdr ? ForwardPass::Output::hdrReversible : ForwardPass::Output::ldrInline);
 
@@ -854,7 +880,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         if (lighting.materials == nullptr)
             return failFrame ("Unable to upload the material table");
 
-        if (! impl->lightingPass.render (frame, impl->viewData, gbuffer, lighting, targets.color))
+        if (! impl->lightingPass.render (device, frame, impl->viewData, gbuffer, lighting, targets.color))
             return failFrame ("Unable to render the lighting pass");
 
         impl->lightingPass.trimUnusedTargets();

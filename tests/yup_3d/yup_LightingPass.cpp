@@ -65,6 +65,24 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle lightingPassSoftShadows()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_soft_shadows.inc>
+        };
+
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassAreaLightsSoftShadows()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights_soft_shadows.inc>
+        };
+
+        return load (data, sizeof (data));
+    }
+
     /** The (set, binding) pairs of @p resources, sorted. */
     static std::vector<std::pair<uint32_t, uint32_t>> bindingsOf (const std::vector<ShaderReflection::ResourceBinding>& resources)
     {
@@ -84,8 +102,8 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
     // Set 0 holds the shared lookups: the environment and its sampler, the shadow comparison
     // sampler and, in the area light variant only, the two area light tables read through
     // linearClamp. Set 1 holds RT0-RT2 and the depth, keeping their binding numbers, and set 3 the
-    // sun cascades and the point and spot light atlas, each compared (0, 2) and read raw for soft
-    // shadows (1, 3)
+    // sun cascades and the point and spot light atlas, each compared (0, 2), and read raw (1, 3) by
+    // the shadow filter variants only
     const struct
     {
         const char* name;
@@ -93,8 +111,10 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
         Bindings images;
         Bindings samplers;
     } variants[] = {
-        { "punctual", lightingPass(), { { 0, 6 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 3 }, { 0, 4 }, { 0, 14 } } },
-        { "area lights", lightingPassAreaLights(), { { 0, 6 }, { 0, 7 }, { 0, 11 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 }, { 0, 14 } } },
+        { "punctual", lightingPass(), { { 0, 6 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 }, { 3, 2 } }, { { 0, 3 }, { 0, 4 }, { 0, 14 } } },
+        { "area lights", lightingPassAreaLights(), { { 0, 6 }, { 0, 7 }, { 0, 11 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 }, { 3, 2 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 }, { 0, 14 } } },
+        { "shadow filters", lightingPassSoftShadows(), { { 0, 6 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 3 }, { 0, 4 }, { 0, 14 } } },
+        { "area lights, shadow filters", lightingPassAreaLightsSoftShadows(), { { 0, 6 }, { 0, 7 }, { 0, 11 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 }, { 0, 14 } } },
     };
 
     for (const auto& variant : variants)

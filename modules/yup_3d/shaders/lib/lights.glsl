@@ -270,16 +270,12 @@ vec3 lightsEvaluateArea(GpuLight light, BsdfSurface s, vec3 worldPosition)
 
 // What one light reflects: the BSDF times its incoming radiance and its shadow, looked up once towards
 // its center (shadowsVisibility), and its contact shadow in the passes defining YUP_3D_CONTACT_SHADOWS
-// (shadowsContact, evaluated once for both paths). Lights with a radius take the area path
-// (YUP_3D_AREA_LIGHTS only), the others the punctual one
+// (shadowsContact), marched only where the light reaches the surface: after the range, cone and
+// horizon exits of the punctual path (before its shadow, which measured faster than after it), and
+// after the shadow of the area path. Lights with a radius take the area path (YUP_3D_AREA_LIGHTS
+// only), the others the punctual one
 vec3 lightsShadeLight(BsdfSurface s, GpuLight light, vec3 worldPosition, vec3 geometricNormal)
 {
-#ifdef YUP_3D_CONTACT_SHADOWS
-    float contact = shadowsContact(light, worldPosition, geometricNormal);
-    if (contact <= 0.0)
-        return vec3(0.0);
-#endif
-
 #ifdef YUP_3D_AREA_LIGHTS
     if (light.spotRadiusShadow.z > 0.0)
     {
@@ -287,7 +283,8 @@ vec3 lightsShadeLight(BsdfSurface s, GpuLight light, vec3 worldPosition, vec3 ge
         if (reflected != vec3(0.0))
             reflected = reflected * shadowsVisibility(light, worldPosition, geometricNormal);
 #ifdef YUP_3D_CONTACT_SHADOWS
-        reflected = reflected * contact;
+        if (reflected != vec3(0.0))
+            reflected = reflected * shadowsContact(light, worldPosition, geometricNormal);
 #endif
 
         return reflected;
@@ -298,6 +295,12 @@ vec3 lightsShadeLight(BsdfSurface s, GpuLight light, vec3 worldPosition, vec3 ge
     vec3 incoming = lightIncoming(light, worldPosition, l);
     if (dot(s.n, l) <= 0.0 || incoming == vec3(0.0))
         return vec3(0.0);
+
+#ifdef YUP_3D_CONTACT_SHADOWS
+    float contact = shadowsContact(light, worldPosition, geometricNormal);
+    if (contact <= 0.0)
+        return vec3(0.0);
+#endif
 
     incoming = incoming * shadowsVisibility(light, worldPosition, geometricNormal);
 #ifdef YUP_3D_CONTACT_SHADOWS

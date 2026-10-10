@@ -292,6 +292,22 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle forwardPassFullSoftShadows()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_full_soft_shadows.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle forwardPassFullAreaLightsSoftShadows()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_full_area_lights_soft_shadows.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
     static ShaderBundle background()
     {
         static constexpr uint8 data[] = {
@@ -328,6 +344,22 @@ protected:
     {
         static constexpr uint8 data[] = {
 #include <yup_3d/shaders/yup_LightingPass_full_area_lights.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassFullSoftShadows()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_soft_shadows.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassFullAreaLightsSoftShadows()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights_soft_shadows.inc>
         };
         return load (data, sizeof (data));
     }
@@ -408,9 +440,13 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         EXPECT_EQ (budget.uniformBlocksPerSet[3], 1) << name;
     }
 
-    // The full tier geometry bundles: the forward pass without the raster light list, and the G-buffer
-    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 10, 4, 1 },
-                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 12, 4, 3 },
+    // The full tier geometry bundles: the forward pass without the raster light list, and the G-buffer.
+    // The forward shadow filter variants read the two maps raw too, but never the scene depth (set 1
+    // binding 12): the blended items they draw write none, so they march no contact shadows
+    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 8, 4, 1 },
+                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 10, 4, 3 },
+                                                                   std::tuple { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), 10, 4, 1 },
+                                                                   std::tuple { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), 12, 4, 3 },
                                                                    std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 1, 0 } })
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -420,6 +456,7 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         EXPECT_EQ (budget.sampledImages, textures) << name;
         EXPECT_EQ (budget.uniformBlocks, blocks) << name;
         EXPECT_EQ (budget.texturesPerSet[0], lookups) << name;
+        EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 12)) << name;
     }
 
     const std::pair<const char*, ShaderBundle> bundles[] = {
@@ -429,10 +466,14 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows() },
         { "Background", background() },
         { "GBufferPass_full", gbufferPassFull() },
         { "LightingPass_full", lightingPassFull() },
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
         { "ShadowPass", shadowPass() },
         { "ShadowPass_masked", shadowPassMasked() },
     };
@@ -469,6 +510,8 @@ TEST_F (SceneRendererBundleTests, OnlyFullVariantsWriteVelocity)
     const auto rasterAreaLights = forwardPassAreaLights();
     const auto full = forwardPassFull();
     const auto fullAreaLights = forwardPassFullAreaLights();
+    const auto fullSoftShadows = forwardPassFullSoftShadows();
+    const auto fullAreaLightsSoftShadows = forwardPassFullAreaLightsSoftShadows();
     const auto rasterBackground = background();
 
     for (const auto* reflection : { fragmentOf (raster), fragmentOf (rasterAreaLights), fragmentOf (rasterBackground) })
@@ -479,7 +522,7 @@ TEST_F (SceneRendererBundleTests, OnlyFullVariantsWriteVelocity)
     }
 
     // Blended items keep writing their motion over the deferred surfaces
-    for (const auto* reflection : { fragmentOf (full), fragmentOf (fullAreaLights) })
+    for (const auto* reflection : { fragmentOf (full), fragmentOf (fullAreaLights), fragmentOf (fullSoftShadows), fragmentOf (fullAreaLightsSoftShadows) })
     {
         ASSERT_NE (reflection, nullptr);
         EXPECT_TRUE (writesLocation (*reflection, 0));
@@ -489,7 +532,7 @@ TEST_F (SceneRendererBundleTests, OnlyFullVariantsWriteVelocity)
 
 TEST_F (SceneRendererBundleTests, MaterialBlockEndsWithTheGpuMaterial)
 {
-    const ShaderBundle bundles[] = { forwardPass(), forwardPassAreaLights(), forwardPassFull(), forwardPassFullAreaLights() };
+    const ShaderBundle bundles[] = { forwardPass(), forwardPassAreaLights(), forwardPassFull(), forwardPassFullAreaLights(), forwardPassFullSoftShadows(), forwardPassFullAreaLightsSoftShadows() };
 
     for (const auto& bundle : bundles)
     {
@@ -520,9 +563,13 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows() },
         { "Background", background() },
         { "LightingPass_full", lightingPassFull() },
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -555,16 +602,21 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
     // binding 4, the sun cascades at set 3 binding 0 and the point and spot light atlas at set 3
     // binding 2, both compared through shadowCompare at set 0 binding 4. WebGPU needs them as depth
     // textures (an array and a 2D one) and a comparison sampler, and Metal gives every texture and
-    // every sampler of a stage its own slot, whatever its set
+    // every sampler of a stage its own slot, whatever its set. Only the shadow filter variants
+    // (YUP_3D_SOFT_SHADOWS) declare the raw depth maps
     const std::tuple<const char*, ShaderBundle, bool> bundles[] = {
-        { "ForwardPass", forwardPass(), true },
-        { "ForwardPass_area_lights", forwardPassAreaLights(), true },
-        { "ForwardPass_soft_shadows", forwardPassSoftShadows(), false },
-        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), false },
+        { "ForwardPass", forwardPass(), false },
+        { "ForwardPass_area_lights", forwardPassAreaLights(), false },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows(), true },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), true },
         { "ForwardPass_full", forwardPassFull(), false },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), false },
         { "LightingPass_full", lightingPassFull(), false },
         { "LightingPass_full_area_lights", lightingPassFullAreaLights(), false },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), true },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), true },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), true },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), true },
     };
 
     const auto distinctSlots = [] (const std::vector<ShaderReflection::ResourceBinding>& resources)
@@ -576,7 +628,7 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
         return slots.size() == resources.size();
     };
 
-    for (const auto& [name, bundle, rasterDefault] : bundles)
+    for (const auto& [name, bundle, declaresRawDepth] : bundles)
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
@@ -630,13 +682,13 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
         // The soft shadow blocker search reads the same maps raw, with texelFetch: WGSL loads them
         // without a sampler, so WebGPU lays them out as unfilterable float textures, the one non
         // depth sample type a depth texture binds to (GpuPipeline takes it from the WGSL). The
-        // default raster bundles leave soft shadows to their own variants and declare neither
+        // default bundles of both tiers leave soft and contact shadows to their own variants and declare neither
         for (const auto& [binding, dimension] : { std::pair { 1u, WgslBindingLayout::ViewDimension::array2D },
                                                   std::pair { 3u, WgslBindingLayout::ViewDimension::texture2D } })
         {
             const auto* raw = find (3, binding);
-            EXPECT_EQ (raw != nullptr, ! rasterDefault) << name << " binding " << (int) binding;
-            EXPECT_EQ (declares (fragment->reflection.separateImages, 3, binding), ! rasterDefault) << name << " binding " << (int) binding;
+            EXPECT_EQ (raw != nullptr, declaresRawDepth) << name << " binding " << (int) binding;
+            EXPECT_EQ (declares (fragment->reflection.separateImages, 3, binding), declaresRawDepth) << name << " binding " << (int) binding;
 
             if (raw == nullptr)
                 continue;
@@ -735,24 +787,33 @@ TEST_F (SceneRendererBundleTests, RasterLightListBlockIs528Bytes)
 TEST_F (SceneRendererBundleTests, FullForwardPassReadsTheClusteredLights)
 {
     // No per-draw list on the full tier: every light in a storage buffer at set 1 binding 6, and
-    // the light lists of the clusters at binding 7, both read only
-    const auto bundle = forwardPassFull();
-    const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
-    ASSERT_NE (fragment, nullptr);
+    // the light lists of the clusters at binding 7, both read only, in every full variant
+    const std::pair<const char*, ShaderBundle> bundles[] = {
+        { "ForwardPass_full", forwardPassFull() },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows() },
+    };
 
-    const auto& blocks = fragment->reflection.uniformBuffers;
-    EXPECT_TRUE (std::none_of (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 2 && b.binding == 12; }));
-
-    std::vector<uint32_t> bindings;
-    for (const auto& buffer : fragment->reflection.storageBuffers)
+    for (const auto& [name, bundle] : bundles)
     {
-        EXPECT_EQ (buffer.set, 1u) << buffer.name;
-        EXPECT_TRUE (buffer.readOnly) << buffer.name;
-        bindings.push_back (buffer.binding);
-    }
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
 
-    std::sort (bindings.begin(), bindings.end());
-    EXPECT_EQ (bindings, (std::vector<uint32_t> { 6, 7 }));
+        const auto& blocks = fragment->reflection.uniformBuffers;
+        EXPECT_TRUE (std::none_of (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 2 && b.binding == 12; })) << name;
+
+        std::vector<uint32_t> bindings;
+        for (const auto& buffer : fragment->reflection.storageBuffers)
+        {
+            EXPECT_EQ (buffer.set, 1u) << name << ": " << buffer.name;
+            EXPECT_TRUE (buffer.readOnly) << name << ": " << buffer.name;
+            bindings.push_back (buffer.binding);
+        }
+
+        std::sort (bindings.begin(), bindings.end());
+        EXPECT_EQ (bindings, (std::vector<uint32_t> { 6, 7 })) << name;
+    }
 }
 
 TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
@@ -764,7 +825,9 @@ TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
         { "ForwardPass_area_lights", forwardPassAreaLights() },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows() },
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -790,9 +853,13 @@ TEST_F (SceneRendererBundleTests, EveryShadingBundleReadsTheEnvironmentFromSetZe
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows() },
         { "Background", background() },
         { "LightingPass_full", lightingPassFull() },
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -814,7 +881,9 @@ TEST_F (SceneRendererBundleTests, PunctualVariantsDeclareNoAreaLightTables)
         { "ForwardPass", forwardPass() },
         { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
         { "ForwardPass_full", forwardPassFull() },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
         { "LightingPass_full", lightingPassFull() },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -3253,6 +3322,45 @@ vec4 encodeLuma(vec3 c)
                 EXPECT_FLOAT_EQ (contactOnly.contact[0], 0.3f);
                 EXPECT_FLOAT_EQ (contactOnly.contact[1], 0.1f);
             }
+        }
+    }
+
+    /** One shadow filter variant holds soft shadows and, on full, contact shadows: on @p tier a
+        frame using neither shades with the default variants even with soft shadows on, a frame
+        using either or both with the filter variant. Raster has no contact shadows: contact alone
+        keeps its default.
+    */
+    void checkShadowFilterVariantFollowsSoftAndContactShadows (RenderSettings::TierPreference tier)
+    {
+        const auto full = tier == RenderSettings::TierPreference::full;
+
+        const struct
+        {
+            const char* name;
+            float sunRadius;
+            bool contact;
+            bool filters;
+        } cases[] = {
+            { "neither", 0.0f, false, false },
+            { "soft only", 0.05f, false, true },
+            { "contact only", 0.0f, true, full },
+            { "both", 0.05f, true, true },
+        };
+
+        for (const auto& c : cases)
+        {
+            Scene scene;
+            buildCreaseScene (scene, c.contact).radius = c.sunRadius;
+            setTier (scene, tier);
+
+            auto settings = scene.getRenderSettings();
+            settings.softShadows = true;
+            scene.setRenderSettings (settings);
+
+            SceneRenderer renderer;
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << c.name << ": " << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk()) << c.name;
+            EXPECT_EQ (renderer.usesShadowFilters(), c.filters) << c.name;
         }
     }
 
@@ -7318,7 +7426,7 @@ TEST_P (SceneRendererTierTests, SoftSunLeavesAGrazedGroundLit)
 TEST_P (SceneRendererTierTests, RasterSoftShadowVariantFollowsTheSettings)
 {
     if (GetParam() != RenderSettings::TierPreference::raster)
-        GTEST_SKIP() << "Raster only: the full tier always holds the soft shadow code";
+        GTEST_SKIP() << "Raster only: the helper builds a raster scene";
 
     checkRasterSoftShadowVariantFollowsTheSettings();
 }
@@ -7398,6 +7506,97 @@ TEST_P (SceneRendererTierTests, SoftShadowsWithoutTaaHoldStill)
     RecordProperty ("hard", hardWidth);
     EXPECT_EQ (flickering, 0);
     EXPECT_GT (softWidth, hardWidth + 4);
+}
+
+TEST_P (SceneRendererTierTests, ShadowFilterVariantFollowsSoftAndContactShadows)
+{
+    checkShadowFilterVariantFollowsSoftAndContactShadows (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ContactOnlyLightWithARadiusLeavesSoftFilteringOff)
+{
+    if (GetParam() != RenderSettings::TierPreference::full)
+        GTEST_SKIP() << "Full tier only";
+
+    // A light with contact shadows but no shadow map holds a record without a map: its radius has
+    // no shadow to soften, so the frame asks for no soft filtering, while its contact shadows
+    // still select the shadow filter variant. The sun casts a hard shadow (radius 0)
+    Scene scene;
+    buildCreaseScene (scene, false);
+    setTier (scene, GetParam());
+
+    auto entity = EntityNode::Ptr (new EntityNode ("point"));
+    auto& light = entity->attach<LightNode> (LightNode::Type::point);
+    light.contactShadows = true;
+    light.radius = 0.1f;
+    entity->setPosition ({ 0.5f, 0.5f, 0.0f });
+    scene.getRoot()->addChild (entity);
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+    const auto data = renderer.getShadowData();
+    const auto last = renderer.getShadowRecordCount() - 1;
+    ASSERT_GT (last, 0);
+    EXPECT_EQ (data.records[last].atlasRect[2], 0.0f);
+    EXPECT_GT (data.records[last].contact[0], 0.0f);
+
+    EXPECT_EQ (data.filterInfo[0], 0.0f);
+    EXPECT_EQ (data.filterInfo[1], 0.0f);
+    EXPECT_TRUE (renderer.usesShadowFilters());
+}
+
+TEST_P (SceneRendererTierTests, ContactShadowsOfALightOutOfRangeChangeNothing)
+{
+    if (GetParam() != RenderSettings::TierPreference::full)
+        GTEST_SKIP() << "Full tier only";
+
+    // A point light just above the step of buildCreaseScene(), on the sun's side. Within its range
+    // its contact shadows darken the ground behind the step. Out of its range it lights nothing,
+    // and its contact record, still allocated, leaves the frame as it is without contact shadows,
+    // although that frame shades with the shadow filter variant and the other with the default
+    const auto render = [&] (float range, bool contact)
+    {
+        Scene scene;
+        buildCreaseScene (scene, false);
+        setTier (scene, GetParam());
+
+        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        light.contactShadows = contact;
+        light.range = range;
+        entity->setPosition ({ -0.5f, 0.15f, 0.0f });
+        scene.getRoot()->addChild (entity);
+
+        SceneRenderer renderer;
+        const auto image = renderConverged (renderer, scene, 256);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        EXPECT_EQ (renderer.usesShadowFilters(), contact);
+
+        const auto data = renderer.getShadowData();
+        const auto marches = std::any_of (std::begin (data.records), std::end (data.records), [] (const GpuShadowRecord& record)
+        {
+            return record.contact[0] > 0.0f;
+        });
+
+        EXPECT_EQ (marches, contact);
+        return image;
+    };
+
+    const auto inRange = render (2.0f, false);
+    const auto inRangeContact = render (2.0f, true);
+    const auto outOfRange = render (0.08f, false);
+    const auto outOfRangeContact = render (0.08f, true);
+    ASSERT_TRUE (inRange.isValid() && inRangeContact.isValid() && outOfRange.isValid() && outOfRangeContact.isValid());
+
+    const auto darkened = countDifferences (inRangeContact, inRange);
+    const auto changed = countDifferences (outOfRangeContact, outOfRange);
+    RecordProperty ("inRangeDarkened", darkened);
+    RecordProperty ("outOfRangeChanged", changed);
+
+    EXPECT_GT (darkened, 0);
+    EXPECT_EQ (changed, 0);
 }
 
 INSTANTIATE_TEST_SUITE_P (SceneRendererTiers,
@@ -7732,6 +7931,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         bool moveModel = false;
         float orbitPitch = 0.0f;
         bool keyContactShadows = false;
+        bool softShadows = true;
     } configs[] = {
         { "full show64", RenderSettings::TierPreference::full, 64, 0.5f },
         { "raster show64", RenderSettings::TierPreference::raster, 64, 0.5f },
@@ -7745,6 +7945,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         { "full show64 range 0.35 orbiting camera low", RenderSettings::TierPreference::full, 64, 0.35f, false, 0.6f },
         { "raster show16 range 0.35 orbiting camera low", RenderSettings::TierPreference::raster, 16, 0.35f, false, 0.6f },
         { "full show64 key contact shadows", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, true },
+        { "full show64 soft shadows off", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, false },
     };
 
     for (const auto& [width, height] : { std::pair { 2560, 1600 }, std::pair { 3456, 2234 } })
@@ -7760,6 +7961,13 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
                 show.moveModel = config.moveModel;
                 show.orbitPitch = config.orbitPitch;
                 show.scene.getRoot()->findChild ("keyLight")->getNode<LightNode>()->contactShadows = config.keyContactShadows;
+
+                if (! config.softShadows)
+                {
+                    auto settings = show.scene.getRenderSettings();
+                    settings.softShadows = false;
+                    show.scene.setRenderSettings (settings);
+                }
 
                 auto shadowRedraws = 0;
                 const auto milliseconds = timeFrames (show, width, height, shadowRedraws);
@@ -7963,5 +8171,10 @@ TEST_F (SceneRendererGLTests, SoftPointShadowHasNoFaceSeams)
 TEST_F (SceneRendererGLTests, SoftSunLeavesAGrazedGroundLit)
 {
     checkSoftSunLeavesAGrazedGroundLit (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ShadowFilterVariantFollowsSoftAndContactShadows)
+{
+    checkShadowFilterVariantFollowsSoftAndContactShadows (RenderSettings::TierPreference::raster);
 }
 #endif

@@ -130,7 +130,7 @@ shader_bundler *COMPILE_ARGS:
   build/yup_shader_bundler {{COMPILE_ARGS}}
 
 [doc("regenerate the yup_3d shader bundles (entries are Name or Name:DEF1+DEF2)")]
-yup3d_shaders: (_shader_bundles "yup3d_shaders" "modules/yup_3d/shaders" "ForwardPass ForwardPass:YUP_3D_AREA_LIGHTS ForwardPass:YUP_3D_SOFT_SHADOWS ForwardPass:YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS ForwardPass:YUP_3D_TIER_FULL ForwardPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS Background GBufferPass:YUP_3D_TIER_FULL GBufferBackground LightingPass:YUP_3D_TIER_FULL LightingPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS ShadowPass ShadowPass:YUP_3D_MASKED TemporalAA ToneMapping BloomDownsample BloomUpsample LightClusters")
+yup3d_shaders: (_shader_bundles "yup3d_shaders" "modules/yup_3d/shaders" "ForwardPass ForwardPass:YUP_3D_AREA_LIGHTS ForwardPass:YUP_3D_SOFT_SHADOWS ForwardPass:YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS ForwardPass:YUP_3D_TIER_FULL ForwardPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS ForwardPass:YUP_3D_TIER_FULL+YUP_3D_SOFT_SHADOWS ForwardPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS Background GBufferPass:YUP_3D_TIER_FULL GBufferBackground LightingPass:YUP_3D_TIER_FULL LightingPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS LightingPass:YUP_3D_TIER_FULL+YUP_3D_SOFT_SHADOWS LightingPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS ShadowPass ShadowPass:YUP_3D_MASKED TemporalAA ToneMapping BloomDownsample BloomUpsample LightClusters")
 
 [doc("regenerate the yup_rhi shader bundles")]
 yup_rhi_shaders: (_shader_bundles "yup_rhi_shaders" "modules/yup_rhi/shaders" "GpuMipDownsample")

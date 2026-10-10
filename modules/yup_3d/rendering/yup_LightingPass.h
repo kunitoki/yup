@@ -40,6 +40,12 @@ namespace yup
     Only the area light variant (YUP_3D_AREA_LIGHTS), which shades the frames where
     LightingInputs::areaLights is set, declares the tables and linearClamp.
 
+    The shadow filter variant (YUP_3D_SOFT_SHADOWS) shades the frames where
+    LightingInputs::shadowFilters is set: it holds the soft shadows and the contact shadows, and
+    only it declares and binds the same two shadow maps again at set 3 bindings 1 and 3, read raw
+    by the blocker search. A frame using either feature pays for both; the default variant runs
+    neither. Both dimensions combine, into four variants.
+
     @internal
 */
 class YUP_API LightingPass
@@ -53,17 +59,22 @@ public:
     ~LightingPass();
 
     //==============================================================================
-    /** Compiles the pipeline, of the area light variant when @p areaLights is set, and creates the
-        stand-in textures, once per variant: a failure is remembered instead of retried every frame.
+    /** Compiles the pipeline, of the area light variant when @p areaLights is set and of the shadow
+        filter variant when @p shadowFilters is set, and creates the stand-in textures, once per
+        variant: a failure is remembered instead of retried every frame.
     */
-    Result prepare (const GpuDevice::Ptr& device, bool areaLights);
+    Result prepare (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters);
 
     /** Shades @p gbuffer into @p sceneColor, an rgba16float texture of its size, with the variant
-        LightingInputs::areaLights picks.
+        LightingInputs::areaLights and LightingInputs::shadowFilters pick.
 
-        @returns False if that variant is not prepared, an input is missing or the draw could not be recorded.
+        Each variant is compiled on @p device the first time a frame needs it (see prepare()). If the
+        shadow filter variant fails to compile, the failure is logged once and the frames shade
+        with the default variant of their area lights, with hard shadows and no contact shadows.
+
+        @returns False if the variant cannot be compiled, an input is missing or the draw could not be recorded.
     */
-    bool render (GpuFrame& frame, const ViewData& view, const GBufferPass::Targets& gbuffer,
+    bool render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, const GBufferPass::Targets& gbuffer,
                  const LightingInputs& lighting, const GpuTexture::Ptr& sceneColor);
 
     /** Releases the render targets not drawn into since the previous call: call it every frame the pass runs. */
@@ -80,8 +91,9 @@ private:
     };
 
     std::optional<Result> defaults;
-    std::array<Variant, 2> variants; // Punctual lights only, then with area lights
+    std::array<Variant, 4> variants; // Punctual lights only, then with area lights; then both again with the shadow filters
     GpuTexture::Ptr blackTexture;
+    bool shadowFiltersFailureReported = false; // The shadow filter variant failed to compile, and was logged once
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LightingPass)
 };

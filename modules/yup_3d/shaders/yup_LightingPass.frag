@@ -27,8 +27,11 @@
 #error "The lighting pass is full tier only: bundle it as LightingPass:YUP_3D_TIER_FULL"
 #endif
 
-// The lights march their contact shadows through the scene depth (lib/shadows.glsl)
+// The shadow filter variant (YUP_3D_SOFT_SHADOWS) of the lighting pass holds the contact shadows
+// too: its lights march them through the scene depth (lib/shadows.glsl)
+#ifdef YUP_3D_SOFT_SHADOWS
 #define YUP_3D_CONTACT_SHADOWS
+#endif
 
 #include "lib/color.glsl"
 #include "lib/view.glsl"

@@ -178,6 +178,11 @@ public:
     /** @internal The shadow records and sun parameters the last frame wrote, for tests. */
     GpuShadowData getShadowData() const noexcept;
 
+    /** @internal True when the last frame asked its shading passes for their shadow filter
+        variants (LightingInputs::shadowFilters), for tests.
+    */
+    bool usesShadowFilters() const noexcept;
+
     /** @internal The side in texels of the point and spot light shadow atlas the renderer holds,
         0 when no light needs one, for tests.
     */

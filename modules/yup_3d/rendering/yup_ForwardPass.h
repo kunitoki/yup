@@ -38,12 +38,13 @@ namespace yup
     and 3, read raw by the blocker search.
 
     Pipelines are compiled lazily per color and depth format, sample count, velocity output, area
-    lights and soft shadows: the full tier variant is the one with a velocity target, and draws
+    lights and shadow filters, only for frames that draw: the full tier variant is the one with a velocity target, and draws
     blended items only. The area light variant (YUP_3D_AREA_LIGHTS) shades the frames where
     LightingInputs::areaLights is set; only it declares and binds the area light tables and the
-    linearClamp sampler. The full tier variants always hold soft shadows; on raster the soft shadow
-    variant (YUP_3D_SOFT_SHADOWS) shades the frames whose shadow records ask for soft filtering
-    (GpuShadowData::filterInfo x), and only it declares and binds the raw depth maps.
+    linearClamp sampler. On both tiers the shadow filter variant (YUP_3D_SOFT_SHADOWS) shades the
+    frames where LightingInputs::shadowFilters is set, and only it declares and binds the raw depth
+    maps. It holds the soft shadows; on the full tier the frame also takes it when contact shadows
+    are marched, which LightingPass alone does (blended items write no depth to march through).
 
     @internal
 */
@@ -91,9 +92,9 @@ public:
         pick from LightingInputs::packedLights, their intensities scaled by its
         SceneDrawList::DrawItem::lightWeights; on the full tier by the lights of the clusters, from
         LightingInputs::lights and LightingInputs::clusterLights. LightingInputs::areaLights picks
-        the area light variant, and soft filtering in LightingInputs::shadows the raster soft shadow
-        variant, each compiled the first time it is needed. A raster soft shadow variant that fails
-        to compile is logged once, and the frames shade hard shadows with the default variant.
+        the area light variant, and LightingInputs::shadowFilters the shadow filter variant, each
+        compiled the first time it is needed. A shadow filter variant that fails to compile is
+        logged once, and the frames shade hard shadows with the default variant.
 
         @param device       The device to draw with.
         @param frame        The frame to record into.
@@ -116,7 +117,7 @@ public:
 private:
     struct Variant;
 
-    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool softShadows);
+    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool shadowFilters);
     Result createDefaults (const GpuDevice::Ptr& device);
 
     std::vector<std::unique_ptr<Variant>> variants;
@@ -124,7 +125,7 @@ private:
     GeometryBindings geometry;
     GpuTexture::Ptr blackTexture;
     GpuTarget::Ptr surface;
-    bool softShadowsFailureReported = false; // A raster soft shadow variant failed to compile, and was logged once
+    bool shadowFiltersFailureReported = false; // A shadow filter variant failed to compile, and was logged once
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ForwardPass)
 };

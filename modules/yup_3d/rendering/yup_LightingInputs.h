@@ -80,6 +80,7 @@ struct YUP_API LightingInputs
     GpuTexture::Ptr ltcAmplitude;        ///< The area light amplitudes (set 0 binding 11), from LtcTables::createAmplitudeTexture().
     FrameResources::Samplers samplers;   ///< The shared set 0 samplers, from FrameResources::getSamplers().
     bool areaLights = false;             ///< hasAreaLights() of the lights: the passes shade with their area light variant, and bind ltcMatrix and ltcAmplitude.
+    bool shadowFilters = false;          ///< ShadowRenderer::needsShadowFilters(): the passes shade with their shadow filter variant (soft shadows, and contact shadows in LightingPass), and bind the raw depth maps.
     std::vector<GpuLight> packedLights;  ///< Every light, directional ones first.
     std::vector<uint32> packedSlots;     ///< For each SceneDrawList::getLights() index, its slot in packedLights.
     GpuBuffer::Ptr lights;               ///< Full tier: packedLights in a storage buffer (set 1 binding 6).

@@ -32,6 +32,25 @@ constexpr uint8_t lightingPassShaderBundle[] = {
 constexpr uint8_t lightingPassAreaLightsShaderBundle[] = {
 #include "../shaders/yup_LightingPass_full_area_lights.inc"
 };
+constexpr uint8_t lightingPassSoftShadowsShaderBundle[] = {
+#include "../shaders/yup_LightingPass_full_soft_shadows.inc"
+};
+constexpr uint8_t lightingPassAreaLightsSoftShadowsShaderBundle[] = {
+#include "../shaders/yup_LightingPass_full_area_lights_soft_shadows.inc"
+};
+
+// The bundle of each variant, indexed by getVariantIndex()
+const std::pair<const uint8_t*, size_t> lightingPassShaderBundles[] = {
+    { lightingPassShaderBundle, sizeof (lightingPassShaderBundle) },
+    { lightingPassAreaLightsShaderBundle, sizeof (lightingPassAreaLightsShaderBundle) },
+    { lightingPassSoftShadowsShaderBundle, sizeof (lightingPassSoftShadowsShaderBundle) },
+    { lightingPassAreaLightsSoftShadowsShaderBundle, sizeof (lightingPassAreaLightsSoftShadowsShaderBundle) },
+};
+
+size_t getVariantIndex (bool areaLights, bool shadowFilters) noexcept
+{
+    return (areaLights ? 1u : 0u) + (shadowFilters ? 2u : 0u);
+}
 
 } // namespace
 
@@ -41,7 +60,7 @@ LightingPass::LightingPass() = default;
 LightingPass::~LightingPass() = default;
 
 //==============================================================================
-Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights)
+Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters)
 {
     if (! defaults)
     {
@@ -56,21 +75,37 @@ Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights)
     if (defaults->failed())
         return *defaults;
 
-    auto& variant = variants[areaLights ? 1 : 0];
+    const auto index = getVariantIndex (areaLights, shadowFilters);
+    auto& variant = variants[index];
     if (! variant.prepared)
     {
-        variant.prepared = areaLights ? variant.pass.prepare (device, lightingPassAreaLightsShaderBundle, sizeof (lightingPassAreaLightsShaderBundle), GpuTextureFormat::rgba16float)
-                                      : variant.pass.prepare (device, lightingPassShaderBundle, sizeof (lightingPassShaderBundle), GpuTextureFormat::rgba16float);
+        const auto& [data, size] = lightingPassShaderBundles[index];
+        variant.prepared = variant.pass.prepare (device, data, size, GpuTextureFormat::rgba16float);
     }
 
     return *variant.prepared;
 }
 
-bool LightingPass::render (GpuFrame& frame, const ViewData& view, const GBufferPass::Targets& gbuffer,
+bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, const GBufferPass::Targets& gbuffer,
                            const LightingInputs& lighting, const GpuTexture::Ptr& sceneColor)
 {
-    auto& variant = variants[lighting.areaLights ? 1 : 0];
-    if (! variant.prepared.has_value() || variant.prepared->failed() || sceneColor == nullptr
+    auto shadowFilters = lighting.shadowFilters;
+    auto prepared = prepare (device, lighting.areaLights, shadowFilters);
+
+    // Without its shadow filter variant the frame shades hard shadows and no contact shadows: the
+    // default variants ignore both
+    if (prepared.failed() && shadowFilters)
+    {
+        if (! shadowFiltersFailureReported)
+            YUP_DBG ("LightingPass: the shadow filter variant is unavailable, shading hard shadows: " << prepared.getErrorMessage());
+
+        shadowFiltersFailureReported = true;
+        shadowFilters = false;
+        prepared = prepare (device, lighting.areaLights, false);
+    }
+
+    auto& variant = variants[getVariantIndex (lighting.areaLights, shadowFilters)];
+    if (prepared.failed() || sceneColor == nullptr
         || gbuffer.albedoOcclusion == nullptr || gbuffer.normalRoughness == nullptr || gbuffer.emissionMaterial == nullptr || gbuffer.depth == nullptr
         || lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.materials == nullptr
         || lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.shadowCascades == nullptr || lighting.shadowAtlas == nullptr)
@@ -85,10 +120,15 @@ bool LightingPass::render (GpuFrame& frame, const ViewData& view, const GBufferP
         renderPass.setSampler (0, 14, lighting.environmentSampler != nullptr ? lighting.environmentSampler : lighting.samplers.pointClamp);
         renderPass.setUniformBuffer (1, 0, &lighting.block, sizeof (lighting.block));
         renderPass.setTexture (3, 0, lighting.shadowCascades);
-        renderPass.setTexture (3, 1, lighting.shadowCascades);
         renderPass.setTexture (3, 2, lighting.shadowAtlas);
-        renderPass.setTexture (3, 3, lighting.shadowAtlas);
         renderPass.setUniformBuffer (3, 4, &lighting.shadows, sizeof (lighting.shadows));
+
+        // The soft shadow blocker search reads the same maps raw
+        if (shadowFilters)
+        {
+            renderPass.setTexture (3, 1, lighting.shadowCascades);
+            renderPass.setTexture (3, 3, lighting.shadowAtlas);
+        }
 
         // Without it no light has a shadow record, and the pipeline's own comparison sampler stays unread
         if (lighting.samplers.shadowCompare != nullptr)
@@ -113,7 +153,7 @@ bool LightingPass::render (GpuFrame& frame, const ViewData& view, const GBufferP
 
 void LightingPass::trimUnusedTargets()
 {
-    // The variant not drawn this frame releases every target it kept
+    // The variants not drawn this frame release every target they kept
     for (auto& variant : variants)
         variant.pass.trimUnusedTargets();
 }

@@ -544,6 +544,7 @@ Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, co
     out = {};
     numRecords = 0;
     firstContactOnlyRecord = GpuShadowData::maxRecords;
+    shadowFilters = false;
 
     const auto lights = inputs.drawList.getLights();
     recordIndices.assign (lights.size(), -1);
@@ -687,19 +688,25 @@ Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, co
         return Result::ok();
     }
 
-    // Soft filtering only for a shadowed light with a size to soften with: raster then shades with its soft shadow variant
+    // Soft filtering only for a light with a shadow map and a size to soften it with: a contact
+    // shadow only record has no map
     auto soft = false;
     for (size_t i = 0; i < lights.size(); ++i)
-        soft = soft || (recordIndices[i] >= 0 && lights[i].node->radius > 0.0f);
+        soft = soft || (recordIndices[i] >= 0 && out.records[recordIndices[i]].atlasRect[2] > 0.0f && lights[i].node->radius > 0.0f);
 
     soft = soft && inputs.capabilities.isEnabled (RenderCapabilities::Feature::softShadows, inputs.settings);
+
+    // The shading passes take their shadow filter variants for soft filtering, or for contact shadows to march
+    const auto contact = inputs.capabilities.isEnabled (RenderCapabilities::Feature::contactShadows, inputs.settings);
+    shadowFilters = soft || (contact && std::any_of (out.records, out.records + numRecords, [] (const GpuShadowRecord& record) { return record.contact[0] > 0.0f; }));
+
     const auto still = inputs.capabilities.getTier() == RenderCapabilities::Tier::full
                     && ! inputs.capabilities.isEnabled (RenderCapabilities::Feature::temporalAntiAliasing, inputs.settings);
     out.filterInfo[0] = soft ? 1.0f : 0.0f;
     out.filterInfo[1] = soft ? (still ? stillSoftShadowTaps : softShadowTaps) : 0.0f;
     out.filterInfo[2] = out.filterInfo[1];
     out.filterInfo[3] = (inputs.capabilities.isEnabled (RenderCapabilities::Feature::temporalAntiAliasing, inputs.settings) ? temporalNoiseFlag : 0.0f)
-                      + (inputs.capabilities.isEnabled (RenderCapabilities::Feature::contactShadows, inputs.settings) ? contactShadowsFlag : 0.0f);
+                      + (contact ? contactShadowsFlag : 0.0f);
 
     // Without a signature per caster nothing tells what a map holds: every map is drawn
     if (inputs.casterSignatures.size() != inputs.drawList.getOpaqueItems().size())

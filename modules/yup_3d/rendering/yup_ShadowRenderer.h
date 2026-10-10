@@ -120,6 +120,13 @@ public:
         has neither a shadow map nor contact shadows (a contact shadow only record has no map). */
     Span<const int> getShadowRecordIndices() const noexcept { return recordIndices; }
 
+    /** True when the last render() asks the shading passes for their shadow filter variants
+        (YUP_3D_SOFT_SHADOWS, LightingInputs::shadowFilters): when its records ask for soft
+        filtering (GpuShadowData::filterInfo x), or when the tier marches contact shadows and a
+        record holds a contact shadow distance (contact[0] > 0).
+    */
+    bool needsShadowFilters() const noexcept { return shadowFilters; }
+
     /** Forgets the rendered maps, so the next render() draws them again: for frames the GPU failed
         to execute, or that were abandoned after their shadow passes were recorded. */
     void invalidate() noexcept;
@@ -180,6 +187,7 @@ private:
     std::array<int, ShadowCascades::maxCascades> numCascadeRenders {};
     int numRecords = 0;
     int firstContactOnlyRecord = GpuShadowData::maxRecords; // the records from here on have no map
+    bool shadowFilters = false;            // see needsShadowFilters()
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShadowRenderer)
 };

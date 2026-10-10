@@ -59,12 +59,8 @@ layout(set = 0, binding = 4) uniform samplerShadow shadowCompare;          // le
 layout(set = 3, binding = 0) uniform texture2DArray shadowCascadesCompare; // the sun cascades, one layer each
 layout(set = 3, binding = 2) uniform texture2D shadowAtlasCompare;         // the views of the point and spot lights, one tile each
 
-// Soft shadows compile into every full tier bundle, and into the raster bundles of the soft shadow
-// variant only (YUP_3D_SOFT_SHADOWS), so the default raster frame neither runs nor binds them
-#if defined(YUP_3D_TIER_FULL) && ! defined(YUP_3D_SOFT_SHADOWS)
-#define YUP_3D_SOFT_SHADOWS
-#endif
-
+// Soft shadows compile into the bundles of the shadow filter variant only (YUP_3D_SOFT_SHADOWS), on
+// both tiers, so the default frame neither runs nor binds them
 #ifdef YUP_3D_SOFT_SHADOWS
 // The same maps read raw by the soft shadow blocker search, with texelFetch through pointClamp
 // (lib/lighting.glsl): WGSL loads them without a sampler, as unfilterable float textures
