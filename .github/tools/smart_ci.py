@@ -22,7 +22,24 @@ With --platform, the "platforms" section of the config restricts the result to
 that platform: native files of other platforms are ignored, only that platform's
 <platform>Deps header lines count, and only the examples it builds are listed.
 
+Exactly one scope selects the changed files:
+
+  - --since-last-green JOB: the files changed since the last push run of the CI
+    workflow on this branch where every job of the platform caller JOB (named JOB
+    or "JOB / ...") succeeded or was skipped. Failed or cancelled work is never
+    green, so it stays in the diff until it passes. Needs `gh` and a token.
+  - --since SHA: the files changed since an explicit ancestor of HEAD.
+  - --base REF: the files changed since the merge-base with REF.
+  - --files FILE...: an explicit list, skipping git.
+  - --full: everything.
+
+--since-last-green and --since fall back to the origin/main diff when no
+usable ancestor is found.
+
 Usage:
+    python3 .github/tools/smart_ci.py --since-last-green Linux --platform linux \
+        --config .github/smart_ci_config.json --output affected.json
+    python3 .github/tools/smart_ci.py --since HEAD~1 --platform linux --output affected.json
     python3 .github/tools/smart_ci.py --base origin/main \
         --config .github/smart_ci_config.json --output affected.json
     python3 .github/tools/smart_ci.py --files modules/yup_core/yup_core.h \
@@ -33,14 +50,19 @@ The --files form skips git and is handy to preview what a change would trigger.
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from collections import defaultdict, deque
 from pathlib import Path
+from urllib.parse import quote
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EMPTY_SHA = "0" * 40
+CI_WORKFLOW = "ci.yml"
+PLAN_JOB = "plan"
+MAX_RUNS = 30
 
 MODULE_NAME_RE = re.compile(r"^yup_")
 HEADER_DEP_LINE_RE = re.compile(r"\s*(dependencies|[A-Za-z]+Deps):\s*(.*)")
@@ -72,6 +94,56 @@ def get_changed_files(base):
         return None
 
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def is_ancestor(sha):
+    return bool(sha) and subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"], capture_output=True).returncode == 0
+
+
+def get_changed_files_since(sha):
+    """Return the files changed between sha and HEAD, or the origin/main diff when sha is not an ancestor of HEAD."""
+    if not is_ancestor(sha):
+        print(f"Warning: '{sha}' is not an ancestor of HEAD, diffing against origin/main", file=sys.stderr)
+        return get_changed_files("origin/main")
+
+    return get_changed_files(sha)
+
+
+def gh_api(endpoint, jq, paginate=False):
+    command = ["gh", "api", "-X", "GET", endpoint, "--jq", jq] + (["--paginate"] if paginate else [])
+    result = subprocess.run(command, capture_output=True, text=True, check=True)
+    return [line.split("\t") for line in result.stdout.splitlines() if line]
+
+
+def find_last_green(job_name):
+    """Return the head sha of the newest push run on this branch that is green for job_name, or None."""
+    repo = os.environ.get("GITHUB_REPOSITORY") or "{owner}/{repo}"
+    branch = os.environ.get("GITHUB_REF_NAME") or run_git(["rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip()
+
+    try:
+        runs = gh_api(f"repos/{repo}/actions/workflows/{CI_WORKFLOW}/runs"
+                      f"?branch={quote(branch, safe='')}&event=push&status=completed&per_page={MAX_RUNS}",
+                      ".workflow_runs[] | [.id, .head_sha, .conclusion] | @tsv")
+
+        for run_id, head_sha, conclusion in runs:
+            if conclusion == "cancelled" or not is_ancestor(head_sha):
+                continue
+
+            jobs = gh_api(f"repos/{repo}/actions/runs/{run_id}/jobs?per_page=100",
+                          '.jobs[] | [.name, .conclusion // ""] | @tsv', paginate=True)
+            if [PLAN_JOB, "success"] not in jobs:
+                continue
+
+            platform_jobs = [result for name, result in jobs if name == job_name or name.startswith(f"{job_name} / ")]
+            if platform_jobs and all(result in ("success", "skipped") for result in platform_jobs):
+                print(f"Last green run for {job_name}: {run_id} ({head_sha})")
+                return head_sha
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"Warning: could not query the CI runs, diffing against origin/main: {getattr(error, 'stderr', '') or error}", file=sys.stderr)
+        return None
+
+    print(f"Warning: no green run for {job_name} on '{branch}', diffing against origin/main", file=sys.stderr)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -298,12 +370,15 @@ def compute_affected(changed_files, config, graph, platform=None):
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="Smart CI for YUP")
-    parser.add_argument("--base", default="main", help="Base ref/sha to diff against (default: main)")
+    scope = parser.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--since-last-green", metavar="PLATFORM_JOB", help="Diff against the last green CI push run of this caller job")
+    scope.add_argument("--since", metavar="SHA", help="Diff against an ancestor of HEAD")
+    scope.add_argument("--base", metavar="REF", help="Diff against the merge-base with this ref")
+    scope.add_argument("--files", nargs="*", help="Explicit changed files (skips git)")
+    scope.add_argument("--full", action="store_true", help="Force a full build (skips git)")
     parser.add_argument("--config", default=".github/smart_ci_config.json", help="Classification config")
     parser.add_argument("--output", required=True, help="Output JSON file")
-    parser.add_argument("--files", nargs="*", help="Explicit changed files (skips git)")
     parser.add_argument("--platform", help="Restrict the result to a platform of the config's 'platforms' section")
-    parser.add_argument("--full", action="store_true", help="Force a full build (skips git)")
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -323,6 +398,11 @@ def main():
         changed_files = None
     elif args.files is not None:
         changed_files = args.files
+    elif args.since_last_green is not None:
+        last_green = find_last_green(args.since_last_green)
+        changed_files = get_changed_files_since(last_green) if last_green else get_changed_files("origin/main")
+    elif args.since is not None:
+        changed_files = get_changed_files_since(args.since)
     else:
         changed_files = get_changed_files(args.base)
     if changed_files is not None:

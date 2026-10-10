@@ -1,17 +1,25 @@
 name: Smart CI
 description: >-
-  Compute the tests and examples a platform must build for the current ref. Branches
-  diff against their merge-base with origin/main, main always builds everything.
-  Needs a checkout with full history (fetch-depth 0).
+  Compute the tests and examples a platform must build for the current ref. Branch
+  pushes diff against the platform's last green CI run on the branch (falling back to
+  the merge-base with origin/main), manual runs diff against origin/main or the given
+  base, main always builds everything. Needs a checkout with full history (fetch-depth 0).
 
 inputs:
   platform:
     description: Platform from the 'platforms' section of .github/smart_ci_config.json
     required: true
+  job_name:
+    description: Name of the CI caller job for this platform, used to find its last green run
+    required: true
   base:
     description: Base ref/sha to diff against, overriding the default
     required: false
     default: ""
+  token:
+    description: Token used to query the CI runs
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   any:
@@ -37,14 +45,18 @@ runs:
     shell: bash
     env:
       PLATFORM: ${{ inputs.platform }}
+      JOB_NAME: ${{ inputs.job_name }}
       BASE: ${{ inputs.base }}
+      GH_TOKEN: ${{ inputs.token }}
     run: |
       if [ -n "$BASE" ]; then
         SCOPE=(--base "$BASE")
       elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
         SCOPE=(--full)
-      else
+      elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
         SCOPE=(--base origin/main)
+      else
+        SCOPE=(--since-last-green "$JOB_NAME")
       fi
       python3 .github/tools/smart_ci.py "${SCOPE[@]}" --platform "$PLATFORM" \
         --config .github/smart_ci_config.json --output "$RUNNER_TEMP/affected.json"

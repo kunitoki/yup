@@ -2,7 +2,7 @@
   "modules_root": "modules",
   "patterns": {
     "global": [
-      {"pattern": "^\\.github/(actions/smart_ci/|tools/smart_ci\\.py$|smart_ci_config\\.json$|workflows/build_)", "targets": ["all"]},
+      {"pattern": "^\\.github/(actions/smart_ci/|tools/smart_ci\\.py$|smart_ci_config\\.json$|workflows/(ci\\.yml$|build_))", "targets": ["all"]},
       {"pattern": "^codecov\\.yml$", "targets": ["all"]},
       {"pattern": "^CMakeLists\\.txt$", "targets": ["all"]},
       {"pattern": "^cmake/.*", "targets": ["all"]},

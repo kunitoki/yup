@@ -3,38 +3,12 @@ name: Android
 # See https://medium.com/@dcostalloyd90/automating-android-builds-with-github-actions-a-step-by-step-guide-2a02a54f59cd
 
 on:
-  push:
-    paths:
-      - "CMakeLists.txt"
-      - "**/workflows/build_android.yml"
-      - "**/.github/actions/smart_ci/**"
-      - "**/.github/tools/smart_ci.py"
-      - "**/.github/smart_ci_config.json"
-      - "**/cmake/**"
-      - "**/examples/**"
-      - "**/modules/**"
-      - "**/tests/**"
-      - "**/thirdparty/**"
-      - "!**/LICENSE*"
-      - "!**/native/*_apple.*"
-      - "!**/native/*_emscripten.*"
-      - "!**/native/*_ios*.*"
-      - "!**/native/*_linux.*"
-      - "!**/native/*_mac.*"
-      - "!**/native/*_wasm.*"
-      - "!**/native/*_windows.*"
-    branches:
-      - "**"
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      base:
-        description: Base ref/sha to diff against (empty uses origin/main, or builds everything on main)
-        required: false
-        default: ""
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+    examples:
+      description: JSON array of the examples to build
+      type: string
+      default: "[]"
 
 env:
   ACTION_RUNNER: github-actions
@@ -48,24 +22,9 @@ env:
     libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev
 
 jobs:
-  determine-components:
-    runs-on: ubuntu-latest
-    outputs:
-      examples: ${{ steps.smart-ci.outputs.examples }}
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - id: smart-ci
-      uses: ./.github/actions/smart_ci
-      with:
-        platform: android
-        base: ${{ inputs.base }}
-
   configure:
     runs-on: ubuntu-latest
-    needs: [determine-components]
-    if: needs.determine-components.outputs.examples != '[]'
+    if: inputs.examples != '[]'
     steps:
       - uses: actions/checkout@v6
       - name: Install Dependencies
@@ -94,12 +53,12 @@ jobs:
 
   build_examples:
     runs-on: ubuntu-latest
-    needs: [determine-components, configure]
-    if: needs.determine-components.outputs.examples != '[]'
+    needs: [configure]
+    if: inputs.examples != '[]'
     strategy:
       fail-fast: false
       matrix:
-        example: ${{ fromJson(needs.determine-components.outputs.examples) }}
+        example: ${{ fromJson(inputs.examples) }}
     steps:
     - uses: actions/checkout@v6
     - name: Setup Java

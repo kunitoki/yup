@@ -90,7 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Graphics synthesizer example: PRISM logo and larger buttons in the header, LFO / scope columns aligned with filter / envelopes, and pitch bend and mod wheels beside the keyboard. The mod wheel is a new `MOD WHEEL` source in the modulation matrix. The matrix now has 16 slots.
 - CMake: retry failed upstream module and validation tool downloads, verify `sha256` after download, and fail at configure time when an upstream archive extracts nothing instead of later with missing headers.
 - Build: add `YUP_TEST_MODULES` to build only the tests of selected modules, and a `testDeps:` module header field for modules the tests need beyond the module's own dependencies.
-- CI: the macOS, Linux, Windows, Wasm, iOS and Android workflows build and test only the modules and examples a branch affects on that platform (`.github/tools/smart_ci.py`); pushes to `main` still build everything.
+- CI: one `CI` workflow plans the macOS, Linux, Windows, Wasm, iOS and Android builds in a single job and builds and tests only the modules and examples affected on each platform since that platform's last green run on the branch (`.github/tools/smart_ci.py`). Failed work carries over to the next push until it passes, a branch with no green run diffs against `main`, and pushes to `main` still build everything. `CI result` is the single check to require.
 
 - YDSP backend (emscripten): mint kernel handles from a module-wide counter instead of a JS-realm-local one, so a realm that runs a graph can no longer find another realm's kernel under the same key and silently invoke the wrong module.
 

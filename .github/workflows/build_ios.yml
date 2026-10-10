@@ -1,64 +1,25 @@
 name: iOS
 
 on:
-  push:
-    paths:
-      - "CMakeLists.txt"
-      - "**/workflows/build_ios.yml"
-      - "**/.github/actions/smart_ci/**"
-      - "**/.github/tools/smart_ci.py"
-      - "**/.github/smart_ci_config.json"
-      - "**/cmake/**"
-      - "**/examples/**"
-      - "**/modules/**"
-      - "**/tests/**"
-      - "**/thirdparty/**"
-      - "!**/LICENSE*"
-      - "!**/native/generated/**"
-      - "!**/native/java*/**"
-      - "!**/native/*_android.*"
-      - "!**/native/*_emscripten.*"
-      - "!**/native/*_linux.*"
-      - "!**/native/*_mac.*"
-      - "!**/native/*_wasm.*"
-      - "!**/native/*_windows.*"
-    branches:
-      - "**"
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      base:
-        description: Base ref/sha to diff against (empty uses origin/main, or builds everything on main)
-        required: false
-        default: ""
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+    examples:
+      description: JSON array of the examples to build
+      type: string
+      default: "[]"
+    example_targets:
+      description: JSON object mapping each example to its space-separated build targets
+      type: string
+      default: "{}"
 
 env:
   ACTION_RUNNER: github-actions
   IOS_PLATFORM: OS64
 
 jobs:
-  determine-components:
-    runs-on: ubuntu-latest
-    outputs:
-      examples: ${{ steps.smart-ci.outputs.examples }}
-      example_targets: ${{ steps.smart-ci.outputs.example_targets }}
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - id: smart-ci
-      uses: ./.github/actions/smart_ci
-      with:
-        platform: ios
-        base: ${{ inputs.base }}
-
   configure:
     runs-on: macos-latest
-    needs: [determine-components]
-    if: needs.determine-components.outputs.examples != '[]'
+    if: inputs.examples != '[]'
     steps:
     - uses: actions/checkout@v6
     - name: Configure
@@ -78,12 +39,12 @@ jobs:
 
   build_examples:
     runs-on: macos-latest
-    needs: [determine-components, configure]
-    if: needs.determine-components.outputs.examples != '[]'
+    needs: [configure]
+    if: inputs.examples != '[]'
     strategy:
       fail-fast: false
       matrix:
-        example: ${{ fromJson(needs.determine-components.outputs.examples) }}
+        example: ${{ fromJson(inputs.examples) }}
     steps:
     - uses: actions/checkout@v6
     - uses: actions/cache/restore@v5
@@ -96,5 +57,5 @@ jobs:
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
           -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_BUILD_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(needs.determine-components.outputs.example_targets)[matrix.example] }}
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(needs.determine-components.outputs.example_targets)[matrix.example] }}
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}

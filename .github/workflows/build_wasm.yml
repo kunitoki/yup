@@ -1,39 +1,24 @@
 name: Wasm
 
 on:
-  push:
-    paths:
-      - "CMakeLists.txt"
-      - "**/workflows/build_wasm.yml"
-      - "**/.github/actions/smart_ci/**"
-      - "**/.github/tools/smart_ci.py"
-      - "**/.github/smart_ci_config.json"
-      - "**/cmake/**"
-      - "**/examples/**"
-      - "**/modules/**"
-      - "**/tests/**"
-      - "**/thirdparty/**"
-      - "!**/LICENSE*"
-      - "!**/native/generated/**"
-      - "!**/native/java*/**"
-      - "!**/native/*_android.*"
-      - "!**/native/*_apple.*"
-      - "!**/native/*_linux.*"
-      - "!**/native/*_ios*.*"
-      - "!**/native/*_mac.*"
-      - "!**/native/*_windows.*"
-    branches:
-      - "**"
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      base:
-        description: Base ref/sha to diff against (empty uses origin/main, or builds everything on main)
-        required: false
-        default: ""
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+    test_modules:
+      description: Semicolon-separated YUP_TEST_MODULES value (empty builds every module's tests)
+      type: string
+      default: ""
+    tests:
+      description: Whether to build and run the tests
+      type: boolean
+      default: false
+    examples:
+      description: JSON array of the examples to build
+      type: string
+      default: "[]"
+    example_targets:
+      description: JSON object mapping each example to its space-separated build targets
+      type: string
+      default: "{}"
 
 env:
   ACTION_RUNNER: github-actions
@@ -45,27 +30,9 @@ env:
   EMCC_SKIP_SANITY_CHECK: 1
 
 jobs:
-  determine-components:
-    runs-on: ubuntu-latest
-    outputs:
-      test_modules: ${{ steps.smart-ci.outputs.test_modules }}
-      tests: ${{ steps.smart-ci.outputs.full_build == 'true' || steps.smart-ci.outputs.test_modules != '' }}
-      examples: ${{ steps.smart-ci.outputs.examples }}
-      example_targets: ${{ steps.smart-ci.outputs.example_targets }}
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - id: smart-ci
-      uses: ./.github/actions/smart_ci
-      with:
-        platform: wasm
-        base: ${{ inputs.base }}
-
   build_tests:
     runs-on: ubuntu-latest
-    needs: [determine-components]
-    if: needs.determine-components.outputs.tests == 'true'
+    if: inputs.tests
     strategy:
       fail-fast: false
       matrix:
@@ -80,19 +47,18 @@ jobs:
     - name: Configure
       run: |
         emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
-          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=OFF -DYUP_TEST_MODULES="${{ needs.determine-components.outputs.test_modules }}"
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=OFF -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/${{ matrix.config }}
       run: node yup_tests.js
 
   build_examples:
     runs-on: ubuntu-latest
-    needs: [determine-components]
-    if: needs.determine-components.outputs.examples != '[]'
+    if: inputs.examples != '[]'
     strategy:
       fail-fast: false
       matrix:
-        example: ${{ fromJson(needs.determine-components.outputs.examples) }}
+        example: ${{ fromJson(inputs.examples) }}
     steps:
     - uses: actions/checkout@v6
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
@@ -102,5 +68,5 @@ jobs:
         version: ${{ env.EM_VERSION }}
     - name: Configure
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_BUILD_TESTS=OFF -DYUP_BUILD_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(needs.determine-components.outputs.example_targets)[matrix.example] }}
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(needs.determine-components.outputs.example_targets)[matrix.example] }}
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
