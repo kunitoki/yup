@@ -1,4 +1,5 @@
 name: Smart CI
+
 description: >-
   Compute the tests and examples a platform must build for the current ref. Branch
   pushes diff against the platform's last green CI run on the branch (falling back to
