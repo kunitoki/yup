@@ -1930,7 +1930,7 @@ TEST_F (GpuRenderPassMockTests, EqualLayoutsWithDifferentDefaultSamplersRebuildT
 
 TEST_F (GpuRenderPassMockTests, SetStorageBufferOnUnsupportedDeviceIsIgnored)
 {
-#if YUP_ASSERTIONS_ENABLED
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
     GTEST_SKIP() << "Binding a storage buffer on a device without fragment storage buffers triggers an assertion in assertion-enabled builds";
 #endif
 
@@ -1994,7 +1994,7 @@ TEST_F (GpuRenderPassMockTests, SetStorageBufferOnUnsupportedDeviceIsIgnored)
 
 TEST_F (GpuRenderPassMockTests, StorageBufferMeetingAWritableBlockSkipsTheDraw)
 {
-#if YUP_ASSERTIONS_ENABLED
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
     GTEST_SKIP() << "A storage buffer meeting a writable block triggers an assertion in assertion-enabled builds";
 #endif
 

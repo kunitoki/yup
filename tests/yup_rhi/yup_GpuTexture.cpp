@@ -1130,7 +1130,7 @@ TEST_F (GpuAttachmentMockTests, DepthOnlyPassDrawsWithoutAColorAttachment)
 
 TEST_F (GpuAttachmentMockTests, DepthOptionsOnAColorTargetGiveAnInvalidPass)
 {
-#if YUP_ASSERTIONS_ENABLED
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
     GTEST_SKIP() << "Depth options on a color target trigger an assertion in assertion-enabled builds";
 #endif
 
