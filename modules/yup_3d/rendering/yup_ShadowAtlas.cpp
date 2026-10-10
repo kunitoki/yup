@@ -48,7 +48,7 @@ void ShadowAtlas::allocate (Span<const Request> requests)
 
     freeNodes.front().push_back ({ 0, 0, atlasSize });
 
-    std::vector<Request> ordered (requests.begin(), requests.end());
+    ordered.assign (requests.begin(), requests.end());
     for (auto& request : ordered)
     {
         jassert (request.faces > 0 && isPowerOfTwo (request.desiredSize));

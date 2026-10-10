@@ -2336,6 +2336,370 @@ protected:
 #endif
     }
 
+    /** Sets the tier of @p scene for an exact comparison of frames: raster, or full without temporal
+        anti-aliasing (no jitter and a still shadow noise).
+    */
+    static void setTierForExactFrames (Scene& scene, RenderSettings::TierPreference tier)
+    {
+        if (tier == RenderSettings::TierPreference::full)
+            setFullTierTaa (scene, 1);
+        else
+            setTier (scene, RenderSettings::TierPreference::raster);
+    }
+
+    /** Sets castsShadows on every light of @p scene. */
+    static void setAllLightsCastShadows (Scene& scene, bool castsShadows)
+    {
+        for (const auto& child : scene.getRoot()->getChildren())
+            if (auto* light = child->getNode<LightNode>())
+                light->castsShadows = castsShadows;
+    }
+
+    /** A device unable to create the comparison sampler cannot read shadow maps: on @p tier it
+        renders every frame, without the shadows, as if the sun cast none.
+    */
+    void checkRendersWithoutTheShadowCompareSampler (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool withSampler, bool castsShadows)
+        {
+            Scene scene;
+            buildShadowsScene (scene);
+            scene.getRoot()->findChild ("sun")->getNode<LightNode>()->castsShadows = castsShadows;
+            setTierForExactFrames (scene, tier);
+
+            SceneRenderer renderer;
+            if (! withSampler)
+                renderer.failShadowCompareSamplerForTesting();
+
+            // The failure is remembered, so the second frame renders like the first
+            Image image;
+            for (int frame = 0; frame < 2; ++frame)
+            {
+                image = renderToImage (renderer, scene, 128);
+                EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            }
+
+            return image;
+        };
+
+        const auto shadowed = render (true, true);
+        const auto withoutSampler = render (false, true);
+        const auto unshadowed = render (true, false);
+        ASSERT_TRUE (shadowed.isValid() && withoutSampler.isValid() && unshadowed.isValid());
+
+        EXPECT_EQ (countDifferences (withoutSampler, unshadowed), 0);
+        EXPECT_GT (countDifferences (shadowed, unshadowed), 0);
+    }
+
+    /** Shadow pipelines the device cannot compile leave every frame of @p tier unshadowed, not
+        failed: the sun scene and the spot scene render as without castsShadows, frame after frame.
+    */
+    void checkRendersWithoutTheShadowPipelines (RenderSettings::TierPreference tier)
+    {
+        for (const auto spotScene : { false, true })
+        {
+            const auto render = [&] (bool failPipelines, bool castsShadows)
+            {
+                Scene scene;
+                if (spotScene)
+                    buildSpotOverGround (scene);
+                else
+                    buildShadowsScene (scene);
+
+                setAllLightsCastShadows (scene, castsShadows);
+                setTierForExactFrames (scene, tier);
+
+                SceneRenderer renderer;
+                if (failPipelines)
+                    renderer.failShadowPipelinesForTesting();
+
+                Image image;
+                for (int frame = 0; frame < 2; ++frame)
+                {
+                    image = renderToImage (renderer, scene, 128);
+                    EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+                    if (failPipelines)
+                        EXPECT_EQ (renderer.getShadowRecordCount(), 0);
+                }
+
+                return image;
+            };
+
+            const auto shadowed = render (false, true);
+            const auto withoutPipelines = render (true, true);
+            const auto unshadowed = render (false, false);
+            ASSERT_TRUE (shadowed.isValid() && withoutPipelines.isValid() && unshadowed.isValid());
+
+            EXPECT_EQ (countDifferences (withoutPipelines, unshadowed), 0) << (spotScene ? "spot" : "sun");
+            EXPECT_GT (countDifferences (shadowed, unshadowed), 0) << (spotScene ? "spot" : "sun");
+        }
+    }
+
+    /** Shadow maps the device cannot create (out of memory) leave the lights needing them
+        unshadowed on @p tier, not the frame failed. The same size is not asked for again, so the
+        next frame stays unshadowed without retrying it; a new shadowResolution asks again, and the
+        shadows come back.
+    */
+    void checkShadowMapsTheDeviceCannotCreateLeaveTheLightsUnshadowed (RenderSettings::TierPreference tier)
+    {
+        for (const auto spotScene : { false, true })
+        {
+            const auto build = [&] (Scene& scene, bool castsShadows)
+            {
+                if (spotScene)
+                    buildSpotOverGround (scene);
+                else
+                    buildShadowsScene (scene);
+
+                setAllLightsCastShadows (scene, castsShadows);
+                setTierForExactFrames (scene, tier);
+            };
+
+            Scene unshadowedScene;
+            build (unshadowedScene, false);
+            SceneRenderer unshadowedRenderer;
+
+            Scene scene;
+            build (scene, true);
+            SceneRenderer renderer;
+            renderer.failShadowMapsForTesting();
+
+            // The failing frame, then one that would succeed if it asked again
+            for (int frame = 0; frame < 2; ++frame)
+            {
+                const auto image = renderToImage (renderer, scene, 128);
+                const auto unshadowed = renderToImage (unshadowedRenderer, unshadowedScene, 128);
+                ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+                ASSERT_TRUE (image.isValid() && unshadowed.isValid());
+
+                EXPECT_EQ (countDifferences (image, unshadowed), 0) << (spotScene ? "spot" : "sun") << ", frame " << frame;
+                EXPECT_EQ (renderer.getShadowRecordCount(), 0);
+                EXPECT_EQ (renderer.getShadowAtlasSize(), 0);
+            }
+
+            auto settings = scene.getRenderSettings();
+            settings.shadowResolution = 1024;
+            scene.setRenderSettings (settings);
+
+            const auto image = renderToImage (renderer, scene, 128);
+            const auto unshadowed = renderToImage (unshadowedRenderer, unshadowedScene, 128);
+            ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            EXPECT_GT (renderer.getShadowRecordCount(), 0);
+            EXPECT_GT (countDifferences (image, unshadowed), 0) << (spotScene ? "spot" : "sun");
+        }
+    }
+
+    /** On @p tier, a shadow map the device could not create does not cost the other one its cache:
+        with the sun's cascades drawn, an atlas that fails leaves a still scene drawing no shadow map
+        frame after frame, and so do failed cascades next to a drawn atlas.
+    */
+    void checkFailedShadowMapKeepsTheOtherOneCached (RenderSettings::TierPreference tier)
+    {
+        for (const auto atlasFails : { true, false })
+        {
+            Scene scene;
+            auto& spot = buildSpotOverGround (scene);
+            auto sunEntity = EntityNode::Ptr (new EntityNode ("sun"));
+            auto& sun = sunEntity->attach<LightNode>();
+            sun.intensity = 2.0f;
+            aimCamera (*sunEntity, { 2.0f, 6.0f, 3.0f }, {}, { 0.0f, 1.0f, 0.0f });
+            scene.getRoot()->addChild (sunEntity);
+            setTier (scene, tier);
+
+            // The map that survives exists first; the other one fails when it is first needed
+            sun.castsShadows = atlasFails;
+            spot.castsShadows = ! atlasFails;
+
+            SceneRenderer renderer;
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+            renderer.failShadowMapsForTesting();
+            sun.castsShadows = true;
+            spot.castsShadows = true;
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_EQ (renderer.getShadowAtlasSize() == 0, atlasFails);
+
+            const auto renders = renderer.getShadowMapRenderCount();
+            const auto cascadeRenders = renderer.getShadowCascadeRenderCount (0);
+            const auto draws = renderer.getShadowCasterDrawCount();
+
+            for (int frame = 0; frame < 3; ++frame)
+                ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+            EXPECT_EQ (renderer.getShadowMapRenderCount(), renders) << (atlasFails ? "atlas fails" : "cascades fail");
+            EXPECT_EQ (renderer.getShadowCascadeRenderCount (0), cascadeRenders) << (atlasFails ? "atlas fails" : "cascades fail");
+            EXPECT_EQ (renderer.getShadowCasterDrawCount(), draws) << (atlasFails ? "atlas fails" : "cascades fail");
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+        }
+    }
+
+    /** A shadowed point light whose range reaches no receiver takes no tile on @p tier, and the frame
+        is the one it gives without shadows; brought within reach of the ground it takes its six faces.
+    */
+    void checkShadowedLightOutOfReachAllocatesNoAtlas (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (Vector3<float> position, bool castsShadows, int& records, int& atlasSize)
+        {
+            Scene scene;
+            buildSpotOverGround (scene).castsShadows = false;
+            setTier (scene, tier);
+
+            auto entity = EntityNode::Ptr (new EntityNode ("point"));
+            auto& light = entity->attach<LightNode> (LightNode::Type::point);
+            light.range = 1.0f;
+            light.castsShadows = castsShadows;
+            entity->setPosition (position);
+            scene.getRoot()->addChild (entity);
+
+            SceneRenderer renderer;
+            const auto image = renderConverged (renderer, scene, 64);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            records = renderer.getShadowRecordCount();
+            atlasSize = renderer.getShadowAtlasSize();
+            return image;
+        };
+
+        int records = -1, atlasSize = -1;
+        const auto far = render ({ 0.0f, 50.0f, 0.0f }, true, records, atlasSize);
+        EXPECT_EQ (records, 0);
+        EXPECT_EQ (atlasSize, 0);
+
+        const auto unshadowed = render ({ 0.0f, 50.0f, 0.0f }, false, records, atlasSize);
+        ASSERT_TRUE (far.isValid() && unshadowed.isValid());
+        EXPECT_EQ (countDifferences (far, unshadowed), 0);
+
+        render ({ 2.0f, 0.5f, 0.0f }, true, records, atlasSize);
+        EXPECT_EQ (records, 6);
+        EXPECT_GT (atlasSize, 0);
+    }
+
+    /** One renderer on @p tier releases the atlas when its only shadowed spot stops casting
+        shadows, and creates it again when it casts them again.
+    */
+    void checkAtlasIsReleasedWhenNoLightNeedsIt (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        auto& spot = buildSpotOverGround (scene);
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        for (const auto castsShadows : { true, false, true })
+        {
+            spot.castsShadows = castsShadows;
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+            if (castsShadows)
+                EXPECT_GT (renderer.getShadowAtlasSize(), 0);
+            else
+                EXPECT_EQ (renderer.getShadowAtlasSize(), 0);
+        }
+
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    /** The spot of buildSpotOverGround() and a shadowed point light of 1.2 m range at (4, 1, 0), its
+        own blocker under it at (4, 0.4, 0), out of the spot's cone, plus a third blocker at (-4, 0.3,
+        -4) which no light reaches, seen from above both lights. Returns the point light's blocker,
+        the spot's blocker and the third one.
+    */
+    static std::array<EntityNode*, 3> buildSpotAndPointOverGround (Scene& scene)
+    {
+        buildSpotOverGround (scene);
+        auto* spotBlocker = scene.getRoot()->findChild ("blocker");
+
+        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto& point = entity->attach<LightNode> (LightNode::Type::point);
+        point.intensity = 4.0f;
+        point.range = 1.2f;
+        point.castsShadows = true;
+        entity->setPosition ({ 4.0f, 1.0f, 0.0f });
+        scene.getRoot()->addChild (entity);
+
+        addBlocker (scene, { 4.0f, 0.4f, 0.0f });
+        auto* pointBlocker = scene.getRoot()->getChildren().back().get();
+
+        addBlocker (scene, { -4.0f, 0.3f, -4.0f });
+        auto* unlitBlocker = scene.getRoot()->getChildren().back().get();
+
+        addCamera (scene, { 2.0f, 6.0f, 6.0f }, { 2.0f, 0.0f, 0.0f });
+        return { pointBlocker, spotBlocker, unlitBlocker };
+    }
+
+    /** On @p tier, a caster moving outside a light's reach does not draw that light's atlas views
+        again: moving the point light's blocker costs the draws it costs without the spot's shadow,
+        and moving a blocker no light reaches draws no shadow map at all.
+    */
+    void checkAtlasRedrawsOnlyTheViewsACasterReaches (RenderSettings::TierPreference tier)
+    {
+        const auto drawsOfAMove = [&] (bool spotCastsShadows)
+        {
+            Scene scene;
+            const auto blockers = buildSpotAndPointOverGround (scene);
+            scene.getRoot()->findChild ("spot")->getNode<LightNode>()->castsShadows = spotCastsShadows;
+            setTier (scene, tier);
+
+            SceneRenderer renderer;
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            const auto drawsBefore = renderer.getShadowCasterDrawCount();
+
+            blockers[0]->setPosition (blockers[0]->getPosition() + Vector3<float> (0.1f, 0.0f, 0.0f));
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+            return renderer.getShadowCasterDrawCount() - drawsBefore;
+        };
+
+        const auto draws = drawsOfAMove (true);
+        EXPECT_GT (draws, 0);
+        EXPECT_EQ (draws, drawsOfAMove (false));
+
+        Scene scene;
+        const auto blockers = buildSpotAndPointOverGround (scene);
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+
+        blockers[2]->setPosition (blockers[2]->getPosition() + Vector3<float> (0.1f, 0.0f, 0.0f));
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    /** On @p tier, an atlas whose views were drawn again one light at a time, each cleared alone
+        while the other tiles were kept, holds what a fresh renderer draws at once: the frames match
+        exactly.
+    */
+    void checkPartiallyRedrawnAtlasMatchesAFreshOne (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        const auto blockers = buildSpotAndPointOverGround (scene);
+        setTierForExactFrames (scene, tier);
+
+        SceneRenderer renderer;
+        ASSERT_TRUE (renderToImage (renderer, scene, 128).isValid());
+
+        // Only the point light's views, then only the spot's
+        for (auto* blocker : { blockers[0], blockers[1] })
+        {
+            const auto drawsBefore = renderer.getShadowCasterDrawCount();
+            blocker->setPosition (blocker->getPosition() + Vector3<float> (0.1f, 0.0f, 0.05f));
+            ASSERT_TRUE (renderToImage (renderer, scene, 128).isValid());
+            ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            EXPECT_GT (renderer.getShadowCasterDrawCount(), drawsBefore);
+        }
+
+        const auto redrawn = renderToImage (renderer, scene, 128);
+
+        SceneRenderer fresh;
+        const auto drawnAtOnce = renderToImage (fresh, scene, 128);
+        ASSERT_TRUE (redrawn.isValid() && drawnAtOnce.isValid());
+        EXPECT_EQ (countDifferences (redrawn, drawnAtOnce), 0);
+
+        // The spot's view and the point light's six
+        EXPECT_EQ (renderer.getShadowRecordCount(), 7);
+    }
+
     /** The scene of the soft shadow tests: a wall 1.2 m high and 2 cm thin across the 4 m ground,
         from x = -2 to its end at x = 0 on z = 0, lit from behind (-z) by a shadow casting sun 45
         degrees high with an angular radius of @p sunRadius. Its shadow covers x < 0 from z = 0 to
@@ -6642,43 +7006,7 @@ TEST_P (SceneRendererTierTests, RendersWithoutTheAreaLightTables)
 
 TEST_P (SceneRendererTierTests, RendersWithoutTheShadowCompareSampler)
 {
-    // A device unable to create the comparison sampler cannot read shadow maps: it renders every
-    // frame, without the shadows, as if the sun cast none
-    const auto full = GetParam() == RenderSettings::TierPreference::full;
-
-    const auto render = [&] (bool withSampler, bool castsShadows)
-    {
-        Scene scene;
-        buildShadowsScene (scene);
-        scene.getRoot()->findChild ("sun")->getNode<LightNode>()->castsShadows = castsShadows;
-
-        if (full)
-            setFullTierTaa (scene, 1);
-        else
-            setTier (scene, RenderSettings::TierPreference::raster);
-
-        SceneRenderer renderer;
-        if (! withSampler)
-            renderer.failShadowCompareSamplerForTesting();
-
-        // The failure is remembered, so the second frame renders like the first
-        Image image;
-        for (int frame = 0; frame < 2; ++frame)
-        {
-            image = renderToImage (renderer, scene, 128);
-            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
-        }
-
-        return image;
-    };
-
-    const auto shadowed = render (true, true);
-    const auto withoutSampler = render (false, true);
-    const auto unshadowed = render (true, false);
-    ASSERT_TRUE (shadowed.isValid() && withoutSampler.isValid() && unshadowed.isValid());
-
-    EXPECT_EQ (countDifferences (withoutSampler, unshadowed), 0);
-    EXPECT_GT (countDifferences (shadowed, unshadowed), 0);
+    checkRendersWithoutTheShadowCompareSampler (GetParam());
 }
 
 TEST_P (SceneRendererTierTests, BaseColorAboveOneShadesAsOne)
@@ -6693,6 +7021,16 @@ TEST_P (SceneRendererTierTests, BaseColorAboveOneShadesAsOne)
         EXPECT_NEAR (two[channel] / one[channel], 1.0, 0.02) << "channel " << channel;
 }
 #endif
+
+TEST_P (SceneRendererTierTests, RendersWithoutTheShadowPipelines)
+{
+    checkRendersWithoutTheShadowPipelines (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ShadowMapsTheDeviceCannotCreateLeaveTheLightsUnshadowed)
+{
+    checkShadowMapsTheDeviceCannotCreateLeaveTheLightsUnshadowed (GetParam());
+}
 
 TEST_P (SceneRendererTierTests, SunShadowReachesNearAndFarCasters)
 {
@@ -7153,41 +7491,74 @@ TEST_P (SceneRendererTierTests, ManyShadowedLightsRenderWithoutError)
 
 TEST_P (SceneRendererTierTests, ShadowedLightOutOfReachAllocatesNoAtlas)
 {
-    // A shadowed point light whose range reaches no receiver takes no tile, and the frame is the
-    // one it gives without shadows; brought within reach of the ground it takes its six faces
-    const auto render = [this] (Vector3<float> position, bool castsShadows, int& records, int& atlasSize)
+    checkShadowedLightOutOfReachAllocatesNoAtlas (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FailedShadowMapKeepsTheOtherOneCached)
+{
+    checkFailedShadowMapKeepsTheOtherOneCached (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, AtlasIsReleasedWhenNoLightNeedsIt)
+{
+    checkAtlasIsReleasedWhenNoLightNeedsIt (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, AtlasRedrawsOnlyTheViewsACasterReaches)
+{
+    checkAtlasRedrawsOnlyTheViewsACasterReaches (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, PartiallyRedrawnAtlasMatchesAFreshOne)
+{
+    checkPartiallyRedrawnAtlasMatchesAFreshOne (GetParam());
+}
+
+TEST_F (SceneRendererMetalTests, TierSwitchesKeepTheShadowsRight)
+{
+    // One renderer through raster, full with soft shadows, raster with soft shadows, raster with an
+    // unshadowed sun and full again: the cascade texture changes its layers (2 and 4) and gives way
+    // to its placeholder, the soft filter variants come and go, and each frame renders as a fresh
+    // renderer of its tier does
+    Scene scene;
+    auto& sun = buildLongGroundScene (scene, 2.0f);
+    sun.radius = 0.02f;
+
+    const struct
     {
-        Scene scene;
-        buildSpotOverGround (scene).castsShadows = false;
-        setTier (scene, GetParam());
-
-        auto entity = EntityNode::Ptr (new EntityNode ("point"));
-        auto& light = entity->attach<LightNode> (LightNode::Type::point);
-        light.range = 1.0f;
-        light.castsShadows = castsShadows;
-        entity->setPosition (position);
-        scene.getRoot()->addChild (entity);
-
-        SceneRenderer renderer;
-        const auto image = renderConverged (renderer, scene, 64);
-        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
-        records = renderer.getShadowRecordCount();
-        atlasSize = renderer.getShadowAtlasSize();
-        return image;
+        RenderSettings::TierPreference tier;
+        bool soft;
+        bool castsShadows;
+    } steps[] = {
+        { RenderSettings::TierPreference::raster, false, true },
+        { RenderSettings::TierPreference::full, true, true },
+        { RenderSettings::TierPreference::raster, true, true },
+        { RenderSettings::TierPreference::raster, false, false },
+        { RenderSettings::TierPreference::full, false, true },
     };
 
-    int records = -1, atlasSize = -1;
-    const auto far = render ({ 0.0f, 50.0f, 0.0f }, true, records, atlasSize);
-    EXPECT_EQ (records, 0);
-    EXPECT_EQ (atlasSize, 0);
+    SceneRenderer renderer;
+    for (const auto& step : steps)
+    {
+        setTierForExactFrames (scene, step.tier);
+        auto settings = scene.getRenderSettings();
+        settings.softShadows = step.soft;
+        scene.setRenderSettings (settings);
+        sun.castsShadows = step.castsShadows;
 
-    const auto unshadowed = render ({ 0.0f, 50.0f, 0.0f }, false, records, atlasSize);
-    ASSERT_TRUE (far.isValid() && unshadowed.isValid());
-    EXPECT_EQ (countDifferences (far, unshadowed), 0);
+        const auto image = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        ASSERT_NE (renderer.getCapabilities(), nullptr);
+        EXPECT_EQ (renderer.getShadowRecordCount(), step.castsShadows ? renderer.getCapabilities()->getCascadeCount (scene.getRenderSettings()) : 0);
+        EXPECT_EQ (renderer.usesShadowFilters(), step.soft && step.castsShadows);
 
-    render ({ 2.0f, 0.5f, 0.0f }, true, records, atlasSize);
-    EXPECT_EQ (records, 6);
-    EXPECT_GT (atlasSize, 0);
+        SceneRenderer fresh;
+        const auto reference = renderToImage (fresh, scene, 128);
+        ASSERT_TRUE (image.isValid() && reference.isValid());
+        EXPECT_EQ (countDifferences (image, reference), 0);
+    }
+
+    EXPECT_EQ (renderer.getShadowRecordCount(), 4);
 }
 
 TEST_P (SceneRendererTierTests, AtlasShadowMapsRenderOnlyWhenTheShadowsChange)
@@ -7774,6 +8145,8 @@ protected:
         float cameraDistance = 0.0f;
         bool moveModel = false;
         float orbitPitch = 0.0f; // the camera orbits at this pitch when not 0
+        EntityNode* knob = nullptr; // turned a little every frame when set, as by automation
+        Quaternion knobRotation;
         double time = 0.0;
         int frame = 0;
 
@@ -7859,6 +8232,9 @@ protected:
         {
             time += 1.0 / 120.0;
 
+            if (knob != nullptr)
+                knob->setRotation (knobRotation * Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.05f * static_cast<float> (++frame % 32)));
+
             if (moveModel)
                 modelRoot->setPosition (modelPosition + Vector3<float> (bounds.getSize().getX() * 0.01f * static_cast<float> (++frame % 2), 0.0f, 0.0f));
 
@@ -7890,8 +8266,9 @@ protected:
     };
 
     /** The wall milliseconds per frame of 120 queued frames after 30 warm-up ones, or -1 on a failure.
-        @p shadowRedraws receives the number of the timed frames that drew shadow maps. */
-    double timeFrames (LightShow& show, int width, int height, int& shadowRedraws)
+        @p shadowRedraws receives the number of the timed frames that drew shadow maps, and
+        @p casterDraws the shadow caster draws of the timed frames. */
+    double timeFrames (LightShow& show, int width, int height, int& shadowRedraws, int* casterDraws = nullptr)
     {
         SceneRenderer renderer;
 
@@ -7911,11 +8288,15 @@ protected:
             return -1.0;
 
         const auto redrawsBefore = renderer.getShadowMapRenderCount();
+        const auto drawsBefore = renderer.getShadowCasterDrawCount();
         const auto start = Time::getMillisecondCounterHiRes();
         if (! renderFrames (120))
             return -1.0;
 
         shadowRedraws = renderer.getShadowMapRenderCount() - redrawsBefore;
+        if (casterDraws != nullptr)
+            *casterDraws = renderer.getShadowCasterDrawCount() - drawsBefore;
+
         return (Time::getMillisecondCounterHiRes() - start) / 120.0;
     }
 };
@@ -7978,6 +8359,121 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
                 std::cout << label.toStdString() << ": " << String (milliseconds, 3).toStdString() << " ms, "
                           << shadowRedraws << " of 120 frames drew shadow maps" << std::endl;
             }
+        }
+    }
+}
+
+/** The Scene3D panel under automation: the demo's key light and pad spot plus two shadowed point
+    lights over the pads, while one knob turns every frame, outside the reach of every point and spot
+    light when one is (the test reports whether it is). Run it like DISABLED_LightShowFrameTimes, in
+    Debug too, with and without MTL_DEBUG_LAYER=1: it prints the frame time and the shadow caster
+    draws per frame.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_KnobAutomationFrameTimes)
+{
+    for (const auto tier : { RenderSettings::TierPreference::full, RenderSettings::TierPreference::raster })
+    {
+        for (const auto [keyShadows, nearestKnob] : { std::pair { true, false }, std::pair { false, false }, std::pair { true, true }, std::pair { false, true } })
+        {
+            LightShow show;
+            if (! show.build (0, 0.5f, 0.08f, tier, 1.6f))
+                GTEST_SKIP() << "mpc.glb is missing";
+
+            auto& root = *show.scene.getRoot();
+            auto& key = *root.findChild ("keyLight")->getNode<LightNode>();
+            key.contactShadows = true;
+            key.castsShadows = keyShadows;
+
+            // The demo's pad spot, from the front right
+            BoundingBox padBounds;
+            std::vector<EntityNode*> knobs;
+            const std::function<void (EntityNode&)> collect = [&] (EntityNode& entity)
+            {
+                for (const auto& child : entity.getChildren())
+                {
+                    if (child->getName().startsWith ("Pad."))
+                        padBounds.expand (child->computeWorldBounds());
+                    else if (child->getName().startsWith ("Knob"))
+                        knobs.push_back (child.get());
+
+                    collect (*child);
+                }
+            };
+            collect (*show.modelRoot);
+            ASSERT_FALSE (padBounds.isEmpty());
+            ASSERT_FALSE (knobs.empty());
+
+            const auto padCenter = padBounds.getCenter();
+            const auto fromDegrees = [] (float azimuth, float elevation)
+            {
+                const auto a = degreesToRadians (azimuth);
+                const auto e = degreesToRadians (elevation);
+                return Vector3<float> (std::cos (e) * std::cos (a), std::sin (e), std::cos (e) * std::sin (a));
+            };
+
+            auto padEntity = EntityNode::Ptr (new EntityNode ("padLight"));
+            auto& pad = padEntity->attach<LightNode> (LightNode::Type::spot);
+            pad.castsShadows = true;
+            pad.intensity = 10.0f;
+            pad.radius = 0.03f;
+            pad.range = 4.0f;
+            pad.innerConeAngle = 0.3f;
+            pad.outerConeAngle = 0.6f;
+            aimCamera (*padEntity, padCenter + fromDegrees (-45.0f, 45.0f) * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f });
+            root.addChild (padEntity);
+
+            // Two small shadowed point lights over the pads
+            const auto padSize = padBounds.getSize();
+            for (const auto side : { -0.25f, 0.25f })
+            {
+                auto entity = EntityNode::Ptr (new EntityNode ("padPoint"));
+                auto& point = entity->attach<LightNode> (LightNode::Type::point);
+                point.castsShadows = true;
+                point.intensity = 0.5f;
+                point.range = jmax (padSize.getX(), padSize.getZ()) * 0.3f;
+                entity->setPosition (padCenter + Vector3<float> (padSize.getX() * side, padSize.getY() + point.range * 0.5f, 0.0f));
+                root.addChild (entity);
+            }
+
+            // The knob farthest from the pads, which the spot light does not reach, or the nearest one
+            const auto byDistance = [&] (EntityNode* a, EntityNode* b)
+            {
+                return (a->computeWorldBounds().getCenter() - padCenter).length() < (b->computeWorldBounds().getCenter() - padCenter).length();
+            };
+            auto* knob = nearestKnob ? *std::min_element (knobs.begin(), knobs.end(), byDistance) : *std::max_element (knobs.begin(), knobs.end(), byDistance);
+
+            const auto knobBounds = knob->computeWorldBounds();
+            const auto padDirection = (padCenter - padEntity->getPosition()).normalized();
+            // The knob's bounding sphere against the spot's cone, widened by a margin over the guard band of its view
+            const auto reachesSpot = [&]
+            {
+                const auto toKnob = knobBounds.getCenter() - padEntity->getPosition();
+                const auto distance = toKnob.length();
+                const auto angle = std::acos (jlimit (-1.0f, 1.0f, toKnob.dotProduct (padDirection) / distance));
+                return angle - std::asin (jmin (1.0f, knobBounds.getRadius() / distance)) <= pad.outerConeAngle + 0.05f;
+            };
+
+            auto reachesPoint = false;
+            for (const auto& child : root.getChildren())
+                if (child->getName() == "padPoint")
+                    reachesPoint = reachesPoint || GpuSceneData::lightReachesBox (knobBounds, child->getPosition(), {}, child->getNode<LightNode>()->range, false, 0.0f);
+
+            EXPECT_TRUE (nearestKnob || ! reachesSpot());
+            EXPECT_TRUE (nearestKnob || ! reachesPoint);
+            show.knob = knob;
+            show.knobRotation = knob->getRotation();
+
+            auto shadowRedraws = 0, casterDraws = 0;
+            const auto milliseconds = timeFrames (show, 2560, 1600, shadowRedraws, &casterDraws);
+            EXPECT_GT (milliseconds, 0.0);
+
+            const auto label = String (tier == RenderSettings::TierPreference::full ? "full" : "raster")
+                             + (keyShadows ? ", key shadowed" : ", key unshadowed")
+                             + ", knob " + knob->getName() + (reachesSpot() || reachesPoint ? " inside a local light" : " outside every local light");
+            RecordProperty (label.toStdString(), String (milliseconds, 3).toStdString());
+            std::cout << label.toStdString() << ": " << String (milliseconds, 3).toStdString() << " ms, "
+                      << shadowRedraws << " of 120 frames drew shadow maps, "
+                      << String (casterDraws / 120.0, 1).toStdString() << " caster draws per frame" << std::endl;
         }
     }
 }
@@ -8077,7 +8573,47 @@ TEST_F (SceneRendererGLTests, ShadowedRegionIsFinite)
 {
     checkShadowedRegionIsFinite (RenderSettings::TierPreference::raster);
 }
+
+TEST_F (SceneRendererGLTests, RendersWithoutTheShadowCompareSampler)
+{
+    checkRendersWithoutTheShadowCompareSampler (RenderSettings::TierPreference::raster);
+}
 #endif
+
+TEST_F (SceneRendererGLTests, RendersWithoutTheShadowPipelines)
+{
+    checkRendersWithoutTheShadowPipelines (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ShadowMapsTheDeviceCannotCreateLeaveTheLightsUnshadowed)
+{
+    checkShadowMapsTheDeviceCannotCreateLeaveTheLightsUnshadowed (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ShadowedLightOutOfReachAllocatesNoAtlas)
+{
+    checkShadowedLightOutOfReachAllocatesNoAtlas (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, FailedShadowMapKeepsTheOtherOneCached)
+{
+    checkFailedShadowMapKeepsTheOtherOneCached (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, AtlasIsReleasedWhenNoLightNeedsIt)
+{
+    checkAtlasIsReleasedWhenNoLightNeedsIt (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, AtlasRedrawsOnlyTheViewsACasterReaches)
+{
+    checkAtlasRedrawsOnlyTheViewsACasterReaches (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, PartiallyRedrawnAtlasMatchesAFreshOne)
+{
+    checkPartiallyRedrawnAtlasMatchesAFreshOne (RenderSettings::TierPreference::raster);
+}
 
 // With GL storing another depth than the shaders compute (clip z remapped differently on the two
 // sides) the near shadow disappears or the whole ground darkens: these two catch either way

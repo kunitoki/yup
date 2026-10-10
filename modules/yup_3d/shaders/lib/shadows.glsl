@@ -470,8 +470,6 @@ float shadowsVisibility(GpuLight light, vec3 worldPosition, vec3 geometricNormal
 }
 
 #ifdef YUP_3D_CONTACT_SHADOWS
-#include "lib/lighting.glsl"
-
 // Contact shadows (full tier, the passes reading the scene depth): the pass defining
 // YUP_3D_CONTACT_SHADOWS declares the scene depth u_depth before including this file.
 

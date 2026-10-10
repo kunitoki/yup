@@ -122,6 +122,29 @@ TEST_F (ViewDataTests, ToneMappingOperatorMatchesShaderIndices)
     EXPECT_EQ (view.getBlock().clipPlanes[3], 2.0f);
 }
 
+TEST_F (ViewDataTests, ShadowNoiseFrameIndexWrapsOnTheCpu)
+{
+    // A float holds every index up to the 64 frame noise cycle exactly, however long the view has
+    // run: past 2^24 frames an unwrapped index would step by 2, and the rotation would freeze
+    Scene scene;
+    ViewData view;
+
+    const auto frameIndex = (uint64 (1) << 30) + 5;
+    view.update (scene, 100, 100, true, 16, frameIndex);
+    EXPECT_EQ (view.getBlock().clipPlanes[2], 5.0f);
+
+    // The jitter still follows the whole index
+    const auto jitter = ViewData::getJitter (frameIndex, 16);
+    EXPECT_FLOAT_EQ (view.getBlock().jitter[0], jitter.getX() * 2.0f / 100.0f);
+    EXPECT_FLOAT_EQ (view.getBlock().jitter[1], jitter.getY() * 2.0f / 100.0f);
+
+    view.update (scene, 100, 100, true, 16, 63);
+    EXPECT_EQ (view.getBlock().clipPlanes[2], 63.0f);
+
+    view.update (scene, 100, 100, true, 16, 64);
+    EXPECT_EQ (view.getBlock().clipPlanes[2], 0.0f);
+}
+
 /** CPU only: mirrors viewLinearDepth of lib/view.glsl on the ViewBlock the shaders read. */
 class ViewDataLinearDepthTests : public ::testing::Test
 {

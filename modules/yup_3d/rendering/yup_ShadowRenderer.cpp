@@ -88,6 +88,15 @@ Matrix4 getCubeFaceView (const Vector3<float>& position, int face) noexcept
     return Matrix4::lookAt (position, position + forward, up);
 }
 
+/** The side of the point and spot light atlas: the largest power of two within the shadow
+    resolution (twice it on full), so the atlas never exceeds the setting, and at most maxAtlasSize. */
+int getLocalAtlasSize (const RenderCapabilities& capabilities, const RenderSettings& settings) noexcept
+{
+    const auto resolution = RenderCapabilities::getShadowResolution (settings);
+    const auto full = capabilities.getTier() == RenderCapabilities::Tier::full;
+    return jmin (nextPowerOfTwo ((full ? 2 * resolution : resolution) + 1) / 2, maxAtlasSize);
+}
+
 /** The view of a spot light at @p position shining along @p direction. */
 Matrix4 getSpotView (const Vector3<float>& position, const Vector3<float>& direction) noexcept
 {
@@ -95,10 +104,47 @@ Matrix4 getSpotView (const Vector3<float>& position, const Vector3<float>& direc
     return Matrix4::lookAt (position, position + direction, up);
 }
 
+/** True unless every corner of @p box lies beyond one plane of the clip volume of @p viewProjection
+    (depth in [0, 1]). Tested in homogeneous clip space, so corners behind a perspective view stay
+    on their side of each plane.
+*/
+bool boxMeetsView (const Matrix4& viewProjection, const BoundingBox& box) noexcept
+{
+    const auto* m = viewProjection.getData();
+    auto outsideAll = 0x3f;
+
+    for (int corner = 0; corner < 8 && outsideAll != 0; ++corner)
+    {
+        const auto p = box.getCorner (corner);
+        const auto clip = [&] (int row)
+        {
+            return m[row] * p.getX() + m[row + 4] * p.getY() + m[row + 8] * p.getZ() + m[row + 12];
+        };
+
+        const auto x = clip (0), y = clip (1), z = clip (2), w = clip (3);
+        outsideAll &= (x < -w ? 1 : 0) | (x > w ? 2 : 0) | (y < -w ? 4 : 0) | (y > w ? 8 : 0) | (z < 0.0f ? 16 : 0) | (z > w ? 32 : 0);
+    }
+
+    return outsideAll == 0;
+}
+
+/** The view block that maps the plane z = 0 of the unit quad to the far plane (clip z = w), for
+    clearing a tile to depth 1 by drawing over it. */
+ViewData::Block makeTileClearBlock() noexcept
+{
+    ViewData::Block block {};
+    std::copy_n (Matrix4::identity().getData(), 16, block.view);
+    std::copy_n (Matrix4::identity().getData(), 16, block.projection);
+    block.projection[10] = 0.0f;
+    block.projection[14] = 1.0f;
+    std::copy_n (block.projection, 16, block.viewProjection);
+    return block;
+}
+
 } // namespace
 
 //==============================================================================
-/** One tile of the atlas and the light view rendered into it. */
+/** One tile of the atlas and the light view rendered into it, with the casters it draws. */
 struct ShadowRenderer::LocalView
 {
     int lightIndex = 0;
@@ -106,8 +152,13 @@ struct ShadowRenderer::LocalView
     int y = 0;
     int size = 0;
     Matrix4 viewProjection;
+    std::vector<std::pair<size_t, uint64>> casters; // an index into the opaque items, and its Inputs::casterSignatures entry
 
-    bool operator== (const LocalView&) const = default;
+    /** True when @p other drew the depth this view would draw, into the same tile. */
+    bool holdsSameDepth (const LocalView& other) const noexcept
+    {
+        return x == other.x && y == other.y && size == other.size && viewProjection == other.viewProjection && casters == other.casters;
+    }
 };
 
 /** What one sun cascade holds: its light transform, and the casters reaching it with their signatures. */
@@ -122,7 +173,6 @@ struct ShadowRenderer::CascadeState
 /** What the shadow textures hold: each map is drawn again only when its part changes. */
 struct ShadowRenderer::RenderedState
 {
-    uint64 signature = 0;
     uint64 globalSignature = 0;
     int resolution = 0;
     int numCascades = 0;
@@ -142,37 +192,81 @@ Result ShadowRenderer::prepare (const GpuDevice::Ptr& device)
     if (preparation)
         return *preparation;
 
-    preparation = geometry.prepare (device);
+    preparation = preparePipelines (device);
+
+    // Remembered: the frames render unshadowed from now on, see render()
     if (preparation->failed())
-        return *preparation;
-
-    for (const auto masked : { false, true })
     {
-        auto bundle = masked ? ShaderBundle::loadFromData (shadowPassMaskedShaderBundle, sizeof (shadowPassMaskedShaderBundle))
-                             : ShaderBundle::loadFromData (shadowPassShaderBundle, sizeof (shadowPassShaderBundle));
-        if (bundle.failed())
-            return *(preparation = Result::fail ("Unable to load the shadow shader bundle: " + bundle.getErrorMessage()));
+        opaquePipeline = nullptr;
+        maskedPipeline = nullptr;
+        tileClearPipeline = nullptr;
+        YUP_DBG ("ShadowRenderer: " << preparation->getErrorMessage() << ", the frames render without shadows");
+    }
 
-        // Depth only, pushed away from the light by the slope of each triangle. The body of a model
-        // can mix windings, so nothing is culled
+    return *preparation;
+}
+
+Result ShadowRenderer::preparePipelines (const GpuDevice::Ptr& device)
+{
+    if (pipelinesFailForTesting)
+        return Result::fail ("Unable to compile the shadow pipeline");
+
+    if (auto result = geometry.prepare (device); result.failed())
+        return result;
+
+    auto opaqueBundle = ShaderBundle::loadFromData (shadowPassShaderBundle, sizeof (shadowPassShaderBundle));
+    auto maskedBundle = ShaderBundle::loadFromData (shadowPassMaskedShaderBundle, sizeof (shadowPassMaskedShaderBundle));
+
+    for (const auto* bundle : { &opaqueBundle, &maskedBundle })
+        if (bundle->failed())
+            return Result::fail ("Unable to load the shadow shader bundle: " + bundle->getErrorMessage());
+
+    // Depth only, pushed away from the light by the slope of each triangle (the body of a model can
+    // mix windings, so nothing is culled); the tile clears are written over the whole tile instead
+    const auto compile = [&] (const ShaderBundle& bundle, bool tileClear, GpuPipeline::Ptr& pipeline)
+    {
         GpuPipelineOptions options;
         GeometryBindings::setPipelineGeometry (options, 0);
         options.cullMode = GpuCullMode::none;
         options.depthStencil.enabled = true;
         options.depthStencil.format = GpuTextureFormat::depth32float;
-        options.depthStencil.depthCompare = GpuCompareFunction::lessEqual;
+        options.depthStencil.depthCompare = tileClear ? GpuCompareFunction::always : GpuCompareFunction::lessEqual;
         options.depthStencil.depthWriteEnabled = true;
-        options.depthStencil.depthBias = 1;
-        options.depthStencil.depthBiasSlopeScale = 1.5f;
+        options.depthStencil.depthBias = tileClear ? 0 : 1;
+        options.depthStencil.depthBiasSlopeScale = tileClear ? 0.0f : 1.5f;
 
-        auto compiled = GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
+        auto compiled = GpuPipeline::compileFromBundle (device, bundle, options);
         if (compiled.failed())
-            return *(preparation = Result::fail ("Unable to compile the shadow pipeline: " + compiled.getErrorMessage()));
+            return Result::fail ("Unable to compile the shadow pipeline: " + compiled.getErrorMessage());
 
-        (masked ? maskedPipeline : opaquePipeline) = compiled.getValue();
-    }
+        pipeline = compiled.getValue();
+        return Result::ok();
+    };
 
-    return *preparation;
+    if (auto result = compile (opaqueBundle.getReference(), false, opaquePipeline); result.failed())
+        return result;
+
+    if (auto result = compile (maskedBundle.getReference(), false, maskedPipeline); result.failed())
+        return result;
+
+    if (auto result = compile (opaqueBundle.getReference(), true, tileClearPipeline); result.failed())
+        return result;
+
+    // A unit quad in the plane z = 0, drawn over a tile through makeTileClearBlock()
+    tileClearMaterial = new Material();
+    tileClearQuad = new Mesh ("SceneRenderer shadow tile clear");
+
+    std::vector<Mesh::Vertex> vertices (4);
+    vertices[0].position = { -1.0f, -1.0f, 0.0f };
+    vertices[1].position = { 1.0f, -1.0f, 0.0f };
+    vertices[2].position = { 1.0f, 1.0f, 0.0f };
+    vertices[3].position = { -1.0f, 1.0f, 0.0f };
+
+    for (auto& vertex : vertices)
+        vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+    tileClearQuad->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, tileClearMaterial);
+    return Result::ok();
 }
 
 GpuTexture::Ptr ShadowRenderer::getCascadeTexture() const noexcept
@@ -255,7 +349,14 @@ bool ShadowRenderer::prepareCascades (const GpuDevice::Ptr& device, int resoluti
     if (cascades != nullptr && cascades->getWidth() == size && hasLayers)
         return true;
 
+    // A resolution the device could not create is not asked for again until the settings change,
+    // whatever the layers (the scene fit's one too, so the sun's shadow does not come and go), and
+    // what the other maps hold is kept: render() releases a texture of another size
+    if (resolution == failedCascadeResolution)
+        return false;
+
     rendered.reset();
+    cascades = nullptr;
     layerTargets.clear();
 
     GpuTextureDesc desc (size, size, GpuTextureFormat::depth32float, true);
@@ -263,24 +364,24 @@ bool ShadowRenderer::prepareCascades (const GpuDevice::Ptr& device, int resoluti
     desc.depthOrArrayLayers = layers;
     desc.label = "SceneRenderer sun cascades";
 
-    cascades = GpuTexture::create (device, desc);
-    if (cascades == nullptr)
-        return false;
+    cascades = failTextures ? nullptr : GpuTexture::create (device, desc);
 
-    for (uint32_t layer = 0; layer < layers; ++layer)
+    for (uint32_t layer = 0; cascades != nullptr && layer < layers; ++layer)
     {
         auto target = GpuTarget::createFromTexture (device, cascades, GpuTextureViewDesc (0, layer));
         if (target == nullptr)
-        {
             cascades = nullptr;
-            layerTargets.clear();
-            return false;
-        }
-
-        layerTargets.push_back (std::move (target));
+        else
+            layerTargets.push_back (std::move (target));
     }
 
-    return true;
+    if (cascades != nullptr)
+        return true;
+
+    layerTargets.clear();
+    failedCascadeResolution = resolution;
+    YUP_DBG ("ShadowRenderer: unable to create " << numCascades << " sun cascades of " << resolution << " texels, the sun casts no shadow");
+    return false;
 }
 
 bool ShadowRenderer::prepareAtlas (const GpuDevice::Ptr& device, int size)
@@ -288,33 +389,36 @@ bool ShadowRenderer::prepareAtlas (const GpuDevice::Ptr& device, int size)
     if (atlas != nullptr && atlas->getWidth() == static_cast<uint32_t> (size))
         return true;
 
+    // A size the device could not create is not asked for again until the settings change, and
+    // what the cascades hold is kept: render() releases an atlas of another size
+    if (size == failedAtlasSize)
+        return false;
+
     rendered.reset();
+    atlas = nullptr;
     atlasTarget = nullptr;
 
     GpuTextureDesc desc (static_cast<uint32_t> (size), static_cast<uint32_t> (size), GpuTextureFormat::depth32float, true);
     desc.label = "SceneRenderer shadow atlas";
 
-    atlas = GpuTexture::create (device, desc);
+    atlas = failTextures ? nullptr : GpuTexture::create (device, desc);
     if (atlas != nullptr)
         atlasTarget = GpuTarget::createFromTexture (device, atlas, GpuTextureViewDesc (0, 0));
 
-    if (atlasTarget == nullptr)
-        atlas = nullptr;
+    if (atlasTarget != nullptr)
+        return true;
 
-    return atlas != nullptr;
+    atlas = nullptr;
+    failedAtlasSize = size;
+    YUP_DBG ("ShadowRenderer: unable to create a shadow atlas of " << size << " texels, point and spot lights cast no shadow");
+    return false;
 }
 
 //==============================================================================
-int ShadowRenderer::planLocalShadows (const Inputs& inputs, int firstRecord, GpuShadowData& out, std::vector<LocalView>& views)
+int ShadowRenderer::planLocalShadows (const Inputs& inputs, bool withAtlas, int firstRecord, GpuShadowData& out, std::vector<LocalView>& views)
 {
-    views.clear();
-    if (! inputs.enabled)
-        return 0;
-
     const auto full = inputs.capabilities.getTier() == RenderCapabilities::Tier::full;
-    const auto resolution = RenderCapabilities::getShadowResolution (inputs.settings);
-    // The largest power of two within the setting (twice the setting on full), so the atlas never exceeds it
-    const auto atlasSize = jmin (nextPowerOfTwo ((full ? 2 * resolution : resolution) + 1) / 2, maxAtlasSize);
+    const auto atlasSize = getLocalAtlasSize (inputs.capabilities, inputs.settings);
     const auto budget = jmin (GpuShadowData::maxRecords - firstRecord, full ? GpuShadowData::maxRecords : maxRasterLocalRecords);
 
     if (atlasLayout == nullptr || atlasLayout->getAtlasSize() != atlasSize)
@@ -331,10 +435,10 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, int firstRecord, Gpu
 
     const auto lights = inputs.drawList.getLights();
 
-    std::vector<BoundingBox> receivers;
-    std::vector<ShadowAtlas::Request> requests;
+    receivers.clear();
+    requests.clear();
 
-    for (size_t i = 0; i < lights.size(); ++i)
+    for (size_t i = 0; withAtlas && i < lights.size(); ++i)
     {
         const auto& light = lights[i];
         const auto request = atlasLayout->makeRequest (*light.node, static_cast<int> (i), (light.position - camera).length(), yFov, viewportHeight, halfHeight);
@@ -366,6 +470,7 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, int firstRecord, Gpu
     const auto tiles = atlasLayout->getTiles();
     const auto texel = 1.0f / static_cast<float> (atlasSize);
     auto used = 0;
+    size_t numViews = 0;
 
     for (const auto& allocation : atlasLayout->getAllocations())
     {
@@ -386,6 +491,8 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, int firstRecord, Gpu
         const auto guard = ShadowAtlas::getGuardAngle (allocation.size);
         const auto fov = (cube ? MathConstants<float>::halfPi : 2.0f * node.outerConeAngle) + guard;
         const auto lightProjection = Matrix4::perspective (fov, 1.0f, nearPlane, farPlane);
+        const auto isSpot = node.type == LightNode::Type::spot;
+        const auto cosOuter = std::cos (node.outerConeAngle);
 
         // The world size of a texel one unit of depth away from the light
         const auto texelPerDepth = 2.0f * std::tan (fov * 0.5f) / static_cast<float> (allocation.size);
@@ -410,12 +517,31 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, int firstRecord, Gpu
             record.params[3] = farPlane;
             record.contact[2] = static_cast<float> (allocation.faces);
 
-            views.push_back ({ allocation.lightIndex, tile.x, tile.y, tile.size, viewProjection });
+            // Reused in place, so the caster lists keep their storage from frame to frame
+            if (numViews == views.size())
+                views.emplace_back();
+
+            auto& view = views[numViews++];
+            view.lightIndex = allocation.lightIndex;
+            view.x = tile.x;
+            view.y = tile.y;
+            view.size = tile.size;
+            view.viewProjection = viewProjection;
+            view.casters.clear();
+
+            // A view draws the casters within the light's reach and its own frustum
+            for (size_t c = 0; c < casterBounds.size(); ++c)
+            {
+                const auto& bounds = casterBounds[c];
+                if (GpuSceneData::lightReachesBox (bounds, light.position, light.direction, farPlane, isSpot, cosOuter) && boxMeetsView (viewProjection, bounds))
+                    view.casters.emplace_back (c, c < inputs.casterSignatures.size() ? inputs.casterSignatures[c] : 0);
+            }
         }
 
         used += allocation.faces;
     }
 
+    views.resize (numViews);
     firstContactOnlyRecord = firstRecord + used;
 
     // Contact shadows (full tier): each light asking for them carries their settings in its first
@@ -425,7 +551,7 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, int firstRecord, Gpu
     if (! inputs.capabilities.isEnabled (RenderCapabilities::Feature::contactShadows, inputs.settings))
         return used;
 
-    std::vector<std::pair<int, size_t>> contactLights; // the tile size ranking a light, its index
+    contactLights.clear();
     for (size_t i = 0; i < lights.size(); ++i)
     {
         const auto& node = *lights[i].node;
@@ -466,7 +592,7 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, int firstRecord, Gpu
 }
 
 //==============================================================================
-void ShadowRenderer::drawCasters (GpuRenderPass& pass, const GpuDevice::Ptr& device, const SceneDrawList& drawList, const Matrix4& viewProjection, const CascadeState* cascade)
+void ShadowRenderer::drawCasters (GpuRenderPass& pass, const GpuDevice::Ptr& device, const SceneDrawList& drawList, const Matrix4& viewProjection, Span<const std::pair<size_t, uint64>> casters)
 {
     // lib/geometry.glsl transforms by projection * view: the whole light transform goes in the projection
     ViewData::Block block {};
@@ -476,10 +602,11 @@ void ShadowRenderer::drawCasters (GpuRenderPass& pass, const GpuDevice::Ptr& dev
     pass.setUniformBuffer (0, 0, &block, sizeof (block));
 
     GpuPipeline* currentPipeline = nullptr;
-
     const auto items = drawList.getOpaqueItems();
-    const auto drawItem = [&] (const SceneDrawList::DrawItem& item)
+
+    for (const auto& caster : casters)
     {
+        const auto& item = items[caster.first];
         const auto& pipeline = item.material->alphaMode == Material::AlphaMode::mask ? maskedPipeline : opaquePipeline;
         if (pipeline.get() != currentPipeline)
         {
@@ -488,19 +615,22 @@ void ShadowRenderer::drawCasters (GpuRenderPass& pass, const GpuDevice::Ptr& dev
         }
 
         geometry.draw (pass, device, item, 0);
-    };
+        ++numCasterDraws;
+    }
+}
 
-    // A cascade draws the casters reaching it, a tile of the atlas every one
-    if (cascade != nullptr)
-    {
-        for (const auto& caster : cascade->casters)
-            drawItem (items[caster.first]);
-    }
-    else
-    {
-        for (const auto& item : items)
-            drawItem (item);
-    }
+bool ShadowRenderer::clearTile (GpuRenderPass& pass, const GpuDevice::Ptr& device)
+{
+    // The quad covers the viewport of the tile, and the scissor keeps it inside
+    const auto block = makeTileClearBlock();
+    pass.setUniformBuffer (0, 0, &block, sizeof (block));
+    pass.setPipeline (tileClearPipeline);
+
+    SceneDrawList::DrawItem item;
+    item.mesh = tileClearQuad.get();
+    item.primitive = &tileClearQuad->getPrimitive (0);
+    item.material = tileClearMaterial.get();
+    return geometry.draw (pass, device, item, 0);
 }
 
 Result ShadowRenderer::renderCascade (const GpuDevice::Ptr& device, GpuFrame& frame, const SceneDrawList& drawList, int layer, const CascadeState& cascade)
@@ -509,7 +639,7 @@ Result ShadowRenderer::renderCascade (const GpuDevice::Ptr& device, GpuFrame& fr
     if (! pass.isValid())
         return Result::fail ("Unable to begin the shadow pass");
 
-    drawCasters (pass, device, drawList, cascade.viewProjection, &cascade);
+    drawCasters (pass, device, drawList, cascade.viewProjection, cascade.casters);
 
     if (! pass.finish())
         return Result::fail ("Unable to record the shadow pass");
@@ -517,19 +647,32 @@ Result ShadowRenderer::renderCascade (const GpuDevice::Ptr& device, GpuFrame& fr
     return Result::ok();
 }
 
-Result ShadowRenderer::renderAtlas (const GpuDevice::Ptr& device, GpuFrame& frame, const SceneDrawList& drawList, Span<const LocalView> views)
+Result ShadowRenderer::renderAtlas (const GpuDevice::Ptr& device, GpuFrame& frame, const SceneDrawList& drawList, Span<const LocalView> views, const std::vector<bool>& redraw, bool keepOtherTiles)
 {
-    // A load clear covers the whole attachment, not a tile: one pass clears the atlas once and
-    // draws every tile through its viewport and scissor
-    auto pass = atlasTarget->beginRenderPass (frame, GpuDepthStencilOptions (1.0f));
+    // One pass draws every tile through its viewport and scissor. A load clear covers the whole
+    // attachment, not a tile: when the other tiles are kept, each tile drawn again is cleared alone
+    GpuDepthStencilOptions options (1.0f);
+    if (keepOtherTiles)
+        options.depthLoadOp = GpuLoadOp::load;
+
+    auto pass = atlasTarget->beginRenderPass (frame, options);
     if (! pass.isValid())
         return Result::fail ("Unable to begin the shadow atlas pass");
 
-    for (const auto& view : views)
+    for (size_t i = 0; i < views.size(); ++i)
     {
+        if (! redraw[i])
+            continue;
+
+        const auto& view = views[i];
         pass.setViewport (static_cast<float> (view.x), static_cast<float> (view.y), static_cast<float> (view.size), static_cast<float> (view.size));
         pass.setScissorRect (view.x, view.y, view.size, view.size);
-        drawCasters (pass, device, drawList, view.viewProjection, nullptr);
+
+        // A tile left uncleared would keep the nearest of its old and new depths
+        if (keepOtherTiles && ! clearTile (pass, device))
+            return Result::fail ("Unable to clear a shadow atlas tile");
+
+        drawCasters (pass, device, drawList, view.viewProjection, view.casters);
     }
 
     if (! pass.finish())
@@ -545,17 +688,21 @@ Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, co
     numRecords = 0;
     firstContactOnlyRecord = GpuShadowData::maxRecords;
     shadowFilters = false;
+    failTextures = std::exchange (texturesFailForTesting, false);
 
     const auto lights = inputs.drawList.getLights();
     recordIndices.assign (lights.size(), -1);
 
-    if (opaquePipeline == nullptr || maskedPipeline == nullptr)
-        return Result::fail ("The shadow pipelines are not prepared");
-
-    const auto sun = inputs.enabled ? findShadowedSun (lights) : -1;
+    // Without the comparison sampler, or the pipelines prepare() could not create, nothing is shadowed
+    const auto enabled = inputs.enabled && opaquePipeline != nullptr && maskedPipeline != nullptr && tileClearPipeline != nullptr;
+    const auto sun = enabled ? findShadowedSun (lights) : -1;
     const auto resolution = RenderCapabilities::getShadowResolution (inputs.settings);
 
+    // The world bounds of the casters, which every map culls: frames without a shadow casting light never pay for them
     casterBounds.clear();
+    if (enabled && std::any_of (lights.begin(), lights.end(), [] (const SceneDrawList::Light& light) { return light.node->castsShadows; }))
+        for (const auto& item : inputs.drawList.getOpaqueItems())
+            casterBounds.push_back (item.primitive->bounds.transformedBy (item.world));
 
     ShadowCascades::Inputs cascadeInputs;
     std::array<ShadowCascades::Cascade, ShadowCascades::maxCascades> fitted;
@@ -571,12 +718,10 @@ Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, co
         const auto orthographic = cascadeInputs.projection.getData()[15] == 1.0f;
         cascadeInputs.count = orthographic ? 1 : inputs.capabilities.getCascadeCount (inputs.settings);
 
-        for (const auto& item : inputs.drawList.getOpaqueItems())
+        for (const auto& bounds : casterBounds)
         {
-            const auto bounds = item.primitive->bounds.transformedBy (item.world);
             cascadeInputs.casterBounds.expand (bounds);
             cascadeInputs.receiverBounds.expand (bounds);
-            casterBounds.push_back (bounds);
         }
 
         for (const auto& item : inputs.drawList.getBlendItems())
@@ -595,29 +740,25 @@ Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, co
             fitted[0] = sceneFit;
             numCascades = 1;
         }
-
-        if (numCascades > 0)
-            recordIndices[static_cast<size_t> (sun)] = 0;
     }
     else
     {
         sceneFitted = false;
     }
 
-    // Built in place, so the caster lists keep their storage from frame to frame
-    if (pending == nullptr)
-        pending = std::make_unique<RenderedState>();
+    // Cascades the device cannot create leave the sun unshadowed. The textures no light needs are
+    // released, and placeholders stand in for them
+    if (numCascades > 0 && ! prepareCascades (device, resolution, numCascades))
+    {
+        numCascades = 0;
+        sceneFitted = false;
+    }
 
-    auto& state = *pending;
-    state.signature = inputs.signature;
-    state.globalSignature = inputs.globalSignature;
-    state.resolution = resolution;
-    state.numCascades = numCascades;
-
-    const auto numLocalRecords = planLocalShadows (inputs, numCascades, out, state.localViews);
-
-    // The textures no light needs are released, and placeholders stand in for them
-    if (numCascades == 0)
+    if (numCascades > 0)
+    {
+        recordIndices[static_cast<size_t> (sun)] = 0;
+    }
+    else
     {
         cascades = nullptr;
         layerTargets.clear();
@@ -625,9 +766,33 @@ Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, co
         if (auto result = preparePlaceholder (device, frame, cascadePlaceholder, true); result.failed())
             return result;
     }
-    else if (! prepareCascades (device, resolution, numCascades))
+
+    // Built in place, so the caster lists keep their storage from frame to frame
+    if (pending == nullptr)
+        pending = std::make_unique<RenderedState>();
+
+    auto& state = *pending;
+    state.globalSignature = inputs.globalSignature;
+    state.resolution = resolution;
+    state.numCascades = numCascades;
+
+    if (! enabled)
+        state.localViews.clear();
+
+    // An atlas size the device could not create is planned without from the start
+    const auto withAtlas = getLocalAtlasSize (inputs.capabilities, inputs.settings) != failedAtlasSize;
+    auto numLocalRecords = enabled ? planLocalShadows (inputs, withAtlas, numCascades, out, state.localViews) : 0;
+
+    // An atlas the device cannot create leaves its lights unshadowed: planned again without it,
+    // they keep their contact shadows
+    if (! state.localViews.empty() && ! prepareAtlas (device, atlasLayout->getAtlasSize()))
     {
-        return Result::fail ("Unable to create the shadow cascades");
+        for (size_t i = 0; i < recordIndices.size(); ++i)
+            if (numCascades == 0 || static_cast<int> (i) != sun)
+                recordIndices[i] = -1;
+
+        std::fill (out.records + numCascades, out.records + numCascades + numLocalRecords, GpuShadowRecord {});
+        numLocalRecords = planLocalShadows (inputs, false, numCascades, out, state.localViews);
     }
 
     if (state.localViews.empty())
@@ -637,10 +802,6 @@ Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, co
 
         if (auto result = preparePlaceholder (device, frame, atlasPlaceholder, false); result.failed())
             return result;
-    }
-    else if (! prepareAtlas (device, atlasLayout->getAtlasSize()))
-    {
-        return Result::fail ("Unable to create the shadow atlas");
     }
 
     state.atlasSize = getAtlasSize();
@@ -724,13 +885,23 @@ Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, co
     for (size_t c = 0; c < static_cast<size_t> (numCascades); ++c)
         redrawCascade[c] = ! keepsCascades || rendered->cascades[c] != state.cascades[c];
 
-    const auto redrawAtlas = ! state.localViews.empty()
-                          && (rendered == nullptr
-                              || rendered->signature != state.signature
-                              || rendered->atlasSize != state.atlasSize
-                              || rendered->localViews != state.localViews);
+    // Each atlas view is drawn again unless its tile already holds the depth it would draw
+    const auto keepsAtlas = rendered != nullptr && rendered->atlasSize == state.atlasSize;
+    redrawViews.assign (state.localViews.size(), true);
+    size_t numRedrawnViews = 0;
 
-    if (! redrawAtlas && std::none_of (redrawCascade.begin(), redrawCascade.end(), [] (bool redraw) { return redraw; }))
+    for (size_t i = 0; i < state.localViews.size(); ++i)
+    {
+        const auto& view = state.localViews[i];
+        redrawViews[i] = ! keepsAtlas || std::none_of (rendered->localViews.begin(), rendered->localViews.end(), [&] (const LocalView& kept)
+        {
+            return kept.holdsSameDepth (view);
+        });
+
+        numRedrawnViews += redrawViews[i] ? 1 : 0;
+    }
+
+    if (numRedrawnViews == 0 && std::none_of (redrawCascade.begin(), redrawCascade.end(), [] (bool redraw) { return redraw; }))
         return Result::ok();
 
     // A failure leaves no rendered state: the next frame draws every map
@@ -748,9 +919,9 @@ Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, co
         ++numCascadeRenders[c];
     }
 
-    if (redrawAtlas)
+    if (numRedrawnViews > 0)
     {
-        if (auto result = renderAtlas (device, frame, inputs.drawList, state.localViews); result.failed())
+        if (auto result = renderAtlas (device, frame, inputs.drawList, state.localViews, redrawViews, numRedrawnViews < state.localViews.size()); result.failed())
         {
             rendered.reset();
             return result;

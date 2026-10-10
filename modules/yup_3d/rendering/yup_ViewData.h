@@ -36,6 +36,14 @@ class YUP_API ViewData
 {
 public:
     //==============================================================================
+    /** The view depth standing for an infinite far plane where a finite one is needed: how far the
+        light clusters and the sun shadows reach. */
+    static constexpr float infiniteFarDistance = 1000.0f;
+
+    /** The frames of the cycle of the shadow noise: clipPlanes.z holds the frame index modulo this. */
+    static constexpr uint64 noiseFrameCycle = 64;
+
+    //==============================================================================
     /** std140 mirror of ViewBlock in lib/view.glsl. */
     struct Block
     {
@@ -48,7 +56,7 @@ public:
         float cameraPosition[4];             ///< xyz position, w scene exposure.
         float viewport[4];                   ///< Width, height, 1 / width, 1 / height in pixels.
         float jitter[4];                     ///< xy jitter in NDC, zw previous jitter in NDC.
-        float clipPlanes[4];                 ///< zNear, zFar, frame index, tone mapping operator.
+        float clipPlanes[4];                 ///< zNear, zFar, frame index modulo noiseFrameCycle, tone mapping operator.
     };
 
     //==============================================================================
@@ -59,7 +67,8 @@ public:
         @param heightPx     The viewport height in pixels.
         @param jittered     True to apply the TAA sub-pixel jitter to the projection.
         @param taaSamples   The number of points in the jitter cycle.
-        @param frameIndex   The index of the frame, stored in clipPlanes.z.
+        @param frameIndex   The index of the frame, which picks the jitter; clipPlanes.z holds it
+                            modulo noiseFrameCycle, exact in a float however long the view runs.
     */
     void update (const Scene& scene, int widthPx, int heightPx, bool jittered, int taaSamples, uint64 frameIndex);
 

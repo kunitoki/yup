@@ -35,7 +35,7 @@ layout(set = 0, binding = 0) uniform ViewBlock
     vec4 cameraPosition;           // xyz, w = exposure
     vec4 viewport;                 // width, height, 1/width, 1/height
     vec4 jitter;                   // xy current, zw previous, in NDC units
-    vec4 clipPlanes;               // near, far, frame index, tone mapping operator (0 Reinhard, 1 ACES, 2 AgX)
+    vec4 clipPlanes;               // near, far, frame index modulo 64, tone mapping operator (0 Reinhard, 1 ACES, 2 AgX)
 } view;
 
 #ifdef YUP_3D_CONTACT_SHADOWS

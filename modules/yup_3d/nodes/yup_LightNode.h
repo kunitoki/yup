@@ -64,8 +64,8 @@ public:
     bool castsShadows = false;                                      ///< True for the light to cast shadows, on both tiers: cascaded shadow maps for the first shadowed directional light, views in a shadow atlas for point and spot lights (the most important ones within the shadow budget of the tier), see SceneRenderer.
 
     /** A multiplier on the automatic depth bias of the shadow maps, which follows their texel size.
-        Raise it when lit surfaces show shadow acne, lower it when shadows detach from their casters;
-        0 disables the automatic bias. Both tiers.
+        Raise it when lit surfaces show shadow acne, lower it when shadows detach from their casters.
+        0 removes the receiver depth offset; the normal offset and the caster slope bias remain. Both tiers.
     */
     float shadowBias = 1.0f;
 

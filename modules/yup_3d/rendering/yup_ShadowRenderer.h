@@ -50,9 +50,9 @@ namespace yup
     (ShadowAtlas::getGuardAngle()) beyond its field of view, from max (0.01, LightNode::radius) to
     the effective range of the light. Lights take tiles from the most to the least important, as the
     atlas serves them, while their views fit the shadow records left after the cascades, at most 16
-    on raster: a light whose views do not all fit is left unshadowed. Every tile is rendered in one
-    depth-only pass, which clears the whole atlas once. The scene fit takes one record where the
-    cascades take the tier's cascade count, so switching between them changes how many records are left.
+    on raster: a light whose views do not all fit is left unshadowed. The tiles drawn in a frame
+    share one depth-only pass. The scene fit takes one record where the cascades take the tier's
+    cascade count, so switching between them changes how many records are left.
 
     When the tier enables contact shadows (RenderCapabilities::Feature::contactShadows, filterInfo
     flag 1), each light with LightNode::contactShadows that is not dark carries its march distance
@@ -66,9 +66,11 @@ namespace yup
     while it fits, and released when no light needs it, a 1x1 placeholder standing in for it. The
     maps are rendered again only when what they hold changes: a cascade when the shadow casting
     directional lights or the shadow settings (Inputs::globalSignature), its matrix, or the casters
-    reaching it and their signatures (Inputs::casterSignatures) change; the atlas when the casters,
-    the lights, the settings (Inputs::signature), the tiles or the view matrices change. invalidate()
-    forgets every map, for frames the GPU did not execute.
+    reaching it and their signatures (Inputs::casterSignatures) change; an atlas view when its tile,
+    its matrix, or the casters within its light's reach (GpuSceneData::lightReachesBox()) and its
+    frustum and their signatures change. Each view draws only those casters, and a view drawn
+    again while other tiles are kept is first cleared alone (a quad at the far plane, scissored to
+    its tile). invalidate() forgets every map, for frames the GPU did not execute.
 
     @internal
 */
@@ -83,8 +85,7 @@ public:
         const ViewData& view;                   ///< The camera the cascades are fitted to.
         const RenderCapabilities& capabilities; ///< The tier: its cascade count and temporal anti-aliasing.
         const RenderSettings& settings;         ///< The shadow settings.
-        uint64 signature = 0;                   ///< A hash of what the maps depend on besides the cascade fit: the casters, the shadow casting lights and the settings.
-        uint64 globalSignature = 0;             ///< The part of signature every cascade depends on: the shadow casting directional lights and the settings.
+        uint64 globalSignature = 0;             ///< What every cascade depends on besides its fit and casters: the shadow casting directional lights and the settings.
         Span<const uint64> casterSignatures;    ///< One hash per opaque item of drawList, in order: what it draws into a shadow map. Without one per item every map is drawn every frame.
         bool enabled = true;                    ///< False when the shadow comparison sampler is missing: nothing is shadowed.
     };
@@ -97,14 +98,23 @@ public:
     ~ShadowRenderer();
 
     //==============================================================================
-    /** Compiles the opaque and masked shadow pipelines once, remembering a failure instead of retrying every frame. */
+    /** Compiles the shadow pipelines once, remembering a failure instead of retrying every frame.
+        After a failure, logged once, render() writes no record, as without the comparison sampler
+        (Inputs::enabled): the frames render without shadow maps and without contact shadows.
+    */
     Result prepare (const GpuDevice::Ptr& device);
 
     /** Renders every shadow map the frame needs into @p frame, unless the maps it holds still fit,
         and writes the shadow records of the frame into @p out.
 
-        @returns A failure when the cascade texture or the atlas cannot be created or a shadow pass
-                 cannot be recorded; the frame must then be abandoned.
+        A cascade texture or an atlas the device cannot create leaves the lights that needed it
+        without a shadow map, logged once: their records are -1, or contact shadow only records, so
+        their contact shadows stay. The same size (for the cascades, the same resolution, the scene
+        fit's single layer included) is not asked for again until the settings change it, and the
+        other map keeps what it holds.
+
+        @returns A failure when a placeholder cannot be created or a shadow pass cannot be
+                 recorded; the frame must then be abandoned.
     */
     Result render (const GpuDevice::Ptr& device, GpuFrame& frame, const Inputs& inputs, GpuShadowData& out);
 
@@ -137,6 +147,15 @@ public:
     /** @internal The number of render() calls that drew sun cascade @p cascade, for tests. */
     int getNumCascadeRenders (int cascade) const noexcept;
 
+    /** @internal The number of casters drawn into shadow maps since the renderer was created, for tests and benchmarks. */
+    int getNumCasterDraws() const noexcept { return numCasterDraws; }
+
+    /** @internal Test hook: from the next prepare() on, the pipelines fail to compile. */
+    void failPipelinesForTesting() noexcept { pipelinesFailForTesting = true; }
+
+    /** @internal Test hook: the cascade texture and the atlas the next render() creates fail to create. */
+    void failTexturesForTesting() noexcept { texturesFailForTesting = true; }
+
     /** @internal The shadow records the last render() wrote, for tests. */
     int getNumRecords() const noexcept { return numRecords; }
 
@@ -159,17 +178,22 @@ private:
         bool cleared = false;
     };
 
+    Result preparePipelines (const GpuDevice::Ptr& device);
     Result preparePlaceholder (const GpuDevice::Ptr& device, GpuFrame& frame, Placeholder& placeholder, bool array);
     bool prepareCascades (const GpuDevice::Ptr& device, int resolution, int numCascades);
     bool prepareAtlas (const GpuDevice::Ptr& device, int size);
-    int planLocalShadows (const Inputs& inputs, int firstRecord, GpuShadowData& out, std::vector<LocalView>& views);
-    void drawCasters (GpuRenderPass& pass, const GpuDevice::Ptr& device, const SceneDrawList& drawList, const Matrix4& viewProjection, const CascadeState* cascade);
+    int planLocalShadows (const Inputs& inputs, bool withAtlas, int firstRecord, GpuShadowData& out, std::vector<LocalView>& views);
+    void drawCasters (GpuRenderPass& pass, const GpuDevice::Ptr& device, const SceneDrawList& drawList, const Matrix4& viewProjection, Span<const std::pair<size_t, uint64>> casters);
+    bool clearTile (GpuRenderPass& pass, const GpuDevice::Ptr& device);
     Result renderCascade (const GpuDevice::Ptr& device, GpuFrame& frame, const SceneDrawList& drawList, int layer, const CascadeState& cascade);
-    Result renderAtlas (const GpuDevice::Ptr& device, GpuFrame& frame, const SceneDrawList& drawList, Span<const LocalView> views);
+    Result renderAtlas (const GpuDevice::Ptr& device, GpuFrame& frame, const SceneDrawList& drawList, Span<const LocalView> views, const std::vector<bool>& redraw, bool keepOtherTiles);
 
     GeometryBindings geometry;
     GpuPipeline::Ptr opaquePipeline;
     GpuPipeline::Ptr maskedPipeline;
+    GpuPipeline::Ptr tileClearPipeline; // draws tileClearQuad at depth 1 over a tile, for redrawing it alone
+    Mesh::Ptr tileClearQuad;
+    Material::Ptr tileClearMaterial;
     std::optional<Result> preparation;
     GpuTexture::Ptr cascades;
     std::vector<GpuTarget::Ptr> layerTargets;
@@ -182,12 +206,22 @@ private:
     std::unique_ptr<RenderedState> pending; // the state render() builds, kept so its lists keep their storage
     std::vector<int> recordIndices;
     std::vector<BoundingBox> casterBounds; // the world bounds of each opaque item of the last render()
+    std::vector<BoundingBox> receivers;    // reused by planLocalShadows(), as the lists below
+    std::vector<ShadowAtlas::Request> requests;
+    std::vector<std::pair<int, size_t>> contactLights; // the tile size ranking a light, its index
+    std::vector<bool> redrawViews;         // for each atlas view of the frame, whether it is drawn again
+    int failedCascadeResolution = 0;       // the cascade resolution the device could not create
+    int failedAtlasSize = 0;               // the atlas size the device could not create
     bool sceneFitted = false;              // the last render() fitted the sun's map to the scene, not the view
     int numRenderedFrames = 0;
     std::array<int, ShadowCascades::maxCascades> numCascadeRenders {};
+    int numCasterDraws = 0;
     int numRecords = 0;
     int firstContactOnlyRecord = GpuShadowData::maxRecords; // the records from here on have no map
     bool shadowFilters = false;            // see needsShadowFilters()
+    bool pipelinesFailForTesting = false;
+    bool texturesFailForTesting = false;
+    bool failTextures = false;             // texturesFailForTesting, for the current render()
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShadowRenderer)
 };

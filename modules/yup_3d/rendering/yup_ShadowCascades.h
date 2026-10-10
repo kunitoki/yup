@@ -63,8 +63,8 @@ public:
     /** The largest number of cascades of one light. */
     static constexpr int maxCascades = 4;
 
-    /** The view depth shadows reach with an infinite far plane, the cap LightClusters uses too. */
-    static constexpr float maxShadowDistance = 1000.0f;
+    /** The view depth shadows reach with an infinite far plane, ViewData::infiniteFarDistance. */
+    static constexpr float maxShadowDistance = ViewData::infiniteFarDistance;
 
     //==============================================================================
     /** One cascade: the light projection of one slice of the view frustum. */

@@ -109,7 +109,7 @@ void ViewData::update (const Scene& scene, int widthPx, int heightPx, bool jitte
 
     block.clipPlanes[0] = camera->zNear;
     block.clipPlanes[1] = camera->zFar;
-    block.clipPlanes[2] = static_cast<float> (frameIndex);
+    block.clipPlanes[2] = static_cast<float> (frameIndex % noiseFrameCycle);
     block.clipPlanes[3] = getToneMappingOperator (scene.getToneMapping());
 }
 

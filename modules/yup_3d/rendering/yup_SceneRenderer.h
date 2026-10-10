@@ -169,6 +169,11 @@ public:
     */
     int getShadowCascadeRenderCount (int cascade) const noexcept;
 
+    /** @internal The number of shadow casters drawn into shadow maps since the renderer set up its
+        device, for tests and benchmarks: the draws the shadow maps cost.
+    */
+    int getShadowCasterDrawCount() const noexcept;
+
     /** @internal The shadow records the last frame wrote, the sun cascades and the views of the
         point and spot lights, plus one record per light with contact shadows but no shadow map, for
         tests: the tier's record budget bounds them.
@@ -212,6 +217,19 @@ public:
     */
     void failShadowCompareSamplerForTesting() noexcept { failShadowCompareSampler = true; }
 
+    /** @internal Test hook, not for production use: the shadow pipelines of this renderer fail to
+        compile, as if the device rejected them. Call it before the first render. Frames still
+        render, without shadow maps and without contact shadows.
+    */
+    void failShadowPipelinesForTesting() noexcept { failShadowPipelines = true; }
+
+    /** @internal Test hook, not for production use: the shadow maps the next render creates (the
+        sun cascades and the point and spot light atlas) fail to create, as if the device ran out of
+        memory. That frame and the next ones render without those shadow maps, the lights keeping
+        their contact shadows, until the shadow settings change their size.
+    */
+    void failShadowMapsForTesting() noexcept { failShadowMaps = true; }
+
     //==============================================================================
     /** Changes the number of MSAA samples per pixel of the raster tier.
 
@@ -236,6 +254,8 @@ private:
     int sampleCount = 4;
     bool failAreaLightTables = false;
     bool failShadowCompareSampler = false;
+    bool failShadowPipelines = false;
+    bool failShadowMaps = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneRenderer)
 };

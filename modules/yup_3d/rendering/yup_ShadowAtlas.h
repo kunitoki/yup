@@ -174,6 +174,7 @@ private:
     int maxTileSize = 0;
 
     std::vector<std::vector<Tile>> freeNodes; // per level, level 0 = the whole atlas; the back is taken first
+    std::vector<Request> ordered; // the requests of the last allocate(), kept for their storage
     std::vector<Allocation> allocations;
     std::vector<Tile> tiles;
 

@@ -35,8 +35,8 @@ inline constexpr float studioKeyElevationDegrees = 28.0f;
 
 //==============================================================================
 /** A photographic studio to light the device: a large, low key soft box behind on the left, a
-    dim fill in front on the right and a rim strip behind, over a dark floor, with dim walls and
-    ceiling.
+    dim fill in front on the right, a low fill on the right side, which the key light never
+    reaches, and a rim strip behind, over a dark floor, with dim walls and ceiling.
 
     The ceiling stays dim on purpose: seen from the top, the flat panel reflects it, and a bright
     overhead light would wash the print out.
@@ -54,10 +54,11 @@ inline yup::EnvironmentMap::Ptr createStudioEnvironment()
         yup::Vector3<float> radiance;
     };
 
-    static constexpr std::array<SoftBox, 3> boxes { {
+    static constexpr std::array<SoftBox, 4> boxes { {
         { studioKeyAzimuthDegrees, studioKeyElevationDegrees, 28.0f, 14.0f, { 8.0f, 7.7f, 7.2f } }, // Key, behind left
         { -40.0f, 40.0f, 22.0f, 14.0f, { 1.8f, 1.85f, 1.9f } },                                     // Fill, front right
         { 180.0f, 32.0f, 45.0f, 6.0f, { 2.6f, 2.6f, 2.6f } },                                       // Rim strip, behind
+        { -100.0f, 15.0f, 20.0f, 12.0f, { 4.0f, 4.0f, 4.0f } },                                     // Low fill, right side
     } };
 
     return new yup::EnvironmentMap ([] (const yup::Vector3<float>& direction)

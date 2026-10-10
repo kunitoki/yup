@@ -126,10 +126,8 @@ bool RenderCapabilities::isEnabled (Feature feature, const RenderSettings& setti
 
 int RenderCapabilities::getCascadeCount (const RenderSettings& settings) const noexcept
 {
-    constexpr int maxCascades = 4;
-
-    const auto tierDefault = tier == Tier::full ? maxCascades : defaultRasterCascades;
-    return jlimit (1, maxCascades, settings.sunCascades != 0 ? settings.sunCascades : tierDefault);
+    const auto tierDefault = tier == Tier::full ? ShadowCascades::maxCascades : defaultRasterCascades;
+    return jlimit (1, ShadowCascades::maxCascades, settings.sunCascades != 0 ? settings.sunCascades : tierDefault);
 }
 
 int RenderCapabilities::getShadowResolution (const RenderSettings& settings) noexcept

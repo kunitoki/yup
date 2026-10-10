@@ -139,11 +139,13 @@ struct SceneRenderer::Impl
     {
     }
 
-    /** Creates the shadow and G-buffer pipelines and the area light tables once, remembering a failure instead of retrying every frame. */
+    /** Creates the shadow and G-buffer pipelines and the area light tables once, remembering a failure instead of retrying every frame.
+        Only a G-buffer failure fails the frame: without shadow pipelines or area light tables the frames render without them.
+    */
     Result prepareResources (bool full, bool failAreaLightTables)
     {
-        if (auto result = shadowRenderer.prepare (device); result.failed())
-            return result;
+        // A failure, logged by the shadow renderer, leaves the frames unshadowed
+        shadowRenderer.prepare (device);
 
         if (! ltcTablesAttempted)
         {
@@ -342,10 +344,9 @@ struct SceneRenderer::Impl
 
     /** Adds one signature per draw item of @p items, summed: the lists are sorted by state and view
         distance, so a camera move or a transform can reorder them without anything else changing.
-        Each item's signature is also appended to @p itemSignatures, when given.
     */
     template <class AddItem>
-    static void addItemSignatures (FrameSignature& signature, Span<const SceneDrawList::DrawItem> items, AddItem&& addItem, std::vector<uint64>* itemSignatures = nullptr)
+    static void addItemSignatures (FrameSignature& signature, Span<const SceneDrawList::DrawItem> items, AddItem&& addItem)
     {
         uint64 sum = 0;
 
@@ -354,9 +355,6 @@ struct SceneRenderer::Impl
             FrameSignature itemSignature;
             addItem (itemSignature, item);
             sum += itemSignature.getFinalized();
-
-            if (itemSignatures != nullptr)
-                itemSignatures->push_back (itemSignature.getFinalized());
         }
 
         signature.addBits (items.size());
@@ -434,22 +432,15 @@ struct SceneRenderer::Impl
         return signature.get();
     }
 
-    /** What the shadow maps depend on besides the cascade fit, which ShadowRenderer compares itself. */
-    struct ShadowSignatures
-    {
-        uint64 whole = 0;  // Everything: the global part, the shadow casting point and spot lights and the casters
-        uint64 global = 0; // What every sun cascade depends on: the shadow settings of the tier and the shadow casting directional lights
-    };
-
-    /** The shadow signatures of the frame: the shadow settings of the tier, the shadow casting lights
-        and the casters (transforms, meshes and what alpha masking reads). Fills
-        shadowCasterSignatures with the signature of each caster, in the order of the opaque items.
-        The sun cascades only depend on the directional lights; the point and spot lights only
-        reach the atlas, through the whole signature.
+    /** What every sun cascade depends on besides its fit and casters, which ShadowRenderer compares
+        itself: the shadow settings of the tier and the shadow casting directional lights. Fills
+        shadowCasterSignatures with the signature of each caster (transform, mesh and what alpha
+        masking reads), in the order of the opaque items. The point and spot lights reach the atlas
+        through the matrices of their views.
     */
-    ShadowSignatures getShadowSignatures (const RenderSettings& settings)
+    uint64 getShadowSignature (const RenderSettings& settings)
     {
-        FrameSignature global, local;
+        FrameSignature global;
         global.addBits (static_cast<uint64> (capabilities->getTier()));
         global.addBits (static_cast<uint64> (capabilities->getCascadeCount (settings)));
         global.addBits (static_cast<uint64> (RenderCapabilities::getShadowResolution (settings)));
@@ -457,24 +448,21 @@ struct SceneRenderer::Impl
         for (const auto& light : drawList.getLights())
         {
             const auto& node = *light.node;
-            if (! node.castsShadows)
+            if (! node.castsShadows || node.type != LightNode::Type::directional)
                 continue;
 
-            auto& signature = node.type == LightNode::Type::directional ? global : local;
-            signature.addBits (static_cast<uint64> (node.type));
-            signature.addBits (GpuSceneData::isDark (node) ? 1u : 0u);
-            signature.addVector (light.position);
-            signature.addVector (light.direction);
+            global.addBits (static_cast<uint64> (node.type));
+            global.addBits (GpuSceneData::isDark (node) ? 1u : 0u);
+            global.addVector (light.position);
+            global.addVector (light.direction);
         }
 
         // The casters: the opaque and masked items
-        FrameSignature whole;
-        whole.addBits (global.get());
-        whole.addBits (local.get());
         shadowCasterSignatures.clear();
 
-        addItemSignatures (whole, drawList.getOpaqueItems(), [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
+        for (const auto& item : drawList.getOpaqueItems())
         {
+            FrameSignature itemSignature;
             itemSignature.addMatrix (item.world);
             itemSignature.addPointer (item.mesh);
             itemSignature.addBits (static_cast<uint64> (item.primitiveIndex));
@@ -489,9 +477,11 @@ struct SceneRenderer::Impl
                 itemSignature.addPointer (material.baseColorTexture.get());
                 itemSignature.addBits (material.baseColorTexture != nullptr ? material.baseColorTexture->getChangeCount() : 0u);
             }
-        }, &shadowCasterSignatures);
 
-        return { whole.get(), global.get() };
+            shadowCasterSignatures.push_back (itemSignature.getFinalized());
+        }
+
+        return global.get();
     }
 
     /** Full tier: compares this frame with the previous one. A new size, tier or TAA sample count
@@ -547,7 +537,7 @@ struct SceneRenderer::Impl
     ViewData viewData;
     SceneDrawList drawList;
     ShadowRenderer shadowRenderer;
-    std::vector<uint64> shadowCasterSignatures; // One per opaque item of drawList, see getShadowSignatures()
+    std::vector<uint64> shadowCasterSignatures; // One per opaque item of drawList, see getShadowSignature()
     GpuShadowData shadowData {};                // The shadow records of the last frame
     LightClusters lightClusters;
     GBufferPass gbufferPass;
@@ -670,6 +660,11 @@ int SceneRenderer::getShadowMapRenderCount() const noexcept
 int SceneRenderer::getShadowCascadeRenderCount (int cascade) const noexcept
 {
     return impl != nullptr ? impl->shadowRenderer.getNumCascadeRenders (cascade) : 0;
+}
+
+int SceneRenderer::getShadowCasterDrawCount() const noexcept
+{
+    return impl != nullptr ? impl->shadowRenderer.getNumCasterDraws() : 0;
 }
 
 GpuShadowData SceneRenderer::getShadowData() const noexcept
@@ -810,6 +805,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     // A light with a radius selects the area light variants of the shading passes. Only a change
     // of the lights switches variants, and the restarting signature hashes every light radius
     const auto areaLights = LightingInputs::hasAreaLights (drawList.getLights());
+    if (failShadowPipelines)
+        impl->shadowRenderer.failPipelinesForTesting();
+
     if (auto result = impl->prepareResources (full, failAreaLightTables); result.failed())
         return failFrame (result.getErrorMessage());
 
@@ -831,15 +829,16 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (failShadowCompareSampler)
         impl->frameResources.failShadowCompareSamplerForTesting();
 
+    if (std::exchange (failShadowMaps, false))
+        impl->shadowRenderer.failTexturesForTesting();
+
     const auto* samplers = impl->frameResources.getSamplers();
     if (samplers == nullptr)
         return failFrame ("Unable to create the shared samplers");
 
     // Without the comparison sampler nothing can read a shadow map: the frame renders unshadowed
     ShadowRenderer::Inputs shadowInputs { drawList, impl->viewData, *impl->capabilities, settings };
-    const auto shadowSignatures = impl->getShadowSignatures (settings);
-    shadowInputs.signature = shadowSignatures.whole;
-    shadowInputs.globalSignature = shadowSignatures.global;
+    shadowInputs.globalSignature = impl->getShadowSignature (settings);
     shadowInputs.casterSignatures = impl->shadowCasterSignatures;
     shadowInputs.enabled = samplers->shadowCompare != nullptr;
 

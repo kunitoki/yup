@@ -362,11 +362,21 @@ objects, on both tiers:
   ask for shadows, the most important ones get them and the others light without
   shadows.
 
-Shadow maps are drawn again only when something they show changes: the casters,
-the shadow casting lights or the shadow settings. Camera moves redraw the
-cascades, and the point and spot light views when a light's size on screen
-changes enough to resize them. A camera orbiting a compact scene usually redraws
-no shadow at all.
+Shadow maps are kept on both tiers until something they show changes: the
+casters, the shadow casting lights or the shadow settings. Each cascade and each
+point or spot light view is drawn again on its own, only when a caster it reaches
+changes, so an object moving outside a light's reach costs that light nothing.
+Camera moves redraw the cascades, and the point and spot light views when a
+light's size on screen changes enough to resize them. A camera orbiting a compact
+scene usually redraws no shadow at all. The renderer cannot see vertices edited
+in place in a `Mesh`: after such edits call `getRenderer().restartAccumulation()`,
+on either tier, which also redraws every shadow map.
+
+A shadow map the device cannot create, such as a large atlas on a device short
+of memory, leaves the lights that need it without shadow maps instead of failing
+the frame (their contact shadows stay); the renderer does not ask for that size
+again until the shadow settings change it. A device that cannot compile the
+shadow pipelines renders every frame without shadows, contact shadows included.
 
 ```cpp
 // A sun from above, slightly soft, with contact shadows on the full tier
@@ -407,7 +417,8 @@ them smoother, see [Temporal anti-aliasing](#temporal-anti-aliasing).
 keeps lit surfaces from shadowing themselves. The default, 1, suits most scenes.
 Raise it when lit surfaces show stripes or dots of shadow (shadow acne); lower
 it when shadows look detached from the objects casting them. 0 removes the
-offset.
+depth offset of the surfaces receiving the shadow; the offset along their normal
+and the slope bias of the casters remain.
 
 **Contact shadows.** Set `LightNode::contactShadows` to add short shadows where
 objects meet, finer than a shadow map can show, such as under buttons or knobs
