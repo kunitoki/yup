@@ -317,7 +317,11 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         if (category == AVAudioSessionCategoryPlayAndRecord)
         {
             options |= AVAudioSessionCategoryOptionDefaultToSpeaker
+#if YUP_IOS_API_VERSION_CAN_BE_BUILT(26, 0)
+                     | AVAudioSessionCategoryOptionAllowBluetoothHFP
+#else
                      | AVAudioSessionCategoryOptionAllowBluetooth
+#endif
                      | AVAudioSessionCategoryOptionAllowAirPlay;
 
             if (@available (iOS 10.0, *))

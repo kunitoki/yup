@@ -54,7 +54,6 @@ set (target_name yup_tests)
 set (target_version "2.0.0")
 set (target_console OFF)
 set (target_gtest_modules "")
-set (target_preloaded "")
 set (target_modules
     yup_core
     yup_simd
@@ -109,15 +108,57 @@ if (NOT YUP_PLATFORM_EMSCRIPTEN)
     endif()
 else()
     set (target_console ON)
-
-    file (GLOB_RECURSE data_files "${CMAKE_CURRENT_LIST_DIR}/data/*")
-    foreach (data_file ${data_files})
-        file (RELATIVE_PATH rel_path "${CMAKE_CURRENT_LIST_DIR}" "${data_file}")
-        list (APPEND target_preloaded "${data_file}@${rel_path}")
-    endforeach()
 endif()
 
-if (YUP_PLATFORM_MAC) # OR YUP_PLATFORM_WINDOWS)
+set (target_bundle_resources "")
+if (YUP_PLATFORM_MOBILE OR YUP_PLATFORM_EMSCRIPTEN)
+    list (APPEND target_bundle_resources
+        "${CMAKE_CURRENT_LIST_DIR}/data@data"
+        "${CMAKE_CURRENT_LIST_DIR}/../examples/graphics/data/synths@data/synths")
+endif()
+
+# ==== Restrict the modules under test (used by the smart CI workflow).
+#      Empty builds every module above; otherwise only the listed modules have
+#      their tests compiled, linking just what they and the test runner need.
+set (YUP_TEST_MODULES "" CACHE STRING "Semicolon-separated list of modules to test; empty builds all")
+
+set (target_test_modules ${target_modules})
+if (YUP_TEST_MODULES)
+    set (platform_modules ${target_modules})
+
+    set (target_test_modules "")
+    foreach (test_module IN LISTS YUP_TEST_MODULES)
+        if (test_module IN_LIST platform_modules)
+            list (APPEND target_test_modules ${test_module})
+        elseif (test_module)
+            _yup_message (WARNING "Skipping YUP_TEST_MODULES entry '${test_module}' (not available on this platform)")
+        endif()
+    endforeach()
+
+    # The test runner needs the application layer; optional and test deps are
+    # linked so guarded features and cross-module tests compile in.
+    if (YUP_PLATFORM_EMSCRIPTEN)
+        set (target_modules yup_events)
+    else()
+        set (target_modules yup_gui)
+    endif()
+
+    foreach (test_module IN LISTS target_test_modules)
+        list (APPEND target_modules ${test_module})
+
+        get_target_property (optional_modules ${test_module} YUP_MODULE_OPTIONAL_DEPENDENCIES)
+        get_target_property (test_dependency_modules ${test_module} YUP_MODULE_TEST_DEPENDENCIES)
+        foreach (extra_module IN LISTS optional_modules test_dependency_modules)
+            if (TARGET ${extra_module} AND (NOT extra_module MATCHES "^yup_" OR extra_module IN_LIST platform_modules))
+                list (APPEND target_modules ${extra_module})
+            endif()
+        endforeach()
+    endforeach()
+
+    list (REMOVE_DUPLICATES target_modules)
+endif()
+
+if (YUP_PLATFORM_MAC AND "yup_python" IN_LIST target_modules)
     set (python_tools_path "${CMAKE_CURRENT_LIST_DIR}/../python/tools")
     set (python_target_name "${target_name}_python_stdlib")
 
@@ -144,16 +185,12 @@ yup_standalone_app (
     INITIAL_MEMORY 268435456   # 256MB: enlarged for wasm pthread stress tests (CI stability)
     MAXIMUM_MEMORY 1073741824  # 1GB:  cap for ALLOW_MEMORY_GROWTH under node/wasm
     STACK_SIZE 1048576         # 1MB:  per-thread stack for concurrent stress tests
-    EMSCRIPTEN_LINK_OPTIONS
-        $<$<CONFIG:Debug>:-sERROR_ON_WASM_CHANGES_AFTER_LINK>
-        $<$<CONFIG:Debug>:-sWASM_BIGINT>
-        $<$<CONFIG:Debug>:-O1>
     DEFINITIONS
         YUP_ENABLE_ALLOCATION_HOOKS=$<BOOL:${YUP_TEST_ALLOCATION_HOOKS}>
         YUP_USE_CURL=0
         YUP_MODAL_LOOPS_PERMITTED=1
-    PRELOAD_FILES
-        ${target_preloaded}
+    BUNDLE_RESOURCES
+        ${target_bundle_resources}
     MODULES
         ${target_modules}
         ${target_gtest_modules})
@@ -164,7 +201,7 @@ yup_standalone_app (
 # ==== Setup sources
 set (sources "")
 set (imported_sources "")
-foreach (module ${target_modules})
+foreach (module ${target_test_modules})
     set (module_main "${CMAKE_CURRENT_LIST_DIR}/${module}/module.cpp")
     file (GLOB module_sources "${module_main}")
     list (APPEND sources ${module_sources})
@@ -192,7 +229,7 @@ source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${imported_sources})
 set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 # ==== Plugin wrapper standalone test TUs (compiled directly, not HEADER_FILE_ONLY)
-if (YUP_PLATFORM_DESKTOP)
+if (YUP_PLATFORM_DESKTOP AND "yup_audio_plugin_client" IN_LIST target_test_modules)
     if (TARGET clap)
         target_link_libraries (${target_name} PRIVATE clap)
         target_sources (${target_name} PRIVATE

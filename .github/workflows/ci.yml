@@ -1,0 +1,162 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches-ignore:
+      - gh-pages
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base ref/sha to diff against (empty uses origin/main, or builds everything on main)
+        required: false
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      linux_any: ${{ steps.linux.outputs.any }}
+      linux_tests: ${{ steps.linux.outputs.full_build == 'true' || steps.linux.outputs.test_modules != '' }}
+      linux_test_modules: ${{ steps.linux.outputs.test_modules }}
+      linux_examples: ${{ steps.linux.outputs.examples }}
+      linux_example_targets: ${{ steps.linux.outputs.example_targets }}
+      mac_any: ${{ steps.mac.outputs.any }}
+      mac_tests: ${{ steps.mac.outputs.full_build == 'true' || steps.mac.outputs.test_modules != '' }}
+      mac_test_modules: ${{ steps.mac.outputs.test_modules }}
+      mac_examples: ${{ steps.mac.outputs.examples }}
+      mac_example_targets: ${{ steps.mac.outputs.example_targets }}
+      windows_any: ${{ steps.windows.outputs.any }}
+      windows_tests: ${{ steps.windows.outputs.full_build == 'true' || steps.windows.outputs.test_modules != '' }}
+      windows_test_modules: ${{ steps.windows.outputs.test_modules }}
+      windows_examples: ${{ steps.windows.outputs.examples }}
+      windows_example_targets: ${{ steps.windows.outputs.example_targets }}
+      wasm_any: ${{ steps.wasm.outputs.any }}
+      wasm_tests: ${{ steps.wasm.outputs.full_build == 'true' || steps.wasm.outputs.test_modules != '' }}
+      wasm_test_modules: ${{ steps.wasm.outputs.test_modules }}
+      wasm_examples: ${{ steps.wasm.outputs.examples }}
+      wasm_example_targets: ${{ steps.wasm.outputs.example_targets }}
+      ios_any: ${{ steps.ios.outputs.any }}
+      ios_examples: ${{ steps.ios.outputs.examples }}
+      ios_example_targets: ${{ steps.ios.outputs.example_targets }}
+      android_any: ${{ steps.android.outputs.any }}
+      android_examples: ${{ steps.android.outputs.examples }}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - id: linux
+      uses: ./.github/actions/smart_ci
+      with:
+        platform: linux
+        job_name: Linux
+        base: ${{ inputs.base }}
+    - id: mac
+      uses: ./.github/actions/smart_ci
+      with:
+        platform: mac
+        job_name: MacOS
+        base: ${{ inputs.base }}
+    - id: windows
+      uses: ./.github/actions/smart_ci
+      with:
+        platform: windows
+        job_name: Windows
+        base: ${{ inputs.base }}
+    - id: wasm
+      uses: ./.github/actions/smart_ci
+      with:
+        platform: wasm
+        job_name: Wasm
+        base: ${{ inputs.base }}
+    - id: ios
+      uses: ./.github/actions/smart_ci
+      with:
+        platform: ios
+        job_name: iOS
+        base: ${{ inputs.base }}
+    - id: android
+      uses: ./.github/actions/smart_ci
+      with:
+        platform: android
+        job_name: Android
+        base: ${{ inputs.base }}
+
+  linux:
+    name: Linux
+    needs: plan
+    if: needs.plan.outputs.linux_any == 'true'
+    uses: ./.github/workflows/build_linux.yml
+    with:
+      test_modules: ${{ needs.plan.outputs.linux_test_modules }}
+      tests: ${{ needs.plan.outputs.linux_tests == 'true' }}
+      examples: ${{ needs.plan.outputs.linux_examples }}
+      example_targets: ${{ needs.plan.outputs.linux_example_targets }}
+
+  macos:
+    name: MacOS
+    needs: plan
+    if: needs.plan.outputs.mac_any == 'true'
+    uses: ./.github/workflows/build_macos.yml
+    with:
+      test_modules: ${{ needs.plan.outputs.mac_test_modules }}
+      tests: ${{ needs.plan.outputs.mac_tests == 'true' }}
+      examples: ${{ needs.plan.outputs.mac_examples }}
+      example_targets: ${{ needs.plan.outputs.mac_example_targets }}
+
+  windows:
+    name: Windows
+    needs: plan
+    if: needs.plan.outputs.windows_any == 'true'
+    uses: ./.github/workflows/build_windows.yml
+    with:
+      test_modules: ${{ needs.plan.outputs.windows_test_modules }}
+      tests: ${{ needs.plan.outputs.windows_tests == 'true' }}
+      examples: ${{ needs.plan.outputs.windows_examples }}
+      example_targets: ${{ needs.plan.outputs.windows_example_targets }}
+
+  wasm:
+    name: Wasm
+    needs: plan
+    if: needs.plan.outputs.wasm_any == 'true'
+    uses: ./.github/workflows/build_wasm.yml
+    with:
+      test_modules: ${{ needs.plan.outputs.wasm_test_modules }}
+      tests: ${{ needs.plan.outputs.wasm_tests == 'true' }}
+      examples: ${{ needs.plan.outputs.wasm_examples }}
+      example_targets: ${{ needs.plan.outputs.wasm_example_targets }}
+
+  ios:
+    name: iOS
+    needs: plan
+    if: needs.plan.outputs.ios_any == 'true'
+    uses: ./.github/workflows/build_ios.yml
+    with:
+      examples: ${{ needs.plan.outputs.ios_examples }}
+      example_targets: ${{ needs.plan.outputs.ios_example_targets }}
+
+  android:
+    name: Android
+    needs: plan
+    if: needs.plan.outputs.android_any == 'true'
+    uses: ./.github/workflows/build_android.yml
+    with:
+      examples: ${{ needs.plan.outputs.android_examples }}
+
+  result:
+    name: CI result
+    runs-on: ubuntu-latest
+    needs: [plan, linux, macos, windows, wasm, ios, android]
+    if: always()
+    steps:
+    - name: Check results
+      if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      run: |
+        echo "A required job failed or was cancelled"
+        exit 1

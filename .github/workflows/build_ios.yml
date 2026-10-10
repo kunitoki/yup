@@ -1,29 +1,16 @@
 name: iOS
 
 on:
-  push:
-    paths:
-      - "CMakeLists.txt"
-      - "**/workflows/build_ios.yml"
-      - "**/cmake/**"
-      - "**/modules/**"
-      - "**/tests/**"
-      - "**/thirdparty/**"
-      - "!**/LICENSE*"
-      - "!**/native/generated/**"
-      - "!**/native/java*/**"
-      - "!**/native/*_android.*"
-      - "!**/native/*_emscripten.*"
-      - "!**/native/*_linux.*"
-      - "!**/native/*_mac.*"
-      - "!**/native/*_wasm.*"
-      - "!**/native/*_windows.*"
-    branches:
-      - "**"
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  workflow_call:
+    inputs:
+      examples:
+        description: JSON array of the examples to build
+        type: string
+        default: "[]"
+      example_targets:
+        description: JSON object mapping each example to its space-separated build targets
+        type: string
+        default: "{}"
 
 env:
   ACTION_RUNNER: github-actions
@@ -32,14 +19,13 @@ env:
 jobs:
   configure:
     runs-on: macos-latest
+    if: inputs.examples != '[]'
     steps:
     - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
     - name: Configure
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_BUILD_EXAMPLES=ON
     - name: Build SDL
       run: |
         cmake --build ${{ runner.workspace }}/build --config Debug --target SDL3-static
@@ -48,65 +34,28 @@ jobs:
       id: cache-build
       uses: actions/cache/save@v5
       with:
-        path: ${{ github.workspace }}/build
-        key: ios-build-${{ github.sha }}
+        path: ${{ runner.workspace }}/build
+        key: ios-build-${{ github.sha }}-${{ github.run_id }}
 
-  build_console:
+  build_examples:
     runs-on: macos-latest
     needs: [configure]
+    if: inputs.examples != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJson(inputs.examples) }}
     steps:
     - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
-        key: ios-build-${{ github.sha }}
+        key: ios-build-${{ github.sha }}-${{ github.run_id }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_console
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_console
-
-  build_app:
-    runs-on: macos-latest
-    needs: [configure]
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - uses: actions/cache/restore@v5
-      id: cache-restore
-      with:
-        path: ${{ runner.workspace }}/build
-        key: ios-build-${{ github.sha }}
-    - name: Configure If Cache Missed
-      if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_app
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_app
-
-  build_graphics:
-    runs-on: macos-latest
-    needs: [configure]
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - uses: actions/cache/restore@v5
-      id: cache-restore
-      with:
-        path: ${{ runner.workspace }}/build
-        key: ios-build-${{ github.sha }}
-    - name: Configure If Cache Missed
-      if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: |
-        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_graphics
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_graphics
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_BUILD_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}

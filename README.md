@@ -4,12 +4,7 @@
 
 YUP is a C++20 framework for building native applications, audio tools, and audio plugins with one codebase across desktop, mobile, and the web. It combines permissively licensed JUCE7-derived foundations with modern rendering through the open source [Rive](https://rive.app/) renderer and YUP's own evolving graphics, GUI, DSP, audio graph, and plugin layers.
 
-[![Build And Test MacOS](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml)
-[![Build And Test Windows](https://github.com/kunitoki/yup/actions/workflows/build_windows.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_windows.yml)
-[![Build And Test Linux](https://github.com/kunitoki/yup/actions/workflows/build_linux.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_linux.yml)
-[![Build And Test Wasm](https://github.com/kunitoki/yup/actions/workflows/build_wasm.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_wasm.yml)
-[![Build And Test iOS](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml)
-[![Build And Test Android](https://github.com/kunitoki/yup/actions/workflows/build_android.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_android.yml)
+[![CI](https://github.com/kunitoki/yup/actions/workflows/ci.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/ci.yml)
 [![Coverage Job](https://github.com/kunitoki/yup/actions/workflows/coverage.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/coverage.yml)
 [![Coverage Report](https://codecov.io/gh/kunitoki/yup/branch/main/graph/badge.svg?token=IO71C3DR1A)](https://codecov.io/gh/kunitoki/yup)
 [![Documentation](https://app.readthedocs.org/projects/yup/badge/?version=latest)](https://yup.readthedocs.io/en/latest)
