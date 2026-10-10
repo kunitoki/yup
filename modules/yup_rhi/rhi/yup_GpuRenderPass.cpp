@@ -166,6 +166,22 @@ struct GpuRenderPass::Impl
     /** Groups 0..3; any higher group is rebuilt by every draw. */
     std::array<GroupCache, 4> groupCaches;
 
+    /** What the open backend pass was last given, so draws only encode what changed. Held, so
+        an address cannot be reused by another object while it is compared against.
+
+        Metal, Vulkan and WebGPU latch the current backing of each uniform buffer when a group is
+        bound. Skipping an unchanged group is only safe because no buffer inside a cached group is
+        updated during the frame: pooled uniform buffers are written once, and a storage buffer
+        whose backing changed rebuilds its group (storageHandlesMatch). Binding a caller-owned
+        buffer that can be updated between draws needs its upload generation in the group cache. */
+    rive::rcp<rive::ore::Pipeline> encodedPipeline;
+    std::array<rive::rcp<rive::ore::BindGroup>, 4> encodedGroups;
+    bool passStateDirty = true;
+
+    /** False on OpenGL, whose bindings are global: a texture upload or a pipeline compiled between
+        two draws changes them behind the pass, so every draw encodes its whole state. */
+    bool backendKeepsState = true;
+
     void markGroupDirty (int group) noexcept
     {
         if (group >= 0 && group < (int) groupCaches.size())
@@ -227,6 +243,13 @@ bool GpuRenderPass::Impl::ensurePassOpen()
         return false;
 
     framePools->openPass = orePass.get();
+
+    // A new backend pass starts without any state
+    const auto platform = framePools->device != nullptr ? framePools->device->getPlatform() : GpuPlatform::Headless;
+    backendKeepsState = platform != GpuPlatform::OpenGL && platform != GpuPlatform::OpenGLES;
+    encodedPipeline = nullptr;
+    encodedGroups = {};
+    passStateDirty = true;
     return true;
 }
 
@@ -604,19 +627,47 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
 
     auto& renderPass = *orePass;
 
-    oreCtx->clearLastError();
-    renderPass.setPipeline (orePipeline);
-    if (! oreCtx->lastError().empty())
+    if (! backendKeepsState)
     {
-        YUP_DBG ("GpuRenderPass: incompatible pipeline: " << String (oreCtx->lastError()));
-        jassertfalse;
-        return false;
+        encodedPipeline = nullptr;
+        encodedGroups = {};
+        passStateDirty = true;
     }
 
-    applyPassState (renderPass);
+    // A pipeline switch can invalidate the bound groups (a new root signature on D3D12, a new
+    // layout on Vulkan), so they and the pass state are encoded again after it
+    if (encodedPipeline.get() != orePipeline)
+    {
+        oreCtx->clearLastError();
+        renderPass.setPipeline (orePipeline);
+        if (! oreCtx->lastError().empty())
+        {
+            YUP_DBG ("GpuRenderPass: incompatible pipeline: " << String (oreCtx->lastError()));
+            jassertfalse;
+            return false;
+        }
+
+        encodedPipeline = rive::ref_rcp (orePipeline);
+        encodedGroups = {};
+        passStateDirty = true;
+    }
+
+    if (std::exchange (passStateDirty, false))
+        applyPassState (renderPass);
 
     for (auto& [groupIdx, bg] : bindGroups)
+    {
+        const auto tracked = groupIdx < encodedGroups.size();
+        if (tracked && encodedGroups[groupIdx] == bg)
+            continue;
+
+        oreCtx->clearLastError();
         renderPass.setBindGroup (groupIdx, bg.get());
+
+        // A failed bind (a descriptor allocation on Vulkan or WebGPU) stays unrecorded, for the next draw to retry
+        if (tracked)
+            encodedGroups[groupIdx] = oreCtx->lastError().empty() ? bg : nullptr;
+    }
 
     for (const auto& vb : vertexBindings)
     {
@@ -962,6 +1013,7 @@ void GpuRenderPass::setViewport (float x, float y, float width, float height, fl
         return;
 
     i->viewportSet = true;
+    i->passStateDirty = true;
     i->viewportRect[0] = x;
     i->viewportRect[1] = y;
     i->viewportRect[2] = width;
@@ -979,6 +1031,7 @@ void GpuRenderPass::setScissorRect (int x, int y, int width, int height)
     jassert (x >= 0 && y >= 0 && width >= 0 && height >= 0);
 
     i->scissorSet = true;
+    i->passStateDirty = true;
     i->scissorRect[0] = (uint32_t) jmax (0, x);
     i->scissorRect[1] = (uint32_t) jmax (0, y);
     i->scissorRect[2] = (uint32_t) jmax (0, width);
@@ -992,6 +1045,7 @@ void GpuRenderPass::setStencilReference (uint32_t reference)
         return;
 
     i->stencilReferenceSet = true;
+    i->passStateDirty = true;
     i->stencilReference = reference;
 }
 
@@ -1002,6 +1056,7 @@ void GpuRenderPass::setBlendColor (GpuColor color)
         return;
 
     i->blendColorSet = true;
+    i->passStateDirty = true;
     i->blendColor = color;
 }
 

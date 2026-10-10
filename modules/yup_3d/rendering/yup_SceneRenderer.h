@@ -36,8 +36,12 @@ namespace yup
     The first directional LightNode with LightNode::castsShadows set casts shadows of the opaque
     items, from cascaded shadow maps: the view is cut into RenderSettings::sunCascades depth ranges,
     each with its own map of RenderSettings::shadowResolution texels, so shadows stay sharp near the
-    camera and still reach far away. The maps are filtered softly and only drawn again when the
-    casters, the shadow casting light, the shadow settings or the camera change.
+    camera and still reach far away. Point and spot lights with LightNode::castsShadows set cast
+    them from perspective views packed into one shadow atlas, six for a point light and one for a
+    spot light, sized by how large the light's reach looks on screen; the most important lights get
+    views while they fit the shadow budget of the tier (16 views on raster), the others light
+    unshadowed. The maps are filtered softly and only drawn again when the casters, the shadow
+    casting lights, the shadow settings or the camera change.
 
     The tier comes from RenderSettings::tier and the device, see RenderCapabilities. The raster
     tier antialiases geometry edges with MSAA, 4 samples by default, resolved into the returned
@@ -159,6 +163,30 @@ public:
         for tests: still frames reuse the maps of the frame before.
     */
     int getShadowMapRenderCount() const noexcept;
+
+    /** @internal The number of frames that drew sun cascade @p cascade since the renderer set up
+        its device, for tests: a cascade is drawn again only when what it holds changed.
+    */
+    int getShadowCascadeRenderCount (int cascade) const noexcept;
+
+    /** @internal The shadow records the last frame wrote, the sun cascades and the views of the
+        point and spot lights, plus one record per light with contact shadows but no shadow map, for
+        tests: the tier's record budget bounds them.
+    */
+    int getShadowRecordCount() const noexcept;
+
+    /** @internal The shadow records and sun parameters the last frame wrote, for tests. */
+    GpuShadowData getShadowData() const noexcept;
+
+    /** @internal The side in texels of the point and spot light shadow atlas the renderer holds,
+        0 when no light needs one, for tests.
+    */
+    int getShadowAtlasSize() const noexcept;
+
+    /** @internal The side in texels of the atlas tiles of light @p lightIndex (an index into the
+        lights of the last frame, in scene order) in the last frame, 0 when it has none, for tests.
+    */
+    int getShadowTileSize (int lightIndex) const noexcept;
 
     /** @internal Test hook, not for production use: edits the facts read from the device before
         every render decides its tier and features, so tests can simulate weaker devices.

@@ -269,16 +269,26 @@ vec3 lightsEvaluateArea(GpuLight light, BsdfSurface s, vec3 worldPosition)
 #endif
 
 // What one light reflects: the BSDF times its incoming radiance and its shadow, looked up once towards
-// its center (shadowsVisibility). Lights with a radius take the area path (YUP_3D_AREA_LIGHTS only),
-// the others the punctual one
+// its center (shadowsVisibility), and its contact shadow in the passes defining YUP_3D_CONTACT_SHADOWS
+// (shadowsContact, evaluated once for both paths). Lights with a radius take the area path
+// (YUP_3D_AREA_LIGHTS only), the others the punctual one
 vec3 lightsShadeLight(BsdfSurface s, GpuLight light, vec3 worldPosition, vec3 geometricNormal)
 {
+#ifdef YUP_3D_CONTACT_SHADOWS
+    float contact = shadowsContact(light, worldPosition, geometricNormal);
+    if (contact <= 0.0)
+        return vec3(0.0);
+#endif
+
 #ifdef YUP_3D_AREA_LIGHTS
     if (light.spotRadiusShadow.z > 0.0)
     {
         vec3 reflected = lightsEvaluateArea(light, s, worldPosition);
         if (reflected != vec3(0.0))
             reflected = reflected * shadowsVisibility(light, worldPosition, geometricNormal);
+#ifdef YUP_3D_CONTACT_SHADOWS
+        reflected = reflected * contact;
+#endif
 
         return reflected;
     }
@@ -290,6 +300,9 @@ vec3 lightsShadeLight(BsdfSurface s, GpuLight light, vec3 worldPosition, vec3 ge
         return vec3(0.0);
 
     incoming = incoming * shadowsVisibility(light, worldPosition, geometricNormal);
+#ifdef YUP_3D_CONTACT_SHADOWS
+    incoming = incoming * contact;
+#endif
     if (incoming == vec3(0.0))
         return vec3(0.0);
 

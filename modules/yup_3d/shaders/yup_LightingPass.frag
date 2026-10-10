@@ -27,9 +27,15 @@
 #error "The lighting pass is full tier only: bundle it as LightingPass:YUP_3D_TIER_FULL"
 #endif
 
+// The lights march their contact shadows through the scene depth (lib/shadows.glsl)
+#define YUP_3D_CONTACT_SHADOWS
+
 #include "lib/color.glsl"
 #include "lib/view.glsl"
 #include "lib/octahedral.glsl"
+
+layout(set = 1, binding = 12) uniform texture2D u_depth;
+
 #include "lib/lights.glsl"
 #include "lib/material_types.glsl"
 
@@ -51,7 +57,6 @@ layout(set = 1, binding = 8) readonly buffer Materials { GpuMaterial materials[]
 layout(set = 1, binding = 9) uniform texture2D u_albedoOcclusion;   // RT0
 layout(set = 1, binding = 10) uniform texture2D u_normalRoughness;  // RT1
 layout(set = 1, binding = 11) uniform texture2D u_emissionMaterial; // RT2
-layout(set = 1, binding = 12) uniform texture2D u_depth;
 
 void main()
 {

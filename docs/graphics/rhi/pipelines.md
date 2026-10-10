@@ -139,6 +139,9 @@ reflected native backend slot for the stage. Texture entries also carry the
 reflected view dimension, sample type and multisampled flag, which WebGPU
 validates against the shader itself - so a `textureCube`, `texture3D`,
 `texture2DArray` or depth texture is declared accurately rather than assumed 2D.
+On WebGPU, a float texture that the WGSL of every stage only reads with
+`texelFetch` (a WGSL `textureLoad`) is declared unfilterable, so a depth texture
+can be bound there and read raw next to its comparison binding.
 
 > **Shaders must declare textures and samplers separately.** A combined
 > `uniform sampler2D` produces *no* binding-map entries at all and will not bind.
@@ -175,6 +178,15 @@ sets the two pipelines declare differently. A set declared identically in both
 group. Declare the per-view resources the same way in every variant of a
 pipeline, for example in `set = 0`, and their bind group is built once and
 reused across the switches.
+
+A draw only sends the backend what changed since the previous draw of the
+pass. Setting the same pipeline again, or the same uniform bytes, costs
+nothing. Setting a texture, sampler or storage buffer rebuilds its set even
+when the resource is unchanged, so set them only when they change. A different
+pipeline sends its bind groups, viewport, scissor, stencil reference and blend
+color again: sorting draws by pipeline, and keeping per-view resources in their
+own set, keeps the CPU cost per draw low. On OpenGL and OpenGL ES every draw
+still sends its whole state, since their bindings are global.
 
 GLSL combines each texture with its sampler on the texture's unit, so on
 OpenGL a sampler used with several textures is bound on each of their units.

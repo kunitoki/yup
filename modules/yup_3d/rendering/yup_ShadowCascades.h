@@ -38,6 +38,11 @@ namespace yup
     camera planes, so no cascade is spent on empty space; the casters only extend the light-space
     depth range towards the light, so casters outside a slice still land in its map.
 
+    A compact scene can instead be covered by one map fitted to the whole scene (fitScene()), which
+    does not depend on the camera: an orbit, pan or zoom then leaves the map as it is. It replaces
+    the cascades only while its texels are no larger than those of the first cascade
+    (prefersSceneFit()), so no shadow gets blurrier.
+
     @code
     ShadowCascades::Inputs inputs;
     inputs.setView (viewData);
@@ -135,6 +140,52 @@ public:
         @return The same projection followed by a clip-space translation of less than half a texel.
     */
     static Matrix4 snapToTexels (const Matrix4& lightViewProjection, int resolution) noexcept;
+
+    /** True when a caster can draw into a cascade: its world bounds overlap the cascade's light
+        projection sideways, and do not lie wholly beyond its far depth. The near side is left open:
+        nothing toward the light is ever culled.
+
+        Only valid for the cascades of build(), whose projections are orthographic (the test ignores
+        w; a perspective projection culls wrongly), and for casters inside the Inputs::casterBounds
+        they were built from: build() starts the light view at the nearest of them, so none of
+        them is clipped by the near plane.
+
+        @param cascade        A cascade of build().
+        @param casterBounds   The world bounds of the caster, inside the Inputs::casterBounds of the cascade.
+
+        @return False when nothing of the caster can land in the cascade's map, true otherwise.
+    */
+    static bool castsInto (const Cascade& cascade, const BoundingBox& casterBounds) noexcept;
+
+    /** Fits one map to the whole scene, whatever the camera: the receiver bounds seen from the light
+        in a basis that only depends on the light direction, padded by four texels (so every lookup
+        of a receiver, moved by its normal offset and widened by the filter, stays inside), its
+        radius rounded up to a 128th of the next power of two (so a caster moving at the edge of the
+        scene seldom changes the texel size) and snapped to whole texels as build() does, its depth
+        range from the nearest caster or receiver towards the light to the deepest receiver. Every
+        receiver lies inside it, so it never fades out.
+
+        Its splitFar is maxShadowDistance, and castsInto() culls against it as against a cascade.
+
+        @param inputs   The light, the receiver and caster bounds and the resolution; the camera is ignored.
+        @param cascade  Receives the map when the function returns true.
+
+        @return False when there is nothing to shadow or nothing casting.
+    */
+    static bool fitScene (const Inputs& inputs, Cascade& cascade) noexcept;
+
+    /** True when a scene fit (fitScene()) should replace the cascades of build().
+
+        It takes over once its texels are no larger than those the first cascade would have one
+        quantization step of its radius smaller, and holds while they are no larger than those of the
+        first cascade. So it is never blurrier than the first cascade, and a camera moving the first
+        cascade back and forth across one step of its radius does not switch between the two.
+
+        @param sceneFit       The map of fitScene().
+        @param firstCascade   The first cascade of build().
+        @param usesSceneFit   True when the previous frame used the scene fit.
+    */
+    static bool prefersSceneFit (const Cascade& sceneFit, const Cascade& firstCascade, bool usesSceneFit) noexcept;
 
     /** Fits every cascade.
 

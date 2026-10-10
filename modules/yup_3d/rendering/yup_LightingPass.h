@@ -36,7 +36,7 @@ namespace yup
     environment with its sampler at 14, and 7 and 11 the area light tables, read through linearClamp
     at binding 1. Set 1 binds the rest of them: 0 the LightingBlock, 6 the lights, 7 the light lists
     of the clusters, 8 the material table; then the G-buffer: 9-11 RT0-RT2 and 12 the depth. Set 3
-    binds the shadows: 0 the sun cascades and 4 the ShadowBlock.
+    binds the shadows: 0 the sun cascades, 2 the point and spot light atlas and 4 the ShadowBlock.
     Only the area light variant (YUP_3D_AREA_LIGHTS), which shades the frames where
     LightingInputs::areaLights is set, declares the tables and linearClamp.
 

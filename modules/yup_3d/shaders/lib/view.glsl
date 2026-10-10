@@ -38,6 +38,18 @@ layout(set = 0, binding = 0) uniform ViewBlock
     vec4 clipPlanes;               // near, far, frame index, tone mapping operator (0 Reinhard, 1 ACES, 2 AgX)
 } view;
 
+#ifdef YUP_3D_CONTACT_SHADOWS
+// The view depth (distance along the view direction) of a stored depth in [0, 1], from the
+// projection: perspective, perspective with an infinite far plane, or orthographic. The jitter only
+// offsets x and y, so the jittered projection gives the same depth. Undefined at depth 1 with an
+// infinite far plane, which lies at infinity. Only the passes reading the scene depth declare it
+float viewLinearDepth(float depth)
+{
+    mat4 p = view.projection;
+    return (depth * p[3][3] - p[3][2]) / (depth * p[2][3] - p[2][2]);
+}
+#endif
+
 // The screen-space motion between two clip positions, current uv minus previous uv, with uv from
 // the top-left
 vec2 viewVelocity(vec4 currentClip, vec4 previousClip)

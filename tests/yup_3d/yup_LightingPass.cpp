@@ -84,7 +84,8 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
     // Set 0 holds the shared lookups: the environment and its sampler, the shadow comparison
     // sampler and, in the area light variant only, the two area light tables read through
     // linearClamp. Set 1 holds RT0-RT2 and the depth, keeping their binding numbers, and set 3 the
-    // sun cascades
+    // sun cascades and the point and spot light atlas, each compared (0, 2) and read raw for soft
+    // shadows (1, 3)
     const struct
     {
         const char* name;
@@ -92,8 +93,8 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
         Bindings images;
         Bindings samplers;
     } variants[] = {
-        { "punctual", lightingPass(), { { 0, 6 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 } }, { { 0, 3 }, { 0, 4 }, { 0, 14 } } },
-        { "area lights", lightingPassAreaLights(), { { 0, 6 }, { 0, 7 }, { 0, 11 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 }, { 0, 14 } } },
+        { "punctual", lightingPass(), { { 0, 6 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 3 }, { 0, 4 }, { 0, 14 } } },
+        { "area lights", lightingPassAreaLights(), { { 0, 6 }, { 0, 7 }, { 0, 11 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 }, { 0, 14 } } },
     };
 
     for (const auto& variant : variants)

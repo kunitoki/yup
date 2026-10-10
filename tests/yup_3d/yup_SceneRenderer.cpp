@@ -260,6 +260,22 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle forwardPassSoftShadows()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_soft_shadows.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle forwardPassAreaLightsSoftShadows()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_area_lights_soft_shadows.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
     static ShaderBundle forwardPassFull()
     {
         static constexpr uint8 data[] = {
@@ -369,9 +385,12 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
     // The reflection counts what the shaders declare, so the budget check cannot pass on empty
     // lists. The area light variants add the two area light tables. The shared lookups (the
     // environment and the area light tables) live in set 0, set 1 holds no texture, and set 3 the
-    // sun cascades, read with the ShadowBlock
-    for (const auto& [name, bundle, textures, lookups] : { std::tuple { "ForwardPass", forwardPass(), 7, 1 },
-                                                           std::tuple { "ForwardPass_area_lights", forwardPassAreaLights(), 9, 3 } })
+    // sun cascades and the point and spot light atlas, read with the ShadowBlock. The soft shadow
+    // variants read both maps raw too
+    for (const auto& [name, bundle, textures, lookups, shadowMaps] : { std::tuple { "ForwardPass", forwardPass(), 8, 1, 2 },
+                                                                       std::tuple { "ForwardPass_area_lights", forwardPassAreaLights(), 10, 3, 2 },
+                                                                       std::tuple { "ForwardPass_soft_shadows", forwardPassSoftShadows(), 10, 1, 4 },
+                                                                       std::tuple { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), 12, 3, 4 } })
     {
         const auto* vertex = bundle.findShader (ShaderStage::vertex, ShaderLanguage::spirv);
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -385,13 +404,13 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         EXPECT_EQ (budget.uniformBlocks, 5) << name;
         EXPECT_EQ (budget.texturesPerSet[0], lookups) << name;
         EXPECT_EQ (budget.texturesPerSet[1], 0) << name;
-        EXPECT_EQ (budget.texturesPerSet[3], 1) << name;
+        EXPECT_EQ (budget.texturesPerSet[3], shadowMaps) << name;
         EXPECT_EQ (budget.uniformBlocksPerSet[3], 1) << name;
     }
 
     // The full tier geometry bundles: the forward pass without the raster light list, and the G-buffer
-    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 7, 4, 1 },
-                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 9, 4, 3 },
+    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 10, 4, 1 },
+                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 12, 4, 3 },
                                                                    std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 1, 0 } })
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -406,6 +425,8 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass", forwardPass() },
         { "ForwardPass_area_lights", forwardPassAreaLights() },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "Background", background() },
@@ -495,6 +516,8 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass", forwardPass() },
         { "ForwardPass_area_lights", forwardPassAreaLights() },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "Background", background() },
@@ -529,16 +552,19 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
 TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
 {
     // One declaration in lib/shadows.glsl, mirrored by GpuShadowData: the ShadowBlock at set 3
-    // binding 4, and the sun cascades at set 3 binding 0 compared through shadowCompare at set 0
-    // binding 4. WebGPU needs them as a depth array texture and a comparison sampler, and Metal
-    // gives every texture and every sampler of a stage its own slot, whatever its set
-    const std::pair<const char*, ShaderBundle> bundles[] = {
-        { "ForwardPass", forwardPass() },
-        { "ForwardPass_area_lights", forwardPassAreaLights() },
-        { "ForwardPass_full", forwardPassFull() },
-        { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
-        { "LightingPass_full", lightingPassFull() },
-        { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
+    // binding 4, the sun cascades at set 3 binding 0 and the point and spot light atlas at set 3
+    // binding 2, both compared through shadowCompare at set 0 binding 4. WebGPU needs them as depth
+    // textures (an array and a 2D one) and a comparison sampler, and Metal gives every texture and
+    // every sampler of a stage its own slot, whatever its set
+    const std::tuple<const char*, ShaderBundle, bool> bundles[] = {
+        { "ForwardPass", forwardPass(), true },
+        { "ForwardPass_area_lights", forwardPassAreaLights(), true },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows(), false },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), false },
+        { "ForwardPass_full", forwardPassFull(), false },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), false },
+        { "LightingPass_full", lightingPassFull(), false },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights(), false },
     };
 
     const auto distinctSlots = [] (const std::vector<ShaderReflection::ResourceBinding>& resources)
@@ -550,7 +576,7 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
         return slots.size() == resources.size();
     };
 
-    for (const auto& [name, bundle] : bundles)
+    for (const auto& [name, bundle, rasterDefault] : bundles)
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
@@ -561,6 +587,7 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
         EXPECT_EQ (block->blockSize, static_cast<uint32_t> (sizeof (GpuShadowData))) << name;
 
         EXPECT_TRUE (declares (fragment->reflection.separateImages, 3, 0)) << name << ": shadowCascadesCompare";
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 3, 2)) << name << ": shadowAtlasCompare";
         EXPECT_TRUE (declares (fragment->reflection.separateSamplers, 0, 4)) << name << ": shadowCompare";
 
         const auto* msl = bundle.findShader (ShaderStage::fragment, ShaderLanguage::msl);
@@ -589,13 +616,35 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
         EXPECT_EQ (cascades->sampleType, WgslBindingLayout::SampleType::depth) << name;
         EXPECT_EQ (cascades->viewDimension, WgslBindingLayout::ViewDimension::array2D) << name;
 
+        const auto* atlas = find (3, 2);
+        ASSERT_NE (atlas, nullptr) << name;
+        EXPECT_EQ (atlas->kind, WgslBindingLayout::ResourceKind::texture) << name;
+        EXPECT_EQ (atlas->sampleType, WgslBindingLayout::SampleType::depth) << name;
+        EXPECT_EQ (atlas->viewDimension, WgslBindingLayout::ViewDimension::texture2D) << name;
+
         const auto* compare = find (0, 4);
         ASSERT_NE (compare, nullptr) << name;
         EXPECT_EQ (compare->kind, WgslBindingLayout::ResourceKind::sampler) << name;
         EXPECT_EQ (compare->samplerType, WgslBindingLayout::SamplerType::comparison) << name;
 
-        // No raw depth read of the cascades yet: soft shadows add it with its non-filtering sampler
-        EXPECT_EQ (find (3, 1), nullptr) << name;
+        // The soft shadow blocker search reads the same maps raw, with texelFetch: WGSL loads them
+        // without a sampler, so WebGPU lays them out as unfilterable float textures, the one non
+        // depth sample type a depth texture binds to (GpuPipeline takes it from the WGSL). The
+        // default raster bundles leave soft shadows to their own variants and declare neither
+        for (const auto& [binding, dimension] : { std::pair { 1u, WgslBindingLayout::ViewDimension::array2D },
+                                                  std::pair { 3u, WgslBindingLayout::ViewDimension::texture2D } })
+        {
+            const auto* raw = find (3, binding);
+            EXPECT_EQ (raw != nullptr, ! rasterDefault) << name << " binding " << (int) binding;
+            EXPECT_EQ (declares (fragment->reflection.separateImages, 3, binding), ! rasterDefault) << name << " binding " << (int) binding;
+
+            if (raw == nullptr)
+                continue;
+
+            EXPECT_EQ (raw->kind, WgslBindingLayout::ResourceKind::texture) << name;
+            EXPECT_EQ (raw->sampleType, WgslBindingLayout::SampleType::floatUnfilterable) << name;
+            EXPECT_EQ (raw->viewDimension, dimension) << name;
+        }
 
         // The reflection the render pipeline layouts are built from (ShaderBindingMap) types them alike:
         // a depth texture and a comparison sampler, for every language
@@ -611,6 +660,7 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
 
             const auto& reflection = shader->reflection;
             EXPECT_TRUE (isDepth (reflection.separateImages, 3, 0) || isDepth (reflection.sampledImages, 3, 0)) << name << " language " << (int) language;
+            EXPECT_TRUE (isDepth (reflection.separateImages, 3, 2) || isDepth (reflection.sampledImages, 3, 2)) << name << " language " << (int) language;
 
             if (language != ShaderLanguage::glsl)
                 EXPECT_TRUE (isDepth (reflection.separateSamplers, 0, 4)) << name << " language " << (int) language;
@@ -712,6 +762,7 @@ TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
     // counts the two tables in the raster budget
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass_area_lights", forwardPassAreaLights() },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
     };
@@ -735,6 +786,8 @@ TEST_F (SceneRendererBundleTests, EveryShadingBundleReadsTheEnvironmentFromSetZe
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass", forwardPass() },
         { "ForwardPass_area_lights", forwardPassAreaLights() },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "Background", background() },
@@ -759,6 +812,7 @@ TEST_F (SceneRendererBundleTests, PunctualVariantsDeclareNoAreaLightTables)
     // Without YUP_3D_AREA_LIGHTS every light is punctual: neither the tables nor their sampler
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass", forwardPass() },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
         { "ForwardPass_full", forwardPassFull() },
         { "LightingPass_full", lightingPassFull() },
     };
@@ -901,32 +955,44 @@ protected:
         entity.setRotation (Quaternion::fromRotationMatrix (Matrix4::lookAt (eye, target, up).inverted()));
     }
 
+    /** A rough light gray dielectric, for the grounds, the walls and the blockers of the shadow scenes. */
+    static Material::Ptr makeWallMaterial()
+    {
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.8f, 0.8f, 0.8f, 1.0f };
+        material->metallicFactor = 0.0f;
+        material->roughnessFactor = 1.0f;
+        return material;
+    }
+
+    /** A square ground at y = 0, 2 * @p halfSize wide, drawn with makeWallMaterial(): the entity "ground". */
+    static EntityNode* addGround (Scene& scene, float halfSize)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { -halfSize, 0.0f, halfSize };
+        vertices[1].position = { halfSize, 0.0f, halfSize };
+        vertices[2].position = { halfSize, 0.0f, -halfSize };
+        vertices[3].position = { -halfSize, 0.0f, -halfSize };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 1.0f, 0.0f };
+
+        auto mesh = Mesh::Ptr (new Mesh ("ground"));
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeWallMaterial());
+
+        auto ground = EntityNode::Ptr (new EntityNode ("ground"));
+        ground->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (ground);
+        return ground.get();
+    }
+
     /** The ground of the long shadow scenes: a 200 x 200 rough dielectric quad at y = 0, lit by a
         shadow casting sun tilted 0.6 rad from vertical, so shadows fall towards +x, under an ambient
         light of 0.05 and no environment. Returns the sun.
     */
     static LightNode& addLongGround (Scene& scene)
     {
-        auto material = Material::Ptr (new Material());
-        material->baseColorFactor = { 0.8f, 0.8f, 0.8f, 1.0f };
-        material->metallicFactor = 0.0f;
-        material->roughnessFactor = 1.0f;
-
-        std::vector<Mesh::Vertex> vertices (4);
-        vertices[0].position = { -100.0f, 0.0f, 100.0f };
-        vertices[1].position = { 100.0f, 0.0f, 100.0f };
-        vertices[2].position = { 100.0f, 0.0f, -100.0f };
-        vertices[3].position = { -100.0f, 0.0f, -100.0f };
-
-        for (auto& vertex : vertices)
-            vertex.normal = { 0.0f, 1.0f, 0.0f };
-
-        auto mesh = Mesh::Ptr (new Mesh ("ground"));
-        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
-
-        auto ground = EntityNode::Ptr (new EntityNode ("ground"));
-        ground->attach<MeshNode> (mesh);
-        scene.getRoot()->addChild (ground);
+        addGround (scene, 100.0f);
 
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         auto& light = sun->attach<LightNode>();
@@ -938,8 +1004,9 @@ protected:
         return light;
     }
 
-    /** A cube of half size @p halfSize centered on the origin, its faces wound counterclockwise seen from outside. */
-    static Mesh::Ptr makeBox (float halfSize, Material::Ptr material)
+    /** A cube of half size @p halfSize centered on the origin, its faces wound counterclockwise seen
+        from outside, or facing its center when @p inward is set (a closed room). */
+    static Mesh::Ptr makeBox (float halfSize, Material::Ptr material, bool inward = false)
     {
         // Each face: its normal n and two axes u, v with u x v = n
         const std::array<std::array<Vector3<float>, 3>, 6> faces { {
@@ -961,10 +1028,10 @@ protected:
             {
                 auto& vertex = vertices.emplace_back();
                 vertex.position = (n + u * a + v * b) * halfSize;
-                vertex.normal = n;
+                vertex.normal = inward ? -n : n;
             }
 
-            for (const auto index : { 0u, 1u, 2u, 0u, 2u, 3u })
+            for (const auto index : inward ? std::array { 0u, 2u, 1u, 0u, 3u, 2u } : std::array { 0u, 1u, 2u, 0u, 2u, 3u })
                 indices.push_back (first + index);
         }
 
@@ -1007,6 +1074,45 @@ protected:
         scene.setActiveCamera (camera.get());
 
         return sun;
+    }
+
+    /** Adds a 1 m cube, the entity "farCaster", to buildLongGroundScene() 60 m away beside the line
+        of sight, in the last cascade only. */
+    static EntityNode& addFarCaster (Scene& scene)
+    {
+        auto caster = EntityNode::Ptr (new EntityNode ("farCaster"));
+        caster->attach<MeshNode> (makeBox (0.5f, makeWallMaterial()));
+        caster->setPosition ({ 0.0f, 0.5f, -60.0f });
+        scene.getRoot()->addChild (caster);
+        return *caster;
+    }
+
+    /** A compact scene: a 0.6 m box, the entity "box", on a 2 m ground under a shadow casting sun,
+        without a camera. Returns the box. */
+    static EntityNode& addCompactScene (Scene& scene)
+    {
+        addGround (scene, 1.0f);
+
+        auto box = EntityNode::Ptr (new EntityNode ("box"));
+        box->attach<MeshNode> (makeBox (0.3f, makeWallMaterial()));
+        box->setPosition ({ 0.0f, 0.3f, 0.0f });
+        scene.getRoot()->addChild (box);
+
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        sun->attach<LightNode>().castsShadows = true;
+        aimCamera (*sun, { -3.0f, 8.0f, 2.0f }, {});
+        scene.getRoot()->addChild (sun);
+        return *box;
+    }
+
+    /** How many frames drew each of the first @p count sun cascades. */
+    static std::vector<int> getCascadeRenderCounts (const SceneRenderer& renderer, int count)
+    {
+        std::vector<int> counts;
+        for (int c = 0; c < count; ++c)
+            counts.push_back (renderer.getShadowCascadeRenderCount (c));
+
+        return counts;
     }
 
     /** The largest relative darkening of an 8x8 pixel window from @p unshadowed to @p shadowed,
@@ -1812,6 +1918,691 @@ protected:
         RecordProperty ("darkestRelative", String (worst, 3).toStdString());
     }
 
+    /** A 0.3 m cube, the entity "blocker", centered on @p position. */
+    static void addBlocker (Scene& scene, Vector3<float> position)
+    {
+        auto blocker = EntityNode::Ptr (new EntityNode ("blocker"));
+        blocker->attach<MeshNode> (makeBox (0.15f, makeWallMaterial()));
+        blocker->setPosition (position);
+        scene.getRoot()->addChild (blocker);
+    }
+
+    /** A closed 4 x 4 x 4 room around the origin, its walls facing inwards, lit by a shadow casting
+        point light at the origin (intensity 20, no range), with a 0.3 m blocker cube 1 m from the
+        light on each of the six axes when @p withBlockers is set: each blocker shadows the middle of
+        the wall behind it, and the wall around that shadow stays lit. Returns the light.
+    */
+    static LightNode& buildPointLightRoom (Scene& scene, bool withBlockers = true)
+    {
+        auto room = EntityNode::Ptr (new EntityNode ("room"));
+        room->attach<MeshNode> (makeBox (2.0f, makeWallMaterial(), true));
+        scene.getRoot()->addChild (room);
+
+        if (withBlockers)
+            for (const auto& axis : getCubeAxes())
+                addBlocker (scene, axis);
+
+        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        light.intensity = 20.0f;
+        light.castsShadows = true;
+        scene.getRoot()->addChild (entity);
+        return light;
+    }
+
+    /** The six unit axes, in the order of the faces of a point light shadow: +X, -X, +Y, -Y, +Z, -Z. */
+    static std::array<Vector3<float>, 6> getCubeAxes()
+    {
+        return { Vector3<float> (1.0f, 0.0f, 0.0f), Vector3<float> (-1.0f, 0.0f, 0.0f), Vector3<float> (0.0f, 1.0f, 0.0f),
+                 Vector3<float> (0.0f, -1.0f, 0.0f), Vector3<float> (0.0f, 0.0f, 1.0f), Vector3<float> (0.0f, 0.0f, -1.0f) };
+    }
+
+    /** Adds a shadow casting point light of intensity 1 at @p position. */
+    static void addShadowedPointLight (Scene& scene, Vector3<float> position)
+    {
+        auto entity = EntityNode::Ptr (new EntityNode ("shadowedPoint"));
+        entity->attach<LightNode> (LightNode::Type::point).castsShadows = true;
+        entity->setPosition (position);
+        scene.getRoot()->addChild (entity);
+    }
+
+    /** Adds a camera at @p eye looking at @p target, and makes it the active one. */
+    static void addCamera (Scene& scene, Vector3<float> eye, Vector3<float> target, Vector3<float> up = { 0.0f, 1.0f, 0.0f })
+    {
+        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        camera->attach<CameraNode>();
+        aimCamera (*camera, eye, target, up);
+        scene.getRoot()->addChild (camera);
+        scene.setActiveCamera (camera.get());
+    }
+
+    /** A 10 x 10 ground at y = 0 under a shadow casting spot light at (0, 3, 0) shining down
+        (intensity 20, outer cone 45 degrees), with a 0.3 m blocker cube at @p blocker. The camera
+        looks at the foot of the spot from (0, 3, 4), so the default blocker at (0, 1, 0) hides a
+        patch of ground behind its shadow, not the shadow. Returns the spot.
+    */
+    static LightNode& buildSpotOverGround (Scene& scene, Vector3<float> blocker = { 0.0f, 1.0f, 0.0f })
+    {
+        addGround (scene, 5.0f);
+        addBlocker (scene, blocker);
+
+        auto entity = EntityNode::Ptr (new EntityNode ("spot"));
+        auto& spot = entity->attach<LightNode> (LightNode::Type::spot);
+        spot.intensity = 20.0f;
+        spot.castsShadows = true;
+        aimCamera (*entity, { 0.0f, 3.0f, 0.0f }, {}, { 0.0f, 0.0f, -1.0f });
+        scene.getRoot()->addChild (entity);
+
+        addCamera (scene, { 0.0f, 3.0f, 4.0f }, {});
+        return spot;
+    }
+
+    /** The point light at the center of buildPointLightRoom() shadows the wall behind a single
+        blocker on each of the six axes on @p tier: seen from beside the light, the shadow darkens the
+        wall by more than half, against the same view without shadows. One blocker at a time, so the
+        shadow can only come from the face of that axis.
+    */
+    void checkPointLightShadowsOnAllSixFaces (RenderSettings::TierPreference tier)
+    {
+        const auto axes = getCubeAxes();
+        for (size_t face = 0; face < axes.size(); ++face)
+        {
+            const auto axis = axes[face];
+            const auto side = axes[(face + 2) % 6] + axes[(face + 4) % 6];
+
+            const auto render = [&] (bool castsShadows)
+            {
+                Scene scene;
+                buildPointLightRoom (scene, false).castsShadows = castsShadows;
+                addBlocker (scene, axis);
+                setTier (scene, tier);
+                addCamera (scene, side * 0.9f - axis * 0.5f, axis * 2.0f, axes[(face + 2) % 6]);
+
+                SceneRenderer renderer;
+                const auto image = renderConverged (renderer, scene, 128);
+                EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+                return image;
+            };
+
+            const auto shadowed = render (true);
+            const auto unshadowed = render (false);
+            ASSERT_TRUE (shadowed.isValid() && unshadowed.isValid());
+
+            const auto contrast = shadowContrast (unshadowed, shadowed);
+            RecordProperty ((String ("contrastFace") + String (static_cast<int> (face))).toStdString(), String (contrast, 3).toStdString());
+            EXPECT_GT (contrast, 0.5) << "face " << axis.getX() << "," << axis.getY() << "," << axis.getZ();
+        }
+    }
+
+    /** The empty room of buildPointLightRoom(), its light moved off the center so that every face
+        of its shadow sees the walls differently and the face edges cross the walls away from their
+        corners, is lit on @p tier as if the light cast no shadow, seen from the light along the
+        diagonal where three faces meet: no pixel darkens by more than 5% on raster, 2% on full, so
+        no face edge leaves a crack and nothing acnes. The full tier filters with a smaller kernel
+        than the raster tent, so a crack darkens less there: its threshold is tighter. Checked at the
+        default shadow resolution, and at the smallest, whose coarse texels widen a crack on screen.
+        A @p radius above 0 checks the soft shadows of a light of that size instead, whose wide
+        kernels must not shadow the walls with themselves either.
+    */
+    void checkPointShadowHasNoFaceSeams (RenderSettings::TierPreference tier, float radius = 0.0f)
+    {
+        const Vector3<float> light (0.5f, -0.3f, 0.4f);
+        const auto threshold = tier == RenderSettings::TierPreference::full ? 0.98 : 0.95;
+
+        for (const auto resolution : { RenderSettings().shadowResolution, RenderCapabilities::minShadowResolution })
+        {
+            const auto render = [&] (bool castsShadows)
+            {
+                Scene scene;
+                auto& pointLight = buildPointLightRoom (scene, false);
+                pointLight.castsShadows = castsShadows;
+                pointLight.radius = radius;
+                scene.getRoot()->findChild ("point")->setPosition (light);
+                addCamera (scene, light, light + Vector3<float> (1.0f, 1.0f, 1.0f), { 0.0f, 0.0f, 1.0f });
+
+                auto settings = scene.getRenderSettings();
+                settings.tier = tier;
+                settings.shadowResolution = resolution;
+                if (radius > 0.0f)
+                    settings.softShadows = true;
+
+                scene.setRenderSettings (settings);
+
+                SceneRenderer renderer;
+                const auto image = renderConverged (renderer, scene, 256);
+                EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+                return image;
+            };
+
+            const auto shadowed = render (true);
+            const auto unshadowed = render (false);
+            ASSERT_TRUE (shadowed.isValid() && unshadowed.isValid());
+
+            auto worst = 1.0;
+            auto darkened = 0;
+            for (int y = 0; y < shadowed.getHeight(); ++y)
+            {
+                for (int x = 0; x < shadowed.getWidth(); ++x)
+                {
+                    const auto lit = meanLuminance (unshadowed, { x, y, 1, 1 });
+                    if (lit <= 10.0)
+                        continue;
+
+                    const auto relative = meanLuminance (shadowed, { x, y, 1, 1 }) / lit;
+                    worst = jmin (worst, relative);
+                    darkened += relative < threshold ? 1 : 0;
+                }
+            }
+
+            const auto suffix = String (resolution).toStdString();
+            RecordProperty ("darkestRelative" + suffix, String (worst, 3).toStdString());
+            RecordProperty ("darkenedPixels" + suffix, darkened);
+            EXPECT_EQ (darkened, 0) << "resolution " << resolution << ", darkest " << worst;
+        }
+    }
+
+    /** The spot of buildSpotOverGround() with a radius of @p radius casts the blocker's shadow on
+        the ground on @p tier: the shadow darkens the ground by more than 35%. */
+    void checkSpotCastsAShadow (RenderSettings::TierPreference tier, float radius)
+    {
+        const auto render = [&] (bool castsShadows)
+        {
+            Scene scene;
+            auto& spot = buildSpotOverGround (scene);
+            spot.castsShadows = castsShadows;
+            spot.radius = radius;
+            setTier (scene, tier);
+
+            SceneRenderer renderer;
+            const auto image = renderConverged (renderer, scene, 128);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            return image;
+        };
+
+        const auto shadowed = render (true);
+        const auto unshadowed = render (false);
+        ASSERT_TRUE (shadowed.isValid() && unshadowed.isValid());
+
+        const auto contrast = shadowContrast (unshadowed, shadowed);
+        RecordProperty ("contrast", String (contrast, 3).toStdString());
+        EXPECT_GT (contrast, 0.35);
+    }
+
+    /** The centroid on the ground y = 0 of the pixels of @p shadowed darker than 70% of
+        @p unshadowed, among those brighter than 10 levels in @p unshadowed, both seen through
+        @p viewProjection: each pixel is traced back to the ground and weighs the ground area it
+        covers, so the perspective of the camera does not move the centroid. Returns nothing when
+        no pixel is shadowed.
+    */
+    static std::optional<Vector3<float>> shadowCentroidOnGround (const Image& unshadowed, const Image& shadowed, const Matrix4& viewProjection)
+    {
+        const auto inverse = viewProjection.inverted();
+        const auto width = static_cast<float> (unshadowed.getWidth());
+        const auto height = static_cast<float> (unshadowed.getHeight());
+
+        // Where the ray through the point (x, y) of the image, in pixels from the top left, meets the ground
+        const auto toGround = [&] (float x, float y)
+        {
+            const auto ndcX = x / width * 2.0f - 1.0f;
+            const auto ndcY = 1.0f - y / height * 2.0f;
+            const auto nearPoint = inverse.transformPoint ({ ndcX, ndcY, 0.0f });
+            const auto farPoint = inverse.transformPoint ({ ndcX, ndcY, 0.5f });
+            return nearPoint + (farPoint - nearPoint) * (nearPoint.getY() / (nearPoint.getY() - farPoint.getY()));
+        };
+
+        Vector3<float> sum;
+        auto area = 0.0f;
+
+        for (int y = 0; y < unshadowed.getHeight(); ++y)
+        {
+            for (int x = 0; x < unshadowed.getWidth(); ++x)
+            {
+                const auto lit = meanLuminance (unshadowed, { x, y, 1, 1 });
+                if (lit <= 10.0 || meanLuminance (shadowed, { x, y, 1, 1 }) >= 0.7 * lit)
+                    continue;
+
+                // Each pixel weighs the ground area it covers, which shrinks with the distance
+                const auto corner = toGround (static_cast<float> (x), static_cast<float> (y));
+                const auto right = toGround (static_cast<float> (x + 1), static_cast<float> (y)) - corner;
+                const auto down = toGround (static_cast<float> (x), static_cast<float> (y + 1)) - corner;
+                const auto weight = std::abs (right.getX() * down.getZ() - right.getZ() * down.getX());
+
+                sum = sum + toGround (static_cast<float> (x) + 0.5f, static_cast<float> (y) + 0.5f) * weight;
+                area += weight;
+            }
+        }
+
+        if (! (area > 0.0f))
+            return std::nullopt;
+
+        return sum * (1.0f / area);
+    }
+
+    /** A spot of radius 0.3 shadows on @p tier from its center. A blocker 1 m under it and off its
+        axis, on the diagonal x = z, is symmetric about the vertical plane x = z holding the spot's
+        center, so its shadow centers on the ground line x = z, where the line from the center of
+        the spot through the blocker meets the ground: the shadow's centroid lies within 5 cm of that
+        line, and within 2 cm of the shadow of the same spot without a radius. Shadowed from a point
+        a radius away from the center along x, it would center about 0.4 m off the line.
+    */
+    void checkAreaSpotCastsAShadowTowardsItsCenter (RenderSettings::TierPreference tier)
+    {
+        const Vector3<float> blocker (0.35f, 2.0f, 0.35f);
+        constexpr int size = 256;
+
+        const auto render = [&] (bool castsShadows, float radius)
+        {
+            Scene scene;
+            auto& spot = buildSpotOverGround (scene, blocker);
+            spot.castsShadows = castsShadows;
+            spot.radius = radius;
+            setTier (scene, tier);
+
+            // The direction of the lookup is under test, not the filter: both radii filter alike
+            auto settings = scene.getRenderSettings();
+            settings.softShadows = false;
+            scene.setRenderSettings (settings);
+
+            SceneRenderer renderer;
+            const auto image = renderConverged (renderer, scene, size);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            return image;
+        };
+
+        const auto unshadowed = render (false, 0.3f);
+        const auto area = render (true, 0.3f);
+        const auto punctual = render (true, 0.0f);
+        ASSERT_TRUE (unshadowed.isValid() && area.isValid() && punctual.isValid());
+
+        // The camera of buildSpotOverGround()
+        const auto camera = Matrix4::lookAt ({ 0.0f, 3.0f, 4.0f }, {}, { 0.0f, 1.0f, 0.0f }).followedBy (Matrix4::perspective (CameraNode().yFov, 1.0f, 0.1f, 1000.0f));
+        const auto areaCentroid = shadowCentroidOnGround (unshadowed, area, camera);
+        const auto punctualCentroid = shadowCentroidOnGround (unshadowed, punctual, camera);
+        ASSERT_TRUE (areaCentroid.has_value() && punctualCentroid.has_value());
+
+        const auto offLine = std::abs (areaCentroid->getX() - areaCentroid->getZ()) / std::sqrt (2.0f);
+        const auto toPunctual = (*areaCentroid - *punctualCentroid).length();
+        RecordProperty ("areaOffTheLine", String (offLine, 3).toStdString());
+        RecordProperty ("areaToPunctual", String (toPunctual, 3).toStdString());
+
+        EXPECT_LT (offLine, 0.05f) << areaCentroid->getX() << ", " << areaCentroid->getZ();
+        EXPECT_LT (toPunctual, 0.02f) << areaCentroid->getX() << ", " << areaCentroid->getZ();
+    }
+
+    /** buildPointLightRoom() with 40 more shadow casting point lights renders on @p tier without an
+        error, recording whole lights within the shadow record budget of the tier, and stays finite in
+        raw radiance (no temporal anti-aliasing on full, the rgba16float bloom path on raster).
+    */
+    void checkManyShadowedLightsRenderWithoutError (RenderSettings::TierPreference tier)
+    {
+        const auto full = tier == RenderSettings::TierPreference::full;
+
+        Scene scene;
+        buildPointLightRoom (scene);
+        for (int i = 0; i < 40; ++i)
+            addShadowedPointLight (scene, { std::sin (static_cast<float> (i)) * 1.5f, std::cos (static_cast<float> (i) * 0.7f) * 1.5f, 0.5f });
+
+        if (full)
+            setFullTierTaa (scene, 1);
+        else
+        {
+            setTier (scene, RenderSettings::TierPreference::raster);
+            setBloom (scene, true);
+        }
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        ASSERT_TRUE (image.isValid());
+
+        // 41 point lights of 6 faces each, without a sun: 2 fit the 16 local records of raster, 10 the 64 of full
+        EXPECT_EQ (renderer.getShadowRecordCount(), full ? 60 : 12);
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+        const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+        ASSERT_NE (sceneColor, nullptr);
+        EXPECT_EQ (sceneColor->getFormat(), GpuTextureFormat::rgba16float);
+        EXPECT_TRUE (isFiniteTexture (sceneColor));
+        EXPECT_FALSE (isSaturatedTexture (sceneColor));
+#endif
+    }
+
+    /** The scene of the soft shadow tests: a wall 1.2 m high and 2 cm thin across the 4 m ground,
+        from x = -2 to its end at x = 0 on z = 0, lit from behind (-z) by a shadow casting sun 45
+        degrees high with an angular radius of @p sunRadius. Its shadow covers x < 0 from z = 0 to
+        z = 1.2, so the side of the shadow cast by the wall's end runs along z at x = 0, ever further
+        below the edge casting it. An orthographic camera looks straight down at x in [-0.85, 0.85]
+        and z in [0.05, 1.75]: the rows of the frame run across that side, which crosses the center
+        column, and the shadow touches the edge of the frame at the wall. Returns the sun.
+    */
+    static LightNode& buildPenumbraScene (Scene& scene, float sunRadius)
+    {
+        addGround (scene, 2.0f);
+
+        auto wall = EntityNode::Ptr (new EntityNode ("wall"));
+        wall->attach<MeshNode> (makeBox (0.5f, makeWallMaterial()));
+        wall->setScale ({ 2.0f, 1.2f, 0.02f });
+        wall->setPosition ({ -1.0f, 0.6f, -0.01f });
+        scene.getRoot()->addChild (wall);
+
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto& light = sun->attach<LightNode>();
+        light.castsShadows = true;
+        light.radius = sunRadius;
+        aimCamera (*sun, { 0.0f, 7.0f, -7.0f }, {});
+        scene.getRoot()->addChild (sun);
+
+        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto& lens = camera->attach<CameraNode>();
+        lens.projection = CameraNode::Projection::orthographic;
+        lens.xMag = 0.85f;
+        lens.yMag = 0.85f;
+        aimCamera (*camera, { 0.0f, 5.0f, 0.9f }, { 0.0f, 0.0f, 0.9f }, { 0.0f, 0.0f, -1.0f });
+        scene.getRoot()->addChild (camera);
+        scene.setActiveCamera (camera.get());
+
+        scene.setAmbientColor (Color (0xff3f3f3f)); // 0.05 once linear
+        return light;
+    }
+
+    /** buildPenumbraScene() on @p tier at 256 x 256, converged, with soft shadows set to @p softShadows.
+        A @p phase above 0 renders that many frames first and restarts the accumulation, so the
+        converged frames run through other jitter offsets and noise rotations: the frame index,
+        which drives both, keeps counting across a restart. */
+    Image renderPenumbraScene (RenderSettings::TierPreference tier, float sunRadius, bool softShadows, int phase = 0)
+    {
+        Scene scene;
+        buildPenumbraScene (scene, sunRadius);
+        setTier (scene, tier);
+
+        auto settings = scene.getRenderSettings();
+        settings.softShadows = softShadows;
+        scene.setRenderSettings (settings);
+
+        SceneRenderer renderer;
+        for (int frame = 0; frame < phase; ++frame)
+            EXPECT_NE (renderer.render (device, scene, 256, 256), nullptr) << renderer.getLastError();
+
+        if (phase > 0)
+            renderer.restartAccumulation();
+
+        const auto image = renderConverged (renderer, scene, 256);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    }
+
+    /** The luma of every pixel of row @p y, from the left. */
+    static std::vector<double> luminanceRow (const Image& image, int y)
+    {
+        std::vector<double> row;
+        for (int x = 0; x < image.getWidth(); ++x)
+            row.push_back (meanLuminance (image, { x, y, 1, 1 }));
+
+        return row;
+    }
+
+    /** The pixels of row @p y between 10% and 90% of the way from its darkest to its brightest level. */
+    static int penumbraWidthAtRow (const Image& image, int y)
+    {
+        const auto row = luminanceRow (image, y);
+        const auto [darkest, brightest] = std::minmax_element (row.begin(), row.end());
+        const auto low = *darkest + 0.1 * (*brightest - *darkest);
+        const auto high = *darkest + 0.9 * (*brightest - *darkest);
+
+        return static_cast<int> (std::count_if (row.begin(), row.end(), [&] (double level) { return level > low && level < high; }));
+    }
+
+    /** penumbraWidthAtRow() along the center row. */
+    static int penumbraWidth (const Image& image)
+    {
+        return penumbraWidthAtRow (image, image.getHeight() / 2);
+    }
+
+    /** The rows where the wall's shadow of buildPenumbraScene() starts and ends, found down a column
+        inside it: first the end at the wall, which touches the edge of the frame, then the far end. */
+    static std::pair<int, int> findWallShadowRows (const Image& image)
+    {
+        const auto x = image.getWidth() / 4;
+        std::vector<double> column;
+        for (int y = 0; y < image.getHeight(); ++y)
+            column.push_back (meanLuminance (image, { x, y, 1, 1 }));
+
+        const auto [darkest, brightest] = std::minmax_element (column.begin(), column.end());
+        const auto middle = 0.5 * (*darkest + *brightest);
+        const auto isShadowed = [middle] (double level) { return level < middle; };
+
+        const auto first = static_cast<int> (std::find_if (column.begin(), column.end(), isShadowed) - column.begin());
+        const auto last = static_cast<int> (column.rend() - std::find_if (column.rbegin(), column.rend(), isShadowed)) - 1;
+
+        return first == 0 ? std::pair { first, last } : std::pair { last, first };
+    }
+
+    /** A row a quarter of the way along the wall's shadow from the wall. */
+    static int nearRow (const Image& image)
+    {
+        const auto [wall, end] = findWallShadowRows (image);
+        return wall + (end - wall) / 4;
+    }
+
+    /** A row a quarter of the way along the wall's shadow from its far end. */
+    static int farRow (const Image& image)
+    {
+        const auto [wall, end] = findWallShadowRows (image);
+        return end - (end - wall) / 4;
+    }
+
+    /** With soft shadows on @p tier, the side of the wall's shadow is wider under a larger sun. */
+    void checkPcssPenumbraWidensWithLightRadius (RenderSettings::TierPreference tier)
+    {
+        const auto sharpImage = renderPenumbraScene (tier, 0.002f, true);
+        const auto softImage = renderPenumbraScene (tier, 0.05f, true);
+        ASSERT_TRUE (sharpImage.isValid() && softImage.isValid());
+
+        const auto sharp = penumbraWidth (sharpImage);
+        const auto soft = penumbraWidth (softImage);
+        RecordProperty ("sharp", sharp);
+        RecordProperty ("soft", soft);
+        EXPECT_GT (soft, sharp + 4);
+    }
+
+    /** With soft shadows on @p tier, the side of the wall's shadow widens away from the wall, as the
+        edge casting it lies further above the ground. */
+    void checkPenumbraWidensWithDistanceFromTheBlocker (RenderSettings::TierPreference tier)
+    {
+        const auto image = renderPenumbraScene (tier, 0.05f, true);
+        ASSERT_TRUE (image.isValid());
+
+        const auto near = penumbraWidthAtRow (image, nearRow (image));
+        const auto far = penumbraWidthAtRow (image, farRow (image));
+        RecordProperty ("near", near);
+        RecordProperty ("far", far);
+        EXPECT_GT (far, near);
+    }
+
+    /** buildPenumbraScene() lit by a shadow casting spot light of radius @p radius instead of the
+        sun, behind the wall at (0, 2.4, -2.4) and aimed at the middle of the frame: the side of the
+        wall's shadow still runs along x = 0, across the rows of the frame, on @p tier at 256 x 256,
+        converged, with soft shadows set to @p softShadows. */
+    Image renderSpotPenumbraScene (RenderSettings::TierPreference tier, float radius, bool softShadows)
+    {
+        Scene scene;
+        buildPenumbraScene (scene, 0.0f).intensity = 0.0f;
+        setTier (scene, tier);
+
+        auto entity = EntityNode::Ptr (new EntityNode ("spot"));
+        auto& spot = entity->attach<LightNode> (LightNode::Type::spot);
+        spot.intensity = 40.0f;
+        spot.outerConeAngle = 0.8f;
+        spot.innerConeAngle = 0.7f;
+        spot.radius = radius;
+        spot.castsShadows = true;
+        aimCamera (*entity, { 0.0f, 2.4f, -2.4f }, { 0.0f, 0.0f, 0.9f });
+        scene.getRoot()->addChild (entity);
+
+        auto settings = scene.getRenderSettings();
+        settings.softShadows = softShadows;
+        scene.setRenderSettings (settings);
+
+        SceneRenderer renderer;
+        const auto image = renderConverged (renderer, scene, 256);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    }
+
+    /** With soft shadows on @p tier, the side of the wall's shadow under a spot light is wider when
+        the light is larger, and only through soft shadows: the same large light filtered hard
+        stays as narrow as the small one. */
+    void checkSpotPenumbraWidensWithLightRadius (RenderSettings::TierPreference tier)
+    {
+        const auto sharpImage = renderSpotPenumbraScene (tier, 0.002f, true);
+        const auto softImage = renderSpotPenumbraScene (tier, 0.2f, true);
+        const auto hardImage = renderSpotPenumbraScene (tier, 0.2f, false);
+        ASSERT_TRUE (sharpImage.isValid() && softImage.isValid() && hardImage.isValid());
+
+        const auto sharp = penumbraWidth (sharpImage);
+        const auto soft = penumbraWidth (softImage);
+        const auto hard = penumbraWidth (hardImage);
+        RecordProperty ("sharp", sharp);
+        RecordProperty ("soft", soft);
+        RecordProperty ("hard", hard);
+        EXPECT_GT (soft, sharp + 4);
+        EXPECT_LE (hard, sharp + 2);
+    }
+
+    /** Raster keeps the hardware filtered shadow by default, and opts in to soft shadows. */
+    void checkRasterSoftShadowsOptIn()
+    {
+        Scene scene;
+        buildPenumbraScene (scene, 0.05f);
+        setTier (scene, RenderSettings::TierPreference::raster);
+
+        SceneRenderer hard;
+        const auto hardWidth = penumbraWidth (renderToImage (hard, scene, 256));
+        EXPECT_LE (hardWidth, 4); // hardware PCF: today's narrow tent
+
+        auto settings = scene.getRenderSettings();
+        settings.softShadows = true;
+        scene.setRenderSettings (settings);
+
+        SceneRenderer soft;
+        const auto softImage = renderToImage (soft, scene, 256);
+        ASSERT_TRUE (soft.getLastError().isEmpty()) << soft.getLastError();
+
+        const auto softWidth = penumbraWidth (softImage);
+        RecordProperty ("hard", hardWidth);
+        RecordProperty ("soft", softWidth);
+        EXPECT_GT (softWidth, hardWidth + 4);
+    }
+
+    /** Raster shades with its soft shadow variant only in the frames that soften a shadow: turning
+        soft shadows on and off again within one renderer comes back to the first frame, the soft
+        frame matches a renderer drawing it from the start, and a sun without a size casts the same
+        shadow with soft shadows on as off. */
+    void checkRasterSoftShadowVariantFollowsTheSettings()
+    {
+        Scene scene;
+        auto& sun = buildPenumbraScene (scene, 0.05f);
+        setTier (scene, RenderSettings::TierPreference::raster);
+
+        const auto setSoftShadows = [&scene] (bool soft)
+        {
+            auto settings = scene.getRenderSettings();
+            settings.softShadows = soft;
+            scene.setRenderSettings (settings);
+        };
+
+        SceneRenderer renderer;
+        std::array<Image, 3> frames;
+        const std::array<bool, 3> soft { false, true, false };
+
+        for (size_t i = 0; i < frames.size(); ++i)
+        {
+            setSoftShadows (soft[i]);
+            frames[i] = renderToImage (renderer, scene, 128);
+            ASSERT_TRUE (frames[i].isValid()) << i << ": " << renderer.getLastError();
+        }
+
+        // The canvas read back dithers the frames by a level, within what countDifferences() ignores
+        EXPECT_EQ (countDifferences (frames[0], frames[2]), 0);
+        EXPECT_GT (countDifferences (frames[1], frames[0]), 0);
+
+        setSoftShadows (true);
+        SceneRenderer fresh;
+        const auto softFrame = renderToImage (fresh, scene, 128);
+        ASSERT_TRUE (softFrame.isValid()) << fresh.getLastError();
+        EXPECT_EQ (countDifferences (frames[1], softFrame), 0);
+
+        sun.radius = 0.0f;
+        const auto pointSun = renderToImage (renderer, scene, 128);
+        setSoftShadows (false);
+        const auto pointSunHard = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (pointSun.isValid() && pointSunHard.isValid()) << renderer.getLastError();
+        EXPECT_EQ (countDifferences (pointSun, pointSunHard), 0);
+    }
+
+    /** A large sun (0.2 rad) 15 degrees above an empty ground casts no more shadow on it with soft
+        shadows than with the hard filter on @p tier: no pixel darkens by more than 5% on raster, 2%
+        on full, and more than the level the canvas read back dithers by. The ground falls steeply
+        away in the sun's depth, so its own depth must not shadow it across the wide soft shadow
+        kernels. */
+    void checkSoftSunLeavesAGrazedGroundLit (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool softShadows)
+        {
+            Scene scene;
+            addGround (scene, 2.0f);
+            scene.setAmbientColor (Color (0xff3f3f3f));
+
+            auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+            auto& light = sun->attach<LightNode>();
+            light.castsShadows = true;
+            light.radius = 0.2f;
+            aimCamera (*sun, { -10.0f * std::cos (0.26f), 10.0f * std::sin (0.26f), 0.0f }, {});
+            scene.getRoot()->addChild (sun);
+
+            addCamera (scene, { 0.0f, 3.0f, 3.0f }, {});
+            setTier (scene, tier);
+
+            auto settings = scene.getRenderSettings();
+            settings.softShadows = softShadows;
+            scene.setRenderSettings (settings);
+
+            SceneRenderer renderer;
+            const auto image = renderConverged (renderer, scene, 256);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            return image;
+        };
+
+        const auto shadowed = render (true);
+        const auto unshadowed = render (false);
+        ASSERT_TRUE (shadowed.isValid() && unshadowed.isValid());
+
+        const auto threshold = tier == RenderSettings::TierPreference::full ? 0.98 : 0.95;
+        auto worst = 1.0;
+        auto darkened = 0;
+        for (int y = 0; y < shadowed.getHeight(); ++y)
+        {
+            for (int x = 0; x < shadowed.getWidth(); ++x)
+            {
+                const auto lit = meanLuminance (unshadowed, { x, y, 1, 1 });
+                if (lit <= 10.0)
+                    continue;
+
+                const auto level = meanLuminance (shadowed, { x, y, 1, 1 });
+                if (lit - level <= 2.0)
+                    continue;
+
+                const auto relative = level / lit;
+                worst = jmin (worst, relative);
+                darkened += relative < threshold ? 1 : 0;
+            }
+        }
+
+        RecordProperty ("darkestRelative", String (worst, 3).toStdString());
+        RecordProperty ("darkenedPixels", darkened);
+        EXPECT_EQ (darkened, 0) << "darkest " << worst;
+    }
+
 #if YUP_ENABLE_SHADER_TRANSPILER
     /** Runs @p fragment over @p source (texture at set 0 binding 0, sampler at binding 1) into an
         rgba8 target of its size, and reads the result back. */
@@ -2299,6 +3090,171 @@ vec4 encodeLuma(vec3 c)
         EXPECT_FALSE (isSaturatedTexture (sceneColor));
     }
 #endif
+
+    /** A 5 cm high step, 1 x 1 m, on a 50 x 50 m ground, its +x face standing on x = 0, lit by a
+        shadow casting sun 15 degrees above the horizon from -x: the step shadows the ground over the
+        0.19 m beyond that face, the crease. The sun gets a single 256 x 256 map, fitted to the
+        ground the camera sees (texels of about 0.12 m). Its lookups move each receiver along its
+        normal by 1.5 texels times (1 - n.l), about 0.13 m under this grazing sun, which lifts the
+        whole crease above the step: the map cannot show that shadow, only contact shadows can.
+        The camera looks at the crease from +x, above it. The sun asks for contact shadows when
+        @p contact is set. Returns the sun.
+    */
+    static LightNode& buildCreaseScene (Scene& scene, bool contact)
+    {
+        addGround (scene, 25.0f);
+
+        auto step = EntityNode::Ptr (new EntityNode ("step"));
+        step->attach<MeshNode> (makeBox (0.5f, makeWallMaterial()));
+        step->setScale ({ 1.0f, 0.05f, 1.0f });
+        step->setPosition ({ -0.5f, 0.025f, 0.0f });
+        scene.getRoot()->addChild (step);
+
+        auto entity = EntityNode::Ptr (new EntityNode ("sun"));
+        auto& sun = entity->attach<LightNode>();
+        sun.castsShadows = true;
+        sun.contactShadows = contact;
+        const auto elevation = degreesToRadians (15.0f);
+        aimCamera (*entity, Vector3<float> (-std::cos (elevation), std::sin (elevation), 0.0f) * 10.0f, {});
+        scene.getRoot()->addChild (entity);
+
+        addCamera (scene, { 0.55f, 0.35f, 0.0f }, { 0.05f, 0.0f, 0.0f });
+        scene.setAmbientColor (Color (0xff3f3f3f)); // 0.05 once linear
+
+        auto settings = scene.getRenderSettings();
+        settings.sunCascades = 1;
+        settings.shadowResolution = 256;
+        scene.setRenderSettings (settings);
+        return sun;
+    }
+
+    /** The ground of the crease of buildCreaseScene() in a render of @p size x @p size. */
+    static Rectangle<int> creaseRect (int size = 256)
+    {
+        return { 64 * size / 256, 116 * size / 256, 128 * size / 256, 16 * size / 256 };
+    }
+
+    /** Open ground of buildCreaseScene(), lit and far from the step, in a render of @p size x @p size. */
+    static Rectangle<int> openGroundRect (int size = 256)
+    {
+        return { 64 * size / 256, 200 * size / 256, 128 * size / 256, 32 * size / 256 };
+    }
+
+    /** buildCreaseScene() on @p tier at @p size x @p size, converged, with or without contact
+        shadows, the sun casting shadows or not. @p texel receives the world size of a texel of the
+        sun map, 0 without one. */
+    Image renderCreaseScene (RenderSettings::TierPreference tier, int size, bool contact, bool castsShadows, float& texel)
+    {
+        Scene scene;
+        buildCreaseScene (scene, contact).castsShadows = castsShadows;
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        const auto image = renderConverged (renderer, scene, size);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+
+        texel = renderer.getShadowData().cascadeTexel[0];
+        return image;
+    }
+
+    /** On @p tier, which has no contact shadows, buildCreaseScene() renders exactly the same with
+        and without them. */
+    void checkContactShadowsIgnoredOnRaster (RenderSettings::TierPreference tier)
+    {
+        Scene withContact, without;
+        buildCreaseScene (withContact, true);
+        buildCreaseScene (without, false);
+        setTier (withContact, tier);
+        setTier (without, tier);
+
+        // Known, not caused by contact shadows: the first frame a fresh Metal device renders differs
+        // from the later ones by one level in a few hundred pixels, with or without shadows (a Phase 3
+        // follow-up, see the Task 8 report). Both compared frames come after a warm-up frame
+        SceneRenderer warmUp;
+        ASSERT_TRUE (renderToImage (warmUp, without, 128).isValid());
+
+        SceneRenderer a, b;
+        const auto imageA = renderToImage (a, withContact, 128);
+        const auto imageB = renderToImage (b, without, 128);
+        ASSERT_TRUE (a.getLastError().isEmpty());
+        ASSERT_TRUE (imageA.isValid() && imageB.isValid());
+        EXPECT_NEAR (meanLuminance (imageA, creaseRect (128)), meanLuminance (imageB, creaseRect (128)), 1.0f / 255.0f);
+
+        auto differing = 0;
+        for (int y = 0; y < imageA.getHeight(); ++y)
+            for (int x = 0; x < imageA.getWidth(); ++x)
+                differing += imageA.getPixelColor (x, y) != imageB.getPixelColor (x, y) ? 1 : 0;
+
+        EXPECT_EQ (differing, 0);
+    }
+
+    /** The contact shadow settings of each light reach the shaders on @p tier through its first
+        shadow record: contact[0] the march distance (0 when off), contact[1] the thickness, with
+        filterInfo.w flag 1 telling the tier marches them. A light with contact shadows but no
+        shadow map takes one record without a map. The raster tier has no contact shadows: no flag,
+        no distance and no extra record.
+    */
+    void checkContactShadowSettingsLiveInTheFirstShadowRecord (RenderSettings::TierPreference tier)
+    {
+        const auto full = tier == RenderSettings::TierPreference::full;
+
+        for (const auto enabled : { true, false })
+        {
+            Scene scene;
+            buildCreaseScene (scene, true);
+            setTier (scene, tier);
+
+            auto settings = scene.getRenderSettings();
+            settings.contactShadows = enabled;
+            scene.setRenderSettings (settings);
+
+            const auto addPoint = [&] (Vector3<float> position, bool castsShadows, float distance, float thickness)
+            {
+                auto entity = EntityNode::Ptr (new EntityNode ("point"));
+                auto& light = entity->attach<LightNode> (LightNode::Type::point);
+                light.castsShadows = castsShadows;
+                light.contactShadows = true;
+                light.contactShadowDistance = distance;
+                light.contactShadowThickness = thickness;
+                entity->setPosition (position);
+                scene.getRoot()->addChild (entity);
+            };
+
+            addPoint ({ 0.5f, 1.0f, 0.5f }, true, 0.4f, 0.02f);
+            addPoint ({ -0.5f, 1.0f, -0.5f }, false, 0.3f, 0.1f);
+
+            SceneRenderer renderer;
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+            const auto marches = full && enabled;
+            const auto data = renderer.getShadowData();
+            const auto cascades = static_cast<int> (data.sunInfo[0]);
+            ASSERT_GE (cascades, 1);
+
+            const auto flags = static_cast<int> (data.filterInfo[3]);
+            EXPECT_EQ ((flags & 1) != 0, marches) << flags;
+
+            // The sun, then the six faces of the shadowed point light, which keep their view count
+            EXPECT_FLOAT_EQ (data.records[0].contact[0], marches ? 0.2f : 0.0f);
+            EXPECT_FLOAT_EQ (data.records[cascades].contact[0], marches ? 0.4f : 0.0f);
+            if (marches)
+                EXPECT_FLOAT_EQ (data.records[cascades].contact[1], 0.02f);
+
+            for (int face = 0; face < 6; ++face)
+                EXPECT_FLOAT_EQ (data.records[cascades + face].contact[2], 6.0f) << face;
+
+            // Contact shadows without a shadow map: one record without a map
+            ASSERT_EQ (renderer.getShadowRecordCount(), cascades + 6 + (marches ? 1 : 0));
+            if (marches)
+            {
+                const auto& contactOnly = data.records[cascades + 6];
+                EXPECT_EQ (contactOnly.atlasRect[2], 0.0f);
+                EXPECT_FLOAT_EQ (contactOnly.contact[0], 0.3f);
+                EXPECT_FLOAT_EQ (contactOnly.contact[1], 0.1f);
+            }
+        }
+    }
 
     GpuDevice::Ptr device;
     std::unique_ptr<GraphicsContext> context;
@@ -4380,19 +5336,23 @@ TEST_F (SceneRendererMetalTests, DeferredMatchesForwardForOpaque)
     // the interior of each baseline scene matches a forced raster frame, away from the edges where
     // MSAA and TAA differ. The mean over the interior catches global drift, the 8x8 blocks of
     // opaque texels catch a local one. The blended quad of the materials scene is drawn forward on
-    // both tiers but blended in linear light on full only, so its blocks are left out
+    // both tiers but blended in linear light on full only, so its blocks are left out. The baseline
+    // scenes are compact enough for one scene-fitted sun map; the long ground keeps two view-fitted
+    // cascades, so the raster blend and the full dither between them are compared too
     const struct
     {
         const char* name;
         void (*build) (Scene&);
         Rectangle<int> blended;
+        bool viewFitted = false; // keeps the view-fitted cascades, so the tiers compare their handover too
     } scenes[] = {
         { "shadows", buildShadowsScene, {} },
         { "materials", buildMaterialsScene, { 74, 53, 24, 24 } },
         { "areaLights", buildAreaLightsScene, {} },
+        { "longGround", [] (Scene& scene) { buildLongGroundScene (scene, 2.0f); }, {}, true },
     };
 
-    for (const auto& [name, build, blended] : scenes)
+    for (const auto& [name, build, blended, viewFitted] : scenes)
     {
         Image images[2];
 
@@ -4409,6 +5369,9 @@ TEST_F (SceneRendererMetalTests, DeferredMatchesForwardForOpaque)
             image = renderConverged (renderer, scene, 128);
             ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
             ASSERT_EQ (renderer.getCapabilities()->getTier() == RenderCapabilities::Tier::full, tier == RenderSettings::TierPreference::full) << name;
+
+            if (viewFitted)
+                EXPECT_EQ (renderer.getShadowData().sunInfo[0], 2.0f) << name;
         }
 
         const auto full = meanLuminance (images[0], { 32, 32, 64, 64 });
@@ -4563,6 +5526,53 @@ TEST_F (SceneRendererMetalTests, BackgroundIsKeptBehindLitPixels)
         EXPECT_NEAR (full.getRed(), raster.getRed(), 3) << x << ", " << y;
         EXPECT_NEAR (full.getGreen(), raster.getGreen(), 3) << x << ", " << y;
         EXPECT_NEAR (full.getBlue(), raster.getBlue(), 3) << x << ", " << y;
+    }
+}
+
+TEST_F (SceneRendererMetalTests, SoftShadowFilterFollowsTheTierAndTaa)
+{
+    // GpuShadowData::filterInfo = (soft, filter taps, blocker taps, flags) per preflight R18: 8 + 8
+    // rotating taps where temporal anti-aliasing averages them (flag 2), 16 + 16 still ones on full
+    // without it, 8 + 8 still ones for raster's opt-in, and none without soft shadows or without a
+    // shadowed light that has a size
+    const struct
+    {
+        const char* name;
+        RenderSettings::TierPreference tier;
+        int taaSamples;
+        std::optional<bool> softShadows;
+        float radius;
+        float taps;
+        bool temporal;
+    } cases[] = {
+        { "full, TAA", RenderSettings::TierPreference::full, 16, {}, 0.05f, 8.0f, true },
+        { "full, no TAA", RenderSettings::TierPreference::full, 1, {}, 0.05f, 16.0f, false },
+        { "full, soft off", RenderSettings::TierPreference::full, 16, false, 0.05f, 0.0f, true },
+        { "full, punctual sun", RenderSettings::TierPreference::full, 16, {}, 0.0f, 0.0f, true },
+        { "raster opt-in", RenderSettings::TierPreference::raster, 16, true, 0.05f, 8.0f, false },
+        { "raster default", RenderSettings::TierPreference::raster, 16, {}, 0.05f, 0.0f, false },
+    };
+
+    for (const auto& c : cases)
+    {
+        Scene scene;
+        buildPenumbraScene (scene, c.radius);
+
+        auto settings = scene.getRenderSettings();
+        settings.tier = c.tier;
+        settings.taaSamples = c.taaSamples;
+        settings.softShadows = c.softShadows;
+        scene.setRenderSettings (settings);
+
+        SceneRenderer renderer;
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << c.name << ": " << renderer.getLastError();
+
+        const auto shadowData = renderer.getShadowData();
+        const auto& filter = shadowData.filterInfo;
+        EXPECT_EQ (filter[0], c.taps > 0.0f ? 1.0f : 0.0f) << c.name;
+        EXPECT_EQ (filter[1], c.taps) << c.name;
+        EXPECT_EQ (filter[2], c.taps) << c.name;
+        EXPECT_EQ ((static_cast<int> (filter[3]) & 2) != 0, c.temporal) << c.name;
     }
 }
 
@@ -5625,6 +6635,34 @@ TEST_P (SceneRendererTierTests, ShadowMapsRenderOnlyWhenTheShadowsChange)
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
+TEST_P (SceneRendererTierTests, ShadowMapsSurviveMovingLightsAndRedrawnOpaqueTextures)
+{
+    // The Scene3D demo's frames: lights casting no shadow orbit and an opaque caster's texture is
+    // redrawn, under the jittered camera of TAA on the full tier. None of it changes the shadows
+    auto material = Material::Ptr (new Material());
+    auto texture = Texture::Ptr (new Texture (GpuTexture::create (device, GpuTextureDesc (2, 2, GpuTextureFormat::rgba8unorm))));
+    material->baseColorTexture = texture;
+
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f, material);
+    setTier (scene, GetParam());
+
+    auto orbiting = EntityNode::Ptr (new EntityNode ("orbiting"));
+    orbiting->attach<LightNode> (LightNode::Type::point);
+    scene.getRoot()->addChild (orbiting);
+
+    SceneRenderer renderer;
+    for (int frame = 0; frame < 4; ++frame)
+    {
+        orbiting->setPosition ({ 0.2f * static_cast<float> (frame), 1.0f, -2.0f });
+        texture->setGpuTexture (GpuTexture::create (device, GpuTextureDesc (2, 2, GpuTextureFormat::rgba8unorm)));
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    }
+
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
 TEST_P (SceneRendererTierTests, MaskedCasterChangesDrawTheShadowMapsAgain)
 {
     // A masked caster casts what its alpha test keeps: a new cutoff, base alpha or base color
@@ -5680,12 +6718,687 @@ TEST_P (SceneRendererTierTests, GpuFailureDrawsTheShadowMapsAgain)
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
+TEST_P (SceneRendererTierTests, OrbitingACompactSceneDoesNotRedrawTheShadows)
+{
+    // A device-sized box on a ground of about its size, seen whole: one map fitted to the scene is
+    // finer than the first cascade and ignores the camera, so orbiting around draws it only once
+    Scene scene;
+    auto& box = addCompactScene (scene);
+
+    addCamera (scene, { 5.0f, 4.0f, 0.0f }, {});
+    auto* camera = scene.getRoot()->findChild ("camera");
+    ASSERT_NE (camera, nullptr);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    for (int frame = 0; frame < 8; ++frame)
+    {
+        const auto yaw = 0.3f * static_cast<float> (frame);
+        aimCamera (*camera, { 5.0f * std::cos (yaw), 4.0f, 5.0f * std::sin (yaw) }, {});
+
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_EQ (renderer.getShadowRecordCount(), 1) << "frame " << frame;
+    }
+
+    // Zooming out and panning keep the map too
+    aimCamera (*camera, { 6.5f, 5.2f, 0.0f }, {});
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    aimCamera (*camera, { 6.5f, 5.2f, 0.3f }, { 0.0f, 0.0f, 0.3f });
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getShadowRecordCount(), 1);
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+
+    // Moving the box draws it again
+    box.setPosition ({ 0.1f, 0.3f, 0.0f });
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, LargeSceneKeepsViewFittedCascades)
+{
+    // The long ground near one end: no single map over 200 m matches the first cascade, so the tier's
+    // cascades stay fitted to the view, and a camera move fits them again
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    ASSERT_NE (renderer.getCapabilities(), nullptr);
+    const auto cascades = renderer.getCapabilities()->getCascadeCount (scene.getRenderSettings());
+    EXPECT_EQ (cascades, GetParam() == RenderSettings::TierPreference::full ? 4 : RenderCapabilities::defaultRasterCascades);
+    EXPECT_EQ (renderer.getShadowRecordCount(), cascades);
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+
+    auto* camera = scene.getRoot()->findChild ("camera");
+    ASSERT_NE (camera, nullptr);
+    camera->setPosition (camera->getPosition() + Vector3<float> (0.5f, 0.0f, 0.0f));
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getShadowRecordCount(), cascades);
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, CasterMovingInsideTheLastCascadeRedrawsOnlyIt)
+{
+    // The far cube moves sideways, still beyond every cascade but the last: the ground keeps the
+    // fit of every cascade, so only the last one holds anything new
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f);
+    auto& farCaster = addFarCaster (scene);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    for (int frame = 0; frame < 2; ++frame)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    const auto cascades = renderer.getShadowRecordCount();
+    ASSERT_GT (cascades, 1);
+
+    auto expected = getCascadeRenderCounts (renderer, cascades);
+    EXPECT_EQ (expected, std::vector<int> (static_cast<size_t> (cascades), 1));
+
+    farCaster.setPosition (farCaster.getPosition() + Vector3<float> (0.5f, 0.0f, 0.0f));
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    ++expected.back();
+    EXPECT_EQ (getCascadeRenderCounts (renderer, cascades), expected);
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, CasterLeavingACascadeRedrawsIt)
+{
+    // The near cube moves beside the far one: the first cascade, which it leaves, and the last
+    // one, which it enters, draw again
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f);
+    addFarCaster (scene);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    const auto cascades = renderer.getShadowRecordCount();
+    ASSERT_GT (cascades, 1);
+
+    auto* caster = scene.getRoot()->findChild ("caster");
+    ASSERT_NE (caster, nullptr);
+    caster->setPosition ({ 3.0f, caster->getPosition().getY(), -60.0f });
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    const auto counts = getCascadeRenderCounts (renderer, cascades);
+    EXPECT_EQ (counts.front(), 2);
+    EXPECT_EQ (counts.back(), 2);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, ShadowSettingOrSunChangeRedrawsEveryCascade)
+{
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f);
+    addFarCaster (scene);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    const auto cascades = renderer.getShadowRecordCount();
+    ASSERT_GT (cascades, 1);
+
+    // The sun turns a little
+    auto* sun = scene.getRoot()->findChild ("sun");
+    ASSERT_NE (sun, nullptr);
+    aimCamera (*sun, { -10.0f * std::sin (0.62f), 10.0f * std::cos (0.62f), 0.0f }, {});
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (getCascadeRenderCounts (renderer, cascades), std::vector<int> (static_cast<size_t> (cascades), 2));
+
+    // The shadow resolution changes
+    auto settings = scene.getRenderSettings();
+    settings.shadowResolution = 1024;
+    scene.setRenderSettings (settings);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (getCascadeRenderCounts (renderer, cascades), std::vector<int> (static_cast<size_t> (cascades), 3));
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, MovingAShadowedPointLightKeepsTheSunCascades)
+{
+    // The point light's views live in the atlas: moving it draws the atlas again, never a cascade
+    Scene scene;
+    buildLongGroundScene (scene, 2.0f);
+
+    auto lamp = EntityNode::Ptr (new EntityNode ("lamp"));
+    auto& light = lamp->attach<LightNode> (LightNode::Type::point);
+    light.castsShadows = true;
+    light.range = 5.0f;
+    lamp->setPosition ({ 1.0f, 1.0f, -2.0f });
+    scene.getRoot()->addChild (lamp);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    ASSERT_GT (renderer.getShadowAtlasSize(), 0);
+
+    const auto cascades = static_cast<int> (renderer.getShadowData().sunInfo[0]);
+    ASSERT_GT (cascades, 1);
+    const auto counts = getCascadeRenderCounts (renderer, cascades);
+
+    lamp->setPosition ({ 1.2f, 1.0f, -2.0f });
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_EQ (getCascadeRenderCounts (renderer, cascades), counts);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, OrthographicCameraTakesTheSceneFitThatNeverFadesOut)
+{
+    // A wide orthographic view from above whose far plane cuts the ground off: its one view-fitted
+    // cascade would fade out and follow every pan, the scene fit covers every receiver and stays
+    Scene scene;
+    addCompactScene (scene);
+    addCamera (scene, { 0.0f, 5.0f, 0.0f }, {}, { 0.0f, 0.0f, -1.0f });
+
+    auto* camera = scene.getRoot()->findChild ("camera");
+    ASSERT_NE (camera, nullptr);
+    auto& lens = *scene.getActiveCamera();
+    lens.projection = CameraNode::Projection::orthographic;
+    lens.xMag = 3.0f;
+    lens.yMag = 3.0f;
+    lens.zFar = 4.9f;
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    for (const auto& offset : { Vector3<float> (0.0f, 0.0f, 0.0f), Vector3<float> (0.5f, 0.0f, 0.0f), Vector3<float> (0.5f, 0.0f, 0.3f) })
+    {
+        camera->setPosition (Vector3<float> (0.0f, 5.0f, 0.0f) + offset);
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+        const auto shadows = renderer.getShadowData();
+        EXPECT_EQ (shadows.sunInfo[0], 1.0f);
+        EXPECT_EQ (shadows.sunInfo[3], 0.0f);
+    }
+
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, SceneFitHoldsWhileTheFirstCascadeIsNoFiner)
+{
+    // The scene fit of the compact scene has a radius of 1.40625. From "near" the first cascade has a
+    // radius of 1.5 (one quantization step smaller: 1.375), so a fresh renderer keeps the cascades
+    // there; from "far" it has 1.625 on raster, 1.75 on full, so the scene fit takes over, and holds
+    // when the camera comes back near, its texels still no larger than the first cascade's
+    Scene scene;
+    addCompactScene (scene);
+    addCamera (scene, { 5.0f, 4.0f, 0.0f }, {});
+
+    auto* camera = scene.getRoot()->findChild ("camera");
+    ASSERT_NE (camera, nullptr);
+    setTier (scene, GetParam());
+
+    const auto full = GetParam() == RenderSettings::TierPreference::full;
+    const auto direction = Vector3<float> (5.0f, 4.0f, 0.0f).normalized();
+    const auto nearEye = direction * (full ? 3.25f : 2.75f);
+    const auto farEye = direction * (full ? 3.5f : 3.0f);
+
+    {
+        SceneRenderer fresh;
+        aimCamera (*camera, nearEye, {});
+        ASSERT_NE (fresh.render (device, scene, 64, 64), nullptr) << fresh.getLastError();
+        EXPECT_GT (fresh.getShadowData().sunInfo[0], 1.0f);
+        EXPECT_TRUE (fresh.waitForGPU().wasOk());
+    }
+
+    SceneRenderer renderer;
+    for (int frame = 0; frame < 6; ++frame)
+    {
+        aimCamera (*camera, frame % 2 == 0 ? farEye : nearEye, {});
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_EQ (renderer.getShadowData().sunInfo[0], 1.0f) << "frame " << frame;
+    }
+
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, PointLightShadowsOnAllSixFaces)
+{
+    checkPointLightShadowsOnAllSixFaces (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, PointShadowHasNoFaceSeams)
+{
+    checkPointShadowHasNoFaceSeams (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, SpotLightCastsAShadow)
+{
+    checkSpotCastsAShadow (GetParam(), 0.0f);
+}
+
+TEST_P (SceneRendererTierTests, AreaSpotCastsAShadowTowardsItsCenter)
+{
+    // The area light variant shadows a spot with a radius from its center, as a punctual spot
+    checkSpotCastsAShadow (GetParam(), 0.1f);
+    checkAreaSpotCastsAShadowTowardsItsCenter (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, AtlasNeverExceedsTheShadowResolution)
+{
+    // The atlas side is a power of two: rounded down, so it never exceeds the setting (raster) or
+    // twice the setting (full)
+    const auto full = GetParam() == RenderSettings::TierPreference::full;
+
+    Scene scene;
+    buildSpotOverGround (scene);
+    auto settings = scene.getRenderSettings();
+    settings.tier = GetParam();
+    settings.shadowResolution = full ? 1100 : 2100;
+    scene.setRenderSettings (settings);
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getShadowAtlasSize(), 2048);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_P (SceneRendererTierTests, OrthographicCameraSizesTilesWhateverItsDistance)
+{
+    // An orthographic camera 2 units high over a 256 px viewport sees the 2 m reach of the light
+    // as 256 px of radius: a 512 texel tile, as near as far
+    const auto tileSizeFrom = [this] (float distance)
+    {
+        Scene scene;
+        addGround (scene, 5.0f);
+        setTier (scene, GetParam());
+
+        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        light.range = 2.0f;
+        light.castsShadows = true;
+        entity->setPosition ({ 0.0f, 0.5f, 0.0f });
+        scene.getRoot()->addChild (entity);
+
+        addCamera (scene, { 0.0f, distance, 0.0f }, {}, { 0.0f, 0.0f, -1.0f });
+        auto& camera = *scene.getActiveCamera();
+        camera.projection = CameraNode::Projection::orthographic;
+        camera.yMag = 1.0f;
+
+        SceneRenderer renderer;
+        EXPECT_NE (renderer.render (device, scene, 256, 256), nullptr) << renderer.getLastError();
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+        return renderer.getShadowTileSize (0);
+    };
+
+    EXPECT_EQ (tileSizeFrom (5.0f), 512);
+    EXPECT_EQ (tileSizeFrom (200.0f), 512);
+}
+
+TEST_P (SceneRendererTierTests, ManyShadowedLightsRenderWithoutError)
+{
+    checkManyShadowedLightsRenderWithoutError (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ShadowedLightOutOfReachAllocatesNoAtlas)
+{
+    // A shadowed point light whose range reaches no receiver takes no tile, and the frame is the
+    // one it gives without shadows; brought within reach of the ground it takes its six faces
+    const auto render = [this] (Vector3<float> position, bool castsShadows, int& records, int& atlasSize)
+    {
+        Scene scene;
+        buildSpotOverGround (scene).castsShadows = false;
+        setTier (scene, GetParam());
+
+        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        light.range = 1.0f;
+        light.castsShadows = castsShadows;
+        entity->setPosition (position);
+        scene.getRoot()->addChild (entity);
+
+        SceneRenderer renderer;
+        const auto image = renderConverged (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        records = renderer.getShadowRecordCount();
+        atlasSize = renderer.getShadowAtlasSize();
+        return image;
+    };
+
+    int records = -1, atlasSize = -1;
+    const auto far = render ({ 0.0f, 50.0f, 0.0f }, true, records, atlasSize);
+    EXPECT_EQ (records, 0);
+    EXPECT_EQ (atlasSize, 0);
+
+    const auto unshadowed = render ({ 0.0f, 50.0f, 0.0f }, false, records, atlasSize);
+    ASSERT_TRUE (far.isValid() && unshadowed.isValid());
+    EXPECT_EQ (countDifferences (far, unshadowed), 0);
+
+    render ({ 2.0f, 0.5f, 0.0f }, true, records, atlasSize);
+    EXPECT_EQ (records, 6);
+    EXPECT_GT (atlasSize, 0);
+}
+
+TEST_P (SceneRendererTierTests, AtlasShadowMapsRenderOnlyWhenTheShadowsChange)
+{
+    // A still scene with a shadowed spot draws its shadow maps once; a moved spot draws them again,
+    // and so does a new range, which only the views of the spot's shadow see
+    Scene scene;
+    auto& spot = buildSpotOverGround (scene);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    for (int frame = 0; frame < 3; ++frame)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+
+    auto* entity = scene.getRoot()->findChild ("spot");
+    ASSERT_NE (entity, nullptr);
+    entity->setPosition (entity->getPosition() + Vector3<float> (0.05f, 0.0f, 0.0f));
+
+    for (int frame = 0; frame < 2; ++frame)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+
+    spot.range = 8.0f;
+    for (int frame = 0; frame < 2; ++frame)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_EQ (renderer.getShadowMapRenderCount(), 3);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
 #if YUP_ENABLE_SHADER_TRANSPILER
 TEST_P (SceneRendererTierTests, ShadowedRegionIsFinite)
 {
     checkShadowedRegionIsFinite (GetParam());
 }
 #endif
+
+TEST_P (SceneRendererTierTests, ContactShadowsDarkenSmallFeatures)
+{
+    if (GetParam() != RenderSettings::TierPreference::full)
+        GTEST_SKIP() << "Full tier only";
+
+    // Without contact shadows the sun map leaves the crease lit: its normal offset lifts the crease above the step
+    float texel = 0.0f, unshadowedTexel = 0.0f;
+    const auto unshadowed = renderCreaseScene (GetParam(), 256, false, false, unshadowedTexel);
+    const auto without = renderCreaseScene (GetParam(), 256, false, true, texel);
+    const auto withContact = renderCreaseScene (GetParam(), 256, true, true, texel);
+    ASSERT_TRUE (unshadowed.isValid() && without.isValid() && withContact.isValid());
+
+    const auto reference = meanLuminance (unshadowed, creaseRect());
+    const auto lit = meanLuminance (without, creaseRect());
+    const auto contact = meanLuminance (withContact, creaseRect());
+    const auto openLit = meanLuminance (without, openGroundRect());
+    const auto openContact = meanLuminance (withContact, openGroundRect());
+
+    RecordProperty ("sunMapTexel", String (texel, 4).toStdString());
+    RecordProperty ("creaseUnshadowed", String (reference, 2).toStdString());
+    RecordProperty ("creaseMapOnly", String (lit, 2).toStdString());
+    RecordProperty ("creaseContact", String (contact, 2).toStdString());
+    RecordProperty ("openGroundMapOnly", String (openLit, 2).toStdString());
+    RecordProperty ("openGroundContact", String (openContact, 2).toStdString());
+
+    EXPECT_GT (lit, 0.95 * reference);
+    EXPECT_LT (contact, 0.8f * lit);
+
+    // Open ground marches without hitting anything
+    EXPECT_NEAR (openContact, openLit, 0.02 * openLit);
+}
+
+TEST_P (SceneRendererTierTests, ContactShadowsIgnoredOnRaster)
+{
+    if (GetParam() != RenderSettings::TierPreference::raster)
+        GTEST_SKIP() << "Raster only";
+
+    checkContactShadowsIgnoredOnRaster (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ContactShadowSettingsLiveInTheFirstShadowRecord)
+{
+    checkContactShadowSettingsLiveInTheFirstShadowRecord (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ContactShadowOnlyRecordsHaveNoAtlasTile)
+{
+    if (GetParam() != RenderSettings::TierPreference::full)
+        GTEST_SKIP() << "Full tier only";
+
+    Scene scene;
+    buildCreaseScene (scene, false);
+    setTier (scene, GetParam());
+
+    // A shadowed point light keeps the atlas alive; the second lies inside its own emitter, so its
+    // views are dropped after its tiles were allocated, and its contact shadows take a record without a map
+    for (const auto radius : { 0.0f, 0.5f })
+    {
+        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        light.castsShadows = true;
+        light.contactShadows = true;
+        light.radius = radius;
+        light.range = 0.3f;
+        entity->setPosition ({ 1.0f + 2.0f * radius, 0.1f, 0.0f });
+        scene.getRoot()->addChild (entity);
+    }
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+    const auto data = renderer.getShadowData();
+    const auto last = renderer.getShadowRecordCount() - 1;
+    ASSERT_GT (last, 0);
+    EXPECT_EQ (data.records[last].atlasRect[2], 0.0f);
+    EXPECT_FLOAT_EQ (data.records[last].contact[0], 0.2f);
+
+    EXPECT_GT (renderer.getShadowTileSize (1), 0);
+    EXPECT_EQ (renderer.getShadowTileSize (2), 0);
+}
+
+TEST_P (SceneRendererTierTests, ContactShadowRecordsGoToTheMostImportantLights)
+{
+    if (GetParam() != RenderSettings::TierPreference::full)
+        GTEST_SKIP() << "Full tier only";
+
+    Scene scene;
+    buildCreaseScene (scene, true);
+    setTier (scene, GetParam());
+
+    // One record more than the budget leaves: 63 small far lights listed first, then a large one
+    const auto addPoint = [&] (Vector3<float> position, float range, float distance)
+    {
+        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        light.contactShadows = true;
+        light.contactShadowDistance = distance;
+        light.range = range;
+        entity->setPosition (position);
+        scene.getRoot()->addChild (entity);
+    };
+
+    for (int i = 0; i < GpuShadowData::maxRecords - 1; ++i)
+        addPoint ({ -5.0f - 0.1f * static_cast<float> (i), 0.1f, -10.0f }, 0.05f, 0.1f);
+
+    addPoint ({ 0.5f, 0.5f, 0.0f }, 30.0f, 0.3f);
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+    const auto data = renderer.getShadowData();
+    ASSERT_EQ (renderer.getShadowRecordCount(), GpuShadowData::maxRecords);
+    EXPECT_TRUE (std::any_of (std::begin (data.records), std::end (data.records), [] (const GpuShadowRecord& record)
+    {
+        return record.contact[0] == 0.3f;
+    }));
+}
+
+TEST_P (SceneRendererTierTests, ContactShadowsSpareAreaLightsBelowTheHorizon)
+{
+    if (GetParam() != RenderSettings::TierPreference::full)
+        GTEST_SKIP() << "Full tier only";
+
+    // A sphere light whose center lies 0.1 below the ground, its top poking 0.3 above it: the ray
+    // towards its center runs into the ground, which must not shadow what the sphere lights
+    const auto render = [&] (bool contact)
+    {
+        Scene scene;
+        addGround (scene, 5.0f);
+        addCamera (scene, { 0.0f, 2.0f, 1.5f }, {});
+        setTier (scene, GetParam());
+
+        auto entity = EntityNode::Ptr (new EntityNode ("sphere"));
+        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        light.intensity = 5.0f;
+        light.radius = 0.4f;
+        light.contactShadows = contact;
+        entity->setPosition ({ 0.0f, -0.1f, 0.0f });
+        scene.getRoot()->addChild (entity);
+
+        SceneRenderer renderer;
+        const auto image = renderConverged (renderer, scene, 128);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    };
+
+    const auto without = render (false);
+    const auto withContact = render (true);
+    ASSERT_TRUE (without.isValid() && withContact.isValid());
+
+    const Rectangle<int> around (40, 40, 48, 48);
+    const auto lit = meanLuminance (without, around);
+    const auto contact = meanLuminance (withContact, around);
+    RecordProperty ("lit", String (lit, 2).toStdString());
+    RecordProperty ("contact", String (contact, 2).toStdString());
+
+    ASSERT_GT (lit, 20.0);
+    EXPECT_GT (contact, 0.98 * lit);
+}
+
+TEST_P (SceneRendererTierTests, PcssPenumbraWidensWithLightRadius)
+{
+    checkPcssPenumbraWidensWithLightRadius (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, PenumbraWidensWithDistanceFromTheBlocker)
+{
+    checkPenumbraWidensWithDistanceFromTheBlocker (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, RasterSoftShadowsOptIn)
+{
+    if (GetParam() != RenderSettings::TierPreference::raster)
+        GTEST_SKIP() << "Raster only";
+
+    checkRasterSoftShadowsOptIn();
+}
+
+TEST_P (SceneRendererTierTests, SpotPenumbraWidensWithLightRadius)
+{
+    checkSpotPenumbraWidensWithLightRadius (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, SoftPointShadowHasNoFaceSeams)
+{
+    checkPointShadowHasNoFaceSeams (GetParam(), 0.1f);
+}
+
+TEST_P (SceneRendererTierTests, SoftSunLeavesAGrazedGroundLit)
+{
+    checkSoftSunLeavesAGrazedGroundLit (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, RasterSoftShadowVariantFollowsTheSettings)
+{
+    if (GetParam() != RenderSettings::TierPreference::raster)
+        GTEST_SKIP() << "Raster only: the full tier always holds the soft shadow code";
+
+    checkRasterSoftShadowVariantFollowsTheSettings();
+}
+
+TEST_P (SceneRendererTierTests, SoftShadowsConvergeToAStableImage)
+{
+    if (GetParam() != RenderSettings::TierPreference::full)
+        GTEST_SKIP() << "Full only: raster never accumulates";
+
+    // The rotated taps average out over the accumulation: a renderer that starts 7 frames later,
+    // with other jitter offsets and tap rotations, converges to nearly the same image, and the
+    // penumbra rises from the shadow to the light without a step back. The accumulation is a true
+    // mean of taaSamples frames, so what is left is the statistical spread of two different sets
+    // of 16 x 8 rotated taps over the widest penumbra: measured at 452 pixels beyond the 2 levels
+    // countDifferences() ignores, at most 5 levels apart (6 pixels with 64 samples). Unresolved
+    // noise, one rotated tap per frame, leaves 3612 pixels up to 21 levels apart
+    const auto first = renderPenumbraScene (GetParam(), 0.05f, true);
+    const auto second = renderPenumbraScene (GetParam(), 0.05f, true, 7);
+    ASSERT_TRUE (first.isValid() && second.isValid());
+
+    const auto differing = countDifferences (first, second);
+    const auto largest = maxChannelDifference (first, second);
+    RecordProperty ("differing", differing);
+    RecordProperty ("largestDifference", largest);
+    EXPECT_LE (differing, 600);
+    EXPECT_LE (largest, 7);
+
+    const auto row = luminanceRow (first, first.getHeight() / 2);
+    const auto rising = row.back() > row.front();
+
+    auto stepBack = 0.0;
+    for (size_t x = 1; x < row.size(); ++x)
+        stepBack = jmax (stepBack, rising ? row[x - 1] - row[x] : row[x] - row[x - 1]);
+
+    const auto width = penumbraWidth (first);
+    RecordProperty ("stepBack", String (stepBack, 2).toStdString());
+    RecordProperty ("width", width);
+    EXPECT_LE (stepBack, 2.0);
+    EXPECT_GT (width, 8); // A soft penumbra, not the hard filter's couple of pixels
+}
+
+TEST_P (SceneRendererTierTests, SoftShadowsWithoutTaaHoldStill)
+{
+    if (GetParam() != RenderSettings::TierPreference::full)
+        GTEST_SKIP() << "Full only: raster has no temporal anti-aliasing to turn off";
+
+    // Without temporal anti-aliasing nothing averages a moving pattern: the soft shadow taps keep
+    // a still rotation, so consecutive frames match, and the penumbra is still soft
+    const auto render = [&] (bool softShadows, Image& next)
+    {
+        Scene scene;
+        buildPenumbraScene (scene, 0.05f);
+        setFullTierTaa (scene, 1);
+
+        auto settings = scene.getRenderSettings();
+        settings.softShadows = softShadows;
+        scene.setRenderSettings (settings);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 256);
+        next = renderToImage (renderer, scene, 256);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    };
+
+    Image soft, softNext, hard, hardNext;
+    soft = render (true, softNext);
+    hard = render (false, hardNext);
+    ASSERT_TRUE (soft.isValid() && softNext.isValid() && hard.isValid());
+
+    // The canvas read back dithers the frames by a level, within what countDifferences() ignores
+    const auto flickering = countDifferences (soft, softNext);
+    const auto softWidth = penumbraWidth (soft);
+    const auto hardWidth = penumbraWidth (hard);
+    RecordProperty ("flickering", flickering);
+    RecordProperty ("soft", softWidth);
+    RecordProperty ("hard", hardWidth);
+    EXPECT_EQ (flickering, 0);
+    EXPECT_GT (softWidth, hardWidth + 4);
+}
 
 INSTANTIATE_TEST_SUITE_P (SceneRendererTiers,
                           SceneRendererTierTests,
@@ -5839,7 +7552,11 @@ TEST_F (GBufferPassMetalTests, BackgroundFillCoversOnlyTheEmptyTexels)
     GTEST_ALSO_RUN_DISABLED_TESTS=1 just test Release "SceneRendererBenchmarkTests.*"
 
     The scene is the demo's: examples/graphics/data/gltf/mpc.glb seen from the top, the shadowed
-    key light, the orbiting show lights and a dim environment. Each configuration renders 30
+    key light, the orbiting show lights and a dim environment. The "moving model" configurations
+    also shift the model every frame, so the shadow maps are drawn again in each one, as while
+    dragging it in the demo. The "orbiting camera" configurations turn the camera around the model
+    every frame instead, as the demo's free movement does from its top view (or from 0.6 rad above
+    the horizon, "low"), and print how many of the timed frames drew shadow maps. Each configuration renders 30
     warm-up frames, then times 120 queued frames by wall time up to the end of the last one on the
     GPU: the GPU cost of a frame wherever the GPU is the limit.
 */
@@ -5852,7 +7569,14 @@ protected:
         Scene scene;
         std::vector<EntityNode*> showLights;
         BoundingBox bounds;
+        EntityNode* modelRoot = nullptr;
+        EntityNode* cameraEntity = nullptr;
+        Vector3<float> modelPosition;
+        float cameraDistance = 0.0f;
+        bool moveModel = false;
+        float orbitPitch = 0.0f; // the camera orbits at this pitch when not 0
         double time = 0.0;
+        int frame = 0;
 
         /** Builds the scene, or returns false without the model. */
         bool build (int numShowLights, float showRange, float keyRadius, RenderSettings::TierPreference tier, float aspectRatio)
@@ -5869,6 +7593,8 @@ protected:
             auto* framed = device != nullptr ? device : root.get();
             root->setPosition (-framed->computeWorldBounds().getCenter());
             bounds = framed->computeWorldBounds();
+            modelRoot = root.get();
+            modelPosition = root->getPosition();
 
             // The top view of the demo, fitted to the aspect ratio
             auto camera = EntityNode::Ptr (new EntityNode ("camera"));
@@ -5884,6 +7610,8 @@ protected:
             aimCamera (*camera, center + Vector3<float> (0.0f, distance, 0.0f), center, { -1.0f, 0.0f, 0.0f });
             scene.getRoot()->addChild (camera);
             scene.setActiveCamera (camera.get());
+            cameraEntity = camera.get();
+            cameraDistance = distance;
 
             auto key = EntityNode::Ptr (new EntityNode ("keyLight"));
             auto& keyLight = key->attach<LightNode>();
@@ -5926,12 +7654,25 @@ protected:
             return true;
         }
 
-        /** Moves the show lights one 120 Hz frame further along the orbits of the demo's LightShowAnimator. */
+        /** Moves the show lights one 120 Hz frame further along the orbits of the demo's LightShowAnimator,
+            and the model by a hundredth of its size when moveModel is set. */
         void animate()
         {
             time += 1.0 / 120.0;
 
+            if (moveModel)
+                modelRoot->setPosition (modelPosition + Vector3<float> (bounds.getSize().getX() * 0.01f * static_cast<float> (++frame % 2), 0.0f, 0.0f));
+
             const auto center = bounds.getCenter();
+
+            // The demo's orbit, the yaw turning 0.008 rad a frame
+            if (orbitPitch != 0.0f)
+            {
+                const auto yaw = 0.008f * static_cast<float> (++frame);
+                const Vector3<float> offset (std::cos (yaw) * std::cos (orbitPitch), std::sin (orbitPitch), -std::sin (yaw) * std::cos (orbitPitch));
+                aimCamera (*cameraEntity, center + offset * cameraDistance, center);
+            }
+
             const auto halfSize = bounds.getSize() * 0.5f;
 
             for (size_t i = 0; i < showLights.size(); ++i)
@@ -5949,8 +7690,9 @@ protected:
         }
     };
 
-    /** The wall milliseconds per frame of 120 queued frames after 30 warm-up ones, or -1 on a failure. */
-    double timeFrames (LightShow& show, int width, int height)
+    /** The wall milliseconds per frame of 120 queued frames after 30 warm-up ones, or -1 on a failure.
+        @p shadowRedraws receives the number of the timed frames that drew shadow maps. */
+    double timeFrames (LightShow& show, int width, int height, int& shadowRedraws)
     {
         SceneRenderer renderer;
 
@@ -5969,10 +7711,12 @@ protected:
         if (! renderFrames (30))
             return -1.0;
 
+        const auto redrawsBefore = renderer.getShadowMapRenderCount();
         const auto start = Time::getMillisecondCounterHiRes();
         if (! renderFrames (120))
             return -1.0;
 
+        shadowRedraws = renderer.getShadowMapRenderCount() - redrawsBefore;
         return (Time::getMillisecondCounterHiRes() - start) / 120.0;
     }
 };
@@ -5985,12 +7729,22 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         RenderSettings::TierPreference tier;
         int showLights;
         float range;
+        bool moveModel = false;
+        float orbitPitch = 0.0f;
+        bool keyContactShadows = false;
     } configs[] = {
         { "full show64", RenderSettings::TierPreference::full, 64, 0.5f },
         { "raster show64", RenderSettings::TierPreference::raster, 64, 0.5f },
         { "raster key+7", RenderSettings::TierPreference::raster, 7, 0.5f },
         { "full show64 range 0.35", RenderSettings::TierPreference::full, 64, 0.35f },
         { "raster show16 range 0.35", RenderSettings::TierPreference::raster, 16, 0.35f },
+        { "full show64 range 0.35 moving model", RenderSettings::TierPreference::full, 64, 0.35f, true },
+        { "raster show16 range 0.35 moving model", RenderSettings::TierPreference::raster, 16, 0.35f, true },
+        { "full show64 range 0.35 orbiting camera", RenderSettings::TierPreference::full, 64, 0.35f, false, 1.56f },
+        { "raster show16 range 0.35 orbiting camera", RenderSettings::TierPreference::raster, 16, 0.35f, false, 1.56f },
+        { "full show64 range 0.35 orbiting camera low", RenderSettings::TierPreference::full, 64, 0.35f, false, 0.6f },
+        { "raster show16 range 0.35 orbiting camera low", RenderSettings::TierPreference::raster, 16, 0.35f, false, 0.6f },
+        { "full show64 key contact shadows", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, true },
     };
 
     for (const auto& [width, height] : { std::pair { 2560, 1600 }, std::pair { 3456, 2234 } })
@@ -6003,12 +7757,18 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
                 if (! show.build (config.showLights, config.range, keyRadius, config.tier, static_cast<float> (width) / static_cast<float> (height)))
                     GTEST_SKIP() << "mpc.glb is missing";
 
-                const auto milliseconds = timeFrames (show, width, height);
+                show.moveModel = config.moveModel;
+                show.orbitPitch = config.orbitPitch;
+                show.scene.getRoot()->findChild ("keyLight")->getNode<LightNode>()->contactShadows = config.keyContactShadows;
+
+                auto shadowRedraws = 0;
+                const auto milliseconds = timeFrames (show, width, height, shadowRedraws);
                 EXPECT_GT (milliseconds, 0.0) << config.name;
 
                 const auto label = String (config.name) + ", key radius " + String (keyRadius, 2) + ", " + String (width) + "x" + String (height);
                 RecordProperty (label.toStdString(), String (milliseconds, 3).toStdString());
-                std::cout << label.toStdString() << ": " << String (milliseconds, 3).toStdString() << " ms" << std::endl;
+                std::cout << label.toStdString() << ": " << String (milliseconds, 3).toStdString() << " ms, "
+                          << shadowRedraws << " of 120 frames drew shadow maps" << std::endl;
             }
         }
     }
@@ -6131,5 +7891,77 @@ TEST_F (SceneRendererGLTests, AreaSunCastsAShadow)
 TEST_F (SceneRendererGLTests, MaskedCasterShadowsOnlyWhatItKeeps)
 {
     checkMaskedCasterShadowsOnlyWhatItKeeps (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, PointLightShadowsOnAllSixFaces)
+{
+    checkPointLightShadowsOnAllSixFaces (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, PointShadowHasNoFaceSeams)
+{
+    checkPointShadowHasNoFaceSeams (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, SpotLightCastsAShadow)
+{
+    checkSpotCastsAShadow (RenderSettings::TierPreference::raster, 0.0f);
+}
+
+TEST_F (SceneRendererGLTests, AreaSpotCastsAShadowTowardsItsCenter)
+{
+    checkSpotCastsAShadow (RenderSettings::TierPreference::raster, 0.1f);
+    checkAreaSpotCastsAShadowTowardsItsCenter (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ManyShadowedLightsRenderWithoutError)
+{
+    checkManyShadowedLightsRenderWithoutError (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ContactShadowsIgnoredOnRaster)
+{
+    checkContactShadowsIgnoredOnRaster (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ContactShadowSettingsLiveInTheFirstShadowRecord)
+{
+    checkContactShadowSettingsLiveInTheFirstShadowRecord (RenderSettings::TierPreference::raster);
+}
+
+// The blocker search reads the raw depth through its own texture unit, next to the compared one
+TEST_F (SceneRendererGLTests, PcssPenumbraWidensWithLightRadius)
+{
+    checkPcssPenumbraWidensWithLightRadius (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, PenumbraWidensWithDistanceFromTheBlocker)
+{
+    checkPenumbraWidensWithDistanceFromTheBlocker (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterSoftShadowsOptIn)
+{
+    checkRasterSoftShadowsOptIn();
+}
+
+TEST_F (SceneRendererGLTests, RasterSoftShadowVariantFollowsTheSettings)
+{
+    checkRasterSoftShadowVariantFollowsTheSettings();
+}
+
+TEST_F (SceneRendererGLTests, SpotPenumbraWidensWithLightRadius)
+{
+    checkSpotPenumbraWidensWithLightRadius (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, SoftPointShadowHasNoFaceSeams)
+{
+    checkPointShadowHasNoFaceSeams (RenderSettings::TierPreference::raster, 0.1f);
+}
+
+TEST_F (SceneRendererGLTests, SoftSunLeavesAGrazedGroundLit)
+{
+    checkSoftSunLeavesAGrazedGroundLit (RenderSettings::TierPreference::raster);
 }
 #endif

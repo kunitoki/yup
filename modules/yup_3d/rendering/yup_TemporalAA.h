@@ -69,12 +69,23 @@ public:
         @param sampleIndex  Frames accumulated in the history, 0 to start over from @p current.
         @param sampleCount  Frames to accumulate: from this index on the history is kept unchanged.
         @param output       The rgba16float texture receiving the resolved color.
+        @param changing     True while the scene changes, see getBlendWeight().
 
         @returns False if the pipeline could not be prepared or the pass could not be recorded.
     */
     bool render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, FrameResources& resources,
                  const GpuTexture::Ptr& current, const GpuTexture::Ptr& depth, const GpuTexture::Ptr& velocity,
-                 int sampleIndex, int sampleCount, const GpuTexture::Ptr& output);
+                 int sampleIndex, int sampleCount, const GpuTexture::Ptr& output, bool changing = false);
+
+    /** The weight of the current frame against the history, frame @p sampleIndex of @p sampleCount.
+
+        While the scene holds still it is the true running mean, 1 / (sampleIndex + 1), so the
+        converged history holds every frame in the same share and noise that rotates from frame to
+        frame (the soft shadow taps) averages out. While it changes (@p changing) it stays at least
+        0.1, so the history fades within a few frames behind moving content. 0 once @p sampleCount
+        frames have accumulated: the history is then kept unchanged.
+    */
+    static float getBlendWeight (int sampleIndex, int sampleCount, bool changing) noexcept;
 
     /** Releases the render targets not drawn into since the previous call, once per frame. */
     void trimUnusedTargets()

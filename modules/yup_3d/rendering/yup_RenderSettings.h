@@ -56,6 +56,9 @@ struct YUP_API RenderSettings
 
     /** Texels per side of each sun shadow cascade. Clamped to [256, 4096] on both tiers, see
         RenderCapabilities::getShadowResolution().
+
+        It also sizes the shadow atlas shared by the point and spot lights: this many texels per side
+        on raster, twice as many on full, rounded down to a power of two and at most 4096.
     */
     int shadowResolution = 2048;
 

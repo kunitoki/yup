@@ -639,6 +639,37 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     for (size_t i = 0; i < fsMap.size(); ++i)
         addEntry (fsMap.at (i));
 
+    // The reflection types every texture read without comparison as filterable, but WebGPU binds a
+    // depth texture only to an unfilterable or depth entry: a texture the WGSL of every stage only
+    // loads (texelFetch) is laid out unfilterable, as WebGPU's own default layout would
+    if (vs.language == GpuShaderLanguage::wgsl || fs.language == GpuShaderLanguage::wgsl)
+    {
+        std::set<std::pair<uint32_t, uint32_t>> loaded, sampled;
+
+        for (const auto* source : { &vs, &fs })
+        {
+            const auto declared = WgslBindingLayout::parse (String::fromUTF8 (reinterpret_cast<const char*> (source->code.data()), static_cast<int> (source->code.size())));
+            if (declared.failed())
+                continue;
+
+            for (const auto& resource : declared.getReference())
+            {
+                if (resource.kind == WgslBindingLayout::ResourceKind::texture)
+                    (resource.sampleType == WgslBindingLayout::SampleType::floatUnfilterable ? loaded : sampled).insert ({ resource.group, resource.binding });
+            }
+        }
+
+        for (auto& me : merged)
+        {
+            const auto slot = std::pair { me.group, me.binding };
+            if (me.kind == rive::ore::ResourceKind::SampledTexture && me.texSampleType == rive::ore::TextureSampleType::Float
+                && loaded.count (slot) > 0 && sampled.count (slot) == 0)
+            {
+                me.texSampleType = rive::ore::TextureSampleType::UnfilterableFloat;
+            }
+        }
+    }
+
     // Build one BindGroupLayout per @group used.
     const uint32_t numGroups = merged.empty() ? 0 : maxGroup + 1;
     std::vector<rive::rcp<rive::ore::BindGroupLayout>> layouts (numGroups);

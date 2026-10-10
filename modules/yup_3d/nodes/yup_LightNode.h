@@ -60,8 +60,8 @@ public:
     float range = 0.0f;                                             ///< Distance where point and spot lights reach zero, 0 for infinite.
     float innerConeAngle = 0.0f;                                    ///< Spot angle from the axis where the falloff starts.
     float outerConeAngle = MathConstants<float>::pi * 0.25f;        ///< Spot angle from the axis where the light ends.
-    float radius = 0.0f;                                            ///< Size of the emitter, 0 for a punctual light: the sphere radius in world units for point and spot lights (spot lights keep their cone), the angular radius in radians for a directional light.
-    bool castsShadows = false;                                      ///< True for a directional light to cast shadows, see SceneRenderer.
+    float radius = 0.0f;                                            ///< Size of the emitter, 0 for a punctual light: the sphere radius in world units for point and spot lights (spot lights keep their cone), the angular radius in radians for a directional light. With RenderSettings::softShadows it also widens the penumbrae of the light's shadows.
+    bool castsShadows = false;                                      ///< True for the light to cast shadows, on both tiers: cascaded shadow maps for the first shadowed directional light, views in a shadow atlas for point and spot lights (the most important ones within the shadow budget of the tier), see SceneRenderer.
 
     /** A multiplier on the automatic depth bias of the shadow maps, which follows their texel size.
         Raise it when lit surfaces show shadow acne, lower it when shadows detach from their casters;

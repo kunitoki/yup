@@ -50,6 +50,15 @@ protected:
         return inputs;
     }
 
+    // A cascade of radius @p radius at the resolution of makeInputs(), as far as prefersSceneFit() reads it
+    static ShadowCascades::Cascade withRadius (float radius)
+    {
+        ShadowCascades::Cascade cascade;
+        cascade.radius = radius;
+        cascade.texelWorldSize = 2.0f * radius / 1024.0f;
+        return cascade;
+    }
+
     static std::array<float, 4> clipOf (const Matrix4& m, const Vector3<float>& p)
     {
         return m.transformPoint4 (p.getX(), p.getY(), p.getZ(), 1.0f);
@@ -519,4 +528,143 @@ TEST_F (ShadowCascadesTests, FarPlaneOrShadowDistanceCutsReceiversOff)
 
     inputs.receiverBounds = BoundingBox();
     EXPECT_FALSE (ShadowCascades::cutsOffReceivers (inputs));
+}
+
+TEST_F (ShadowCascadesTests, OnlyCastersReachingACascadeCastIntoIt)
+{
+    const auto inputs = makeInputs();
+
+    Cascades cascades;
+    ASSERT_EQ (ShadowCascades::build (inputs, cascades), 4);
+
+    const auto& first = cascades[0];
+    const auto light = inputs.lightDirection;
+    const auto sideways = light.crossProduct ({ 0.0f, 1.0f, 0.0f }).normalized();
+    const auto box = [] (const Vector3<float>& center, float halfSize)
+    {
+        return BoundingBox (center - Vector3<float> (halfSize, halfSize, halfSize), center + Vector3<float> (halfSize, halfSize, halfSize));
+    };
+
+    // Inside the slice, or between it and the light, a caster shadows it
+    EXPECT_TRUE (ShadowCascades::castsInto (first, box (first.center, 0.01f)));
+    EXPECT_TRUE (ShadowCascades::castsInto (first, box (first.center - light * (first.radius + 3.0f), 0.01f)));
+
+    // The near side is open: even past the light view's near plane, toward the light, it still does
+    const auto pastNear = first.center - light * (first.depthRange + 10.0f);
+    ASSERT_LT (clipOf (first.viewProjection, pastNear)[2], 0.0f);
+    EXPECT_TRUE (ShadowCascades::castsInto (first, box (pastNear, 0.01f)));
+
+    // Straddling the side of the projection, it still does
+    EXPECT_TRUE (ShadowCascades::castsInto (first, box (first.center + sideways * first.radius, 0.1f * first.radius)));
+
+    // Beside the projection, or beyond its far depth, it cannot
+    EXPECT_FALSE (ShadowCascades::castsInto (first, box (first.center + sideways * (first.radius * 1.5f), 0.01f)));
+    EXPECT_FALSE (ShadowCascades::castsInto (first, box (first.center + light * (first.depthRange + 1.0f), 0.01f)));
+
+    // The last cascade, larger, still holds the caster beside the first one
+    EXPECT_TRUE (ShadowCascades::castsInto (cascades[3], box (first.center + sideways * (first.radius * 1.5f), 0.01f)));
+}
+
+TEST_F (ShadowCascadesTests, SceneFitIsAtLeastAsSharpAsCascadeZero)
+{
+    // Against a first cascade of radius 2, one quantization step smaller 1.875: the scene fit takes
+    // over at that size or finer, and holds while no coarser than the first cascade
+    const auto first = withRadius (2.0f);
+    EXPECT_TRUE (ShadowCascades::prefersSceneFit (withRadius (1.875f), first, false));
+    EXPECT_FALSE (ShadowCascades::prefersSceneFit (withRadius (1.88f), first, false));
+    EXPECT_FALSE (ShadowCascades::prefersSceneFit (withRadius (2.0f), first, false));
+    EXPECT_TRUE (ShadowCascades::prefersSceneFit (withRadius (1.88f), first, true));
+    EXPECT_TRUE (ShadowCascades::prefersSceneFit (withRadius (2.0f), first, true));
+    EXPECT_FALSE (ShadowCascades::prefersSceneFit (withRadius (2.01f), first, true));
+
+    // A 2 m ground seen whole from 6 m: one map over it is finer than the first of four cascades
+    auto inputs = makeInputs();
+    inputs.cameraWorld = Matrix4::lookAt ({ 0.0f, 4.0f, 4.5f }, {}, { 0.0f, 1.0f, 0.0f }).inverted();
+    inputs.receiverBounds = BoundingBox ({ -1.0f, 0.0f, -1.0f }, { 1.0f, 0.6f, 1.0f });
+    inputs.casterBounds = inputs.receiverBounds;
+
+    Cascades cascades;
+    ASSERT_EQ (ShadowCascades::build (inputs, cascades), 4);
+
+    ShadowCascades::Cascade scene;
+    ASSERT_TRUE (ShadowCascades::fitScene (inputs, scene));
+    EXPECT_FLOAT_EQ (scene.texelWorldSize, 2.0f * scene.radius / static_cast<float> (inputs.resolution));
+    EXPECT_TRUE (ShadowCascades::prefersSceneFit (scene, cascades[0], false));
+
+    // The long ground of the default inputs is not: its cascades stay
+    const auto wide = makeInputs();
+    ASSERT_EQ (ShadowCascades::build (wide, cascades), 4);
+    ASSERT_TRUE (ShadowCascades::fitScene (wide, scene));
+    EXPECT_FALSE (ShadowCascades::prefersSceneFit (scene, cascades[0], false));
+}
+
+TEST_F (ShadowCascadesTests, SceneFitDoesNotFlipAcrossOneQuantizationStep)
+{
+    // A camera moving the first cascade back and forth between two adjacent quantized radii, at the
+    // top and at the bottom of an octave: once the scene fit takes over, it holds
+    for (const auto& [larger, smaller] : { std::pair { 2.0f, 1.875f }, std::pair { 2.25f, 2.0f } })
+    {
+        for (auto scene = 0.9f * smaller; scene <= larger; scene += 0.005f)
+        {
+            auto usesSceneFit = false;
+            auto switches = 0;
+
+            for (int frame = 0; frame < 8; ++frame)
+            {
+                const auto uses = ShadowCascades::prefersSceneFit (withRadius (scene), withRadius (frame % 2 == 0 ? larger : smaller), usesSceneFit);
+                switches += uses != usesSceneFit ? 1 : 0;
+                usesSceneFit = uses;
+            }
+
+            EXPECT_LE (switches, 1) << larger << " and " << smaller << ", scene " << scene;
+        }
+    }
+}
+
+TEST_F (ShadowCascadesTests, SceneFitCoversEveryReceiverWhateverTheCamera)
+{
+    auto inputs = makeInputs();
+    inputs.receiverBounds = BoundingBox ({ -1.0f, 0.0f, -1.5f }, { 2.0f, 0.6f, 1.0f });
+    inputs.casterBounds = BoundingBox ({ -0.3f, 0.0f, -0.3f }, { 0.3f, 1.5f, 0.3f });
+
+    ShadowCascades::Cascade scene;
+    ASSERT_TRUE (ShadowCascades::fitScene (inputs, scene));
+    EXPECT_EQ (scene.splitFar, ShadowCascades::maxShadowDistance);
+
+    // Every receiver lies inside the map, three and a half texels away from its sides after snapping
+    // (room for the normal offset and the filter), and every caster in front of its far depth
+    const auto margin = 7.0f / static_cast<float> (inputs.resolution);
+    for (int corner = 0; corner < 8; ++corner)
+    {
+        const auto clip = clipOf (scene.viewProjection, inputs.receiverBounds.getCorner (corner));
+        EXPECT_LE (std::abs (clip[0]) + margin, 1.0f) << corner;
+        EXPECT_LE (std::abs (clip[1]) + margin, 1.0f) << corner;
+        EXPECT_GE (clip[2], 0.0f) << corner;
+        EXPECT_LE (clip[2], 1.0f) << corner;
+
+        const auto caster = clipOf (scene.viewProjection, inputs.casterBounds.getCorner (corner));
+        EXPECT_GE (caster[2], 0.0f) << corner;
+    }
+
+    EXPECT_TRUE (ShadowCascades::castsInto (scene, inputs.casterBounds));
+
+    // The camera, its planes and its projection play no part
+    auto moved = inputs;
+    moved.cameraWorld = Matrix4::lookAt ({ 7.0f, 3.0f, -4.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }).inverted();
+    moved.projection = Matrix4::orthographic (-3.0f, 3.0f, -2.0f, 2.0f, 0.5f, 20.0f);
+    moved.nearPlane = 0.5f;
+    moved.farPlane = 20.0f;
+
+    ShadowCascades::Cascade movedScene;
+    ASSERT_TRUE (ShadowCascades::fitScene (moved, movedScene));
+    EXPECT_TRUE (std::equal (scene.viewProjection.getData(), scene.viewProjection.getData() + 16, movedScene.viewProjection.getData()));
+    EXPECT_EQ (scene.depthRange, movedScene.depthRange);
+
+    // Nothing to shadow, or nothing casting, gives no map
+    auto empty = inputs;
+    empty.casterBounds = BoundingBox();
+    EXPECT_FALSE (ShadowCascades::fitScene (empty, scene));
+    empty = inputs;
+    empty.receiverBounds = BoundingBox();
+    EXPECT_FALSE (ShadowCascades::fitScene (empty, scene));
 }

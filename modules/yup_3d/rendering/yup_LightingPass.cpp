@@ -73,7 +73,7 @@ bool LightingPass::render (GpuFrame& frame, const ViewData& view, const GBufferP
     if (! variant.prepared.has_value() || variant.prepared->failed() || sceneColor == nullptr
         || gbuffer.albedoOcclusion == nullptr || gbuffer.normalRoughness == nullptr || gbuffer.emissionMaterial == nullptr || gbuffer.depth == nullptr
         || lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.materials == nullptr
-        || lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.shadowCascades == nullptr)
+        || lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.shadowCascades == nullptr || lighting.shadowAtlas == nullptr)
         return false;
 
     // Every pixel is written, so the scene color needs no clear
@@ -85,6 +85,9 @@ bool LightingPass::render (GpuFrame& frame, const ViewData& view, const GBufferP
         renderPass.setSampler (0, 14, lighting.environmentSampler != nullptr ? lighting.environmentSampler : lighting.samplers.pointClamp);
         renderPass.setUniformBuffer (1, 0, &lighting.block, sizeof (lighting.block));
         renderPass.setTexture (3, 0, lighting.shadowCascades);
+        renderPass.setTexture (3, 1, lighting.shadowCascades);
+        renderPass.setTexture (3, 2, lighting.shadowAtlas);
+        renderPass.setTexture (3, 3, lighting.shadowAtlas);
         renderPass.setUniformBuffer (3, 4, &lighting.shadows, sizeof (lighting.shadows));
 
         // Without it no light has a shadow record, and the pipeline's own comparison sampler stays unread

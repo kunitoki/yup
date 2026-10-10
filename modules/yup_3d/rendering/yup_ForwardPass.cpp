@@ -35,6 +35,12 @@ constexpr uint8_t forwardPassShaderBundle[] = {
 constexpr uint8_t forwardPassAreaLightsShaderBundle[] = {
 #include "../shaders/yup_ForwardPass_area_lights.inc"
 };
+constexpr uint8_t forwardPassSoftShadowsShaderBundle[] = {
+#include "../shaders/yup_ForwardPass_soft_shadows.inc"
+};
+constexpr uint8_t forwardPassAreaLightsSoftShadowsShaderBundle[] = {
+#include "../shaders/yup_ForwardPass_area_lights_soft_shadows.inc"
+};
 constexpr uint8_t forwardPassFullShaderBundle[] = {
 #include "../shaders/yup_ForwardPass_full.inc"
 };
@@ -72,25 +78,28 @@ struct ForwardPass::Variant
     uint32_t sampleCount = 1;
     bool velocity = false;
     bool areaLights = false;
+    bool softShadows = false; // Always set with velocity: the full tier bundles hold the soft shadow code
 
     std::array<GpuPipeline::Ptr, 2 * GeometryBindings::numRasterStates> pipelines; // [blend * 4 + raster state], blend only on full
     GpuPipeline::Ptr background; // Raster only: the full tier shows the environment from LightingPass
     String error;
 
-    bool matches (const Targets& targets, uint32_t samples, bool withAreaLights) const noexcept
+    bool matches (const Targets& targets, uint32_t samples, bool withAreaLights, bool withSoftShadows) const noexcept
     {
         return colorFormat == targets.color->getFormat()
             && depthFormat == targets.depth->getFormat()
             && sampleCount == samples
             && velocity == (targets.velocity != nullptr)
-            && areaLights == withAreaLights;
+            && areaLights == withAreaLights
+            && softShadows == withSoftShadows;
     }
 
     String compile (const GpuDevice::Ptr& device)
     {
         const auto load = [] (const auto& data) { return ShaderBundle::loadFromData (data, sizeof (data)); };
-        auto bundle = velocity ? (areaLights ? load (forwardPassFullAreaLightsShaderBundle) : load (forwardPassFullShaderBundle))
-                               : (areaLights ? load (forwardPassAreaLightsShaderBundle) : load (forwardPassShaderBundle));
+        auto bundle = velocity      ? (areaLights ? load (forwardPassFullAreaLightsShaderBundle) : load (forwardPassFullShaderBundle))
+                    : softShadows ? (areaLights ? load (forwardPassAreaLightsSoftShadowsShaderBundle) : load (forwardPassSoftShadowsShaderBundle))
+                                  : (areaLights ? load (forwardPassAreaLightsShaderBundle) : load (forwardPassShaderBundle));
         if (bundle.failed())
             return "Unable to load the scene shader bundle: " + bundle.getErrorMessage();
 
@@ -177,10 +186,12 @@ Result ForwardPass::createDefaults (const GpuDevice::Ptr& device)
     return Result::ok();
 }
 
-ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights)
+ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool softShadows)
 {
     if (device == nullptr || targets.color == nullptr || targets.depth == nullptr)
         return makeResultValueFail ("No device or no forward targets");
+
+    softShadows = softShadows || targets.velocity != nullptr;
 
     if (! defaults)
         defaults = createDefaults (device);
@@ -190,7 +201,7 @@ ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice:
 
     auto existing = std::find_if (variants.begin(), variants.end(), [&] (const auto& variant)
     {
-        return variant->matches (targets, sampleCount, areaLights);
+        return variant->matches (targets, sampleCount, areaLights, softShadows);
     });
 
     if (existing == variants.end())
@@ -201,6 +212,7 @@ ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice:
         variant->sampleCount = sampleCount;
         variant->velocity = targets.velocity != nullptr;
         variant->areaLights = areaLights;
+        variant->softShadows = softShadows;
         variant->error = variant->compile (device);
 
         variants.push_back (std::move (variant));
@@ -215,7 +227,7 @@ ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice:
 
 Result ForwardPass::prepare (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights)
 {
-    const auto variant = prepareVariant (device, targets, sampleCount, areaLights);
+    const auto variant = prepareVariant (device, targets, sampleCount, areaLights, false);
     return variant.failed() ? Result::fail (variant.getErrorMessage()) : Result::ok();
 }
 
@@ -224,7 +236,20 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
                           Span<const SceneDrawList::DrawItem> opaque, Span<const SceneDrawList::DrawItem> blend,
                           const Targets& targets, Output output, uint32_t sampleCount, std::optional<GpuColor> clear)
 {
-    const auto prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights);
+    // The shadow records ask for soft filtering when a shadowed light has a size to soften with
+    const auto softShadows = lighting.shadows.filterInfo[0] > 0.5f;
+    auto prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, softShadows);
+
+    // Without its soft shadow variant, raster shades hard shadows: the other bundles ignore soft filtering
+    if (prepared.failed() && softShadows && targets.velocity == nullptr)
+    {
+        if (! softShadowsFailureReported)
+            YUP_DBG ("ForwardPass: the soft shadow variant is unavailable, shading hard shadows: " << prepared.getErrorMessage());
+
+        softShadowsFailureReported = true;
+        prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, false);
+    }
+
     if (prepared.failed())
         return false;
 
@@ -234,7 +259,7 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     if (! clear.has_value() && opaque.empty() && blend.empty())
         return true;
 
-    if (lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.shadowCascades == nullptr)
+    if (lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.shadowCascades == nullptr || lighting.shadowAtlas == nullptr)
         return false;
 
     if (variant.velocity && (lighting.lights == nullptr || lighting.clusterLights == nullptr || ! opaque.empty()))
@@ -279,11 +304,19 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     pass.setSampler (0, 14, lighting.environmentSampler != nullptr ? lighting.environmentSampler : geometry.getDefaultSampler());
     pass.setUniformBuffer (1, 0, &block, sizeof (block));
     pass.setTexture (3, 0, lighting.shadowCascades);
+    pass.setTexture (3, 2, lighting.shadowAtlas);
     pass.setUniformBuffer (3, 4, &lighting.shadows, sizeof (lighting.shadows));
 
     // Without it no light has a shadow record, and the pipeline's own comparison sampler stays unread
     if (lighting.samplers.shadowCompare != nullptr)
         pass.setSampler (0, 4, lighting.samplers.shadowCompare);
+
+    // The soft shadow blocker search reads the same maps raw
+    if (variant.softShadows)
+    {
+        pass.setTexture (3, 1, lighting.shadowCascades);
+        pass.setTexture (3, 3, lighting.shadowAtlas);
+    }
 
     if (variant.areaLights)
     {

@@ -46,6 +46,7 @@ public:
         bool colorIsReversible = false; ///< True when color is reversibly tone mapped (raster HDR path).
         Color background;               ///< Display-referred, composited under the uncovered pixels.
         int temporalSampleIndex = 0;    ///< Frames accumulated in the TAA history, see TemporalAA::render().
+        bool temporalChanging = false;  ///< True while the scene changes, see TemporalAA::getBlendWeight().
     };
 
     //==============================================================================

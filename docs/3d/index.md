@@ -250,7 +250,8 @@ itself until the image has converged, see [Platform tiers](#platform-tiers).
 component. Shading follows the glTF BRDF (GGX, Smith, Schlick) with punctual
 and area lights, a flat ambient term, environment lighting, shadows, normal
 mapping, alpha masking and blending, and double-sided materials; the result is
-exposed, tone mapped and sRGB encoded.
+exposed, tone mapped and sRGB encoded. Skinning and animation are not available
+yet.
 
 **Deferred and forward.** On the full tier, opaque and masked materials are
 drawn once into a set of intermediate targets, then shaded in a single pass per
@@ -306,8 +307,8 @@ A radius of 0, the default, keeps the light punctual. Area lights have a cost:
 a frame where any light has a radius shades with the area light shaders, which
 are heavier for every pixel; when all radii are 0 the renderer switches back to
 the lighter punctual shaders. Very smooth surfaces seen at
-grazing angles can show a misplaced highlight under an area light. The radius softens the light and its highlights, not the shadows:
-their edges stay as sharp as those of a punctual light.
+grazing angles can show a misplaced highlight under an area light. The radius
+also softens the shadows of the light, see [Lights and shadows](#lights-and-shadows).
 
 ### Environment lighting and reflections
 
@@ -344,23 +345,95 @@ show as sharp glints on smooth surfaces and as broad highlights on rough ones.
   `Scene::ToneMapping::agx` is a third option, a filmic curve that keeps very
   saturated highlights from skewing in hue. See [Render settings](#render-settings).
 
-### Shadows
+## Lights and shadows
 
-Set `castsShadows` on a directional `LightNode` to make it cast shadows. The
-first such light in the scene renders the opaque items into a shadow map of
-`SceneRenderer::shadowMapSize` texels, fitted around them, and their shadows are
-softened by a small filter.
+Set `castsShadows` on any `LightNode` to make it cast shadows of the opaque
+objects, on both tiers:
+
+- **Directional lights.** The first shadowed directional light in the scene
+  gets cascaded shadow maps: the view is cut into depth ranges, each with its own
+  map, so shadows stay sharp near the camera and still reach far away. When the
+  whole scene fits one map at least as sharp as the nearest cascade, a single map
+  fitted to the scene replaces them. Other directional lights light the scene
+  without shadows.
+- **Point and spot lights** share one shadow atlas: a spot light takes one view
+  of it and a point light six. Lights that look larger on screen get larger
+  views. Each tier has a budget of views (see the table below); when more lights
+  ask for shadows, the most important ones get them and the others light without
+  shadows.
+
+Shadow maps are drawn again only when something they show changes: the casters,
+the shadow casting lights or the shadow settings. Camera moves redraw the
+cascades, and the point and spot light views when a light's size on screen
+changes enough to resize them. A camera orbiting a compact scene usually redraws
+no shadow at all.
 
 ```cpp
+// A sun from above, slightly soft, with contact shadows on the full tier
 auto sun = yup::EntityNode::Ptr (new yup::EntityNode ("sun"));
-auto& light = sun->attach<yup::LightNode>();
-light.castsShadows = true;
-light.intensity = 3.0f;
+sun->setRotation (yup::Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, -1.0f));
+auto& sunLight = sun->attach<yup::LightNode>();
+sunLight.intensity = 3.0f;
+sunLight.castsShadows = true;
+sunLight.radius = 0.02f;        // angular radius in radians
+sunLight.contactShadows = true;
 scene->getRoot()->addChild (sun);
+
+// A spot light 2 units above the origin, shining down
+auto lamp = yup::EntityNode::Ptr (new yup::EntityNode ("lamp"));
+lamp->setPosition ({ 0.0f, 2.0f, 0.0f });
+lamp->setRotation (yup::Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, -yup::MathConstants<float>::halfPi));
+auto& spot = lamp->attach<yup::LightNode> (yup::LightNode::Type::spot);
+spot.intensity = 8.0f;
+spot.range = 5.0f;
+spot.outerConeAngle = 0.6f;
+spot.castsShadows = true;
+spot.radius = 0.05f;            // sphere radius in world units
+scene->getRoot()->addChild (lamp);
 ```
 
-Point and spot lights don't cast shadows. Skinning and animation are not
-available yet.
+**Soft shadows.** A light's `radius` (see [Area lights](#area-lights)) also sets
+how soft its shadows are: the penumbra widens with the size of the light and
+with the distance between the caster and the surface it shades, so a shadow is
+sharp where an object touches the ground and softer further away. A radius of 0
+gives hard shadows with slightly filtered edges. Soft shadows are on by default
+on the full tier; on the raster tier set `RenderSettings::softShadows` to `true`
+to turn them on, at a lower quality. On the full tier the penumbrae are refined
+over the frames that temporal anti-aliasing accumulates, so they are grainy
+while the scene moves and smooth once it is still; a higher `taaSamples` makes
+them smoother, see [Temporal anti-aliasing](#temporal-anti-aliasing).
+
+**Shadow bias.** `LightNode::shadowBias` scales the small depth offset that
+keeps lit surfaces from shadowing themselves. The default, 1, suits most scenes.
+Raise it when lit surfaces show stripes or dots of shadow (shadow acne); lower
+it when shadows look detached from the objects casting them. 0 removes the
+offset.
+
+**Contact shadows.** Set `LightNode::contactShadows` to add short shadows where
+objects meet, finer than a shadow map can show, such as under buttons or knobs
+sitting on a panel. They are traced on screen up to `contactShadowDistance`
+towards the light, and `contactShadowThickness` is how thick the objects they
+hit are assumed to be. They work with or without `castsShadows`, and only on
+the full tier; the raster tier ignores them.
+
+The shadow settings in `RenderSettings`:
+
+| Setting            | Default | What it does                                                                                       |
+| ------------------ | ------- | -------------------------------------------------------------------------------------------------- |
+| `sunCascades`      | 0       | Cascades of the shadowed directional light, from 1 to 4. 0 picks the tier default. More cascades keep shadows sharp further away, at the cost of one more map each. |
+| `shadowResolution` | 2048    | Texels per side of each cascade, from 256 to 4096. It also sizes the point and spot light atlas.   |
+| `softShadows`      | unset   | Soft shadows from the light `radius`. Unset follows the tier: on for full, off for raster.         |
+| `contactShadows`   | on      | Contact shadows for the lights that ask for them. Full tier only.                                  |
+
+What each tier gets:
+
+|                              | Raster                          | Full                                  |
+| ---------------------------- | ------------------------------- | ------------------------------------- |
+| Directional light cascades   | 2 by default                    | 4 by default                          |
+| Point and spot light atlas   | `shadowResolution` per side, rounded down to a power of two | twice `shadowResolution`, rounded down to a power of two, up to 4096 |
+| Point and spot light views   | up to 16                        | about 60, shared with the cascades    |
+| Soft shadows                 | opt-in                          | on, refined by TAA                    |
+| Contact shadows              | no                              | yes                                   |
 
 ## Render settings
 
@@ -441,6 +514,9 @@ falls back to raster.
 On the full tier a still image is not final after the first frame. Each frame is
 rendered with a slightly different sub-pixel offset and blended into a history,
 so after `taaSamples` frames the edges are smooth and the image stops changing.
+While the scene is still, each of those frames counts the same in the final
+image, so raising `taaSamples` gives smoother edges and less grain in soft
+shadows, at the cost of more frames before the image is final.
 
 - `SceneComponent` keeps repainting by itself until the image has converged, then
   goes idle. `getRenderer().isConverged()` tells whether it has; it is always

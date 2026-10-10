@@ -37,17 +37,17 @@ struct TemporalAABlock
     float params[4]; // x weight of the current frame, y 1 when the history is valid
 };
 
-// The weight of the current frame: a running average up to 10 frames, then an exponential one,
-// and 0 once sampleCount frames have accumulated
-float getTemporalBlendWeight (int sampleIndex, int sampleCount) noexcept
+} // namespace
+
+//==============================================================================
+float TemporalAA::getBlendWeight (int sampleIndex, int sampleCount, bool changing) noexcept
 {
     if (sampleIndex >= sampleCount)
         return 0.0f;
 
-    return jmax (1.0f / static_cast<float> (jmax (0, sampleIndex) + 1), 0.1f);
+    const auto mean = 1.0f / static_cast<float> (jmax (0, sampleIndex) + 1);
+    return changing ? jmax (mean, 0.1f) : mean;
 }
-
-} // namespace
 
 //==============================================================================
 TemporalAA::TemporalAA() = default;
@@ -66,7 +66,7 @@ Result TemporalAA::prepare (const GpuDevice::Ptr& device, const FrameResources::
 
 bool TemporalAA::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, FrameResources& resources,
                          const GpuTexture::Ptr& current, const GpuTexture::Ptr& depth, const GpuTexture::Ptr& velocity,
-                         int sampleIndex, int sampleCount, const GpuTexture::Ptr& output)
+                         int sampleIndex, int sampleCount, const GpuTexture::Ptr& output, bool changing)
 {
     if (device == nullptr || current == nullptr || depth == nullptr || velocity == nullptr || output == nullptr)
         return false;
@@ -92,7 +92,7 @@ bool TemporalAA::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Vi
         return false;
 
     TemporalAABlock block {};
-    block.params[0] = getTemporalBlendWeight (sampleIndex, sampleCount);
+    block.params[0] = getBlendWeight (sampleIndex, sampleCount, changing);
     block.params[1] = history.valid ? 1.0f : 0.0f;
 
     // Every texel of both targets is written, so they are cleared rather than loaded

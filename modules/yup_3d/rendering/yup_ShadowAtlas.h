@@ -113,12 +113,12 @@ public:
     const Allocation* findAllocation (int lightIndex) const noexcept;
 
     //==============================================================================
-    /** The request of a light seen by a perspective camera, or nothing when it casts no shadow
-        in the atlas: directional lights, lights without LightNode::castsShadows, and dark lights
-        (a GpuSceneData::getEffectiveRange() of 0).
+    /** The request of a light seen by the camera, or nothing when it casts no shadow in the atlas:
+        directional lights, lights without LightNode::castsShadows, and dark lights (a
+        GpuSceneData::getEffectiveRange() of 0).
 
         The tile size follows the screen size of the light's influence sphere (its effective
-        range), see getProjectedRadius() and getDesiredTileSize(). Point lights get 6 faces; a spot
+        range), see getProjectedRadius(), getOrthographicProjectedRadius() and getDesiredTileSize(). Point lights get 6 faces; a spot
         light whose cone plus the guard band (2 * outerConeAngle + getGuardAngle (minTileSize))
         exceeds 120 degrees is shadowed as a point light too, with 6 faces. Degenerate camera
         inputs (a yFov or viewportHeight that is not positive, a NaN distance) give minTileSize.
@@ -126,10 +126,19 @@ public:
         @param light             The light node.
         @param lightIndex        The index in SceneDrawList::getLights().
         @param distanceToCamera  The distance from the camera to the light's position.
-        @param yFov              The vertical field of view of the camera in radians.
+        @param yFov              The vertical field of view of a perspective camera in radians.
         @param viewportHeight    The viewport height in pixels.
+        @param orthographicHalfHeight  For an orthographic camera, half the height of its view in
+                                       world units; @p distanceToCamera and @p yFov are then ignored.
+                                       0 for a perspective camera.
     */
-    std::optional<Request> makeRequest (const LightNode& light, int lightIndex, float distanceToCamera, float yFov, int viewportHeight) const noexcept;
+    std::optional<Request> makeRequest (const LightNode& light, int lightIndex, float distanceToCamera, float yFov, int viewportHeight, float orthographicHalfHeight = 0.0f) const noexcept;
+
+    /** The tile size makeRequest() asks for a point or spot light, which also ranks it: the size
+        of the screen projection of its influence sphere (its effective range), clamped to the
+        atlas tile sizes. The parameters are those of makeRequest().
+    */
+    int getLightTileSize (const LightNode& light, float distanceToCamera, float yFov, int viewportHeight, float orthographicHalfHeight = 0.0f) const noexcept;
 
     //==============================================================================
     /** The tile size for a light whose influence sphere projects to @p projectedRadiusPx
@@ -142,6 +151,12 @@ public:
         the camera is inside it. A yFov or viewportHeight that is not positive gives 0.
     */
     static float getProjectedRadius (float sphereRadius, float distanceToCamera, float yFov, int viewportHeight) noexcept;
+
+    /** Projected radius in pixels of a sphere for an orthographic camera whose view is
+        2 * @p halfHeight world units high: sphereRadius / halfHeight * viewportHeight / 2, whatever
+        its distance. A halfHeight or viewportHeight that is not positive gives 0.
+    */
+    static float getOrthographicProjectedRadius (float sphereRadius, float halfHeight, int viewportHeight) noexcept;
 
     /** The angle in radians added to a face's field of view so that a 4-texel filter kernel at
         the edge of a tile of @p tileSize texels stays inside it: 2 * atan (1 + 4 / tileSize) - pi / 2.

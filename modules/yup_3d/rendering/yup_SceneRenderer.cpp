@@ -330,9 +330,10 @@ struct SceneRenderer::Impl
 
     /** Adds one signature per draw item of @p items, summed: the lists are sorted by state and view
         distance, so a camera move or a transform can reorder them without anything else changing.
+        Each item's signature is also appended to @p itemSignatures, when given.
     */
     template <class AddItem>
-    static void addItemSignatures (FrameSignature& signature, Span<const SceneDrawList::DrawItem> items, AddItem&& addItem)
+    static void addItemSignatures (FrameSignature& signature, Span<const SceneDrawList::DrawItem> items, AddItem&& addItem, std::vector<uint64>* itemSignatures = nullptr)
     {
         uint64 sum = 0;
 
@@ -341,6 +342,9 @@ struct SceneRenderer::Impl
             FrameSignature itemSignature;
             addItem (itemSignature, item);
             sum += itemSignature.getFinalized();
+
+            if (itemSignatures != nullptr)
+                itemSignatures->push_back (itemSignature.getFinalized());
         }
 
         signature.addBits (items.size());
@@ -418,19 +422,46 @@ struct SceneRenderer::Impl
         return signature.get();
     }
 
-    /** What the shadow maps depend on besides the cascade fit, which ShadowRenderer compares itself:
-        the casters (transforms, meshes and what alpha masking reads), the shadow casting lights and
-        the shadow settings of the tier.
-    */
-    uint64 getShadowSignature (const RenderSettings& settings) const
+    /** What the shadow maps depend on besides the cascade fit, which ShadowRenderer compares itself. */
+    struct ShadowSignatures
     {
-        FrameSignature signature;
-        signature.addBits (static_cast<uint64> (capabilities->getTier()));
-        signature.addBits (static_cast<uint64> (capabilities->getCascadeCount (settings)));
-        signature.addBits (static_cast<uint64> (RenderCapabilities::getShadowResolution (settings)));
+        uint64 whole = 0;  // Everything: the global part, the shadow casting point and spot lights and the casters
+        uint64 global = 0; // What every sun cascade depends on: the shadow settings of the tier and the shadow casting directional lights
+    };
+
+    /** The shadow signatures of the frame: the shadow settings of the tier, the shadow casting lights
+        and the casters (transforms, meshes and what alpha masking reads). Fills
+        shadowCasterSignatures with the signature of each caster, in the order of the opaque items.
+        The sun cascades only depend on the directional lights; the point and spot lights only
+        reach the atlas, through the whole signature.
+    */
+    ShadowSignatures getShadowSignatures (const RenderSettings& settings)
+    {
+        FrameSignature global, local;
+        global.addBits (static_cast<uint64> (capabilities->getTier()));
+        global.addBits (static_cast<uint64> (capabilities->getCascadeCount (settings)));
+        global.addBits (static_cast<uint64> (RenderCapabilities::getShadowResolution (settings)));
+
+        for (const auto& light : drawList.getLights())
+        {
+            const auto& node = *light.node;
+            if (! node.castsShadows)
+                continue;
+
+            auto& signature = node.type == LightNode::Type::directional ? global : local;
+            signature.addBits (static_cast<uint64> (node.type));
+            signature.addBits (GpuSceneData::isDark (node) ? 1u : 0u);
+            signature.addVector (light.position);
+            signature.addVector (light.direction);
+        }
 
         // The casters: the opaque and masked items
-        addItemSignatures (signature, drawList.getOpaqueItems(), [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
+        FrameSignature whole;
+        whole.addBits (global.get());
+        whole.addBits (local.get());
+        shadowCasterSignatures.clear();
+
+        addItemSignatures (whole, drawList.getOpaqueItems(), [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
         {
             itemSignature.addMatrix (item.world);
             itemSignature.addPointer (item.mesh);
@@ -446,21 +477,9 @@ struct SceneRenderer::Impl
                 itemSignature.addPointer (material.baseColorTexture.get());
                 itemSignature.addBits (material.baseColorTexture != nullptr ? material.baseColorTexture->getChangeCount() : 0u);
             }
-        });
+        }, &shadowCasterSignatures);
 
-        for (const auto& light : drawList.getLights())
-        {
-            const auto& node = *light.node;
-            if (! node.castsShadows)
-                continue;
-
-            signature.addBits (static_cast<uint64> (node.type));
-            signature.addBits (GpuSceneData::isDark (node) ? 1u : 0u);
-            signature.addVector (light.position);
-            signature.addVector (light.direction);
-        }
-
-        return signature.get();
+        return { whole.get(), global.get() };
     }
 
     /** Full tier: compares this frame with the previous one. A new size, tier or TAA sample count
@@ -516,6 +535,8 @@ struct SceneRenderer::Impl
     ViewData viewData;
     SceneDrawList drawList;
     ShadowRenderer shadowRenderer;
+    std::vector<uint64> shadowCasterSignatures; // One per opaque item of drawList, see getShadowSignatures()
+    GpuShadowData shadowData {};                // The shadow records of the last frame
     LightClusters lightClusters;
     GBufferPass gbufferPass;
     MaterialTable materialTable;
@@ -632,6 +653,31 @@ GpuTexture::Ptr SceneRenderer::getPassOutput (PassOutput output) const
 int SceneRenderer::getShadowMapRenderCount() const noexcept
 {
     return impl != nullptr ? impl->shadowRenderer.getNumRenderedFrames() : 0;
+}
+
+int SceneRenderer::getShadowCascadeRenderCount (int cascade) const noexcept
+{
+    return impl != nullptr ? impl->shadowRenderer.getNumCascadeRenders (cascade) : 0;
+}
+
+GpuShadowData SceneRenderer::getShadowData() const noexcept
+{
+    return impl != nullptr ? impl->shadowData : GpuShadowData {};
+}
+
+int SceneRenderer::getShadowRecordCount() const noexcept
+{
+    return impl != nullptr ? impl->shadowRenderer.getNumRecords() : 0;
+}
+
+int SceneRenderer::getShadowAtlasSize() const noexcept
+{
+    return impl != nullptr ? impl->shadowRenderer.getAtlasSize() : 0;
+}
+
+int SceneRenderer::getShadowTileSize (int lightIndex) const noexcept
+{
+    return impl != nullptr ? impl->shadowRenderer.getTileSize (lightIndex) : 0;
 }
 
 void SceneRenderer::setDeviceFactsOverride (std::function<void (RenderCapabilities::DeviceFacts&)> newOverride)
@@ -774,15 +820,19 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
     // Without the comparison sampler nothing can read a shadow map: the frame renders unshadowed
     ShadowRenderer::Inputs shadowInputs { drawList, impl->viewData, *impl->capabilities, settings };
-    shadowInputs.signature = impl->getShadowSignature (settings);
+    const auto shadowSignatures = impl->getShadowSignatures (settings);
+    shadowInputs.signature = shadowSignatures.whole;
+    shadowInputs.globalSignature = shadowSignatures.global;
+    shadowInputs.casterSignatures = impl->shadowCasterSignatures;
     shadowInputs.enabled = samplers->shadowCompare != nullptr;
 
-    GpuShadowData shadows;
+    auto& shadows = impl->shadowData;
     if (auto result = impl->shadowRenderer.render (device, frame, shadowInputs, shadows); result.failed())
         return failFrame (result.getErrorMessage());
 
     auto lighting = LightingInputs::create (device, scene, drawList.getLights(), impl->shadowRenderer.getShadowRecordIndices());
     lighting.shadowCascades = impl->shadowRenderer.getCascadeTexture();
+    lighting.shadowAtlas = impl->shadowRenderer.getAtlasTexture();
     lighting.shadows = shadows;
     lighting.ltcMatrix = impl->ltcMatrix;
     lighting.ltcAmplitude = impl->ltcAmplitude;
@@ -832,7 +882,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     {
         // Raster: the resolved color, reversibly tone mapped, and no depth or motion for the post effects
         const auto sceneColor = targets.resolve != nullptr ? targets.resolve : targets.color;
-        const PostChain::Inputs inputs { sceneColor, full ? targets.depth : nullptr, targets.velocity, ! full, scene.getBackgroundColor(), impl->getTemporalSampleIndex() };
+        const PostChain::Inputs inputs { sceneColor, full ? targets.depth : nullptr, targets.velocity, ! full, scene.getBackgroundColor(), impl->getTemporalSampleIndex(), impl->changing };
         if (! impl->postChain.render (device, frame, *impl->capabilities, settings, impl->viewData, impl->frameResources, inputs, impl->colorTarget->asTexture()))
             return failFrame ("Unable to render the post effects");
     }

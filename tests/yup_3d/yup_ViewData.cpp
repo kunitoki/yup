@@ -121,3 +121,87 @@ TEST_F (ViewDataTests, ToneMappingOperatorMatchesShaderIndices)
     view.update (scene, 100, 100, false, 16, 1);
     EXPECT_EQ (view.getBlock().clipPlanes[3], 2.0f);
 }
+
+/** CPU only: mirrors viewLinearDepth of lib/view.glsl on the ViewBlock the shaders read. */
+class ViewDataLinearDepthTests : public ::testing::Test
+{
+protected:
+    /** Mirrors viewLinearDepth: the view depth of a stored depth, from the (jittered) projection. */
+    static float viewLinearDepth (const ViewData::Block& block, float depth)
+    {
+        const auto* p = block.projection;
+        return (depth * p[15] - p[14]) / (depth * p[11] - p[10]);
+    }
+
+    /** The depth a surface at view depth @p viewDepth stores, projected through the block's projection. */
+    static float storedDepth (const ViewData::Block& block, float viewDepth)
+    {
+        const auto* p = block.projection;
+        const std::array<float, 4> position { 0.3f, -0.2f, -viewDepth, 1.0f };
+
+        auto z = 0.0f;
+        auto w = 0.0f;
+        for (int j = 0; j < 4; ++j)
+        {
+            z += p[j * 4 + 2] * position[static_cast<size_t> (j)];
+            w += p[j * 4 + 3] * position[static_cast<size_t> (j)];
+        }
+
+        return z / w;
+    }
+
+    /** Renders nothing: updates a jittered view of a camera configured by @p configure, and checks
+        that viewLinearDepth recovers view depths between its planes. */
+    template <class Configure>
+    static void checkRecoversViewDepth (Configure&& configure, std::initializer_list<float> viewDepths)
+    {
+        Scene scene;
+        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        configure (camera->attach<CameraNode>());
+        scene.getRoot()->addChild (camera);
+        scene.setActiveCamera (camera.get());
+
+        ViewData view;
+        view.update (scene, 100, 50, true, 16, 3);
+        ASSERT_NE (view.getBlock().jitter[0], 0.0f);
+
+        for (const auto viewDepth : viewDepths)
+        {
+            const auto depth = storedDepth (view.getBlock(), viewDepth);
+            ASSERT_GT (depth, 0.0f);
+            ASSERT_LT (depth, 1.0f);
+            EXPECT_NEAR (viewLinearDepth (view.getBlock(), depth), viewDepth, viewDepth * 1.0e-3f) << viewDepth;
+        }
+    }
+};
+
+TEST_F (ViewDataLinearDepthTests, RecoversPerspectiveViewDepth)
+{
+    checkRecoversViewDepth ([] (CameraNode& camera)
+    {
+        camera.zNear = 0.1f;
+        camera.zFar = 100.0f;
+    },
+                            { 0.15f, 1.0f, 7.5f, 90.0f });
+}
+
+TEST_F (ViewDataLinearDepthTests, RecoversViewDepthWithAnInfiniteFarPlane)
+{
+    checkRecoversViewDepth ([] (CameraNode& camera)
+    {
+        camera.zNear = 0.1f;
+        camera.zFar = 0.0f;
+    },
+                            { 0.15f, 1.0f, 7.5f, 500.0f });
+}
+
+TEST_F (ViewDataLinearDepthTests, RecoversOrthographicViewDepth)
+{
+    checkRecoversViewDepth ([] (CameraNode& camera)
+    {
+        camera.projection = CameraNode::Projection::orthographic;
+        camera.zNear = 0.5f;
+        camera.zFar = 50.0f;
+    },
+                            { 0.75f, 3.0f, 25.0f, 49.0f });
+}

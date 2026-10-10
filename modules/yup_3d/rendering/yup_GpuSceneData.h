@@ -68,8 +68,8 @@ struct YUP_API GpuShadowRecord
 {
     float viewProjection[16]; ///< World to shadow clip space, depth 0 to 1, column-major.
     float atlasRect[4];       ///< u, v, size in UV units, 1 / atlas size (cascades: layer, 0, 1, 1 / resolution); size 0 means no map.
-    float params[4];          ///< Depth bias, normal offset in world units, near, far.
-    float contact[4];         ///< Contact shadow march distance (0 off) and thickness in world units, 0, 0.
+    float params[4];          ///< Depth bias, normal offset in world units (point and spot lights: per unit of depth from the light), near, far.
+    float contact[4];         ///< (contact shadow march distance (0 off), contact shadow thickness in world units, number of views of the light (point and spot lights: 1 or 6), 0). Writers of the contact shadow distance and thickness write contact[0] and contact[1] only: contact[2] selects the faces of a point light.
 };
 
 static_assert (sizeof (GpuShadowRecord) == 112);
@@ -79,7 +79,8 @@ static_assert (sizeof (GpuShadowRecord) == 112);
     std140, mirrored by GpuShadowData in lib/shadows.glsl.
 
     Cascades occupy the first records, then each shadowed point light takes 6 consecutive records
-    (+X, -X, +Y, -Y, +Z, -Z) and each spot light 1.
+    (+X, -X, +Y, -Y, +Z, -Z) and each spot light 1, or 6 like a point light when its cone is too
+    wide for one view (see ShadowAtlas::makeRequest()).
 
     @internal
 */
@@ -91,7 +92,7 @@ struct YUP_API GpuShadowData
     float cascadeSplits[4];              ///< The view-space far distance of each cascade.
     float cascadeTexel[4];               ///< The world size of one texel of each cascade.
     float sunInfo[4];                    ///< Cascade count, unused (0), cascade blend band fraction, 1 when receivers lie beyond the last cascade (it then fades out).
-    float filterInfo[4];                 ///< Soft shadows (0 or 1), PCF taps, blocker search taps, flags (1 contact shadows, 2 temporal noise).
+    float filterInfo[4];                 ///< Soft shadows (1 when on and a shadowed light has a radius, else 0), PCF taps, blocker search taps, flags (1 contact shadows, 2 temporal noise).
     GpuShadowRecord records[maxRecords]; ///< The shadow map views, cascades first.
 };
 

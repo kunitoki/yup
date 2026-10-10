@@ -106,7 +106,7 @@ const ShadowAtlas::Allocation* ShadowAtlas::findAllocation (int lightIndex) cons
 }
 
 //==============================================================================
-std::optional<ShadowAtlas::Request> ShadowAtlas::makeRequest (const LightNode& light, int lightIndex, float distanceToCamera, float yFov, int viewportHeight) const noexcept
+std::optional<ShadowAtlas::Request> ShadowAtlas::makeRequest (const LightNode& light, int lightIndex, float distanceToCamera, float yFov, int viewportHeight, float orthographicHalfHeight) const noexcept
 {
     if (light.type == LightNode::Type::directional || ! light.castsShadows)
         return std::nullopt;
@@ -120,8 +120,17 @@ std::optional<ShadowAtlas::Request> ShadowAtlas::makeRequest (const LightNode& l
     Request request;
     request.lightIndex = lightIndex;
     request.faces = (light.type == LightNode::Type::point || wideSpot) ? 6 : 1;
-    request.desiredSize = getDesiredTileSize (getProjectedRadius (range, distanceToCamera, yFov, viewportHeight), minTileSize, maxTileSize);
+    request.desiredSize = getLightTileSize (light, distanceToCamera, yFov, viewportHeight, orthographicHalfHeight);
     return request;
+}
+
+int ShadowAtlas::getLightTileSize (const LightNode& light, float distanceToCamera, float yFov, int viewportHeight, float orthographicHalfHeight) const noexcept
+{
+    const auto range = GpuSceneData::getEffectiveRange (light);
+    const auto projectedRadius = orthographicHalfHeight > 0.0f ? getOrthographicProjectedRadius (range, orthographicHalfHeight, viewportHeight)
+                                                               : getProjectedRadius (range, distanceToCamera, yFov, viewportHeight);
+
+    return getDesiredTileSize (projectedRadius, minTileSize, maxTileSize);
 }
 
 //==============================================================================
@@ -143,6 +152,14 @@ float ShadowAtlas::getProjectedRadius (float sphereRadius, float distanceToCamer
         return 1.0e9f;
 
     return sphereRadius / (distanceToCamera * std::tan (yFov * 0.5f)) * static_cast<float> (viewportHeight) * 0.5f;
+}
+
+float ShadowAtlas::getOrthographicProjectedRadius (float sphereRadius, float halfHeight, int viewportHeight) noexcept
+{
+    if (! (halfHeight > 0.0f) || viewportHeight <= 0)
+        return 0.0f;
+
+    return sphereRadius / halfHeight * static_cast<float> (viewportHeight) * 0.5f;
 }
 
 float ShadowAtlas::getGuardAngle (int tileSize) noexcept

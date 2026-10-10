@@ -427,3 +427,23 @@ TEST_F (ShadowAtlasTests, DegenerateCameraInputsGiveTheSmallestTile)
     ASSERT_TRUE (nanDistance.has_value());
     EXPECT_EQ (nanDistance->desiredSize, 64);
 }
+
+TEST_F (ShadowAtlasTests, OrthographicCameraSizesByTheViewHeight)
+{
+    // 5 m of influence radius in a view 2 * 50 m high spans 54 of 1080 px: no distance makes it nearer
+    EXPECT_FLOAT_EQ (ShadowAtlas::getOrthographicProjectedRadius (5.0f, 50.0f, viewportHeight), 54.0f);
+    EXPECT_FLOAT_EQ (ShadowAtlas::getOrthographicProjectedRadius (5.0f, 0.0f, viewportHeight), 0.0f);
+
+    const ShadowAtlas atlas (4096, 64, 1024);
+    LightNode light (LightNode::Type::point);
+    makeShadowed (light);
+
+    for (const auto distance : { 1.0f, 1000.0f })
+    {
+        const auto wide = atlas.makeRequest (light, 0, distance, yFov, viewportHeight, 50.0f);
+        const auto narrow = atlas.makeRequest (light, 0, distance, yFov, viewportHeight, 2.5f);
+        ASSERT_TRUE (wide.has_value() && narrow.has_value());
+        EXPECT_EQ (wide->desiredSize, 128) << distance;
+        EXPECT_EQ (narrow->desiredSize, 1024) << distance;
+    }
+}

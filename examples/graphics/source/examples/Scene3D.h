@@ -44,9 +44,11 @@
     MeshSurfaceMapper, and clicking outside it zooms back out.
     The scene is only redrawn continuously while the camera or the light show moves. The "Scene
     tree" button shows the entity tree of the scene, and "Free movement" lets the mouse orbit,
-    pan and zoom the camera. "Render settings" edits how it is rendered, the angular size of the
-    key light, and turns on a light show of colored point lights orbiting the device: 64 on the
-    full tier, 16 on the raster tier, which shades every draw with its own short list of lights.
+    pan and zoom the camera. "Render settings" edits how it is rendered and shadowed, the angular
+    size of the key light, and turns on a light show of colored point lights orbiting the device:
+    64 on the full tier, 16 on the raster tier, which shades every draw with its own short list of
+    lights. The key light and a small spot light over the pads cast shadows, soft by default on
+    the full tier.
 */
 class Scene3DDemo : public yup::Component
 {
@@ -541,6 +543,12 @@ private:
 
                 deviceBounds = framed->computeWorldBounds();
                 radius = yup::jmax (0.001f, deviceBounds.getRadius());
+
+                for (const auto& child : framed->getChildren())
+                {
+                    if (child->getName().startsWith ("Pad."))
+                        padBounds.expand (child->computeWorldBounds());
+                }
             }
             else
             {
@@ -557,15 +565,31 @@ private:
             scene->setActiveCamera (cameraEntity.get());
 
             // Lit like a product shot: one large, low key light from the back left, its soft box in the
-            // studio, rakes across the panel and casts long shadows; the dim studio fills the rest
+            // studio, rakes across the panel and casts long shadows; the dim studio fills the rest. On the
+            // full tier contact shadows tighten them where the knobs and pads meet the panel
             auto keyLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("keyLight"));
             auto& keyLight = keyLightEntity->attach<yup::LightNode>();
             keyLight.castsShadows = true;
+            keyLight.contactShadows = true;
             keyLight.intensity = 4.0f;
             keyLight.radius = 0.08f;
             keyLight.color = { 1.0f, 0.96f, 0.9f };
             CameraPose::lookingAt (directionFromDegrees (studioKeyAzimuthDegrees, studioKeyElevationDegrees) * 10.0f, {}, { 0.0f, 1.0f, 0.0f }).applyTo (*keyLightEntity);
             scene->getRoot()->addChild (keyLightEntity);
+
+            // A small spot light from the front right lights the pads and casts their shadows across the next row
+            auto padLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("padLight"));
+            auto& padLight = padLightEntity->attach<yup::LightNode> (yup::LightNode::Type::spot);
+            padLight.castsShadows = true;
+            padLight.intensity = 10.0f;
+            padLight.radius = 0.03f;
+            padLight.range = 4.0f;
+            padLight.innerConeAngle = 0.3f;
+            padLight.outerConeAngle = 0.6f;
+            padLight.color = { 0.9f, 0.94f, 1.0f };
+            const auto padCenter = padBounds.getCenter();
+            CameraPose::lookingAt (padCenter + directionFromDegrees (-45.0f, 45.0f) * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f }).applyTo (*padLightEntity);
+            scene->getRoot()->addChild (padLightEntity);
 
             lightShow = new yup::EntityNode ("lightShow");
             lightShow->setVisible (false);
@@ -1167,6 +1191,7 @@ private:
         yup::Vector3<float> screenUp;
         yup::Vector3<float> screenRight;
         yup::BoundingBox deviceBounds { { -1.0f, -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f } };
+        yup::BoundingBox padBounds;
 
         bool zoomedOnScreen = false;
 
@@ -1279,7 +1304,7 @@ private:
             };
 
             keyLightSizeLabel.setText ("Key light angular size", yup::dontSendNotification);
-            keyLightSizeSlider.setRange (0.0, 0.1, 0.0);
+            keyLightSizeSlider.setRange (0.0, 0.3, 0.0);
             keyLightSizeSlider.setNumDecimalPlacesToDisplay (3);
             keyLightSizeSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
 
@@ -1293,6 +1318,52 @@ private:
                     keyLight->radius = static_cast<float> (value);
                     view.repaint();
                 }
+            };
+
+            cascadesLabel.setText ("Sun cascades", yup::dontSendNotification);
+            cascadesCombo.addItem ("Automatic", 1);
+            for (int count = 1; count <= 4; ++count)
+                cascadesCombo.addItem (yup::String (count), count + 1);
+            cascadesCombo.setSelectedId (settings.sunCascades + 1, yup::dontSendNotification);
+            cascadesCombo.onSelectedItemChanged = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.sunCascades = cascadesCombo.getSelectedId() - 1;
+                });
+            };
+
+            shadowResolutionLabel.setText ("Shadow resolution", yup::dontSendNotification);
+            for (const auto resolution : { 1024, 2048, 4096 })
+                shadowResolutionCombo.addItem (yup::String (resolution), resolution);
+            shadowResolutionCombo.setSelectedId (settings.shadowResolution, yup::dontSendNotification);
+            shadowResolutionCombo.onSelectedItemChanged = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.shadowResolution = shadowResolutionCombo.getSelectedId();
+                });
+            };
+
+            // The shadow toggles show what the last frame ran with: the tier default until clicked, see refresh()
+            softShadowsLabel.setText ("Soft shadows", yup::dontSendNotification);
+            softShadowsToggle.setButtonText ("Enabled");
+            softShadowsToggle.onClick = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.softShadows = softShadowsToggle.getToggleState();
+                });
+            };
+
+            contactShadowsLabel.setText ("Contact shadows", yup::dontSendNotification);
+            contactShadowsToggle.setButtonText ("Enabled");
+            contactShadowsToggle.onClick = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.contactShadows = contactShadowsToggle.getToggleState();
+                });
             };
 
             lightShowLabel.setText ("Light show", yup::dontSendNotification);
@@ -1309,7 +1380,9 @@ private:
 
             for (auto* child : std::initializer_list<yup::Component*> { &tierLabel, &tierCombo, &taaLabel, &taaSlider, &bloomLabel, &bloomToggle, &bloomThresholdLabel, &bloomThresholdSlider,
                                                                         &bloomIntensityLabel, &bloomIntensitySlider, &bloomRadiusLabel, &bloomRadiusSlider, &toneMappingLabel, &toneMappingCombo, &exposureLabel, &exposureSlider,
-                                                                        &keyLightSizeLabel, &keyLightSizeSlider, &lightShowLabel, &lightShowToggle, &statusLabel, &detailLabel, &benchmarkButton })
+                                                                        &keyLightSizeLabel, &keyLightSizeSlider, &lightShowLabel, &lightShowToggle, &cascadesLabel, &cascadesCombo,
+                                                                        &shadowResolutionLabel, &shadowResolutionCombo, &softShadowsLabel, &softShadowsToggle, &contactShadowsLabel,
+                                                                        &contactShadowsToggle, &statusLabel, &detailLabel, &benchmarkButton })
                 addAndMakeVisible (*child);
         }
 
@@ -1351,6 +1424,25 @@ private:
                                                                               &bloomIntensityLabel, &bloomIntensitySlider, &bloomRadiusLabel, &bloomRadiusSlider })
                     control->setEnabled (canBloom);
             }
+
+            const auto softShadows = capabilities->isEnabled (yup::RenderCapabilities::Feature::softShadows, settings);
+            if (softShadowsToggle.getToggleState() != softShadows)
+                softShadowsToggle.setToggleState (softShadows, yup::dontSendNotification);
+
+            const auto contactShadows = capabilities->isEnabled (yup::RenderCapabilities::Feature::contactShadows, settings);
+            if (contactShadowsToggle.getToggleState() != contactShadows)
+                contactShadowsToggle.setToggleState (contactShadows, yup::dontSendNotification);
+
+            const auto canContactShadows = capabilities->isAvailable (yup::RenderCapabilities::Feature::contactShadows);
+            const auto contactShadowsText = canContactShadows ? yup::String ("Enabled") : yup::String ("Needs the full tier");
+            if (contactShadowsToggle.getButtonText() != contactShadowsText)
+                contactShadowsToggle.setButtonText (contactShadowsText);
+
+            if (contactShadowsToggle.isEnabled() != canContactShadows)
+            {
+                contactShadowsToggle.setEnabled (canContactShadows);
+                contactShadowsLabel.setEnabled (canContactShadows);
+            }
         }
 
         void paint (yup::Graphics& g) override
@@ -1362,7 +1454,8 @@ private:
         void resized() override
         {
             auto bounds = getLocalBounds().reduced (8.0f);
-            constexpr float rowHeight = 24.0f;
+            constexpr float rowHeight = 22.0f;
+            constexpr float gap = 6.0f;
 
             for (auto [label, control] : { std::pair<yup::Component*, yup::Component*> { &tierLabel, &tierCombo },
                                            { &taaLabel, &taaSlider },
@@ -1377,12 +1470,27 @@ private:
             {
                 label->setBounds (bounds.removeFromTop (rowHeight));
                 control->setBounds (bounds.removeFromTop (rowHeight));
-                bounds.removeFromTop (8.0f);
+                bounds.removeFromTop (gap);
+            }
+
+            // The shadow settings go two per row, to fit the default window
+            const auto halfWidth = (bounds.getWidth() - gap) * 0.5f;
+
+            for (auto [left, leftControl, right, rightControl] : { std::tuple<yup::Component*, yup::Component*, yup::Component*, yup::Component*> { &cascadesLabel, &cascadesCombo, &shadowResolutionLabel, &shadowResolutionCombo },
+                                                                   { &softShadowsLabel, &softShadowsToggle, &contactShadowsLabel, &contactShadowsToggle } })
+            {
+                auto labels = bounds.removeFromTop (rowHeight);
+                auto controls = bounds.removeFromTop (rowHeight);
+                left->setBounds (labels.removeFromLeft (halfWidth));
+                right->setBounds (labels.removeFromRight (halfWidth));
+                leftControl->setBounds (controls.removeFromLeft (halfWidth));
+                rightControl->setBounds (controls.removeFromRight (halfWidth));
+                bounds.removeFromTop (gap);
             }
 
             statusLabel.setBounds (bounds.removeFromTop (rowHeight));
             detailLabel.setBounds (bounds.removeFromTop (rowHeight));
-            bounds.removeFromTop (8.0f);
+            bounds.removeFromTop (gap);
             benchmarkButton.setBounds (bounds.removeFromTop (rowHeight).removeFromLeft (110.0f));
         }
 
@@ -1445,6 +1553,14 @@ private:
         yup::Slider keyLightSizeSlider { yup::Slider::LinearHorizontal, "keyLightSizeSlider" };
         yup::Label lightShowLabel { "lightShowLabel" };
         yup::ToggleButton lightShowToggle { "lightShowToggle" };
+        yup::Label cascadesLabel { "cascadesLabel" };
+        yup::ComboBox cascadesCombo { "cascadesCombo" };
+        yup::Label shadowResolutionLabel { "shadowResolutionLabel" };
+        yup::ComboBox shadowResolutionCombo { "shadowResolutionCombo" };
+        yup::Label softShadowsLabel { "softShadowsLabel" };
+        yup::ToggleButton softShadowsToggle { "softShadowsToggle" };
+        yup::Label contactShadowsLabel { "contactShadowsLabel" };
+        yup::ToggleButton contactShadowsToggle { "contactShadowsToggle" };
         yup::Label statusLabel { "statusLabel" };
         yup::Label detailLabel { "detailLabel" };
         yup::TextButton benchmarkButton { "Benchmark" };

@@ -33,13 +33,17 @@ namespace yup
     sampler at 14, the area light tables at 7 and 11, read through linearClamp at binding 1, and
     shadowCompare at 4. Set 1 holds the LightingBlock at binding 0, and on the full tier the lights
     and the light lists of the clusters at bindings 6 and 7; raster draws read their own light list
-    at set 2 binding 12. Set 3 holds the shadows: the sun cascades at binding 0 and the ShadowBlock
-    at 4.
+    at set 2 binding 12. Set 3 holds the shadows: the sun cascades at binding 0, the point and spot
+    light atlas at 2 and the ShadowBlock at 4, and for soft shadows the same two maps again at 1
+    and 3, read raw by the blocker search.
 
-    Pipelines are compiled lazily per color and depth format, sample count, velocity output and area
-    lights: the full tier variant is the one with a velocity target, and draws blended items only.
-    The area light variant (YUP_3D_AREA_LIGHTS) shades the frames where LightingInputs::areaLights
-    is set; only it declares and binds the area light tables and the linearClamp sampler.
+    Pipelines are compiled lazily per color and depth format, sample count, velocity output, area
+    lights and soft shadows: the full tier variant is the one with a velocity target, and draws
+    blended items only. The area light variant (YUP_3D_AREA_LIGHTS) shades the frames where
+    LightingInputs::areaLights is set; only it declares and binds the area light tables and the
+    linearClamp sampler. The full tier variants always hold soft shadows; on raster the soft shadow
+    variant (YUP_3D_SOFT_SHADOWS) shades the frames whose shadow records ask for soft filtering
+    (GpuShadowData::filterInfo x), and only it declares and binds the raw depth maps.
 
     @internal
 */
@@ -87,7 +91,9 @@ public:
         pick from LightingInputs::packedLights, their intensities scaled by its
         SceneDrawList::DrawItem::lightWeights; on the full tier by the lights of the clusters, from
         LightingInputs::lights and LightingInputs::clusterLights. LightingInputs::areaLights picks
-        the area light variant, compiled the first time it is needed.
+        the area light variant, and soft filtering in LightingInputs::shadows the raster soft shadow
+        variant, each compiled the first time it is needed. A raster soft shadow variant that fails
+        to compile is logged once, and the frames shade hard shadows with the default variant.
 
         @param device       The device to draw with.
         @param frame        The frame to record into.
@@ -110,7 +116,7 @@ public:
 private:
     struct Variant;
 
-    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights);
+    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool softShadows);
     Result createDefaults (const GpuDevice::Ptr& device);
 
     std::vector<std::unique_ptr<Variant>> variants;
@@ -118,6 +124,7 @@ private:
     GeometryBindings geometry;
     GpuTexture::Ptr blackTexture;
     GpuTarget::Ptr surface;
+    bool softShadowsFailureReported = false; // A raster soft shadow variant failed to compile, and was logged once
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ForwardPass)
 };

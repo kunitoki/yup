@@ -74,6 +74,7 @@ struct YUP_API LightingInputs
     GpuTexture::Ptr environment;         ///< The environment (set 0 binding 6), or nullptr without one.
     GpuSampler::Ptr environmentSampler;  ///< Its interim sampler (set 0 binding 14), or nullptr without an environment.
     GpuTexture::Ptr shadowCascades;      ///< The sun cascades (set 3 binding 0), ShadowRenderer::getCascadeTexture().
+    GpuTexture::Ptr shadowAtlas;         ///< The point and spot light shadow atlas (set 3 binding 2), ShadowRenderer::getAtlasTexture().
     GpuShadowData shadows {};            ///< The ShadowBlock (set 3 binding 4): the shadow records ShadowRenderer::render() wrote.
     GpuTexture::Ptr ltcMatrix;           ///< The area light inverse matrices (set 0 binding 7), from LtcTables::createMatrixTexture().
     GpuTexture::Ptr ltcAmplitude;        ///< The area light amplitudes (set 0 binding 11), from LtcTables::createAmplitudeTexture().

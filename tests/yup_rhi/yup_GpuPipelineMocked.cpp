@@ -436,6 +436,72 @@ TEST_F (GpuPipelineMockTests, CompileWithMultipleBindGroups)
     ASSERT_TRUE (result.wasOk());
 }
 
+TEST_F (GpuPipelineMockTests, WgslLoadedTexturesGetUnfilterableLayouts)
+{
+    // The reflection types every non-comparison texture as filterable float, but WebGPU binds a
+    // depth texture only to an unfilterable or depth layout entry: a texture the WGSL only loads
+    // (texelFetch) is laid out unfilterable, while one it samples stays filterable
+    auto fragmentModule = rive::make_rcp<TestOreShaderModule>();
+    for (const auto& [binding, kind, dimension] : { std::tuple { 0, rive::ore::ResourceKind::SampledTexture, rive::ore::TextureViewDim::D2Array },
+                                                    std::tuple { 1, rive::ore::ResourceKind::SampledTexture, rive::ore::TextureViewDim::D2 },
+                                                    std::tuple { 2, rive::ore::ResourceKind::Sampler, rive::ore::TextureViewDim::D2 } })
+    {
+        rive::ore::BindingMap::Entry e;
+        e.group = 1;
+        e.binding = static_cast<uint8_t> (binding);
+        e.kind = kind;
+        e.stageMask = rive::ore::BindingMap::kStageFragment;
+        e.backendSlot[1] = static_cast<uint16_t> (binding);
+        e.textureViewDim = dimension;
+        e.textureSampleType = rive::ore::TextureSampleType::Float;
+        fragmentModule->m_bindingMap.push (e);
+    }
+    fragmentModule->m_bindingMap.finalize();
+
+    std::vector<rive::ore::BindGroupLayoutEntry> groupOne;
+    auto bgl = rive::make_rcp<TestOreBindGroupLayout>();
+
+    EXPECT_CALL (*mockOreCtx, makeShaderModule (_))
+        .WillOnce (Return (makeShaderModuleWithBindingMap()))
+        .WillOnce (Return (fragmentModule));
+    EXPECT_CALL (*mockOreCtx, makeBindGroupLayout (_))
+        .WillRepeatedly (Invoke ([&] (const rive::ore::BindGroupLayoutDesc& desc)
+        {
+            if (desc.groupIndex == 1)
+                groupOne.assign (desc.entries, desc.entries + desc.entryCount);
+
+            return bgl;
+        }));
+    EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
+        .WillOnce (Return (rive::make_rcp<TestOrePipeline>()));
+
+    auto vs = makeShaderSource ("@vertex fn main() -> @builtin(position) vec4f { return vec4f(0.0); }");
+    vs.language = GpuShaderLanguage::wgsl;
+
+    auto fs = makeShaderSource (R"(@group(1) @binding(0) var rawDepth : texture_2d_array<f32>;
+@group(1) @binding(1) var color : texture_2d<f32>;
+@group(1) @binding(2) var colorSampler : sampler;
+@fragment fn main() -> @location(0) vec4f
+{
+    return textureLoad(rawDepth, vec2i(0), 0, 0) + textureSample(color, colorSampler, vec2f(0.5));
+})");
+    fs.language = GpuShaderLanguage::wgsl;
+
+    ASSERT_TRUE (GpuPipeline::compile (ctx, vs, fs).wasOk());
+    ASSERT_EQ (groupOne.size(), 3u);
+
+    using SampleType = rive::ore::BindGroupLayoutEntry::SampleType;
+    for (const auto& entry : groupOne)
+    {
+        if (entry.binding == 0)
+            EXPECT_EQ (entry.textureSampleType, SampleType::floatUnfilterable);
+        else if (entry.binding == 1)
+            EXPECT_EQ (entry.textureSampleType, SampleType::floatFilterable);
+        else
+            EXPECT_EQ (entry.kind, rive::ore::BindingKind::sampler);
+    }
+}
+
 // ==============================================================================
 // GpuBuffer mock-based tests
 // ==============================================================================
@@ -1013,6 +1079,60 @@ protected:
         }));
     }
 
+    /** The state calls the backend passes received, over every pass begun. */
+    struct EncodedCalls
+    {
+        int passes = 0;
+        int pipelines = 0;
+        int bindGroups = 0;
+        int viewports = 0;
+        int scissors = 0;
+        int stencilReferences = 0;
+        int blendColors = 0;
+        int bindGroupsToFail = 0; ///< The next binds to fail, as an out of memory descriptor pool does
+    };
+
+    /** A mocked backend pass that finish() finishes, as the real ones do. */
+    class FinishingOreRenderPass : public NiceMock<MockOreRenderPass>
+    {
+    public:
+        FinishingOreRenderPass()
+        {
+            ON_CALL (*this, finish()).WillByDefault (Invoke ([this] { m_finished = true; }));
+        }
+    };
+
+    /** Like serveDraws(), counting the state calls every backend pass receives into @p calls. */
+    void serveCountedDraws (EncodedCalls& calls)
+    {
+        serveDraws (unusedMade, unusedBound);
+
+        ON_CALL (*mockOreCtx, beginRenderPass (_, _))
+            .WillByDefault (Invoke ([&calls, oreCtx = mockOreCtx.get()] (const rive::ore::RenderPassDesc&, std::string*)
+        {
+            ++calls.passes;
+            auto* renderPass = new FinishingOreRenderPass();
+            ON_CALL (*renderPass, setPipeline (_)).WillByDefault (Invoke ([&calls] (rive::ore::Pipeline*) { ++calls.pipelines; }));
+            ON_CALL (*renderPass, setBindGroup (_, _, _, _)).WillByDefault (Invoke ([&calls, oreCtx] (uint32_t, rive::ore::BindGroup*, const uint32_t*, uint32_t)
+            {
+                ++calls.bindGroups;
+                if (calls.bindGroupsToFail > 0)
+                {
+                    --calls.bindGroupsToFail;
+                    oreCtx->setLastError ("bind group failed");
+                }
+            }));
+            ON_CALL (*renderPass, setStencilReference (_)).WillByDefault (Invoke ([&calls] (uint32_t) { ++calls.stencilReferences; }));
+            ON_CALL (*renderPass, setBlendColor (_, _, _, _)).WillByDefault (Invoke ([&calls] (float, float, float, float) { ++calls.blendColors; }));
+            ON_CALL (*renderPass, setViewport (_, _, _, _, _, _)).WillByDefault (Invoke ([&calls] (float, float, float, float, float, float) { ++calls.viewports; }));
+            ON_CALL (*renderPass, setScissorRect (_, _, _, _)).WillByDefault (Invoke ([&calls] (uint32_t, uint32_t, uint32_t, uint32_t) { ++calls.scissors; }));
+            return std::unique_ptr<rive::ore::RenderPass> (renderPass);
+        }));
+    }
+
+    int unusedMade = 0;
+    int unusedBound = 0;
+
     /** A mocked device reporting fragment storage buffers, so setStorageBuffer() keeps its bindings. */
     class StorageBufferGpuDevice : public OreAndTargetGpuDevice
     {
@@ -1377,7 +1497,7 @@ TEST_F (GpuRenderPassMockTests, UnchangedGroupsReuseTheirBindGroup)
     pass.setUniformBuffer (2, 0, drawB, sizeof (drawB));
     EXPECT_TRUE (pass.draw (3));
     EXPECT_EQ (made, 4);
-    EXPECT_EQ (bound, 6);
+    EXPECT_EQ (bound, 4);
 
     pass.finish();
     frame.submit();
@@ -1409,7 +1529,7 @@ TEST_F (GpuRenderPassMockTests, IdenticalUniformBytesDoNotRebuildTheGroup)
     pass.setUniformBuffer (0, 0, same, sizeof (same));
     EXPECT_TRUE (pass.draw (3));
     EXPECT_EQ (made, 3);
-    EXPECT_EQ (bound, 6);
+    EXPECT_EQ (bound, 3);
 
     // Same leading bytes but a different size is a change
     pass.setUniformBuffer (0, 0, same, sizeof (float) * 2);
@@ -1458,7 +1578,7 @@ TEST_F (GpuRenderPassMockTests, EverySetterDirtiesOnlyItsGroup)
     pass.setTexture (7, 0, nullptr);
     EXPECT_TRUE (pass.draw (3));
     EXPECT_EQ (made, 6);
-    EXPECT_EQ (bound, 15);
+    EXPECT_EQ (bound, 6);
 
     pass.finish();
     frame.submit();
@@ -1500,7 +1620,204 @@ TEST_F (GpuRenderPassMockTests, ChangingThePipelineLayoutRebuildsEveryGroup)
     pass.setPipeline (first);
     EXPECT_TRUE (pass.draw (3));
     EXPECT_EQ (made, 9);
-    EXPECT_EQ (bound, 12);
+    EXPECT_EQ (bound, 9);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, DrawsEncodeOnlyTheStateThatChanged)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto first = compileThreeGroupPipeline();
+    auto second = compileThreeGroupPipeline (3);
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+
+    EncodedCalls calls;
+    serveCountedDraws (calls);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float changed[4] = { 5.0f, 6.0f, 7.0f, 8.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (first);
+    for (int group = 0; group < 3; ++group)
+        pass.setUniformBuffer (group, 0, uniforms, sizeof (uniforms));
+
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.pipelines, 1);
+    EXPECT_EQ (calls.bindGroups, 3);
+    EXPECT_EQ (calls.viewports, 1);
+
+    // Only the group whose bind group changed is bound again
+    pass.setUniformBuffer (2, 0, changed, sizeof (changed));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.pipelines, 1);
+    EXPECT_EQ (calls.bindGroups, 4);
+    EXPECT_EQ (calls.viewports, 1);
+
+    // A new viewport or scissor is applied once, by the next draw
+    pass.setViewport (0.0f, 0.0f, 64.0f, 64.0f);
+    pass.setScissorRect (0, 0, 32, 32);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.viewports, 2);
+    EXPECT_EQ (calls.scissors, 1);
+
+    // So are a new stencil reference and blend color
+    pass.setStencilReference (1);
+    pass.setBlendColor (GpuColor (0.5f, 0.5f, 0.5f, 1.0f));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.stencilReferences, 1);
+    EXPECT_EQ (calls.blendColors, 1);
+
+    pass.setStencilReference (2);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.stencilReferences, 2);
+
+    pass.setBlendColor (GpuColor (0.25f, 0.5f, 0.5f, 1.0f));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.blendColors, 3);
+    EXPECT_EQ (calls.stencilReferences, 3);
+
+    // Setting the same pipeline again encodes nothing
+    pass.setPipeline (first);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.pipelines, 1);
+    EXPECT_EQ (calls.bindGroups, 4);
+
+    // Another pipeline is encoded with every group and the pass state again
+    pass.setPipeline (second);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.pipelines, 2);
+    EXPECT_EQ (calls.bindGroups, 7);
+    EXPECT_EQ (calls.viewports, 6);
+    EXPECT_EQ (calls.scissors, 5);
+    EXPECT_EQ (calls.passes, 1);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, AFailedGroupBindIsRetriedByTheNextDraw)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileThreeGroupPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    EncodedCalls calls;
+    serveCountedDraws (calls);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    for (int group = 0; group < 3; ++group)
+        pass.setUniformBuffer (group, 0, uniforms, sizeof (uniforms));
+
+    calls.bindGroupsToFail = 1;
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.bindGroups, 3);
+
+    // Only the group whose bind failed is bound again
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.bindGroups, 4);
+
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.bindGroups, 4);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, AReopenedBackendPassIsEncodedAfresh)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileThreeGroupPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    EncodedCalls calls;
+    serveCountedDraws (calls);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto passA = target->beginRenderPass (frame);
+    auto passB = target->beginRenderPass (frame);
+    ASSERT_TRUE (passA.isValid());
+    ASSERT_TRUE (passB.isValid());
+
+    for (auto* pass : { &passA, &passB })
+    {
+        pass->setPipeline (compiled);
+        for (int group = 0; group < 3; ++group)
+            pass->setUniformBuffer (group, 0, uniforms, sizeof (uniforms));
+    }
+
+    EXPECT_TRUE (passA.draw (3));
+    EXPECT_EQ (calls.passes, 1);
+
+    // B takes the backend pass over, so A's next draw opens a new one and encodes everything in it
+    EXPECT_TRUE (passB.draw (3));
+    EXPECT_TRUE (passA.draw (3));
+    EXPECT_EQ (calls.passes, 3);
+    EXPECT_EQ (calls.pipelines, 3);
+    EXPECT_EQ (calls.bindGroups, 9);
+    EXPECT_EQ (calls.viewports, 3);
+
+    passA.finish();
+    passB.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, OpenGLDrawsEncodeTheirWholeState)
+{
+    // OpenGL binds to global units, which uploads between draws can change behind the pass
+    class OpenGLDevice : public OreAndTargetGpuDevice
+    {
+    public:
+        using OreAndTargetGpuDevice::OreAndTargetGpuDevice;
+
+        GpuPlatform getPlatform() const noexcept override { return GpuPlatform::OpenGL; }
+    };
+
+    ctx = new OpenGLDevice (mockOreCtx.get(), MockOffscreenTarget::withGpuTexture (256, 128));
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileThreeGroupPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    EncodedCalls calls;
+    serveCountedDraws (calls);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    for (int group = 0; group < 3; ++group)
+        pass.setUniformBuffer (group, 0, uniforms, sizeof (uniforms));
+
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.pipelines, 2);
+    EXPECT_EQ (calls.bindGroups, 6);
+    EXPECT_EQ (calls.viewports, 2);
 
     pass.finish();
     frame.submit();

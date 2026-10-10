@@ -58,7 +58,7 @@ bool PostChain::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Ren
         auto resolved = resources.acquire (desc);
         if (resolved == nullptr
             || ! temporalAA.render (device, frame, view, resources, inputs.color, inputs.depth, inputs.velocity,
-                                    inputs.temporalSampleIndex, settings.taaSamples, resolved))
+                                    inputs.temporalSampleIndex, settings.taaSamples, resolved, inputs.temporalChanging))
             return false;
 
         resolvedColor = resolved;
