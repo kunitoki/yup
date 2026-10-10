@@ -3,14 +3,14 @@ name: iOS
 on:
   workflow_call:
     inputs:
-    examples:
-      description: JSON array of the examples to build
-      type: string
-      default: "[]"
-    example_targets:
-      description: JSON object mapping each example to its space-separated build targets
-      type: string
-      default: "{}"
+      examples:
+        description: JSON array of the examples to build
+        type: string
+        default: "[]"
+      example_targets:
+        description: JSON object mapping each example to its space-separated build targets
+        type: string
+        default: "{}"
 
 env:
   ACTION_RUNNER: github-actions

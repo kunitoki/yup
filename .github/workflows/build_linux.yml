@@ -3,22 +3,22 @@ name: Linux
 on:
   workflow_call:
     inputs:
-    test_modules:
-      description: Semicolon-separated YUP_TEST_MODULES value (empty builds every module's tests)
-      type: string
-      default: ""
-    tests:
-      description: Whether to build and run the tests
-      type: boolean
-      default: false
-    examples:
-      description: JSON array of the examples to build
-      type: string
-      default: "[]"
-    example_targets:
-      description: JSON object mapping each example to its space-separated build targets
-      type: string
-      default: "{}"
+      test_modules:
+        description: Semicolon-separated YUP_TEST_MODULES value (empty builds every module's tests)
+        type: string
+        default: ""
+      tests:
+        description: Whether to build and run the tests
+        type: boolean
+        default: false
+      examples:
+        description: JSON array of the examples to build
+        type: string
+        default: "[]"
+      example_targets:
+        description: JSON object mapping each example to its space-separated build targets
+        type: string
+        default: "{}"
 
 env:
   ACTION_RUNNER: github-actions

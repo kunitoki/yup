@@ -5,10 +5,10 @@ name: Android
 on:
   workflow_call:
     inputs:
-    examples:
-      description: JSON array of the examples to build
-      type: string
-      default: "[]"
+      examples:
+        description: JSON array of the examples to build
+        type: string
+        default: "[]"
 
 env:
   ACTION_RUNNER: github-actions
