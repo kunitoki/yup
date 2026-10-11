@@ -23,6 +23,14 @@ public:
                         uint32_t size,
                         uint32_t offset = 0) = 0;
 
+    virtual void writeUnsynchronized(const void* data,
+                                     uint32_t size,
+                                     uint32_t offset,
+                                     bool)
+    {
+        update(data, size, offset);
+    }
+
     virtual ~Buffer() = default;
 
 protected:

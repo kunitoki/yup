@@ -421,8 +421,11 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, bool withAtlas, int 
     const auto atlasSize = getLocalAtlasSize (inputs.capabilities, inputs.settings);
     const auto budget = jmin (GpuShadowData::maxRecords - firstRecord, full ? GpuShadowData::maxRecords : maxRasterLocalRecords);
 
-    if (atlasLayout == nullptr || atlasLayout->getAtlasSize() != atlasSize)
-        atlasLayout = std::make_unique<ShadowAtlas> (atlasSize, minAtlasTile, atlasSize / 4);
+    if (halfTileLayout == nullptr || halfTileLayout->getAtlasSize() != atlasSize)
+    {
+        halfTileLayout = std::make_unique<ShadowAtlas> (atlasSize, minAtlasTile, atlasSize / 2);
+        quarterTileLayout = std::make_unique<ShadowAtlas> (atlasSize, minAtlasTile, atlasSize / 4);
+    }
 
     // The tile sizes follow the screen size of each light's influence: an orthographic camera
     // (w = 1) sees every distance at the same scale
@@ -441,7 +444,7 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, bool withAtlas, int 
     for (size_t i = 0; withAtlas && i < lights.size(); ++i)
     {
         const auto& light = lights[i];
-        const auto request = atlasLayout->makeRequest (*light.node, static_cast<int> (i), (light.position - camera).length(), yFov, viewportHeight, halfHeight);
+        const auto request = halfTileLayout->makeRequest (*light.node, static_cast<int> (i), (light.position - camera).length(), yFov, viewportHeight, halfHeight);
         if (! request)
             continue;
 
@@ -465,7 +468,19 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, bool withAtlas, int 
             requests.push_back (*request);
     }
 
-    atlasLayout->allocate (requests);
+    // Tiles up to half the atlas side, unless a light would get a smaller tile than with tiles up
+    // to a quarter of it (which fit more lights): then those
+    halfTileLayout->allocate (requests);
+    quarterTileLayout->allocate (requests);
+
+    const auto quarterAllocations = quarterTileLayout->getAllocations();
+    const auto halfTilesFit = std::all_of (quarterAllocations.begin(), quarterAllocations.end(), [this] (const ShadowAtlas::Allocation& quarter)
+    {
+        const auto* half = halfTileLayout->findAllocation (quarter.lightIndex);
+        return half != nullptr && half->size >= quarter.size;
+    });
+
+    atlasLayout = halfTilesFit ? halfTileLayout.get() : quarterTileLayout.get();
 
     const auto tiles = atlasLayout->getTiles();
     const auto texel = 1.0f / static_cast<float> (atlasSize);
@@ -547,7 +562,9 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, bool withAtlas, int 
     // Contact shadows (full tier): each light asking for them carries their settings in its first
     // record, the sun's being its first cascade. A light without a shadow map takes one record
     // without a map (atlasRect size 0) from the same budget, from the most important as the atlas
-    // serves them: directional lights, then larger tiles, then lower light indices
+    // serves them: directional lights, then larger tiles, then lower light indices. The tile sizes
+    // rank with the quarter cap whichever layout the frame uses, so a switch between the layouts,
+    // or an atlas planned without (no requests), does not reorder the lights
     if (! inputs.capabilities.isEnabled (RenderCapabilities::Feature::contactShadows, inputs.settings))
         return used;
 
@@ -560,7 +577,7 @@ int ShadowRenderer::planLocalShadows (const Inputs& inputs, bool withAtlas, int 
 
         const auto rank = node.type == LightNode::Type::directional
                             ? std::numeric_limits<int>::max()
-                            : atlasLayout->getLightTileSize (node, (lights[i].position - camera).length(), yFov, viewportHeight, halfHeight);
+                            : quarterTileLayout->getLightTileSize (node, (lights[i].position - camera).length(), yFov, viewportHeight, halfHeight);
 
         contactLights.emplace_back (rank, i);
     }
@@ -682,8 +699,9 @@ Result ShadowRenderer::renderAtlas (const GpuDevice::Ptr& device, GpuFrame& fram
 }
 
 //==============================================================================
-Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Inputs& inputs, GpuShadowData& out)
+Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Inputs& inputs)
 {
+    auto& out = shadowData;
     out = {};
     numRecords = 0;
     firstContactOnlyRecord = GpuShadowData::maxRecords;

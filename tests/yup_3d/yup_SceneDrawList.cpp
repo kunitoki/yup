@@ -702,3 +702,247 @@ TEST_F (SceneDrawListTests, PerDrawSelectionIsSkippedUnlessAsked)
     drawList.build (*root, {}, { false, false });
     EXPECT_EQ (drawList.getOpaqueItems()[0].numLights, 0);
 }
+
+TEST_F (SceneDrawListTests, CollectsReflectionProbes)
+{
+    auto probeEntity = makeEntity ("probe");
+    probeEntity->setPosition ({ 2.0f, 0.0f, 0.0f });
+    auto& probe = probeEntity->attach<ReflectionProbeNode>();
+    probe.influenceRadius = 3.0f;
+    root->addChild (probeEntity);
+
+    drawList.build (*root, {});
+
+    ASSERT_EQ (drawList.getReflectionProbes().size(), 1u);
+    const auto& collected = drawList.getReflectionProbes()[0];
+    EXPECT_EQ (collected.node, &probe);
+    EXPECT_TRUE (collected.world.approximatelyEqualTo (probeEntity->getWorldMatrix()));
+    expectNear (collected.position, { 2.0f, 0.0f, 0.0f });
+    expectNear (collected.bounds.getMin(), { -1.0f, -3.0f, -3.0f });
+    expectNear (collected.bounds.getMax(), { 5.0f, 3.0f, 3.0f });
+}
+
+TEST_F (SceneDrawListTests, BoxProbeBoundsFollowTheEntityTransform)
+{
+    auto probeEntity = makeEntity();
+    probeEntity->setPosition ({ 1.0f, 0.0f, 0.0f });
+    probeEntity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
+    auto& probe = probeEntity->attach<ReflectionProbeNode>();
+    probe.shape = ReflectionProbeNode::Shape::box;
+    probe.influenceExtents = { 2.0f, 1.0f, 0.5f };
+    root->addChild (probeEntity);
+
+    drawList.build (*root, {});
+
+    // Turned 90 degrees around +Y, the X extent lies along Z and the Z extent along X
+    ASSERT_EQ (drawList.getReflectionProbes().size(), 1u);
+    expectNear (drawList.getReflectionProbes()[0].bounds.getMin(), { 0.5f, -1.0f, -2.0f });
+    expectNear (drawList.getReflectionProbes()[0].bounds.getMax(), { 1.5f, 1.0f, 2.0f });
+}
+
+TEST_F (SceneDrawListTests, SphereProbeBoundsIgnoreRotation)
+{
+    auto rotated = makeEntity();
+    rotated->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::pi * 0.25f));
+    rotated->attach<ReflectionProbeNode>().influenceRadius = 2.0f;
+    root->addChild (rotated);
+
+    auto scaled = makeEntity();
+    scaled->setPosition ({ 10.0f, 0.0f, 0.0f });
+    scaled->setScale ({ 2.0f, 1.0f, 1.0f });
+    scaled->attach<ReflectionProbeNode>().influenceRadius = 2.0f;
+    root->addChild (scaled);
+
+    drawList.build (*root, {});
+
+    ASSERT_EQ (drawList.getReflectionProbes().size(), 2u);
+    expectNear (drawList.getReflectionProbes()[0].bounds.getMin(), { -2.0f, -2.0f, -2.0f });
+    expectNear (drawList.getReflectionProbes()[0].bounds.getMax(), { 2.0f, 2.0f, 2.0f });
+    expectNear (drawList.getReflectionProbes()[1].bounds.getMin(), { 6.0f, -2.0f, -2.0f });
+    expectNear (drawList.getReflectionProbes()[1].bounds.getMax(), { 14.0f, 2.0f, 2.0f });
+}
+
+TEST_F (SceneDrawListTests, ZeroScaleProbesAreSkipped)
+{
+    auto flat = makeEntity();
+    flat->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.3f));
+    flat->setScale ({ 0.0f, 1.0f, 1.0f });
+    flat->attach<ReflectionProbeNode>();
+    root->addChild (flat);
+
+    auto collapsed = makeEntity();
+    collapsed->setScale ({ 0.0f, 0.0f, 0.0f });
+    collapsed->attach<ReflectionProbeNode>().shape = ReflectionProbeNode::Shape::box;
+    root->addChild (collapsed);
+
+    drawList.build (*root, {});
+    EXPECT_TRUE (drawList.getReflectionProbes().empty());
+}
+
+TEST_F (SceneDrawListTests, ProbesWithoutInfluenceAreSkipped)
+{
+    auto sphere = makeEntity();
+    sphere->attach<ReflectionProbeNode>().influenceRadius = 0.0f;
+    root->addChild (sphere);
+
+    auto box = makeEntity();
+    auto& boxProbe = box->attach<ReflectionProbeNode>();
+    boxProbe.shape = ReflectionProbeNode::Shape::box;
+    boxProbe.influenceExtents = { 1.0f, -1.0f, 1.0f };
+    root->addChild (box);
+
+    drawList.build (*root, {});
+    EXPECT_TRUE (drawList.getReflectionProbes().empty());
+}
+
+TEST_F (SceneDrawListTests, RebuildingReplacesThePreviousProbes)
+{
+    root->attach<ReflectionProbeNode>();
+    drawList.build (*root, {});
+    drawList.build (*root, {});
+
+    EXPECT_EQ (drawList.getReflectionProbes().size(), 1u);
+
+    drawList.clear();
+    EXPECT_TRUE (drawList.getReflectionProbes().empty());
+}
+
+TEST_F (SceneDrawListTests, SelectsTheTwoNearestOverlappingProbes)
+{
+    std::vector<SceneDrawList::ReflectionProbe> probes (4);
+    const float xs[] = { 10.0f, 0.5f, 3.0f, -1.0f };
+    for (size_t i = 0; i < probes.size(); ++i)
+    {
+        probes[i].position = { xs[i], 0.0f, 0.0f };
+        probes[i].bounds = BoundingBox ({ xs[i] - 2.0f, -2.0f, -2.0f }, { xs[i] + 2.0f, 2.0f, 2.0f });
+    }
+
+    const auto picked = SceneDrawList::selectReflectionProbes (probes, BoundingBox ({ -0.5f, -0.5f, -0.5f }, { 0.5f, 0.5f, 0.5f }));
+    EXPECT_EQ (picked[0], 1); // 0.5 away
+    EXPECT_EQ (picked[1], 3); // 1.0 away; probe 2 at 3.0 is farther, probe 0 does not overlap
+}
+
+TEST_F (SceneDrawListTests, NoOverlappingProbeSelectsNone)
+{
+    std::vector<SceneDrawList::ReflectionProbe> probes (1);
+    probes[0].position = { 10.0f, 0.0f, 0.0f };
+    probes[0].bounds = BoundingBox ({ 9.0f, -1.0f, -1.0f }, { 11.0f, 1.0f, 1.0f });
+
+    const auto picked = SceneDrawList::selectReflectionProbes (probes, BoundingBox ({ -1.0f, -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f }));
+    EXPECT_EQ (picked[0], -1);
+    EXPECT_EQ (picked[1], -1);
+}
+
+TEST_F (SceneDrawListTests, SmallerProbesRankFirst)
+{
+    std::vector<SceneDrawList::ReflectionProbe> probes (2);
+    probes[0].position = { 3.0f, 0.0f, 0.0f };
+    probes[0].bounds = BoundingBox ({ -7.0f, -10.0f, -10.0f }, { 13.0f, 10.0f, 10.0f });
+    probes[1].position = { 1.0f, 0.0f, 0.0f };
+    probes[1].bounds = BoundingBox ({ 0.0f, -1.0f, -1.0f }, { 2.0f, 1.0f, 1.0f });
+
+    const auto picked = SceneDrawList::selectReflectionProbes (probes, BoundingBox ({ -0.5f, -0.5f, -0.5f }, { 0.5f, 0.5f, 0.5f }));
+    EXPECT_EQ (picked[0], 1);
+    EXPECT_EQ (picked[1], 0);
+}
+
+TEST_F (SceneDrawListTests, NestedSmallProbeIsPickedFirst)
+{
+    auto large = makeEntity ("large");
+    large->attach<ReflectionProbeNode>().influenceRadius = 10.0f;
+    root->addChild (large);
+
+    auto small = makeEntity ("small");
+    small->attach<ReflectionProbeNode>().influenceRadius = 1.0f;
+    root->addChild (small);
+
+    auto entity = makeEntity();
+    entity->setPosition ({ 0.5f, 0.0f, 0.0f });
+    entity->setScale ({ 0.1f, 0.1f, 0.1f });
+    entity->attach<MeshNode> (makeTriangle());
+    root->addChild (entity);
+
+    drawList.build (*root, {}, { false, true });
+
+    // Both probes capture from the origin and the draw lies inside both influences
+    ASSERT_EQ (drawList.getReflectionProbes().size(), 2u);
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].reflectionProbes[0], 1);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].reflectionProbes[1], 0);
+}
+
+TEST_F (SceneDrawListTests, ProbeTiesFollowTheBakeId)
+{
+    ReflectionProbeNode first;
+    ReflectionProbeNode second;
+    first.requestBake(); // now newer than second
+
+    std::vector<SceneDrawList::ReflectionProbe> probes (2);
+    probes[0].node = &first;
+    probes[1].node = &second;
+    for (auto& probe : probes)
+    {
+        probe.position = { 1.0f, 0.0f, 0.0f };
+        probe.bounds = BoundingBox ({ -1.0f, -2.0f, -2.0f }, { 3.0f, 2.0f, 2.0f });
+    }
+
+    const auto picked = SceneDrawList::selectReflectionProbes (probes, BoundingBox ({ -0.5f, -0.5f, -0.5f }, { 0.5f, 0.5f, 0.5f }));
+    EXPECT_EQ (picked[0], 1);
+    EXPECT_EQ (picked[1], 0);
+}
+
+TEST_F (SceneDrawListTests, ProbeTiesKeepTheLowerIndex)
+{
+    std::vector<SceneDrawList::ReflectionProbe> probes (3);
+    for (auto& probe : probes)
+    {
+        probe.position = { 1.0f, 0.0f, 0.0f };
+        probe.bounds = BoundingBox ({ -1.0f, -2.0f, -2.0f }, { 3.0f, 2.0f, 2.0f });
+    }
+
+    const auto picked = SceneDrawList::selectReflectionProbes (probes, BoundingBox ({ -0.5f, -0.5f, -0.5f }, { 0.5f, 0.5f, 0.5f }));
+    EXPECT_EQ (picked[0], 0);
+    EXPECT_EQ (picked[1], 1);
+}
+
+TEST_F (SceneDrawListTests, EmptyItemBoundsSelectNoProbe)
+{
+    std::vector<SceneDrawList::ReflectionProbe> probes (1);
+    probes[0].bounds = BoundingBox ({ -1.0f, -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f });
+
+    const auto picked = SceneDrawList::selectReflectionProbes (probes, BoundingBox());
+    EXPECT_EQ (picked[0], -1);
+    EXPECT_EQ (picked[1], -1);
+}
+
+TEST_F (SceneDrawListTests, PerDrawSelectionPicksReflectionProbes)
+{
+    auto entity = makeEntity();
+    entity->attach<MeshNode> (makeTriangle());
+    root->addChild (entity);
+
+    auto probeEntity = makeEntity();
+    probeEntity->setPosition ({ 0.5f, 0.0f, 0.0f });
+    probeEntity->attach<ReflectionProbeNode>().influenceRadius = 2.0f;
+    root->addChild (probeEntity);
+
+    drawList.build (*root, {}, { false, true });
+
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].reflectionProbes[0], 0);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].reflectionProbes[1], -1);
+}
+
+TEST_F (SceneDrawListTests, ReflectionProbeSelectionIsSkippedUnlessAsked)
+{
+    auto entity = makeEntity();
+    entity->attach<MeshNode> (makeTriangle());
+    entity->attach<ReflectionProbeNode>();
+    root->addChild (entity);
+
+    drawList.build (*root, {}, { false, false });
+
+    ASSERT_EQ (drawList.getReflectionProbes().size(), 1u);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].reflectionProbes[0], -1);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].reflectionProbes[1], -1);
+}

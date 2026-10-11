@@ -39,6 +39,7 @@ Beyond availability, the device reports what it can do:
 | `isFormatRenderable (format)` | Whether `format` can be a render target. |
 | `isStorageTextureAvailable()` | Whether compute passes can write `GpuTextureDesc::storage` textures. |
 | `isFragmentStorageBufferAvailable()` | Whether render passes can read storage buffers (`setStorageBuffer`). |
+| `isDynamicUniformOffsetAvailable()` | Whether pipelines honor `GpuPipelineOptions::dynamicUniformBuffers`. |
 
 Desktop OpenGL, OpenGL ES and WebGL2 are raster-only: they report no storage
 textures and no fragment storage buffers.

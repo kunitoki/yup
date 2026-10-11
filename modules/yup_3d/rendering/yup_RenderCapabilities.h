@@ -46,7 +46,8 @@ public:
         temporalAntiAliasing, ///< Jittered frames accumulated over time.
         bloom,                ///< Glow around highlights.
         softShadows,          ///< Penumbrae from the light size: both tiers, on by default on full only.
-        contactShadows        ///< Screen-space contact shadows: full tier only.
+        contactShadows,       ///< Screen-space contact shadows: full tier only.
+        ambientOcclusion      ///< Screen-space ambient occlusion: on by default on full, opt-in on raster where the device can draw the depth and normal prepass. Off whenever RenderSettings::aoDistance is not a positive finite number.
     };
 
     /** Shadow cascades of the sun on the raster tier when RenderSettings::sunCascades is 0. */
@@ -70,6 +71,7 @@ public:
         uint32_t rgba8Samples = 1;                    ///< Maximum MSAA sample count for rgba8unorm.
         uint32_t rgba16floatSamples = 0;              ///< Maximum MSAA sample count for rgba16float.
         uint32_t colorAttachments = 1;                ///< Maximum simultaneous color attachments.
+        bool depthNormalPrepass = false;              ///< The raster depth and normal prepass can be drawn: rgba16float and depth32float render targets.
     };
 
     /** Reads the facts from a device. */

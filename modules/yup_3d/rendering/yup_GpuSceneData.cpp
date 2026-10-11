@@ -148,4 +148,24 @@ GpuMaterial GpuSceneData::packMaterial (const Material& material) noexcept
              { material.ior, material.emissiveStrength, 0.0f, 0.0f } };
 }
 
+GpuReflectionProbe GpuSceneData::packReflectionProbe (const SceneDrawList::ReflectionProbe& probe, const Rectangle<float>& atlasRect, int numMips) noexcept
+{
+    const auto& node = *probe.node;
+    const auto isBox = node.shape == ReflectionProbeNode::Shape::box;
+    const auto& extents = node.influenceExtents;
+
+    GpuReflectionProbe packed {
+        {},
+        { probe.position.getX(), probe.position.getY(), probe.position.getZ(), isBox ? 1.0f : 0.0f },
+        { isBox ? extents.getX() : node.influenceRadius, isBox ? extents.getY() : 0.0f, isBox ? extents.getZ() : 0.0f, jmax (0.0f, node.falloff) },
+        { atlasRect.getX(), atlasRect.getY(), atlasRect.getWidth(), atlasRect.getHeight() },
+        { node.intensity, node.parallaxCorrection ? 1.0f : 0.0f, static_cast<float> (numMips), 0.0f }
+    };
+
+    const auto worldToLocal = probe.world.inverted();
+    std::copy_n (worldToLocal.getData(), 16, packed.worldToLocal);
+
+    return packed;
+}
+
 } // namespace yup

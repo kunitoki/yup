@@ -23,8 +23,8 @@
 #extension GL_GOOGLE_include_directive : require
 
 #include "lib/color.glsl"
+#include "lib/gbuffer.glsl"
 #include "lib/material.glsl"
-#include "lib/octahedral.glsl"
 #include "lib/view.glsl"
 
 // Writes the material of opaque and masked surfaces for the lighting pass (full tier only):
@@ -47,10 +47,8 @@ void main()
 {
     MaterialSurface m = materialEvaluate();
 
-    float filteredRoughness = sqrt(sqrt(m.alpha2));
-
     outAlbedoOcclusion = vec4(yupLinearToSrgb(m.baseColor.rgb), m.occlusion);
-    outNormalRoughness = vec4(octahedralEncode(m.n), filteredRoughness, m.metallic);
+    outNormalRoughness = gbufferEncodeNormalRoughness(m);
     outEmissionMaterial = vec4(min(m.emissive, vec3(yupMaxHalf)), v_materialId);
     outVelocity = viewVelocity(v_currentClip, v_previousClip);
 }

@@ -273,6 +273,16 @@ public:
     */
     virtual bool isFragmentStorageBufferAvailable() const noexcept { return false; }
 
+    /** Returns true if pipelines can bind uniform buffers at dynamic offsets
+        (GpuPipelineOptions::dynamicUniformBuffers).
+
+        True on Metal, Vulkan, WebGPU and OpenGL / OpenGL ES / WebGL2. Direct3D 11
+        needs the 11.1 runtime with constant buffer offsetting and no-overwrite maps
+        of dynamic constant buffers. Always false on the headless backend. When false,
+        pipelines ignore GpuPipelineOptions::dynamicUniformBuffers.
+    */
+    virtual bool isDynamicUniformOffsetAvailable() const noexcept { return false; }
+
     /** Returns true if compute shaders can write storage textures that later
         passes sample.
 

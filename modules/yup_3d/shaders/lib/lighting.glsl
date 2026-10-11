@@ -23,14 +23,12 @@
 #ifndef YUP_3D_LIB_LIGHTING
 #define YUP_3D_LIB_LIGHTING
 
-#include "lib/bsdf.glsl"
-#include "lib/view.glsl"
-
 // The lighting inputs of the passes that shade, declared once: the set 1 LightingBlock (mirrored
-// by LightingInputs::Block in yup_LightingInputs.h), the set 0 environment lookup with its interim
-// sampler, and the set 0 point sampler. Then the environment lookups. The shadows are declared by
-// lib/shadows.glsl, which lib/lights.glsl includes.
+// by LightingInputs::Block in yup_LightingInputs.h) and the set 0 linear and point samplers. The
+// environment and its lookups are declared by lib/probes.glsl, the shadows by lib/shadows.glsl, and
+// the lookup tables by lib/lights.glsl.
 
+layout(set = 0, binding = 1) uniform sampler linearClamp;
 layout(set = 0, binding = 3) uniform sampler pointClamp;
 
 layout(set = 1, binding = 0) uniform LightingBlock
@@ -40,46 +38,7 @@ layout(set = 1, binding = 0) uniform LightingBlock
     vec4 irradiance[9];       // rgb coefficients of the environment diffuse light
     vec4 clusterGrid;         // full tier: tiles x, tiles y, depth slices, number of lights
     vec4 clusterDepth;        // full tier: near, far, number of directional lights, 1 when the last slice is open (infinite far plane)
+    vec4 probeInfo;           // x 1 when the environment, probe and volume textures hold RGBM; y, z reserved; w 1 when the frame has ambient occlusion (both tiers; LightingPass reads it)
 } lighting;
-
-layout(set = 0, binding = 6) uniform texture2D u_environment;
-layout(set = 0, binding = 14) uniform sampler s_environment;
-
-// The environment towards a direction, from a latitude-longitude image: around the vertical axis
-// from +Z, and from the zenith down. atan is undefined at the poles, where both arguments are zero
-vec3 environmentSample(vec3 d, float level)
-{
-    vec2 uv = vec2(atan(d.x, d.z + 1.0e-6) / (2.0 * yupPi), acos(clamp(d.y, -1.0, 1.0)) / yupPi);
-    return textureLod(sampler2D(u_environment, s_environment), uv, level).rgb;
-}
-
-// The environment reflected towards a direction, blurred by the roughness through the mip levels
-vec3 environmentRadiance(vec3 d, float roughness)
-{
-    return environmentSample(d, roughness * lighting.environmentInfo.y);
-}
-
-// The diffuse light of the environment around a normal, from nine spherical harmonics coefficients
-vec3 environmentIrradiance(vec3 n)
-{
-    vec3 result = lighting.irradiance[0].rgb
-                + lighting.irradiance[1].rgb * n.y
-                + lighting.irradiance[2].rgb * n.z
-                + lighting.irradiance[3].rgb * n.x
-                + lighting.irradiance[4].rgb * (n.x * n.y)
-                + lighting.irradiance[5].rgb * (n.y * n.z)
-                + lighting.irradiance[6].rgb * (3.0 * n.z * n.z - 1.0)
-                + lighting.irradiance[7].rgb * (n.x * n.z)
-                + lighting.irradiance[8].rgb * (n.x * n.x - n.y * n.y);
-
-    return max(result, vec3(0.0));
-}
-
-// The exposed environment behind the scene through a clip position, blurred to the background level
-vec3 lightingBackground(vec2 clip)
-{
-    vec3 color = environmentSample(viewDirection(clip), lighting.environmentInfo.z);
-    return color * (lighting.environmentInfo.x * view.cameraPosition.w);
-}
 
 #endif

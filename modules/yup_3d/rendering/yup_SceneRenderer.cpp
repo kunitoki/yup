@@ -139,26 +139,24 @@ struct SceneRenderer::Impl
     {
     }
 
-    /** Creates the shadow and G-buffer pipelines and the area light tables once, remembering a failure instead of retrying every frame.
-        Only a G-buffer failure fails the frame: without shadow pipelines or area light tables the frames render without them.
+    /** Creates the shadow and G-buffer pipelines and the lookup tables once, remembering a failure instead of retrying every frame.
+        Only a G-buffer failure fails the frame: without shadow pipelines or lookup tables the frames render without them.
     */
-    Result prepareResources (bool full, bool failAreaLightTables)
+    Result prepareResources (bool full, bool failLookupTables)
     {
         // A failure, logged by the shadow renderer, leaves the frames unshadowed
         shadowRenderer.prepare (device);
 
-        if (! ltcTablesAttempted)
+        if (! lookupTablesAttempted)
         {
-            ltcTablesAttempted = true;
-            ltcMatrix = failAreaLightTables ? nullptr : LtcTables::createMatrixTexture (device);
-            ltcAmplitude = failAreaLightTables ? nullptr : LtcTables::createAmplitudeTexture (device);
+            lookupTablesAttempted = true;
+            lookupTables = failLookupTables ? nullptr : LookupTables::createTexture (device);
 
-            // The passes bind black tables instead, which leave area lights their diffuse light only
-            if (ltcMatrix == nullptr || ltcAmplitude == nullptr)
+            // Black tables instead leave area lights and the environment their diffuse light only
+            if (lookupTables == nullptr)
             {
-                YUP_DBG ("SceneRenderer: unable to create the area light tables, area lights render without specular light");
-                ltcMatrix = nullptr;
-                ltcAmplitude = nullptr;
+                YUP_DBG ("SceneRenderer: unable to create the lookup tables, area lights and the environment render without specular light");
+                lookupTables = LookupTables::createBlackTexture (device);
             }
         }
 
@@ -311,6 +309,87 @@ struct SceneRenderer::Impl
                                        viewData.getView(), viewData.getJitteredProjection().inverted(), lighting.clusterLights);
     }
 
+    /** Raster: draws the depth and normal prepass while ambient occlusion is enabled. It is created
+        by the first frame needing it, and only releases its targets on the frames without it, so
+        turning ambient occlusion back on compiles nothing. A prepass that cannot compile is logged
+        once and leaves the frames without it. Returns false only when the prepass could not be
+        recorded. @p failForTesting makes a new prepass fail to compile.
+    */
+    bool renderDepthNormalPrepass (GpuFrame& frame, const RenderSettings& settings, int width, int height, bool failForTesting)
+    {
+        if (capabilities->getTier() == RenderCapabilities::Tier::full
+            || ! capabilities->isEnabled (RenderCapabilities::Feature::ambientOcclusion, settings))
+        {
+            if (depthNormalPrepass != nullptr)
+                depthNormalPrepass->releaseTargets();
+
+            return true;
+        }
+
+        if (depthNormalPrepass == nullptr)
+        {
+            depthNormalPrepass = std::make_unique<DepthNormalPrepass> (device);
+            if (failForTesting)
+                depthNormalPrepass->failPipelinesForTesting();
+        }
+
+        if (depthNormalPrepass->prepare().failed())
+            return true;
+
+        return depthNormalPrepass->render (frame, viewData, drawList, frameResources, width, height);
+    }
+
+    /** Traces the ambient occlusion of @p depth and @p normalRoughness into lighting.ambientOcclusion
+        while it is enabled and both exist: the G-buffer's on full, the prepass's on raster. The pass
+        is created by the first frame needing it, and only releases its targets on the frames without
+        it, so turning ambient occlusion back on compiles nothing. A pass that cannot compile, or
+        targets that cannot be created, are logged once and leave the frames without it, the shading
+        passes binding white. Block::probeInfo.w is the frame's ambient occlusion flag, which LightingPass reads. Returns false
+        only when the pass could not be recorded.
+    */
+    bool renderAmbientOcclusion (GpuFrame& frame, const RenderSettings& settings, bool temporal,
+                                 const GpuTexture::Ptr& depth, const GpuTexture::Ptr& normalRoughness, LightingInputs& lighting)
+    {
+        lighting.ambientOcclusion = nullptr;
+        lighting.block.probeInfo[3] = 0.0f;
+
+        if (! capabilities->isEnabled (RenderCapabilities::Feature::ambientOcclusion, settings) || depth == nullptr || normalRoughness == nullptr)
+        {
+            if (ambientOcclusionPass != nullptr)
+                ambientOcclusionPass->releaseTargets();
+
+            return true;
+        }
+
+        if (ambientOcclusionPass == nullptr)
+            ambientOcclusionPass = std::make_unique<AmbientOcclusionPass> (device);
+
+        if (ambientOcclusionPass->prepare().failed())
+            return true;
+
+        if (! ambientOcclusionPass->render (frame, viewData, capabilities->getTier(), temporal, depth, normalRoughness, settings.aoDistance, frameResources))
+            return false;
+
+        ambientOcclusionPass->trimUnusedTargets();
+        lighting.ambientOcclusion = ambientOcclusionPass->getOutput();
+        lighting.block.probeInfo[3] = lighting.ambientOcclusion != nullptr ? 1.0f : 0.0f;
+        return true;
+    }
+
+    /** Releases the render targets the passes keep for the next frames. */
+    void releasePassTargets() noexcept
+    {
+        postChain.releaseTargets();
+        gbufferPass.releaseTargets();
+        lightingPass.releaseTargets();
+
+        if (depthNormalPrepass != nullptr)
+            depthNormalPrepass->releaseTargets();
+
+        if (ambientOcclusionPass != nullptr)
+            ambientOcclusionPass->releaseTargets();
+    }
+
     /** Nodes this renderer did not draw in its previous frame have no motion: their previous world is the current one. */
     void resolvePreviousTransforms()
     {
@@ -376,13 +455,14 @@ struct SceneRenderer::Impl
         keeps the history, which TAA reprojects and clips to the new frame. Tone mapping and bloom
         run after TAA, so their settings are left out.
     */
-    uint64 getRestartingSignature (const Scene& scene, const RenderSettings& settings) const
+    uint64 getRestartingSignature (const Scene& scene, const RenderSettings& settings, const GpuTexture* environmentCube) const
     {
         FrameSignature signature;
         signature.addMatrix (viewData.getUnjitteredViewProjection());
         signature.addFloat (scene.getExposure());
         signature.addBits (scene.getAmbientColor().getARGB());
         signature.addPointer (scene.getEnvironment().get());
+        signature.addPointer (environmentCube); // Rebuilt after the GPU failed to build it
         signature.addFloat (scene.getEnvironmentIntensity());
         signature.addFloat (scene.getEnvironmentBlur());
         signature.addBits (scene.isEnvironmentVisible() ? 1u : 0u);
@@ -392,6 +472,11 @@ struct SceneRenderer::Impl
         signature.addBits (static_cast<uint64> (RenderCapabilities::getShadowResolution (settings)));
         signature.addBits (capabilities->isEnabled (RenderCapabilities::Feature::softShadows, settings) ? 1u : 0u);
         signature.addBits (capabilities->isEnabled (RenderCapabilities::Feature::contactShadows, settings) ? 1u : 0u);
+
+        const auto ambientOcclusion = capabilities->isEnabled (RenderCapabilities::Feature::ambientOcclusion, settings);
+        signature.addBits (ambientOcclusion ? 1u : 0u);
+        if (ambientOcclusion)
+            signature.addFloat (settings.aoDistance);
 
         // Each item's transform is hashed with what it draws, so swapping transforms between items still counts
         const auto addItem = [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
@@ -489,10 +574,10 @@ struct SceneRenderer::Impl
         first unchanged frame after changes counts the history as a single sample, so the frames
         that follow average it out instead of keeping a share of the image before the changes.
     */
-    void trackChanges (const Scene& scene, const RenderSettings& settings, int width, int height)
+    void trackChanges (const Scene& scene, const RenderSettings& settings, int width, int height, const GpuTexture* environmentCube)
     {
         const auto invalidating = getInvalidatingSignature (width, height, settings.taaSamples);
-        const auto restarting = getRestartingSignature (scene, settings);
+        const auto restarting = getRestartingSignature (scene, settings, environmentCube);
 
         if (! hasSignature || invalidating != invalidatingSignature)
         {
@@ -538,21 +623,25 @@ struct SceneRenderer::Impl
     SceneDrawList drawList;
     ShadowRenderer shadowRenderer;
     std::vector<uint64> shadowCasterSignatures; // One per opaque item of drawList, see getShadowSignature()
-    GpuShadowData shadowData {};                // The shadow records of the last frame
     LightClusters lightClusters;
     GBufferPass gbufferPass;
+    std::unique_ptr<DepthNormalPrepass> depthNormalPrepass; // Created by the first raster frame with ambient occlusion, see renderDepthNormalPrepass()
+    std::unique_ptr<AmbientOcclusionPass> ambientOcclusionPass; // Created by the first frame with ambient occlusion, see renderAmbientOcclusion()
     MaterialTable materialTable;
     LightingPass lightingPass;
     ForwardPass forwardPass;
     PostChain postChain;
     GpuTarget::Ptr colorTarget;
     GpuTexture::Ptr depthTexture;
-    GpuTexture::Ptr ltcMatrix;    // The area light tables of this renderer and device, created once, or nullptr if that failed
-    GpuTexture::Ptr ltcAmplitude;
-    bool ltcTablesAttempted = false;
+    GpuTexture::Ptr lookupTables; // The lookup tables of this renderer and device, created once, black if that failed
+    bool lookupTablesAttempted = false;
+    ProbeRenderer probeRenderer { device };      // Builds the environment cube; its radiance format is the device's
+    LightingInputs::EnvironmentCube environment; // The scene's environment cube on this device
     GpuTexture::Ptr sceneColorOutput;
     GpuTexture::Ptr velocityOutput;
     GpuTexture::Ptr gbufferNormalOutput;
+    GpuTexture::Ptr prepassNormalOutput;
+    GpuTexture::Ptr ambientOcclusionOutput;
     uint64 frameIndex = 0;
     uint64 lastStamp = 0;
     uint64 invalidatingSignature = 0;
@@ -647,49 +736,21 @@ GpuTexture::Ptr SceneRenderer::getPassOutput (PassOutput output) const
         case PassOutput::sceneColor: return impl->sceneColorOutput;
         case PassOutput::velocity: return impl->velocityOutput;
         case PassOutput::gbufferNormal: return impl->gbufferNormalOutput;
+        case PassOutput::prepassNormal: return impl->prepassNormalOutput;
+        case PassOutput::ambientOcclusion: return impl->ambientOcclusionOutput;
     }
 
     return nullptr;
 }
 
-int SceneRenderer::getShadowMapRenderCount() const noexcept
+const ShadowRenderer* SceneRenderer::getShadowRenderer() const noexcept
 {
-    return impl != nullptr ? impl->shadowRenderer.getNumRenderedFrames() : 0;
+    return impl != nullptr ? &impl->shadowRenderer : nullptr;
 }
 
-int SceneRenderer::getShadowCascadeRenderCount (int cascade) const noexcept
+const AmbientOcclusionPass* SceneRenderer::getAmbientOcclusionPass() const noexcept
 {
-    return impl != nullptr ? impl->shadowRenderer.getNumCascadeRenders (cascade) : 0;
-}
-
-int SceneRenderer::getShadowCasterDrawCount() const noexcept
-{
-    return impl != nullptr ? impl->shadowRenderer.getNumCasterDraws() : 0;
-}
-
-GpuShadowData SceneRenderer::getShadowData() const noexcept
-{
-    return impl != nullptr ? impl->shadowData : GpuShadowData {};
-}
-
-bool SceneRenderer::usesShadowFilters() const noexcept
-{
-    return impl != nullptr && impl->shadowRenderer.needsShadowFilters();
-}
-
-int SceneRenderer::getShadowRecordCount() const noexcept
-{
-    return impl != nullptr ? impl->shadowRenderer.getNumRecords() : 0;
-}
-
-int SceneRenderer::getShadowAtlasSize() const noexcept
-{
-    return impl != nullptr ? impl->shadowRenderer.getAtlasSize() : 0;
-}
-
-int SceneRenderer::getShadowTileSize (int lightIndex) const noexcept
-{
-    return impl != nullptr ? impl->shadowRenderer.getTileSize (lightIndex) : 0;
+    return impl != nullptr ? impl->ambientOcclusionPass.get() : nullptr;
 }
 
 void SceneRenderer::setDeviceFactsOverride (std::function<void (RenderCapabilities::DeviceFacts&)> newOverride)
@@ -709,6 +770,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
             impl->sceneColorOutput = nullptr;
             impl->velocityOutput = nullptr;
             impl->gbufferNormalOutput = nullptr;
+            impl->prepassNormalOutput = nullptr;
+            impl->ambientOcclusionOutput = nullptr;
         }
 
         lastError = error;
@@ -761,11 +824,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
     // A new size releases the pool's textures, which the fullscreen passes' render targets would keep alive
     if (widthPx != impl->frameResources.getWidth() || heightPx != impl->frameResources.getHeight())
-    {
-        impl->postChain.releaseTargets();
-        impl->gbufferPass.releaseTargets();
-        impl->lightingPass.releaseTargets();
-    }
+        impl->releasePassTargets();
 
     impl->frameResources.beginFrame (widthPx, heightPx);
 
@@ -775,9 +834,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         // The history and the shadow maps may not have been written: the next frame starts over
         impl->frameResources.invalidateHistory();
         impl->shadowRenderer.invalidate();
-        impl->postChain.releaseTargets();
-        impl->gbufferPass.releaseTargets();
-        impl->lightingPass.releaseTargets();
+        impl->releasePassTargets();
         impl->frameResources.endFrame();
         impl->hasSignature = false;
         return fail (error);
@@ -808,7 +865,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (failShadowPipelines)
         impl->shadowRenderer.failPipelinesForTesting();
 
-    if (auto result = impl->prepareResources (full, failAreaLightTables); result.failed())
+    if (auto result = impl->prepareResources (full, failLookupTables); result.failed())
         return failFrame (result.getErrorMessage());
 
     impl->resolvePreviousTransforms();
@@ -817,8 +874,12 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->samplesToConverge = full ? (temporalAntiAliasing ? settings.taaSamples : 1) : 0;
     impl->hasSignature = impl->hasSignature && full;
 
+    // Built in a frame of its own the first time, never inside this one
+    impl->probeRenderer.setForceRgbmForTesting (forceRgbmRadiance);
+    const auto environmentCube = LightingInputs::prepareEnvironment (impl->probeRenderer, scene, impl->environment);
+
     if (full)
-        impl->trackChanges (scene, settings, widthPx, heightPx);
+        impl->trackChanges (scene, settings, widthPx, heightPx, environmentCube.get());
 
     auto frame = GpuFrame::begin (device);
     if (! frame.isValid())
@@ -842,17 +903,18 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     shadowInputs.casterSignatures = impl->shadowCasterSignatures;
     shadowInputs.enabled = samplers->shadowCompare != nullptr;
 
-    auto& shadows = impl->shadowData;
-    if (auto result = impl->shadowRenderer.render (device, frame, shadowInputs, shadows); result.failed())
+    if (auto result = impl->shadowRenderer.render (device, frame, shadowInputs); result.failed())
         return failFrame (result.getErrorMessage());
 
-    auto lighting = LightingInputs::create (device, scene, drawList.getLights(), impl->shadowRenderer.getShadowRecordIndices());
+    auto lighting = LightingInputs::create (scene, environmentCube, drawList.getLights(), impl->shadowRenderer.getShadowRecordIndices());
     lighting.shadowCascades = impl->shadowRenderer.getCascadeTexture();
     lighting.shadowAtlas = impl->shadowRenderer.getAtlasTexture();
-    lighting.shadows = shadows;
+    lighting.shadows = impl->shadowRenderer.getShadowData();
     lighting.shadowFilters = impl->shadowRenderer.needsShadowFilters();
-    lighting.ltcMatrix = impl->ltcMatrix;
-    lighting.ltcAmplitude = impl->ltcAmplitude;
+    lighting.lookupTables = impl->lookupTables;
+
+    // One flag for every radiance texture of the device, whether or not the scene has an environment
+    lighting.block.probeInfo[0] = impl->probeRenderer.getRadianceFormat() == GpuTextureFormat::rgba8unorm ? 1.0f : 0.0f;
     lighting.samplers = *samplers;
 
     // The shading passes compile only the variants the frame shades with: the defaults here, so a
@@ -879,6 +941,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         if (lighting.materials == nullptr)
             return failFrame ("Unable to upload the material table");
 
+        if (! impl->renderAmbientOcclusion (frame, settings, temporalAntiAliasing, gbuffer.depth, gbuffer.normalRoughness, lighting))
+            return failFrame ("Unable to render the ambient occlusion");
+
         if (! impl->lightingPass.render (device, frame, impl->viewData, gbuffer, lighting, targets.color))
             return failFrame ("Unable to render the lighting pass");
 
@@ -888,6 +953,18 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     {
         impl->gbufferPass.releaseTargets();
         impl->lightingPass.releaseTargets();
+    }
+
+    // Raster screen-space effects read the depth and normals of the prepass, full ones the G-buffer
+    if (! impl->renderDepthNormalPrepass (frame, settings, widthPx, heightPx, failDepthNormalPrepass))
+        return failFrame ("Unable to render the depth and normal prepass");
+
+    if (! full)
+    {
+        const auto* prepass = impl->depthNormalPrepass.get();
+        if (! impl->renderAmbientOcclusion (frame, settings, false, prepass != nullptr ? prepass->getDepth() : nullptr,
+                                            prepass != nullptr ? prepass->getNormalRoughness() : nullptr, lighting))
+            return failFrame ("Unable to render the ambient occlusion");
     }
 
     // Raster: every item over the cleared targets, HDR scene color starting transparent for tone
@@ -922,6 +999,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->sceneColorOutput = hdr ? impl->postChain.getResolvedColor() : impl->colorTarget->asTexture();
     impl->velocityOutput = targets.velocity;
     impl->gbufferNormalOutput = gbuffer.normalRoughness;
+    impl->prepassNormalOutput = impl->depthNormalPrepass != nullptr ? impl->depthNormalPrepass->getNormalRoughness() : nullptr;
+    impl->ambientOcclusionOutput = lighting.ambientOcclusion;
 
     lastError = {};
     return impl->colorTarget->asTexture();

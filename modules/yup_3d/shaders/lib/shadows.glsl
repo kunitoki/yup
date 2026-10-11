@@ -242,6 +242,13 @@ float shadowsSoftFilter(bool atlas, vec2 uv, float layer, vec4 bounds, float dep
     return lit.y > 0.0 ? lit.x / lit.y : 1.0;
 }
 
+// The narrowest blocker search and filter of soft shadows, in texels: wider than the hard filter's
+// disk of 1.5 texels, so where a light's penumbra is thinner than a texel, as where an object touches
+// a surface, the steps of the map's texels blur into a straight edge instead of showing as teeth.
+// The search spans it too, or a receiver at the outer edge of the filter would find no blocker and
+// stay lit, cutting that half of the penumbra
+const float shadowsMinSoftTexels = 2.0;
+
 // The widest blocker search and filter of soft shadows, in texels: wider when temporal anti-aliasing
 // averages the rotated taps over many frames. A few taps over a wider disk would miss small casters
 float shadowsSoftLimit()
@@ -254,7 +261,8 @@ float shadowsSoftLimit()
 // cascade's depth is linear over its depth range (params.w), so a depth difference times that range
 // is a world distance along the light. The search covers the blockers that can hide part of the sun
 // from the receiver, between the near end of the range and the receiver; their average depth sets
-// the penumbra, (receiver - blocker) * tan (radius) in world units, filtered over as many texels.
+// the penumbra, (receiver - blocker) * tan (radius) in world units, filtered over as many texels, at
+// least shadowsMinSoftTexels.
 // No blocker leaves the receiver lit. The taps turn by the noise and follow the receiver's plane
 // (shadowsReceiverGradient: position, normal and ndc of the receiver)
 float sunSoftShadow(int c, vec2 uv, float depth, vec3 position, vec3 normal, vec3 ndc, vec2 noise, float tanRadius)
@@ -267,13 +275,13 @@ float sunSoftShadow(int c, vec2 uv, float depth, vec3 position, vec3 normal, vec
     float angle = noise.x * 6.28318531;
     vec2 gradient = shadowsReceiverGradient(shadows.data.records[c].viewProjection, position, normal, ndc, 16.0 * texelWorld, 1.0);
 
-    float search = min(tanRadius * depthRange * depth / texelWorld, limit);
+    float search = clamp(tanRadius * depthRange * depth / texelWorld, shadowsMinSoftTexels, limit);
     vec4 bounds = vec4(0.0, 0.0, 1.0, 1.0);
     vec2 blockers = shadowsFindBlockers(false, uv, layer, bounds, depth, gradient, texel, search * texel, angle, vec2(0.0));
     if (blockers.y < 0.5)
         return 1.0;
 
-    float penumbra = clamp((depth - blockers.x / blockers.y) * depthRange * tanRadius / texelWorld, 1.0, limit);
+    float penumbra = clamp((depth - blockers.x / blockers.y) * depthRange * tanRadius / texelWorld, shadowsMinSoftTexels, limit);
     return shadowsSoftFilter(false, uv, layer, bounds, depth, gradient, texel, penumbra * texel, angle);
 }
 
@@ -283,7 +291,8 @@ float sunSoftShadow(int c, vec2 uv, float depth, vec3 position, vec3 normal, vec
 // far planes (params.z, w). The search covers the cone from the receiver to the light where it
 // crosses the near plane, the penumbra is (receiver - blocker) * radius / blocker in world units at
 // the receiver, and both turn into uv through the view's projection, at most shadowsSoftLimit()
-// texels, a quarter of the tile, and the distance to the tile's edge: the guard band of a cube face
+// texels, a quarter of the tile, and the distance to the tile's edge, the filter at least
+// shadowsMinSoftTexels where that distance leaves room: the guard band of a cube face
 // spans a couple of texels, so a soft shadow narrows to them where it crosses a face edge, a known
 // limit that keeps it continuous there.
 // No blocker leaves the receiver lit. The taps follow the receiver's plane, as the sun's do
@@ -300,13 +309,13 @@ float localSoftShadow(vec2 uv, vec4 rect, vec4 bounds, vec3 position, vec3 norma
     float receiver = shadowsLinearDepth(ndc.z, params.zw);
     vec2 gradient = shadowsReceiverGradient(viewProjection, position, normal, ndc, 16.0 * rect.w * receiver / scale, rect.z);
 
-    float search = min(lightRadius * (receiver - near) / receiver * scale / near, limit);
+    float search = min(max(lightRadius * (receiver - near) / receiver * scale / near, shadowsMinSoftTexels * rect.w), limit);
     vec2 blockers = shadowsFindBlockers(true, uv, 0.0, bounds, ndc.z, gradient, rect.w, search, angle, params.zw);
     if (blockers.y < 0.5)
         return 1.0;
 
     float blocker = blockers.x / blockers.y;
-    float penumbra = clamp((receiver - blocker) * lightRadius / blocker * scale / receiver, rect.w, limit);
+    float penumbra = min(max((receiver - blocker) * lightRadius / blocker * scale / receiver, shadowsMinSoftTexels * rect.w), limit);
     return shadowsSoftFilter(true, uv, 0.0, bounds, ndc.z, gradient, rect.w, penumbra, angle);
 }
 

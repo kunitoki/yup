@@ -177,6 +177,7 @@ TEST_F (GpuDeviceOpenGLTests, DesktopGLRendersHalfFloat)
     EXPECT_GE (device->getMaximumSampleCount (GpuTextureFormat::rgba16float), 1u);
     EXPECT_FALSE (device->isFragmentStorageBufferAvailable());
     EXPECT_FALSE (device->isStorageTextureAvailable());
+    EXPECT_TRUE (device->isDynamicUniformOffsetAvailable());
 }
 
 // --------------------------------------------------------------------------
@@ -1616,6 +1617,88 @@ TEST_F (GpuTextureOpenGLTests, DepthBiasShiftsWrittenDepth)
     ASSERT_FALSE (biased.empty());
     EXPECT_GE (biased[0], 250);
     EXPECT_LE (biased[1], 5);
+}
+
+#endif // YUP_ENABLE_SHADER_TRANSPILER
+
+// --------------------------------------------------------------------------
+// Dynamic uniform buffers
+// --------------------------------------------------------------------------
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+
+TEST_F (GpuDeviceOpenGLTests, ManyDrawsReadBackTheirOwnDynamicUniforms)
+{
+    // A 256 byte slot per draw block, and one every third draw for the material: over 64 KB
+    constexpr int draws = 300;
+
+    ASSERT_TRUE (device->isDynamicUniformOffsetAvailable());
+
+    constexpr const char* fragment = R"(#version 450
+layout(set = 0, binding = 0) uniform ViewBlock { vec4 value; } view;
+layout(set = 2, binding = 0) uniform DrawBlock { vec4 value; } draw;
+layout(set = 2, binding = 1) uniform MaterialBlock { vec4 value; } material;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main() { color = vec4 (draw.value.r, draw.value.g, material.value.b, view.value.a); })";
+
+    GpuPipelineOptions options;
+    auto& colorTarget = options.colorTargets.emplace_back();
+    colorTarget.format = GpuTextureFormat::rgba8unorm;
+    colorTarget.blendEnabled = false;
+    options.dynamicUniformBuffers = { { 2, 0 }, { 2, 1 } };
+
+    auto pipeline = GpuPipeline::compileFromGlsl (device, fullscreenVertex, fragment, options);
+    ASSERT_TRUE (pipeline.wasOk()) << pipeline.getErrorMessage();
+
+    auto target = GpuTarget::create (device, draws, 1);
+    ASSERT_NE (target, nullptr);
+
+    const auto colorOf = [] (int index) -> std::array<int, 3>
+    {
+        return { (index * 7) & 255, (index * 37) & 255, ((index / 3) * 53) & 255 };
+    };
+
+    const auto block = [] (int red, int green, int blue, int alpha)
+    {
+        return std::array<float, 4> { (float) red / 255.0f, (float) green / 255.0f, (float) blue / 255.0f, (float) alpha / 255.0f };
+    };
+
+    const auto view = block (0, 0, 0, 255);
+
+    auto frame = GpuFrame::begin (device);
+    auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+    pass.setPipeline (pipeline.getValue());
+    pass.setUniformBuffer (0, 0, view.data(), sizeof (view));
+
+    for (int index = 0; index < draws; ++index)
+    {
+        const auto color = colorOf (index);
+        const auto draw = block (color[0], color[1], 0, 0);
+        const auto material = block (0, 0, color[2], 0);
+
+        pass.setUniformBuffer (2, 0, draw.data(), sizeof (draw));
+        pass.setUniformBuffer (2, 1, material.data(), sizeof (material));
+        pass.setViewport ((float) index, 0.0f, 1.0f, 1.0f);
+        EXPECT_TRUE (pass.draw (3));
+    }
+
+    pass.finish();
+    EXPECT_TRUE (frame.submit());
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    std::vector<uint8_t> pixels ((size_t) draws * 4);
+    ASSERT_TRUE (target->readPixels (pixels.data(), pixels.size()));
+
+    for (int index = 0; index < draws; ++index)
+    {
+        const auto color = colorOf (index);
+        const auto* pixel = pixels.data() + index * 4;
+        EXPECT_NEAR (pixel[0], color[0], 1) << "column " << index << " red";
+        EXPECT_NEAR (pixel[1], color[1], 1) << "column " << index << " green";
+        EXPECT_NEAR (pixel[2], color[2], 1) << "column " << index << " blue";
+        EXPECT_EQ (pixel[3], 255) << "column " << index << " alpha";
+    }
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER

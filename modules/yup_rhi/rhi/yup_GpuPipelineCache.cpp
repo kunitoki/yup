@@ -100,6 +100,11 @@ void appendPipelineOptions (String& payload, const GpuPipelineOptions& o)
             payload << ",a" << (int) a << ':' << (int) at.format << ',' << (int) at.offset << ',' << (int) at.shaderLocation;
         }
     }
+
+    payload << "|dyn:" << (int) o.dynamicUniformBuffers.size();
+
+    for (const auto& slot : o.dynamicUniformBuffers)
+        payload << ',' << (int) slot.group << ':' << (int) slot.binding;
 }
 
 } // namespace

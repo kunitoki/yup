@@ -668,6 +668,28 @@ struct GpuDepthStencilState
 };
 
 //==============================================================================
+/** A uniform buffer slot of a pipeline: the set (group) and the binding number a
+    shader declares the block at.
+
+    @see GpuPipelineOptions::dynamicUniformBuffers
+*/
+struct GpuUniformSlot
+{
+    constexpr GpuUniformSlot() = default;
+
+    constexpr GpuUniformSlot (uint32_t groupIndex, uint32_t bindingIndex)
+        : group (groupIndex)
+        , binding (bindingIndex)
+    {
+    }
+
+    constexpr bool operator== (const GpuUniformSlot&) const = default;
+
+    uint32_t group = 0;   ///< The set the block is declared in.
+    uint32_t binding = 0; ///< The binding number within the set.
+};
+
+//==============================================================================
 /** Full pipeline configuration for a GpuPipeline.
 
     Defaults reproduce the classic fullscreen-triangle post-process pipeline
@@ -708,6 +730,25 @@ struct GpuPipelineOptions
     uint8_t stencilWriteMask = 0xFF;
 
     uint32_t sampleCount = 1; ///< MSAA sample count.
+
+    /** Uniform buffers whose data changes from draw to draw, such as per-object transforms.
+
+        GpuRenderPass::setUniformBuffer() on one of these copies the block into a buffer
+        the frame shares between its passes and moves the block's offset in it, instead
+        of building a new bind group for the set. A set whose other resources do not
+        change is then built once and reused by the following draws.
+
+        Slots the shaders do not declare are ignored, so pipelines can share one list
+        while each declares only some of its blocks. Every listed slot the shaders do
+        declare must be a uniform buffer: another kind asserts in Debug and stays
+        static. At most 8 slots are honored, the limit every backend supports; a longer
+        list asserts in Debug and only its first 8 slots count. The whole list is ignored on devices
+        where GpuDevice::isDynamicUniformOffsetAvailable() returns false, which keeps
+        every block on the per-draw path.
+
+        @see GpuDevice::isDynamicUniformOffsetAvailable
+    */
+    std::vector<GpuUniformSlot> dynamicUniformBuffers;
 };
 
 //==============================================================================

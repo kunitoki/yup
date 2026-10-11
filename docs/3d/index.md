@@ -318,9 +318,11 @@ blurred when rough, and receives its soft diffuse light. Metals and glossy
 plastics, which only had highlights from the punctual lights, look like the real
 material.
 
-The environment is baked once on the CPU from any function returning the
+The environment is sampled once on the CPU from any function returning the
 radiance along a direction, for example an analytic sky or a studio of soft
-boxes:
+boxes. The first time a renderer draws it, it is turned into a cube on the GPU and
+filtered for every roughness, one mip each, without stalling the frame. The
+environment itself never changes, so several scenes and windows can share one:
 
 ```cpp
 auto sky = [] (const yup::Vector3<float>& direction)
@@ -336,6 +338,8 @@ scene->setAmbientColor (yup::Colors::black); // the environment replaces the fla
 
 Small bright lights such as a sun keep their energy at every roughness, so they
 show as sharp glints on smooth surfaces and as broad highlights on rough ones.
+The constructor's `width` sets the sharpness of the reflections (the cube faces
+are a quarter of it) and `numLevels` the number of roughness mips.
 
 - `setEnvironmentVisible (true)` draws the environment behind the scene instead
   of the background color, and `setEnvironmentBlur()` softens it, from 0 (sharp)
@@ -344,6 +348,51 @@ show as sharp glints on smooth surfaces and as broad highlights on rough ones.
   filmic curve, which suits bright environments better than the default Reinhard.
   `Scene::ToneMapping::agx` is a third option, a filmic curve that keeps very
   saturated highlights from skewing in hue. See [Render settings](#render-settings).
+
+### Ambient occlusion
+
+Ambient occlusion darkens the light a surface receives from its surroundings
+where nearby geometry hides part of them: in creases, where objects meet the
+ground, and between knobs and buttons on a panel. It is traced on screen every
+frame from the depth and normals of the visible surfaces.
+
+```cpp
+yup::RenderSettings settings;
+settings.ambientOcclusion = true; // on raster; the full tier has it on by default
+settings.aoDistance = 0.1f;       // how far, in scene units, surfaces occlude each other
+scene->setRenderSettings (settings);
+```
+
+- Only the indirect light is darkened: the flat ambient light and the
+  environment. Lights, and their shadows, are never occluded.
+- The diffuse light of the environment is taken along each surface's bent
+  normal, the mean direction of the sky it can still see: next to a wall, a
+  surface is lit by the open side rather than by the wall's direction.
+- The environment reflections are occluded too, less so at grazing angles, so
+  an open, shiny floor keeps its reflections while a crease loses them.
+- The material's own occlusion texture still applies; where both darken a
+  surface, the darker one wins.
+- Transparent (blended) surfaces are not occluded: the occlusion is traced from
+  the opaque surfaces behind them.
+- `aoDistance` should match the scale of the details you want shaded. Too
+  large, and objects cast dark halos on everything around them. Close to the
+  camera, the occlusion reaches at most a tenth of the view height on screen. An
+  `aoDistance` of 0 or less turns ambient occlusion off.
+
+Ambient occlusion is traced at half resolution on both tiers, then filtered and
+stretched over the frame:
+
+| Tier   | Default | How it is drawn                                                                 |
+| ------ | ------- | ------------------------------------------------------------------------------- |
+| Full   | on      | Its noise changes every frame and is averaged by TAA, so it settles once the image converges; without TAA it is traced with twice the samples and stays still. Stretched with depth- and normal-aware weights, so it mostly stays inside the edges of objects; features thinner than about 2 pixels take the occlusion of their neighbors. It costs about 1 ms per frame at 2560 x 1600 on an Apple M2 Max: set `ambientOcclusion = false` to save it. |
+| Raster | off     | After one extra depth and normal pass, stretched by plain filtering: thin objects can show a halo of occlusion about one pixel wide along their edges. |
+
+On raster, ambient occlusion needs half-float render targets: on devices without
+them the setting is ignored and the frame renders as if it were off.
+`getCapabilities()->isEnabled (RenderCapabilities::Feature::ambientOcclusion, settings)`
+tells whether it was asked for and is available. It stays true when the device
+fails to create the occlusion targets or shaders at run time, which renders the
+frame without ambient occlusion and logs it once in debug builds.
 
 ## Lights and shadows
 
@@ -358,19 +407,24 @@ objects, on both tiers:
   without shadows.
 - **Point and spot lights** share one shadow atlas: a spot light takes one view
   of it and a point light six. Lights that look larger on screen get larger
-  views. Each tier has a budget of views (see the table below); when more lights
-  ask for shadows, the most important ones get them and the others light without
-  shadows.
+  views: up to half the atlas side while every light still gets a view at least
+  as large as with a quarter, a quarter otherwise, so a few lights get the
+  sharpest shadows and many still fit. Each tier has a budget of views (see the
+  table below); when more lights ask for shadows, the most important ones get
+  them and the others light without shadows.
 
 Shadow maps are kept on both tiers until something they show changes: the
 casters, the shadow casting lights or the shadow settings. Each cascade and each
 point or spot light view is drawn again on its own, only when a caster it reaches
 changes, so an object moving outside a light's reach costs that light nothing.
 Camera moves redraw the cascades, and the point and spot light views when a
-light's size on screen changes enough to resize them. A camera orbiting a compact
-scene usually redraws no shadow at all. The renderer cannot see vertices edited
-in place in a `Mesh`: after such edits call `getRenderer().restartAccumulation()`,
-on either tier, which also redraws every shadow map.
+light's size on screen changes enough to resize them. A shadowed point or spot
+light coming or going, or growing on screen past a quarter of the atlas, can
+move and resize the other lights' views, which are then redrawn. A camera
+orbiting a compact scene usually redraws no shadow at all. The renderer cannot
+see vertices edited in place in a `Mesh`: after such edits call
+`getRenderer().restartAccumulation()`, on either tier, which also redraws every
+shadow map.
 
 A shadow map the device cannot create, such as a large atlas on a device short
 of memory, leaves the lights that need it without shadow maps instead of failing
@@ -405,11 +459,13 @@ scene->getRoot()->addChild (lamp);
 **Soft shadows.** A light's `radius` (see [Area lights](#area-lights)) also sets
 how soft its shadows are: the penumbra widens with the size of the light and
 with the distance between the caster and the surface it shades, so a shadow is
-sharp where an object touches the ground and softer further away. A radius of 0
-gives hard shadows with slightly filtered edges. Soft shadows are on by default
-on the full tier; on the raster tier set `RenderSettings::softShadows` to `true`
-to turn them on, at a lower quality. On the full tier the penumbrae are refined
-over the frames that temporal anti-aliasing accumulates, so they are grainy
+sharp where an object touches the ground and softer further away. Even there a
+soft shadow is blurred over at least two texels of its shadow map, so its edge
+does not show the map's texel steps where the shadow starts at its caster. A
+radius of 0 gives hard shadows with slightly filtered edges. Soft shadows are on
+by default on the full tier; on the raster tier set `RenderSettings::softShadows`
+to `true` to turn them on, at a lower quality. On the full tier the penumbrae are
+refined over the frames that temporal anti-aliasing accumulates, so they are grainy
 while the scene moves and smooth once it is still; a higher `taaSamples` makes
 them smoother, see [Temporal anti-aliasing](#temporal-anti-aliasing).
 
@@ -470,6 +526,8 @@ scene->setExposure (1.2f);
 | `bloomThreshold` | 1.0         | Exposed radiance above which pixels glow.                                                      |
 | `bloomIntensity` | 0.05        | How much of the blurred glow is added to the image.                                            |
 | `bloomRadius`    | 0.85        | From 0 to 1: how far the glow spreads.                                                         |
+| `ambientOcclusion` | unset     | Darkens the indirect light in creases, see [Ambient occlusion](#ambient-occlusion). Unset follows the tier: on for full, off for raster. |
+| `aoDistance`     | 0.2         | How far, in scene units, surfaces occlude each other for ambient occlusion. 0 or less turns it off. |
 
 Settings a device or tier cannot provide are ignored instead of failing. Ask
 `getRenderer().getCapabilities()` what is in effect after a frame was rendered:

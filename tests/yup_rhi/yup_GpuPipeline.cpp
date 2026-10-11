@@ -680,6 +680,29 @@ TEST_F (GpuPipelineCacheTests, DepthBiasProducesDifferentKeys)
     EXPECT_NE (key, GpuPipelineCache::generateCacheKey (bundle, withClamp, GpuPlatform::Metal));
 }
 
+TEST_F (GpuPipelineCacheTests, PipelineCacheKeyIncludesDynamicSlots)
+{
+    ShaderBundle bundle;
+
+    GpuPipelineOptions base;
+
+    auto withDrawBlock = base;
+    withDrawBlock.dynamicUniformBuffers = { { 2, 0 } };
+
+    auto withMaterialBlock = base;
+    withMaterialBlock.dynamicUniformBuffers = { { 2, 1 } };
+
+    auto withBoth = base;
+    withBoth.dynamicUniformBuffers = { { 2, 0 }, { 2, 1 } };
+
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, base, GpuPlatform::Metal);
+    const auto drawKey = GpuPipelineCache::generateCacheKey (bundle, withDrawBlock, GpuPlatform::Metal);
+    EXPECT_NE (key, drawKey);
+    EXPECT_NE (drawKey, GpuPipelineCache::generateCacheKey (bundle, withMaterialBlock, GpuPlatform::Metal));
+    EXPECT_NE (drawKey, GpuPipelineCache::generateCacheKey (bundle, withBoth, GpuPlatform::Metal));
+    EXPECT_EQ (drawKey, GpuPipelineCache::generateCacheKey (bundle, withDrawBlock, GpuPlatform::Metal));
+}
+
 TEST_F (GpuPipelineCacheTests, StoreAndContainsAndCount)
 {
     GpuPipelineCache cache (*context);

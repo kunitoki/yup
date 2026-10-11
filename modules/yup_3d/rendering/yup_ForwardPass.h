@@ -30,21 +30,28 @@ namespace yup
     Bindings follow the set 0 (view) / set 1 (pass) / set 2 (draw and material) convention, so the
     per-frame sets are built once per pipeline change and only set 2 changes per draw. Set 0 holds
     the shared samplers and lookups of the LightingInputs: the environment at binding 6 with its
-    sampler at 14, the area light tables at 7 and 11, read through linearClamp at binding 1, and
+    sampler at 14, the lookup tables (LookupTables) at 7, read through linearClamp at binding 1, and
     shadowCompare at 4. Set 1 holds the LightingBlock at binding 0, and on the full tier the lights
-    and the light lists of the clusters at bindings 6 and 7; raster draws read their own light list
-    at set 2 binding 12. Set 3 holds the shadows: the sun cascades at binding 0, the point and spot
+    and the light lists of the clusters at bindings 6 and 7; raster frames with ambient occlusion
+    the AmbientOcclusionPass output at 13 (LightingInputs::ambientOcclusion, at half resolution,
+    upsampled bilinearly), which the full tier's blended surfaces skip. Raster draws read their own
+    light list at set 2 binding 12. Set 3 holds the shadows: the sun cascades at binding 0, the point and spot
     light atlas at 2 and the ShadowBlock at 4, and for soft shadows the same two maps again at 1
     and 3, read raw by the blocker search.
 
     Pipelines are compiled lazily per color and depth format, sample count, velocity output, area
-    lights and shadow filters, only for frames that draw: the full tier variant is the one with a velocity target, and draws
+    lights, shadow filters and local indirect inputs, only for frames that draw: the full tier variant is the one with a velocity target, and draws
     blended items only. The area light variant (YUP_3D_AREA_LIGHTS) shades the frames where
-    LightingInputs::areaLights is set; only it declares and binds the area light tables and the
-    linearClamp sampler. On both tiers the shadow filter variant (YUP_3D_SOFT_SHADOWS) shades the
+    LightingInputs::areaLights is set; every variant declares the lookup tables, which the
+    environment reads too. On both tiers the shadow filter variant (YUP_3D_SOFT_SHADOWS) shades the
     frames where LightingInputs::shadowFilters is set, and only it declares and binds the raw depth
     maps. It holds the soft shadows; on the full tier the frame also takes it when contact shadows
     are marched, which LightingPass alone does (blended items write no depth to march through).
+    On raster, the local indirect variant (YUP_3D_LOCAL_INDIRECT) shades the frames with
+    LightingInputs::ambientOcclusion, and only it declares and binds it: the default raster bundles
+    carry no ambient occlusion code. Blended items skip it (a white texture is bound before them),
+    since it holds the opaque surfaces behind them. If it fails to compile, the failure is logged
+    once and the frames shade without ambient occlusion.
 
     @internal
 */
@@ -117,15 +124,16 @@ public:
 private:
     struct Variant;
 
-    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool shadowFilters);
+    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool shadowFilters, bool localIndirect);
     Result createDefaults (const GpuDevice::Ptr& device);
 
     std::vector<std::unique_ptr<Variant>> variants;
     std::optional<Result> defaults;
     GeometryBindings geometry;
-    GpuTexture::Ptr blackTexture;
+    GpuTexture::Ptr blackCube; // The environment without one
     GpuTarget::Ptr surface;
     bool shadowFiltersFailureReported = false; // A shadow filter variant failed to compile, and was logged once
+    bool localIndirectFailureReported = false; // A local indirect variant failed to compile, and was logged once
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ForwardPass)
 };

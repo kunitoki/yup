@@ -419,6 +419,13 @@ std::unique_ptr<ContextGL> ContextGL::Make()
         f.anisotropicFiltering = true;
 #endif
 
+#ifdef RIVE_DESKTOP_GL
+#ifndef GL_TEXTURE_CUBE_MAP_SEAMLESS
+#define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
+#endif
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+#endif
+
     return ctx;
 }
 

@@ -49,14 +49,12 @@ vec3 bsdfFresnelSchlick(vec3 f0, vec3 f90, float vDotH)
     return f0 + (f90 - f0) * pow(1.0 - vDotH, 5.0);
 }
 
-// Split-sum scale and bias of the specular reflectance, fitted analytically (Karis, mobile)
-vec2 bsdfEnvironmentBrdf(float roughness, float nDotV)
+// The single-scattering specular reflectance under environment light, the split sum (Karis 2013,
+// "Real Shading in Unreal Engine 4"), from the GGX lobe magnitude x and its Fresnel part y of the
+// lookup tables: f0 scales x - y, and f90 the bias y
+vec3 bsdfSplitSum(vec3 f0, vec3 f90, vec2 lobe)
 {
-    const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
-    const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
-    vec4 r = roughness * c0 + c1;
-    float a004 = min(r.x * r.x, exp2(-9.28 * nDotV)) * r.x + r.y;
-    return vec2(-1.04, 1.04) * a004 + r.zw;
+    return f0 * (lobe.x - lobe.y) + f90 * lobe.y;
 }
 
 // Specular antialiasing: the variance of the shading normal within the pixel, added to alpha2 by
@@ -149,11 +147,24 @@ vec3 bsdfEvaluate(BsdfSurface s, vec3 l)
     return (diffuse + specular) * nDotL;
 }
 
-// The diffuse weight under environment light, from the split-sum scale and bias of
-// bsdfEnvironmentBrdf applied to the dielectric reflectance, as bsdfEvaluate does per light
-float bsdfEnvironmentDiffuseWeight(BsdfSurface s, vec2 brdf)
+// The diffuse weight under environment light, from the split sum of the dielectric reflectance,
+// as bsdfEvaluate does per light. lobe is the GGX lobe magnitude and its Fresnel part (bsdfSplitSum)
+float bsdfEnvironmentDiffuseWeight(BsdfSurface s, vec2 lobe)
 {
-    return bsdfDiffuseWeight(s.dielectricF0 * brdf.x + s.dielectricF90 * brdf.y);
+    return bsdfDiffuseWeight(bsdfSplitSum(s.dielectricF0, vec3(s.dielectricF90), lobe));
+}
+
+// Multiple-scattering energy compensation of the split sum (Fdez-Aguera 2019, "A Multiple-Scattering
+// Microfacet Model for Real-Time Image-based Lighting", JCGT 8 (1)). The single-scattering lobe
+// reflects Ess = lobe.x of a white environment, its magnitude without Fresnel, and misses
+// Ems = 1 - Ess. That energy bounces again, attenuated by the cosine-weighted average of the Schlick
+// Fresnel, Favg = f0 + (f90 - f0) / 21, and leaves uniformly diffused: Fms Ems, returned here, weights
+// the environment irradiance, as a diffuse albedo does. singleScattering is FssEss, from bsdfSplitSum
+vec3 bsdfMultipleScattering(BsdfSurface s, vec2 lobe, vec3 singleScattering)
+{
+    float missing = 1.0 - lobe.x;
+    vec3 averageFresnel = s.f0 + (s.f90 - s.f0) / 21.0;
+    return singleScattering * averageFresnel * missing / max(1.0 - averageFresnel * missing, vec3(1.0e-4));
 }
 
 #endif

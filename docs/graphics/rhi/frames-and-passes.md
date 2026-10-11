@@ -113,6 +113,18 @@ whatever pipeline, textures and uniforms were set most recently. The attachments
 are cleared before the **first** draw only - every later draw loads them - so
 several draws accumulate into one surface and share one depth buffer.
 
+### Per-draw uniforms
+
+`setUniformBuffer` copies the bytes, so the caller's block can change right
+after the call. A block the pipeline lists in
+`GpuPipelineOptions::dynamicUniformBuffers` is written into the frame's uniform
+buffer, which every pass of the frame shares: each block takes 256 bytes, or
+its size rounded up to 256 when larger, in 64 KB chunks taken from the device's
+pool, and a chunk returns to the pool once the frame retires. The draw binds its set at the blocks' offsets, so the
+set is not rebuilt when only those bytes change. Setting identical bytes again
+keeps the block where it is. See
+[Dynamic uniform buffers](pipelines.md#dynamic-uniform-buffers).
+
 ### Fullscreen passes
 
 For a fullscreen post-process that generates its vertices from the vertex index,

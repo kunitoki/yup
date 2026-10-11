@@ -121,7 +121,7 @@ public:
     /** The samplers shared by the passes, bound in set 0. */
     struct Samplers
     {
-        GpuSampler::Ptr linearClamp;   ///< Set 0 binding 1: linear filtering, clamped to the edge.
+        GpuSampler::Ptr linearClamp;   ///< Set 0 binding 1: trilinear filtering, clamped to the edge.
         GpuSampler::Ptr pointClamp;    ///< Set 0 binding 3: nearest filtering, clamped to the edge.
         GpuSampler::Ptr shadowCompare; ///< Set 0 binding 4: linear filtering, clamped to the edge, comparing with lessEqual, or nullptr when the device cannot create it.
     };

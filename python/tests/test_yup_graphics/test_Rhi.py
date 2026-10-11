@@ -251,6 +251,7 @@ def test_gpu_pipeline_options_defaults():
     assert len(opts.colorTargets) == 0
     assert len(opts.vertexBuffers) == 0
     assert opts.sampleCount == 1
+    assert len(opts.dynamicUniformBuffers) == 0
 
 
 def test_gpu_render_options_defaults():
@@ -449,6 +450,27 @@ def test_pipeline_options_owns_its_color_targets():
     assert opts.colorTargets[0].blendEnabled is False
 
 
+def test_gpu_uniform_slot_construction():
+    slot = yup.GpuUniformSlot()
+    assert slot.group == 0
+    assert slot.binding == 0
+
+    slot = yup.GpuUniformSlot(2, 12)
+    assert slot.group == 2
+    assert slot.binding == 12
+    assert slot == yup.GpuUniformSlot(2, 12)
+    assert slot != yup.GpuUniformSlot(2, 1)
+
+
+def test_pipeline_options_owns_its_dynamic_uniform_buffers():
+    opts = yup.GpuPipelineOptions()
+    opts.dynamicUniformBuffers = [yup.GpuUniformSlot(2, 0), yup.GpuUniformSlot(2, 1)]
+
+    assert len(opts.dynamicUniformBuffers) == 2
+    assert opts.dynamicUniformBuffers[1].group == 2
+    assert opts.dynamicUniformBuffers[1].binding == 1
+
+
 # ==============================================================================
 # GPU device — everything below needs a real device and is skipped without one
 # ==============================================================================
@@ -485,6 +507,7 @@ def test_gpu_device_capability_probes_are_bound(headless_device):
     assert headless_device.getMaximumColorAttachments() == 0
     assert headless_device.isFragmentStorageBufferAvailable() is False
     assert headless_device.isStorageTextureAvailable() is False
+    assert headless_device.isDynamicUniformOffsetAvailable() is False
     assert headless_device.getPlatform() == yup.GpuPlatform.Headless
 
 

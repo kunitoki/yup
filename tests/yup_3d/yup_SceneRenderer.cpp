@@ -276,6 +276,38 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle forwardPassLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_local_indirect.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle forwardPassAreaLightsLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_area_lights_local_indirect.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle forwardPassSoftShadowsLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_soft_shadows_local_indirect.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle forwardPassAreaLightsSoftShadowsLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_area_lights_soft_shadows_local_indirect.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
     static ShaderBundle forwardPassFull()
     {
         static constexpr uint8 data[] = {
@@ -381,6 +413,22 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle gtaoTrace()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_GtaoTrace.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle gtaoDenoise()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_GtaoDenoise.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
     static Budget countResources (const ShaderReflection& reflection)
     {
         Budget budget;
@@ -415,14 +463,18 @@ protected:
 TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
 {
     // The reflection counts what the shaders declare, so the budget check cannot pass on empty
-    // lists. The area light variants add the two area light tables. The shared lookups (the
-    // environment and the area light tables) live in set 0, set 1 holds no texture, and set 3 the
+    // lists. The shared lookups (the environment and the lookup tables) live in set 0 in every
+    // variant, set 1 holds the ambient occlusion in the local indirect variants only, and set 3 the
     // sun cascades and the point and spot light atlas, read with the ShadowBlock. The soft shadow
     // variants read both maps raw too
-    for (const auto& [name, bundle, textures, lookups, shadowMaps] : { std::tuple { "ForwardPass", forwardPass(), 8, 1, 2 },
-                                                                       std::tuple { "ForwardPass_area_lights", forwardPassAreaLights(), 10, 3, 2 },
-                                                                       std::tuple { "ForwardPass_soft_shadows", forwardPassSoftShadows(), 10, 1, 4 },
-                                                                       std::tuple { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), 12, 3, 4 } })
+    for (const auto& [name, bundle, textures, passInputs, shadowMaps] : { std::tuple { "ForwardPass", forwardPass(), 9, 0, 2 },
+                                                                          std::tuple { "ForwardPass_area_lights", forwardPassAreaLights(), 9, 0, 2 },
+                                                                          std::tuple { "ForwardPass_soft_shadows", forwardPassSoftShadows(), 11, 0, 4 },
+                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), 11, 0, 4 },
+                                                                          std::tuple { "ForwardPass_local_indirect", forwardPassLocalIndirect(), 10, 1, 2 },
+                                                                          std::tuple { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), 10, 1, 2 },
+                                                                          std::tuple { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), 12, 1, 4 },
+                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), 12, 1, 4 } })
     {
         const auto* vertex = bundle.findShader (ShaderStage::vertex, ShaderLanguage::spirv);
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -434,8 +486,8 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         EXPECT_EQ (countResources (vertex->reflection).uniformBlocks, 2) << name;
         EXPECT_EQ (budget.sampledImages, textures) << name;
         EXPECT_EQ (budget.uniformBlocks, 5) << name;
-        EXPECT_EQ (budget.texturesPerSet[0], lookups) << name;
-        EXPECT_EQ (budget.texturesPerSet[1], 0) << name;
+        EXPECT_EQ (budget.texturesPerSet[0], 2) << name;
+        EXPECT_EQ (budget.texturesPerSet[1], passInputs) << name;
         EXPECT_EQ (budget.texturesPerSet[3], shadowMaps) << name;
         EXPECT_EQ (budget.uniformBlocksPerSet[3], 1) << name;
     }
@@ -443,10 +495,10 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
     // The full tier geometry bundles: the forward pass without the raster light list, and the G-buffer.
     // The forward shadow filter variants read the two maps raw too, but never the scene depth (set 1
     // binding 12): the blended items they draw write none, so they march no contact shadows
-    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 8, 4, 1 },
-                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 10, 4, 3 },
-                                                                   std::tuple { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), 10, 4, 1 },
-                                                                   std::tuple { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), 12, 4, 3 },
+    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 9, 4, 2 },
+                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 9, 4, 2 },
+                                                                   std::tuple { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), 11, 4, 2 },
+                                                                   std::tuple { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), 11, 4, 2 },
                                                                    std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 1, 0 } })
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -464,6 +516,10 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         { "ForwardPass_area_lights", forwardPassAreaLights() },
         { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect() },
+        { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect() },
+        { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect() },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
@@ -476,6 +532,8 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
         { "ShadowPass", shadowPass() },
         { "ShadowPass_masked", shadowPassMasked() },
+        { "GtaoTrace", gtaoTrace() },
+        { "GtaoDenoise", gtaoDenoise() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -498,6 +556,57 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
     }
 }
 
+TEST_F (SceneRendererBundleTests, AmbientOcclusionIsReadByTheRasterForwardPassAndTheLightingPass)
+{
+    // Set 1 binding 13: on raster only the local indirect variants read it, so the default bundles
+    // carry no ambient occlusion code; on full the lighting pass reads it for the opaque surfaces,
+    // and the blended ones skip it
+    const std::tuple<const char*, ShaderBundle, bool> bundles[] = {
+        { "ForwardPass", forwardPass(), false },
+        { "ForwardPass_area_lights", forwardPassAreaLights(), false },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows(), false },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), false },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect(), true },
+        { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), true },
+        { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), true },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), true },
+        { "ForwardPass_full", forwardPassFull(), false },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), false },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), false },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), false },
+        { "LightingPass_full", lightingPassFull(), true },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights(), true },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), true },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), true },
+    };
+
+    for (const auto& [name, bundle, reads] : bundles)
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+        EXPECT_EQ (declares (fragment->reflection.separateImages, 1, 13), reads) << name;
+
+        // Nor the specular occlusion of lib/probes.glsl, which every shading bundle includes, in the WGSL
+        // that keeps unused functions
+        const auto* wgsl = bundle.findShader (ShaderStage::fragment, ShaderLanguage::wgsl);
+        ASSERT_NE (wgsl, nullptr) << name;
+        EXPECT_EQ (wgsl->source.contains ("gtaoSpecularOcclusion"), reads) << name;
+    }
+
+    // The trace reads the depth and the normals (set 1 bindings 1 and 2), the denoise the trace too (3)
+    for (const auto& [name, bundle, images] : { std::tuple { "GtaoTrace", gtaoTrace(), 2 }, std::tuple { "GtaoDenoise", gtaoDenoise(), 3 } })
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+
+        auto budget = countResources (fragment->reflection);
+        EXPECT_EQ (budget.texturesPerSet[1], images) << name;
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 1)) << name;
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 2)) << name;
+        EXPECT_TRUE (declares (fragment->reflection.uniformBuffers, 1, 0)) << name;
+    }
+}
+
 TEST_F (SceneRendererBundleTests, OnlyFullVariantsWriteVelocity)
 {
     const auto fragmentOf = [] (const ShaderBundle& bundle) -> const ShaderReflection*
@@ -508,13 +617,15 @@ TEST_F (SceneRendererBundleTests, OnlyFullVariantsWriteVelocity)
 
     const auto raster = forwardPass();
     const auto rasterAreaLights = forwardPassAreaLights();
+    const auto rasterLocalIndirect = forwardPassLocalIndirect();
+    const auto rasterAreaLightsLocalIndirect = forwardPassAreaLightsLocalIndirect();
     const auto full = forwardPassFull();
     const auto fullAreaLights = forwardPassFullAreaLights();
     const auto fullSoftShadows = forwardPassFullSoftShadows();
     const auto fullAreaLightsSoftShadows = forwardPassFullAreaLightsSoftShadows();
     const auto rasterBackground = background();
 
-    for (const auto* reflection : { fragmentOf (raster), fragmentOf (rasterAreaLights), fragmentOf (rasterBackground) })
+    for (const auto* reflection : { fragmentOf (raster), fragmentOf (rasterAreaLights), fragmentOf (rasterLocalIndirect), fragmentOf (rasterAreaLightsLocalIndirect), fragmentOf (rasterBackground) })
     {
         ASSERT_NE (reflection, nullptr);
         EXPECT_TRUE (writesLocation (*reflection, 0));
@@ -561,6 +672,10 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
         { "ForwardPass_area_lights", forwardPassAreaLights() },
         { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect() },
+        { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect() },
+        { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect() },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
@@ -580,7 +695,7 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
         const auto& blocks = fragment->reflection.uniformBuffers;
         const auto block = std::find_if (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 1 && b.binding == 0; });
         ASSERT_NE (block, blocks.end()) << name;
-        EXPECT_EQ (block->blockSize, 208u) << name;
+        EXPECT_EQ (block->blockSize, 224u) << name;
 
         std::map<String, uint32_t> offsets;
         for (const auto& member : block->members)
@@ -593,6 +708,7 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
         EXPECT_EQ (offsets["irradiance"], 32u) << name;
         EXPECT_EQ (offsets["clusterGrid"], 176u) << name;
         EXPECT_EQ (offsets["clusterDepth"], 192u) << name;
+        EXPECT_EQ (offsets["probeInfo"], 208u) << name;
     }
 }
 
@@ -609,6 +725,10 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
         { "ForwardPass_area_lights", forwardPassAreaLights(), false },
         { "ForwardPass_soft_shadows", forwardPassSoftShadows(), true },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), true },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect(), false },
+        { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), false },
+        { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), true },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), true },
         { "ForwardPass_full", forwardPassFull(), false },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), false },
         { "LightingPass_full", lightingPassFull(), false },
@@ -818,12 +938,13 @@ TEST_F (SceneRendererBundleTests, FullForwardPassReadsTheClusteredLights)
 
 TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
 {
-    // The area light variants of the shading passes read the area light tables, set 0 lookups at
-    // bindings 7 and 11, through the set 0 linearClamp sampler. RasterBundlesStayWithinBudget
-    // counts the two tables in the raster budget
+    // The area light variants of the shading passes read the area light tables from the lookup
+    // array, a set 0 lookup at binding 7, through the set 0 linearClamp sampler; binding 11 is spare
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass_area_lights", forwardPassAreaLights() },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
+        { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect() },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows() },
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
@@ -835,8 +956,8 @@ TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
 
-        EXPECT_TRUE (declares (fragment->reflection.separateImages, 0, 7)) << name << ": ltcMatrix";
-        EXPECT_TRUE (declares (fragment->reflection.separateImages, 0, 11)) << name << ": ltcAmplitude";
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 0, 7)) << name << ": lookupLuts";
+        EXPECT_FALSE (declares (fragment->reflection.separateImages, 0, 11)) << name;
         EXPECT_TRUE (declares (fragment->reflection.separateSamplers, 0, 1)) << name << ": linearClamp";
         EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 4)) << name;
         EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 5)) << name;
@@ -845,12 +966,18 @@ TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
 
 TEST_F (SceneRendererBundleTests, EveryShadingBundleReadsTheEnvironmentFromSetZero)
 {
-    // The environment is a set 0 lookup at binding 6, with its interim sampler at binding 14
+    // The environment is a set 0 lookup at binding 6, a cube read through linearClamp at binding 1
+    // since its interim sampler at binding 14 is gone. Its split sum is in the lookup tables at
+    // binding 7, unused by Background
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass", forwardPass() },
         { "ForwardPass_area_lights", forwardPassAreaLights() },
         { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect() },
+        { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect() },
+        { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect() },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
@@ -867,19 +994,37 @@ TEST_F (SceneRendererBundleTests, EveryShadingBundleReadsTheEnvironmentFromSetZe
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
 
-        EXPECT_TRUE (declares (fragment->reflection.separateImages, 0, 6)) << name << ": environment";
-        EXPECT_TRUE (declares (fragment->reflection.separateSamplers, 0, 14)) << name << ": environment sampler";
+        const auto& images = fragment->reflection.separateImages;
+        const auto environment = std::find_if (images.begin(), images.end(), [] (const auto& image) { return image.set == 0 && image.binding == 6; });
+        ASSERT_NE (environment, images.end()) << name << ": environment";
+        EXPECT_EQ (environment->imageDim, ShaderReflection::ImageDimension::cube) << name;
+
+        EXPECT_FALSE (declares (fragment->reflection.separateSamplers, 0, 14)) << name << ": interim environment sampler";
+        EXPECT_TRUE (declares (fragment->reflection.separateSamplers, 0, 1)) << name << ": linearClamp";
+        EXPECT_EQ (declares (fragment->reflection.separateImages, 0, 7), String (name) != "Background") << name << ": lookupLuts";
         EXPECT_FALSE (declares (fragment->reflection.separateImages, 1, 1)) << name;
         EXPECT_FALSE (declares (fragment->reflection.separateSamplers, 1, 2)) << name;
     }
 }
 
-TEST_F (SceneRendererBundleTests, PunctualVariantsDeclareNoAreaLightTables)
+TEST_F (SceneRendererBundleTests, PunctualVariantsCompileNoAreaLightCode)
 {
-    // Without YUP_3D_AREA_LIGHTS every light is punctual: neither the tables nor their sampler
+    // Without YUP_3D_AREA_LIGHTS every light is punctual: no area light code, while the lookup
+    // tables and their sampler stay declared for the environment. The area variants hold the code,
+    // so the check is not vacuous
+    for (const auto& [name, bundle] : { std::pair { "ForwardPass_area_lights", forwardPassAreaLights() },
+                                        std::pair { "LightingPass_full_area_lights", lightingPassFullAreaLights() } })
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::msl);
+        ASSERT_NE (fragment, nullptr) << name;
+        EXPECT_TRUE (fragment->source.contains ("lightsEllipseIntegral")) << name;
+    }
+
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass", forwardPass() },
         { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect() },
+        { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
         { "LightingPass_full", lightingPassFull() },
@@ -891,10 +1036,13 @@ TEST_F (SceneRendererBundleTests, PunctualVariantsDeclareNoAreaLightTables)
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
 
-        EXPECT_FALSE (declares (fragment->reflection.separateImages, 0, 7)) << name << ": ltcMatrix";
-        EXPECT_FALSE (declares (fragment->reflection.separateImages, 0, 11)) << name << ": ltcAmplitude";
-        EXPECT_FALSE (declares (fragment->reflection.separateSamplers, 0, 1)) << name << ": linearClamp";
-        EXPECT_FALSE (fragment->reflection.separateSamplers.empty()) << name;
+        EXPECT_TRUE (declares (fragment->reflection.separateImages, 0, 7)) << name << ": lookupLuts";
+        EXPECT_FALSE (declares (fragment->reflection.separateImages, 0, 11)) << name;
+        EXPECT_TRUE (declares (fragment->reflection.separateSamplers, 0, 1)) << name << ": linearClamp";
+
+        const auto* msl = bundle.findShader (ShaderStage::fragment, ShaderLanguage::msl);
+        ASSERT_NE (msl, nullptr) << name;
+        EXPECT_FALSE (msl->source.contains ("lightsEllipseIntegral")) << name;
     }
 }
 
@@ -1174,12 +1322,24 @@ protected:
         return *box;
     }
 
+    /** The shadow renderer of @p renderer, which must have rendered: a test failure otherwise,
+        read as a shadow renderer that drew nothing. */
+    static const ShadowRenderer& shadows (const SceneRenderer& renderer)
+    {
+        if (const auto* shadowRenderer = renderer.getShadowRenderer())
+            return *shadowRenderer;
+
+        ADD_FAILURE() << "The renderer has not rendered yet";
+        static const ShadowRenderer none;
+        return none;
+    }
+
     /** How many frames drew each of the first @p count sun cascades. */
     static std::vector<int> getCascadeRenderCounts (const SceneRenderer& renderer, int count)
     {
         std::vector<int> counts;
         for (int c = 0; c < count; ++c)
-            counts.push_back (renderer.getShadowCascadeRenderCount (c));
+            counts.push_back (shadows (renderer).getNumCascadeRenders (c));
 
         return counts;
     }
@@ -1345,6 +1505,14 @@ protected:
         scene.setRenderSettings (settings);
     }
 
+    /** The linear radiance behind an 8 bit level that was Reinhard tone mapped and sRGB encoded. */
+    static double reinhardRadiance (int level)
+    {
+        const auto encoded = level / 255.0;
+        const auto mapped = encoded <= 0.04045 ? encoded / 12.92 : std::pow ((encoded + 0.055) / 1.055, 2.4);
+        return mapped / (1.0 - mapped);
+    }
+
     /** The mean Rec.709 luma of the 8 bit levels within @p area. */
     static double meanLuminance (const Image& image, Rectangle<int> area)
     {
@@ -1470,8 +1638,10 @@ protected:
 
     /** The shadows scene against its Phase 0 baseline @p platform_shadows.png by statistics, since
         the cascades replaced the single map of Phase 0: the shadow darkens at least as much
-        (checkShadows), covers about the same pixels, and nothing differs outside of it. The shadow
-        is what tells each image apart from the scene rendered without it.
+        (checkShadows), covers about the same pixels, and nothing differs outside of the plates.
+        The shadow is what tells each image apart from the scene rendered without it. The plates'
+        shading under the environment changed in Phase 4 (lookup tables and multiple scattering),
+        so their mean luminance is recorded for both images rather than compared.
     */
     void checkShadowsAgainstBaseline (const Image& image, const String& platform)
     {
@@ -1487,6 +1657,12 @@ protected:
         const auto unshadowed = renderToImage (renderer, scene, 128);
         ASSERT_TRUE (unshadowed.isValid()) << renderer.getLastError();
 
+        // The plates are the pixels they change over the background, in either image
+        scene.getRoot()->removeChild (scene.getRoot()->findChild ("plates"));
+        SceneRenderer backgroundRenderer;
+        const auto background = renderToImage (backgroundRenderer, scene, 128);
+        ASSERT_TRUE (background.isValid()) << backgroundRenderer.getLastError();
+
         checkShadows (image);
 
         const auto margin = [] (const Image& shadowed)
@@ -1500,24 +1676,47 @@ protected:
         const auto shadow = differenceMask (image, unshadowed);
         const auto baselineShadow = differenceMask (baseline, unshadowed);
         const auto differing = differenceMask (image, baseline);
+        const auto plates = differenceMask (image, background);
+        const auto baselinePlates = differenceMask (baseline, background);
 
-        int shadowPixels = 0, baselineShadowPixels = 0, differingOutside = 0;
+        int shadowPixels = 0, baselineShadowPixels = 0, differingOutside = 0, changedOutside = 0, platePixels = 0;
+        double plateLuminance = 0.0, baselinePlateLuminance = 0.0;
         for (size_t i = 0; i < shadow.size(); ++i)
         {
             shadowPixels += shadow[i] ? 1 : 0;
             baselineShadowPixels += baselineShadow[i] ? 1 : 0;
-            differingOutside += differing[i] && ! shadow[i] && ! baselineShadow[i] ? 1 : 0;
+
+            const auto onPlates = plates[i] || baselinePlates[i];
+            differingOutside += differing[i] && ! onPlates ? 1 : 0;
+
+            // The background stays exact, not just within 2 levels
+            const auto x = static_cast<int> (i) % image.getWidth(), y = static_cast<int> (i) / image.getWidth();
+            changedOutside += ! onPlates && image.getPixelColor (x, y) != baseline.getPixelColor (x, y) ? 1 : 0;
+
+            if (onPlates)
+            {
+                const Rectangle<int> pixel (x, y, 1, 1);
+                plateLuminance += meanLuminance (image, pixel);
+                baselinePlateLuminance += meanLuminance (baseline, pixel);
+                ++platePixels;
+            }
         }
 
         RecordProperty ("shadowsDifferingFromBaseline", static_cast<int> (std::count (differing.begin(), differing.end(), true)));
         RecordProperty ("shadowPixels", shadowPixels);
         RecordProperty ("baselineShadowPixels", baselineShadowPixels);
-        RecordProperty ("differingOutsideShadows", differingOutside);
+        RecordProperty ("differingOutsidePlates", differingOutside);
+        RecordProperty ("changedOutsidePlates", changedOutside);
+        RecordProperty ("platePixels", platePixels);
+        RecordProperty ("platesMeanLuminance", String (plateLuminance / jmax (platePixels, 1), 2).toStdString());
+        RecordProperty ("baselinePlatesMeanLuminance", String (baselinePlateLuminance / jmax (platePixels, 1), 2).toStdString());
 
         EXPECT_GT (baselineShadowPixels, 0);
         EXPECT_GE (shadowPixels, baselineShadowPixels * 4 / 5);
         EXPECT_LE (shadowPixels, baselineShadowPixels * 5 / 4);
+        EXPECT_GT (platePixels, 128 * 128 / 8);
         EXPECT_EQ (differingOutside, 0);
+        EXPECT_EQ (changedOutside, 0);
     }
 
     /** How far a readVelocity() level is from zero velocity (127.5): 0 for 127 and 128, up to 127. */
@@ -2325,7 +2524,7 @@ protected:
         ASSERT_TRUE (image.isValid());
 
         // 41 point lights of 6 faces each, without a sun: 2 fit the 16 local records of raster, 10 the 64 of full
-        EXPECT_EQ (renderer.getShadowRecordCount(), full ? 60 : 12);
+        EXPECT_EQ (shadows (renderer).getNumRecords(), full ? 60 : 12);
 
 #if YUP_ENABLE_SHADER_TRANSPILER
         const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
@@ -2419,7 +2618,7 @@ protected:
                     image = renderToImage (renderer, scene, 128);
                     EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
                     if (failPipelines)
-                        EXPECT_EQ (renderer.getShadowRecordCount(), 0);
+                        EXPECT_EQ (shadows (renderer).getNumRecords(), 0);
                 }
 
                 return image;
@@ -2473,8 +2672,8 @@ protected:
                 ASSERT_TRUE (image.isValid() && unshadowed.isValid());
 
                 EXPECT_EQ (countDifferences (image, unshadowed), 0) << (spotScene ? "spot" : "sun") << ", frame " << frame;
-                EXPECT_EQ (renderer.getShadowRecordCount(), 0);
-                EXPECT_EQ (renderer.getShadowAtlasSize(), 0);
+                EXPECT_EQ (shadows (renderer).getNumRecords(), 0);
+                EXPECT_EQ (shadows (renderer).getAtlasSize(), 0);
             }
 
             auto settings = scene.getRenderSettings();
@@ -2484,7 +2683,7 @@ protected:
             const auto image = renderToImage (renderer, scene, 128);
             const auto unshadowed = renderToImage (unshadowedRenderer, unshadowedScene, 128);
             ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
-            EXPECT_GT (renderer.getShadowRecordCount(), 0);
+            EXPECT_GT (shadows (renderer).getNumRecords(), 0);
             EXPECT_GT (countDifferences (image, unshadowed), 0) << (spotScene ? "spot" : "sun");
         }
     }
@@ -2517,18 +2716,18 @@ protected:
             sun.castsShadows = true;
             spot.castsShadows = true;
             ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-            EXPECT_EQ (renderer.getShadowAtlasSize() == 0, atlasFails);
+            EXPECT_EQ (shadows (renderer).getAtlasSize() == 0, atlasFails);
 
-            const auto renders = renderer.getShadowMapRenderCount();
-            const auto cascadeRenders = renderer.getShadowCascadeRenderCount (0);
-            const auto draws = renderer.getShadowCasterDrawCount();
+            const auto renders = shadows (renderer).getNumRenderedFrames();
+            const auto cascadeRenders = shadows (renderer).getNumCascadeRenders (0);
+            const auto draws = shadows (renderer).getNumCasterDraws();
 
             for (int frame = 0; frame < 3; ++frame)
                 ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-            EXPECT_EQ (renderer.getShadowMapRenderCount(), renders) << (atlasFails ? "atlas fails" : "cascades fail");
-            EXPECT_EQ (renderer.getShadowCascadeRenderCount (0), cascadeRenders) << (atlasFails ? "atlas fails" : "cascades fail");
-            EXPECT_EQ (renderer.getShadowCasterDrawCount(), draws) << (atlasFails ? "atlas fails" : "cascades fail");
+            EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), renders) << (atlasFails ? "atlas fails" : "cascades fail");
+            EXPECT_EQ (shadows (renderer).getNumCascadeRenders (0), cascadeRenders) << (atlasFails ? "atlas fails" : "cascades fail");
+            EXPECT_EQ (shadows (renderer).getNumCasterDraws(), draws) << (atlasFails ? "atlas fails" : "cascades fail");
             EXPECT_TRUE (renderer.waitForGPU().wasOk());
         }
     }
@@ -2554,8 +2753,8 @@ protected:
             SceneRenderer renderer;
             const auto image = renderConverged (renderer, scene, 64);
             EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
-            records = renderer.getShadowRecordCount();
-            atlasSize = renderer.getShadowAtlasSize();
+            records = shadows (renderer).getNumRecords();
+            atlasSize = shadows (renderer).getAtlasSize();
             return image;
         };
 
@@ -2589,9 +2788,9 @@ protected:
             ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
             if (castsShadows)
-                EXPECT_GT (renderer.getShadowAtlasSize(), 0);
+                EXPECT_GT (shadows (renderer).getAtlasSize(), 0);
             else
-                EXPECT_EQ (renderer.getShadowAtlasSize(), 0);
+                EXPECT_EQ (shadows (renderer).getAtlasSize(), 0);
         }
 
         EXPECT_TRUE (renderer.waitForGPU().wasOk());
@@ -2640,12 +2839,12 @@ protected:
 
             SceneRenderer renderer;
             EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-            const auto drawsBefore = renderer.getShadowCasterDrawCount();
+            const auto drawsBefore = shadows (renderer).getNumCasterDraws();
 
             blockers[0]->setPosition (blockers[0]->getPosition() + Vector3<float> (0.1f, 0.0f, 0.0f));
             EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
             EXPECT_TRUE (renderer.waitForGPU().wasOk());
-            return renderer.getShadowCasterDrawCount() - drawsBefore;
+            return shadows (renderer).getNumCasterDraws() - drawsBefore;
         };
 
         const auto draws = drawsOfAMove (true);
@@ -2658,11 +2857,11 @@ protected:
 
         SceneRenderer renderer;
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-        EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+        EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
         blockers[2]->setPosition (blockers[2]->getPosition() + Vector3<float> (0.1f, 0.0f, 0.0f));
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-        EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+        EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
         EXPECT_TRUE (renderer.waitForGPU().wasOk());
     }
 
@@ -2682,11 +2881,11 @@ protected:
         // Only the point light's views, then only the spot's
         for (auto* blocker : { blockers[0], blockers[1] })
         {
-            const auto drawsBefore = renderer.getShadowCasterDrawCount();
+            const auto drawsBefore = shadows (renderer).getNumCasterDraws();
             blocker->setPosition (blocker->getPosition() + Vector3<float> (0.1f, 0.0f, 0.05f));
             ASSERT_TRUE (renderToImage (renderer, scene, 128).isValid());
             ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
-            EXPECT_GT (renderer.getShadowCasterDrawCount(), drawsBefore);
+            EXPECT_GT (shadows (renderer).getNumCasterDraws(), drawsBefore);
         }
 
         const auto redrawn = renderToImage (renderer, scene, 128);
@@ -2697,7 +2896,182 @@ protected:
         EXPECT_EQ (countDifferences (redrawn, drawnAtOnce), 0);
 
         // The spot's view and the point light's six
-        EXPECT_EQ (renderer.getShadowRecordCount(), 7);
+        EXPECT_EQ (shadows (renderer).getNumRecords(), 7);
+    }
+
+    /** buildSpotOverGround() plus @p extraSpots more shadow casting spots like it, 2 m from it on the
+        diagonals, each over its own blocker, set 15 cm further off its axis than the previous one so
+        no two spots draw the same depth: the camera is inside the reach of every spot, so each asks
+        for the largest tile. Returns the extra spots. */
+    static std::vector<LightNode*> buildSpotsOverGround (Scene& scene, int extraSpots)
+    {
+        buildSpotOverGround (scene);
+
+        std::vector<LightNode*> spots;
+        for (int i = 0; i < extraSpots; ++i)
+        {
+            const Vector3<float> foot ((i % 2 == 0 ? 2.0f : -2.0f), 0.0f, (i / 2 % 2 == 0 ? 2.0f : -2.0f));
+            addBlocker (scene, foot + Vector3<float> (0.15f * static_cast<float> (i + 1), 1.0f, 0.0f));
+
+            auto entity = EntityNode::Ptr (new EntityNode ("spot" + String (i + 1)));
+            auto& spot = entity->attach<LightNode> (LightNode::Type::spot);
+            spot.intensity = 20.0f;
+            spot.castsShadows = true;
+            aimCamera (*entity, foot + Vector3<float> (0.0f, 3.0f, 0.0f), foot, { 0.0f, 0.0f, -1.0f });
+            scene.getRoot()->addChild (entity);
+            spots.push_back (&spot);
+        }
+
+        return spots;
+    }
+
+    /** The tiles of the point and spot light views of @p renderer's last frame, in atlas texels:
+        the records with a map after its @p numCascades cascades. */
+    static std::vector<Rectangle<int>> getLocalViewTiles (const SceneRenderer& renderer, int numCascades)
+    {
+        const auto data = shadows (renderer).getShadowData();
+        const auto atlasSize = static_cast<float> (shadows (renderer).getAtlasSize());
+        std::vector<Rectangle<int>> tiles;
+
+        for (int r = numCascades; r < shadows (renderer).getNumRecords(); ++r)
+        {
+            const auto& rect = data.records[r].atlasRect;
+            if (rect[2] > 0.0f)
+                tiles.emplace_back (roundToInt (rect[0] * atlasSize), roundToInt (rect[1] * atlasSize), roundToInt (rect[2] * atlasSize), roundToInt (rect[2] * atlasSize));
+        }
+
+        return tiles;
+    }
+
+    /** On @p tier, a single shadow casting spot light near the camera gets a tile of half the atlas side. */
+    void checkSingleSpotTakesHalfTheAtlas (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildSpotOverGround (scene);
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+        ASSERT_GT (shadows (renderer).getAtlasSize(), 0);
+        EXPECT_EQ (shadows (renderer).getTileSize (0), shadows (renderer).getAtlasSize() / 2);
+    }
+
+    /** On @p tier, spot lights each asking for the largest tile keep half the atlas side while all of
+        them fit at that size (4 of them), and shrink back to a quarter of it, the cap before it was
+        raised, once one more would be left without a tile: every spot keeps a tile inside the atlas,
+        and no two tiles overlap. */
+    void checkLocalViewsShrinkToFitTheAtlas (RenderSettings::TierPreference tier)
+    {
+        for (const auto& [extraSpots, divisor] : { std::pair { 3, 2 }, std::pair { 4, 4 }, std::pair { 7, 4 } })
+        {
+            Scene scene;
+            buildSpotsOverGround (scene, extraSpots);
+            setTier (scene, tier);
+
+            SceneRenderer renderer;
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+            const auto atlasSize = shadows (renderer).getAtlasSize();
+            ASSERT_GT (atlasSize, 0);
+
+            for (int light = 0; light <= extraSpots; ++light)
+                EXPECT_EQ (shadows (renderer).getTileSize (light), atlasSize / divisor) << extraSpots + 1 << " spots, light " << light;
+
+            const auto tiles = getLocalViewTiles (renderer, 0);
+            ASSERT_EQ (static_cast<int> (tiles.size()), extraSpots + 1);
+
+            for (size_t i = 0; i < tiles.size(); ++i)
+            {
+                EXPECT_TRUE (Rectangle<int> (0, 0, atlasSize, atlasSize).contains (tiles[i]));
+
+                for (size_t j = i + 1; j < tiles.size(); ++j)
+                    EXPECT_FALSE (tiles[i].intersection (tiles[j]).area() > 0) << extraSpots + 1 << " spots, views " << i << " and " << j;
+            }
+        }
+    }
+
+    /** On @p tier, three spot lights asking for half the atlas side do not squeeze a shadowed point
+        light after them below the tile it gets with tiles of at most a quarter: on half tiles the
+        spots would take three quarters of the atlas and leave the point light's six views an eighth
+        of the side, so every light keeps a quarter, without overlaps. */
+    void checkLocalLightsKeepTheirQuarterTiles (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildSpotsOverGround (scene, 2);
+        addShadowedPointLight (scene, { 0.0f, 1.5f, 2.0f });
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+        const auto atlasSize = shadows (renderer).getAtlasSize();
+        ASSERT_GT (atlasSize, 0);
+
+        for (int light = 0; light < 4; ++light)
+            EXPECT_EQ (shadows (renderer).getTileSize (light), atlasSize / 4) << "light " << light;
+
+        const auto tiles = getLocalViewTiles (renderer, 0);
+        ASSERT_EQ (tiles.size(), 9u);
+
+        for (size_t i = 0; i < tiles.size(); ++i)
+            for (size_t j = i + 1; j < tiles.size(); ++j)
+                EXPECT_FALSE (tiles[i].intersection (tiles[j]).area() > 0) << "views " << i << " and " << j;
+    }
+
+    /** On @p tier, the atlas layout follows the spot lights casting shadows, and each frame draws the
+        views whose tile moved again (one more shadow map render) and matches, exactly, a fresh
+        renderer drawing the same scene at once: four spots on half the atlas side, then eight
+        shrinking to a quarter, then seven, which moves the views after the first one to the tiles
+        before them at the same size, then the four again. */
+    void checkAtlasRelayoutRedrawsTheMovedTiles (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        auto spots = buildSpotsOverGround (scene, 7);
+        spots.insert (spots.begin(), scene.getRoot()->findChild ("spot")->getNode<LightNode>());
+        setTierForExactFrames (scene, tier);
+
+        const auto castShadows = [&] (int first, int last)
+        {
+            for (int i = 0; i < static_cast<int> (spots.size()); ++i)
+                spots[static_cast<size_t> (i)]->castsShadows = i >= first && i < last;
+        };
+
+        castShadows (0, 4);
+        SceneRenderer renderer;
+        ASSERT_TRUE (renderToImage (renderer, scene, 128).isValid());
+
+        const auto atlasSize = shadows (renderer).getAtlasSize();
+        EXPECT_EQ (shadows (renderer).getTileSize (1), atlasSize / 2);
+
+        const struct
+        {
+            const char* name;
+            int first, last, divisor;
+        } steps[] = {
+            { "eight spots", 0, 8, 4 },
+            { "seven spots", 1, 8, 4 },
+            { "four spots", 0, 4, 2 },
+        };
+
+        for (const auto& step : steps)
+        {
+            const auto renders = shadows (renderer).getNumRenderedFrames();
+            castShadows (step.first, step.last);
+
+            const auto relaidOut = renderToImage (renderer, scene, 128);
+            ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), renders + 1) << step.name;
+            EXPECT_EQ (shadows (renderer).getTileSize (1), atlasSize / step.divisor) << step.name;
+
+            SceneRenderer fresh;
+            const auto drawnAtOnce = renderToImage (fresh, scene, 128);
+            ASSERT_TRUE (relaidOut.isValid() && drawnAtOnce.isValid());
+            EXPECT_EQ (countDifferences (relaidOut, drawnAtOnce), 0) << step.name;
+        }
     }
 
     /** The scene of the soft shadow tests: a wall 1.2 m high and 2 cm thin across the 4 m ground,
@@ -2852,16 +3226,11 @@ protected:
         EXPECT_GT (far, near);
     }
 
-    /** buildPenumbraScene() lit by a shadow casting spot light of radius @p radius instead of the
-        sun, behind the wall at (0, 2.4, -2.4) and aimed at the middle of the frame: the side of the
-        wall's shadow still runs along x = 0, across the rows of the frame, on @p tier at 256 x 256,
-        converged, with soft shadows set to @p softShadows. */
-    Image renderSpotPenumbraScene (RenderSettings::TierPreference tier, float radius, bool softShadows)
+    /** Adds to buildPenumbraScene() a shadow casting spot light of radius @p radius, behind the wall
+        at (0, 2.4, -2.4) and aimed at the middle of the frame: the side of the wall's shadow still
+        runs along x = 0, across the rows of the frame. */
+    static void addPenumbraSpot (Scene& scene, float radius)
     {
-        Scene scene;
-        buildPenumbraScene (scene, 0.0f).intensity = 0.0f;
-        setTier (scene, tier);
-
         auto entity = EntityNode::Ptr (new EntityNode ("spot"));
         auto& spot = entity->attach<LightNode> (LightNode::Type::spot);
         spot.intensity = 40.0f;
@@ -2871,6 +3240,16 @@ protected:
         spot.castsShadows = true;
         aimCamera (*entity, { 0.0f, 2.4f, -2.4f }, { 0.0f, 0.0f, 0.9f });
         scene.getRoot()->addChild (entity);
+    }
+
+    /** buildPenumbraScene() lit by addPenumbraSpot() of radius @p radius instead of the sun, on
+        @p tier at 256 x 256, converged, with soft shadows set to @p softShadows. */
+    Image renderSpotPenumbraScene (RenderSettings::TierPreference tier, float radius, bool softShadows)
+    {
+        Scene scene;
+        buildPenumbraScene (scene, 0.0f).intensity = 0.0f;
+        setTier (scene, tier);
+        addPenumbraSpot (scene, radius);
 
         auto settings = scene.getRenderSettings();
         settings.softShadows = softShadows;
@@ -2900,6 +3279,94 @@ protected:
         RecordProperty ("hard", hard);
         EXPECT_GT (soft, sharp + 4);
         EXPECT_LE (hard, sharp + 2);
+    }
+
+    /** The width in texels of shadow map @p record of the side of the wall's shadow of
+        buildPenumbraScene() at 256 x 256, between 10% and 90% of the way from the shadow to the
+        light: the linear radiance (reinhardRadiance()) of the rows around the middle of the frame,
+        averaged per column, crossing the levels 60 columns (0.4 m) on either side of the edge,
+        interpolated. The record's texels are
+        measured across the edge, along x, at the middle of the frame. */
+    static double getPenumbraTexels (const Image& image, const GpuShadowRecord& record)
+    {
+        std::vector<double> profile;
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            auto radiance = 0.0;
+            for (int y = 96; y < 160; ++y)
+                radiance += reinhardRadiance (roundToInt (meanLuminance (image, { x, y, 1, 1 })));
+
+            profile.push_back (radiance / 64.0);
+        }
+
+        const auto center = image.getWidth() / 2;
+        const auto dark = std::min (profile[static_cast<size_t> (center - 60)], profile[static_cast<size_t> (center + 60)]);
+        const auto lit = std::max (profile[static_cast<size_t> (center - 60)], profile[static_cast<size_t> (center + 60)]);
+        const auto step = profile[static_cast<size_t> (center - 60)] < profile[static_cast<size_t> (center + 60)] ? 1 : -1;
+
+        // The first column from the shadow's side reaching a level, with its fraction
+        const auto crossing = [&] (double level)
+        {
+            for (auto x = center - 60 * step; x != center + 60 * step; x += step)
+            {
+                const auto a = profile[static_cast<size_t> (x)];
+                const auto b = profile[static_cast<size_t> (x + step)];
+                if (a < level && b >= level)
+                    return static_cast<double> (x) + static_cast<double> (step) * (level - a) / (b - a);
+            }
+
+            return static_cast<double> (center + 60 * step);
+        };
+
+        const auto pixels = std::abs (crossing (dark + 0.9 * (lit - dark)) - crossing (dark + 0.1 * (lit - dark)));
+
+        std::array<float, 16> values;
+        std::copy_n (record.viewProjection, 16, values.begin());
+        const Matrix4 viewProjection (values);
+        const auto u = [&] (float x)
+        {
+            const auto clip = viewProjection.transformPoint4 (x, 0.0f, 0.9f, 1.0f);
+            return clip[0] / clip[3] * 0.5f * record.atlasRect[2];
+        };
+
+        // The orthographic camera of buildPenumbraScene() shows 1.7 m across the frame
+        const auto texelsPerMeter = std::abs (u (0.01f) - u (0.0f)) / record.atlasRect[3] / 0.01f;
+        const auto pixelsPerMeter = static_cast<double> (image.getWidth()) / 1.7;
+        return pixels / pixelsPerMeter * texelsPerMeter;
+    }
+
+    /** With soft shadows on @p tier, a sun and a spot light of almost no size still filter their
+        shadows over a disk of at least 2 texels of their map, where the shadow starts at its caster:
+        the side of the wall's shadow spans at least 2.5 texels between 10% and 90% (a disk of 2
+        texels spans 2.75, one of 1 texel 1.4). The maps are coarse (shadowResolution 256), so a
+        texel spans several pixels. */
+    void checkSoftShadowsFilterAtLeastTwoTexels (RenderSettings::TierPreference tier)
+    {
+        for (const auto spot : { false, true })
+        {
+            Scene scene;
+            auto& sun = buildPenumbraScene (scene, 0.002f);
+            if (spot)
+            {
+                sun.intensity = 0.0f;
+                addPenumbraSpot (scene, 0.002f);
+            }
+
+            auto settings = scene.getRenderSettings();
+            settings.tier = tier;
+            settings.softShadows = true;
+            settings.shadowResolution = 256;
+            scene.setRenderSettings (settings);
+
+            SceneRenderer renderer;
+            const auto image = renderConverged (renderer, scene, 256);
+            ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+            ASSERT_EQ (shadows (renderer).getNumRecords(), 1);
+
+            const auto texels = getPenumbraTexels (image, shadows (renderer).getShadowData().records[0]);
+            RecordProperty (spot ? "spotTexels" : "sunTexels", String (texels, 2).toStdString());
+            EXPECT_GE (texels, 2.5) << (spot ? "spot" : "sun");
+        }
     }
 
     /** Raster keeps the hardware filtered shadow by default, and opts in to soft shadows. */
@@ -3181,14 +3648,18 @@ void main()
                               texture);
     }
 
+    /** The source of lib/octahedral.glsl, for the test shaders decoding a G-buffer RT1. */
+    static String loadOctahedralLibrary()
+    {
+        return File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory()
+            .getChildFile ("modules/yup_3d/shaders/lib/octahedral.glsl")
+            .loadFileAsString();
+    }
+
     /** The shading normal of a G-buffer RT1 decoded through lib/octahedral.glsl, as n * 0.5 + 0.5 in rgb. */
     Image readGBufferNormal (const GpuTexture::Ptr& normalRoughness)
     {
-        const auto octahedral = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory()
-                                    .getChildFile ("modules/yup_3d/shaders/lib/octahedral.glsl")
-                                    .loadFileAsString();
-
-        return mapTexels (normalRoughness, "vec4(octahedralDecode(t.xy) * 0.5 + 0.5, 1.0)", octahedral);
+        return mapTexels (normalRoughness, "vec4(octahedralDecode(t.xy) * 0.5 + 0.5, 1.0)", loadOctahedralLibrary());
     }
 
     /** The rg16float velocity as signed 8 bit levels of v * @p scale + 0.5, x in red and y in green:
@@ -3522,6 +3993,45 @@ vec4 encodeLuma(vec3 c)
         EXPECT_TRUE (isFiniteTexture (sceneColor));
         EXPECT_FALSE (isSaturatedTexture (sceneColor));
     }
+
+    /** With ambient occlusion on, the raster depth and normal prepass of the plates scene holds the
+        G-buffer RT1 encoding: the plates' +Z decodes through lib/octahedral.glsl within 0.02, and only
+        drawn texels have a roughness. The full tier reads its G-buffer instead and draws no prepass.
+    */
+    void checkPrepassMatchesTheGBufferEncoding (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildShadowsScene (scene);
+        setTier (scene, tier);
+
+        auto settings = scene.getRenderSettings();
+        settings.ambientOcclusion = true;
+        scene.setRenderSettings (settings);
+
+        SceneRenderer renderer;
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        ASSERT_TRUE (renderer.waitForGPU().wasOk());
+
+        const auto prepass = renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal);
+        if (tier == RenderSettings::TierPreference::full)
+        {
+            EXPECT_EQ (prepass, nullptr);
+            return;
+        }
+
+        ASSERT_NE (prepass, nullptr);
+        EXPECT_EQ (prepass->getFormat(), GpuTextureFormat::rgba16float);
+        EXPECT_EQ (prepass->getSampleCount(), 1u);
+
+        // Red: the distance of the decoded normal from +Z, times 10, so 0.02 reads 51 levels. Green: the roughness
+        const auto decoded = mapTexels (prepass, "vec4(length(octahedralDecode(t.xy) - vec3(0.0, 0.0, 1.0)) * 10.0, t.z, 0.0, 1.0)", loadOctahedralLibrary());
+        ASSERT_TRUE (decoded.isValid());
+
+        // A cleared texel decodes to +Z as well, so the roughness proves the center was drawn
+        EXPECT_LT (decoded.getPixelColor (32, 32).getRed(), 51);
+        EXPECT_GT (decoded.getPixelColor (32, 32).getGreen(), 64);
+        EXPECT_EQ (decoded.getPixelColor (1, 1).getGreen(), 0);
+    }
 #endif
 
     /** A 5 cm high step, 1 x 1 m, on a 50 x 50 m ground, its +x face standing on x = 0, lit by a
@@ -3586,7 +4096,7 @@ vec4 encodeLuma(vec3 c)
         const auto image = renderConverged (renderer, scene, size);
         EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
 
-        texel = renderer.getShadowData().cascadeTexel[0];
+        texel = shadows (renderer).getShadowData().cascadeTexel[0];
         return image;
     }
 
@@ -3661,7 +4171,7 @@ vec4 encodeLuma(vec3 c)
             EXPECT_TRUE (renderer.waitForGPU().wasOk());
 
             const auto marches = full && enabled;
-            const auto data = renderer.getShadowData();
+            const auto data = shadows (renderer).getShadowData();
             const auto cascades = static_cast<int> (data.sunInfo[0]);
             ASSERT_GE (cascades, 1);
 
@@ -3678,7 +4188,7 @@ vec4 encodeLuma(vec3 c)
                 EXPECT_FLOAT_EQ (data.records[cascades + face].contact[2], 6.0f) << face;
 
             // Contact shadows without a shadow map: one record without a map
-            ASSERT_EQ (renderer.getShadowRecordCount(), cascades + 6 + (marches ? 1 : 0));
+            ASSERT_EQ (shadows (renderer).getNumRecords(), cascades + 6 + (marches ? 1 : 0));
             if (marches)
             {
                 const auto& contactOnly = data.records[cascades + 6];
@@ -3724,8 +4234,492 @@ vec4 encodeLuma(vec3 c)
             SceneRenderer renderer;
             ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << c.name << ": " << renderer.getLastError();
             EXPECT_TRUE (renderer.waitForGPU().wasOk()) << c.name;
-            EXPECT_EQ (renderer.usesShadowFilters(), c.filters) << c.name;
+            EXPECT_EQ (shadows (renderer).needsShadowFilters(), c.filters) << c.name;
         }
+    }
+
+    /** The depth and normal prepass exists only on raster with ambient occlusion on: none at the
+        default settings, one once ambient occlusion is turned on, released when it is turned off
+        again. The full tier never draws one, and a raster device that cannot draw it renders without.
+    */
+    void checkPrepassIsNotCreatedByDefault (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildShadowsScene (scene);
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        const auto drawsPrepass = [&] (std::optional<bool> ambientOcclusion)
+        {
+            auto settings = scene.getRenderSettings();
+            settings.ambientOcclusion = ambientOcclusion;
+            scene.setRenderSettings (settings);
+
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+            return renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal) != nullptr;
+        };
+
+        EXPECT_FALSE (drawsPrepass (std::nullopt));
+        EXPECT_EQ (drawsPrepass (true), tier == RenderSettings::TierPreference::raster);
+        EXPECT_FALSE (drawsPrepass (false));
+
+        renderer.setDeviceFactsOverride ([] (RenderCapabilities::DeviceFacts& facts)
+        {
+            facts.depthNormalPrepass = false;
+        });
+        EXPECT_FALSE (drawsPrepass (true));
+    }
+
+    /** A prepass that fails to compile leaves the frames without it, with no error. On raster,
+        where ambient occlusion reads the prepass, they render like frames without ambient
+        occlusion; the full tier never draws the prepass, so its frames are left as they are.
+    */
+    void checkRendersWithoutTheDepthNormalPrepass (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool ambientOcclusion, bool failPrepass)
+        {
+            Scene scene;
+            buildShadowsScene (scene);
+            setTier (scene, tier);
+
+            auto settings = scene.getRenderSettings();
+            settings.ambientOcclusion = ambientOcclusion;
+            scene.setRenderSettings (settings);
+
+            SceneRenderer renderer;
+            if (failPrepass)
+                renderer.failDepthNormalPrepassForTesting();
+
+            Image image;
+            for (int frame = 0; frame < 2; ++frame)
+            {
+                image = renderToImage (renderer, scene, 64);
+                EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+                EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr) << frame;
+            }
+
+            return image;
+        };
+
+        const auto withoutPrepass = render (true, true);
+        const auto reference = render (tier == RenderSettings::TierPreference::full, false);
+        ASSERT_TRUE (withoutPrepass.isValid() && reference.isValid());
+        EXPECT_EQ (countDifferences (withoutPrepass, reference), 0);
+    }
+
+    /** A 0.6 m box, the entity "box", resting on a 6 x 6 m ground, seen from 0.9 m in front of the
+        foot of its +z face and 30 degrees above it: the crease where that face meets the ground
+        runs across the middle of the frame, and the ground at the bottom of the frame lies 0.4 m
+        and more in front of the face, beyond the default aoDistance of 0.2 m. Without a light, it
+        is lit by the flat ambient light alone (0.5 once linear), the indirect light ambient
+        occlusion darkens.
+    */
+    static void buildContactCreaseScene (Scene& scene)
+    {
+        addGround (scene, 3.0f);
+
+        auto box = EntityNode::Ptr (new EntityNode ("box"));
+        box->attach<MeshNode> (makeBox (0.3f, makeWallMaterial()));
+        box->setPosition ({ 0.0f, 0.3f, 0.0f });
+        scene.getRoot()->addChild (box);
+
+        const Vector3<float> foot (0.0f, 0.0f, 0.3f);
+        const auto elevation = degreesToRadians (30.0f);
+        addCamera (scene, foot + Vector3<float> (0.0f, std::sin (elevation), std::cos (elevation)) * 0.9f, foot);
+
+        scene.setUsingDefaultLight (false);
+        scene.setAmbientColor (Color (0xffbcbcbc));
+    }
+
+    /** The ground just in front of the box face of buildContactCreaseScene(), in a texture or image
+        of @p width x @p height. */
+    static Rectangle<int> contactCreaseRect (int width, int height)
+    {
+        return { width * 35 / 100, height * 50 / 100, width * 30 / 100, jmax (1, height * 4 / 100) };
+    }
+
+    /** Open ground of buildContactCreaseScene(), at least 0.4 m in front of the box, in a texture or
+        image of @p width x @p height. */
+    static Rectangle<int> openFloorRect (int width, int height)
+    {
+        return { width * 35 / 100, height * 90 / 100, width * 30 / 100, height * 7 / 100 };
+    }
+
+    /** Sets RenderSettings::ambientOcclusion of a scene. */
+    static void setAmbientOcclusion (Scene& scene, std::optional<bool> ambientOcclusion)
+    {
+        auto settings = scene.getRenderSettings();
+        settings.ambientOcclusion = ambientOcclusion;
+        scene.setRenderSettings (settings);
+    }
+
+    /** The pixels of @p image more than one level away from @p reference in any channel. */
+    static int countDifferencesAboveOneLevel (const Image& image, const Image& reference)
+    {
+        int differing = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+        {
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto a = image.getPixelColor (x, y);
+                const auto b = reference.getPixelColor (x, y);
+                if (std::abs (a.getRed() - b.getRed()) > 1 || std::abs (a.getGreen() - b.getGreen()) > 1 || std::abs (a.getBlue() - b.getBlue()) > 1)
+                    ++differing;
+            }
+        }
+
+        return differing;
+    }
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    /** On @p tier, ambient occlusion darkens the crease where a box meets the ground and leaves the
+        open ground nearly unoccluded. The pass output is rgba8, full size on full and half size on
+        raster, and holds the view-space bent normal, which on open ground is the ground's normal.
+        The shaded crease is darker than without ambient occlusion, the open ground is not.
+    */
+    void checkAmbientOcclusionDarkensTheContactCrease (RenderSettings::TierPreference tier)
+    {
+        const auto full = tier == RenderSettings::TierPreference::full;
+
+        Scene scene;
+        buildContactCreaseScene (scene);
+        setTier (scene, tier);
+        setAmbientOcclusion (scene, true);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+        const auto ao = renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion);
+        ASSERT_NE (ao, nullptr);
+        EXPECT_EQ (ao->getFormat(), GpuTextureFormat::rgba8unorm);
+        EXPECT_EQ (ao->getWidth(), 64u);
+        EXPECT_EQ (ao->getHeight(), 64u);
+
+        const auto size = static_cast<int> (ao->getWidth());
+        const auto visibility = mapTexels (ao, "vec4(t.aaa, 1.0)");
+        ASSERT_TRUE (visibility.isValid());
+
+        const auto crease = meanLuminance (visibility, contactCreaseRect (size, size));
+        const auto open = meanLuminance (visibility, openFloorRect (size, size));
+        RecordProperty ("creaseVisibility", String (crease, 1).toStdString());
+        RecordProperty ("openVisibility", String (open, 1).toStdString());
+        EXPECT_LT (crease, open - 30.0);
+        EXPECT_GT (open, 220.0); // An open floor is barely occluded
+
+        // Seen 30 degrees from above, the ground's normal in view space is (0, cos 30, sin 30)
+        const auto bentNormal = mapTexels (ao, "vec4(t.rgb, 1.0)");
+        ASSERT_TRUE (bentNormal.isValid());
+
+        const auto openArea = openFloorRect (size, size);
+        const auto bent = bentNormal.getPixelColor (openArea.getCenterX(), openArea.getCenterY());
+        EXPECT_NEAR (bent.getRed(), 128, 16);
+        EXPECT_NEAR (bent.getGreen(), 238, 16);
+        EXPECT_NEAR (bent.getBlue(), 191, 16);
+
+        Scene without;
+        buildContactCreaseScene (without);
+        setTier (without, tier);
+        setAmbientOcclusion (without, false);
+
+        SceneRenderer withoutRenderer;
+        const auto reference = renderToImage (withoutRenderer, without, 128);
+        ASSERT_TRUE (reference.isValid()) << withoutRenderer.getLastError();
+
+        const auto shadedCrease = meanLuminance (image, contactCreaseRect (128, 128));
+        const auto referenceCrease = meanLuminance (reference, contactCreaseRect (128, 128));
+        RecordProperty ("shadedCrease", String (shadedCrease, 1).toStdString());
+        RecordProperty ("shadedCreaseWithout", String (referenceCrease, 1).toStdString());
+        EXPECT_LT (shadedCrease, referenceCrease - 10.0);
+        EXPECT_NEAR (meanLuminance (image, openFloorRect (128, 128)), meanLuminance (reference, openFloorRect (128, 128)), 4.0);
+    }
+#endif
+
+    /** Ambient occlusion off allocates nothing on @p tier: no prepass on raster and no ambient
+        occlusion output on either tier. Raster defaults to off, full to on. A pass created by an
+        earlier frame keeps no render target on the frames without it, and an aoDistance of 0 turns
+        ambient occlusion off.
+    */
+    void checkAmbientOcclusionOffAllocatesNothing (RenderSettings::TierPreference tier)
+    {
+        const auto full = tier == RenderSettings::TierPreference::full;
+
+        Scene scene;
+        buildContactCreaseScene (scene);
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        const auto render = [&] (std::optional<bool> ambientOcclusion)
+        {
+            setAmbientOcclusion (scene, ambientOcclusion);
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+            return renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion) != nullptr;
+        };
+
+        EXPECT_EQ (render (std::nullopt), full);
+        EXPECT_FALSE (render (false));
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr);
+        EXPECT_TRUE (render (true));
+
+        const auto* pass = renderer.getAmbientOcclusionPass();
+        ASSERT_NE (pass, nullptr);
+        EXPECT_GT (pass->getNumCachedTargets(), 0u);
+
+        EXPECT_FALSE (render (false));
+        EXPECT_EQ (renderer.getAmbientOcclusionPass(), pass);
+        EXPECT_EQ (pass->getNumCachedTargets(), 0u);
+        EXPECT_EQ (pass->getOutput(), nullptr);
+
+        auto settings = scene.getRenderSettings();
+        settings.aoDistance = 0.0f;
+        scene.setRenderSettings (settings);
+        EXPECT_FALSE (render (true));
+        EXPECT_EQ (pass->getNumCachedTargets(), 0u);
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr);
+    }
+
+    /** On a raster device that cannot draw the depth and normal prepass, ambient occlusion is
+        unavailable: turning it on renders the same image as leaving it off, without an error and
+        without an output. The full tier reads the G-buffer instead, so the fact leaves it on.
+    */
+    void checkAmbientOcclusionUnavailableOnRasterRendersFallback (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool ambientOcclusion, bool& hasOutput)
+        {
+            Scene scene;
+            buildContactCreaseScene (scene);
+            setTier (scene, tier);
+            setAmbientOcclusion (scene, ambientOcclusion);
+
+            SceneRenderer renderer;
+            renderer.setDeviceFactsOverride ([] (RenderCapabilities::DeviceFacts& facts)
+            {
+                facts.depthNormalPrepass = false;
+            });
+
+            const auto image = renderToImage (renderer, scene, 64);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            hasOutput = renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion) != nullptr;
+            return image;
+        };
+
+        auto hasOutput = false, hasOutputWithout = false;
+        const auto withAmbientOcclusion = render (true, hasOutput);
+        const auto without = render (false, hasOutputWithout);
+        ASSERT_TRUE (withAmbientOcclusion.isValid() && without.isValid());
+        EXPECT_FALSE (hasOutputWithout);
+
+        if (tier == RenderSettings::TierPreference::full)
+        {
+            EXPECT_TRUE (hasOutput);
+            return;
+        }
+
+        EXPECT_FALSE (hasOutput);
+        EXPECT_EQ (countDifferencesAboveOneLevel (withAmbientOcclusion, without), 0);
+    }
+
+    /** On @p tier, ambient occlusion never darkens direct light: lit by a sun alone, without
+        ambient light, the crease scene renders the same with and without it.
+    */
+    void checkAmbientOcclusionLeavesTheDirectLightAlone (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool ambientOcclusion)
+        {
+            Scene scene;
+            buildContactCreaseScene (scene);
+            scene.setAmbientColor (Colors::black);
+
+            auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+            sun->attach<LightNode>();
+            aimCamera (*sun, { -3.0f, 8.0f, 4.0f }, {});
+            scene.getRoot()->addChild (sun);
+
+            setTier (scene, tier);
+            setAmbientOcclusion (scene, ambientOcclusion);
+
+            SceneRenderer renderer;
+            const auto image = renderToImage (renderer, scene, 64);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion) != nullptr, ambientOcclusion);
+            return image;
+        };
+
+        // A fresh Metal device's first frame can differ by a level in a few pixels, see checkContactShadowsIgnoredOnRaster()
+        ASSERT_TRUE (render (false).isValid());
+
+        const auto withAmbientOcclusion = render (true);
+        const auto without = render (false);
+        ASSERT_TRUE (withAmbientOcclusion.isValid() && without.isValid());
+        EXPECT_EQ (countDifferencesAboveOneLevel (withAmbientOcclusion, without), 0);
+    }
+
+    /** Ambient occlusion keeps the frames deterministic on @p tier (preflight R13): its noise
+        rotates only under temporal anti-aliasing, whose running mean freezes once converged, so
+        two renderers converging on the same scene end on the same image.
+    */
+    void checkConvergedAmbientOcclusionIsDeterministic (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildContactCreaseScene (scene);
+        setTier (scene, tier);
+        setAmbientOcclusion (scene, true);
+
+        SceneRenderer warmUp;
+        ASSERT_TRUE (renderToImage (warmUp, scene, 64).isValid());
+
+        SceneRenderer a, b;
+        const auto imageA = renderConverged (a, scene, 64);
+        const auto imageB = renderConverged (b, scene, 64);
+        ASSERT_TRUE (imageA.isValid() && imageB.isValid());
+        EXPECT_TRUE (a.isConverged() && b.isConverged());
+        EXPECT_NE (a.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion), nullptr);
+
+        auto differing = 0;
+        for (int y = 0; y < imageA.getHeight(); ++y)
+            for (int x = 0; x < imageA.getWidth(); ++x)
+                differing += imageA.getPixelColor (x, y) != imageB.getPixelColor (x, y) ? 1 : 0;
+
+        EXPECT_EQ (differing, 0);
+    }
+
+    /** On @p tier, blended surfaces skip ambient occlusion: the prepass and the G-buffer hold the
+        opaque surfaces only, so their occlusion belongs to what lies behind. A blended quad of alpha
+        1 hiding the crease of buildContactCreaseScene() renders the same with and without it.
+    */
+    void checkBlendedSurfacesSkipAmbientOcclusion (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool ambientOcclusion)
+        {
+            Scene scene;
+            buildContactCreaseScene (scene);
+            setTier (scene, tier);
+            setAmbientOcclusion (scene, ambientOcclusion);
+
+            // Facing the camera halfway to the crease, 0.2 m wide: it covers the crease rectangle
+            const Vector3<float> foot (0.0f, 0.0f, 0.3f);
+            const auto elevation = degreesToRadians (30.0f);
+            const Vector3<float> toCamera (0.0f, std::sin (elevation), std::cos (elevation));
+            const Vector3<float> up (0.0f, std::cos (elevation), -std::sin (elevation));
+            const Vector3<float> right (1.0f, 0.0f, 0.0f);
+            const auto center = foot + toCamera * 0.45f;
+
+            std::vector<Mesh::Vertex> vertices (4);
+            const std::array<std::pair<float, float>, 4> corners { { { -1.0f, -1.0f }, { 1.0f, -1.0f }, { 1.0f, 1.0f }, { -1.0f, 1.0f } } };
+            for (size_t i = 0; i < 4; ++i)
+            {
+                vertices[i].position = center + right * (0.1f * corners[i].first) + up * (0.1f * corners[i].second);
+                vertices[i].normal = toCamera;
+            }
+
+            auto material = Material::Ptr (new Material());
+            material->baseColorFactor = { 0.8f, 0.8f, 0.8f, 1.0f };
+            material->metallicFactor = 0.0f;
+            material->roughnessFactor = 0.5f;
+            material->alphaMode = Material::AlphaMode::blend;
+
+            auto mesh = Mesh::Ptr (new Mesh ("pane"));
+            mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
+
+            auto pane = EntityNode::Ptr (new EntityNode ("pane"));
+            pane->attach<MeshNode> (mesh);
+            scene.getRoot()->addChild (pane);
+
+            SceneRenderer renderer;
+            const auto image = renderConverged (renderer, scene, 128);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion) != nullptr, ambientOcclusion);
+            return image;
+        };
+
+        const auto withAmbientOcclusion = render (true);
+        const auto without = render (false);
+        ASSERT_TRUE (withAmbientOcclusion.isValid() && without.isValid());
+
+        const auto crease = contactCreaseRect (128, 128);
+        RecordProperty ("paneWith", String (meanLuminance (withAmbientOcclusion, crease), 1).toStdString());
+        RecordProperty ("paneWithout", String (meanLuminance (without, crease), 1).toStdString());
+        EXPECT_NEAR (meanLuminance (withAmbientOcclusion, crease), meanLuminance (without, crease), 1.0);
+    }
+
+    /** On @p tier, the bent normals turn the diffuse light of the environment towards the open side:
+        under a sky bright above and dark below, the foot of the box's face, whose bent normals lean
+        up away from the ground, gets more of the sky than under the same sky turned upside down. The
+        face is vertical and has no specular, so without bent normals both skies light it the same.
+    */
+    void checkBentNormalsTurnTheDiffuseLightToTheOpenSide (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool skyAbove)
+        {
+            Scene scene;
+            buildContactCreaseScene (scene);
+            setTier (scene, tier);
+            setAmbientOcclusion (scene, true);
+            scene.setAmbientColor (Colors::black);
+
+            // Diffuse only: no dielectric specular, so only the irradiance tells the skies apart
+            auto material = Material::Ptr (new Material());
+            material->baseColorFactor = { 0.8f, 0.8f, 0.8f, 1.0f };
+            material->metallicFactor = 0.0f;
+            material->roughnessFactor = 1.0f;
+            material->specularFactor = 0.0f;
+            auto* box = scene.getRoot()->findChild ("box");
+            box->getNode<MeshNode>()->mesh = makeBox (0.3f, material);
+
+            scene.setEnvironment (new EnvironmentMap ([skyAbove] (const Vector3<float>& direction)
+            {
+                const auto up = jlimit (0.0f, 1.0f, (skyAbove ? direction.getY() : -direction.getY()) * 0.5f + 0.5f);
+                return Vector3<float> (1.0f, 1.0f, 1.0f) * (0.05f + 2.0f * up * up);
+            }, 32, 3));
+
+            SceneRenderer renderer;
+            const auto image = renderConverged (renderer, scene, 128);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            return image;
+        };
+
+        const auto skyAbove = render (true);
+        const auto skyBelow = render (false);
+        ASSERT_TRUE (skyAbove.isValid() && skyBelow.isValid());
+
+        // The foot of the face, just above the crease, and the top of the face, open to the sky
+        const Rectangle<int> foot (45, 58, 38, 4);
+        const Rectangle<int> top (45, 30, 38, 4);
+        const auto footAbove = meanLuminance (skyAbove, foot), footBelow = meanLuminance (skyBelow, foot);
+        RecordProperty ("footSkyAbove", String (footAbove, 1).toStdString());
+        RecordProperty ("footSkyBelow", String (footBelow, 1).toStdString());
+        RecordProperty ("topSkyAbove", String (meanLuminance (skyAbove, top), 1).toStdString());
+        RecordProperty ("topSkyBelow", String (meanLuminance (skyBelow, top), 1).toStdString());
+        EXPECT_GT (footAbove, footBelow + 3.0);
+    }
+
+    /** Raster: ambient occlusion turned on, then off again, leaves the frame exactly as it was before,
+        the variant without ambient occlusion shading it again.
+    */
+    void checkRasterAmbientOcclusionOffAgainRestoresTheFrame()
+    {
+        Scene scene;
+        buildContactCreaseScene (scene);
+        setTier (scene, RenderSettings::TierPreference::raster);
+
+        // A fresh Metal device's frames can differ by a level in a few hundred pixels (see
+        // checkContactShadowsIgnoredOnRaster()): the frames compare within one level, while the
+        // ambient occlusion darkens the crease by about ten
+        SceneRenderer renderer;
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid());
+        const auto before = renderToImage (renderer, scene, 64);
+
+        setAmbientOcclusion (scene, true);
+        const auto during = renderToImage (renderer, scene, 64);
+
+        setAmbientOcclusion (scene, false);
+        const auto after = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (before.isValid() && during.isValid() && after.isValid()) << renderer.getLastError();
+
+        EXPECT_GT (countDifferencesAboveOneLevel (during, before), 0);
+        EXPECT_EQ (countDifferencesAboveOneLevel (after, before), 0);
     }
 
     GpuDevice::Ptr device;
@@ -3822,22 +4816,16 @@ protected:
         addLight (LightNode::Type::directional, 0.5f, 0.05f, {}, Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f));
     }
 
-    /** The linear radiance behind an 8 bit level that was Reinhard tone mapped and sRGB encoded. */
-    static double reinhardRadiance (int level)
-    {
-        const auto encoded = level / 255.0;
-        const auto mapped = encoded <= 0.04045 ? encoded / 12.92 : std::pow ((encoded + 0.055) / 1.055, 2.4);
-        return mapped / (1.0 - mapped);
-    }
-
     /** A rough (roughness 1) plate drawn with @p material and lit head-on by a white sun of
         intensity @p sunIntensity, under @p ambient light: the mean linear radiance of the 8x8
         pixels at the center, where the normal, the view and the light directions coincide. There
         D = 1 / pi, V = 1 / 4 and F = f0, so the sun adds 2 (f0 / 4 + diffuseColor * weight) / pi
-        at the default intensity of 2.
+        at the default intensity of 2. A positive @p environmentRadiance adds a uniform environment
+        of that radiance, and @p failLookupTables renders without the lookup tables.
     */
     std::array<double, 3> renderHeadOnRadiance (Material::Ptr material, RenderSettings::TierPreference tier,
-                                                float sunIntensity = 2.0f, Color ambient = Colors::black)
+                                                float sunIntensity = 2.0f, Color ambient = Colors::black,
+                                                float environmentRadiance = 0.0f, bool failLookupTables = false)
     {
         material->roughnessFactor = 1.0f;
 
@@ -3847,11 +4835,17 @@ protected:
         scene.setToneMapping (Scene::ToneMapping::reinhard);
         setTier (scene, tier);
 
+        if (environmentRadiance > 0.0f)
+            scene.setEnvironment (new EnvironmentMap ([environmentRadiance] (const Vector3<float>&) { return Vector3<float> (environmentRadiance, environmentRadiance, environmentRadiance); }, 32, 3));
+
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         sun->attach<LightNode>().intensity = sunIntensity;
         scene.getRoot()->addChild (sun);
 
         SceneRenderer renderer;
+        if (failLookupTables)
+            renderer.failLookupTablesForTesting();
+
         const auto image = renderToImage (renderer, scene, 64);
         EXPECT_TRUE (image.isValid()) << renderer.getLastError();
 
@@ -4110,6 +5104,126 @@ TEST_F (SceneRendererMetalTests, RendersEnvironmentShadowsAndBackground)
     EXPECT_NEAR (corner.getRed(), 206, 3);
     EXPECT_NEAR (corner.getGreen(), 206, 3);
     EXPECT_NEAR (corner.getBlue(), 206, 3);
+}
+
+TEST_F (SceneRendererMetalTests, RgbmEnvironmentShadesLikeTheFloatOne)
+{
+    // Below the float floor the renderer's environment cube holds RGBM, and LightingBlock.probeInfo
+    // tells the background and the surfaces to decode it. Undecoded, the corner would show 0.996, not 0.5
+    const auto render = [this] (bool rgbm)
+    {
+        Scene scene;
+        scene.getRoot()->addChild (makePlates());
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.setEnvironmentVisible (true);
+        scene.setToneMapping (Scene::ToneMapping::aces);
+
+        SceneRenderer renderer;
+        if (rgbm)
+            renderer.forceRgbmRadianceForTesting();
+
+        auto image = renderToImage (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    };
+
+    const auto floatImage = render (false);
+    const auto rgbmImage = render (true);
+    ASSERT_TRUE (floatImage.isValid());
+    ASSERT_TRUE (rgbmImage.isValid());
+
+    EXPECT_NEAR (rgbmImage.getPixelColor (1, 1).getRed(), 206, 1);
+    EXPECT_NEAR (floatImage.getPixelColor (1, 1).getRed(), 206, 1);
+
+    // The plates in the middle reflect the environment
+    const Rectangle<int> plates (24, 24, 16, 16);
+    EXPECT_NEAR (meanLuminance (rgbmImage, plates), meanLuminance (floatImage, plates), 0.02 * meanLuminance (floatImage, plates));
+}
+
+TEST_F (SceneRendererMetalTests, RadianceFormatChangeRebuildsTheCube)
+{
+    // One source of truth: when the renderer's radiance format changes, the cube it built is
+    // dropped and built again in the new format, never decoded with the other one
+    Scene scene;
+    scene.getRoot()->addChild (makePlates());
+    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    scene.setEnvironmentVisible (true);
+    scene.setToneMapping (Scene::ToneMapping::aces);
+
+    SceneRenderer renderer;
+    const auto floatImage = renderToImage (renderer, scene, 64);
+    ASSERT_TRUE (floatImage.isValid()) << renderer.getLastError();
+    EXPECT_NEAR (floatImage.getPixelColor (1, 1).getRed(), 206, 1);
+
+    renderer.forceRgbmRadianceForTesting();
+    const auto rgbmImage = renderToImage (renderer, scene, 64);
+    ASSERT_TRUE (rgbmImage.isValid()) << renderer.getLastError();
+    EXPECT_NEAR (rgbmImage.getPixelColor (1, 1).getRed(), 206, 1);
+}
+
+TEST_F (SceneRendererMetalTests, OneEnvironmentDrawnByTwoRenderers)
+{
+    // Each renderer keeps the cube of its own device: drawing the same environment alternately
+    // builds nothing again and restarts no convergence, and nothing stays behind once they are gone
+    auto otherDevice = GpuDevice::create (GpuPlatform::Metal, {});
+    ASSERT_NE (otherDevice, nullptr);
+
+    EnvironmentMap::Ptr environment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+
+    Scene scene;
+    buildEdgesScene (scene);
+    scene.setEnvironment (environment);
+    scene.setEnvironmentVisible (true);
+    setFullTierTaa (scene, 4);
+
+    {
+        SceneRenderer first, second;
+        for (int i = 0; i < 4; ++i)
+        {
+            ASSERT_NE (first.render (device, scene, 64, 64), nullptr) << first.getLastError();
+            ASSERT_NE (second.render (otherDevice, scene, 64, 64), nullptr) << second.getLastError();
+        }
+
+        EXPECT_TRUE (first.isConverged());
+        EXPECT_TRUE (second.isConverged());
+
+        ASSERT_NE (first.render (device, scene, 64, 64), nullptr) << first.getLastError();
+        ASSERT_NE (second.render (otherDevice, scene, 64, 64), nullptr) << second.getLastError();
+        EXPECT_TRUE (first.isConverged());
+        EXPECT_TRUE (second.isConverged());
+
+        // The test, the scene and one slot per renderer
+        EXPECT_EQ (environment->getReferenceCount(), 4);
+
+        EXPECT_TRUE (first.waitForGPU().wasOk());
+        EXPECT_TRUE (second.waitForGPU().wasOk());
+    }
+
+    EXPECT_EQ (environment->getReferenceCount(), 2);
+}
+
+TEST_F (SceneRendererMetalTests, EnvironmentChangeDropsTheOldCube)
+{
+    EnvironmentMap::Ptr first (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    EnvironmentMap::Ptr second (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.25f, 0.25f, 0.25f); }, 32, 3));
+
+    Scene scene;
+    buildEdgesScene (scene);
+    scene.setEnvironment (first);
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (first->getReferenceCount(), 3); // The test, the scene and the renderer's slot
+
+    scene.setEnvironment (second);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (first->getReferenceCount(), 1);
+    EXPECT_EQ (second->getReferenceCount(), 3);
+
+    scene.setEnvironment (nullptr);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (second->getReferenceCount(), 1);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
 TEST_F (SceneRendererMetalTests, CapturesBaselineScenes)
@@ -5004,6 +6118,75 @@ TEST_F (SceneRendererMetalTests, LightRadiusChangeRestartsTheFullTier)
     EXPECT_FALSE (renderer.isConverged());
 }
 
+TEST_F (SceneRendererMetalTests, RebuiltEnvironmentRestartsTheFullTier)
+{
+    // The environment cube is built in a frame of its own, before the first frame. When the GPU fails
+    // to build it, the first frame shades with an undefined cube and the next one rebuilds it: the
+    // samples taken with the undefined cube must leave the running mean
+    Scene scene;
+    buildEdgesScene (scene);
+    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    setFullTierTaa (scene, 4);
+
+    SceneRenderer renderer;
+    device->failNextFrameForTesting ("injected failure");
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    // Frames complete in order, so once a later frame did the build has too
+    {
+        auto fence = GpuFrame::begin (device);
+        EXPECT_TRUE (fence.waitForGPU().wasOk());
+    }
+
+    for (int i = 0; i < 3; ++i)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_FALSE (renderer.isConverged());
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.isConverged());
+}
+
+TEST_F (SceneRendererMetalTests, RepeatedEnvironmentFailureConvergesWithoutIt)
+{
+    // Two failed builds in a row leave the renderer without the environment: the background shows
+    // instead of it, and the full tier converges instead of restarting every frame
+    const auto background = Color (static_cast<uint8> (40), static_cast<uint8> (70), static_cast<uint8> (110));
+
+    Scene scene;
+    buildEdgesScene (scene);
+    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    scene.setEnvironmentVisible (true);
+    scene.setToneMapping (Scene::ToneMapping::aces);
+    scene.setBackgroundColor (background);
+    setFullTierTaa (scene, 4);
+
+    SceneRenderer renderer;
+    for (int i = 0; i < 2; ++i)
+    {
+        device->failNextFrameForTesting ("injected failure");
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+        auto fence = GpuFrame::begin (device);
+        EXPECT_TRUE (fence.waitForGPU().wasOk());
+    }
+
+    for (int i = 0; i < 4; ++i)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_TRUE (renderer.isConverged());
+
+    const auto image = renderToImage (renderer, scene, 64);
+    ASSERT_TRUE (image.isValid());
+    EXPECT_TRUE (renderer.isConverged());
+
+    // The background color, not the environment's 206
+    const auto corner = image.getPixelColor (1, 1);
+    EXPECT_NEAR (corner.getRed(), background.getRed(), 2);
+    EXPECT_NEAR (corner.getGreen(), background.getGreen(), 2);
+    EXPECT_NEAR (corner.getBlue(), background.getBlue(), 2);
+}
+
 TEST_F (SceneRendererMetalTests, AreaLightVariantSwitchRestartsAndConvergesAgain)
 {
     // A radius switches the shading passes to their area light variant mid-session, and back when
@@ -5122,6 +6305,37 @@ TEST_F (SceneRendererMetalTests, LightShadowFieldsRestartAccumulation)
         ASSERT_TRUE (renderer.isConverged()) << name;
 
         change (*light);
+
+        // Restarted, not invalidated, see ShadowSettingsRestartAccumulation
+        const auto first = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (first.isValid()) << renderer.getLastError();
+        EXPECT_FALSE (renderer.isConverged()) << name;
+        EXPECT_GE (countIntermediatePixels (first, 40), 4) << name;
+    }
+}
+
+TEST_F (SceneRendererMetalTests, AmbientOcclusionSettingsRestartAccumulation)
+{
+    // Each change moves the value the full tier resolves away from its default
+    const std::pair<const char*, std::function<void (RenderSettings&)>> changes[] = {
+        { "ambientOcclusion", [] (RenderSettings& settings) { settings.ambientOcclusion = false; } },
+        { "aoDistance", [] (RenderSettings& settings) { settings.aoDistance = 0.5f; } },
+    };
+
+    for (const auto& [name, change] : changes)
+    {
+        Scene scene;
+        buildEdgesScene (scene);
+        setFullTierTaa (scene, 8);
+
+        SceneRenderer renderer;
+        for (int i = 0; i < 8; ++i)
+            ASSERT_NE (renderer.render (device, scene, 128, 128), nullptr) << renderer.getLastError();
+        ASSERT_TRUE (renderer.isConverged()) << name;
+
+        auto settings = scene.getRenderSettings();
+        change (settings);
+        scene.setRenderSettings (settings);
 
         // Restarted, not invalidated, see ShadowSettingsRestartAccumulation
         const auto first = renderToImage (renderer, scene, 128);
@@ -5449,6 +6663,93 @@ TEST_F (SceneRendererMetalTests, CameraMotionKeepsTheHistory)
 }
 
 #if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (SceneRendererMetalTests, SpecularOcclusionIsContinuousAndKeepsGrazingReflections)
+{
+    // The self-contained block of lib/probes.glsl the shaders reading the ambient occlusion compile,
+    // without the environment lookups and their includes around it
+    const auto library = "#define YUP_3D_AMBIENT_OCCLUSION\n"
+                       + File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory()
+                             .getChildFile ("modules/yup_3d/shaders/lib/probes.glsl")
+                             .loadFileAsString()
+                             .fromFirstOccurrenceOf ("#ifdef YUP_3D_AMBIENT_OCCLUSION", true, false)
+                             .upToLastOccurrenceOf ("#endif", false, false);
+    ASSERT_TRUE (library.contains ("gtaoSpecularOcclusion"));
+
+    // Red: full visibility hides nothing, even at grazing. Green: no visibility hides everything.
+    // Blue: an open floor (visibility 250 / 255) keeps a smooth reflection 85 degrees off its normal
+    const auto bounds = mapTexels (GeometryBindings::createSolidTexture (device, 0xffffffff), "vec4("
+                                   "gtaoSpecularOcclusion(0.05, 1.0, 0.8), "
+                                   "gtaoSpecularOcclusion(0.5, 0.0, 0.5), "
+                                   "gtaoSpecularOcclusion(cos(radians(85.0)), 250.0 / 255.0, 0.1), 1.0)",
+                                   library);
+    ASSERT_TRUE (bounds.isValid());
+    EXPECT_EQ (bounds.getPixelColor (0, 0).getRed(), 255);
+    EXPECT_EQ (bounds.getPixelColor (0, 0).getGreen(), 0);
+    EXPECT_GE (bounds.getPixelColor (0, 0).getBlue(), 230);
+
+    // Over n.v (columns, 0 to 1) and visibility (rows, 0.9 to 1, the open surfaces), for a smooth and
+    // a rough lobe: continuous, and rising with the visibility
+    GpuTextureDesc desc (64, 64, GpuTextureFormat::rgba8unorm, true);
+    const auto grid = GpuTexture::create (device, desc);
+    ASSERT_NE (grid, nullptr);
+
+    const auto sweep = mapTexels (grid, "vec4("
+                                  "gtaoSpecularOcclusion((gl_FragCoord.x - 0.5) / 63.0, 0.9 + 0.1 * (gl_FragCoord.y - 0.5) / 63.0, 0.1), "
+                                  "gtaoSpecularOcclusion((gl_FragCoord.x - 0.5) / 63.0, 0.9 + 0.1 * (gl_FragCoord.y - 0.5) / 63.0, 0.7), 0.0, 1.0)",
+                                  library);
+    ASSERT_TRUE (sweep.isValid());
+
+    auto largestStep = 0, smallestGrazing = 255, notRising = 0;
+    for (int y = 0; y < 64; ++y)
+    {
+        for (int x = 0; x < 64; ++x)
+        {
+            const auto c = sweep.getPixelColor (x, y);
+            if (x > 0)
+                largestStep = jmax (largestStep, std::abs (static_cast<int> (c.getRed()) - static_cast<int> (sweep.getPixelColor (x - 1, y).getRed())));
+            if (y > 0)
+                largestStep = jmax (largestStep, std::abs (static_cast<int> (c.getRed()) - static_cast<int> (sweep.getPixelColor (x, y - 1).getRed())));
+
+            // Grazing smooth reflections, 80 to 88 degrees off the normal, at visibility 0.98 and above
+            const auto nDotV = static_cast<float> (x) / 63.0f, visibility = 0.9f + 0.1f * static_cast<float> (y) / 63.0f;
+            if (nDotV >= std::cos (degreesToRadians (88.0f)) && nDotV <= std::cos (degreesToRadians (80.0f)) && visibility >= 0.98f)
+                smallestGrazing = jmin (smallestGrazing, static_cast<int> (c.getRed()));
+
+            if (y > 0)
+            {
+                notRising += c.getRed() + 1 < sweep.getPixelColor (x, y - 1).getRed() ? 1 : 0;
+                notRising += c.getGreen() + 1 < sweep.getPixelColor (x, y - 1).getGreen() ? 1 : 0;
+            }
+        }
+    }
+
+    RecordProperty ("largestStep", largestStep);
+    RecordProperty ("smallestGrazing", smallestGrazing);
+    EXPECT_LE (largestStep, 8);
+    EXPECT_GE (smallestGrazing, 230);
+    EXPECT_EQ (notRising, 0);
+}
+
+TEST_F (SceneRendererMetalTests, AmbientOcclusionUpsampleReadsWhereEachTexelWasTraced)
+{
+    // Texel i of the half resolution ambient occlusion was traced at the full resolution texel 2i:
+    // that fragment must read the center of texel i, and texel 2i + 1 halfway to the next one
+    const auto library = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory()
+                             .getChildFile ("modules/yup_3d/shaders/lib/probes.glsl")
+                             .loadFileAsString()
+                             .fromFirstOccurrenceOf ("#ifdef YUP_3D_AMBIENT_OCCLUSION", true, false)
+                             .upToLastOccurrenceOf ("#endif", false, false);
+
+    // Red: 100 + 50 * (the texel coordinate read for fragment 2i, minus i + 0.5); green: the same for 2i + 1, minus i + 1
+    const auto mapped = mapTexels (GeometryBindings::createSolidTexture (device, 0xffffffff),
+                                   "vec4((100.0 + 50.0 * (gtaoUpsampleUv(vec2(10.5), vec2(32.0)).x * 32.0 - 5.5)) / 255.0, "
+                                   "(100.0 + 50.0 * (gtaoUpsampleUv(vec2(11.5), vec2(32.0)).y * 32.0 - 6.0)) / 255.0, 0.0, 1.0)",
+                                   "#define YUP_3D_AMBIENT_OCCLUSION\n" + library);
+    ASSERT_TRUE (mapped.isValid());
+    EXPECT_NEAR (mapped.getPixelColor (0, 0).getRed(), 100, 1);
+    EXPECT_NEAR (mapped.getPixelColor (0, 0).getGreen(), 100, 1);
+}
+
 TEST_F (SceneRendererMetalTests, NonFiniteCheckFindsNanAndInfinity)
 {
     // Half floats: 1.0, NaN and +infinity
@@ -5843,7 +7144,7 @@ TEST_F (SceneRendererMetalTests, DeferredMatchesForwardForOpaque)
             ASSERT_EQ (renderer.getCapabilities()->getTier() == RenderCapabilities::Tier::full, tier == RenderSettings::TierPreference::full) << name;
 
             if (viewFitted)
-                EXPECT_EQ (renderer.getShadowData().sunInfo[0], 2.0f) << name;
+                EXPECT_EQ (shadows (renderer).getShadowData().sunInfo[0], 2.0f) << name;
         }
 
         const auto full = meanLuminance (images[0], { 32, 32, 64, 64 });
@@ -6039,7 +7340,7 @@ TEST_F (SceneRendererMetalTests, SoftShadowFilterFollowsTheTierAndTaa)
         SceneRenderer renderer;
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << c.name << ": " << renderer.getLastError();
 
-        const auto shadowData = renderer.getShadowData();
+        const auto shadowData = shadows (renderer).getShadowData();
         const auto& filter = shadowData.filterInfo;
         EXPECT_EQ (filter[0], c.taps > 0.0f ? 1.0f : 0.0f) << c.name;
         EXPECT_EQ (filter[1], c.taps) << c.name;
@@ -6682,7 +7983,64 @@ TEST_P (SceneRendererTierTests, GBufferNormalFacesTheCamera)
     EXPECT_GT (roughness.getPixelColor (32, 32).getRed(), 64);
     EXPECT_EQ (roughness.getPixelColor (1, 1).getRed(), 0);
 }
+
+TEST_P (SceneRendererTierTests, PrepassMatchesTheGBufferEncoding)
+{
+    checkPrepassMatchesTheGBufferEncoding (GetParam());
+}
 #endif
+
+TEST_P (SceneRendererTierTests, PrepassIsNotCreatedByDefault)
+{
+    checkPrepassIsNotCreatedByDefault (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, RendersWithoutTheDepthNormalPrepass)
+{
+    checkRendersWithoutTheDepthNormalPrepass (GetParam());
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_P (SceneRendererTierTests, AmbientOcclusionDarkensTheContactCrease)
+{
+    checkAmbientOcclusionDarkensTheContactCrease (GetParam());
+}
+#endif
+
+TEST_P (SceneRendererTierTests, AmbientOcclusionOffAllocatesNothing)
+{
+    checkAmbientOcclusionOffAllocatesNothing (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, AmbientOcclusionUnavailableOnRasterRendersFallback)
+{
+    checkAmbientOcclusionUnavailableOnRasterRendersFallback (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, AmbientOcclusionLeavesTheDirectLightAlone)
+{
+    checkAmbientOcclusionLeavesTheDirectLightAlone (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ConvergedAmbientOcclusionIsDeterministic)
+{
+    checkConvergedAmbientOcclusionIsDeterministic (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, BlendedSurfacesSkipAmbientOcclusion)
+{
+    checkBlendedSurfacesSkipAmbientOcclusion (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, BentNormalsTurnTheDiffuseLightToTheOpenSide)
+{
+    checkBentNormalsTurnTheDiffuseLightToTheOpenSide (GetParam());
+}
+
+TEST_F (SceneRendererMetalTests, RasterAmbientOcclusionOffAgainRestoresTheFrame)
+{
+    checkRasterAmbientOcclusionOffAgainRestoresTheFrame();
+}
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 TEST_P (SceneRendererTierTests, TinyRadiusMatchesPunctual)
@@ -6943,9 +8301,9 @@ TEST_P (SceneRendererTierTests, InfiniteFarPlaneShowsTheEnvironment)
     EXPECT_EQ (countDifferences (infinite, finite), 0);
 }
 
-TEST_P (SceneRendererTierTests, RendersWithoutTheAreaLightTables)
+TEST_P (SceneRendererTierTests, RendersWithoutTheLookupTables)
 {
-    // When the area light tables cannot be created, frames still render: area lights lose their
+    // When the lookup tables cannot be created, frames still render: area lights lose their
     // specular light, never their diffuse light, and nothing turns non-finite
     const auto full = GetParam() == RenderSettings::TierPreference::full;
 
@@ -6961,7 +8319,7 @@ TEST_P (SceneRendererTierTests, RendersWithoutTheAreaLightTables)
 
         SceneRenderer renderer;
         if (! withTables)
-            renderer.failAreaLightTablesForTesting();
+            renderer.failLookupTablesForTesting();
 
         const auto image = renderToImage (renderer, scene, 128);
         EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
@@ -7002,6 +8360,48 @@ TEST_P (SceneRendererTierTests, RendersWithoutTheAreaLightTables)
     EXPECT_EQ (brighter, 0);
     EXPECT_GT (darker, 100);
     EXPECT_GT (darkest, 5.0);
+
+    // The environment's specular light goes too: a white rough metal, which only reflects, turns
+    // black under a uniform environment
+    const auto metal = renderHeadOnRadiance (Material::Ptr (new Material()), GetParam(), 0.0f, Colors::black, 0.5f);
+    const auto blackMetal = renderHeadOnRadiance (Material::Ptr (new Material()), GetParam(), 0.0f, Colors::black, 0.5f, true);
+    EXPECT_GT (metal[1], 0.1);
+    EXPECT_LT (blackMetal[1], 0.005);
+}
+
+TEST_P (SceneRendererTierTests, RoughWhiteMetalPassesTheWhiteFurnaceTest)
+{
+    // A white rough metal facing the view, under a uniform environment and no light, reflects all
+    // of it. The split sum alone reflects the single-scattering albedo, 1 - ln 2 at roughness 1
+    // (the analytic fit used before Phase 4 gave 0.45); the multiple-scattering compensation
+    // (Fdez-Aguera 2019) returns the rest
+    const auto radiance = renderHeadOnRadiance (Material::Ptr (new Material()), GetParam(), 0.0f, Colors::black, 0.5f);
+    RecordProperty ("roughMetalBrightness", String (radiance[1] / 0.5, 4).toStdString());
+
+    for (const auto channel : radiance)
+        EXPECT_NEAR (channel, 0.5, 0.02);
+
+    // A colored metal tells the average Fresnel apart: each channel regains FssEss Favg Ems /
+    // (1 - Favg Ems), with Favg = f0 + (1 - f0) / 21. At f0 = 0.5 that is 0.2409 of the
+    // environment, where the tables alone give 0.1534 and Favg = 1 would give 0.5. A brighter
+    // environment keeps the darkest channel well above the 8-bit steps of the image
+    const std::array<float, 3> f0 { 1.0f, 0.5f, 0.2f };
+    const auto environment = 2.0f;
+
+    auto colored = Material::Ptr (new Material());
+    colored->baseColorFactor = { f0[0], f0[1], f0[2], 1.0f };
+    const auto coloredRadiance = renderHeadOnRadiance (colored, GetParam(), 0.0f, Colors::black, environment);
+
+    const auto amplitude = LtcTables::getAmplitude (LtcTables::size - 1, 0);
+    for (size_t channel = 0; channel < f0.size(); ++channel)
+    {
+        const auto singleScattering = f0[channel] * (amplitude[0] - amplitude[1]) + amplitude[1];
+        const auto averageFresnel = f0[channel] + (1.0f - f0[channel]) / 21.0f;
+        const auto missing = 1.0f - amplitude[0];
+        const auto expected = environment * (singleScattering + singleScattering * averageFresnel * missing / (1.0f - averageFresnel * missing));
+
+        EXPECT_NEAR (coloredRadiance[channel], expected, expected * 0.1) << "channel " << channel;
+    }
 }
 
 TEST_P (SceneRendererTierTests, RendersWithoutTheShadowCompareSampler)
@@ -7064,7 +8464,7 @@ TEST_P (SceneRendererTierTests, ShadowMapsRenderOnlyWhenTheShadowsChange)
     for (int frame = 0; frame < 3; ++frame)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
     auto* caster = scene.getRoot()->findChild ("caster");
     ASSERT_NE (caster, nullptr);
@@ -7073,11 +8473,11 @@ TEST_P (SceneRendererTierTests, ShadowMapsRenderOnlyWhenTheShadowsChange)
     for (int frame = 0; frame < 2; ++frame)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
 
     renderer.restartAccumulation();
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 3);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 3);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7105,7 +8505,7 @@ TEST_P (SceneRendererTierTests, ShadowMapsSurviveMovingLightsAndRedrawnOpaqueTex
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     }
 
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7125,15 +8525,15 @@ TEST_P (SceneRendererTierTests, MaskedCasterChangesDrawTheShadowMapsAgain)
     for (int frame = 0; frame < 2; ++frame)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
     material->alphaCutoff = 0.9f;
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
 
     material->baseColorFactor[3] = 1.0f;
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 3);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 3);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7147,7 +8547,7 @@ TEST_P (SceneRendererTierTests, GpuFailureDrawsTheShadowMapsAgain)
     SceneRenderer renderer;
     device->failNextFrameForTesting ("injected failure");
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
     // Frames complete in order, so once a later frame did the failed one has too
     {
@@ -7157,10 +8557,10 @@ TEST_P (SceneRendererTierTests, GpuFailureDrawsTheShadowMapsAgain)
 
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (renderer.getLastGpuFailure(), "injected failure");
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
 
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7183,7 +8583,7 @@ TEST_P (SceneRendererTierTests, OrbitingACompactSceneDoesNotRedrawTheShadows)
         aimCamera (*camera, { 5.0f * std::cos (yaw), 4.0f, 5.0f * std::sin (yaw) }, {});
 
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-        EXPECT_EQ (renderer.getShadowRecordCount(), 1) << "frame " << frame;
+        EXPECT_EQ (shadows (renderer).getNumRecords(), 1) << "frame " << frame;
     }
 
     // Zooming out and panning keep the map too
@@ -7191,13 +8591,13 @@ TEST_P (SceneRendererTierTests, OrbitingACompactSceneDoesNotRedrawTheShadows)
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     aimCamera (*camera, { 6.5f, 5.2f, 0.3f }, { 0.0f, 0.0f, 0.3f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    EXPECT_EQ (renderer.getShadowRecordCount(), 1);
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_EQ (shadows (renderer).getNumRecords(), 1);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
     // Moving the box draws it again
     box.setPosition ({ 0.1f, 0.3f, 0.0f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7215,16 +8615,16 @@ TEST_P (SceneRendererTierTests, LargeSceneKeepsViewFittedCascades)
     ASSERT_NE (renderer.getCapabilities(), nullptr);
     const auto cascades = renderer.getCapabilities()->getCascadeCount (scene.getRenderSettings());
     EXPECT_EQ (cascades, GetParam() == RenderSettings::TierPreference::full ? 4 : RenderCapabilities::defaultRasterCascades);
-    EXPECT_EQ (renderer.getShadowRecordCount(), cascades);
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_EQ (shadows (renderer).getNumRecords(), cascades);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
     auto* camera = scene.getRoot()->findChild ("camera");
     ASSERT_NE (camera, nullptr);
     camera->setPosition (camera->getPosition() + Vector3<float> (0.5f, 0.0f, 0.0f));
 
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    EXPECT_EQ (renderer.getShadowRecordCount(), cascades);
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_EQ (shadows (renderer).getNumRecords(), cascades);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7241,7 +8641,7 @@ TEST_P (SceneRendererTierTests, CasterMovingInsideTheLastCascadeRedrawsOnlyIt)
     for (int frame = 0; frame < 2; ++frame)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-    const auto cascades = renderer.getShadowRecordCount();
+    const auto cascades = shadows (renderer).getNumRecords();
     ASSERT_GT (cascades, 1);
 
     auto expected = getCascadeRenderCounts (renderer, cascades);
@@ -7252,7 +8652,7 @@ TEST_P (SceneRendererTierTests, CasterMovingInsideTheLastCascadeRedrawsOnlyIt)
 
     ++expected.back();
     EXPECT_EQ (getCascadeRenderCounts (renderer, cascades), expected);
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7268,7 +8668,7 @@ TEST_P (SceneRendererTierTests, CasterLeavingACascadeRedrawsIt)
     SceneRenderer renderer;
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-    const auto cascades = renderer.getShadowRecordCount();
+    const auto cascades = shadows (renderer).getNumRecords();
     ASSERT_GT (cascades, 1);
 
     auto* caster = scene.getRoot()->findChild ("caster");
@@ -7292,7 +8692,7 @@ TEST_P (SceneRendererTierTests, ShadowSettingOrSunChangeRedrawsEveryCascade)
     SceneRenderer renderer;
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-    const auto cascades = renderer.getShadowRecordCount();
+    const auto cascades = shadows (renderer).getNumRecords();
     ASSERT_GT (cascades, 1);
 
     // The sun turns a little
@@ -7327,15 +8727,15 @@ TEST_P (SceneRendererTierTests, MovingAShadowedPointLightKeepsTheSunCascades)
 
     SceneRenderer renderer;
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    ASSERT_GT (renderer.getShadowAtlasSize(), 0);
+    ASSERT_GT (shadows (renderer).getAtlasSize(), 0);
 
-    const auto cascades = static_cast<int> (renderer.getShadowData().sunInfo[0]);
+    const auto cascades = static_cast<int> (shadows (renderer).getShadowData().sunInfo[0]);
     ASSERT_GT (cascades, 1);
     const auto counts = getCascadeRenderCounts (renderer, cascades);
 
     lamp->setPosition ({ 1.2f, 1.0f, -2.0f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
     EXPECT_EQ (getCascadeRenderCounts (renderer, cascades), counts);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
@@ -7363,12 +8763,12 @@ TEST_P (SceneRendererTierTests, OrthographicCameraTakesTheSceneFitThatNeverFades
         camera->setPosition (Vector3<float> (0.0f, 5.0f, 0.0f) + offset);
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-        const auto shadows = renderer.getShadowData();
-        EXPECT_EQ (shadows.sunInfo[0], 1.0f);
-        EXPECT_EQ (shadows.sunInfo[3], 0.0f);
+        const auto data = shadows (renderer).getShadowData();
+        EXPECT_EQ (data.sunInfo[0], 1.0f);
+        EXPECT_EQ (data.sunInfo[3], 0.0f);
     }
 
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7395,7 +8795,7 @@ TEST_P (SceneRendererTierTests, SceneFitHoldsWhileTheFirstCascadeIsNoFiner)
         SceneRenderer fresh;
         aimCamera (*camera, nearEye, {});
         ASSERT_NE (fresh.render (device, scene, 64, 64), nullptr) << fresh.getLastError();
-        EXPECT_GT (fresh.getShadowData().sunInfo[0], 1.0f);
+        EXPECT_GT (shadows (fresh).getShadowData().sunInfo[0], 1.0f);
         EXPECT_TRUE (fresh.waitForGPU().wasOk());
     }
 
@@ -7404,10 +8804,10 @@ TEST_P (SceneRendererTierTests, SceneFitHoldsWhileTheFirstCascadeIsNoFiner)
     {
         aimCamera (*camera, frame % 2 == 0 ? farEye : nearEye, {});
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-        EXPECT_EQ (renderer.getShadowData().sunInfo[0], 1.0f) << "frame " << frame;
+        EXPECT_EQ (shadows (renderer).getShadowData().sunInfo[0], 1.0f) << "frame " << frame;
     }
 
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7448,7 +8848,7 @@ TEST_P (SceneRendererTierTests, AtlasNeverExceedsTheShadowResolution)
 
     SceneRenderer renderer;
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    EXPECT_EQ (renderer.getShadowAtlasSize(), 2048);
+    EXPECT_EQ (shadows (renderer).getAtlasSize(), 2048);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7477,7 +8877,7 @@ TEST_P (SceneRendererTierTests, OrthographicCameraSizesTilesWhateverItsDistance)
         SceneRenderer renderer;
         EXPECT_NE (renderer.render (device, scene, 256, 256), nullptr) << renderer.getLastError();
         EXPECT_TRUE (renderer.waitForGPU().wasOk());
-        return renderer.getShadowTileSize (0);
+        return shadows (renderer).getTileSize (0);
     };
 
     EXPECT_EQ (tileSizeFrom (5.0f), 512);
@@ -7512,6 +8912,26 @@ TEST_P (SceneRendererTierTests, AtlasRedrawsOnlyTheViewsACasterReaches)
 TEST_P (SceneRendererTierTests, PartiallyRedrawnAtlasMatchesAFreshOne)
 {
     checkPartiallyRedrawnAtlasMatchesAFreshOne (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, SingleSpotTakesHalfTheAtlas)
+{
+    checkSingleSpotTakesHalfTheAtlas (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, LocalViewsShrinkToFitTheAtlas)
+{
+    checkLocalViewsShrinkToFitTheAtlas (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, LocalLightsKeepTheirQuarterTiles)
+{
+    checkLocalLightsKeepTheirQuarterTiles (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, AtlasRelayoutRedrawsTheMovedTiles)
+{
+    checkAtlasRelayoutRedrawsTheMovedTiles (GetParam());
 }
 
 TEST_F (SceneRendererMetalTests, TierSwitchesKeepTheShadowsRight)
@@ -7549,8 +8969,8 @@ TEST_F (SceneRendererMetalTests, TierSwitchesKeepTheShadowsRight)
         const auto image = renderToImage (renderer, scene, 128);
         ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
         ASSERT_NE (renderer.getCapabilities(), nullptr);
-        EXPECT_EQ (renderer.getShadowRecordCount(), step.castsShadows ? renderer.getCapabilities()->getCascadeCount (scene.getRenderSettings()) : 0);
-        EXPECT_EQ (renderer.usesShadowFilters(), step.soft && step.castsShadows);
+        EXPECT_EQ (shadows (renderer).getNumRecords(), step.castsShadows ? renderer.getCapabilities()->getCascadeCount (scene.getRenderSettings()) : 0);
+        EXPECT_EQ (shadows (renderer).needsShadowFilters(), step.soft && step.castsShadows);
 
         SceneRenderer fresh;
         const auto reference = renderToImage (fresh, scene, 128);
@@ -7558,7 +8978,7 @@ TEST_F (SceneRendererMetalTests, TierSwitchesKeepTheShadowsRight)
         EXPECT_EQ (countDifferences (image, reference), 0);
     }
 
-    EXPECT_EQ (renderer.getShadowRecordCount(), 4);
+    EXPECT_EQ (shadows (renderer).getNumRecords(), 4);
 }
 
 TEST_P (SceneRendererTierTests, AtlasShadowMapsRenderOnlyWhenTheShadowsChange)
@@ -7573,7 +8993,7 @@ TEST_P (SceneRendererTierTests, AtlasShadowMapsRenderOnlyWhenTheShadowsChange)
     for (int frame = 0; frame < 3; ++frame)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 1);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
     auto* entity = scene.getRoot()->findChild ("spot");
     ASSERT_NE (entity, nullptr);
@@ -7582,13 +9002,13 @@ TEST_P (SceneRendererTierTests, AtlasShadowMapsRenderOnlyWhenTheShadowsChange)
     for (int frame = 0; frame < 2; ++frame)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 2);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
 
     spot.range = 8.0f;
     for (int frame = 0; frame < 2; ++frame)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-    EXPECT_EQ (renderer.getShadowMapRenderCount(), 3);
+    EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 3);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
@@ -7671,14 +9091,14 @@ TEST_P (SceneRendererTierTests, ContactShadowOnlyRecordsHaveNoAtlasTile)
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 
-    const auto data = renderer.getShadowData();
-    const auto last = renderer.getShadowRecordCount() - 1;
+    const auto data = shadows (renderer).getShadowData();
+    const auto last = shadows (renderer).getNumRecords() - 1;
     ASSERT_GT (last, 0);
     EXPECT_EQ (data.records[last].atlasRect[2], 0.0f);
     EXPECT_FLOAT_EQ (data.records[last].contact[0], 0.2f);
 
-    EXPECT_GT (renderer.getShadowTileSize (1), 0);
-    EXPECT_EQ (renderer.getShadowTileSize (2), 0);
+    EXPECT_GT (shadows (renderer).getTileSize (1), 0);
+    EXPECT_EQ (shadows (renderer).getTileSize (2), 0);
 }
 
 TEST_P (SceneRendererTierTests, ContactShadowRecordsGoToTheMostImportantLights)
@@ -7711,8 +9131,8 @@ TEST_P (SceneRendererTierTests, ContactShadowRecordsGoToTheMostImportantLights)
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 
-    const auto data = renderer.getShadowData();
-    ASSERT_EQ (renderer.getShadowRecordCount(), GpuShadowData::maxRecords);
+    const auto data = shadows (renderer).getShadowData();
+    ASSERT_EQ (shadows (renderer).getNumRecords(), GpuShadowData::maxRecords);
     EXPECT_TRUE (std::any_of (std::begin (data.records), std::end (data.records), [] (const GpuShadowRecord& record)
     {
         return record.contact[0] == 0.3f;
@@ -7782,6 +9202,11 @@ TEST_P (SceneRendererTierTests, RasterSoftShadowsOptIn)
 TEST_P (SceneRendererTierTests, SpotPenumbraWidensWithLightRadius)
 {
     checkSpotPenumbraWidensWithLightRadius (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, SoftShadowsFilterAtLeastTwoTexels)
+{
+    checkSoftShadowsFilterAtLeastTwoTexels (GetParam());
 }
 
 TEST_P (SceneRendererTierTests, SoftPointShadowHasNoFaceSeams)
@@ -7907,15 +9332,15 @@ TEST_P (SceneRendererTierTests, ContactOnlyLightWithARadiusLeavesSoftFilteringOf
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 
-    const auto data = renderer.getShadowData();
-    const auto last = renderer.getShadowRecordCount() - 1;
+    const auto data = shadows (renderer).getShadowData();
+    const auto last = shadows (renderer).getNumRecords() - 1;
     ASSERT_GT (last, 0);
     EXPECT_EQ (data.records[last].atlasRect[2], 0.0f);
     EXPECT_GT (data.records[last].contact[0], 0.0f);
 
     EXPECT_EQ (data.filterInfo[0], 0.0f);
     EXPECT_EQ (data.filterInfo[1], 0.0f);
-    EXPECT_TRUE (renderer.usesShadowFilters());
+    EXPECT_TRUE (shadows (renderer).needsShadowFilters());
 }
 
 TEST_P (SceneRendererTierTests, ContactShadowsOfALightOutOfRangeChangeNothing)
@@ -7943,9 +9368,9 @@ TEST_P (SceneRendererTierTests, ContactShadowsOfALightOutOfRangeChangeNothing)
         SceneRenderer renderer;
         const auto image = renderConverged (renderer, scene, 256);
         EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
-        EXPECT_EQ (renderer.usesShadowFilters(), contact);
+        EXPECT_EQ (shadows (renderer).needsShadowFilters(), contact);
 
-        const auto data = renderer.getShadowData();
+        const auto data = shadows (renderer).getShadowData();
         const auto marches = std::any_of (std::begin (data.records), std::end (data.records), [] (const GpuShadowRecord& record)
         {
             return record.contact[0] > 0.0f;
@@ -7991,6 +9416,15 @@ protected:
         SceneRendererMetalTests::SetUp();
         if (! IsSkipped())
             frameResources = std::make_unique<FrameResources> (device);
+    }
+
+    /** A green alpha masked material of base color alpha @p alpha, cut out below the default 0.5 cutoff. */
+    static Material::Ptr makeMasked (float alpha)
+    {
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { 0.2f, 0.8f, 0.2f, alpha };
+        material->alphaMode = Material::AlphaMode::mask;
+        return material;
     }
 
     /** A square of @p halfSize centered at (@p x, 0, 0), facing the default camera. */
@@ -8053,17 +9487,9 @@ protected:
 
 TEST_F (GBufferPassMetalTests, MaskedTexelsAreNotWritten)
 {
-    const auto masked = [] (float alpha)
-    {
-        auto material = Material::Ptr (new Material());
-        material->baseColorFactor = { 0.2f, 0.8f, 0.2f, alpha };
-        material->alphaMode = Material::AlphaMode::mask;
-        return material;
-    };
-
     // Below and above the default 0.5 cutoff, centered at about x = 23 and x = 41
-    const auto cutOut = masked (0.2f);
-    const auto kept = masked (0.8f);
+    const auto cutOut = makeMasked (0.2f);
+    const auto kept = makeMasked (0.8f);
 
     Scene scene;
     scene.getRoot()->addChild (makeQuad (-0.6f, 0.4f, cutOut));
@@ -8113,6 +9539,148 @@ TEST_F (GBufferPassMetalTests, BackgroundFillCoversOnlyTheEmptyTexels)
     const auto still = readVelocity (render (scene).velocity, 1000.0f);
     ASSERT_TRUE (still.isValid());
     EXPECT_EQ (maxVelocityDeviation (still), 0);
+}
+
+/** DepthNormalPrepass on its own frame resources, next to the GBufferPass of the same items. */
+class DepthNormalPrepassMetalTests : public GBufferPassMetalTests
+{
+protected:
+    void SetUp() override
+    {
+        GBufferPassMetalTests::SetUp();
+        if (IsSkipped())
+            return;
+
+        prepass = std::make_unique<DepthNormalPrepass> (device);
+        prepassResources = std::make_unique<FrameResources> (device);
+    }
+
+    /** Draws the prepass of the items and view of the last GBufferPassMetalTests::render(). Its own
+        frame resources keep it from reusing the G-buffer targets it is compared with. */
+    bool renderPrepass()
+    {
+        prepassResources->beginFrame (size, size);
+
+        auto frame = GpuFrame::begin (device);
+        const auto drawn = prepass->render (frame, view, drawList, *prepassResources, size, size);
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+        prepassResources->endFrame();
+        return drawn;
+    }
+
+    /** Depth as three 8 bit levels of increasing precision, so equal images mean equal depths to 2^-24. */
+    Image readDepth (const GpuTexture::Ptr& depth)
+    {
+        return mapTexels (depth, "vec4(t.r, fract(t.r * 255.0), fract(t.r * 65025.0), 1.0)");
+    }
+
+    std::unique_ptr<DepthNormalPrepass> prepass;
+    std::unique_ptr<FrameResources> prepassResources;
+};
+
+TEST_F (DepthNormalPrepassMetalTests, IsSupportedOnMetal)
+{
+    EXPECT_TRUE (DepthNormalPrepass::isSupported (*device));
+    EXPECT_TRUE (RenderCapabilities::queryDevice (*device).depthNormalPrepass);
+}
+
+TEST_F (DepthNormalPrepassMetalTests, MatchesTheGBufferTexelForTexel)
+{
+    // A turned quad with its own roughness and metalness, so the normals are not +Z
+    auto material = Material::Ptr (new Material());
+    material->metallicFactor = 0.7f;
+    material->roughnessFactor = 0.5f;
+
+    auto quad = makeQuad (0.0f, 0.6f, material);
+    // Turned by 0.45 rad, the normal encodes to 169.03 levels in red, away from a rounding boundary
+    quad->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.45f));
+
+    Scene scene;
+    scene.getRoot()->addChild (quad);
+
+    const auto gbuffer = render (scene);
+    ASSERT_TRUE (renderPrepass());
+
+    const auto normalRoughness = prepass->getNormalRoughness();
+    const auto depth = prepass->getDepth();
+    ASSERT_NE (normalRoughness, nullptr);
+    ASSERT_NE (depth, nullptr);
+    ASSERT_NE (normalRoughness, gbuffer.normalRoughness);
+    ASSERT_NE (depth, gbuffer.depth);
+
+    EXPECT_EQ (normalRoughness->getFormat(), GpuTextureFormat::rgba16float);
+    EXPECT_EQ (depth->getFormat(), GpuTextureFormat::depth32float);
+    for (const auto& texture : { normalRoughness, depth })
+    {
+        EXPECT_EQ (texture->getWidth(), static_cast<uint32_t> (size));
+        EXPECT_EQ (texture->getHeight(), static_cast<uint32_t> (size));
+        EXPECT_EQ (texture->getSampleCount(), 1u);
+    }
+
+    const auto encoded = [&] (const GpuTexture::Ptr& texture)
+    {
+        return std::pair { mapTexels (texture, "vec4(t.xy * 0.5 + 0.5, t.z, 1.0)"), mapTexels (texture, "vec4(t.w, 0.0, 0.0, 1.0)") };
+    };
+
+    const auto [expectedNormal, expectedMetallic] = encoded (gbuffer.normalRoughness);
+    const auto [actualNormal, actualMetallic] = encoded (normalRoughness);
+    const auto expectedDepth = readDepth (gbuffer.depth);
+    const auto actualDepth = readDepth (depth);
+    for (const auto* image : { &expectedNormal, &expectedMetallic, &actualNormal, &actualMetallic, &expectedDepth, &actualDepth })
+        ASSERT_TRUE (image->isValid());
+
+    // Not vacuous: the quad's normal is far from +Z, and it has a depth
+    const auto center = actualNormal.getPixelColor (32, 32);
+    EXPECT_GT (std::abs (center.getRed() - 128) + std::abs (center.getGreen() - 128), 32);
+    EXPECT_LT (actualDepth.getPixelColor (32, 32).getRed(), 255);
+    EXPECT_GT (actualMetallic.getPixelColor (32, 32).getRed(), 128);
+
+    // One level of margin: two 8 bit readouts of the same texture can already differ by one level
+    const auto normalLevels = maxChannelDifference (actualNormal, expectedNormal);
+    RecordProperty ("normalLevelsApart", normalLevels);
+    EXPECT_LE (normalLevels, 1);
+    EXPECT_EQ (maxChannelDifference (actualMetallic, expectedMetallic), 0);
+    EXPECT_EQ (maxChannelDifference (actualDepth, expectedDepth), 0);
+}
+
+TEST_F (DepthNormalPrepassMetalTests, MaskedTexelsAreNotWritten)
+{
+    // Below and above the default 0.5 cutoff, centered at about x = 23 and x = 41
+    Scene scene;
+    scene.getRoot()->addChild (makeQuad (-0.6f, 0.4f, makeMasked (0.2f)));
+    scene.getRoot()->addChild (makeQuad (0.6f, 0.4f, makeMasked (0.8f)));
+
+    render (scene);
+    ASSERT_TRUE (renderPrepass());
+
+    const auto roughness = mapTexels (prepass->getNormalRoughness(), "vec4(t.z, 0.0, 0.0, 1.0)");
+    const auto cleared = mapTexels (prepass->getDepth(), "vec4(t.r >= 1.0 ? 1.0 : 0.0, 0.0, 0.0, 1.0)");
+    ASSERT_TRUE (roughness.isValid());
+    ASSERT_TRUE (cleared.isValid());
+
+    EXPECT_GT (roughness.getPixelColor (41, 32).getRed(), 64);
+    EXPECT_EQ (cleared.getPixelColor (41, 32).getRed(), 0);
+
+    EXPECT_EQ (roughness.getPixelColor (23, 32).getRed(), 0);
+    EXPECT_EQ (cleared.getPixelColor (23, 32).getRed(), 255);
+}
+
+TEST_F (DepthNormalPrepassMetalTests, TargetsThatCannotBeCreatedLeaveTheFrameWithoutIt)
+{
+    Scene scene;
+    scene.getRoot()->addChild (makeQuad (0.0f, 0.5f, Material::Ptr (new Material())));
+    render (scene);
+
+    // Not an error for the frame: the pass draws nothing and has no targets, as long as they fail
+    prepass->failTargetsForTesting();
+    for (int frame = 0; frame < 2; ++frame)
+    {
+        EXPECT_TRUE (renderPrepass()) << frame;
+        EXPECT_EQ (prepass->getNormalRoughness(), nullptr) << frame;
+        EXPECT_EQ (prepass->getDepth(), nullptr) << frame;
+    }
 }
 #endif
 
@@ -8287,15 +9855,15 @@ protected:
         if (! renderFrames (30))
             return -1.0;
 
-        const auto redrawsBefore = renderer.getShadowMapRenderCount();
-        const auto drawsBefore = renderer.getShadowCasterDrawCount();
+        const auto redrawsBefore = shadows (renderer).getNumRenderedFrames();
+        const auto drawsBefore = shadows (renderer).getNumCasterDraws();
         const auto start = Time::getMillisecondCounterHiRes();
         if (! renderFrames (120))
             return -1.0;
 
-        shadowRedraws = renderer.getShadowMapRenderCount() - redrawsBefore;
+        shadowRedraws = shadows (renderer).getNumRenderedFrames() - redrawsBefore;
         if (casterDraws != nullptr)
-            *casterDraws = renderer.getShadowCasterDrawCount() - drawsBefore;
+            *casterDraws = shadows (renderer).getNumCasterDraws() - drawsBefore;
 
         return (Time::getMillisecondCounterHiRes() - start) / 120.0;
     }
@@ -8313,6 +9881,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         float orbitPitch = 0.0f;
         bool keyContactShadows = false;
         bool softShadows = true;
+        bool ambientOcclusion = true; // follows the tier default when true, off otherwise
     } configs[] = {
         { "full show64", RenderSettings::TierPreference::full, 64, 0.5f },
         { "raster show64", RenderSettings::TierPreference::raster, 64, 0.5f },
@@ -8327,6 +9896,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         { "raster show16 range 0.35 orbiting camera low", RenderSettings::TierPreference::raster, 16, 0.35f, false, 0.6f },
         { "full show64 key contact shadows", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, true },
         { "full show64 soft shadows off", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, false },
+        { "full show64 ambient occlusion off", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, true, false },
     };
 
     for (const auto& [width, height] : { std::pair { 2560, 1600 }, std::pair { 3456, 2234 } })
@@ -8347,6 +9917,13 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
                 {
                     auto settings = show.scene.getRenderSettings();
                     settings.softShadows = false;
+                    show.scene.setRenderSettings (settings);
+                }
+
+                if (! config.ambientOcclusion)
+                {
+                    auto settings = show.scene.getRenderSettings();
+                    settings.ambientOcclusion = false;
                     show.scene.setRenderSettings (settings);
                 }
 
@@ -8578,7 +10155,62 @@ TEST_F (SceneRendererGLTests, RendersWithoutTheShadowCompareSampler)
 {
     checkRendersWithoutTheShadowCompareSampler (RenderSettings::TierPreference::raster);
 }
+
+TEST_F (SceneRendererGLTests, PrepassMatchesTheGBufferEncoding)
+{
+    checkPrepassMatchesTheGBufferEncoding (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, AmbientOcclusionDarkensTheContactCrease)
+{
+    checkAmbientOcclusionDarkensTheContactCrease (RenderSettings::TierPreference::raster);
+}
 #endif
+
+TEST_F (SceneRendererGLTests, PrepassIsNotCreatedByDefault)
+{
+    checkPrepassIsNotCreatedByDefault (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RendersWithoutTheDepthNormalPrepass)
+{
+    checkRendersWithoutTheDepthNormalPrepass (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, AmbientOcclusionOffAllocatesNothing)
+{
+    checkAmbientOcclusionOffAllocatesNothing (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, AmbientOcclusionUnavailableOnRasterRendersFallback)
+{
+    checkAmbientOcclusionUnavailableOnRasterRendersFallback (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, AmbientOcclusionLeavesTheDirectLightAlone)
+{
+    checkAmbientOcclusionLeavesTheDirectLightAlone (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ConvergedAmbientOcclusionIsDeterministic)
+{
+    checkConvergedAmbientOcclusionIsDeterministic (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, BlendedSurfacesSkipAmbientOcclusion)
+{
+    checkBlendedSurfacesSkipAmbientOcclusion (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, BentNormalsTurnTheDiffuseLightToTheOpenSide)
+{
+    checkBentNormalsTurnTheDiffuseLightToTheOpenSide (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterAmbientOcclusionOffAgainRestoresTheFrame)
+{
+    checkRasterAmbientOcclusionOffAgainRestoresTheFrame();
+}
 
 TEST_F (SceneRendererGLTests, RendersWithoutTheShadowPipelines)
 {
@@ -8613,6 +10245,26 @@ TEST_F (SceneRendererGLTests, AtlasRedrawsOnlyTheViewsACasterReaches)
 TEST_F (SceneRendererGLTests, PartiallyRedrawnAtlasMatchesAFreshOne)
 {
     checkPartiallyRedrawnAtlasMatchesAFreshOne (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, SingleSpotTakesHalfTheAtlas)
+{
+    checkSingleSpotTakesHalfTheAtlas (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, LocalViewsShrinkToFitTheAtlas)
+{
+    checkLocalViewsShrinkToFitTheAtlas (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, LocalLightsKeepTheirQuarterTiles)
+{
+    checkLocalLightsKeepTheirQuarterTiles (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, AtlasRelayoutRedrawsTheMovedTiles)
+{
+    checkAtlasRelayoutRedrawsTheMovedTiles (RenderSettings::TierPreference::raster);
 }
 
 // With GL storing another depth than the shaders compute (clip z remapped differently on the two
@@ -8697,6 +10349,11 @@ TEST_F (SceneRendererGLTests, RasterSoftShadowVariantFollowsTheSettings)
 TEST_F (SceneRendererGLTests, SpotPenumbraWidensWithLightRadius)
 {
     checkSpotPenumbraWidensWithLightRadius (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, SoftShadowsFilterAtLeastTwoTexels)
+{
+    checkSoftShadowsFilterAtLeastTwoTexels (RenderSettings::TierPreference::raster);
 }
 
 TEST_F (SceneRendererGLTests, SoftPointShadowHasNoFaceSeams)

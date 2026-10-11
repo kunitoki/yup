@@ -82,4 +82,16 @@ void BufferWGPU::update(const void* data, uint32_t size, uint32_t offset)
         m_wgpuQueue.WriteBuffer(current(), offset, data, size);
 }
 
+void BufferWGPU::writeUnsynchronized(const void* data,
+                                     uint32_t size,
+                                     uint32_t offset,
+                                     bool)
+{
+    assert(offset + size <= m_size);
+    if (m_shadow.empty())
+        m_shadow.resize(m_size, 0);
+    memcpy(m_shadow.data() + offset, data, size);
+    m_wgpuQueue.WriteBuffer(current(), offset, data, size);
+}
+
 } // namespace rive::ore

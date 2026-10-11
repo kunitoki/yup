@@ -57,6 +57,27 @@ static_assert (sizeof (GpuMaterial) == 32);
 static_assert (offsetof (GpuMaterial, extended) == 16);
 
 //==============================================================================
+/** One reflection probe as the shaders read it: 128 bytes, laid out the same in std140 and std430.
+    Filled by GpuSceneData::packReflectionProbe().
+
+    @internal
+*/
+struct YUP_API GpuReflectionProbe
+{
+    float worldToLocal[16]; ///< The inverse of the entity world matrix, column-major.
+    float positionShape[4]; ///< xyz capture position in world space, w shape (0 sphere, 1 box).
+    float influence[4];     ///< xyz half extents in entity space (sphere: the radius in x, yz 0), w falloff in entity space (0 or more).
+    float atlasRect[4];     ///< UV of the level 0 tile origin (xy) and size (zw) in the reflection atlas.
+    float params[4];        ///< x intensity, y parallax correction (0 or 1), z number of mips, w unused (0).
+};
+
+static_assert (sizeof (GpuReflectionProbe) == 128);
+static_assert (offsetof (GpuReflectionProbe, positionShape) == 64);
+static_assert (offsetof (GpuReflectionProbe, influence) == 80);
+static_assert (offsetof (GpuReflectionProbe, atlasRect) == 96);
+static_assert (offsetof (GpuReflectionProbe, params) == 112);
+
+//==============================================================================
 /** One shadow map view as the shaders read it: a sun cascade, a spot light or one face of a point
     light. std140, 112 bytes, mirrored by GpuShadowRecord in lib/shadows.glsl.
 
@@ -162,6 +183,14 @@ public:
 
     /** Packs the specular, index of refraction and emissive strength of a material. */
     static GpuMaterial packMaterial (const Material& material) noexcept;
+
+    /** Packs a reflection probe.
+
+        @param probe      The probe, with its node.
+        @param atlasRect  The UV of the level 0 tile origin and size of the probe in the reflection atlas.
+        @param numMips    The number of mips of the tile.
+    */
+    static GpuReflectionProbe packReflectionProbe (const SceneDrawList::ReflectionProbe& probe, const Rectangle<float>& atlasRect, int numMips) noexcept;
 };
 
 } // namespace yup

@@ -24,13 +24,11 @@ namespace yup
 
 //==============================================================================
 
-static bool isMirroringTransform (const Matrix4& m) noexcept
+static float getLinearDeterminant (const Matrix4& m) noexcept
 {
-    const auto determinant = m (0, 0) * (m (1, 1) * m (2, 2) - m (2, 1) * m (1, 2))
-                           - m (0, 1) * (m (1, 0) * m (2, 2) - m (2, 0) * m (1, 2))
-                           + m (0, 2) * (m (1, 0) * m (2, 1) - m (2, 0) * m (1, 1));
-
-    return determinant < 0.0f;
+    return m (0, 0) * (m (1, 1) * m (2, 2) - m (2, 1) * m (1, 2))
+         - m (0, 1) * (m (1, 0) * m (2, 2) - m (2, 0) * m (1, 2))
+         + m (0, 2) * (m (1, 0) * m (2, 1) - m (2, 0) * m (1, 1));
 }
 
 //==============================================================================
@@ -71,7 +69,11 @@ void SceneDrawList::build (const EntityNode& root, const Matrix4& view, const Bu
         for (auto* items : { &opaqueItems, &blendItems })
         {
             for (auto& item : *items)
-                item.numLights = selectLights (item.primitive->bounds.transformedBy (item.world), lights, lightRankings, item.lightIndices, item.lightWeights);
+            {
+                const auto worldBounds = item.primitive->bounds.transformedBy (item.world);
+                item.numLights = selectLights (worldBounds, lights, lightRankings, item.lightIndices, item.lightWeights);
+                item.reflectionProbes = selectReflectionProbes (reflectionProbes, worldBounds);
+            }
         }
     }
 
@@ -202,11 +204,79 @@ int SceneDrawList::selectLights (const BoundingBox& worldBounds, Span<const Ligh
     return static_cast<int> (numKept);
 }
 
+std::array<int, 2> SceneDrawList::selectReflectionProbes (Span<const ReflectionProbe> probes, const BoundingBox& itemBounds) noexcept
+{
+    std::array<int, 2> picked { -1, -1 };
+
+    if (itemBounds.isEmpty())
+        return picked;
+
+    const auto overlaps = [&itemBounds] (const BoundingBox& bounds)
+    {
+        const auto& a = itemBounds;
+        return ! bounds.isEmpty()
+            && bounds.getMin().getX() <= a.getMax().getX() && a.getMin().getX() <= bounds.getMax().getX()
+            && bounds.getMin().getY() <= a.getMax().getY() && a.getMin().getY() <= bounds.getMax().getY()
+            && bounds.getMin().getZ() <= a.getMax().getZ() && a.getMin().getZ() <= bounds.getMax().getZ();
+    };
+
+    // Smaller influences first, then nearer probes, then older bake ids
+    struct Rank
+    {
+        float volume = 0.0f;
+        float distance = 0.0f;
+        uint64 bakeId = 0;
+
+        bool operator< (const Rank& other) const noexcept
+        {
+            if (volume != other.volume)
+                return volume < other.volume;
+
+            if (distance != other.distance)
+                return distance < other.distance;
+
+            return bakeId < other.bakeId;
+        }
+    };
+
+    std::array<Rank, 2> ranks {};
+    const auto itemCenter = itemBounds.getCenter();
+
+    for (size_t index = 0; index < probes.size(); ++index)
+    {
+        const auto& probe = probes[index];
+        if (! overlaps (probe.bounds))
+            continue;
+
+        const auto size = probe.bounds.getSize();
+        const Rank rank { size.getX() * size.getY() * size.getZ(),
+                          (probe.position - itemCenter).length(),
+                          probe.node != nullptr ? probe.node->getBakeId() : 0 };
+
+        // Only a strictly better probe moves ahead, so full ties keep the lower index
+        if (picked[0] < 0 || rank < ranks[0])
+        {
+            picked[1] = picked[0];
+            ranks[1] = ranks[0];
+            picked[0] = static_cast<int> (index);
+            ranks[0] = rank;
+        }
+        else if (picked[1] < 0 || rank < ranks[1])
+        {
+            picked[1] = static_cast<int> (index);
+            ranks[1] = rank;
+        }
+    }
+
+    return picked;
+}
+
 void SceneDrawList::clear()
 {
     opaqueItems.clear();
     blendItems.clear();
     lights.clear();
+    reflectionProbes.clear();
 }
 
 void SceneDrawList::collect (const EntityNode& entity, const Matrix4& world, const Material* overrideMaterial, const Matrix4& view)
@@ -222,7 +292,8 @@ void SceneDrawList::collect (const EntityNode& entity, const Matrix4& world, con
             overrideMaterial = node.material.get();
     });
 
-    const auto mirrored = isMirroringTransform (world);
+    const auto determinant = getLinearDeterminant (world);
+    const auto mirrored = determinant < 0.0f;
 
     entity.forEachNode<MeshNode> ([&] (MeshNode& node, int)
     {
@@ -257,6 +328,34 @@ void SceneDrawList::collect (const EntityNode& entity, const Matrix4& world, con
         lights.push_back ({ &node,
                             world.transformPoint ({}),
                             world.transformVector ({ 0.0f, 0.0f, -1.0f }).normalized() });
+    });
+
+    entity.forEachNode<ReflectionProbeNode> ([&] (ReflectionProbeNode& node, int)
+    {
+        const auto isBox = node.shape == ReflectionProbeNode::Shape::box;
+        const auto& extents = node.influenceExtents;
+        const auto hasInfluence = isBox ? jmin (extents.getX(), extents.getY(), extents.getZ()) > 0.0f
+                                        : node.influenceRadius > 0.0f;
+
+        // A probe without influence, or flattened by a zero scale, reaches nothing
+        if (! hasInfluence || std::abs (determinant) <= 1.0e-12f)
+            return;
+
+        const auto position = world.transformPoint ({});
+
+        // A sphere is bounded exactly: along each world axis, the radius times the length of that row of the linear part
+        const auto rowLength = [&world] (int row)
+        {
+            return Vector3<float> (world (row, 0), world (row, 1), world (row, 2)).length();
+        };
+
+        const auto sphereExtents = Vector3<float> (rowLength (0), rowLength (1), rowLength (2)) * node.influenceRadius;
+
+        reflectionProbes.push_back ({ &node,
+                                      world,
+                                      position,
+                                      isBox ? BoundingBox (-extents, extents).transformedBy (world)
+                                            : BoundingBox (position - sphereExtents, position + sphereExtents) });
     });
 
     for (const auto& child : entity.getChildren())

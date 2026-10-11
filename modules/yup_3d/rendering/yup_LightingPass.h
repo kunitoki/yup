@@ -33,12 +33,13 @@ namespace yup
     tone mapping to composite the background color under it.
 
     Set 0 binds the shared samplers and lookups of the LightingInputs: 4 shadowCompare, 6 the
-    environment with its sampler at 14, and 7 and 11 the area light tables, read through linearClamp
-    at binding 1. Set 1 binds the rest of them: 0 the LightingBlock, 6 the lights, 7 the light lists
-    of the clusters, 8 the material table; then the G-buffer: 9-11 RT0-RT2 and 12 the depth. Set 3
+    environment with its sampler at 14, and 7 the lookup tables (LookupTables), read through
+    linearClamp at binding 1. Set 1 binds the rest of them: 0 the LightingBlock, 6 the lights, 7 the light lists
+    of the clusters, 8 the material table; then the G-buffer: 9-11 RT0-RT2 and 12 the depth; and 13
+    the ambient occlusion (LightingInputs::ambientOcclusion, or white without it). Set 3
     binds the shadows: 0 the sun cascades, 2 the point and spot light atlas and 4 the ShadowBlock.
-    Only the area light variant (YUP_3D_AREA_LIGHTS), which shades the frames where
-    LightingInputs::areaLights is set, declares the tables and linearClamp.
+    The area light variant (YUP_3D_AREA_LIGHTS) shades the frames where LightingInputs::areaLights
+    is set; every variant reads the lookup tables, for the environment.
 
     The shadow filter variant (YUP_3D_SOFT_SHADOWS) shades the frames where
     LightingInputs::shadowFilters is set: it holds the soft shadows and the contact shadows, and
@@ -92,7 +93,8 @@ private:
 
     std::optional<Result> defaults;
     std::array<Variant, 4> variants; // Punctual lights only, then with area lights; then both again with the shadow filters
-    GpuTexture::Ptr blackTexture;
+    GpuTexture::Ptr blackCube; // The environment without one
+    GpuTexture::Ptr whiteTexture; // Stands in for the ambient occlusion when there is none
     bool shadowFiltersFailureReported = false; // The shadow filter variant failed to compile, and was logged once
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LightingPass)

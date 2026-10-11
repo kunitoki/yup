@@ -310,3 +310,110 @@ TEST_F (GpuSceneDataTests, PacksSpecularIorAndEmissiveStrength)
     EXPECT_FLOAT_EQ (packed.extended[2], 0.0f);
     EXPECT_FLOAT_EQ (packed.extended[3], 0.0f);
 }
+
+TEST_F (GpuSceneDataTests, GpuReflectionProbeLayoutIsStd430)
+{
+    EXPECT_EQ (sizeof (GpuReflectionProbe), 128u);
+    EXPECT_EQ (offsetof (GpuReflectionProbe, positionShape), 64u);
+    EXPECT_EQ (offsetof (GpuReflectionProbe, influence), 80u);
+    EXPECT_EQ (offsetof (GpuReflectionProbe, atlasRect), 96u);
+    EXPECT_EQ (offsetof (GpuReflectionProbe, params), 112u);
+}
+
+TEST_F (GpuSceneDataTests, PacksASphereProbe)
+{
+    auto root = EntityNode::Ptr (new EntityNode ("root"));
+    auto entity = EntityNode::Ptr (new EntityNode ("probe"));
+    entity->setPosition ({ 1.0f, 2.0f, 3.0f });
+    entity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.7f));
+    entity->setScale ({ 2.0f, 2.0f, 2.0f });
+    auto& node = entity->attach<ReflectionProbeNode>();
+    node.influenceRadius = 3.0f;
+    node.falloff = 0.25f;
+    node.intensity = 2.0f;
+    node.parallaxCorrection = false;
+    root->addChild (entity);
+
+    SceneDrawList drawList;
+    drawList.build (*root, {});
+    ASSERT_EQ (drawList.getReflectionProbes().size(), 1u);
+
+    const auto& probe = drawList.getReflectionProbes()[0];
+    const auto packed = GpuSceneData::packReflectionProbe (probe, { 0.25f, 0.5f, 0.125f, 0.0625f }, 6);
+
+    EXPECT_FLOAT_EQ (packed.positionShape[0], 1.0f);
+    EXPECT_FLOAT_EQ (packed.positionShape[1], 2.0f);
+    EXPECT_FLOAT_EQ (packed.positionShape[2], 3.0f);
+    EXPECT_FLOAT_EQ (packed.positionShape[3], 0.0f);
+
+    EXPECT_FLOAT_EQ (packed.influence[0], 3.0f);
+    EXPECT_FLOAT_EQ (packed.influence[1], 0.0f);
+    EXPECT_FLOAT_EQ (packed.influence[2], 0.0f);
+    EXPECT_FLOAT_EQ (packed.influence[3], 0.25f);
+
+    EXPECT_FLOAT_EQ (packed.atlasRect[0], 0.25f);
+    EXPECT_FLOAT_EQ (packed.atlasRect[1], 0.5f);
+    EXPECT_FLOAT_EQ (packed.atlasRect[2], 0.125f);
+    EXPECT_FLOAT_EQ (packed.atlasRect[3], 0.0625f);
+
+    EXPECT_FLOAT_EQ (packed.params[0], 2.0f);
+    EXPECT_FLOAT_EQ (packed.params[1], 0.0f);
+    EXPECT_FLOAT_EQ (packed.params[2], 6.0f);
+    EXPECT_FLOAT_EQ (packed.params[3], 0.0f);
+
+    // The world to local matrix brings the capture position to the origin and undoes the scale and rotation
+    std::array<float, 16> values;
+    std::copy (std::begin (packed.worldToLocal), std::end (packed.worldToLocal), values.begin());
+    const Matrix4 worldToLocal (values);
+
+    expectNear (worldToLocal.transformPoint (probe.position), {}, 1.0e-5f);
+    expectNear (worldToLocal.transformPoint (probe.world.transformPoint ({ 1.0f, -2.0f, 0.5f })), { 1.0f, -2.0f, 0.5f }, 1.0e-5f);
+}
+
+TEST_F (GpuSceneDataTests, PacksABoxProbe)
+{
+    auto root = EntityNode::Ptr (new EntityNode ("root"));
+    auto entity = EntityNode::Ptr (new EntityNode ("probe"));
+    entity->setPosition ({ -4.0f, 0.0f, 1.0f });
+    auto& node = entity->attach<ReflectionProbeNode>();
+    node.shape = ReflectionProbeNode::Shape::box;
+    node.influenceExtents = { 1.0f, 2.0f, 4.0f };
+    node.falloff = 0.5f;
+    root->addChild (entity);
+
+    SceneDrawList drawList;
+    drawList.build (*root, {});
+    ASSERT_EQ (drawList.getReflectionProbes().size(), 1u);
+
+    const auto& probe = drawList.getReflectionProbes()[0];
+    const auto packed = GpuSceneData::packReflectionProbe (probe, { 0.0f, 0.0f, 0.5f, 0.5f }, 4);
+
+    EXPECT_FLOAT_EQ (packed.positionShape[0], -4.0f);
+    EXPECT_FLOAT_EQ (packed.positionShape[2], 1.0f);
+    EXPECT_FLOAT_EQ (packed.positionShape[3], 1.0f);
+
+    EXPECT_FLOAT_EQ (packed.influence[0], 1.0f);
+    EXPECT_FLOAT_EQ (packed.influence[1], 2.0f);
+    EXPECT_FLOAT_EQ (packed.influence[2], 4.0f);
+    EXPECT_FLOAT_EQ (packed.influence[3], 0.5f);
+
+    EXPECT_FLOAT_EQ (packed.params[0], 1.0f);
+    EXPECT_FLOAT_EQ (packed.params[1], 1.0f);
+    EXPECT_FLOAT_EQ (packed.params[2], 4.0f);
+
+    EXPECT_FLOAT_EQ (packed.worldToLocal[12], 4.0f);
+    EXPECT_FLOAT_EQ (packed.worldToLocal[13], 0.0f);
+    EXPECT_FLOAT_EQ (packed.worldToLocal[14], -1.0f);
+}
+
+TEST_F (GpuSceneDataTests, PacksANegativeFalloffAsZero)
+{
+    ReflectionProbeNode node;
+    node.falloff = -1.0f;
+
+    SceneDrawList::ReflectionProbe probe;
+    probe.node = &node;
+
+    const auto packed = GpuSceneData::packReflectionProbe (probe, {}, 1);
+    EXPECT_EQ (packed.influence[3], 0.0f);
+}

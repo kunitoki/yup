@@ -416,6 +416,32 @@ rive::ore::SamplerDesc toOreSamplerDesc (const GpuSamplerDesc& src)
     return sd;
 }
 
+/** The most dynamic uniform buffers a pipeline takes: the least every backend supports. */
+constexpr size_t maxDynamicUniformBuffers = 8;
+
+/** True when the dynamic uniform buffers of @p entries are in the same order by Vulkan descriptor
+    binding (the native slot, taken as ore's createDSLFromLayoutDesc takes it) as by binding: Vulkan
+    takes dynamic offsets in descriptor binding order, every other backend in binding order. */
+bool dynamicUniformBuffersKeepTheirOrder (const std::vector<rive::ore::BindGroupLayoutEntry>& entries)
+{
+    constexpr auto absent = rive::ore::BindGroupLayoutEntry::kNativeSlotAbsent;
+
+    std::vector<std::pair<uint32_t, uint32_t>> dynamic;
+    for (const auto& entry : entries)
+    {
+        if (! entry.hasDynamicOffset)
+            continue;
+
+        const uint32_t descriptorBinding = entry.nativeSlotVS != absent   ? entry.nativeSlotVS
+                                         : entry.nativeSlotFS != absent ? entry.nativeSlotFS
+                                                                        : entry.binding;
+        dynamic.emplace_back (entry.binding, descriptorBinding);
+    }
+
+    std::sort (dynamic.begin(), dynamic.end());
+    return std::is_sorted (dynamic.begin(), dynamic.end(), [] (const auto& a, const auto& b) { return a.second < b.second; });
+}
+
 } // namespace GpuPipelineHelpers
 
 //==============================================================================
@@ -444,6 +470,11 @@ struct GpuPipeline::Impl
     rive::rcp<rive::ore::Pipeline> pipeline;
     std::vector<rive::rcp<rive::ore::BindGroupLayout>> layouts;
     std::vector<std::vector<SamplerBinding>> samplersPerGroup;
+
+    /** The bindings of each group's dynamic uniform buffers, ascending: the order a bind of the
+        group takes their offsets in. */
+    std::vector<std::vector<uint32_t>> dynamicBindingsPerGroup;
+
     std::vector<std::vector<rive::ore::VertexAttribute>> vertexAttrStorage;
     std::vector<rive::ore::VertexBufferLayout> vertexLayoutStorage;
 
@@ -670,9 +701,17 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
         }
     }
 
+    // Uniform buffers taking dynamic offsets, honored where the device supports them
+    const auto& requestedDynamic = pipelineOptions.dynamicUniformBuffers;
+    jassert (requestedDynamic.size() <= maxDynamicUniformBuffers);
+
+    const auto dynamicCount = jmin (requestedDynamic.size(), maxDynamicUniformBuffers);
+    const bool dynamicOffsets = ctx->isDynamicUniformOffsetAvailable();
+
     // Build one BindGroupLayout per @group used.
     const uint32_t numGroups = merged.empty() ? 0 : maxGroup + 1;
     std::vector<rive::rcp<rive::ore::BindGroupLayout>> layouts (numGroups);
+    std::vector<std::vector<uint32_t>> dynamicBindingsPerGroup (numGroups);
 
     for (uint32_t g = 0; g < numGroups; ++g)
     {
@@ -770,6 +809,33 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
 
             entries.push_back (entry);
         }
+
+        for (size_t i = 0; i < dynamicCount; ++i)
+        {
+            const auto& slot = requestedDynamic[i];
+
+            for (auto& entry : entries)
+            {
+                if (slot.group != g || entry.binding != slot.binding)
+                    continue;
+
+                // Only uniform buffers take dynamic offsets
+                jassert (entry.kind == rive::ore::BindingKind::uniformBuffer);
+                entry.hasDynamicOffset = dynamicOffsets && entry.kind == rive::ore::BindingKind::uniformBuffer;
+
+                if (entry.hasDynamicOffset)
+                    dynamicBindingsPerGroup[g].push_back (entry.binding);
+            }
+        }
+
+        std::sort (dynamicBindingsPerGroup[g].begin(), dynamicBindingsPerGroup[g].end());
+        dynamicBindingsPerGroup[g].erase (std::unique (dynamicBindingsPerGroup[g].begin(), dynamicBindingsPerGroup[g].end()), dynamicBindingsPerGroup[g].end());
+
+#if YUP_DEBUG
+        // Vulkan would bind the blocks of a set at each other's offsets
+        if (ctx->getPlatform() == GpuPlatform::Vulkan)
+            jassert (dynamicUniformBuffersKeepTheirOrder (entries));
+#endif
 
         if (! entries.empty())
         {
@@ -909,6 +975,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     implRef->fragModule = std::move (fragModule);
     implRef->pipeline = std::move (pipeline);
     implRef->layouts = std::move (layouts);
+    implRef->dynamicBindingsPerGroup = std::move (dynamicBindingsPerGroup);
 
     implRef->samplersPerGroup.resize (implRef->layouts.size());
 

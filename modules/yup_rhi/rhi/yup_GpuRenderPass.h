@@ -136,6 +136,11 @@ public:
         The data is copied immediately; the caller need not keep it alive.
         If the same slot is set more than once the later call wins.
 
+        A slot the pipeline lists in GpuPipelineOptions::dynamicUniformBuffers is
+        written into the frame's shared uniform buffer and bound at an offset, so
+        new bytes do not rebuild the bind group of its set; its size should stay
+        the same from draw to draw, and be a multiple of 4 bytes.
+
         @param group     The uniform group index (0..N).
         @param binding   The uniform binding index (0..N).
         @param data      Pointer to the source data to upload (must be non-null).
@@ -323,6 +328,11 @@ public:
     */
     bool finish();
 
+    /** @internal Test hook, not for production use: how many draws of this pass ran the Debug
+        check that no texture is bound with two different views. Always 0 in Release builds.
+    */
+    int getTextureViewChecksForTesting() const noexcept;
+
 private:
     friend class GpuCanvas;
     friend class GpuTarget;
@@ -333,7 +343,7 @@ private:
     Impl* getImpl() noexcept;
     const Impl* getImpl() const noexcept;
 
-    static constexpr size_t ImplSizeBytes = 1024;
+    static constexpr size_t ImplSizeBytes = 1536;
     TypeErasedObject<ImplSizeBytes> impl;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuRenderPass)

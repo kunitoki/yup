@@ -61,6 +61,44 @@ struct GpuFrame::Impl
 
     rive::rcp<rive::ore::Buffer> acquireUniformBuffer (const void* data, size_t byteSize);
 
+    /** The uniform blocks of pipelines that declare them dynamic, packed one after the other into
+        pooled chunks shared by every pass of the frame. Each range is written once, before the
+        commands reading it are recorded, so a write never touches what a recorded draw reads.
+    */
+    struct UniformRing
+    {
+        static constexpr uint32_t chunkSize = 64 * 1024;
+
+        rive::rcp<rive::ore::Buffer> chunk;
+        uint32_t cursor = 0;
+        uint32_t alignment = 256;
+
+        /** Counts the chunks taken, so 0 never names one. */
+        uint32_t chunkId = 0;
+
+        /** The next write starts a chunk, whose previous content the GPU may still be reading. */
+        bool firstWrite = true;
+
+        /** The room a block of @p byteSize bytes takes: offsets are multiples of the alignment. */
+        uint32_t slotSize (size_t byteSize) const noexcept
+        {
+            return (uint32_t) ((byteSize + alignment - 1) / alignment * alignment);
+        }
+
+        bool fits (uint32_t bytes) const noexcept
+        {
+            return chunk != nullptr && (uint64_t) cursor + bytes <= chunk->size();
+        }
+    };
+
+    UniformRing uniformRing;
+
+    /** Moves the ring to a pooled chunk with room for @p bytes, 64 KB at least. */
+    bool startUniformChunk (uint32_t bytes);
+
+    /** Writes a block at the ring's cursor, which must have room for it, and returns its offset. */
+    uint32_t writeUniforms (const void* data, uint32_t byteSize);
+
     /** Hands the transient resources to the device, to be freed once enough later
         frames have begun that the GPU cannot still be reading them. */
     void retire();
@@ -90,6 +128,36 @@ rive::rcp<rive::ore::Buffer> GpuFrame::Impl::acquireUniformBuffer (const void* d
     return buffer;
 }
 
+bool GpuFrame::Impl::startUniformChunk (uint32_t bytes)
+{
+    if (device == nullptr || oreCtx == nullptr)
+        return false;
+
+    auto chunk = device->uniformBufferPool.acquire (*oreCtx, jmax (bytes, UniformRing::chunkSize));
+    if (chunk == nullptr)
+        return false;
+
+    liveBuffers.push_back (chunk);
+
+    uniformRing.chunk = std::move (chunk);
+    uniformRing.cursor = 0;
+    uniformRing.firstWrite = true;
+    ++uniformRing.chunkId;
+    return true;
+}
+
+uint32_t GpuFrame::Impl::writeUniforms (const void* data, uint32_t byteSize)
+{
+    // WebGPU writes buffers in multiples of 4 bytes, which std140 blocks always are
+    jassert (byteSize % 4 == 0);
+    jassert (uniformRing.fits (byteSize));
+
+    const auto offset = uniformRing.cursor;
+    uniformRing.chunk->writeUnsynchronized (data, byteSize, offset, std::exchange (uniformRing.firstWrite, false));
+    uniformRing.cursor += uniformRing.slotSize (byteSize);
+    return offset;
+}
+
 void GpuFrame::Impl::retire()
 {
     if (released)
@@ -97,6 +165,7 @@ void GpuFrame::Impl::retire()
 
     released = true;
     releaseCommands();
+    uniformRing.chunk = nullptr;
 
     if (device != nullptr)
     {
@@ -120,6 +189,7 @@ void GpuFrame::Impl::releaseNow()
 
     released = true;
     releaseCommands();
+    uniformRing.chunk = nullptr;
 
     if (device != nullptr)
         for (auto& buffer : liveBuffers)
@@ -177,6 +247,7 @@ GpuFrame GpuFrame::begin (GpuDevice::Ptr ctx)
     i->device = ctx;
     i->oreCtx = oreCtx;
     i->generation = ctx->beginFrameGeneration();
+    i->uniformRing.alignment = jmax (1u, oreCtx->features().minUniformBufferOffsetAlignment);
     i->commandBuffer = ctx->beginFrameCommands (i->generation);
 
     // A Metal frame records into the device's command buffer, so it has nothing to record into

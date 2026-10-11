@@ -27,7 +27,9 @@ namespace yup
 
     build() walks the tree once, depth-first, accumulating world matrices and the material
     override of the nearest MaterialNode, and skipping hidden subtrees. Every primitive of
-    every MeshNode slot becomes a DrawItem, and every LightNode slot becomes a Light.
+    every MeshNode slot becomes a DrawItem, every LightNode slot becomes a Light, and every
+    ReflectionProbeNode slot becomes a ReflectionProbe, unless its influence is empty: a radius
+    or an extent of 0 or less, or an entity scaled to 0.
 
     Opaque and masked items are sorted by pipeline state (double-sided, then mirrored) and then
     by material, to limit state changes. Blended items are sorted back to front, so they are drawn over what is behind them.
@@ -39,7 +41,8 @@ namespace yup
     set and the tree has no LightNode, it holds the default light owned by the list.
 
     With BuildOptions::selectLightsPerDraw, every item also lists the lights shading it: the
-    maxLightsPerDraw most influential ones, faded out near the cutoff, see selectLights().
+    maxLightsPerDraw most influential ones, faded out near the cutoff, see selectLights(), and
+    the two reflection probes influencing it most, see selectReflectionProbes().
 
     @see SceneRenderer
 */
@@ -65,6 +68,7 @@ public:
         std::array<uint16, maxLightsPerDraw> lightIndices {}; ///< Indices into getLights(), most influential first, see BuildOptions::selectLightsPerDraw.
         std::array<float, maxLightsPerDraw> lightWeights = [] { std::array<float, maxLightsPerDraw> ones; ones.fill (1.0f); return ones; }(); ///< What scales the intensity of each of lightIndices, see selectLights().
         int numLights = 0;                           ///< How many lightIndices are valid.
+        std::array<int, 2> reflectionProbes { -1, -1 }; ///< Indices into getReflectionProbes(), the most influential first, -1 when unused, see BuildOptions::selectLightsPerDraw.
     };
 
     /** One light, in world space. */
@@ -75,6 +79,15 @@ public:
         Vector3<float> direction;                    ///< Unit direction the light shines towards, the entity -Z.
     };
 
+    /** One reflection probe, in world space. */
+    struct ReflectionProbe
+    {
+        ReflectionProbeNode* node = nullptr; ///< The probe settings.
+        Matrix4 world;                       ///< Entity to world.
+        Vector3<float> position;             ///< Capture position, the entity origin in world space.
+        BoundingBox bounds;                  ///< World-space bounds of the influence volume, exact for a sphere under any rotation and scale.
+    };
+
     /** Options for build(). */
     struct BuildOptions
     {
@@ -83,7 +96,9 @@ public:
         */
         bool addDefaultLight = false;
 
-        /** Fills DrawItem::lightIndices, DrawItem::lightWeights and DrawItem::numLights of every item with selectLights(). */
+        /** Fills DrawItem::lightIndices, DrawItem::lightWeights and DrawItem::numLights of every item with selectLights(),
+            and DrawItem::reflectionProbes with selectReflectionProbes().
+        */
         bool selectLightsPerDraw = false;
     };
 
@@ -119,6 +134,9 @@ public:
     /** Returns the lights. */
     Span<const Light> getLights() const noexcept { return lights; }
 
+    /** Returns the reflection probes. */
+    Span<const ReflectionProbe> getReflectionProbes() const noexcept { return reflectionProbes; }
+
     /** Returns the material used by primitives without a material and without an override. */
     const Material& getDefaultMaterial() const noexcept { return *defaultMaterial; }
 
@@ -148,6 +166,25 @@ public:
     */
     static int selectLights (const BoundingBox& worldBounds, Span<const Light> lights, std::array<uint16, maxLightsPerDraw>& indices);
 
+    /** Picks the two probes that take priority over @p itemBounds, the first one first.
+
+        A probe is a candidate when its world bounds intersect @p itemBounds; an empty box
+        intersects nothing. Candidates are ranked by the volume of their world bounds, smallest
+        first, so a probe nested inside a larger one takes priority where both reach. Equal
+        volumes are ranked by the distance from the item center to the probe position (the center
+        of its influence), then by bake id, oldest first, and full ties keep the lower index.
+
+        The shaders blend in that order: the first probe by its weight w0, the second by
+        (1 - w0) * w1, the environment takes the rest. Only two probes are kept, so a draw moving
+        until a third probe outranks the second switches between them abruptly.
+
+        @param probes      The probes to pick from.
+        @param itemBounds  The bounds of the object, in world space.
+
+        @returns The indices into @p probes, the nearest first. Unused entries are -1.
+    */
+    static std::array<int, 2> selectReflectionProbes (Span<const ReflectionProbe> probes, const BoundingBox& itemBounds) noexcept;
+
 private:
     /** What selectLights() ranks a light by, computed once per light rather than per draw. */
     struct LightRanking
@@ -168,6 +205,7 @@ private:
     std::vector<DrawItem> blendItems;
     std::vector<Light> lights;
     std::vector<LightRanking> lightRankings;
+    std::vector<ReflectionProbe> reflectionProbes;
     Material::Ptr defaultMaterial;
     std::unique_ptr<LightNode> defaultLight;
 

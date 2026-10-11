@@ -176,6 +176,8 @@ public:
 
     bool isFragmentStorageBufferAvailable() const noexcept override { return true; }
 
+    bool isDynamicUniformOffsetAvailable() const noexcept override { return true; }
+
     bool isStorageTextureAvailable() const noexcept override { return true; }
 
     bool isDeviceLost() const noexcept override { return vulkanDevice->isDeviceLost(); }

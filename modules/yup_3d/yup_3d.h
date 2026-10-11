@@ -50,6 +50,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <functional>
 #include <limits>
@@ -69,6 +70,7 @@
 #include "resources/yup_HalfFloat.h"
 #include "resources/yup_Texture.h"
 #include "resources/yup_EnvironmentMap.h"
+#include "rendering/yup_SphericalHarmonics.h"
 #include "resources/yup_Material.h"
 #include "resources/yup_Mesh.h"
 #include "scene/yup_EntityNode.h"
@@ -76,6 +78,7 @@
 #include "nodes/yup_MaterialNode.h"
 #include "nodes/yup_CameraNode.h"
 #include "nodes/yup_LightNode.h"
+#include "nodes/yup_ReflectionProbeNode.h"
 #include "rendering/yup_RenderSettings.h"
 #include "rendering/yup_RenderCapabilities.h"
 #include "scene/yup_Scene.h"
@@ -85,13 +88,19 @@
 #include "rendering/yup_MaterialTable.h"
 #include "rendering/yup_GeometryBindings.h"
 #include "resources/yup_LtcTables.h"
+#include "rendering/yup_LookupTables.h"
 #include "rendering/yup_ViewData.h"
 #include "rendering/yup_ShadowAtlas.h"
+#include "rendering/yup_ProbeAtlas.h"
 #include "rendering/yup_ShadowCascades.h"
 #include "rendering/yup_FrameResources.h"
 #include "rendering/yup_LightClusters.h"
 #include "rendering/yup_FullscreenPass.h"
+#include "rendering/yup_ProbeRenderer.h"
+#include "rendering/yup_ShadowRenderer.h"
 #include "rendering/yup_GBufferPass.h"
+#include "rendering/yup_DepthNormalPrepass.h"
+#include "rendering/yup_AmbientOcclusionPass.h"
 #include "rendering/yup_TemporalAA.h"
 #include "rendering/yup_ToneMapping.h"
 #include "rendering/yup_Bloom.h"

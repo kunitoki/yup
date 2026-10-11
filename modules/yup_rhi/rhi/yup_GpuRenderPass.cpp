@@ -46,6 +46,11 @@ struct GpuRenderPass::Impl
         int group;
         int binding;
         std::vector<uint8_t> data;
+
+        /** Where the frame's uniform ring holds the bytes of a block a pipeline declares dynamic.
+            A chunk of 0 means they have not been written since they changed. */
+        uint32_t ringChunk = 0;
+        uint32_t ringOffset = 0;
     };
 
     struct StorageBinding
@@ -71,15 +76,30 @@ struct GpuRenderPass::Impl
         GpuTextureViewDesc resolveView;
     };
 
-    /** The bind group a draw built for a group, reused by later draws until one of
-        its bindings changes or a pipeline switch changes the group's layout or default samplers. */
+    /** The bind group a draw built for a group, reused by later draws until a binding its layout
+        declares changes or a pipeline switch changes the group's layout or default samplers. */
     struct GroupCache
     {
         rive::rcp<rive::ore::BindGroup> group;
         bool dirty = true;
 
+        /** The ring chunk the group's dynamic uniform buffers are bound to, or 0 without any. */
+        uint32_t ringChunk = 0;
+
         /** The native storage buffers the group was built with: an update may swap a buffer's backing. */
         std::vector<void*> storageHandles;
+    };
+
+    /** The dynamic offsets of a bind, in the order of the layout's dynamic entries. */
+    struct DynamicOffsets
+    {
+        std::array<uint32_t, GpuPipelineHelpers::maxDynamicUniformBuffers> values {};
+        uint32_t count = 0;
+
+        bool operator== (const DynamicOffsets& other) const noexcept
+        {
+            return count == other.count && std::equal (values.begin(), values.begin() + count, other.values.begin());
+        }
     };
 
     /** Calls @p visit with the native handle of every storage buffer bound to @p group, in binding order. */
@@ -130,6 +150,7 @@ struct GpuRenderPass::Impl
     rive::ore::Pipeline* orePipeline = nullptr;
     const std::vector<rive::rcp<rive::ore::BindGroupLayout>>* oreLayouts = nullptr;
     const std::vector<std::vector<GpuPipeline::Impl::SamplerBinding>>* oreSamplers = nullptr;
+    const std::vector<std::vector<uint32_t>>* dynamicBindings = nullptr;
 
     // Sticky per-pass state, replayed into every encoded ore render pass.
     bool viewportSet = false;
@@ -166,33 +187,96 @@ struct GpuRenderPass::Impl
     /** Groups 0..3; any higher group is rebuilt by every draw. */
     std::array<GroupCache, 4> groupCaches;
 
+    /** Scratch lists encode() clears and refills, so draws stop allocating once they have grown. */
+    std::vector<std::pair<uint32_t, rive::rcp<rive::ore::BindGroup>>> bindGroups;
+    std::vector<rive::ore::BindGroupDesc::UBOEntry> uboEntries;
+    std::vector<rive::ore::BindGroupDesc::TexEntry> texEntries;
+    std::vector<rive::ore::BindGroupDesc::StorageEntry> storageEntries;
+    std::vector<rive::ore::BindGroupDesc::SampEntry> sampEntries;
+
     /** What the open backend pass was last given, so draws only encode what changed. Held, so
         an address cannot be reused by another object while it is compared against.
 
         Metal, Vulkan and WebGPU latch the current backing of each uniform buffer when a group is
-        bound. Skipping an unchanged group is only safe because no buffer inside a cached group is
-        updated during the frame: pooled uniform buffers are written once, and a storage buffer
-        whose backing changed rebuilds its group (storageHandlesMatch). Binding a caller-owned
-        buffer that can be updated between draws needs its upload generation in the group cache. */
+        bound. Skipping a group bound with the same dynamic offsets is only safe because no range
+        a recorded command reads is written again during the frame: pooled uniform buffers are
+        written once, the uniform ring writes each range once, unsynchronized, before the draw that
+        reads it is recorded, and a storage buffer whose backing changed rebuilds its group
+        (storageHandlesMatch). Binding a caller-owned buffer that can be updated between draws
+        needs its upload generation in the group cache. */
     rive::rcp<rive::ore::Pipeline> encodedPipeline;
     std::array<rive::rcp<rive::ore::BindGroup>, 4> encodedGroups;
+    std::array<DynamicOffsets, 4> encodedOffsets;
     bool passStateDirty = true;
 
     /** False on OpenGL, whose bindings are global: a texture upload or a pipeline compiled between
         two draws changes them behind the pass, so every draw encodes its whole state. */
     bool backendKeepsState = true;
 
-    void markGroupDirty (int group) noexcept
+    /** Set when a texture binding or the pipeline changed, for the next draw to check the views again. */
+    bool textureViewsChanged = true;
+    bool textureViewsConflict = false;
+    int textureViewChecks = 0;
+
+    /** Marks @p group for a rebuild after its @p binding changed, unless the current pipeline's layout
+        for the group lacks the binding: a switch to a pipeline declaring it rebuilds the group anyway. */
+    void markGroupDirty (int group, int binding) noexcept
     {
-        if (group >= 0 && group < (int) groupCaches.size())
+        if (group < 0 || group >= (int) groupCaches.size())
+            return;
+
+        const auto* layout = oreLayouts != nullptr && (size_t) group < oreLayouts->size() ? (*oreLayouts)[(size_t) group].get() : nullptr;
+        if (layout == nullptr || layout->findEntry ((uint32_t) binding) != nullptr)
             groupCaches[(size_t) group].dirty = true;
     }
 
+    /** True when the current pipeline binds the uniform buffer at @p group and @p binding at a dynamic offset. */
+    bool declaresDynamic (int group, int binding) const
+    {
+        if (oreLayouts == nullptr || group < 0 || (size_t) group >= oreLayouts->size())
+            return false;
+
+        const auto* layout = (*oreLayouts)[(size_t) group].get();
+        return layout != nullptr && binding >= 0 && layout->hasDynamicOffset ((uint32_t) binding);
+    }
+
+    /** Calls @p visit with every uniform buffer bound to a dynamic slot of the current pipeline. */
+    template <typename Visitor>
+    void forEachDynamicUniform (Visitor&& visit)
+    {
+        for (size_t group = 0; group < dynamicBindings->size(); ++group)
+        {
+            for (const auto binding : (*dynamicBindings)[group])
+            {
+                if (auto* ub = findUniformBuffer ((int) group, (int) binding))
+                    visit (*ub);
+            }
+        }
+    }
+
+    UboBinding* findUniformBuffer (int group, int binding)
+    {
+        for (auto& ub : uboBindings)
+        {
+            if (ub.group == group && ub.binding == binding)
+                return &ub;
+        }
+
+        return nullptr;
+    }
+
+    /** Writes the dynamic uniform buffers the ring's current chunk lacks, moving the ring to a new
+        chunk, and writing all of them, when they do not fit: a draw binds a single chunk. */
+    bool writeDynamicUniforms();
+
+    /** The offsets a bind of @p group's @p bindGroup takes. */
+    DynamicOffsets collectDynamicOffsets (uint32_t group, const rive::ore::BindGroup& bindGroup);
+
     static bool layoutDeclares (const rive::ore::BindGroupLayout& layout, uint32_t binding, bool asTexture);
 
-    /** OpenGL applies a sampled mip range to the texture object, so one texture bound
-        with two different views in a draw would sample the last range in both slots. */
-    void assertNoConflictingTextureViews() const;
+    /** True when one texture is bound with two different views. OpenGL applies a sampled mip range
+        to the texture object, so such a draw would sample the last range in both slots. */
+    bool hasConflictingTextureViews() const;
 
     bool encode (uint32_t count, bool indexed, uint32_t instanceCount, uint32_t first, int32_t baseVertex, uint32_t firstInstance);
 
@@ -380,7 +464,7 @@ bool GpuRenderPass::Impl::layoutDeclares (const rive::ore::BindGroupLayout& layo
     return false;
 }
 
-void GpuRenderPass::Impl::assertNoConflictingTextureViews() const
+bool GpuRenderPass::Impl::hasConflictingTextureViews() const
 {
     const auto isBound = [this] (const TextureBinding& tb)
     {
@@ -403,12 +487,77 @@ void GpuRenderPass::Impl::assertNoConflictingTextureViews() const
             if (second.texture != first.texture || ! isBound (second))
                 continue;
 
-            jassertquiet (first.view.value_or (first.texture->getWholeTextureViewDesc()) == second.view.value_or (second.texture->getWholeTextureViewDesc()));
+            if (first.view.value_or (first.texture->getWholeTextureViewDesc()) != second.view.value_or (second.texture->getWholeTextureViewDesc()))
+                return true;
         }
     }
+
+    return false;
 }
 
 //==============================================================================
+
+bool GpuRenderPass::Impl::writeDynamicUniforms()
+{
+    if (dynamicBindings == nullptr)
+        return true;
+
+    auto& ring = framePools->uniformRing;
+    const auto isWritten = [&ring] (const UboBinding& ub) { return ub.ringChunk != 0 && ub.ringChunk == ring.chunkId; };
+
+    uint32_t staleBytes = 0;
+    uint32_t allBytes = 0;
+
+    forEachDynamicUniform ([&] (const UboBinding& ub)
+    {
+        const auto bytes = ring.slotSize (ub.data.size());
+        allBytes += bytes;
+
+        if (! isWritten (ub))
+            staleBytes += bytes;
+    });
+
+    if (staleBytes == 0)
+        return true;
+
+    if (! ring.fits (staleBytes) && ! framePools->startUniformChunk (allBytes))
+    {
+        YUP_DBG ("GpuRenderPass: no uniform buffer for the dynamic uniforms of a draw");
+        return false;
+    }
+
+    forEachDynamicUniform ([&] (UboBinding& ub)
+    {
+        if (isWritten (ub))
+            return;
+
+        ub.ringOffset = framePools->writeUniforms (ub.data.data(), (uint32_t) ub.data.size());
+        ub.ringChunk = ring.chunkId;
+    });
+
+    return true;
+}
+
+GpuRenderPass::Impl::DynamicOffsets GpuRenderPass::Impl::collectDynamicOffsets (uint32_t group, const rive::ore::BindGroup& bindGroup)
+{
+    DynamicOffsets offsets;
+    if (dynamicBindings == nullptr || group >= dynamicBindings->size())
+        return offsets;
+
+    // Vulkan and WebGPU take an offset per dynamic entry of the layout, 0 for one left unbound;
+    // Metal, OpenGL and Direct3D 11 one per dynamic uniform buffer the group holds
+    const auto& bindings = (*dynamicBindings)[group];
+    const bool perLayoutEntry = bindGroup.dynamicOffsetCount() == bindings.size();
+
+    for (const auto binding : bindings)
+    {
+        const auto* ub = findUniformBuffer ((int) group, (int) binding);
+        if (ub != nullptr || perLayoutEntry)
+            offsets.values[offsets.count++] = ub != nullptr ? ub->ringOffset : 0;
+    }
+
+    return offsets;
+}
 
 bool GpuRenderPass::Impl::encode (uint32_t count,
                                   bool indexed,
@@ -428,12 +577,23 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
 
     const auto& layouts = *oreLayouts;
 
-    std::vector<std::pair<uint32_t, rive::rcp<rive::ore::BindGroup>>> bindGroups;
+    if (! writeDynamicUniforms())
+        return false;
+
+    const auto ringChunk = framePools->uniformRing.chunkId;
+
+    bindGroups.clear();
 
     const bool hasAnyBindings = ! uboBindings.empty() || ! textureBindings.empty() || ! storageBindings.empty();
 
 #if YUP_DEBUG
-    assertNoConflictingTextureViews();
+    if (std::exchange (textureViewsChanged, false))
+    {
+        textureViewsConflict = hasConflictingTextureViews();
+        ++textureViewChecks;
+    }
+
+    jassertquiet (! textureViewsConflict);
 #endif
 
     for (uint32_t groupIdx = 0; groupIdx < layouts.size(); ++groupIdx)
@@ -444,7 +604,8 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
 
         // Resources bound into a cached group were retained by this frame when it was built.
         auto* cache = groupIdx < groupCaches.size() ? &groupCaches[groupIdx] : nullptr;
-        if (cache != nullptr && ! cache->dirty && storageHandlesMatch (groupIdx, *cache))
+        if (cache != nullptr && ! cache->dirty && storageHandlesMatch (groupIdx, *cache)
+            && (cache->ringChunk == 0 || cache->ringChunk == ringChunk))
         {
             bindGroups.push_back ({ groupIdx, cache->group });
             continue;
@@ -461,13 +622,27 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
 
         // A group missing a declared resource is rebuilt by the next draw instead of being reused
         bool anySkipped = false;
+        bool anyDynamic = false;
 
         // UBO entries for this group.
-        std::vector<rive::ore::BindGroupDesc::UBOEntry> uboEntries;
+        uboEntries.clear();
         for (const auto& ub : uboBindings)
         {
             if (ub.group != (int) groupIdx || ! layoutDeclares (*layout, (uint32_t) ub.binding, false))
                 continue;
+
+            // The ring holds the block in its current chunk, and the bind moves to its offset
+            if (layout->hasDynamicOffset ((uint32_t) ub.binding))
+            {
+                rive::ore::BindGroupDesc::UBOEntry entry;
+                entry.slot = (uint32_t) ub.binding;
+                entry.buffer = framePools->uniformRing.chunk.get();
+                entry.offset = 0;
+                entry.size = (uint32_t) ub.data.size();
+                uboEntries.push_back (entry);
+                anyDynamic = true;
+                continue;
+            }
 
             auto buf = framePools->acquireUniformBuffer (ub.data.data(), ub.data.size());
             if (buf == nullptr)
@@ -485,7 +660,7 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
         }
 
         // Texture entries for this group.
-        std::vector<rive::ore::BindGroupDesc::TexEntry> texEntries;
+        texEntries.clear();
         for (const auto& tb : textureBindings)
         {
             if (tb.group != (int) groupIdx || tb.texture == nullptr || ! layoutDeclares (*layout, (uint32_t) tb.binding, true))
@@ -509,7 +684,7 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
         // Storage buffer entries for this group. Ore takes native handles and does
         // not retain them, so the frame keeps the buffers alive, except on Vulkan
         // where Rive's resource purgatory keeps the native buffer instead.
-        std::vector<rive::ore::BindGroupDesc::StorageEntry> storageEntries;
+        storageEntries.clear();
         for (const auto& sb : storageBindings)
         {
             if (sb.group != (int) groupIdx || sb.buffer == nullptr)
@@ -569,7 +744,7 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
 
         // Sampler entries: the pipeline's per-layout defaults, with any slot the
         // caller overrode via setSampler() swapped in.
-        std::vector<rive::ore::BindGroupDesc::SampEntry> sampEntries;
+        sampEntries.clear();
         if (groupSamplers != nullptr)
         {
             for (const auto& sb : *groupSamplers)
@@ -612,6 +787,7 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
         {
             cache->group = bg;
             cache->dirty = bg == nullptr || anySkipped;
+            cache->ringChunk = anyDynamic ? ringChunk : 0;
             cache->storageHandles.clear();
             forEachStorageHandle (groupIdx, [cache] (void* handle) { cache->storageHandles.push_back (handle); });
         }
@@ -657,16 +833,33 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
 
     for (auto& [groupIdx, bg] : bindGroups)
     {
+        const auto offsets = collectDynamicOffsets (groupIdx, *bg);
+
         const auto tracked = groupIdx < encodedGroups.size();
-        if (tracked && encodedGroups[groupIdx] == bg)
+        if (tracked && encodedGroups[groupIdx] == bg && encodedOffsets[groupIdx] == offsets)
             continue;
 
+#if YUP_DEBUG
+        if (offsets.count > 0)
+        {
+            std::string error;
+            const bool valid = rive::ore::validateSetBindGroup (groupIdx, bg.get(), offsets.values.data(), offsets.count, framePools->uniformRing.alignment, &error);
+            if (! valid)
+                YUP_DBG ("GpuRenderPass: " << String (error));
+
+            jassert (valid);
+        }
+#endif
+
         oreCtx->clearLastError();
-        renderPass.setBindGroup (groupIdx, bg.get());
+        renderPass.setBindGroup (groupIdx, bg.get(), offsets.count > 0 ? offsets.values.data() : nullptr, offsets.count);
 
         // A failed bind (a descriptor allocation on Vulkan or WebGPU) stays unrecorded, for the next draw to retry
         if (tracked)
+        {
             encodedGroups[groupIdx] = oreCtx->lastError().empty() ? bg : nullptr;
+            encodedOffsets[groupIdx] = offsets;
+        }
     }
 
     for (const auto& vb : vertexBindings)
@@ -744,17 +937,22 @@ void GpuRenderPass::setPipeline (GpuPipeline::Ptr pipeline)
     const auto* previousImpl = previous != nullptr ? previous->getImpl() : nullptr;
     const auto* pipeImpl = pipeline->getImpl();
 
+    if (previous != pipeline)
+        i->textureViewsChanged = true;
+
     if (pipeImpl != nullptr)
     {
         i->orePipeline = pipeImpl->pipeline.get();
         i->oreLayouts = &pipeImpl->layouts;
         i->oreSamplers = &pipeImpl->samplersPerGroup;
+        i->dynamicBindings = &pipeImpl->dynamicBindingsPerGroup;
     }
     else
     {
         i->orePipeline = nullptr;
         i->oreLayouts = nullptr;
         i->oreSamplers = nullptr;
+        i->dynamicBindings = nullptr;
     }
 
     // A group stays valid only while every switch keeps its layout entries and default samplers
@@ -771,18 +969,23 @@ void GpuRenderPass::setTexture (int group, int binding, GpuTexture::Ptr texture)
     if (i == nullptr)
         return;
 
-    i->markGroupDirty (group);
-
     for (auto& tb : i->textureBindings)
     {
         if (tb.group == group && tb.binding == binding)
         {
+            if (tb.texture == texture && ! tb.view.has_value())
+                return;
+
             tb.texture = std::move (texture);
             tb.view = std::nullopt;
+            i->textureViewsChanged = true;
+            i->markGroupDirty (group, binding);
             return;
         }
     }
 
+    i->textureViewsChanged = true;
+    i->markGroupDirty (group, binding);
     i->textureBindings.push_back ({ group, binding, std::move (texture), std::nullopt });
 }
 
@@ -802,18 +1005,23 @@ void GpuRenderPass::setTexture (int group, int binding, GpuTexture::Ptr texture,
     if (! inRange)
         return;
 
-    i->markGroupDirty (group);
-
     for (auto& tb : i->textureBindings)
     {
         if (tb.group == group && tb.binding == binding)
         {
+            if (tb.texture == texture && tb.view == view)
+                return;
+
             tb.texture = std::move (texture);
             tb.view = view;
+            i->textureViewsChanged = true;
+            i->markGroupDirty (group, binding);
             return;
         }
     }
 
+    i->textureViewsChanged = true;
+    i->markGroupDirty (group, binding);
     i->textureBindings.push_back ({ group, binding, std::move (texture), view });
 }
 
@@ -823,17 +1031,20 @@ void GpuRenderPass::setSampler (int group, int binding, GpuSampler::Ptr sampler)
     if (i == nullptr)
         return;
 
-    i->markGroupDirty (group);
-
     for (auto& sb : i->samplerBindings)
     {
         if (sb.group == group && sb.binding == binding)
         {
+            if (sb.sampler == sampler)
+                return;
+
             sb.sampler = std::move (sampler);
+            i->markGroupDirty (group, binding);
             return;
         }
     }
 
+    i->markGroupDirty (group, binding);
     i->samplerBindings.push_back ({ group, binding, std::move (sampler) });
 }
 
@@ -856,13 +1067,19 @@ void GpuRenderPass::setUniformBuffer (int group, int binding, const void* data, 
             if (std::equal (ub.data.begin(), ub.data.end(), bytes, bytes + byteSize))
                 return;
 
+            const bool resized = ub.data.size() != byteSize;
             ub.data.assign (bytes, bytes + byteSize);
-            i->markGroupDirty (group);
+            ub.ringChunk = 0;
+
+            // A dynamic block only moves its offset, unless its size, which the group holds, changed
+            if (resized || ! i->declaresDynamic (group, binding))
+                i->markGroupDirty (group, binding);
+
             return;
         }
     }
 
-    i->markGroupDirty (group);
+    i->markGroupDirty (group, binding);
 
     Impl::UboBinding ub;
     ub.group = group;
@@ -886,17 +1103,20 @@ void GpuRenderPass::setStorageBuffer (int group, int binding, GpuBuffer::Ptr buf
     if (buffer != nullptr && buffer->getType() != GpuBufferType::storage)
         return;
 
-    i->markGroupDirty (group);
-
     for (auto& sb : i->storageBindings)
     {
         if (sb.group == group && sb.binding == binding)
         {
+            if (sb.buffer == buffer)
+                return;
+
             sb.buffer = std::move (buffer);
+            i->markGroupDirty (group, binding);
             return;
         }
     }
 
+    i->markGroupDirty (group, binding);
     i->storageBindings.push_back ({ group, binding, std::move (buffer) });
 }
 
@@ -1100,6 +1320,12 @@ bool GpuRenderPass::finish()
 
     i->finished = true;
     return true;
+}
+
+int GpuRenderPass::getTextureViewChecksForTesting() const noexcept
+{
+    const auto* i = getImpl();
+    return i != nullptr ? i->textureViewChecks : 0;
 }
 
 } // namespace yup

@@ -66,6 +66,8 @@ void GeometryBindings::setPipelineGeometry (GpuPipelineOptions& options, size_t 
 
     // A mirroring transform reverses the winding of the triangles on screen
     options.winding = (rasterState & 1) != 0 ? GpuFaceWinding::clockwise : GpuFaceWinding::counterClockwise;
+
+    options.dynamicUniformBuffers = { { 2, 0 }, { 2, 1 }, { 2, 12 } };
 }
 
 GeometryBindings::DrawBlock GeometryBindings::makeDrawBlock (const SceneDrawList::DrawItem& item, int materialId) noexcept

@@ -33,6 +33,9 @@
 #define YUP_3D_CONTACT_SHADOWS
 #endif
 
+// The opaque surfaces read the ambient occlusion (lib/probes.glsl)
+#define YUP_3D_AMBIENT_OCCLUSION
+
 #include "lib/color.glsl"
 #include "lib/view.glsl"
 #include "lib/octahedral.glsl"
@@ -60,6 +63,68 @@ layout(set = 1, binding = 8) readonly buffer Materials { GpuMaterial materials[]
 layout(set = 1, binding = 9) uniform texture2D u_albedoOcclusion;   // RT0
 layout(set = 1, binding = 10) uniform texture2D u_normalRoughness;  // RT1
 layout(set = 1, binding = 11) uniform texture2D u_emissionMaterial; // RT2
+
+// AmbientOcclusionPass, at half resolution: the view-space bent normal * 0.5 + 0.5 in rgb, the
+// visibility in a, read when lighting.probeInfo.w is 1. A 1x1 white texture without ambient occlusion
+layout(set = 1, binding = 13) uniform texture2D u_ambientOcclusion;
+
+// The view depth of a stored depth, for perspective and orthographic projections (as lib/gtao.glsl)
+float lightingViewDepth(float depth)
+{
+    mat4 p = view.projection;
+    return (p[3][2] - depth * p[3][3]) / (depth * p[2][3] - p[2][2]);
+}
+
+// The ambient occlusion of a pixel (encoded bent normal in rgb, visibility in a), upsampled from
+// half resolution: the four bilinear taps around it, each weighted by how close the depth and the
+// normal its texel was traced from are to the pixel's, so the occlusion does not bleed across depth
+// or normal edges. Taps traced from the sky (depth 1, at infinity with an infinite far plane) do not
+// count; without any, nothing occludes. Blended relative to the first valid tap, so equal taps (the
+// white texture) give their value exactly
+vec4 lightingAmbientOcclusion(ivec2 pixel, float viewDepth, vec3 n)
+{
+    ivec2 size = textureSize(sampler2D(u_ambientOcclusion, pointClamp), 0);
+    vec2 position = gtaoUpsampleUv(vec2(pixel) + 0.5, vec2(size)) * vec2(size) - 0.5;
+    ivec2 base = ivec2(floor(position));
+    vec2 f = position - vec2(base);
+
+    bool found = false;
+    vec4 first = vec4(1.0);
+    vec4 sum = vec4(0.0);
+    float weights = 0.0;
+
+    for (int i = 0; i < 4; ++i)
+    {
+        ivec2 offset = ivec2(i & 1, i >> 1);
+        ivec2 texel = clamp(base + offset, ivec2(0), size - 1);
+        ivec2 source = min(texel * 2, ivec2(view.viewport.xy) - 1);
+
+        float tapStored = texelFetch(sampler2D(u_depth, pointClamp), source, 0).r;
+        if (tapStored >= 1.0)
+            continue;
+
+        float tapDepth = lightingViewDepth(tapStored);
+        vec3 tapNormal = octahedralDecode(texelFetch(sampler2D(u_normalRoughness, pointClamp), source, 0).xy);
+        float facing = max(dot(tapNormal, n), 0.0);
+        facing *= facing;
+        facing *= facing;
+        facing *= facing;
+
+        vec2 bilinear = mix(1.0 - f, f, vec2(offset));
+        float similar = clamp(1.0 - abs(tapDepth - viewDepth) / (0.05 * abs(viewDepth)), 0.0, 1.0) * facing;
+        float weight = bilinear.x * bilinear.y * (similar + 1.0e-3);
+
+        vec4 occlusion = texelFetch(sampler2D(u_ambientOcclusion, pointClamp), texel, 0);
+        if (! found)
+            first = occlusion;
+
+        found = true;
+        sum += (occlusion - first) * weight;
+        weights += weight;
+    }
+
+    return found ? first + sum / max(weights, 1.0e-6) : vec4(1.0);
+}
 
 void main()
 {
@@ -89,8 +154,17 @@ void main()
     BsdfSurface surface = bsdfMaterialSurface(n, v, yupSrgbToLinear(albedoOcclusion.rgb), normalRoughness.w,
                                               material.extended.x, material.specular, roughness2 * roughness2);
 
-    vec3 color = lightsShade(surface, worldPosition, n);
-    color += lightsAmbientAndEnvironment(surface, n, albedoOcclusion.a);
+    // The indirect light only: direct light is never occluded
+    vec4 ambientOcclusion = lighting.probeInfo.w > 0.5 ? lightingAmbientOcclusion(pixel, lightingViewDepth(depth), n) : vec4(1.0);
+    vec3 bentNormal = gtaoBentNormal(ambientOcclusion.rgb, ambientOcclusion.a, transpose(mat3(view.view)), surface.n, n);
+    float diffuseOcclusion = min(ambientOcclusion.a, albedoOcclusion.a);
+    float reflectionOcclusion = min(gtaoSpecularOcclusion(surface.nDotV, ambientOcclusion.a, normalRoughness.z), albedoOcclusion.a);
+
+    // The environment first, added in the same order as before
+    LightsLookup lookup = lightsLookup(surface);
+    vec3 indirect = lightsIndirect(surface, lookup, worldPosition, n, bentNormal, diffuseOcclusion, reflectionOcclusion);
+    vec3 color = lightsShade(surface, lookup, worldPosition, n);
+    color += indirect;
     color += emissionMaterial.rgb;
 
     fragColor = vec4(min(color * view.cameraPosition.w, vec3(yupMaxHalf)), 1.0);

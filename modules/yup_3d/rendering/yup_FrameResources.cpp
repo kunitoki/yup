@@ -142,7 +142,11 @@ const FrameResources::Samplers* FrameResources::getSamplers()
         GpuSamplerDesc compareDesc (GpuFilter::linear, GpuWrapMode::clampToEdge);
         compareDesc.compare = GpuCompareFunction::lessEqual;
 
-        samplers.linearClamp = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::clampToEdge));
+        // Trilinear: the prefiltered cubes blend their roughness mips, every other reader samples mip 0
+        GpuSamplerDesc linearDesc (GpuFilter::linear, GpuWrapMode::clampToEdge);
+        linearDesc.mipmapFilter = GpuFilter::linear;
+
+        samplers.linearClamp = GpuSampler::create (device, linearDesc);
         samplers.pointClamp = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
         samplersCreated = samplers.linearClamp != nullptr && samplers.pointClamp != nullptr;
 

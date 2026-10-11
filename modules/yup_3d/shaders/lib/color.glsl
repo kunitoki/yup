@@ -130,7 +130,6 @@ vec4 yupSanitize(vec4 c)
     return clamp(mix(c, replacement, yupIsNonFinite(c)), vec4(0.0), vec4(yupMaxHalf, yupMaxHalf, yupMaxHalf, 1.0));
 }
 
-#ifdef YUP_3D_RGBM
 #define YUP_3D_RGBM_RANGE 8.0
 
 // HDR color in an rgba8 target: rgb scaled by a shared multiplier stored in alpha, up to 8
@@ -142,10 +141,16 @@ vec4 yupEncodeRgbm(vec3 c)
     return vec4(clamp(scaled / m, 0.0, 1.0), m);
 }
 
-vec3 yupDecodeRgbm(vec4 rgbm)
+// The rgb of a texel holding RGBM when @p rgbm is 1, or linear color when it is 0
+vec3 yupDecodeRgbm(vec4 c, float rgbm)
 {
-    return rgbm.rgb * (rgbm.a * YUP_3D_RGBM_RANGE);
+    return c.rgb * mix(1.0, c.a * YUP_3D_RGBM_RANGE, rgbm);
 }
-#endif
+
+// The texel holding @p c: RGBM when @p rgbm is 1, otherwise linear color within the half float range
+vec4 yupEncodeRadiance(vec3 c, float rgbm)
+{
+    return rgbm > 0.5 ? yupEncodeRgbm(c) : vec4(min(c, vec3(yupMaxHalf)), 1.0);
+}
 
 #endif

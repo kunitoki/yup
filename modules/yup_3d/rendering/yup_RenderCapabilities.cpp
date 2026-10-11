@@ -37,6 +37,7 @@ RenderCapabilities::DeviceFacts RenderCapabilities::queryDevice (const GpuDevice
     facts.rgba8Samples = device.getMaximumSampleCount (GpuTextureFormat::rgba8unorm);
     facts.rgba16floatSamples = device.getMaximumSampleCount (GpuTextureFormat::rgba16float);
     facts.colorAttachments = device.getMaximumColorAttachments();
+    facts.depthNormalPrepass = DepthNormalPrepass::isSupported (device);
     return facts;
 }
 
@@ -96,6 +97,9 @@ bool RenderCapabilities::isAvailable (Feature feature) const noexcept
         case Feature::hdrSceneColor:
         case Feature::bloom:
             return facts.rgba16floatRenderable && facts.rgba16floatSamples >= requestedSamples;
+
+        case Feature::ambientOcclusion:
+            return facts.depthNormalPrepass;
     }
 
     return false;
@@ -119,6 +123,10 @@ bool RenderCapabilities::isEnabled (Feature feature, const RenderSettings& setti
 
         case Feature::contactShadows:
             return isAvailable (feature) && settings.contactShadows;
+
+        case Feature::ambientOcclusion:
+            return isAvailable (feature) && settings.ambientOcclusion.value_or (tier == Tier::full)
+                && std::isfinite (settings.aoDistance) && settings.aoDistance > 0.0f;
     }
 
     return false;

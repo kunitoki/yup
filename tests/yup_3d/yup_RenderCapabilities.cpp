@@ -39,6 +39,7 @@ protected:
         facts.rgba8Samples = 4;
         facts.rgba16floatSamples = 4;
         facts.colorAttachments = 4;
+        facts.depthNormalPrepass = true;
         return facts;
     }
 
@@ -50,6 +51,7 @@ protected:
         facts.rgba8Samples = 4;
         facts.rgba16floatSamples = halfFloatSamples;
         facts.colorAttachments = 4;
+        facts.depthNormalPrepass = halfFloat;
         return facts;
     }
 
@@ -218,4 +220,66 @@ TEST_F (RenderCapabilitiesTests, ShadowResolutionIsClamped)
 
     EXPECT_EQ (RenderCapabilities::minShadowResolution, 256);
     EXPECT_EQ (RenderCapabilities::maxShadowResolution, 4096);
+}
+
+TEST_F (RenderCapabilitiesTests, AmbientOcclusionDefaultsPerTier)
+{
+    RenderSettings settings;
+    EXPECT_TRUE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::ambientOcclusion, settings));
+    EXPECT_FALSE (RenderCapabilities (webgl2 (true, 4), settings, 4).isEnabled (Feature::ambientOcclusion, settings));
+
+    settings.ambientOcclusion = true;
+    EXPECT_TRUE (RenderCapabilities (webgl2 (true, 4), settings, 4).isEnabled (Feature::ambientOcclusion, settings));
+
+    settings.ambientOcclusion = false;
+    EXPECT_FALSE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::ambientOcclusion, settings));
+}
+
+TEST_F (RenderCapabilitiesTests, AmbientOcclusionNeedsAPositiveDistance)
+{
+    RenderSettings settings;
+    settings.ambientOcclusion = true;
+
+    for (const auto distance : { 0.0f, -0.1f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() })
+    {
+        settings.aoDistance = distance;
+        EXPECT_FALSE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::ambientOcclusion, settings)) << distance;
+        EXPECT_FALSE (RenderCapabilities (webgl2 (true, 4), settings, 4).isEnabled (Feature::ambientOcclusion, settings)) << distance;
+    }
+
+    settings.aoDistance = 0.001f;
+    EXPECT_TRUE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::ambientOcclusion, settings));
+}
+
+TEST_F (RenderCapabilitiesTests, AmbientOcclusionUnavailableOnRasterWithoutHalfFloat)
+{
+    auto facts = webgl2 (false, 0);
+    facts.rgba16floatRenderable = false;
+    facts.depthNormalPrepass = false;
+
+    RenderSettings settings;
+    settings.ambientOcclusion = true;
+    RenderCapabilities capabilities (facts, settings, 4);
+
+    EXPECT_FALSE (capabilities.isAvailable (Feature::ambientOcclusion));
+    EXPECT_FALSE (capabilities.isEnabled (Feature::ambientOcclusion, settings));
+}
+
+TEST_F (RenderCapabilitiesTests, AmbientOcclusionOnRasterNeedsTheDepthNormalPrepass)
+{
+    RenderSettings settings;
+    settings.ambientOcclusion = true;
+
+    // The fact alone decides, whatever the half float targets
+    auto facts = webgl2 (true, 4);
+    facts.depthNormalPrepass = false;
+    EXPECT_FALSE (RenderCapabilities (facts, settings, 4).isAvailable (Feature::ambientOcclusion));
+
+    facts.depthNormalPrepass = true;
+    EXPECT_TRUE (RenderCapabilities (facts, settings, 4).isAvailable (Feature::ambientOcclusion));
+
+    // The full tier reads the G-buffer instead, whatever the fact says
+    auto full = desktopMetal();
+    full.depthNormalPrepass = false;
+    EXPECT_TRUE (RenderCapabilities (full, settings, 4).isEnabled (Feature::ambientOcclusion, settings));
 }

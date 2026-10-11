@@ -423,6 +423,16 @@ void registerYupRhiBindings (py::module_& m)
         .def_readwrite ("depthBiasSlopeScale", &GpuDepthStencilState::depthBiasSlopeScale)
         .def_readwrite ("depthBiasClamp", &GpuDepthStencilState::depthBiasClamp);
 
+    py::class_<GpuUniformSlot> (m, "GpuUniformSlot")
+        .def (py::init<>())
+        .def (py::init<uint32_t, uint32_t>(), "group"_a, "binding"_a)
+        .def_readwrite ("group", &GpuUniformSlot::group)
+        .def_readwrite ("binding", &GpuUniformSlot::binding)
+        .def ("__eq__", [] (const GpuUniformSlot& self, const GpuUniformSlot& other)
+        {
+            return self == other;
+        });
+
     py::class_<GpuPipelineOptions> (m, "GpuPipelineOptions")
         .def (py::init<>())
         .def_readwrite ("vertexBuffers", &GpuPipelineOptions::vertexBuffers)
@@ -436,7 +446,8 @@ void registerYupRhiBindings (py::module_& m)
         .def_readwrite ("stencilBack", &GpuPipelineOptions::stencilBack)
         .def_readwrite ("stencilReadMask", &GpuPipelineOptions::stencilReadMask)
         .def_readwrite ("stencilWriteMask", &GpuPipelineOptions::stencilWriteMask)
-        .def_readwrite ("sampleCount", &GpuPipelineOptions::sampleCount);
+        .def_readwrite ("sampleCount", &GpuPipelineOptions::sampleCount)
+        .def_readwrite ("dynamicUniformBuffers", &GpuPipelineOptions::dynamicUniformBuffers);
 
     py::class_<GpuDepthStencilOptions> (m, "GpuDepthStencilOptions")
         .def (py::init<>())
@@ -569,6 +580,7 @@ void registerYupRhiBindings (py::module_& m)
         .def ("isFormatRenderable", &GpuDevice::isFormatRenderable, "format"_a)
         .def ("isAnisotropicFilteringAvailable", &GpuDevice::isAnisotropicFilteringAvailable)
         .def ("isFragmentStorageBufferAvailable", &GpuDevice::isFragmentStorageBufferAvailable)
+        .def ("isDynamicUniformOffsetAvailable", &GpuDevice::isDynamicUniformOffsetAvailable)
         .def ("isStorageTextureAvailable", &GpuDevice::isStorageTextureAvailable)
         .def ("getMaximumSampleCount", py::overload_cast<> (&GpuDevice::getMaximumSampleCount, py::const_))
         .def ("getMaximumSampleCount", py::overload_cast<GpuTextureFormat> (&GpuDevice::getMaximumSampleCount, py::const_), "format"_a)

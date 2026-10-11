@@ -45,8 +45,13 @@ namespace yup
     Point and spot lights with LightNode::castsShadows that are not dark and reach a receiver get
     tiles of one depth32float atlas (ShadowAtlas) of RenderCapabilities::getShadowResolution() texels
     on raster, twice that on full, rounded down to a power of two (so it never exceeds the setting)
-    and at most 4096: 6 perspective views for a point light (and for a
-    spot light too wide for one view), 1 for a spot light, each spanning a guard band
+    and at most 4096. A tile is at most half the atlas side while every light still gets at least
+    the tile it would get with tiles of at most a quarter of it, and at most a quarter otherwise, so
+    a few lights get the sharpest shadows and more lights still fit. The layout follows the lights
+    and their size on screen, with no hysteresis: a light coming or going, or growing on screen past
+    a quarter of the atlas, can move and resize the other lights' views, which are drawn again.
+    6 perspective views for a point light (and for a spot light too wide for one view), 1 for a
+    spot light, each spanning a guard band
     (ShadowAtlas::getGuardAngle()) beyond its field of view, from max (0.01, LightNode::radius) to
     the effective range of the light. Lights take tiles from the most to the least important, as the
     atlas serves them, while their views fit the shadow records left after the cascades, at most 16
@@ -59,8 +64,8 @@ namespace yup
     and thickness in contact[0] and contact[1] of its first record. A light without a shadow map
     takes one record without a map (atlasRect size 0) for them, after the atlas views and within the
     same records, while any are left, from the most important light as the atlas serves them:
-    directional lights first, then larger tiles (ShadowAtlas::getLightTileSize()), then lower
-    light indices.
+    directional lights first, then larger tiles (ShadowAtlas::getLightTileSize() with tiles of at
+    most a quarter of the atlas, whichever layout the frame uses), then lower light indices.
 
     The renderer owns the cascade texture and the atlas: each is created when a light needs it, kept
     while it fits, and released when no light needs it, a 1x1 placeholder standing in for it. The
@@ -105,7 +110,7 @@ public:
     Result prepare (const GpuDevice::Ptr& device);
 
     /** Renders every shadow map the frame needs into @p frame, unless the maps it holds still fit,
-        and writes the shadow records of the frame into @p out.
+        and writes the shadow records of the frame, which getShadowData() returns.
 
         A cascade texture or an atlas the device cannot create leaves the lights that needed it
         without a shadow map, logged once: their records are -1, or contact shadow only records, so
@@ -116,7 +121,10 @@ public:
         @returns A failure when a placeholder cannot be created or a shadow pass cannot be
                  recorded; the frame must then be abandoned.
     */
-    Result render (const GpuDevice::Ptr& device, GpuFrame& frame, const Inputs& inputs, GpuShadowData& out);
+    Result render (const GpuDevice::Ptr& device, GpuFrame& frame, const Inputs& inputs);
+
+    /** The shadow records and sun parameters the last render() wrote (the ShadowBlock). */
+    const GpuShadowData& getShadowData() const noexcept { return shadowData; }
 
     /** The sun cascades of the last render(): a depth32float array texture, or a one layer
         placeholder when no sun casts. */
@@ -198,12 +206,15 @@ private:
     GpuTexture::Ptr cascades;
     std::vector<GpuTarget::Ptr> layerTargets;
     Placeholder cascadePlaceholder;
-    std::unique_ptr<ShadowAtlas> atlasLayout;
+    std::unique_ptr<ShadowAtlas> halfTileLayout;    // tiles up to half the atlas side
+    std::unique_ptr<ShadowAtlas> quarterTileLayout; // tiles up to a quarter of it, which fit more lights
+    const ShadowAtlas* atlasLayout = nullptr;       // the one of the last render(), see planLocalShadows()
     GpuTexture::Ptr atlas;
     GpuTarget::Ptr atlasTarget;
     Placeholder atlasPlaceholder;
     std::unique_ptr<RenderedState> rendered;
     std::unique_ptr<RenderedState> pending; // the state render() builds, kept so its lists keep their storage
+    GpuShadowData shadowData {};
     std::vector<int> recordIndices;
     std::vector<BoundingBox> casterBounds; // the world bounds of each opaque item of the last render()
     std::vector<BoundingBox> receivers;    // reused by planLocalShadows(), as the lists below

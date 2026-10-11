@@ -167,6 +167,10 @@ public:
 
     //==============================================================================
 
+    // The uniform ring writes with glBufferSubData: return false to fall back to per-draw uniform
+    // buffers, should a driver stall on writes to a buffer that queued draws still read
+    bool isDynamicUniformOffsetAvailable() const noexcept override { return true; }
+
     bool isComputeAvailable() const noexcept override
     {
         if (renderContext == nullptr)

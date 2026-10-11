@@ -64,9 +64,10 @@ Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, boo
 {
     if (! defaults)
     {
-        blackTexture = GeometryBindings::createSolidTexture (device, 0x000000ff);
+        blackCube = LightingInputs::createBlackCube (device);
+        whiteTexture = GeometryBindings::createSolidTexture (device, 0xffffffff);
 
-        if (blackTexture == nullptr)
+        if (blackCube == nullptr || whiteTexture == nullptr)
             defaults = Result::fail ("Unable to create the lighting pass textures");
         else
             defaults = Result::ok();
@@ -108,16 +109,18 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
     if (prepared.failed() || sceneColor == nullptr
         || gbuffer.albedoOcclusion == nullptr || gbuffer.normalRoughness == nullptr || gbuffer.emissionMaterial == nullptr || gbuffer.depth == nullptr
         || lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.materials == nullptr
-        || lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.shadowCascades == nullptr || lighting.shadowAtlas == nullptr)
+        || lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.lookupTables == nullptr
+        || lighting.shadowCascades == nullptr || lighting.shadowAtlas == nullptr)
         return false;
 
     // Every pixel is written, so the scene color needs no clear
     return variant.pass.draw (frame, sceneColor, {}, [&] (GpuRenderPass& renderPass)
     {
         renderPass.setUniformBuffer (0, 0, &view.getBlock(), sizeof (ViewData::Block));
+        renderPass.setSampler (0, 1, lighting.samplers.linearClamp);
         renderPass.setSampler (0, 3, lighting.samplers.pointClamp);
-        renderPass.setTexture (0, 6, lighting.environment != nullptr ? lighting.environment : blackTexture);
-        renderPass.setSampler (0, 14, lighting.environmentSampler != nullptr ? lighting.environmentSampler : lighting.samplers.pointClamp);
+        renderPass.setTexture (0, 6, lighting.environment != nullptr ? lighting.environment : blackCube);
+        renderPass.setTexture (0, 7, lighting.lookupTables);
         renderPass.setUniformBuffer (1, 0, &lighting.block, sizeof (lighting.block));
         renderPass.setTexture (3, 0, lighting.shadowCascades);
         renderPass.setTexture (3, 2, lighting.shadowAtlas);
@@ -134,13 +137,6 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
         if (lighting.samplers.shadowCompare != nullptr)
             renderPass.setSampler (0, 4, lighting.samplers.shadowCompare);
 
-        if (lighting.areaLights)
-        {
-            renderPass.setSampler (0, 1, lighting.samplers.linearClamp);
-            renderPass.setTexture (0, 7, lighting.ltcMatrix != nullptr ? lighting.ltcMatrix : blackTexture);
-            renderPass.setTexture (0, 11, lighting.ltcAmplitude != nullptr ? lighting.ltcAmplitude : blackTexture);
-        }
-
         renderPass.setStorageBuffer (1, 6, lighting.lights);
         renderPass.setStorageBuffer (1, 7, lighting.clusterLights);
         renderPass.setStorageBuffer (1, 8, lighting.materials);
@@ -148,6 +144,7 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
         renderPass.setTexture (1, 10, gbuffer.normalRoughness);
         renderPass.setTexture (1, 11, gbuffer.emissionMaterial);
         renderPass.setTexture (1, 12, gbuffer.depth);
+        renderPass.setTexture (1, 13, lighting.ambientOcclusion != nullptr ? lighting.ambientOcclusion : whiteTexture);
     });
 }
 

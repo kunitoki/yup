@@ -151,7 +151,9 @@ public:
     {
         sceneColor, ///< Full: the rgba16float scene color after temporal anti-aliasing, before the other post effects. Raster: the resolved forward output, rgba16float reversibly tone mapped when bloom is on.
         velocity,     ///< Full: the rg16float screen-space motion, current uv minus previous uv, both unjittered, uv from the top-left. Raster: none.
-        gbufferNormal ///< Full: the rgba16float G-buffer RT1, the octahedral shading normal in xy, the filtered roughness in z and metallic in w, 0 where nothing was drawn. Raster: none.
+        gbufferNormal, ///< Full: the rgba16float G-buffer RT1, the octahedral shading normal in xy, the filtered roughness in z and metallic in w, 0 where nothing was drawn. Raster: none.
+        prepassNormal, ///< Raster with ambient occlusion: the rgba16float depth and normal prepass target, encoded as the G-buffer RT1, single sampled. Otherwise none.
+        ambientOcclusion ///< With ambient occlusion: the rgba8 AmbientOcclusionPass output, the view-space bent normal * 0.5 + 0.5 in rgb and the visibility in a, at half resolution. Otherwise none.
     };
 
     /** @internal Returns an intermediate texture of the last frame, valid until the next render,
@@ -159,44 +161,11 @@ public:
     */
     GpuTexture::Ptr getPassOutput (PassOutput output) const;
 
-    /** @internal The number of frames that drew shadow maps since the renderer set up its device,
-        for tests: still frames reuse the maps of the frame before.
-    */
-    int getShadowMapRenderCount() const noexcept;
+    /** @internal The shadow renderer of the main view, for tests and debug views, or nullptr before the first render. */
+    const ShadowRenderer* getShadowRenderer() const noexcept;
 
-    /** @internal The number of frames that drew sun cascade @p cascade since the renderer set up
-        its device, for tests: a cascade is drawn again only when what it holds changed.
-    */
-    int getShadowCascadeRenderCount (int cascade) const noexcept;
-
-    /** @internal The number of shadow casters drawn into shadow maps since the renderer set up its
-        device, for tests and benchmarks: the draws the shadow maps cost.
-    */
-    int getShadowCasterDrawCount() const noexcept;
-
-    /** @internal The shadow records the last frame wrote, the sun cascades and the views of the
-        point and spot lights, plus one record per light with contact shadows but no shadow map, for
-        tests: the tier's record budget bounds them.
-    */
-    int getShadowRecordCount() const noexcept;
-
-    /** @internal The shadow records and sun parameters the last frame wrote, for tests. */
-    GpuShadowData getShadowData() const noexcept;
-
-    /** @internal True when the last frame asked its shading passes for their shadow filter
-        variants (LightingInputs::shadowFilters), for tests.
-    */
-    bool usesShadowFilters() const noexcept;
-
-    /** @internal The side in texels of the point and spot light shadow atlas the renderer holds,
-        0 when no light needs one, for tests.
-    */
-    int getShadowAtlasSize() const noexcept;
-
-    /** @internal The side in texels of the atlas tiles of light @p lightIndex (an index into the
-        lights of the last frame, in scene order) in the last frame, 0 when it has none, for tests.
-    */
-    int getShadowTileSize (int lightIndex) const noexcept;
+    /** @internal The ambient occlusion pass, for tests, or nullptr before the first frame with ambient occlusion. */
+    const AmbientOcclusionPass* getAmbientOcclusionPass() const noexcept;
 
     /** @internal Test hook, not for production use: edits the facts read from the device before
         every render decides its tier and features, so tests can simulate weaker devices.
@@ -206,10 +175,11 @@ public:
     void setDeviceFactsOverride (std::function<void (RenderCapabilities::DeviceFacts&)> newOverride);
 
     /** @internal Test hook, not for production use: from the next device this renderer sets up
-        on, its area light tables fail to create, as if the device could not create them. Call it
-        before the first render. Frames still render, with area lights lighting only diffusely.
+        on, its lookup tables fail to create, as if the device could not create them. Call it
+        before the first render. Frames still render, with area lights and the environment
+        lighting only diffusely.
     */
-    void failAreaLightTablesForTesting() noexcept { failAreaLightTables = true; }
+    void failLookupTablesForTesting() noexcept { failLookupTables = true; }
 
     /** @internal Test hook, not for production use: the shadow comparison sampler of this
         renderer fails to create, as if the device could not create it. Call it before the first
@@ -229,6 +199,18 @@ public:
         their contact shadows, until the shadow settings change their size.
     */
     void failShadowMapsForTesting() noexcept { failShadowMaps = true; }
+
+    /** @internal Test hook, not for production use: the depth and normal prepass of this renderer
+        fails to compile, as if the device rejected it. Call it before the first render with ambient
+        occlusion on the raster tier. Frames still render, without the prepass.
+    */
+    void failDepthNormalPrepassForTesting() noexcept { failDepthNormalPrepass = true; }
+
+    /** @internal Test hook, not for production use: the environment cube and the other radiance
+        textures of this renderer hold RGBM in rgba8unorm, as below the float floor, even when the
+        device renders half floats. Call it before the first render.
+    */
+    void forceRgbmRadianceForTesting() noexcept { forceRgbmRadiance = true; }
 
     //==============================================================================
     /** Changes the number of MSAA samples per pixel of the raster tier.
@@ -252,10 +234,12 @@ private:
     String lastError;
     String lastGpuFailure;
     int sampleCount = 4;
-    bool failAreaLightTables = false;
+    bool failLookupTables = false;
     bool failShadowCompareSampler = false;
     bool failShadowPipelines = false;
     bool failShadowMaps = false;
+    bool failDepthNormalPrepass = false;
+    bool forceRgbmRadiance = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneRenderer)
 };

@@ -43,8 +43,7 @@ namespace yup
       In the textures x is the angle and y the roughness, sampled at
       ((angle + 0.5) / size, (roughness + 0.5) / size).
 
-    The textures are rgba16float, filterable on every backend. They belong to the caller, which
-    creates them once per device and releases them with it.
+    The shaders read both tables from the layers of LookupTables.
 
     @internal
 */
@@ -67,21 +66,6 @@ public:
         lobe integrates to f0 * (magnitude - fresnel) + f90 * fresnel.
     */
     static std::array<float, 2> getAmplitude (int roughnessIndex, int angleIndex) noexcept;
-
-    /** Creates the inverse matrices as a size x size rgba16float texture (m00, m02, m11, m20).
-
-        Returns a new texture on every call, or nullptr if the device is null or the upload fails.
-    */
-    static GpuTexture::Ptr createMatrixTexture (const GpuDevice::Ptr& device);
-
-    /** Creates the amplitudes as a size x size rgba16float texture (magnitude, fresnel, 0, 1).
-
-        Shaders weight the lobe by f0 * (x - y) + f90 * y. Unlike the split-sum environment BRDF,
-        x is the whole magnitude rather than the f0 weight.
-
-        Returns a new texture on every call, or nullptr if the device is null or the upload fails.
-    */
-    static GpuTexture::Ptr createAmplitudeTexture (const GpuDevice::Ptr& device);
 };
 
 } // namespace yup

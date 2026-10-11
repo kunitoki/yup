@@ -74,6 +74,18 @@ struct YUP_API RenderSettings
     */
     bool contactShadows = true;
 
+    /** Ambient occlusion: darkens the indirect light in creases and contacts. Unset picks the tier
+        default: on for full, off for raster, where true opts in when the device can draw the depth
+        and normal prepass it needs (see RenderCapabilities::Feature::ambientOcclusion). An
+        aoDistance of 0 or less, or one that is not finite, turns it off.
+    */
+    std::optional<bool> ambientOcclusion;
+
+    /** The world-space distance within which surfaces occlude each other for ambient occlusion. A
+        distance of 0 or less, or one that is not finite, turns ambient occlusion off.
+    */
+    float aoDistance = 0.2f;
+
     bool operator== (const RenderSettings&) const = default;
 };
 

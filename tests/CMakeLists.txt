@@ -191,6 +191,10 @@ source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${imported_sources})
 set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
 
+if (YUP_PLATFORM_APPLE)
+    set_source_files_properties ("${CMAKE_CURRENT_LIST_DIR}/yup_rhi/module.mm" PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+endif()
+
 # ==== Plugin wrapper standalone test TUs (compiled directly, not HEADER_FILE_ONLY)
 if (YUP_PLATFORM_DESKTOP)
     if (TARGET clap)

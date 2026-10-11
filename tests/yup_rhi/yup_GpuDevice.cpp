@@ -97,6 +97,7 @@ TEST_F (GpuDeviceErrorTests, HeadlessReportsNoAdvancedCapabilities)
     EXPECT_EQ (headless->getMaximumSampleCount (GpuTextureFormat::rgba8unorm), 0u);
     EXPECT_FALSE (headless->isFragmentStorageBufferAvailable());
     EXPECT_FALSE (headless->isStorageTextureAvailable());
+    EXPECT_FALSE (headless->isDynamicUniformOffsetAvailable());
 }
 
 #if YUP_ANDROID || YUP_LINUX
@@ -399,6 +400,11 @@ protected:
 TEST_F (GpuDeviceMetalCapabilityTests, ReportsFourColorAttachments)
 {
     EXPECT_EQ (device->getMaximumColorAttachments(), 4u);
+}
+
+TEST_F (GpuDeviceMetalCapabilityTests, ReportsDynamicUniformOffsets)
+{
+    EXPECT_TRUE (device->isDynamicUniformOffsetAvailable());
 }
 
 TEST_F (GpuDeviceMetalCapabilityTests, SampleCountIsPerFormat)

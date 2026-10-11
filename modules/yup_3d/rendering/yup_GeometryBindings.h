@@ -31,7 +31,12 @@ namespace yup
     Set 2 holds the DrawBlock (binding 0, lib/geometry.glsl), the MaterialBlock (binding 1,
     lib/material.glsl), and the five material textures (bindings 2-6) with their samplers
     (bindings 7-11). Missing textures are replaced by white, or by a flat normal for the normal
-    texture.
+    texture. The raster ForwardPass adds its LightListBlock at binding 12.
+
+    The DrawBlock, the MaterialBlock and the LightListBlock are dynamic uniform buffers (see
+    GpuPipelineOptions::dynamicUniformBuffers): a draw only moves their offsets, so set 2 is built
+    again only when the textures or samplers change, or when the frame's uniform buffer fills up.
+    Pipelines whose shaders lack some of these blocks, such as the shadow pass, ignore them.
 
     @internal
 */
@@ -65,8 +70,8 @@ public:
     /** The cull and winding state of an item: doubleSided * 2 + mirrored. */
     static size_t getRasterState (const SceneDrawList::DrawItem& item) noexcept;
 
-    /** Sets the Mesh::Vertex layout (attributes 0-4), indexed triangles, and the culling and
-        winding of a raster state from getRasterState().
+    /** Sets the Mesh::Vertex layout (attributes 0-4), indexed triangles, the culling and winding
+        of a raster state from getRasterState(), and the set 2 blocks as dynamic uniform buffers.
     */
     static void setPipelineGeometry (GpuPipelineOptions& options, size_t rasterState);
 
@@ -97,8 +102,8 @@ public:
     */
     bool draw (GpuRenderPass& pass, const GpuDevice::Ptr& device, const SceneDrawList::DrawItem& item, int materialId) const;
 
-    /** The linear repeating sampler of the stand-in textures, after prepare(). */
-    const GpuSampler::Ptr& getDefaultSampler() const noexcept { return defaultSampler; }
+    /** The 1x1 opaque white stand-in texture, after prepare(). */
+    const GpuTexture::Ptr& getWhiteTexture() const noexcept { return whiteTexture; }
 
 private:
     GpuTexture::Ptr whiteTexture;

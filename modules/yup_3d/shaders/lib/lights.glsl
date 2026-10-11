@@ -25,6 +25,7 @@
 
 #include "lib/bsdf.glsl"
 #include "lib/lighting.glsl"
+#include "lib/probes.glsl"
 
 // Punctual lights after KHR_lights_punctual (Khronos glTF 2.0 extension): inverse square falloff,
 // windowed by the range, and a smooth spot cone. Lights with a radius are area lights, shaded with
@@ -39,12 +40,40 @@
 #include "lib/light_types.glsl"
 #include "lib/shadows.glsl"
 
-#ifdef YUP_3D_AREA_LIGHTS
-// The area light tables of LtcTables, set 0 lookups read through the shared linear sampler
-layout(set = 0, binding = 1) uniform sampler linearClamp;
-layout(set = 0, binding = 7) uniform texture2D u_ltcMatrix;     // inverse matrices m00, m02, m11, m20 (m22 = 1)
-layout(set = 0, binding = 11) uniform texture2D u_ltcAmplitude; // lobe magnitude, its Fresnel part
+// The lookup tables of LookupTables, a set 0 lookup read through the shared linear sampler: layer 0
+// holds the inverse LTC matrices of the area lights, m00, m02, m11, m20 (m22 = 1), and layer 1 the
+// GGX lobe magnitude, its Fresnel part, the sheen albedo and 1, the split sum of the environment too
+layout(set = 0, binding = 7) uniform texture2DArray lookupLuts;
+
+// The coordinates of a surface in the lookup tables: columns sqrt (1 - n.v), rows sqrt (alpha),
+// sampled at the texel centers
+vec2 lightsLookupCoordinates(BsdfSurface s)
+{
+    return (vec2(sqrt(1.0 - s.nDotV), sqrt(sqrt(s.alpha2))) * 63.0 + 0.5) / 64.0;
+}
+
+// A surface's place in the lookup tables, read once per pixel before the light loop: its coordinates
+// and layer 1 there, shared by the environment and, in the area light variants, by every area light.
+// The punctual variants read layer 1 only when the environment needs it
+struct LightsLookup
+{
+    vec2 uv;   // lightsLookupCoordinates()
+    vec2 lobe; // layer 1: the GGX lobe magnitude and its Fresnel part (0 when not read)
+};
+
+LightsLookup lightsLookup(BsdfSurface s)
+{
+    LightsLookup lookup = LightsLookup(lightsLookupCoordinates(s), vec2(0.0));
+
+#ifndef YUP_3D_AREA_LIGHTS
+    if (lighting.environmentInfo.x > 0.0)
 #endif
+    {
+        lookup.lobe = textureLod(sampler2DArray(lookupLuts, linearClamp), vec3(lookup.uv, 1.0), 0.0).xy;
+    }
+
+    return lookup;
+}
 
 #ifdef YUP_3D_TIER_FULL
 // Every light, directional ones first (GpuSceneData::packLights), and the light lists of the
@@ -197,7 +226,7 @@ float lightsEllipseIntegral(vec3 c, vec3 a1, vec3 a2)
 // is dimmed by the dielectric Fresnel towards the light's center, as bsdfEvaluate does.
 // Known limitation of the tables: on smooth surfaces (roughness below 0.12) seen at grazing angles
 // (n.v below 0.03) the lobe is misplaced, the fit jumping between the last two columns.
-vec3 lightsEvaluateArea(GpuLight light, BsdfSurface s, vec3 worldPosition)
+vec3 lightsEvaluateArea(GpuLight light, BsdfSurface s, LightsLookup lookup, vec3 worldPosition)
 {
     vec3 l;
     vec3 incoming = lightIncoming(light, worldPosition, l);
@@ -250,13 +279,10 @@ vec3 lightsEvaluateArea(GpuLight light, BsdfSurface s, vec3 worldPosition)
     vec3 a1 = toLocal * ex;
     vec3 a2 = toLocal * ey;
 
-    // Columns sqrt (1 - n.v), rows sqrt (alpha), sampled at the texel centers
-    vec2 uv = (vec2(sqrt(1.0 - s.nDotV), sqrt(sqrt(s.alpha2))) * 63.0 + 0.5) / 64.0;
-    vec4 m = textureLod(sampler2D(u_ltcMatrix, linearClamp), uv, 0.0);
-    vec2 amplitude = textureLod(sampler2D(u_ltcAmplitude, linearClamp), uv, 0.0).xy;
+    vec4 m = textureLod(sampler2DArray(lookupLuts, linearClamp), vec3(lookup.uv, 0.0), 0.0);
     mat3 inverseMatrix = mat3(vec3(m.x, 0.0, m.w), vec3(0.0, m.z, 0.0), vec3(m.y, 0.0, 1.0));
 
-    vec3 specular = (s.f0 * (amplitude.x - amplitude.y) + s.f90 * amplitude.y)
+    vec3 specular = (s.f0 * (lookup.lobe.x - lookup.lobe.y) + s.f90 * lookup.lobe.y)
                   * lightsEllipseIntegral(inverseMatrix * c, inverseMatrix * a1, inverseMatrix * a2);
 
     vec3 h = s.v + l;
@@ -274,12 +300,12 @@ vec3 lightsEvaluateArea(GpuLight light, BsdfSurface s, vec3 worldPosition)
 // horizon exits of the punctual path (before its shadow, which measured faster than after it), and
 // after the shadow of the area path. Lights with a radius take the area path (YUP_3D_AREA_LIGHTS
 // only), the others the punctual one
-vec3 lightsShadeLight(BsdfSurface s, GpuLight light, vec3 worldPosition, vec3 geometricNormal)
+vec3 lightsShadeLight(BsdfSurface s, LightsLookup lookup, GpuLight light, vec3 worldPosition, vec3 geometricNormal)
 {
 #ifdef YUP_3D_AREA_LIGHTS
     if (light.spotRadiusShadow.z > 0.0)
     {
-        vec3 reflected = lightsEvaluateArea(light, s, worldPosition);
+        vec3 reflected = lightsEvaluateArea(light, s, lookup, worldPosition);
         if (reflected != vec3(0.0))
             reflected = reflected * shadowsVisibility(light, worldPosition, geometricNormal);
 #ifdef YUP_3D_CONTACT_SHADOWS
@@ -329,25 +355,25 @@ uint lightsClusterIndex(vec3 worldPosition)
 }
 
 // The light loop: every directional light, then the lights of the fragment's cluster
-vec3 lightsShade(BsdfSurface s, vec3 worldPosition, vec3 geometricNormal)
+vec3 lightsShade(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal)
 {
     vec3 color = vec3(0.0);
     int directionalLights = int(lighting.clusterDepth.z);
 
     for (int i = 0; i < directionalLights; ++i)
-        color += lightsShadeLight(s, lights[i], worldPosition, geometricNormal);
+        color += lightsShadeLight(s, lookup, lights[i], worldPosition, geometricNormal);
 
     uint slot = lightsClusterIndex(worldPosition) * 64u;
     uint count = min(clusterLights[slot], 63u);
 
     for (uint i = 0u; i < count; ++i)
-        color += lightsShadeLight(s, lights[clusterLights[slot + 1u + i]], worldPosition, geometricNormal);
+        color += lightsShadeLight(s, lookup, lights[clusterLights[slot + 1u + i]], worldPosition, geometricNormal);
 
     return color;
 }
 #else
 // The light loop over the draw's lights
-vec3 lightsShade(BsdfSurface s, vec3 worldPosition, vec3 geometricNormal)
+vec3 lightsShade(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal)
 {
     vec3 color = vec3(0.0);
     int lightCount = int(lightList.count.x);
@@ -357,7 +383,7 @@ vec3 lightsShade(BsdfSurface s, vec3 worldPosition, vec3 geometricNormal)
         if (i >= lightCount)
             break;
 
-        color += lightsShadeLight(s, lightList.lights[i], worldPosition, geometricNormal);
+        color += lightsShadeLight(s, lookup, lightList.lights[i], worldPosition, geometricNormal);
     }
 
     return color;
@@ -365,12 +391,23 @@ vec3 lightsShade(BsdfSurface s, vec3 worldPosition, vec3 geometricNormal)
 #endif
 
 // The flat ambient light and, when there is one, the environment: its diffuse light from the
-// spherical harmonics and its reflections blurred by the filtered roughness, both darkened by the
-// material occlusion. The ambient light reflects f0 and leaves the diffuse what the dielectric
-// layer does not reflect, as the lights and the environment do
-vec3 lightsAmbientAndEnvironment(BsdfSurface s, vec3 geometricNormal, float occlusion)
+// spherical harmonics and its reflections blurred by the filtered roughness, weighted by the split
+// sum of the lookup tables plus the multiple scattering it misses. The diffuse terms are darkened by
+// @p diffuseOcclusion and the specular ones by @p specularOcclusion. The ambient light reflects f0
+// and leaves the diffuse what the dielectric layer does not reflect, as the lights and the
+// environment do. The passes evaluate it before the light loop, so its lookups and temporaries do
+// not live across the loop.
+// The shaders reading the ambient occlusion (YUP_3D_AMBIENT_OCCLUSION) also pass the world-space
+// @p bentNormal, along which the diffuse light of the environment is evaluated (the surface normal
+// without ambient occlusion). The others keep the signature without it, so their compiled code is
+// exactly what it was before ambient occlusion
+#ifdef YUP_3D_AMBIENT_OCCLUSION
+vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal, vec3 bentNormal, float diffuseOcclusion, float specularOcclusion)
+#else
+vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal, float diffuseOcclusion, float specularOcclusion)
+#endif
 {
-    vec3 color = lighting.ambient.rgb * (s.diffuseColor * bsdfDiffuseWeight(s.dielectricF0) + s.f0) * occlusion;
+    vec3 color = lighting.ambient.rgb * (s.diffuseColor * bsdfDiffuseWeight(s.dielectricF0) * diffuseOcclusion + s.f0 * specularOcclusion);
 
     if (lighting.environmentInfo.x > 0.0)
     {
@@ -378,16 +415,21 @@ vec3 lightsAmbientAndEnvironment(BsdfSurface s, vec3 geometricNormal, float occl
         float environmentRoughness = sqrt(sqrt(s.alpha2));
         vec3 r = reflect(-s.v, s.n);
 
-        vec2 brdf = bsdfEnvironmentBrdf(environmentRoughness, s.nDotV);
-        vec3 specularWeight = s.f0 * brdf.x + s.f90 * brdf.y;
+        vec3 specularWeight = bsdfSplitSum(s.f0, s.f90, lookup.lobe);
 
         // Reflections pointing into the surface are hidden by it
         float horizon = clamp(1.0 + dot(r, geometricNormal), 0.0, 1.0);
 
-        vec3 diffuse = s.diffuseColor * environmentIrradiance(s.n) * bsdfEnvironmentDiffuseWeight(s, brdf);
-        vec3 specular = environmentRadiance(r, environmentRoughness) * specularWeight * (horizon * horizon);
+        vec3 irradiance = environmentIrradiance(s.n);
+#ifdef YUP_3D_AMBIENT_OCCLUSION
+        vec3 diffuse = s.diffuseColor * environmentIrradiance(bentNormal) * bsdfEnvironmentDiffuseWeight(s, lookup.lobe);
+#else
+        vec3 diffuse = s.diffuseColor * irradiance * bsdfEnvironmentDiffuseWeight(s, lookup.lobe);
+#endif
+        vec3 specular = environmentRadiance(r, environmentRoughness) * specularWeight * (horizon * horizon)
+                      + irradiance * bsdfMultipleScattering(s, lookup.lobe, specularWeight);
 
-        color += (diffuse + specular) * (occlusion * lighting.environmentInfo.x);
+        color += (diffuse * diffuseOcclusion + specular * specularOcclusion) * lighting.environmentInfo.x;
     }
 
     return color;

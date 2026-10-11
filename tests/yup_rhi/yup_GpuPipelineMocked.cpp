@@ -1012,8 +1012,8 @@ protected:
     }
 
     /** Compiles a pipeline whose stages declare @p bindings, with one layout per declared group
-        mirroring the description compile() asks for. */
-    GpuPipeline::Ptr compilePipeline (const std::vector<rive::ore::BindingMap::Entry>& bindings)
+        mirroring the description compile() asks for. The layouts are kept in layoutsMade. */
+    GpuPipeline::Ptr compilePipeline (const std::vector<rive::ore::BindingMap::Entry>& bindings, const GpuPipelineOptions& options = {})
     {
         auto module = rive::make_rcp<TestOreShaderModule>();
         for (const auto& e : bindings)
@@ -1024,17 +1024,33 @@ protected:
             .Times (2)
             .WillRepeatedly (Return (module));
         ON_CALL (*mockOreCtx, makeBindGroupLayout (_))
-            .WillByDefault (Invoke ([] (const rive::ore::BindGroupLayoutDesc& desc) -> rive::rcp<rive::ore::BindGroupLayout>
+            .WillByDefault (Invoke ([this] (const rive::ore::BindGroupLayoutDesc& desc) -> rive::rcp<rive::ore::BindGroupLayout>
         {
-            return rive::make_rcp<TestOreBindGroupLayout> (desc);
+            auto layout = rive::make_rcp<TestOreBindGroupLayout> (desc);
+            layoutsMade.push_back (layout);
+            return layout;
         }));
         EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
             .WillOnce (Return (rive::make_rcp<TestOrePipeline>()));
 
-        auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
+        auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"), options);
         EXPECT_TRUE (compileResult.wasOk());
         return compileResult.getValue();
     }
+
+    /** The layout entry of the last layout made for @p group, or nullptr. */
+    const rive::ore::BindGroupLayoutEntry* lastLayoutEntry (uint32_t group, uint32_t binding) const
+    {
+        for (auto it = layoutsMade.rbegin(); it != layoutsMade.rend(); ++it)
+        {
+            if ((*it)->groupIndex() == group)
+                return (*it)->findEntry (binding);
+        }
+
+        return nullptr;
+    }
+
+    std::vector<rive::rcp<TestOreBindGroupLayout>> layoutsMade;
 
     /** Compiles a pipeline declaring one uniform buffer at binding 0 of groups 0, 1 and 2, on
         native slots counted up from @p firstSlot. */
@@ -1133,6 +1149,27 @@ protected:
     int unusedMade = 0;
     int unusedBound = 0;
 
+    /** Creates a sampleable 4x4 texture with @p mipLevels mips, whose views a draw can resolve. */
+    GpuTexture::Ptr createSampledTexture (uint32_t mipLevels = 1)
+    {
+        ON_CALL (*mockOreCtx, makeTexture (_))
+            .WillByDefault (Invoke ([] (const rive::ore::TextureDesc& desc)
+        {
+            return rive::rcp<rive::ore::Texture> (rive::make_rcp<NiceMock<MockOreTexture>> (desc));
+        }));
+        ON_CALL (*mockOreCtx, makeTextureViewImpl (_))
+            .WillByDefault (Invoke ([] (const rive::ore::TextureViewDesc&)
+        {
+            return rive::rcp<rive::ore::TextureView> (rive::make_rcp<TestOreTextureView>());
+        }));
+
+        GpuTextureDesc desc;
+        desc.width = 4;
+        desc.height = 4;
+        desc.mipLevels = mipLevels;
+        return GpuTexture::create (ctx, desc);
+    }
+
     /** A mocked device reporting fragment storage buffers, so setStorageBuffer() keeps its bindings. */
     class StorageBufferGpuDevice : public OreAndTargetGpuDevice
     {
@@ -1141,6 +1178,178 @@ protected:
 
         bool isFragmentStorageBufferAvailable() const noexcept override { return true; }
     };
+
+    /** A mocked device binding uniform buffers at dynamic offsets, reporting @p platform. */
+    class DynamicUniformGpuDevice : public OreAndTargetGpuDevice
+    {
+    public:
+        DynamicUniformGpuDevice (rive::ore::Context* oreCtx, std::unique_ptr<MockOffscreenTarget> target, GpuPlatform platformToReport)
+            : OreAndTargetGpuDevice (oreCtx, std::move (target))
+            , platform (platformToReport)
+        {
+        }
+
+        GpuPlatform getPlatform() const noexcept override { return platform; }
+
+        bool isDynamicUniformOffsetAvailable() const noexcept override { return true; }
+
+    private:
+        GpuPlatform platform;
+    };
+
+    /** Makes the fixture's device a DynamicUniformGpuDevice. */
+    void useDynamicUniformDevice (GpuPlatform platform = GpuPlatform::Headless)
+    {
+        ctx = new DynamicUniformGpuDevice (mockOreCtx.get(), MockOffscreenTarget::withGpuTexture (256, 128), platform);
+    }
+
+    /** Compiles a pipeline with a view block at set 0 binding 0, and a draw block and a material
+        block at set 2 bindings 0 and 1, the blocks of @p dynamic being dynamic. */
+    GpuPipeline::Ptr compileDynamicPipeline (std::vector<GpuUniformSlot> dynamic = { { 2, 0 }, { 2, 1 } })
+    {
+        using RK = rive::ore::ResourceKind;
+
+        GpuPipelineOptions options;
+        options.dynamicUniformBuffers = std::move (dynamic);
+
+        return compilePipeline ({ makeBinding (0, 0, RK::UniformBuffer, 0),
+                                  makeBinding (2, 0, RK::UniformBuffer, 1),
+                                  makeBinding (2, 1, RK::UniformBuffer, 2) },
+                                options);
+    }
+
+    /** What draws asked of the backend: the uniform writes, the bind groups made and every bind. */
+    struct DynamicCalls
+    {
+        struct Write
+        {
+            rive::ore::Buffer* buffer = nullptr;
+            uint32_t offset = 0;
+            uint32_t size = 0;
+            bool discard = false;
+            std::vector<uint8_t> bytes;
+        };
+
+        struct Made
+        {
+            rive::ore::BindGroup* bindGroup = nullptr;
+            uint32_t group = 0;
+            std::vector<rive::ore::BindGroupDesc::UBOEntry> ubos;
+            std::vector<rive::ore::BindGroupDesc::TexEntry> textures;
+            std::vector<rive::ore::BindGroupDesc::SampEntry> samplers;
+        };
+
+        struct Bind
+        {
+            uint32_t group = 0;
+            rive::ore::BindGroup* bindGroup = nullptr;
+            std::vector<uint32_t> offsets;
+        };
+
+        std::vector<rive::ore::Buffer*> buffers;
+        std::vector<Write> writes;
+        std::vector<Made> made;
+        std::vector<Bind> binds;
+
+        bool countsLayoutEntries = true; ///< How the bind groups made count their dynamic offsets
+        int bindsToFail = 0;             ///< The next binds to fail, as an out of memory descriptor pool does
+
+        int bindsOf (uint32_t group) const
+        {
+            return (int) std::count_if (binds.begin(), binds.end(), [group] (const Bind& b) { return b.group == group; });
+        }
+
+        int madeOf (uint32_t group) const
+        {
+            return (int) std::count_if (made.begin(), made.end(), [group] (const Made& m) { return m.group == group; });
+        }
+
+        std::vector<uint32_t> lastOffsetsOf (uint32_t group) const
+        {
+            for (auto it = binds.rbegin(); it != binds.rend(); ++it)
+            {
+                if (it->group == group)
+                    return it->offsets;
+            }
+
+            return {};
+        }
+
+        const Made* lastMadeOf (uint32_t group) const
+        {
+            for (auto it = made.rbegin(); it != made.rend(); ++it)
+            {
+                if (it->group == group)
+                    return &*it;
+            }
+
+            return nullptr;
+        }
+
+        /** The writes that carried exactly @p size bytes of @p data. */
+        std::vector<Write> writesOf (const void* data, size_t size) const
+        {
+            const auto* bytes = static_cast<const uint8_t*> (data);
+
+            std::vector<Write> result;
+            for (const auto& w : writes)
+            {
+                if (w.bytes.size() == size && std::equal (w.bytes.begin(), w.bytes.end(), bytes))
+                    result.push_back (w);
+            }
+
+            return result;
+        }
+    };
+
+    /** Like serveDraws(), recording every uniform write, bind group made and bind into @p calls. */
+    void serveDynamicDraws (DynamicCalls& calls)
+    {
+        serveDraws (unusedMade, unusedBound);
+
+        ON_CALL (*mockOreCtx, makeBuffer (_))
+            .WillByDefault (Invoke ([&calls] (const rive::ore::BufferDesc& desc) -> rive::rcp<rive::ore::Buffer>
+        {
+            auto buffer = rive::make_rcp<NiceMock<MockOreBuffer>> (desc.size);
+            ON_CALL (*buffer, writeUnsynchronized (_, _, _, _))
+                .WillByDefault (Invoke ([&calls, raw = buffer.get()] (const void* data, uint32_t size, uint32_t offset, bool discard)
+            {
+                const auto* bytes = static_cast<const uint8_t*> (data);
+                calls.writes.push_back ({ raw, offset, size, discard, { bytes, bytes + size } });
+            }));
+
+            calls.buffers.push_back (buffer.get());
+            return buffer;
+        }));
+        ON_CALL (*mockOreCtx, makeBindGroup (_))
+            .WillByDefault (Invoke ([&calls] (const rive::ore::BindGroupDesc& desc) -> rive::rcp<rive::ore::BindGroup>
+        {
+            auto bindGroup = rive::make_rcp<TestOreBindGroup> (desc, calls.countsLayoutEntries);
+            calls.made.push_back ({ bindGroup.get(),
+                                    desc.layout->groupIndex(),
+                                    { desc.ubos, desc.ubos + desc.uboCount },
+                                    { desc.textures, desc.textures + desc.textureCount },
+                                    { desc.samplers, desc.samplers + desc.samplerCount } });
+            return bindGroup;
+        }));
+        ON_CALL (*mockOreCtx, beginRenderPass (_, _))
+            .WillByDefault (Invoke ([&calls, oreCtx = mockOreCtx.get()] (const rive::ore::RenderPassDesc&, std::string*)
+        {
+            auto* renderPass = new FinishingOreRenderPass();
+            ON_CALL (*renderPass, setBindGroup (_, _, _, _))
+                .WillByDefault (Invoke ([&calls, oreCtx] (uint32_t group, rive::ore::BindGroup* bindGroup, const uint32_t* offsets, uint32_t count)
+            {
+                calls.binds.push_back ({ group, bindGroup, std::vector<uint32_t> (offsets, offsets + count) });
+
+                if (calls.bindsToFail > 0)
+                {
+                    --calls.bindsToFail;
+                    oreCtx->setLastError ("bind group failed");
+                }
+            }));
+            return std::unique_ptr<rive::ore::RenderPass> (renderPass);
+        }));
+    }
 
     std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
     GpuDevice::Ptr ctx;
@@ -1545,7 +1754,19 @@ TEST_F (GpuRenderPassMockTests, EverySetterDirtiesOnlyItsGroup)
     auto target = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (target, nullptr);
 
-    auto compiled = compileThreeGroupPipeline();
+    ON_CALL (*mockOreCtx, makeSampler (_))
+        .WillByDefault (Invoke ([] (const rive::ore::SamplerDesc&) -> rive::rcp<rive::ore::Sampler>
+    {
+        return rive::make_rcp<TestOreSampler>();
+    }));
+
+    using RK = rive::ore::ResourceKind;
+    auto compiled = compilePipeline ({ makeBinding (0, 0, RK::UniformBuffer, 0),
+                                       makeBinding (0, 2, RK::Sampler, 0),
+                                       makeBinding (1, 0, RK::UniformBuffer, 1),
+                                       makeBinding (1, 1, RK::SampledTexture, 0),
+                                       makeBinding (2, 0, RK::UniformBuffer, 2),
+                                       makeBinding (2, 1, RK::SampledTexture, 1) });
     ASSERT_NE (compiled, nullptr);
 
     int made = 0, bound = 0;
@@ -1579,6 +1800,158 @@ TEST_F (GpuRenderPassMockTests, EverySetterDirtiesOnlyItsGroup)
     EXPECT_TRUE (pass.draw (3));
     EXPECT_EQ (made, 6);
     EXPECT_EQ (bound, 6);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, UnchangedTexturesAndSamplersDoNotRebuildTheirGroup)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    ON_CALL (*mockOreCtx, makeSampler (_))
+        .WillByDefault (Invoke ([] (const rive::ore::SamplerDesc&) -> rive::rcp<rive::ore::Sampler>
+    {
+        return rive::make_rcp<TestOreSampler>();
+    }));
+
+    using RK = rive::ore::ResourceKind;
+    auto compiled = compilePipeline ({ makeBinding (0, 0, RK::UniformBuffer, 0),
+                                       makeBinding (0, 1, RK::SampledTexture, 0),
+                                       makeBinding (0, 2, RK::Sampler, 0) });
+    ASSERT_NE (compiled, nullptr);
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    int buffersMade = 0;
+    ON_CALL (*mockOreCtx, makeBuffer (_))
+        .WillByDefault (Invoke ([&buffersMade] (const rive::ore::BufferDesc& desc) -> rive::rcp<rive::ore::Buffer>
+    {
+        ++buffersMade;
+        return rive::make_rcp<NiceMock<MockOreBuffer>> (desc.size);
+    }));
+
+    auto texture = createSampledTexture();
+    auto otherTexture = createSampledTexture (2);
+    auto sampler = GpuSampler::create (ctx, {});
+    auto otherSampler = GpuSampler::create (ctx, {});
+    ASSERT_NE (texture, nullptr);
+    ASSERT_NE (otherTexture, nullptr);
+    ASSERT_NE (sampler, nullptr);
+    ASSERT_NE (otherSampler, nullptr);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    pass.setUniformBuffer (0, 0, uniforms, sizeof (uniforms));
+    pass.setTexture (0, 1, texture);
+    pass.setSampler (0, 2, sampler);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 1);
+    EXPECT_EQ (bound, 1);
+
+    // Setting the same resources before every draw, as a scene does, makes and binds nothing
+    const auto buffersBefore = buffersMade;
+    for (int draw = 0; draw < 100; ++draw)
+    {
+        pass.setUniformBuffer (0, 0, uniforms, sizeof (uniforms));
+        pass.setTexture (0, 1, texture);
+        pass.setSampler (0, 2, sampler);
+        EXPECT_TRUE (pass.draw (3));
+    }
+
+    EXPECT_EQ (made, 1);
+    EXPECT_EQ (bound, 1);
+    EXPECT_EQ (buffersMade, buffersBefore);
+
+    // Another texture or sampler rebuilds the group
+    pass.setTexture (0, 1, otherTexture);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 2);
+
+    pass.setSampler (0, 2, otherSampler);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 3);
+
+    // The view is part of the binding: the same view keeps the group, another view or none rebuilds it
+    const GpuTextureViewDesc secondMip (1, 0);
+    const GpuTextureViewDesc firstMip (0, 0);
+
+    pass.setTexture (0, 1, otherTexture, secondMip);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 4);
+
+    pass.setTexture (0, 1, otherTexture, secondMip);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 4);
+
+    pass.setTexture (0, 1, otherTexture, firstMip);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 5);
+
+    pass.setTexture (0, 1, otherTexture);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 6);
+    EXPECT_EQ (bound, 6);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, UnchangedStorageBuffersDoNotRebuildTheirGroup)
+{
+    auto storageDevice = GpuDevice::create (GpuPlatform::Metal, {});
+    if (storageDevice == nullptr || ! storageDevice->isFragmentStorageBufferAvailable())
+        GTEST_SKIP() << "No device with fragment storage buffers to create the buffers on";
+
+    const float color[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+    auto buffer = storageDevice->createBuffer (GpuBufferType::storage, color, sizeof (color));
+    auto otherBuffer = storageDevice->createBuffer (GpuBufferType::storage, color, sizeof (color));
+    ASSERT_NE (buffer, nullptr);
+    ASSERT_NE (otherBuffer, nullptr);
+
+    ctx = new StorageBufferGpuDevice (mockOreCtx.get(), MockOffscreenTarget::withGpuTexture (256, 128));
+
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    using RK = rive::ore::ResourceKind;
+    auto compiled = compilePipeline ({ makeBinding (0, 0, RK::UniformBuffer, 0),
+                                       makeBinding (0, 1, RK::StorageBufferRO, 0) });
+    ASSERT_NE (compiled, nullptr);
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    pass.setUniformBuffer (0, 0, uniforms, sizeof (uniforms));
+    pass.setStorageBuffer (0, 1, buffer);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 1);
+
+    for (int draw = 0; draw < 3; ++draw)
+    {
+        pass.setStorageBuffer (0, 1, buffer);
+        EXPECT_TRUE (pass.draw (3));
+    }
+
+    EXPECT_EQ (made, 1);
+    EXPECT_EQ (bound, 1);
+
+    pass.setStorageBuffer (0, 1, otherBuffer);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (made, 2);
+    EXPECT_EQ (bound, 2);
 
     pass.finish();
     frame.submit();
@@ -2270,6 +2643,844 @@ TEST_F (GpuRenderPassMockTests, MoveAssignmentFromValidPassClearsSource)
 
     dst.finish();
     valid.submit();
+}
+
+// ==============================================================================
+// GpuRenderPass - dynamic uniform buffers
+// ==============================================================================
+
+TEST_F (GpuRenderPassMockTests, CompileMarksRequestedUniformSlotsDynamic)
+{
+    // Vulkan also checks that the native slots keep the binding order of the dynamic blocks
+    useDynamicUniformDevice (GpuPlatform::Vulkan);
+
+    auto compiled = compileDynamicPipeline ({ { 2, 0 } });
+    ASSERT_NE (compiled, nullptr);
+
+    const auto* view = lastLayoutEntry (0, 0);
+    const auto* draw = lastLayoutEntry (2, 0);
+    const auto* material = lastLayoutEntry (2, 1);
+    ASSERT_NE (view, nullptr);
+    ASSERT_NE (draw, nullptr);
+    ASSERT_NE (material, nullptr);
+
+    EXPECT_FALSE (view->hasDynamicOffset);
+    EXPECT_TRUE (draw->hasDynamicOffset);
+    EXPECT_FALSE (material->hasDynamicOffset);
+}
+
+TEST_F (GpuRenderPassMockTests, CompileIgnoresDynamicSlotsTheShadersLack)
+{
+    useDynamicUniformDevice();
+
+    auto compiled = compileDynamicPipeline ({ { 2, 12 }, { 1, 0 }, { 3, 0 }, { 2, 1 } });
+    ASSERT_NE (compiled, nullptr);
+
+    ASSERT_NE (lastLayoutEntry (2, 0), nullptr);
+    ASSERT_NE (lastLayoutEntry (2, 1), nullptr);
+    EXPECT_FALSE (lastLayoutEntry (2, 0)->hasDynamicOffset);
+    EXPECT_TRUE (lastLayoutEntry (2, 1)->hasDynamicOffset);
+    EXPECT_EQ (lastLayoutEntry (2, 12), nullptr);
+
+    for (const auto& layout : layoutsMade)
+        EXPECT_NE (layout->groupIndex(), 1u);
+}
+
+TEST_F (GpuRenderPassMockTests, CompileKeepsUniformsStaticWithoutDeviceSupport)
+{
+    auto compiled = compileDynamicPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    ASSERT_NE (lastLayoutEntry (2, 0), nullptr);
+    ASSERT_NE (lastLayoutEntry (2, 1), nullptr);
+    EXPECT_FALSE (lastLayoutEntry (2, 0)->hasDynamicOffset);
+    EXPECT_FALSE (lastLayoutEntry (2, 1)->hasDynamicOffset);
+}
+
+TEST_F (GpuRenderPassMockTests, CompileOnlyMarksUniformBuffersDynamic)
+{
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "A dynamic slot declared as a texture triggers an assertion in assertion-enabled builds";
+#endif
+
+    useDynamicUniformDevice();
+
+    using RK = rive::ore::ResourceKind;
+    GpuPipelineOptions options;
+    options.dynamicUniformBuffers = { { 2, 1 }, { 2, 0 } };
+
+    auto compiled = compilePipeline ({ makeBinding (2, 0, RK::UniformBuffer, 0),
+                                       makeBinding (2, 1, RK::SampledTexture, 0) },
+                                     options);
+    ASSERT_NE (compiled, nullptr);
+
+    ASSERT_NE (lastLayoutEntry (2, 0), nullptr);
+    ASSERT_NE (lastLayoutEntry (2, 1), nullptr);
+    EXPECT_TRUE (lastLayoutEntry (2, 0)->hasDynamicOffset);
+    EXPECT_FALSE (lastLayoutEntry (2, 1)->hasDynamicOffset);
+}
+
+TEST_F (GpuRenderPassMockTests, CompileHonorsTheFirstEightDynamicSlots)
+{
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "More than eight dynamic slots trigger an assertion in assertion-enabled builds";
+#endif
+
+    useDynamicUniformDevice();
+
+    std::vector<rive::ore::BindingMap::Entry> bindings;
+    GpuPipelineOptions options;
+
+    for (uint32_t binding = 0; binding < 9; ++binding)
+    {
+        bindings.push_back (makeBinding (2, binding, rive::ore::ResourceKind::UniformBuffer, (uint16_t) binding));
+        options.dynamicUniformBuffers.push_back ({ 2, binding });
+    }
+
+    auto compiled = compilePipeline (bindings, options);
+    ASSERT_NE (compiled, nullptr);
+
+    for (uint32_t binding = 0; binding < 9; ++binding)
+    {
+        ASSERT_NE (lastLayoutEntry (2, binding), nullptr);
+        EXPECT_EQ (lastLayoutEntry (2, binding)->hasDynamicOffset, binding < 8) << "binding " << binding;
+    }
+}
+
+TEST_F (GpuRenderPassMockTests, DynamicUniformsMoveTheOffsetWithoutRebuildingTheGroup)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileDynamicPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const float view[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float material[8] = { 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f };
+    float draw[16] = {};
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    pass.setUniformBuffer (0, 0, view, sizeof (view));
+    pass.setUniformBuffer (2, 1, material, sizeof (material));
+
+    for (int i = 0; i < 100; ++i)
+    {
+        draw[0] = (float) i;
+        pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+        EXPECT_TRUE (pass.draw (3));
+    }
+
+    // Set 2 is built once, over one ring chunk; the static view block has its own pooled buffer
+    EXPECT_EQ (calls.madeOf (0), 1);
+    EXPECT_EQ (calls.madeOf (2), 1);
+    EXPECT_EQ (calls.bindsOf (0), 1);
+    EXPECT_EQ (calls.bindsOf (2), 100);
+    ASSERT_EQ (calls.buffers.size(), 2u);
+
+    // Every draw writes its draw block, only the first one writes the material block
+    ASSERT_EQ (calls.writes.size(), 101u);
+    auto* chunk = calls.writes.front().buffer;
+    EXPECT_EQ (chunk->size(), 65536u);
+
+    for (const auto& write : calls.writes)
+        EXPECT_EQ (write.buffer, chunk);
+
+    EXPECT_EQ (calls.writesOf (material, sizeof (material)).size(), 1u);
+
+    // The group holds each block's size at offset 0 of the chunk, and the offsets move it
+    const auto* made = calls.lastMadeOf (2);
+    ASSERT_NE (made, nullptr);
+    ASSERT_EQ (made->ubos.size(), 2u);
+
+    for (const auto& ubo : made->ubos)
+    {
+        EXPECT_EQ (ubo.buffer, chunk);
+        EXPECT_EQ (ubo.offset, 0u);
+        EXPECT_EQ (ubo.size, ubo.slot == 0 ? sizeof (draw) : sizeof (material));
+    }
+
+    // The blocks follow each other at the offset alignment, in binding order
+    uint32_t drawIndex = 0;
+    for (const auto& bind : calls.binds)
+    {
+        if (bind.group != 2)
+            continue;
+
+        const std::vector<uint32_t> expected { drawIndex == 0 ? 0u : 256u * (drawIndex + 1), 256u };
+        EXPECT_EQ (bind.offsets, expected) << "draw " << drawIndex;
+        ++drawIndex;
+    }
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, IdenticalDynamicBytesKeepTheirOffset)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileDynamicPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const float view[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float material[8] = { 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f };
+    float draw[16] = {};
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    pass.setUniformBuffer (0, 0, view, sizeof (view));
+    pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+    pass.setUniformBuffer (2, 1, material, sizeof (material));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.writes.size(), 2u);
+    EXPECT_EQ (calls.bindsOf (2), 1);
+
+    pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+    pass.setUniformBuffer (2, 1, material, sizeof (material));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.writes.size(), 2u);
+    EXPECT_EQ (calls.bindsOf (2), 1);
+    EXPECT_EQ (calls.madeOf (2), 1);
+
+    draw[0] = 1.0f;
+    pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.writes.size(), 3u);
+    EXPECT_EQ (calls.bindsOf (2), 2);
+    EXPECT_EQ (calls.madeOf (2), 1);
+    EXPECT_EQ (calls.lastOffsetsOf (2), (std::vector<uint32_t> { 512u, 256u }));
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, AFullChunkSwitchesAndRewritesEveryDynamicBlockOfTheDraw)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileDynamicPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const float view[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float material[8] = { 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f };
+    float draw[16] = {};
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    pass.setUniformBuffer (0, 0, view, sizeof (view));
+    pass.setUniformBuffer (2, 1, material, sizeof (material));
+
+    // The first draw takes two 256 byte slots, the next 254 one each: the chunk is then full
+    for (int i = 0; i < 255; ++i)
+    {
+        draw[0] = (float) i;
+        pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+        EXPECT_TRUE (pass.draw (3));
+    }
+
+    ASSERT_EQ (calls.buffers.size(), 2u);
+    EXPECT_EQ (calls.madeOf (2), 1);
+    EXPECT_EQ (calls.lastOffsetsOf (2), (std::vector<uint32_t> { 65280u, 256u }));
+
+    draw[0] = 255.0f;
+    pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+    EXPECT_TRUE (pass.draw (3));
+
+    // A new chunk holds both blocks of the draw, so the unchanged material block is written again
+    ASSERT_EQ (calls.buffers.size(), 3u);
+    auto* secondChunk = calls.buffers.back();
+    EXPECT_EQ (secondChunk->size(), 65536u);
+    EXPECT_EQ (calls.madeOf (2), 2);
+    EXPECT_EQ (calls.lastOffsetsOf (2), (std::vector<uint32_t> { 0u, 256u }));
+
+    const auto materialWrites = calls.writesOf (material, sizeof (material));
+    ASSERT_EQ (materialWrites.size(), 2u);
+    EXPECT_EQ (materialWrites.back().buffer, secondChunk);
+
+    const auto* made = calls.lastMadeOf (2);
+    ASSERT_NE (made, nullptr);
+    for (const auto& ubo : made->ubos)
+        EXPECT_EQ (ubo.buffer, secondChunk);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, InterleavedPassesRewriteBlocksOfAnOldChunk)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileDynamicPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const float view[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float materialA[8] = { 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f };
+    const float materialB[8] = { 13.0f, 14.0f, 15.0f, 16.0f, 17.0f, 18.0f, 19.0f, 20.0f };
+    float draw[16] = {};
+
+    auto frame = makeValidFrame();
+    auto passA = target->beginRenderPass (frame);
+    auto passB = target->beginRenderPass (frame);
+    ASSERT_TRUE (passA.isValid());
+    ASSERT_TRUE (passB.isValid());
+
+    passA.setPipeline (compiled);
+    passA.setUniformBuffer (0, 0, view, sizeof (view));
+    passA.setUniformBuffer (2, 0, draw, sizeof (draw));
+    passA.setUniformBuffer (2, 1, materialA, sizeof (materialA));
+    EXPECT_TRUE (passA.draw (3));
+
+    // B shares the frame's ring and fills it, which moves the ring to a new chunk
+    passB.setPipeline (compiled);
+    passB.setUniformBuffer (0, 0, view, sizeof (view));
+    passB.setUniformBuffer (2, 1, materialB, sizeof (materialB));
+
+    for (int i = 0; i < 300; ++i)
+    {
+        draw[0] = (float) i + 1.0f;
+        passB.setUniformBuffer (2, 0, draw, sizeof (draw));
+        EXPECT_TRUE (passB.draw (3));
+    }
+
+    // Two chunks, and the static view block of each pass
+    ASSERT_EQ (calls.buffers.size(), 4u);
+    ASSERT_FALSE (calls.writes.empty());
+    auto* firstChunk = calls.writes.front().buffer;
+    auto* secondChunk = calls.buffers.back();
+
+    // A's material block did not change, but it lives in the old chunk: it is written again
+    draw[0] = 1000.0f;
+    passA.setUniformBuffer (2, 0, draw, sizeof (draw));
+    passA.setUniformBuffer (2, 1, materialA, sizeof (materialA));
+    EXPECT_TRUE (passA.draw (3));
+
+    const auto materialWrites = calls.writesOf (materialA, sizeof (materialA));
+    ASSERT_EQ (materialWrites.size(), 2u);
+    EXPECT_EQ (materialWrites.front().buffer, firstChunk);
+    EXPECT_EQ (materialWrites.back().buffer, secondChunk);
+
+    const auto* made = calls.lastMadeOf (2);
+    ASSERT_NE (made, nullptr);
+    ASSERT_EQ (made->ubos.size(), 2u);
+    for (const auto& ubo : made->ubos)
+        EXPECT_EQ (ubo.buffer, secondChunk);
+
+    passA.finish();
+    passB.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, OffsetsFollowTheLayoutOrderWithZeroForUnbound)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    // Declared out of binding order, all dynamic
+    using RK = rive::ore::ResourceKind;
+    GpuPipelineOptions options;
+    options.dynamicUniformBuffers = { { 2, 0 }, { 2, 1 }, { 2, 12 } };
+
+    auto compiled = compilePipeline ({ makeBinding (2, 12, RK::UniformBuffer, 3),
+                                       makeBinding (2, 1, RK::UniformBuffer, 2),
+                                       makeBinding (2, 0, RK::UniformBuffer, 1) },
+                                     options);
+    ASSERT_NE (compiled, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const float first[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float second[4] = { 5.0f, 6.0f, 7.0f, 8.0f };
+    const float lights[4] = { 9.0f, 10.0f, 11.0f, 12.0f };
+
+    // Vulkan and WebGPU take one offset per dynamic entry of the layout, 0 for an unbound one;
+    // Metal, OpenGL and Direct3D 11 take one per dynamic buffer the group holds
+    for (const bool countsLayoutEntries : { true, false })
+    {
+        calls.countsLayoutEntries = countsLayoutEntries;
+        const auto zeroForUnbound = [countsLayoutEntries] (std::vector<uint32_t> bound)
+        {
+            if (countsLayoutEntries)
+                bound.insert (bound.begin(), 0u);
+
+            return bound;
+        };
+
+        auto frame = makeValidFrame();
+        auto pass = target->beginRenderPass (frame);
+        ASSERT_TRUE (pass.isValid());
+        pass.setPipeline (compiled);
+        pass.setUniformBuffer (2, 1, first, sizeof (first));
+        pass.setUniformBuffer (2, 12, lights, sizeof (lights));
+        EXPECT_TRUE (pass.draw (3));
+        EXPECT_EQ (calls.lastOffsetsOf (2), zeroForUnbound ({ 0u, 256u }));
+
+        pass.setUniformBuffer (2, 1, second, sizeof (second));
+        EXPECT_TRUE (pass.draw (3));
+        EXPECT_EQ (calls.lastOffsetsOf (2), zeroForUnbound ({ 512u, 256u }));
+
+        // Binding order, not the order the blocks were written in
+        pass.setUniformBuffer (2, 0, first, sizeof (first));
+        EXPECT_TRUE (pass.draw (3));
+        EXPECT_EQ (calls.lastOffsetsOf (2), (std::vector<uint32_t> { 768u, 512u, 256u }));
+
+        pass.finish();
+        frame.submit();
+        frame.waitForGPU();
+    }
+}
+
+TEST_F (GpuRenderPassMockTests, FirstWriteOfAChunkDiscards)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileDynamicPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const float material[8] = { 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f };
+    float draw[16] = {};
+
+    // Each frame starts a chunk: its first write discards, since a chunk the pool hands out again
+    // may still be read by an earlier frame on the GPU
+    for (int frameIndex = 0; frameIndex < 2; ++frameIndex)
+    {
+        const auto writesBefore = calls.writes.size();
+
+        auto frame = makeValidFrame();
+        auto pass = target->beginRenderPass (frame);
+        ASSERT_TRUE (pass.isValid());
+        pass.setPipeline (compiled);
+        pass.setUniformBuffer (2, 1, material, sizeof (material));
+
+        for (int i = 0; i < 3; ++i)
+        {
+            draw[0] = (float) i;
+            pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+            EXPECT_TRUE (pass.draw (3));
+        }
+
+        pass.finish();
+        frame.submit();
+
+        ASSERT_EQ (calls.writes.size(), writesBefore + 4);
+        for (size_t w = writesBefore; w < calls.writes.size(); ++w)
+            EXPECT_EQ (calls.writes[w].discard, w == writesBefore) << "frame " << frameIndex << " write " << w - writesBefore;
+    }
+}
+
+TEST_F (GpuRenderPassMockTests, FailedDynamicBindIsRetried)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileDynamicPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const float view[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float material[8] = { 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f };
+    float draw[16] = {};
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    pass.setUniformBuffer (0, 0, view, sizeof (view));
+    pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+    pass.setUniformBuffer (2, 1, material, sizeof (material));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.bindsOf (2), 1);
+
+    // Only set 2 moves, and its bind fails
+    draw[0] = 1.0f;
+    pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+    calls.bindsToFail = 1;
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.bindsOf (2), 2);
+    const auto failedOffsets = calls.lastOffsetsOf (2);
+
+    // The next draw binds the same group at the same offsets again
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.bindsOf (2), 3);
+    EXPECT_EQ (calls.lastOffsetsOf (2), failedOffsets);
+    EXPECT_EQ (calls.bindsOf (0), 1);
+
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.bindsOf (2), 3);
+    EXPECT_EQ (calls.madeOf (2), 1);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, OpenGLDynamicDrawsRebindEveryGroupWithoutRebuilding)
+{
+    useDynamicUniformDevice (GpuPlatform::OpenGL);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileDynamicPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const float view[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float material[8] = { 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f };
+    float draw[16] = {};
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    pass.setUniformBuffer (0, 0, view, sizeof (view));
+    pass.setUniformBuffer (2, 1, material, sizeof (material));
+
+    for (int i = 0; i < 5; ++i)
+    {
+        draw[0] = (float) i;
+        pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+        EXPECT_TRUE (pass.draw (3));
+        EXPECT_EQ (calls.lastOffsetsOf (2), (std::vector<uint32_t> { i == 0 ? 0u : 256u * (uint32_t) (i + 1), 256u }));
+    }
+
+    EXPECT_EQ (calls.bindsOf (0), 5);
+    EXPECT_EQ (calls.bindsOf (2), 5);
+    EXPECT_EQ (calls.madeOf (0), 1);
+    EXPECT_EQ (calls.madeOf (2), 1);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, ADynamicBlockOfAnotherSizeRebuildsItsGroup)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileDynamicPipeline();
+    ASSERT_NE (compiled, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const float material[8] = { 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f };
+    const float draw[16] = {};
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+    pass.setUniformBuffer (2, 1, material, sizeof (material));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.madeOf (2), 1);
+
+    // The group binds a block's size, so a block of another size needs a new group
+    pass.setUniformBuffer (2, 0, draw, sizeof (float) * 8);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.madeOf (2), 2);
+
+    const auto* made = calls.lastMadeOf (2);
+    ASSERT_NE (made, nullptr);
+    for (const auto& ubo : made->ubos)
+        EXPECT_EQ (ubo.size, sizeof (float) * 8);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, ABlockLargerThanAChunkGetsALargerChunk)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto compiled = compileDynamicPipeline ({ { 2, 0 } });
+    ASSERT_NE (compiled, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const std::vector<uint8_t> draw (70000, 7);
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (compiled);
+    pass.setUniformBuffer (2, 0, draw.data(), draw.size());
+    EXPECT_TRUE (pass.draw (3));
+
+    ASSERT_EQ (calls.writes.size(), 1u);
+    EXPECT_EQ (calls.writes.front().size, 70000u);
+    EXPECT_EQ (calls.writes.front().buffer->size(), 131072u);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, SwitchingBetweenStaticAndDynamicLayoutsRebuildsTheGroup)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto dynamicPipeline = compileDynamicPipeline();
+    auto staticPipeline = compileDynamicPipeline ({});
+    ASSERT_NE (dynamicPipeline, nullptr);
+    ASSERT_NE (staticPipeline, nullptr);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    const float material[8] = { 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f };
+    const float draw[16] = {};
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (dynamicPipeline);
+    pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+    pass.setUniformBuffer (2, 1, material, sizeof (material));
+    EXPECT_TRUE (pass.draw (3));
+    ASSERT_EQ (calls.writes.size(), 2u);
+    auto* chunk = calls.writes.front().buffer;
+
+    // The static layout uploads the blocks into pooled buffers of their own
+    pass.setPipeline (staticPipeline);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.madeOf (2), 2);
+    EXPECT_TRUE (calls.lastOffsetsOf (2).empty());
+    ASSERT_NE (calls.lastMadeOf (2), nullptr);
+    for (const auto& ubo : calls.lastMadeOf (2)->ubos)
+        EXPECT_NE (ubo.buffer, chunk);
+
+    // Back on the dynamic layout, the blocks still sit where the ring wrote them
+    pass.setPipeline (dynamicPipeline);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.madeOf (2), 3);
+    EXPECT_EQ (calls.writes.size(), 2u);
+    EXPECT_EQ (calls.lastOffsetsOf (2), (std::vector<uint32_t> { 0u, 256u }));
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, BindingsThePipelineLacksDoNotRebuildItsGroup)
+{
+    useDynamicUniformDevice();
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    std::vector<rive::ore::Sampler*> samplersMade;
+    ON_CALL (*mockOreCtx, makeSampler (_))
+        .WillByDefault (Invoke ([&samplersMade] (const rive::ore::SamplerDesc&) -> rive::rcp<rive::ore::Sampler>
+    {
+        auto sampler = rive::make_rcp<TestOreSampler>();
+        samplersMade.push_back (sampler.get());
+        return sampler;
+    }));
+
+    // Like an opaque shadow pipeline, the first declares only the draw block in set 2
+    using RK = rive::ore::ResourceKind;
+    GpuPipelineOptions options;
+    options.dynamicUniformBuffers = { { 2, 0 }, { 2, 1 } };
+
+    auto lacking = compilePipeline ({ makeBinding (0, 0, RK::UniformBuffer, 0),
+                                      makeBinding (2, 0, RK::UniformBuffer, 1) },
+                                    options);
+    auto declaring = compilePipeline ({ makeBinding (0, 0, RK::UniformBuffer, 0),
+                                        makeBinding (2, 0, RK::UniformBuffer, 1),
+                                        makeBinding (2, 1, RK::UniformBuffer, 2),
+                                        makeBinding (2, 2, RK::SampledTexture, 0),
+                                        makeBinding (2, 3, RK::Sampler, 0) },
+                                      options);
+    ASSERT_NE (lacking, nullptr);
+    ASSERT_NE (declaring, nullptr);
+
+    // The textures differ in their mip count, which their sampling views carry
+    const GpuTexture::Ptr textures[2] = { createSampledTexture (1), createSampledTexture (2) };
+    const auto firstUserSampler = samplersMade.size();
+    const GpuSampler::Ptr samplers[2] = { GpuSampler::create (ctx, {}), GpuSampler::create (ctx, {}) };
+    ASSERT_NE (textures[0], nullptr);
+    ASSERT_NE (textures[1], nullptr);
+    ASSERT_NE (samplers[0], nullptr);
+    ASSERT_NE (samplers[1], nullptr);
+    ASSERT_EQ (samplersMade.size(), firstUserSampler + 2);
+
+    DynamicCalls calls;
+    serveDynamicDraws (calls);
+
+    std::map<rive::ore::TextureView*, uint32_t> viewMipCounts;
+    ON_CALL (*mockOreCtx, makeTextureViewImpl (_))
+        .WillByDefault (Invoke ([&viewMipCounts] (const rive::ore::TextureViewDesc& desc)
+    {
+        auto view = rive::make_rcp<TestOreTextureView>();
+        viewMipCounts[view.get()] = desc.mipCount;
+        return rive::rcp<rive::ore::TextureView> (view);
+    }));
+
+    const float view[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    const float materials[2][8] = { { 1.0f }, { 2.0f } };
+    float draw[16] = {};
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (lacking);
+    pass.setUniformBuffer (0, 0, view, sizeof (view));
+
+    // Every draw changes the material block, the texture and the sampler the pipeline lacks
+    constexpr int numDraws = 9;
+    for (int i = 0; i < numDraws; ++i)
+    {
+        draw[0] = (float) i;
+        pass.setUniformBuffer (2, 0, draw, sizeof (draw));
+        pass.setUniformBuffer (2, 1, materials[i % 2], sizeof (materials[i % 2]));
+        pass.setTexture (2, 2, textures[i % 2]);
+        pass.setSampler (2, 3, samplers[i % 2]);
+        EXPECT_TRUE (pass.draw (3));
+    }
+
+    EXPECT_EQ (calls.madeOf (2), 1);
+    EXPECT_EQ (calls.bindsOf (2), numDraws);
+    EXPECT_TRUE (calls.writesOf (materials[0], sizeof (materials[0])).empty());
+
+    // A pipeline declaring them builds the group with the values set last, while they were lacking
+    pass.setPipeline (declaring);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (calls.madeOf (2), 2);
+
+    const auto* made = calls.lastMadeOf (2);
+    ASSERT_NE (made, nullptr);
+    ASSERT_EQ (made->ubos.size(), 2u);
+    EXPECT_EQ (made->ubos[1].slot, 1u);
+    EXPECT_EQ (made->ubos[1].size, sizeof (materials[0]));
+
+    const auto materialWrites = calls.writesOf (materials[0], sizeof (materials[0]));
+    ASSERT_EQ (materialWrites.size(), 1u);
+    const auto offsets = calls.lastOffsetsOf (2);
+    ASSERT_EQ (offsets.size(), 2u);
+    EXPECT_EQ (offsets[1], materialWrites.front().offset);
+
+    ASSERT_EQ (made->textures.size(), 1u);
+    EXPECT_EQ (made->textures[0].slot, 2u);
+    EXPECT_EQ (viewMipCounts[made->textures[0].view], 1u);
+
+    ASSERT_EQ (made->samplers.size(), 1u);
+    EXPECT_EQ (made->samplers[0].slot, 3u);
+    EXPECT_EQ (made->samplers[0].sampler, samplersMade[firstUserSampler]);
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, TextureViewCheckRunsOnlyWhenATextureOrThePipelineChanges)
+{
+#if ! YUP_DEBUG
+    GTEST_SKIP() << "The check only runs in Debug builds";
+#endif
+
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    using RK = rive::ore::ResourceKind;
+    auto first = compilePipeline ({ makeBinding (0, 0, RK::UniformBuffer, 0),
+                                    makeBinding (0, 1, RK::SampledTexture, 0),
+                                    makeBinding (0, 2, RK::SampledTexture, 1) });
+    auto second = compilePipeline ({ makeBinding (0, 0, RK::UniformBuffer, 0),
+                                     makeBinding (0, 1, RK::SampledTexture, 1),
+                                     makeBinding (0, 2, RK::SampledTexture, 0) });
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    auto texture = createSampledTexture (2);
+    auto otherTexture = createSampledTexture (2);
+    ASSERT_NE (texture, nullptr);
+    ASSERT_NE (otherTexture, nullptr);
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    auto frame = makeValidFrame();
+    auto pass = target->beginRenderPass (frame);
+    ASSERT_TRUE (pass.isValid());
+    pass.setPipeline (first);
+    pass.setUniformBuffer (0, 0, uniforms, sizeof (uniforms));
+    pass.setTexture (0, 1, texture);
+    pass.setTexture (0, 2, texture);
+
+    // Draws resetting the same resources check once
+    for (int draw = 0; draw < 10; ++draw)
+    {
+        pass.setTexture (0, 1, texture);
+        pass.setTexture (0, 2, texture);
+        pass.setPipeline (first);
+        EXPECT_TRUE (pass.draw (3));
+    }
+
+    EXPECT_EQ (pass.getTextureViewChecksForTesting(), 1);
+
+    // Another texture, another view of it and a new binding each check again, by the next draw only
+    pass.setTexture (0, 2, otherTexture);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (pass.getTextureViewChecksForTesting(), 2);
+
+    pass.setTexture (0, 2, otherTexture, GpuTextureViewDesc (1, 0));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (pass.getTextureViewChecksForTesting(), 3);
+
+    pass.setTexture (0, 3, texture);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (pass.getTextureViewChecksForTesting(), 4);
+
+    // So does another pipeline, whose layouts decide which bindings count
+    pass.setPipeline (second);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_EQ (pass.getTextureViewChecksForTesting(), 5);
+
+    pass.finish();
+    frame.submit();
 }
 
 #if YUP_ENABLE_SHADER_TRANSPILER

@@ -25,8 +25,9 @@
 #include "lib/color.glsl"
 #include "lib/view.glsl"
 #include "lib/lighting.glsl"
+#include "lib/probes.glsl"
 
-// Shows the environment behind the scene of the raster tier, blurred to one of its roughness levels,
+// Shows the environment behind the scene of the raster tier, blurred to one of its roughness mips,
 // exposed and written per output mode like the surfaces. The full tier shows it from LightingPass.
 
 layout(location = 0) in vec2 v_clip;

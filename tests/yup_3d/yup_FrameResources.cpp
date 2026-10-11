@@ -349,6 +349,7 @@ TEST_F (FrameResourcesMetalTests, SharedSamplersAreCreatedOnceForEveryPass)
 
     const auto& linear = samplers->linearClamp->getDescription();
     EXPECT_EQ (linear.minFilter, GpuFilter::linear);
+    EXPECT_EQ (linear.mipmapFilter, GpuFilter::linear);
     EXPECT_EQ (linear.wrapU, GpuWrapMode::clampToEdge);
     EXPECT_FALSE (linear.compare.has_value());
 

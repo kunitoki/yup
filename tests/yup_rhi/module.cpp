@@ -31,8 +31,11 @@
 #include "yup_GpuPipeline.cpp"
 #include "yup_GpuPipelineMocked.cpp"
 #include "yup_GpuComputePass.cpp"
+// Uses GpuComputePassDeviceFixture: keep it after yup_GpuComputePass.cpp
+#include "yup_GpuRenderPass.cpp"
 #include "yup_GpuFrame.cpp"
 #include "yup_GpuFrameDescriptor.cpp"
+#include "yup_OreBuffer.cpp"
 
 #if YUP_LINUX
 #include "native/yup_GpuDevice_linux.cpp"

@@ -39,28 +39,6 @@ size_t getCellIndex (int roughnessIndex, int angleIndex) noexcept
     return static_cast<size_t> (r * LtcTables::size + a);
 }
 
-/** Uploads four floats per cell, in cell order, as a size x size rgba16float texture. */
-GpuTexture::Ptr createHalfTexture (const GpuDevice::Ptr& device, Span<const float> texels, const String& label)
-{
-    if (device == nullptr)
-        return nullptr;
-
-    GpuTextureDesc desc (LtcTables::size, LtcTables::size, GpuTextureFormat::rgba16float);
-    desc.label = label;
-
-    auto texture = GpuTexture::create (device, desc);
-    if (texture == nullptr)
-        return nullptr;
-
-    std::vector<uint16> halves (texels.size());
-    std::transform (texels.begin(), texels.end(), halves.begin(), floatToHalf);
-
-    GpuTextureDataDesc data;
-    data.data = halves.data();
-
-    return texture->upload (data) ? texture : nullptr;
-}
-
 } // namespace
 
 //==============================================================================
@@ -75,22 +53,6 @@ std::array<float, 2> LtcTables::getAmplitude (int roughnessIndex, int angleIndex
 {
     const auto* cell = ltcAmplitudes + getCellIndex (roughnessIndex, angleIndex) * 2;
     return { cell[0], cell[1] };
-}
-
-GpuTexture::Ptr LtcTables::createMatrixTexture (const GpuDevice::Ptr& device)
-{
-    return createHalfTexture (device, ltcInverseMatrices, "LtcMatrix");
-}
-
-GpuTexture::Ptr LtcTables::createAmplitudeTexture (const GpuDevice::Ptr& device)
-{
-    std::vector<float> texels;
-    texels.reserve (static_cast<size_t> (size * size * 4));
-
-    for (size_t cell = 0; cell < std::size (ltcAmplitudes) / 2; ++cell)
-        texels.insert (texels.end(), { ltcAmplitudes[cell * 2], ltcAmplitudes[cell * 2 + 1], 0.0f, 1.0f });
-
-    return createHalfTexture (device, texels, "LtcAmplitude");
 }
 
 } // namespace yup

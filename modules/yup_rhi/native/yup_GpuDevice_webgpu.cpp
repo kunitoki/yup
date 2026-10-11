@@ -87,6 +87,8 @@ public:
 
     bool isFragmentStorageBufferAvailable() const noexcept override { return maxFragmentStorageBuffers > 0; }
 
+    bool isDynamicUniformOffsetAvailable() const noexcept override { return true; }
+
     bool isStorageTextureAvailable() const noexcept override { return true; }
 
     /** Returns the native wgpu::Device for compute operations. */

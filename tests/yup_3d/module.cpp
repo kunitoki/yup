@@ -19,7 +19,12 @@
   ==============================================================================
 */
 
+#include "../mocks/rive_gpu.h"
+#include "../mocks/rive_ore.h"
+#include "../mocks/yup_rhi.h"
+
 #include "yup_BoundingBox.cpp"
+#include "yup_DepthNormalPrepass.cpp"
 #include "yup_EntityNode.cpp"
 #include "yup_EnvironmentMap.cpp"
 #include "yup_FrameResources.cpp"
@@ -31,10 +36,14 @@
 #include "yup_HalfFloat.cpp"
 #include "yup_LightClusters.cpp"
 #include "yup_LightingPass.cpp"
+#include "yup_LookupTables.cpp"
 #include "yup_LtcTables.cpp"
 #include "yup_MaterialTable.cpp"
 #include "yup_Mesh.cpp"
 #include "yup_PostChain.cpp"
+#include "yup_ProbeAtlas.cpp"
+#include "yup_ProbeRenderer.cpp"
+#include "yup_ReflectionProbeNode.cpp"
 #include "yup_RenderCapabilities.cpp"
 #include "yup_Scene.cpp"
 #include "yup_SceneComponent.cpp"
@@ -42,6 +51,7 @@
 #include "yup_SceneRenderer.cpp"
 #include "yup_ShadowAtlas.cpp"
 #include "yup_ShadowCascades.cpp"
+#include "yup_SphericalHarmonics.cpp"
 #include "yup_TemporalAA.cpp"
 #include "yup_Texture.cpp"
 #include "yup_ViewData.cpp"
