@@ -38,6 +38,18 @@ constexpr uint8_t lightingPassSoftShadowsShaderBundle[] = {
 constexpr uint8_t lightingPassAreaLightsSoftShadowsShaderBundle[] = {
 #include "../shaders/yup_LightingPass_full_area_lights_soft_shadows.inc"
 };
+constexpr uint8_t lightingPassLocalIndirectShaderBundle[] = {
+#include "../shaders/yup_LightingPass_full_local_indirect.inc"
+};
+constexpr uint8_t lightingPassAreaLightsLocalIndirectShaderBundle[] = {
+#include "../shaders/yup_LightingPass_full_area_lights_local_indirect.inc"
+};
+constexpr uint8_t lightingPassSoftShadowsLocalIndirectShaderBundle[] = {
+#include "../shaders/yup_LightingPass_full_soft_shadows_local_indirect.inc"
+};
+constexpr uint8_t lightingPassAreaLightsSoftShadowsLocalIndirectShaderBundle[] = {
+#include "../shaders/yup_LightingPass_full_area_lights_soft_shadows_local_indirect.inc"
+};
 
 // The bundle of each variant, indexed by getVariantIndex()
 const std::pair<const uint8_t*, size_t> lightingPassShaderBundles[] = {
@@ -45,11 +57,15 @@ const std::pair<const uint8_t*, size_t> lightingPassShaderBundles[] = {
     { lightingPassAreaLightsShaderBundle, sizeof (lightingPassAreaLightsShaderBundle) },
     { lightingPassSoftShadowsShaderBundle, sizeof (lightingPassSoftShadowsShaderBundle) },
     { lightingPassAreaLightsSoftShadowsShaderBundle, sizeof (lightingPassAreaLightsSoftShadowsShaderBundle) },
+    { lightingPassLocalIndirectShaderBundle, sizeof (lightingPassLocalIndirectShaderBundle) },
+    { lightingPassAreaLightsLocalIndirectShaderBundle, sizeof (lightingPassAreaLightsLocalIndirectShaderBundle) },
+    { lightingPassSoftShadowsLocalIndirectShaderBundle, sizeof (lightingPassSoftShadowsLocalIndirectShaderBundle) },
+    { lightingPassAreaLightsSoftShadowsLocalIndirectShaderBundle, sizeof (lightingPassAreaLightsSoftShadowsLocalIndirectShaderBundle) },
 };
 
-size_t getVariantIndex (bool areaLights, bool shadowFilters) noexcept
+size_t getVariantIndex (bool areaLights, bool shadowFilters, bool localIndirect) noexcept
 {
-    return (areaLights ? 1u : 0u) + (shadowFilters ? 2u : 0u);
+    return (areaLights ? 1u : 0u) + (shadowFilters ? 2u : 0u) + (localIndirect ? 4u : 0u);
 }
 
 } // namespace
@@ -60,7 +76,7 @@ LightingPass::LightingPass() = default;
 LightingPass::~LightingPass() = default;
 
 //==============================================================================
-Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters)
+Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters, bool localIndirect)
 {
     if (! defaults)
     {
@@ -77,12 +93,14 @@ Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, boo
     if (defaults->failed())
         return *defaults;
 
-    const auto index = getVariantIndex (areaLights, shadowFilters);
+    const auto index = getVariantIndex (areaLights, shadowFilters, localIndirect);
     auto& variant = variants[index];
     if (! variant.prepared)
     {
         const auto& [data, size] = lightingPassShaderBundles[index];
-        variant.prepared = variant.pass.prepare (device, data, size, GpuTextureFormat::rgba16float);
+        variant.prepared = localIndirect && localIndirectFailsForTesting
+                             ? Result::fail ("The local indirect variant failed for testing")
+                             : variant.pass.prepare (device, data, size, GpuTextureFormat::rgba16float);
     }
 
     return *variant.prepared;
@@ -91,8 +109,21 @@ Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, boo
 bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, const GBufferPass::Targets& gbuffer,
                            const LightingInputs& lighting, const GpuTexture::Ptr& sceneColor)
 {
+    // The frames with reflection probes or irradiance volumes shade with the local indirect variant, the only one reading them
+    auto localIndirect = lighting.hasReflectionProbes() || lighting.hasIrradianceVolumes();
     auto shadowFilters = lighting.shadowFilters;
-    auto prepared = prepare (device, lighting.areaLights, shadowFilters);
+    auto prepared = prepare (device, lighting.areaLights, shadowFilters, localIndirect);
+    usedLocalIndirect = false;
+
+    // Without its local indirect variant, the frame shades without reflection probes and irradiance volumes
+    if (prepared.failed() && localIndirect)
+    {
+        if (! std::exchange (localIndirectFailureReported, true))
+            YUP_DBG ("LightingPass: the local indirect variant " << (shadowFilters ? "with shadow filters " : "") << "is unavailable, shading without reflection probes and irradiance volumes: " << prepared.getErrorMessage());
+
+        localIndirect = false;
+        prepared = prepare (device, lighting.areaLights, shadowFilters, false);
+    }
 
     // Without its shadow filter variant the frame shades hard shadows and no contact shadows: the
     // default variants ignore both
@@ -103,16 +134,19 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
 
         shadowFiltersFailureReported = true;
         shadowFilters = false;
-        prepared = prepare (device, lighting.areaLights, false);
+        prepared = prepare (device, lighting.areaLights, false, localIndirect);
     }
 
-    auto& variant = variants[getVariantIndex (lighting.areaLights, shadowFilters)];
+    auto& variant = variants[getVariantIndex (lighting.areaLights, shadowFilters, localIndirect)];
     if (prepared.failed() || sceneColor == nullptr
         || gbuffer.albedoOcclusion == nullptr || gbuffer.normalRoughness == nullptr || gbuffer.emissionMaterial == nullptr || gbuffer.depth == nullptr
-        || lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.materials == nullptr || lighting.reflectionProbeBuffer == nullptr
+        || lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.materials == nullptr
+        || (localIndirect && (lighting.reflectionProbeBuffer == nullptr || lighting.irradianceVolumeBuffer == nullptr))
         || lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.lookupTables == nullptr
         || lighting.shadowCascades == nullptr || lighting.shadowAtlas == nullptr)
         return false;
+
+    usedLocalIndirect = localIndirect;
 
     // Every pixel is written, so the scene color needs no clear
     return variant.pass.draw (frame, sceneColor, {}, [&] (GpuRenderPass& renderPass)
@@ -122,7 +156,6 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
         renderPass.setSampler (0, 3, lighting.samplers.pointClamp);
         renderPass.setTexture (0, 6, lighting.environment != nullptr ? lighting.environment : blackCube);
         renderPass.setTexture (0, 7, lighting.lookupTables);
-        renderPass.setTexture (0, 8, lighting.reflectionAtlas != nullptr ? lighting.reflectionAtlas : blackTexture);
         renderPass.setUniformBuffer (1, 0, &lighting.block, sizeof (lighting.block));
         renderPass.setTexture (3, 0, lighting.shadowCascades);
         renderPass.setTexture (3, 2, lighting.shadowAtlas);
@@ -147,7 +180,16 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
         renderPass.setTexture (1, 11, gbuffer.emissionMaterial);
         renderPass.setTexture (1, 12, gbuffer.depth);
         renderPass.setTexture (1, 13, lighting.ambientOcclusion != nullptr ? lighting.ambientOcclusion : whiteTexture);
-        renderPass.setStorageBuffer (1, 14, lighting.reflectionProbeBuffer);
+
+        // The probe and volume atlases stand in black without probes or volumes
+        if (localIndirect)
+        {
+            renderPass.setTexture (0, 8, lighting.reflectionAtlas != nullptr ? lighting.reflectionAtlas : blackTexture);
+            renderPass.setTexture (0, 9, lighting.irradianceAtlas != nullptr ? lighting.irradianceAtlas : blackTexture);
+            renderPass.setTexture (0, 10, lighting.visibilityAtlas != nullptr ? lighting.visibilityAtlas : blackTexture);
+            renderPass.setStorageBuffer (1, 14, lighting.reflectionProbeBuffer);
+            renderPass.setStorageBuffer (1, 15, lighting.irradianceVolumeBuffer);
+        }
     });
 }
 

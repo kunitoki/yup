@@ -796,6 +796,247 @@ void main()
         }
     }
 
+    //==============================================================================
+    /** The four channels of the texels of one row of @p texture, from @p x, @p count of them, read exactly. */
+    std::vector<std::array<float, 4>> fetchRow (const GpuTexture::Ptr& texture, int x, int y, int count)
+    {
+        struct FetchBlock
+        {
+            int area[4] {};
+        } block;
+
+        block.area[0] = x;
+        block.area[1] = y;
+
+        const auto values = readFloats (R"(
+layout(set = 0, binding = 1) uniform sampler lookupSampler;
+layout(set = 0, binding = 0) uniform texture2D source;
+layout(set = 1, binding = 0) uniform FetchBlock { ivec4 area; } block;
+layout(location = 0) out vec4 color;
+void main()
+{
+    int x = int(gl_FragCoord.x);
+    int texel = x / 4;
+    vec4 value = texelFetch(sampler2D(source, lookupSampler), block.area.xy + ivec2(texel, 0), 0);
+    color = packFloat(value[x - texel * 4]);
+})",
+                                        count * 4, 1, [&] (GpuRenderPass& pass)
+        {
+            pass.setTexture (0, 0, texture);
+            pass.setSampler (0, 1, sampler());
+            pass.setUniformBuffer (1, 0, &block, sizeof (block));
+        });
+
+        std::vector<std::array<float, 4>> texels;
+        for (size_t i = 0; i + 3 < values.size(); i += 4)
+            texels.push_back ({ values[i], values[i + 1], values[i + 2], values[i + 3] });
+
+        return texels;
+    }
+
+    /** The four irradiance coefficients projectIrradiance() wrote in the column at @p texel of
+        @p atlas, decoded from RGBM and ratios when the atlas holds them. */
+    std::array<Vector3<float>, 4> readIrradiance (const GpuTexture::Ptr& atlas, Point<int> texel)
+    {
+        std::array<std::array<float, 4>, 4> raw {};
+        for (int c = 0; c < 4; ++c)
+        {
+            const auto row = fetchRow (atlas, texel.getX(), texel.getY() + c, 1);
+            if (row.size() == 1)
+                raw[static_cast<size_t> (c)] = row[0];
+        }
+
+        std::array<Vector3<float>, 4> coefficients;
+        const auto rgbm = atlas->getFormat() == GpuTextureFormat::rgba8unorm;
+        const auto multiplier = rgbm ? raw[0][3] * 8.0f : 1.0f;
+        coefficients[0] = Vector3<float> (raw[0][0], raw[0][1], raw[0][2]) * multiplier;
+
+        for (size_t c = 1; c < 4; ++c)
+        {
+            const auto& t = raw[c];
+            coefficients[c] = rgbm ? Vector3<float> (SphericalHarmonics::decodeRatio (t[0], coefficients[0].getX()),
+                                                     SphericalHarmonics::decodeRatio (t[1], coefficients[0].getY()),
+                                                     SphericalHarmonics::decodeRatio (t[2], coefficients[0].getZ()))
+                                   : Vector3<float> (t[0], t[1], t[2]);
+        }
+
+        return coefficients;
+    }
+
+    /** Projects @p radiance through a 32 texel cube into an atlas, and compares the four
+        coefficients with the CPU projection of the function, within @p tolerance of coefficient 0. */
+    void checkIrradianceMatchesTheCpuProjection (const RadianceFunction& radiance, float tolerance)
+    {
+        auto cube = makeSourceCube (radiance, 32);
+        GpuTextureDesc desc (8, 8, probes->getRadianceFormat(), true);
+        auto atlas = GpuTexture::create (device, desc);
+        ASSERT_NE (cube, nullptr);
+        ASSERT_NE (atlas, nullptr);
+
+        auto frame = GpuFrame::begin (device);
+        EXPECT_TRUE (probes->projectIrradiance (frame, cube, atlas, { 3, 2 }));
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+        const auto expected = SphericalHarmonics::toIrradiance (SphericalHarmonics::project (radiance, 256));
+        const auto actual = readIrradiance (atlas, { 3, 2 });
+
+        for (size_t c = 0; c < 4; ++c)
+        {
+            RecordProperty (("coefficient" + String ((int) c)).toStdString(), (String (actual[c].getX()) + " " + String (actual[c].getY()) + " " + String (actual[c].getZ())).toStdString());
+
+            EXPECT_NEAR (actual[c].getX(), expected[c].getX(), tolerance * expected[0].getX()) << "coefficient " << c;
+            EXPECT_NEAR (actual[c].getY(), expected[c].getY(), tolerance * expected[0].getY()) << "coefficient " << c;
+            EXPECT_NEAR (actual[c].getZ(), expected[c].getZ(), tolerance * expected[0].getZ()) << "coefficient " << c;
+        }
+    }
+
+    /** A distance cube in ProbeRenderer::visibilityFormat holding 2 + d.x + 0.25 d.y along each direction d. */
+    GpuTexture::Ptr makeDistanceCube (int faceSize)
+    {
+        const auto root = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory();
+        const auto shaders = root.getChildFile ("modules/yup_3d/shaders");
+        const auto source = String ("#version 450\n") + shaders.getChildFile ("lib/cube.glsl").loadFileAsString() + R"(
+layout(set = 1, binding = 0) uniform FaceBlock { vec4 params; } block;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    vec3 d = cubeDirection(int(block.params.x), uv);
+    float distance = 2.0 + d.x + 0.25 * d.y;
+    color = vec4(distance, distance * distance, 0.0, 1.0);
+})";
+
+        ShaderBundleCompileRequest request;
+        request.sourceLanguage = ShaderLanguage::glsl;
+
+        for (const auto& [stage, code] : { std::pair { ShaderStage::vertex, shaders.getChildFile ("yup_Fullscreen.vert").loadFileAsString() },
+                                           std::pair { ShaderStage::fragment, source } })
+        {
+            ShaderBundleEntry entry;
+            entry.stage = stage;
+            entry.source = code;
+            entry.targetLanguages = { ShaderLanguage::msl, ShaderLanguage::glsl };
+            request.entries.push_back (entry);
+        }
+
+        ShaderBundleCompiler compiler;
+        auto bundle = compiler.compile (request);
+        MemoryBlock block;
+        if (! bundle.wasOk() || ! bundle.getReference().saveToMemoryBlock (block).wasOk())
+        {
+            ADD_FAILURE() << bundle.getErrorMessage();
+            return nullptr;
+        }
+
+        GpuTextureDesc desc (static_cast<uint32> (faceSize), static_cast<uint32> (faceSize), ProbeRenderer::visibilityFormat, true);
+        desc.type = GpuTextureType::cube;
+        desc.depthOrArrayLayers = 6;
+        auto cube = GpuTexture::create (device, desc);
+
+        FullscreenPass pass;
+        if (cube == nullptr || pass.prepare (device, static_cast<const uint8*> (block.getData()), block.getSize(), ProbeRenderer::visibilityFormat).failed())
+        {
+            ADD_FAILURE() << "Unable to create the distance cube";
+            return nullptr;
+        }
+
+        auto frame = GpuFrame::begin (device);
+        for (int face = 0; face < 6; ++face)
+        {
+            const float params[4] { static_cast<float> (face), 0.0f, 0.0f, 0.0f };
+            EXPECT_TRUE (pass.draw (frame, cube, GpuTextureViewDesc (0, static_cast<uint32> (face)), [&] (GpuRenderPass& renderPass)
+            {
+                renderPass.setUniformBuffer (1, 0, params, sizeof (params));
+            }, GpuColor::transparentBlack()));
+        }
+
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+        return cube;
+    }
+
+    /** Renders the visibility of makeDistanceCube() into a 16 texel tile at (2, 3) of an atlas,
+        scaled by 0.5, and returns the 18 rows of the bordered tile. */
+    std::vector<std::vector<std::array<float, 4>>> renderVisibilityTile()
+    {
+        auto cube = makeDistanceCube (32);
+        GpuTextureDesc desc (24, 24, ProbeRenderer::visibilityFormat, true);
+        auto atlas = GpuTexture::create (device, desc);
+        if (cube == nullptr || atlas == nullptr)
+        {
+            ADD_FAILURE() << "Unable to create the visibility textures";
+            return {};
+        }
+
+        auto frame = GpuFrame::begin (device);
+        EXPECT_TRUE (probes->renderVisibility (frame, cube, atlas, { 2, 3 }, 16, 0.5f));
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+        std::vector<std::vector<std::array<float, 4>>> rows;
+        for (int y = 0; y < 18; ++y)
+            rows.push_back (fetchRow (atlas, 2, 3 + y, 18));
+
+        return rows;
+    }
+
+    void checkVisibilityHoldsTheMomentsOfTheDistance()
+    {
+        ASSERT_TRUE (probes->canRenderVisibility());
+        const auto rows = renderVisibilityTile();
+        ASSERT_EQ (rows.size(), 18u);
+
+        // The mean of a linear function under a cos^50 lobe around n is the function at n scaled
+        // by the lobe's mean cosine, 51 / 52, along its gradient
+        constexpr auto meanCosine = 51.0f / 52.0f;
+        auto spread = 0.0f;
+
+        for (int j = 0; j < 16; ++j)
+        {
+            ASSERT_EQ (rows[static_cast<size_t> (j + 1)].size(), 18u);
+
+            for (int i = 0; i < 16; ++i)
+            {
+                const auto n = GpuSceneData::decodeOctahedral ({ (static_cast<float> (i) + 0.5f) / 8.0f - 1.0f, (static_cast<float> (j) + 0.5f) / 8.0f - 1.0f });
+                const auto expected = 0.5f * (2.0f + meanCosine * (n.getX() + 0.25f * n.getY()));
+                const auto& texel = rows[static_cast<size_t> (j + 1)][static_cast<size_t> (i + 1)];
+
+                EXPECT_NEAR (texel[0], expected, 0.01f) << "texel " << i << ", " << j;
+                EXPECT_GE (texel[1], texel[0] * texel[0] - 0.002f) << "texel " << i << ", " << j;
+                EXPECT_LT (texel[1] - texel[0] * texel[0], 0.01f) << "texel " << i << ", " << j;
+                spread = jmax (spread, std::abs (texel[0] - 1.0f));
+            }
+        }
+
+        // Not vacuous: the distance changes across the tile
+        EXPECT_GT (spread, 0.4f);
+    }
+
+    void checkVisibilityBorderMirrorsTheTileEdges()
+    {
+        const auto rows = renderVisibilityTile();
+        ASSERT_EQ (rows.size(), 18u);
+
+        const auto at = [&rows] (int x, int y) { return rows[static_cast<size_t> (y)][static_cast<size_t> (x)]; };
+
+        for (int k = 1; k <= 16; ++k)
+        {
+            EXPECT_EQ (at (k, 0), at (17 - k, 1)) << "top " << k;
+            EXPECT_EQ (at (k, 17), at (17 - k, 16)) << "bottom " << k;
+            EXPECT_EQ (at (0, k), at (1, 17 - k)) << "left " << k;
+            EXPECT_EQ (at (17, k), at (16, 17 - k)) << "right " << k;
+        }
+
+        EXPECT_EQ (at (0, 0), at (16, 16));
+        EXPECT_EQ (at (17, 0), at (1, 16));
+        EXPECT_EQ (at (0, 17), at (16, 1));
+        EXPECT_EQ (at (17, 17), at (1, 1));
+
+        // Not vacuous: the mirrored texels differ from their neighbors inside
+        EXPECT_NE (at (1, 0), at (1, 1));
+    }
+
     static inline const String packingFunctions = R"(
 vec4 packFloat(float v)
 {
@@ -1008,6 +1249,66 @@ TEST_F (ProbeRendererMetalTests, PrefilteredCubeHasNoSeams)
 {
     checkPrefilteredCubeHasNoSeams();
 }
+
+TEST_F (ProbeRendererMetalTests, IrradianceOfAConstantCubeIsItsRadiance)
+{
+    // Over a constant radiance the first band is the radiance itself, the second is zero
+    checkIrradianceMatchesTheCpuProjection (constantRadiance, 0.01f);
+}
+
+TEST_F (ProbeRendererMetalTests, IrradianceMatchesTheCpuProjection)
+{
+    checkIrradianceMatchesTheCpuProjection (skyGradient, 0.01f);
+}
+
+TEST_F (ProbeRendererMetalTests, RgbmIrradianceMatchesTheCpuProjection)
+{
+    probes->setForceRgbmForTesting (true);
+    ASSERT_EQ (probes->getRadianceFormat(), GpuTextureFormat::rgba8unorm);
+    checkIrradianceMatchesTheCpuProjection (skyGradient, 0.03f);
+}
+
+TEST_F (ProbeRendererMetalTests, IrradianceRejectsMisplacedTexels)
+{
+    auto cube = probes->createCube (32);
+    GpuTextureDesc desc (8, 8, probes->getRadianceFormat(), true);
+    auto atlas = GpuTexture::create (device, desc);
+    ASSERT_NE (cube, nullptr);
+    ASSERT_NE (atlas, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    EXPECT_FALSE (probes->projectIrradiance (frame, cube, atlas, { 0, 5 })); // Four rows from 5 leave the atlas
+    EXPECT_FALSE (probes->projectIrradiance (frame, cube, atlas, { -1, 0 }));
+    EXPECT_FALSE (probes->projectIrradiance (frame, nullptr, atlas, { 0, 0 }));
+    EXPECT_FALSE (probes->projectIrradiance (frame, cube, nullptr, { 0, 0 }));
+    frame.submit();
+}
+
+TEST_F (ProbeRendererMetalTests, VisibilityHoldsTheMomentsOfTheDistance)
+{
+    checkVisibilityHoldsTheMomentsOfTheDistance();
+}
+
+TEST_F (ProbeRendererMetalTests, VisibilityBorderMirrorsTheTileEdges)
+{
+    checkVisibilityBorderMirrorsTheTileEdges();
+}
+
+TEST_F (ProbeRendererMetalTests, VisibilityRejectsMisplacedTiles)
+{
+    auto cube = makeDistanceCube (8);
+    GpuTextureDesc desc (24, 24, ProbeRenderer::visibilityFormat, true);
+    auto atlas = GpuTexture::create (device, desc);
+    ASSERT_NE (cube, nullptr);
+    ASSERT_NE (atlas, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    EXPECT_FALSE (probes->renderVisibility (frame, cube, atlas, { 8, 0 }, 16, 1.0f)); // 18 texels from 8 leave the atlas
+    EXPECT_FALSE (probes->renderVisibility (frame, cube, atlas, { 0, 0 }, 1, 1.0f));
+    EXPECT_FALSE (probes->renderVisibility (frame, nullptr, atlas, { 0, 0 }, 16, 1.0f));
+    frame.submit();
+}
+
 #endif
 
 #if YUP_LINUX && YUP_ENABLE_SHADER_TRANSPILER
@@ -1100,5 +1401,20 @@ TEST_F (ProbeRendererGLTests, PrefilterMipZeroIsACopyOfTheSource)
 TEST_F (ProbeRendererGLTests, PrefilteredCubeHasNoSeams)
 {
     checkPrefilteredCubeHasNoSeams();
+}
+
+TEST_F (ProbeRendererGLTests, IrradianceMatchesTheCpuProjection)
+{
+    checkIrradianceMatchesTheCpuProjection (skyGradient, 0.01f);
+}
+
+TEST_F (ProbeRendererGLTests, VisibilityHoldsTheMomentsOfTheDistance)
+{
+    checkVisibilityHoldsTheMomentsOfTheDistance();
+}
+
+TEST_F (ProbeRendererGLTests, VisibilityBorderMirrorsTheTileEdges)
+{
+    checkVisibilityBorderMirrorsTheTileEdges();
 }
 #endif

@@ -97,10 +97,11 @@ public:
     /** The storage buffers a frame can acquire. */
     enum class StorageSlot
     {
-        lights,          ///< The packed lights.
-        clusterLights,   ///< The light lists of the clusters.
-        materials,       ///< The material table.
-        reflectionProbes ///< The reflection probes of the full tier.
+        lights,           ///< The packed lights.
+        clusterLights,    ///< The light lists of the clusters.
+        materials,        ///< The material table.
+        reflectionProbes, ///< The reflection probes of the full tier.
+        irradianceVolumes ///< The irradiance volumes of the full tier.
     };
 
     /** A storage buffer of at least @p byteSize for this frame. Contents are undefined until written.
@@ -174,7 +175,7 @@ private:
 
     // One buffer per frame the device keeps in flight (GpuDevice::framesInFlight)
     static constexpr size_t storageRingSize = 3;
-    static constexpr size_t numStorageSlots = 4;
+    static constexpr size_t numStorageSlots = 5;
 
     GpuDevice::Ptr device;
     std::vector<Transient> transients;

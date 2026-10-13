@@ -396,6 +396,38 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle lightingPassFullLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_local_indirect.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassFullAreaLightsLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights_local_indirect.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassFullSoftShadowsLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_soft_shadows_local_indirect.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassFullAreaLightsSoftShadowsLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights_soft_shadows_local_indirect.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
     /** True if @p resources declare a resource at @p set and @p binding. */
     static bool declares (const std::vector<ShaderReflection::ResourceBinding>& resources, uint32_t set, uint32_t binding)
     {
@@ -464,17 +496,17 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
 {
     // The reflection counts what the shaders declare, so the budget check cannot pass on empty
     // lists. The shared lookups (the environment and the lookup tables) live in set 0 in every
-    // variant, the local indirect variants adding the reflection atlas there, the ambient occlusion
-    // in set 1 and the probe list in set 2; set 3 holds the sun cascades and the point and spot
+    // variant, the local indirect variants adding the reflection, irradiance and visibility atlases
+    // there, the ambient occlusion in set 1 and the probe list in set 2; set 3 holds the sun cascades and the point and spot
     // light atlas, read with the ShadowBlock. The soft shadow variants read both maps raw too
     for (const auto& [name, bundle, textures, lookups, passInputs, shadowMaps, blocks] : { std::tuple { "ForwardPass", forwardPass(), 9, 2, 0, 2, 5 },
                                                                                           std::tuple { "ForwardPass_area_lights", forwardPassAreaLights(), 9, 2, 0, 2, 5 },
                                                                                           std::tuple { "ForwardPass_soft_shadows", forwardPassSoftShadows(), 11, 2, 0, 4, 5 },
                                                                                           std::tuple { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), 11, 2, 0, 4, 5 },
-                                                                                          std::tuple { "ForwardPass_local_indirect", forwardPassLocalIndirect(), 11, 3, 1, 2, 6 },
-                                                                                          std::tuple { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), 11, 3, 1, 2, 6 },
-                                                                                          std::tuple { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), 13, 3, 1, 4, 6 },
-                                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), 13, 3, 1, 4, 6 } })
+                                                                                          std::tuple { "ForwardPass_local_indirect", forwardPassLocalIndirect(), 13, 5, 1, 2, 6 },
+                                                                                          std::tuple { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), 13, 5, 1, 2, 6 },
+                                                                                          std::tuple { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), 15, 5, 1, 4, 6 },
+                                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), 15, 5, 1, 4, 6 } })
     {
         const auto* vertex = bundle.findShader (ShaderStage::vertex, ShaderLanguage::spirv);
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -493,13 +525,13 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
     }
 
     // The full tier geometry bundles: the forward pass without the raster light list, and the G-buffer.
-    // The forward pass reads the reflection atlas in set 0 too. Its shadow filter variants read the
+    // The forward pass reads the reflection, irradiance and visibility atlases in set 0 too. Its shadow filter variants read the
     // two maps raw too, but never the scene depth (set 1 binding 12): the blended items they draw
     // write none, so they march no contact shadows
-    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 10, 4, 3 },
-                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 10, 4, 3 },
-                                                                   std::tuple { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), 12, 4, 3 },
-                                                                   std::tuple { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), 12, 4, 3 },
+    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 12, 4, 5 },
+                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 12, 4, 5 },
+                                                                   std::tuple { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), 14, 4, 5 },
+                                                                   std::tuple { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), 14, 4, 5 },
                                                                    std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 1, 0 } })
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -531,6 +563,10 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
+        { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect() },
+        { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect() },
+        { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect() },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect() },
         { "ShadowPass", shadowPass() },
         { "ShadowPass_masked", shadowPassMasked() },
         { "GtaoTrace", gtaoTrace() },
@@ -579,6 +615,10 @@ TEST_F (SceneRendererBundleTests, AmbientOcclusionIsReadByTheRasterForwardPassAn
         { "LightingPass_full_area_lights", lightingPassFullAreaLights(), true },
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), true },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), true },
+        { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect(), true },
+        { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect(), true },
+        { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect(), true },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect(), true },
     };
 
     for (const auto& [name, bundle, reads] : bundles)
@@ -611,9 +651,10 @@ TEST_F (SceneRendererBundleTests, AmbientOcclusionIsReadByTheRasterForwardPassAn
 TEST_F (SceneRendererBundleTests, ReflectionProbesAreReadWhereProbesShade)
 {
     // The reflection atlas at set 0 binding 8, and the probes: on raster the per-draw ProbeListBlock
-    // (set 2 binding 13, two GpuReflectionProbe and a count, 272 bytes) in the local indirect
+    // (set 2 binding 13, two GpuReflectionProbe, a GpuIrradianceVolume and a count, 384 bytes) in the local indirect
     // variants only, so the default bundles carry no probe code; on full a storage buffer of every
-    // probe of the frame, set 1 binding 8 in the forward pass and 14 in the lighting pass
+    // probe of the frame, set 1 binding 8 in the forward pass and 14 in the local indirect variants
+    // of the lighting pass (preflight R27), its default variants carrying no probe code either
     enum class Reads { nothing, perDraw, storage };
 
     const std::tuple<const char*, ShaderBundle, Reads, uint32_t> bundles[] = {
@@ -630,10 +671,14 @@ TEST_F (SceneRendererBundleTests, ReflectionProbesAreReadWhereProbesShade)
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), Reads::storage, 8 },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), Reads::storage, 8 },
         { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), Reads::storage, 8 },
-        { "LightingPass_full", lightingPassFull(), Reads::storage, 14 },
-        { "LightingPass_full_area_lights", lightingPassFullAreaLights(), Reads::storage, 14 },
-        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), Reads::storage, 14 },
-        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), Reads::storage, 14 },
+        { "LightingPass_full", lightingPassFull(), Reads::nothing, 0 },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights(), Reads::nothing, 0 },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), Reads::nothing, 0 },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), Reads::nothing, 0 },
+        { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect(), Reads::storage, 14 },
+        { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect(), Reads::storage, 14 },
+        { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect(), Reads::storage, 14 },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect(), Reads::storage, 14 },
     };
 
     for (const auto& [name, bundle, reads, storageBinding] : bundles)
@@ -648,7 +693,7 @@ TEST_F (SceneRendererBundleTests, ReflectionProbesAreReadWhereProbesShade)
         const auto probeList = std::find_if (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 2 && b.binding == 13; });
         EXPECT_EQ (probeList != blocks.end(), reads == Reads::perDraw) << name;
         if (probeList != blocks.end())
-            EXPECT_EQ (probeList->blockSize, static_cast<uint32_t> (2 * sizeof (GpuReflectionProbe) + 16)) << name;
+            EXPECT_EQ (probeList->blockSize, static_cast<uint32_t> (2 * sizeof (GpuReflectionProbe) + sizeof (GpuIrradianceVolume) + 16)) << name;
 
         const auto& buffers = reflection.storageBuffers;
         const auto probes = std::find_if (buffers.begin(), buffers.end(), [binding = storageBinding] (const auto& b) { return b.set == 1 && b.binding == binding; });
@@ -660,6 +705,65 @@ TEST_F (SceneRendererBundleTests, ReflectionProbesAreReadWhereProbesShade)
         const auto* wgsl = bundle.findShader (ShaderStage::fragment, ShaderLanguage::wgsl);
         ASSERT_NE (wgsl, nullptr) << name;
         EXPECT_EQ (wgsl->source.contains ("reflectionProbeWeight"), reads != Reads::nothing) << name;
+    }
+}
+
+TEST_F (SceneRendererBundleTests, IrradianceVolumesAreReadWhereProbesShade)
+{
+    // The irradiance and visibility atlases at set 0 bindings 9 and 10, and the volumes: on raster
+    // the draw's volume in the per-draw ProbeListBlock (set 2 binding 13) of the local indirect
+    // variants only, so the default bundles carry no volume code; on full a storage buffer of the
+    // volumes of the frame, set 1 binding 9 in the forward pass and 15 in the local indirect variants
+    // of the lighting pass (preflight R27), its default variants carrying none
+    enum class Reads { nothing, perDraw, storage };
+
+    const std::tuple<const char*, ShaderBundle, Reads, uint32_t> bundles[] = {
+        { "ForwardPass", forwardPass(), Reads::nothing, 0 },
+        { "ForwardPass_area_lights", forwardPassAreaLights(), Reads::nothing, 0 },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows(), Reads::nothing, 0 },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), Reads::nothing, 0 },
+        { "Background", background(), Reads::nothing, 0 },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_full", forwardPassFull(), Reads::storage, 9 },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), Reads::storage, 9 },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), Reads::storage, 9 },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), Reads::storage, 9 },
+        { "LightingPass_full", lightingPassFull(), Reads::nothing, 0 },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights(), Reads::nothing, 0 },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), Reads::nothing, 0 },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), Reads::nothing, 0 },
+        { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect(), Reads::storage, 15 },
+        { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect(), Reads::storage, 15 },
+        { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect(), Reads::storage, 15 },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect(), Reads::storage, 15 },
+    };
+
+    for (const auto& [name, bundle, reads, storageBinding] : bundles)
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+
+        const auto& reflection = fragment->reflection;
+        EXPECT_EQ (declares (reflection.separateImages, 0, 9), reads != Reads::nothing) << name;
+        EXPECT_EQ (declares (reflection.separateImages, 0, 10), reads != Reads::nothing) << name;
+
+        const auto& buffers = reflection.storageBuffers;
+        const auto volumes = std::find_if (buffers.begin(), buffers.end(), [binding = storageBinding] (const auto& b) { return b.set == 1 && b.binding == binding; });
+        EXPECT_EQ (volumes != buffers.end(), reads == Reads::storage) << name;
+        if (volumes != buffers.end())
+        {
+            EXPECT_TRUE (volumes->readOnly) << name;
+            ASSERT_EQ (volumes->members.size(), 1u) << name;
+            EXPECT_EQ (volumes->members[0].arrayStride, static_cast<uint32_t> (sizeof (GpuIrradianceVolume))) << name;
+        }
+
+        // Nor the volume functions of lib/probes.glsl, in the WGSL that keeps unused functions
+        const auto* wgsl = bundle.findShader (ShaderStage::fragment, ShaderLanguage::wgsl);
+        ASSERT_NE (wgsl, nullptr) << name;
+        EXPECT_EQ (wgsl->source.contains ("irradianceVolumeWeight"), reads != Reads::nothing) << name;
     }
 }
 
@@ -741,6 +845,10 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
+        { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect() },
+        { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect() },
+        { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect() },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -793,6 +901,10 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
         { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), true },
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), true },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), true },
+        { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect(), false },
+        { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect(), false },
+        { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect(), true },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect(), true },
     };
 
     const auto distinctSlots = [] (const std::vector<ShaderReflection::ResourceBinding>& resources)
@@ -964,7 +1076,7 @@ TEST_F (SceneRendererBundleTests, FullForwardPassReadsTheClusteredLights)
 {
     // No per-draw list on the full tier: every light in a storage buffer at set 1 binding 6, and
     // the light lists of the clusters at binding 7, both read only, in every full variant; and the
-    // reflection probes of the frame at binding 8
+    // reflection probes of the frame at binding 8 and its irradiance volumes at binding 9
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
@@ -989,7 +1101,7 @@ TEST_F (SceneRendererBundleTests, FullForwardPassReadsTheClusteredLights)
         }
 
         std::sort (bindings.begin(), bindings.end());
-        EXPECT_EQ (bindings, (std::vector<uint32_t> { 6, 7, 8 })) << name;
+        EXPECT_EQ (bindings, (std::vector<uint32_t> { 6, 7, 8, 9 })) << name;
     }
 }
 
@@ -1006,6 +1118,8 @@ TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
         { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows() },
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
+        { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect() },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -1044,6 +1158,10 @@ TEST_F (SceneRendererBundleTests, EveryShadingBundleReadsTheEnvironmentFromSetZe
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
+        { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect() },
+        { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect() },
+        { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect() },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -1086,6 +1204,8 @@ TEST_F (SceneRendererBundleTests, PunctualVariantsCompileNoAreaLightCode)
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
         { "LightingPass_full", lightingPassFull() },
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
+        { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect() },
+        { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -5397,6 +5517,585 @@ vec4 encodeLuma(vec3 c)
 
         ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
         EXPECT_EQ (getNumBakes (renderer), 0);
+
+        // An explicit bake tries again, and fails once more
+        EXPECT_EQ (renderer.bakeProbes (device, scene), 0);
+        EXPECT_FALSE (renderer.getProbeBaker()->hasGivenUp());
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    /** A vertical quad in the plane x = @p x over @p area (z, y), facing +X or -X, the entity @p name. */
+    static EntityNode::Ptr makeWallQuad (const char* name, float x, Rectangle<float> area, bool facingPositiveX, Material::Ptr material)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { x, area.getY(), area.getBottom() };
+        vertices[1].position = { x, area.getY(), area.getX() };
+        vertices[2].position = { x, area.getBottom(), area.getX() };
+        vertices[3].position = { x, area.getBottom(), area.getBottom() };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { facingPositiveX ? 1.0f : -1.0f, 0.0f, 0.0f };
+
+        // Counterclockwise seen from the side the normal points to
+        auto mesh = Mesh::Ptr (new Mesh (name));
+        mesh->addPrimitive (std::move (vertices), facingPositiveX ? std::vector<uint32> { 0, 1, 2, 0, 2, 3 } : std::vector<uint32> { 0, 2, 1, 0, 3, 2 }, std::move (material));
+
+        auto entity = EntityNode::Ptr (new EntityNode (name));
+        entity->attach<MeshNode> (mesh);
+        return entity;
+    }
+
+    /** A white floor 8 x 6 at y = 0, from x = -4 to 4, lit by a constant gray environment of 0.5
+        and no light, with no ambient light. A red emissive wall, the entity "red wall", double-sided
+        and 3 m high, emitting 6, stands across it at x = -1.5. With @p withDivider an opaque gray wall, the entity
+        "divider", double-sided and as high, splits the floor at x = 0: the floor between the two
+        walls sees the red wall, the floor right of the divider does not. The volume probes next to
+        the divider on its left (addIrradianceVolume()) see a lot of red, so trilinear weights alone
+        would leak it to the right. The camera looks straight down from 11 m, +Z towards the bottom
+        of the frame, so at 64 x 64 a floor point (x, z) shows at (32 + 6.88 x, 32 + 6.88 z).
+    */
+    static void buildRedRoomScene (Scene& scene, bool withDivider = true)
+    {
+        auto white = Material::Ptr (new Material());
+        white->baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
+        white->metallicFactor = 0.0f;
+        white->roughnessFactor = 1.0f;
+        scene.getRoot()->addChild (makeHorizontalQuad ("floor", 0.0f, { -4.0f, -3.0f, 8.0f, 6.0f }, true, white));
+
+        auto red = makeEmitterMaterial ({ 6.0f, 0.0f, 0.0f });
+        red->doubleSided = true;
+        scene.getRoot()->addChild (makeWallQuad ("red wall", -1.5f, { -3.0f, 0.0f, 6.0f, 3.0f }, true, red));
+
+        if (withDivider)
+        {
+            auto gray = makeWallMaterial();
+            gray->doubleSided = true;
+            scene.getRoot()->addChild (makeWallQuad ("divider", 0.0f, { -3.0f, 0.0f, 6.0f, 3.0f }, true, gray));
+        }
+
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.setAmbientColor (Colors::black);
+        scene.setUsingDefaultLight (false);
+        addCamera (scene, { 0.0f, 11.0f, 0.0f }, {}, { 0.0f, 0.0f, -1.0f });
+    }
+
+    /** The floor between the two walls of buildRedRoomScene() at 64 x 64, from x = -1.3 to -0.15 and z = -2 to 2. */
+    static Rectangle<int> leftFloorRegion() { return { 23, 19, 8, 26 }; }
+
+    /** The floor right of the divider of buildRedRoomScene() at 64 x 64, next to it: x = 0.15 to 0.58, z = -2 to 2. */
+    static Rectangle<int> rightFloorRegion() { return { 33, 19, 3, 26 }; }
+
+    /** Adds an irradiance volume of @p nx x @p ny x @p nz probes enclosing the room of
+        buildRedRoomScene(), the entity "volume", and returns its part. With 2 rows they lie at
+        y = 0.5 and 2.5, above the floor, and with 6 columns no probe lies in a wall: the cells are
+        1.5 m wide along X, centered at x = -3.75, -2.25, -0.75, 0.75, 2.25 and 3.75. The floor lies
+        0.5 m inside the box, beyond the falloff of 0.25.
+    */
+    static IrradianceVolumeNode& addIrradianceVolume (Scene& scene, int nx, int ny, int nz)
+    {
+        auto entity = EntityNode::Ptr (new EntityNode ("volume"));
+        auto& volume = entity->attach<IrradianceVolumeNode>();
+        volume.extents = { 4.5f, 2.0f, 3.5f };
+        volume.resolutionX = nx;
+        volume.resolutionY = ny;
+        volume.resolutionZ = nz;
+        volume.falloff = 0.25f;
+        entity->setPosition ({ 0.0f, 1.5f, 0.0f });
+        scene.getRoot()->addChild (entity);
+        return volume;
+    }
+
+    /** Adds @p count small gray quads lying on the right of the floor of buildRedRoomScene(), each
+        its own entity and draw, for scenes with many draws. */
+    static void addSmallCasters (Scene& scene, int count)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            const auto x = 0.5f + 0.3f * static_cast<float> (i % 10);
+            const auto z = -2.5f + 0.5f * static_cast<float> (i / 10);
+            scene.getRoot()->addChild (makeHorizontalQuad ("caster", 0.05f, { x, z, 0.1f, 0.1f }, true, makeWallMaterial()));
+        }
+    }
+
+    /** How much redder than green @p color is. */
+    static float redOverGreen (Color color)
+    {
+        return static_cast<float> (color.getRed()) / static_cast<float> (jmax (1, static_cast<int> (color.getGreen())));
+    }
+
+    /** The number of irradiance volumes the renderer baked, or -1 before it had a baker. */
+    static int getNumVolumeBakes (const SceneRenderer& renderer)
+    {
+        const auto* baker = renderer.getProbeBaker();
+        return baker != nullptr ? baker->getNumVolumeBakes() : -1;
+    }
+
+    /** On @p tier, an irradiance volume tints the floor next to the red wall red: without it the
+        floor shows the gray environment only.
+    */
+    void checkIrradianceVolumeTintsTheFloorNearTheRedWall (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene);
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        const auto without = meanColor (renderToImage (renderer, scene, 64), leftFloorRegion());
+        ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        EXPECT_EQ (renderer.getProbeBaker(), nullptr); // Nothing allocated without a volume
+
+        addIrradianceVolume (scene, 6, 2, 4);
+        const auto with = meanColor (renderToImage (renderer, scene, 64), leftFloorRegion());
+        ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        EXPECT_EQ (getNumVolumeBakes (renderer), 1);
+
+        RecordProperty ("leftWithout", without.toString().toStdString());
+        RecordProperty ("leftWith", with.toString().toStdString());
+        EXPECT_NEAR (redOverGreen (without), 1.0f, 0.05f);
+        EXPECT_GT (redOverGreen (with), redOverGreen (without) + 0.2f);
+    }
+
+    /** On @p tier, the volume's visibility keeps the red light of the probes on the left of the
+        divider off the floor right of it, which those probes cannot see: their trilinear weights
+        alone would let it through. Below the float floor visibility is skipped, so the check needs
+        rg16float render targets.
+    */
+    void checkVisibilityStopsLightLeakingThroughTheWall (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene);
+        setTier (scene, tier);
+        addIrradianceVolume (scene, 6, 2, 4);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumVolumeBakes (renderer), 1);
+
+        if (! device->isFormatRenderable (GpuTextureFormat::rg16float))
+            GTEST_SKIP() << "Visibility is skipped below the float floor";
+
+        ASSERT_NE (renderer.getProbeBaker(), nullptr);
+        ASSERT_NE (renderer.getProbeBaker()->getVisibilityAtlas(), nullptr);
+
+        const auto left = meanColor (image, leftFloorRegion());
+        const auto right = meanColor (image, rightFloorRegion());
+        RecordProperty ("left", left.toString().toStdString());
+        RecordProperty ("right", right.toString().toStdString());
+
+        EXPECT_GT (redOverGreen (left), 1.2f); // Not vacuous: the red light is there
+        EXPECT_LT (redOverGreen (right), 1.1f);
+    }
+
+    /** On @p tier, a volume bakes again when it moves or one of its own fields changes, never because
+        the rest of the scene changed, until requestBake() asks for it.
+    */
+    void checkMovingAVolumeBakesItAgain (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setTier (scene, tier);
+        auto& volume = addIrradianceVolume (scene, 4, 2, 2);
+
+        SceneRenderer renderer;
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumVolumeBakes (renderer), 1);
+
+        // Unchanged, it keeps its bake
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumVolumeBakes (renderer), 1);
+
+        scene.getRoot()->findChild ("volume")->setPosition ({ 0.0f, 1.6f, 0.0f });
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumVolumeBakes (renderer), 2);
+
+        volume.normalBias = 0.1f;
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumVolumeBakes (renderer), 3);
+
+        // The wall turns green: the volume keeps showing what it captured
+        scene.getRoot()->findChild ("red wall")->getNode<MeshNode>()->mesh->getPrimitive (0).material->emissiveFactor = { 0.0f, 6.0f, 0.0f };
+        const auto stale = meanColor (renderToImage (renderer, scene, 64), leftFloorRegion());
+        EXPECT_EQ (getNumVolumeBakes (renderer), 3);
+        EXPECT_GT (stale.getRed(), stale.getGreen() + 10);
+
+        volume.requestBake();
+        const auto rebaked = meanColor (renderToImage (renderer, scene, 64), leftFloorRegion());
+        EXPECT_EQ (getNumVolumeBakes (renderer), 4);
+        EXPECT_GT (rebaked.getGreen(), rebaked.getRed() + 10);
+    }
+
+    /** On @p tier, bakeProbes() bakes the volumes too, and returns how many probes and volumes it
+        baked; render() then has nothing left to bake.
+    */
+    void checkBakeProbesBakesTheVolumes (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setTier (scene, tier);
+        auto& volume = addIrradianceVolume (scene, 4, 2, 2);
+
+        SceneRenderer renderer;
+        EXPECT_EQ (renderer.bakeProbes (device, scene), 1);
+        EXPECT_EQ (renderer.bakeProbes (device, scene), 0);
+
+        volume.requestBake();
+        EXPECT_EQ (renderer.bakeProbes (device, scene), 1);
+        EXPECT_EQ (getNumVolumeBakes (renderer), 2);
+
+        const auto floor = meanColor (renderToImage (renderer, scene, 64), leftFloorRegion());
+        EXPECT_EQ (getNumVolumeBakes (renderer), 2);
+        EXPECT_GT (redOverGreen (floor), 1.2f);
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    /** On @p tier, the atlases of the volumes live as long as a volume needs them. */
+    void checkRemovedVolumesReleaseTheAtlases (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setTier (scene, tier);
+        addIrradianceVolume (scene, 4, 2, 2);
+
+        SceneRenderer renderer;
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        const auto* baker = renderer.getProbeBaker();
+        ASSERT_NE (baker, nullptr);
+        EXPECT_NE (baker->getIrradianceAtlas(), nullptr);
+        EXPECT_EQ (baker->getVisibilityAtlas() != nullptr, device->isFormatRenderable (GpuTextureFormat::rg16float));
+        EXPECT_EQ (baker->getNumBakedVolumes(), 1);
+
+        // The next call bakes nothing and keeps the atlases
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_FALSE (baker->holdsCaptureTargets());
+        EXPECT_NE (baker->getIrradianceAtlas(), nullptr);
+
+        scene.getRoot()->removeChild (scene.getRoot()->findChild ("volume"));
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (renderer.getProbeBaker(), baker);
+        EXPECT_EQ (baker->getNumBakedVolumes(), 0);
+        EXPECT_EQ (baker->getIrradianceAtlas(), nullptr);
+        EXPECT_EQ (baker->getVisibilityAtlas(), nullptr);
+    }
+
+    /** On @p tier, below the float floor the volume stores its first band in RGBM and the second as
+        ratios to it, and lights the floor as the float volume does.
+    */
+    void checkRgbmVolumeLightsLikeTheFloatOne (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool rgbm)
+        {
+            Scene scene;
+            buildRedRoomScene (scene, false);
+            setTier (scene, tier);
+            addIrradianceVolume (scene, 4, 2, 2);
+
+            SceneRenderer renderer;
+            if (rgbm)
+                renderer.forceRgbmRadianceForTesting();
+
+            const auto image = renderToImage (renderer, scene, 64);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+
+            const auto* baker = renderer.getProbeBaker();
+            const auto atlas = baker != nullptr ? baker->getIrradianceAtlas() : nullptr;
+            EXPECT_TRUE (atlas != nullptr && atlas->getFormat() == (rgbm ? GpuTextureFormat::rgba8unorm : GpuTextureFormat::rgba16float));
+            return image;
+        };
+
+        const auto floatImage = render (false);
+        const auto rgbmImage = render (true);
+        ASSERT_TRUE (floatImage.isValid() && rgbmImage.isValid());
+
+        // The floor behind the red wall, in front of it and across the room
+        for (const auto& region : { Rectangle<int> (6, 19, 8, 26), Rectangle<int> (23, 19, 8, 26), Rectangle<int> (40, 19, 16, 26) })
+        {
+            const auto expected = meanColor (floatImage, region), actual = meanColor (rgbmImage, region);
+            RecordProperty (("float" + region.toString()).toStdString(), expected.toString().toStdString());
+            RecordProperty (("rgbm" + region.toString()).toStdString(), actual.toString().toStdString());
+
+            EXPECT_NEAR (actual.getRed(), expected.getRed(), 3) << region.toString();
+            EXPECT_NEAR (actual.getGreen(), expected.getGreen(), 3) << region.toString();
+            EXPECT_NEAR (actual.getBlue(), expected.getBlue(), 3) << region.toString();
+        }
+
+        // Not vacuous: the volume tints the floor, more next to the wall than across the room
+        EXPECT_GT (redOverGreen (meanColor (floatImage, { 23, 19, 8, 26 })), redOverGreen (meanColor (floatImage, { 40, 19, 16, 26 })) + 0.1f);
+    }
+
+    /** On @p tier, a volume with more probe positions than one bake records (preflight R28) bakes
+        over several frames, and weighs nothing until all of them are captured.
+    */
+    void checkProgressiveVolumeBakeShadesOnceComplete (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setTier (scene, tier);
+        addIrradianceVolume (scene, 7, 7, 7);
+
+        const auto positions = 7 * 7 * 7;
+        ASSERT_GT (positions, ProbeBaker::maxVolumeProbesPerBake);
+        const auto expectedFrames = (positions + ProbeBaker::maxVolumeProbesPerBake - 1) / ProbeBaker::maxVolumeProbesPerBake;
+
+        SceneRenderer renderer;
+        const auto first = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (first.isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumVolumeBakes (renderer), 0);
+        EXPECT_NEAR (redOverGreen (meanColor (first, leftFloorRegion())), 1.0f, 0.05f); // Weighs nothing yet
+
+        auto frames = 1;
+        Image last;
+        while (getNumVolumeBakes (renderer) < 1 && frames < 4 * expectedFrames)
+        {
+            last = renderToImage (renderer, scene, 64);
+            ASSERT_TRUE (last.isValid()) << renderer.getLastError();
+            ++frames;
+        }
+
+        RecordProperty ("framesToBake", frames);
+        EXPECT_EQ (frames, expectedFrames);
+        EXPECT_EQ (getNumVolumeBakes (renderer), 1);
+        EXPECT_GT (redOverGreen (meanColor (last, leftFloorRegion())), 1.2f);
+
+        // Baked, it records nothing more
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumVolumeBakes (renderer), 1);
+    }
+
+    /** On @p tier, a volume whose captures fail leaves the reflection probes baking and reflecting:
+        each feature has its own failure latch.
+    */
+    void checkFailedVolumeCapturesLeaveTheProbesReflecting (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setTier (scene, tier);
+        addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+        addIrradianceVolume (scene, 4, 2, 2);
+
+        SceneRenderer renderer;
+        renderer.failVolumeCapturesForTesting();
+
+        Image image;
+        for (int i = 0; i < 3; ++i)
+        {
+            image = renderToImage (renderer, scene, 64);
+            ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        }
+
+        ASSERT_NE (renderer.getProbeBaker(), nullptr);
+        EXPECT_TRUE (renderer.getProbeBaker()->hasGivenUpVolumes());
+        EXPECT_FALSE (renderer.getProbeBaker()->hasGivenUpProbes());
+        EXPECT_EQ (getNumVolumeBakes (renderer), 0);
+        EXPECT_EQ (getNumBakes (renderer), 1);
+
+        const auto floor = meanColor (image, floorRegion());
+        EXPECT_GT (floor.getGreen(), floor.getRed() + 40); // The probe still reflects the emitter
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    /** On @p tier, a volume whose resolution changes gives its blocks back and bakes again into new ones. */
+    void checkResizingAVolumeBakesItAgain (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setTier (scene, tier);
+        auto& volume = addIrradianceVolume (scene, 4, 2, 2);
+
+        SceneRenderer renderer;
+        auto bakes = 0;
+        for (const auto resolutionX : { 4, 6, 3, 6 })
+        {
+            volume.resolutionX = resolutionX;
+            const auto image = renderToImage (renderer, scene, 64);
+            ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+            EXPECT_EQ (getNumVolumeBakes (renderer), ++bakes) << resolutionX;
+            EXPECT_GT (redOverGreen (meanColor (image, leftFloorRegion())), 1.2f) << resolutionX;
+        }
+
+        ASSERT_NE (renderer.getProbeBaker(), nullptr);
+        EXPECT_EQ (renderer.getProbeBaker()->getNumBakedVolumes(), 1);
+    }
+
+    /** On @p tier, the volume lights without an environment, and keeps its own intensity when the
+        environment's changes: its diffuse light is outside the environment's intensity, and the
+        indirect branch opens for it alone (lightsIndirect's probeInfo.z gate). The volume here covers
+        the left of the room only, so the floor on the right shows the environment.
+    */
+    void checkVolumeLightsWithoutTheEnvironmentAndKeepsItsIntensity (RenderSettings::TierPreference tier)
+    {
+        const auto addLeftVolume = [] (Scene& scene)
+        {
+            auto& volume = addIrradianceVolume (scene, 4, 2, 2);
+            volume.extents = { 2.75f, 2.0f, 3.5f };
+            scene.getRoot()->findChild ("volume")->setPosition ({ -1.75f, 1.5f, 0.0f });
+        };
+
+        const Rectangle<int> outsideRegion (46, 19, 10, 26); // x = 2 to 3.5, beyond the volume's border at x = 1
+        {
+            Scene scene;
+            buildRedRoomScene (scene, false);
+            setTierForExactFrames (scene, tier);
+            scene.setEnvironment (nullptr);
+            addLeftVolume (scene);
+
+            SceneRenderer renderer;
+            const auto image = renderToImage (renderer, scene, 64);
+            ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+            EXPECT_EQ (getNumVolumeBakes (renderer), 1);
+
+            const auto inside = meanColor (image, leftFloorRegion());
+            RecordProperty ("insideWithoutEnvironment", inside.toString().toStdString());
+            EXPECT_GT (inside.getRed(), 60);
+            EXPECT_GT (redOverGreen (inside), 1.5f);
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+            if (tier == RenderSettings::TierPreference::full)
+            {
+                const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+                ASSERT_NE (sceneColor, nullptr);
+                EXPECT_TRUE (isFiniteTexture (sceneColor));
+                EXPECT_FALSE (isSaturatedTexture (sceneColor));
+            }
+#endif
+        }
+
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setTierForExactFrames (scene, tier);
+        addLeftVolume (scene);
+
+        SceneRenderer renderer;
+        const auto full = renderToImage (renderer, scene, 64);
+        scene.setEnvironmentIntensity (0.25f);
+        const auto quarter = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (full.isValid() && quarter.isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumVolumeBakes (renderer), 1); // An environment change never bakes it again
+
+        const auto insideFull = meanColor (full, leftFloorRegion()), insideQuarter = meanColor (quarter, leftFloorRegion());
+        const auto outsideFull = meanColor (full, outsideRegion), outsideQuarter = meanColor (quarter, outsideRegion);
+        RecordProperty ("insideFull", insideFull.toString().toStdString());
+        RecordProperty ("insideQuarter", insideQuarter.toString().toStdString());
+        RecordProperty ("outsideFull", outsideFull.toString().toStdString());
+        RecordProperty ("outsideQuarter", outsideQuarter.toString().toStdString());
+
+        // The floor inside keeps the volume's light, the environment's specular share of a rough
+        // dielectric aside (a few levels); the floor outside darkens with the environment
+        EXPECT_NEAR (insideQuarter.getRed(), insideFull.getRed(), 6);
+        EXPECT_NEAR (insideQuarter.getGreen(), insideFull.getGreen(), 6);
+        EXPECT_LT (outsideQuarter.getGreen(), outsideFull.getGreen() - 30);
+    }
+
+    /** On @p tier, a volume that changes after its bake completed bakes again from its first
+        position, weighs nothing until all of them are captured again, and is reported pending
+        meanwhile, however many calls that takes (preflight R28).
+    */
+    void checkChangedVolumeBakesAgainWhole (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setTier (scene, tier);
+        addIrradianceVolume (scene, 7, 7, 7);
+
+        const auto callsPerBake = (7 * 7 * 7 + ProbeBaker::maxVolumeProbesPerBake - 1) / ProbeBaker::maxVolumeProbesPerBake;
+
+        SceneRenderer renderer;
+        for (int i = 0; i < 4 * callsPerBake && getNumVolumeBakes (renderer) < 1; ++i)
+            ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+
+        ASSERT_EQ (getNumVolumeBakes (renderer), 1);
+        const auto* baker = renderer.getProbeBaker();
+        ASSERT_NE (baker, nullptr);
+
+        // Moved: it bakes again, and weighs nothing until that bake completes
+        scene.getRoot()->findChild ("volume")->setPosition ({ 0.0f, 1.6f, 0.0f });
+
+        SceneDrawList list;
+        auto calls = 0;
+        while (calls < 4 * callsPerBake)
+        {
+            if (renderer.bakeProbes (device, scene) == 0)
+                break;
+
+            ++calls;
+            list.build (*scene.getRoot(), Matrix4());
+
+            if (getNumVolumeBakes (renderer) < 2)
+            {
+                EXPECT_EQ (baker->getNumPending (list), 1) << calls;
+                EXPECT_TRUE (baker->packIrradianceVolumesByPriority (list).empty()) << calls;
+
+                const auto packed = baker->packIrradianceVolumes (list);
+                const GpuIrradianceVolume empty {};
+                EXPECT_TRUE (packed.size() == 1 && std::memcmp (&packed[0], &empty, sizeof (empty)) == 0) << calls;
+            }
+        }
+
+        EXPECT_EQ (calls, callsPerBake);
+        EXPECT_EQ (getNumVolumeBakes (renderer), 2);
+        EXPECT_EQ (baker->getNumPending (list), 0);
+
+        const auto image = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        EXPECT_GT (redOverGreen (meanColor (image, leftFloorRegion())), 1.2f);
+    }
+
+    /** On @p tier, reflection probe captures that fail leave the irradiance volumes baking and lighting. */
+    void checkFailedProbeCapturesLeaveTheVolumesLighting (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setTier (scene, tier);
+        addIrradianceVolume (scene, 4, 2, 2);
+        addReflectionProbe (scene, { 2.0f, 1.0f, 0.0f }, 1.0f);
+
+        SceneRenderer renderer;
+        renderer.failProbeCapturesForTesting();
+
+        Image image;
+        for (int i = 0; i < 3; ++i)
+        {
+            image = renderToImage (renderer, scene, 64);
+            ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        }
+
+        ASSERT_NE (renderer.getProbeBaker(), nullptr);
+        EXPECT_TRUE (renderer.getProbeBaker()->hasGivenUpProbes());
+        EXPECT_FALSE (renderer.getProbeBaker()->hasGivenUpVolumes());
+        EXPECT_EQ (getNumBakes (renderer), 0);
+        EXPECT_EQ (getNumVolumeBakes (renderer), 1);
+        EXPECT_GT (redOverGreen (meanColor (image, leftFloorRegion())), 1.2f); // The volume still lights the floor
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    /** On @p tier, a volume whose capture fails leaves the frame rendering without it, and the
+        baker gives up after two failures in a row, until bakeProbes() asks again.
+    */
+    void checkFailedVolumeCapturesLeaveTheFrameWithoutVolumes (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setTier (scene, tier);
+        addIrradianceVolume (scene, 4, 2, 2);
+
+        SceneRenderer renderer;
+        renderer.failVolumeCapturesForTesting();
+
+        const auto first = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (first.isValid()) << renderer.getLastError();
+        EXPECT_TRUE (renderer.getLastError().isEmpty());
+        ASSERT_NE (renderer.getProbeBaker(), nullptr);
+        EXPECT_EQ (getNumVolumeBakes (renderer), 0);
+        EXPECT_FALSE (renderer.getProbeBaker()->hasGivenUp());
+
+        // Without the volume the floor shows the gray environment only
+        EXPECT_NEAR (redOverGreen (meanColor (first, leftFloorRegion())), 1.0f, 0.05f);
+
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_TRUE (renderer.getProbeBaker()->hasGivenUp());
+
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumVolumeBakes (renderer), 0);
 
         // An explicit bake tries again, and fails once more
         EXPECT_EQ (renderer.bakeProbes (device, scene), 0);
@@ -10296,6 +10995,324 @@ TEST_F (SceneRendererMetalTests, ReflectionProbeChangesRestartAccumulation)
     }
 }
 
+TEST_P (SceneRendererTierTests, IrradianceVolumeTintsTheFloorNearTheRedWall)
+{
+    checkIrradianceVolumeTintsTheFloorNearTheRedWall (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, VisibilityStopsLightLeakingThroughTheWall)
+{
+    checkVisibilityStopsLightLeakingThroughTheWall (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, MovingAVolumeBakesItAgain)
+{
+    checkMovingAVolumeBakesItAgain (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, BakeProbesBakesTheVolumes)
+{
+    checkBakeProbesBakesTheVolumes (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, RemovedVolumesReleaseTheAtlases)
+{
+    checkRemovedVolumesReleaseTheAtlases (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, RgbmVolumeLightsLikeTheFloatOne)
+{
+    checkRgbmVolumeLightsLikeTheFloatOne (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FailedVolumeCapturesLeaveTheFrameWithoutVolumes)
+{
+    checkFailedVolumeCapturesLeaveTheFrameWithoutVolumes (GetParam());
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_P (SceneRendererTierTests, GpuFailureBakesTheVolumesAgain)
+{
+    // The frame baking the volume failed on the GPU: the next frame cannot trust its blocks. The
+    // environment cube is built first, in a frame of its own, so the failure hits the bake
+    Scene scene;
+    buildRedRoomScene (scene, false);
+    setTier (scene, GetParam());
+
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+    addIrradianceVolume (scene, 4, 2, 2);
+    device->failNextFrameForTesting ("injected failure");
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (getNumVolumeBakes (renderer), 1);
+
+    // Frames complete in order, so once a later frame did the failed one has too
+    {
+        auto fence = GpuFrame::begin (device);
+        EXPECT_TRUE (fence.waitForGPU().wasOk());
+    }
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getLastGpuFailure(), "injected failure");
+    EXPECT_EQ (getNumVolumeBakes (renderer), 2);
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (getNumVolumeBakes (renderer), 2);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+#endif
+
+TEST_P (SceneRendererTierTests, ChangedVolumeBakesAgainWhole)
+{
+    checkChangedVolumeBakesAgainWhole (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FailedProbeCapturesLeaveTheVolumesLighting)
+{
+    checkFailedProbeCapturesLeaveTheVolumesLighting (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ProgressiveVolumeBakeShadesOnceComplete)
+{
+    checkProgressiveVolumeBakeShadesOnceComplete (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FailedVolumeCapturesLeaveTheProbesReflecting)
+{
+    checkFailedVolumeCapturesLeaveTheProbesReflecting (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ResizingAVolumeBakesItAgain)
+{
+    checkResizingAVolumeBakesItAgain (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, VolumeLightsWithoutTheEnvironmentAndKeepsItsIntensity)
+{
+    checkVolumeLightsWithoutTheEnvironmentAndKeepsItsIntensity (GetParam());
+}
+
+TEST_F (SceneRendererMetalTests, IrradianceVolumeShadesAlikeOnBothTiers)
+{
+    // Raster picks the volume per draw by its center, full per pixel: with one volume over the whole
+    // floor both shade the floor from the same probes. The tolerance of 6 levels is T7's tier parity
+    // one: the two tiers differ by their geometric normal (the full tier stands the shading normal in
+    // for it) and their AO and MSAA, about a level here
+    const auto render = [this] (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildRedRoomScene (scene);
+        setTierForExactFrames (scene, tier);
+        addIrradianceVolume (scene, 6, 2, 4);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    };
+
+    const auto raster = render (RenderSettings::TierPreference::raster);
+    const auto full = render (RenderSettings::TierPreference::full);
+    ASSERT_TRUE (raster.isValid() && full.isValid());
+
+    for (const auto& region : { leftFloorRegion(), rightFloorRegion(), Rectangle<int> (40, 19, 16, 26) })
+    {
+        const auto expected = meanColor (raster, region);
+        const auto actual = meanColor (full, region);
+        RecordProperty (("raster" + region.toString()).toStdString(), expected.toString().toStdString());
+        RecordProperty (("full" + region.toString()).toStdString(), actual.toString().toStdString());
+
+        EXPECT_NEAR (actual.getRed(), expected.getRed(), 6) << region.toString();
+        EXPECT_NEAR (actual.getGreen(), expected.getGreen(), 6) << region.toString();
+        EXPECT_NEAR (actual.getBlue(), expected.getBlue(), 6) << region.toString();
+    }
+
+    // Not vacuous: the volume tints the floor between the walls
+    EXPECT_GT (redOverGreen (meanColor (raster, leftFloorRegion())), 1.3f);
+}
+
+TEST_F (SceneRendererMetalTests, IrradianceVolumeChangesRestartAccumulation)
+{
+    // Each change shows on the full tier once converged: a bake asked for, a field of the volume,
+    // and its entity moving, which also bakes it again
+    const std::pair<const char*, std::function<void (EntityNode&)>> changes[] = {
+        { "requestBake", [] (EntityNode& volume) { volume.getNode<IrradianceVolumeNode>()->requestBake(); } },
+        { "intensity", [] (EntityNode& volume) { volume.getNode<IrradianceVolumeNode>()->intensity = 0.5f; } },
+        { "falloff", [] (EntityNode& volume) { volume.getNode<IrradianceVolumeNode>()->falloff = 1.0f; } },
+        { "normalBias", [] (EntityNode& volume) { volume.getNode<IrradianceVolumeNode>()->normalBias = 0.2f; } },
+        { "position", [] (EntityNode& volume) { volume.setPosition ({ 0.0f, 1.6f, 0.0f }); } },
+    };
+
+    for (const auto& [name, change] : changes)
+    {
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setFullTierTaa (scene, 8);
+        addIrradianceVolume (scene, 4, 2, 2);
+
+        SceneRenderer renderer;
+        for (int i = 0; i < 12; ++i)
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        ASSERT_TRUE (renderer.isConverged()) << name;
+
+        change (*scene.getRoot()->findChild ("volume"));
+
+        // Restarted, not invalidated
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_FALSE (renderer.isConverged()) << name;
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+}
+
+TEST_F (SceneRendererMetalTests, LightingPassShadesProbesAndVolumesWithItsLocalIndirectVariant)
+{
+    // Preflight R27: the full tier shades its opaque surfaces with the local indirect variants of
+    // the lighting pass only in the frames with reflection probes or irradiance volumes
+    Scene scene;
+    buildRedRoomScene (scene, false);
+    setFullTierTaa (scene, 1);
+
+    SceneRenderer renderer;
+    const auto usesLocalIndirect = [&]
+    {
+        EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        const auto* lightingPass = renderer.getLightingPass();
+        return lightingPass != nullptr && lightingPass->usesLocalIndirect();
+    };
+
+    EXPECT_FALSE (usesLocalIndirect());
+
+    addIrradianceVolume (scene, 4, 2, 2);
+    EXPECT_TRUE (usesLocalIndirect());
+
+    scene.getRoot()->removeChild (scene.getRoot()->findChild ("volume"));
+    EXPECT_FALSE (usesLocalIndirect());
+
+    addReflectionProbe (scene, { 0.0f, 1.0f, 0.0f }, 20.0f);
+    EXPECT_TRUE (usesLocalIndirect());
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_F (SceneRendererMetalTests, FailedLocalIndirectLightingShadesWithoutVolumes)
+{
+    // A local indirect variant the device cannot compile leaves the full tier's frames rendering,
+    // their opaque surfaces without the volume
+    const auto render = [this] (bool fail)
+    {
+        Scene scene;
+        buildRedRoomScene (scene, false);
+        setFullTierTaa (scene, 1);
+        addIrradianceVolume (scene, 4, 2, 2);
+
+        SceneRenderer renderer;
+        if (fail)
+            renderer.failLocalIndirectLightingForTesting();
+
+        const auto image = renderToImage (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        EXPECT_NE (renderer.getLightingPass(), nullptr);
+        EXPECT_EQ (renderer.getLightingPass() != nullptr && renderer.getLightingPass()->usesLocalIndirect(), ! fail);
+        return image;
+    };
+
+    const auto failed = render (true);
+    const auto working = render (false);
+    ASSERT_TRUE (failed.isValid() && working.isValid());
+
+    EXPECT_NEAR (redOverGreen (meanColor (failed, leftFloorRegion())), 1.0f, 0.05f);
+    EXPECT_GT (redOverGreen (meanColor (working, leftFloorRegion())), 1.2f); // Not vacuous
+}
+
+TEST_F (SceneRendererMetalTests, FullTierShadesAtMost8Volumes)
+{
+    // 9 baked volumes: the full tier packs the 8 smallest, the largest left out, logged and not asserted
+    Scene scene;
+    for (int i = 1; i <= 9; ++i)
+    {
+        auto entity = EntityNode::Ptr (new EntityNode ("volume"));
+        auto& volume = entity->attach<IrradianceVolumeNode>();
+        volume.extents = { static_cast<float> (i), 1.0f, 1.0f };
+        volume.resolutionX = volume.resolutionY = volume.resolutionZ = 2;
+        scene.getRoot()->addChild (entity);
+    }
+
+    // 72 probe positions take two calls (ProbeBaker::maxVolumeProbesPerBake)
+    SceneRenderer renderer;
+    auto calls = 0;
+    while (renderer.bakeProbes (device, scene) > 0 && calls < 8)
+        ++calls;
+
+    EXPECT_EQ (calls, (9 * 8 + ProbeBaker::maxVolumeProbesPerBake - 1) / ProbeBaker::maxVolumeProbesPerBake);
+    ASSERT_EQ (getNumVolumeBakes (renderer), 9);
+    ASSERT_NE (renderer.getProbeBaker(), nullptr);
+
+    SceneDrawList list;
+    list.build (*scene.getRoot(), Matrix4());
+    ASSERT_EQ (list.getIrradianceVolumes().size(), 9u);
+
+    const auto packed = renderer.getProbeBaker()->packIrradianceVolumesByPriority (list);
+    ASSERT_EQ (packed.size(), 8u);
+
+    // Smallest first: worldToUnit scales x by 1 / (2 * extent)
+    EXPECT_FLOAT_EQ (packed.front().worldToUnit[0], 0.5f);
+    EXPECT_FLOAT_EQ (packed.back().worldToUnit[0], 1.0f / 16.0f);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_F (SceneRendererMetalTests, VolumeBakeUniformPoolStaysSmall)
+{
+    // Preflight R18 and R28: volume bakes in the red room plus 100 small casters, each its own draw
+    // on every capture face: the brief's 6 x 2 x 4 volume, then the largest one, 7 x 7 x 7, which
+    // bakes over several frames, waited on and then not. The device's uniform buffers, pooled or held
+    // by frames in flight, are recorded once each bake completed and the frames returned them
+    const auto bake = [this] (int nx, int ny, int nz, const char* name, bool waitEachFrame = true)
+    {
+        Scene scene;
+        buildRedRoomScene (scene);
+        addSmallCasters (scene, 100);
+        addIrradianceVolume (scene, nx, ny, nz);
+
+        SceneRenderer renderer;
+        auto frames = 0;
+        while (getNumVolumeBakes (renderer) < 1 && frames < 64)
+        {
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            if (waitEachFrame)
+                EXPECT_TRUE (renderer.waitForGPU().wasOk());
+            ++frames;
+        }
+
+        for (int i = 0; i < 3; ++i)
+        {
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+        }
+
+        EXPECT_EQ (getNumVolumeBakes (renderer), 1) << name;
+
+        const auto pool = device->getUniformBufferPoolSizeForTesting();
+        RecordProperty ((String (name) + "FramesToBake").toStdString(), frames);
+        RecordProperty ((String (name) + "UniformBuffers").toStdString(), pool.first);
+        RecordProperty ((String (name) + "UniformBytes").toStdString(), static_cast<int> (pool.second));
+        return pool;
+    };
+
+    // The pool only grows, so each figure is the running peak of the device after that bake, an upper bound of it
+    const auto before = device->getUniformBufferPoolSizeForTesting();
+    const auto brief = bake (6, 2, 4, "brief");
+    const auto largest = bake (IrradianceVolumeNode::maxResolution, IrradianceVolumeNode::maxResolution, IrradianceVolumeNode::maxResolution, "largest");
+
+    // As an application renders, without waiting: the frames in flight hold their buffers longer
+    const auto unwaited = bake (IrradianceVolumeNode::maxResolution, IrradianceVolumeNode::maxResolution, IrradianceVolumeNode::maxResolution, "unwaited", false);
+
+    EXPECT_GT (brief.second, before.second);
+    EXPECT_LE (brief.second, static_cast<size_t> (16 * 1024 * 1024));
+    EXPECT_LE (largest.second, static_cast<size_t> (16 * 1024 * 1024));
+    EXPECT_LE (unwaited.second, static_cast<size_t> (16 * 1024 * 1024));
+}
+
 INSTANTIATE_TEST_SUITE_P (SceneRendererTiers,
                           SceneRendererTierTests,
                           ::testing::Values (RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full),
@@ -11042,6 +12059,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         bool softShadows = true;
         bool ambientOcclusion = true; // follows the tier default when true, off otherwise
         bool probes = false;          // a box probe around the model and a sphere probe inside it
+        bool volume = false;          // a 6 x 2 x 4 irradiance volume around the model
     } configs[] = {
         { "full show64", RenderSettings::TierPreference::full, 64, 0.5f },
         { "raster show64", RenderSettings::TierPreference::raster, 64, 0.5f },
@@ -11059,6 +12077,8 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         { "full show64 ambient occlusion off", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, true, false },
         { "full show64 two probes", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, true, true, true },
         { "raster show64 two probes", RenderSettings::TierPreference::raster, 64, 0.5f, false, 0.0f, false, true, true, true },
+        { "full show64 one volume", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, true, true, false, true },
+        { "raster show64 one volume", RenderSettings::TierPreference::raster, 64, 0.5f, false, 0.0f, false, true, true, false, true },
     };
 
     for (const auto& [width, height] : { std::pair { 2560, 1600 }, std::pair { 3456, 2234 } })
@@ -11107,6 +12127,21 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
                     local->attach<ReflectionProbeNode>().influenceRadius = size.length() * 0.25f;
                     local->setPosition (center + size * 0.2f);
                     show.scene.getRoot()->addChild (local);
+                }
+
+                // Baked by the warm-up frames too: the volume stays still
+                if (config.volume)
+                {
+                    const auto bounds = show.modelRoot->computeWorldBounds();
+
+                    auto entity = EntityNode::Ptr (new EntityNode ("volume"));
+                    auto& volume = entity->attach<IrradianceVolumeNode>();
+                    volume.extents = bounds.getSize() * 0.75f;
+                    volume.resolutionX = 6;
+                    volume.resolutionY = 2;
+                    volume.resolutionZ = 4;
+                    entity->setPosition (bounds.getCenter());
+                    show.scene.getRoot()->addChild (entity);
                 }
 
                 auto shadowRedraws = 0;
@@ -11611,5 +12646,70 @@ TEST_F (SceneRendererGLTests, BoxProbeParallaxPlacesTheReflectionOnTheWalls)
 TEST_F (SceneRendererGLTests, FailedProbeCapturesLeaveTheFrameWithoutProbes)
 {
     checkFailedProbeCapturesLeaveTheFrameWithoutProbes (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, IrradianceVolumeTintsTheFloorNearTheRedWall)
+{
+    checkIrradianceVolumeTintsTheFloorNearTheRedWall (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, VisibilityStopsLightLeakingThroughTheWall)
+{
+    checkVisibilityStopsLightLeakingThroughTheWall (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, MovingAVolumeBakesItAgain)
+{
+    checkMovingAVolumeBakesItAgain (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, BakeProbesBakesTheVolumes)
+{
+    checkBakeProbesBakesTheVolumes (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RemovedVolumesReleaseTheAtlases)
+{
+    checkRemovedVolumesReleaseTheAtlases (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RgbmVolumeLightsLikeTheFloatOne)
+{
+    checkRgbmVolumeLightsLikeTheFloatOne (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, FailedVolumeCapturesLeaveTheFrameWithoutVolumes)
+{
+    checkFailedVolumeCapturesLeaveTheFrameWithoutVolumes (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ProgressiveVolumeBakeShadesOnceComplete)
+{
+    checkProgressiveVolumeBakeShadesOnceComplete (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, FailedVolumeCapturesLeaveTheProbesReflecting)
+{
+    checkFailedVolumeCapturesLeaveTheProbesReflecting (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ResizingAVolumeBakesItAgain)
+{
+    checkResizingAVolumeBakesItAgain (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, VolumeLightsWithoutTheEnvironmentAndKeepsItsIntensity)
+{
+    checkVolumeLightsWithoutTheEnvironmentAndKeepsItsIntensity (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ChangedVolumeBakesAgainWhole)
+{
+    checkChangedVolumeBakesAgainWhole (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, FailedProbeCapturesLeaveTheVolumesLighting)
+{
+    checkFailedProbeCapturesLeaveTheVolumesLighting (RenderSettings::TierPreference::raster);
 }
 #endif

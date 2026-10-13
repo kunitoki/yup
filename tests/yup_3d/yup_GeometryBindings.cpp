@@ -280,7 +280,7 @@ protected:
         pass.setUniformBuffer (0, 0, view, sizeof (view));
 
         std::array<float, 132> lights {};
-        std::array<float, 68> probes {};
+        std::array<float, 96> probes {}; // ProbeListBlock: two GpuReflectionProbe, a GpuIrradianceVolume and a count, 384 bytes
 
         for (int i = 0; i < count; ++i)
         {
@@ -378,7 +378,8 @@ TEST_F (GeometryBindingsMockTests, ProbeListsMovingPerDrawBuildSetTwoOncePerFram
     auto pipeline = compileGeometryPipeline (localIndirectSetTwo());
     ASSERT_NE (pipeline, nullptr);
 
-    // The raster probe list is a dynamic block too: a new one per draw only moves its offset
+    // The raster probe list is a dynamic block too: a new one per draw only moves its offset. Its 384
+    // bytes take a 512 byte slot of the ring at a 256 byte alignment, as its 272 did before the volume
     const std::vector<Material::Ptr> shared { new Material() };
     EXPECT_EQ (drawFrame (pipeline, shared, 24, true, true), 1);
     EXPECT_EQ (setTwoGroupsBound, 24);

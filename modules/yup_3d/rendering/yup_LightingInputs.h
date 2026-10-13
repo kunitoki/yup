@@ -32,7 +32,7 @@ namespace yup
     create() fills everything the scene decides, and packs the lights with the shadow records
     ShadowRenderer gave them. The renderer then sets the shadow maps and records of its
     ShadowRenderer, the lookup tables it owns for its device, the shared samplers of its
-    FrameResources and the reflection atlas and probes of its ProbeBaker, and the full tier adds
+    FrameResources and the atlases, probes and volumes of its ProbeBaker, and the full tier adds
     the storage buffers and the cluster grid
     (LightClusters::packGrid into Block::clusterGrid and Block::clusterDepth) before the passes draw.
 
@@ -49,7 +49,7 @@ struct YUP_API LightingInputs
         float irradiance[9][4];   ///< rgb spherical harmonics coefficients of the environment diffuse light.
         float clusterGrid[4];     ///< Full tier: tiles x, tiles y, depth slices, number of lights.
         float clusterDepth[4];    ///< Full tier: near, far, number of directional lights, 1 for an infinite far plane.
-        float probeInfo[4];       ///< x 1 when the environment, probe and volume textures hold RGBM; y the number of reflection probes of the frame (reflectionProbes or reflectionProbeBuffer); z reserved; w 1 when the frame has ambientOcclusion (both tiers; LightingPass reads it).
+        float probeInfo[4];       ///< x 1 when the environment, probe and volume textures hold RGBM; y the number of reflection probes of the frame (reflectionProbes or reflectionProbeBuffer); z the number of irradiance volumes of the frame (irradianceVolumes or irradianceVolumeBuffer); w 1 when the frame has ambientOcclusion (both tiers; LightingPass reads it).
     };
 
     //==============================================================================
@@ -95,6 +95,9 @@ struct YUP_API LightingInputs
     /** True when the frame shades with reflection probes (Block::probeInfo y). */
     bool hasReflectionProbes() const noexcept { return block.probeInfo[1] > 0.5f; }
 
+    /** True when the frame shades with irradiance volumes (Block::probeInfo z). */
+    bool hasIrradianceVolumes() const noexcept { return block.probeInfo[2] > 0.5f; }
+
     /** True when the environment shows behind the scene. */
     bool isEnvironmentVisible() const noexcept { return block.ambient[3] > 0.5f; }
 
@@ -120,6 +123,10 @@ struct YUP_API LightingInputs
     GpuTexture::Ptr reflectionAtlas;     ///< The reflection atlas (set 0 binding 8), ProbeBaker::getReflectionAtlas(), or nullptr without probes: the passes bind black.
     std::vector<GpuReflectionProbe> reflectionProbes; ///< Raster: every probe of the draw list packed in its order (ProbeBaker::packReflectionProbes()), which each draw picks by SceneDrawList::DrawItem::reflectionProbes into its ProbeListBlock. Empty without probes.
     GpuBuffer::Ptr reflectionProbeBuffer; ///< Full tier: the probes of the frame by priority (ProbeBaker::packReflectionProbesByPriority()), set 1 binding 14 of LightingPass and 8 of ForwardPass, sized for one probe at least.
+    GpuTexture::Ptr irradianceAtlas;     ///< The irradiance atlas (set 0 binding 9), ProbeBaker::getIrradianceAtlas(), or nullptr without volumes: the passes bind black.
+    GpuTexture::Ptr visibilityAtlas;     ///< The visibility atlas (set 0 binding 10), ProbeBaker::getVisibilityAtlas(), or nullptr without volumes or below the float floor: the passes bind black.
+    std::vector<GpuIrradianceVolume> irradianceVolumes; ///< Raster: every volume of the draw list packed in its order (ProbeBaker::packIrradianceVolumes()), which each draw picks by SceneDrawList::DrawItem::irradianceVolume into its ProbeListBlock. Empty without volumes.
+    GpuBuffer::Ptr irradianceVolumeBuffer; ///< Full tier: the volumes of the frame by priority (ProbeBaker::packIrradianceVolumesByPriority()), set 1 binding 15 of LightingPass and 9 of ForwardPass, sized for one volume at least.
 };
 
 static_assert (sizeof (LightingInputs::Block) == 224);

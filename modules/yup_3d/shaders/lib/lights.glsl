@@ -54,7 +54,7 @@ vec2 lightsLookupCoordinates(BsdfSurface s)
 
 // A surface's place in the lookup tables, read once per pixel before the light loop: its coordinates
 // and layer 1 there, shared by the environment and, in the area light variants, by every area light.
-// The punctual variants read layer 1 only when the environment needs it
+// The punctual variants read layer 1 only when the environment, the probes or the volumes need it
 struct LightsLookup
 {
     vec2 uv;   // lightsLookupCoordinates()
@@ -66,7 +66,9 @@ LightsLookup lightsLookup(BsdfSurface s)
     LightsLookup lookup = LightsLookup(lightsLookupCoordinates(s), vec2(0.0));
 
 #ifndef YUP_3D_AREA_LIGHTS
-#ifdef YUP_3D_REFLECTION_PROBES
+#if defined(YUP_3D_IRRADIANCE_VOLUMES)
+    if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0 || lighting.probeInfo.z > 0.0)
+#elif defined(YUP_3D_REFLECTION_PROBES)
     if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0)
 #else
     if (lighting.environmentInfo.x > 0.0)
@@ -407,16 +409,36 @@ vec3 lightsShade(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 ge
 // exactly what it was before ambient occlusion.
 // The shaders shading the reflection probes (YUP_3D_REFLECTION_PROBES) take the reflections at
 // @p worldPosition from the probes first (specularIndirect, lib/probes.glsl), the environment
-// taking the share they leave
+// taking the share they leave. The shaders shading the irradiance volumes
+// (YUP_3D_IRRADIANCE_VOLUMES) take the diffuse light at @p worldPosition from the volume first
+// (diffuseIndirect, lib/probes.glsl), offset along @p geometricNormal and evaluated along the bent
+// normal, the environment taking the share it leaves; the specular light does not change
 #ifdef YUP_3D_AMBIENT_OCCLUSION
 vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal, vec3 bentNormal, float diffuseOcclusion, float specularOcclusion)
 #else
 vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal, float diffuseOcclusion, float specularOcclusion)
 #endif
 {
+#ifdef YUP_3D_IRRADIANCE_VOLUMES
+    // The irradiance volume takes its share of the diffuse light first, with its own intensity, and
+    // the environment, scaled by its intensity below, the rest. Without a volume the shares are
+    // exactly 0 and 1, so the frame shades as without them. Evaluated first, while little else is live
+    float environmentDiffuseWeight = 1.0;
+    vec3 volume = vec3(0.0);
+#ifdef YUP_3D_AMBIENT_OCCLUSION
+    if (lighting.probeInfo.z > 0.0)
+        volume = diffuseIndirect(worldPosition, geometricNormal, bentNormal, environmentDiffuseWeight);
+#else
+    if (lighting.probeInfo.z > 0.0)
+        volume = diffuseIndirect(worldPosition, geometricNormal, s.n, environmentDiffuseWeight);
+#endif
+#endif
+
     vec3 color = lighting.ambient.rgb * (s.diffuseColor * bsdfDiffuseWeight(s.dielectricF0) * diffuseOcclusion + s.f0 * specularOcclusion);
 
-#ifdef YUP_3D_REFLECTION_PROBES
+#if defined(YUP_3D_IRRADIANCE_VOLUMES)
+    if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0 || lighting.probeInfo.z > 0.0)
+#elif defined(YUP_3D_REFLECTION_PROBES)
     if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0)
 #else
     if (lighting.environmentInfo.x > 0.0)
@@ -436,6 +458,10 @@ vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3
         vec3 diffuse = s.diffuseColor * environmentIrradiance(bentNormal) * bsdfEnvironmentDiffuseWeight(s, lookup.lobe);
 #else
         vec3 diffuse = s.diffuseColor * irradiance * bsdfEnvironmentDiffuseWeight(s, lookup.lobe);
+#endif
+#ifdef YUP_3D_IRRADIANCE_VOLUMES
+        diffuse *= environmentDiffuseWeight;
+        color += s.diffuseColor * volume * bsdfEnvironmentDiffuseWeight(s, lookup.lobe) * diffuseOcclusion;
 #endif
 #ifdef YUP_3D_REFLECTION_PROBES
         // The reflection probes take their share of the specular light first, in selection order,

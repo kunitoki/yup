@@ -946,3 +946,127 @@ TEST_F (SceneDrawListTests, ReflectionProbeSelectionIsSkippedUnlessAsked)
     EXPECT_EQ (drawList.getOpaqueItems()[0].reflectionProbes[0], -1);
     EXPECT_EQ (drawList.getOpaqueItems()[0].reflectionProbes[1], -1);
 }
+
+TEST_F (SceneDrawListTests, CollectsIrradianceVolumes)
+{
+    auto volumeEntity = makeEntity ("volume");
+    volumeEntity->setPosition ({ 2.0f, 0.0f, 0.0f });
+    volumeEntity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
+    auto& volume = volumeEntity->attach<IrradianceVolumeNode>();
+    volume.extents = { 2.0f, 1.0f, 0.5f };
+    root->addChild (volumeEntity);
+
+    drawList.build (*root, {});
+
+    // Turned 90 degrees around +Y, the X extent lies along Z and the Z extent along X
+    ASSERT_EQ (drawList.getIrradianceVolumes().size(), 1u);
+    const auto& collected = drawList.getIrradianceVolumes()[0];
+    EXPECT_EQ (collected.node, &volume);
+    EXPECT_TRUE (collected.world.approximatelyEqualTo (volumeEntity->getWorldMatrix()));
+    expectNear (collected.bounds.getMin(), { 1.5f, -1.0f, -2.0f });
+    expectNear (collected.bounds.getMax(), { 2.5f, 1.0f, 2.0f });
+
+    drawList.clear();
+    EXPECT_TRUE (drawList.getIrradianceVolumes().empty());
+}
+
+TEST_F (SceneDrawListTests, EmptyOrFlattenedVolumesAreSkipped)
+{
+    auto empty = makeEntity();
+    empty->attach<IrradianceVolumeNode>().extents = { 1.0f, 0.0f, 1.0f };
+    root->addChild (empty);
+
+    auto flat = makeEntity();
+    flat->setScale ({ 1.0f, 0.0f, 1.0f });
+    flat->attach<IrradianceVolumeNode>();
+    root->addChild (flat);
+
+    drawList.build (*root, {});
+    EXPECT_TRUE (drawList.getIrradianceVolumes().empty());
+}
+
+TEST_F (SceneDrawListTests, SelectsTheSmallestVolumeContainingTheItem)
+{
+    std::vector<SceneDrawList::IrradianceVolume> volumes (2);
+    volumes[0].bounds = BoundingBox ({ -10.0f, -10.0f, -10.0f }, { 10.0f, 10.0f, 10.0f });
+    volumes[1].bounds = BoundingBox ({ -1.0f, -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f });
+
+    EXPECT_EQ (SceneDrawList::selectIrradianceVolume (volumes, BoundingBox ({ 0, 0, 0 }, { 0.2f, 0.2f, 0.2f })), 1);
+    EXPECT_EQ (SceneDrawList::selectIrradianceVolume (volumes, BoundingBox ({ 5, 5, 5 }, { 5.2f, 5.2f, 5.2f })), 0);
+    EXPECT_EQ (SceneDrawList::selectIrradianceVolume (volumes, BoundingBox ({ 50, 0, 0 }, { 51, 1, 1 })), -1);
+}
+
+TEST_F (SceneDrawListTests, VolumeSelectionTakesTheItemCenterAndKeepsTheLowerIndexOnTies)
+{
+    std::vector<SceneDrawList::IrradianceVolume> volumes (2);
+    volumes[0].bounds = BoundingBox ({ -1.0f, -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f });
+    volumes[1].bounds = volumes[0].bounds;
+
+    // Overlapping the volumes but centered outside them
+    EXPECT_EQ (SceneDrawList::selectIrradianceVolume (volumes, BoundingBox ({ 0.5f, 0.0f, 0.0f }, { 4.5f, 0.1f, 0.1f })), -1);
+    EXPECT_EQ (SceneDrawList::selectIrradianceVolume (volumes, BoundingBox ({ -0.5f, 0.0f, 0.0f }, { 0.5f, 0.1f, 0.1f })), 0);
+    EXPECT_EQ (SceneDrawList::selectIrradianceVolume (volumes, BoundingBox()), -1);
+}
+
+TEST_F (SceneDrawListTests, PerDrawSelectionPicksTheIrradianceVolume)
+{
+    auto entity = makeEntity();
+    entity->attach<MeshNode> (makeTriangle());
+    root->addChild (entity);
+
+    auto volumeEntity = makeEntity();
+    volumeEntity->attach<IrradianceVolumeNode>().extents = { 2.0f, 2.0f, 2.0f };
+    root->addChild (volumeEntity);
+
+    drawList.build (*root, {}, { false, false });
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].irradianceVolume, -1);
+
+    drawList.build (*root, {}, { false, true });
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].irradianceVolume, 0);
+}
+
+TEST_F (SceneDrawListTests, VolumeResolutionIsClampedToTwo)
+{
+    auto volumeEntity = makeEntity();
+    auto& volume = volumeEntity->attach<IrradianceVolumeNode>();
+    volume.resolutionX = 0;
+    volume.resolutionY = -3;
+    volume.resolutionZ = 5;
+    root->addChild (volumeEntity);
+
+    drawList.build (*root, {});
+    ASSERT_EQ (drawList.getIrradianceVolumes().size(), 1u);
+
+    const auto packed = GpuSceneData::packIrradianceVolume (drawList.getIrradianceVolumes()[0], {}, {}, 16);
+    EXPECT_EQ (packed.resolution[0], 2.0f);
+    EXPECT_EQ (packed.resolution[1], 2.0f);
+    EXPECT_EQ (packed.resolution[2], 5.0f);
+}
+
+TEST_F (SceneDrawListTests, VolumeResolutionIsClampedToTheLargestThatFits)
+{
+    // Every volume fits both atlases, and no block arithmetic overflows: each axis is clamped to maxResolution
+    auto volumeEntity = makeEntity();
+    auto& volume = volumeEntity->attach<IrradianceVolumeNode>();
+    volume.resolutionX = 100000;
+    volume.resolutionY = IrradianceVolumeNode::maxResolution + 1;
+    volume.resolutionZ = IrradianceVolumeNode::maxResolution;
+    root->addChild (volumeEntity);
+
+    drawList.build (*root, {});
+    ASSERT_EQ (drawList.getIrradianceVolumes().size(), 1u);
+
+    const auto [nx, ny, nz] = GpuSceneData::getVolumeResolution (volume);
+    EXPECT_EQ (nx, IrradianceVolumeNode::maxResolution);
+    EXPECT_EQ (ny, IrradianceVolumeNode::maxResolution);
+    EXPECT_EQ (nz, IrradianceVolumeNode::maxResolution);
+
+    // The largest volume fits the visibility atlas (18 texels per probe, 1024 wide) and the irradiance atlas (256 wide)
+    const auto x = static_cast<int64> (nx), y = static_cast<int64> (ny), z = static_cast<int64> (nz);
+    EXPECT_LE (x * z * (ProbeBaker::visibilityTileSize + 2), ProbeBaker::visibilityAtlasWidth);
+    EXPECT_LE (y * (ProbeBaker::visibilityTileSize + 2), ProbeBaker::maxVisibilityAtlasHeight);
+    EXPECT_LE (x * z, ProbeBaker::irradianceAtlasWidth);
+    EXPECT_LE (y * 4, ProbeBaker::maxIrradianceAtlasHeight);
+}

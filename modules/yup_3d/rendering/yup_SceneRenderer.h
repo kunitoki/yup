@@ -33,7 +33,8 @@ namespace yup
     With a Scene::setEnvironment(), surfaces reflect the environment, blurred by their roughness,
     and receive its diffuse light; Scene::setEnvironmentVisible() also draws it behind the scene.
     Surfaces inside the influence of a ReflectionProbeNode reflect the scene the probe captured
-    instead, see bakeProbes().
+    instead, and surfaces inside an IrradianceVolumeNode take their diffuse light from the volume,
+    see bakeProbes().
 
     The first directional LightNode with LightNode::castsShadows set casts shadows of the opaque
     items, from cascaded shadow maps: the view is cut into RenderSettings::sunCascades depth ranges,
@@ -93,24 +94,30 @@ public:
     */
     GpuTexture::Ptr render (const GpuDevice::Ptr& device, Scene& scene, int widthPx, int heightPx);
 
-    /** Bakes every reflection probe of the scene that was never baked, was asked to bake again
-        (ReflectionProbeNode::requestBake()), or whose own fields or entity world matrix changed
-        since its bake, and returns how many were baked.
+    /** Bakes every reflection probe and irradiance volume of the scene that was never baked, was
+        asked to bake again (ReflectionProbeNode::requestBake(), IrradianceVolumeNode::requestBake()),
+        or whose own fields or entity world matrix changed since its bake, and returns how many
+        probes and volumes it captured.
 
-        render() bakes such probes at the start of its frames anyway: calling this only moves the
-        cost, for example to a loading screen. The bakes record into a GpuFrame of their own,
-        submitted without waiting. The next render() or bakeProbes() that finds that frame failed on
-        the GPU bakes the probes again; bakeProbes() reports such a failure through
-        getLastGpuFailure() itself, until the next render() clears it.
+        render() bakes such probes and volumes at the start of its frames anyway: calling this only
+        moves the cost, for example to a loading screen. The bakes record into a GpuFrame of their
+        own, submitted without waiting. Each call captures at most ProbeBaker::maxVolumeProbesPerBake
+        volume probe positions, so a large volume, or many volumes, take several calls: call it until
+        it returns 0. A volume lights nothing until all of its positions are captured. The next
+        render() or bakeProbes() that finds a frame failed on the GPU bakes the probes and volumes
+        again; bakeProbes() reports such a failure through getLastGpuFailure() itself, until the
+        next render() clears it.
 
-        Bakes that cannot be prepared or recorded never fail a frame: the probes shade with weight 0
-        meanwhile, and after two failures in a row the renderer stops baking them, logged once in
-        debug builds. Calling bakeProbes() lets it try again.
+        Bakes that cannot be prepared or recorded never fail a frame: the probes or volumes shade
+        with weight 0 meanwhile, and after two failures in a row of one of them the renderer stops
+        baking that one, logged once in debug builds; the other keeps baking. Calling bakeProbes()
+        lets both try again.
 
         @param device  The device to bake with, the one render() is called with.
-        @param scene   The scene whose probes to bake.
+        @param scene   The scene whose reflection probes and irradiance volumes to bake.
 
-        @returns The number of probes baked, 0 when there was nothing to bake or the bakes failed.
+        @returns The number of probes baked plus the number of volumes with positions captured,
+                 complete or not; 0 when there was nothing left to bake or the bakes failed.
     */
     int bakeProbes (const GpuDevice::Ptr& device, Scene& scene);
 
@@ -187,11 +194,14 @@ public:
     /** @internal The shadow renderer of the main view, for tests and debug views, or nullptr before the first render. */
     const ShadowRenderer* getShadowRenderer() const noexcept;
 
-    /** @internal The reflection probe baker, for tests, or nullptr before the first frame or bake with a reflection probe. */
+    /** @internal The reflection probe and irradiance volume baker, for tests, or nullptr before the first frame or bake with a probe or a volume. */
     const ProbeBaker* getProbeBaker() const noexcept;
 
     /** @internal The ambient occlusion pass, for tests, or nullptr before the first frame with ambient occlusion. */
     const AmbientOcclusionPass* getAmbientOcclusionPass() const noexcept;
+
+    /** @internal The deferred lighting pass of the full tier, for tests, or nullptr before the first render. */
+    const LightingPass* getLightingPass() const noexcept;
 
     /** @internal Test hook, not for production use: edits the facts read from the device before
         every render decides its tier and features, so tests can simulate weaker devices.
@@ -234,9 +244,22 @@ public:
 
     /** @internal Test hook, not for production use: every reflection probe capture of this
         renderer fails to record, as if the device rejected it. Frames still render, without the
-        probes.
+        probes, and the irradiance volumes keep baking.
     */
     void failProbeCapturesForTesting() noexcept { failProbeCaptures = true; }
+
+    /** @internal Test hook, not for production use: every irradiance volume capture of this renderer
+        fails to record, as if the device rejected it. Frames still render, without the volumes, and
+        the reflection probes keep baking.
+    */
+    void failVolumeCapturesForTesting() noexcept { failVolumeCaptures = true; }
+
+    /** @internal Test hook, not for production use: the local indirect variants of the full tier's
+        LightingPass fail to compile, as if the device rejected them. Call it before the first
+        render. Frames still render, their opaque surfaces without reflection probes and irradiance
+        volumes.
+    */
+    void failLocalIndirectLightingForTesting() noexcept { failLocalIndirectLighting = true; }
 
     /** @internal Test hook, not for production use: the environment cube and the other radiance
         textures of this renderer hold RGBM in rgba8unorm, as below the float floor, even when the
@@ -273,6 +296,8 @@ private:
     bool failDepthNormalPrepass = false;
     bool forceRgbmRadiance = false;
     bool failProbeCaptures = false;
+    bool failVolumeCaptures = false;
+    bool failLocalIndirectLighting = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneRenderer)
 };

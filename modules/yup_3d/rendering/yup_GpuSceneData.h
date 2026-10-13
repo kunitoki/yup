@@ -78,6 +78,24 @@ static_assert (offsetof (GpuReflectionProbe, atlasRect) == 96);
 static_assert (offsetof (GpuReflectionProbe, params) == 112);
 
 //==============================================================================
+/** One irradiance volume as the shaders read it: 112 bytes, laid out the same in std140 and std430.
+    Filled by GpuSceneData::packIrradianceVolume().
+    @internal
+*/
+struct YUP_API GpuIrradianceVolume
+{
+    float worldToUnit[16];     ///< World to the volume box mapped onto [0, 1]^3, column-major.
+    float resolution[4];       ///< xyz probes along each axis (at least 2), w intensity.
+    float shBlock[4];          ///< xy texel of the SH block in the irradiance atlas, z falloff in world units (0 or more), w unused (0).
+    float visibilityBlock[4];  ///< xy texel of the visibility block in the visibility atlas, z tile size in texels without its border (0: no visibility), w normal bias in world units.
+};
+
+static_assert (sizeof (GpuIrradianceVolume) == 112);
+static_assert (offsetof (GpuIrradianceVolume, resolution) == 64);
+static_assert (offsetof (GpuIrradianceVolume, shBlock) == 80);
+static_assert (offsetof (GpuIrradianceVolume, visibilityBlock) == 96);
+
+//==============================================================================
 /** One shadow map view as the shaders read it: a sun cascade, a spot light or one face of a point
     light. std140, 112 bytes, mirrored by GpuShadowRecord in lib/shadows.glsl.
 
@@ -191,6 +209,17 @@ public:
         @param numMips    The number of mips of the tile.
     */
     static GpuReflectionProbe packReflectionProbe (const SceneDrawList::ReflectionProbe& probe, const Rectangle<float>& atlasRect, int numMips) noexcept;
+
+    /** The probes of an irradiance volume along each axis: its resolution, from 2 to IrradianceVolumeNode::maxResolution per axis. */
+    static std::array<int, 3> getVolumeResolution (const IrradianceVolumeNode& volume) noexcept;
+
+    /** Packs an irradiance volume.
+        @param volume           The volume, with its node.
+        @param shBlock          The texel of its SH block in the irradiance atlas.
+        @param visibilityBlock  The texel of its visibility block in the visibility atlas.
+        @param visibilityTile   The size of each probe's octahedral visibility tile without its border, or 0 without visibility.
+    */
+    static GpuIrradianceVolume packIrradianceVolume (const SceneDrawList::IrradianceVolume& volume, Point<int> shBlock, Point<int> visibilityBlock, int visibilityTile) noexcept;
 };
 
 } // namespace yup

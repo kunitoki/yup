@@ -36,9 +36,7 @@ namespace yup
     environment with its sampler at 14, and 7 the lookup tables (LookupTables), read through
     linearClamp at binding 1. Set 1 binds the rest of them: 0 the LightingBlock, 6 the lights, 7 the light lists
     of the clusters, 8 the material table; then the G-buffer: 9-11 RT0-RT2 and 12 the depth; 13
-    the ambient occlusion (LightingInputs::ambientOcclusion, or white without it); and 14 the
-    reflection probes of the frame (LightingInputs::reflectionProbeBuffer), whose atlas set 0 binds at
-    8 (black without probes). Set 3
+    the ambient occlusion (LightingInputs::ambientOcclusion, or white without it). Set 3
     binds the shadows: 0 the sun cascades, 2 the point and spot light atlas and 4 the ShadowBlock.
     The area light variant (YUP_3D_AREA_LIGHTS) shades the frames where LightingInputs::areaLights
     is set; every variant reads the lookup tables, for the environment.
@@ -47,7 +45,15 @@ namespace yup
     LightingInputs::shadowFilters is set: it holds the soft shadows and the contact shadows, and
     only it declares and binds the same two shadow maps again at set 3 bindings 1 and 3, read raw
     by the blocker search. A frame using either feature pays for both; the default variant runs
-    neither. Both dimensions combine, into four variants.
+    neither.
+
+    The local indirect variant (YUP_3D_LOCAL_INDIRECT, preflight R27) shades the frames with
+    reflection probes or irradiance volumes (LightingInputs::hasReflectionProbes(),
+    hasIrradianceVolumes()): only it declares and binds set 1 binding 14, the reflection probes of
+    the frame (LightingInputs::reflectionProbeBuffer), and 15, its irradiance volumes
+    (LightingInputs::irradianceVolumeBuffer), with their atlases at set 0 bindings 8, 9 and 10
+    (black without them). The default variants carry no probe or volume code. All three dimensions
+    combine, into eight variants.
 
     @internal
 */
@@ -62,18 +68,20 @@ public:
     ~LightingPass();
 
     //==============================================================================
-    /** Compiles the pipeline, of the area light variant when @p areaLights is set and of the shadow
-        filter variant when @p shadowFilters is set, and creates the stand-in textures, once per
-        variant: a failure is remembered instead of retried every frame.
+    /** Compiles the pipeline, of the area light variant when @p areaLights is set, of the shadow
+        filter variant when @p shadowFilters is set and of the local indirect variant when
+        @p localIndirect is set, and creates the stand-in textures, once per variant: a failure is
+        remembered instead of retried every frame.
     */
-    Result prepare (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters);
+    Result prepare (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters, bool localIndirect = false);
 
     /** Shades @p gbuffer into @p sceneColor, an rgba16float texture of its size, with the variant
-        LightingInputs::areaLights and LightingInputs::shadowFilters pick.
+        LightingInputs::areaLights, LightingInputs::shadowFilters and the frame's probes and volumes pick.
 
         Each variant is compiled on @p device the first time a frame needs it (see prepare()). If the
-        shadow filter variant fails to compile, the failure is logged once and the frames shade
-        with the default variant of their area lights, with hard shadows and no contact shadows.
+        local indirect variant fails to compile, the failure is logged once and the frames shade
+        without reflection probes and irradiance volumes. If the shadow filter variant fails to
+        compile, the failure is logged once and the frames shade with hard shadows and no contact shadows.
 
         @returns False if the variant cannot be compiled, an input is missing or the draw could not be recorded.
     */
@@ -86,6 +94,12 @@ public:
     /** Releases every render target, for a frame without the pass, a resize or a failed frame. */
     void releaseTargets() noexcept;
 
+    /** @internal True when the last render() shaded with a local indirect variant, for tests. */
+    bool usesLocalIndirect() const noexcept { return usedLocalIndirect; }
+
+    /** @internal Test hook: the local indirect variants not compiled yet fail to compile, as if the device rejected them. */
+    void failLocalIndirectForTesting() noexcept { localIndirectFailsForTesting = true; }
+
 private:
     struct Variant
     {
@@ -94,11 +108,14 @@ private:
     };
 
     std::optional<Result> defaults;
-    std::array<Variant, 4> variants; // Punctual lights only, then with area lights; then both again with the shadow filters
+    std::array<Variant, 8> variants; // Punctual lights only, then with area lights; then both again with the shadow filters; then all four again with the local indirect code
     GpuTexture::Ptr blackCube; // The environment without one
     GpuTexture::Ptr whiteTexture; // Stands in for the ambient occlusion when there is none
-    GpuTexture::Ptr blackTexture; // Stands in for the reflection atlas without probes
+    GpuTexture::Ptr blackTexture; // Stands in for the probe and volume atlases without them
     bool shadowFiltersFailureReported = false; // The shadow filter variant failed to compile, and was logged once
+    bool localIndirectFailureReported = false; // The local indirect variant failed to compile, and was logged once
+    bool localIndirectFailsForTesting = false; // failLocalIndirectForTesting(): the local indirect variants not compiled yet fail
+    bool usedLocalIndirect = false;            // The last render() shaded with the local indirect variant
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LightingPass)
 };

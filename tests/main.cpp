@@ -175,9 +175,11 @@ private:
 
     std::chrono::steady_clock::time_point programStart;
     std::vector<FailedTest> failedTests;
+    std::vector<FailedTest> skippedTests;
     std::vector<TestTiming> testTimings;
     int totalTests = 0;
     int passedTests = 0;
+    int slowestTests = 10;
     yup::File originalXmlOutputPath;
     bool shouldUseSingleCall = false;
     int totalShards = 1;
@@ -247,6 +249,11 @@ private:
                 shouldUseSingleCall = true;
                 std::cout << "List tests mode enabled" << std::endl;
             }
+            else if (arg.startsWith ("--slowest_count="))
+            {
+                slowestTests = std::max (0, arg.fromFirstOccurrenceOf ("=", false, false).getIntValue());
+                std::cout << "Slowest tests printed: " << slowestTests << std::endl;
+            }
         }
     }
 
@@ -298,6 +305,7 @@ private:
                 testsuite->setAttribute ("name", yup::String (suiteResult.name));
                 testsuite->setAttribute ("tests", suiteResult.tests);
                 testsuite->setAttribute ("failures", suiteResult.failures);
+                testsuite->setAttribute ("skipped", suiteResult.skipped);
                 testsuite->setAttribute ("errors", suiteResult.errors);
                 testsuite->setAttribute ("time", suiteResult.timeSeconds);
 
@@ -308,7 +316,13 @@ private:
                     testcase->setAttribute ("classname", yup::String (testCase.className));
                     testcase->setAttribute ("time", testCase.timeSeconds);
 
-                    if (! testCase.passed && ! testCase.failureMessage.empty())
+                    if (testCase.skipped)
+                    {
+                        auto skipped = new yup::XmlElement ("skipped");
+                        skipped->setAttribute ("message", yup::String (testCase.failureMessage));
+                        testcase->addChildElement (skipped);
+                    }
+                    else if (! testCase.passed && ! testCase.failureMessage.empty())
                     {
                         auto failure = new yup::XmlElement ("failure");
                         failure->setAttribute ("message", "Test failed");
@@ -357,23 +371,34 @@ private:
                           << fail.failureDetails << "\n";
         }
 
-        std::cout << "\n========================================\n";
-        std::cout << "SLOWEST TESTS (top 5):\n";
-
-        std::sort (testTimings.begin(), testTimings.end(), [] (const TestTiming& a, const TestTiming& b)
+        if (! skippedTests.empty())
         {
-            return a.duration > b.duration;
-        });
+            std::cout << "\n========================================\n";
+            std::cout << "SKIPPED (" << skippedTests.size() << "):\n";
+            for (const auto& skipped : skippedTests)
+                std::cout << "  " << skipped.name << ": " << skipped.failureDetails << "\n";
+        }
 
-        const size_t topCount = std::min (testTimings.size(), size_t (5));
-        for (size_t i = 0; i < topCount; ++i)
-            std::cout << "  " << (i + 1) << ". " << testTimings[i].name
-                      << " (" << testTimings[i].duration.count() << " ms)\n";
+        if (slowestTests > 0)
+        {
+            std::cout << "\n========================================\n";
+            std::cout << "SLOWEST TESTS (top " << slowestTests << "):\n";
+
+            std::sort (testTimings.begin(), testTimings.end(), [] (const TestTiming& a, const TestTiming& b)
+            {
+                return a.duration > b.duration;
+            });
+
+            const size_t topCount = std::min (testTimings.size(), size_t (slowestTests));
+            for (size_t i = 0; i < topCount; ++i)
+                std::cout << "  " << (i + 1) << ". " << testTimings[i].name
+                          << " (" << testTimings[i].duration.count() << " ms)\n";
+        }
 
         std::cout << "\n========================================\n";
         std::cout << "RESULT: "
                   << (failedTests.empty() ? "ALL PASSED" : "SOME FAILED")
-                  << " (" << passedTests << "/" << totalTests << " tests) in "
+                  << " (" << passedTests << "/" << totalTests << " tests, " << skippedTests.size() << " skipped) in "
                   << std::chrono::duration_cast<std::chrono::milliseconds> (totalElapsed).count()
                   << " ms\n";
 
@@ -389,6 +414,7 @@ private:
         std::string name;
         std::string className;
         bool passed;
+        bool skipped;
         double timeSeconds;
         std::string failureMessage;
     };
@@ -398,6 +424,7 @@ private:
         std::string name;
         int tests = 0;
         int failures = 0;
+        int skipped = 0;
         int errors = 0;
         double timeSeconds = 0.0;
         std::vector<TestCaseResult> testCases;
@@ -437,6 +464,7 @@ private:
             testStart = std::chrono::steady_clock::now();
             failureStream.str ("");
             failureStream.clear();
+            skipReason.clear();
 
             std::ostringstream line;
             line << (std::string (info.test_suite_name()) + "." + info.name());
@@ -452,6 +480,10 @@ private:
                 failureStream << result.file_name() << ":" << result.line_number() << ": "
                               << result.summary() << '\n';
             }
+            else if (result.skipped())
+            {
+                skipReason = yup::String (result.message()).trim().toStdString();
+            }
         }
 
         void OnTestEnd (const testing::TestInfo& info) override
@@ -466,10 +498,16 @@ private:
             line << (std::string (info.test_suite_name()) + "." + info.name());
 
             bool testPassed = ! info.result()->Failed();
+            bool testSkipped = testPassed && info.result()->Skipped();
 
             owner.testTimings.push_back (TestTiming { line.str(), std::chrono::milliseconds (elapsedMs) });
 
-            if (testPassed)
+            if (testSkipped)
+            {
+                std::cout << "--- SKIP (" << elapsedMs << " ms): " << skipReason << '\n';
+                owner.skippedTests.push_back ({ line.str(), skipReason });
+            }
+            else if (testPassed)
             {
                 std::cout << "--- PASS (" << elapsedMs << " ms)" << '\n';
                 owner.passedTests++;
@@ -490,11 +528,14 @@ private:
                 testCase.name = info.name();
                 testCase.className = info.test_suite_name();
                 testCase.passed = testPassed;
+                testCase.skipped = testSkipped;
                 testCase.timeSeconds = elapsedSeconds;
-                testCase.failureMessage = testPassed ? "" : failureStream.str();
+                testCase.failureMessage = testSkipped ? skipReason : (testPassed ? "" : failureStream.str());
 
                 owner.currentSuite->testCases.push_back (testCase);
                 owner.currentSuite->tests++;
+                if (testSkipped)
+                    owner.currentSuite->skipped++;
                 if (! testPassed)
                     owner.currentSuite->failures++;
             }
@@ -505,6 +546,7 @@ private:
         std::chrono::steady_clock::time_point testStart;
         std::chrono::steady_clock::time_point suiteStartTime;
         std::stringstream failureStream;
+        std::string skipReason;
     };
 };
 

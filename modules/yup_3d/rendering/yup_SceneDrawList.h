@@ -29,7 +29,8 @@ namespace yup
     override of the nearest MaterialNode, and skipping hidden subtrees. Every primitive of
     every MeshNode slot becomes a DrawItem, every LightNode slot becomes a Light, and every
     ReflectionProbeNode slot becomes a ReflectionProbe, unless its influence is empty: a radius
-    or an extent of 0 or less, or an entity scaled to 0.
+    or an extent of 0 or less, or an entity scaled to 0. Every IrradianceVolumeNode slot becomes
+    an IrradianceVolume, under the same conditions.
 
     Opaque and masked items are sorted by pipeline state (double-sided, then mirrored) and then
     by material, to limit state changes. Blended items are sorted back to front, so they are drawn over what is behind them.
@@ -42,7 +43,8 @@ namespace yup
 
     With BuildOptions::selectLightsPerDraw, every item also lists the lights shading it: the
     maxLightsPerDraw most influential ones, faded out near the cutoff, see selectLights(), and
-    the two reflection probes influencing it most, see selectReflectionProbes().
+    the two reflection probes influencing it most, see selectReflectionProbes(), and the irradiance
+    volume lighting it, see selectIrradianceVolume().
 
     @see SceneRenderer
 */
@@ -69,6 +71,7 @@ public:
         std::array<float, maxLightsPerDraw> lightWeights = [] { std::array<float, maxLightsPerDraw> ones; ones.fill (1.0f); return ones; }(); ///< What scales the intensity of each of lightIndices, see selectLights().
         int numLights = 0;                           ///< How many lightIndices are valid.
         std::array<int, 2> reflectionProbes { -1, -1 }; ///< Indices into getReflectionProbes(), the most influential first, -1 when unused, see BuildOptions::selectLightsPerDraw.
+        int irradianceVolume = -1;                   ///< Index into getIrradianceVolumes(), -1 for none, see BuildOptions::selectLightsPerDraw.
     };
 
     /** One light, in world space. */
@@ -88,6 +91,14 @@ public:
         BoundingBox bounds;                  ///< World-space bounds of the influence volume, exact for a sphere under any rotation and scale.
     };
 
+    /** One irradiance volume, in world space. */
+    struct IrradianceVolume
+    {
+        IrradianceVolumeNode* node = nullptr; ///< The volume settings.
+        Matrix4 world;                        ///< Entity to world.
+        BoundingBox bounds;                   ///< World-space bounds of the box.
+    };
+
     /** Options for build(). */
     struct BuildOptions
     {
@@ -97,7 +108,7 @@ public:
         bool addDefaultLight = false;
 
         /** Fills DrawItem::lightIndices, DrawItem::lightWeights and DrawItem::numLights of every item with selectLights(),
-            and DrawItem::reflectionProbes with selectReflectionProbes().
+            DrawItem::reflectionProbes with selectReflectionProbes() and DrawItem::irradianceVolume with selectIrradianceVolume().
         */
         bool selectLightsPerDraw = false;
     };
@@ -136,6 +147,9 @@ public:
 
     /** Returns the reflection probes. */
     Span<const ReflectionProbe> getReflectionProbes() const noexcept { return reflectionProbes; }
+
+    /** Returns the irradiance volumes. */
+    Span<const IrradianceVolume> getIrradianceVolumes() const noexcept { return irradianceVolumes; }
 
     /** Returns the material used by primitives without a material and without an override. */
     const Material& getDefaultMaterial() const noexcept { return *defaultMaterial; }
@@ -185,6 +199,19 @@ public:
     */
     static std::array<int, 2> selectReflectionProbes (Span<const ReflectionProbe> probes, const BoundingBox& itemBounds) noexcept;
 
+    /** Picks the irradiance volume lighting an object: the smallest one whose world bounds contain
+        the center of @p itemBounds, by the volume of those bounds. Ties keep the lower index.
+
+        The raster tier lights each draw with the volume of its center, so an object spanning two
+        volumes takes its light from one of them; the full tier picks per pixel.
+
+        @param volumes     The volumes to pick from.
+        @param itemBounds  The bounds of the object, in world space.
+
+        @returns The index into @p volumes, or -1 when none contains the center or the bounds are empty.
+    */
+    static int selectIrradianceVolume (Span<const IrradianceVolume> volumes, const BoundingBox& itemBounds) noexcept;
+
 private:
     /** What selectLights() ranks a light by, computed once per light rather than per draw. */
     struct LightRanking
@@ -206,6 +233,7 @@ private:
     std::vector<Light> lights;
     std::vector<LightRanking> lightRankings;
     std::vector<ReflectionProbe> reflectionProbes;
+    std::vector<IrradianceVolume> irradianceVolumes;
     Material::Ptr defaultMaterial;
     std::unique_ptr<LightNode> defaultLight;
 

@@ -562,4 +562,33 @@ bool GpuDevice::UniformBufferPool::isEmpty() const noexcept
     return true;
 }
 
+void GpuDevice::UniformBufferPool::addSize (std::pair<int, size_t>& size) const noexcept
+{
+    for (const auto& bucket : buckets)
+    {
+        for (const auto& buffer : bucket)
+        {
+            ++size.first;
+            size.second += buffer->size();
+        }
+    }
+}
+
+std::pair<int, size_t> GpuDevice::getUniformBufferPoolSizeForTesting() const noexcept
+{
+    std::pair<int, size_t> size;
+    uniformBufferPool.addSize (size);
+
+    for (const auto& frame : retiredFrames)
+    {
+        for (const auto& buffer : frame.buffers)
+        {
+            ++size.first;
+            size.second += buffer->size();
+        }
+    }
+
+    return size;
+}
+
 } // namespace yup

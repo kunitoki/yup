@@ -39,6 +39,14 @@ constexpr uint8_t probePrefilterShaderBundle[] = {
 #include "../shaders/yup_ProbePrefilter.inc"
 };
 
+constexpr uint8_t probeShProjectionShaderBundle[] = {
+#include "../shaders/yup_ProbeShProjection.inc"
+};
+
+constexpr uint8_t probeVisibilityShaderBundle[] = {
+#include "../shaders/yup_ProbeVisibility.inc"
+};
+
 // std140 mirror of ProbeEquirectBlock in yup_ProbeEquirectToCube.frag
 struct ProbeEquirectBlock
 {
@@ -59,8 +67,23 @@ struct ProbePrefilterBlock
     float sizes[4];  // x size written, y source face size at mip 0, z highest source mip, w samples (1 for a copy)
 };
 
+// std140 mirror of ProbeShBlock in yup_ProbeShProjection.frag
+struct ProbeShBlock
+{
+    float params[4]; // x unused, y 1 when the textures hold RGBM, z face size of the mip read
+};
+
+// std140 mirror of ProbeVisibilityBlock in yup_ProbeVisibility.frag
+struct ProbeVisibilityBlock
+{
+    float params[4]; // x tile size without its border, y distance scale, z samples, w cosine power
+};
+
 constexpr int numCubeFaces = 6;
 constexpr int prefilterSamples = 64;
+constexpr int irradianceFaceSize = 8;   // The cube mip summed by projectIrradiance(): 384 texels
+constexpr int visibilitySamples = 64;
+constexpr float visibilityPower = 50.0f; // McGuire et al. 2019
 
 /** One mip of every face, as a cube: lod 0 of the shader is @p mip. */
 GpuTextureViewDesc cubeMipView (uint32 mip)
@@ -289,6 +312,107 @@ bool ProbeRenderer::prefilterToAtlas (GpuFrame& frame, const GpuTexture::Ptr& so
 
     prefilterPass.releaseTargets();
     return drawn;
+}
+
+//==============================================================================
+bool ProbeRenderer::projectIrradiance (GpuFrame& frame, const GpuTexture::Ptr& cube, const GpuTexture::Ptr& atlas, Point<int> texel)
+{
+    if (! isRadianceCube (cube)
+        || atlas == nullptr
+        || atlas->getType() != GpuTextureType::texture2D
+        || atlas->getFormat() != getRadianceFormat()
+        || ! atlas->isRenderTarget()
+        || texel.getX() < 0
+        || texel.getY() < 0
+        || texel.getX() >= static_cast<int> (atlas->getWidth())
+        || texel.getY() + 4 > static_cast<int> (atlas->getHeight())
+        || ! prepare())
+        return false;
+
+    auto* pass = prepareVolumePass (usesRgbm() ? irradianceRgbmPass : irradiancePass, probeShProjectionShaderBundle, sizeof (probeShProjectionShaderBundle), getRadianceFormat());
+    if (pass == nullptr)
+        return false;
+
+    // The mip with faces of irradianceFaceSize texels, or mip 0 of a smaller cube
+    auto mip = 0;
+    while (mip + 1 < static_cast<int> (cube->getMipLevels()) && (cube->getWidth() >> mip) > irradianceFaceSize)
+        ++mip;
+
+    ProbeShBlock block {};
+    block.params[1] = usesRgbm() ? 1.0f : 0.0f;
+    block.params[2] = static_cast<float> (jmax (1, cube->getWidth() >> mip));
+
+    // Loaded, not cleared, so the other texels of the atlas survive
+    const auto drawn = pass->draw (frame, atlas, GpuTextureViewDesc (0, 0), [&] (GpuRenderPass& renderPass)
+    {
+        renderPass.setViewport (static_cast<float> (texel.getX()), static_cast<float> (texel.getY()), 1.0f, 4.0f);
+        renderPass.setScissorRect (texel.getX(), texel.getY(), 1, 4);
+        renderPass.setSampler (0, 1, cubeSampler);
+        renderPass.setUniformBuffer (1, 0, &block, sizeof (block));
+        renderPass.setTexture (1, 1, cube, cubeMipView (static_cast<uint32> (mip)));
+    });
+
+    pass->releaseTargets();
+    return drawn;
+}
+
+bool ProbeRenderer::canRenderVisibility() const noexcept
+{
+    return device != nullptr && ! usesRgbm() && device->isFormatRenderable (visibilityFormat);
+}
+
+bool ProbeRenderer::renderVisibility (GpuFrame& frame, const GpuTexture::Ptr& distanceCube, const GpuTexture::Ptr& atlas,
+                                      Point<int> origin, int tileSize, float distanceScale)
+{
+    const auto bordered = tileSize + 2;
+
+    if (! canRenderVisibility()
+        || distanceCube == nullptr
+        || distanceCube->getType() != GpuTextureType::cube
+        || distanceCube->getDepthOrArrayLayers() != numCubeFaces
+        || distanceCube->getFormat() != visibilityFormat
+        || atlas == nullptr
+        || atlas->getType() != GpuTextureType::texture2D
+        || atlas->getFormat() != visibilityFormat
+        || ! atlas->isRenderTarget()
+        || tileSize < 2
+        || origin.getX() < 0
+        || origin.getY() < 0
+        || origin.getX() + bordered > static_cast<int> (atlas->getWidth())
+        || origin.getY() + bordered > static_cast<int> (atlas->getHeight()))
+        return false;
+
+    // The distances are half floats, always filtered
+    if (distanceSampler == nullptr)
+        distanceSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::clampToEdge));
+
+    auto* pass = prepareVolumePass (visibilityPass, probeVisibilityShaderBundle, sizeof (probeVisibilityShaderBundle), visibilityFormat);
+    if (pass == nullptr || distanceSampler == nullptr)
+        return false;
+
+    const ProbeVisibilityBlock block { { static_cast<float> (tileSize), distanceScale, static_cast<float> (visibilitySamples), visibilityPower } };
+
+    // Loaded, not cleared, so the other tiles of the atlas survive
+    const auto drawn = pass->draw (frame, atlas, GpuTextureViewDesc (0, 0), [&] (GpuRenderPass& renderPass)
+    {
+        renderPass.setViewport (static_cast<float> (origin.getX()), static_cast<float> (origin.getY()), static_cast<float> (bordered), static_cast<float> (bordered));
+        renderPass.setScissorRect (origin.getX(), origin.getY(), bordered, bordered);
+        renderPass.setSampler (0, 1, distanceSampler);
+        renderPass.setUniformBuffer (1, 0, &block, sizeof (block));
+        renderPass.setTexture (1, 1, distanceCube);
+    });
+
+    pass->releaseTargets();
+    return drawn;
+}
+
+FullscreenPass* ProbeRenderer::prepareVolumePass (VolumePass& volumePass, const uint8* bundle, size_t bundleSize, GpuTextureFormat format)
+{
+    // Compiled on first use, apart from the environment passes, and kept: frames in flight may use it
+    if (! volumePass.prepared.has_value())
+        volumePass.prepared = volumePass.pass.prepare (device, bundle, bundleSize, format);
+
+    return volumePass.prepared->wasOk() ? &volumePass.pass : nullptr;
 }
 
 //==============================================================================

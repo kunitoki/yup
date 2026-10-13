@@ -38,7 +38,7 @@ layout(set = 1, binding = 0) uniform LightingBlock
     vec4 irradiance[9];       // rgb coefficients of the environment diffuse light
     vec4 clusterGrid;         // full tier: tiles x, tiles y, depth slices, number of lights
     vec4 clusterDepth;        // full tier: near, far, number of directional lights, 1 when the last slice is open (infinite far plane)
-    vec4 probeInfo;           // x 1 when the environment, probe and volume textures hold RGBM; y, z reserved; w 1 when the frame has ambient occlusion (both tiers; LightingPass reads it)
+    vec4 probeInfo;           // x 1 when the environment, probe and volume textures hold RGBM; y the number of reflection probes; z the number of irradiance volumes; w 1 when the frame has ambient occlusion (both tiers; LightingPass reads it)
 } lighting;
 
 #endif

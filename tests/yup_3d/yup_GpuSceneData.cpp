@@ -417,3 +417,73 @@ TEST_F (GpuSceneDataTests, PacksANegativeFalloffAsZero)
     const auto packed = GpuSceneData::packReflectionProbe (probe, {}, 1);
     EXPECT_EQ (packed.influence[3], 0.0f);
 }
+
+TEST_F (GpuSceneDataTests, GpuIrradianceVolumeLayoutIsStd430)
+{
+    EXPECT_EQ (sizeof (GpuIrradianceVolume), 112u);
+    EXPECT_EQ (offsetof (GpuIrradianceVolume, resolution), 64u);
+    EXPECT_EQ (offsetof (GpuIrradianceVolume, shBlock), 80u);
+    EXPECT_EQ (offsetof (GpuIrradianceVolume, visibilityBlock), 96u);
+}
+
+TEST_F (GpuSceneDataTests, PacksAVolume)
+{
+    auto root = EntityNode::Ptr (new EntityNode ("root"));
+    auto entity = EntityNode::Ptr (new EntityNode ("volume"));
+    entity->setPosition ({ -4.0f, 1.0f, 2.0f });
+    entity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
+    auto& node = entity->attach<IrradianceVolumeNode>();
+    node.extents = { 1.0f, 2.0f, 4.0f };
+    node.resolutionX = 3;
+    node.resolutionY = 2;
+    node.resolutionZ = 5;
+    node.falloff = 0.25f;
+    node.intensity = 1.5f;
+    node.normalBias = 0.1f;
+    root->addChild (entity);
+
+    SceneDrawList drawList;
+    drawList.build (*root, {});
+    ASSERT_EQ (drawList.getIrradianceVolumes().size(), 1u);
+
+    const auto& volume = drawList.getIrradianceVolumes()[0];
+    const auto packed = GpuSceneData::packIrradianceVolume (volume, { 12, 40 }, { 36, 72 }, 16);
+
+    // The box corners, in entity space (-extents and +extents), map to 0 and 1
+    std::array<float, 16> values {};
+    std::copy_n (packed.worldToUnit, 16, values.begin());
+    const Matrix4 worldToUnit (values);
+    expectNear (worldToUnit.transformPoint (volume.world.transformPoint ({ -1.0f, -2.0f, -4.0f })), { 0.0f, 0.0f, 0.0f }, 1.0e-5f);
+    expectNear (worldToUnit.transformPoint (volume.world.transformPoint ({ 1.0f, 2.0f, 4.0f })), { 1.0f, 1.0f, 1.0f }, 1.0e-5f);
+    expectNear (worldToUnit.transformPoint (volume.world.transformPoint ({ 1.0f, -2.0f, 0.0f })), { 1.0f, 0.0f, 0.5f }, 1.0e-5f);
+    expectNear (worldToUnit.transformPoint ({ -4.0f, 1.0f, 2.0f }), { 0.5f, 0.5f, 0.5f }, 1.0e-5f);
+
+    EXPECT_FLOAT_EQ (packed.resolution[0], 3.0f);
+    EXPECT_FLOAT_EQ (packed.resolution[1], 2.0f);
+    EXPECT_FLOAT_EQ (packed.resolution[2], 5.0f);
+    EXPECT_FLOAT_EQ (packed.resolution[3], 1.5f);
+
+    EXPECT_FLOAT_EQ (packed.shBlock[0], 12.0f);
+    EXPECT_FLOAT_EQ (packed.shBlock[1], 40.0f);
+    EXPECT_FLOAT_EQ (packed.shBlock[2], 0.25f);
+
+    EXPECT_FLOAT_EQ (packed.visibilityBlock[0], 36.0f);
+    EXPECT_FLOAT_EQ (packed.visibilityBlock[1], 72.0f);
+    EXPECT_FLOAT_EQ (packed.visibilityBlock[2], 16.0f);
+    EXPECT_FLOAT_EQ (packed.visibilityBlock[3], 0.1f);
+}
+
+TEST_F (GpuSceneDataTests, PacksAVolumeWithoutVisibilityAndANegativeFalloffAsZero)
+{
+    auto root = EntityNode::Ptr (new EntityNode ("root"));
+    root->attach<IrradianceVolumeNode>().falloff = -1.0f;
+
+    SceneDrawList drawList;
+    drawList.build (*root, {});
+    ASSERT_EQ (drawList.getIrradianceVolumes().size(), 1u);
+
+    const auto packed = GpuSceneData::packIrradianceVolume (drawList.getIrradianceVolumes()[0], { 1, 2 }, {}, 0);
+    EXPECT_FLOAT_EQ (packed.resolution[0], 4.0f);
+    EXPECT_FLOAT_EQ (packed.shBlock[2], 0.0f);
+    EXPECT_FLOAT_EQ (packed.visibilityBlock[2], 0.0f);
+}

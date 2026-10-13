@@ -73,6 +73,7 @@ void SceneDrawList::build (const EntityNode& root, const Matrix4& view, const Bu
                 const auto worldBounds = item.primitive->bounds.transformedBy (item.world);
                 item.numLights = selectLights (worldBounds, lights, lightRankings, item.lightIndices, item.lightWeights);
                 item.reflectionProbes = selectReflectionProbes (reflectionProbes, worldBounds);
+                item.irradianceVolume = selectIrradianceVolume (irradianceVolumes, worldBounds);
             }
         }
     }
@@ -271,12 +272,44 @@ std::array<int, 2> SceneDrawList::selectReflectionProbes (Span<const ReflectionP
     return picked;
 }
 
+int SceneDrawList::selectIrradianceVolume (Span<const IrradianceVolume> volumes, const BoundingBox& itemBounds) noexcept
+{
+    if (itemBounds.isEmpty())
+        return -1;
+
+    const auto center = itemBounds.getCenter();
+    auto picked = -1;
+    auto pickedVolume = 0.0f;
+
+    for (size_t index = 0; index < volumes.size(); ++index)
+    {
+        const auto& bounds = volumes[index].bounds;
+        if (bounds.isEmpty()
+            || center.getX() < bounds.getMin().getX() || center.getX() > bounds.getMax().getX()
+            || center.getY() < bounds.getMin().getY() || center.getY() > bounds.getMax().getY()
+            || center.getZ() < bounds.getMin().getZ() || center.getZ() > bounds.getMax().getZ())
+            continue;
+
+        // Only a strictly smaller volume moves ahead, so ties keep the lower index
+        const auto size = bounds.getSize();
+        const auto volume = size.getX() * size.getY() * size.getZ();
+        if (picked < 0 || volume < pickedVolume)
+        {
+            picked = static_cast<int> (index);
+            pickedVolume = volume;
+        }
+    }
+
+    return picked;
+}
+
 void SceneDrawList::clear()
 {
     opaqueItems.clear();
     blendItems.clear();
     lights.clear();
     reflectionProbes.clear();
+    irradianceVolumes.clear();
 }
 
 void SceneDrawList::collect (const EntityNode& entity, const Matrix4& world, const Material* overrideMaterial, const Matrix4& view)
@@ -356,6 +389,17 @@ void SceneDrawList::collect (const EntityNode& entity, const Matrix4& world, con
                                       position,
                                       isBox ? BoundingBox (-extents, extents).transformedBy (world)
                                             : BoundingBox (position - sphereExtents, position + sphereExtents) });
+    });
+
+    entity.forEachNode<IrradianceVolumeNode> ([&] (IrradianceVolumeNode& node, int)
+    {
+        const auto& extents = node.extents;
+
+        // A volume without extent, or flattened by a zero scale, lights nothing
+        if (jmin (extents.getX(), extents.getY(), extents.getZ()) <= 0.0f || std::abs (determinant) <= 1.0e-12f)
+            return;
+
+        irradianceVolumes.push_back ({ &node, world, BoundingBox (-extents, extents).transformedBy (world) });
     });
 
     for (const auto& child : entity.getChildren())

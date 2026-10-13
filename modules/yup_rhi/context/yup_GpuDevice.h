@@ -329,6 +329,11 @@ public:
     */
     void failNextFrameForTesting (const String& error);
 
+    /** @internal Test accessor, not for production use: the number of uniform buffers this device keeps for reuse, pooled or
+        held by submitted frames until the GPU is done with them, and their total capacity in bytes.
+    */
+    std::pair<int, size_t> getUniformBufferPoolSizeForTesting() const noexcept;
+
     //==============================================================================
     /** Returns true if textures of the given format can be created and sampled.
 
@@ -687,6 +692,9 @@ private:
 
         /** Returns true when the pool holds no buffers. */
         bool isEmpty() const noexcept;
+
+        /** Adds the number of pooled buffers and their total capacity to @p size. */
+        void addSize (std::pair<int, size_t>& size) const noexcept;
 
     private:
         /** Smallest capacity handed out - uniform blocks are 16-byte aligned. */

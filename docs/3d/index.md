@@ -425,7 +425,7 @@ scene->getRoot()->addChild (probe);
   probes as a whole, from the influences its bounds touch: split large objects,
   such as a long floor, that span more than two probes.
 - Probes replace the environment's reflections only: the diffuse light still
-  comes from the environment and the ambient color. `intensity` scales the
+  comes from the environment, the ambient color and the irradiance volumes. `intensity` scales the
   captured light.
 - A capture renders the scene from the entity's origin as the raster tier does,
   without exposure or tone mapping, with the environment behind it and hard
@@ -449,6 +449,72 @@ move that cost. On the full tier at most 64 probes shade a frame, the largest
 ones being left out beyond that. A capture the device cannot draw never fails a
 frame: the probe reflects nothing meanwhile, and after two failures in a row the
 renderer stops capturing until `bakeProbes()` is called again.
+
+### Irradiance volumes
+
+The environment and the ambient color light every surface alike, whatever
+surrounds it. An `IrradianceVolumeNode` bakes the diffuse light inside a box
+instead, so a floor next to a red wall turns a little red, and a corner behind a
+wall stays out of the light of the room next door.
+
+```cpp
+auto volume = yup::EntityNode::Ptr (new yup::EntityNode ("volume"));
+volume->setPosition ({ 0.0f, 1.5f, 0.0f }); // the center of the box
+
+auto& node = volume->attach<yup::IrradianceVolumeNode>();
+node.extents = { 4.5f, 2.0f, 3.5f };          // half the size of the box, around the entity
+node.resolutionX = 6;                         // probes along each axis
+node.resolutionY = 2;
+node.resolutionZ = 4;
+scene->getRoot()->addChild (volume);
+```
+
+- The box is divided into `resolutionX` x `resolutionY` x `resolutionZ` cells
+  (from 2 to 7 along each axis, `IrradianceVolumeNode::maxResolution`), with a
+  probe at the center of each. A probe
+  captures the scene around it into a 32 pixel cube, keeps its first two bands of
+  spherical harmonics, and the distances to the geometry around it.
+- A surface inside the box takes its diffuse light from the 8 probes around it,
+  weighted by distance, by which side of the surface they are on, and by whether
+  they can see it (McGuire et al. 2019): a probe on the other side of a wall does
+  not light it. The volume fades to the environment's diffuse light over
+  `falloff` (in world units) towards its border. `intensity` scales the baked
+  light, which the environment intensity does not scale; `normalBias` moves the
+  visibility test off the surface, against shadow acne.
+- Volumes give diffuse light only: reflections still come from the reflection
+  probes and the environment. Where volumes overlap, the smallest one is used.
+  The raster tier picks the volume of each object by the center of its bounds,
+  so an object spanning two volumes takes all of its light from one of them;
+  the full tier picks per pixel, and shades up to 8 volumes a frame. The raster
+  pick also differs in that it tests the box's world-aligned bounds (a rotated
+  box reaches past its corners there), it keeps a volume that is still baking
+  (that object then takes the environment's light meanwhile), and between equal
+  boxes it keeps the first one in the scene, where the full tier keeps the oldest.
+- Where a volume fades out over its falloff, or where none of its probes can see
+  a surface (a closed cabinet without a probe inside), the environment takes the
+  rest of the light, not a larger volume around it: give a volume nested in
+  another a `falloff` of 0, or its border shows the environment.
+- One bounce: a capture is lit by the environment, the lights and their shadows,
+  as a reflection probe capture is, but not by the volumes or the probes, so the
+  light the volume adds is the light of the scene bounced once.
+- On devices without half float render targets the bake keeps the first band in
+  RGBM and the second as ratios to it, slightly less precise, and skips the
+  visibility: light then leaks through walls between the probes. Keep the probes
+  out of walls there, or use more of them.
+- Any one volume fits the atlases; many large ones can fill them, and a volume
+  left without room lights nothing (logged once in debug builds). Below the float
+  floor there is no visibility, so they hold about five times more probes.
+
+A volume is baked again under the same rules as a reflection probe: when it is
+attached, on `IrradianceVolumeNode::requestBake()`, when one of its own fields or
+its entity's transform changes, and by `SceneRenderer::bakeProbes()`. Changes to
+the rest of the scene never bake it again by themselves. A bake costs six renders
+of the scene per probe (288 for a 6 x 2 x 4 volume). A frame captures at most 48
+probe positions, so a larger volume, or several volumes, bake over several
+frames, and each volume lights nothing until it is complete. Bake them ahead
+with `bakeProbes (device, scene)` behind a loading screen, calling it until it
+returns 0. A volume whose bake fails leaves the reflection probes baking, and
+the other way round.
 
 ## Lights and shadows
 

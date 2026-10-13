@@ -83,6 +83,42 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle lightingPassLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_local_indirect.inc>
+        };
+
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassAreaLightsLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights_local_indirect.inc>
+        };
+
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassSoftShadowsLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_soft_shadows_local_indirect.inc>
+        };
+
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassAreaLightsSoftShadowsLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights_soft_shadows_local_indirect.inc>
+        };
+
+        return load (data, sizeof (data));
+    }
+
     /** The (set, binding) pairs of @p resources, sorted. */
     static std::vector<std::pair<uint32_t, uint32_t>> bindingsOf (const std::vector<ShaderReflection::ResourceBinding>& resources)
     {
@@ -99,22 +135,48 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
 {
     using Bindings = std::vector<std::pair<uint32_t, uint32_t>>;
 
-    // Set 0 holds the shared lookups: the environment cube, in every variant the lookup tables and
-    // the reflection atlas (8), all read through linearClamp, and the shadow comparison sampler
+    // Set 0 holds the shared lookups: the environment cube, in every variant the lookup tables, and
+    // in the local indirect variants (preflight R27) the reflection atlas (8) and the irradiance and
+    // visibility atlases (9, 10), all read through linearClamp, and the shadow comparison sampler
     // (bindings 11 and 14 are spare). Set 1 holds RT0-RT2 and the depth, keeping their binding
-    // numbers, then the ambient occlusion (13), and set 3 the sun cascades and the point and spot
-    // light atlas, each compared (0, 2), and read raw (1, 3) by the shadow filter variants only
+    // numbers, then the ambient occlusion (13) in every variant, and set 3 the sun cascades and the
+    // point and spot light atlas, each compared (0, 2), and read raw (1, 3) by the shadow filter
+    // variants only. The storage buffers are the lights, the light lists of the clusters and the
+    // material table, plus the reflection probes (14) and the irradiance volumes (15) in the local
+    // indirect variants only
+    const Bindings lookups { { 0, 6 }, { 0, 7 } };
+    const Bindings probeAtlases { { 0, 8 }, { 0, 9 }, { 0, 10 } };
+    const Bindings passInputs { { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 } };
+    const Bindings compared { { 3, 0 }, { 3, 2 } };
+    const Bindings filtered { { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } };
+    const Bindings storage { { 1, 6 }, { 1, 7 }, { 1, 8 } };
+    const Bindings probeStorage { { 1, 6 }, { 1, 7 }, { 1, 8 }, { 1, 14 }, { 1, 15 } };
+
+    const auto join = [] (std::initializer_list<Bindings> parts)
+    {
+        Bindings joined;
+        for (const auto& part : parts)
+            joined.insert (joined.end(), part.begin(), part.end());
+
+        std::sort (joined.begin(), joined.end());
+        return joined;
+    };
+
     const struct
     {
         const char* name;
         ShaderBundle bundle;
         Bindings images;
-        Bindings samplers;
+        Bindings buffers;
     } variants[] = {
-        { "punctual", lightingPass(), { { 0, 6 }, { 0, 7 }, { 0, 8 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 2 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
-        { "area lights", lightingPassAreaLights(), { { 0, 6 }, { 0, 7 }, { 0, 8 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 2 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
-        { "shadow filters", lightingPassSoftShadows(), { { 0, 6 }, { 0, 7 }, { 0, 8 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
-        { "area lights, shadow filters", lightingPassAreaLightsSoftShadows(), { { 0, 6 }, { 0, 7 }, { 0, 8 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
+        { "punctual", lightingPass(), join ({ lookups, passInputs, compared }), storage },
+        { "area lights", lightingPassAreaLights(), join ({ lookups, passInputs, compared }), storage },
+        { "shadow filters", lightingPassSoftShadows(), join ({ lookups, passInputs, filtered }), storage },
+        { "area lights, shadow filters", lightingPassAreaLightsSoftShadows(), join ({ lookups, passInputs, filtered }), storage },
+        { "local indirect", lightingPassLocalIndirect(), join ({ lookups, probeAtlases, passInputs, compared }), probeStorage },
+        { "area lights, local indirect", lightingPassAreaLightsLocalIndirect(), join ({ lookups, probeAtlases, passInputs, compared }), probeStorage },
+        { "shadow filters, local indirect", lightingPassSoftShadowsLocalIndirect(), join ({ lookups, probeAtlases, passInputs, filtered }), probeStorage },
+        { "area lights, shadow filters, local indirect", lightingPassAreaLightsSoftShadowsLocalIndirect(), join ({ lookups, probeAtlases, passInputs, filtered }), probeStorage },
     };
 
     for (const auto& variant : variants)
@@ -126,7 +188,7 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
         EXPECT_EQ (bindingsOf (fragment->uniformBuffers), (Bindings { { 0, 0 }, { 1, 0 }, { 3, 4 } })) << variant.name;
 
         EXPECT_EQ (bindingsOf (fragment->separateImages), variant.images) << variant.name;
-        EXPECT_EQ (bindingsOf (fragment->separateSamplers), variant.samplers) << variant.name;
+        EXPECT_EQ (bindingsOf (fragment->separateSamplers), (Bindings { { 0, 1 }, { 0, 3 }, { 0, 4 } })) << variant.name;
         EXPECT_TRUE (fragment->sampledImages.empty()) << variant.name;
 
         // Each set stays within the 8 textures an ore bind group holds
@@ -138,8 +200,8 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
         EXPECT_LE (texturesPerSet[1], 8) << variant.name;
         EXPECT_LE (texturesPerSet[3], 8) << variant.name;
 
-        // The lights, the light lists of the clusters, the material table and the reflection probes, read only
-        EXPECT_EQ (bindingsOf (fragment->storageBuffers), (Bindings { { 1, 6 }, { 1, 7 }, { 1, 8 }, { 1, 14 } })) << variant.name;
+        // Read only
+        EXPECT_EQ (bindingsOf (fragment->storageBuffers), variant.buffers) << variant.name;
         for (const auto& buffer : fragment->storageBuffers)
             EXPECT_TRUE (buffer.readOnly) << variant.name << ": " << buffer.name;
     }

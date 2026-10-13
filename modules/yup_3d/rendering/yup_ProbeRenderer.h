@@ -35,6 +35,9 @@ namespace yup
     - downsampleCube() fills the other mips of that cube, keeping its energy.
     - prefilterToCube() and prefilterToAtlas() filter that cube for GGX reflections, one roughness
       per mip, into another cube or into an octahedral tile of an atlas.
+    - projectIrradiance() and renderVisibility() bake one probe of an irradiance volume: the first
+      two bands of the spherical harmonics of its radiance cube, and the visibility moments of its
+      distance cube.
 
     @code
     ProbeRenderer probes (device);
@@ -151,13 +154,68 @@ public:
                            Rectangle<int> tileAtMip0, int numMips);
 
     //==============================================================================
+    /** Projects the radiance of @p cube on the first two bands of the real spherical harmonics,
+        convolved into irradiance as SphericalHarmonics::toIrradiance() does, into four texels of
+        @p atlas: coefficient c, in the order 1, y, z, x, at (texel.x, texel.y + c). Each one sums
+        the 384 texels of the cube mip whose faces are 8 texels wide (or mip 0 when smaller),
+        weighted by their solid angle.
+
+        Below the float floor (RGBM radiance) coefficient 0 is stored in RGBM and the others as
+        their ratios to it per channel, SphericalHarmonics::encodeRatio(), since they may be negative.
+
+        @param frame  The frame to record into.
+        @param cube   A cube in getRadianceFormat() with its full mip chain filled, as downsampleCube() leaves it.
+        @param atlas  A render-target 2D texture in getRadianceFormat().
+        @param texel  The texel of coefficient 0; the column of four must lie inside @p atlas.
+
+        @returns False on a null or wrong-shaped texture or a texel outside the atlas, recording
+                 nothing, or if the pass could not be compiled or recorded.
+    */
+    bool projectIrradiance (GpuFrame& frame, const GpuTexture::Ptr& cube, const GpuTexture::Ptr& atlas, Point<int> texel);
+
+    /** The format of the distance cubes and visibility atlases of the irradiance volumes. */
+    static constexpr GpuTextureFormat visibilityFormat = GpuTextureFormat::rg16float;
+
+    /** True when the device renders visibilityFormat and half float radiance: below the float floor
+        the irradiance volumes have no visibility. */
+    bool canRenderVisibility() const noexcept;
+
+    /** Writes the visibility moments of an irradiance volume probe into a bordered octahedral tile
+        of @p atlas, (tileSize + 2) texels wide with @p origin its top-left border texel (see
+        shaders/lib/volumes.glsl): per texel direction, the mean distance and the mean squared
+        distance in x and y, read from @p distanceCube under a cos^50 lobe with 64 samples, times
+        @p distanceScale. The other texels of the atlas are kept.
+
+        @param frame          The frame to record into.
+        @param distanceCube   A cube in visibilityFormat holding the distance from the probe in x.
+        @param atlas          A render-target 2D texture in visibilityFormat.
+        @param origin         The top-left border texel of the tile.
+        @param tileSize       The tile size without its border, at least 2.
+        @param distanceScale  What the distances are multiplied by: 1 over the cell diagonal.
+
+        @returns False when visibility cannot render (canRenderVisibility()), on a null or
+                 wrong-shaped texture or a tile outside the atlas, recording nothing, or if the
+                 pass could not be compiled or recorded.
+    */
+    bool renderVisibility (GpuFrame& frame, const GpuTexture::Ptr& distanceCube, const GpuTexture::Ptr& atlas,
+                           Point<int> origin, int tileSize, float distanceScale);
+
+    //==============================================================================
     /** @internal For tests only: use RGBM in rgba8unorm even when half floats are renderable. */
     void setForceRgbmForTesting (bool shouldForceRgbm);
 
 private:
+    /** A pass of the irradiance volumes, compiled on its first use and kept, apart from prepare(). */
+    struct VolumePass
+    {
+        FullscreenPass pass;
+        std::optional<Result> prepared;
+    };
+
     bool prepare();
     bool usesRgbm() const noexcept;
     bool isRadianceCube (const GpuTexture::Ptr& texture) const noexcept;
+    FullscreenPass* prepareVolumePass (VolumePass& volumePass, const uint8* bundle, size_t bundleSize, GpuTextureFormat format);
 
     GpuDevice::Ptr device;
     bool forceRgbm = false;
@@ -166,9 +224,13 @@ private:
     FullscreenPass equirectPass;
     FullscreenPass downsamplePass;
     FullscreenPass prefilterPass;
+    VolumePass irradiancePass;      // rgba16float
+    VolumePass irradianceRgbmPass;  // rgba8unorm, below the float floor
+    VolumePass visibilityPass;
 
     GpuSampler::Ptr equirectSampler;
     GpuSampler::Ptr cubeSampler;
+    GpuSampler::Ptr distanceSampler;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ProbeRenderer)
 };

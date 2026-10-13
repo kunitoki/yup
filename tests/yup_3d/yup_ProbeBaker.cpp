@@ -104,3 +104,67 @@ TEST_F (ProbeBakerTests, UnbakedProbesArePendingAndWeighNothing)
     // The full tier packs baked probes only
     EXPECT_TRUE (baker.packReflectionProbesByPriority (list).empty());
 }
+
+TEST_F (ProbeBakerTests, VolumeSignatureFollowsEveryFieldAndTheWorldMatrix)
+{
+    auto entity = EntityNode::Ptr (new EntityNode ("volume"));
+    auto& volume = entity->attach<IrradianceVolumeNode>();
+    entity->setPosition ({ 1.0f, 2.0f, 3.0f });
+    scene.getRoot()->addChild (entity);
+
+    const auto signature = [this]
+    {
+        list.build (*scene.getRoot(), Matrix4());
+        return list.getIrradianceVolumes().size() == 1 ? ProbeBaker::getSignature (list.getIrradianceVolumes()[0]) : 0;
+    };
+
+    const auto original = signature();
+    ASSERT_NE (original, 0u);
+
+    // The bake id is the key of a bake, not part of its signature
+    volume.requestBake();
+    EXPECT_EQ (signature(), original);
+
+    const std::pair<const char*, std::function<void()>> changes[] = {
+        { "extents", [&] { volume.extents = { 5.0f, 3.0f, 5.0f }; } },
+        { "resolutionX", [&] { volume.resolutionX = 5; } },
+        { "resolutionY", [&] { volume.resolutionY = 3; } },
+        { "resolutionZ", [&] { volume.resolutionZ = 6; } },
+        { "falloff", [&] { volume.falloff = 1.0f; } },
+        { "intensity", [&] { volume.intensity = 2.0f; } },
+        { "normalBias", [&] { volume.normalBias = 0.2f; } },
+        { "position", [&] { entity->setPosition ({ 1.0f, 2.0f, 4.0f }); } },
+    };
+
+    auto previous = original;
+    for (const auto& [name, change] : changes)
+    {
+        change();
+        const auto changed = signature();
+        EXPECT_NE (changed, previous) << name;
+        previous = changed;
+    }
+}
+
+TEST_F (ProbeBakerTests, UnbakedVolumesArePendingAndWeighNothing)
+{
+    scene.getRoot()->attach<IrradianceVolumeNode>();
+    list.build (*scene.getRoot(), Matrix4());
+    ASSERT_EQ (list.getIrradianceVolumes().size(), 1u);
+
+    ProbeRenderer probes (nullptr);
+    ProbeBaker baker (probes);
+    EXPECT_EQ (baker.getNumPending (list), 1);
+    EXPECT_EQ (baker.getIrradianceAtlas(), nullptr);
+    EXPECT_EQ (baker.getVisibilityAtlas(), nullptr);
+    EXPECT_EQ (baker.getNumBakedVolumes(), 0);
+
+    // Packed in list order for raster, all zero: a volume that weighs nothing
+    const auto packed = baker.packIrradianceVolumes (list);
+    ASSERT_EQ (packed.size(), 1u);
+    const GpuIrradianceVolume empty {};
+    EXPECT_EQ (std::memcmp (&packed[0], &empty, sizeof (empty)), 0);
+
+    // The full tier packs baked volumes only
+    EXPECT_TRUE (baker.packIrradianceVolumesByPriority (list).empty());
+}

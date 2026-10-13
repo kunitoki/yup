@@ -102,15 +102,16 @@ struct ForwardLightListBlock
 
 static_assert (sizeof (ForwardLightListBlock) == 528);
 
-// std140 mirror of ProbeListBlock in lib/probes.glsl, the reflection probes of one raster draw,
-// count in x (set 2 binding 13, local indirect variants only)
+// std140 mirror of ProbeListBlock in lib/probes.glsl, the reflection probes of one raster draw, count
+// in x, and its irradiance volume when count y is 1 (set 2 binding 13, local indirect variants only)
 struct ForwardProbeListBlock
 {
     GpuReflectionProbe probes[2];
+    GpuIrradianceVolume volume;
     float count[4];
 };
 
-static_assert (sizeof (ForwardProbeListBlock) == 272);
+static_assert (sizeof (ForwardProbeListBlock) == 384);
 
 size_t getForwardPipelineIndex (const SceneDrawList::DrawItem& item) noexcept
 {
@@ -289,16 +290,16 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     if (! clear.has_value() && opaque.empty() && blend.empty())
         return true;
 
-    // Raster frames with ambient occlusion or reflection probes shade with the local indirect
-    // variant, the only one reading them
-    auto localIndirect = targets.velocity == nullptr && (lighting.ambientOcclusion != nullptr || lighting.hasReflectionProbes());
+    // Raster frames with ambient occlusion, reflection probes or irradiance volumes shade with the
+    // local indirect variant, the only one reading them
+    auto localIndirect = targets.velocity == nullptr && (lighting.ambientOcclusion != nullptr || lighting.hasReflectionProbes() || lighting.hasIrradianceVolumes());
     auto prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, lighting.shadowFilters, localIndirect);
 
-    // Without its local indirect variant, the frame shades without ambient occlusion and reflection probes
+    // Without its local indirect variant, the frame shades without ambient occlusion, reflection probes and irradiance volumes
     if (prepared.failed() && localIndirect)
     {
         if (! localIndirectFailureReported)
-            YUP_DBG ("ForwardPass: the local indirect variant is unavailable, shading without ambient occlusion and reflection probes: " << prepared.getErrorMessage());
+            YUP_DBG ("ForwardPass: the local indirect variant " << (lighting.shadowFilters ? "with shadow filters " : "") << "is unavailable, shading without ambient occlusion, reflection probes and irradiance volumes: " << prepared.getErrorMessage());
 
         localIndirectFailureReported = true;
         localIndirect = false;
@@ -324,18 +325,20 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
         || lighting.shadowCascades == nullptr || lighting.shadowAtlas == nullptr)
         return false;
 
-    if (variant.velocity && (lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.reflectionProbeBuffer == nullptr || ! opaque.empty()))
+    if (variant.velocity && (lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.reflectionProbeBuffer == nullptr
+                             || lighting.irradianceVolumeBuffer == nullptr || ! opaque.empty()))
     {
         jassert (opaque.empty()); // The full tier shades its opaque items through GBufferPass and LightingPass
         return false;
     }
 
-    // The reflection atlas stands in black without probes, in the variants reading it
+    // The probe and volume atlases stand in black without probes or volumes, in the variants reading them
     const auto readsProbes = variant.velocity || variant.localIndirect;
-    if (readsProbes && lighting.reflectionAtlas == nullptr && blackTexture == nullptr)
+    const auto needsBlack = lighting.reflectionAtlas == nullptr || lighting.irradianceAtlas == nullptr || lighting.visibilityAtlas == nullptr;
+    if (readsProbes && needsBlack && blackTexture == nullptr)
         blackTexture = GeometryBindings::createSolidTexture (device, 0x000000ff);
 
-    if (readsProbes && lighting.reflectionAtlas == nullptr && blackTexture == nullptr)
+    if (readsProbes && needsBlack && blackTexture == nullptr)
         return false;
 
     if (surface == nullptr || surface->asTexture() != targets.color)
@@ -390,17 +393,22 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     }
 
     if (readsProbes)
+    {
         pass.setTexture (0, 8, lighting.reflectionAtlas != nullptr ? lighting.reflectionAtlas : blackTexture);
+        pass.setTexture (0, 9, lighting.irradianceAtlas != nullptr ? lighting.irradianceAtlas : blackTexture);
+        pass.setTexture (0, 10, lighting.visibilityAtlas != nullptr ? lighting.visibilityAtlas : blackTexture);
+    }
 
     if (variant.velocity)
     {
         pass.setStorageBuffer (1, 6, lighting.lights);
         pass.setStorageBuffer (1, 7, lighting.clusterLights);
         pass.setStorageBuffer (1, 8, lighting.reflectionProbeBuffer);
+        pass.setStorageBuffer (1, 9, lighting.irradianceVolumeBuffer);
     }
 
-    // Without ambient occlusion white occludes nothing; without probes one empty list serves every draw
-    const auto drawsProbeLists = variant.localIndirect && lighting.hasReflectionProbes();
+    // Without ambient occlusion white occludes nothing; without probes and volumes one empty list serves every draw
+    const auto drawsProbeLists = variant.localIndirect && (lighting.hasReflectionProbes() || lighting.hasIrradianceVolumes());
 
     if (variant.localIndirect)
     {
@@ -458,6 +466,12 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
                         probeList.probes[numProbes++] = lighting.reflectionProbes[static_cast<size_t> (index)];
 
                 probeList.count[0] = static_cast<float> (numProbes);
+
+                if (item.irradianceVolume >= 0 && static_cast<size_t> (item.irradianceVolume) < lighting.irradianceVolumes.size())
+                {
+                    probeList.volume = lighting.irradianceVolumes[static_cast<size_t> (item.irradianceVolume)];
+                    probeList.count[1] = 1.0f;
+                }
 
                 pass.setUniformBuffer (2, 13, &probeList, sizeof (probeList));
             }

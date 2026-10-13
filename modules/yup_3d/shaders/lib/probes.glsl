@@ -68,6 +68,45 @@ vec3 lightingBackground(vec2 clip)
     return color * (lighting.environmentInfo.x * view.cameraPosition.w);
 }
 
+// The irradiance volumes (ProbeBaker), compiled only into the shaders shading with them, which define
+// YUP_3D_IRRADIANCE_VOLUMES with YUP_3D_REFLECTION_PROBES before their first include: the raster
+// local indirect variants of the forward pass, its full tier variants and the lighting pass. The
+// full tier shaders also define YUP_3D_IRRADIANCE_VOLUMES_BINDING, the set 1 binding of their
+// storage buffer of volumes. The raster tier reads each draw's volume from its ProbeListBlock
+#ifdef YUP_3D_IRRADIANCE_VOLUMES
+
+#ifndef YUP_3D_REFLECTION_PROBES
+#error "The irradiance volumes are shaded with the reflection probes: define YUP_3D_REFLECTION_PROBES too"
+#endif
+
+#include "lib/volumes.glsl"
+
+// One irradiance volume, mirrored by GpuIrradianceVolume in yup_GpuSceneData.h (112 bytes in std140
+// and std430). An empty volume (all zero) weighs nothing anywhere
+struct GpuIrradianceVolume
+{
+    mat4 worldToUnit;     // world to the volume box mapped onto [0, 1]^3
+    vec4 resolution;      // xyz probes along each axis, w intensity
+    vec4 shBlock;         // xy texel of the SH block in the irradiance atlas, z falloff in world units
+    vec4 visibilityBlock; // xy texel of the visibility block in the visibility atlas, z tile size without its border (0: no visibility), w normal bias
+};
+
+// The irradiance of every volume probe, four texels each, the first band (in RGBM when
+// lighting.probeInfo.x is 1) above the three coefficients of the second (as ratios to the first
+// then); black without volumes
+layout(set = 0, binding = 9) uniform texture2D u_irradianceAtlas;
+
+// The visibility moments of every volume probe in bordered octahedral tiles (lib/volumes.glsl), the
+// mean distance and mean squared distance in units of the cell diagonal; black without volumes
+layout(set = 0, binding = 10) uniform texture2D u_visibilityAtlas;
+
+#ifdef YUP_3D_TIER_FULL
+// The volumes of the frame, lighting.probeInfo.z of them, the smallest first
+layout(set = 1, binding = YUP_3D_IRRADIANCE_VOLUMES_BINDING) readonly buffer IrradianceVolumes { GpuIrradianceVolume irradianceVolumes[]; };
+#endif
+
+#endif
+
 // The reflection probes (ProbeBaker), compiled only into the shaders shading with them, which define
 // YUP_3D_REFLECTION_PROBES before their first include: the raster local indirect variants of the
 // forward pass, its full tier variants and the lighting pass. The full tier shaders also define
@@ -95,10 +134,14 @@ layout(set = 0, binding = 8) uniform texture2D u_reflectionAtlas;
 // Every probe of the frame, lighting.probeInfo.y of them, in the priority order of the raster selection
 layout(set = 1, binding = YUP_3D_REFLECTION_PROBES_BINDING) readonly buffer ReflectionProbes { GpuReflectionProbe reflectionProbes[]; };
 #else
-// The two probes taking priority over the draw (SceneDrawList::selectReflectionProbes), count.x of them
+// The two probes taking priority over the draw (SceneDrawList::selectReflectionProbes), count.x of
+// them, and the irradiance volume lighting it (SceneDrawList::selectIrradianceVolume) when count.y is 1
 layout(set = 2, binding = 13) uniform ProbeListBlock
 {
     GpuReflectionProbe probes[2];
+#ifdef YUP_3D_IRRADIANCE_VOLUMES
+    GpuIrradianceVolume volume;
+#endif
     vec4 count;
 } probeList;
 #endif
@@ -209,6 +252,167 @@ vec3 specularIndirect(vec3 worldPosition, vec3 r, float roughness, out float env
 
     environmentWeight = rest;
     return radiance;
+}
+
+#endif
+
+// The diffuse light of the irradiance volumes (McGuire et al. 2019, "Dynamic Diffuse Global
+// Illumination with Ray-Traced Irradiance Fields", JCGT 8(2)), with the probes of each volume
+// storing two bands of spherical harmonics (ProbeBaker) instead of octahedral irradiance
+#ifdef YUP_3D_IRRADIANCE_VOLUMES
+
+// How much a volume lights a world position: 1 inside the box, fading out over its falloff to 0 at
+// the border, the distance to each face measured in world units (the unit coordinate over its rate
+// of change along the world). 0 on the border itself and for an empty volume
+float irradianceVolumeWeight(GpuIrradianceVolume volume, vec3 worldPosition)
+{
+    if (volume.resolution.x < 1.5)
+        return 0.0;
+
+    vec3 u = (volume.worldToUnit * vec4(worldPosition, 1.0)).xyz;
+    mat3 a = mat3(volume.worldToUnit);
+    vec3 rate = vec3(length(vec3(a[0][0], a[1][0], a[2][0])), length(vec3(a[0][1], a[1][1], a[2][1])), length(vec3(a[0][2], a[1][2], a[2][2])));
+    vec3 inside = min(u, 1.0 - u) / rate;
+    float border = min(inside.x, min(inside.y, inside.z));
+
+    if (! (border > 0.0))
+        return 0.0;
+
+    return volume.shBlock.z > 0.0 ? min(border / volume.shBlock.z, 1.0) : 1.0;
+}
+
+// The irradiance a volume's probes give a surface at @p worldPosition with the normal @p n, its
+// spherical harmonics evaluated along @p direction (the bent normal with ambient occlusion), and in
+// @p found whether any probe weighs anything there. The 8 probes around the position, offset along
+// the normal by the volume's normal bias, are weighted by:
+// - their trilinear weight;
+// - a smooth backface weight, ((dot (towards the probe, n) + 1) / 2)^2 + 0.2;
+// - the Chebyshev bound of their visibility moments in the direction of the position, cubed to
+//   sharpen it, where the position lies beyond the mean distance; skipped below the float floor,
+//   where the volume has no visibility.
+// The sum is normalized by the weights when they add up to more than 1e-4
+vec3 irradianceVolumeIrradiance(GpuIrradianceVolume volume, vec3 worldPosition, vec3 n, vec3 direction, out bool found)
+{
+    vec3 resolution = volume.resolution.xyz;
+
+    // Unit to world for the vectors between the probes: the inverse of the linear part, from its adjugate
+    mat3 a = mat3(volume.worldToUnit);
+    vec3 r0 = cross(a[1], a[2]);
+    vec3 r1 = cross(a[2], a[0]);
+    vec3 r2 = cross(a[0], a[1]);
+    mat3 unitToWorld = transpose(mat3(r0, r1, r2)) / dot(a[0], r0);
+
+    vec3 biased = worldPosition + n * volume.visibilityBlock.w;
+    vec3 u = (volume.worldToUnit * vec4(biased, 1.0)).xyz;
+    vec3 grid = u * resolution - 0.5;
+    vec3 base = clamp(floor(grid), vec3(0.0), resolution - 2.0);
+    vec3 f = clamp(grid - base, vec3(0.0), vec3(1.0));
+    float diagonal = length(unitToWorld * (1.0 / resolution));
+
+    vec2 visibilitySize = vec2(textureSize(sampler2D(u_visibilityAtlas, linearClamp), 0));
+    float tile = volume.visibilityBlock.z;
+
+    vec3 sum = vec3(0.0);
+    float total = 0.0;
+
+    for (int i = 0; i < 8; ++i)
+    {
+        vec3 corner = vec3(float(i & 1), float((i >> 1) & 1), float((i >> 2) & 1));
+        vec3 probe = base + corner;
+        vec3 trilinear = mix(1.0 - f, f, corner);
+        float weight = trilinear.x * trilinear.y * trilinear.z;
+
+        vec3 toProbe = unitToWorld * ((probe + 0.5) / resolution - u);
+        float distance = length(toProbe);
+        vec3 towardsProbe = distance > 1.0e-6 ? toProbe / distance : n;
+
+        float backface = max(0.0001, (dot(towardsProbe, n) + 1.0) * 0.5);
+        weight *= backface * backface + 0.2;
+
+        // Probe (i, j, k) sits at column i + k nx of the blocks, row j
+        vec2 cell = vec2(probe.x + probe.z * resolution.x, probe.y);
+
+        if (tile > 0.0)
+        {
+            vec2 origin = volume.visibilityBlock.xy + cell * (tile + 2.0);
+            vec2 moments = textureLod(sampler2D(u_visibilityAtlas, linearClamp), volumeTileUv(-towardsProbe, origin, tile, visibilitySize), 0.0).xy;
+            float d = distance / diagonal;
+
+            if (d > moments.x)
+            {
+                float variance = abs(moments.y - moments.x * moments.x);
+                float delta = d - moments.x;
+                float chebyshev = variance / (variance + delta * delta);
+                weight *= chebyshev * chebyshev * chebyshev;
+            }
+        }
+
+        ivec2 texel = ivec2(volume.shBlock.xy + cell * vec2(1.0, 4.0));
+        vec4 t0 = texelFetch(sampler2D(u_irradianceAtlas, pointClamp), texel, 0);
+        vec4 t1 = texelFetch(sampler2D(u_irradianceAtlas, pointClamp), texel + ivec2(0, 1), 0);
+        vec4 t2 = texelFetch(sampler2D(u_irradianceAtlas, pointClamp), texel + ivec2(0, 2), 0);
+        vec4 t3 = texelFetch(sampler2D(u_irradianceAtlas, pointClamp), texel + ivec2(0, 3), 0);
+
+        // Below the float floor the second band holds ratios to the first, remapped to [0, 1]
+        // (SphericalHarmonics::encodeRatio())
+        float rgbm = lighting.probeInfo.x;
+        vec3 l0 = yupDecodeRgbm(t0, rgbm);
+        vec3 l1y = mix(t1.rgb, (t1.rgb - 0.5) * 4.0 * l0, rgbm);
+        vec3 l1z = mix(t2.rgb, (t2.rgb - 0.5) * 4.0 * l0, rgbm);
+        vec3 l1x = mix(t3.rgb, (t3.rgb - 0.5) * 4.0 * l0, rgbm);
+
+        sum += max(l0 + l1y * direction.y + l1z * direction.z + l1x * direction.x, vec3(0.0)) * weight;
+        total += weight;
+    }
+
+    found = total > 1.0e-4;
+    return found ? sum / total : vec3(0.0);
+}
+
+// The diffuse light of the irradiance volume at @p worldPosition, with its own intensity, for the
+// normal @p n and the direction its spherical harmonics are evaluated along, weighted by its share,
+// and in @p environmentWeight the share it leaves to the environment (1 without a volume, or where
+// no probe of the volume weighs anything). Raster: the draw's volume. Full: the first of the frame's
+// volumes, the smallest first, weighing anything there
+vec3 diffuseIndirect(vec3 worldPosition, vec3 n, vec3 direction, out float environmentWeight)
+{
+    environmentWeight = 1.0;
+
+#ifdef YUP_3D_TIER_FULL
+    int count = int(lighting.probeInfo.z + 0.5);
+
+    for (int i = 0; i < count; ++i)
+    {
+        float weight = irradianceVolumeWeight(irradianceVolumes[i], worldPosition);
+        if (weight <= 0.0)
+            continue;
+
+        bool found;
+        vec3 irradiance = irradianceVolumeIrradiance(irradianceVolumes[i], worldPosition, n, direction, found);
+        if (! found)
+            return vec3(0.0);
+
+        environmentWeight = 1.0 - weight;
+        return irradiance * (irradianceVolumes[i].resolution.w * weight);
+    }
+#else
+    if (probeList.count.y > 0.5)
+    {
+        float weight = irradianceVolumeWeight(probeList.volume, worldPosition);
+        if (weight <= 0.0)
+            return vec3(0.0);
+
+        bool found;
+        vec3 irradiance = irradianceVolumeIrradiance(probeList.volume, worldPosition, n, direction, found);
+        if (! found)
+            return vec3(0.0);
+
+        environmentWeight = 1.0 - weight;
+        return irradiance * (probeList.volume.resolution.w * weight);
+    }
+#endif
+
+    return vec3(0.0);
 }
 
 #endif

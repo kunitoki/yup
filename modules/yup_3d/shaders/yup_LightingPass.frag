@@ -33,11 +33,16 @@
 #define YUP_3D_CONTACT_SHADOWS
 #endif
 
-// The opaque surfaces read the ambient occlusion and the reflection probes (lib/probes.glsl), these
-// from set 1 binding 14
+// The opaque surfaces read the ambient occlusion (lib/probes.glsl). The local indirect variant
+// (YUP_3D_LOCAL_INDIRECT), which shades the frames with reflection probes or irradiance volumes,
+// reads those too, from set 1 bindings 14 and 15: the default variants carry no probe or volume code
 #define YUP_3D_AMBIENT_OCCLUSION
+#ifdef YUP_3D_LOCAL_INDIRECT
 #define YUP_3D_REFLECTION_PROBES
 #define YUP_3D_REFLECTION_PROBES_BINDING 14
+#define YUP_3D_IRRADIANCE_VOLUMES
+#define YUP_3D_IRRADIANCE_VOLUMES_BINDING 15
+#endif
 
 #include "lib/color.glsl"
 #include "lib/view.glsl"

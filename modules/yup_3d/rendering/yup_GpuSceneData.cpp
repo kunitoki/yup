@@ -168,4 +168,32 @@ GpuReflectionProbe GpuSceneData::packReflectionProbe (const SceneDrawList::Refle
     return packed;
 }
 
+std::array<int, 3> GpuSceneData::getVolumeResolution (const IrradianceVolumeNode& volume) noexcept
+{
+    constexpr auto most = IrradianceVolumeNode::maxResolution;
+    return { jlimit (2, most, volume.resolutionX), jlimit (2, most, volume.resolutionY), jlimit (2, most, volume.resolutionZ) };
+}
+
+GpuIrradianceVolume GpuSceneData::packIrradianceVolume (const SceneDrawList::IrradianceVolume& volume, Point<int> shBlock, Point<int> visibilityBlock, int visibilityTile) noexcept
+{
+    const auto& node = *volume.node;
+    const auto& extents = node.extents;
+    const auto [nx, ny, nz] = getVolumeResolution (node);
+
+    GpuIrradianceVolume packed {
+        {},
+        { static_cast<float> (nx), static_cast<float> (ny), static_cast<float> (nz), node.intensity },
+        { static_cast<float> (shBlock.getX()), static_cast<float> (shBlock.getY()), jmax (0.0f, node.falloff), 0.0f },
+        { static_cast<float> (visibilityBlock.getX()), static_cast<float> (visibilityBlock.getY()), static_cast<float> (jmax (0, visibilityTile)), node.normalBias }
+    };
+
+    // World to entity, then the box from -extents to +extents onto [0, 1]
+    const auto worldToUnit = volume.world.inverted()
+                                 .followedBy (Matrix4::translation (extents))
+                                 .followedBy (Matrix4::scaling ({ 0.5f / extents.getX(), 0.5f / extents.getY(), 0.5f / extents.getZ() }));
+    std::copy_n (worldToUnit.getData(), 16, packed.worldToUnit);
+
+    return packed;
+}
+
 } // namespace yup

@@ -48,7 +48,9 @@
     size of the key light, and turns on a light show of colored point lights orbiting the device:
     64 on the full tier, 16 on the raster tier, which shades every draw with its own short list of
     lights. The key light and a small spot light over the pads cast shadows, soft by default on
-    the full tier.
+    the full tier, with ambient occlusion at the scale of its knobs, a reflection probe over its
+    panel and an irradiance volume for the light the device bounces onto itself; "Bake probes"
+    captures them again.
 */
 class Scene3DDemo : public yup::Component
 {
@@ -591,6 +593,36 @@ private:
             CameraPose::lookingAt (padCenter + directionFromDegrees (-45.0f, 45.0f) * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f }).applyTo (*padLightEntity);
             scene->getRoot()->addChild (padLightEntity);
 
+            // Probed from above the pads, the glossy caps and the screen glass reflect the panel around
+            // them instead of the studio floor. Parallax correction suits closed rooms, not an open studio
+            const auto deviceCenter = deviceBounds.getCenter();
+            const auto deviceSize = deviceBounds.getSize();
+            const auto probePosition = padBounds.isEmpty() ? deviceCenter + yup::Vector3<float> (0.0f, deviceSize.getY(), 0.0f)
+                                                           : padBounds.getCenter() + yup::Vector3<float> (0.0f, padBounds.getSize().getY() * 0.5f + 0.25f, 0.0f);
+            auto probeEntity = yup::EntityNode::Ptr (new yup::EntityNode ("reflectionProbe"));
+            probeEntity->setPosition (probePosition);
+            reflectionProbe = &probeEntity->attach<yup::ReflectionProbeNode>();
+            reflectionProbe->shape = yup::ReflectionProbeNode::Shape::box;
+            reflectionProbe->influenceExtents = { std::abs (deviceCenter.getX() - probePosition.getX()) + deviceSize.getX() * 0.5f + 0.3f,
+                                                  probePosition.getY() - deviceBounds.getMin().getY() + 0.1f,
+                                                  std::abs (deviceCenter.getZ() - probePosition.getZ()) + deviceSize.getZ() * 0.5f + 0.3f };
+            reflectionProbe->falloff = 0.2f;
+            reflectionProbe->parallaxCorrection = false;
+            scene->getRoot()->addChild (probeEntity);
+
+            // Bakes the light the case and the screen bounce onto the panel, from 4 x 2 x 4 probes
+            const auto volumeBottom = deviceBounds.getMin().getY();
+            const auto volumeTop = deviceBounds.getMax().getY() + 0.4f;
+            auto volumeEntity = yup::EntityNode::Ptr (new yup::EntityNode ("irradianceVolume"));
+            volumeEntity->setPosition ({ deviceCenter.getX(), (volumeBottom + volumeTop) * 0.5f, deviceCenter.getZ() });
+            irradianceVolume = &volumeEntity->attach<yup::IrradianceVolumeNode>();
+            irradianceVolume->extents = { deviceSize.getX() * 0.5f + 0.6f, (volumeTop - volumeBottom) * 0.5f, deviceSize.getZ() * 0.5f + 0.6f };
+            irradianceVolume->resolutionX = 4;
+            irradianceVolume->resolutionY = 2;
+            irradianceVolume->resolutionZ = 4;
+            irradianceVolume->falloff = 0.15f;
+            scene->getRoot()->addChild (volumeEntity);
+
             lightShow = new yup::EntityNode ("lightShow");
             lightShow->setVisible (false);
             lightShow->attach<LightShowAnimator> (deviceBounds);
@@ -605,6 +637,12 @@ private:
             scene->setToneMapping (yup::Scene::ToneMapping::agx);
             scene->setEnvironmentVisible (true);
             scene->setEnvironmentBlur (0.5f);
+
+            // Ambient occlusion on both tiers, at the scale of the knobs: they are about 0.08 tall
+            auto settings = scene->getRenderSettings();
+            settings.ambientOcclusion = true;
+            settings.aoDistance = 0.08f;
+            scene->setRenderSettings (settings);
 
             setScene (scene);
 
@@ -659,6 +697,18 @@ private:
             if (shouldShow)
                 setContinuousUpdates (true);
 
+            repaint();
+        }
+
+        /** Captures the reflection probe and the irradiance volume again at the next frame.
+
+            They only bake by themselves when attached or moved, so they keep the light show and the
+            screen as they were then.
+        */
+        void bakeProbes()
+        {
+            reflectionProbe->requestBake();
+            irradianceVolume->requestBake();
             repaint();
         }
 
@@ -1185,6 +1235,8 @@ private:
         CameraAnimator* animator = nullptr;
 
         yup::EntityNode::Ptr lightShow;
+        yup::ReflectionProbeNode* reflectionProbe = nullptr;
+        yup::IrradianceVolumeNode* irradianceVolume = nullptr;
 
         yup::EntityNode* screenEntity = nullptr;
         yup::Vector3<float> screenCenter;
@@ -1303,7 +1355,7 @@ private:
                 view.repaint();
             };
 
-            keyLightSizeLabel.setText ("Key light angular size", yup::dontSendNotification);
+            keyLightSizeLabel.setText ("Key light size", yup::dontSendNotification);
             keyLightSizeSlider.setRange (0.0, 0.3, 0.0);
             keyLightSizeSlider.setNumDecimalPlacesToDisplay (3);
             keyLightSizeSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
@@ -1366,6 +1418,31 @@ private:
                 });
             };
 
+            // Like the shadow toggles, it shows what the last frame ran with, see refresh()
+            ambientOcclusionLabel.setText ("Ambient occlusion", yup::dontSendNotification);
+            ambientOcclusionToggle.setButtonText ("Enabled");
+            ambientOcclusionToggle.onClick = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.ambientOcclusion = ambientOcclusionToggle.getToggleState();
+                });
+            };
+
+            aoDistanceLabel.setText ("AO distance", yup::dontSendNotification);
+            aoDistanceSlider.setRange (0.01, 0.4, 0.0);
+            aoDistanceSlider.setSkewFactorFromMidpoint (0.1);
+            aoDistanceSlider.setNumDecimalPlacesToDisplay (3);
+            aoDistanceSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
+            aoDistanceSlider.setValue (settings.aoDistance, yup::dontSendNotification);
+            aoDistanceSlider.onValueChanged = [this] (double value)
+            {
+                editSettings ([value] (yup::RenderSettings& s)
+                {
+                    s.aoDistance = static_cast<float> (value);
+                });
+            };
+
             lightShowLabel.setText ("Light show", yup::dontSendNotification);
             lightShowToggle.setButtonText (yup::String (view.getNumShowLights()) + " orbiting lights");
             lightShowToggle.onClick = [this]
@@ -1378,11 +1455,16 @@ private:
                 view.requestBenchmark();
             };
 
+            bakeProbesButton.onClick = [this]
+            {
+                view.bakeProbes();
+            };
+
             for (auto* child : std::initializer_list<yup::Component*> { &tierLabel, &tierCombo, &taaLabel, &taaSlider, &bloomLabel, &bloomToggle, &bloomThresholdLabel, &bloomThresholdSlider,
                                                                         &bloomIntensityLabel, &bloomIntensitySlider, &bloomRadiusLabel, &bloomRadiusSlider, &toneMappingLabel, &toneMappingCombo, &exposureLabel, &exposureSlider,
-                                                                        &keyLightSizeLabel, &keyLightSizeSlider, &lightShowLabel, &lightShowToggle, &cascadesLabel, &cascadesCombo,
+                                                                        &keyLightSizeLabel, &keyLightSizeSlider, &aoDistanceLabel, &aoDistanceSlider, &lightShowLabel, &lightShowToggle, &cascadesLabel, &cascadesCombo,
                                                                         &shadowResolutionLabel, &shadowResolutionCombo, &softShadowsLabel, &softShadowsToggle, &contactShadowsLabel,
-                                                                        &contactShadowsToggle, &statusLabel, &detailLabel, &benchmarkButton })
+                                                                        &contactShadowsToggle, &ambientOcclusionLabel, &ambientOcclusionToggle, &statusLabel, &detailLabel, &benchmarkButton, &bakeProbesButton })
                 addAndMakeVisible (*child);
         }
 
@@ -1443,6 +1525,17 @@ private:
                 contactShadowsToggle.setEnabled (canContactShadows);
                 contactShadowsLabel.setEnabled (canContactShadows);
             }
+
+            const auto ambientOcclusion = capabilities->isEnabled (yup::RenderCapabilities::Feature::ambientOcclusion, settings);
+            if (ambientOcclusionToggle.getToggleState() != ambientOcclusion)
+                ambientOcclusionToggle.setToggleState (ambientOcclusion, yup::dontSendNotification);
+
+            const auto canAmbientOcclusion = capabilities->isAvailable (yup::RenderCapabilities::Feature::ambientOcclusion);
+            if (ambientOcclusionToggle.isEnabled() != canAmbientOcclusion)
+            {
+                for (auto* control : std::initializer_list<yup::Component*> { &ambientOcclusionLabel, &ambientOcclusionToggle, &aoDistanceLabel, &aoDistanceSlider })
+                    control->setEnabled (canAmbientOcclusion);
+            }
         }
 
         void paint (yup::Graphics& g) override
@@ -1464,20 +1557,20 @@ private:
                                            { &bloomIntensityLabel, &bloomIntensitySlider },
                                            { &bloomRadiusLabel, &bloomRadiusSlider },
                                            { &toneMappingLabel, &toneMappingCombo },
-                                           { &exposureLabel, &exposureSlider },
-                                           { &keyLightSizeLabel, &keyLightSizeSlider },
-                                           { &lightShowLabel, &lightShowToggle } })
+                                           { &exposureLabel, &exposureSlider } })
             {
                 label->setBounds (bounds.removeFromTop (rowHeight));
                 control->setBounds (bounds.removeFromTop (rowHeight));
                 bounds.removeFromTop (gap);
             }
 
-            // The shadow settings go two per row, to fit the default window
+            // The lighting settings go two per row, to fit the default window
             const auto halfWidth = (bounds.getWidth() - gap) * 0.5f;
 
-            for (auto [left, leftControl, right, rightControl] : { std::tuple<yup::Component*, yup::Component*, yup::Component*, yup::Component*> { &cascadesLabel, &cascadesCombo, &shadowResolutionLabel, &shadowResolutionCombo },
-                                                                   { &softShadowsLabel, &softShadowsToggle, &contactShadowsLabel, &contactShadowsToggle } })
+            for (auto [left, leftControl, right, rightControl] : { std::tuple<yup::Component*, yup::Component*, yup::Component*, yup::Component*> { &keyLightSizeLabel, &keyLightSizeSlider, &aoDistanceLabel, &aoDistanceSlider },
+                                                                   { &cascadesLabel, &cascadesCombo, &shadowResolutionLabel, &shadowResolutionCombo },
+                                                                   { &softShadowsLabel, &softShadowsToggle, &contactShadowsLabel, &contactShadowsToggle },
+                                                                   { &ambientOcclusionLabel, &ambientOcclusionToggle, &lightShowLabel, &lightShowToggle } })
             {
                 auto labels = bounds.removeFromTop (rowHeight);
                 auto controls = bounds.removeFromTop (rowHeight);
@@ -1491,7 +1584,9 @@ private:
             statusLabel.setBounds (bounds.removeFromTop (rowHeight));
             detailLabel.setBounds (bounds.removeFromTop (rowHeight));
             bounds.removeFromTop (gap);
-            benchmarkButton.setBounds (bounds.removeFromTop (rowHeight).removeFromLeft (110.0f));
+            auto buttons = bounds.removeFromTop (rowHeight);
+            benchmarkButton.setBounds (buttons.removeFromLeft (110.0f));
+            bakeProbesButton.setBounds (buttons.removeFromRight (110.0f));
         }
 
     private:
@@ -1561,9 +1656,14 @@ private:
         yup::ToggleButton softShadowsToggle { "softShadowsToggle" };
         yup::Label contactShadowsLabel { "contactShadowsLabel" };
         yup::ToggleButton contactShadowsToggle { "contactShadowsToggle" };
+        yup::Label ambientOcclusionLabel { "ambientOcclusionLabel" };
+        yup::ToggleButton ambientOcclusionToggle { "ambientOcclusionToggle" };
+        yup::Label aoDistanceLabel { "aoDistanceLabel" };
+        yup::Slider aoDistanceSlider { yup::Slider::LinearHorizontal, "aoDistanceSlider" };
         yup::Label statusLabel { "statusLabel" };
         yup::Label detailLabel { "detailLabel" };
         yup::TextButton benchmarkButton { "Benchmark" };
+        yup::TextButton bakeProbesButton { "Bake probes" };
     };
 
     //==============================================================================

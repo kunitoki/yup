@@ -30,10 +30,12 @@
 #endif
 
 // The raster local indirect variants and the full tier's blended surfaces read the reflection probes
-// (lib/probes.glsl), the full tier from set 1 binding 8
+// and the irradiance volumes (lib/probes.glsl), the full tier from set 1 bindings 8 and 9
 #if defined(YUP_3D_LOCAL_INDIRECT) || defined(YUP_3D_TIER_FULL)
 #define YUP_3D_REFLECTION_PROBES
 #define YUP_3D_REFLECTION_PROBES_BINDING 8
+#define YUP_3D_IRRADIANCE_VOLUMES
+#define YUP_3D_IRRADIANCE_VOLUMES_BINDING 9
 #endif
 
 #include "lib/bsdf.glsl"

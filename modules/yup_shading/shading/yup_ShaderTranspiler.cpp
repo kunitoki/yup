@@ -26,35 +26,19 @@ namespace
 {
 
 //==============================================================================
-// glslang global init/finalize - reference-counted across all ShaderTranspiler instances
+// glslang global init/finalize - once per process, the first ShaderTranspiler initializes it.
+// Finalizing frees glslang's built-in symbol tables, which every later compile would rebuild
 //==============================================================================
 
-static CriticalSection& getGlslangInitLock()
+static void initializeGlslang()
 {
-    static CriticalSection lock;
-    return lock;
-}
+    struct GlslangProcess
+    {
+        GlslangProcess() { glslang::InitializeProcess(); }
+        ~GlslangProcess() { glslang::FinalizeProcess(); }
+    };
 
-static int& getGlslangInitCount()
-{
-    static int count = 0;
-    return count;
-}
-
-static void incrementGlslangInit()
-{
-    const ScopedLock sl (getGlslangInitLock());
-
-    if (getGlslangInitCount()++ == 0)
-        glslang::InitializeProcess();
-}
-
-static void decrementGlslangInit()
-{
-    const ScopedLock sl (getGlslangInitLock());
-
-    if (--getGlslangInitCount() == 0)
-        glslang::FinalizeProcess();
+    static GlslangProcess process;
 }
 
 //==============================================================================
@@ -1248,13 +1232,10 @@ static ResultValue<String> preprocessGlsl (const String& source,
 
 ShaderTranspiler::ShaderTranspiler()
 {
-    incrementGlslangInit();
+    initializeGlslang();
 }
 
-ShaderTranspiler::~ShaderTranspiler()
-{
-    decrementGlslangInit();
-}
+ShaderTranspiler::~ShaderTranspiler() = default;
 
 ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
                                                            ShaderStage stage,
