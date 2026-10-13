@@ -47,6 +47,49 @@ protected:
     /** The Fresnel part of the lobe of a rough surface (roughness 1) at normal incidence. */
     static double amplitudeBias() { return LtcTables::getAmplitude (LtcTables::size - 1, 0)[1]; }
 
+    /** The directional albedo of the sheen lobe at a cell of the tables, integrated independently
+        of LookupTables: over the light directions, by the midpoint rule on 1024 x 1024 cells of the
+        hemisphere, with the Charlie distribution (Estevez and Kulla 2017) and the visibility of
+        Neubelt and Pettineo 2013. The row is the perceptual sheen roughness, floored at
+        LookupTables::minSheenRoughness, and the column sqrt (1 - n.v), n.v floored at 1e-4 as the
+        shaders do. Not limited to 1.
+    */
+    static double referenceSheenAlbedo (int roughness, int angle)
+    {
+        const auto pi = MathConstants<double>::pi;
+        const auto perceptual = std::max (roughness / 63.0, static_cast<double> (LookupTables::minSheenRoughness));
+        const auto alpha = perceptual * perceptual;
+        const auto u = angle / 63.0;
+        const auto nDotV = std::max (1.0 - u * u, 1.0e-4);
+        const auto sinV = std::sqrt (1.0 - nDotV * nDotV);
+
+        constexpr int steps = 1024;
+        const auto dTheta = pi * 0.5 / steps;
+        const auto dPhi = 2.0 * pi / steps;
+        auto sum = 0.0;
+
+        for (int i = 0; i < steps; ++i)
+        {
+            const auto theta = (i + 0.5) * dTheta;
+            const auto nDotL = std::cos (theta);
+            const auto sinL = std::sin (theta);
+            const auto visibility = 1.0 / (4.0 * (nDotL + nDotV - nDotL * nDotV));
+
+            for (int j = 0; j < steps; ++j)
+            {
+                const auto phi = (j + 0.5) * dPhi;
+                const auto hx = sinL * std::cos (phi) + sinV;
+                const auto hy = sinL * std::sin (phi);
+                const auto hz = nDotL + nDotV;
+                const auto cos2 = hz * hz / (hx * hx + hy * hy + hz * hz);
+                const auto distribution = (2.0 + 1.0 / alpha) * std::pow (std::max (1.0 - cos2, 0.0), 0.5 / alpha) / (2.0 * pi);
+                sum += distribution * visibility * nDotL * sinL;
+            }
+        }
+
+        return sum * dTheta * dPhi;
+    }
+
 #if YUP_APPLE && YUP_ENABLE_SHADER_TRANSPILER
     /** Creates a Metal device and its lookup array, false without a GPU. */
     bool prepareLookup()
@@ -170,6 +213,56 @@ TEST_F (LookupTablesTests, RecordsTheAnalyticFitItReplaces)
     EXPECT_NEAR (gray, 0.2409, 1.0e-3);
 }
 
+TEST_F (LookupTablesTests, SheenAlbedoMatchesAReferenceIntegration)
+{
+    const auto start = Time::getMillisecondCounterHiRes();
+    const auto table = LookupTables::computeSheenAlbedo();
+    RecordProperty ("sheenAlbedoMilliseconds", String (Time::getMillisecondCounterHiRes() - start, 2).toStdString());
+
+    ASSERT_EQ (table.size(), static_cast<size_t> (LookupTables::size * LookupTables::size));
+
+    // Rough to smooth, head-on to grazing, and the floored rows below the minimum roughness. Within
+    // 1e-3, above the integration error of the table's 256 x 32 quadrature (6.6e-4 at most, at n.v = 1e-4)
+    for (const auto& [r, a] : { std::pair { 63, 0 }, std::pair { 63, 40 }, std::pair { 63, 63 }, std::pair { 32, 32 },
+                                std::pair { 16, 56 }, std::pair { 8, 60 }, std::pair { 0, 56 }, std::pair { 4, 30 } })
+    {
+        const auto expected = std::min (referenceSheenAlbedo (r, a), 1.0);
+        EXPECT_NEAR (table[static_cast<size_t> (r * LookupTables::size + a)], expected, 1.0e-3) << "cell " << r << ", " << a;
+    }
+
+    // Not vacuous: the albedo of a rough sheen seen head-on, and its rise towards grazing
+    EXPECT_NEAR (table[63 * LookupTables::size], 0.1414, 1.0e-3);
+    EXPECT_GT (table[63 * LookupTables::size + 63], 0.6f);
+}
+
+TEST_F (LookupTablesTests, MinimumSheenRoughnessIsARowCenter)
+{
+    // The shaders floor the sheen roughness there and read the row it maps to: at a row center the
+    // read is that row alone, not a blend with the next one, which is computed at a rougher sheen
+    const auto row = LookupTables::minSheenRoughness * static_cast<float> (LookupTables::size - 1);
+    EXPECT_NEAR (row, std::round (row), 1.0e-4f);
+    EXPECT_GT (std::round (row), 0.0f);
+}
+
+TEST_F (LookupTablesTests, SheenAlbedoIsLimitedToOne)
+{
+    // The visibility of Neubelt and Pettineo is not energy conserving at grazing angles: a smooth
+    // sheen seen edge-on reflects several times what it receives. The table holds at most 1, so
+    // the layers under the sheen are dimmed at most to black
+    EXPECT_GT (referenceSheenAlbedo (8, 63), 1.5);
+
+    const auto table = LookupTables::computeSheenAlbedo();
+    auto limited = 0;
+    for (const auto value : table)
+    {
+        EXPECT_TRUE (value >= 0.0f && value <= 1.0f) << value;
+        limited += value == 1.0f ? 1 : 0;
+    }
+
+    EXPECT_GT (limited, 0);
+    EXPECT_EQ (table[8 * LookupTables::size + 63], 1.0f);
+}
+
 #if YUP_APPLE
 TEST_F (LookupTablesTests, CreatesANewHalfFloatArrayForADevice)
 {
@@ -209,6 +302,8 @@ TEST_F (LookupTablesTests, LayersHoldTheAreaLightTablesAtTheirCells)
         return literal + ")";
     };
 
+    const auto sheenAlbedo = LookupTables::computeSheenAlbedo();
+
     // Cells (0, 63) and (63, 0) swap under a transposed layout, and their values differ widely
     for (const auto& [r, a] : { std::pair { 0, 63 }, std::pair { 63, 0 }, std::pair { 32, 40 } })
     {
@@ -216,9 +311,10 @@ TEST_F (LookupTablesTests, LayersHoldTheAreaLightTablesAtTheirCells)
 
         const auto m = LtcTables::getInverseMatrix (r, a);
         const auto amplitude = LtcTables::getAmplitude (r, a);
+        const auto sheen = sheenAlbedo[static_cast<size_t> (r * LookupTables::size + a)];
 
         for (const auto& [layer, expected] : { std::pair { 0, std::array<double, 4> { m[0], m[1], m[2], m[3] } },
-                                               std::pair { 1, std::array<double, 4> { amplitude[0], amplitude[1], 0.0, 1.0 } } })
+                                               std::pair { 1, std::array<double, 4> { amplitude[0], amplitude[1], sheen, 1.0 } } })
         {
             // 0.5 plus twenty times the relative error of the texel, which an rgba8 target can hold
             std::array<double, 4> scales {};

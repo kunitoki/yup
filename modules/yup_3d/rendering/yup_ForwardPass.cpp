@@ -53,6 +53,18 @@ constexpr uint8_t forwardPassSoftShadowsLocalIndirectShaderBundle[] = {
 constexpr uint8_t forwardPassAreaLightsSoftShadowsLocalIndirectShaderBundle[] = {
 #include "../shaders/yup_ForwardPass_area_lights_soft_shadows_local_indirect.inc"
 };
+constexpr uint8_t forwardPassLocalIndirectLayersShaderBundle[] = {
+#include "../shaders/yup_ForwardPass_local_indirect_layers.inc"
+};
+constexpr uint8_t forwardPassAreaLightsLocalIndirectLayersShaderBundle[] = {
+#include "../shaders/yup_ForwardPass_area_lights_local_indirect_layers.inc"
+};
+constexpr uint8_t forwardPassSoftShadowsLocalIndirectLayersShaderBundle[] = {
+#include "../shaders/yup_ForwardPass_soft_shadows_local_indirect_layers.inc"
+};
+constexpr uint8_t forwardPassAreaLightsSoftShadowsLocalIndirectLayersShaderBundle[] = {
+#include "../shaders/yup_ForwardPass_area_lights_soft_shadows_local_indirect_layers.inc"
+};
 constexpr uint8_t forwardPassFullShaderBundle[] = {
 #include "../shaders/yup_ForwardPass_full.inc"
 };
@@ -83,12 +95,17 @@ const std::pair<const uint8_t*, size_t> forwardPassShaderBundles[] = {
     { forwardPassAreaLightsLocalIndirectShaderBundle, sizeof (forwardPassAreaLightsLocalIndirectShaderBundle) },
     { forwardPassSoftShadowsLocalIndirectShaderBundle, sizeof (forwardPassSoftShadowsLocalIndirectShaderBundle) },
     { forwardPassAreaLightsSoftShadowsLocalIndirectShaderBundle, sizeof (forwardPassAreaLightsSoftShadowsLocalIndirectShaderBundle) },
+    { forwardPassLocalIndirectLayersShaderBundle, sizeof (forwardPassLocalIndirectLayersShaderBundle) },
+    { forwardPassAreaLightsLocalIndirectLayersShaderBundle, sizeof (forwardPassAreaLightsLocalIndirectLayersShaderBundle) },
+    { forwardPassSoftShadowsLocalIndirectLayersShaderBundle, sizeof (forwardPassSoftShadowsLocalIndirectLayersShaderBundle) },
+    { forwardPassAreaLightsSoftShadowsLocalIndirectLayersShaderBundle, sizeof (forwardPassAreaLightsSoftShadowsLocalIndirectLayersShaderBundle) },
 };
 
-// The local indirect variants are raster only: the full tier's blended surfaces read no ambient occlusion
-size_t getForwardVariantIndex (bool velocity, bool areaLights, bool shadowFilters, bool localIndirect) noexcept
+// The local indirect variants, and their layers variants, are raster only: the full tier's blended
+// surfaces read no ambient occlusion, and always shade the material layers
+size_t getForwardVariantIndex (bool velocity, bool areaLights, bool shadowFilters, bool localIndirect, bool layers) noexcept
 {
-    return (areaLights ? 1u : 0u) + (shadowFilters ? 2u : 0u) + (velocity ? 4u : (localIndirect ? 8u : 0u));
+    return (areaLights ? 1u : 0u) + (shadowFilters ? 2u : 0u) + (velocity ? 4u : (layers ? 12u : (localIndirect ? 8u : 0u)));
 }
 
 //==============================================================================
@@ -131,12 +148,13 @@ struct ForwardPass::Variant
     bool areaLights = false;
     bool shadowFilters = false; // The shadow filter variant, holding the soft shadows
     bool localIndirect = false; // Raster: the local indirect variant, reading the ambient occlusion
+    bool layers = false;        // Raster: its layers variant, shading the clearcoat and the sheen
 
     std::array<GpuPipeline::Ptr, 2 * GeometryBindings::numRasterStates> pipelines; // [blend * 4 + raster state], blend only on full
     GpuPipeline::Ptr background; // Raster only: the full tier shows the environment from LightingPass
     String error;
 
-    bool matches (const Targets& targets, uint32_t samples, bool withAreaLights, bool withShadowFilters, bool withLocalIndirect) const noexcept
+    bool matches (const Targets& targets, uint32_t samples, bool withAreaLights, bool withShadowFilters, bool withLocalIndirect, bool withLayers) const noexcept
     {
         return colorFormat == targets.color->getFormat()
             && depthFormat == targets.depth->getFormat()
@@ -144,12 +162,13 @@ struct ForwardPass::Variant
             && velocity == (targets.velocity != nullptr)
             && areaLights == withAreaLights
             && shadowFilters == withShadowFilters
-            && localIndirect == withLocalIndirect;
+            && localIndirect == withLocalIndirect
+            && layers == withLayers;
     }
 
     String compile (const GpuDevice::Ptr& device)
     {
-        const auto& [data, size] = forwardPassShaderBundles[getForwardVariantIndex (velocity, areaLights, shadowFilters, localIndirect)];
+        const auto& [data, size] = forwardPassShaderBundles[getForwardVariantIndex (velocity, areaLights, shadowFilters, localIndirect, layers)];
         auto bundle = ShaderBundle::loadFromData (data, size);
         if (bundle.failed())
             return "Unable to load the scene shader bundle: " + bundle.getErrorMessage();
@@ -237,7 +256,7 @@ Result ForwardPass::createDefaults (const GpuDevice::Ptr& device)
     return Result::ok();
 }
 
-ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool shadowFilters, bool localIndirect)
+ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool shadowFilters, bool localIndirect, bool layers)
 {
     if (device == nullptr || targets.color == nullptr || targets.depth == nullptr)
         return makeResultValueFail ("No device or no forward targets");
@@ -250,7 +269,7 @@ ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice:
 
     auto existing = std::find_if (variants.begin(), variants.end(), [&] (const auto& variant)
     {
-        return variant->matches (targets, sampleCount, areaLights, shadowFilters, localIndirect);
+        return variant->matches (targets, sampleCount, areaLights, shadowFilters, localIndirect, layers);
     });
 
     if (existing == variants.end())
@@ -263,7 +282,8 @@ ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice:
         variant->areaLights = areaLights;
         variant->shadowFilters = shadowFilters;
         variant->localIndirect = localIndirect;
-        variant->error = variant->compile (device);
+        variant->layers = layers;
+        variant->error = layers && layersFailForTesting ? String ("The layers variant failed for testing") : variant->compile (device);
 
         variants.push_back (std::move (variant));
         existing = std::prev (variants.end());
@@ -277,7 +297,7 @@ ResultValue<ForwardPass::Variant*> ForwardPass::prepareVariant (const GpuDevice:
 
 Result ForwardPass::prepare (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights)
 {
-    const auto variant = prepareVariant (device, targets, sampleCount, areaLights, false, false);
+    const auto variant = prepareVariant (device, targets, sampleCount, areaLights, false, false, false);
     return variant.failed() ? Result::fail (variant.getErrorMessage()) : Result::ok();
 }
 
@@ -286,24 +306,39 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
                           Span<const SceneDrawList::DrawItem> opaque, Span<const SceneDrawList::DrawItem> blend,
                           const Targets& targets, Output output, uint32_t sampleCount, std::optional<GpuColor> clear)
 {
+    usedLocalIndirect = false;
+    usedLayers = false;
+
     // Over the loaded targets, nothing to draw leaves them as they are, and compiles nothing
     if (! clear.has_value() && opaque.empty() && blend.empty())
         return true;
 
     // Raster frames with ambient occlusion, reflection probes or irradiance volumes shade with the
-    // local indirect variant, the only one reading them
-    auto localIndirect = targets.velocity == nullptr && (lighting.ambientOcclusion != nullptr || lighting.hasReflectionProbes() || lighting.hasIrradianceVolumes());
-    auto prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, lighting.shadowFilters, localIndirect);
+    // local indirect variant, the only one reading them, and frames drawing a material with a
+    // clearcoat or a sheen with its layers variant, the only one shading them
+    auto layers = targets.velocity == nullptr && lighting.materialLayers;
+    auto localIndirect = layers || (targets.velocity == nullptr && (lighting.ambientOcclusion != nullptr || lighting.hasReflectionProbes() || lighting.hasIrradianceVolumes()));
+    auto prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, lighting.shadowFilters, localIndirect, layers);
 
-    // Without its local indirect variant, the frame shades without ambient occlusion, reflection probes and irradiance volumes
+    // Without its layers variant, the frame shades the materials without their layers
+    if (prepared.failed() && layers)
+    {
+        if (! std::exchange (layersFailureReported, true))
+            YUP_DBG ("ForwardPass: the material layers variant " << (lighting.shadowFilters ? "with shadow filters " : "") << "is unavailable, shading without clearcoat and sheen: " << prepared.getErrorMessage());
+
+        layers = false;
+        prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, lighting.shadowFilters, localIndirect, false);
+    }
+
+    // Without its local indirect variant, the frame shades without ambient occlusion, reflection probes, irradiance volumes and material layers
     if (prepared.failed() && localIndirect)
     {
         if (! localIndirectFailureReported)
-            YUP_DBG ("ForwardPass: the local indirect variant " << (lighting.shadowFilters ? "with shadow filters " : "") << "is unavailable, shading without ambient occlusion, reflection probes and irradiance volumes: " << prepared.getErrorMessage());
+            YUP_DBG ("ForwardPass: the local indirect variant " << (lighting.shadowFilters ? "with shadow filters " : "") << "is unavailable, shading without ambient occlusion, reflection probes, irradiance volumes and material layers: " << prepared.getErrorMessage());
 
         localIndirectFailureReported = true;
         localIndirect = false;
-        prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, lighting.shadowFilters, false);
+        prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, lighting.shadowFilters, false, false);
     }
 
     // Without its shadow filter variant, the frame shades hard shadows: the default bundles ignore soft filtering
@@ -313,13 +348,15 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
             YUP_DBG ("ForwardPass: the shadow filter variant is unavailable, shading hard shadows: " << prepared.getErrorMessage());
 
         shadowFiltersFailureReported = true;
-        prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, false, false);
+        prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, false, false, false);
     }
 
     if (prepared.failed())
         return false;
 
     const auto& variant = *prepared.getValue();
+    usedLocalIndirect = variant.localIndirect;
+    usedLayers = variant.layers;
 
     if (lighting.samplers.pointClamp == nullptr || lighting.samplers.linearClamp == nullptr || lighting.lookupTables == nullptr
         || lighting.shadowCascades == nullptr || lighting.shadowAtlas == nullptr)

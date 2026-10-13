@@ -66,7 +66,6 @@
 #include "resources/yup_EnvironmentMap.cpp"
 #include "rendering/yup_ShadowRenderer.cpp"
 #include "rendering/yup_LightingInputs.cpp"
-#include "rendering/yup_ForwardPass.h"
 #include "rendering/yup_ForwardPass.cpp"
 #include "rendering/yup_GBufferPass.cpp"
 #include "rendering/yup_DepthNormalPrepass.cpp"

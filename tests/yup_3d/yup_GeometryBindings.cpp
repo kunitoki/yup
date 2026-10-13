@@ -101,6 +101,8 @@ TEST_F (GeometryBindingsTests, MaterialBlockPacksTheMaterial)
     material.roughnessFactor = 0.3f;
     material.specularFactor = 0.5f;
     material.ior = 1.33f;
+    material.clearcoatFactor = 0.75f;
+    material.sheenColorFactor = { 0.5f, 0.25f, 0.125f };
 
     const auto block = GeometryBindings::makeMaterialBlock (material, true);
     EXPECT_FLOAT_EQ (block.flags[0], 1.0f);
@@ -113,8 +115,12 @@ TEST_F (GeometryBindingsTests, MaterialBlockPacksTheMaterial)
     {
         EXPECT_FLOAT_EQ (block.extension.specular[i], expected.specular[i]);
         EXPECT_FLOAT_EQ (block.extension.extended[i], expected.extended[i]);
+        EXPECT_FLOAT_EQ (block.extension.clearcoat[i], expected.clearcoat[i]);
+        EXPECT_FLOAT_EQ (block.extension.sheen[i], expected.sheen[i]);
     }
 
+    EXPECT_FLOAT_EQ (block.extension.clearcoat[0], 0.75f);
+    EXPECT_FLOAT_EQ (block.extension.sheen[1], 0.25f);
     EXPECT_FLOAT_EQ (GeometryBindings::makeMaterialBlock (material, false).flags[3], 0.0f);
 }
 

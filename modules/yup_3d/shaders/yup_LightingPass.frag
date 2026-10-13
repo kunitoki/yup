@@ -34,14 +34,24 @@
 #endif
 
 // The opaque surfaces read the ambient occlusion (lib/probes.glsl). The local indirect variant
-// (YUP_3D_LOCAL_INDIRECT), which shades the frames with reflection probes or irradiance volumes,
-// reads those too, from set 1 bindings 14 and 15: the default variants carry no probe or volume code
+// (YUP_3D_LOCAL_INDIRECT), which shades the frames with reflection probes, irradiance volumes or
+// materials with a clearcoat or a sheen, reads those too, from set 1 bindings 14 and 15; its layers
+// variant (YUP_3D_LAYERS), for the frames drawing a layered material, also shades the clearcoat and
+// sheen layers. The default variants carry no probe, volume or layer code
 #define YUP_3D_AMBIENT_OCCLUSION
 #ifdef YUP_3D_LOCAL_INDIRECT
 #define YUP_3D_REFLECTION_PROBES
 #define YUP_3D_REFLECTION_PROBES_BINDING 14
 #define YUP_3D_IRRADIANCE_VOLUMES
 #define YUP_3D_IRRADIANCE_VOLUMES_BINDING 15
+#endif
+
+#if defined(YUP_3D_LAYERS) && ! defined(YUP_3D_LOCAL_INDIRECT)
+#error "The layers variant is a local indirect variant: bundle it as LightingPass:YUP_3D_TIER_FULL+YUP_3D_LOCAL_INDIRECT+YUP_3D_LAYERS"
+#endif
+
+#ifdef YUP_3D_LAYERS
+#define YUP_3D_MATERIAL_LAYERS
 #endif
 
 #include "lib/color.glsl"
@@ -153,14 +163,15 @@ void main()
     vec4 albedoOcclusion = texelFetch(sampler2D(u_albedoOcclusion, pointClamp), pixel, 0);
     vec4 normalRoughness = texelFetch(sampler2D(u_normalRoughness, pointClamp), pixel, 0);
     vec4 emissionMaterial = texelFetch(sampler2D(u_emissionMaterial, pointClamp), pixel, 0);
-    GpuMaterial material = materials[int(emissionMaterial.a + 0.5)];
+    // Row by row, so a variant loads only the rows it shades with
+    int materialId = int(emissionMaterial.a + 0.5);
 
     vec3 n = octahedralDecode(normalRoughness.xy);
     vec3 v = normalize(view.cameraPosition.xyz - worldPosition);
     float roughness2 = normalRoughness.z * normalRoughness.z;
 
     BsdfSurface surface = bsdfMaterialSurface(n, v, yupSrgbToLinear(albedoOcclusion.rgb), normalRoughness.w,
-                                              material.extended.x, material.specular, roughness2 * roughness2);
+                                              materials[materialId].extended.x, materials[materialId].specular, roughness2 * roughness2);
 
     // The indirect light only: direct light is never occluded
     vec4 ambientOcclusion = lighting.probeInfo.w > 0.5 ? lightingAmbientOcclusion(pixel, lightingViewDepth(depth), n) : vec4(1.0);
@@ -170,10 +181,24 @@ void main()
 
     // The environment first, added in the same order as before
     LightsLookup lookup = lightsLookup(surface);
+#ifdef YUP_3D_MATERIAL_LAYERS
+    // The clearcoat and the sheen, before the light loop so it carries none of their state. The
+    // G-buffer holds the shading normal alone, which the clearcoat follows, normal map included
+    vec3 layerIrradiance;
+    vec3 indirect = lightsIndirect(surface, lookup, worldPosition, n, bentNormal, diffuseOcclusion, reflectionOcclusion, layerIrradiance);
+    float baseScale;
+    vec3 layered = lightsLayered(surface, materials[materialId].clearcoat, materials[materialId].sheen, emissionMaterial.rgb, worldPosition, n, layerIrradiance, ambientOcclusion.a, albedoOcclusion.a, baseScale);
+#else
     vec3 indirect = lightsIndirect(surface, lookup, worldPosition, n, bentNormal, diffuseOcclusion, reflectionOcclusion);
+#endif
     vec3 color = lightsShade(surface, lookup, worldPosition, n);
+#ifdef YUP_3D_MATERIAL_LAYERS
+    // The layers over the base, the emission included: exactly the sum below without them
+    color = (color + indirect) * baseScale + layered;
+#else
     color += indirect;
     color += emissionMaterial.rgb;
+#endif
 
     fragColor = vec4(min(color * view.cameraPosition.w, vec3(yupMaxHalf)), 1.0);
 }

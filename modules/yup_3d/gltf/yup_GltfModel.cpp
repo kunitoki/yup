@@ -313,7 +313,8 @@ public:
     Result load()
     {
         static const char* supportedExtensions[] = { "KHR_lights_punctual", "EXT_texture_webp", "KHR_mesh_quantization",
-                                                     "KHR_materials_emissive_strength", "KHR_materials_ior", "KHR_materials_specular" };
+                                                     "KHR_materials_emissive_strength", "KHR_materials_ior", "KHR_materials_specular",
+                                                     "KHR_materials_clearcoat", "KHR_materials_sheen" };
 
         for (uint32_t i = 0; i < model.extensions_required_count; ++i)
         {
@@ -715,6 +716,29 @@ private:
         {
             if (findMember (specular, textureName) != nullptr)
                 warn ("Material " + String (materialIndex) + ": the KHR_materials_specular " + textureName + " is not supported and is ignored");
+        }
+
+        const auto* clearcoat = findExtension (source.ext, "KHR_materials_clearcoat");
+        material->clearcoatFactor = jlimit (0.0f, 1.0f, static_cast<float> (readNumber (clearcoat, "clearcoatFactor", material->clearcoatFactor)));
+        material->clearcoatRoughnessFactor = jlimit (0.0f, 1.0f, static_cast<float> (readNumber (clearcoat, "clearcoatRoughnessFactor", material->clearcoatRoughnessFactor)));
+
+        for (const auto* textureName : { "clearcoatTexture", "clearcoatRoughnessTexture", "clearcoatNormalTexture" })
+        {
+            if (findMember (clearcoat, textureName) != nullptr)
+                warn ("Material " + String (materialIndex) + ": the KHR_materials_clearcoat " + textureName + " is not supported and is ignored");
+        }
+
+        const auto* sheen = findExtension (source.ext, "KHR_materials_sheen");
+        readNumbers (sheen, "sheenColorFactor", material->sheenColorFactor);
+        material->sheenRoughnessFactor = jlimit (0.0f, 1.0f, static_cast<float> (readNumber (sheen, "sheenRoughnessFactor", material->sheenRoughnessFactor)));
+
+        for (auto& component : material->sheenColorFactor)
+            component = jlimit (0.0f, 1.0f, component);
+
+        for (const auto* textureName : { "sheenColorTexture", "sheenRoughnessTexture" })
+        {
+            if (findMember (sheen, textureName) != nullptr)
+                warn ("Material " + String (materialIndex) + ": the KHR_materials_sheen " + textureName + " is not supported and is ignored");
         }
 
         return material;

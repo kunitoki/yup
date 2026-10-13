@@ -92,6 +92,36 @@ float bsdfDiffuseWeight(vec3 reflectance)
     return 1.0 - max(max(reflectance.r, reflectance.g), reflectance.b);
 }
 
+#ifdef YUP_3D_MATERIAL_LAYERS
+// The clearcoat (KHR_materials_clearcoat) and sheen (KHR_materials_sheen) layers over the glTF
+// BSDF, compiled only into the shaders defining YUP_3D_MATERIAL_LAYERS: the local indirect layers
+// variants (YUP_3D_LAYERS) and the full tier's forward pass. A layer dims what lies under it by what it reflects:
+// the clearcoat by 1 - clearcoat Fc (n.v), Fc its Schlick Fresnel with f0 = 0.04, and the sheen by
+// the Khronos albedo scaling from its directional albedo E (lib/lights.glsl). A material without
+// layers skips them by a branch, which leaves the base exactly as it is
+struct BsdfLayers
+{
+    float clearcoat;          // the clearcoat factor, 0 for none
+    vec3 clearcoatNormal;     // unit: the interpolated normal on raster, the shading normal on full
+    float clearcoatRoughness; // perceptual, from 0.04 to 1
+    float clearcoatAlpha2;    // GGX alpha squared of the clearcoat
+    float clearcoatNDotV;     // dot(clearcoatNormal, v), kept above zero
+    float clearcoatBase;      // 1 - clearcoat Fc (n.v), what the clearcoat leaves to the layers under it: 1 without it
+    vec2 clearcoatUv;         // the coordinates of the clearcoat in the lookup tables
+    vec2 clearcoatLobe;       // its layer 1 there: the GGX lobe magnitude and its Fresnel part
+    vec3 sheenColor;          // linear, black for none
+    float sheenMax;           // the largest channel of sheenColor, 0 for none
+    float sheenRoughness;     // perceptual, from LookupTables::minSheenRoughness (5 / 63) to 1
+    float sheenAlbedo;        // the directional albedo E (n.v) of a white sheen, 0 for none
+};
+
+// The layers of a material without clearcoat and sheen
+BsdfLayers bsdfNoLayers()
+{
+    return BsdfLayers(0.0, vec3(0.0, 0.0, 1.0), 1.0, 1.0, 1.0, 1.0, vec2(0.0), vec2(0.0), vec3(0.0), 0.0, 1.0, 0.0);
+}
+#endif
+
 // The glTF material mixes a dielectric BRDF (diffuse under a specular layer) and a metal BRDF
 // (specular only) by metallic. The specular of both is one lobe with the mixed f0 and f90, while
 // the diffuse is dimmed by the dielectric layer alone: partially metallic materials keep more
@@ -166,5 +196,59 @@ vec3 bsdfMultipleScattering(BsdfSurface s, vec2 lobe, vec3 singleScattering)
     vec3 averageFresnel = s.f0 + (s.f90 - s.f0) / 21.0;
     return singleScattering * averageFresnel * missing / max(1.0 - averageFresnel * missing, vec3(1.0e-4));
 }
+
+#ifdef YUP_3D_MATERIAL_LAYERS
+// The reflectance of the clearcoat at normal incidence, an index of refraction of 1.5
+const float bsdfClearcoatF0 = 0.04;
+
+// Schlick's Fresnel of the clearcoat, from 0.04 to 1
+float bsdfClearcoatFresnel(float cosine)
+{
+    return bsdfClearcoatF0 + (1.0 - bsdfClearcoatF0) * pow(1.0 - cosine, 5.0);
+}
+
+// The Charlie sheen distribution (Estevez and Kulla 2017, "Production Friendly Microfacet Sheen
+// BRDF"), (2 + 1 / alpha) sin^(1 / alpha) (theta_h) / (2 pi), of alpha the sheen roughness squared
+float bsdfDistributionCharlie(float nDotH, float alpha)
+{
+    float inverseAlpha = 1.0 / alpha;
+    float sin2 = max(1.0 - nDotH * nDotH, 0.0);
+    return (2.0 + inverseAlpha) * pow(sin2, inverseAlpha * 0.5) / (2.0 * yupPi);
+}
+
+// The sheen visibility of Neubelt and Pettineo 2013 ("Crafting a Next-Gen Material Pipeline for
+// The Order: 1886"), which Filament calls Ashikhmin's. Not energy conserving at grazing angles,
+// where LookupTables limits the sheen albedo to 1
+float bsdfVisibilityNeubelt(float nDotV, float nDotL)
+{
+    return 1.0 / (4.0 * (nDotL + nDotV - nDotL * nDotV));
+}
+
+// The sheen BRDF towards the unit light direction l, sheenColor D V, for n.l = @p nDotL above zero
+vec3 bsdfEvaluateSheen(BsdfSurface s, BsdfLayers layers, vec3 l, float nDotL)
+{
+    float nDotH = max(dot(s.n, normalize(s.v + l)), 0.0);
+    float alpha = layers.sheenRoughness * layers.sheenRoughness;
+    return layers.sheenColor * (bsdfDistributionCharlie(nDotH, alpha) * bsdfVisibilityNeubelt(s.nDotV, nDotL));
+}
+
+// The clearcoat lobe for a unit light direction l and unit incoming radiance, times its factor and
+// the cosine with its normal: GGX with height-correlated Smith visibility and the Schlick Fresnel
+// of bsdfClearcoatFresnel, 0 when the light is behind the clearcoat
+float bsdfEvaluateClearcoat(BsdfSurface s, BsdfLayers layers, vec3 l)
+{
+    float nDotL = dot(layers.clearcoatNormal, l);
+    if (nDotL <= 0.0)
+        return 0.0;
+
+    vec3 h = normalize(s.v + l);
+    float nDotH = max(dot(layers.clearcoatNormal, h), 0.0);
+    float vDotH = max(dot(s.v, h), 0.0);
+
+    float distribution = bsdfDistributionGgx(nDotH, layers.clearcoatAlpha2);
+    float visibility = bsdfVisibilitySmithGgxCorrelated(layers.clearcoatNDotV, nDotL, layers.clearcoatAlpha2);
+    return layers.clearcoat * bsdfClearcoatFresnel(vDotH) * distribution * visibility * nDotL;
+}
+#endif
 
 #endif

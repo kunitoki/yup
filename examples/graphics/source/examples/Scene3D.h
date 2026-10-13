@@ -610,9 +610,13 @@ private:
             reflectionProbe->parallaxCorrection = false;
             scene->getRoot()->addChild (probeEntity);
 
-            // Bakes the light the case and the screen bounce onto the panel, from 4 x 2 x 4 probes
-            const auto volumeBottom = deviceBounds.getMin().getY();
-            const auto volumeTop = deviceBounds.getMax().getY() + 0.4f;
+            // Bakes the light the case and the screen bounce onto the panel, from 4 x 2 x 4 probes. The probes
+            // sit at the cell centers: both layers stay above the panel, the lower one just over the pads, since
+            // a probe inside the body only sees its inside and lights the pads with stair-stepped seams
+            const auto panelTop = padBounds.isEmpty() ? deviceCenter.getY() : padBounds.getMax().getY();
+            const auto layerSpacing = 0.45f;
+            const auto volumeBottom = panelTop + 0.05f - layerSpacing * 0.5f;
+            const auto volumeTop = volumeBottom + layerSpacing * 2.0f;
             auto volumeEntity = yup::EntityNode::Ptr (new yup::EntityNode ("irradianceVolume"));
             volumeEntity->setPosition ({ deviceCenter.getX(), (volumeBottom + volumeTop) * 0.5f, deviceCenter.getZ() });
             irradianceVolume = &volumeEntity->attach<yup::IrradianceVolumeNode>();
@@ -989,7 +993,9 @@ private:
             screenEntity = &device;
         }
 
-        /** Makes the painted panel matte and the black knobs glossy, for soft highlights under the studio. */
+        /** Makes the painted panel matte, varnishes the black knobs and trim with a sharp clearcoat over
+            a satin base, and gives the rubber pads a soft velvet sheen at their edges.
+        */
         static void tuneMaterials (const yup::EntityNode& entity)
         {
             if (auto* meshNode = entity.getNode<yup::MeshNode>(); meshNode != nullptr && meshNode->mesh != nullptr)
@@ -1002,9 +1008,20 @@ private:
                     auto& material = *primitive.material;
 
                     if (material.name == "Faceplate" || material.name == "Case")
+                    {
                         material.roughnessFactor = 0.7f;
+                    }
                     else if (material.name == "Knob Rubber" || material.name == "Black Plastic")
-                        material.roughnessFactor = 0.22f;
+                    {
+                        material.roughnessFactor = 0.45f;
+                        material.clearcoatFactor = 1.0f;
+                        material.clearcoatRoughnessFactor = 0.08f;
+                    }
+                    else if (material.name == "Pad Rubber")
+                    {
+                        material.sheenColorFactor = { 0.35f, 0.36f, 0.38f };
+                        material.sheenRoughnessFactor = 0.5f;
+                    }
                 }
             }
 

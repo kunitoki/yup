@@ -754,36 +754,6 @@ TEST_F (TransparencyLayerTests, InvalidLayerTakesNoMask)
     EXPECT_EQ (nullptr, layer.addMask());
 }
 
-TEST_F (TransparencyLayerTests, EachAddMaskCreatesAnotherMask)
-{
-    auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 1.0f);
-    if (! layer.isValid())
-        GTEST_SKIP() << "Transparency layers need offscreen targets, see GraphicsGpuPixelTests";
-
-    auto* first = layer.addMask (LayerMaskMode::Luminance);
-    auto* second = layer.addMask (LayerMaskMode::InvertedAlpha);
-
-    ASSERT_NE (nullptr, first);
-    ASSERT_NE (nullptr, second);
-    EXPECT_NE (first, second);
-}
-
-TEST_F (TransparencyLayerTests, MaskedLayerCommitDoesNotCrash)
-{
-    auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 1.0f);
-    if (! layer.isValid())
-        GTEST_SKIP() << "Transparency layers need offscreen targets, see GraphicsGpuPixelTests";
-
-    if (auto* mask = layer.addMask (LayerMaskMode::Alpha))
-    {
-        mask->setFillColor (Colors::white);
-        mask->fillEllipse (10.0f, 10.0f, 80.0f, 80.0f);
-    }
-
-    EXPECT_NO_THROW (layer.commit());
-    EXPECT_EQ (nullptr, layer.addMask());
-}
-
 //==============================================================================
 // Pixel tests on a real GPU, reading back what was drawn
 //==============================================================================
@@ -1709,6 +1679,103 @@ TEST_F (GraphicsGpuPixelTests, FeatheredTextFillLeavesColoredRunsSharp)
 
     EXPECT_GT (countPixels (pixels, [] (int r, int g, int b) { return r > 200 && g < 50 && b < 50; }), 0);
     EXPECT_GT (softGreenPixels, 0);
+}
+
+TEST_F (GraphicsGpuPixelTests, TransparencyLayerCanBeDrawnInto)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        auto layer = g.beginTransparencyLayer ({ 0.0f, 0.0f, 32.0f, 32.0f }, 0.5f);
+        ASSERT_TRUE (layer.isValid());
+
+        layer.getGraphics().setFillColor (Color (0xFFFF0000));
+        layer.getGraphics().fillRect (Rectangle<float> (4.0f, 4.0f, 16.0f, 16.0f));
+    });
+
+    EXPECT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+}
+
+TEST_F (GraphicsGpuPixelTests, TransparencyLayerCommitDrawsTheLayer)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        auto layer = g.beginTransparencyLayer ({ 0.0f, 0.0f, 32.0f, 32.0f }, 1.0f);
+        ASSERT_TRUE (layer.isValid());
+
+        layer.getGraphics().setFillColor (Color (0xFF0000FF));
+        layer.getGraphics().fillRect (Rectangle<float> (4.0f, 4.0f, 16.0f, 16.0f));
+
+        EXPECT_TRUE (layer.commit());
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (channelAt (pixels, 12, 12, 2), 200);
+    EXPECT_LT (alphaAt (pixels, 48, 48), 50);
+}
+
+TEST_F (GraphicsGpuPixelTests, EachAddMaskCreatesAnotherMask)
+{
+    render ([] (Graphics& g)
+    {
+        auto layer = g.beginTransparencyLayer ({ 0.0f, 0.0f, 32.0f, 32.0f }, 1.0f);
+        ASSERT_TRUE (layer.isValid());
+
+        auto* first = layer.addMask (LayerMaskMode::Luminance);
+        auto* second = layer.addMask (LayerMaskMode::InvertedAlpha);
+
+        ASSERT_NE (nullptr, first);
+        ASSERT_NE (nullptr, second);
+        EXPECT_NE (first, second);
+    });
+}
+
+TEST_F (GraphicsGpuPixelTests, MaskedLayerTakesNoMaskOnceCommitted)
+{
+    render ([] (Graphics& g)
+    {
+        auto layer = g.beginTransparencyLayer ({ 0.0f, 0.0f, 32.0f, 32.0f }, 1.0f);
+        ASSERT_TRUE (layer.isValid());
+
+        auto* mask = layer.addMask (LayerMaskMode::Alpha);
+        ASSERT_NE (nullptr, mask);
+        mask->setFillColor (Colors::white);
+        mask->fillEllipse (4.0f, 4.0f, 24.0f, 24.0f);
+
+        EXPECT_TRUE (layer.commit());
+        EXPECT_EQ (nullptr, layer.addMask());
+    });
+}
+
+TEST_F (GraphicsGpuPixelTests, ImageBackedGraphicsCommitsToTheImage)
+{
+    Image target (32, 32, PixelFormat::RGBA);
+
+    Graphics offscreen (*gpuContext, target, 0xFF000000u);
+    ASSERT_TRUE (offscreen.isOffscreen());
+
+    offscreen.setFillColor (Color (0xFFFF0000));
+    offscreen.fillRect (Rectangle<float> (0.0f, 0.0f, 32.0f, 32.0f));
+
+    EXPECT_TRUE (offscreen.commitToImage());
+    EXPECT_FALSE (offscreen.commitToImage());
+}
+
+TEST_F (GraphicsGpuPixelTests, ImageBackedGraphicsReadsItsPixelsBack)
+{
+    Image target (32, 32, PixelFormat::RGBA);
+
+    Graphics offscreen (*gpuContext, target, 0xFF000000u);
+    ASSERT_TRUE (offscreen.isOffscreen());
+
+    offscreen.setFillColor (Color (0xFF0000FF));
+    offscreen.fillRect (Rectangle<float> (0.0f, 0.0f, 32.0f, 32.0f));
+
+    ASSERT_TRUE (offscreen.readPixelsToImage());
+
+    const auto bytes = target.getRawData();
+    EXPECT_LT (bytes[0], 50);
+    EXPECT_GT (bytes[2], 200);
+    EXPECT_GT (bytes[3], 200);
 }
 
 //==============================================================================

@@ -413,8 +413,15 @@ vec3 lightsShade(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 ge
 // (YUP_3D_IRRADIANCE_VOLUMES) take the diffuse light at @p worldPosition from the volume first
 // (diffuseIndirect, lib/probes.glsl), offset along @p geometricNormal and evaluated along the bent
 // normal, the environment taking the share it leaves; the specular light does not change
-#ifdef YUP_3D_AMBIENT_OCCLUSION
+// The shaders compiling the material layers (YUP_3D_MATERIAL_LAYERS) also return the irradiance the
+// base diffuse receives, without its occlusion, in @p layerIrradiance, which the sheen reflects
+// (lightsLayered)
+#if defined(YUP_3D_AMBIENT_OCCLUSION) && defined(YUP_3D_MATERIAL_LAYERS)
+vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal, vec3 bentNormal, float diffuseOcclusion, float specularOcclusion, out vec3 layerIrradiance)
+#elif defined(YUP_3D_AMBIENT_OCCLUSION)
 vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal, vec3 bentNormal, float diffuseOcclusion, float specularOcclusion)
+#elif defined(YUP_3D_MATERIAL_LAYERS)
+vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal, float diffuseOcclusion, float specularOcclusion, out vec3 layerIrradiance)
 #else
 vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal, float diffuseOcclusion, float specularOcclusion)
 #endif
@@ -435,6 +442,9 @@ vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3
 #endif
 
     vec3 color = lighting.ambient.rgb * (s.diffuseColor * bsdfDiffuseWeight(s.dielectricF0) * diffuseOcclusion + s.f0 * specularOcclusion);
+#ifdef YUP_3D_MATERIAL_LAYERS
+    layerIrradiance = lighting.ambient.rgb;
+#endif
 
 #if defined(YUP_3D_IRRADIANCE_VOLUMES)
     if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0 || lighting.probeInfo.z > 0.0)
@@ -463,6 +473,11 @@ vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3
         diffuse *= environmentDiffuseWeight;
         color += s.diffuseColor * volume * bsdfEnvironmentDiffuseWeight(s, lookup.lobe) * diffuseOcclusion;
 #endif
+#if defined(YUP_3D_MATERIAL_LAYERS) && defined(YUP_3D_AMBIENT_OCCLUSION)
+        layerIrradiance += volume + environmentIrradiance(bentNormal) * (environmentDiffuseWeight * lighting.environmentInfo.x);
+#elif defined(YUP_3D_MATERIAL_LAYERS)
+        layerIrradiance += volume + irradiance * (environmentDiffuseWeight * lighting.environmentInfo.x);
+#endif
 #ifdef YUP_3D_REFLECTION_PROBES
         // The reflection probes take their share of the specular light first, in selection order,
         // with their own intensity; the environment, scaled by its intensity below, takes the rest.
@@ -489,5 +504,279 @@ vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3
 
     return color;
 }
+
+#ifdef YUP_3D_MATERIAL_LAYERS
+#ifndef YUP_3D_IRRADIANCE_VOLUMES
+#error "The material layers are shaded with the probes and volumes: define YUP_3D_REFLECTION_PROBES and YUP_3D_IRRADIANCE_VOLUMES too"
+#endif
+
+// The clearcoat (KHR_materials_clearcoat) and sheen (KHR_materials_sheen) layers of the materials,
+// over the base the functions above shade (preflight R26), compiled only into the shaders defining
+// YUP_3D_MATERIAL_LAYERS. lightsLayered() evaluates them on their own, after the base indirect light
+// and before the base light loop, and returns what they reflect and how much of the base they leave:
+// so neither the base loop nor lightsIndirect carry any layer state, and a material without layers
+// shades exactly as in the default variants. Layered pixels walk the lights twice, shadows included.
+// Every light, the indirect light and the emission go under the layers as one: the sheen dims them by
+// 1 - max3 (sheenColor) E (n.v), the Khronos albedo scaling without its n.l term, which would need the
+// base of each light again in the layers' loop, and the clearcoat by 1 - clearcoat Fc (n.v)
+
+// The directional albedo E of a white sheen (layer 1 z of the tables) for a cosine with the shading
+// normal and a perceptual sheen roughness
+float lightsSheenAlbedo(float cosine, float roughness)
+{
+    vec2 uv = (vec2(sqrt(1.0 - cosine), roughness) * 63.0 + 0.5) / 64.0;
+    return textureLod(sampler2DArray(lookupLuts, linearClamp), vec3(uv, 1.0), 0.0).z;
+}
+
+// The layers of a surface from the clearcoat and sheen rows of its GpuMaterial, the clearcoat over
+// @p clearcoatNormal, each read from the tables at its own roughness: the clearcoat's lobe (layer 1
+// xy) and the sheen albedo E (n.v) (layer 1 z). Nothing is read without a layer
+BsdfLayers lightsLayers(BsdfSurface s, vec4 clearcoat, vec4 sheen, vec3 clearcoatNormal)
+{
+    BsdfLayers layers = bsdfNoLayers();
+
+    if (clearcoat.x > 0.0)
+    {
+        layers.clearcoat = clearcoat.x;
+        layers.clearcoatNormal = clearcoatNormal;
+        layers.clearcoatRoughness = clamp(clearcoat.y, 0.04, 1.0);
+        float alpha = layers.clearcoatRoughness * layers.clearcoatRoughness;
+        layers.clearcoatAlpha2 = alpha * alpha;
+        layers.clearcoatNDotV = max(dot(clearcoatNormal, s.v), 0.0001);
+        layers.clearcoatBase = 1.0 - clearcoat.x * bsdfClearcoatFresnel(layers.clearcoatNDotV);
+        layers.clearcoatUv = (vec2(sqrt(1.0 - layers.clearcoatNDotV), layers.clearcoatRoughness) * 63.0 + 0.5) / 64.0;
+        layers.clearcoatLobe = textureLod(sampler2DArray(lookupLuts, linearClamp), vec3(layers.clearcoatUv, 1.0), 0.0).xy;
+    }
+
+    float sheenMax = max(max(sheen.r, sheen.g), sheen.b);
+    if (sheenMax > 0.0)
+    {
+        layers.sheenColor = sheen.rgb;
+        layers.sheenMax = sheenMax;
+        layers.sheenRoughness = clamp(sheen.w, 5.0 / 63.0, 1.0); // LookupTables::minSheenRoughness, the center of row 5
+        layers.sheenAlbedo = lightsSheenAlbedo(s.nDotV, layers.sheenRoughness);
+    }
+
+    return layers;
+}
+
+#ifdef YUP_3D_AREA_LIGHTS
+// What the layers reflect of a light with radius > 0, per lightsEvaluateArea's disk: the sheen BRDF
+// towards the center times pi times the clamped cosine over the disk, as for a small light (no LTC
+// fit of the Charlie lobe), and the clearcoat through the LTC tables at its own roughness, in the
+// frame of its own normal. The disk is the one lightsEvaluateArea builds
+vec3 lightsEvaluateLayersArea(GpuLight light, BsdfSurface s, BsdfLayers layers, vec3 worldPosition)
+{
+    vec3 l;
+    vec3 incoming = lightIncoming(light, worldPosition, l);
+    if (incoming == vec3(0.0))
+        return vec3(0.0);
+
+    float radius = light.spotRadiusShadow.z;
+    vec3 center;
+    vec3 facing;
+    float diskRadius;
+
+    if (light.positionType.w < 0.5)
+    {
+        float angle = min(radius, 1.5);
+        float sine = sin(angle);
+        incoming /= yupPi * sine * sine;
+        center = l;
+        facing = -l;
+        diskRadius = tan(angle);
+    }
+    else
+    {
+        center = light.positionType.xyz - worldPosition;
+        float distanceSquared = max(dot(center, center), 0.0001);
+        incoming *= distanceSquared / (yupPi * radius * radius);
+
+        if (dot(l, l) == 0.0)
+        {
+            l = s.n;
+            center = s.n * sqrt(distanceSquared);
+        }
+
+        facing = -l;
+        diskRadius = radius * inversesqrt(max(1.0 - radius * radius / distanceSquared, 1.0e-4));
+    }
+
+    vec3 ex = normalize(cross(facing, abs(facing.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0))) * diskRadius;
+    vec3 ey = cross(facing, ex);
+    vec3 reflected = vec3(0.0);
+
+    if (layers.sheenMax > 0.0)
+    {
+        vec3 t1 = s.v - s.n * dot(s.v, s.n);
+        t1 = dot(t1, t1) > 1.0e-8 ? normalize(t1) : normalize(cross(s.n, abs(s.n.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
+        mat3 toLocal = transpose(mat3(t1, cross(s.n, t1), s.n));
+
+        float formFactor = lightsEllipseIntegral(toLocal * center, toLocal * ex, toLocal * ey);
+        if (formFactor > 0.0)
+            reflected = bsdfEvaluateSheen(s, layers, l, max(dot(s.n, l), 1.0e-4)) * (yupPi * formFactor * layers.clearcoatBase);
+    }
+
+    if (layers.clearcoat > 0.0)
+    {
+        vec3 n = layers.clearcoatNormal;
+        vec3 t1 = s.v - n * dot(s.v, n);
+        t1 = dot(t1, t1) > 1.0e-8 ? normalize(t1) : normalize(cross(n, abs(n.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
+        mat3 toLocal = transpose(mat3(t1, cross(n, t1), n));
+
+        vec4 m = textureLod(sampler2DArray(lookupLuts, linearClamp), vec3(layers.clearcoatUv, 0.0), 0.0);
+        mat3 inverseMatrix = mat3(vec3(m.x, 0.0, m.w), vec3(0.0, m.z, 0.0), vec3(m.y, 0.0, 1.0)) * toLocal;
+
+        vec2 lobe = layers.clearcoatLobe;
+        reflected += vec3(layers.clearcoat * (bsdfClearcoatF0 * (lobe.x - lobe.y) + lobe.y)
+                          * lightsEllipseIntegral(inverseMatrix * center, inverseMatrix * ex, inverseMatrix * ey));
+    }
+
+    return incoming * reflected;
+}
+#endif
+
+// What the layers reflect of one light, shadowed as lightsShadeLight shadows the base: the sheen,
+// under the clearcoat, then the clearcoat, which reflects the lights its own normal faces
+vec3 lightsShadeLayersLight(BsdfSurface s, BsdfLayers layers, GpuLight light, vec3 worldPosition, vec3 geometricNormal)
+{
+#ifdef YUP_3D_AREA_LIGHTS
+    if (light.spotRadiusShadow.z > 0.0)
+    {
+        vec3 reflected = lightsEvaluateLayersArea(light, s, layers, worldPosition);
+        if (reflected != vec3(0.0))
+            reflected = reflected * shadowsVisibility(light, worldPosition, geometricNormal);
+#ifdef YUP_3D_CONTACT_SHADOWS
+        if (reflected != vec3(0.0))
+            reflected = reflected * shadowsContact(light, worldPosition, geometricNormal);
+#endif
+
+        return reflected;
+    }
+#endif
+
+    vec3 l;
+    vec3 incoming = lightIncoming(light, worldPosition, l);
+    float nDotL = layers.sheenMax > 0.0 ? dot(s.n, l) : 0.0;
+    float coatDotL = layers.clearcoat > 0.0 ? dot(layers.clearcoatNormal, l) : 0.0;
+    if ((nDotL <= 0.0 && coatDotL <= 0.0) || incoming == vec3(0.0))
+        return vec3(0.0);
+
+#ifdef YUP_3D_CONTACT_SHADOWS
+    float contact = shadowsContact(light, worldPosition, geometricNormal);
+    if (contact <= 0.0)
+        return vec3(0.0);
+#endif
+
+    incoming = incoming * shadowsVisibility(light, worldPosition, geometricNormal);
+#ifdef YUP_3D_CONTACT_SHADOWS
+    incoming = incoming * contact;
+#endif
+    if (incoming == vec3(0.0))
+        return vec3(0.0);
+
+    vec3 reflected = coatDotL > 0.0 ? vec3(bsdfEvaluateClearcoat(s, layers, l)) : vec3(0.0);
+    if (nDotL > 0.0)
+        reflected += bsdfEvaluateSheen(s, layers, l, nDotL) * (nDotL * layers.clearcoatBase);
+
+    return reflected * incoming;
+}
+
+// What the layers reflect of the lights the base loop (lightsShade) walks, in the same order
+vec3 lightsShadeLayers(BsdfSurface s, BsdfLayers layers, vec3 worldPosition, vec3 geometricNormal)
+{
+    vec3 color = vec3(0.0);
+#ifdef YUP_3D_TIER_FULL
+    int directionalLights = int(lighting.clusterDepth.z);
+
+    for (int i = 0; i < directionalLights; ++i)
+        color += lightsShadeLayersLight(s, layers, lights[i], worldPosition, geometricNormal);
+
+    uint slot = lightsClusterIndex(worldPosition) * 64u;
+    uint count = min(clusterLights[slot], 63u);
+
+    for (uint i = 0u; i < count; ++i)
+        color += lightsShadeLayersLight(s, layers, lights[clusterLights[slot + 1u + i]], worldPosition, geometricNormal);
+#else
+    int lightCount = int(lightList.count.x);
+
+    for (int i = 0; i < 8; ++i)
+    {
+        if (i >= lightCount)
+            break;
+
+        color += lightsShadeLayersLight(s, layers, lightList.lights[i], worldPosition, geometricNormal);
+    }
+#endif
+
+    return color;
+}
+
+// What the layers reflect of the indirect light, the sheen under the clearcoat. The sheen reflects
+// sheenColor E (n.v) of @p irradiance, what the base diffuse receives in lightsIndirect (the ambient
+// light, the irradiance volume and the environment's share), darkened by @p diffuseOcclusion. The
+// clearcoat reflects the ambient light by its f0, then the reflection probes and the environment for
+// their leftover share, along the reflection about its normal at its roughness, weighted by the
+// split sum at f0 = 0.04, the horizon and @p clearcoatOcclusion, its specular occlusion
+vec3 lightsIndirectLayers(BsdfSurface s, BsdfLayers layers, vec3 worldPosition, vec3 geometricNormal, vec3 irradiance, float diffuseOcclusion, float clearcoatOcclusion)
+{
+    vec3 reflected = vec3(0.0);
+
+    if (layers.sheenMax > 0.0)
+        reflected = layers.sheenColor * (layers.sheenAlbedo * diffuseOcclusion * layers.clearcoatBase) * irradiance;
+
+    if (layers.clearcoat > 0.0)
+    {
+        vec3 radiance = lighting.ambient.rgb * bsdfClearcoatF0;
+        if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0 || lighting.probeInfo.z > 0.0)
+        {
+            vec3 r = reflect(-s.v, layers.clearcoatNormal);
+            float horizon = clamp(1.0 + dot(r, geometricNormal), 0.0, 1.0);
+            float weight = bsdfSplitSum(vec3(bsdfClearcoatF0), vec3(1.0), layers.clearcoatLobe).x;
+
+            float environmentWeight = 1.0;
+            vec3 probes = vec3(0.0);
+            if (lighting.probeInfo.y > 0.0)
+                probes = specularIndirect(worldPosition, r, layers.clearcoatRoughness, environmentWeight);
+
+            radiance += (probes + environmentRadiance(r, layers.clearcoatRoughness) * (environmentWeight * lighting.environmentInfo.x)) * (weight * horizon * horizon);
+        }
+
+        reflected += radiance * (layers.clearcoat * clearcoatOcclusion);
+    }
+
+    return reflected;
+}
+
+// The layers of a surface (lightsLayers) and what they reflect of the lights and of the indirect
+// light, plus the @p emission they dim, with the base under them: the pass adds the base light and
+// the base indirect light times @p baseScale to the result. Without layers this is the emission
+// and a scale of exactly 1. The clearcoat lies over the surface's @p geometricNormal (the
+// interpolated normal on raster, the shading normal of the G-buffer on full); @p irradiance is the
+// layerIrradiance of lightsIndirect. The occlusions follow the base's: the diffuse one is
+// min (@p visibility, @p materialOcclusion), and the clearcoat's specular one is taken at its own
+// view angle and roughness in the shaders reading the ambient occlusion (1 for @p visibility
+// without it)
+vec3 lightsLayered(BsdfSurface s, vec4 clearcoat, vec4 sheen, vec3 emission, vec3 worldPosition, vec3 geometricNormal,
+                   vec3 irradiance, float visibility, float materialOcclusion, out float baseScale)
+{
+    baseScale = 1.0;
+    if (clearcoat.x <= 0.0 && max(max(sheen.r, sheen.g), sheen.b) <= 0.0)
+        return emission;
+
+    BsdfLayers layers = lightsLayers(s, clearcoat, sheen, geometricNormal);
+    baseScale = (1.0 - layers.sheenMax * layers.sheenAlbedo) * layers.clearcoatBase;
+
+#ifdef YUP_3D_AMBIENT_OCCLUSION
+    float clearcoatOcclusion = min(gtaoSpecularOcclusion(layers.clearcoatNDotV, visibility, layers.clearcoatRoughness), materialOcclusion);
+#else
+    float clearcoatOcclusion = materialOcclusion;
+#endif
+
+    return emission * layers.clearcoatBase
+         + lightsIndirectLayers(s, layers, worldPosition, geometricNormal, irradiance, min(visibility, materialOcclusion), clearcoatOcclusion)
+         + lightsShadeLayers(s, layers, worldPosition, geometricNormal);
+}
+#endif
 
 #endif

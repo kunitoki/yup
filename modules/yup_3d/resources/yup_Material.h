@@ -31,6 +31,12 @@ namespace yup
 
     Materials are shared between meshes: changing one changes every primitive that uses it.
 
+    The clearcoat and the sheen are layers over the base, after KHR_materials_clearcoat and
+    KHR_materials_sheen: a varnish reflecting through its own sharp highlight, and a velvet-like
+    sheen brightening the grazing edges. With their factors at 0, the defaults, a material shades
+    exactly as without them; a frame drawing a material with either layer shades with a slower
+    shader variant.
+
     @see Mesh, MaterialNode, Texture
 */
 class YUP_API Material : public ReferenceCountedObject
@@ -74,6 +80,11 @@ public:
     float ior = 1.5f;                                    ///< KHR_materials_ior, index of refraction of dielectrics (0 for infinite: full reflection).
     float specularFactor = 1.0f;                         ///< KHR_materials_specular, strength of the dielectric specular.
     std::array<float, 3> specularColorFactor { 1.0f, 1.0f, 1.0f }; ///< KHR_materials_specular, linear F0 color of dielectrics.
+
+    float clearcoatFactor = 0.0f;                                ///< KHR_materials_clearcoat, strength of a clear varnish layer over the base, 0 for none.
+    float clearcoatRoughnessFactor = 0.0f;                       ///< KHR_materials_clearcoat, perceptual roughness of the varnish.
+    std::array<float, 3> sheenColorFactor { 0.0f, 0.0f, 0.0f }; ///< KHR_materials_sheen, linear color of the velvet-like sheen, black for none.
+    float sheenRoughnessFactor = 0.0f;                           ///< KHR_materials_sheen, perceptual roughness of the sheen.
 
     AlphaMode alphaMode = AlphaMode::opaque;             ///< How alpha is used.
     float alphaCutoff = 0.5f;                            ///< Threshold for AlphaMode::mask.

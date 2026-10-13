@@ -57,6 +57,10 @@ void addMaterialSignature (FrameSignature& signature, const Material& material)
     signature.addFloat (material.ior);
     signature.addFloat (material.specularFactor);
     signature.addFloats (material.specularColorFactor);
+    signature.addFloat (material.clearcoatFactor);
+    signature.addFloat (material.clearcoatRoughnessFactor);
+    signature.addFloats (material.sheenColorFactor);
+    signature.addFloat (material.sheenRoughnessFactor);
 
     for (const auto* texture : getMaterialTextures (material))
         signature.addPointer (texture->get());
@@ -849,6 +853,11 @@ const LightingPass* SceneRenderer::getLightingPass() const noexcept
     return impl != nullptr ? &impl->lightingPass : nullptr;
 }
 
+const ForwardPass* SceneRenderer::getForwardPass() const noexcept
+{
+    return impl != nullptr ? &impl->forwardPass : nullptr;
+}
+
 void SceneRenderer::setDeviceFactsOverride (std::function<void (RenderCapabilities::DeviceFacts&)> newOverride)
 {
     deviceFactsOverride = std::move (newOverride);
@@ -1015,6 +1024,11 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     lighting.shadowFilters = impl->shadowRenderer.needsShadowFilters();
     lighting.lookupTables = impl->lookupTables;
 
+    // A clearcoat or a sheen selects the variants compiling the layers: raster for any item, full
+    // for the opaque items of the lighting pass (its forward pass always compiles them)
+    lighting.materialLayers = LightingInputs::hasMaterialLayers (drawList.getOpaqueItems())
+                           || (! full && LightingInputs::hasMaterialLayers (drawList.getBlendItems()));
+
     // One flag for every radiance texture of the device, whether or not the scene has an environment
     lighting.block.probeInfo[0] = impl->probeRenderer.getRadianceFormat() == GpuTextureFormat::rgba8unorm ? 1.0f : 0.0f;
     lighting.samplers = *samplers;
@@ -1055,6 +1069,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         if (failLocalIndirectLighting)
             impl->lightingPass.failLocalIndirectForTesting();
 
+        if (failMaterialLayers)
+            impl->lightingPass.failMaterialLayersForTesting();
+
         if (! impl->lightingPass.render (device, frame, impl->viewData, gbuffer, lighting, targets.color))
             return failFrame ("Unable to render the lighting pass");
 
@@ -1084,6 +1101,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     const auto clear = full ? std::optional<GpuColor>()
                             : std::optional<GpuColor> (output == ForwardPass::Output::ldrInline ? GpuColor (scene.getBackgroundColor()) : GpuColor::transparentBlack());
     const auto opaque = full ? Span<const SceneDrawList::DrawItem>() : drawList.getOpaqueItems();
+
+    if (failMaterialLayers)
+        impl->forwardPass.failMaterialLayersForTesting();
 
     if (! impl->forwardPass.render (device, frame, impl->viewData, lighting, opaque, drawList.getBlendItems(), targets, output, forwardSamples, clear))
         return failFrame ("Unable to render the forward pass");

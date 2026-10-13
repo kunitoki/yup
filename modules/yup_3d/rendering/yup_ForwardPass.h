@@ -42,7 +42,7 @@ namespace yup
     and 3, read raw by the blocker search.
 
     Pipelines are compiled lazily per color and depth format, sample count, velocity output, area
-    lights, shadow filters and local indirect inputs, only for frames that draw: the full tier variant is the one with a velocity target, and draws
+    lights, shadow filters, local indirect inputs and material layers, only for frames that draw: the full tier variant is the one with a velocity target, and draws
     blended items only. The area light variant (YUP_3D_AREA_LIGHTS) shades the frames where
     LightingInputs::areaLights is set; every variant declares the lookup tables, which the
     environment reads too. On both tiers the shadow filter variant (YUP_3D_SOFT_SHADOWS) shades the
@@ -50,13 +50,18 @@ namespace yup
     maps. It holds the soft shadows; on the full tier the frame also takes it when contact shadows
     are marched, which LightingPass alone does (blended items write no depth to march through).
     On raster, the local indirect variant (YUP_3D_LOCAL_INDIRECT) shades the frames with
-    LightingInputs::ambientOcclusion or reflection probes (LightingInputs::hasReflectionProbes()),
-    and only it declares and binds them: the default raster bundles carry no ambient occlusion and
-    no probe code. Without ambient occlusion it binds white there, and without probes one empty
-    probe list for the whole pass. Blended items skip the ambient occlusion (a white texture is
-    bound before them), since it holds the opaque surfaces behind them, and keep their probes. If
-    the variant fails to compile, the failure is logged once and the frames shade without ambient
-    occlusion and probes.
+    LightingInputs::ambientOcclusion, reflection probes (LightingInputs::hasReflectionProbes()),
+    irradiance volumes (LightingInputs::hasIrradianceVolumes()) or materials with a clearcoat or a
+    sheen (LightingInputs::materialLayers), and only it declares and binds them; its layers variant
+    (YUP_3D_LAYERS) shades the frames drawing a layered material, and alone compiles the layers, so
+    the default raster bundles carry no ambient occlusion, probe or layer code and the plain local
+    indirect ones no layer code. Without
+    ambient occlusion it binds white there, and without probes one empty probe list for the whole
+    pass. Blended items skip the ambient occlusion (a white texture is bound before them), since it
+    holds the opaque surfaces behind them, and keep their probes. If the variant fails to compile,
+    the failure is logged once and the frames shade without ambient occlusion, probes and layers; if
+    only the layers variant fails, they shade without the layers.
+    The full tier variants always shade the layers. The clearcoat follows the interpolated normal.
 
     @internal
 */
@@ -126,10 +131,19 @@ public:
                  Span<const SceneDrawList::DrawItem> opaque, Span<const SceneDrawList::DrawItem> blend,
                  const Targets& targets, Output output, uint32_t sampleCount, std::optional<GpuColor> clear);
 
+    /** True when the last render() shaded with a local indirect variant, for tests. */
+    bool usesLocalIndirect() const noexcept { return usedLocalIndirect; }
+
+    /** True when the last render() shaded with a layers variant, for tests. */
+    bool usesMaterialLayers() const noexcept { return usedLayers; }
+
+    /** @internal Test hook: the layers variants not compiled yet fail to compile, as if the device rejected them. */
+    void failMaterialLayersForTesting() noexcept { layersFailForTesting = true; }
+
 private:
     struct Variant;
 
-    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool shadowFilters, bool localIndirect);
+    ResultValue<Variant*> prepareVariant (const GpuDevice::Ptr& device, const Targets& targets, uint32_t sampleCount, bool areaLights, bool shadowFilters, bool localIndirect, bool layers);
     Result createDefaults (const GpuDevice::Ptr& device);
 
     std::vector<std::unique_ptr<Variant>> variants;
@@ -140,6 +154,10 @@ private:
     GpuTarget::Ptr surface;
     bool shadowFiltersFailureReported = false; // A shadow filter variant failed to compile, and was logged once
     bool localIndirectFailureReported = false; // A local indirect variant failed to compile, and was logged once
+    bool usedLocalIndirect = false;            // The last render() shaded with a local indirect variant
+    bool layersFailureReported = false;        // A layers variant failed to compile, and was logged once
+    bool layersFailForTesting = false;         // failMaterialLayersForTesting(): the layers variants not compiled yet fail
+    bool usedLayers = false;                   // The last render() shaded with a layers variant
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ForwardPass)
 };

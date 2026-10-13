@@ -54,14 +54,17 @@ public:
         float ids[4];            ///< x material id in the frame's MaterialTable, yzw reserved.
     };
 
-    /** std140 mirror of MaterialBlock in lib/material.glsl. */
+    /** std140 mirror of MaterialBlock in lib/material.glsl, 128 bytes. The shaders without the
+        clearcoat and sheen layers declare its first 96 bytes, leaving out GpuMaterial::clearcoat and
+        GpuMaterial::sheen, while every draw binds all of it.
+    */
     struct MaterialBlock
     {
         float baseColorFactor[4];
         float emissiveFactor[4]; ///< rgb emissive, w alpha cutoff.
         float params[4];         ///< Metallic, roughness, normal scale, occlusion strength.
         float flags[4];          ///< Alpha mode, base color sRGB, emissive sRGB, has normal texture.
-        GpuMaterial extension;   ///< Specular, ior and emissive strength.
+        GpuMaterial extension;   ///< Specular, ior, emissive strength, clearcoat and sheen.
     };
 
     //==============================================================================

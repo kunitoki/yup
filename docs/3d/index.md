@@ -176,13 +176,16 @@ What is converted:
   Normal maps follow the authored tangents; without them, the tangent frame is
   derived from the texture coordinates;
 - metallic-roughness materials with their five textures, alpha mode and
-  double-sided flag, plus the factors of three material extensions (their
+  double-sided flag, plus the factors of five material extensions (their
   textures are ignored, with a warning):
   - `KHR_materials_emissive_strength` multiplies the emissive color, for
     emitters brighter than 1, such as screens and lamps that glow with bloom;
   - `KHR_materials_ior` sets the index of refraction of non-metals, which
     changes how strongly they reflect when seen head-on;
   - `KHR_materials_specular` scales and tints those reflections;
+  - `KHR_materials_clearcoat` adds a clear varnish over the material, see
+    [Clearcoat and sheen](#clearcoat-and-sheen);
+  - `KHR_materials_sheen` adds a velvet-like sheen;
 - images stored in buffer views, data URIs or external files, including
   `EXT_texture_webp` sources;
 - nodes with their transforms (a `matrix` is split into translation, rotation and
@@ -270,6 +273,59 @@ Image quality:
   the normal changes quickly across a pixel, so they don't sparkle while moving.
 - **Anisotropic filtering** keeps glTF textures sharp at grazing angles on
   devices that support it.
+
+### Clearcoat and sheen
+
+Two optional layers go over a material, after the glTF extensions of the same
+names:
+
+- **Clearcoat:** a clear varnish, as on car paint, lacquered wood or a glossy
+  knob cap. `clearcoatFactor` sets its strength (0 for none) and
+  `clearcoatRoughnessFactor` how blurred its reflections are. It reflects the
+  lights, the reflection probes and the environment through its own sharp
+  highlight, on top of the material's own reflections, and dims what lies under
+  it, the emission included, a little head-on and more at grazing angles.
+- **Sheen:** the soft glow of velvet, felt or rubber at grazing angles.
+  `sheenColorFactor` sets its color (black for none) and `sheenRoughnessFactor`
+  how wide the glow spreads. It reflects the lights and the diffuse light of the
+  ambient color, the irradiance volumes and the environment, and dims the
+  material under it.
+
+```cpp
+auto paint = yup::Material::Ptr (new yup::Material());
+paint->baseColorFactor = { 0.6f, 0.05f, 0.05f, 1.0f };
+paint->metallicFactor = 0.0f;
+paint->clearcoatFactor = 1.0f;
+paint->clearcoatRoughnessFactor = 0.05f;
+```
+
+Both factors default to 0, which shades a material exactly as without the
+layers. A frame that draws any material with a layer shades with heavier shaders
+on the raster tier, and for its opaque materials on the full tier; frames
+without layered materials, reflection probes and irradiance volumes included,
+never run them. Layered surfaces cost about as much again as plain ones.
+
+The textures of both extensions (`clearcoatTexture`,
+`clearcoatRoughnessTexture`, `clearcoatNormalTexture`, `sheenColorTexture` and
+`sheenRoughnessTexture`) are ignored. Without a clearcoat normal texture the
+varnish follows the surface without its normal map on the raster tier and for
+the full tier's blended materials. On the full tier, opaque materials have only
+their normal-mapped normal, so there the clearcoat highlights follow the normal
+map too. Reflection probes and irradiance volumes capture the materials without
+their layers.
+
+Two approximations keep layered frames fast:
+
+- The sheen dims the material under it by how much it reflects towards the
+  viewer, the same for every light. The glTF extension also accounts for the
+  angle of each light, which this skips: under a white sheen, a light at 60
+  degrees from the surface normal lights the material up to about a quarter too
+  brightly (20% of its brightness without the sheen). Darker sheens, and lights
+  facing the surface, show less.
+- Under an area light (a `LightNode` with a radius), the sheen is lit as if the
+  light came from its center. It is exact for small lights and smooth for large
+  ones, but a large, close light gives a slightly different sheen than a bank of
+  small ones would.
 
 ### Lights
 

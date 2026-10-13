@@ -41,6 +41,14 @@ bool LightingInputs::hasAreaLights (Span<const SceneDrawList::Light> lights) noe
     });
 }
 
+bool LightingInputs::hasMaterialLayers (Span<const SceneDrawList::DrawItem> items) noexcept
+{
+    return std::any_of (items.begin(), items.end(), [] (const SceneDrawList::DrawItem& item)
+    {
+        return GpuSceneData::hasLayers (*item.material);
+    });
+}
+
 GpuTexture::Ptr LightingInputs::prepareEnvironment (ProbeRenderer& probes, const Scene& scene, EnvironmentCube& slot)
 {
     const auto& environment = scene.getEnvironment();

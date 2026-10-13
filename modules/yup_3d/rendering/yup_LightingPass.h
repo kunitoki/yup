@@ -49,11 +49,16 @@ namespace yup
 
     The local indirect variant (YUP_3D_LOCAL_INDIRECT, preflight R27) shades the frames with
     reflection probes or irradiance volumes (LightingInputs::hasReflectionProbes(),
-    hasIrradianceVolumes()): only it declares and binds set 1 binding 14, the reflection probes of
-    the frame (LightingInputs::reflectionProbeBuffer), and 15, its irradiance volumes
+    hasIrradianceVolumes()), or with opaque materials that have a clearcoat or a sheen
+    (LightingInputs::materialLayers): only it declares and binds set 1 binding 14, the reflection
+    probes of the frame (LightingInputs::reflectionProbeBuffer), and 15, its irradiance volumes
     (LightingInputs::irradianceVolumeBuffer), with their atlases at set 0 bindings 8, 9 and 10
-    (black without them). The default variants carry no probe or volume code. All three dimensions
-    combine, into eight variants.
+    (black without them). Its layers variant (YUP_3D_LAYERS, preflight R29) shades the frames with
+    layered opaque materials, and alone compiles the layers, whose clearcoat follows the shading
+    normal of the G-buffer; if it fails to compile, the failure is logged once and the frames shade
+    without the layers. The other variants carry no layer code, and read only the rows of the
+    material table they shade with; the default ones no probe or volume code either. The three
+    dimensions combine, the layers only with the local indirect code, into twelve variants.
 
     @internal
 */
@@ -70,10 +75,11 @@ public:
     //==============================================================================
     /** Compiles the pipeline, of the area light variant when @p areaLights is set, of the shadow
         filter variant when @p shadowFilters is set and of the local indirect variant when
-        @p localIndirect is set, and creates the stand-in textures, once per variant: a failure is
+        @p localIndirect is set, of its layers variant when @p layers is set (local indirect implied),
+        and creates the stand-in textures, once per variant: a failure is
         remembered instead of retried every frame.
     */
-    Result prepare (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters, bool localIndirect = false);
+    Result prepare (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters, bool localIndirect = false, bool layers = false);
 
     /** Shades @p gbuffer into @p sceneColor, an rgba16float texture of its size, with the variant
         LightingInputs::areaLights, LightingInputs::shadowFilters and the frame's probes and volumes pick.
@@ -97,8 +103,14 @@ public:
     /** @internal True when the last render() shaded with a local indirect variant, for tests. */
     bool usesLocalIndirect() const noexcept { return usedLocalIndirect; }
 
+    /** @internal True when the last render() shaded with a layers variant, for tests. */
+    bool usesMaterialLayers() const noexcept { return usedLayers; }
+
     /** @internal Test hook: the local indirect variants not compiled yet fail to compile, as if the device rejected them. */
     void failLocalIndirectForTesting() noexcept { localIndirectFailsForTesting = true; }
+
+    /** @internal Test hook: the layers variants not compiled yet fail to compile, as if the device rejected them. */
+    void failMaterialLayersForTesting() noexcept { layersFailForTesting = true; }
 
 private:
     struct Variant
@@ -108,7 +120,7 @@ private:
     };
 
     std::optional<Result> defaults;
-    std::array<Variant, 8> variants; // Punctual lights only, then with area lights; then both again with the shadow filters; then all four again with the local indirect code
+    std::array<Variant, 12> variants; // Punctual lights only, then with area lights; then both again with the shadow filters; then all four again with the local indirect code, and again with its layers
     GpuTexture::Ptr blackCube; // The environment without one
     GpuTexture::Ptr whiteTexture; // Stands in for the ambient occlusion when there is none
     GpuTexture::Ptr blackTexture; // Stands in for the probe and volume atlases without them
@@ -116,6 +128,9 @@ private:
     bool localIndirectFailureReported = false; // The local indirect variant failed to compile, and was logged once
     bool localIndirectFailsForTesting = false; // failLocalIndirectForTesting(): the local indirect variants not compiled yet fail
     bool usedLocalIndirect = false;            // The last render() shaded with the local indirect variant
+    bool layersFailureReported = false;        // The layers variant failed to compile, and was logged once
+    bool layersFailForTesting = false;         // failMaterialLayersForTesting(): the layers variants not compiled yet fail
+    bool usedLayers = false;                   // The last render() shaded with the layers variant
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LightingPass)
 };

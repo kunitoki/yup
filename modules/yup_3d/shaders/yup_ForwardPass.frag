@@ -38,6 +38,17 @@
 #define YUP_3D_IRRADIANCE_VOLUMES_BINDING 9
 #endif
 
+// The clearcoat and sheen layers of the materials (lib/bsdf.glsl, lib/lights.glsl): the raster local
+// indirect layers variants (YUP_3D_LAYERS, for the frames drawing a layered material) and every full
+// tier variant
+#if defined(YUP_3D_LAYERS) && ! defined(YUP_3D_LOCAL_INDIRECT)
+#error "The layers variant is a local indirect variant: bundle it as ForwardPass:YUP_3D_LOCAL_INDIRECT+YUP_3D_LAYERS"
+#endif
+
+#if defined(YUP_3D_LAYERS) || defined(YUP_3D_TIER_FULL)
+#define YUP_3D_MATERIAL_LAYERS
+#endif
+
 #include "lib/bsdf.glsl"
 #include "lib/color.glsl"
 #include "lib/view.glsl"
@@ -84,13 +95,34 @@ void main()
     vec3 bentNormal = gtaoBentNormal(ambientOcclusion.rgb, ambientOcclusion.a, transpose(mat3(view.view)), surface.n, m.geometricNormal);
     float diffuseOcclusion = min(ambientOcclusion.a, m.occlusion);
     float reflectionOcclusion = min(gtaoSpecularOcclusion(surface.nDotV, ambientOcclusion.a, sqrt(sqrt(surface.alpha2))), m.occlusion);
+#ifdef YUP_3D_MATERIAL_LAYERS
+    // The clearcoat and the sheen, before the light loop so it carries none of their state. Without
+    // a clearcoat normal texture, the clearcoat follows the interpolated normal
+    vec3 layerIrradiance;
+    vec3 indirect = lightsIndirect(surface, lookup, v_worldPosition, m.geometricNormal, bentNormal, diffuseOcclusion, reflectionOcclusion, layerIrradiance);
+    float baseScale;
+    vec3 layered = lightsLayered(surface, material.clearcoat, material.sheen, m.emissive, v_worldPosition, m.geometricNormal, layerIrradiance, ambientOcclusion.a, m.occlusion, baseScale);
+#else
     vec3 indirect = lightsIndirect(surface, lookup, v_worldPosition, m.geometricNormal, bentNormal, diffuseOcclusion, reflectionOcclusion);
+#endif
+#else
+#ifdef YUP_3D_MATERIAL_LAYERS
+    vec3 layerIrradiance;
+    vec3 indirect = lightsIndirect(surface, lookup, v_worldPosition, m.geometricNormal, m.occlusion, m.occlusion, layerIrradiance);
+    float baseScale;
+    vec3 layered = lightsLayered(surface, material.clearcoat, material.sheen, m.emissive, v_worldPosition, m.geometricNormal, layerIrradiance, 1.0, m.occlusion, baseScale);
 #else
     vec3 indirect = lightsIndirect(surface, lookup, v_worldPosition, m.geometricNormal, m.occlusion, m.occlusion);
 #endif
+#endif
     vec3 color = lightsShade(surface, lookup, v_worldPosition, m.geometricNormal);
+#ifdef YUP_3D_MATERIAL_LAYERS
+    // The layers over the base, the emission included: exactly the sum below without them
+    color = (color + indirect) * baseScale + layered;
+#else
     color += indirect;
     color += m.emissive;
+#endif
 
     vec3 exposed = color * view.cameraPosition.w;
 

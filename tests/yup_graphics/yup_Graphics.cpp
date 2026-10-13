@@ -741,34 +741,6 @@ TEST_F (GraphicsTest, TransparencyLayer_InvalidLayerCommitReturnsFalse)
     EXPECT_FALSE (layer.commit());
 }
 
-TEST_F (GraphicsTest, TransparencyLayer_CanDrawIntoLayerWhenSupported)
-{
-    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
-
-    auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 0.5f);
-    if (! layer.isValid())
-        GTEST_SKIP() << "Offscreen targets not supported on this context";
-
-    EXPECT_NO_THROW ({
-        layer.getGraphics().setFillColor (Color (0xFFFF0000));
-        layer.getGraphics().fillRect (Rectangle<float> (10.0f, 10.0f, 30.0f, 30.0f));
-    });
-}
-
-TEST_F (GraphicsTest, TransparencyLayer_CommitSucceedsWhenSupported)
-{
-    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
-
-    auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 1.0f);
-    if (! layer.isValid())
-        GTEST_SKIP() << "Offscreen targets not supported on this context";
-
-    layer.getGraphics().setFillColor (Color (0xFF0000FF));
-    layer.getGraphics().fillRect (Rectangle<float> (5.0f, 5.0f, 50.0f, 50.0f));
-
-    EXPECT_TRUE (layer.commit());
-}
-
 TEST_F (GraphicsTest, TransparencyLayer_CommitTwiceAlwaysReturnsFalseOnSecondCall)
 {
     graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
@@ -881,46 +853,6 @@ TEST_F (GraphicsTest, OffscreenRendering_ConstructionFromImageDoesNotCrash)
         Graphics offscreen (*context, target, 0xFF000000u);
         (void) offscreen;
     });
-}
-
-TEST_F (GraphicsTest, OffscreenRendering_CommitToImageWhenSupported)
-{
-    Image target (32, 32, PixelFormat::RGBA);
-
-    Graphics offscreen (*context, target, 0xFF000000u);
-    if (! offscreen.isOffscreen())
-        GTEST_SKIP() << "Offscreen rendering not supported on this context";
-
-    offscreen.setFillColor (Color (0xFFFF0000));
-    offscreen.fillRect (Rectangle<float> (0.0f, 0.0f, 32.0f, 32.0f));
-
-    EXPECT_TRUE (offscreen.commitToImage());
-}
-
-TEST_F (GraphicsTest, OffscreenRendering_CommitToImageTwiceReturnsFalse)
-{
-    Image target (16, 16, PixelFormat::RGBA);
-
-    Graphics offscreen (*context, target, 0xFF000000u);
-    if (! offscreen.isOffscreen())
-        GTEST_SKIP() << "Offscreen rendering not supported on this context";
-
-    EXPECT_TRUE (offscreen.commitToImage());
-    EXPECT_FALSE (offscreen.commitToImage());
-}
-
-TEST_F (GraphicsTest, OffscreenRendering_ReadPixelsToImageWhenSupported)
-{
-    Image target (32, 32, PixelFormat::RGBA);
-
-    Graphics offscreen (*context, target, 0xFF000000u);
-    if (! offscreen.isOffscreen())
-        GTEST_SKIP() << "Offscreen rendering not supported on this context";
-
-    offscreen.setFillColor (Color (0xFF0000FF));
-    offscreen.fillRect (Rectangle<float> (0.0f, 0.0f, 32.0f, 32.0f));
-
-    EXPECT_TRUE (offscreen.readPixelsToImage());
 }
 
 TEST_F (GraphicsTest, OffscreenRendering_NonOffscreenGraphicsReadPixelsFails)

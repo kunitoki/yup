@@ -203,6 +203,9 @@ public:
     /** @internal The deferred lighting pass of the full tier, for tests, or nullptr before the first render. */
     const LightingPass* getLightingPass() const noexcept;
 
+    /** @internal The forward pass, for tests, or nullptr before the first render. */
+    const ForwardPass* getForwardPass() const noexcept;
+
     /** @internal Test hook, not for production use: edits the facts read from the device before
         every render decides its tier and features, so tests can simulate weaker devices.
 
@@ -261,6 +264,13 @@ public:
     */
     void failLocalIndirectLightingForTesting() noexcept { failLocalIndirectLighting = true; }
 
+    /** @internal Test hook, not for production use: the material layers variants of the raster
+        ForwardPass and of the full tier's LightingPass fail to compile, as if the device rejected
+        them. Call it before the first render. Frames still render, their materials without the
+        clearcoat and the sheen (the full ForwardPass, which always shades them, is unaffected).
+    */
+    void failMaterialLayersForTesting() noexcept { failMaterialLayers = true; }
+
     /** @internal Test hook, not for production use: the environment cube and the other radiance
         textures of this renderer hold RGBM in rgba8unorm, as below the float floor, even when the
         device renders half floats. Call it before the first render.
@@ -298,6 +308,7 @@ private:
     bool failProbeCaptures = false;
     bool failVolumeCaptures = false;
     bool failLocalIndirectLighting = false;
+    bool failMaterialLayers = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneRenderer)
 };

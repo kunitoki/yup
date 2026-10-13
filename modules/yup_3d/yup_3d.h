@@ -101,6 +101,7 @@
 #include "rendering/yup_ShadowRenderer.h"
 #include "rendering/yup_ProbeBaker.h"
 #include "rendering/yup_LightingInputs.h"
+#include "rendering/yup_ForwardPass.h"
 #include "rendering/yup_GBufferPass.h"
 #include "rendering/yup_LightingPass.h"
 #include "rendering/yup_DepthNormalPrepass.h"

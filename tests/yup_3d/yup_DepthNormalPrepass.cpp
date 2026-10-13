@@ -136,7 +136,8 @@ TEST_F (DepthNormalPrepassTests, SharesTheGeometryAndMaterialBindingsOfTheGBuffe
     const auto* gbufferMaterial = findBlock (*reflectionOf (gbufferBundle, ShaderStage::fragment), 2, 1);
     ASSERT_NE (material, nullptr);
     ASSERT_NE (gbufferMaterial, nullptr);
-    EXPECT_EQ (material->blockSize, static_cast<uint32_t> (sizeof (GeometryBindings::MaterialBlock)));
+    // Without the clearcoat and sheen rows, which only the shaders compiling the layers read
+    EXPECT_EQ (material->blockSize, static_cast<uint32_t> (offsetof (GeometryBindings::MaterialBlock, extension) + offsetof (GpuMaterial, clearcoat)));
     EXPECT_EQ (memberOffsets (*material), memberOffsets (*gbufferMaterial));
 }
 

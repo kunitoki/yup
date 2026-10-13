@@ -28,6 +28,8 @@ struct GpuMaterial
 {
     vec4 specular;         // rgb specular color, w specular factor (KHR_materials_specular)
     vec4 extended;         // x ior (KHR_materials_ior), y emissive strength (KHR_materials_emissive_strength), zw reserved
+    vec4 clearcoat;        // x clearcoat factor, y clearcoat roughness (KHR_materials_clearcoat), zw reserved
+    vec4 sheen;            // rgb sheen color, w sheen roughness (KHR_materials_sheen)
 };
 
 #endif

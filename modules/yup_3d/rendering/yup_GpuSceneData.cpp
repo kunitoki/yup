@@ -144,8 +144,19 @@ GpuMaterial GpuSceneData::packMaterial (const Material& material) noexcept
 {
     const auto& color = material.specularColorFactor;
 
+    const auto& sheen = material.sheenColorFactor;
+    const auto unit = [] (float value) { return jlimit (0.0f, 1.0f, value); };
+
     return { { color[0], color[1], color[2], material.specularFactor },
-             { material.ior, material.emissiveStrength, 0.0f, 0.0f } };
+             { material.ior, material.emissiveStrength, 0.0f, 0.0f },
+             { unit (material.clearcoatFactor), unit (material.clearcoatRoughnessFactor), 0.0f, 0.0f },
+             { unit (sheen[0]), unit (sheen[1]), unit (sheen[2]), unit (material.sheenRoughnessFactor) } };
+}
+
+bool GpuSceneData::hasLayers (const Material& material) noexcept
+{
+    const auto& sheen = material.sheenColorFactor;
+    return material.clearcoatFactor > 0.0f || jmax (sheen[0], sheen[1], sheen[2]) > 0.0f;
 }
 
 GpuReflectionProbe GpuSceneData::packReflectionProbe (const SceneDrawList::ReflectionProbe& probe, const Rectangle<float>& atlasRect, int numMips) noexcept

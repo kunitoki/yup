@@ -32,7 +32,8 @@
 // Normal mapping uses the mesh tangents when present, and otherwise builds the tangent frame from
 // screen-space derivatives. Color textures are decoded from sRGB here.
 
-// Mirrors GeometryBindings::MaterialBlock in yup_GeometryBindings.h
+// Mirrors GeometryBindings::MaterialBlock in yup_GeometryBindings.h. Only the shaders compiling the
+// clearcoat and sheen layers (YUP_3D_MATERIAL_LAYERS) declare their two rows, which every draw binds
 layout(set = 2, binding = 1) uniform MaterialBlock
 {
     vec4 baseColorFactor;
@@ -41,6 +42,10 @@ layout(set = 2, binding = 1) uniform MaterialBlock
     vec4 flags;               // alpha mode (0 opaque, 1 mask, 2 blend), base color sRGB, emissive sRGB, has normal texture
     vec4 specular;            // rgb specular color, w specular factor (KHR_materials_specular); GpuMaterial from here
     vec4 extended;            // x ior (KHR_materials_ior), y emissive strength (KHR_materials_emissive_strength), zw reserved
+#ifdef YUP_3D_MATERIAL_LAYERS
+    vec4 clearcoat;           // x clearcoat factor, y clearcoat roughness (KHR_materials_clearcoat), zw reserved
+    vec4 sheen;               // rgb sheen color, w sheen roughness (KHR_materials_sheen)
+#endif
 } material;
 
 layout(set = 2, binding = 2) uniform texture2D u_baseColor;

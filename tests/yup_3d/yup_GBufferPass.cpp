@@ -153,8 +153,18 @@ TEST_F (GBufferPassTests, SharesTheMaterialBindingsOfTheForwardPass)
     const auto* forwardMaterial = findBlock (*forwardFragment, 2, 1);
     ASSERT_NE (gbufferMaterial, nullptr);
     ASSERT_NE (forwardMaterial, nullptr);
-    EXPECT_EQ (gbufferMaterial->blockSize, static_cast<uint32_t> (sizeof (GeometryBindings::MaterialBlock)));
-    EXPECT_EQ (memberOffsets (*gbufferMaterial), memberOffsets (*forwardMaterial));
+    // The G-buffer declares the block without the clearcoat and sheen rows; the full forward pass,
+    // which shades the layers, declares them. Every draw binds all of it
+    const auto layerRows = static_cast<uint32_t> (offsetof (GeometryBindings::MaterialBlock, extension) + offsetof (GpuMaterial, clearcoat));
+    EXPECT_EQ (gbufferMaterial->blockSize, layerRows);
+    EXPECT_EQ (forwardMaterial->blockSize, static_cast<uint32_t> (sizeof (GeometryBindings::MaterialBlock)));
+
+    auto forwardOffsets = memberOffsets (*forwardMaterial);
+    EXPECT_EQ (forwardOffsets["clearcoat"], layerRows);
+    EXPECT_EQ (forwardOffsets["sheen"], layerRows + 16u);
+    forwardOffsets.erase ("clearcoat");
+    forwardOffsets.erase ("sheen");
+    EXPECT_EQ (memberOffsets (*gbufferMaterial), forwardOffsets);
 
     // The five material textures at set 2 bindings 2-6 and their samplers at 7-11, nothing else
     std::set<std::pair<uint32_t, uint32_t>> material;

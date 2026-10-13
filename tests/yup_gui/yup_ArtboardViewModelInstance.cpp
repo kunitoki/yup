@@ -153,27 +153,6 @@ TEST_F (ArtboardViewModelInstanceTests, UnknownPropertiesAreRejectedSafely)
     EXPECT_EQ (nullptr, instance->getListItem ("nonexistentProperty", 0).get());
 }
 
-TEST_F (ArtboardViewModelInstanceTests, BooleanPropertyRoundTrips)
-{
-    const auto name = findPropertyName (ArtboardViewModel::PropertyType::boolean);
-    if (name.isEmpty())
-    {
-        GTEST_SKIP() << "Test asset exposes no boolean property";
-        return;
-    }
-
-    EXPECT_TRUE (instance->setBoolProperty (name, true));
-    EXPECT_EQ (std::optional<bool> (true), instance->getBoolProperty (name));
-    EXPECT_TRUE (instance->getProperty (name).isBool());
-
-    EXPECT_TRUE (instance->setProperty (name, var (false)));
-    EXPECT_EQ (std::optional<bool> (false), instance->getBoolProperty (name));
-
-    // Wrong var type must not clobber the property.
-    EXPECT_FALSE (instance->setProperty (name, var (42)));
-    EXPECT_EQ (std::optional<bool> (false), instance->getBoolProperty (name));
-}
-
 TEST_F (ArtboardViewModelInstanceTests, NumberPropertyRoundTrips)
 {
     const auto name = findPropertyName (ArtboardViewModel::PropertyType::number);
@@ -191,78 +170,6 @@ TEST_F (ArtboardViewModelInstanceTests, NumberPropertyRoundTrips)
     EXPECT_EQ (std::optional<double> (7.0), instance->getNumberProperty (name));
 
     EXPECT_FALSE (instance->setProperty (name, var ("nope")));
-}
-
-TEST_F (ArtboardViewModelInstanceTests, StringPropertyRoundTrips)
-{
-    const auto name = findPropertyName (ArtboardViewModel::PropertyType::string);
-    if (name.isEmpty())
-    {
-        GTEST_SKIP() << "Test asset exposes no string property";
-        return;
-    }
-
-    EXPECT_TRUE (instance->setStringProperty (name, "hello"));
-    EXPECT_EQ (std::optional<String> ("hello"), instance->getStringProperty (name));
-    EXPECT_TRUE (instance->getProperty (name).isString());
-
-    EXPECT_TRUE (instance->setProperty (name, var (String ("world"))));
-    EXPECT_EQ (std::optional<String> ("world"), instance->getStringProperty (name));
-
-    EXPECT_FALSE (instance->setProperty (name, var (3.14)));
-}
-
-TEST_F (ArtboardViewModelInstanceTests, ColorPropertyRoundTrips)
-{
-    const auto name = findPropertyName (ArtboardViewModel::PropertyType::color);
-    if (name.isEmpty())
-    {
-        GTEST_SKIP() << "Test asset exposes no color property";
-        return;
-    }
-
-    const Color expected (0xFF112233u);
-    EXPECT_TRUE (instance->setColorProperty (name, expected));
-    EXPECT_EQ (expected.getARGB(), instance->getColorProperty (name)->getARGB());
-
-    EXPECT_TRUE (instance->setProperty (name, var (static_cast<int64> (expected.getARGB()))));
-    EXPECT_EQ (expected.getARGB(), instance->getColorProperty (name)->getARGB());
-}
-
-TEST_F (ArtboardViewModelInstanceTests, EnumPropertyRoundTrips)
-{
-    const auto name = findPropertyName (ArtboardViewModel::PropertyType::enumType);
-    if (name.isEmpty())
-    {
-        GTEST_SKIP() << "Test asset exposes no enum property";
-        return;
-    }
-
-    const auto info = viewModel->getProperty (name);
-    if (info.enumValues.isEmpty())
-    {
-        GTEST_SKIP() << "Test asset's enum property exposes no options";
-        return;
-    }
-
-    const auto& firstOption = info.enumValues[0];
-    EXPECT_TRUE (instance->setEnumProperty (name, firstOption));
-    EXPECT_EQ (std::optional<String> (firstOption), instance->getEnumProperty (name));
-
-    EXPECT_FALSE (instance->setEnumProperty (name, "nonexistentOption"));
-}
-
-TEST_F (ArtboardViewModelInstanceTests, TriggerPropertyFires)
-{
-    const auto name = findPropertyName (ArtboardViewModel::PropertyType::trigger);
-    if (name.isEmpty())
-    {
-        GTEST_SKIP() << "Test asset exposes no trigger property";
-        return;
-    }
-
-    EXPECT_TRUE (instance->trigger (name));
-    EXPECT_FALSE (instance->trigger ("nonexistentProperty"));
 }
 
 TEST_F (ArtboardViewModelInstanceTests, PropertyChangedCallbackFiresOnWrites)
@@ -807,63 +714,19 @@ TEST_F (ResponsiveSlidersInstanceTests, CallbackMayWriteOtherPropertiesFromWithi
 }
 
 //==============================================================================
-// List properties
-//
-// Neither shipped fixture is guaranteed to expose a list, so these discover one
-// and skip when there is none.
+// List properties, against the "items" list of the authored "Default" instance
+// of "Store" in tests/data/rive/artboard-lab.riv, which holds two "Item"s.
 //==============================================================================
-
-namespace
-{
-
-struct DiscoveredList
-{
-    String path;
-    String elementViewModelName;
-};
-
-std::optional<DiscoveredList> findListProperty (const std::shared_ptr<ArtboardFile>& file)
-{
-    for (int viewModelIndex = 0; viewModelIndex < file->getNumViewModels(); ++viewModelIndex)
-    {
-        auto viewModel = file->getArtboardViewModelAt (viewModelIndex);
-        if (viewModel == nullptr)
-            continue;
-
-        for (int propertyIndex = 0; propertyIndex < viewModel->getNumProperties(); ++propertyIndex)
-        {
-            const auto property = viewModel->getPropertyAt (propertyIndex);
-            if (property.type != ArtboardViewModel::PropertyType::list)
-                continue;
-
-            // The element schema is not described by PropertyInfo, so pair the list
-            // with whichever schema the file already stores items of.
-            auto owner = file->createArtboardViewModelInstance (viewModel->getName());
-            if (owner == nullptr || owner->getListSize (property.name) <= 0)
-                continue;
-
-            auto item = owner->getListItem (property.name, 0);
-            if (item == nullptr)
-                continue;
-
-            return DiscoveredList { property.name, item->getName() };
-        }
-    }
-
-    return std::nullopt;
-}
-
-} // namespace
 
 class ArtboardViewModelListTests : public ::testing::Test
 {
 protected:
     void SetUp() override
     {
-        const auto file = findViewModelInstanceTestFile();
+        const auto file = findViewModelInstanceTestFile().getSiblingFile ("artboard-lab.riv");
         if (! file.existsAsFile())
         {
-            GTEST_SKIP() << "Missing test asset: tests/data/rive/data-binding.riv";
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/artboard-lab.riv";
             return;
         }
 
@@ -876,35 +739,16 @@ protected:
 
         artboardFile = result.getValue();
 
-        auto discovered = findListProperty (artboardFile);
-        if (! discovered.has_value())
-        {
-            GTEST_SKIP() << "Test asset exposes no populated list property";
-            return;
-        }
-
-        listPath = discovered->path;
-        elementViewModelName = discovered->elementViewModelName;
-
-        for (int viewModelIndex = 0; viewModelIndex < artboardFile->getNumViewModels(); ++viewModelIndex)
-        {
-            auto viewModel = artboardFile->getArtboardViewModelAt (viewModelIndex);
-            if (viewModel == nullptr || ! viewModel->hasProperty (listPath))
-                continue;
-
-            instance = artboardFile->createArtboardViewModelInstance (viewModel->getName());
-            break;
-        }
-
-        if (instance == nullptr || instance->getListSize (listPath) < 0)
-            GTEST_SKIP() << "Failed to create an instance owning the discovered list";
+        instance = artboardFile->createArtboardViewModelInstance ("Store", "Default");
+        ASSERT_NE (nullptr, instance.get());
+        ASSERT_EQ (2, instance->getListSize (listPath));
     }
 
     ::testing::NiceMock<MockRiveFactory> factory;
     std::shared_ptr<ArtboardFile> artboardFile;
     ArtboardViewModelInstance::Ptr instance;
-    String listPath;
-    String elementViewModelName;
+    const String listPath = "items";
+    const String elementViewModelName = "Item";
 };
 
 TEST_F (ArtboardViewModelListTests, AppendingGrowsTheList)
@@ -1058,11 +902,7 @@ TEST_F (ArtboardViewModelListTests, AppendedItemsAreObservedToo)
         if (itemViewModel->getPropertyAt (i).type == ArtboardViewModel::PropertyType::number)
             numberProperty = itemViewModel->getPropertyAt (i).name;
 
-    if (numberProperty.isEmpty())
-    {
-        GTEST_SKIP() << "Discovered list element schema exposes no number property";
-        return;
-    }
+    ASSERT_FALSE (numberProperty.isEmpty());
 
     reportedPaths.clear();
 
@@ -1953,6 +1793,68 @@ TEST_F (ArtboardLabInstanceTests, InstancesAreOnlyCreatedForKnownSchemasAndInsta
     EXPECT_EQ (nullptr, artboardFile->createArtboardViewModelInstance ("NoSuchViewModel").get());
     EXPECT_EQ (nullptr, artboardFile->createArtboardViewModelInstance ("NoSuchViewModel", "Default").get());
     EXPECT_EQ (nullptr, artboardFile->createArtboardViewModelInstance ("Store", "NoSuchInstance").get());
+}
+
+TEST_F (ArtboardLabInstanceTests, BooleanPropertyRoundTrips)
+{
+    EXPECT_TRUE (store->setBoolProperty ("open", false));
+    EXPECT_EQ (std::optional<bool> (false), store->getBoolProperty ("open"));
+    EXPECT_TRUE (store->getProperty ("open").isBool());
+
+    EXPECT_TRUE (store->setProperty ("open", var (true)));
+    EXPECT_EQ (std::optional<bool> (true), store->getBoolProperty ("open"));
+
+    // Wrong var type must not clobber the property.
+    EXPECT_FALSE (store->setProperty ("open", var (42)));
+    EXPECT_EQ (std::optional<bool> (true), store->getBoolProperty ("open"));
+}
+
+TEST_F (ArtboardLabInstanceTests, StringPropertyRoundTrips)
+{
+    EXPECT_TRUE (store->setStringProperty ("title", "hello"));
+    EXPECT_EQ (std::optional<String> ("hello"), store->getStringProperty ("title"));
+    EXPECT_TRUE (store->getProperty ("title").isString());
+
+    EXPECT_TRUE (store->setProperty ("title", var (String ("world"))));
+    EXPECT_EQ (std::optional<String> ("world"), store->getStringProperty ("title"));
+
+    EXPECT_FALSE (store->setProperty ("title", var (3.14)));
+}
+
+TEST_F (ArtboardLabInstanceTests, ColorPropertyRoundTrips)
+{
+    const Color expected (0xFF112233u);
+    EXPECT_TRUE (store->setColorProperty ("tint", expected));
+    EXPECT_EQ (expected.getARGB(), store->getColorProperty ("tint").value_or (Color()).getARGB());
+
+    const Color other (0xFF445566u);
+    EXPECT_TRUE (store->setProperty ("tint", var (static_cast<int64> (other.getARGB()))));
+    EXPECT_EQ (other.getARGB(), store->getColorProperty ("tint").value_or (Color()).getARGB());
+}
+
+TEST_F (ArtboardLabInstanceTests, EnumPropertyRoundTrips)
+{
+    auto viewModel = artboardFile->getArtboardViewModel ("Store");
+    ASSERT_NE (nullptr, viewModel.get());
+
+    const auto info = viewModel->getProperty ("mode");
+    ASSERT_EQ (StringArray ({ "Off", "On", "Automatic" }), info.enumValues);
+
+    const auto& firstOption = info.enumValues[0];
+    EXPECT_TRUE (store->setEnumProperty ("mode", firstOption));
+    EXPECT_EQ (std::optional<String> (firstOption), store->getEnumProperty ("mode"));
+
+    EXPECT_FALSE (store->setEnumProperty ("mode", "nonexistentOption"));
+}
+
+TEST_F (ArtboardLabInstanceTests, TriggerPropertyFires)
+{
+    // The authored "Default" instance stores no value for "ping", a fresh instance holds them all.
+    auto fresh = artboardFile->createArtboardViewModelInstance ("Store");
+    ASSERT_NE (nullptr, fresh.get());
+
+    EXPECT_TRUE (fresh->trigger ("ping"));
+    EXPECT_FALSE (fresh->trigger ("nonexistentProperty"));
 }
 
 TEST_F (ArtboardLabInstanceTests, ColorsAndEnumsReadAsVars)

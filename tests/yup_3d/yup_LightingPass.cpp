@@ -119,6 +119,38 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle lightingPassLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassAreaLightsLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassSoftShadowsLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_soft_shadows_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassAreaLightsSoftShadowsLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights_soft_shadows_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
     /** The (set, binding) pairs of @p resources, sorted. */
     static std::vector<std::pair<uint32_t, uint32_t>> bindingsOf (const std::vector<ShaderReflection::ResourceBinding>& resources)
     {
@@ -177,6 +209,10 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
         { "area lights, local indirect", lightingPassAreaLightsLocalIndirect(), join ({ lookups, probeAtlases, passInputs, compared }), probeStorage },
         { "shadow filters, local indirect", lightingPassSoftShadowsLocalIndirect(), join ({ lookups, probeAtlases, passInputs, filtered }), probeStorage },
         { "area lights, shadow filters, local indirect", lightingPassAreaLightsSoftShadowsLocalIndirect(), join ({ lookups, probeAtlases, passInputs, filtered }), probeStorage },
+        { "local indirect, layers", lightingPassLocalIndirectLayers(), join ({ lookups, probeAtlases, passInputs, compared }), probeStorage },
+        { "area lights, local indirect, layers", lightingPassAreaLightsLocalIndirectLayers(), join ({ lookups, probeAtlases, passInputs, compared }), probeStorage },
+        { "shadow filters, local indirect, layers", lightingPassSoftShadowsLocalIndirectLayers(), join ({ lookups, probeAtlases, passInputs, filtered }), probeStorage },
+        { "area lights, shadow filters, local indirect, layers", lightingPassAreaLightsSoftShadowsLocalIndirectLayers(), join ({ lookups, probeAtlases, passInputs, filtered }), probeStorage },
     };
 
     for (const auto& variant : variants)

@@ -43,18 +43,26 @@ static_assert (sizeof (GpuLight) == 64);
 /** The material parameters beyond the core metallic-roughness model, packed for the GPU.
 
     It is the tail of the forward MaterialBlock (std140) and a material table entry (std430):
-    both layouts are the same for two vec4 rows. Filled by GpuSceneData::packMaterial().
+    both layouts are the same for vec4 rows. Filled by GpuSceneData::packMaterial().
+
+    The shaders compiling the clearcoat and sheen layers declare all four rows. The others declare
+    the forward MaterialBlock without the last two, which they never read, while the whole block
+    is bound; the material table always holds the four.
 
     @internal
 */
 struct YUP_API GpuMaterial
 {
-    float specular[4]; ///< rgb specularColorFactor, w specularFactor (KHR_materials_specular).
-    float extended[4]; ///< x ior (KHR_materials_ior), y emissiveStrength (KHR_materials_emissive_strength), zw reserved (0).
+    float specular[4];  ///< rgb specularColorFactor, w specularFactor (KHR_materials_specular).
+    float extended[4];  ///< x ior (KHR_materials_ior), y emissiveStrength (KHR_materials_emissive_strength), zw reserved (0).
+    float clearcoat[4]; ///< x clearcoatFactor, y clearcoatRoughnessFactor (KHR_materials_clearcoat), zw reserved (0).
+    float sheen[4];     ///< rgb sheenColorFactor, w sheenRoughnessFactor (KHR_materials_sheen).
 };
 
-static_assert (sizeof (GpuMaterial) == 32);
+static_assert (sizeof (GpuMaterial) == 64);
 static_assert (offsetof (GpuMaterial, extended) == 16);
+static_assert (offsetof (GpuMaterial, clearcoat) == 32);
+static_assert (offsetof (GpuMaterial, sheen) == 48);
 
 //==============================================================================
 /** One reflection probe as the shaders read it: 128 bytes, laid out the same in std140 and std430.
@@ -199,8 +207,16 @@ public:
     */
     static std::vector<GpuLight> packLights (Span<const SceneDrawList::Light> lights, Span<const int> firstShadowRecord, std::vector<uint32>& order);
 
-    /** Packs the specular, index of refraction and emissive strength of a material. */
+    /** Packs the specular, index of refraction, emissive strength, clearcoat and sheen of a
+        material. The clearcoat and sheen factors are limited to [0, 1], as their extensions define them.
+    */
     static GpuMaterial packMaterial (const Material& material) noexcept;
+
+    /** True when a material has a clearcoat or a sheen layer, a clearcoat factor or a sheen color
+        channel above 0 once packed: frames drawing one shade with the shader variants compiling
+        the layers (LightingInputs::materialLayers).
+    */
+    static bool hasLayers (const Material& material) noexcept;
 
     /** Packs a reflection probe.
 

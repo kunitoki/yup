@@ -29,7 +29,7 @@ static_assert (sizeof (GeometryBindings::DrawBlock) == 208);
 static_assert (offsetof (GeometryBindings::DrawBlock, normalMatrix) == 64);
 static_assert (offsetof (GeometryBindings::DrawBlock, previousModel) == 128);
 static_assert (offsetof (GeometryBindings::DrawBlock, ids) == 192);
-static_assert (sizeof (GeometryBindings::MaterialBlock) == 96);
+static_assert (sizeof (GeometryBindings::MaterialBlock) == 128);
 static_assert (offsetof (GeometryBindings::MaterialBlock, emissiveFactor) == 16);
 static_assert (offsetof (GeometryBindings::MaterialBlock, params) == 32);
 static_assert (offsetof (GeometryBindings::MaterialBlock, flags) == 48);

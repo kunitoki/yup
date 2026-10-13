@@ -428,6 +428,70 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle forwardPassLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle forwardPassAreaLightsLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_area_lights_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle forwardPassSoftShadowsLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_soft_shadows_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle forwardPassAreaLightsSoftShadowsLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_ForwardPass_area_lights_soft_shadows_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassFullLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassFullAreaLightsLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassFullSoftShadowsLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_soft_shadows_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_LightingPass_full_area_lights_soft_shadows_local_indirect_layers.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
     /** True if @p resources declare a resource at @p set and @p binding. */
     static bool declares (const std::vector<ShaderReflection::ResourceBinding>& resources, uint32_t set, uint32_t binding)
     {
@@ -506,7 +570,11 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
                                                                                           std::tuple { "ForwardPass_local_indirect", forwardPassLocalIndirect(), 13, 5, 1, 2, 6 },
                                                                                           std::tuple { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), 13, 5, 1, 2, 6 },
                                                                                           std::tuple { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), 15, 5, 1, 4, 6 },
-                                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), 15, 5, 1, 4, 6 } })
+                                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), 15, 5, 1, 4, 6 },
+                                                                                          std::tuple { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers(), 13, 5, 1, 2, 6 },
+                                                                                          std::tuple { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers(), 13, 5, 1, 2, 6 },
+                                                                                          std::tuple { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers(), 15, 5, 1, 4, 6 },
+                                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers(), 15, 5, 1, 4, 6 } })
     {
         const auto* vertex = bundle.findShader (ShaderStage::vertex, ShaderLanguage::spirv);
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -550,9 +618,13 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_local_indirect", forwardPassLocalIndirect() },
+        { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers() },
         { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect() },
+        { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers() },
         { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect() },
+        { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers() },
         { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect() },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
@@ -564,9 +636,13 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
         { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect() },
+        { "LightingPass_full_local_indirect_layers", lightingPassFullLocalIndirectLayers() },
         { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect() },
+        { "LightingPass_full_area_lights_local_indirect_layers", lightingPassFullAreaLightsLocalIndirectLayers() },
         { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect() },
+        { "LightingPass_full_soft_shadows_local_indirect_layers", lightingPassFullSoftShadowsLocalIndirectLayers() },
         { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect() },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect_layers", lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers() },
         { "ShadowPass", shadowPass() },
         { "ShadowPass_masked", shadowPassMasked() },
         { "GtaoTrace", gtaoTrace() },
@@ -604,9 +680,13 @@ TEST_F (SceneRendererBundleTests, AmbientOcclusionIsReadByTheRasterForwardPassAn
         { "ForwardPass_soft_shadows", forwardPassSoftShadows(), false },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), false },
         { "ForwardPass_local_indirect", forwardPassLocalIndirect(), true },
+        { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers(), true },
         { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), true },
+        { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers(), true },
         { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), true },
+        { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers(), true },
         { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), true },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers(), true },
         { "ForwardPass_full", forwardPassFull(), false },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), false },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), false },
@@ -616,9 +696,13 @@ TEST_F (SceneRendererBundleTests, AmbientOcclusionIsReadByTheRasterForwardPassAn
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), true },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), true },
         { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect(), true },
+        { "LightingPass_full_local_indirect_layers", lightingPassFullLocalIndirectLayers(), true },
         { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect(), true },
+        { "LightingPass_full_area_lights_local_indirect_layers", lightingPassFullAreaLightsLocalIndirectLayers(), true },
         { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect(), true },
+        { "LightingPass_full_soft_shadows_local_indirect_layers", lightingPassFullSoftShadowsLocalIndirectLayers(), true },
         { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect(), true },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect_layers", lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers(), true },
     };
 
     for (const auto& [name, bundle, reads] : bundles)
@@ -664,9 +748,13 @@ TEST_F (SceneRendererBundleTests, ReflectionProbesAreReadWhereProbesShade)
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), Reads::nothing, 0 },
         { "Background", background(), Reads::nothing, 0 },
         { "ForwardPass_local_indirect", forwardPassLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers(), Reads::perDraw, 0 },
         { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers(), Reads::perDraw, 0 },
         { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers(), Reads::perDraw, 0 },
         { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers(), Reads::perDraw, 0 },
         { "ForwardPass_full", forwardPassFull(), Reads::storage, 8 },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), Reads::storage, 8 },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), Reads::storage, 8 },
@@ -676,9 +764,13 @@ TEST_F (SceneRendererBundleTests, ReflectionProbesAreReadWhereProbesShade)
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), Reads::nothing, 0 },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), Reads::nothing, 0 },
         { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect(), Reads::storage, 14 },
+        { "LightingPass_full_local_indirect_layers", lightingPassFullLocalIndirectLayers(), Reads::storage, 14 },
         { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect(), Reads::storage, 14 },
+        { "LightingPass_full_area_lights_local_indirect_layers", lightingPassFullAreaLightsLocalIndirectLayers(), Reads::storage, 14 },
         { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect(), Reads::storage, 14 },
+        { "LightingPass_full_soft_shadows_local_indirect_layers", lightingPassFullSoftShadowsLocalIndirectLayers(), Reads::storage, 14 },
         { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect(), Reads::storage, 14 },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect_layers", lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers(), Reads::storage, 14 },
     };
 
     for (const auto& [name, bundle, reads, storageBinding] : bundles)
@@ -724,9 +816,13 @@ TEST_F (SceneRendererBundleTests, IrradianceVolumesAreReadWhereProbesShade)
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), Reads::nothing, 0 },
         { "Background", background(), Reads::nothing, 0 },
         { "ForwardPass_local_indirect", forwardPassLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers(), Reads::perDraw, 0 },
         { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers(), Reads::perDraw, 0 },
         { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers(), Reads::perDraw, 0 },
         { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers(), Reads::perDraw, 0 },
         { "ForwardPass_full", forwardPassFull(), Reads::storage, 9 },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), Reads::storage, 9 },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), Reads::storage, 9 },
@@ -736,9 +832,13 @@ TEST_F (SceneRendererBundleTests, IrradianceVolumesAreReadWhereProbesShade)
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), Reads::nothing, 0 },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), Reads::nothing, 0 },
         { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect(), Reads::storage, 15 },
+        { "LightingPass_full_local_indirect_layers", lightingPassFullLocalIndirectLayers(), Reads::storage, 15 },
         { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect(), Reads::storage, 15 },
+        { "LightingPass_full_area_lights_local_indirect_layers", lightingPassFullAreaLightsLocalIndirectLayers(), Reads::storage, 15 },
         { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect(), Reads::storage, 15 },
+        { "LightingPass_full_soft_shadows_local_indirect_layers", lightingPassFullSoftShadowsLocalIndirectLayers(), Reads::storage, 15 },
         { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect(), Reads::storage, 15 },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect_layers", lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers(), Reads::storage, 15 },
     };
 
     for (const auto& [name, bundle, reads, storageBinding] : bundles)
@@ -803,24 +903,118 @@ TEST_F (SceneRendererBundleTests, OnlyFullVariantsWriteVelocity)
 
 TEST_F (SceneRendererBundleTests, MaterialBlockEndsWithTheGpuMaterial)
 {
-    const ShaderBundle bundles[] = { forwardPass(), forwardPassAreaLights(), forwardPassFull(), forwardPassFullAreaLights(), forwardPassFullSoftShadows(), forwardPassFullAreaLightsSoftShadows() };
+    // The bundles compiling the clearcoat and sheen layers (preflight R29: the raster local indirect
+    // layers variants and the full forward pass) declare the whole block;
+    // the others, which never read the layers, leave out their two rows, so their code is the same
+    // as before the layers. Every draw binds the whole block
+    const std::tuple<const char*, ShaderBundle, bool> bundles[] = {
+        { "ForwardPass", forwardPass(), false },
+        { "ForwardPass_area_lights", forwardPassAreaLights(), false },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows(), false },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), false },
+        { "ShadowPass_masked", shadowPassMasked(), false },
+        { "GBufferPass_full", gbufferPassFull(), false },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect(), false },
+        { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers(), true },
+        { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), false },
+        { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers(), true },
+        { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), false },
+        { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers(), true },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), false },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers(), true },
+        { "ForwardPass_full", forwardPassFull(), true },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), true },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), true },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), true },
+    };
 
-    for (const auto& bundle : bundles)
+    for (const auto& [name, bundle, layers] : bundles)
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
-        ASSERT_NE (fragment, nullptr);
+        ASSERT_NE (fragment, nullptr) << name;
 
         const auto& blocks = fragment->reflection.uniformBuffers;
         const auto block = std::find_if (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 2 && b.binding == 1; });
-        ASSERT_NE (block, blocks.end());
-        EXPECT_EQ (block->blockSize, 96u);
+        ASSERT_NE (block, blocks.end()) << name;
+
+        const auto extension = static_cast<uint32_t> (offsetof (GeometryBindings::MaterialBlock, extension));
+        EXPECT_EQ (block->blockSize, layers ? static_cast<uint32_t> (sizeof (GeometryBindings::MaterialBlock)) : extension + static_cast<uint32_t> (offsetof (GpuMaterial, clearcoat))) << name;
 
         std::map<String, uint32_t> offsets;
         for (const auto& member : block->members)
             offsets[member.name] = member.offset;
 
-        EXPECT_EQ (offsets["specular"], 64u);
-        EXPECT_EQ (offsets["extended"], 64u + static_cast<uint32_t> (offsetof (GpuMaterial, extended)));
+        EXPECT_EQ (offsets["specular"], extension) << name;
+        EXPECT_EQ (offsets["extended"], extension + static_cast<uint32_t> (offsetof (GpuMaterial, extended))) << name;
+        EXPECT_EQ (offsets.count ("clearcoat"), layers ? 1u : 0u) << name;
+        EXPECT_EQ (offsets.count ("sheen"), layers ? 1u : 0u) << name;
+
+        if (layers)
+        {
+            EXPECT_EQ (offsets["clearcoat"], extension + static_cast<uint32_t> (offsetof (GpuMaterial, clearcoat))) << name;
+            EXPECT_EQ (offsets["sheen"], extension + static_cast<uint32_t> (offsetof (GpuMaterial, sheen))) << name;
+        }
+    }
+}
+
+TEST_F (SceneRendererBundleTests, MaterialLayersCompileOnlyWhereTheLayersShade)
+{
+    // Preflight R29: the clearcoat and sheen lobes compile into the local indirect layers variants of
+    // the raster forward pass and of the lighting pass, and into the full forward pass; the default
+    // and plain local indirect variants carry none of their code. Every lighting pass reads the
+    // material table at the GpuMaterial stride
+    const std::tuple<const char*, ShaderBundle, bool> bundles[] = {
+        { "ForwardPass", forwardPass(), false },
+        { "ForwardPass_area_lights", forwardPassAreaLights(), false },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows(), false },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), false },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect(), false },
+        { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers(), true },
+        { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), false },
+        { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers(), true },
+        { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), false },
+        { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers(), true },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), false },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers(), true },
+        { "ForwardPass_full", forwardPassFull(), true },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), true },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), true },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), true },
+        { "LightingPass_full", lightingPassFull(), false },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights(), false },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), false },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), false },
+        { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect(), false },
+        { "LightingPass_full_local_indirect_layers", lightingPassFullLocalIndirectLayers(), true },
+        { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect(), false },
+        { "LightingPass_full_area_lights_local_indirect_layers", lightingPassFullAreaLightsLocalIndirectLayers(), true },
+        { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect(), false },
+        { "LightingPass_full_soft_shadows_local_indirect_layers", lightingPassFullSoftShadowsLocalIndirectLayers(), true },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect(), false },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect_layers", lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers(), true },
+        { "Background", background(), false },
+        { "GBufferPass_full", gbufferPassFull(), false },
+    };
+
+    for (const auto& [name, bundle, layers] : bundles)
+    {
+        // The WGSL keeps unused functions, so a lobe compiled anywhere shows
+        const auto* wgsl = bundle.findShader (ShaderStage::fragment, ShaderLanguage::wgsl);
+        ASSERT_NE (wgsl, nullptr) << name;
+        EXPECT_EQ (wgsl->source.contains ("bsdfDistributionCharlie"), layers) << name;
+        EXPECT_EQ (wgsl->source.contains ("bsdfEvaluateClearcoat"), layers) << name;
+
+        if (! String (name).startsWith ("LightingPass"))
+            continue;
+
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+
+        const auto& buffers = fragment->reflection.storageBuffers;
+        const auto materials = std::find_if (buffers.begin(), buffers.end(), [] (const auto& b) { return b.set == 1 && b.binding == 8; });
+        ASSERT_NE (materials, buffers.end()) << name;
+        ASSERT_EQ (materials->members.size(), 1u) << name;
+        EXPECT_EQ (materials->members[0].arrayStride, static_cast<uint32_t> (sizeof (GpuMaterial))) << name;
     }
 }
 
@@ -833,9 +1027,13 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
         { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_local_indirect", forwardPassLocalIndirect() },
+        { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers() },
         { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect() },
+        { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers() },
         { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect() },
+        { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers() },
         { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect() },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
@@ -846,9 +1044,13 @@ TEST_F (SceneRendererBundleTests, LightingBlockIsSharedByEveryShadingBundle)
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
         { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect() },
+        { "LightingPass_full_local_indirect_layers", lightingPassFullLocalIndirectLayers() },
         { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect() },
+        { "LightingPass_full_area_lights_local_indirect_layers", lightingPassFullAreaLightsLocalIndirectLayers() },
         { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect() },
+        { "LightingPass_full_soft_shadows_local_indirect_layers", lightingPassFullSoftShadowsLocalIndirectLayers() },
         { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect() },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect_layers", lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -890,9 +1092,13 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
         { "ForwardPass_soft_shadows", forwardPassSoftShadows(), true },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), true },
         { "ForwardPass_local_indirect", forwardPassLocalIndirect(), false },
+        { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers(), false },
         { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), false },
+        { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers(), false },
         { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), true },
+        { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers(), true },
         { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), true },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers(), true },
         { "ForwardPass_full", forwardPassFull(), false },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), false },
         { "LightingPass_full", lightingPassFull(), false },
@@ -902,9 +1108,13 @@ TEST_F (SceneRendererBundleTests, ShadowBlockIsSharedByEveryShadingBundle)
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), true },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), true },
         { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect(), false },
+        { "LightingPass_full_local_indirect_layers", lightingPassFullLocalIndirectLayers(), false },
         { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect(), false },
+        { "LightingPass_full_area_lights_local_indirect_layers", lightingPassFullAreaLightsLocalIndirectLayers(), false },
         { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect(), true },
+        { "LightingPass_full_soft_shadows_local_indirect_layers", lightingPassFullSoftShadowsLocalIndirectLayers(), true },
         { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect(), true },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect_layers", lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers(), true },
     };
 
     const auto distinctSlots = [] (const std::vector<ShaderReflection::ResourceBinding>& resources)
@@ -1113,13 +1323,17 @@ TEST_F (SceneRendererBundleTests, RasterAreaLightsCompile)
         { "ForwardPass_area_lights", forwardPassAreaLights() },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect() },
+        { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers() },
         { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect() },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows() },
         { "LightingPass_full_area_lights", lightingPassFullAreaLights() },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
         { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect() },
+        { "LightingPass_full_area_lights_local_indirect_layers", lightingPassFullAreaLightsLocalIndirectLayers() },
         { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect() },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect_layers", lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -1146,9 +1360,13 @@ TEST_F (SceneRendererBundleTests, EveryShadingBundleReadsTheEnvironmentFromSetZe
         { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
         { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows() },
         { "ForwardPass_local_indirect", forwardPassLocalIndirect() },
+        { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers() },
         { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect() },
+        { "ForwardPass_area_lights_local_indirect_layers", forwardPassAreaLightsLocalIndirectLayers() },
         { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect() },
+        { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers() },
         { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect() },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
@@ -1159,9 +1377,13 @@ TEST_F (SceneRendererBundleTests, EveryShadingBundleReadsTheEnvironmentFromSetZe
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
         { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows() },
         { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect() },
+        { "LightingPass_full_local_indirect_layers", lightingPassFullLocalIndirectLayers() },
         { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect() },
+        { "LightingPass_full_area_lights_local_indirect_layers", lightingPassFullAreaLightsLocalIndirectLayers() },
         { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect() },
+        { "LightingPass_full_soft_shadows_local_indirect_layers", lightingPassFullSoftShadowsLocalIndirectLayers() },
         { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect() },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect_layers", lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -1199,13 +1421,17 @@ TEST_F (SceneRendererBundleTests, PunctualVariantsCompileNoAreaLightCode)
         { "ForwardPass", forwardPass() },
         { "ForwardPass_soft_shadows", forwardPassSoftShadows() },
         { "ForwardPass_local_indirect", forwardPassLocalIndirect() },
+        { "ForwardPass_local_indirect_layers", forwardPassLocalIndirectLayers() },
         { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect() },
+        { "ForwardPass_soft_shadows_local_indirect_layers", forwardPassSoftShadowsLocalIndirectLayers() },
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows() },
         { "LightingPass_full", lightingPassFull() },
         { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows() },
         { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect() },
+        { "LightingPass_full_local_indirect_layers", lightingPassFullLocalIndirectLayers() },
         { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect() },
+        { "LightingPass_full_soft_shadows_local_indirect_layers", lightingPassFullSoftShadowsLocalIndirectLayers() },
     };
 
     for (const auto& [name, bundle] : bundles)
@@ -4016,6 +4242,44 @@ vec4 encodeLuma(vec3 c)
         EXPECT_NEAR (area / punctual, 1.0, 0.02);
     }
 
+    /** On @p tier, the clearcoat and the sheen reflect a point light of radius 0.001 through their
+        area light path (lightsEvaluateLayersArea: the clearcoat's LTC, the sheen's form factor) as
+        they reflect the punctual one, within 2%, the tolerance of checkTinyRadiusMatchesPunctual. The
+        base reflects nothing (black, no specular), so the layers alone light the plate.
+    */
+    void checkLayersUnderATinyAreaLightMatchPunctual (RenderSettings::TierPreference tier)
+    {
+        const auto meanAt = [this, tier] (Material::Ptr material, float radius)
+        {
+            Scene scene;
+            addPlate (scene, material);
+            scene.setAmbientColor (Colors::black);
+
+            auto light = EntityNode::Ptr (new EntityNode ("point"));
+            light->attach<LightNode> (LightNode::Type::point).radius = radius;
+            light->setPosition ({ 0.6f, 0.0f, 0.8f });
+            scene.getRoot()->addChild (light);
+
+            return meanLuma (renderLuma (scene, 128, tier), 128, { 40, 40, 48, 48 });
+        };
+
+        const std::pair<const char*, Material::Ptr> layers[] = {
+            { "clearcoat", makeLayeredMaterial ({ 0.0f, 0.0f, 0.0f }, 1.0f, 0.4f, {}, 0.0f, 0.0f) },
+            { "sheen", makeLayeredMaterial ({ 0.0f, 0.0f, 0.0f }, 0.0f, 0.0f, { 1.0f, 1.0f, 1.0f }, 0.5f, 0.0f) },
+        };
+
+        for (const auto& [name, material] : layers)
+        {
+            const auto punctual = meanAt (material, 0.0f);
+            const auto area = meanAt (material, 0.001f);
+            RecordProperty ((String (name) + "Punctual").toStdString(), String (punctual, 4).toStdString());
+            RecordProperty ((String (name) + "Area").toStdString(), String (area, 4).toStdString());
+
+            ASSERT_GT (punctual, 0.002) << name;
+            EXPECT_NEAR (area / punctual, 1.0, 0.02) << name;
+        }
+    }
+
     /** A light radius widens the highlight without changing its energy on @p tier. */
     void checkRadiusWidensTheHighlight (RenderSettings::TierPreference tier)
     {
@@ -4066,8 +4330,9 @@ vec4 encodeLuma(vec3 c)
         EXPECT_NEAR (wideEnergy / sharpEnergy, 1.0, 0.1);
     }
 
-    /** Area lights stay finite on @p tier, through the rgba16float path on raster. */
-    void checkAreaLightsStayFinite (RenderSettings::TierPreference tier)
+    /** Area lights stay finite on @p tier, through the rgba16float path on raster, over a material
+        with a smooth clearcoat and a smooth white sheen when @p layers is set. */
+    void checkAreaLightsStayFinite (RenderSettings::TierPreference tier, bool layers = false)
     {
         // A smooth plate inside a sphere light, touching another, under a spot disk and a grazing sun
         // disk, over a gray ambient light so every plate pixel stays lit
@@ -4075,6 +4340,12 @@ vec4 encodeLuma(vec3 c)
         material->baseColorFactor = { 0.5f, 0.5f, 0.5f, 1.0f };
         material->metallicFactor = 0.0f;
         material->roughnessFactor = 0.0f;
+
+        if (layers)
+        {
+            material->clearcoatFactor = 1.0f;
+            material->sheenColorFactor = { 1.0f, 1.0f, 1.0f };
+        }
 
         Scene scene;
         addPlate (scene, material);
@@ -6101,6 +6372,466 @@ vec4 encodeLuma(vec3 c)
         EXPECT_EQ (renderer.bakeProbes (device, scene), 0);
         EXPECT_FALSE (renderer.getProbeBaker()->hasGivenUp());
         EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    //==============================================================================
+    /** Adds a UV sphere of @p radius at the origin, 64 segments by 32 rings, drawn with @p material. */
+    static EntityNode* addSphere (Scene& scene, float radius, Material::Ptr material)
+    {
+        constexpr int segments = 64, rings = 32;
+        const auto pi = MathConstants<float>::pi;
+
+        std::vector<Mesh::Vertex> vertices;
+        for (int ring = 0; ring <= rings; ++ring)
+        {
+            const auto theta = pi * static_cast<float> (ring) / static_cast<float> (rings);
+            for (int segment = 0; segment <= segments; ++segment)
+            {
+                // Segment 0 faces the default camera, on +z, and the segments turn towards +x
+                const auto phi = 2.0f * pi * static_cast<float> (segment) / static_cast<float> (segments);
+                const Vector3<float> normal (std::sin (theta) * std::sin (phi), std::cos (theta), std::sin (theta) * std::cos (phi));
+
+                auto& vertex = vertices.emplace_back();
+                vertex.position = normal * radius;
+                vertex.normal = normal;
+                vertex.uv = { static_cast<float> (segment) / static_cast<float> (segments), static_cast<float> (ring) / static_cast<float> (rings) };
+            }
+        }
+
+        // Counter-clockwise seen from outside: upper left, lower left, lower right, then upper right
+        std::vector<uint32> indices;
+        for (int ring = 0; ring < rings; ++ring)
+        {
+            for (int segment = 0; segment < segments; ++segment)
+            {
+                const auto upperLeft = static_cast<uint32> (ring * (segments + 1) + segment);
+                const auto lowerLeft = upperLeft + static_cast<uint32> (segments + 1);
+                indices.insert (indices.end(), { upperLeft, lowerLeft, lowerLeft + 1, upperLeft, lowerLeft + 1, upperLeft + 1 });
+            }
+        }
+
+        auto mesh = Mesh::Ptr (new Mesh ("sphere"));
+        mesh->addPrimitive (std::move (vertices), std::move (indices), std::move (material));
+
+        auto entity = EntityNode::Ptr (new EntityNode ("sphere"));
+        entity->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (entity);
+        return entity.get();
+    }
+
+    /** The radius in pixels of a sphere of @p radius at the origin seen by the default camera, from
+        (0, 0, 5) with a vertical field of view of 0.8, in a square image of @p size pixels. */
+    static float sphereRadiusInPixels (float radius, int size)
+    {
+        return static_cast<float> (size) * 0.5f * (radius / std::sqrt (25.0f - radius * radius)) / std::tan (0.4f);
+    }
+
+    /** The mean luminance of the pixels of a square image whose centers lie between @p inner and
+        @p outer pixels from its center. */
+    static double annulusLuminance (const Image& image, float inner, float outer)
+    {
+        const auto center = static_cast<float> (image.getWidth()) * 0.5f;
+        auto sum = 0.0;
+        auto count = 0;
+
+        for (int y = 0; y < image.getHeight(); ++y)
+        {
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto distance = std::hypot (static_cast<float> (x) + 0.5f - center, static_cast<float> (y) + 0.5f - center);
+                if (distance >= inner && distance < outer)
+                {
+                    sum += meanLuminance (image, { x, y, 1, 1 });
+                    ++count;
+                }
+            }
+        }
+
+        return count > 0 ? sum / count : -1.0;
+    }
+
+    /** The luminance of the brightest pixel of @p image. */
+    static double brightestLuminance (const Image& image)
+    {
+        auto brightest = 0.0;
+        for (int y = 0; y < image.getHeight(); ++y)
+            for (int x = 0; x < image.getWidth(); ++x)
+                brightest = jmax (brightest, meanLuminance (image, { x, y, 1, 1 }));
+
+        return brightest;
+    }
+
+    /** A dielectric of base color @p base and roughness 1 with the given clearcoat and sheen: the
+        base reflects no specular light when @p specularFactor is 0. */
+    static Material::Ptr makeLayeredMaterial (std::array<float, 3> base, float clearcoat, float clearcoatRoughness,
+                                              std::array<float, 3> sheen, float sheenRoughness, float specularFactor = 1.0f)
+    {
+        auto material = Material::Ptr (new Material());
+        material->baseColorFactor = { base[0], base[1], base[2], 1.0f };
+        material->metallicFactor = 0.0f;
+        material->roughnessFactor = 1.0f;
+        material->specularFactor = specularFactor;
+        material->clearcoatFactor = clearcoat;
+        material->clearcoatRoughnessFactor = clearcoatRoughness;
+        material->sheenColorFactor = sheen;
+        material->sheenRoughnessFactor = sheenRoughness;
+        return material;
+    }
+
+    /** A sphere of radius 1.5 drawn with @p material, lit head-on by a white sun of intensity 3
+        alone, rendered on @p tier at 128 x 128 without temporal anti-aliasing. */
+    Image renderLitSphere (Material::Ptr material, RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        addSphere (scene, 1.5f, std::move (material));
+        scene.setAmbientColor (Colors::black);
+        setTierForExactFrames (scene, tier);
+
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        sun->attach<LightNode>().intensity = 3.0f;
+        scene.getRoot()->addChild (sun);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 128);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    }
+
+    /** On @p tier, a clearcoat (KHR_materials_clearcoat) over a rough red base adds the sharp
+        highlight of its own smooth lobe: the head-on sun's mirror point at the center of the sphere
+        brightens by more than 40 levels of luminance, within a few pixels.
+    */
+    void checkClearcoatAddsASharpHighlightOnARoughBase (RenderSettings::TierPreference tier)
+    {
+        const auto matte = renderLitSphere (makeLayeredMaterial ({ 0.8f, 0.05f, 0.05f }, 0.0f, 0.05f, {}, 0.0f), tier);
+        const auto coated = renderLitSphere (makeLayeredMaterial ({ 0.8f, 0.05f, 0.05f }, 1.0f, 0.05f, {}, 0.0f), tier);
+        ASSERT_TRUE (matte.isValid() && coated.isValid());
+
+        const auto matteBrightest = brightestLuminance (matte);
+        const auto coatedBrightest = brightestLuminance (coated);
+        RecordProperty ("matteBrightest", String (matteBrightest, 1).toStdString());
+        RecordProperty ("coatedBrightest", String (coatedBrightest, 1).toStdString());
+        EXPECT_GT (coatedBrightest, matteBrightest + 40.0);
+
+        // Sharp: the pixels the highlight brightens by more than 20 levels lie at the center, within
+        // a few pixels, where the rough base spreads over the whole sphere
+        auto brightened = 0;
+        for (int y = 0; y < 128; ++y)
+        {
+            for (int x = 0; x < 128; ++x)
+            {
+                if (meanLuminance (coated, { x, y, 1, 1 }) > meanLuminance (matte, { x, y, 1, 1 }) + 20.0)
+                {
+                    ++brightened;
+                    EXPECT_LT (std::hypot (x + 0.5 - 64.0, y + 0.5 - 64.0), 8.0) << x << ", " << y;
+                }
+            }
+        }
+
+        RecordProperty ("brightenedPixels", brightened);
+        EXPECT_GT (brightened, 0);
+    }
+
+    /** On @p tier, a white sheen (KHR_materials_sheen) over a black base without specular light
+        brightens the grazing edges of the sphere, lit head-on: its Charlie lobe vanishes where the
+        normal faces the view and the light, at the center, and peaks towards the silhouette.
+    */
+    void checkSheenBrightensGrazingEdges (RenderSettings::TierPreference tier)
+    {
+        const auto image = renderLitSphere (makeLayeredMaterial ({ 0.0f, 0.0f, 0.0f }, 0.0f, 0.0f, { 1.0f, 1.0f, 1.0f }, 0.5f, 0.0f), tier);
+        ASSERT_TRUE (image.isValid());
+
+        const auto radius = sphereRadiusInPixels (1.5f, 128);
+        const auto center = annulusLuminance (image, 0.0f, 0.3f * radius);
+        const auto ring = annulusLuminance (image, 0.85f * radius, 0.95f * radius);
+        RecordProperty ("center", String (center, 1).toStdString());
+        RecordProperty ("ring", String (ring, 1).toStdString());
+
+        EXPECT_GT (ring, center + 20.0);
+    }
+
+    /** On @p tier, a white rough sheen over a black base without specular light, facing the view
+        under a uniform environment of radiance 4 and no light, reflects the sheen albedo of the
+        tables: 4 E (n.v = 1, roughness 1), 0.566. Within 2.5%: the half float table and its read
+        0.2 texel off its first column (under 0.3%), and the rounding of the Reinhard-mapped image
+        around level 160, up to half an 8-bit step there (about 1.1%). The scene color stays finite
+        and unsaturated.
+    */
+    void checkSheenPassesTheWhiteFurnaceTest (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        addPlate (scene, makeLayeredMaterial ({ 0.0f, 0.0f, 0.0f }, 0.0f, 0.0f, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f));
+        scene.setAmbientColor (Colors::black);
+        scene.setUsingDefaultLight (false);
+        scene.setToneMapping (Scene::ToneMapping::reinhard);
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 4.0f, 4.0f); }, 32, 3));
+        setTierForExactFrames (scene, tier);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+        std::array<double, 3> radiance {};
+        for (int y = 28; y < 36; ++y)
+        {
+            for (int x = 28; x < 36; ++x)
+            {
+                const auto color = image.getPixelColor (x, y);
+                EXPECT_LT (color.getGreen(), 250) << x << ", " << y;
+                radiance[0] += reinhardRadiance (color.getRed()) / 64.0;
+                radiance[1] += reinhardRadiance (color.getGreen()) / 64.0;
+                radiance[2] += reinhardRadiance (color.getBlue()) / 64.0;
+            }
+        }
+
+        const auto expected = 4.0 * LookupTables::computeSheenAlbedo()[static_cast<size_t> ((LookupTables::size - 1) * LookupTables::size)];
+        RecordProperty ("sheenFurnace", String (radiance[1] / expected, 4).toStdString());
+
+        for (const auto channel : radiance)
+            EXPECT_NEAR (channel, expected, 0.025 * expected);
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+        // Raw radiance: the full tier's scene color, and the raster rgba16float bloom path
+        if (tier != RenderSettings::TierPreference::full)
+        {
+            setBloom (scene, true);
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        }
+
+        const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+        ASSERT_NE (sceneColor, nullptr);
+        EXPECT_TRUE (isFiniteTexture (sceneColor));
+        EXPECT_FALSE (isSaturatedTexture (sceneColor));
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+#endif
+    }
+
+    /** On @p tier, the frames drawing a material with a clearcoat or a sheen shade with the layers
+        variants (preflight R29), local indirect ones that alone compile the layers; frames with
+        probes only take the plain local indirect variant, the others the default one. On raster
+        the forward pass selects them for any item, on full the lighting pass for its opaque items
+        (the full forward pass, for blended items, always compiles the layers).
+    */
+    void checkLayeredVariantFollowsTheMaterials (RenderSettings::TierPreference tier)
+    {
+        const auto full = tier == RenderSettings::TierPreference::full;
+        auto material = makeLayeredMaterial ({ 0.5f, 0.5f, 0.5f }, 0.0f, 0.0f, {}, 0.0f);
+
+        Scene scene;
+        addPlate (scene, material);
+        setTierForExactFrames (scene, tier);
+
+        // The variant of the last frame: 0 default, 1 local indirect, 2 local indirect with the layers
+        SceneRenderer renderer;
+        const auto variant = [&]
+        {
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            if (full)
+            {
+                const auto* pass = renderer.getLightingPass();
+                return pass == nullptr ? -1 : (pass->usesMaterialLayers() ? 2 : (pass->usesLocalIndirect() ? 1 : 0));
+            }
+
+            const auto* pass = renderer.getForwardPass();
+            return pass == nullptr ? -1 : (pass->usesMaterialLayers() ? 2 : (pass->usesLocalIndirect() ? 1 : 0));
+        };
+
+        EXPECT_EQ (variant(), 0);
+
+        material->clearcoatFactor = 0.5f;
+        EXPECT_EQ (variant(), 2);
+
+        material->clearcoatFactor = 0.0f;
+        material->clearcoatRoughnessFactor = 0.5f;
+        material->sheenRoughnessFactor = 0.5f;
+        EXPECT_EQ (variant(), 0);
+
+        material->sheenColorFactor = { 0.0f, 0.0f, 0.25f };
+        EXPECT_EQ (variant(), 2);
+
+        // A blended layered item: on full the forward pass shades it, the lighting pass stays default
+        material->alphaMode = Material::AlphaMode::blend;
+        EXPECT_EQ (variant(), full ? 0 : 2);
+
+        // A probe without layered materials takes the local indirect variant without the layers
+        material->alphaMode = Material::AlphaMode::opaque;
+        material->sheenColorFactor = { 0.0f, 0.0f, 0.0f };
+        addReflectionProbe (scene, { 0.0f, 0.0f, 2.0f }, 20.0f);
+        EXPECT_EQ (variant(), 1);
+
+        material->clearcoatFactor = 1.0f;
+        EXPECT_EQ (variant(), 2);
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    /** On @p tier, a layers variant the device cannot compile is logged once and leaves the frames
+        rendering with the plain local indirect variant, without the layers: the clearcoat's
+        highlight is gone, and the frame is otherwise the uncoated one.
+    */
+    void checkFailedLayersVariantShadesWithoutTheLayers (RenderSettings::TierPreference tier)
+    {
+        const auto render = [this, tier] (float clearcoat, bool fail)
+        {
+            Scene scene;
+            addSphere (scene, 1.5f, makeLayeredMaterial ({ 0.8f, 0.05f, 0.05f }, clearcoat, 0.05f, {}, 0.0f));
+            scene.setAmbientColor (Colors::black);
+            setTierForExactFrames (scene, tier);
+
+            auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+            sun->attach<LightNode>().intensity = 3.0f;
+            scene.getRoot()->addChild (sun);
+
+            SceneRenderer renderer;
+            if (fail)
+                renderer.failMaterialLayersForTesting();
+
+            auto image = renderToImage (renderer, scene, 128);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+
+            const auto full = tier == RenderSettings::TierPreference::full;
+            const auto* lightingPass = renderer.getLightingPass();
+            const auto* forwardPass = renderer.getForwardPass();
+            const auto layers = full ? lightingPass != nullptr && lightingPass->usesMaterialLayers() : forwardPass != nullptr && forwardPass->usesMaterialLayers();
+            const auto localIndirect = full ? lightingPass != nullptr && lightingPass->usesLocalIndirect() : forwardPass != nullptr && forwardPass->usesLocalIndirect();
+            EXPECT_EQ (layers, clearcoat > 0.0f && ! fail);
+            EXPECT_EQ (localIndirect, clearcoat > 0.0f);
+            return image;
+        };
+
+        const auto uncoated = render (0.0f, false);
+        const auto failed = render (1.0f, true);
+        const auto coated = render (1.0f, false);
+        ASSERT_TRUE (uncoated.isValid() && failed.isValid() && coated.isValid());
+
+        RecordProperty ("failedBrightest", String (brightestLuminance (failed), 1).toStdString());
+        RecordProperty ("uncoatedBrightest", String (brightestLuminance (uncoated), 1).toStdString());
+        EXPECT_NEAR (brightestLuminance (failed), brightestLuminance (uncoated), 1.0);
+        EXPECT_GT (brightestLuminance (coated), brightestLuminance (uncoated) + 40.0); // Not vacuous
+    }
+
+    /** The mean linear radiance of the 8x8 pixels at the center of a 64 x 64 Reinhard-mapped image. */
+    static std::array<double, 3> centerRadiance (const Image& image)
+    {
+        std::array<double, 3> radiance {};
+        for (int y = 28; y < 36; ++y)
+        {
+            for (int x = 28; x < 36; ++x)
+            {
+                const auto color = image.getPixelColor (x, y);
+                radiance[0] += reinhardRadiance (color.getRed()) / 64.0;
+                radiance[1] += reinhardRadiance (color.getGreen()) / 64.0;
+                radiance[2] += reinhardRadiance (color.getBlue()) / 64.0;
+            }
+        }
+
+        return radiance;
+    }
+
+    /** On @p tier, a white sheen over a white base keeps the energy of a white furnace: under a
+        uniform environment of radiance 1 and no light, the base without specular (specularFactor 0)
+        reflects 1 - E (n.v) of it once the sheen dims it, and the sheen E (n.v), so the plate reads
+        exactly 1, whatever the albedo E of the tables. Within 2.5%: around level 188 an 8-bit step of
+        the Reinhard-mapped image is about 2.4%, so its rounding errs by up to 1.2%, and 1 reads
+        1.0116. Without the base scaling it reads
+        1 + E, 1.14 at roughness 1 seen head-on.
+    */
+    void checkSheenOverAWhiteBaseKeepsTheEnergy (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        addPlate (scene, makeLayeredMaterial ({ 1.0f, 1.0f, 1.0f }, 0.0f, 0.0f, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f));
+        scene.setAmbientColor (Colors::black);
+        scene.setUsingDefaultLight (false);
+        scene.setToneMapping (Scene::ToneMapping::reinhard);
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (1.0f, 1.0f, 1.0f); }, 32, 3));
+        setTierForExactFrames (scene, tier);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+        const auto radiance = centerRadiance (image);
+        RecordProperty ("whiteSheenFurnace", String (radiance[1], 4).toStdString());
+
+        for (const auto channel : radiance)
+            EXPECT_NEAR (channel, 1.0, 0.025);
+    }
+
+    /** On @p tier, a clearcoat of factor 1 dims the emission under it by 1 - Fc (n.v), Fc the
+        Schlick Fresnel of f0 = 0.04: a black emitter without specular, turned 70 degrees away from
+        the view, alone in the scene (the clearcoat reflects nothing there), is dimmed to 0.841 of
+        its uncoated radiance at the center of the frame. Within 0.025: a few 8-bit steps of the
+        Reinhard-mapped image, and the view angle varying by under a degree over the 8x8 pixels.
+    */
+    void checkClearcoatDimsTheEmission (RenderSettings::TierPreference tier)
+    {
+        const auto render = [this, tier] (float clearcoat)
+        {
+            auto material = makeLayeredMaterial ({ 0.0f, 0.0f, 0.0f }, clearcoat, 0.3f, {}, 0.0f, 0.0f);
+            material->emissiveFactor = { 0.5f, 0.5f, 0.5f };
+
+            Scene scene;
+            addPlate (scene, material)->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, degreesToRadians (70.0f)));
+            scene.setAmbientColor (Colors::black);
+            scene.setUsingDefaultLight (false);
+            scene.setToneMapping (Scene::ToneMapping::reinhard);
+            setTierForExactFrames (scene, tier);
+
+            SceneRenderer renderer;
+            const auto image = renderToImage (renderer, scene, 64);
+            EXPECT_TRUE (image.isValid()) << renderer.getLastError();
+            return image.isValid() ? centerRadiance (image) : std::array<double, 3> {};
+        };
+
+        const auto bare = render (0.0f);
+        const auto coated = render (1.0f);
+        ASSERT_GT (bare[1], 0.2);
+
+        const auto nDotV = std::cos (degreesToRadians (70.0));
+        const auto expected = 1.0 - (0.04 + 0.96 * std::pow (1.0 - nDotV, 5.0));
+        RecordProperty ("emissionUnderClearcoat", String (coated[1] / bare[1], 4).toStdString());
+
+        for (size_t i = 0; i < 3; ++i)
+            EXPECT_NEAR (coated[i] / bare[i], expected, 0.025) << i;
+    }
+
+    /** On @p tier, a clearcoat reflects a reflection probe and leaves the environment only the share
+        the probe leaves: a clearcoated floor whose base reflects nothing (black, no specular), in
+        buildMirrorFloorScene() under a red sky, shows the red sky in its coat without a probe. With
+        a probe it shows the green emitter above the frustum, which only the probe sees, instead.
+    */
+    void checkClearcoatReflectsTheProbe (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setEmitterColor (scene, { 0.0f, 8.0f, 0.0f });
+        auto& floor = *scene.getRoot()->findChild ("floor")->getNode<MeshNode>()->mesh->getPrimitive (0).material;
+        floor.baseColorFactor = { 0.0f, 0.0f, 0.0f, 1.0f };
+        floor.metallicFactor = 0.0f;
+        floor.roughnessFactor = 1.0f;
+        floor.specularFactor = 0.0f;
+        floor.clearcoatFactor = 1.0f;
+        floor.clearcoatRoughnessFactor = 0.04f;
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 0.0f); }, 32, 3));
+        scene.setAmbientColor (Colors::black);
+        setTierForExactFrames (scene, tier);
+
+        SceneRenderer renderer;
+        const auto before = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (before.isValid()) << renderer.getLastError();
+
+        addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+        const auto after = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (after.isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 1);
+
+        const auto floorBefore = meanColor (before, floorRegion());
+        const auto floorAfter = meanColor (after, floorRegion());
+        RecordProperty ("floorBefore", floorBefore.toString().toStdString());
+        RecordProperty ("floorAfter", floorAfter.toString().toStdString());
+
+        EXPECT_GT (floorBefore.getRed(), floorBefore.getGreen() + 20); // The coat reflects the red sky
+        EXPECT_GT (floorAfter.getGreen(), floorBefore.getGreen() + 20); // then the emitter through the probe
+        EXPECT_LT (floorAfter.getRed(), floorBefore.getRed() - 20);     // and the sky no more where the probe weighs 1
     }
 
     GpuDevice::Ptr device;
@@ -9473,6 +10204,16 @@ TEST_P (SceneRendererTierTests, AreaLightsStayFinite)
     checkAreaLightsStayFinite (GetParam());
 }
 
+TEST_P (SceneRendererTierTests, LayeredAreaLightsStayFinite)
+{
+    checkAreaLightsStayFinite (GetParam(), true);
+}
+
+TEST_P (SceneRendererTierTests, LayersUnderATinyAreaLightMatchPunctual)
+{
+    checkLayersUnderATinyAreaLightMatchPunctual (GetParam());
+}
+
 TEST_P (SceneRendererTierTests, LargeLowSphereLightDiffuseIsExact)
 {
     // A sphere light of angular radius 25 degrees, its center 17 degrees over a diffuse-only plate:
@@ -11313,6 +12054,183 @@ TEST_F (SceneRendererMetalTests, VolumeBakeUniformPoolStaysSmall)
     EXPECT_LE (unwaited.second, static_cast<size_t> (16 * 1024 * 1024));
 }
 
+TEST_P (SceneRendererTierTests, ClearcoatAddsASharpHighlightOnARoughBase)
+{
+    checkClearcoatAddsASharpHighlightOnARoughBase (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, SheenBrightensGrazingEdges)
+{
+    checkSheenBrightensGrazingEdges (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, SheenPassesTheWhiteFurnaceTest)
+{
+    checkSheenPassesTheWhiteFurnaceTest (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, LayeredVariantFollowsTheMaterials)
+{
+    checkLayeredVariantFollowsTheMaterials (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FailedLayersVariantShadesWithoutTheLayers)
+{
+    checkFailedLayersVariantShadesWithoutTheLayers (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, SheenOverAWhiteBaseKeepsTheEnergy)
+{
+    checkSheenOverAWhiteBaseKeepsTheEnergy (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ClearcoatDimsTheEmission)
+{
+    checkClearcoatDimsTheEmission (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ClearcoatReflectsTheProbe)
+{
+    checkClearcoatReflectsTheProbe (GetParam());
+}
+
+TEST_F (SceneRendererMetalTests, BlendedLayeredItemShadesOnFull)
+{
+    // The full forward pass shades blended items, and always compiles the layers: a half transparent
+    // plate with a clearcoat, under the head-on sun and a sky, gains the coat's highlight there, and
+    // stays finite. The lighting pass shades no layer, the plate being its only item
+    const auto render = [this] (float clearcoat, GpuTexture::Ptr* sceneColor)
+    {
+        auto material = makeLayeredMaterial ({ 0.5f, 0.5f, 0.5f }, clearcoat, 0.2f, {}, 0.0f);
+        material->baseColorFactor[3] = 0.5f;
+        material->alphaMode = Material::AlphaMode::blend;
+
+        Scene scene;
+        addPlate (scene, material);
+        scene.setAmbientColor (Colors::black);
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& d) { return Vector3<float> (0.2f, 0.2f, 0.2f) * (d.getY() * 0.5f + 0.5f); }, 32, 3));
+        setFullTierTaa (scene, 1);
+
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        sun->attach<LightNode>().intensity = 3.0f;
+        scene.getRoot()->addChild (sun);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        EXPECT_FALSE (renderer.getLightingPass() != nullptr && renderer.getLightingPass()->usesMaterialLayers());
+
+        if (sceneColor != nullptr)
+            *sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+
+        return image;
+    };
+
+    GpuTexture::Ptr sceneColor;
+    const auto bare = render (0.0f, nullptr);
+    const auto coated = render (1.0f, &sceneColor);
+    ASSERT_TRUE (bare.isValid() && coated.isValid());
+
+    const auto bareLuminance = meanLuminance (bare, { 28, 28, 8, 8 });
+    const auto coatedLuminance = meanLuminance (coated, { 28, 28, 8, 8 });
+    RecordProperty ("bare", String (bareLuminance, 1).toStdString());
+    RecordProperty ("coated", String (coatedLuminance, 1).toStdString());
+    EXPECT_GT (coatedLuminance, bareLuminance + 10.0);
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    ASSERT_NE (sceneColor, nullptr);
+    EXPECT_TRUE (isFiniteTexture (sceneColor));
+    EXPECT_FALSE (isSaturatedTexture (sceneColor));
+#endif
+}
+
+TEST_F (SceneRendererMetalTests, ClearcoatShadesAlikeOnBothTiers)
+{
+    // A clearcoated sphere without a normal map, where the clearcoat normal of both tiers is the
+    // surface normal, under the head-on sun and a sky: its direct and indirect lobes. The tolerance
+    // of 6 levels is T7's tier parity one (the full tier's shading normal and the raster MSAA)
+    const auto render = [this] (RenderSettings::TierPreference tier, float clearcoat)
+    {
+        Scene scene;
+        addSphere (scene, 1.5f, makeLayeredMaterial ({ 0.6f, 0.1f, 0.1f }, clearcoat, 0.3f, {}, 0.0f));
+        scene.setAmbientColor (Colors::black);
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& direction)
+        {
+            const auto up = jlimit (0.0f, 1.0f, direction.getY() * 0.5f + 0.5f);
+            return Vector3<float> (0.1f, 0.1f, 0.1f) + Vector3<float> (1.0f, 1.2f, 1.5f) * up;
+        }, 32, 3));
+        setTierForExactFrames (scene, tier);
+
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        sun->attach<LightNode>().intensity = 2.0f;
+        scene.getRoot()->addChild (sun);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 128);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    };
+
+    const auto raster = render (RenderSettings::TierPreference::raster, 1.0f);
+    const auto full = render (RenderSettings::TierPreference::full, 1.0f);
+    const auto uncoated = render (RenderSettings::TierPreference::raster, 0.0f);
+    ASSERT_TRUE (raster.isValid() && full.isValid() && uncoated.isValid());
+
+    // The highlight, the lit body, the upper and lower grazing edges reflecting the sky and the ground
+    const Rectangle<int> regions[] = { { 60, 60, 8, 8 }, { 80, 56, 8, 16 }, { 60, 24, 8, 6 }, { 60, 98, 8, 6 } };
+    auto coatChanges = 0;
+
+    for (const auto& region : regions)
+    {
+        const auto expected = meanColor (raster, region);
+        const auto actual = meanColor (full, region);
+        RecordProperty (("raster" + region.toString()).toStdString(), expected.toString().toStdString());
+        RecordProperty (("full" + region.toString()).toStdString(), actual.toString().toStdString());
+
+        EXPECT_NEAR (actual.getRed(), expected.getRed(), 6) << region.toString();
+        EXPECT_NEAR (actual.getGreen(), expected.getGreen(), 6) << region.toString();
+        EXPECT_NEAR (actual.getBlue(), expected.getBlue(), 6) << region.toString();
+
+        // Not vacuous: the clearcoat changes the region
+        const auto bare = meanColor (uncoated, region);
+        RecordProperty (("uncoated" + region.toString()).toStdString(), bare.toString().toStdString());
+        coatChanges += std::abs (expected.getGreen() - bare.getGreen()) > 10 ? 1 : 0;
+    }
+
+    // The highlight and the sky reflected at the upper edge, at least
+    EXPECT_GE (coatChanges, 2);
+}
+
+TEST_F (SceneRendererMetalTests, MaterialLayerChangesRestartAccumulation)
+{
+    // Preflight R11: each clearcoat and sheen field shows on the full tier once converged
+    const std::pair<const char*, std::function<void (Material&)>> changes[] = {
+        { "clearcoatFactor", [] (Material& material) { material.clearcoatFactor = 0.25f; } },
+        { "clearcoatRoughnessFactor", [] (Material& material) { material.clearcoatRoughnessFactor = 0.6f; } },
+        { "sheenColorFactor", [] (Material& material) { material.sheenColorFactor[1] = 0.5f; } },
+        { "sheenRoughnessFactor", [] (Material& material) { material.sheenRoughnessFactor = 0.9f; } },
+    };
+
+    for (const auto& [name, change] : changes)
+    {
+        auto material = makeLayeredMaterial ({ 0.5f, 0.5f, 0.5f }, 1.0f, 0.2f, { 1.0f, 1.0f, 1.0f }, 0.3f);
+
+        Scene scene;
+        addPlate (scene, material);
+        setFullTierTaa (scene, 4);
+
+        SceneRenderer renderer;
+        for (int i = 0; i < 4; ++i)
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        ASSERT_TRUE (renderer.isConverged()) << name;
+
+        change (*material);
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_FALSE (renderer.isConverged()) << name;
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P (SceneRendererTiers,
                           SceneRendererTierTests,
                           ::testing::Values (RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full),
@@ -11885,6 +12803,7 @@ protected:
         BoundingBox bounds;
         EntityNode* modelRoot = nullptr;
         EntityNode* cameraEntity = nullptr;
+        std::vector<Material::Ptr> materials; // the model's
         Vector3<float> modelPosition;
         float cameraDistance = 0.0f;
         bool moveModel = false;
@@ -11904,6 +12823,7 @@ protected:
 
             auto root = model.getReference().createEntity();
             scene.getRoot()->addChild (root);
+            materials = model.getReference().getMaterials();
 
             auto* device = root->findChild ("Cube");
             auto* framed = device != nullptr ? device : root.get();
@@ -12060,6 +12980,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         bool ambientOcclusion = true; // follows the tier default when true, off otherwise
         bool probes = false;          // a box probe around the model and a sphere probe inside it
         bool volume = false;          // a 6 x 2 x 4 irradiance volume around the model
+        bool layers = false;          // a clearcoat on the knob caps and a sheen on the pad rubber
     } configs[] = {
         { "full show64", RenderSettings::TierPreference::full, 64, 0.5f },
         { "raster show64", RenderSettings::TierPreference::raster, 64, 0.5f },
@@ -12079,6 +13000,8 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         { "raster show64 two probes", RenderSettings::TierPreference::raster, 64, 0.5f, false, 0.0f, false, true, true, true },
         { "full show64 one volume", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, true, true, false, true },
         { "raster show64 one volume", RenderSettings::TierPreference::raster, 64, 0.5f, false, 0.0f, false, true, true, false, true },
+        { "full show64 layered materials", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, true, true, false, false, true },
+        { "raster show64 layered materials", RenderSettings::TierPreference::raster, 64, 0.5f, false, 0.0f, false, true, true, false, false, true },
     };
 
     for (const auto& [width, height] : { std::pair { 2560, 1600 }, std::pair { 3456, 2234 } })
@@ -12142,6 +13065,21 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
                     volume.resolutionZ = 4;
                     entity->setPosition (bounds.getCenter());
                     show.scene.getRoot()->addChild (entity);
+                }
+
+                // Shared by every primitive drawn with them, so the knobs and the pads change everywhere
+                for (const auto& material : config.layers ? show.materials : std::vector<Material::Ptr>())
+                {
+                    if (material->name == "Knob Cap")
+                    {
+                        material->clearcoatFactor = 1.0f;
+                        material->clearcoatRoughnessFactor = 0.1f;
+                    }
+                    else if (material->name == "Pad Rubber")
+                    {
+                        material->sheenColorFactor = { 0.8f, 0.8f, 0.8f };
+                        material->sheenRoughnessFactor = 0.5f;
+                    }
                 }
 
                 auto shadowRedraws = 0;
@@ -12361,6 +13299,16 @@ TEST_F (SceneRendererGLTests, AreaLightRadiusWidensTheHighlightAndStaysFinite)
 {
     checkRadiusWidensTheHighlight (RenderSettings::TierPreference::raster);
     checkAreaLightsStayFinite (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, LayeredAreaLightsStayFinite)
+{
+    checkAreaLightsStayFinite (RenderSettings::TierPreference::raster, true);
+}
+
+TEST_F (SceneRendererGLTests, LayersUnderATinyAreaLightMatchPunctual)
+{
+    checkLayersUnderATinyAreaLightMatchPunctual (RenderSettings::TierPreference::raster);
 }
 
 TEST_F (SceneRendererGLTests, ShadowedRegionIsFinite)
@@ -12711,5 +13659,45 @@ TEST_F (SceneRendererGLTests, ChangedVolumeBakesAgainWhole)
 TEST_F (SceneRendererGLTests, FailedProbeCapturesLeaveTheVolumesLighting)
 {
     checkFailedProbeCapturesLeaveTheVolumesLighting (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ClearcoatAddsASharpHighlightOnARoughBase)
+{
+    checkClearcoatAddsASharpHighlightOnARoughBase (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, SheenBrightensGrazingEdges)
+{
+    checkSheenBrightensGrazingEdges (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, SheenPassesTheWhiteFurnaceTest)
+{
+    checkSheenPassesTheWhiteFurnaceTest (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, LayeredVariantFollowsTheMaterials)
+{
+    checkLayeredVariantFollowsTheMaterials (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, FailedLayersVariantShadesWithoutTheLayers)
+{
+    checkFailedLayersVariantShadesWithoutTheLayers (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, SheenOverAWhiteBaseKeepsTheEnergy)
+{
+    checkSheenOverAWhiteBaseKeepsTheEnergy (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ClearcoatDimsTheEmission)
+{
+    checkClearcoatDimsTheEmission (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ClearcoatReflectsTheProbe)
+{
+    checkClearcoatReflectsTheProbe (RenderSettings::TierPreference::raster);
 }
 #endif

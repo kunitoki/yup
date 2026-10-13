@@ -92,6 +92,11 @@ struct YUP_API LightingInputs
     */
     static bool hasAreaLights (Span<const SceneDrawList::Light> lights) noexcept;
 
+    /** True when an item of @p items is drawn with a material that has a clearcoat or a sheen
+        (GpuSceneData::hasLayers()): the frame then shades with the variants compiling the layers.
+    */
+    static bool hasMaterialLayers (Span<const SceneDrawList::DrawItem> items) noexcept;
+
     /** True when the frame shades with reflection probes (Block::probeInfo y). */
     bool hasReflectionProbes() const noexcept { return block.probeInfo[1] > 0.5f; }
 
@@ -114,6 +119,7 @@ struct YUP_API LightingInputs
     FrameResources::Samplers samplers;   ///< The shared set 0 samplers, from FrameResources::getSamplers().
     bool areaLights = false;             ///< hasAreaLights() of the lights: the passes shade with their area light variant.
     bool shadowFilters = false;          ///< ShadowRenderer::needsShadowFilters(): the passes shade with their shadow filter variant (soft shadows, and contact shadows in LightingPass), and bind the raw depth maps.
+    bool materialLayers = false;         ///< hasMaterialLayers() of the items the pass shades: the raster ForwardPass and LightingPass shade with their local indirect layers variant (YUP_3D_LAYERS), the only one compiling the clearcoat and sheen layers (the full ForwardPass always compiles them).
     std::vector<GpuLight> packedLights;  ///< Every light, directional ones first.
     std::vector<uint32> packedSlots;     ///< For each SceneDrawList::getLights() index, its slot in packedLights.
     GpuBuffer::Ptr lights;               ///< Full tier: packedLights in a storage buffer (set 1 binding 6).

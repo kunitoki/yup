@@ -51,6 +51,19 @@ constexpr uint8_t lightingPassAreaLightsSoftShadowsLocalIndirectShaderBundle[] =
 #include "../shaders/yup_LightingPass_full_area_lights_soft_shadows_local_indirect.inc"
 };
 
+constexpr uint8_t lightingPassLocalIndirectLayersShaderBundle[] = {
+#include "../shaders/yup_LightingPass_full_local_indirect_layers.inc"
+};
+constexpr uint8_t lightingPassAreaLightsLocalIndirectLayersShaderBundle[] = {
+#include "../shaders/yup_LightingPass_full_area_lights_local_indirect_layers.inc"
+};
+constexpr uint8_t lightingPassSoftShadowsLocalIndirectLayersShaderBundle[] = {
+#include "../shaders/yup_LightingPass_full_soft_shadows_local_indirect_layers.inc"
+};
+constexpr uint8_t lightingPassAreaLightsSoftShadowsLocalIndirectLayersShaderBundle[] = {
+#include "../shaders/yup_LightingPass_full_area_lights_soft_shadows_local_indirect_layers.inc"
+};
+
 // The bundle of each variant, indexed by getVariantIndex()
 const std::pair<const uint8_t*, size_t> lightingPassShaderBundles[] = {
     { lightingPassShaderBundle, sizeof (lightingPassShaderBundle) },
@@ -61,11 +74,16 @@ const std::pair<const uint8_t*, size_t> lightingPassShaderBundles[] = {
     { lightingPassAreaLightsLocalIndirectShaderBundle, sizeof (lightingPassAreaLightsLocalIndirectShaderBundle) },
     { lightingPassSoftShadowsLocalIndirectShaderBundle, sizeof (lightingPassSoftShadowsLocalIndirectShaderBundle) },
     { lightingPassAreaLightsSoftShadowsLocalIndirectShaderBundle, sizeof (lightingPassAreaLightsSoftShadowsLocalIndirectShaderBundle) },
+    { lightingPassLocalIndirectLayersShaderBundle, sizeof (lightingPassLocalIndirectLayersShaderBundle) },
+    { lightingPassAreaLightsLocalIndirectLayersShaderBundle, sizeof (lightingPassAreaLightsLocalIndirectLayersShaderBundle) },
+    { lightingPassSoftShadowsLocalIndirectLayersShaderBundle, sizeof (lightingPassSoftShadowsLocalIndirectLayersShaderBundle) },
+    { lightingPassAreaLightsSoftShadowsLocalIndirectLayersShaderBundle, sizeof (lightingPassAreaLightsSoftShadowsLocalIndirectLayersShaderBundle) },
 };
 
-size_t getVariantIndex (bool areaLights, bool shadowFilters, bool localIndirect) noexcept
+// The layers variants are local indirect variants too
+size_t getVariantIndex (bool areaLights, bool shadowFilters, bool localIndirect, bool layers) noexcept
 {
-    return (areaLights ? 1u : 0u) + (shadowFilters ? 2u : 0u) + (localIndirect ? 4u : 0u);
+    return (areaLights ? 1u : 0u) + (shadowFilters ? 2u : 0u) + (layers ? 8u : (localIndirect ? 4u : 0u));
 }
 
 } // namespace
@@ -76,7 +94,7 @@ LightingPass::LightingPass() = default;
 LightingPass::~LightingPass() = default;
 
 //==============================================================================
-Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters, bool localIndirect)
+Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters, bool localIndirect, bool layers)
 {
     if (! defaults)
     {
@@ -93,14 +111,17 @@ Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, boo
     if (defaults->failed())
         return *defaults;
 
-    const auto index = getVariantIndex (areaLights, shadowFilters, localIndirect);
+    const auto index = getVariantIndex (areaLights, shadowFilters, localIndirect || layers, layers);
     auto& variant = variants[index];
     if (! variant.prepared)
     {
         const auto& [data, size] = lightingPassShaderBundles[index];
-        variant.prepared = localIndirect && localIndirectFailsForTesting
-                             ? Result::fail ("The local indirect variant failed for testing")
-                             : variant.pass.prepare (device, data, size, GpuTextureFormat::rgba16float);
+        if ((localIndirect || layers) && localIndirectFailsForTesting)
+            variant.prepared = Result::fail ("The local indirect variant failed for testing");
+        else if (layers && layersFailForTesting)
+            variant.prepared = Result::fail ("The layers variant failed for testing");
+        else
+            variant.prepared = variant.pass.prepare (device, data, size, GpuTextureFormat::rgba16float);
     }
 
     return *variant.prepared;
@@ -109,20 +130,34 @@ Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, boo
 bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, const GBufferPass::Targets& gbuffer,
                            const LightingInputs& lighting, const GpuTexture::Ptr& sceneColor)
 {
-    // The frames with reflection probes or irradiance volumes shade with the local indirect variant, the only one reading them
-    auto localIndirect = lighting.hasReflectionProbes() || lighting.hasIrradianceVolumes();
+    // The frames with reflection probes or irradiance volumes shade with the local indirect variant,
+    // the only one reading them, and the frames with layered opaque materials with its layers
+    // variant, the only one shading the clearcoat and the sheen
+    auto layers = lighting.materialLayers;
+    auto localIndirect = layers || lighting.hasReflectionProbes() || lighting.hasIrradianceVolumes();
     auto shadowFilters = lighting.shadowFilters;
-    auto prepared = prepare (device, lighting.areaLights, shadowFilters, localIndirect);
+    auto prepared = prepare (device, lighting.areaLights, shadowFilters, localIndirect, layers);
     usedLocalIndirect = false;
+    usedLayers = false;
 
-    // Without its local indirect variant, the frame shades without reflection probes and irradiance volumes
+    // Without its layers variant, the frame shades the materials without their layers
+    if (prepared.failed() && layers)
+    {
+        if (! std::exchange (layersFailureReported, true))
+            YUP_DBG ("LightingPass: the material layers variant " << (shadowFilters ? "with shadow filters " : "") << "is unavailable, shading without clearcoat and sheen: " << prepared.getErrorMessage());
+
+        layers = false;
+        prepared = prepare (device, lighting.areaLights, shadowFilters, localIndirect, false);
+    }
+
+    // Without its local indirect variant, the frame shades without reflection probes, irradiance volumes and material layers
     if (prepared.failed() && localIndirect)
     {
         if (! std::exchange (localIndirectFailureReported, true))
-            YUP_DBG ("LightingPass: the local indirect variant " << (shadowFilters ? "with shadow filters " : "") << "is unavailable, shading without reflection probes and irradiance volumes: " << prepared.getErrorMessage());
+            YUP_DBG ("LightingPass: the local indirect variant " << (shadowFilters ? "with shadow filters " : "") << "is unavailable, shading without reflection probes, irradiance volumes and material layers: " << prepared.getErrorMessage());
 
         localIndirect = false;
-        prepared = prepare (device, lighting.areaLights, shadowFilters, false);
+        prepared = prepare (device, lighting.areaLights, shadowFilters, false, false);
     }
 
     // Without its shadow filter variant the frame shades hard shadows and no contact shadows: the
@@ -134,10 +169,10 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
 
         shadowFiltersFailureReported = true;
         shadowFilters = false;
-        prepared = prepare (device, lighting.areaLights, false, localIndirect);
+        prepared = prepare (device, lighting.areaLights, false, localIndirect, layers);
     }
 
-    auto& variant = variants[getVariantIndex (lighting.areaLights, shadowFilters, localIndirect)];
+    auto& variant = variants[getVariantIndex (lighting.areaLights, shadowFilters, localIndirect, layers)];
     if (prepared.failed() || sceneColor == nullptr
         || gbuffer.albedoOcclusion == nullptr || gbuffer.normalRoughness == nullptr || gbuffer.emissionMaterial == nullptr || gbuffer.depth == nullptr
         || lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.materials == nullptr
@@ -147,6 +182,7 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
         return false;
 
     usedLocalIndirect = localIndirect;
+    usedLayers = layers;
 
     // Every pixel is written, so the scene color needs no clear
     return variant.pass.draw (frame, sceneColor, {}, [&] (GpuRenderPass& renderPass)

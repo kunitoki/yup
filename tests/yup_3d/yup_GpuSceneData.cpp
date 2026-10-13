@@ -258,8 +258,10 @@ TEST_F (GpuSceneDataTests, PackLightsKeepsListOrderWithinEachGroup)
 
 TEST_F (GpuSceneDataTests, GpuMaterialLayoutIsStd430)
 {
-    EXPECT_EQ (sizeof (GpuMaterial), 32u);
+    EXPECT_EQ (sizeof (GpuMaterial), 64u);
     EXPECT_EQ (offsetof (GpuMaterial, extended), 16u);
+    EXPECT_EQ (offsetof (GpuMaterial, clearcoat), 32u);
+    EXPECT_EQ (offsetof (GpuMaterial, sheen), 48u);
 }
 
 TEST_F (GpuSceneDataTests, ShadowBlocksAreStd140)
@@ -309,6 +311,75 @@ TEST_F (GpuSceneDataTests, PacksSpecularIorAndEmissiveStrength)
     EXPECT_FLOAT_EQ (packed.extended[1], 5.0f);
     EXPECT_FLOAT_EQ (packed.extended[2], 0.0f);
     EXPECT_FLOAT_EQ (packed.extended[3], 0.0f);
+}
+
+TEST_F (GpuSceneDataTests, PacksNoLayersByDefault)
+{
+    const auto packed = GpuSceneData::packMaterial (Material());
+
+    for (int i = 0; i < 4; ++i)
+    {
+        EXPECT_EQ (packed.clearcoat[i], 0.0f) << i;
+        EXPECT_EQ (packed.sheen[i], 0.0f) << i;
+    }
+
+    EXPECT_FALSE (GpuSceneData::hasLayers (Material()));
+}
+
+TEST_F (GpuSceneDataTests, PacksClearcoatAndSheen)
+{
+    Material material;
+    material.clearcoatFactor = 0.8f;
+    material.clearcoatRoughnessFactor = 0.1f;
+    material.sheenColorFactor = { 0.9f, 0.2f, 0.3f };
+    material.sheenRoughnessFactor = 0.5f;
+
+    const auto packed = GpuSceneData::packMaterial (material);
+    EXPECT_FLOAT_EQ (packed.clearcoat[0], 0.8f);
+    EXPECT_FLOAT_EQ (packed.clearcoat[1], 0.1f);
+    EXPECT_FLOAT_EQ (packed.clearcoat[2], 0.0f);
+    EXPECT_FLOAT_EQ (packed.clearcoat[3], 0.0f);
+    EXPECT_FLOAT_EQ (packed.sheen[0], 0.9f);
+    EXPECT_FLOAT_EQ (packed.sheen[1], 0.2f);
+    EXPECT_FLOAT_EQ (packed.sheen[2], 0.3f);
+    EXPECT_FLOAT_EQ (packed.sheen[3], 0.5f);
+}
+
+TEST_F (GpuSceneDataTests, PackedLayersAreLimitedToTheUnitRange)
+{
+    // The shaders branch on the packed factors: a negative factor packs as no layer
+    Material material;
+    material.clearcoatFactor = -0.5f;
+    material.clearcoatRoughnessFactor = 2.0f;
+    material.sheenColorFactor = { -1.0f, 2.0f, 0.5f };
+    material.sheenRoughnessFactor = -1.0f;
+
+    const auto packed = GpuSceneData::packMaterial (material);
+    EXPECT_EQ (packed.clearcoat[0], 0.0f);
+    EXPECT_EQ (packed.clearcoat[1], 1.0f);
+    EXPECT_EQ (packed.sheen[0], 0.0f);
+    EXPECT_EQ (packed.sheen[1], 1.0f);
+    EXPECT_EQ (packed.sheen[2], 0.5f);
+    EXPECT_EQ (packed.sheen[3], 0.0f);
+}
+
+TEST_F (GpuSceneDataTests, LayeredMaterialsHaveAClearcoatOrASheen)
+{
+    Material clearcoat;
+    clearcoat.clearcoatFactor = 0.25f;
+    EXPECT_TRUE (GpuSceneData::hasLayers (clearcoat));
+
+    Material sheen;
+    sheen.sheenColorFactor[2] = 0.1f;
+    EXPECT_TRUE (GpuSceneData::hasLayers (sheen));
+
+    // Roughness alone, or factors limited to 0, add no layer
+    Material rough;
+    rough.clearcoatRoughnessFactor = 0.5f;
+    rough.sheenRoughnessFactor = 0.5f;
+    rough.clearcoatFactor = -1.0f;
+    rough.sheenColorFactor = { -1.0f, 0.0f, -2.0f };
+    EXPECT_FALSE (GpuSceneData::hasLayers (rough));
 }
 
 TEST_F (GpuSceneDataTests, GpuReflectionProbeLayoutIsStd430)

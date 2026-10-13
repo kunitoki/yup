@@ -830,7 +830,7 @@ TEST_F (GltfModelTests, ShortSpecularColorIsIgnored)
 
 TEST_F (GltfModelTests, RequiredKhrMaterialExtensionsAreSupported)
 {
-    for (const auto* name : { "KHR_materials_emissive_strength", "KHR_materials_ior", "KHR_materials_specular" })
+    for (const auto* name : { "KHR_materials_emissive_strength", "KHR_materials_ior", "KHR_materials_specular", "KHR_materials_clearcoat", "KHR_materials_sheen" })
     {
         auto result = loadJson (triangleJson ({}, String (R"(, "extensionsRequired": [ "$NAME" ], "extensionsUsed": [ "$NAME" ])").replace ("$NAME", name)));
         EXPECT_TRUE (result.wasOk()) << name << ": " << result.getErrorMessage();
@@ -888,6 +888,106 @@ TEST_F (GltfModelTests, IgnoredSpecularTexturesAreReported)
     EXPECT_EQ (result.getReference().getWarnings().size(), 2) << warnings;
     EXPECT_TRUE (warnings.contains ("specularTexture")) << warnings;
     EXPECT_TRUE (warnings.contains ("specularColorTexture")) << warnings;
+}
+
+TEST_F (GltfModelTests, ReadsClearcoatAndSheenFactors)
+{
+    auto result = GltfModel::loadFromFile (getDataDirectory().getChildFile ("clearcoat_sheen.gltf"));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    ASSERT_FALSE (result.getReference().getMaterials().empty());
+
+    const auto& material = *result.getReference().getMaterials()[0];
+    EXPECT_FLOAT_EQ (material.clearcoatFactor, 0.8f);
+    EXPECT_FLOAT_EQ (material.clearcoatRoughnessFactor, 0.1f);
+    EXPECT_FLOAT_EQ (material.sheenColorFactor[0], 0.9f);
+    EXPECT_FLOAT_EQ (material.sheenColorFactor[1], 0.2f);
+    EXPECT_FLOAT_EQ (material.sheenColorFactor[2], 0.3f);
+    EXPECT_FLOAT_EQ (material.sheenRoughnessFactor, 0.5f);
+    EXPECT_TRUE (result.getReference().getWarnings().isEmpty()) << result.getReference().getWarnings().joinIntoString ("\n");
+}
+
+TEST_F (GltfModelTests, RequiredClearcoatAndSheenLoad)
+{
+    // A file that cannot render without the layers lists them as required: they are supported
+    auto result = loadJson (triangleJson (R"(, "material": 0)", R"(,
+        "extensionsUsed": [ "KHR_materials_clearcoat", "KHR_materials_sheen" ],
+        "extensionsRequired": [ "KHR_materials_clearcoat", "KHR_materials_sheen" ],
+        "materials": [ { "extensions": {
+            "KHR_materials_clearcoat": { "clearcoatFactor": 0.5 },
+            "KHR_materials_sheen": { "sheenColorFactor": [ 0.25, 0.5, 1 ] } } } ])"));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    ASSERT_FALSE (result.getReference().getMaterials().empty());
+
+    const auto& material = *result.getReference().getMaterials()[0];
+    EXPECT_FLOAT_EQ (material.clearcoatFactor, 0.5f);
+    EXPECT_FLOAT_EQ (material.sheenColorFactor[2], 1.0f);
+}
+
+TEST_F (GltfModelTests, MaterialsWithoutTheExtensionsKeepDefaults)
+{
+    auto result = GltfModel::loadFromFile (getDataDirectory().getChildFile ("external").getChildFile ("triangle.gltf"));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    ASSERT_FALSE (result.getReference().getMaterials().empty());
+
+    const auto& material = *result.getReference().getMaterials()[0];
+    EXPECT_FLOAT_EQ (material.clearcoatFactor, 0.0f);
+    EXPECT_FLOAT_EQ (material.clearcoatRoughnessFactor, 0.0f);
+    EXPECT_FLOAT_EQ (material.sheenColorFactor[0], 0.0f);
+    EXPECT_FLOAT_EQ (material.sheenColorFactor[1], 0.0f);
+    EXPECT_FLOAT_EQ (material.sheenColorFactor[2], 0.0f);
+    EXPECT_FLOAT_EQ (material.sheenRoughnessFactor, 0.0f);
+}
+
+TEST_F (GltfModelTests, OutOfRangeClearcoatAndSheenValuesAreLimited)
+{
+    // The extension schemas limit every factor to [0, 1]
+    auto result = loadJson (triangleJson (R"(, "material": 0)", R"(,
+        "materials": [ { "extensions": {
+            "KHR_materials_clearcoat": { "clearcoatFactor": 2, "clearcoatRoughnessFactor": -0.5 },
+            "KHR_materials_sheen": { "sheenColorFactor": [ -1, 0.5, 3 ], "sheenRoughnessFactor": 1.5 }
+        } }, { "extensions": {
+            "KHR_materials_clearcoat": { "clearcoatFactor": -1, "clearcoatRoughnessFactor": 1 },
+            "KHR_materials_sheen": { "sheenColorFactor": [ 1, 1 ] }
+        } } ])"));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& materials = result.getReference().getMaterials();
+    ASSERT_EQ (materials.size(), 2u);
+
+    EXPECT_FLOAT_EQ (materials[0]->clearcoatFactor, 1.0f);
+    EXPECT_FLOAT_EQ (materials[0]->clearcoatRoughnessFactor, 0.0f);
+    EXPECT_FLOAT_EQ (materials[0]->sheenColorFactor[0], 0.0f);
+    EXPECT_FLOAT_EQ (materials[0]->sheenColorFactor[1], 0.5f);
+    EXPECT_FLOAT_EQ (materials[0]->sheenColorFactor[2], 1.0f);
+    EXPECT_FLOAT_EQ (materials[0]->sheenRoughnessFactor, 1.0f);
+
+    // A color too short is ignored, as for KHR_materials_specular
+    EXPECT_FLOAT_EQ (materials[1]->clearcoatFactor, 0.0f);
+    EXPECT_FLOAT_EQ (materials[1]->clearcoatRoughnessFactor, 1.0f);
+    EXPECT_FLOAT_EQ (materials[1]->sheenColorFactor[0], 0.0f);
+    EXPECT_FLOAT_EQ (materials[1]->sheenColorFactor[1], 0.0f);
+}
+
+TEST_F (GltfModelTests, IgnoredClearcoatAndSheenTexturesAreReported)
+{
+    auto result = loadJson (triangleJson (R"(, "material": 0)", R"(,
+        "materials": [ { "extensions": {
+            "KHR_materials_clearcoat": { "clearcoatFactor": 1, "clearcoatTexture": { "index": 0 },
+                                         "clearcoatRoughnessTexture": { "index": 0 }, "clearcoatNormalTexture": { "index": 0 } },
+            "KHR_materials_sheen": { "sheenColorTexture": { "index": 0 }, "sheenRoughnessTexture": { "index": 0 } } } } ])"));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto warnings = result.getReference().getWarnings().joinIntoString ("\n");
+    EXPECT_EQ (result.getReference().getWarnings().size(), 5) << warnings;
+
+    for (const auto* name : { "clearcoatTexture", "clearcoatRoughnessTexture", "clearcoatNormalTexture" })
+        EXPECT_TRUE (warnings.contains (String ("the KHR_materials_clearcoat ") + name)) << name << "\n" << warnings;
+
+    for (const auto* name : { "sheenColorTexture", "sheenRoughnessTexture" })
+        EXPECT_TRUE (warnings.contains (String ("the KHR_materials_sheen ") + name)) << name << "\n" << warnings;
+
+    // The factors still apply
+    EXPECT_FLOAT_EQ (result.getReference().getMaterials()[0]->clearcoatFactor, 1.0f);
 }
 
 TEST_F (GltfModelTests, FailsOnMissingFile)
