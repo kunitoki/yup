@@ -102,6 +102,16 @@ struct ForwardLightListBlock
 
 static_assert (sizeof (ForwardLightListBlock) == 528);
 
+// std140 mirror of ProbeListBlock in lib/probes.glsl, the reflection probes of one raster draw,
+// count in x (set 2 binding 13, local indirect variants only)
+struct ForwardProbeListBlock
+{
+    GpuReflectionProbe probes[2];
+    float count[4];
+};
+
+static_assert (sizeof (ForwardProbeListBlock) == 272);
+
 size_t getForwardPipelineIndex (const SceneDrawList::DrawItem& item) noexcept
 {
     return (item.material->alphaMode == Material::AlphaMode::blend ? GeometryBindings::numRasterStates : 0u)
@@ -279,15 +289,16 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     if (! clear.has_value() && opaque.empty() && blend.empty())
         return true;
 
-    // Raster frames with ambient occlusion shade with the local indirect variant, the only one reading it
-    auto localIndirect = targets.velocity == nullptr && lighting.ambientOcclusion != nullptr;
+    // Raster frames with ambient occlusion or reflection probes shade with the local indirect
+    // variant, the only one reading them
+    auto localIndirect = targets.velocity == nullptr && (lighting.ambientOcclusion != nullptr || lighting.hasReflectionProbes());
     auto prepared = prepareVariant (device, targets, sampleCount, lighting.areaLights, lighting.shadowFilters, localIndirect);
 
-    // Without its local indirect variant, the frame shades without ambient occlusion
+    // Without its local indirect variant, the frame shades without ambient occlusion and reflection probes
     if (prepared.failed() && localIndirect)
     {
         if (! localIndirectFailureReported)
-            YUP_DBG ("ForwardPass: the local indirect variant is unavailable, shading without ambient occlusion: " << prepared.getErrorMessage());
+            YUP_DBG ("ForwardPass: the local indirect variant is unavailable, shading without ambient occlusion and reflection probes: " << prepared.getErrorMessage());
 
         localIndirectFailureReported = true;
         localIndirect = false;
@@ -313,11 +324,19 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
         || lighting.shadowCascades == nullptr || lighting.shadowAtlas == nullptr)
         return false;
 
-    if (variant.velocity && (lighting.lights == nullptr || lighting.clusterLights == nullptr || ! opaque.empty()))
+    if (variant.velocity && (lighting.lights == nullptr || lighting.clusterLights == nullptr || lighting.reflectionProbeBuffer == nullptr || ! opaque.empty()))
     {
         jassert (opaque.empty()); // The full tier shades its opaque items through GBufferPass and LightingPass
         return false;
     }
+
+    // The reflection atlas stands in black without probes, in the variants reading it
+    const auto readsProbes = variant.velocity || variant.localIndirect;
+    if (readsProbes && lighting.reflectionAtlas == nullptr && blackTexture == nullptr)
+        blackTexture = GeometryBindings::createSolidTexture (device, 0x000000ff);
+
+    if (readsProbes && lighting.reflectionAtlas == nullptr && blackTexture == nullptr)
+        return false;
 
     if (surface == nullptr || surface->asTexture() != targets.color)
         surface = GpuTarget::createFromTexture (device, targets.color);
@@ -370,14 +389,29 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
         pass.setTexture (3, 3, lighting.shadowAtlas);
     }
 
+    if (readsProbes)
+        pass.setTexture (0, 8, lighting.reflectionAtlas != nullptr ? lighting.reflectionAtlas : blackTexture);
+
     if (variant.velocity)
     {
         pass.setStorageBuffer (1, 6, lighting.lights);
         pass.setStorageBuffer (1, 7, lighting.clusterLights);
+        pass.setStorageBuffer (1, 8, lighting.reflectionProbeBuffer);
     }
 
+    // Without ambient occlusion white occludes nothing; without probes one empty list serves every draw
+    const auto drawsProbeLists = variant.localIndirect && lighting.hasReflectionProbes();
+
     if (variant.localIndirect)
-        pass.setTexture (1, 13, lighting.ambientOcclusion);
+    {
+        pass.setTexture (1, 13, lighting.ambientOcclusion != nullptr ? lighting.ambientOcclusion : geometry.getWhiteTexture());
+
+        if (! drawsProbeLists)
+        {
+            const ForwardProbeListBlock noProbes {};
+            pass.setUniformBuffer (2, 13, &noProbes, sizeof (noProbes));
+        }
+    }
 
     GpuPipeline* currentPipeline = nullptr;
 
@@ -413,6 +447,19 @@ bool ForwardPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
                 lightList.count[0] = static_cast<float> (item.numLights);
 
                 pass.setUniformBuffer (2, 12, &lightList, sizeof (lightList));
+            }
+
+            if (drawsProbeLists)
+            {
+                ForwardProbeListBlock probeList {};
+                auto numProbes = 0;
+                for (const auto index : item.reflectionProbes)
+                    if (index >= 0 && static_cast<size_t> (index) < lighting.reflectionProbes.size())
+                        probeList.probes[numProbes++] = lighting.reflectionProbes[static_cast<size_t> (index)];
+
+                probeList.count[0] = static_cast<float> (numProbes);
+
+                pass.setUniformBuffer (2, 13, &probeList, sizeof (probeList));
             }
 
             geometry.draw (pass, device, item, 0);

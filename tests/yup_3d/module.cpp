@@ -42,6 +42,7 @@
 #include "yup_Mesh.cpp"
 #include "yup_PostChain.cpp"
 #include "yup_ProbeAtlas.cpp"
+#include "yup_ProbeBaker.cpp"
 #include "yup_ProbeRenderer.cpp"
 #include "yup_ReflectionProbeNode.cpp"
 #include "yup_RenderCapabilities.cpp"

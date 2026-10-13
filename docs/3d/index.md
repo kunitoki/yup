@@ -394,6 +394,62 @@ tells whether it was asked for and is available. It stays true when the device
 fails to create the occlusion targets or shaders at run time, which renders the
 frame without ambient occlusion and logs it once in debug builds.
 
+### Reflection probes
+
+An environment lies infinitely far away, so every surface reflects the same sky.
+A `ReflectionProbeNode` captures the scene itself around a point instead: the
+surfaces near it reflect what really surrounds them, such as the walls of a
+room, the panel around a knob, or a light the camera does not see.
+
+```cpp
+auto probe = yup::EntityNode::Ptr (new yup::EntityNode ("probe"));
+probe->setPosition ({ 0.0f, 1.0f, 0.0f }); // where the scene is captured from
+
+auto& node = probe->attach<yup::ReflectionProbeNode>();
+node.shape = yup::ReflectionProbeNode::Shape::box;
+node.influenceExtents = { 2.0f, 1.0f, 2.0f }; // the room, around the entity
+scene->getRoot()->addChild (probe);
+```
+
+- The influence is a sphere (`influenceRadius`) or a box (`influenceExtents`)
+  centered on the entity, which moves, turns and scales it. Surfaces inside it
+  take their reflections from the probe, fading to the environment over
+  `falloff` towards its border.
+- `parallaxCorrection`, on by default, projects the reflections onto the
+  influence shape, so a box that matches a room keeps the reflections of its
+  walls in place on every surface. Turn it off for a probe over open space.
+- Where influences overlap, the smaller one takes priority, so a small probe
+  inside a large one wins near what it encloses. A surface blends at most two
+  probes, and the environment takes what they leave; without an environment
+  that share reflects black. On the raster tier each object picks its two
+  probes as a whole, from the influences its bounds touch: split large objects,
+  such as a long floor, that span more than two probes.
+- Probes replace the environment's reflections only: the diffuse light still
+  comes from the environment and the ambient color. `intensity` scales the
+  captured light.
+- A capture renders the scene from the entity's origin as the raster tier does,
+  without exposure or tone mapping, with the environment behind it and hard
+  shadows, but without ambient occlusion or the other probes. The sun's shadow
+  covers the whole scene; point and spot light shadows are drawn at a low
+  resolution. Its faces are 128 pixels wide; `clipNear` keeps nearby geometry
+  out of it, up to half the capture's far plane.
+
+A probe is captured again when:
+
+- it is attached, or `ReflectionProbeNode::requestBake()` is called;
+- one of its own fields or its entity's transform changes;
+- `SceneRenderer::bakeProbes()` finds it never baked.
+
+Changes to the rest of the scene never capture it again by themselves, so the
+reflections show the scene as it was: call `requestBake()` after editing what
+surrounds the probe. Each capture costs six renders of the scene plus filtering.
+`render()` captures the pending probes at the start of the frame; call
+`bakeProbes (device, scene)` beforehand, for example behind a loading screen, to
+move that cost. On the full tier at most 64 probes shade a frame, the largest
+ones being left out beyond that. A capture the device cannot draw never fails a
+frame: the probe reflects nothing meanwhile, and after two failures in a row the
+renderer stops capturing until `bakeProbes()` is called again.
+
 ## Lights and shadows
 
 Set `castsShadows` on any `LightNode` to make it cast shadows of the opaque

@@ -33,8 +33,11 @@
 #define YUP_3D_CONTACT_SHADOWS
 #endif
 
-// The opaque surfaces read the ambient occlusion (lib/probes.glsl)
+// The opaque surfaces read the ambient occlusion and the reflection probes (lib/probes.glsl), these
+// from set 1 binding 14
 #define YUP_3D_AMBIENT_OCCLUSION
+#define YUP_3D_REFLECTION_PROBES
+#define YUP_3D_REFLECTION_PROBES_BINDING 14
 
 #include "lib/color.glsl"
 #include "lib/view.glsl"

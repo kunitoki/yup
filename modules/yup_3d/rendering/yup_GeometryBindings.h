@@ -31,9 +31,10 @@ namespace yup
     Set 2 holds the DrawBlock (binding 0, lib/geometry.glsl), the MaterialBlock (binding 1,
     lib/material.glsl), and the five material textures (bindings 2-6) with their samplers
     (bindings 7-11). Missing textures are replaced by white, or by a flat normal for the normal
-    texture. The raster ForwardPass adds its LightListBlock at binding 12.
+    texture. The raster ForwardPass adds its LightListBlock at binding 12, and in its local indirect
+    variants its ProbeListBlock at binding 13.
 
-    The DrawBlock, the MaterialBlock and the LightListBlock are dynamic uniform buffers (see
+    The DrawBlock, the MaterialBlock, the LightListBlock and the ProbeListBlock are dynamic uniform buffers (see
     GpuPipelineOptions::dynamicUniformBuffers): a draw only moves their offsets, so set 2 is built
     again only when the textures or samplers change, or when the frame's uniform buffer fills up.
     Pipelines whose shaders lack some of these blocks, such as the shadow pass, ignore them.

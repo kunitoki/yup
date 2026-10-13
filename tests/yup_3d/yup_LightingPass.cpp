@@ -99,11 +99,11 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
 {
     using Bindings = std::vector<std::pair<uint32_t, uint32_t>>;
 
-    // Set 0 holds the shared lookups: the environment cube and, in every variant, the lookup tables,
-    // both read through linearClamp, and the shadow comparison sampler (bindings 11 and 14 are
-    // spare). Set 1 holds RT0-RT2 and the depth, keeping their binding numbers, then the ambient
-    // occlusion (13), and set 3 the sun cascades and the point and spot light atlas, each compared
-    // (0, 2), and read raw (1, 3) by the shadow filter variants only
+    // Set 0 holds the shared lookups: the environment cube, in every variant the lookup tables and
+    // the reflection atlas (8), all read through linearClamp, and the shadow comparison sampler
+    // (bindings 11 and 14 are spare). Set 1 holds RT0-RT2 and the depth, keeping their binding
+    // numbers, then the ambient occlusion (13), and set 3 the sun cascades and the point and spot
+    // light atlas, each compared (0, 2), and read raw (1, 3) by the shadow filter variants only
     const struct
     {
         const char* name;
@@ -111,10 +111,10 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
         Bindings images;
         Bindings samplers;
     } variants[] = {
-        { "punctual", lightingPass(), { { 0, 6 }, { 0, 7 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 2 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
-        { "area lights", lightingPassAreaLights(), { { 0, 6 }, { 0, 7 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 2 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
-        { "shadow filters", lightingPassSoftShadows(), { { 0, 6 }, { 0, 7 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
-        { "area lights, shadow filters", lightingPassAreaLightsSoftShadows(), { { 0, 6 }, { 0, 7 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
+        { "punctual", lightingPass(), { { 0, 6 }, { 0, 7 }, { 0, 8 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 2 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
+        { "area lights", lightingPassAreaLights(), { { 0, 6 }, { 0, 7 }, { 0, 8 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 2 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
+        { "shadow filters", lightingPassSoftShadows(), { { 0, 6 }, { 0, 7 }, { 0, 8 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
+        { "area lights, shadow filters", lightingPassAreaLightsSoftShadows(), { { 0, 6 }, { 0, 7 }, { 0, 8 }, { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } }, { { 0, 1 }, { 0, 3 }, { 0, 4 } } },
     };
 
     for (const auto& variant : variants)
@@ -138,8 +138,8 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
         EXPECT_LE (texturesPerSet[1], 8) << variant.name;
         EXPECT_LE (texturesPerSet[3], 8) << variant.name;
 
-        // The lights, the light lists of the clusters and the material table, read only
-        EXPECT_EQ (bindingsOf (fragment->storageBuffers), (Bindings { { 1, 6 }, { 1, 7 }, { 1, 8 } })) << variant.name;
+        // The lights, the light lists of the clusters, the material table and the reflection probes, read only
+        EXPECT_EQ (bindingsOf (fragment->storageBuffers), (Bindings { { 1, 6 }, { 1, 7 }, { 1, 8 }, { 1, 14 } })) << variant.name;
         for (const auto& buffer : fragment->storageBuffers)
             EXPECT_TRUE (buffer.readOnly) << variant.name << ": " << buffer.name;
     }

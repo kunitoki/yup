@@ -66,7 +66,11 @@ LightsLookup lightsLookup(BsdfSurface s)
     LightsLookup lookup = LightsLookup(lightsLookupCoordinates(s), vec2(0.0));
 
 #ifndef YUP_3D_AREA_LIGHTS
+#ifdef YUP_3D_REFLECTION_PROBES
+    if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0)
+#else
     if (lighting.environmentInfo.x > 0.0)
+#endif
 #endif
     {
         lookup.lobe = textureLod(sampler2DArray(lookupLuts, linearClamp), vec3(lookup.uv, 1.0), 0.0).xy;
@@ -400,7 +404,10 @@ vec3 lightsShade(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 ge
 // The shaders reading the ambient occlusion (YUP_3D_AMBIENT_OCCLUSION) also pass the world-space
 // @p bentNormal, along which the diffuse light of the environment is evaluated (the surface normal
 // without ambient occlusion). The others keep the signature without it, so their compiled code is
-// exactly what it was before ambient occlusion
+// exactly what it was before ambient occlusion.
+// The shaders shading the reflection probes (YUP_3D_REFLECTION_PROBES) take the reflections at
+// @p worldPosition from the probes first (specularIndirect, lib/probes.glsl), the environment
+// taking the share they leave
 #ifdef YUP_3D_AMBIENT_OCCLUSION
 vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal, vec3 bentNormal, float diffuseOcclusion, float specularOcclusion)
 #else
@@ -409,7 +416,11 @@ vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3
 {
     vec3 color = lighting.ambient.rgb * (s.diffuseColor * bsdfDiffuseWeight(s.dielectricF0) * diffuseOcclusion + s.f0 * specularOcclusion);
 
+#ifdef YUP_3D_REFLECTION_PROBES
+    if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0)
+#else
     if (lighting.environmentInfo.x > 0.0)
+#endif
     {
         // The filtered roughness, so the reflections blur where the highlights do
         float environmentRoughness = sqrt(sqrt(s.alpha2));
@@ -426,8 +437,26 @@ vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3
 #else
         vec3 diffuse = s.diffuseColor * irradiance * bsdfEnvironmentDiffuseWeight(s, lookup.lobe);
 #endif
+#ifdef YUP_3D_REFLECTION_PROBES
+        // The reflection probes take their share of the specular light first, in selection order,
+        // with their own intensity; the environment, scaled by its intensity below, takes the rest.
+        // Both keep the multiple scattering compensation of their share, the probes' over their
+        // prefiltered radiance (preflight R23). Without a probe the shares are exactly 1 and 0, so
+        // the frame shades as without them
+        float environmentWeight = 1.0;
+        vec3 probes = vec3(0.0);
+        if (lighting.probeInfo.y > 0.0)
+            probes = specularIndirect(worldPosition, r, environmentRoughness, environmentWeight);
+
+        vec3 multiple = bsdfMultipleScattering(s, lookup.lobe, specularWeight);
+        vec3 specular = environmentRadiance(r, environmentRoughness) * environmentWeight * specularWeight * (horizon * horizon)
+                      + irradiance * multiple * environmentWeight;
+
+        color += probes * (specularWeight * (horizon * horizon) + multiple) * specularOcclusion;
+#else
         vec3 specular = environmentRadiance(r, environmentRoughness) * specularWeight * (horizon * horizon)
                       + irradiance * bsdfMultipleScattering(s, lookup.lobe, specularWeight);
+#endif
 
         color += (diffuse * diffuseOcclusion + specular * specularOcclusion) * lighting.environmentInfo.x;
     }

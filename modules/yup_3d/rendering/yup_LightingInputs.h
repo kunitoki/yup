@@ -31,8 +31,9 @@ namespace yup
 
     create() fills everything the scene decides, and packs the lights with the shadow records
     ShadowRenderer gave them. The renderer then sets the shadow maps and records of its
-    ShadowRenderer, the lookup tables it owns for its device and the shared samplers of its
-    FrameResources, and the full tier adds the storage buffers and the cluster grid
+    ShadowRenderer, the lookup tables it owns for its device, the shared samplers of its
+    FrameResources and the reflection atlas and probes of its ProbeBaker, and the full tier adds
+    the storage buffers and the cluster grid
     (LightClusters::packGrid into Block::clusterGrid and Block::clusterDepth) before the passes draw.
 
     @internal
@@ -48,7 +49,7 @@ struct YUP_API LightingInputs
         float irradiance[9][4];   ///< rgb spherical harmonics coefficients of the environment diffuse light.
         float clusterGrid[4];     ///< Full tier: tiles x, tiles y, depth slices, number of lights.
         float clusterDepth[4];    ///< Full tier: near, far, number of directional lights, 1 for an infinite far plane.
-        float probeInfo[4];       ///< x 1 when the environment, probe and volume textures hold RGBM; y, z reserved; w 1 when the frame has ambientOcclusion (both tiers; LightingPass reads it).
+        float probeInfo[4];       ///< x 1 when the environment, probe and volume textures hold RGBM; y the number of reflection probes of the frame (reflectionProbes or reflectionProbeBuffer); z reserved; w 1 when the frame has ambientOcclusion (both tiers; LightingPass reads it).
     };
 
     //==============================================================================
@@ -91,6 +92,9 @@ struct YUP_API LightingInputs
     */
     static bool hasAreaLights (Span<const SceneDrawList::Light> lights) noexcept;
 
+    /** True when the frame shades with reflection probes (Block::probeInfo y). */
+    bool hasReflectionProbes() const noexcept { return block.probeInfo[1] > 0.5f; }
+
     /** True when the environment shows behind the scene. */
     bool isEnvironmentVisible() const noexcept { return block.ambient[3] > 0.5f; }
 
@@ -113,6 +117,9 @@ struct YUP_API LightingInputs
     GpuBuffer::Ptr clusterLights;        ///< Full tier: the light lists of the clusters (set 1 binding 7).
     GpuBuffer::Ptr materials;            ///< Full tier: the frame's MaterialTable (set 1 binding 8), read by LightingPass.
     GpuTexture::Ptr ambientOcclusion;    ///< The AmbientOcclusionPass output (set 1 binding 13), or nullptr without one. With it the raster ForwardPass shades with its local indirect variant; LightingPass binds white without it.
+    GpuTexture::Ptr reflectionAtlas;     ///< The reflection atlas (set 0 binding 8), ProbeBaker::getReflectionAtlas(), or nullptr without probes: the passes bind black.
+    std::vector<GpuReflectionProbe> reflectionProbes; ///< Raster: every probe of the draw list packed in its order (ProbeBaker::packReflectionProbes()), which each draw picks by SceneDrawList::DrawItem::reflectionProbes into its ProbeListBlock. Empty without probes.
+    GpuBuffer::Ptr reflectionProbeBuffer; ///< Full tier: the probes of the frame by priority (ProbeBaker::packReflectionProbesByPriority()), set 1 binding 14 of LightingPass and 8 of ForwardPass, sized for one probe at least.
 };
 
 static_assert (sizeof (LightingInputs::Block) == 224);

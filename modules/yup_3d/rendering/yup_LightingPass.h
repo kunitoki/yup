@@ -35,8 +35,10 @@ namespace yup
     Set 0 binds the shared samplers and lookups of the LightingInputs: 4 shadowCompare, 6 the
     environment with its sampler at 14, and 7 the lookup tables (LookupTables), read through
     linearClamp at binding 1. Set 1 binds the rest of them: 0 the LightingBlock, 6 the lights, 7 the light lists
-    of the clusters, 8 the material table; then the G-buffer: 9-11 RT0-RT2 and 12 the depth; and 13
-    the ambient occlusion (LightingInputs::ambientOcclusion, or white without it). Set 3
+    of the clusters, 8 the material table; then the G-buffer: 9-11 RT0-RT2 and 12 the depth; 13
+    the ambient occlusion (LightingInputs::ambientOcclusion, or white without it); and 14 the
+    reflection probes of the frame (LightingInputs::reflectionProbeBuffer), whose atlas set 0 binds at
+    8 (black without probes). Set 3
     binds the shadows: 0 the sun cascades, 2 the point and spot light atlas and 4 the ShadowBlock.
     The area light variant (YUP_3D_AREA_LIGHTS) shades the frames where LightingInputs::areaLights
     is set; every variant reads the lookup tables, for the environment.
@@ -95,6 +97,7 @@ private:
     std::array<Variant, 4> variants; // Punctual lights only, then with area lights; then both again with the shadow filters
     GpuTexture::Ptr blackCube; // The environment without one
     GpuTexture::Ptr whiteTexture; // Stands in for the ambient occlusion when there is none
+    GpuTexture::Ptr blackTexture; // Stands in for the reflection atlas without probes
     bool shadowFiltersFailureReported = false; // The shadow filter variant failed to compile, and was logged once
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LightingPass)

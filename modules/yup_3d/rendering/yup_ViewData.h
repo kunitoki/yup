@@ -72,6 +72,17 @@ public:
     */
     void update (const Scene& scene, int widthPx, int heightPx, bool jittered, int taaSamples, uint64 frameIndex);
 
+    /** Sets the matrices of a capture, such as a face of a reflection probe cube: exposure 1, no
+        jitter, frame index 0, no motion (the previous matrix is the current one), and Reinhard
+        (operator 0) for an inline tone mapped output.
+
+        @param viewMatrix        World to view.
+        @param projectionMatrix  The perspective projection, depth 0 to 1, whose clip planes the block keeps.
+        @param position          The world position of the capture.
+        @param size              The width and height of the capture in pixels.
+    */
+    void setCapture (const Matrix4& viewMatrix, const Matrix4& projectionMatrix, Vector3<float> position, int size);
+
     /** Forgets the previous frame: the next update() uses its own matrices as the previous ones. */
     void reset() noexcept;
 

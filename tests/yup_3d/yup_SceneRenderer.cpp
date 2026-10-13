@@ -464,17 +464,17 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
 {
     // The reflection counts what the shaders declare, so the budget check cannot pass on empty
     // lists. The shared lookups (the environment and the lookup tables) live in set 0 in every
-    // variant, set 1 holds the ambient occlusion in the local indirect variants only, and set 3 the
-    // sun cascades and the point and spot light atlas, read with the ShadowBlock. The soft shadow
-    // variants read both maps raw too
-    for (const auto& [name, bundle, textures, passInputs, shadowMaps] : { std::tuple { "ForwardPass", forwardPass(), 9, 0, 2 },
-                                                                          std::tuple { "ForwardPass_area_lights", forwardPassAreaLights(), 9, 0, 2 },
-                                                                          std::tuple { "ForwardPass_soft_shadows", forwardPassSoftShadows(), 11, 0, 4 },
-                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), 11, 0, 4 },
-                                                                          std::tuple { "ForwardPass_local_indirect", forwardPassLocalIndirect(), 10, 1, 2 },
-                                                                          std::tuple { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), 10, 1, 2 },
-                                                                          std::tuple { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), 12, 1, 4 },
-                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), 12, 1, 4 } })
+    // variant, the local indirect variants adding the reflection atlas there, the ambient occlusion
+    // in set 1 and the probe list in set 2; set 3 holds the sun cascades and the point and spot
+    // light atlas, read with the ShadowBlock. The soft shadow variants read both maps raw too
+    for (const auto& [name, bundle, textures, lookups, passInputs, shadowMaps, blocks] : { std::tuple { "ForwardPass", forwardPass(), 9, 2, 0, 2, 5 },
+                                                                                          std::tuple { "ForwardPass_area_lights", forwardPassAreaLights(), 9, 2, 0, 2, 5 },
+                                                                                          std::tuple { "ForwardPass_soft_shadows", forwardPassSoftShadows(), 11, 2, 0, 4, 5 },
+                                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), 11, 2, 0, 4, 5 },
+                                                                                          std::tuple { "ForwardPass_local_indirect", forwardPassLocalIndirect(), 11, 3, 1, 2, 6 },
+                                                                                          std::tuple { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), 11, 3, 1, 2, 6 },
+                                                                                          std::tuple { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), 13, 3, 1, 4, 6 },
+                                                                                          std::tuple { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), 13, 3, 1, 4, 6 } })
     {
         const auto* vertex = bundle.findShader (ShaderStage::vertex, ShaderLanguage::spirv);
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -485,20 +485,21 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
         EXPECT_EQ (countResources (vertex->reflection).sampledImages, 0) << name;
         EXPECT_EQ (countResources (vertex->reflection).uniformBlocks, 2) << name;
         EXPECT_EQ (budget.sampledImages, textures) << name;
-        EXPECT_EQ (budget.uniformBlocks, 5) << name;
-        EXPECT_EQ (budget.texturesPerSet[0], 2) << name;
+        EXPECT_EQ (budget.uniformBlocks, blocks) << name;
+        EXPECT_EQ (budget.texturesPerSet[0], lookups) << name;
         EXPECT_EQ (budget.texturesPerSet[1], passInputs) << name;
         EXPECT_EQ (budget.texturesPerSet[3], shadowMaps) << name;
         EXPECT_EQ (budget.uniformBlocksPerSet[3], 1) << name;
     }
 
     // The full tier geometry bundles: the forward pass without the raster light list, and the G-buffer.
-    // The forward shadow filter variants read the two maps raw too, but never the scene depth (set 1
-    // binding 12): the blended items they draw write none, so they march no contact shadows
-    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 9, 4, 2 },
-                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 9, 4, 2 },
-                                                                   std::tuple { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), 11, 4, 2 },
-                                                                   std::tuple { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), 11, 4, 2 },
+    // The forward pass reads the reflection atlas in set 0 too. Its shadow filter variants read the
+    // two maps raw too, but never the scene depth (set 1 binding 12): the blended items they draw
+    // write none, so they march no contact shadows
+    for (const auto& [name, bundle, textures, blocks, lookups] : { std::tuple { "ForwardPass_full", forwardPassFull(), 10, 4, 3 },
+                                                                   std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 10, 4, 3 },
+                                                                   std::tuple { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), 12, 4, 3 },
+                                                                   std::tuple { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), 12, 4, 3 },
                                                                    std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 1, 0 } })
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
@@ -604,6 +605,61 @@ TEST_F (SceneRendererBundleTests, AmbientOcclusionIsReadByTheRasterForwardPassAn
         EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 1)) << name;
         EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 2)) << name;
         EXPECT_TRUE (declares (fragment->reflection.uniformBuffers, 1, 0)) << name;
+    }
+}
+
+TEST_F (SceneRendererBundleTests, ReflectionProbesAreReadWhereProbesShade)
+{
+    // The reflection atlas at set 0 binding 8, and the probes: on raster the per-draw ProbeListBlock
+    // (set 2 binding 13, two GpuReflectionProbe and a count, 272 bytes) in the local indirect
+    // variants only, so the default bundles carry no probe code; on full a storage buffer of every
+    // probe of the frame, set 1 binding 8 in the forward pass and 14 in the lighting pass
+    enum class Reads { nothing, perDraw, storage };
+
+    const std::tuple<const char*, ShaderBundle, Reads, uint32_t> bundles[] = {
+        { "ForwardPass", forwardPass(), Reads::nothing, 0 },
+        { "ForwardPass_area_lights", forwardPassAreaLights(), Reads::nothing, 0 },
+        { "ForwardPass_soft_shadows", forwardPassSoftShadows(), Reads::nothing, 0 },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), Reads::nothing, 0 },
+        { "Background", background(), Reads::nothing, 0 },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_area_lights_local_indirect", forwardPassAreaLightsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_soft_shadows_local_indirect", forwardPassSoftShadowsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect", forwardPassAreaLightsSoftShadowsLocalIndirect(), Reads::perDraw, 0 },
+        { "ForwardPass_full", forwardPassFull(), Reads::storage, 8 },
+        { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), Reads::storage, 8 },
+        { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), Reads::storage, 8 },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), Reads::storage, 8 },
+        { "LightingPass_full", lightingPassFull(), Reads::storage, 14 },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights(), Reads::storage, 14 },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), Reads::storage, 14 },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), Reads::storage, 14 },
+    };
+
+    for (const auto& [name, bundle, reads, storageBinding] : bundles)
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+
+        const auto& reflection = fragment->reflection;
+        EXPECT_EQ (declares (reflection.separateImages, 0, 8), reads != Reads::nothing) << name;
+
+        const auto& blocks = reflection.uniformBuffers;
+        const auto probeList = std::find_if (blocks.begin(), blocks.end(), [] (const auto& b) { return b.set == 2 && b.binding == 13; });
+        EXPECT_EQ (probeList != blocks.end(), reads == Reads::perDraw) << name;
+        if (probeList != blocks.end())
+            EXPECT_EQ (probeList->blockSize, static_cast<uint32_t> (2 * sizeof (GpuReflectionProbe) + 16)) << name;
+
+        const auto& buffers = reflection.storageBuffers;
+        const auto probes = std::find_if (buffers.begin(), buffers.end(), [binding = storageBinding] (const auto& b) { return b.set == 1 && b.binding == binding; });
+        EXPECT_EQ (probes != buffers.end(), reads == Reads::storage) << name;
+        if (probes != buffers.end())
+            EXPECT_TRUE (probes->readOnly) << name;
+
+        // Nor the probe functions of lib/probes.glsl, in the WGSL that keeps unused functions
+        const auto* wgsl = bundle.findShader (ShaderStage::fragment, ShaderLanguage::wgsl);
+        ASSERT_NE (wgsl, nullptr) << name;
+        EXPECT_EQ (wgsl->source.contains ("reflectionProbeWeight"), reads != Reads::nothing) << name;
     }
 }
 
@@ -907,7 +963,8 @@ TEST_F (SceneRendererBundleTests, RasterLightListBlockIs528Bytes)
 TEST_F (SceneRendererBundleTests, FullForwardPassReadsTheClusteredLights)
 {
     // No per-draw list on the full tier: every light in a storage buffer at set 1 binding 6, and
-    // the light lists of the clusters at binding 7, both read only, in every full variant
+    // the light lists of the clusters at binding 7, both read only, in every full variant; and the
+    // reflection probes of the frame at binding 8
     const std::pair<const char*, ShaderBundle> bundles[] = {
         { "ForwardPass_full", forwardPassFull() },
         { "ForwardPass_full_area_lights", forwardPassFullAreaLights() },
@@ -932,7 +989,7 @@ TEST_F (SceneRendererBundleTests, FullForwardPassReadsTheClusteredLights)
         }
 
         std::sort (bindings.begin(), bindings.end());
-        EXPECT_EQ (bindings, (std::vector<uint32_t> { 6, 7 })) << name;
+        EXPECT_EQ (bindings, (std::vector<uint32_t> { 6, 7, 8 })) << name;
     }
 }
 
@@ -4720,6 +4777,631 @@ vec4 encodeLuma(vec3 c)
 
         EXPECT_GT (countDifferencesAboveOneLevel (during, before), 0);
         EXPECT_EQ (countDifferencesAboveOneLevel (after, before), 0);
+    }
+
+    /** A mirror floor (white metal, roughness 0.02), 12 x 12 at y = 0, the entity "floor", under a
+        large green emitter 2 m up facing down, the entity "emitter". The camera looks down at the
+        floor from (0, 1.5, 2.5) at 31 degrees, so the top edge of its frustum points 8 degrees below
+        the horizon and only the floor's reflection can show the emitter. No environment and no
+        default light: without a reflection probe the floor reflects black, and shows the flat
+        ambient light only. @p withEmitter false leaves the emitter out.
+    */
+    /** A horizontal quad at height @p y over @p area (x, z), facing up or down, the entity @p name. */
+    static EntityNode::Ptr makeHorizontalQuad (const char* name, float y, Rectangle<float> area, bool facingUp, Material::Ptr material)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { area.getX(), y, area.getBottom() };
+        vertices[1].position = { area.getRight(), y, area.getBottom() };
+        vertices[2].position = { area.getRight(), y, area.getY() };
+        vertices[3].position = { area.getX(), y, area.getY() };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, facingUp ? 1.0f : -1.0f, 0.0f };
+
+        // Counterclockwise seen from the side the normal points to
+        auto mesh = Mesh::Ptr (new Mesh (name));
+        mesh->addPrimitive (std::move (vertices), facingUp ? std::vector<uint32> { 0, 1, 2, 0, 2, 3 } : std::vector<uint32> { 0, 2, 1, 0, 3, 2 }, std::move (material));
+
+        auto entity = EntityNode::Ptr (new EntityNode (name));
+        entity->attach<MeshNode> (mesh);
+        return entity;
+    }
+
+    /** A black material emitting @p emission. */
+    static Material::Ptr makeEmitterMaterial (std::array<float, 3> emission)
+    {
+        auto emitter = Material::Ptr (new Material());
+        emitter->baseColorFactor = { 0.0f, 0.0f, 0.0f, 1.0f };
+        emitter->emissiveFactor = emission;
+        return emitter;
+    }
+
+    static void buildMirrorFloorScene (Scene& scene, bool withEmitter = true)
+    {
+        auto mirror = Material::Ptr (new Material());
+        mirror->baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
+        mirror->metallicFactor = 1.0f;
+        mirror->roughnessFactor = 0.02f;
+        scene.getRoot()->addChild (makeHorizontalQuad ("floor", 0.0f, { -6.0f, -6.0f, 12.0f, 12.0f }, true, mirror));
+
+        if (withEmitter)
+            scene.getRoot()->addChild (makeHorizontalQuad ("emitter", 2.0f, { -30.0f, -40.0f, 60.0f, 41.5f }, false, makeEmitterMaterial ({ 0.0f, 1.0f, 0.0f })));
+
+        addCamera (scene, { 0.0f, 1.5f, 2.5f }, {});
+        scene.setUsingDefaultLight (false);
+    }
+
+    /** The middle of the floor of buildMirrorFloorScene() in a frame of @p size x @p size. */
+    static Rectangle<int> floorRegion (int size = 64)
+    {
+        return { size / 4, size * 3 / 8, size / 2, size / 2 };
+    }
+
+    /** The mean color of the 8 bit pixels within @p area. */
+    static Color meanColor (const Image& image, Rectangle<int> area)
+    {
+        double sum[3] {};
+        for (int y = area.getY(); y < area.getBottom(); ++y)
+        {
+            for (int x = area.getX(); x < area.getRight(); ++x)
+            {
+                const auto color = image.getPixelColor (x, y);
+                sum[0] += color.getRed();
+                sum[1] += color.getGreen();
+                sum[2] += color.getBlue();
+            }
+        }
+
+        const auto count = static_cast<double> (area.getWidth() * area.getHeight());
+        return Color (static_cast<uint8> (std::lround (sum[0] / count)),
+                      static_cast<uint8> (std::lround (sum[1] / count)),
+                      static_cast<uint8> (std::lround (sum[2] / count)));
+    }
+
+    /** Sets the emission of the emitter of buildMirrorFloorScene(). */
+    static void setEmitterColor (Scene& scene, std::array<float, 3> color)
+    {
+        auto* emitter = scene.getRoot()->findChild ("emitter");
+        ASSERT_NE (emitter, nullptr);
+        emitter->getNode<MeshNode>()->mesh->getPrimitive (0).material->emissiveFactor = color;
+    }
+
+    /** Adds a spherical reflection probe at @p position, the entity "probe", and returns its part. */
+    static ReflectionProbeNode& addReflectionProbe (Scene& scene, Vector3<float> position, float influenceRadius, const char* name = "probe")
+    {
+        auto probe = EntityNode::Ptr (new EntityNode (name));
+        auto& node = probe->attach<ReflectionProbeNode>();
+        node.influenceRadius = influenceRadius;
+        probe->setPosition (position);
+        scene.getRoot()->addChild (probe);
+        return node;
+    }
+
+    /** The number of probes the renderer baked, or -1 before it had a baker. */
+    static int getNumBakes (const SceneRenderer& renderer)
+    {
+        const auto* baker = renderer.getProbeBaker();
+        return baker != nullptr ? baker->getNumBakes() : -1;
+    }
+
+    /** On @p tier, a reflection probe shows the floor what the camera cannot see: the emitter of
+        buildMirrorFloorScene() above the frustum, which the floor reflects only through the probe.
+    */
+    void checkReflectionProbeShowsWhatTheCameraCannotSee (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        const auto before = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (before.isValid()) << renderer.getLastError();
+        EXPECT_EQ (renderer.getProbeBaker(), nullptr); // Nothing allocated without a probe
+
+        const auto floorBefore = meanColor (before, floorRegion());
+        EXPECT_NEAR (floorBefore.getGreen(), floorBefore.getRed(), 2); // The camera does not see the emitter
+
+        addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+
+        const auto after = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        ASSERT_TRUE (after.isValid());
+        EXPECT_EQ (getNumBakes (renderer), 1);
+
+        const auto floorAfter = meanColor (after, floorRegion());
+        RecordProperty ("floorGreenBefore", floorBefore.getGreen());
+        RecordProperty ("floorGreenAfter", floorAfter.getGreen());
+        EXPECT_GT (floorAfter.getGreen(), floorBefore.getGreen() + 40);
+        EXPECT_NEAR (floorAfter.getRed(), floorBefore.getRed(), 2);
+    }
+
+    /** On @p tier, a probe part replacing another on the same entity is a new probe: it bakes, and
+        does not reuse what the old one captured.
+    */
+    void checkReplacedProbeIsBakedAgain (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setTier (scene, tier);
+        addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+
+        SceneRenderer renderer;
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+
+        // Turn the green emitter red, then replace the probe: the new part must bake, not reuse the old tile
+        setEmitterColor (scene, { 1.0f, 0.0f, 0.0f });
+        auto* entity = scene.getRoot()->findChild ("probe");
+        ASSERT_TRUE (entity->detach<ReflectionProbeNode>());
+        entity->attach<ReflectionProbeNode>().influenceRadius = 20.0f;
+
+        const auto image = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 2);
+        ASSERT_NE (renderer.getProbeBaker(), nullptr);
+        EXPECT_EQ (renderer.getProbeBaker()->getNumBakedProbes(), 1);
+
+        const auto floor = meanColor (image, floorRegion());
+        EXPECT_GT (floor.getRed(), floor.getGreen() + 30);
+    }
+
+    /** On @p tier, a probe bakes again when it moves or one of its own fields changes, never because
+        the rest of the scene changed, until requestBake() asks for it.
+    */
+    void checkMovingAProbeBakesItAgain (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setTier (scene, tier);
+        auto& probe = addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+
+        SceneRenderer renderer;
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 1);
+
+        // Unchanged, it keeps its bake
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 1);
+
+        scene.getRoot()->findChild ("probe")->setPosition ({ 0.5f, 1.0f, -1.0f });
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 2);
+
+        probe.clipNear = 0.2f;
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 3);
+
+        // The emitter turns red: the probe keeps showing what it captured
+        setEmitterColor (scene, { 1.0f, 0.0f, 0.0f });
+        const auto stale = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (stale.isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 3);
+        EXPECT_GT (meanColor (stale, floorRegion()).getGreen(), meanColor (stale, floorRegion()).getRed() + 30);
+
+        probe.requestBake();
+        const auto rebaked = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (rebaked.isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 4);
+        EXPECT_GT (meanColor (rebaked, floorRegion()).getRed(), meanColor (rebaked, floorRegion()).getGreen() + 30);
+    }
+
+    /** On @p tier, a probe whose falloff crosses the floor, in a scene without an environment and
+        with a black emitter, blends to finite values everywhere: the weights are never normalized by
+        their sum. The floor shows the ambient light only, so it is even; a non-finite blend would
+        show as a block of pixels unlike their neighbors (Metal clamps NaN to the other operand).
+    */
+    void checkProbeBlendWithoutEnvironmentIsFinite (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setEmitterColor (scene, { 0.0f, 0.0f, 0.0f });
+
+        if (tier == RenderSettings::TierPreference::full)
+            setFullTierTaa (scene, 1);
+        else
+            setTier (scene, tier);
+
+        // Fading out from 1 m to 3 m around a point 1 m over the floor's center
+        auto& probe = addReflectionProbe (scene, { 0.0f, 1.0f, 0.0f }, 3.0f);
+        probe.falloff = 2.0f;
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 1);
+
+        const auto floor = floorRegion();
+        auto uneven = 0;
+        for (int y = floor.getY(); y < floor.getBottom() - 1; ++y)
+        {
+            for (int x = floor.getX(); x < floor.getRight() - 1; ++x)
+            {
+                const auto color = image.getPixelColor (x, y);
+                for (const auto& neighbor : { image.getPixelColor (x + 1, y), image.getPixelColor (x, y + 1) })
+                    if (std::abs (color.getRed() - neighbor.getRed()) > 2 || std::abs (color.getGreen() - neighbor.getGreen()) > 2 || std::abs (color.getBlue() - neighbor.getBlue()) > 2)
+                        ++uneven;
+            }
+        }
+
+        EXPECT_EQ (uneven, 0);
+        EXPECT_GT (meanColor (image, floor).getGreen(), 10); // Not black: the ambient light shows
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+        if (tier == RenderSettings::TierPreference::full)
+        {
+            const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+            ASSERT_NE (sceneColor, nullptr);
+            EXPECT_TRUE (isFiniteTexture (sceneColor));
+            EXPECT_FALSE (isSaturatedTexture (sceneColor));
+        }
+#endif
+    }
+
+    /** On @p tier, a box probe enclosing the scene, its reflections projected onto the box, shows
+        the floor the emitter too.
+    */
+    void checkBoxProbeWithParallaxReflects (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setTier (scene, tier);
+
+        SceneRenderer renderer;
+        const auto before = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (before.isValid()) << renderer.getLastError();
+
+        auto& probe = addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+        probe.shape = ReflectionProbeNode::Shape::box;
+        probe.influenceExtents = { 40.0f, 5.0f, 45.0f };
+        ASSERT_TRUE (probe.parallaxCorrection);
+
+        const auto after = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (after.isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 1);
+
+        RecordProperty ("floorGreenBefore", meanColor (before, floorRegion()).getGreen());
+        RecordProperty ("floorGreenAfter", meanColor (after, floorRegion()).getGreen());
+        EXPECT_GT (meanColor (after, floorRegion()).getGreen(), meanColor (before, floorRegion()).getGreen() + 40);
+    }
+
+    /** On @p tier, bakeProbes() bakes the probes never baked or asked to bake again, and returns
+        how many; render() then has nothing left to bake.
+    */
+    void checkBakeProbesReportsPendingCount (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setTier (scene, tier);
+        auto& first = addReflectionProbe (scene, { -1.0f, 1.0f, -1.0f }, 20.0f, "first");
+        addReflectionProbe (scene, { 1.0f, 1.0f, -1.0f }, 5.0f, "second");
+
+        SceneRenderer renderer;
+        EXPECT_EQ (renderer.bakeProbes (device, scene), 2);
+        EXPECT_EQ (renderer.bakeProbes (device, scene), 0);
+
+        first.requestBake();
+        EXPECT_EQ (renderer.bakeProbes (device, scene), 1);
+        EXPECT_EQ (getNumBakes (renderer), 3);
+
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 3);
+        EXPECT_GT (meanColor (renderToImage (renderer, scene, 64), floorRegion()).getGreen(), 100);
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    /** On @p tier, the probe resources live only as long as probes need them: the capture shadow
+        maps and scratch targets until the next call that bakes nothing, the atlas until no probe is
+        left. The capture shadow renderer itself, with its pipelines, stays.
+    */
+    void checkRemovedProbesReleaseTheAtlas (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setTier (scene, tier);
+        addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+
+        SceneRenderer renderer;
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        const auto* baker = renderer.getProbeBaker();
+        ASSERT_NE (baker, nullptr);
+        EXPECT_NE (baker->getReflectionAtlas(), nullptr);
+        EXPECT_TRUE (baker->holdsCaptureTargets());
+
+        const auto* captureShadows = baker->getCaptureShadowRenderer();
+        ASSERT_NE (captureShadows, nullptr);
+        EXPECT_NE (captureShadows->getCascadeTexture(), nullptr);
+
+        // The next call bakes nothing: the capture textures go, the pipelines stay for the frames in flight
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (baker->getCaptureShadowRenderer(), captureShadows);
+        EXPECT_EQ (captureShadows->getCascadeTexture(), nullptr);
+        EXPECT_EQ (captureShadows->getAtlasTexture(), nullptr);
+        EXPECT_FALSE (baker->holdsCaptureTargets());
+        EXPECT_NE (baker->getReflectionAtlas(), nullptr);
+
+        scene.getRoot()->removeChild (scene.getRoot()->findChild ("probe"));
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (renderer.getProbeBaker(), baker);
+        EXPECT_EQ (baker->getNumBakedProbes(), 0);
+        EXPECT_EQ (baker->getReflectionAtlas(), nullptr);
+    }
+
+    /** On @p tier, a probe over an open sky reflects what the environment does: its capture faces
+        keep the orientation of the cube. The sky's color tells directions apart (red grows towards
+        +x, blue towards -z, green upwards), so a face mirrored or turned shows on the floor.
+    */
+    void checkProbeOfAnOpenSkyMatchesTheEnvironment (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool withProbe)
+        {
+            Scene scene;
+            buildMirrorFloorScene (scene, false);
+            setTier (scene, tier);
+            scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& d)
+            {
+                return Vector3<float> (0.6f + 0.55f * jlimit (-1.0f, 1.0f, 2.5f * d.getX()),
+                                       0.3f + 0.3f * d.getY(),
+                                       0.6f - 0.55f * jlimit (-1.0f, 1.0f, 2.5f * d.getZ()));
+            }, 256, 7));
+
+            // Without parallax the probe reads its capture along the reflected direction, as the environment does
+            if (withProbe)
+                addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f).parallaxCorrection = false;
+
+            SceneRenderer renderer;
+            const auto image = renderToImage (renderer, scene, 64);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            EXPECT_EQ (getNumBakes (renderer), withProbe ? 1 : -1);
+            return image;
+        };
+
+        const auto environment = render (false);
+        const auto probe = render (true);
+        ASSERT_TRUE (environment.isValid() && probe.isValid());
+
+        // Left and right, near and far parts of the floor reflect different parts of the sky
+        const Rectangle<int> regions[] = { { 8, 30, 12, 10 }, { 44, 30, 12, 10 }, { 8, 50, 12, 10 }, { 44, 50, 12, 10 }, { 26, 26, 12, 8 } };
+        const auto left = meanColor (environment, regions[0]), right = meanColor (environment, regions[1]);
+        EXPECT_GT (std::abs (left.getRed() - right.getRed()), 20); // The check cannot pass on a uniform sky
+
+        for (const auto& region : regions)
+        {
+            const auto expected = meanColor (environment, region);
+            const auto actual = meanColor (probe, region);
+            RecordProperty (("environment" + region.toString()).toStdString(), expected.toString().toStdString());
+            RecordProperty (("probe" + region.toString()).toStdString(), actual.toString().toStdString());
+            EXPECT_NEAR (actual.getRed(), expected.getRed(), 8) << region.toString();
+            EXPECT_NEAR (actual.getGreen(), expected.getGreen(), 8) << region.toString();
+            EXPECT_NEAR (actual.getBlue(), expected.getBlue(), 8) << region.toString();
+        }
+    }
+
+    /** On @p tier, below the float floor the probes hold RGBM, which the passes decode: the
+        reflection matches the half float one, channel by channel. The mirror floor reflects a blue
+        emitter of radiance 3 on the left, a channel no tone map of the capture may saturate, and a
+        dim gray one of 0.006 on the right, which 8 bit linear steps would round by a third.
+    */
+    void checkRgbmProbeShowsLikeTheFloatOne (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool rgbm)
+        {
+            Scene scene;
+            buildMirrorFloorScene (scene, false);
+            setTier (scene, tier);
+            scene.setAmbientColor (Colors::black);
+            scene.getRoot()->addChild (makeHorizontalQuad ("blue", 2.0f, { -30.0f, -40.0f, 30.0f, 41.5f }, false, makeEmitterMaterial ({ 0.0f, 0.0f, 3.0f })));
+            scene.getRoot()->addChild (makeHorizontalQuad ("dim", 2.0f, { 0.0f, -40.0f, 30.0f, 41.5f }, false, makeEmitterMaterial ({ 0.006f, 0.006f, 0.006f })));
+            addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+
+            SceneRenderer renderer;
+            if (rgbm)
+                renderer.forceRgbmRadianceForTesting();
+
+            const auto image = renderToImage (renderer, scene, 64);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+
+            const auto* baker = renderer.getProbeBaker();
+            const auto atlas = baker != nullptr ? baker->getReflectionAtlas() : nullptr;
+            EXPECT_TRUE (atlas != nullptr && atlas->getFormat() == (rgbm ? GpuTextureFormat::rgba8unorm : GpuTextureFormat::rgba16float));
+            return image;
+        };
+
+        const auto floatImage = render (false);
+        const auto rgbmImage = render (true);
+        ASSERT_TRUE (floatImage.isValid() && rgbmImage.isValid());
+
+        const Rectangle<int> blueRegion (6, 28, 14, 24), dimRegion (44, 28, 14, 24);
+        const auto expectedBlue = meanColor (floatImage, blueRegion), actualBlue = meanColor (rgbmImage, blueRegion);
+        const auto expectedDim = meanColor (floatImage, dimRegion), actualDim = meanColor (rgbmImage, dimRegion);
+        RecordProperty ("blueFloat", expectedBlue.toString().toStdString());
+        RecordProperty ("blueRgbm", actualBlue.toString().toStdString());
+        RecordProperty ("dimFloat", expectedDim.toString().toStdString());
+        RecordProperty ("dimRgbm", actualDim.toString().toStdString());
+
+        // Not vacuous: the blue is well above what a saturated capture would give, the dim region above black
+        EXPECT_GT (expectedBlue.getBlue(), 210);
+        EXPECT_GT (expectedDim.getGreen(), 10);
+
+        for (const auto& [expected, actual, tolerance] : { std::tuple { expectedBlue, actualBlue, 3 }, std::tuple { expectedDim, actualDim, 1 } })
+        {
+            EXPECT_NEAR (actual.getRed(), expected.getRed(), tolerance);
+            EXPECT_NEAR (actual.getGreen(), expected.getGreen(), tolerance);
+            EXPECT_NEAR (actual.getBlue(), expected.getBlue(), tolerance);
+        }
+    }
+
+    /** On @p tier, the reflection probes keep the multiple scattering compensation of rough metals
+        (Fdez-Aguera 2019, preflight R23): a white metal of roughness 1 facing the view, inside a room
+        whose walls all emit 0.5, lit only by a probe that captured the room, reflects all of it, as
+        under a uniform environment (RoughWhiteMetalPassesTheWhiteFurnaceTest). Single scattering
+        alone would reflect 1 - ln 2 of it. The tolerance is the environment furnace's 0.02 plus a
+        level for the probe's own capture and filtering.
+    */
+    void checkProbeKeepsTheMultipleScatteringOfRoughMetals (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        auto metal = Material::Ptr (new Material());
+        metal->roughnessFactor = 1.0f;
+        addPlate (scene, metal);
+
+        auto room = EntityNode::Ptr (new EntityNode ("room"));
+        room->attach<MeshNode> (makeBox (10.0f, makeEmitterMaterial ({ 0.5f, 0.5f, 0.5f }), true));
+        scene.getRoot()->addChild (room);
+
+        scene.setAmbientColor (Colors::black);
+        scene.setUsingDefaultLight (false);
+        scene.setToneMapping (Scene::ToneMapping::reinhard);
+        setTier (scene, tier);
+        addReflectionProbe (scene, { 0.0f, 0.0f, 2.0f }, 30.0f).parallaxCorrection = false;
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 1);
+
+        std::array<double, 3> radiance {};
+        for (int y = 28; y < 36; ++y)
+        {
+            for (int x = 28; x < 36; ++x)
+            {
+                const auto color = image.getPixelColor (x, y);
+                radiance[0] += reinhardRadiance (color.getRed()) / 64.0;
+                radiance[1] += reinhardRadiance (color.getGreen()) / 64.0;
+                radiance[2] += reinhardRadiance (color.getBlue()) / 64.0;
+            }
+        }
+
+        RecordProperty ("probeFurnaceBrightness", String (radiance[1] / 0.5, 4).toStdString());
+
+        for (const auto channel : radiance)
+            EXPECT_NEAR (channel, 0.5, 0.025);
+    }
+
+    /** On @p tier, parallax correction puts a box probe's reflections where the walls are: a mirror
+        floor inside a 6 x 6 m room, the box probe filling it, captured from its center 1 m up,
+        reflects a small green patch high on the far wall at its true mirror position. Read along the
+        reflected direction alone, as without the correction, the patch lands elsewhere.
+    */
+    void checkBoxProbeParallaxPlacesTheReflectionOnTheWalls (RenderSettings::TierPreference tier)
+    {
+        constexpr int size = 128;
+        const Vector3<float> eye (0.0f, 1.5f, 2.5f);
+        const Vector3<float> patchCenter (1.1f, 1.6f, -2.95f);
+
+        const auto render = [&] (bool parallax)
+        {
+            Scene scene;
+            setTier (scene, tier);
+            scene.setAmbientColor (Colors::black);
+            scene.setUsingDefaultLight (false);
+
+            auto mirror = Material::Ptr (new Material());
+            mirror->metallicFactor = 1.0f;
+            mirror->roughnessFactor = 0.02f;
+            scene.getRoot()->addChild (makeHorizontalQuad ("floor", 0.0f, { -3.0f, -3.0f, 6.0f, 6.0f }, true, mirror));
+
+            // On the far wall, facing into the room
+            std::vector<Mesh::Vertex> vertices (4);
+            vertices[0].position = patchCenter + Vector3<float> (-0.5f, -0.3f, 0.0f);
+            vertices[1].position = patchCenter + Vector3<float> (0.5f, -0.3f, 0.0f);
+            vertices[2].position = patchCenter + Vector3<float> (0.5f, 0.3f, 0.0f);
+            vertices[3].position = patchCenter + Vector3<float> (-0.5f, 0.3f, 0.0f);
+            for (auto& vertex : vertices)
+                vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+            auto mesh = Mesh::Ptr (new Mesh ("patch"));
+            mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeEmitterMaterial ({ 0.0f, 4.0f, 0.0f }));
+            auto patch = EntityNode::Ptr (new EntityNode ("patch"));
+            patch->attach<MeshNode> (mesh);
+            scene.getRoot()->addChild (patch);
+
+            addCamera (scene, eye, {});
+
+            auto& probe = addReflectionProbe (scene, { 0.0f, 1.0f, 0.0f }, 1.0f);
+            probe.shape = ReflectionProbeNode::Shape::box;
+            probe.influenceExtents = { 3.0f, 1.2f, 3.0f };
+            probe.falloff = 0.0f;
+            probe.parallaxCorrection = parallax;
+
+            SceneRenderer renderer;
+            const auto image = renderToImage (renderer, scene, size);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            EXPECT_EQ (getNumBakes (renderer), 1);
+            return image;
+        };
+
+        // The green pixels of the floor's reflection: the patch itself lies above the frustum
+        const auto centroid = [] (const Image& image) -> std::optional<Point<float>>
+        {
+            Point<float> sum;
+            auto count = 0;
+            for (int y = 0; y < image.getHeight(); ++y)
+            {
+                for (int x = 0; x < image.getWidth(); ++x)
+                {
+                    const auto color = image.getPixelColor (x, y);
+                    if (color.getGreen() > 60 && color.getGreen() > color.getRed() + 40)
+                    {
+                        sum += Point<float> (static_cast<float> (x) + 0.5f, static_cast<float> (y) + 0.5f);
+                        ++count;
+                    }
+                }
+            }
+
+            return count > 0 ? std::optional<Point<float>> (sum / static_cast<float> (count)) : std::nullopt;
+        };
+
+        // Where the mirror image of the patch's center, under the floor, shows on screen
+        CameraNode camera;
+        const auto viewProjection = Matrix4::lookAt (eye, {}, { 0.0f, 1.0f, 0.0f }).followedBy (camera.getProjectionMatrix (1.0f));
+        const auto ndc = viewProjection.transformPoint ({ patchCenter.getX(), -patchCenter.getY(), patchCenter.getZ() });
+        const Point<float> expected ((ndc.getX() * 0.5f + 0.5f) * size, (0.5f - ndc.getY() * 0.5f) * size);
+
+        const auto corrected = centroid (render (true));
+        const auto uncorrected = centroid (render (false));
+        ASSERT_TRUE (corrected.has_value() && uncorrected.has_value());
+
+        RecordProperty ("expected", expected.toString().toStdString());
+        RecordProperty ("corrected", corrected->toString().toStdString());
+        RecordProperty ("uncorrected", uncorrected->toString().toStdString());
+
+        EXPECT_LT (corrected->distanceTo (expected), 3.0f);
+        EXPECT_GT (uncorrected->distanceTo (expected), corrected->distanceTo (expected) + 5.0f);
+    }
+
+    /** On @p tier, probe captures that fail to record never fail the frame: it renders without the
+        probe, retries once, then stops baking until bakeProbes() asks again.
+    */
+    void checkFailedProbeCapturesLeaveTheFrameWithoutProbes (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setTier (scene, tier);
+        addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+
+        SceneRenderer renderer;
+        renderer.failProbeCapturesForTesting();
+
+        const auto first = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (first.isValid()) << renderer.getLastError();
+        EXPECT_TRUE (renderer.getLastError().isEmpty());
+        ASSERT_NE (renderer.getProbeBaker(), nullptr);
+        EXPECT_EQ (getNumBakes (renderer), 0);
+        EXPECT_FALSE (renderer.getProbeBaker()->hasGivenUp());
+
+        // Without the probe the floor shows no green
+        const auto floor = meanColor (first, floorRegion());
+        EXPECT_NEAR (floor.getGreen(), floor.getRed(), 2);
+
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_TRUE (renderer.getProbeBaker()->hasGivenUp());
+
+        ASSERT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 0);
+
+        // An explicit bake tries again, and fails once more
+        EXPECT_EQ (renderer.bakeProbes (device, scene), 0);
+        EXPECT_FALSE (renderer.getProbeBaker()->hasGivenUp());
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
     }
 
     GpuDevice::Ptr device;
@@ -9395,6 +10077,225 @@ TEST_P (SceneRendererTierTests, ContactShadowsOfALightOutOfRangeChangeNothing)
     EXPECT_EQ (changed, 0);
 }
 
+TEST_P (SceneRendererTierTests, ReflectionProbeShowsWhatTheCameraCannotSee)
+{
+    checkReflectionProbeShowsWhatTheCameraCannotSee (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ReplacedProbeIsBakedAgain)
+{
+    checkReplacedProbeIsBakedAgain (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, MovingAProbeBakesItAgain)
+{
+    checkMovingAProbeBakesItAgain (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ProbeBlendWithoutEnvironmentIsFinite)
+{
+    checkProbeBlendWithoutEnvironmentIsFinite (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, BoxProbeWithParallaxReflects)
+{
+    checkBoxProbeWithParallaxReflects (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, BakeProbesReportsPendingCount)
+{
+    checkBakeProbesReportsPendingCount (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, RemovedProbesReleaseTheAtlas)
+{
+    checkRemovedProbesReleaseTheAtlas (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, ProbeOfAnOpenSkyMatchesTheEnvironment)
+{
+    checkProbeOfAnOpenSkyMatchesTheEnvironment (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, RgbmProbeShowsLikeTheFloatOne)
+{
+    checkRgbmProbeShowsLikeTheFloatOne (GetParam());
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_P (SceneRendererTierTests, GpuFailureBakesTheProbesAgain)
+{
+    // The frame baking the probe failed on the GPU: the next frame cannot trust its tile
+    Scene scene;
+    buildMirrorFloorScene (scene);
+    setTier (scene, GetParam());
+    addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+
+    SceneRenderer renderer;
+    device->failNextFrameForTesting ("injected failure");
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (getNumBakes (renderer), 1);
+
+    // Frames complete in order, so once a later frame did the failed one has too
+    {
+        auto fence = GpuFrame::begin (device);
+        EXPECT_TRUE (fence.waitForGPU().wasOk());
+    }
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getLastGpuFailure(), "injected failure");
+    EXPECT_EQ (getNumBakes (renderer), 2);
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (getNumBakes (renderer), 2);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+#endif
+
+TEST_P (SceneRendererTierTests, ProbeKeepsTheMultipleScatteringOfRoughMetals)
+{
+    checkProbeKeepsTheMultipleScatteringOfRoughMetals (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, BoxProbeParallaxPlacesTheReflectionOnTheWalls)
+{
+    checkBoxProbeParallaxPlacesTheReflectionOnTheWalls (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FailedProbeCapturesLeaveTheFrameWithoutProbes)
+{
+    checkFailedProbeCapturesLeaveTheFrameWithoutProbes (GetParam());
+}
+
+TEST_F (SceneRendererMetalTests, NestedProbesBlendAlikeOnBothTiers)
+{
+    // The large probe captures the emitter green; the small one, nested in it over the near floor,
+    // captures it red afterwards. Raster picks both for the floor, full blends them per pixel in the
+    // same order: the floor matches band by band
+    const auto render = [this] (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setTierForExactFrames (scene, tier);
+        addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f, "large");
+
+        SceneRenderer renderer;
+        EXPECT_EQ (renderer.bakeProbes (device, scene), 1);
+
+        setEmitterColor (scene, { 1.0f, 0.0f, 0.0f });
+        addReflectionProbe (scene, { 0.0f, 0.5f, 0.5f }, 1.5f, "small").falloff = 0.5f;
+
+        const auto image = renderToImage (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        EXPECT_EQ (getNumBakes (renderer), 2);
+        return image;
+    };
+
+    const auto raster = render (RenderSettings::TierPreference::raster);
+    const auto full = render (RenderSettings::TierPreference::full);
+    ASSERT_TRUE (raster.isValid() && full.isValid());
+
+    auto green = false, red = false;
+    for (const auto& band : { Rectangle<int> (16, 4, 32, 8), Rectangle<int> (16, 16, 32, 8), Rectangle<int> (16, 28, 32, 8), Rectangle<int> (16, 44, 32, 12) })
+    {
+        const auto expected = meanColor (raster, band);
+        const auto actual = meanColor (full, band);
+        RecordProperty (("raster" + band.toString()).toStdString(), expected.toString().toStdString());
+        RecordProperty (("full" + band.toString()).toStdString(), actual.toString().toStdString());
+
+        EXPECT_NEAR (actual.getRed(), expected.getRed(), 6) << band.toString();
+        EXPECT_NEAR (actual.getGreen(), expected.getGreen(), 6) << band.toString();
+        EXPECT_NEAR (actual.getBlue(), expected.getBlue(), 6) << band.toString();
+
+        green = green || expected.getGreen() > expected.getRed() + 30;
+        red = red || expected.getRed() > expected.getGreen() + 30;
+    }
+
+    // Not vacuous: the far floor shows the large probe, the near one the small
+    EXPECT_TRUE (green);
+    EXPECT_TRUE (red);
+}
+
+TEST_F (SceneRendererMetalTests, FullTierShadesAtMost64Probes)
+{
+    // 65 baked probes: the full tier packs the 64 smallest, the largest left out, logged and not asserted
+    Scene scene;
+    for (int i = 1; i <= 65; ++i)
+        addReflectionProbe (scene, { static_cast<float> (i), 0.0f, 0.0f }, static_cast<float> (i), "probe");
+
+    SceneRenderer renderer;
+    ASSERT_EQ (renderer.bakeProbes (device, scene), 65);
+    ASSERT_NE (renderer.getProbeBaker(), nullptr);
+
+    SceneDrawList list;
+    list.build (*scene.getRoot(), Matrix4());
+    ASSERT_EQ (list.getReflectionProbes().size(), 65u);
+
+    const auto packed = renderer.getProbeBaker()->packReflectionProbesByPriority (list);
+    ASSERT_EQ (packed.size(), 64u);
+    EXPECT_FLOAT_EQ (packed.front().influence[0], 1.0f);
+    EXPECT_FLOAT_EQ (packed.back().influence[0], 64.0f);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_F (SceneRendererMetalTests, FullTierPacksTheProbesInTheRasterPriorityOrder)
+{
+    // The smaller influence first whatever the bake order, so the full tier blends as raster ranks
+    Scene scene;
+    buildMirrorFloorScene (scene);
+    addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f, "large");
+    addReflectionProbe (scene, { 1.0f, 1.0f, -1.0f }, 5.0f, "small");
+
+    SceneRenderer renderer;
+    ASSERT_EQ (renderer.bakeProbes (device, scene), 2);
+    ASSERT_NE (renderer.getProbeBaker(), nullptr);
+
+    SceneDrawList list;
+    list.build (*scene.getRoot(), Matrix4());
+
+    const auto packed = renderer.getProbeBaker()->packReflectionProbesByPriority (list);
+    ASSERT_EQ (packed.size(), 2u);
+    EXPECT_FLOAT_EQ (packed[0].influence[0], 5.0f);
+    EXPECT_FLOAT_EQ (packed[1].influence[0], 20.0f);
+
+    // Both baked into their own tile of the atlas
+    EXPECT_GT (packed[0].atlasRect[2], 0.0f);
+    EXPECT_NE (packed[0].atlasRect[0], packed[1].atlasRect[0]);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_F (SceneRendererMetalTests, ReflectionProbeChangesRestartAccumulation)
+{
+    // Each change shows on the full tier once converged: a bake asked for, a field of the probe, and
+    // its entity moving, which also bakes it again
+    const std::pair<const char*, std::function<void (EntityNode&)>> changes[] = {
+        { "requestBake", [] (EntityNode& probe) { probe.getNode<ReflectionProbeNode>()->requestBake(); } },
+        { "intensity", [] (EntityNode& probe) { probe.getNode<ReflectionProbeNode>()->intensity = 0.5f; } },
+        { "falloff", [] (EntityNode& probe) { probe.getNode<ReflectionProbeNode>()->falloff = 2.0f; } },
+        { "position", [] (EntityNode& probe) { probe.setPosition ({ 0.5f, 1.0f, -1.0f }); } },
+    };
+
+    for (const auto& [name, change] : changes)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setFullTierTaa (scene, 8);
+        addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+
+        SceneRenderer renderer;
+        for (int i = 0; i < 12; ++i)
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        ASSERT_TRUE (renderer.isConverged()) << name;
+
+        change (*scene.getRoot()->findChild ("probe"));
+
+        // Restarted, not invalidated
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_FALSE (renderer.isConverged()) << name;
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P (SceneRendererTiers,
                           SceneRendererTierTests,
                           ::testing::Values (RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full),
@@ -9684,6 +10585,264 @@ TEST_F (DepthNormalPrepassMetalTests, TargetsThatCannotBeCreatedLeaveTheFrameWit
 }
 #endif
 
+#if YUP_ENABLE_SHADER_TRANSPILER
+/** HiZPyramid over the G-buffer depth of the compact scene, checked by fullscreen passes writing
+    255 where a texel holds and 0 where it does not. */
+class HiZPyramidMetalTests : public SceneRendererMetalTests
+{
+protected:
+    void SetUp() override
+    {
+        SceneRendererMetalTests::SetUp();
+        if (IsSkipped())
+            return;
+
+        frameResources = std::make_unique<FrameResources> (device);
+        pyramid = std::make_unique<HiZPyramid> (device);
+    }
+
+    struct Built
+    {
+        GpuTexture::Ptr depth;
+        GpuTexture::Ptr pyramid;
+    };
+
+    /** Draws the compact scene, seen from above and in front, into the depth of a G-buffer of
+        @p width x @p height, and builds the pyramid of that depth in the same frame. The ground
+        fills the bottom rows, nearest at the bottom, and the background the top ones. */
+    Built renderAndBuild (int width, int height)
+    {
+        Scene scene;
+        addCompactScene (scene);
+
+        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        camera->attach<CameraNode>();
+        aimCamera (*camera, { 0.0f, 1.2f, 1.8f }, { 0.0f, 0.2f, 0.0f });
+        scene.getRoot()->addChild (camera);
+        scene.setActiveCamera (camera.get());
+
+        frameResources->beginFrame (width, height);
+
+        const auto acquire = [&] (GpuTextureFormat format)
+        {
+            return frameResources->acquire (GpuTextureDesc (static_cast<uint32_t> (width), static_cast<uint32_t> (height), format, true));
+        };
+
+        const auto targets = GBufferPass::acquireTargets (*frameResources, acquire (GpuTextureFormat::rg16float), acquire (GpuTextureFormat::depth32float));
+
+        view.update (scene, width, height, false, 1, 0);
+        drawList.build (*scene.getRoot(), view.getView());
+        EXPECT_TRUE (gbufferPass.prepare (device).wasOk());
+
+        Built built;
+        auto frame = GpuFrame::begin (device);
+        EXPECT_TRUE (gbufferPass.render (frame, view, drawList.getOpaqueItems(), materials, targets));
+        built.depth = targets.depth;
+        built.pyramid = pyramid->build (frame, targets.depth, *frameResources);
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+        pyramid->trimUnusedTargets();
+        frameResources->endFrame();
+        drawList.clear();
+        return built;
+    }
+
+    /** Draws @p fragment into an rgba8 target of @p width x @p height, with a nearest sampler at
+        set 0 binding 1 and the textures @p bind sets, and returns its rgba texels. */
+    std::vector<uint8> runChecker (const String& fragment, int width, int height, const std::function<void (GpuRenderPass&)>& bind)
+    {
+        const auto vertex = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory()
+                                .getChildFile ("modules/yup_3d/shaders/yup_Fullscreen.vert")
+                                .loadFileAsString();
+
+        ShaderBundleCompileRequest request;
+        request.sourceLanguage = ShaderLanguage::glsl;
+
+        for (const auto& [stage, code] : { std::pair { ShaderStage::vertex, vertex }, std::pair { ShaderStage::fragment, fragment } })
+        {
+            ShaderBundleEntry entry;
+            entry.stage = stage;
+            entry.source = code;
+            entry.targetLanguages = { ShaderLanguage::msl };
+            request.entries.push_back (entry);
+        }
+
+        ShaderBundleCompiler compiler;
+        auto bundle = compiler.compile (request);
+        MemoryBlock block;
+        if (! bundle.wasOk() || ! bundle.getReference().saveToMemoryBlock (block).wasOk())
+        {
+            ADD_FAILURE() << bundle.getErrorMessage();
+            return {};
+        }
+
+        auto target = GpuTarget::create (device, width, height);
+        auto sampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
+        if (target == nullptr || sampler == nullptr)
+            return {};
+
+        FullscreenPass pass;
+        if (! pass.prepare (device, static_cast<const uint8*> (block.getData()), block.getSize(), target->asTexture()->getFormat()).wasOk())
+            return {};
+
+        auto frame = GpuFrame::begin (device);
+        EXPECT_TRUE (pass.draw (frame, target->asTexture(), {}, [&] (GpuRenderPass& renderPass)
+        {
+            renderPass.setSampler (0, 1, sampler);
+            bind (renderPass);
+        }, GpuColor::transparentBlack()));
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+        std::vector<uint8> texels (static_cast<size_t> (width * height * 4));
+        if (! target->readPixels (texels.data(), texels.size()))
+            return {};
+
+        return texels;
+    }
+
+    /** How many texels of @p texels have @p channel not at 255. */
+    static int countFailing (const std::vector<uint8>& texels, int channel)
+    {
+        int failing = 0;
+        for (size_t i = static_cast<size_t> (channel); i < texels.size(); i += 4)
+            failing += texels[i] != 255 ? 1 : 0;
+
+        return failing;
+    }
+
+    std::unique_ptr<FrameResources> frameResources;
+    std::unique_ptr<HiZPyramid> pyramid;
+    ViewData view;
+    SceneDrawList drawList;
+    GBufferPass gbufferPass;
+    MaterialTable materials;
+};
+
+TEST_F (HiZPyramidMetalTests, HiZMipsKeepTheClosestDepth)
+{
+    // Mip n (lod 1 of a view starting at mip n - 1, since a draw binds a texture through one view
+    // only) against the texels of mip n - 1 it covers, found from the sizes alone: 3 per axis
+    // where mip n - 1 is odd. Red: not farther than any of them. Green: exactly the closest of them.
+    const String checker = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D pyramid;
+layout(set = 0, binding = 1) uniform sampler nearest;
+layout(location = 0) out vec4 color;
+void main()
+{
+    ivec2 texel = ivec2(gl_FragCoord.xy);
+    ivec2 upperSize = textureSize(sampler2D(pyramid, nearest), 0);
+    ivec2 lowerSize = textureSize(sampler2D(pyramid, nearest), 1);
+    ivec2 first = (texel * upperSize) / lowerSize;
+    ivec2 last = ((texel + 1) * upperSize + lowerSize - 1) / lowerSize - 1;
+
+    float closest = 2.0;
+    for (int y = first.y; y <= last.y; ++y)
+        for (int x = first.x; x <= last.x; ++x)
+            closest = min(closest, texelFetch(sampler2D(pyramid, nearest), ivec2(x, y), 0).r);
+
+    float value = texelFetch(sampler2D(pyramid, nearest), texel, 1).r;
+    color = vec4(value <= closest ? 1.0 : 0.0, value == closest ? 1.0 : 0.0, 0.0, 1.0);
+})";
+
+    // Odd extents at most mips of the first (37 x 23 down to 2 x 1 and 1 x 1), and of the second from mip 1
+    for (const auto& [width, height] : { std::pair { 37, 23 }, std::pair { 40, 30 } })
+    {
+        SCOPED_TRACE (String (width) + " x " + String (height));
+
+        const auto built = renderAndBuild (width, height);
+        ASSERT_NE (built.pyramid, nullptr);
+        EXPECT_EQ (built.pyramid->getFormat(), GpuTextureFormat::r32float);
+        EXPECT_EQ (built.pyramid->getWidth(), width);
+        EXPECT_EQ (built.pyramid->getHeight(), height);
+        EXPECT_EQ (built.pyramid->getMipLevels(), 6u);
+
+        for (uint32_t mip = 1; mip < built.pyramid->getMipLevels(); ++mip)
+        {
+            GpuTextureViewDesc twoMips (mip - 1, 0);
+            twoMips.mipCount = 2;
+
+            const auto texels = runChecker (checker, jmax (1, width >> mip), jmax (1, height >> mip), [&] (GpuRenderPass& pass)
+            {
+                pass.setTexture (0, 0, built.pyramid, twoMips);
+            });
+            ASSERT_FALSE (texels.empty()) << mip;
+            EXPECT_EQ (countFailing (texels, 0), 0) << "farther than a covered texel at mip " << mip;
+            EXPECT_EQ (countFailing (texels, 1), 0) << "not the closest covered texel at mip " << mip;
+        }
+    }
+}
+
+TEST_F (HiZPyramidMetalTests, MipZeroCopiesTheDepth)
+{
+    // Red: the pyramid is within 1e-6 of the depth. Green: something was drawn there.
+    const String checker = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D depth;
+layout(set = 0, binding = 1) uniform sampler nearest;
+layout(set = 0, binding = 2) uniform texture2D pyramid;
+layout(location = 0) out vec4 color;
+void main()
+{
+    ivec2 texel = ivec2(gl_FragCoord.xy);
+    float d = texelFetch(sampler2D(depth, nearest), texel, 0).r;
+    float value = texelFetch(sampler2D(pyramid, nearest), texel, 0).r;
+    color = vec4(abs(value - d) <= 1e-6 ? 1.0 : 0.0, d < 1.0 ? 1.0 : 0.0, 0.0, 1.0);
+})";
+
+    const auto built = renderAndBuild (37, 23);
+    ASSERT_NE (built.pyramid, nullptr);
+
+    const auto texels = runChecker (checker, 37, 23, [&] (GpuRenderPass& pass)
+    {
+        pass.setTexture (0, 0, built.depth);
+        pass.setTexture (0, 2, built.pyramid, GpuTextureViewDesc (0, 0));
+    });
+    ASSERT_EQ (texels.size(), static_cast<size_t> (37 * 23 * 4));
+    EXPECT_EQ (countFailing (texels, 0), 0);
+
+    // Neither empty nor full: the scene draws the ground and the box over the background
+    const auto background = countFailing (texels, 1);
+    EXPECT_GT (background, 0);
+    EXPECT_LT (background, 37 * 23);
+}
+
+TEST_F (HiZPyramidMetalTests, ReturnsNullWithoutASingleSampledDepth)
+{
+    frameResources->beginFrame (8, 8);
+
+    auto color = frameResources->acquire (GpuTextureDesc (8, 8, GpuTextureFormat::rgba8unorm, true));
+    ASSERT_NE (color, nullptr);
+
+    GpuTextureDesc multisampledDesc (8, 8, GpuTextureFormat::depth32float, true);
+    multisampledDesc.sampleCount = 4;
+    auto multisampled = frameResources->acquire (multisampledDesc);
+    ASSERT_NE (multisampled, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    EXPECT_EQ (pyramid->build (frame, nullptr, *frameResources), nullptr);
+    EXPECT_EQ (pyramid->build (frame, color, *frameResources), nullptr);
+    EXPECT_EQ (pyramid->build (frame, multisampled, *frameResources), nullptr);
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    frameResources->endFrame();
+    EXPECT_EQ (pyramid->getNumCachedTargets(), 0u);
+}
+
+TEST_F (HiZPyramidMetalTests, ReusesThePooledPyramidAndOneTargetPerMip)
+{
+    const auto first = renderAndBuild (37, 23).pyramid;
+    const auto second = renderAndBuild (37, 23).pyramid;
+    ASSERT_NE (first, nullptr);
+    EXPECT_EQ (first, second);
+    EXPECT_EQ (pyramid->getNumCachedTargets(), static_cast<size_t> (first->getMipLevels()));
+
+    pyramid->releaseTargets();
+    EXPECT_EQ (pyramid->getNumCachedTargets(), 0u);
+}
+#endif
+
 /** Frame times of the Scene3D light show, measured by hand: disabled in the normal suites. Run them
     on a Release build with
 
@@ -9882,6 +11041,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         bool keyContactShadows = false;
         bool softShadows = true;
         bool ambientOcclusion = true; // follows the tier default when true, off otherwise
+        bool probes = false;          // a box probe around the model and a sphere probe inside it
     } configs[] = {
         { "full show64", RenderSettings::TierPreference::full, 64, 0.5f },
         { "raster show64", RenderSettings::TierPreference::raster, 64, 0.5f },
@@ -9897,6 +11057,8 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         { "full show64 key contact shadows", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, true },
         { "full show64 soft shadows off", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, false },
         { "full show64 ambient occlusion off", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, true, false },
+        { "full show64 two probes", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, true, true, true },
+        { "raster show64 two probes", RenderSettings::TierPreference::raster, 64, 0.5f, false, 0.0f, false, true, true, true },
     };
 
     for (const auto& [width, height] : { std::pair { 2560, 1600 }, std::pair { 3456, 2234 } })
@@ -9925,6 +11087,26 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
                     auto settings = show.scene.getRenderSettings();
                     settings.ambientOcclusion = false;
                     show.scene.setRenderSettings (settings);
+                }
+
+                // Baked by the warm-up frames: the probes stay still
+                if (config.probes)
+                {
+                    const auto bounds = show.modelRoot->computeWorldBounds();
+                    const auto center = bounds.getCenter();
+                    const auto size = bounds.getSize();
+
+                    auto room = EntityNode::Ptr (new EntityNode ("roomProbe"));
+                    auto& box = room->attach<ReflectionProbeNode>();
+                    box.shape = ReflectionProbeNode::Shape::box;
+                    box.influenceExtents = size * 0.75f;
+                    room->setPosition (center);
+                    show.scene.getRoot()->addChild (room);
+
+                    auto local = EntityNode::Ptr (new EntityNode ("localProbe"));
+                    local->attach<ReflectionProbeNode>().influenceRadius = size.length() * 0.25f;
+                    local->setPosition (center + size * 0.2f);
+                    show.scene.getRoot()->addChild (local);
                 }
 
                 auto shadowRedraws = 0;
@@ -10369,5 +11551,65 @@ TEST_F (SceneRendererGLTests, SoftSunLeavesAGrazedGroundLit)
 TEST_F (SceneRendererGLTests, ShadowFilterVariantFollowsSoftAndContactShadows)
 {
     checkShadowFilterVariantFollowsSoftAndContactShadows (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ReflectionProbeShowsWhatTheCameraCannotSee)
+{
+    checkReflectionProbeShowsWhatTheCameraCannotSee (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ReplacedProbeIsBakedAgain)
+{
+    checkReplacedProbeIsBakedAgain (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, MovingAProbeBakesItAgain)
+{
+    checkMovingAProbeBakesItAgain (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ProbeBlendWithoutEnvironmentIsFinite)
+{
+    checkProbeBlendWithoutEnvironmentIsFinite (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, BoxProbeWithParallaxReflects)
+{
+    checkBoxProbeWithParallaxReflects (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, BakeProbesReportsPendingCount)
+{
+    checkBakeProbesReportsPendingCount (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RemovedProbesReleaseTheAtlas)
+{
+    checkRemovedProbesReleaseTheAtlas (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ProbeOfAnOpenSkyMatchesTheEnvironment)
+{
+    checkProbeOfAnOpenSkyMatchesTheEnvironment (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RgbmProbeShowsLikeTheFloatOne)
+{
+    checkRgbmProbeShowsLikeTheFloatOne (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, ProbeKeepsTheMultipleScatteringOfRoughMetals)
+{
+    checkProbeKeepsTheMultipleScatteringOfRoughMetals (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, BoxProbeParallaxPlacesTheReflectionOnTheWalls)
+{
+    checkBoxProbeParallaxPlacesTheReflectionOnTheWalls (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, FailedProbeCapturesLeaveTheFrameWithoutProbes)
+{
+    checkFailedProbeCapturesLeaveTheFrameWithoutProbes (RenderSettings::TierPreference::raster);
 }
 #endif

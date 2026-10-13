@@ -64,8 +64,8 @@ TEST_F (GeometryBindingsTests, PipelineGeometryCullsAndWindsPerState)
         EXPECT_EQ (options.cullMode, (state & 2) != 0 ? GpuCullMode::none : GpuCullMode::back);
         EXPECT_EQ (options.winding, (state & 1) != 0 ? GpuFaceWinding::clockwise : GpuFaceWinding::counterClockwise);
 
-        // The draw, material and raster light list blocks move from draw to draw
-        const std::vector<GpuUniformSlot> dynamic { { 2, 0 }, { 2, 1 }, { 2, 12 } };
+        // The draw, material, raster light list and raster probe list blocks move from draw to draw
+        const std::vector<GpuUniformSlot> dynamic { { 2, 0 }, { 2, 1 }, { 2, 12 }, { 2, 13 } };
         EXPECT_EQ (options.dynamicUniformBuffers, dynamic);
     }
 }
@@ -257,10 +257,18 @@ protected:
         return bindings;
     }
 
+    /** The set 2 of the raster ForwardPass local indirect variants: forwardSetTwo() and the probe list. */
+    static std::vector<std::pair<uint32_t, RK>> localIndirectSetTwo()
+    {
+        auto bindings = forwardSetTwo();
+        bindings.push_back ({ 13, RK::UniformBuffer });
+        return bindings;
+    }
+
     /** Draws @p count items, each moved and each with the next of @p materials, in one frame, setting
-        a light list that changes every draw first when @p lightList is set. Returns the set 2 bind
-        groups the frame made. */
-    int drawFrame (const GpuPipeline::Ptr& pipeline, const std::vector<Material::Ptr>& materials, int count, bool lightList)
+        a light list that changes every draw first when @p lightList is set, and a probe list that
+        changes every draw when @p probeList is set. Returns the set 2 bind groups the frame made. */
+    int drawFrame (const GpuPipeline::Ptr& pipeline, const std::vector<Material::Ptr>& materials, int count, bool lightList, bool probeList = false)
     {
         const auto madeBefore = setTwoGroupsMade;
 
@@ -272,6 +280,7 @@ protected:
         pass.setUniformBuffer (0, 0, view, sizeof (view));
 
         std::array<float, 132> lights {};
+        std::array<float, 68> probes {};
 
         for (int i = 0; i < count; ++i)
         {
@@ -285,6 +294,12 @@ protected:
             {
                 lights[0] = static_cast<float> (i);
                 pass.setUniformBuffer (2, 12, lights.data(), sizeof (lights));
+            }
+
+            if (probeList)
+            {
+                probes[0] = static_cast<float> (i);
+                pass.setUniformBuffer (2, 13, probes.data(), sizeof (probes));
             }
 
             EXPECT_TRUE (geometry.draw (pass, device, item, 0));
@@ -356,4 +371,25 @@ TEST_F (GeometryBindingsMockTests, ShadowCastersAlternatingMaterialsBuildSetTwoO
     rough->roughnessFactor = 0.9f;
 
     EXPECT_EQ (drawFrame (pipeline, { red, rough }, 64, false), 1);
+}
+
+TEST_F (GeometryBindingsMockTests, ProbeListsMovingPerDrawBuildSetTwoOncePerFrame)
+{
+    auto pipeline = compileGeometryPipeline (localIndirectSetTwo());
+    ASSERT_NE (pipeline, nullptr);
+
+    // The raster probe list is a dynamic block too: a new one per draw only moves its offset
+    const std::vector<Material::Ptr> shared { new Material() };
+    EXPECT_EQ (drawFrame (pipeline, shared, 24, true, true), 1);
+    EXPECT_EQ (setTwoGroupsBound, 24);
+}
+
+TEST_F (GeometryBindingsMockTests, ProbeListsOutsideThePipelineLeaveSetTwoAlone)
+{
+    // The default raster bundles declare no probe list: setting one dirties nothing
+    auto pipeline = compileGeometryPipeline (forwardSetTwo());
+    ASSERT_NE (pipeline, nullptr);
+
+    const std::vector<Material::Ptr> shared { new Material() };
+    EXPECT_EQ (drawFrame (pipeline, shared, 24, true, true), 1);
 }

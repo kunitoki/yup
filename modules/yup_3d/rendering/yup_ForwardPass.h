@@ -31,11 +31,13 @@ namespace yup
     per-frame sets are built once per pipeline change and only set 2 changes per draw. Set 0 holds
     the shared samplers and lookups of the LightingInputs: the environment at binding 6 with its
     sampler at 14, the lookup tables (LookupTables) at 7, read through linearClamp at binding 1, and
-    shadowCompare at 4. Set 1 holds the LightingBlock at binding 0, and on the full tier the lights
-    and the light lists of the clusters at bindings 6 and 7; raster frames with ambient occlusion
-    the AmbientOcclusionPass output at 13 (LightingInputs::ambientOcclusion, at half resolution,
+    shadowCompare at 4, and the reflection atlas at 8 in the variants reading the probes. Set 1 holds
+    the LightingBlock at binding 0, and on the full tier the lights, the light lists of the clusters
+    and the reflection probes at bindings 6, 7 and 8; raster frames with ambient occlusion the
+    AmbientOcclusionPass output at 13 (LightingInputs::ambientOcclusion, at half resolution,
     upsampled bilinearly), which the full tier's blended surfaces skip. Raster draws read their own
-    light list at set 2 binding 12. Set 3 holds the shadows: the sun cascades at binding 0, the point and spot
+    light list at set 2 binding 12, and in the local indirect variants their two reflection probes at
+    13 (SceneDrawList::DrawItem::reflectionProbes). Set 3 holds the shadows: the sun cascades at binding 0, the point and spot
     light atlas at 2 and the ShadowBlock at 4, and for soft shadows the same two maps again at 1
     and 3, read raw by the blocker search.
 
@@ -48,10 +50,13 @@ namespace yup
     maps. It holds the soft shadows; on the full tier the frame also takes it when contact shadows
     are marched, which LightingPass alone does (blended items write no depth to march through).
     On raster, the local indirect variant (YUP_3D_LOCAL_INDIRECT) shades the frames with
-    LightingInputs::ambientOcclusion, and only it declares and binds it: the default raster bundles
-    carry no ambient occlusion code. Blended items skip it (a white texture is bound before them),
-    since it holds the opaque surfaces behind them. If it fails to compile, the failure is logged
-    once and the frames shade without ambient occlusion.
+    LightingInputs::ambientOcclusion or reflection probes (LightingInputs::hasReflectionProbes()),
+    and only it declares and binds them: the default raster bundles carry no ambient occlusion and
+    no probe code. Without ambient occlusion it binds white there, and without probes one empty
+    probe list for the whole pass. Blended items skip the ambient occlusion (a white texture is
+    bound before them), since it holds the opaque surfaces behind them, and keep their probes. If
+    the variant fails to compile, the failure is logged once and the frames shade without ambient
+    occlusion and probes.
 
     @internal
 */
@@ -131,6 +136,7 @@ private:
     std::optional<Result> defaults;
     GeometryBindings geometry;
     GpuTexture::Ptr blackCube; // The environment without one
+    GpuTexture::Ptr blackTexture; // The reflection atlas without probes, created by the first frame reading it
     GpuTarget::Ptr surface;
     bool shadowFiltersFailureReported = false; // A shadow filter variant failed to compile, and was logged once
     bool localIndirectFailureReported = false; // A local indirect variant failed to compile, and was logged once

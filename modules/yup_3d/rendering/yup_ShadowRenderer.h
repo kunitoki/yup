@@ -93,6 +93,7 @@ public:
         uint64 globalSignature = 0;             ///< What every cascade depends on besides its fit and casters: the shadow casting directional lights and the settings.
         Span<const uint64> casterSignatures;    ///< One hash per opaque item of drawList, in order: what it draws into a shadow map. Without one per item every map is drawn every frame.
         bool enabled = true;                    ///< False when the shadow comparison sampler is missing: nothing is shadowed.
+        bool sceneFit = false;                  ///< Fits the sun's single map to the whole scene (ShadowCascades::fitScene()) whatever the view, so one draw serves views anywhere in it, such as the reflection probe captures.
     };
 
     //==============================================================================
@@ -148,6 +149,12 @@ public:
     /** Forgets the rendered maps, so the next render() draws them again: for frames the GPU failed
         to execute, or that were abandoned after their shadow passes were recorded. */
     void invalidate() noexcept;
+
+    /** Releases the shadow maps and their placeholders, keeping the pipelines and the tile clear
+        mesh, which frames still in flight may use: the frames keep the textures they bind. The next
+        render() creates and draws the maps again. getCascadeTexture() and getAtlasTexture() return
+        nullptr until then. */
+    void releaseTextures() noexcept;
 
     /** @internal The number of render() calls that drew shadow maps, for tests. */
     int getNumRenderedFrames() const noexcept { return numRenderedFrames; }

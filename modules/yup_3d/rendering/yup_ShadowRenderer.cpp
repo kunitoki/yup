@@ -305,6 +305,17 @@ void ShadowRenderer::invalidate() noexcept
     atlasPlaceholder.cleared = false;
 }
 
+void ShadowRenderer::releaseTextures() noexcept
+{
+    invalidate();
+    cascades = nullptr;
+    layerTargets.clear();
+    atlas = nullptr;
+    atlasTarget = nullptr;
+    cascadePlaceholder = {};
+    atlasPlaceholder = {};
+}
+
 //==============================================================================
 Result ShadowRenderer::preparePlaceholder (const GpuDevice::Ptr& device, GpuFrame& frame, Placeholder& placeholder, bool array)
 {
@@ -747,16 +758,20 @@ Result ShadowRenderer::render (const GpuDevice::Ptr& device, GpuFrame& frame, co
 
         numCascades = ShadowCascades::build (cascadeInputs, fitted);
 
-        // A compact scene gets one map over all of it, which does not follow the camera
+        // A compact scene gets one map over all of it, which does not follow the camera; Inputs::sceneFit always takes it
         ShadowCascades::Cascade sceneFit;
-        sceneFitted = numCascades > 0
+        sceneFitted = (numCascades > 0 || inputs.sceneFit)
                    && ShadowCascades::fitScene (cascadeInputs, sceneFit)
-                   && ShadowCascades::prefersSceneFit (sceneFit, fitted[0], sceneFitted);
+                   && (inputs.sceneFit || ShadowCascades::prefersSceneFit (sceneFit, fitted[0], sceneFitted));
 
         if (sceneFitted)
         {
             fitted[0] = sceneFit;
             numCascades = 1;
+        }
+        else if (inputs.sceneFit)
+        {
+            numCascades = 0;
         }
     }
     else

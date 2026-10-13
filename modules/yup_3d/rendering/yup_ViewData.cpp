@@ -113,6 +113,44 @@ void ViewData::update (const Scene& scene, int widthPx, int heightPx, bool jitte
     block.clipPlanes[3] = getToneMappingOperator (scene.getToneMapping());
 }
 
+void ViewData::setCapture (const Matrix4& viewMatrix, const Matrix4& projectionMatrix, Vector3<float> position, int size)
+{
+    view = viewMatrix;
+    projection = projectionMatrix;
+    jitteredProjection = projectionMatrix;
+    unjitteredViewProjection = view.followedBy (projection);
+    cameraPosition = position;
+    previousJitter = {};
+    hasPrevious = false;
+
+    copyViewMatrix (view, block.view);
+    copyViewMatrix (projection, block.projection);
+    copyViewMatrix (unjitteredViewProjection, block.viewProjection);
+    copyViewMatrix (unjitteredViewProjection.inverted(), block.inverseViewProjection);
+    copyViewMatrix (unjitteredViewProjection, block.unjitteredViewProjection);
+    copyViewMatrix (unjitteredViewProjection, block.previousViewProjection);
+
+    block.cameraPosition[0] = position.getX();
+    block.cameraPosition[1] = position.getY();
+    block.cameraPosition[2] = position.getZ();
+    block.cameraPosition[3] = 1.0f;
+
+    const auto extent = static_cast<float> (size);
+    block.viewport[0] = extent;
+    block.viewport[1] = extent;
+    block.viewport[2] = 1.0f / extent;
+    block.viewport[3] = 1.0f / extent;
+
+    std::fill (std::begin (block.jitter), std::end (block.jitter), 0.0f);
+
+    // A depth 0 to 1 perspective projection stores near * far / (near - far) at [14] and far / (near - far) at [10]
+    const auto* p = projectionMatrix.getData();
+    block.clipPlanes[0] = p[14] / p[10];
+    block.clipPlanes[1] = p[14] / (p[10] + 1.0f);
+    block.clipPlanes[2] = 0.0f;
+    block.clipPlanes[3] = 0.0f;
+}
+
 void ViewData::reset() noexcept
 {
     hasPrevious = false;

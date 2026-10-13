@@ -29,6 +29,13 @@
 #define YUP_3D_AMBIENT_OCCLUSION
 #endif
 
+// The raster local indirect variants and the full tier's blended surfaces read the reflection probes
+// (lib/probes.glsl), the full tier from set 1 binding 8
+#if defined(YUP_3D_LOCAL_INDIRECT) || defined(YUP_3D_TIER_FULL)
+#define YUP_3D_REFLECTION_PROBES
+#define YUP_3D_REFLECTION_PROBES_BINDING 8
+#endif
+
 #include "lib/bsdf.glsl"
 #include "lib/color.glsl"
 #include "lib/view.glsl"

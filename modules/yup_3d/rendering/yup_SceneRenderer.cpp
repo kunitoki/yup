@@ -25,79 +25,15 @@ namespace yup
 namespace
 {
 
-//==============================================================================
-/** FNV-1a over the values a frame depends on. Floats are canonicalized first, so 0 and -0, and
-    NaNs of any payload, hash the same.
-*/
-class FrameSignature
+/** The largest power of two within both @p requested and what @p device supports. */
+uint32_t getSupportedSampleCount (int requested, const GpuDevice& device) noexcept
 {
-public:
-    void addBits (uint64 value) noexcept
-    {
-        addBytes (value, 8);
-    }
+    uint32_t samples = 1;
+    while (samples * 2 <= static_cast<uint32_t> (requested) && samples * 2 <= device.getMaximumSampleCount())
+        samples *= 2;
 
-    void addFloat (float value) noexcept
-    {
-        auto bits = std::bit_cast<uint32> (value);
-
-        if ((bits & 0x7f800000u) == 0x7f800000u && (bits & 0x007fffffu) != 0)
-            bits = 0x7fc00000u;
-        else if (bits == 0x80000000u)
-            bits = 0;
-
-        addBytes (bits, 4);
-    }
-
-    void addFloats (Span<const float> values) noexcept
-    {
-        for (const auto value : values)
-            addFloat (value);
-    }
-
-    void addPointer (const void* pointer) noexcept
-    {
-        addBits (static_cast<uint64> (reinterpret_cast<uintptr_t> (pointer)));
-    }
-
-    void addVector (const Vector3<float>& vector) noexcept
-    {
-        addFloat (vector.getX());
-        addFloat (vector.getY());
-        addFloat (vector.getZ());
-    }
-
-    void addMatrix (const Matrix4& matrix) noexcept
-    {
-        addFloats (Span<const float> (matrix.getData(), 16));
-    }
-
-    uint64 get() const noexcept { return hash; }
-
-    /** The hash through the splitmix64 finalizer. Sums of plain FNV-1a hashes of similar items
-        cancel out (two primitives of one mesh changing together leave the sum unchanged), sums of
-        finalized ones don't.
-    */
-    uint64 getFinalized() const noexcept
-    {
-        auto z = hash;
-        z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ull;
-        z = (z ^ (z >> 27)) * 0x94d049bb133111ebull;
-        return z ^ (z >> 31);
-    }
-
-private:
-    void addBytes (uint64 value, int count) noexcept
-    {
-        for (int i = 0; i < count; ++i)
-        {
-            hash ^= (value >> (i * 8)) & 0xff;
-            hash *= 1099511628211ull;
-        }
-    }
-
-    uint64 hash = 14695981039346656037ull;
-};
+    return samples;
+}
 
 std::array<const Texture::Ptr*, 5> getMaterialTextures (const Material& material) noexcept
 {
@@ -376,6 +312,62 @@ struct SceneRenderer::Impl
         return true;
     }
 
+    /** Bakes the pending reflection probes of @p probeList into @p frame, through the forward pass
+        (see ProbeBaker), and returns how many were baked. The baker is created by the first frame or
+        bake with a probe, then kept, so a scene without probes allocates nothing. A bake that fails
+        never fails the frame: the probes shade with weight 0 until they bake again.
+        @p failCapturesForTesting makes every capture fail.
+    */
+    int bakeReflectionProbes (GpuFrame& frame, const Scene& scene, const SceneDrawList& probeList, const RenderCapabilities::DeviceFacts& facts,
+                              const GpuTexture::Ptr& environmentCube, const FrameResources::Samplers& samplers, bool failCapturesForTesting)
+    {
+        if (probeBaker == nullptr)
+        {
+            if (probeList.getReflectionProbes().empty())
+                return 0;
+
+            probeBaker = std::make_unique<ProbeBaker> (probeRenderer);
+        }
+
+        probeBaker->failCapturesForTesting (failCapturesForTesting);
+
+        const ProbeBaker::Inputs inputs { scene, probeList, facts, environmentCube, lookupTables, samplers };
+        return probeBaker->bake (frame, forwardPass, inputs);
+    }
+
+    /** The reflection probes of the frame for the shading passes, Block::probeInfo y counting them:
+        on raster every probe of the draw list, which each draw picks from; on full the baked ones by
+        priority in a storage buffer, uploaded every full frame (sized for one probe without any).
+        Returns false only when that buffer could not be uploaded.
+    */
+    bool prepareReflectionProbes (LightingInputs& lighting, bool full)
+    {
+        // A baker that gave up shades no probe
+        const auto hasProbes = probeBaker != nullptr && ! probeBaker->hasGivenUp() && ! drawList.getReflectionProbes().empty();
+        lighting.reflectionAtlas = hasProbes ? probeBaker->getReflectionAtlas() : nullptr;
+
+        if (full)
+        {
+            const auto probes = hasProbes ? probeBaker->packReflectionProbesByPriority (drawList) : std::vector<GpuReflectionProbe>();
+            lighting.block.probeInfo[1] = static_cast<float> (probes.size());
+            lighting.reflectionProbeBuffer = uploadStorageBuffer (FrameResources::StorageSlot::reflectionProbes, Span<const GpuReflectionProbe> (probes));
+            return lighting.reflectionProbeBuffer != nullptr;
+        }
+
+        if (hasProbes)
+            lighting.reflectionProbes = probeBaker->packReflectionProbes (drawList);
+
+        lighting.block.probeInfo[1] = static_cast<float> (lighting.reflectionProbes.size());
+        return true;
+    }
+
+    /** Makes the reflection probes bake again: for frames the GPU did not execute. */
+    void forgetProbeBakes() noexcept
+    {
+        if (probeBaker != nullptr)
+            probeBaker->forgetBakes();
+    }
+
     /** Releases the render targets the passes keep for the next frames. */
     void releasePassTargets() noexcept
     {
@@ -455,7 +447,7 @@ struct SceneRenderer::Impl
         keeps the history, which TAA reprojects and clips to the new frame. Tone mapping and bloom
         run after TAA, so their settings are left out.
     */
-    uint64 getRestartingSignature (const Scene& scene, const RenderSettings& settings, const GpuTexture* environmentCube) const
+    uint64 getRestartingSignature (const Scene& scene, const RenderSettings& settings, const GpuTexture* environmentCube, int pendingBakes) const
     {
         FrameSignature signature;
         signature.addMatrix (viewData.getUnjitteredViewProjection());
@@ -492,6 +484,14 @@ struct SceneRenderer::Impl
 
         for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
             addItemSignatures (signature, items, addItem);
+
+        // The reflection probes: their fields and placement, and their bakes, the ones this frame records included
+        const auto bakes = probeBaker != nullptr ? probeBaker->getGeneration() : 0;
+        signature.addBits (bakes + (pendingBakes > 0 ? 1u : 0u));
+        signature.addBits (drawList.getReflectionProbes().size());
+
+        for (const auto& probe : drawList.getReflectionProbes())
+            signature.addBits (ProbeBaker::getSignature (probe));
 
         signature.addBits (drawList.getLights().size());
 
@@ -574,10 +574,10 @@ struct SceneRenderer::Impl
         first unchanged frame after changes counts the history as a single sample, so the frames
         that follow average it out instead of keeping a share of the image before the changes.
     */
-    void trackChanges (const Scene& scene, const RenderSettings& settings, int width, int height, const GpuTexture* environmentCube)
+    void trackChanges (const Scene& scene, const RenderSettings& settings, int width, int height, const GpuTexture* environmentCube, int pendingBakes)
     {
         const auto invalidating = getInvalidatingSignature (width, height, settings.taaSamples);
-        const auto restarting = getRestartingSignature (scene, settings, environmentCube);
+        const auto restarting = getRestartingSignature (scene, settings, environmentCube, pendingBakes);
 
         if (! hasSignature || invalidating != invalidatingSignature)
         {
@@ -637,6 +637,7 @@ struct SceneRenderer::Impl
     bool lookupTablesAttempted = false;
     ProbeRenderer probeRenderer { device };      // Builds the environment cube; its radiance format is the device's
     LightingInputs::EnvironmentCube environment; // The scene's environment cube on this device
+    std::unique_ptr<ProbeBaker> probeBaker;      // Created by the first frame or bake with a reflection probe, see bakeReflectionProbes()
     GpuTexture::Ptr sceneColorOutput;
     GpuTexture::Ptr velocityOutput;
     GpuTexture::Ptr gbufferNormalOutput;
@@ -680,6 +681,7 @@ struct SceneRenderer::Impl
         {
             frameResources.invalidateHistory();
             shadowRenderer.invalidate();
+            forgetProbeBakes();
             hasSignature = false;
             accumulatedSamples = 0;
             stillSamples = 0;
@@ -748,6 +750,59 @@ const ShadowRenderer* SceneRenderer::getShadowRenderer() const noexcept
     return impl != nullptr ? &impl->shadowRenderer : nullptr;
 }
 
+const ProbeBaker* SceneRenderer::getProbeBaker() const noexcept
+{
+    return impl != nullptr ? impl->probeBaker.get() : nullptr;
+}
+
+int SceneRenderer::bakeProbes (const GpuDevice::Ptr& device, Scene& scene)
+{
+    if (device == nullptr)
+        return 0;
+
+    // An earlier frame the GPU failed to execute makes its bakes bake again now
+    if (impl != nullptr)
+        if (const auto gpuResult = impl->takeFinishedFrames (false); gpuResult.failed())
+            lastGpuFailure = gpuResult.getErrorMessage();
+
+    if (impl == nullptr || device != impl->device)
+        impl = std::make_unique<Impl> (device, getSupportedSampleCount (sampleCount, *device));
+
+    SceneDrawList probeList;
+    probeList.build (*scene.getRoot(), Matrix4());
+    if (probeList.getReflectionProbes().empty() && impl->probeBaker == nullptr)
+        return 0;
+
+    auto deviceFacts = impl->deviceFacts;
+    if (deviceFactsOverride)
+        deviceFactsOverride (deviceFacts);
+
+    // The lookup tables, and the environment cube, built in a frame of its own, never inside this one
+    if (impl->prepareResources (false, failLookupTables).failed())
+        return 0;
+
+    impl->probeRenderer.setForceRgbmForTesting (forceRgbmRadiance);
+    const auto environmentCube = LightingInputs::prepareEnvironment (impl->probeRenderer, scene, impl->environment);
+
+    const auto* samplers = impl->frameResources.getSamplers();
+    if (samplers == nullptr)
+        return 0;
+
+    auto frame = GpuFrame::begin (device);
+    if (! frame.isValid())
+        return 0;
+
+    impl->pendingFrames.push_back (frame.getStatus());
+
+    // An explicit bake tries again even after the baker gave up
+    if (impl->probeBaker != nullptr)
+        impl->probeBaker->clearFailures();
+
+    const auto baked = impl->bakeReflectionProbes (frame, scene, probeList, deviceFacts, environmentCube, *samplers, failProbeCaptures);
+    frame.submit();
+    return baked;
+}
+
 const AmbientOcclusionPass* SceneRenderer::getAmbientOcclusionPass() const noexcept
 {
     return impl != nullptr ? impl->ambientOcclusionPass.get() : nullptr;
@@ -788,10 +843,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (device == nullptr || widthPx <= 0 || heightPx <= 0)
         return fail ("No device, or an empty size");
 
-    // The largest power of two within both the request and what the device supports
-    uint32_t samples = 1;
-    while (samples * 2 <= static_cast<uint32_t> (sampleCount) && samples * 2 <= device->getMaximumSampleCount())
-        samples *= 2;
+    const auto samples = getSupportedSampleCount (sampleCount, *device);
 
     if (impl == nullptr || device != impl->device)
     {
@@ -831,9 +883,10 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     // Every exit from here on ends the frame of the resource pool
     const auto failFrame = [&] (const String& error)
     {
-        // The history and the shadow maps may not have been written: the next frame starts over
+        // The history, the shadow maps and the probe bakes may not have been written: the next frame starts over
         impl->frameResources.invalidateHistory();
         impl->shadowRenderer.invalidate();
+        impl->forgetProbeBakes();
         impl->releasePassTargets();
         impl->frameResources.endFrame();
         impl->hasSignature = false;
@@ -878,8 +931,12 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->probeRenderer.setForceRgbmForTesting (forceRgbmRadiance);
     const auto environmentCube = LightingInputs::prepareEnvironment (impl->probeRenderer, scene, impl->environment);
 
+    // The probes this frame bakes, counted before it records them so the frame baking them restarts the convergence
+    const auto pendingBakes = impl->probeBaker != nullptr ? impl->probeBaker->getNumPending (drawList)
+                                                          : static_cast<int> (drawList.getReflectionProbes().size());
+
     if (full)
-        impl->trackChanges (scene, settings, widthPx, heightPx, environmentCube.get());
+        impl->trackChanges (scene, settings, widthPx, heightPx, environmentCube.get(), pendingBakes);
 
     auto frame = GpuFrame::begin (device);
     if (! frame.isValid())
@@ -896,6 +953,10 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     const auto* samplers = impl->frameResources.getSamplers();
     if (samplers == nullptr)
         return failFrame ("Unable to create the shared samplers");
+
+    // The pending reflection probes bake first, in this frame, so failFrame() and a GPU failure bake
+    // them again. A bake that fails leaves the frame without them
+    impl->bakeReflectionProbes (frame, scene, drawList, deviceFacts, environmentCube, *samplers, failProbeCaptures);
 
     // Without the comparison sampler nothing can read a shadow map: the frame renders unshadowed
     ShadowRenderer::Inputs shadowInputs { drawList, impl->viewData, *impl->capabilities, settings };
@@ -916,6 +977,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     // One flag for every radiance texture of the device, whether or not the scene has an environment
     lighting.block.probeInfo[0] = impl->probeRenderer.getRadianceFormat() == GpuTextureFormat::rgba8unorm ? 1.0f : 0.0f;
     lighting.samplers = *samplers;
+
+    if (! impl->prepareReflectionProbes (lighting, full))
+        return failFrame ("Unable to upload the reflection probes");
 
     // The shading passes compile only the variants the frame shades with: the defaults here, so a
     // failure tells why, the shadow filter variants in the passes, which fall back to the defaults

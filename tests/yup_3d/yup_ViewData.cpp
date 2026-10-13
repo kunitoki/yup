@@ -145,6 +145,33 @@ TEST_F (ViewDataTests, ShadowNoiseFrameIndexWrapsOnTheCpu)
     EXPECT_EQ (view.getBlock().clipPlanes[2], 0.0f);
 }
 
+TEST_F (ViewDataTests, CaptureHasExposureOneNoJitterAndItsClipPlanes)
+{
+    const Vector3<float> position (1.0f, 2.0f, 3.0f);
+    const auto view = Matrix4::lookAt (position, position + Vector3<float> (1.0f, 0.0f, 0.0f), { 0.0f, 1.0f, 0.0f });
+    const auto projection = Matrix4::perspective (MathConstants<float>::halfPi, 1.0f, 0.05f, 100.0f);
+
+    ViewData data;
+    data.setCapture (view, projection, position, 128);
+
+    const auto& block = data.getBlock();
+    EXPECT_FLOAT_EQ (block.cameraPosition[3], 1.0f);
+    EXPECT_FLOAT_EQ (block.cameraPosition[0], 1.0f);
+    EXPECT_FLOAT_EQ (block.viewport[0], 128.0f);
+    EXPECT_FLOAT_EQ (block.viewport[3], 1.0f / 128.0f);
+    EXPECT_NEAR (block.clipPlanes[0], 0.05f, 1.0e-5f);
+    EXPECT_NEAR (block.clipPlanes[1], 100.0f, 0.1f); // Read back from the float projection
+    EXPECT_FLOAT_EQ (block.clipPlanes[2], 0.0f);
+
+    for (const auto jitter : block.jitter)
+        EXPECT_FLOAT_EQ (jitter, 0.0f);
+
+    // No motion: the previous matrix is the current one, unjittered
+    EXPECT_TRUE (std::equal (std::begin (block.viewProjection), std::end (block.viewProjection), block.previousViewProjection));
+    EXPECT_TRUE (std::equal (std::begin (block.viewProjection), std::end (block.viewProjection), block.unjitteredViewProjection));
+    EXPECT_EQ (data.getCameraPosition(), position);
+}
+
 /** CPU only: mirrors viewLinearDepth of lib/view.glsl on the ViewBlock the shaders read. */
 class ViewDataLinearDepthTests : public ::testing::Test
 {

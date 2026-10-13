@@ -60,7 +60,7 @@ public:
     float falloff = 0.5f;                                 ///< Distance inside the border over which the probe fades out, in entity space. Negative counts as 0, a hard edge.
     bool parallaxCorrection = true;                       ///< Projects reflections onto the influence shape (Lagarde 2012).
     float intensity = 1.0f;                               ///< Multiplier of the captured light.
-    float clipNear = 0.05f;                               ///< Near plane of the capture, in world units from the entity origin. Values below 0.001 count as 0.001.
+    float clipNear = 0.05f;                               ///< Near plane of the capture, in world units from the entity origin. Values below 0.001 count as 0.001, and values beyond half the capture's far plane (four times the influence's bounding radius, at least 100) as that.
 
     /** Marks the probe for baking again, by giving it a new bake id. */
     void requestBake() noexcept;
