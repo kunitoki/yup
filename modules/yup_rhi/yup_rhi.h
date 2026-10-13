@@ -33,6 +33,7 @@
     license:            ISC
 
     dependencies:       yup_core yup_shading yup_simd rive
+    testDeps:           yup_graphics
     appleFrameworks:    Metal
 
   END_YUP_MODULE_DECLARATION

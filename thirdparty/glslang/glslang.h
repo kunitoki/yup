@@ -32,6 +32,7 @@
     website:            https://github.com/KhronosGroup/glslang
     license:            BSD-3-Clause
 
+    optionalDeps:       spirv_tools
     defines:            ENABLE_HLSL=1
     searchpaths:        upstream upstream/SPIRV
 

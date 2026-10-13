@@ -1,31 +1,24 @@
 name: MacOS
 
 on:
-  push:
-    paths:
-      - "CMakeLists.txt"
-      - "**/workflows/build_macos.yml"
-      - "**/cmake/**"
-      - "**/examples/**"
-      - "**/modules/**"
-      - "**/python/**"
-      - "**/tests/**"
-      - "**/thirdparty/**"
-      - "!**/LICENSE*"
-      - "!**/native/generated/**"
-      - "!**/native/java*/**"
-      - "!**/native/*_android.*"
-      - "!**/native/*_emscripten.*"
-      - "!**/native/*_linux.*"
-      - "!**/native/*_ios*.*"
-      - "!**/native/*_wasm.*"
-      - "!**/native/*_windows.*"
-    branches:
-      - "**"
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_call:
+    inputs:
+      test_modules:
+        description: Semicolon-separated YUP_TEST_MODULES value (empty builds every module's tests)
+        type: string
+        default: ""
+      tests:
+        description: Whether to build and run the tests
+        type: boolean
+        default: false
+      examples:
+        description: JSON array of the examples to build
+        type: string
+        default: "[]"
+      example_targets:
+        description: JSON object mapping each example to its space-separated build targets
+        type: string
+        default: "{}"
 
 env:
   ACTION_RUNNER: github-actions
@@ -35,10 +28,10 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
     - name: Configure
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+      run: |
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - name: Build SDL
       run: |
         cmake --build ${{ runner.workspace }}/build --config Debug --target SDL3-static
@@ -48,120 +41,52 @@ jobs:
       uses: actions/cache/save@v5
       with:
         path: ${{ runner.workspace }}/build
-        key: macos-build-${{ github.sha }}
+        key: macos-build-${{ github.sha }}-${{ github.run_id }}
 
-  build_tests_debug:
+  build_tests:
     runs-on: macos-latest
     needs: [configure]
+    if: inputs.tests
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
     steps:
     - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
-        key: macos-build-${{ github.sha }}
+        key: macos-build-${{ github.sha }}-${{ github.run_id }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
-    - working-directory: ${{ runner.workspace }}/build/tests/Debug
+      run: |
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
+    - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/${{ matrix.config }}
       run: ./yup_tests.app/Contents/MacOS/yup_tests
 
-  build_tests_release:
+  build_examples:
     runs-on: macos-latest
     needs: [configure]
-    timeout-minutes: 45
+    if: inputs.examples != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJson(inputs.examples) }}
     steps:
     - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
-        key: macos-build-${{ github.sha }}
+        key: macos-build-${{ github.sha }}-${{ github.run_id }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
-    - working-directory: ${{ runner.workspace }}/build/tests/Release
-      run: ./yup_tests.app/Contents/MacOS/yup_tests
-
-  build_console:
-    runs-on: macos-latest
-    needs: [configure]
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - uses: actions/cache/restore@v5
-      id: cache-restore
-      with:
-        path: ${{ runner.workspace }}/build
-        key: macos-build-${{ github.sha }}
-    - name: Configure If Cache Missed
-      if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_console
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_console
-
-  build_app:
-    runs-on: macos-latest
-    needs: [configure]
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - uses: actions/cache/restore@v5
-      id: cache-restore
-      with:
-        path: ${{ runner.workspace }}/build
-        key: macos-build-${{ github.sha }}
-    - name: Configure If Cache Missed
-      if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_app
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_app
-
-  build_graphics:
-    runs-on: macos-latest
-    needs: [configure]
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - uses: actions/cache/restore@v5
-      id: cache-restore
-      with:
-        path: ${{ runner.workspace }}/build
-        key: macos-build-${{ github.sha }}
-    - name: Configure If Cache Missed
-      if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_graphics
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_graphics
-
-  build_plugins:
-    runs-on: macos-latest
-    needs: [configure]
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - uses: actions/cache/restore@v5
-      id: cache-restore
-      with:
-        path: ${{ runner.workspace }}/build
-        key: macos-build-${{ github.sha }}
-    - name: Configure If Cache Missed
-      if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_clap_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_clap_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_vst3_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_vst3_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_standalone_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_standalone_plugin
+      run: |
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
