@@ -154,25 +154,27 @@ class ModuleGraph:
         self.yup_modules = set()
         self.tp_names = set()
         self.examples = set()
-        self.dependents = defaultdict(set)       # dep -> {yup/thirdparty modules using it, required or optional}
+        self.dependents = defaultdict(set)       # dep -> {yup/thirdparty modules requiring it}
+        self.optional_dependents = defaultdict(set)  # dep -> {yup/thirdparty modules optionally using it}
         self.test_dependents = defaultdict(set)  # dep -> {yup modules whose tests use it}
         self.example_deps = {}                   # example -> {deps}
 
 
 def parse_module_header(header, platform_deps=None):
-    """Return (dependency_tokens, test_dependency_tokens) from a module declaration block.
+    """Return (dependency_tokens, optional_dependency_tokens, test_dependency_tokens) from a module declaration block.
 
     platform_deps names the <platform>Deps lines to honour; None honours all of them.
     """
     try:
         text = header.read_text(errors="ignore")
     except OSError:
-        return set(), set()
+        return set(), set(), set()
 
     match = re.search(r"BEGIN_YUP_MODULE_DECLARATION(.*?)END_YUP_MODULE_DECLARATION", text, re.DOTALL)
     block = match.group(1) if match else text
 
     deps = set()
+    optional_deps = set()
     test_deps = set()
     for line in block.splitlines():
         dep_match = HEADER_DEP_LINE_RE.match(line)
@@ -182,9 +184,11 @@ def parse_module_header(header, platform_deps=None):
         tokens = set(dep_match.group(2).replace(",", " ").split())
         if key == "testDeps":
             test_deps |= tokens
-        elif key in ("dependencies", "optionalDeps") or platform_deps is None or key in platform_deps:
+        elif key == "optionalDeps":
+            optional_deps |= tokens
+        elif key == "dependencies" or platform_deps is None or key in platform_deps:
             deps |= tokens
-    return deps, test_deps
+    return deps, optional_deps, test_deps
 
 
 def build_graph(root, platform_deps=None):
@@ -210,14 +214,18 @@ def build_graph(root, platform_deps=None):
 
     known = graph.yup_modules | graph.tp_names
 
-    # An optional consumer compiles against its dep whenever both are linked,
-    # so optional edges propagate changes exactly like required ones.
+    # An optional consumer only compiles against its dep when both are linked,
+    # which a dependent of the consumer does not imply: optional edges are kept
+    # apart so they propagate a single hop.
     for module in known:
         folder = modules_dir if module in graph.yup_modules else thirdparty_dir
-        deps, test_deps = parse_module_header(folder / module / f"{module}.h", platform_deps)
+        deps, optional_deps, test_deps = parse_module_header(folder / module / f"{module}.h", platform_deps)
 
         for dep in deps & known:
             graph.dependents[dep].add(module)
+
+        for dep in optional_deps & known:
+            graph.optional_dependents[dep].add(module)
 
         if module in graph.yup_modules:
             for dep in test_deps & known:
@@ -347,12 +355,16 @@ def compute_affected(changed_files, config, graph, platform=None):
     if full_build:
         return result(True, set(), graph.examples)
 
-    # A code change (yup or thirdparty) affects every transitive dependent. Tests
-    # also rerun when a module their testDeps name is affected; test-file changes
-    # are scoped to their own module only.
+    # A code change (yup or thirdparty) affects every transitive required
+    # dependent. Optional consumers of an affected module rerun their tests, as
+    # their test build links their optional deps, but do not propagate further:
+    # their dependents do not link the changed module. Tests also rerun when a
+    # module their testDeps name is affected; test-file changes are scoped to
+    # their own module only.
     code_affected = reverse_closure(changed_yup | changed_tp, graph.dependents)
     test_set = (code_affected | test_components) & graph.yup_modules
     for dep in code_affected:
+        test_set |= graph.optional_dependents.get(dep, set()) & graph.yup_modules
         test_set |= graph.test_dependents.get(dep, set())
 
     # Examples rebuild when they changed directly or depend on an affected
