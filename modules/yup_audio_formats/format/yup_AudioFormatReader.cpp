@@ -48,6 +48,10 @@ bool AudioFormatReader::read (float* const* destChannels, int numDestChannels, i
     if (! readSamples (floatChans.getData(), numChannelsToRead, 0, startSampleInSource, numSamplesToRead))
         return false;
 
+    for (int i = 0; i < numChannelsToRead; ++i)
+        if (destChannels[i] != nullptr)
+            FloatVectorOperations::copy (destChannels[i], floatChans[i], numSamplesToRead);
+
     if (numChannelsToRead < numDestChannels)
     {
         if (fillLeftoverChannelsWithCopies && numChannelsToRead > 0)

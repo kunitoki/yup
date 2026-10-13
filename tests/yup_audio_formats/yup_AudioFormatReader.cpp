@@ -98,6 +98,48 @@ TEST (AudioFormatReaderTests, ReadCopiesMonoSourceToAllDestinationChannels)
     }
 }
 
+TEST (AudioFormatReaderTests, ReadIntoChannelPointersCopiesSourceData)
+{
+    MockAudioFormatReader reader (2, 4);
+    fillChannel (reader.buffer, 0, { 0.1f, -0.25f, 0.75f, 0.0f });
+    fillChannel (reader.buffer, 1, { -0.5f, 0.2f, 0.3f, -0.9f });
+
+    AudioBuffer<float> destination (2, 3);
+    destination.clear();
+
+    EXPECT_TRUE (reader.read (destination.getArrayOfWritePointers(), 2, 1, 3));
+
+    for (int channel = 0; channel < 2; ++channel)
+    {
+        for (int sample = 0; sample < 3; ++sample)
+            EXPECT_FLOAT_EQ (reader.buffer.getSample (channel, sample + 1), destination.getSample (channel, sample));
+    }
+}
+
+TEST (AudioFormatReaderTests, ReadIntoChannelPointersFillsLeftoverChannels)
+{
+    MockAudioFormatReader reader (1, 4);
+    fillChannel (reader.buffer, 0, { 0.1f, -0.25f, 0.75f, 0.5f });
+
+    AudioBuffer<float> copied (3, 4);
+    copied.clear();
+    EXPECT_TRUE (reader.read (copied.getArrayOfWritePointers(), 3, 0, 4, true));
+
+    AudioBuffer<float> cleared (2, 4);
+    for (int channel = 0; channel < 2; ++channel)
+        std::fill_n (cleared.getWritePointer (channel), 4, 1.0f);
+    EXPECT_TRUE (reader.read (cleared.getArrayOfWritePointers(), 2, 0, 4, false));
+
+    for (int sample = 0; sample < 4; ++sample)
+    {
+        for (int channel = 0; channel < 3; ++channel)
+            EXPECT_FLOAT_EQ (reader.buffer.getSample (0, sample), copied.getSample (channel, sample));
+
+        EXPECT_FLOAT_EQ (reader.buffer.getSample (0, sample), cleared.getSample (0, sample));
+        EXPECT_FLOAT_EQ (0.0f, cleared.getSample (1, sample));
+    }
+}
+
 TEST (AudioFormatReaderTests, ReadClearsDestinationWhenNoChannelsAreRequested)
 {
     MockAudioFormatReader reader (2, 4);
