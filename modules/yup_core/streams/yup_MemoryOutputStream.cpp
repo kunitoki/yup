@@ -197,7 +197,10 @@ int64 MemoryOutputStream::writeFromInputStream (InputStream& source, int64 maxNu
         if (maxNumBytesToWrite < 0 || availableData < maxNumBytesToWrite)
             maxNumBytesToWrite = availableData;
 
-        if (blockToUse != nullptr)
+        // The declared length may be wrong or hostile, so only reserve a bounded amount up front
+        constexpr int64 maxPreallocatedBytes = (int64) 64 << 20;
+
+        if (blockToUse != nullptr && maxNumBytesToWrite <= maxPreallocatedBytes)
             preallocate (position + (size_t) maxNumBytesToWrite);
     }
 

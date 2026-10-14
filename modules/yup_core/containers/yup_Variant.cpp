@@ -1174,7 +1174,8 @@ void var::writeToStream (OutputStream& output) const
 
 static var readVarFromStream (InputStream& input, int depth)
 {
-    constexpr int maxNestingDepth = 1024;
+    // Kept well below the 1024 used for parsing so deep input cannot exhaust small thread stacks such as WebAssembly's
+    constexpr int maxNestingDepth = 128;
 
     const int numBytes = input.readCompressedInt();
 
