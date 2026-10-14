@@ -71,6 +71,7 @@
 #include "rendering/yup_DepthNormalPrepass.cpp"
 #include "rendering/yup_AmbientOcclusionPass.cpp"
 #include "rendering/yup_HiZPyramid.cpp"
+#include "rendering/yup_ReflectionPass.cpp"
 #include "rendering/yup_LightingPass.cpp"
 #include "rendering/yup_TemporalAA.cpp"
 #include "rendering/yup_ToneMapping.cpp"

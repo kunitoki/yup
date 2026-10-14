@@ -400,3 +400,36 @@ TEST (FrameResourcesTests, NoSharedSamplersWithoutADevice)
     EXPECT_EQ (resources.getSamplers(), nullptr);
     EXPECT_EQ (resources.getSamplers(), nullptr);
 }
+
+TEST_F (FrameResourcesMetalTests, FindHistoryNeitherCreatesNorReallocatesNorKeeps)
+{
+    FrameResources resources (device);
+    const GpuTextureDesc desc (64, 64, GpuTextureFormat::rgba16float, true);
+
+    // Nothing to find before the owner created it, and finding creates nothing
+    resources.beginFrame (64, 64);
+    const auto missing = resources.findHistory ("taa");
+    EXPECT_EQ (missing.read, nullptr);
+    EXPECT_EQ (missing.write, nullptr);
+    EXPECT_FALSE (missing.valid);
+    EXPECT_EQ (resources.findHistory ("taa").read, nullptr);
+    const auto owned = resources.getHistory ("taa", desc);
+    resources.endFrame();
+
+    // The owner's pair, whatever size the reader would have asked for, valid once written
+    resources.beginFrame (64, 64);
+    const auto found = resources.findHistory ("taa");
+    EXPECT_EQ (found.read, owned.write);
+    EXPECT_TRUE (found.valid);
+    EXPECT_EQ (resources.getHistory ("taa", desc).read, owned.write);
+    resources.endFrame();
+
+    // Finding it does not keep it: a frame where only a reader looked releases it
+    resources.beginFrame (64, 64);
+    EXPECT_NE (resources.findHistory ("taa").read, nullptr);
+    resources.endFrame();
+
+    resources.beginFrame (64, 64);
+    EXPECT_EQ (resources.findHistory ("taa").read, nullptr);
+    resources.endFrame();
+}

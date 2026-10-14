@@ -36,7 +36,9 @@ namespace yup
     environment with its sampler at 14, and 7 the lookup tables (LookupTables), read through
     linearClamp at binding 1. Set 1 binds the rest of them: 0 the LightingBlock, 6 the lights, 7 the light lists
     of the clusters, 8 the material table; then the G-buffer: 9-11 RT0-RT2 and 12 the depth; 13
-    the ambient occlusion (LightingInputs::ambientOcclusion, or white without it). Set 3
+    the ambient occlusion (LightingInputs::ambientOcclusion, or white without it); 16 the
+    screen-space reflections (LightingInputs::reflections, or transparent black without them, a
+    confidence of 0 that shades every pixel exactly as without them). Set 3
     binds the shadows: 0 the sun cascades, 2 the point and spot light atlas and 4 the ShadowBlock.
     The area light variant (YUP_3D_AREA_LIGHTS) shades the frames where LightingInputs::areaLights
     is set; every variant reads the lookup tables, for the environment.
@@ -100,6 +102,9 @@ public:
     /** Releases every render target, for a frame without the pass, a resize or a failed frame. */
     void releaseTargets() noexcept;
 
+    /** @internal The stand-in bound for the screen-space reflections without them, for tests: transparent black, a confidence of 0. */
+    GpuTexture::Ptr getReflectionsStandIn() const noexcept { return transparentTexture; }
+
     /** @internal True when the last render() shaded with a local indirect variant, for tests. */
     bool usesLocalIndirect() const noexcept { return usedLocalIndirect; }
 
@@ -124,6 +129,7 @@ private:
     GpuTexture::Ptr blackCube; // The environment without one
     GpuTexture::Ptr whiteTexture; // Stands in for the ambient occlusion when there is none
     GpuTexture::Ptr blackTexture; // Stands in for the probe and volume atlases without them
+    GpuTexture::Ptr transparentTexture; // Stands in for the screen-space reflections without them
     bool shadowFiltersFailureReported = false; // The shadow filter variant failed to compile, and was logged once
     bool localIndirectFailureReported = false; // The local indirect variant failed to compile, and was logged once
     bool localIndirectFailsForTesting = false; // failLocalIndirectForTesting(): the local indirect variants not compiled yet fail

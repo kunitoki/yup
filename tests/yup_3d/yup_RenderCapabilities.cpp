@@ -283,3 +283,55 @@ TEST_F (RenderCapabilitiesTests, AmbientOcclusionOnRasterNeedsTheDepthNormalPrep
     full.depthNormalPrepass = false;
     EXPECT_TRUE (RenderCapabilities (full, settings, 4).isEnabled (Feature::ambientOcclusion, settings));
 }
+
+TEST_F (RenderCapabilitiesTests, ScreenSpaceReflectionsAreFullTierOnly)
+{
+    RenderSettings settings;
+    EXPECT_TRUE (RenderCapabilities (desktopMetal(), settings, 4).isAvailable (Feature::screenSpaceReflections));
+    EXPECT_TRUE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::screenSpaceReflections, settings));
+
+    // Raster ignores the setting, even on a device that could draw everything else
+    settings.screenSpaceReflections = true;
+    for (const auto& facts : { webgl2 (true, 4), desktopMetal() })
+    {
+        auto raster = settings;
+        raster.tier = Preference::raster;
+        const RenderCapabilities capabilities (facts, raster, 4);
+        EXPECT_EQ (capabilities.getTier(), Tier::raster);
+        EXPECT_FALSE (capabilities.isAvailable (Feature::screenSpaceReflections));
+        EXPECT_FALSE (capabilities.isEnabled (Feature::screenSpaceReflections, raster));
+    }
+}
+
+TEST_F (RenderCapabilitiesTests, ScreenSpaceReflectionsCanBeTurnedOffOnFull)
+{
+    RenderSettings settings;
+    settings.screenSpaceReflections = false;
+    const RenderCapabilities capabilities (desktopMetal(), settings, 4);
+    EXPECT_TRUE (capabilities.isAvailable (Feature::screenSpaceReflections));
+    EXPECT_FALSE (capabilities.isEnabled (Feature::screenSpaceReflections, settings));
+
+    settings.screenSpaceReflections = true;
+    EXPECT_TRUE (capabilities.isEnabled (Feature::screenSpaceReflections, settings));
+}
+
+TEST_F (RenderCapabilitiesTests, ScreenSpaceReflectionsNeedTheTemporalHistory)
+{
+    // They read the history temporal anti-aliasing keeps, which only taaSamples above 1 keep
+    RenderSettings settings;
+    settings.screenSpaceReflections = true;
+
+    for (const auto samples : { 1, 0, -4 })
+    {
+        settings.taaSamples = samples;
+        const RenderCapabilities capabilities (desktopMetal(), settings, 4);
+        EXPECT_FALSE (capabilities.isEnabled (Feature::temporalAntiAliasing, settings)) << samples;
+        EXPECT_FALSE (capabilities.isEnabled (Feature::screenSpaceReflections, settings)) << samples;
+    }
+
+    for (const auto samples : { 2, 16 })
+    {
+        settings.taaSamples = samples;
+        EXPECT_TRUE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::screenSpaceReflections, settings)) << samples;
+    }
+}

@@ -89,6 +89,7 @@ bool RenderCapabilities::isAvailable (Feature feature) const noexcept
     {
         case Feature::temporalAntiAliasing:
         case Feature::contactShadows:
+        case Feature::screenSpaceReflections:
             return false;
 
         case Feature::softShadows:
@@ -127,6 +128,10 @@ bool RenderCapabilities::isEnabled (Feature feature, const RenderSettings& setti
         case Feature::ambientOcclusion:
             return isAvailable (feature) && settings.ambientOcclusion.value_or (tier == Tier::full)
                 && std::isfinite (settings.aoDistance) && settings.aoDistance > 0.0f;
+
+        case Feature::screenSpaceReflections:
+            return isAvailable (feature) && settings.screenSpaceReflections.value_or (tier == Tier::full)
+                && isEnabled (Feature::temporalAntiAliasing, settings);
     }
 
     return false;

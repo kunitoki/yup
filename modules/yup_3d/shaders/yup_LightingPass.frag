@@ -37,8 +37,10 @@
 // (YUP_3D_LOCAL_INDIRECT), which shades the frames with reflection probes, irradiance volumes or
 // materials with a clearcoat or a sheen, reads those too, from set 1 bindings 14 and 15; its layers
 // variant (YUP_3D_LAYERS), for the frames drawing a layered material, also shades the clearcoat and
-// sheen layers. The default variants carry no probe, volume or layer code
+// sheen layers. The default variants carry no probe, volume or layer code. Every variant reads the
+// screen-space reflections (lib/lights.glsl), which only this pass shades
 #define YUP_3D_AMBIENT_OCCLUSION
+#define YUP_3D_SCREEN_SPACE_REFLECTIONS
 #ifdef YUP_3D_LOCAL_INDIRECT
 #define YUP_3D_REFLECTION_PROBES
 #define YUP_3D_REFLECTION_PROBES_BINDING 14
@@ -85,6 +87,10 @@ layout(set = 1, binding = 11) uniform texture2D u_emissionMaterial; // RT2
 // AmbientOcclusionPass, at half resolution: the view-space bent normal * 0.5 + 0.5 in rgb, the
 // visibility in a, read when lighting.probeInfo.w is 1. A 1x1 white texture without ambient occlusion
 layout(set = 1, binding = 13) uniform texture2D u_ambientOcclusion;
+
+// ReflectionPass, at full resolution: the prefiltered radiance of the screen-space reflections in rgb,
+// their confidence in a. A 1x1 transparent black texture without them
+layout(set = 1, binding = 16) uniform texture2D u_reflections;
 
 // The view depth of a stored depth, for perspective and orthographic projections (as lib/gtao.glsl)
 float lightingViewDepth(float depth)
@@ -178,6 +184,9 @@ void main()
     vec3 bentNormal = gtaoBentNormal(ambientOcclusion.rgb, ambientOcclusion.a, transpose(mat3(view.view)), surface.n, n);
     float diffuseOcclusion = min(ambientOcclusion.a, albedoOcclusion.a);
     float reflectionOcclusion = min(gtaoSpecularOcclusion(surface.nDotV, ambientOcclusion.a, normalRoughness.z), albedoOcclusion.a);
+
+    // Read before the lookup, which the reflection needs too. The 1x1 stand-in is read at its texel
+    lightsReflection = texelFetch(sampler2D(u_reflections, pointClamp), min(pixel, textureSize(sampler2D(u_reflections, pointClamp), 0) - 1), 0);
 
     // The environment first, added in the same order as before
     LightsLookup lookup = lightsLookup(surface);

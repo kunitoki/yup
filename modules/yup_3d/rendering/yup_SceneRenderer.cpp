@@ -316,6 +316,78 @@ struct SceneRenderer::Impl
         return true;
     }
 
+    /** Full tier: traces the screen-space reflections of @p gbuffer into lighting.reflections while
+        they are enabled and the previous frame left a history of temporal anti-aliasing to read
+        their radiance from; otherwise the lighting pass binds its stand-in, a confidence of 0, and
+        the frame shades exactly as without them. The Hi-Z pyramid and the pass are created by the
+        first frame tracing them, then kept for the renderer's life (frames do not retain
+        pipelines); frames without them release their targets only. A failure, the Hi-Z pyramid
+        included, never fails the frame: it shades without the reflections, and the second failure
+        in a row gives up (ReflectionPass::hasGivenUp()). @p failForTesting makes the pass fail.
+    */
+    void renderScreenSpaceReflections (GpuFrame& frame, const RenderSettings& settings, const GBufferPass::Targets& gbuffer,
+                                       LightingInputs& lighting, bool failForTesting)
+    {
+        lighting.reflections = nullptr;
+
+        // An exposure of 0 left nothing to divide the history by
+        if (! isTracingReflections (settings) || ! (previousExposure > 0.0f))
+        {
+            releaseReflectionTargets();
+            return;
+        }
+
+        // The radiance comes from the history of the previous frame, which TemporalAA alone creates
+        // and sizes: none on the first frame, after a resize or once released, which leave the frame
+        // without the reflections
+        const auto history = frameResources.findHistory (TemporalAA::historyName);
+        if (! history.valid || history.read == nullptr)
+        {
+            releaseReflectionTargets();
+            return;
+        }
+
+        if (reflectionPass == nullptr)
+        {
+            hiZPyramid = std::make_unique<HiZPyramid> (device);
+            reflectionPass = std::make_unique<ReflectionPass> (device);
+        }
+
+        if (failForTesting)
+            reflectionPass->failRendersForTesting();
+
+        // A pyramid that cannot be built counts as a failure of the pass
+        const auto pyramid = reflectionPass->prepare().wasOk() ? hiZPyramid->build (frame, gbuffer.depth, frameResources) : nullptr;
+        lighting.reflections = reflectionPass->render (frame, viewData, pyramid, gbuffer.normalRoughness, gbuffer.velocity,
+                                                       history.read, previousExposure, frameResources);
+
+        if (lighting.reflections == nullptr)
+        {
+            releaseReflectionTargets();
+            return;
+        }
+
+        hiZPyramid->trimUnusedTargets();
+        reflectionPass->trimUnusedTargets();
+    }
+
+    /** True while the frames trace screen-space reflections: enabled, and not given up after failures. */
+    bool isTracingReflections (const RenderSettings& settings) const
+    {
+        return capabilities->isEnabled (RenderCapabilities::Feature::screenSpaceReflections, settings)
+            && (reflectionPass == nullptr || ! reflectionPass->hasGivenUp());
+    }
+
+    /** Releases the targets of the screen-space reflections, keeping their pipelines. */
+    void releaseReflectionTargets() noexcept
+    {
+        if (reflectionPass != nullptr)
+        {
+            hiZPyramid->releaseTargets();
+            reflectionPass->releaseTargets();
+        }
+    }
+
     /** Bakes the pending reflection probes and irradiance volumes of @p probeList into @p frame,
         through the forward pass (see ProbeBaker), and returns how many were baked. The baker is
         created by the first frame or bake with a probe or a volume, then kept, so a scene without
@@ -414,6 +486,8 @@ struct SceneRenderer::Impl
 
         if (ambientOcclusionPass != nullptr)
             ambientOcclusionPass->releaseTargets();
+
+        releaseReflectionTargets();
     }
 
     /** Nodes this renderer did not draw in its previous frame have no motion: their previous world is the current one. */
@@ -503,6 +577,9 @@ struct SceneRenderer::Impl
         signature.addBits (ambientOcclusion ? 1u : 0u);
         if (ambientOcclusion)
             signature.addFloat (settings.aoDistance);
+
+        // Giving up on them after failures changes the image as much as turning them off
+        signature.addBits (isTracingReflections (settings) ? 1u : 0u);
 
         // Each item's transform is hashed with what it draws, so swapping transforms between items still counts
         const auto addItem = [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
@@ -667,6 +744,8 @@ struct SceneRenderer::Impl
     GBufferPass gbufferPass;
     std::unique_ptr<DepthNormalPrepass> depthNormalPrepass; // Created by the first raster frame with ambient occlusion, see renderDepthNormalPrepass()
     std::unique_ptr<AmbientOcclusionPass> ambientOcclusionPass; // Created by the first frame with ambient occlusion, see renderAmbientOcclusion()
+    std::unique_ptr<HiZPyramid> hiZPyramid;         // Created by the first frame tracing screen-space reflections, see renderScreenSpaceReflections()
+    std::unique_ptr<ReflectionPass> reflectionPass; // Created with hiZPyramid
     MaterialTable materialTable;
     LightingPass lightingPass;
     ForwardPass forwardPass;
@@ -683,6 +762,8 @@ struct SceneRenderer::Impl
     GpuTexture::Ptr gbufferNormalOutput;
     GpuTexture::Ptr prepassNormalOutput;
     GpuTexture::Ptr ambientOcclusionOutput;
+    GpuTexture::Ptr reflectionsOutput;
+    float previousExposure = 1.0f; // The exposure of the last frame, which its history holds, see renderScreenSpaceReflections()
     uint64 frameIndex = 0;
     uint64 lastStamp = 0;
     uint64 invalidatingSignature = 0;
@@ -780,6 +861,7 @@ GpuTexture::Ptr SceneRenderer::getPassOutput (PassOutput output) const
         case PassOutput::gbufferNormal: return impl->gbufferNormalOutput;
         case PassOutput::prepassNormal: return impl->prepassNormalOutput;
         case PassOutput::ambientOcclusion: return impl->ambientOcclusionOutput;
+        case PassOutput::reflections: return impl->reflectionsOutput;
     }
 
     return nullptr;
@@ -848,6 +930,16 @@ const AmbientOcclusionPass* SceneRenderer::getAmbientOcclusionPass() const noexc
     return impl != nullptr ? impl->ambientOcclusionPass.get() : nullptr;
 }
 
+const ReflectionPass* SceneRenderer::getReflectionPass() const noexcept
+{
+    return impl != nullptr ? impl->reflectionPass.get() : nullptr;
+}
+
+const HiZPyramid* SceneRenderer::getHiZPyramid() const noexcept
+{
+    return impl != nullptr ? impl->hiZPyramid.get() : nullptr;
+}
+
 const LightingPass* SceneRenderer::getLightingPass() const noexcept
 {
     return impl != nullptr ? &impl->lightingPass : nullptr;
@@ -877,6 +969,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
             impl->gbufferNormalOutput = nullptr;
             impl->prepassNormalOutput = nullptr;
             impl->ambientOcclusionOutput = nullptr;
+            impl->reflectionsOutput = nullptr;
         }
 
         lastError = error;
@@ -1066,6 +1159,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         if (! impl->renderAmbientOcclusion (frame, settings, temporalAntiAliasing, gbuffer.depth, gbuffer.normalRoughness, lighting))
             return failFrame ("Unable to render the ambient occlusion");
 
+        impl->renderScreenSpaceReflections (frame, settings, gbuffer, lighting, failScreenSpaceReflections);
+
         if (failLocalIndirectLighting)
             impl->lightingPass.failLocalIndirectForTesting();
 
@@ -1081,6 +1176,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     {
         impl->gbufferPass.releaseTargets();
         impl->lightingPass.releaseTargets();
+        impl->releaseReflectionTargets();
     }
 
     // Raster screen-space effects read the depth and normals of the prepass, full ones the G-buffer
@@ -1132,6 +1228,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->gbufferNormalOutput = gbuffer.normalRoughness;
     impl->prepassNormalOutput = impl->depthNormalPrepass != nullptr ? impl->depthNormalPrepass->getNormalRoughness() : nullptr;
     impl->ambientOcclusionOutput = lighting.ambientOcclusion;
+    impl->reflectionsOutput = lighting.reflections;
+    impl->previousExposure = impl->viewData.getBlock().cameraPosition[3];
 
     lastError = {};
     return impl->colorTarget->asTexture();

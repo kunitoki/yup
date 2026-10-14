@@ -107,6 +107,7 @@
 #include "rendering/yup_DepthNormalPrepass.h"
 #include "rendering/yup_AmbientOcclusionPass.h"
 #include "rendering/yup_HiZPyramid.h"
+#include "rendering/yup_ReflectionPass.h"
 #include "rendering/yup_TemporalAA.h"
 #include "rendering/yup_ToneMapping.h"
 #include "rendering/yup_Bloom.h"

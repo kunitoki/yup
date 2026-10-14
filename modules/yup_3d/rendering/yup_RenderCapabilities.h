@@ -47,7 +47,8 @@ public:
         bloom,                ///< Glow around highlights.
         softShadows,          ///< Penumbrae from the light size: both tiers, on by default on full only.
         contactShadows,       ///< Screen-space contact shadows: full tier only.
-        ambientOcclusion      ///< Screen-space ambient occlusion: on by default on full, opt-in on raster where the device can draw the depth and normal prepass. Off whenever RenderSettings::aoDistance is not a positive finite number.
+        ambientOcclusion,     ///< Screen-space ambient occlusion: on by default on full, opt-in on raster where the device can draw the depth and normal prepass. Off whenever RenderSettings::aoDistance is not a positive finite number.
+        screenSpaceReflections ///< Screen-space reflections: full tier only, on by default. They read the history of temporal anti-aliasing, so they are off whenever it is (RenderSettings::taaSamples of 1 or less).
     };
 
     /** Shadow cascades of the sun on the raster tier when RenderSettings::sunCascades is 0. */

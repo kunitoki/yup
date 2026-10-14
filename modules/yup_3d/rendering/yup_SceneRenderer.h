@@ -183,7 +183,8 @@ public:
         velocity,     ///< Full: the rg16float screen-space motion, current uv minus previous uv, both unjittered, uv from the top-left. Raster: none.
         gbufferNormal, ///< Full: the rgba16float G-buffer RT1, the octahedral shading normal in xy, the filtered roughness in z and metallic in w, 0 where nothing was drawn. Raster: none.
         prepassNormal, ///< Raster with ambient occlusion: the rgba16float depth and normal prepass target, encoded as the G-buffer RT1, single sampled. Otherwise none.
-        ambientOcclusion ///< With ambient occlusion: the rgba8 AmbientOcclusionPass output, the view-space bent normal * 0.5 + 0.5 in rgb and the visibility in a, at half resolution. Otherwise none.
+        ambientOcclusion, ///< With ambient occlusion: the rgba8 AmbientOcclusionPass output, the view-space bent normal * 0.5 + 0.5 in rgb and the visibility in a, at half resolution. Otherwise none.
+        reflections ///< Full, with screen-space reflections and a history to read them from: the rgba16float ReflectionPass output, the reflected radiance (unexposed) in rgb and its confidence in a. Otherwise none, the first frame included.
     };
 
     /** @internal Returns an intermediate texture of the last frame, valid until the next render,
@@ -199,6 +200,12 @@ public:
 
     /** @internal The ambient occlusion pass, for tests, or nullptr before the first frame with ambient occlusion. */
     const AmbientOcclusionPass* getAmbientOcclusionPass() const noexcept;
+
+    /** @internal The screen-space reflection pass, for tests, or nullptr before the first frame tracing them. */
+    const ReflectionPass* getReflectionPass() const noexcept;
+
+    /** @internal The Hi-Z pyramid of the screen-space reflections, for tests, created with getReflectionPass(). */
+    const HiZPyramid* getHiZPyramid() const noexcept;
 
     /** @internal The deferred lighting pass of the full tier, for tests, or nullptr before the first render. */
     const LightingPass* getLightingPass() const noexcept;
@@ -271,6 +278,13 @@ public:
     */
     void failMaterialLayersForTesting() noexcept { failMaterialLayers = true; }
 
+    /** @internal Test hook, not for production use: from the next render on, every screen-space
+        reflection pass of this renderer fails, as if the device could not record it. Frames still
+        render, without screen-space reflections; the renderer stops trying after the second failure
+        in a row, which restarts the accumulation.
+    */
+    void failScreenSpaceReflectionsForTesting() noexcept { failScreenSpaceReflections = true; }
+
     /** @internal Test hook, not for production use: the environment cube and the other radiance
         textures of this renderer hold RGBM in rgba8unorm, as below the float floor, even when the
         device renders half floats. Call it before the first render.
@@ -309,6 +323,7 @@ private:
     bool failVolumeCaptures = false;
     bool failLocalIndirectLighting = false;
     bool failMaterialLayers = false;
+    bool failScreenSpaceReflections = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneRenderer)
 };

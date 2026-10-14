@@ -101,8 +101,9 @@ Result LightingPass::prepare (const GpuDevice::Ptr& device, bool areaLights, boo
         blackCube = LightingInputs::createBlackCube (device);
         whiteTexture = GeometryBindings::createSolidTexture (device, 0xffffffff);
         blackTexture = GeometryBindings::createSolidTexture (device, 0x000000ff);
+        transparentTexture = GeometryBindings::createSolidTexture (device, 0x00000000);
 
-        if (blackCube == nullptr || whiteTexture == nullptr || blackTexture == nullptr)
+        if (blackCube == nullptr || whiteTexture == nullptr || blackTexture == nullptr || transparentTexture == nullptr)
             defaults = Result::fail ("Unable to create the lighting pass textures");
         else
             defaults = Result::ok();
@@ -216,6 +217,7 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
         renderPass.setTexture (1, 11, gbuffer.emissionMaterial);
         renderPass.setTexture (1, 12, gbuffer.depth);
         renderPass.setTexture (1, 13, lighting.ambientOcclusion != nullptr ? lighting.ambientOcclusion : whiteTexture);
+        renderPass.setTexture (1, 16, lighting.reflections != nullptr ? lighting.reflections : transparentTexture);
 
         // The probe and volume atlases stand in black without probes or volumes
         if (localIndirect)

@@ -86,6 +86,13 @@ public:
     */
     History getHistory (StringRef name, const GpuTextureDesc& desc);
 
+    /** Returns the history pair called @p name as its owner's getHistory() left it, for a reader
+        of a history another pass owns: it never creates, reallocates or uses the pair, so the
+        owner alone decides its size and lifetime. Both textures are nullptr and the history is
+        invalid when there is no such pair.
+    */
+    History findHistory (StringRef name) const;
+
     /** Marks every history invalid, so the next getHistory() reports it as such. The textures are kept.
 
         A history already fetched this frame stays invalid in the next frame too, since this frame's

@@ -126,6 +126,7 @@ struct YUP_API LightingInputs
     GpuBuffer::Ptr clusterLights;        ///< Full tier: the light lists of the clusters (set 1 binding 7).
     GpuBuffer::Ptr materials;            ///< Full tier: the frame's MaterialTable (set 1 binding 8), read by LightingPass.
     GpuTexture::Ptr ambientOcclusion;    ///< The AmbientOcclusionPass output (set 1 binding 13), or nullptr without one. With it the raster ForwardPass shades with its local indirect variant; LightingPass binds white without it.
+    GpuTexture::Ptr reflections;         ///< Full: the ReflectionPass output (LightingPass set 1 binding 16), or nullptr without screen-space reflections: LightingPass binds transparent black, a confidence of 0.
     GpuTexture::Ptr reflectionAtlas;     ///< The reflection atlas (set 0 binding 8), ProbeBaker::getReflectionAtlas(), or nullptr without probes: the passes bind black.
     std::vector<GpuReflectionProbe> reflectionProbes; ///< Raster: every probe of the draw list packed in its order (ProbeBaker::packReflectionProbes()), which each draw picks by SceneDrawList::DrawItem::reflectionProbes into its ProbeListBlock. Empty without probes.
     GpuBuffer::Ptr reflectionProbeBuffer; ///< Full tier: the probes of the frame by priority (ProbeBaker::packReflectionProbesByPriority()), set 1 binding 14 of LightingPass and 8 of ForwardPass, sized for one probe at least.

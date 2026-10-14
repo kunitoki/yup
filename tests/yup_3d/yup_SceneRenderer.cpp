@@ -525,6 +525,22 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle ssrTrace()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_SsrTrace.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle ssrResolve()
+    {
+        static constexpr uint8 data[] = {
+#include <yup_3d/shaders/yup_SsrResolve.inc>
+        };
+        return load (data, sizeof (data));
+    }
+
     static Budget countResources (const ShaderReflection& reflection)
     {
         Budget budget;
@@ -729,6 +745,57 @@ TEST_F (SceneRendererBundleTests, AmbientOcclusionIsReadByTheRasterForwardPassAn
         EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 1)) << name;
         EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, 2)) << name;
         EXPECT_TRUE (declares (fragment->reflection.uniformBuffers, 1, 0)) << name;
+    }
+}
+
+TEST_F (SceneRendererBundleTests, ScreenSpaceReflectionsAreReadByTheLightingPassOnly)
+{
+    // Set 1 binding 16, in every lighting pass variant: the full tier's opaque surfaces. The
+    // blended ones (the full forward pass) and the raster tier never read it, nor any other bundle
+    const std::tuple<const char*, ShaderBundle, bool> bundles[] = {
+        { "ForwardPass", forwardPass(), false },
+        { "ForwardPass_area_lights_soft_shadows", forwardPassAreaLightsSoftShadows(), false },
+        { "ForwardPass_local_indirect", forwardPassLocalIndirect(), false },
+        { "ForwardPass_area_lights_soft_shadows_local_indirect_layers", forwardPassAreaLightsSoftShadowsLocalIndirectLayers(), false },
+        { "ForwardPass_full", forwardPassFull(), false },
+        { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), false },
+        { "Background", background(), false },
+        { "GBufferPass_full", gbufferPassFull(), false },
+        { "LightingPass_full", lightingPassFull(), true },
+        { "LightingPass_full_area_lights", lightingPassFullAreaLights(), true },
+        { "LightingPass_full_soft_shadows", lightingPassFullSoftShadows(), true },
+        { "LightingPass_full_area_lights_soft_shadows", lightingPassFullAreaLightsSoftShadows(), true },
+        { "LightingPass_full_local_indirect", lightingPassFullLocalIndirect(), true },
+        { "LightingPass_full_local_indirect_layers", lightingPassFullLocalIndirectLayers(), true },
+        { "LightingPass_full_area_lights_local_indirect", lightingPassFullAreaLightsLocalIndirect(), true },
+        { "LightingPass_full_area_lights_local_indirect_layers", lightingPassFullAreaLightsLocalIndirectLayers(), true },
+        { "LightingPass_full_soft_shadows_local_indirect", lightingPassFullSoftShadowsLocalIndirect(), true },
+        { "LightingPass_full_soft_shadows_local_indirect_layers", lightingPassFullSoftShadowsLocalIndirectLayers(), true },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect", lightingPassFullAreaLightsSoftShadowsLocalIndirect(), true },
+        { "LightingPass_full_area_lights_soft_shadows_local_indirect_layers", lightingPassFullAreaLightsSoftShadowsLocalIndirectLayers(), true },
+    };
+
+    for (const auto& [name, bundle, reads] : bundles)
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+        EXPECT_EQ (declares (fragment->reflection.separateImages, 1, 16), reads) << name;
+    }
+
+    // The trace reads the Hi-Z pyramid and the normals (set 1 bindings 1 and 2), the resolve the
+    // trace, the velocity and the previous scene color too (3 to 5); both read the pass block (0)
+    for (const auto& [name, bundle, images] : { std::tuple { "SsrTrace", ssrTrace(), 2 }, std::tuple { "SsrResolve", ssrResolve(), 5 } })
+    {
+        const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
+        ASSERT_NE (fragment, nullptr) << name;
+
+        auto budget = countResources (fragment->reflection);
+        EXPECT_EQ (budget.texturesPerSet[1], images) << name;
+        EXPECT_TRUE (declares (fragment->reflection.uniformBuffers, 0, 0)) << name;
+        EXPECT_TRUE (declares (fragment->reflection.uniformBuffers, 1, 0)) << name;
+
+        for (uint32_t binding = 1; binding <= static_cast<uint32_t> (images); ++binding)
+            EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, binding)) << name << " " << static_cast<int> (binding);
     }
 }
 
@@ -5795,6 +5862,103 @@ vec4 encodeLuma(vec3 c)
         EXPECT_TRUE (renderer.waitForGPU().wasOk());
     }
 
+    /** buildMirrorFloorScene() without its emitter, plus a red emitter standing on the floor in
+        front of the camera, 1.2 wide and 0.8 tall at z = -0.5, facing it: the camera sees both the
+        emitter (rows 8 to 26 at 64 x 64) and its reflection in the floor (rows 26 to 40), which only
+        screen-space reflections show, since the scene has no environment and no probe.
+    */
+    static void buildOnScreenEmitterScene (Scene& scene, float emission = 1.0f)
+    {
+        buildMirrorFloorScene (scene, false);
+
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { -0.6f, 0.0f, -0.5f };
+        vertices[1].position = { 0.6f, 0.0f, -0.5f };
+        vertices[2].position = { 0.6f, 0.8f, -0.5f };
+        vertices[3].position = { -0.6f, 0.8f, -0.5f };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        auto mesh = Mesh::Ptr (new Mesh ("emitter"));
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeEmitterMaterial ({ emission, 0.0f, 0.0f }));
+
+        auto emitter = EntityNode::Ptr (new EntityNode ("emitter"));
+        emitter->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (emitter);
+    }
+
+    /** The floor of buildOnScreenEmitterScene() reflecting the emitter, at 64 x 64: between the
+        emitter's foot (row 26) and the bottom of its reflection (row 40), within its columns.
+    */
+    static Rectangle<int> reflectedEmitterRegion()
+    {
+        return { 22, 28, 20, 10 };
+    }
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    /** The mean linear red of @p texture over @p area, below 1, read back in 16 bits: its 8 high
+        bits in red, the next 8 in green. */
+    double meanLinearRed (const GpuTexture::Ptr& texture, Rectangle<int> area)
+    {
+        const auto linear = mapTexels (texture, "vec4(floor(t.r * 255.0) / 255.0, fract(t.r * 255.0), 0.0, 1.0)");
+        if (! linear.isValid())
+            return -1.0;
+
+        auto sum = 0.0;
+        for (int y = area.getY(); y < area.getBottom(); ++y)
+        {
+            for (int x = area.getX(); x < area.getRight(); ++x)
+            {
+                const auto color = linear.getPixelColor (x, y);
+                sum += (color.getRed() + color.getGreen() / 255.0) / 255.0;
+            }
+        }
+
+        return sum / (area.getWidth() * area.getHeight());
+    }
+#endif
+
+    /** Switches screen-space reflections on or off, or back to the tier default. */
+    static void setScreenSpaceReflections (Scene& scene, std::optional<bool> screenSpaceReflections)
+    {
+        auto settings = scene.getRenderSettings();
+        settings.screenSpaceReflections = screenSpaceReflections;
+        scene.setRenderSettings (settings);
+    }
+
+    /** On a raster device, screen-space reflections are unavailable: turning them on renders the
+        same image as leaving them off, without an error and without an output.
+    */
+    void checkScreenSpaceReflectionsUnavailableOnRasterRendersFallback (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool screenSpaceReflections)
+        {
+            Scene scene;
+            buildOnScreenEmitterScene (scene);
+            setTier (scene, tier);
+            setScreenSpaceReflections (scene, screenSpaceReflections);
+
+            SceneRenderer renderer;
+            const auto image = renderToImage (renderer, scene, 64);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+            EXPECT_EQ (renderer.getReflectionPass(), nullptr);
+
+            const auto* capabilities = renderer.getCapabilities();
+            EXPECT_TRUE (capabilities != nullptr && ! capabilities->isAvailable (RenderCapabilities::Feature::screenSpaceReflections));
+            return image;
+        };
+
+        // A fresh Metal device's first frame can differ by a level in a few pixels, see checkContactShadowsIgnoredOnRaster()
+        ASSERT_TRUE (render (false).isValid());
+
+        const auto withReflections = render (true);
+        const auto without = render (false);
+        ASSERT_TRUE (withReflections.isValid() && without.isValid());
+        EXPECT_EQ (countDifferencesAboveOneLevel (withReflections, without), 0);
+    }
+
     /** A vertical quad in the plane x = @p x over @p area (z, y), facing +X or -X, the entity @p name. */
     static EntityNode::Ptr makeWallQuad (const char* name, float x, Rectangle<float> area, bool facingPositiveX, Material::Ptr material)
     {
@@ -8455,6 +8619,527 @@ TEST_F (SceneRendererMetalTests, AmbientOcclusionSettingsRestartAccumulation)
         EXPECT_FALSE (renderer.isConverged()) << name;
         EXPECT_GE (countIntermediatePixels (first, 40), 4) << name;
     }
+}
+
+// The screen-space reflection tests converge 8 jittered samples at 64 x 64: the floor of
+// buildOnScreenEmitterScene() is a mirror (roughness 0.02), whose rays barely spread, so the running
+// mean of 8 frames holds its reflection, and the first frame, which has no history to read it from
+// yet, weighs an eighth of it
+TEST_F (SceneRendererMetalTests, SsrReflectsAnOnScreenEmitter)
+{
+    const auto render = [&] (bool screenSpaceReflections, SceneRenderer& renderer)
+    {
+        Scene scene;
+        buildOnScreenEmitterScene (scene);
+        setFullTierTaa (scene, 8);
+        setScreenSpaceReflections (scene, screenSpaceReflections);
+
+        const auto image = renderConverged (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        EXPECT_TRUE (renderer.isConverged());
+        return image;
+    };
+
+    SceneRenderer on, off;
+    const auto withReflections = render (true, on);
+    const auto without = render (false, off);
+    ASSERT_TRUE (withReflections.isValid() && without.isValid());
+
+    const auto region = reflectedEmitterRegion();
+    const auto floorOn = meanColor (withReflections, region);
+    const auto floorOff = meanColor (without, region);
+    RecordProperty ("floorRedOn", static_cast<int> (floorOn.getRed()));
+    RecordProperty ("floorRedOff", static_cast<int> (floorOff.getRed()));
+    // Measured 191 against 85: the threshold keeps three quarters of that margin
+    EXPECT_GT (floorOn.getRed(), floorOff.getRed() + 80);
+    EXPECT_NEAR (floorOn.getGreen(), floorOff.getGreen(), 2); // The emitter is red only
+
+    EXPECT_EQ (off.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+    const auto reflections = on.getPassOutput (SceneRenderer::PassOutput::reflections);
+    ASSERT_NE (reflections, nullptr);
+    EXPECT_EQ (reflections->getFormat(), GpuTextureFormat::rgba16float);
+    EXPECT_EQ (reflections->getWidth(), 64u);
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    EXPECT_TRUE (isFiniteTexture (reflections));
+    EXPECT_FALSE (isSaturatedTexture (reflections));
+
+    const auto confidence = mapTexels (reflections, "vec4(t.aaa, 1.0)");
+    ASSERT_TRUE (confidence.isValid());
+    RecordProperty ("floorConfidence", String (meanLuminance (confidence, region), 1).toStdString());
+    EXPECT_GT (meanLuminance (confidence, region), 200.0);
+#endif
+}
+
+TEST_F (SceneRendererMetalTests, SsrConvergedRendersAreIdentical)
+{
+    // The rays turn with the frame only under temporal anti-aliasing, whose running mean freezes
+    // once converged (preflight R13): two renderers converging on the same scene end on one image
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    setFullTierTaa (scene, 8);
+
+    SceneRenderer warmUp;
+    ASSERT_TRUE (renderToImage (warmUp, scene, 64).isValid());
+
+    SceneRenderer a, b;
+    const auto imageA = renderConverged (a, scene, 64);
+    const auto imageB = renderConverged (b, scene, 64);
+    ASSERT_TRUE (imageA.isValid() && imageB.isValid());
+    EXPECT_TRUE (a.isConverged() && b.isConverged());
+    EXPECT_NE (a.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+
+    auto differing = 0;
+    for (int y = 0; y < imageA.getHeight(); ++y)
+        for (int x = 0; x < imageA.getWidth(); ++x)
+            differing += imageA.getPixelColor (x, y) != imageB.getPixelColor (x, y) ? 1 : 0;
+
+    EXPECT_EQ (differing, 0);
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (SceneRendererMetalTests, SsrWithoutHistoryShadesAsWithoutIt)
+{
+    // A renderer's first frame has no history to read reflections from: every pixel takes the
+    // confidence 0 branch, which leaves the frame bit for bit as without them. The environment the
+    // floor reflects would show any confidence taken from it
+    SceneRenderer warmUp;
+    {
+        Scene scene;
+        buildOnScreenEmitterScene (scene);
+        ASSERT_TRUE (renderToImage (warmUp, scene, 64).isValid());
+    }
+
+    const auto renderBits = [&] (bool screenSpaceReflections)
+    {
+        Scene scene;
+        buildOnScreenEmitterScene (scene);
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        setFullTierTaa (scene, 8);
+        setScreenSpaceReflections (scene, screenSpaceReflections);
+
+        SceneRenderer renderer;
+        EXPECT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+
+        // The 8 bytes of the half float scene color, three to an opaque rgba8 image
+        std::vector<Image> bits;
+        const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+        for (const auto* bytes : { "vec4(lo.xyz, 1.0)", "vec4(lo.w, hi.xy, 1.0)", "vec4(hi.zw, 0.0, 1.0)" })
+        {
+            const auto* halves = "#define lo unpackUnorm4x8(packHalf2x16(t.rg))\n#define hi unpackUnorm4x8(packHalf2x16(t.ba))\n";
+            bits.push_back (sceneColor != nullptr ? mapTexels (sceneColor, bytes, halves) : Image());
+        }
+
+        return bits;
+    };
+
+    const auto withReflections = renderBits (true);
+    const auto without = renderBits (false);
+
+    for (size_t part = 0; part < withReflections.size(); ++part)
+    {
+        ASSERT_TRUE (withReflections[part].isValid() && without[part].isValid());
+
+        auto differing = 0;
+        for (int y = 0; y < without[part].getHeight(); ++y)
+            for (int x = 0; x < without[part].getWidth(); ++x)
+                differing += withReflections[part].getPixelColor (x, y) != without[part].getPixelColor (x, y) ? 1 : 0;
+
+        EXPECT_EQ (differing, 0) << part;
+    }
+
+    // The stand-in the lighting pass binds without reflections is 0 in every channel, so that branch
+    // is the one every pixel takes
+    const auto* lightingPass = warmUp.getLightingPass();
+    ASSERT_NE (lightingPass, nullptr);
+    const auto standIn = lightingPass->getReflectionsStandIn();
+    ASSERT_NE (standIn, nullptr);
+    const auto nonZero = mapTexels (standIn, "any(notEqual(t, vec4(0.0))) ? vec4(1.0) : vec4(0.0, 0.0, 0.0, 1.0)");
+    ASSERT_TRUE (nonZero.isValid());
+    EXPECT_EQ (nonZero.getPixelColor (0, 0).getRed(), 0);
+
+    // And that branch kept the floor's reflection of the environment, which a stand-in of
+    // confidence 1 would have replaced with its black: the floor is brighter than without one
+    const auto floorLuminance = [&] (bool environment)
+    {
+        Scene scene;
+        buildOnScreenEmitterScene (scene);
+        setFullTierTaa (scene, 8);
+
+        if (environment)
+            scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, 64);
+        return image.isValid() ? meanLuminance (image, reflectedEmitterRegion()) : -1.0;
+    };
+
+    const auto withEnvironment = floorLuminance (true);
+    const auto withoutEnvironment = floorLuminance (false);
+    RecordProperty ("floorWithEnvironment", String (withEnvironment, 1).toStdString());
+    RecordProperty ("floorWithoutEnvironment", String (withoutEnvironment, 1).toStdString());
+    EXPECT_GT (withEnvironment, withoutEnvironment + 20.0);
+}
+
+TEST_F (SceneRendererMetalTests, SsrScalesWithTheExposure)
+{
+    // The history holds exposed radiance, divided by the exposure of the frame it was rendered with:
+    // converged at exposure 1 then at 2, the reflection scales like the frame without it does.
+    // Dividing by nothing, or by the exposure twice, scales it by 4 or 1
+    const auto renderRatio = [&] (bool screenSpaceReflections)
+    {
+        Scene scene;
+        buildOnScreenEmitterScene (scene, 0.3f);
+        setFullTierTaa (scene, 8);
+        setScreenSpaceReflections (scene, screenSpaceReflections);
+
+        SceneRenderer renderer;
+        const auto meanRed = [&]
+        {
+            EXPECT_TRUE (renderConverged (renderer, scene, 64).isValid()) << renderer.getLastError();
+            const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+            return sceneColor != nullptr ? meanLinearRed (sceneColor, reflectedEmitterRegion()) : -1.0;
+        };
+
+        const auto atOne = meanRed();
+        scene.setExposure (2.0f);
+        const auto atTwo = meanRed();
+        RecordProperty (screenSpaceReflections ? "floorRedOn" : "floorRedOff", (String (atOne, 4) + " -> " + String (atTwo, 4)).toStdString());
+        return atOne > 0.0 ? atTwo / atOne : -1.0;
+    };
+
+    const auto ratioOn = renderRatio (true);
+    const auto ratioOff = renderRatio (false);
+    RecordProperty ("ratioOn", String (ratioOn, 3).toStdString());
+    RecordProperty ("ratioOff", String (ratioOff, 3).toStdString());
+    EXPECT_GT (ratioOff, 1.5);
+    EXPECT_NEAR (ratioOn, ratioOff, 0.02 * ratioOff);
+}
+#endif
+
+TEST_F (SceneRendererMetalTests, SsrFallsBackToProbesOffScreen)
+{
+    // buildMirrorFloorScene() hides its emitter above the frustum: no ray finds it on screen, so
+    // the floor reflects the probe's capture of it alike with and without screen-space reflections
+    const auto render = [&] (bool screenSpaceReflections, SceneRenderer& renderer)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        setFullTierTaa (scene, 8);
+        setScreenSpaceReflections (scene, screenSpaceReflections);
+        addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
+
+        const auto image = renderConverged (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    };
+
+    SceneRenderer on, off;
+    const auto withReflections = render (true, on);
+    const auto without = render (false, off);
+    ASSERT_TRUE (withReflections.isValid() && without.isValid());
+
+    const auto floorOn = meanColor (withReflections, floorRegion());
+    const auto floorOff = meanColor (without, floorRegion());
+    RecordProperty ("floorGreenOn", static_cast<int> (floorOn.getGreen()));
+    RecordProperty ("floorGreenOff", static_cast<int> (floorOff.getGreen()));
+    EXPECT_GT (floorOn.getGreen(), floorOn.getRed() + 40);
+    EXPECT_GT (floorOff.getGreen(), floorOff.getRed() + 40);
+    EXPECT_NEAR (floorOn.getRed(), floorOff.getRed(), 2);
+    EXPECT_NEAR (floorOn.getGreen(), floorOff.getGreen(), 2);
+    EXPECT_NEAR (floorOn.getBlue(), floorOff.getBlue(), 2);
+
+    // The rays ran and missed
+    const auto reflections = on.getPassOutput (SceneRenderer::PassOutput::reflections);
+    ASSERT_NE (reflections, nullptr);
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    const auto confidence = mapTexels (reflections, "vec4(t.aaa, 1.0)");
+    ASSERT_TRUE (confidence.isValid());
+    EXPECT_LT (meanLuminance (confidence, floorRegion()), 1.0);
+#endif
+}
+
+TEST_F (SceneRendererMetalTests, SsrSettingRestartsAccumulation)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    setFullTierTaa (scene, 8);
+
+    SceneRenderer renderer;
+    for (int i = 0; i < 8; ++i)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    ASSERT_TRUE (renderer.isConverged());
+
+    // Restarted, not invalidated: the history stays valid for the reflections to come back at once
+    setScreenSpaceReflections (scene, false);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_FALSE (renderer.isConverged());
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+
+    setScreenSpaceReflections (scene, std::nullopt);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_FALSE (renderer.isConverged());
+    EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (SceneRendererMetalTests, SsrConvergedRegionMatchesAPrimedHistory)
+{
+    // The first frame has no history to read reflections from, and enters the running mean without
+    // them. Temporal anti-aliasing clips it to the neighborhood of the next frames, which hold the
+    // reflection, so the converged reflection keeps no share of it: it matches a renderer whose
+    // history was primed by an earlier convergence, then restarted by a setting that changes
+    // nothing on screen (contact shadows, without a light)
+    const auto renderRed = [&] (bool primed)
+    {
+        Scene scene;
+        buildOnScreenEmitterScene (scene, 0.3f);
+        setFullTierTaa (scene, 8);
+
+        SceneRenderer renderer;
+        EXPECT_TRUE (renderConverged (renderer, scene, 64).isValid()) << renderer.getLastError();
+
+        if (primed)
+        {
+            auto settings = scene.getRenderSettings();
+            settings.contactShadows = false;
+            scene.setRenderSettings (settings);
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr);
+            EXPECT_FALSE (renderer.isConverged());
+            EXPECT_TRUE (renderConverged (renderer, scene, 64).isValid()) << renderer.getLastError();
+        }
+
+        EXPECT_TRUE (renderer.isConverged());
+        const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+        return sceneColor != nullptr ? meanLinearRed (sceneColor, reflectedEmitterRegion()) : -1.0;
+    };
+
+    const auto fresh = renderRed (false);
+    const auto primed = renderRed (true);
+    RecordProperty ("floorRedFresh", String (fresh, 4).toStdString());
+    RecordProperty ("floorRedPrimed", String (primed, 4).toStdString());
+
+    // The reflection is 0.3 of the 0.4 the floor shows: a missing eighth of it would be 0.0375,
+    // 9% of the floor. The rest of the frame is the same in both, up to the noise of the rays
+    EXPECT_GT (fresh, 0.3);
+    EXPECT_NEAR (fresh, primed, 0.01 * primed);
+}
+#endif
+
+TEST_F (SceneRendererMetalTests, GivingUpSsrRestartsAccumulation)
+{
+    // Reflections that stop failing twice in a row change the image: a converged renderer starts over
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    setFullTierTaa (scene, 8);
+
+    SceneRenderer renderer;
+    ASSERT_TRUE (renderConverged (renderer, scene, 64).isValid()) << renderer.getLastError();
+    ASSERT_TRUE (renderer.isConverged());
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+
+    renderer.failScreenSpaceReflectionsForTesting();
+
+    for (const auto givesUp : { false, true })
+    {
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+        ASSERT_NE (renderer.getReflectionPass(), nullptr);
+        EXPECT_EQ (renderer.getReflectionPass()->hasGivenUp(), givesUp);
+    }
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_FALSE (renderer.isConverged());
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (SceneRendererMetalTests, SsrDoesNotLeakAcrossDepthEdges)
+{
+    // A rough bar floats in front of the reflecting floor, across rows 32 to 34 of the reflection.
+    // The bar traces no rays, so a floor pixel next to it would count the bar's texels as misses if
+    // the resolve did not leave out the texels of another depth and normal: its confidence would
+    // fall along the bar's edges. With them left out, the rows along the bar keep the confidence of
+    // the rows further from it
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    setFullTierTaa (scene, 8);
+
+    std::vector<Mesh::Vertex> vertices (4);
+    vertices[0].position = { -1.0f, 0.2f, 0.5f };
+    vertices[1].position = { 1.0f, 0.2f, 0.5f };
+    vertices[2].position = { 1.0f, 0.3f, 0.5f };
+    vertices[3].position = { -1.0f, 0.3f, 0.5f };
+    for (auto& vertex : vertices)
+        vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+    auto rough = Material::Ptr (new Material());
+    rough->baseColorFactor = { 0.5f, 0.5f, 0.5f, 1.0f };
+    rough->metallicFactor = 0.0f;
+    rough->roughnessFactor = 1.0f;
+
+    auto mesh = Mesh::Ptr (new Mesh ("bar"));
+    mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, rough);
+    auto bar = EntityNode::Ptr (new EntityNode ("bar"));
+    bar->attach<MeshNode> (mesh);
+    scene.getRoot()->addChild (bar);
+
+    SceneRenderer renderer;
+    ASSERT_TRUE (renderConverged (renderer, scene, 64).isValid()) << renderer.getLastError();
+    const auto reflections = renderer.getPassOutput (SceneRenderer::PassOutput::reflections);
+    ASSERT_NE (reflections, nullptr);
+
+    const auto confidence = mapTexels (reflections, "vec4(t.aaa, 1.0)");
+    ASSERT_TRUE (confidence.isValid());
+
+    const auto edges = (meanLuminance (confidence, { 24, 31, 16, 1 }) + meanLuminance (confidence, { 24, 35, 16, 1 })) * 0.5;
+    const auto inside = (meanLuminance (confidence, { 24, 28, 16, 2 }) + meanLuminance (confidence, { 24, 37, 16, 1 })) / 2.0;
+    RecordProperty ("edgeConfidence", String (edges, 1).toStdString());
+    RecordProperty ("insideConfidence", String (inside, 1).toStdString());
+    EXPECT_GT (inside, 200.0);
+    EXPECT_GT (edges, 0.9 * inside);
+}
+
+TEST_F (SceneRendererMetalTests, SsrWeighsNeighborRaysByThePixelsLobe)
+{
+    // A mirror floor under an emitter of 4 red and green bands. The rays are traced at half
+    // resolution, so a pixel reuses the rays of its neighbors, which hit the bands a pixel or so
+    // away from its own reflection: weighed by its lobe over the rays' pdf, the nearest of them
+    // dominates and the reflected bands stay as distinct as the emitter's own, where a plain mean of
+    // the 4 rays would blend each band into the next
+    Scene scene;
+    buildMirrorFloorScene (scene, false);
+    setFullTierTaa (scene, 8);
+
+    for (int band = 0; band < 4; ++band)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        const auto bottom = 0.2f * static_cast<float> (band);
+        vertices[0].position = { -0.6f, bottom, -0.5f };
+        vertices[1].position = { 0.6f, bottom, -0.5f };
+        vertices[2].position = { 0.6f, bottom + 0.2f, -0.5f };
+        vertices[3].position = { -0.6f, bottom + 0.2f, -0.5f };
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        const auto red = band % 2 == 0;
+        auto mesh = Mesh::Ptr (new Mesh ("band"));
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeEmitterMaterial ({ red ? 1.0f : 0.0f, red ? 0.0f : 1.0f, 0.0f }));
+        auto entity = EntityNode::Ptr (new EntityNode ("band"));
+        entity->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (entity);
+    }
+
+    SceneRenderer renderer;
+    const auto image = renderConverged (renderer, scene, 64);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    // The mean red-green difference over columns 24 to 39 of rows from first to last
+    const auto contrast = [&] (int first, int last)
+    {
+        auto sum = 0.0;
+        for (int y = first; y <= last; ++y)
+            for (int x = 24; x < 40; ++x)
+                sum += std::abs (static_cast<int> (image.getPixelColor (x, y).getRed()) - static_cast<int> (image.getPixelColor (x, y).getGreen()));
+
+        return sum / (16.0 * (last - first + 1));
+    };
+
+    const auto emitter = contrast (10, 24);
+    const auto reflected = contrast (28, 38);
+    RecordProperty ("emitterContrast", String (emitter, 1).toStdString());
+    RecordProperty ("reflectedContrast", String (reflected, 1).toStdString());
+
+    // Measured 56.7 of the emitter's 166.2 (0.34), and 49.0 (0.29) with a plain mean of the rays
+    EXPECT_GT (reflected, 0.32 * emitter);
+}
+#endif
+
+TEST_F (SceneRendererMetalTests, SsrOffReleasesItsTargets)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    setFullTierTaa (scene, 8);
+
+    SceneRenderer renderer;
+    EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getReflectionPass(), nullptr); // Nothing to read on the first frame, nothing created
+
+    EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    const auto* pass = renderer.getReflectionPass();
+    ASSERT_NE (pass, nullptr);
+    EXPECT_GT (pass->getNumCachedTargets(), 0u);
+
+    const auto* hiZ = renderer.getHiZPyramid();
+    ASSERT_NE (hiZ, nullptr);
+    EXPECT_GT (hiZ->getNumCachedTargets(), 0u);
+
+    // Kept, with no target, so turning them back on compiles nothing
+    setScreenSpaceReflections (scene, false);
+    EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getReflectionPass(), pass);
+    EXPECT_EQ (pass->getNumCachedTargets(), 0u);
+    EXPECT_EQ (hiZ->getNumCachedTargets(), 0u);
+
+    // Back on, then a resize: the new size has no history yet, and keeps no target of the old one
+    setScreenSpaceReflections (scene, std::nullopt);
+    EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_GT (hiZ->getNumCachedTargets(), 0u);
+
+    EXPECT_NE (renderer.render (device, scene, 48, 48), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getHiZPyramid(), hiZ);
+    EXPECT_EQ (pass->getNumCachedTargets(), 0u);
+    EXPECT_EQ (hiZ->getNumCachedTargets(), 0u);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_F (SceneRendererMetalTests, FailedSsrShadesWithoutIt)
+{
+    // Pipelines that cannot compile never fail the frame: it shades as without the reflections,
+    // the renderer tries once more, then gives up
+    const auto render = [&] (bool fail, std::optional<bool> screenSpaceReflections, SceneRenderer& renderer)
+    {
+        Scene scene;
+        buildOnScreenEmitterScene (scene);
+        setFullTierTaa (scene, 8);
+        setScreenSpaceReflections (scene, screenSpaceReflections);
+
+        if (fail)
+            renderer.failScreenSpaceReflectionsForTesting();
+
+        std::vector<bool> givenUp;
+        for (int frame = 0; frame < 3; ++frame)
+        {
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+            givenUp.push_back (renderer.getReflectionPass() != nullptr && renderer.getReflectionPass()->hasGivenUp());
+        }
+
+        // The first frame has no history to trace from, the next two fail
+        EXPECT_EQ (givenUp, (std::vector<bool> { false, false, fail }));
+        return renderConverged (renderer, scene, 64);
+    };
+
+    SceneRenderer failing, off;
+    const auto image = render (true, std::nullopt, failing);
+    const auto without = render (false, false, off);
+    ASSERT_TRUE (image.isValid() && without.isValid());
+    EXPECT_TRUE (failing.getLastError().isEmpty()) << failing.getLastError();
+
+    // Giving up restarted the accumulation of the failing renderer, so its silhouettes converged
+    // over other jitter offsets: the floor matches, the edges may not to the level
+    const auto floorFailing = meanColor (image, reflectedEmitterRegion());
+    const auto floorWithout = meanColor (without, reflectedEmitterRegion());
+    EXPECT_NEAR (floorFailing.getRed(), floorWithout.getRed(), 1);
+    EXPECT_NEAR (floorFailing.getGreen(), floorWithout.getGreen(), 1);
+}
+
+TEST_F (SceneRendererMetalTests, SsrUnavailableOnRasterRendersFallback)
+{
+    checkScreenSpaceReflectionsUnavailableOnRasterRendersFallback (RenderSettings::TierPreference::raster);
 }
 
 TEST_F (SceneRendererMetalTests, SilhouetteEdgesMatchRasterOnBothTiers)
@@ -12742,6 +13427,36 @@ void main()
     EXPECT_LT (background, 37 * 23);
 }
 
+/** ReflectionPass on its own, for the failure paths SceneRenderer reaches. */
+class ReflectionPassMetalTests : public SceneRendererMetalTests
+{
+};
+
+TEST_F (ReflectionPassMetalTests, PipelinesThatCannotCompileGiveUpWithTheirReason)
+{
+    // As SceneRenderer calls it: without pipelines no Hi-Z pyramid is built, so the pass is handed
+    // none, and must still report the pipelines, not the pyramid, as why it gave up
+    ReflectionPass pass (device);
+    pass.failPipelinesForTesting();
+    EXPECT_TRUE (pass.prepare().failed());
+
+    FrameResources resources (device);
+    ViewData view;
+
+    for (int i = 0; i < 2; ++i)
+    {
+        EXPECT_FALSE (pass.hasGivenUp());
+        resources.beginFrame (64, 64);
+        auto frame = GpuFrame::begin (device);
+        EXPECT_EQ (pass.render (frame, view, nullptr, nullptr, nullptr, nullptr, 1.0f, resources), nullptr);
+        frame.submit();
+        resources.endFrame();
+    }
+
+    EXPECT_TRUE (pass.hasGivenUp());
+    EXPECT_TRUE (pass.getGiveUpReason().contains ("pipelines failed for testing")) << pass.getGiveUpReason();
+}
+
 TEST_F (HiZPyramidMetalTests, ReturnsNullWithoutASingleSampledDepth)
 {
     frameResources->beginFrame (8, 8);
@@ -12981,6 +13696,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         bool probes = false;          // a box probe around the model and a sphere probe inside it
         bool volume = false;          // a 6 x 2 x 4 irradiance volume around the model
         bool layers = false;          // a clearcoat on the knob caps and a sheen on the pad rubber
+        bool screenSpaceReflections = true; // follows the tier default when true, off otherwise
     } configs[] = {
         { "full show64", RenderSettings::TierPreference::full, 64, 0.5f },
         { "raster show64", RenderSettings::TierPreference::raster, 64, 0.5f },
@@ -13002,6 +13718,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
         { "raster show64 one volume", RenderSettings::TierPreference::raster, 64, 0.5f, false, 0.0f, false, true, true, false, true },
         { "full show64 layered materials", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, true, true, false, false, true },
         { "raster show64 layered materials", RenderSettings::TierPreference::raster, 64, 0.5f, false, 0.0f, false, true, true, false, false, true },
+        { "full show64 screen-space reflections off", RenderSettings::TierPreference::full, 64, 0.5f, false, 0.0f, false, true, true, false, false, false, false },
     };
 
     for (const auto& [width, height] : { std::pair { 2560, 1600 }, std::pair { 3456, 2234 } })
@@ -13029,6 +13746,13 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
                 {
                     auto settings = show.scene.getRenderSettings();
                     settings.ambientOcclusion = false;
+                    show.scene.setRenderSettings (settings);
+                }
+
+                if (! config.screenSpaceReflections)
+                {
+                    auto settings = show.scene.getRenderSettings();
+                    settings.screenSpaceReflections = false;
                     show.scene.setRenderSettings (settings);
                 }
 
@@ -13103,13 +13827,22 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
 */
 TEST_F (SceneRendererBenchmarkTests, DISABLED_KnobAutomationFrameTimes)
 {
-    for (const auto tier : { RenderSettings::TierPreference::full, RenderSettings::TierPreference::raster })
+    for (const auto [tier, screenSpaceReflections] : { std::pair { RenderSettings::TierPreference::full, true },
+                                                       std::pair { RenderSettings::TierPreference::full, false },
+                                                       std::pair { RenderSettings::TierPreference::raster, true } })
     {
         for (const auto [keyShadows, nearestKnob] : { std::pair { true, false }, std::pair { false, false }, std::pair { true, true }, std::pair { false, true } })
         {
             LightShow show;
             if (! show.build (0, 0.5f, 0.08f, tier, 1.6f))
                 GTEST_SKIP() << "mpc.glb is missing";
+
+            if (! screenSpaceReflections)
+            {
+                auto settings = show.scene.getRenderSettings();
+                settings.screenSpaceReflections = false;
+                show.scene.setRenderSettings (settings);
+            }
 
             auto& root = *show.scene.getRoot();
             auto& key = *root.findChild ("keyLight")->getNode<LightNode>();
@@ -13200,6 +13933,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_KnobAutomationFrameTimes)
             EXPECT_GT (milliseconds, 0.0);
 
             const auto label = String (tier == RenderSettings::TierPreference::full ? "full" : "raster")
+                             + (screenSpaceReflections ? "" : ", screen-space reflections off")
                              + (keyShadows ? ", key shadowed" : ", key unshadowed")
                              + ", knob " + knob->getName() + (reachesSpot() || reachesPoint ? " inside a local light" : " outside every local light");
             RecordProperty (label.toStdString(), String (milliseconds, 3).toStdString());
@@ -13350,6 +14084,11 @@ TEST_F (SceneRendererGLTests, AmbientOcclusionOffAllocatesNothing)
 TEST_F (SceneRendererGLTests, AmbientOcclusionUnavailableOnRasterRendersFallback)
 {
     checkAmbientOcclusionUnavailableOnRasterRendersFallback (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, SsrUnavailableOnRasterRendersFallback)
+{
+    checkScreenSpaceReflectionsUnavailableOnRasterRendersFallback (RenderSettings::TierPreference::raster);
 }
 
 TEST_F (SceneRendererGLTests, AmbientOcclusionLeavesTheDirectLightAlone)

@@ -108,6 +108,19 @@ FrameResources::History FrameResources::getHistory (StringRef name, const GpuTex
     return { pair->textures[1 - pair->writeIndex], pair->textures[pair->writeIndex], pair->valid };
 }
 
+FrameResources::History FrameResources::findHistory (StringRef name) const
+{
+    const auto pair = std::find_if (histories.begin(), histories.end(), [&] (const HistoryPair& h)
+    {
+        return h.name == name;
+    });
+
+    if (pair == histories.end() || pair->textures[0] == nullptr || pair->textures[1] == nullptr)
+        return {};
+
+    return { pair->textures[1 - pair->writeIndex], pair->textures[pair->writeIndex], pair->valid };
+}
+
 void FrameResources::invalidateHistory() noexcept
 {
     for (auto& pair : histories)

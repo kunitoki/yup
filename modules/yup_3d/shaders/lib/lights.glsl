@@ -45,6 +45,17 @@
 // GGX lobe magnitude, its Fresnel part, the sheen albedo and 1, the split sum of the environment too
 layout(set = 0, binding = 7) uniform texture2DArray lookupLuts;
 
+#if defined(YUP_3D_SCREEN_SPACE_REFLECTIONS) && defined(YUP_3D_REFLECTION_PROBES) && ! defined(YUP_3D_IRRADIANCE_VOLUMES)
+#error "The gates below open on the screen-space reflections with the probes only alongside the volumes: define YUP_3D_IRRADIANCE_VOLUMES too"
+#endif
+
+#ifdef YUP_3D_SCREEN_SPACE_REFLECTIONS
+// The screen-space reflection of the pixel the full tier's LightingPass shades (ReflectionPass), which
+// it sets before lightsLookup(): the prefiltered radiance in rgb, the confidence in a, 0 where the
+// probes and the environment reflect alone
+vec4 lightsReflection = vec4(0.0);
+#endif
+
 // The coordinates of a surface in the lookup tables: columns sqrt (1 - n.v), rows sqrt (alpha),
 // sampled at the texel centers
 vec2 lightsLookupCoordinates(BsdfSurface s)
@@ -66,10 +77,14 @@ LightsLookup lightsLookup(BsdfSurface s)
     LightsLookup lookup = LightsLookup(lightsLookupCoordinates(s), vec2(0.0));
 
 #ifndef YUP_3D_AREA_LIGHTS
-#if defined(YUP_3D_IRRADIANCE_VOLUMES)
+#if defined(YUP_3D_IRRADIANCE_VOLUMES) && defined(YUP_3D_SCREEN_SPACE_REFLECTIONS)
+    if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0 || lighting.probeInfo.z > 0.0 || lightsReflection.a > 0.0)
+#elif defined(YUP_3D_IRRADIANCE_VOLUMES)
     if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0 || lighting.probeInfo.z > 0.0)
 #elif defined(YUP_3D_REFLECTION_PROBES)
     if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0)
+#elif defined(YUP_3D_SCREEN_SPACE_REFLECTIONS)
+    if (lighting.environmentInfo.x > 0.0 || lightsReflection.a > 0.0)
 #else
     if (lighting.environmentInfo.x > 0.0)
 #endif
@@ -396,6 +411,20 @@ vec3 lightsShade(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 ge
 }
 #endif
 
+#ifdef YUP_3D_SCREEN_SPACE_REFLECTIONS
+// Adds the share of the specular light the screen-space reflection takes (lightsReflection), and
+// returns the share it leaves to the probes and the environment: it replaces the prefiltered
+// radiance of the split sum in proportion to its confidence, mix (probes and environment,
+// reflection, confidence), and keeps the lookup tables' reflectance, the horizon, the multiple
+// scattering compensation (as the probes do, preflight R25) and the specular occlusion. Called only
+// for a confidence above 0, so a reflection the pass did not find never reaches the shading
+float lightsAddReflection(inout vec3 color, vec3 specularWeight, float horizon, vec3 multiple, float specularOcclusion)
+{
+    color += lightsReflection.rgb * (specularWeight * (horizon * horizon) + multiple) * (lightsReflection.a * specularOcclusion);
+    return 1.0 - lightsReflection.a;
+}
+#endif
+
 // The flat ambient light and, when there is one, the environment: its diffuse light from the
 // spherical harmonics and its reflections blurred by the filtered roughness, weighted by the split
 // sum of the lookup tables plus the multiple scattering it misses. The diffuse terms are darkened by
@@ -413,6 +442,9 @@ vec3 lightsShade(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 ge
 // (YUP_3D_IRRADIANCE_VOLUMES) take the diffuse light at @p worldPosition from the volume first
 // (diffuseIndirect, lib/probes.glsl), offset along @p geometricNormal and evaluated along the bent
 // normal, the environment taking the share it leaves; the specular light does not change
+// The full tier's LightingPass (YUP_3D_SCREEN_SPACE_REFLECTIONS) takes the share of the specular
+// light its screen-space reflection finds first (lightsAddReflection), also without an environment
+// or probes; the base layer only, the clearcoat keeping the probes and the environment.
 // The shaders compiling the material layers (YUP_3D_MATERIAL_LAYERS) also return the irradiance the
 // base diffuse receives, without its occlusion, in @p layerIrradiance, which the sheen reflects
 // (lightsLayered)
@@ -446,10 +478,14 @@ vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3
     layerIrradiance = lighting.ambient.rgb;
 #endif
 
-#if defined(YUP_3D_IRRADIANCE_VOLUMES)
+#if defined(YUP_3D_IRRADIANCE_VOLUMES) && defined(YUP_3D_SCREEN_SPACE_REFLECTIONS)
+    if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0 || lighting.probeInfo.z > 0.0 || lightsReflection.a > 0.0)
+#elif defined(YUP_3D_IRRADIANCE_VOLUMES)
     if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0 || lighting.probeInfo.z > 0.0)
 #elif defined(YUP_3D_REFLECTION_PROBES)
     if (lighting.environmentInfo.x > 0.0 || lighting.probeInfo.y > 0.0)
+#elif defined(YUP_3D_SCREEN_SPACE_REFLECTIONS)
+    if (lighting.environmentInfo.x > 0.0 || lightsReflection.a > 0.0)
 #else
     if (lighting.environmentInfo.x > 0.0)
 #endif
@@ -492,11 +528,23 @@ vec3 lightsIndirect(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3
         vec3 multiple = bsdfMultipleScattering(s, lookup.lobe, specularWeight);
         vec3 specular = environmentRadiance(r, environmentRoughness) * environmentWeight * specularWeight * (horizon * horizon)
                       + irradiance * multiple * environmentWeight;
+#ifdef YUP_3D_SCREEN_SPACE_REFLECTIONS
+        if (lightsReflection.a > 0.0)
+        {
+            float rest = lightsAddReflection(color, specularWeight, horizon, multiple, specularOcclusion);
+            probes *= rest;
+            specular *= rest;
+        }
+#endif
 
         color += probes * (specularWeight * (horizon * horizon) + multiple) * specularOcclusion;
 #else
         vec3 specular = environmentRadiance(r, environmentRoughness) * specularWeight * (horizon * horizon)
                       + irradiance * bsdfMultipleScattering(s, lookup.lobe, specularWeight);
+#ifdef YUP_3D_SCREEN_SPACE_REFLECTIONS
+        if (lightsReflection.a > 0.0)
+            specular *= lightsAddReflection(color, specularWeight, horizon, bsdfMultipleScattering(s, lookup.lobe, specularWeight), specularOcclusion);
+#endif
 #endif
 
         color += (diffuse * diffuseOcclusion + specular * specularOcclusion) * lighting.environmentInfo.x;

@@ -86,6 +86,14 @@ struct YUP_API RenderSettings
     */
     float aoDistance = 0.2f;
 
+    /** Screen-space reflections: smooth surfaces reflect what the camera sees, taken from the
+        previous frame, and fall back to the reflection probes and the environment where the
+        reflection is not on screen. Full tier only, and only with temporal anti-aliasing (taaSamples
+        above 1), whose history they read (see RenderCapabilities::Feature::screenSpaceReflections).
+        Unset picks the tier default: on for full. The raster tier ignores it, which is not an error.
+    */
+    std::optional<bool> screenSpaceReflections;
+
     bool operator== (const RenderSettings&) const = default;
 };
 

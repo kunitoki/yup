@@ -572,6 +572,52 @@ with `bakeProbes (device, scene)` behind a loading screen, calling it until it
 returns 0. A volume whose bake fails leaves the reflection probes baking, and
 the other way round.
 
+### Screen-space reflections
+
+Reflection probes and the environment are captured from a few fixed points, so
+they cannot show what moves, nor the exact surroundings of every surface. On the
+full tier, smooth surfaces also reflect what the camera sees: a glossy floor
+shows the objects standing on it, a varnished knob the panel next to it, from the
+previous frame of the image.
+
+```cpp
+yup::RenderSettings settings;
+settings.screenSpaceReflections = false; // on by default on the full tier
+scene->setRenderSettings (settings);
+```
+
+- A reflection is found by marching a ray over the depth of the frame. Where the
+  ray leaves the screen, goes behind what the camera sees, or turns back towards
+  the camera, the surface reflects the reflection probes and the environment
+  instead, blending into them near the screen edges. Turning the camera can
+  therefore change a reflection: what is off screen is not reflected.
+- Only surfaces with a roughness below 0.6 trace rays. From 0.5 to 0.6 they fade
+  into the probes and the environment, which reflect the rough surfaces alone:
+  their wide, blurred reflections need many rays to settle, and the probes are as
+  good there.
+- Every reflection is traced at half resolution, one ray per 2 x 2 pixels around
+  the sharpest part of the reflection, and each pixel combines the rays of its
+  neighbors. Glossy reflections are noisy at first and settle as the image
+  converges, like soft shadows: temporal anti-aliasing averages the rays, which
+  change every frame.
+- What the reflection replaces is the reflected light itself: the surface keeps
+  its reflectance, its ambient occlusion and its material occlusion. The flat
+  ambient color is not a reflection and still adds to it.
+- The clearcoat layer of a material keeps the probes and the environment, while
+  the material under it reflects the screen: an approximation, since a clearcoat
+  is often the sharpest reflection of a surface.
+- Transparent (blended) surfaces do not trace reflections, and a ray never stops
+  on them. Where one covers the surface a ray finds, the reflection shows that
+  surface seen through it, as the previous frame showed it.
+
+Screen-space reflections need the history of temporal anti-aliasing, so
+`taaSamples` of 1 turns them off; the raster tier never has them and ignores the
+setting. The first frame after the renderer is created or resized has no history
+yet and renders without them. They cost about 0.7 ms per frame at 2560 x 1600 and
+1.2 ms at 3456 x 2234 on an Apple M2 Max: set `screenSpaceReflections = false` to
+save it. A device that cannot compile them renders without them, which is logged
+once in debug builds.
+
 ## Lights and shadows
 
 Set `castsShadows` on any `LightNode` to make it cast shadows of the opaque
@@ -706,6 +752,7 @@ scene->setExposure (1.2f);
 | `bloomRadius`    | 0.85        | From 0 to 1: how far the glow spreads.                                                         |
 | `ambientOcclusion` | unset     | Darkens the indirect light in creases, see [Ambient occlusion](#ambient-occlusion). Unset follows the tier: on for full, off for raster. |
 | `aoDistance`     | 0.2         | How far, in scene units, surfaces occlude each other for ambient occlusion. 0 or less turns it off. |
+| `screenSpaceReflections` | unset | Smooth surfaces reflect what the camera sees, see [Screen-space reflections](#screen-space-reflections). Unset follows the tier: on for full; raster never has them. Needs `taaSamples` above 1. |
 
 Settings a device or tier cannot provide are ignored instead of failing. Ask
 `getRenderer().getCapabilities()` what is in effect after a frame was rendered:

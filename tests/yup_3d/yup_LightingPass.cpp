@@ -171,14 +171,14 @@ TEST_F (LightingPassTests, BindsTheContractSetOneLayout)
     // in the local indirect variants (preflight R27) the reflection atlas (8) and the irradiance and
     // visibility atlases (9, 10), all read through linearClamp, and the shadow comparison sampler
     // (bindings 11 and 14 are spare). Set 1 holds RT0-RT2 and the depth, keeping their binding
-    // numbers, then the ambient occlusion (13) in every variant, and set 3 the sun cascades and the
-    // point and spot light atlas, each compared (0, 2), and read raw (1, 3) by the shadow filter
-    // variants only. The storage buffers are the lights, the light lists of the clusters and the
+    // numbers, then the ambient occlusion (13) and the screen-space reflections (16) in every
+    // variant, and set 3 the sun cascades and the point and spot light atlas, each compared (0, 2),
+    // and read raw (1, 3) by the shadow filter variants only. The storage buffers are the lights, the light lists of the clusters and the
     // material table, plus the reflection probes (14) and the irradiance volumes (15) in the local
     // indirect variants only
     const Bindings lookups { { 0, 6 }, { 0, 7 } };
     const Bindings probeAtlases { { 0, 8 }, { 0, 9 }, { 0, 10 } };
-    const Bindings passInputs { { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 } };
+    const Bindings passInputs { { 1, 9 }, { 1, 10 }, { 1, 11 }, { 1, 12 }, { 1, 13 }, { 1, 16 } };
     const Bindings compared { { 3, 0 }, { 3, 2 } };
     const Bindings filtered { { 3, 0 }, { 3, 1 }, { 3, 2 }, { 3, 3 } };
     const Bindings storage { { 1, 6 }, { 1, 7 }, { 1, 8 } };
