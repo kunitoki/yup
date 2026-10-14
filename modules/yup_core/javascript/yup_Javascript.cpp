@@ -1806,8 +1806,8 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         Expression* parseSuffixes (Expression* e)
         {
-            NestingGuard nesting (nestingDepth, location);
             ExpPtr input (e);
+            NestingGuard nesting (nestingDepth, location);
 
             if (matchIf (TokenTypes::dot))
                 return parseSuffixes (new DotOperator (location, input, parseIdentifier()));
