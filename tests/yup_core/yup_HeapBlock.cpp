@@ -29,19 +29,22 @@ class HeapBlockTests : public ::testing::Test
 {
 };
 
-#if ! YUP_EXCEPTIONS_DISABLED
+#if ! YUP_WASM && ! YUP_EXCEPTIONS_DISABLED
 TEST_F (HeapBlockTests, FailedAllocationLeavesThrowingBlockEmpty)
 {
+    // Too large for any address space, so the allocator must fail even when the OS overcommits memory
+    const auto impossibleSize = static_cast<size_t> (-1) / 2;
+
     HeapBlock<char, true> mallocBlock (16);
-    EXPECT_THROW (mallocBlock.malloc ((size_t) 1 << 50), std::bad_alloc);
+    EXPECT_THROW (mallocBlock.malloc (impossibleSize), std::bad_alloc);
     EXPECT_TRUE (mallocBlock == nullptr);
 
     HeapBlock<char, true> callocBlock (16);
-    EXPECT_THROW (callocBlock.calloc ((size_t) 1 << 50), std::bad_alloc);
+    EXPECT_THROW (callocBlock.calloc (impossibleSize), std::bad_alloc);
     EXPECT_TRUE (callocBlock == nullptr);
 
     HeapBlock<char, true> allocateBlock (16);
-    EXPECT_THROW (allocateBlock.allocate ((size_t) 1 << 50, true), std::bad_alloc);
+    EXPECT_THROW (allocateBlock.allocate (impossibleSize, true), std::bad_alloc);
     EXPECT_TRUE (allocateBlock == nullptr);
 }
 #endif
