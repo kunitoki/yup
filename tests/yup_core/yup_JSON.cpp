@@ -399,7 +399,7 @@ TEST_F (JSONTests, DeeplyNestedOutputIsTruncated)
 
     for (int i = 0; i < 300; ++i)
     {
-        var outer (Array<var>());
+        auto outer = var (Array<var>());
         outer.getArray()->add (nested);
         nested = outer;
     }

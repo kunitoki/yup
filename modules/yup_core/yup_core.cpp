@@ -88,6 +88,10 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <netinet/in.h>
 #endif
 
+#if YUP_MAC || YUP_IOS
+#include <sys/random.h>
+#endif
+
 #if YUP_WASM
 #include <dirent.h>
 #include <errno.h>
