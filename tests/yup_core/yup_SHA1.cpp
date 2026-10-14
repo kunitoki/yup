@@ -98,3 +98,24 @@ TEST (SHA1Tests, SameInputAlwaysProducesSameHash)
     EXPECT_EQ (hash1.toHexString(), hash2.toHexString());
     EXPECT_TRUE (hash1 == hash2);
 }
+
+class SHA1StreamTests : public ::testing::Test
+{
+protected:
+    class FailingInputStream : public InputStream
+    {
+    public:
+        int64 getTotalLength() override { return -1; }
+        bool isExhausted() override { return false; }
+        int read (void*, int) override { return -1; }
+        int64 getPosition() override { return 0; }
+        bool setPosition (int64) override { return false; }
+    };
+};
+
+TEST_F (SHA1StreamTests, NegativeReadIsTreatedAsEndOfStream)
+{
+    FailingInputStream input;
+    SHA1 hash (input, -1);
+    EXPECT_EQ (hash.toHexString(), String ("da39a3ee5e6b4b0d3255bfef95601890afd80709"));
+}

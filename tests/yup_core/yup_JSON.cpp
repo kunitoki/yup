@@ -159,6 +159,14 @@ TEST_F (JSONTests, ParseAndGenerate)
     }
 }
 
+TEST_F (JSONTests, RejectsMinusWithoutDigit)
+{
+    EXPECT_TRUE (JSON::parse ("-").isVoid());
+    EXPECT_TRUE (JSON::parse ("[-]").isVoid());
+    EXPECT_TRUE (JSON::parse ("[-x]").isVoid());
+    EXPECT_TRUE (JSON::parse ("[-").isVoid());
+}
+
 TEST_F (JSONTests, FloatFormatting)
 {
     std::map<double, String> tests {
@@ -369,4 +377,32 @@ TEST_F (JSONTests, WriteNonDynamicObject)
     // in release it just does nothing. Ensure toString doesn't crash.
     var v (42); // an int, not an object
     EXPECT_TRUE (JSON::toString (v).isNotEmpty());
+}
+
+TEST_F (JSONTests, DeeplyNestedInputIsRejected)
+{
+    String json;
+
+    for (int i = 0; i < 300; ++i)
+        json << "[";
+
+    for (int i = 0; i < 300; ++i)
+        json << "]";
+
+    var result;
+    EXPECT_TRUE (JSON::parse (json, result).failed());
+}
+
+TEST_F (JSONTests, DeeplyNestedOutputIsTruncated)
+{
+    var nested (1);
+
+    for (int i = 0; i < 300; ++i)
+    {
+        var outer (Array<var>());
+        outer.getArray()->add (nested);
+        nested = outer;
+    }
+
+    EXPECT_TRUE (JSON::toString (nested, true).contains ("null"));
 }

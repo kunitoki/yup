@@ -812,3 +812,63 @@ TEST_F (YAMLTests, AliasAnchorAsMapKey)
     EXPECT_TRUE (YAML::parse ("*alias: value", result).failed());
     EXPECT_TRUE (YAML::parse ("&anchor: value", result).failed());
 }
+
+TEST_F (YAMLTests, MultilineFlowSequenceOfManyLines)
+{
+    String yaml = "k: [\n";
+
+    for (int i = 0; i < 5000; ++i)
+        yaml << "1,\n";
+
+    yaml << "2]\nj: 3";
+
+    var result;
+    ASSERT_TRUE (YAML::parse (yaml, result).wasOk());
+
+    auto* object = result.getDynamicObject();
+    ASSERT_NE (object, nullptr);
+    auto* array = object->getProperty ("k").getArray();
+    ASSERT_NE (array, nullptr);
+    EXPECT_EQ (array->size(), 5001);
+}
+
+#if ! YUP_WASM
+TEST_F (YAMLTests, SequenceAndAnchorChainsCountTowardsDepthLimit)
+{
+    var result;
+
+    String sequences;
+
+    for (int i = 0; i < 600; ++i)
+        sequences << "- ";
+
+    sequences << "x";
+    EXPECT_TRUE (YAML::parse (sequences, result).failed());
+
+    String anchors = "k: ";
+
+    for (int i = 0; i < 600; ++i)
+        anchors << "&a" << String (i) << " ";
+
+    anchors << "1";
+    EXPECT_TRUE (YAML::parse (anchors, result).failed());
+}
+#endif
+
+TEST_F (YAMLTests, AliasExpansionIsBounded)
+{
+    String yaml = "a0: &a0 [x, x, x, x, x, x, x, x, x, x]\n";
+
+    for (int i = 1; i <= 9; ++i)
+    {
+        yaml << "a" << String (i) << ": &a" << String (i) << " [";
+
+        for (int j = 0; j < 10; ++j)
+            yaml << (j > 0 ? ", " : "") << "*a" << String (i - 1);
+
+        yaml << "]\n";
+    }
+
+    var result;
+    EXPECT_TRUE (YAML::parse (yaml, result).failed());
+}

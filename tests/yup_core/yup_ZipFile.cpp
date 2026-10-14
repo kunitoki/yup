@@ -85,6 +85,54 @@ protected:
         return data;
     }
 
+    MemoryBlock createZip64ExtraField (int64 compressedSize) const
+    {
+        MemoryBlock extraField;
+        MemoryOutputStream mo (extraField, false);
+        mo.writeShort (0x0001);
+        mo.writeShort (8);
+        mo.writeInt64 (compressedSize);
+        mo.flush();
+
+        return extraField;
+    }
+
+    MemoryBlock createCentralDirectoryOnlyZip (const String& entryName, const MemoryBlock& extraField, int declaredExtraLength) const
+    {
+        const auto nameLength = (int) entryName.toUTF8().sizeInBytes() - 1;
+        MemoryBlock data;
+        MemoryOutputStream mo (data, false);
+        mo.writeInt (0x02014b50);
+        mo.writeShort (20);
+        mo.writeShort (20);
+        mo.writeShort (0);
+        mo.writeShort (0);
+        mo.writeInt (0);
+        mo.writeInt (0);
+        mo.writeInt (-1);
+        mo.writeInt (5);
+        mo.writeShort ((short) nameLength);
+        mo.writeShort ((short) declaredExtraLength);
+        mo.writeShort (0);
+        mo.writeShort (0);
+        mo.writeShort (0);
+        mo.writeInt (0);
+        mo.writeInt (0);
+        mo << entryName;
+        mo.write (extraField.getData(), extraField.getSize());
+        mo.writeInt (0x06054b50);
+        mo.writeShort (0);
+        mo.writeShort (0);
+        mo.writeShort (1);
+        mo.writeShort (1);
+        mo.writeInt (46 + nameLength + (int) extraField.getSize());
+        mo.writeInt (0);
+        mo.writeShort (0);
+        mo.flush();
+
+        return data;
+    }
+
     File zipFile;
 };
 
@@ -1535,3 +1583,43 @@ TEST_F (ZipFileTests, Zip64Testing)
     ASSERT_NE (zip.getEntry (0), nullptr);
     EXPECT_EQ (zip.getEntry (0)->uncompressedSize, 947036);
 }
+
+TEST_F (ZipFileTests, RejectsNegativeZip64CompressedSize)
+{
+    const auto data = createCentralDirectoryOnlyZip ("entry", createZip64ExtraField (-1), 12);
+    MemoryInputStream mi (data, false);
+    ZipFile zip (mi);
+
+    EXPECT_EQ (zip.getNumEntries(), 0);
+}
+
+TEST_F (ZipFileTests, TruncatedZip64ExtraField)
+{
+    const auto data = createCentralDirectoryOnlyZip ("entry", createZip64ExtraField (5), 0xFFFF);
+    MemoryInputStream mi (data, false);
+    ZipFile zip (mi);
+
+    EXPECT_EQ (zip.getNumEntries(), 0);
+}
+
+#if ! YUP_WINDOWS
+TEST_F (ZipFileTests, UncompressDoesNotFollowEntrySymlinks)
+{
+    TemporaryFile tmp;
+    auto root = tmp.getFile();
+    auto target = root.getChildFile ("target");
+    auto outside = root.getChildFile ("outside");
+    target.createDirectory();
+    outside.createDirectory();
+    outside.getChildFile ("victim.txt").replaceWithText ("secret");
+    File::createSymbolicLink (target.getChildFile ("link"), outside.getFullPathName(), false);
+
+    auto data = createZipMemoryBlock ({ "link/victim.txt" });
+    MemoryInputStream mi (data, false);
+    ZipFile zip (mi);
+
+    ASSERT_EQ (zip.getNumEntries(), 1);
+    EXPECT_FALSE (zip.uncompressEntry (0, target).wasOk());
+    EXPECT_EQ (outside.getChildFile ("victim.txt").loadFileAsString(), "secret");
+}
+#endif

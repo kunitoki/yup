@@ -315,4 +315,19 @@ TEST (DatagramSocketTests, SetEnablePortReuse)
     EXPECT_TRUE (socket.setEnablePortReuse (false));
 }
 
+TEST (DatagramSocketTests, PortIsNotSharedUnlessReuseIsEnabled)
+{
+    constexpr int port = 47381;
+
+    DatagramSocket first;
+    ASSERT_TRUE (first.bindToPort (port));
+
+    DatagramSocket second;
+    EXPECT_FALSE (second.bindToPort (port));
+
+    DatagramSocket reusing;
+    ASSERT_TRUE (reusing.setEnablePortReuse (true));
+    EXPECT_TRUE (reusing.bindToPort (port));
+}
+
 #endif

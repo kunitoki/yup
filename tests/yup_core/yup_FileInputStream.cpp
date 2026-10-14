@@ -41,7 +41,38 @@
 
 #include <yup_core/yup_core.h>
 
+#if YUP_MAC || YUP_LINUX
+#include <sys/stat.h>
+#endif
+
 using namespace yup;
+
+#if YUP_MAC || YUP_LINUX
+class FileInputStreamPermissionTests : public ::testing::Test
+{
+protected:
+    static mode_t getPermissions (const File& file)
+    {
+        struct stat info;
+        return stat (file.getFullPathName().toRawUTF8(), &info) == 0 ? (info.st_mode & 0777) : 0;
+    }
+};
+
+TEST_F (FileInputStreamPermissionTests, OpeningDoesNotChangePermissions)
+{
+    auto tempFile = File::createTempFile (".txt");
+    ASSERT_TRUE (tempFile.replaceWithText ("secret"));
+    ASSERT_EQ (chmod (tempFile.getFullPathName().toRawUTF8(), 0600), 0);
+
+    {
+        FileInputStream stream (tempFile);
+        EXPECT_TRUE (stream.openedOk());
+    }
+
+    EXPECT_EQ (getPermissions (tempFile), (mode_t) 0600);
+    tempFile.deleteFile();
+}
+#endif
 
 TEST (FileInputStreamTests, OpenStreamNonExistentFile)
 {

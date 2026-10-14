@@ -111,6 +111,7 @@ NetworkServiceDiscovery::AvailableServiceList::AvailableServiceList (const Strin
     acquireMulticastLock();
 #endif
 
+    socket.setEnablePortReuse (true);
     socket.bindToPort (broadcastPort);
     startThread (Priority::background);
 }

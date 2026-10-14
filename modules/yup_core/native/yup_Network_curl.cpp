@@ -278,7 +278,9 @@ public:
             && symbols->curl_easy_setopt (curl, CURLOPT_NOSIGNAL, 1) == CURLE_OK
             && symbols->curl_easy_setopt (curl, CURLOPT_MAXREDIRS, static_cast<long> (maxRedirects)) == CURLE_OK
             && symbols->curl_easy_setopt (curl, CURLOPT_USERAGENT, userAgent.toRawUTF8()) == CURLE_OK
-            && symbols->curl_easy_setopt (curl, CURLOPT_FOLLOWLOCATION, (maxRedirects > 0 ? 1 : 0)) == CURLE_OK)
+            && symbols->curl_easy_setopt (curl, CURLOPT_FOLLOWLOCATION, (maxRedirects > 0 ? 1 : 0)) == CURLE_OK
+            && symbols->curl_easy_setopt (curl, CURLOPT_PROTOCOLS, static_cast<long> (CURLPROTO_HTTP | CURLPROTO_HTTPS)) == CURLE_OK
+            && symbols->curl_easy_setopt (curl, CURLOPT_REDIR_PROTOCOLS, static_cast<long> (CURLPROTO_HTTP | CURLPROTO_HTTPS)) == CURLE_OK)
         {
             if (hasBodyDataToSend)
             {
@@ -612,12 +614,25 @@ public:
 
         String header (ptr, len);
 
+        if (header.startsWithIgnoreCase ("Location:") && isDowngradingRedirect (header.fromFirstOccurrenceOf (":", false, false).trim()))
+            return 0;
+
         if (! header.contains (":") && header.startsWithIgnoreCase ("HTTP/"))
             responseHeaders.clear();
         else
             responseHeaders += header;
 
         return len;
+    }
+
+    bool isDowngradingRedirect (const String& location) const
+    {
+        char* effectiveURL = nullptr;
+
+        if (symbols->curl_easy_getinfo (curl, CURLINFO_EFFECTIVE_URL, &effectiveURL) != CURLE_OK || effectiveURL == nullptr)
+            return false;
+
+        return String (effectiveURL).startsWithIgnoreCase ("https://") && location.startsWithIgnoreCase ("http://");
     }
 
     //==============================================================================

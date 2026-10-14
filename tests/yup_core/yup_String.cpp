@@ -995,6 +995,80 @@ TEST_F (StringTests, StandardLibraryIntegration)
     EXPECT_TRUE (yup_wide_view_str.contains ("Hello"));
 }
 
+TEST_F (StringTests, StringViewLimitsBytesNotCodePoints)
+{
+    const std::string buffer = "\xC3\xA9xy";
+    std::string_view view (buffer.data(), 2);
+
+    String str (view);
+    EXPECT_EQ (str, String (CharPointer_UTF8 ("\xC3\xA9")));
+    EXPECT_EQ (str.length(), 1);
+}
+
+TEST_F (StringTests, StringViewEdgeCases)
+{
+    EXPECT_TRUE (String (std::string_view()).isEmpty());
+
+    const std::string withNull ("a\0b", 3);
+    EXPECT_EQ (String (std::string_view (withNull)).length(), 1);
+
+    const std::string truncated ("\xE2\x82", 2);
+    EXPECT_EQ (String (std::string_view (truncated)).length(), 1);
+
+    const std::string exact ("abc");
+    EXPECT_EQ (String (std::string_view (exact)), String ("abc"));
+
+    const std::string malformed ("\xF0\x9F\x98\x80\xC0", 5);
+    EXPECT_EQ (String (std::string_view (malformed)).length(), 2);
+}
+
+TEST_F (StringTests, StringViewStopsAtViewBoundaryMidSequence)
+{
+    const std::string buffer = "\xC3\xA9\xE2\x82\xAC";
+    String str (std::string_view (buffer.data(), 3));
+
+    EXPECT_EQ (str.length(), 2);
+    EXPECT_EQ (std::string (str.toRawUTF8()), std::string ("\xC3\xA9\xEF\xBF\xBD"));
+}
+
+TEST_F (StringTests, FormattedExactBufferLength)
+{
+    for (const int length : { 254, 255, 256, 511, 512, 1023, 1024 })
+    {
+        const std::string text (static_cast<size_t> (length), 'a');
+        EXPECT_EQ (String::formatted ("%s", text.c_str()), String (text.c_str()));
+    }
+}
+
+TEST_F (StringTests, MalformedRangeStoresWellFormedBytes)
+{
+    const std::string bytes ("\xFF\xFF\xFF\xFF", 4);
+    String str (CharPointer_UTF8 (bytes.data()), CharPointer_UTF8 (bytes.data() + 4));
+
+    EXPECT_EQ (std::strlen (str.toRawUTF8()), str.getNumBytesAsUTF8());
+
+    MemoryOutputStream stream;
+    EXPECT_TRUE (stream.writeString (str));
+    EXPECT_EQ (stream.getDataSize(), str.getNumBytesAsUTF8() + 1);
+}
+
+TEST_F (StringTests, AppendedMalformedRangeStoresWellFormedBytes)
+{
+    const std::string bytes ("\xC0\x80" "AB", 4);
+    String str ("x");
+    str += String (CharPointer_UTF8 (bytes.data()), CharPointer_UTF8 (bytes.data() + 4));
+
+    EXPECT_EQ (std::strlen (str.toRawUTF8()), str.getNumBytesAsUTF8());
+    EXPECT_EQ (str.length(), 1 + 2 + 2);
+}
+
+TEST_F (StringTests, StdStringMalformedInputIsBounded)
+{
+    const std::string malformed (2048, '\xC0');
+    EXPECT_EQ (String (malformed).length(), 2048);
+    EXPECT_EQ (String (std::wstring_view()).length(), 0);
+}
+
 TEST_F (StringTests, CaseConversionEdgeCases)
 {
 #if ! YUP_WINDOWS

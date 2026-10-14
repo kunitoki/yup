@@ -40,6 +40,32 @@ TEST (JavascriptEngineTests, ExecuteInvalidCode)
     EXPECT_FALSE (result.wasOk());
 }
 
+TEST (JavascriptEngineTests, IndexOfClampsNegativeStart)
+{
+    JavascriptEngine engine;
+
+    EXPECT_EQ (static_cast<int> (engine.evaluate ("[1, 2, 3].indexOf (1, -100000)")), 0);
+    EXPECT_EQ (static_cast<int> (engine.evaluate ("[1, 2, 3].indexOf (3, -100000)")), 2);
+}
+
+TEST (JavascriptEngineTests, CharCodeAtOutOfRangeReturnsNaN)
+{
+    JavascriptEngine engine;
+
+    EXPECT_TRUE (std::isnan (static_cast<double> (engine.evaluate ("'abc'.charCodeAt (5000)"))));
+    EXPECT_TRUE (std::isnan (static_cast<double> (engine.evaluate ("'abc'.charCodeAt (-64)"))));
+    EXPECT_EQ (static_cast<int> (engine.evaluate ("'abc'.charCodeAt (1)")), 98);
+}
+
+TEST (JavascriptEngineTests, AssignToPropertyOfTemporaryObject)
+{
+    JavascriptEngine engine;
+
+    auto result = engine.executeWithResult ("function mk() { return {}; } mk().x = 1; 2;");
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_EQ (static_cast<int> (result.getReference()), 2);
+}
+
 TEST (JavascriptEngineTests, ExecuteWithResultReturnsLastExpressionStatement)
 {
     JavascriptEngine engine;
@@ -1028,4 +1054,109 @@ TEST (JavascriptEngineTests, ConstructorFunctionSetsProperties)
     engine.execute ("var obj2 = new MyObject (20);");
     EXPECT_EQ (10, (int) engine.evaluate ("obj.x"));
     EXPECT_EQ (20, (int) engine.evaluate ("obj2.x"));
+}
+
+TEST (JavascriptEngineTests, CallFunctionThatReassignsItself)
+{
+    JavascriptEngine engine;
+    engine.execute ("function f () { f = 0; return 1; }");
+
+    Result result = Result::fail ("fail");
+    var returnValue = engine.callFunction ("f", var::NativeFunctionArgs (var()), &result);
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_EQ (1, (int) returnValue);
+}
+
+TEST (JavascriptEngineTests, CloneOfNamedFunctionStaysCallable)
+{
+    JavascriptEngine engine;
+    Result result = engine.execute ("function add (a, b) { return a + b; } var copy = add.clone();");
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_EQ (5, (int) engine.evaluate ("copy (2, 3)"));
+}
+
+TEST (JavascriptEngineTests, ModuloOfMinimumInt64ByMinusOneDoesNotTrap)
+{
+    JavascriptEngine engine;
+    EXPECT_EQ (0, (int) engine.evaluate ("(-9223372036854775807 - 1) % -1"));
+}
+
+TEST (JavascriptEngineTests, AssignHugeArrayIndexIsRejected)
+{
+    JavascriptEngine engine;
+    Result result = engine.execute ("var a = []; a[2000000000] = 0;");
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_EQ (0, (int) engine.evaluate ("a.length"));
+    EXPECT_TRUE (engine.evaluate ("[1][2000000000]").isVoid());
+}
+
+TEST (JavascriptEngineTests, PrototypeCycleHonoursTimeout)
+{
+    JavascriptEngine engine;
+    engine.maximumExecutionTime = RelativeTime::milliseconds (200);
+
+    Result result = engine.execute ("var o = {}; o.prototype = o; o.missing ();");
+    EXPECT_FALSE (result.wasOk());
+
+    engine.execute ("o.prototype = 0;");
+}
+
+TEST (JavascriptEngineTests, UnboundedRecursionIsStopped)
+{
+    JavascriptEngine engine;
+
+    Result result = engine.execute ("function f () { return f (); } f ();");
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_EQ (2, (int) engine.evaluate ("1 + 1"));
+}
+
+TEST (JavascriptEngineTests, ModeratelyNestedExpressionStillWorks)
+{
+    JavascriptEngine engine;
+    EXPECT_EQ (1, (int) engine.evaluate (String::repeatedString ("(", 50) + "1" + String::repeatedString (")", 50)));
+}
+
+TEST (JavascriptEngineTests, DeeplyNestedExpressionIsRejected)
+{
+    JavascriptEngine engine;
+    Result result = engine.execute ("var x = " + String::repeatedString ("(", 10000) + "1" + String::repeatedString (")", 10000) + ";");
+    EXPECT_FALSE (result.wasOk());
+}
+
+TEST (JavascriptEngineTests, VeryLongOperatorChainIsRejected)
+{
+    JavascriptEngine engine;
+    Result result = engine.execute ("var x = 1" + String::repeatedString (" + 1", 10000) + ";");
+    EXPECT_FALSE (result.wasOk());
+}
+
+TEST (JavascriptEngineTests, VeryLongNewDotChainIsRejected)
+{
+    JavascriptEngine engine;
+    Result result = engine.execute ("var x = new " + String::repeatedString ("a.", 10000) + "a ();");
+    EXPECT_FALSE (result.wasOk());
+}
+
+TEST (JavascriptEngineTests, RecursionThroughExecIsStopped)
+{
+    JavascriptEngine engine;
+
+    Result result = engine.execute ("function g () { exec (\"g ();\"); } g ();");
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_EQ (2, (int) engine.evaluate ("1 + 1"));
+}
+
+TEST (JavascriptEngineTests, CyclicArrayIsRejectedByStringifyCloneAndEquality)
+{
+    JavascriptEngine engine;
+    EXPECT_TRUE (engine.execute ("var a = []; a.push (a); var b = []; b.push (b);").wasOk());
+
+    EXPECT_FALSE (engine.execute ("JSON.stringify (a);").wasOk());
+    EXPECT_FALSE (engine.execute ("var c = a.clone();").wasOk());
+    EXPECT_FALSE (engine.execute ("var same = (a == b);").wasOk());
+
+    engine.execute ("a[0] = 0; b[0] = 0;");
 }

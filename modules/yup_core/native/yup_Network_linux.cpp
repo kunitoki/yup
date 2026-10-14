@@ -240,7 +240,7 @@ public:
 
                 auto chunkSize = chunkLengthBuffer.toString().trimStart().getHexValue64();
 
-                if (chunkSize == 0)
+                if (chunkSize <= 0 || chunkSize > std::numeric_limits<int64>::max() - chunkEnd)
                 {
                     finished = true;
                     return 0;
@@ -249,8 +249,10 @@ public:
                 chunkEnd += chunkSize;
             }
 
-            if (bytesToRead > chunkEnd - position)
-                bytesToRead = static_cast<int> (chunkEnd - position);
+            const auto bytesLeftInChunk = chunkEnd - position;
+
+            if (bytesLeftInChunk < bytesToRead)
+                bytesToRead = static_cast<int> (bytesLeftInChunk);
         }
 
         pollfd pfd { socketHandle, POLLIN, 0 };
@@ -332,6 +334,9 @@ private:
     int createConnection (WebInputStream::Listener* listener, int numRedirects)
     {
         closeSocket (false);
+
+        if (containsControlCharacters (address) || ! areHeaderLinesSafe (headers))
+            return 0;
 
         if (hasBodyDataToSend)
             WebInputStream::createHeadersAndPostData (url,
@@ -455,8 +460,17 @@ private:
                         location = address + "/" + location;
                 }
 
-                address = location;
-                return createConnection (listener, numRedirects);
+                const URL currentURL (address);
+                const URL redirectURL (location);
+
+                if (currentURL.isRedirectAllowed (redirectURL))
+                {
+                    if (! currentURL.isSameOrigin (redirectURL))
+                        headers = removeCredentialHeaders (headers);
+
+                    address = location;
+                    return createConnection (listener, numRedirects);
+                }
             }
 
             auto contentLengthString = findHeaderItem (headerLines, "Content-Length:");
@@ -619,6 +633,35 @@ private:
                 return lines[i].substring (itemName.length()).trim();
 
         return {};
+    }
+
+    static bool containsControlCharacters (const String& text)
+    {
+        for (int i = 0; i < text.length(); ++i)
+            if (text[i] < ' ' || text[i] == 0x7f)
+                return true;
+
+        return false;
+    }
+
+    static bool areHeaderLinesSafe (const String& userHeaders)
+    {
+        for (const auto& line : StringArray::fromLines (userHeaders))
+            if (containsControlCharacters (line))
+                return false;
+
+        return true;
+    }
+
+    static String removeCredentialHeaders (const String& userHeaders)
+    {
+        auto lines = StringArray::fromLines (userHeaders);
+
+        for (int i = lines.size(); --i >= 0;)
+            if (lines[i].startsWithIgnoreCase ("Authorization:") || lines[i].startsWithIgnoreCase ("Cookie:"))
+                lines.remove (i);
+
+        return lines.joinIntoString ("\r\n");
     }
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)

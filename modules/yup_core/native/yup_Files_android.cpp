@@ -256,6 +256,17 @@ File AndroidContentUriResolver::getLocalFileFromContentUri (const URL& url)
                                           StringArray { mediaId }));
     }
 
+    // Only system providers can be trusted to return a real _data path, other providers
+    // could redirect the file to app private locations, so they are read as content streams
+    const auto isSystemProvider = authority == "com.android.externalstorage.documents"
+                               || authority == "com.android.providers.downloads.documents"
+                               || authority == "com.android.providers.media.documents"
+                               || authority == "downloads"
+                               || authority == "media";
+
+    if (! isSystemProvider)
+        return {};
+
     return File (getCursorDataColumn (url));
 }
 

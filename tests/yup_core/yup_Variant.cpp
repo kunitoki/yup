@@ -1759,3 +1759,38 @@ TEST_F (VariantTests, OperatorGreaterThanOrEqual)
     EXPECT_TRUE (v4 >= v6);
     EXPECT_FALSE (v6 >= v4);
 }
+
+class VariantStreamTests : public ::testing::Test
+{
+protected:
+    static constexpr char binaryMarker = 8;
+    static constexpr char arrayMarker = 7;
+};
+
+TEST_F (VariantStreamTests, BinaryPayloadIsBoundedByInput)
+{
+    MemoryOutputStream out;
+    out.writeCompressedInt (0x7FFFFFFF);
+    out.writeByte (binaryMarker);
+    const uint8 payload[] = { 1, 2, 3 };
+    out.write (payload, sizeof (payload));
+
+    MemoryInputStream in (out.getData(), out.getDataSize(), false);
+    var restored = var::readFromStream (in);
+
+    ASSERT_TRUE (restored.isBinaryData());
+    EXPECT_EQ (restored.getBinaryData()->getSize(), sizeof (payload));
+}
+
+TEST_F (VariantStreamTests, ArrayCountIsBoundedByInput)
+{
+    MemoryOutputStream out;
+    out.writeCompressedInt (2);
+    out.writeByte (arrayMarker);
+    out.writeCompressedInt (0x7FFFFFFF);
+
+    MemoryInputStream in (out.getData(), out.getDataSize(), false);
+    var restored = var::readFromStream (in);
+
+    EXPECT_EQ (restored.size(), 0);
+}

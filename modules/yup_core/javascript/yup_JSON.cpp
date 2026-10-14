@@ -50,6 +50,9 @@ struct JSONParser
 
     String::CharPointerType startLocation, currentLocation;
 
+    static constexpr int maxNestingDepth = 1024;
+    int nestingDepth = 0;
+
     struct ErrorException
     {
         String message;
@@ -212,6 +215,10 @@ struct JSONParser
 
             case '-':
                 skipWhitespace();
+
+                if (! isPositiveAndBelow ((int) peekChar() - '0', 10))
+                    throwError ("Syntax error", originalLocation);
+
                 return parseNumber (true);
 
             case '0':
@@ -296,6 +303,11 @@ struct JSONParser
 
     var parseObject()
     {
+        ScopedValueSetter<int> nesting (nestingDepth, nestingDepth + 1);
+
+        if (nestingDepth > maxNestingDepth)
+            throwError ("Nesting too deep", currentLocation);
+
         auto resultObject = new DynamicObject();
         var result (resultObject);
         auto& resultProperties = resultObject->getProperties();
@@ -348,6 +360,11 @@ struct JSONParser
 
     var parseArray()
     {
+        ScopedValueSetter<int> nesting (nestingDepth, nestingDepth + 1);
+
+        if (nestingDepth > maxNestingDepth)
+            throwError ("Nesting too deep", currentLocation);
+
         auto result = var (Array<var>());
         auto destArray = result.getArray();
         auto startOfArrayDecl = currentLocation;
@@ -504,6 +521,16 @@ struct JSONFormatter
 
 void JSON::writeToStream (OutputStream& out, const var& v, const FormatOptions& opt)
 {
+    static thread_local int nestingDepth = 0;
+
+    if ((v.isArray() || v.isObject()) && nestingDepth >= JSONParser::maxNestingDepth)
+    {
+        out << "null";
+        return;
+    }
+
+    ScopedValueSetter<int> nesting (nestingDepth, nestingDepth + 1);
+
     if (v.isString())
     {
         out << '"';

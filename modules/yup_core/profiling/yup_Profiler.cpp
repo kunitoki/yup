@@ -104,7 +104,16 @@ void Profiler::startTracing (uint32 sizeInKilobytes)
     if (destination.existsAsFile())
         destination.deleteFile();
 
-    fileDescriptor = open (destination.getFullPathName().toRawUTF8(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+    auto openFlags = O_RDWR | O_CREAT | O_EXCL;
+
+#if defined (O_NOFOLLOW)
+    openFlags |= O_NOFOLLOW;
+#endif
+
+    fileDescriptor = open (destination.getFullPathName().toRawUTF8(), openFlags, 0600);
+
+    if (fileDescriptor == -1)
+        return;
 
     session = perfetto::Tracing::NewTrace();
     session->Setup (traceConfig, fileDescriptor);

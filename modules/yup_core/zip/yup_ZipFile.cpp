@@ -88,10 +88,13 @@ struct ZipFile::ZipEntryHolder
             auto* extraHeaderPtr = buffer + 46 + fileNameLen;
             auto* extraSectionPtr = extraHeaderPtr;
 
-            while (extraFieldOffset < extraFieldLength)
+            while (extraFieldOffset + 4 <= extraFieldLength)
             {
                 auto extraHeaderTag = readUnalignedLittleEndianShort (extraSectionPtr);
                 auto extraFieldSectionLength = readUnalignedLittleEndianShort (extraSectionPtr + 2);
+
+                if (extraFieldOffset + 4 + extraFieldSectionLength > extraFieldLength)
+                    break;
 
                 if (extraHeaderTag == 0x0001) // Zip64 Tag
                 {
@@ -125,6 +128,13 @@ struct ZipFile::ZipEntryHolder
                 extraSectionPtr = extraHeaderPtr + extraFieldOffset;
             }
         }
+    }
+
+    bool isWithin (int64 archiveSize) const noexcept
+    {
+        return entry.uncompressedSize >= 0
+            && streamOffset >= 0 && streamOffset <= archiveSize
+            && compressedSize >= 0 && compressedSize <= archiveSize - streamOffset;
     }
 
     static Time parseFileTime (uint32 time, uint32 date) noexcept
@@ -308,7 +318,12 @@ struct ZipFile::ZipInputStream final : public InputStream
         if (headerSize <= 0)
             return 0;
 
-        howMany = (int) jmin ((int64) howMany, zipEntryHolder.compressedSize - pos);
+        const auto remaining = zipEntryHolder.compressedSize - pos;
+
+        if (remaining <= 0)
+            return 0;
+
+        howMany = (int) jmin ((int64) howMany, remaining);
 
         if (inputStream == nullptr)
             return 0;
@@ -508,15 +523,21 @@ void ZipFile::init()
 
                     auto* buffer = static_cast<const char*> (headerData.getData()) + pos;
                     auto fileNameLen = readUnalignedLittleEndianShort (buffer + 28u);
+                    auto recordLen = 46u + fileNameLen
+                                   + readUnalignedLittleEndianShort (buffer + 30u)
+                                   + readUnalignedLittleEndianShort (buffer + 32u);
 
-                    if (pos + 46 + fileNameLen > size)
+                    if (pos + recordLen > size)
                         break;
 
-                    entries.add (new ZipEntryHolder (buffer, fileNameLen));
+                    auto* zei = new ZipEntryHolder (buffer, fileNameLen);
 
-                    pos += 46u + fileNameLen
-                         + readUnalignedLittleEndianShort (buffer + 30u)
-                         + readUnalignedLittleEndianShort (buffer + 32u);
+                    if (zei->isWithin (in->getTotalLength()))
+                        entries.add (zei);
+                    else
+                        delete zei;
+
+                    pos += recordLen;
                 }
             }
         }
@@ -563,6 +584,9 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
     if (! targetFile.isAChildOf (targetDirectory))
         return Result::fail ("Entry " + entryPath + " is outside the target directory");
 
+    if (followSymlinks == FollowSymlinks::no && hasSymbolicPart (targetDirectory, targetFile))
+        return Result::fail ("Parent directory leads through symlink for target file: " + targetFile.getFullPathName());
+
     if (entryPath.endsWithChar ('/') || entryPath.endsWithChar ('\\'))
         return targetFile.createDirectory(); // (entry is a directory, not a file)
 
@@ -579,9 +603,6 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
         if (! targetFile.deleteFile())
             return Result::fail ("Failed to write to target file: " + targetFile.getFullPathName());
     }
-
-    if (followSymlinks == FollowSymlinks::no && hasSymbolicPart (targetDirectory, targetFile.getParentDirectory()))
-        return Result::fail ("Parent directory leads through symlink for target file: " + targetFile.getFullPathName());
 
     if (! targetFile.getParentDirectory().createDirectory())
         return Result::fail ("Failed to create target folder: " + targetFile.getParentDirectory().getFullPathName());

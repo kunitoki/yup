@@ -59,6 +59,11 @@ namespace yup
     script creates complex connections between objects, you run the risk of creating cyclic
     dependencies and hence leaking.
 
+    Resource use is bounded: the nesting of expressions, statements and active function
+    calls is limited to 1024 levels, and index assignment can't grow an array beyond index
+    1048576. Exceeding a limit, or running out of memory, stops the script with an error
+    instead of crashing the host.
+
     @tags{Core}
 */
 class YUP_API JavascriptEngine final

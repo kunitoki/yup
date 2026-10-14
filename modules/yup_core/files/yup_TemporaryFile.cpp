@@ -48,6 +48,14 @@ static File createTempFile (const File& parentDirectory, String name, const Stri
     return parentDirectory.getNonexistentChildFile (name, suffix, (optionFlags & TemporaryFile::putNumbersInBrackets) != 0);
 }
 
+static String getSecureTempNameSuffix()
+{
+    uint64 randomValue = 0;
+    SecureRandom::fillBytes (&randomValue, sizeof (randomValue));
+
+    return String::toHexString (randomValue);
+}
+
 TemporaryFile::TemporaryFile()
     : TemporaryFile { String {} }
 {
@@ -65,7 +73,7 @@ TemporaryFile::TemporaryFile (const File& target)
 
 TemporaryFile::TemporaryFile (const String& suffix, const int optionFlags)
     : temporaryFile (createTempFile (File::getSpecialLocation (File::tempDirectory),
-                                     "temp_" + String::toHexString (Random::getSystemRandom().nextInt()),
+                                     "temp_" + getSecureTempNameSuffix(),
                                      suffix,
                                      optionFlags))
     , targetFile()
@@ -75,7 +83,7 @@ TemporaryFile::TemporaryFile (const String& suffix, const int optionFlags)
 TemporaryFile::TemporaryFile (const File& target, const int optionFlags)
     : temporaryFile (createTempFile (target.getParentDirectory(),
                                      target.getFileNameWithoutExtension()
-                                         + "_temp" + String::toHexString (Random::getSystemRandom().nextInt()),
+                                         + "_temp" + getSecureTempNameSuffix(),
                                      target.getFileExtension(),
                                      optionFlags))
     , targetFile (target)

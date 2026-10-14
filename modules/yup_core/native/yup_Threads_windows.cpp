@@ -340,7 +340,11 @@ bool yup_isRunningInWine()
 bool DynamicLibrary::open (const String& name)
 {
     close();
-    handle = LoadLibrary (name.toWideCharPointer());
+    // Bare names skip the current directory and PATH to avoid DLL search order hijacking
+    handle = name.containsAnyOf ("\\/:")
+                 ? LoadLibrary (name.toWideCharPointer())
+                 : LoadLibraryEx (name.toWideCharPointer(), nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+
     return handle != nullptr;
 }
 
@@ -612,21 +616,40 @@ bool ChildProcess::start (const String& command, const StringPairArray& environm
     return activeProcess != nullptr;
 }
 
+static String quoteArgumentForCommandLine (const String& arg)
+{
+    if (arg.isNotEmpty() && ! arg.containsAnyOf (" \t\""))
+        return arg;
+
+    // Follows the CommandLineToArgvW rules, backslashes only need escaping when they precede a quote
+    String quoted ("\"");
+    int backslashes = 0;
+
+    for (int i = 0; i < arg.length(); ++i)
+    {
+        const auto character = arg[i];
+
+        if (character == '\\')
+        {
+            ++backslashes;
+            continue;
+        }
+
+        const auto escapedBackslashes = character == '"' ? backslashes * 2 + 1 : backslashes;
+        quoted << String::repeatedString ("\\", escapedBackslashes) << String::charToString (character);
+        backslashes = 0;
+    }
+
+    quoted << String::repeatedString ("\\", backslashes * 2) << '"';
+    return quoted;
+}
+
 bool ChildProcess::start (const StringArray& args, int streamFlags)
 {
     String escaped;
 
     for (int i = 0; i < args.size(); ++i)
-    {
-        String arg (args[i]);
-
-        // If there are spaces, surround it with quotes. If there are quotes,
-        // replace them with \" so that CommandLineToArgv will correctly parse them.
-        if (arg.containsAnyOf ("\" "))
-            arg = arg.replace ("\"", "\\\"").quoted();
-
-        escaped << arg << ' ';
-    }
+        escaped << quoteArgumentForCommandLine (args[i]) << ' ';
 
     return start (escaped.trim(), streamFlags);
 }
@@ -636,16 +659,7 @@ bool ChildProcess::start (const StringArray& args, const StringPairArray& enviro
     String escaped;
 
     for (int i = 0; i < args.size(); ++i)
-    {
-        String arg (args[i]);
-
-        // If there are spaces, surround it with quotes. If there are quotes,
-        // replace them with \" so that CommandLineToArgv will correctly parse them.
-        if (arg.containsAnyOf ("\" "))
-            arg = arg.replace ("\"", "\\\"").quoted();
-
-        escaped << arg << ' ';
-    }
+        escaped << quoteArgumentForCommandLine (args[i]) << ' ';
 
     return start (escaped.trim(), environment, streamFlags);
 }

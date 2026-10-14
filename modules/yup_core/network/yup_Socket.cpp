@@ -680,7 +680,6 @@ DatagramSocket::DatagramSocket (bool canBroadcast, const SocketOptions& optionsI
     if (handle >= 0)
     {
         SocketHelpers::resetSocketOptions ((SocketHandle) handle.load(), true, canBroadcast, options);
-        SocketHelpers::makeReusable (handle);
     }
 }
 

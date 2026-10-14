@@ -1027,8 +1027,11 @@ String File::getRelativePathFrom (const File& dir) const
 //==============================================================================
 File File::createTempFile (StringRef fileNameEnding)
 {
+    uint64 randomValue = 0;
+    SecureRandom::fillBytes (&randomValue, sizeof (randomValue));
+
     auto tempFile = getSpecialLocation (tempDirectory)
-                        .getChildFile ("temp_" + String::toHexString (Random::getSystemRandom().nextInt()))
+                        .getChildFile ("temp_" + String::toHexString (randomValue))
                         .withFileExtension (fileNameEnding);
 
     if (tempFile.exists())

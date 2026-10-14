@@ -1200,15 +1200,9 @@ var var::readFromStream (InputStream& input)
 
             case varMarker_Binary:
             {
-                MemoryBlock mb ((size_t) numBytes - 1);
-
-                if (numBytes > 1)
-                {
-                    const int numRead = input.read (mb.getData(), numBytes - 1);
-                    mb.setSize ((size_t) numRead);
-                }
-
-                return var (mb);
+                MemoryOutputStream mo;
+                mo.writeFromInputStream (input, numBytes - 1);
+                return var (mo.getMemoryBlock());
             }
 
             case varMarker_Array:
@@ -1216,7 +1210,7 @@ var var::readFromStream (InputStream& input)
                 var v;
                 auto* destArray = v.convertToArray();
 
-                for (int i = input.readCompressedInt(); --i >= 0;)
+                for (int i = input.readCompressedInt(); --i >= 0 && ! input.isExhausted();)
                     destArray->add (readFromStream (input));
 
                 return v;

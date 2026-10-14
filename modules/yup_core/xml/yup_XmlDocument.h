@@ -44,8 +44,9 @@ namespace yup
 /**
     Parses a text-based XML document and creates an XmlElement object from it.
 
-    The parser will parse DTDs to load external entities but won't
-    check the document for validity against the DTD.
+    The parser will parse DTDs to load external entities, but only when
+    setExternalEntitiesAllowed() is enabled, and won't check the document for
+    validity against the DTD.
 
     e.g.
     @code
@@ -148,6 +149,20 @@ public:
     */
     void setEmptyTextElementsIgnored (bool shouldBeIgnored) noexcept;
 
+    /** Sets whether external DTD subsets and external entities may be read.
+
+        By default this is disabled, so a SYSTEM identifier in the DOCTYPE, or a
+        parameter entity declared with SYSTEM, never reads a file or URL through the
+        input source. This prevents XML external entity (XXE) attacks on untrusted
+        documents. Enable it only for documents you trust.
+
+        Note that this is a behaviour change: documents relying on external DTDs will
+        now see their external entities as unknown unless this is enabled.
+
+        @see setInputSource
+    */
+    void setExternalEntitiesAllowed (bool shouldBeAllowed) noexcept;
+
     //==============================================================================
     /** A handy static method that parses a file.
         This is a shortcut for creating an XmlDocument object and calling getDocumentElement() on it.
@@ -166,9 +181,14 @@ private:
     String originalText;
     String::CharPointerType input { nullptr };
     bool outOfData = false, errorOccurred = false;
+    static constexpr int maxElementDepth = 256;
+    static constexpr int maxEntityDepth = 32;
+    static constexpr int maxEntityExpansionLength = 1 << 20;
+
     String lastError, dtdText;
     StringArray tokenisedDTD;
-    bool needToLoadDTD = false, ignoreEmptyTextElements = true;
+    bool needToLoadDTD = false, ignoreEmptyTextElements = true, externalEntitiesAllowed = false;
+    int elementDepth = 0, entityDepth = 0, entityExpansionLength = 0;
     std::unique_ptr<InputSource> inputSource;
 
     std::unique_ptr<XmlElement> parseDocumentElement (String::CharPointerType, bool outer);

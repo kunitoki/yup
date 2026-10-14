@@ -69,11 +69,13 @@
 
 #if YUP_WINDOWS
 YUP_BEGIN_IGNORE_WARNINGS_MSVC (4091)
-#include <Dbghelp.h>
+#include <dbghelp.h>
+#include <bcrypt.h>
 YUP_END_IGNORE_WARNINGS_MSVC
 
 #if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
-#pragma comment(lib, "DbgHelp.lib")
+#pragma comment(lib, "dbghelp.lib")
+#pragma comment(lib, "bcrypt.lib")
 #endif
 
 #else
@@ -81,6 +83,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
+#include <sys/random.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #endif
@@ -95,6 +98,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/vfs.h>
+#include <sys/random.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <utime.h>
@@ -194,6 +198,7 @@ extern char** environ;
 #include "cryptography/yup_SHA1.cpp"
 #include "misc/yup_RuntimePermissions.cpp"
 #include "misc/yup_Result.cpp"
+#include "misc/yup_SecureRandom.cpp"
 #include "misc/yup_Uuid.cpp"
 #include "misc/yup_ConsoleApplication.cpp"
 #include "misc/yup_ScopeGuard.cpp"

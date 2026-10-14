@@ -134,7 +134,11 @@ struct RegistryKeyWrapper
         switch (getBinaryValue (regValuePath, buffer, wow64Flags))
         {
             case REG_SZ:
+            {
+                // The stored string is not guaranteed to be NUL terminated
+                buffer.setSize (buffer.getSize() + sizeof (WCHAR), true);
                 return static_cast<const WCHAR*> (buffer.getData());
+            }
             case REG_DWORD:
                 return String ((int) *reinterpret_cast<const DWORD*> (buffer.getData()));
             default:
@@ -258,7 +262,7 @@ bool YUP_CALLTYPE WindowsRegistry::registerFileAssociation (const String& fileEx
 
     return setValue (root + fileExtension + "\\", symbolicDescription, mode)
         && setValue (key + "\\", fullDescription, mode)
-        && setValue (key + "\\shell\\open\\command\\", targetExecutable.getFullPathName() + " \"%1\"", mode)
+        && setValue (key + "\\shell\\open\\command\\", "\"" + targetExecutable.getFullPathName() + "\" \"%1\"", mode)
         && (iconResourceNumber == 0
             || setValue (key + "\\DefaultIcon\\",
                          targetExecutable.getFullPathName() + "," + String (iconResourceNumber)));

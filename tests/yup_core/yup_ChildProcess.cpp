@@ -171,5 +171,16 @@ TEST (ChildProcessTests, StartWithStringArray)
 #endif
 }
 
-// Note: yup_runSystemCommand and yup_getOutputFromCommand are internal POSIX functions
-// not exposed in the public API. They are tested indirectly through ChildProcess and File operations.
+#if YUP_MAC || YUP_LINUX
+class ChildProcessArgumentTests : public ::testing::Test
+{
+};
+
+TEST_F (ChildProcessArgumentTests, PreservesEmptyArguments)
+{
+    ChildProcess p;
+    ASSERT_TRUE (p.start (StringArray { "/bin/sh", "-c", "printf %s \"$#\"", "sh", "", "" }));
+
+    EXPECT_EQ (p.readAllProcessOutput(), "2");
+}
+#endif

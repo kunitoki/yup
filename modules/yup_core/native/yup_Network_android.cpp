@@ -284,6 +284,9 @@ public:
                                                                                         javaString (httpRequest).get())));
             }
 
+            if (jniCheckHasExceptionOccurredAndClear())
+                stream.clear();
+
             if (stream != nullptr && ! stream.callBooleanMethod (HTTPStream.connect))
                 stream.clear();
 

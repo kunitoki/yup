@@ -560,6 +560,11 @@ bool File::moveInternal (const File& dest) const
 
 bool File::replaceInternal (const File& dest) const
 {
+    yup_statStruct info;
+
+    if (yup_stat (dest.getFullPathName(), info))
+        chmod (fullPath.toUTF8(), info.st_mode & 0777);
+
     return moveInternal (dest);
 }
 
@@ -570,29 +575,7 @@ Result File::createDirectoryInternal (const String& fileName) const
         return Result::fail ("Cannot write to a read-only bundle/asset path: " + fileName);
 #endif
 
-    auto res = getResultForReturnValue (mkdir (fileName.toUTF8(), 0777));
-
-    if (res.ok())
-    {
-        auto parent = File (fileName).getParentDirectory().getFullPathName();
-
-        struct stat parentInfo;
-        struct stat childInfo;
-
-        if (stat (parent.toRawUTF8(), &parentInfo) == 0 && stat (fileName.toRawUTF8(), &childInfo) == 0)
-        {
-            if (parentInfo.st_mode & S_IWOTH)
-                childInfo.st_mode |= S_IWOTH;
-            if (parentInfo.st_mode & S_IWUSR)
-                childInfo.st_mode |= S_IWUSR;
-            if (parentInfo.st_mode & S_IWGRP)
-                childInfo.st_mode |= S_IWGRP;
-
-            chmod (fileName.toRawUTF8(), childInfo.st_mode);
-        }
-    }
-
-    return res;
+    return getResultForReturnValue (mkdir (fileName.toUTF8(), 0777));
 }
 
 //==============================================================================
@@ -629,26 +612,9 @@ void FileInputStream::openHandle()
     }
 #endif
 
-    mode_t permission = 00644;
-
-    auto parent = file.getParentDirectory().getFullPathName();
-
-    struct stat parentInfo;
-
-    if (stat (parent.toRawUTF8(), &parentInfo) == 0)
-    {
-        if (parentInfo.st_mode & S_IWOTH)
-            permission |= S_IWOTH;
-        if (parentInfo.st_mode & S_IWUSR)
-            permission |= S_IWUSR;
-        if (parentInfo.st_mode & S_IWGRP)
-            permission |= S_IWGRP;
-    }
-
-    auto f = open (file.getFullPathName().toUTF8(), O_RDONLY, permission);
+    auto f = open (file.getFullPathName().toUTF8(), O_RDONLY);
     if (f != -1)
     {
-        fchmod (f, permission);
         fileHandle = fdToVoidPointer (f);
     }
     else
@@ -745,7 +711,7 @@ void FileOutputStream::openHandle()
     }
     else
     {
-        auto f = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT, 00644);
+        auto f = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW, 00644);
 
         if (f != -1)
             fileHandle = fdToVoidPointer (f);
@@ -823,6 +789,8 @@ void MemoryMappedFile::openInternal (const File& file, AccessMode mode, bool exc
 
     if (fileHandle != -1)
     {
+        range = range.getIntersectionWith (Range<int64> (0, (int64) lseek (fileHandle, 0, SEEK_END)));
+
         auto m = mmap (nullptr, (size_t) range.getLength(), mode == readWrite ? (PROT_READ | PROT_WRITE) : PROT_READ, exclusive ? MAP_PRIVATE : MAP_SHARED, fileHandle, (off_t) range.getStart());
 
         if (m != MAP_FAILED)
@@ -934,26 +902,22 @@ int File::getVolumeSerialNumber() const
 
 //==============================================================================
 #if ! YUP_IOS
-void yup_runSystemCommand (const String&);
-
-void yup_runSystemCommand (const String& command)
+static File getPerUserTempFolder (const String& folderName)
 {
-    [[maybe_unused]] int result = system (command.toUTF8());
-}
+    auto folder = File::getSpecialLocation (File::tempDirectory).getChildFile (folderName + "." + String ((int) geteuid()));
 
-String yup_getOutputFromCommand (const String&);
+    if (mkdir (folder.getFullPathName().toRawUTF8(), 0700) != 0 && errno != EEXIST)
+        return File();
 
-String yup_getOutputFromCommand (const String& command)
-{
-    // slight bodge here, as we just pipe the output into a temp file and read it...
-    auto tempFile = File::getSpecialLocation (File::tempDirectory)
-                        .getNonexistentChildFile (String::toHexString (Random::getSystemRandom().nextInt()), ".tmp", false);
+    struct stat info;
 
-    yup_runSystemCommand (command + " > " + tempFile.getFullPathName());
+    if (lstat (folder.getFullPathName().toRawUTF8(), &info) != 0
+        || ! S_ISDIR (info.st_mode)
+        || info.st_uid != geteuid()
+        || (info.st_mode & 077) != 0)
+        return File();
 
-    auto result = tempFile.loadFileAsString();
-    tempFile.deleteFile();
-    return result;
+    return folder;
 }
 #endif
 
@@ -974,18 +938,16 @@ class InterProcessLock::Pimpl
 public:
     Pimpl (const String& lockName, int timeOutMillisecs)
     {
+        auto userFolder = getPerUserTempFolder ("org.yup.locks");
+
 #if YUP_MAC
-        if (! createLockFile (File ("~/Library/Caches/org.yup.locks").getChildFile (lockName), timeOutMillisecs))
+        if (! createLockFile (File ("~/Library/Caches/org.yup.locks").getChildFile (lockName), timeOutMillisecs)
+            && userFolder != File())
             // Fallback if the user's home folder is on a network drive with no ability to lock..
-            createLockFile (File ("/tmp/org.yup.locks").getChildFile (lockName), timeOutMillisecs);
-
+            createLockFile (userFolder.getChildFile (lockName), timeOutMillisecs);
 #else
-        File tempFolder ("/var/tmp");
-
-        if (! tempFolder.isDirectory())
-            tempFolder = "/tmp";
-
-        createLockFile (tempFolder.getChildFile (lockName), timeOutMillisecs);
+        if (userFolder != File())
+            createLockFile (userFolder.getChildFile (lockName), timeOutMillisecs);
 #endif
     }
 
@@ -996,39 +958,45 @@ public:
 
     bool createLockFile (const File& file, int timeOutMillisecs)
     {
-        file.create();
-        handle = open (file.getFullPathName().toUTF8(), O_RDWR);
+        file.getParentDirectory().createDirectory();
+        handle = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT | O_NOFOLLOW, 0600);
 
-        if (handle != 0)
+        if (handle < 0)
         {
-            struct flock fl;
-            zerostruct (fl);
+            handle = 0;
+            return false;
+        }
 
-            fl.l_whence = SEEK_SET;
-            fl.l_type = F_WRLCK;
+        struct flock fl;
+        zerostruct (fl);
 
-            auto endTime = Time::currentTimeMillis() + timeOutMillisecs;
+        fl.l_whence = SEEK_SET;
+        fl.l_type = F_WRLCK;
 
-            for (;;)
+        auto endTime = Time::currentTimeMillis() + timeOutMillisecs;
+
+        for (;;)
+        {
+            auto result = fcntl (handle, F_SETLK, &fl);
+
+            if (result >= 0)
+                return true;
+
+            auto error = errno;
+
+            if (error != EINTR)
             {
-                auto result = fcntl (handle, F_SETLK, &fl);
-
-                if (result >= 0)
-                    return true;
-
-                auto error = errno;
-
-                if (error != EINTR)
+                if (error == EBADF || error == ENOTSUP)
                 {
-                    if (error == EBADF || error == ENOTSUP)
-                        return false;
-
-                    if (timeOutMillisecs == 0
-                        || (timeOutMillisecs > 0 && Time::currentTimeMillis() >= endTime))
-                        break;
-
-                    Thread::sleep (10);
+                    closeFile();
+                    return false;
                 }
+
+                if (timeOutMillisecs == 0
+                    || (timeOutMillisecs > 0 && Time::currentTimeMillis() >= endTime))
+                    break;
+
+                Thread::sleep (10);
             }
         }
 
@@ -1360,6 +1328,20 @@ static String readPosixConfigFileValue (const char* file, const char* key)
 }
 #endif
 
+static bool createCloseOnExecPipe (int (&pipeHandles)[2]) noexcept
+{
+#if YUP_LINUX || YUP_ANDROID
+    return pipe2 (pipeHandles, O_CLOEXEC) == 0;
+#else
+    if (pipe (pipeHandles) != 0)
+        return false;
+
+    fcntl (pipeHandles[0], F_SETFD, FD_CLOEXEC);
+    fcntl (pipeHandles[1], F_SETFD, FD_CLOEXEC);
+    return true;
+#endif
+}
+
 //==============================================================================
 class ChildProcess::ActiveProcess
 {
@@ -1389,14 +1371,17 @@ public:
 
         StringArray args = arguments;
 
-        if (args.size() > 0 && ! File::isAbsolutePath (args[0]))
+        if (args.size() > 0 && ! File::isAbsolutePath (args[0]) && ! args[0].containsChar (File::getSeparatorChar()))
         {
             auto pathVariable = environment.getValue ("PATH", SystemStats::getEnvironmentVariable ("PATH", {}));
             auto pathArray = StringArray::fromTokens (pathVariable, ":", "\"");
 
+            const auto name = args[0];
+            args.set (0, String());
+
             for (const auto& path : pathArray)
             {
-                auto pathFile = File::createFileWithoutCheckingPath (path).getChildFile (args[0]);
+                auto pathFile = File::createFileWithoutCheckingPath (path).getChildFile (name);
                 if (pathFile.existsAsFile())
                 {
                     args.set (0, pathFile.getFullPathName());
@@ -1415,6 +1400,9 @@ public:
     {
         if (pipeHandle != 0)
             close (pipeHandle);
+
+        if (childPID != 0 && ! reaped)
+            waitpid (childPID, nullptr, WNOHANG);
     }
 
     template <class Exec>
@@ -1429,7 +1417,7 @@ public:
 
         int pipeHandles[2] = {};
 
-        if (pipe (pipeHandles) == 0)
+        if (createCloseOnExecPipe (pipeHandles))
         {
             auto result = fork();
 
@@ -1458,8 +1446,7 @@ public:
                 Array<char*> argv;
 
                 for (auto& arg : arguments)
-                    if (arg.isNotEmpty())
-                        argv.add (const_cast<char*> (arg.toRawUTF8()));
+                    argv.add (const_cast<char*> (arg.toRawUTF8()));
 
                 argv.add (nullptr);
 
@@ -1486,6 +1473,8 @@ public:
 
         if (pid == 0)
             return true;
+
+        reaped = true;
 
         if (WIFEXITED (childState))
         {
@@ -1527,7 +1516,7 @@ public:
 
     bool killProcess() const noexcept
     {
-        return ::kill (childPID, SIGKILL) == 0;
+        return ! reaped && ::kill (childPID, SIGKILL) == 0;
     }
 
     uint32 getExitCode() noexcept
@@ -1539,6 +1528,9 @@ public:
         {
             int childState = 0;
             auto pid = waitpid (childPID, &childState, WNOHANG);
+
+            if (pid != 0)
+                reaped = true;
 
             if (pid >= 0 && WIFEXITED (childState))
             {
@@ -1553,13 +1545,17 @@ public:
     int childPID = 0;
     int pipeHandle = 0;
     int exitCode = -1;
+    bool reaped = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ActiveProcess)
 };
 
 bool ChildProcess::start (const String& command, int streamFlags)
 {
-    return start (StringArray::fromTokens (command, true), streamFlags);
+    auto args = StringArray::fromTokens (command, true);
+    args.removeEmptyStrings();
+
+    return start (args, streamFlags);
 }
 
 bool ChildProcess::start (const StringArray& args, int streamFlags)
@@ -1577,7 +1573,10 @@ bool ChildProcess::start (const StringArray& args, int streamFlags)
 
 bool ChildProcess::start (const String& command, const StringPairArray& environment, int streamFlags)
 {
-    return start (StringArray::fromTokens (command, true), environment, streamFlags);
+    auto args = StringArray::fromTokens (command, true);
+    args.removeEmptyStrings();
+
+    return start (args, environment, streamFlags);
 }
 
 bool ChildProcess::start (const StringArray& args, const StringPairArray& environment, int streamFlags)
