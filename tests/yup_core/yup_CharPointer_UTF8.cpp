@@ -242,6 +242,29 @@ TEST_F (CharPointerUTF8Tests, BoundedDecodeNeverReadsPastBound)
     EXPECT_EQ (p.getAndAdvance (1), replacement);
 }
 
+TEST_F (CharPointerUTF8Tests, UnencodableValuesAreWrittenAsReplacementCharacter)
+{
+    for (auto value : { (yup_wchar) 0xD800, (yup_wchar) 0xDFFF, (yup_wchar) 0x110000, (yup_wchar) 0x7FFFFFFF })
+    {
+        char buffer[8] = {};
+        CharPointer_UTF8 dest (buffer);
+
+        EXPECT_EQ (CharPointer_UTF8::getBytesRequiredFor (value), (size_t) 3);
+        dest.write (value);
+
+        EXPECT_EQ (dest.getAddress() - buffer, 3);
+        EXPECT_STREQ (buffer, "\xEF\xBF\xBD");
+    }
+
+    const yup_wchar loneSurrogate[] = { 'a', 0xD800, 'b', 0 };
+    const String s (CharPointer_UTF32 (loneSurrogate));
+
+    EXPECT_EQ (s.length(), 3);
+    EXPECT_EQ (s[1], replacement);
+    EXPECT_EQ (s.getNumBytesAsUTF8(), (size_t) 5);
+    EXPECT_TRUE (CharPointer_UTF8::isValidString (s.toRawUTF8(), 16));
+}
+
 TEST_F (CharPointerUTF8Tests, CopiedMalformedStringGrowsSafely)
 {
     const String original (CharPointer_UTF8 ("\xC0\x80"));

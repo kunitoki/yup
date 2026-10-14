@@ -595,7 +595,7 @@ struct YAMLParser
     }
 
     //==============================================================================
-    static constexpr int maxParseDepth = 1024;
+    static constexpr int maxParseDepth = 256;
     static constexpr int maxCopiedNodes = 1 << 20;
 
     Array<Line> lines;
@@ -782,9 +782,9 @@ struct YAMLParser
     }
 
     //==============================================================================
-    static int readHexEscape (const String& text, int& index, int numDigits, int lineNumber)
+    static uint32 readHexEscape (const String& text, int& index, int numDigits, int lineNumber)
     {
-        int value = 0;
+        uint32 value = 0;
 
         for (int i = 0; i < numDigits; ++i)
         {
@@ -796,11 +796,48 @@ struct YAMLParser
             if (digit < 0)
                 throwErrorStatic ("Invalid unicode escape sequence", lineNumber);
 
-            value = (value << 4) + digit;
+            value = (value << 4) | (uint32) digit;
             ++index;
         }
 
+        if (value > 0x10ffff)
+            throwErrorStatic ("Invalid unicode escape sequence", lineNumber);
+
         return value;
+    }
+
+    //==============================================================================
+    // Shared rules for \u and \U escapes in every quoted scalar form.
+    static bool isHighSurrogate (uint32 c) noexcept { return c >= 0xd800 && c <= 0xdbff; }
+    static bool isLowSurrogate (uint32 c) noexcept { return c >= 0xdc00 && c <= 0xdfff; }
+
+    // Surrogates are not scalar values and cannot be encoded as UTF-8, so each one becomes a single U+FFFD.
+    static yup_wchar toScalarValue (uint32 value) noexcept
+    {
+        return (isHighSurrogate (value) || isLowSurrogate (value)) ? (yup_wchar) 0xfffd : (yup_wchar) value;
+    }
+
+    static uint32 joinSurrogates (uint32 high, uint32 low) noexcept
+    {
+        return 0x10000 + (((high - 0xd800) << 10) | (low - 0xdc00));
+    }
+
+    // Returns the value of the four hex digits at `index`, or -1 without consuming anything.
+    static int peekHexQuad (const String& text, int index)
+    {
+        uint32 value = 0;
+
+        for (int i = 0; i < 4; ++i)
+        {
+            const auto digit = index + i < text.length() ? CharacterFunctions::getHexDigitValue (text[index + i]) : -1;
+
+            if (digit < 0)
+                return -1;
+
+            value = (value << 4) | (uint32) digit;
+        }
+
+        return (int) value;
     }
 
     static void ensureLineEnd (const String& text, int index, int lineNumber)
@@ -861,28 +898,25 @@ struct YAMLParser
 
                     case 'u':
                     {
-                        auto value = (yup_wchar) readHexEscape (text, index, 4, lineNumber);
+                        auto value = readHexEscape (text, index, 4, lineNumber);
 
-                        // Combine a UTF-16 surrogate pair into a single code point
-                        if (value >= 0xd800 && value <= 0xdbff
-                            && index + 1 < len && text[index] == '\\' && text[index + 1] == 'u')
+                        if (isHighSurrogate (value) && index + 1 < len && text[index] == '\\' && text[index + 1] == 'u')
                         {
-                            int lookahead = index + 2;
-                            const auto low = (yup_wchar) readHexEscape (text, lookahead, 4, lineNumber);
+                            const auto low = peekHexQuad (text, index + 2);
 
                             if (low >= 0xdc00 && low <= 0xdfff)
                             {
-                                value = 0x10000 + ((((value - 0xd800) << 10) | (low - 0xdc00)));
-                                index = lookahead;
+                                value = joinSurrogates (value, (uint32) low);
+                                index += 6;
                             }
                         }
 
-                        buffer.appendUTF8Char (value);
+                        buffer.appendUTF8Char (toScalarValue (value));
                         break;
                     }
 
                     case 'U':
-                        buffer.appendUTF8Char ((yup_wchar) readHexEscape (text, index, 8, lineNumber));
+                        buffer.appendUTF8Char (toScalarValue (readHexEscape (text, index, 8, lineNumber)));
                         break;
                     default:
                         throwErrorStatic ("Invalid escape sequence", lineNumber);
@@ -1730,9 +1764,9 @@ struct YAMLParser
         return buffer.toUTF8().trimEnd();
     }
 
-    int readFlowHexEscape (FlowCursor& cursor, int numDigits)
+    uint32 readFlowHexEscape (FlowCursor& cursor, int numDigits)
     {
-        int value = 0;
+        uint32 value = 0;
 
         for (int i = 0; i < numDigits; ++i)
         {
@@ -1744,10 +1778,31 @@ struct YAMLParser
             if (digit < 0)
                 throwError ("Invalid unicode escape sequence", flowStartLine);
 
-            value = (value << 4) + digit;
+            value = (value << 4) | (uint32) digit;
         }
 
+        if (value > 0x10ffff)
+            throwError ("Invalid unicode escape sequence", flowStartLine);
+
         return value;
+    }
+
+    // Returns the value of the four hex digits starting `offset` characters ahead, or -1 without consuming anything.
+    static int peekFlowHexQuad (const FlowCursor& cursor, int offset)
+    {
+        uint32 value = 0;
+
+        for (int i = 0; i < 4; ++i)
+        {
+            const auto digit = CharacterFunctions::getHexDigitValue (cursor.peekAt (offset + i));
+
+            if (digit < 0)
+                return -1;
+
+            value = (value << 4) | (uint32) digit;
+        }
+
+        return (int) value;
     }
 
     String parseFlowQuoted (FlowCursor& cursor)
@@ -1790,29 +1845,25 @@ struct YAMLParser
 
                     case 'u':
                     {
-                        auto value = (yup_wchar) readFlowHexEscape (cursor, 4);
+                        auto value = readFlowHexEscape (cursor, 4);
 
-                        // Combine a UTF-16 surrogate pair into a single code point
-                        if (value >= 0xd800 && value <= 0xdbff
-                            && cursor.peek() == '\\' && cursor.peekAt (1) == 'u')
+                        if (isHighSurrogate (value) && cursor.peek() == '\\' && cursor.peekAt (1) == 'u')
                         {
-                            const int savedIndex = cursor.index;
-                            cursor.get();
-                            cursor.get();
-                            const auto low = (yup_wchar) readFlowHexEscape (cursor, 4);
+                            const auto low = peekFlowHexQuad (cursor, 2);
 
                             if (low >= 0xdc00 && low <= 0xdfff)
-                                value = 0x10000 + ((((value - 0xd800) << 10) | (low - 0xdc00)));
-                            else
-                                cursor.index = savedIndex;
+                            {
+                                value = joinSurrogates (value, (uint32) low);
+                                cursor.index += 6;
+                            }
                         }
 
-                        buffer.appendUTF8Char (value);
+                        buffer.appendUTF8Char (toScalarValue (value));
                         break;
                     }
 
                     case 'U':
-                        buffer.appendUTF8Char ((yup_wchar) readFlowHexEscape (cursor, 8));
+                        buffer.appendUTF8Char (toScalarValue (readFlowHexEscape (cursor, 8)));
                         break;
                     default:
                         throwError ("Invalid escape sequence", flowStartLine);
@@ -2054,7 +2105,7 @@ struct YAMLParser
             }
 
             const int endIndex = cursor.index;
-            const int newlinePos = text.indexOfChar ('\n', endIndex);
+            const int newlinePos = text.indexOfChar (endIndex, '\n');
             const auto tail = newlinePos >= 0 ? text.substring (endIndex, newlinePos) : text.substring (endIndex);
 
             if (! isLineEnd (tail))
@@ -2279,7 +2330,7 @@ Result YAML::parseQuotedString (String::CharPointerType& t, var& result)
 
                 case 'u':
                 {
-                    yup_wchar value = 0;
+                    uint32 value = 0;
 
                     for (int i = 0; i < 4; ++i)
                     {
@@ -2287,46 +2338,50 @@ Result YAML::parseQuotedString (String::CharPointerType& t, var& result)
                         if (digit < 0)
                             return Result::fail ("Invalid unicode escape sequence!");
 
-                        value = (yup_wchar) ((value << 4) + digit);
+                        value = (value << 4) | (uint32) digit;
                     }
 
-                    // Combine a UTF-16 surrogate pair into a single code point
-                    if (value >= 0xd800 && value <= 0xdbff && *t == '\\')
+                    if (YAMLParser::isHighSurrogate (value) && *t == '\\')
                     {
                         auto afterBackslash = t;
                         ++afterBackslash;
 
                         if (*afterBackslash == 'u')
                         {
-                            auto savedT = t;
-                            t = afterBackslash;
-                            t.getAndAdvance();
+                            // Peek at the four digits after "\u" and only consume them if they form a low surrogate
+                            auto digits = afterBackslash;
+                            ++digits;
 
-                            yup_wchar low = 0;
+                            uint32 low = 0;
+                            bool validLow = true;
 
-                            for (int i = 0; i < 4; ++i)
+                            for (int i = 0; i < 4 && validLow; ++i)
                             {
-                                const auto digit = CharacterFunctions::getHexDigitValue (t.getAndAdvance());
-                                if (digit < 0)
-                                    return Result::fail ("Invalid unicode escape sequence!");
+                                const auto digit = CharacterFunctions::getHexDigitValue (*digits);
+                                validLow = digit >= 0;
 
-                                low = (yup_wchar) ((low << 4) + digit);
+                                if (validLow)
+                                {
+                                    low = (low << 4) | (uint32) digit;
+                                    ++digits;
+                                }
                             }
 
-                            if (low >= 0xdc00 && low <= 0xdfff)
-                                value = 0x10000 + ((((value - 0xd800) << 10) | (low - 0xdc00)));
-                            else
-                                t = savedT;
+                            if (validLow && YAMLParser::isLowSurrogate (low))
+                            {
+                                value = YAMLParser::joinSurrogates (value, low);
+                                t = digits;
+                            }
                         }
                     }
 
-                    buffer.appendUTF8Char (value);
+                    buffer.appendUTF8Char (YAMLParser::toScalarValue (value));
                     break;
                 }
 
                 case 'U':
                 {
-                    yup_wchar value = 0;
+                    uint32 value = 0;
 
                     for (int i = 0; i < 8; ++i)
                     {
@@ -2334,10 +2389,13 @@ Result YAML::parseQuotedString (String::CharPointerType& t, var& result)
                         if (digit < 0)
                             return Result::fail ("Invalid unicode escape sequence!");
 
-                        value = (yup_wchar) ((value << 4) + digit);
+                        value = (value << 4) | (uint32) digit;
                     }
 
-                    buffer.appendUTF8Char (value);
+                    if (value > 0x10ffff)
+                        return Result::fail ("Invalid unicode escape sequence!");
+
+                    buffer.appendUTF8Char (YAMLParser::toScalarValue (value));
                     break;
                 }
 

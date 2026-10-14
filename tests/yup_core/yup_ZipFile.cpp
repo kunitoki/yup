@@ -1587,6 +1587,7 @@ TEST_F (ZipFileTests, Zip64Testing)
 TEST_F (ZipFileTests, RejectsNegativeZip64CompressedSize)
 {
     const auto data = createCentralDirectoryOnlyZip ("entry", createZip64ExtraField (-1), 12);
+
     MemoryInputStream mi (data, false);
     ZipFile zip (mi);
 
@@ -1596,6 +1597,7 @@ TEST_F (ZipFileTests, RejectsNegativeZip64CompressedSize)
 TEST_F (ZipFileTests, TruncatedZip64ExtraField)
 {
     const auto data = createCentralDirectoryOnlyZip ("entry", createZip64ExtraField (5), 0xFFFF);
+
     MemoryInputStream mi (data, false);
     ZipFile zip (mi);
 
@@ -1621,5 +1623,59 @@ TEST_F (ZipFileTests, UncompressDoesNotFollowEntrySymlinks)
     ASSERT_EQ (zip.getNumEntries(), 1);
     EXPECT_FALSE (zip.uncompressEntry (0, target).wasOk());
     EXPECT_EQ (outside.getChildFile ("victim.txt").loadFileAsString(), "secret");
+}
+
+TEST_F (ZipFileTests, UncompressRejectsSymlinkEntriesEscapingTarget)
+{
+    TemporaryFile tmp;
+    auto root = tmp.getFile();
+    auto source = root.getChildFile ("source");
+    auto outside = root.getChildFile ("outside");
+    ASSERT_TRUE (source.createDirectory());
+    ASSERT_TRUE (outside.createDirectory());
+    ASSERT_TRUE (source.getChildFile ("file.txt").replaceWithText ("data"));
+
+    ASSERT_TRUE (File::createSymbolicLink (source.getChildFile ("inside"), "file.txt", false));
+    ASSERT_TRUE (File::createSymbolicLink (source.getChildFile ("relative"), "../outside", false));
+    ASSERT_TRUE (File::createSymbolicLink (source.getChildFile ("absolute"), outside.getFullPathName(), false));
+
+    ZipFile::Builder builder;
+    builder.addFile (source.getChildFile ("file.txt"), 0, "file.txt");
+    builder.addFile (source.getChildFile ("inside"), 0, "inside");
+    builder.addFile (source.getChildFile ("relative"), 0, "relative");
+    builder.addFile (source.getChildFile ("absolute"), 0, "absolute");
+
+    MemoryBlock data;
+    {
+        MemoryOutputStream mo (data, false);
+        ASSERT_TRUE (builder.writeToStream (mo, nullptr));
+    }
+
+    MemoryInputStream mi (data, false);
+    ZipFile zip (mi);
+    ASSERT_EQ (zip.getNumEntries(), 4);
+
+    const auto uncompressByName = [&] (const String& name, const File& target, ZipFile::FollowSymlinks follow)
+    {
+        return zip.uncompressEntry (zip.getIndexOfFileName (name), target, ZipFile::OverwriteFiles::yes, follow);
+    };
+
+    auto safeTarget = root.getChildFile ("safe");
+    ASSERT_TRUE (safeTarget.createDirectory());
+
+    EXPECT_TRUE (uncompressByName ("file.txt", safeTarget, ZipFile::FollowSymlinks::no).wasOk());
+    EXPECT_TRUE (uncompressByName ("inside", safeTarget, ZipFile::FollowSymlinks::no).wasOk());
+    EXPECT_TRUE (safeTarget.getChildFile ("inside").isSymbolicLink());
+
+    EXPECT_TRUE (uncompressByName ("relative", safeTarget, ZipFile::FollowSymlinks::no).failed());
+    EXPECT_TRUE (uncompressByName ("absolute", safeTarget, ZipFile::FollowSymlinks::no).failed());
+    EXPECT_FALSE (safeTarget.getChildFile ("relative").isSymbolicLink());
+    EXPECT_FALSE (safeTarget.getChildFile ("absolute").isSymbolicLink());
+
+    auto trustedTarget = root.getChildFile ("trusted");
+    ASSERT_TRUE (trustedTarget.createDirectory());
+
+    EXPECT_TRUE (uncompressByName ("relative", trustedTarget, ZipFile::FollowSymlinks::yes).wasOk());
+    EXPECT_TRUE (trustedTarget.getChildFile ("relative").isSymbolicLink());
 }
 #endif

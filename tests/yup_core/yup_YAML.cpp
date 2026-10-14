@@ -310,7 +310,7 @@ TEST_F (YAMLTests, FlowQuotedUnpairedHighSurrogateEscape)
     auto v = YAML::parse ("{k: \"\\uD800\\u0041\"}");
 
     auto chars = v["k"].toString().getCharPointer();
-    EXPECT_EQ ((yup_wchar) 0xd800, chars.getAndAdvance());
+    EXPECT_EQ ((yup_wchar) 0xfffd, chars.getAndAdvance());
     EXPECT_EQ ((yup_wchar) 'A', chars.getAndAdvance());
 }
 
@@ -339,7 +339,7 @@ TEST_F (YAMLTests, QuotedScalars)
     auto unpaired = YAML::fromString ("\"\\uD800\\u0041\"");
     EXPECT_TRUE (unpaired.isString());
     auto unpairedChars = unpaired.toString().getCharPointer();
-    EXPECT_EQ ((yup_wchar) 0xd800, unpairedChars.getAndAdvance());
+    EXPECT_EQ ((yup_wchar) 0xfffd, unpairedChars.getAndAdvance());
     EXPECT_EQ ((yup_wchar) 'A', unpairedChars.getAndAdvance());
 }
 
@@ -577,8 +577,13 @@ TEST_F (YAMLTests, EscapeStringAndParseQuotedString)
     t = surrogate.getCharPointer();
     EXPECT_TRUE (YAML::parseQuotedString (t, result).wasOk());
     auto surrogateChars = result.toString().getCharPointer();
-    EXPECT_EQ ((yup_wchar) 0xd800, surrogateChars.getAndAdvance());
+    EXPECT_EQ ((yup_wchar) 0xfffd, surrogateChars.getAndAdvance());
     EXPECT_EQ ((yup_wchar) 'A', surrogateChars.getAndAdvance());
+
+    // A high surrogate followed by a truncated "\u" must not step past the terminator
+    String truncatedLow = "\"\\uD800\\u";
+    t = truncatedLow.getCharPointer();
+    EXPECT_TRUE (YAML::parseQuotedString (t, result).failed());
 }
 
 TEST_F (YAMLTests, Yaml11Booleans)
@@ -790,6 +795,17 @@ TEST_F (YAMLTests, InvalidEscapeSequence)
     var result;
     // \q is not a valid escape
     EXPECT_TRUE (YAML::parse ("\"\\q\"", result).failed());
+}
+
+TEST_F (YAMLTests, OutOfRangeUnicodeEscapeIsRejected)
+{
+    var result;
+    EXPECT_TRUE (YAML::parse ("k: \"\\UFFFFFFFF\"", result).failed());
+    EXPECT_TRUE (YAML::parse ("k: \"\\U00110000\"", result).failed());
+    EXPECT_TRUE (YAML::parse ("k: \"\\U0010FFFF\"", result).wasOk());
+
+    // U+10FFFF is the last scalar value: F4 8F BF BF in UTF-8
+    EXPECT_EQ (String::fromUTF8 ("\xf4\x8f\xbf\xbf"), result["k"].toString());
 }
 
 TEST_F (YAMLTests, UnexpectedContentAfterFlowCollection)

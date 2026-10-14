@@ -141,7 +141,7 @@ struct ZipFile::ZipEntryHolder
     {
         auto year = (int) (1980 + (date >> 9));
         auto month = jlimit (0, 11, (int) (((date >> 5) & 15) - 1));
-        auto day = (int) (date & 31);
+        auto day = jlimit (1, 31, (int) (date & 31));
         auto hours = jlimit (0, 23, (int) time >> 11);
         auto minutes = jlimit (0, 59, (int) ((time >> 5) & 63));
         auto seconds = jlimit (0, 59, (int) ((time & 31) << 1));
@@ -266,6 +266,30 @@ static bool hasSymbolicPart (const File& root, const File& f)
     }
 
     return false;
+}
+
+static bool isSymlinkTargetContained (const File& root, const File& link, const String& linkTarget)
+{
+    if (linkTarget.isEmpty() || File::isAbsolutePath (linkTarget))
+        return false;
+
+    // ".." after a named component could climb out of a previously extracted symlink
+    bool seenNamedComponent = false;
+
+    for (const auto& component : StringArray::fromTokens (linkTarget, File::getSeparatorString(), {}))
+    {
+        if (component == "..")
+        {
+            if (seenNamedComponent)
+                return false;
+        }
+        else if (component.isNotEmpty() && component != ".")
+        {
+            seenNamedComponent = true;
+        }
+    }
+
+    return link.getParentDirectory().getChildFile (linkTarget).isAChildOf (root);
 }
 
 //==============================================================================
@@ -595,6 +619,16 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
     if (in == nullptr)
         return Result::fail ("Failed to open the zip file for reading");
 
+    String linkTargetPath;
+
+    if (zei->entry.isSymbolicLink)
+    {
+        linkTargetPath = in->readEntireStreamAsString().replaceCharacter (L'/', File::getSeparatorChar());
+
+        if (followSymlinks == FollowSymlinks::no && ! isSymlinkTargetContained (targetDirectory, targetFile, linkTargetPath))
+            return Result::fail ("Symbolic link " + entryPath + " points outside the target directory: " + linkTargetPath);
+    }
+
     if (targetFile.exists())
     {
         if (overwriteFiles == OverwriteFiles::no)
@@ -609,11 +643,8 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
 
     if (zei->entry.isSymbolicLink)
     {
-        String originalFilePath (in->readEntireStreamAsString()
-                                     .replaceCharacter (L'/', File::getSeparatorChar()));
-
-        if (! File::createSymbolicLink (targetFile, originalFilePath, true))
-            return Result::fail ("Failed to create symbolic link: " + originalFilePath);
+        if (! File::createSymbolicLink (targetFile, linkTargetPath, true))
+            return Result::fail ("Failed to create symbolic link: " + linkTargetPath);
     }
     else
     {

@@ -117,6 +117,40 @@ TEST_F (XmlDocumentTests, TruncatedHexCharacterReferenceIsRejected)
     EXPECT_FALSE (doc.getLastParseError().isEmpty());
 }
 
+TEST_F (XmlDocumentTests, UnencodableCharacterReferencesBecomeReplacementCharacter)
+{
+    for (auto* text : { "<a>&#xD800;</a>", "<a>&#x110000;</a>", "<a>&#xFFFFFFFF;</a>" })
+    {
+        auto element = XmlDocument::parse (String (text));
+        ASSERT_NE (element, nullptr) << text;
+
+        const auto content = element->getAllSubText();
+        EXPECT_EQ (content.length(), 1) << text;
+        EXPECT_EQ (content[0], (yup_wchar) 0xfffd) << text;
+        EXPECT_EQ (content.getNumBytesAsUTF8(), (size_t) 3) << text;
+    }
+}
+
+TEST_F (XmlDocumentTests, TruncatedInputIsHandledSafely)
+{
+    const char* const truncatedInputs[] = { "<", "<a", "<a b", "<a b=", "<a b=\"", "<a b=\"x", "<a>", "<a><b>text", "<!DOCTYPE", "<!DOCTYPE a [", "<?xml", "<a>&", "<a>&#" };
+
+    for (auto* text : truncatedInputs)
+    {
+        XmlDocument doc (text);
+        doc.getDocumentElement();
+    }
+
+    const char* const invalidInputs[] = { "<", "<a>", "<a><b>text", "<!DOCTYPE", "<!DOCTYPE a [", "<?xml" };
+
+    for (auto* text : invalidInputs)
+    {
+        XmlDocument doc (text);
+        EXPECT_EQ (doc.getDocumentElement(), nullptr) << text;
+        EXPECT_FALSE (doc.getLastParseError().isEmpty()) << text;
+    }
+}
+
 TEST_F (XmlDocumentTests, ParseXmlWithUnterminatedCDATA)
 {
     XmlDocument doc ("<root><![CDATA[Unterminated");

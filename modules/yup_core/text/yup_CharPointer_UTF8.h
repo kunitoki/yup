@@ -256,7 +256,7 @@ public:
     static size_t getBytesRequiredFor (const yup_wchar charToWrite) noexcept
     {
         size_t num = 1;
-        auto c = (uint32) charToWrite;
+        auto c = toEncodableValue (charToWrite);
 
         if (c >= 0x80)
         {
@@ -296,7 +296,7 @@ public:
     /** Writes a unicode character to this string, and advances this pointer to point to the next position. */
     void write (const yup_wchar charToWrite) noexcept
     {
-        auto c = (uint32) charToWrite;
+        auto c = toEncodableValue (charToWrite);
 
         if (c >= 0x80)
         {
@@ -516,6 +516,13 @@ public:
 
 private:
     static constexpr yup_wchar replacementCharacter = 0xfffd;
+
+    // Surrogates and values above U+10FFFF have no UTF-8 form, so they're written as the replacement character
+    static uint32 toEncodableValue (yup_wchar character) noexcept
+    {
+        const auto c = (uint32) character;
+        return (c > 0x10ffff || (c >= 0xd800 && c <= 0xdfff)) ? (uint32) replacementCharacter : c;
+    }
 
     /*  Decodes the character at data, setting numBytes to the bytes it spans. Malformed
         sequences decode to the replacement character spanning only their valid prefix, so

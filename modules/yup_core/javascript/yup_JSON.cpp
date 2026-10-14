@@ -50,7 +50,7 @@ struct JSONParser
 
     String::CharPointerType startLocation, currentLocation;
 
-    static constexpr int maxNestingDepth = 1024;
+    static constexpr int maxNestingDepth = 256;
     int nestingDepth = 0;
 
     struct ErrorException
@@ -179,6 +179,42 @@ struct JSONParser
 
                             c = (yup_wchar) ((c << 4) + static_cast<yup_wchar> (digitValue));
                         }
+
+                        // A high surrogate joins an immediately following low-surrogate escape; any other
+                        // surrogate is not a scalar value, so it becomes a single U+FFFD
+                        if (c >= 0xd800 && c <= 0xdbff && peekChar() == '\\')
+                        {
+                            auto lookahead = currentLocation;
+                            ++lookahead;
+
+                            if (*lookahead == 'u')
+                            {
+                                ++lookahead;
+                                yup_wchar low = 0;
+                                bool validLow = true;
+
+                                for (int i = 0; i < 4 && validLow; ++i)
+                                {
+                                    const auto digitValue = CharacterFunctions::getHexDigitValue (*lookahead);
+                                    validLow = digitValue >= 0;
+
+                                    if (validLow)
+                                    {
+                                        low = (yup_wchar) ((low << 4) + static_cast<yup_wchar> (digitValue));
+                                        ++lookahead;
+                                    }
+                                }
+
+                                if (validLow && low >= 0xdc00 && low <= 0xdfff)
+                                {
+                                    c = (yup_wchar) (0x10000 + (((c - 0xd800) << 10) | (low - 0xdc00)));
+                                    currentLocation = lookahead;
+                                }
+                            }
+                        }
+
+                        if (c >= 0xd800 && c <= 0xdfff)
+                            c = 0xfffd;
 
                         break;
                     }

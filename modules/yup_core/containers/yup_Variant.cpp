@@ -1172,9 +1172,19 @@ void var::writeToStream (OutputStream& output) const
     type->writeToStream (value, output);
 }
 
-var var::readFromStream (InputStream& input)
+static var readVarFromStream (InputStream& input, int depth)
 {
+    constexpr int maxNestingDepth = 1024;
+
     const int numBytes = input.readCompressedInt();
+
+    if (depth > maxNestingDepth)
+    {
+        if (numBytes > 0)
+            input.skipNextBytes (numBytes);
+
+        return {};
+    }
 
     if (numBytes > 0)
     {
@@ -1207,13 +1217,12 @@ var var::readFromStream (InputStream& input)
 
             case varMarker_Array:
             {
-                var v;
-                auto* destArray = v.convertToArray();
+                Array<var> destArray;
 
                 for (int i = input.readCompressedInt(); --i >= 0 && ! input.isExhausted();)
-                    destArray->add (readFromStream (input));
+                    destArray.add (readVarFromStream (input, depth + 1));
 
-                return v;
+                return var (std::move (destArray));
             }
 
             default:
@@ -1223,6 +1232,11 @@ var var::readFromStream (InputStream& input)
     }
 
     return {};
+}
+
+var var::readFromStream (InputStream& input)
+{
+    return readVarFromStream (input, 0);
 }
 
 var::NativeFunctionArgs::NativeFunctionArgs (const var& t) noexcept

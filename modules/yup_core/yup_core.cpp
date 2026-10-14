@@ -83,13 +83,8 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
-#include <sys/random.h>
 #include <unistd.h>
 #include <netinet/in.h>
-#endif
-
-#if YUP_MAC || YUP_IOS
-#include <sys/random.h>
 #endif
 
 #if YUP_WASM
@@ -121,6 +116,9 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <semaphore.h>
 #include <sys/inotify.h>
 #include <sys/mman.h>
+#if YUP_LINUX
+#include <sys/random.h>
+#endif
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>

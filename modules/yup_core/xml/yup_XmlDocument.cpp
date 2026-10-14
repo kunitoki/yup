@@ -211,15 +211,13 @@ String XmlDocument::getFileContents (const String& filename) const
 
 yup_wchar XmlDocument::readNextChar() noexcept
 {
-    auto c = input.getAndAdvance();
-
-    if (c == 0)
+    if (input.isEmpty())
     {
         outOfData = true;
-        --input;
+        return 0;
     }
 
-    return c;
+    return input.getAndAdvance();
 }
 
 std::unique_ptr<XmlElement> XmlDocument::parseDocumentElement (String::CharPointerType textToParse,
@@ -248,9 +246,13 @@ std::unique_ptr<XmlElement> XmlDocument::parseDocumentElement (String::CharPoint
         lastError.clear();
         std::unique_ptr<XmlElement> result (readNextElement (! onlyReadOuterDocumentElement));
 
-        if (! errorOccurred)
+        if (! errorOccurred && result != nullptr)
             return result;
     }
+
+    // A failed parse always reports why, even on paths that don't set an error of their own
+    if (lastError.isEmpty())
+        lastError = "malformed document";
 
     return {};
 }
@@ -264,7 +266,10 @@ bool XmlDocument::parseHeader()
         auto headerEnd = CharacterFunctions::find (input, CharPointer_ASCII ("?>"));
 
         if (headerEnd.isEmpty())
+        {
+            setLastError ("unterminated XML declaration", false);
             return false;
+        }
 
 #if YUP_DEBUG
         auto encoding = String (input, headerEnd)
@@ -355,7 +360,7 @@ void XmlDocument::skipNextWhiteSpace()
 
                 if (closeBracket < 0)
                 {
-                    outOfData = true;
+                    setLastError ("unterminated processing instruction", false);
                     break;
                 }
 

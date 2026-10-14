@@ -135,11 +135,14 @@ struct RegistryKeyWrapper
         {
             case REG_SZ:
             {
-                // The stored string is not guaranteed to be NUL terminated
-                buffer.setSize (buffer.getSize() + sizeof (WCHAR), true);
+                // The stored string is not guaranteed to be NUL terminated, nor to have an even byte size
+                buffer.setSize ((buffer.getSize() + 1) / sizeof (WCHAR) * sizeof (WCHAR) + sizeof (WCHAR), true);
                 return static_cast<const WCHAR*> (buffer.getData());
             }
             case REG_DWORD:
+                if (buffer.getSize() < sizeof (DWORD))
+                    break;
+
                 return String ((int) *reinterpret_cast<const DWORD*> (buffer.getData()));
             default:
                 break;

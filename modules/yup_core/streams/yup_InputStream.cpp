@@ -145,8 +145,8 @@ int InputStream::readCompressedInt()
     if (read (bytes, numBytes) != numBytes)
         return 0;
 
-    auto num = (int) ByteOrder::littleEndianInt (bytes);
-    return (sizeByte >> 7) ? -num : num;
+    auto num = ByteOrder::littleEndianInt (bytes);
+    return (int) ((sizeByte >> 7) ? 0u - num : num);
 }
 
 int64 InputStream::readInt64()

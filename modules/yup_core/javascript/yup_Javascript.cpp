@@ -82,8 +82,8 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 {
     RootObject()
     {
-        setMethod ("exec", exec);
-        setMethod ("eval", eval);
+        setMethod ("exec", [this] (Args a) { execute (getString (a, 0)); return var::undefined(); });
+        setMethod ("eval", [this] (Args a) { return evaluate (getString (a, 0)); });
         setMethod ("trace", trace);
         setMethod ("charToInt", charToInt);
         setMethod ("parseInt", IntegerClass::parseInt);
@@ -94,7 +94,9 @@ struct JavascriptEngine::RootObject final : public DynamicObject
     Time timeout;
     int callDepth = 0;
 
-    static constexpr int maxNestingDepth = 1024;
+    static constexpr int maxNestingDepth = 256;
+    // Calls use more native stack than nesting does, so they get a lower limit to stay within small thread stacks
+    static constexpr int maxCallDepth = 64;
     static constexpr int maxArrayIndex = 1 << 20;
 
     using Args = const var::NativeFunctionArgs&;
@@ -212,9 +214,10 @@ struct JavascriptEngine::RootObject final : public DynamicObject
     //==============================================================================
     struct NestingGuard
     {
-        NestingGuard (int& counter, const CodeLocation& l, int n = 1)
+        NestingGuard (int& counter, const CodeLocation& l, int n = 1, int maxDepth = maxNestingDepth)
             : depth (counter)
             , location (l)
+            , limit (maxDepth)
         {
             add (n);
         }
@@ -223,7 +226,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         void add (int n = 1)
         {
-            if (depth + n > maxNestingDepth)
+            if (depth + n > limit)
                 location.throwError ("Expression or call nesting is too deep");
 
             depth += n;
@@ -233,6 +236,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         int& depth;
         const CodeLocation& location;
         int levels = 0;
+        int limit;
     };
 
     //==============================================================================
@@ -1107,7 +1111,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         var invokeFunction (const Scope& s, const var& function, const var& thisObject) const
         {
             s.checkTimeOut (location);
-            NestingGuard nesting (s.root->callDepth, location);
+            NestingGuard nesting (s.root->callDepth, location, 1, RootObject::maxCallDepth);
 
             Array<var> argVars;
 
@@ -2612,21 +2616,6 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         return "undefined";
     }
 
-    static var exec (Args a)
-    {
-        if (auto* root = dynamic_cast<RootObject*> (a.thisObject.getObject()))
-            root->execute (getString (a, 0));
-
-        return var::undefined();
-    }
-
-    static var eval (Args a)
-    {
-        if (auto* root = dynamic_cast<RootObject*> (a.thisObject.getObject()))
-            return root->evaluate (getString (a, 0));
-
-        return var::undefined();
-    }
 };
 
 //==============================================================================

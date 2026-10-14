@@ -137,7 +137,7 @@ bool OutputStream::writeIntBigEndian (int value)
 
 bool OutputStream::writeCompressedInt (int value)
 {
-    auto un = (value < 0) ? (unsigned int) -value
+    auto un = (value < 0) ? 0u - (unsigned int) value
                           : (unsigned int) value;
 
     uint8 data[5];
