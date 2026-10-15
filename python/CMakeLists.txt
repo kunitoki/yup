@@ -51,13 +51,11 @@ yup_standalone_app (
     TARGET_WHEEL ON
     MODULES
         yup::yup_ai
-        yup::yup_animation
         yup::yup_audio_basics
         yup::yup_audio_devices
         yup::yup_audio_formats
         yup::yup_audio_graph
         yup::yup_audio_gui
-        yup::yup_audio_plugin_host
         yup::yup_audio_processors
         yup::yup_core
         yup::yup_data_model

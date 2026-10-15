@@ -11,6 +11,10 @@ on:
         description: Whether to build and run the tests
         type: boolean
         default: false
+      python:
+        description: Whether to build and test the python wheels
+        type: boolean
+        default: false
       examples:
         description: JSON array of the examples to build
         type: string
@@ -90,3 +94,50 @@ jobs:
           -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
+
+  build_python:
+    name: build_cp${{matrix.python}}-${{ matrix.platform_id }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: false
+    if: inputs.python
+
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+        - { os: macos-latest, python: 311, platform_id: macosx_universal2, cibw_archs: universal2 }
+
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Setup and install python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v3.0.0
+      env:
+        CIBW_ARCHS: ${{matrix.cibw_archs}}
+        CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
+        #CIBW_TEST_SKIP: "*-macosx_x86_64 *-macosx_universal2:x86_64"
+        CIBW_DEBUG_TRACEBACK: TRUE
+        CIBW_ENVIRONMENT: |
+          CIBW_DEBUG_TRACEBACK=TRUE MACOSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_DEPLOYMENT_TARGET=11.0 YUP_OSX_ARCHITECTURES="x86_64;arm64"
+      with:
+        package-dir: python
+
+    - name: Store failures artifacts
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: compare-data-${{ matrix.platform_id }}
+        path: |
+          python/tests/compare_data/
+          !python/tests/compare_data/.gitignore
+        if-no-files-found: ignore
+        retention-days: 5
+        compression-level: 0
+        overwrite: true

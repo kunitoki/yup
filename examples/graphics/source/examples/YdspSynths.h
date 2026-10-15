@@ -192,6 +192,7 @@ class YdspSynthDemo
     : public yup::Component
     , public yup::AudioIODeviceCallback
     , public yup::MidiInputCallback
+    , public LoadingDemo
 {
 public:
     YdspSynthDemo()
@@ -201,20 +202,7 @@ public:
         , modWheelComponent (keyboardState, "ModWheel")
         , codeEditor (codeDocument)
     {
-        deviceManager.initialiseWithDefaultDevices (0, 2);
-
         setColor (yup::DocumentWindow::Style::backgroundColorId, paletteVoidColor());
-
-        {
-            yup::MemoryBlock mb;
-            auto imageFile = getAssetPath ("data/logo.png");
-            if (imageFile.loadFileAsData (mb))
-            {
-                auto loadedImage = yup::Image::loadFromData (mb.asBytes());
-                if (loadedImage.wasOk())
-                    logoImage = std::move (loadedImage.getReference());
-            }
-        }
 
         midiCollector.reset (44100.0);
         keyboardState.addListener (&midiCollector);
@@ -322,14 +310,8 @@ public:
         createMidiInputCombo();
         createExpressionControls();
 
-        midiDeviceListConnection = yup::MidiDeviceListConnection::make ([this]
-        {
-            refreshMidiInputCombo();
-        });
-
         createEffectInputControls();
         createParamPageControls();
-        loadDrumLoop();
 
         addAndMakeVisible (oscilloscope);
 
@@ -351,8 +333,38 @@ public:
         diagnosticsEditor->setFont (yup::ApplicationTheme::getGlobalTheme()->getDefaultMonospaceFont());
         addChildComponent (*diagnosticsEditor);
 
-        loadSynthSources();
-        selectSynth (0);
+        addLoadingStep ([this]
+        {
+            loadLogo();
+
+            // CoreMIDI and friends can take a while to come up the first time
+            refreshMidiInputCombo();
+            midiDeviceListConnection = yup::MidiDeviceListConnection::make ([this]
+            {
+                refreshMidiInputCombo();
+            });
+        });
+
+        addLoadingStep ([this]
+        {
+            loadDrumLoop();
+        });
+
+        addLoadingStep ([this]
+        {
+            loadSynthSources();
+        });
+
+        addLoadingStep ([this]
+        {
+            selectSynth (0); // JIT compiles the first patch
+        });
+
+        addLoadingStep ([this]
+        {
+            // Last, so audioDeviceAboutToStart prepares the compiled graph
+            deviceManager.initialiseWithDefaultDevices (0, 2);
+        });
     }
 
     ~YdspSynthDemo() override
@@ -472,6 +484,8 @@ public:
 
     void paint (yup::Graphics& g) override
     {
+        pumpLoading();
+
         g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (paletteVoidColor()));
         g.fillAll();
 
@@ -698,8 +712,6 @@ private:
                                      : yup::String());
         };
         addAndMakeVisible (*midiInputCombo);
-
-        refreshMidiInputCombo();
     }
 
     void refreshMidiInputCombo()
@@ -1476,6 +1488,17 @@ private:
 
         paramPrevButton->setVisible (false);
         paramNextButton->setVisible (false);
+    }
+
+    void loadLogo()
+    {
+        yup::MemoryBlock mb;
+        if (! getAssetPath ("data/logo.png").loadFileAsData (mb))
+            return;
+
+        auto loadedImage = yup::Image::loadFromData (mb.asBytes());
+        if (loadedImage.wasOk())
+            logoImage = std::move (loadedImage.getReference());
     }
 
     void loadDrumLoop()

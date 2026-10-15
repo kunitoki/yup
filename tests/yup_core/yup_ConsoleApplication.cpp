@@ -75,26 +75,23 @@ TEST (ArgumentTests, GetLongOptionValue)
 
     EXPECT_EQ (arg1.getLongOptionValue(), "test.txt");
     EXPECT_EQ (arg2.getLongOptionValue(), "result.dat");
-    EXPECT_TRUE (arg3.getLongOptionValue().isEmpty());
+    EXPECT_FALSE (arg3.getLongOptionValue().has_value());
+    EXPECT_EQ (ArgumentList::Argument { "--empty=" }.getLongOptionValue(), "");
+    EXPECT_FALSE (ArgumentList::Argument { "-f=x" }.getLongOptionValue().has_value());
 }
 
-TEST (ArgumentTests, DISABLED_IsShortOptionWithChar)
+TEST (ArgumentTests, IsShortOptionWithChar)
 {
-    // NOTE: This test is disabled due to an apparent bug in the implementation.
-    // The isShortOption(char) method at yup_ConsoleApplication.cpp:135 uses
-    // "String(option)[0]" which likely calls String(int) constructor, converting
-    // the char to its ASCII value instead of creating a string with that character.
-    // The implementation should probably use text.containsChar(option) directly.
-
-    ArgumentList list ("test", "-h -abc --help");
+    ArgumentList list ("test", "-h -abc --help -I/home/shaders");
 
     EXPECT_TRUE (list[0].isShortOption ('h'));
     EXPECT_FALSE (list[0].isShortOption ('x'));
-    EXPECT_TRUE (list[1].isShortOption ('a'));
-    EXPECT_TRUE (list[1].isShortOption ('b'));
-    EXPECT_TRUE (list[1].isShortOption ('c'));
-    EXPECT_FALSE (list[1].isShortOption ('d'));
+    EXPECT_FALSE (list[1].isShortOption ('a'));
+    EXPECT_FALSE (list[1].isShortOption ('b'));
+    EXPECT_FALSE (list[1].isShortOption ('c'));
     EXPECT_FALSE (list[2].isShortOption ('h'));
+    EXPECT_FALSE (list[3].isShortOption ('I'));
+    EXPECT_FALSE (list[3].isShortOption ('h'));
 }
 
 TEST (ArgumentTests, IsOption)
@@ -112,6 +109,20 @@ TEST (ArgumentTests, IsOption)
     EXPECT_TRUE (arg5.isOption());
 }
 
+TEST (ArgumentTests, NegativeNumbersAreNotOptions)
+{
+    for (auto text : { "-6", "-0.5", "-.5", "-1e3" })
+    {
+        ArgumentList::Argument arg { text };
+
+        EXPECT_FALSE (arg.isOption()) << text;
+        EXPECT_FALSE (arg.isShortOption()) << text;
+    }
+
+    EXPECT_TRUE (ArgumentList::Argument { "-e" }.isOption());
+    EXPECT_TRUE (ArgumentList::Argument { "-6x" }.isOption());
+}
+
 TEST (ArgumentTests, EqualityOperator)
 {
     ArgumentList::Argument arg { "--help" };
@@ -123,6 +134,15 @@ TEST (ArgumentTests, EqualityOperator)
     EXPECT_TRUE (arg == "--help|--h|-h");
     EXPECT_TRUE (arg == "-h|--help|--h");
     EXPECT_FALSE (arg == "-v|--version");
+}
+
+TEST (ArgumentTests, ShortOptionsMatchExactly)
+{
+    EXPECT_TRUE (ArgumentList::Argument { "-h" } == "--help|-h");
+    EXPECT_FALSE (ArgumentList::Argument { "-I/home/shaders" } == "--help|-h");
+    EXPECT_FALSE (ArgumentList::Argument { "-DSHADOWS=1" } == "-h");
+    EXPECT_FALSE (ArgumentList::Argument { "-abc" } == "-a");
+    EXPECT_FALSE (ArgumentList::Argument { "-hv" } == "-h");
 }
 
 TEST (ArgumentTests, InequalityOperator)
@@ -258,8 +278,8 @@ TEST (ArgumentListTests, GetValueForOption)
 
     EXPECT_EQ (list.getValueForOption ("--file"), "test.txt");
     EXPECT_EQ (list.getValueForOption ("--output"), "result.dat");
-    EXPECT_TRUE (list.getValueForOption ("-v").isEmpty());
-    EXPECT_TRUE (list.getValueForOption ("--missing").isEmpty());
+    EXPECT_FALSE (list.getValueForOption ("-v").has_value());
+    EXPECT_FALSE (list.getValueForOption ("--missing").has_value());
 }
 
 TEST (ArgumentListTests, GetValueForShortOption)
@@ -268,6 +288,16 @@ TEST (ArgumentListTests, GetValueForShortOption)
 
     EXPECT_EQ (list.getValueForOption ("-f"), "input.txt");
     EXPECT_EQ (list.getValueForOption ("-o"), "output.dat");
+}
+
+TEST (ArgumentListTests, ShortOptionsIgnoreArgumentsContainingTheirCharacter)
+{
+    ArgumentList list ("myapp", "--output out.ysl -I/home/shaders -i a.wav b.wav");
+
+    EXPECT_FALSE (list.containsOption ("--help|-h"));
+    EXPECT_EQ (list.indexOfOption ("-i"), 3);
+    EXPECT_EQ (list.getValuesForOption ("--inputs|-i"), StringArray ({ "a.wav", "b.wav" }));
+    EXPECT_FALSE (list.containsOption ("-s"));
 }
 
 TEST (ArgumentListTests, RemoveValueForOption)
@@ -297,6 +327,184 @@ TEST (ArgumentListTests, GetFileForOptionAndRemove)
     EXPECT_TRUE (file.getFullPathName().contains ("test.txt"));
     EXPECT_FALSE (list.containsOption ("--input"));
     EXPECT_EQ (list.size(), 1);
+}
+
+TEST (ArgumentListTests, GetValueForOptionWithSpace)
+{
+    ArgumentList list ("myapp", "--file test.txt --level 3 positional");
+
+    EXPECT_EQ (list.getValueForOption ("--file"), "test.txt");
+    EXPECT_EQ (list.getValueForOption ("--level"), "3");
+}
+
+TEST (ArgumentListTests, GetValueForOptionWithoutValue)
+{
+    ArgumentList list ("myapp", "--flag --other x --empty=");
+
+    EXPECT_TRUE (list.containsOption ("--flag"));
+    EXPECT_FALSE (list.getValueForOption ("--flag").has_value());
+    EXPECT_EQ (list.getValueForOption ("--empty"), "");
+}
+
+TEST (ArgumentListTests, GetValuesForOption)
+{
+    ArgumentList list ("myapp", "--files a b c --verbose");
+
+    EXPECT_EQ (list.getValuesForOption ("--files"), StringArray ({ "a", "b", "c" }));
+    EXPECT_EQ (list.getValueForOption ("--files"), "a");
+    EXPECT_TRUE (list.getValuesForOption ("--verbose").isEmpty());
+    EXPECT_TRUE (list.getValuesForOption ("--missing").isEmpty());
+}
+
+TEST (ArgumentListTests, GetValuesForRepeatedOption)
+{
+    ArgumentList list ("myapp", "--inc a --inc=b -x --inc c d");
+
+    EXPECT_EQ (list.getValuesForOption ("--inc"), StringArray ({ "a", "b", "c", "d" }));
+    EXPECT_EQ (list.getValueForOption ("--inc"), "a");
+}
+
+TEST (ArgumentListTests, GetValuesForOptionWithAlternatives)
+{
+    ArgumentList list ("myapp", "-i a --include b");
+
+    EXPECT_EQ (list.getValuesForOption ("--include|-i"), StringArray ({ "a", "b" }));
+}
+
+TEST (ArgumentListTests, NegativeNumbersAreValues)
+{
+    ArgumentList list ("myapp", "--gain -6 --offset -0.5 --range -1 1");
+
+    EXPECT_EQ (list.getIntValueForOption ("--gain", 0), -6);
+    EXPECT_DOUBLE_EQ (list.getDoubleValueForOption ("--offset", 0.0), -0.5);
+    EXPECT_EQ (list.getValuesForOption ("--range"), StringArray ({ "-1", "1" }));
+}
+
+TEST (ArgumentListTests, TerminatorEndsOptions)
+{
+    ArgumentList list ("myapp", "--files a b -- c --files d -x");
+
+    EXPECT_EQ (list.getValuesForOption ("--files"), StringArray ({ "a", "b" }));
+    EXPECT_FALSE (list.containsOption ("-x"));
+    EXPECT_EQ (list.getTrailingArguments(), StringArray ({ "c", "--files", "d", "-x" }));
+}
+
+TEST (ArgumentListTests, NoTrailingArgumentsWithoutTerminator)
+{
+    ArgumentList list ("myapp", "--file a b");
+
+    EXPECT_TRUE (list.getTrailingArguments().isEmpty());
+}
+
+TEST (ArgumentListTests, RemoveValueForOptionKeepsFurtherValues)
+{
+    ArgumentList list ("myapp", "--file a b");
+
+    EXPECT_EQ (list.removeValueForOption ("--file"), "a");
+    ASSERT_EQ (list.size(), 1);
+    EXPECT_EQ (list[0].text, "b");
+}
+
+TEST (ArgumentListTests, RemoveValueForMissingOption)
+{
+    ArgumentList list ("myapp", "--flag");
+
+    EXPECT_FALSE (list.removeValueForOption ("--missing").has_value());
+    EXPECT_FALSE (list.removeValueForOption ("--flag").has_value());
+    EXPECT_EQ (list.size(), 0);
+}
+
+TEST (ArgumentListTests, RemoveValuesForOption)
+{
+    ArgumentList list ("myapp", "--inc a b --verbose --inc=c --inc d");
+
+    EXPECT_EQ (list.removeValuesForOption ("--inc"), StringArray ({ "a", "b", "c", "d" }));
+    ASSERT_EQ (list.size(), 1);
+    EXPECT_TRUE (list.containsOption ("--verbose"));
+}
+
+TEST (ArgumentListTests, GetIntValueForOption)
+{
+    ArgumentList list ("myapp", "--count 42 --plus=+7 --bad abc --fraction 1.5 --flag");
+
+    EXPECT_EQ (list.getIntValueForOption ("--count", 0), 42);
+    EXPECT_EQ (list.getIntValueForOption ("--plus", 0), 7);
+    EXPECT_EQ (list.getIntValueForOption ("--bad", -1), -1);
+    EXPECT_EQ (list.getIntValueForOption ("--fraction", -1), -1);
+    EXPECT_EQ (list.getIntValueForOption ("--flag", -1), -1);
+    EXPECT_EQ (list.getIntValueForOption ("--missing", 5), 5);
+}
+
+TEST (ArgumentListTests, GetDoubleValueForOption)
+{
+    ArgumentList list ("myapp", "--rate 0.25 --big=1e3 --integer 2 --bad x1");
+
+    EXPECT_DOUBLE_EQ (list.getDoubleValueForOption ("--rate", 0.0), 0.25);
+    EXPECT_DOUBLE_EQ (list.getDoubleValueForOption ("--big", 0.0), 1000.0);
+    EXPECT_DOUBLE_EQ (list.getDoubleValueForOption ("--integer", 0.0), 2.0);
+    EXPECT_DOUBLE_EQ (list.getDoubleValueForOption ("--bad", -1.0), -1.0);
+    EXPECT_DOUBLE_EQ (list.getDoubleValueForOption ("--missing", 3.0), 3.0);
+}
+
+TEST (ArgumentListTests, GetBoolValueForOption)
+{
+    ArgumentList list ("myapp", "--verbose --color=off --fast NO --zero 0 --on=yes");
+
+    EXPECT_TRUE (list.getBoolValueForOption ("--verbose", false));
+    EXPECT_FALSE (list.getBoolValueForOption ("--color", true));
+    EXPECT_FALSE (list.getBoolValueForOption ("--fast", true));
+    EXPECT_FALSE (list.getBoolValueForOption ("--zero", true));
+    EXPECT_TRUE (list.getBoolValueForOption ("--on", false));
+    EXPECT_TRUE (list.getBoolValueForOption ("--missing", true));
+    EXPECT_FALSE (list.getBoolValueForOption ("--missing", false));
+}
+
+TEST (ArgumentListTests, TryGetFileForOption)
+{
+    ArgumentList list ("myapp", "--input /tmp/test.txt --flag");
+
+    auto file = list.tryGetFileForOption ("--input");
+    ASSERT_TRUE (file.wasOk());
+    EXPECT_EQ (file.getReference().getFileName(), "test.txt");
+
+    EXPECT_TRUE (list.tryGetFileForOption ("--flag").failed());
+    EXPECT_TRUE (list.tryGetFileForOption ("--missing").failed());
+}
+
+TEST (ArgumentListTests, TryGetExistingFileAndFolderForOption)
+{
+    const auto folder = File::getSpecialLocation (File::tempDirectory);
+    const auto missing = folder.getNonexistentChildFile ("yup_argument_list_test", ".txt");
+
+    ArgumentList list ("myapp", StringArray { "--dir", folder.getFullPathName(), "--file", missing.getFullPathName() });
+
+    auto existingFolder = list.tryGetExistingFolderForOption ("--dir");
+    ASSERT_TRUE (existingFolder.wasOk());
+    EXPECT_EQ (existingFolder.getReference(), folder);
+
+    EXPECT_TRUE (list.tryGetExistingFileForOption ("--file").failed());
+    EXPECT_TRUE (list.tryGetExistingFolderForOption ("--file").failed());
+    EXPECT_TRUE (list.tryGetExistingFileForOption ("--missing").failed());
+}
+
+TEST (ArgumentListTests, TryResolveAsExistingFile)
+{
+    const auto folder = File::getSpecialLocation (File::tempDirectory);
+    const auto missing = folder.getNonexistentChildFile ("yup_argument_list_test", ".txt");
+
+    EXPECT_TRUE (ArgumentList::Argument { folder.getFullPathName() }.tryResolveAsExistingFolder().wasOk());
+    EXPECT_TRUE (ArgumentList::Argument { missing.getFullPathName() }.tryResolveAsExistingFile().failed());
+}
+
+TEST (ArgumentListTests, RangeForIteratesArguments)
+{
+    ArgumentList list ("myapp", "a b c");
+
+    StringArray texts;
+    for (const auto& arg : list)
+        texts.add (arg.text);
+
+    EXPECT_EQ (texts, StringArray ({ "a", "b", "c" }));
 }
 
 //==============================================================================

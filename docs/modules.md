@@ -427,6 +427,7 @@ flowchart LR
     yup_python -. optional .-> yup_ai:::opt
     yup_python -. optional .-> yup_audio_basics:::opt
     yup_python -. optional .-> yup_audio_devices:::opt
+    yup_python -. optional .-> yup_audio_gui:::opt
     yup_python -. optional .-> yup_audio_processors:::opt
     yup_python -. optional .-> yup_data_model:::opt
     yup_python -. optional .-> yup_events:::opt

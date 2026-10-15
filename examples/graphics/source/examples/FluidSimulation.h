@@ -165,10 +165,7 @@ public:
             pumpCompilation();
 
             if (compiling)
-            {
-                drawCompileProgress (g);
                 return;
-            }
         }
 
         if (! gpuReady)
@@ -513,34 +510,6 @@ private:
             gpuReady = true;
             statusLabel->setText ("GPU fluid simulation ready - drag to splat", yup::dontSendNotification);
         }
-    }
-
-    void drawCompileProgress (yup::Graphics& g)
-    {
-        auto area = getLocalBounds().to<float>().reduced (10.0f);
-        const float barWidth = yup::jmin (560.0f, area.getWidth() * 0.7f);
-        const float barHeight = 10.0f;
-
-        auto bar = yup::Rectangle<float> ((area.getWidth() - barWidth) * 0.5f,
-                                          (area.getHeight() - barHeight) * 0.5f,
-                                          barWidth,
-                                          barHeight);
-
-        const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
-
-        g.setFillColor (palette.getColor (yup::ThemePalette::Role::surface));
-        g.fillRect (bar);
-
-        const float fraction = compileJobs.empty() ? 1.0f
-                                                   : (float) compileCursor / (float) compileJobs.size();
-        auto fill = bar.withWidth (bar.getWidth() * fraction);
-        g.setFillColor (palette.getColor (yup::ThemePalette::Role::accent));
-        g.fillRect (fill);
-
-        statusLabel->setText (yup::String::formatted ("Compiling shaders (%d/%d)...",
-                                                      (int) compileCursor,
-                                                      (int) compileJobs.size()),
-                              yup::dontSendNotification);
     }
 
     //==============================================================================

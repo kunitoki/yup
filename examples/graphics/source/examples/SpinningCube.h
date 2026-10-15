@@ -59,6 +59,7 @@
 */
 class SpinningCubeDemo : public yup::Component
     , public yup::DragAndDropTarget
+    , public LoadingDemo
 {
 public:
     //==============================================================================
@@ -166,6 +167,30 @@ public:
         errorEditor->setColor (yup::TextEditor::Style::textColorId, yup::Colors::red);
         errorEditor->setVisible (false);
         addChildComponent (errorEditor.get());
+
+        addLoadingStep ([this]
+        {
+            if (capturedContext->isGpuAvailable())
+            {
+                initBlur();
+                return;
+            }
+
+            statusLabel->setText ("GPU context unavailable", yup::dontSendNotification);
+            gpuInitialized = true;
+            finishLoading();
+        }, StepThread::render);
+
+        addLoadingStep ([this]
+        {
+            initCube();
+        }, StepThread::render);
+
+        addLoadingStep ([this]
+        {
+            initLottie();
+            finishGpuInit();
+        }, StepThread::render);
     }
 
     ~SpinningCubeDemo() override = default;
@@ -191,10 +216,10 @@ public:
         g.fillAll();
 
         if (capturedContext == nullptr)
-        {
             capturedContext = &g.getGraphicsContext();
-            initGpu();
-        }
+
+        if (pumpLoading())
+            return;
 
         auto bounds = getLocalBounds().to<float>().reduced (10.0f);
         bounds.removeFromBottom (60.0f);
@@ -576,22 +601,9 @@ void main() {
 
     // ---- GPU initialisation --------------------------------------------------
 
-    void initGpu()
+    void finishGpuInit()
     {
-        if (capturedContext == nullptr || gpuInitialized)
-            return;
-
         gpuInitialized = true;
-
-        if (! capturedContext->isGpuAvailable())
-        {
-            statusLabel->setText ("GPU context unavailable", yup::dontSendNotification);
-            return;
-        }
-
-        initBlur();
-        initCube();
-        initLottie();
 
         if (cubePipeline != nullptr && blurPipeline != nullptr)
             statusLabel->setText ("GPU cube + separable blur ready. Drag slider for blur intensity.", yup::dontSendNotification);

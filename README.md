@@ -312,6 +312,7 @@ Build and execute the `yup_tests` target to run the automated test suite.
 
 - Build examples:
 Compile example targets like `example_app`, `example_console`, or `example_graphics` to see practical implementations.
+Pass `--demo NAME` to `example_graphics` to open a demo directly, e.g. `example_graphics --demo "Fluid Simulation"`.
 
 
 ## Running Your First Application

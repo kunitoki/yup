@@ -69,8 +69,29 @@ int main (int argc, char* argv[])
 }
 ```
 
-The `ArgumentList` passed to each command parses options, values, and file
-arguments (`getValueForOption`, `containsOption`, …).
+The `ArgumentList` passed to each command finds options and their values. A
+value is assigned (`--out=a.wav`) or follows the option (`--out a.wav`), and an
+option can take several (`--inputs a.wav b.wav`) or be repeated. Values run
+until the next option, negative numbers count as values, and a lone `--` ends
+the options. Short options match exactly and are never grouped: `-i` matches
+`-i`, not `-abi` or `-I/include/path`.
+
+```cpp
+[] (const ArgumentList& args)
+{
+    auto inputs = args.getValuesForOption ("--inputs|-i");   // StringArray
+    auto name = args.getValueForOption ("--name");          // std::optional<String>
+    auto gain = args.getDoubleValueForOption ("--gain", 0.0);
+    auto verbose = args.getBoolValueForOption ("--verbose", false);
+
+    auto output = args.tryGetFileForOption ("--out");        // ResultValue<File>
+    if (output.failed())
+        ConsoleApplication::fail (output.getErrorMessage());
+}
+```
+
+The `get...FileForOption` variants without `try` call `ConsoleApplication::fail`
+themselves.
 
 ```{seealso}
 For GUI applications, use `YUPApplication` and `START_YUP_APPLICATION` from
