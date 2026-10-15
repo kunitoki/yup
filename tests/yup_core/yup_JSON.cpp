@@ -159,6 +159,29 @@ TEST_F (JSONTests, ParseAndGenerate)
     }
 }
 
+TEST_F (JSONTests, RejectsMinusWithoutDigit)
+{
+    EXPECT_TRUE (JSON::parse ("-").isVoid());
+    EXPECT_TRUE (JSON::parse ("[-]").isVoid());
+    EXPECT_TRUE (JSON::parse ("[-x]").isVoid());
+    EXPECT_TRUE (JSON::parse ("[-").isVoid());
+}
+
+TEST_F (JSONTests, SurrogateEscapes)
+{
+    auto pair = JSON::parse ("[\"\\ud83d\\ude00\"]");
+    EXPECT_EQ ((yup_wchar) 0x1f600, pair[0].toString().getCharPointer().getAndAdvance());
+
+    const auto unpairedString = JSON::parse ("[\"\\ud800\\u0041\"]")[0].toString();
+    auto unpaired = unpairedString.getCharPointer();
+    EXPECT_EQ ((yup_wchar) 0xfffd, unpaired.getAndAdvance());
+    EXPECT_EQ ((yup_wchar) 'A', unpaired.getAndAdvance());
+
+    var result;
+    EXPECT_TRUE (JSON::parse ("[\"\\ud800\\u", result).failed());
+    EXPECT_TRUE (JSON::parse ("[\"\\ud800\\u12", result).failed());
+}
+
 TEST_F (JSONTests, FloatFormatting)
 {
     std::map<double, String> tests {
@@ -369,4 +392,32 @@ TEST_F (JSONTests, WriteNonDynamicObject)
     // in release it just does nothing. Ensure toString doesn't crash.
     var v (42); // an int, not an object
     EXPECT_TRUE (JSON::toString (v).isNotEmpty());
+}
+
+TEST_F (JSONTests, DeeplyNestedInputIsRejected)
+{
+    String json;
+
+    for (int i = 0; i < 300; ++i)
+        json << "[";
+
+    for (int i = 0; i < 300; ++i)
+        json << "]";
+
+    var result;
+    EXPECT_TRUE (JSON::parse (json, result).failed());
+}
+
+TEST_F (JSONTests, DeeplyNestedOutputIsTruncated)
+{
+    var nested (1);
+
+    for (int i = 0; i < 300; ++i)
+    {
+        auto outer = var (Array<var>());
+        outer.getArray()->add (nested);
+        nested = outer;
+    }
+
+    EXPECT_TRUE (JSON::toString (nested, true).contains ("null"));
 }

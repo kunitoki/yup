@@ -80,7 +80,8 @@ Related helpers:
   [serialization](#serialization) framework.
 
 ```{note}
-`JSON::parse` accepts only a valid JSON object or array at the top level.
+`JSON::parse` accepts only a valid JSON object or array at the top level, and
+rejects documents nested deeper than 256 levels.
 ```
 
 ## YAML
@@ -127,7 +128,7 @@ character pointer.
 `YAML::parse(text, result)` returns a `Result` with line-numbered error messages
 for malformed input. The parser enforces:
 
-- Maximum nesting depth of 512 to prevent stack overflow
+- Maximum nesting depth of 256 to prevent stack overflow
 - Cyclic alias detection (`&a [*a]` is rejected)
 - Duplicate anchor detection (`&a 1\n&a 2` is rejected)
 

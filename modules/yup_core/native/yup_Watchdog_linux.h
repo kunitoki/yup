@@ -176,9 +176,10 @@ private:
                 continue;
 
             const inotify_event* notifyEvent = nullptr;
-            for (const char* ptr = buffer.data(); ptr < buffer.data() + numRead; ptr += offsetof (struct inotify_event, name) + notifyEvent ? notifyEvent->len : 0)
+            for (const char* ptr = buffer.data(); ptr < buffer.data() + numRead;)
             {
                 notifyEvent = reinterpret_cast<const inotify_event*> (ptr);
+                ptr += sizeof (struct inotify_event) + notifyEvent->len;
 
                 auto path = folder.getChildFile (String::fromUTF8 (notifyEvent->name));
                 if (path.isHidden())

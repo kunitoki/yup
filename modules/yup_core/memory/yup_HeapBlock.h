@@ -285,7 +285,7 @@ public:
     template <typename SizeType>
     void malloc (SizeType newNumElements, size_t elementSize = sizeof (ElementType))
     {
-        std::free (data);
+        free();
         data = mallocWrapper (static_cast<size_t> (newNumElements) * elementSize);
     }
 
@@ -295,7 +295,7 @@ public:
     template <typename SizeType>
     void calloc (SizeType newNumElements, const size_t elementSize = sizeof (ElementType))
     {
-        std::free (data);
+        free();
         data = callocWrapper (static_cast<size_t> (newNumElements), elementSize);
     }
 
@@ -306,7 +306,7 @@ public:
     template <typename SizeType>
     void allocate (SizeType newNumElements, bool initialiseToZero)
     {
-        std::free (data);
+        free();
         data = initialiseToZero ? callocWrapper (static_cast<size_t> (newNumElements), sizeof (ElementType))
                                 : mallocWrapper (static_cast<size_t> (newNumElements) * sizeof (ElementType));
     }

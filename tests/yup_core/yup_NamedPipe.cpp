@@ -43,6 +43,11 @@
 
 #if ! YUP_WASM
 
+#if YUP_MAC || YUP_LINUX
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 using namespace yup;
 
 namespace
@@ -239,5 +244,22 @@ TEST_F (NamedPipeTests, SendMessageExistingPipe)
     EXPECT_EQ (receiver.result, (int) sizeof (receiver.recvData));
     EXPECT_EQ (receiver.recvData, sendData);
 }
+
+#if YUP_MAC || YUP_LINUX
+TEST_F (NamedPipeTests, CreatedPipeIsOwnerOnly)
+{
+    auto pipePath = File::getSpecialLocation (File::tempDirectory).getChildFile (pipeName).getFullPathName();
+
+    NamedPipe pipe;
+    ASSERT_TRUE (pipe.createNewPipe (pipePath));
+
+    struct stat info;
+    ASSERT_EQ (stat ((pipePath + "_in").toRawUTF8(), &info), 0);
+
+    EXPECT_TRUE (S_ISFIFO (info.st_mode));
+    EXPECT_EQ (info.st_uid, getuid());
+    EXPECT_EQ (info.st_mode & 0777, (mode_t) 0600);
+}
+#endif
 
 #endif

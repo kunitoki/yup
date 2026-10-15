@@ -72,7 +72,9 @@ public:
                                             formats the data is expected to be in
         @param uncompressedStreamLength     if the creator knows the length that the
                                             uncompressed stream will be, then it can supply this
-                                            value, which will be returned by getTotalLength()
+                                            value, which will be returned by getTotalLength().
+                                            The stream will not produce more bytes than this value,
+                                            so a corrupt or malicious source cannot expand past it.
     */
     GZIPDecompressorInputStream (InputStream* sourceStream,
                                  bool deleteSourceWhenDestroyed,

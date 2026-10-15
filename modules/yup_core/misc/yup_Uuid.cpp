@@ -42,10 +42,15 @@ namespace yup
 
 Uuid::Uuid()
 {
-    Random r;
+    if (! SecureRandom::fillBytes (uuid, sizeof (uuid)))
+    {
+        jassertfalse;
 
-    for (size_t i = 0; i < sizeof (uuid); ++i)
-        uuid[i] = (uint8) (r.nextInt (256));
+        Random r;
+
+        for (size_t i = 0; i < sizeof (uuid); ++i)
+            uuid[i] = (uint8) (r.nextInt (256));
+    }
 
     // To make it RFC 4122 compliant, need to force a few bits...
     uuid[6] = (uuid[6] & 0x0f) | 0x40;

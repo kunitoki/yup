@@ -102,6 +102,55 @@ TEST_F (XmlDocumentTests, ParseXmlWithMultipleCDATA)
     EXPECT_TRUE (xml->getAllSubText().contains ("Second"));
 }
 
+TEST_F (XmlDocumentTests, SingleTokenDoctypeDoesNotReadBeforeTokens)
+{
+    EXPECT_NO_FATAL_FAILURE ({
+        XmlDocument doc ("<!DOCTYPE root><root>&a;</root>");
+        doc.getDocumentElement();
+    });
+}
+
+TEST_F (XmlDocumentTests, TruncatedHexCharacterReferenceIsRejected)
+{
+    XmlDocument doc ("<a>&#x");
+    doc.getDocumentElement();
+    EXPECT_FALSE (doc.getLastParseError().isEmpty());
+}
+
+TEST_F (XmlDocumentTests, UnencodableCharacterReferencesBecomeReplacementCharacter)
+{
+    for (auto* text : { "<a>&#xD800;</a>", "<a>&#x110000;</a>", "<a>&#xFFFFFFFF;</a>" })
+    {
+        auto element = XmlDocument::parse (String (text));
+        ASSERT_NE (element, nullptr) << text;
+
+        const auto content = element->getAllSubText();
+        EXPECT_EQ (content.length(), 1) << text;
+        EXPECT_EQ (content[0], (yup_wchar) 0xfffd) << text;
+        EXPECT_EQ (content.getNumBytesAsUTF8(), (size_t) 3) << text;
+    }
+}
+
+TEST_F (XmlDocumentTests, TruncatedInputIsHandledSafely)
+{
+    const char* const truncatedInputs[] = { "<", "<a", "<a b", "<a b=", "<a b=\"", "<a b=\"x", "<a>", "<a><b>text", "<!DOCTYPE", "<!DOCTYPE a [", "<?xml", "<a>&", "<a>&#" };
+
+    for (auto* text : truncatedInputs)
+    {
+        XmlDocument doc (text);
+        doc.getDocumentElement();
+    }
+
+    const char* const invalidInputs[] = { "<", "<a>", "<a><b>text", "<!DOCTYPE", "<!DOCTYPE a [", "<?xml" };
+
+    for (auto* text : invalidInputs)
+    {
+        XmlDocument doc (text);
+        EXPECT_EQ (doc.getDocumentElement(), nullptr) << text;
+        EXPECT_FALSE (doc.getLastParseError().isEmpty()) << text;
+    }
+}
+
 TEST_F (XmlDocumentTests, ParseXmlWithUnterminatedCDATA)
 {
     XmlDocument doc ("<root><![CDATA[Unterminated");
@@ -602,4 +651,80 @@ TEST_F (XmlDocumentTests, SetInputSourceTakesOwnershipOfTheSource)
     }
 
     EXPECT_EQ (CountingInputSource::numLivingInstances, 0);
+}
+
+// =============================================================================
+// Security Limit Tests
+// =============================================================================
+
+TEST_F (XmlDocumentTests, ExternalDtdNotLoadedByDefault)
+{
+    auto tempDir = File::getSpecialLocation (File::SpecialLocationType::tempDirectory);
+    auto dtdFile = tempDir.getChildFile ("test_xml_external_entities.dtd");
+    auto xmlFile = tempDir.getChildFile ("test_xml_external_entities.xml");
+
+    dtdFile.replaceWithText ("<!ENTITY secret \"external value\">");
+    xmlFile.replaceWithText ("<?xml version=\"1.0\"?>\n"
+                             "<!DOCTYPE root SYSTEM \"test_xml_external_entities.dtd\">\n"
+                             "<root>&secret;</root>");
+
+    XmlDocument doc (xmlFile);
+    auto element = doc.getDocumentElement();
+    ASSERT_NE (element, nullptr);
+    EXPECT_EQ (element->getAllSubText(), "secret");
+
+    XmlDocument allowedDoc (xmlFile);
+    allowedDoc.setExternalEntitiesAllowed (true);
+    auto allowedElement = allowedDoc.getDocumentElement();
+    ASSERT_NE (allowedElement, nullptr);
+    EXPECT_EQ (allowedElement->getAllSubText(), "external value");
+
+    xmlFile.deleteFile();
+    dtdFile.deleteFile();
+}
+
+TEST_F (XmlDocumentTests, SelfReferencingEntityIsRejected)
+{
+    String xml = "<?xml version=\"1.0\"?>\n"
+                 "<!DOCTYPE root [\n"
+                 "  <!ENTITY a \"&a;\">\n"
+                 "]>\n"
+                 "<root>&a;</root>";
+
+    XmlDocument doc (xml);
+    EXPECT_EQ (doc.getDocumentElement(), nullptr);
+}
+
+TEST_F (XmlDocumentTests, ExponentialEntityExpansionIsRejected)
+{
+    String xml = "<?xml version=\"1.0\"?>\n<!DOCTYPE root [\n  <!ENTITY l0 \"xxxxxxxxxx\">\n";
+
+    for (int i = 1; i <= 10; ++i)
+    {
+        xml << "  <!ENTITY l" << String (i) << " \"";
+
+        for (int j = 0; j < 10; ++j)
+            xml << "&l" << String (i - 1) << ";";
+
+        xml << "\">\n";
+    }
+
+    xml << "]>\n<root>&l10;</root>";
+
+    XmlDocument doc (xml);
+    EXPECT_EQ (doc.getDocumentElement(), nullptr);
+}
+
+TEST_F (XmlDocumentTests, DeeplyNestedElementsAreRejected)
+{
+    String xml;
+
+    for (int i = 0; i < 300; ++i)
+        xml << "<e>";
+
+    for (int i = 0; i < 300; ++i)
+        xml << "</e>";
+
+    XmlDocument doc (xml);
+    EXPECT_EQ (doc.getDocumentElement(), nullptr);
 }

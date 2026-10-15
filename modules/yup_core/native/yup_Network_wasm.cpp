@@ -253,7 +253,8 @@ private:
     {
         StringArray headerLines = StringArray::fromLines (headersString.trim());
 
-        std::vector<const char*> headerArray;
+        headerKeyValues.clear();
+
         for (const auto& line : headerLines)
         {
             int colonPos = line.indexOfChar (':');
@@ -262,15 +263,15 @@ private:
                 String key = line.substring (0, colonPos).trim();
                 String value = line.substring (colonPos + 1).trim();
 
-                // Store the key and value strings
                 headerKeyValues.emplace_back (key.toRawUTF8());
                 headerKeyValues.emplace_back (value.toRawUTF8());
-
-                // Store pointers to the strings
-                headerArray.push_back (headerKeyValues[headerKeyValues.size() - 2].c_str());
-                headerArray.push_back (headerKeyValues.back().c_str());
             }
         }
+
+        // Pointers are taken only after all strings are stored, so vector growth cannot invalidate them
+        std::vector<const char*> headerArray;
+        for (const auto& keyValue : headerKeyValues)
+            headerArray.push_back (keyValue.c_str());
 
         headerArray.push_back (nullptr);
         return headerArray;

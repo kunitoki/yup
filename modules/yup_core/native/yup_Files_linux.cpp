@@ -293,39 +293,55 @@ static bool openDocumentExternally (const String& fileName, const String& parame
     if (! hasDisplay)
         return false;
 
-    const auto cmdString = [&]
-    {
-        if (fileName.startsWithIgnoreCase ("file:")
-            || File::createFileWithoutCheckingPath (fileName).isDirectory()
-            || ! isFileExecutable (fileName))
-        {
-            const auto singleCommand = fileName.trim().quoted();
+    const bool openWithDefaultApp = fileName.startsWithIgnoreCase ("file:")
+                                    || File::createFileWithoutCheckingPath (fileName).isDirectory()
+                                    || ! isFileExecutable (fileName);
 
-            StringArray cmdLines;
+    StringArray arguments;
+    arguments.add (openWithDefaultApp ? fileName.trim() : fileName);
 
-            for (auto browserName : { "xdg-open", "/etc/alternatives/x-www-browser", "firefox", "mozilla", "google-chrome", "chromium-browser", "opera", "konqueror" })
-            {
-                cmdLines.add (String (browserName) + " " + singleCommand);
-            }
+    if (! openWithDefaultApp)
+        for (const auto& parameter : StringArray::fromTokens (parameters, true))
+            if (parameter.isNotEmpty())
+                arguments.add (parameter.unquoted());
 
-            return cmdLines.joinIntoString (" || ");
-        }
+    Array<const char*> argv;
 
-        return (fileName.replace (" ", "\\ ", false) + " " + parameters).trim();
-    }();
+    for (const auto& argument : arguments)
+        argv.add (argument.toRawUTF8());
 
-    const char* const argv[] = { "/bin/sh", "-c", cmdString.toUTF8(), nullptr };
+    argv.add (nullptr);
 
     const auto cpid = fork();
 
     if (cpid == 0)
     {
-        setsid();
+        if (fork() == 0)
+        {
+            setsid();
 
-        // Child process
-        execve (argv[0], (char**) argv, environment ? environment->getRawDataPointer() : environ);
-        exit (0);
+            if (environment != nullptr)
+                environ = (char**) environment->getRawDataPointer();
+
+            if (openWithDefaultApp)
+            {
+                for (auto* opener : { "xdg-open", "/etc/alternatives/x-www-browser", "firefox", "mozilla", "google-chrome", "chromium-browser", "opera", "konqueror" })
+                {
+                    const char* const openerArgv[] = { opener, argv[0], nullptr };
+                    execvp (opener, (char**) openerArgv);
+                }
+            }
+            else
+            {
+                execv (argv[0], (char**) argv.getRawDataPointer());
+            }
+        }
+
+        _exit (0);
     }
+
+    if (cpid > 0)
+        waitpid (cpid, nullptr, 0);
 
     return cpid >= 0;
 }

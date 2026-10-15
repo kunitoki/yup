@@ -105,3 +105,30 @@ TEST (ThreadTests, SetCurrentThreadName)
     EXPECT_NO_THROW (Thread::setCurrentThreadName ("LongerTestThreadName"));
     EXPECT_NO_THROW (Thread::setCurrentThreadName (""));
 }
+
+TEST (ThreadTests, TimedOutStopLeavesThreadStopped)
+{
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "stopThread asserts when a thread outlives its timeout";
+#endif
+
+    class StubbornThread : public Thread
+    {
+    public:
+        StubbornThread()
+            : Thread ("StubbornThread")
+        {
+        }
+
+        void run() override
+        {
+            Thread::sleep (500);
+        }
+    };
+
+    StubbornThread thread;
+    thread.startThread();
+
+    EXPECT_FALSE (thread.stopThread (10));
+    EXPECT_FALSE (thread.isThreadRunning());
+}

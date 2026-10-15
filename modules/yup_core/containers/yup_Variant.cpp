@@ -1172,9 +1172,20 @@ void var::writeToStream (OutputStream& output) const
     type->writeToStream (value, output);
 }
 
-var var::readFromStream (InputStream& input)
+static var readVarFromStream (InputStream& input, int depth)
 {
+    // Kept well below the 1024 used for parsing so deep input cannot exhaust small thread stacks such as WebAssembly's
+    constexpr int maxNestingDepth = 128;
+
     const int numBytes = input.readCompressedInt();
+
+    if (depth > maxNestingDepth)
+    {
+        if (numBytes > 0)
+            input.skipNextBytes (numBytes);
+
+        return {};
+    }
 
     if (numBytes > 0)
     {
@@ -1200,26 +1211,19 @@ var var::readFromStream (InputStream& input)
 
             case varMarker_Binary:
             {
-                MemoryBlock mb ((size_t) numBytes - 1);
-
-                if (numBytes > 1)
-                {
-                    const int numRead = input.read (mb.getData(), numBytes - 1);
-                    mb.setSize ((size_t) numRead);
-                }
-
-                return var (mb);
+                MemoryOutputStream mo;
+                mo.writeFromInputStream (input, numBytes - 1);
+                return var (mo.getMemoryBlock());
             }
 
             case varMarker_Array:
             {
-                var v;
-                auto* destArray = v.convertToArray();
+                Array<var> destArray;
 
-                for (int i = input.readCompressedInt(); --i >= 0;)
-                    destArray->add (readFromStream (input));
+                for (int i = input.readCompressedInt(); --i >= 0 && ! input.isExhausted();)
+                    destArray.add (readVarFromStream (input, depth + 1));
 
-                return v;
+                return var (std::move (destArray));
             }
 
             default:
@@ -1229,6 +1233,11 @@ var var::readFromStream (InputStream& input)
     }
 
     return {};
+}
+
+var var::readFromStream (InputStream& input)
+{
+    return readVarFromStream (input, 0);
 }
 
 var::NativeFunctionArgs::NativeFunctionArgs (const var& t) noexcept

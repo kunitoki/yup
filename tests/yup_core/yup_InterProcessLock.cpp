@@ -105,3 +105,17 @@ TEST (InterProcessLockTests, LockScope)
     EXPECT_TRUE (lock.enter (100));
     lock.exit();
 }
+
+#if YUP_LINUX
+class InterProcessLockFailureTests : public ::testing::Test
+{
+};
+
+TEST_F (InterProcessLockFailureTests, EnterFailsWhenLockFileUnopenable)
+{
+    // An empty name resolves to the lock directory itself, which can never be opened as a lock file
+    InterProcessLock lock ("");
+
+    EXPECT_FALSE (lock.enter (0));
+}
+#endif

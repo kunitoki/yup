@@ -92,6 +92,11 @@ void XmlDocument::setEmptyTextElementsIgnored (bool shouldBeIgnored) noexcept
     ignoreEmptyTextElements = shouldBeIgnored;
 }
 
+void XmlDocument::setExternalEntitiesAllowed (bool shouldBeAllowed) noexcept
+{
+    externalEntitiesAllowed = shouldBeAllowed;
+}
+
 namespace XmlIdentifierChars
 {
 static bool isIdentifierCharSlow (yup_wchar c) noexcept
@@ -193,7 +198,7 @@ void XmlDocument::setLastError (const String& desc, const bool carryOn)
 
 String XmlDocument::getFileContents (const String& filename) const
 {
-    if (inputSource != nullptr)
+    if (externalEntitiesAllowed && inputSource != nullptr)
     {
         std::unique_ptr<InputStream> in (inputSource->createInputStreamFor (filename.trim().unquoted()));
 
@@ -206,15 +211,13 @@ String XmlDocument::getFileContents (const String& filename) const
 
 yup_wchar XmlDocument::readNextChar() noexcept
 {
-    auto c = input.getAndAdvance();
-
-    if (c == 0)
+    if (input.isEmpty())
     {
         outOfData = true;
-        --input;
+        return 0;
     }
 
-    return c;
+    return input.getAndAdvance();
 }
 
 std::unique_ptr<XmlElement> XmlDocument::parseDocumentElement (String::CharPointerType textToParse,
@@ -224,6 +227,7 @@ std::unique_ptr<XmlElement> XmlDocument::parseDocumentElement (String::CharPoint
     errorOccurred = false;
     outOfData = false;
     needToLoadDTD = true;
+    entityExpansionLength = 0;
 
     if (textToParse.isEmpty())
     {
@@ -242,9 +246,13 @@ std::unique_ptr<XmlElement> XmlDocument::parseDocumentElement (String::CharPoint
         lastError.clear();
         std::unique_ptr<XmlElement> result (readNextElement (! onlyReadOuterDocumentElement));
 
-        if (! errorOccurred)
+        if (! errorOccurred && result != nullptr)
             return result;
     }
+
+    // A failed parse always reports why, even on paths that don't set an error of their own
+    if (lastError.isEmpty())
+        lastError = "malformed document";
 
     return {};
 }
@@ -258,7 +266,10 @@ bool XmlDocument::parseHeader()
         auto headerEnd = CharacterFunctions::find (input, CharPointer_ASCII ("?>"));
 
         if (headerEnd.isEmpty())
+        {
+            setLastError ("unterminated XML declaration", false);
             return false;
+        }
 
 #if YUP_DEBUG
         auto encoding = String (input, headerEnd)
@@ -349,7 +360,7 @@ void XmlDocument::skipNextWhiteSpace()
 
                 if (closeBracket < 0)
                 {
-                    outOfData = true;
+                    setLastError ("unterminated processing instruction", false);
                     break;
                 }
 
@@ -515,6 +526,13 @@ XmlElement* XmlDocument::readNextElement (const bool alsoParseSubElements)
 
 void XmlDocument::readChildElements (XmlElement& parent)
 {
+    if (elementDepth >= maxElementDepth)
+    {
+        setLastError ("elements nested too deeply", false);
+        return;
+    }
+
+    ScopedValueSetter<int> depthSetter (elementDepth, elementDepth + 1);
     LinkedListPointer<XmlElement>::Appender childAppender (parent.firstChildElement);
 
     for (;;)
@@ -720,6 +738,12 @@ void XmlDocument::readEntity (String& result)
 
             while (input[0] != ';')
             {
+                if (input[0] == 0)
+                {
+                    setLastError ("unexpected end of input", true);
+                    return;
+                }
+
                 auto hexValue = CharacterFunctions::getHexDigitValue (input[0]);
 
                 if (hexValue < 0 || ++numChars > 8)
@@ -829,7 +853,8 @@ String XmlDocument::expandExternalEntity (const String& entity)
             dtdText = dtdText.trimCharactersAtEnd (">");
             tokenisedDTD.addTokens (dtdText, true);
 
-            if (tokenisedDTD[tokenisedDTD.size() - 2].equalsIgnoreCase ("system")
+            if (tokenisedDTD.size() >= 2
+                && tokenisedDTD[tokenisedDTD.size() - 2].equalsIgnoreCase ("system")
                 && tokenisedDTD[tokenisedDTD.size() - 1].isQuotedString())
             {
                 auto fn = tokenisedDTD[tokenisedDTD.size() - 1];
@@ -880,6 +905,16 @@ String XmlDocument::expandExternalEntity (const String& entity)
             if (tokenisedDTD[i - 1].equalsIgnoreCase ("<!entity"))
             {
                 auto ent = tokenisedDTD[i + 1].trimCharactersAtEnd (">").trim().unquoted();
+
+                entityExpansionLength += ent.length();
+
+                if (entityDepth >= maxEntityDepth || entityExpansionLength > maxEntityExpansionLength)
+                {
+                    setLastError ("entity expansion limit exceeded", false);
+                    return {};
+                }
+
+                ScopedValueSetter<int> depthSetter (entityDepth, entityDepth + 1);
 
                 // check for sub-entities..
                 auto ampersand = ent.indexOfChar ('&');

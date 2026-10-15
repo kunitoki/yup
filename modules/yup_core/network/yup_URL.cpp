@@ -609,6 +609,13 @@ static bool isValidIPv6Content (const String& ipv6Addr)
 
     return true;
 }
+
+static String escapeMultipartQuotedValue (const String& value)
+{
+    return value.replace ("\"", "%22")
+                .replace ("\r", "%0D")
+                .replace ("\n", "%0A");
+}
 } // namespace URLHelpers
 
 void URL::addParameter (const String& name, const String& value)
@@ -805,10 +812,27 @@ String URL::getScheme() const
     return url.substring (schemeRange.getStart(), schemeRange.getEnd());
 }
 
+bool URL::isSameOrigin (const URL& other) const
+{
+    return getScheme().equalsIgnoreCase (other.getScheme())
+           && getDomain().equalsIgnoreCase (other.getDomain())
+           && getPort() == other.getPort();
+}
+
+bool URL::isRedirectAllowed (const URL& target) const
+{
+    const auto targetScheme = target.getScheme();
+
+    if (! (targetScheme.equalsIgnoreCase ("http") || targetScheme.equalsIgnoreCase ("https")))
+        return false;
+
+    return ! (getScheme().equalsIgnoreCase ("https") && targetScheme.equalsIgnoreCase ("http"));
+}
+
 #if ! YUP_ANDROID
 bool URL::isLocalFile() const
 {
-    return getScheme() == "file";
+    return getScheme().equalsIgnoreCase ("file");
 }
 
 File URL::getLocalFile() const
@@ -934,7 +958,12 @@ void URL::createHeadersAndPostData (String& headers,
         // (this doesn't currently support mixing custom post-data with uploads..)
         jassert (postData.isEmpty());
 
-        auto boundary = String::toHexString (Random::getSystemRandom().nextInt64());
+        int64 randomBits = 0;
+
+        if (! SecureRandom::fillBytes (&randomBits, sizeof (randomBits)))
+            randomBits = Random::getSystemRandom().nextInt64();
+
+        auto boundary = String::toHexString (randomBits);
 
         headers << "Content-Type: multipart/form-data; boundary=" << boundary << "\r\n";
 
@@ -942,7 +971,7 @@ void URL::createHeadersAndPostData (String& headers,
 
         for (int i = 0; i < parameterNames.size(); ++i)
         {
-            data << "\r\nContent-Disposition: form-data; name=\"" << parameterNames[i]
+            data << "\r\nContent-Disposition: form-data; name=\"" << URLHelpers::escapeMultipartQuotedValue (parameterNames[i])
                  << "\"\r\n\r\n"
                  << parameterValues[i]
                  << "\r\n--" << boundary;
@@ -950,8 +979,8 @@ void URL::createHeadersAndPostData (String& headers,
 
         for (auto* f : filesToUpload)
         {
-            data << "\r\nContent-Disposition: form-data; name=\"" << f->parameterName
-                 << "\"; filename=\"" << f->filename << "\"\r\n";
+            data << "\r\nContent-Disposition: form-data; name=\"" << URLHelpers::escapeMultipartQuotedValue (f->parameterName)
+                 << "\"; filename=\"" << URLHelpers::escapeMultipartQuotedValue (f->filename) << "\"\r\n";
 
             if (f->mimeType.isNotEmpty())
                 data << "Content-Type: " << f->mimeType << "\r\n";

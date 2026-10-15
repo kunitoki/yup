@@ -595,23 +595,22 @@ struct YAMLParser
     }
 
     //==============================================================================
-    static constexpr int maxParseDepth = 512;
+    static constexpr int maxParseDepth = 256;
+    static constexpr int maxCopiedNodes = 1 << 20;
 
     Array<Line> lines;
     HashMap<String, var> anchors;
     HashMap<String, int> expandingAliases; // Tracks aliases currently being expanded (cycle detection)
     int currentDepth = 0;
+    int copiedNodes = 0;
     int flowStartLine = 1;
 
-    void enterDepth (int lineNumber)
+    ScopedValueSetter<int> enterDepth (int lineNumber)
     {
-        if (++currentDepth > maxParseDepth)
+        if (currentDepth >= maxParseDepth)
             throwError ("Maximum nesting depth exceeded", lineNumber);
-    }
 
-    void leaveDepth()
-    {
-        --currentDepth;
+        return { currentDepth, currentDepth + 1 };
     }
 
     //==============================================================================
@@ -783,9 +782,9 @@ struct YAMLParser
     }
 
     //==============================================================================
-    static int readHexEscape (const String& text, int& index, int numDigits, int lineNumber)
+    static uint32 readHexEscape (const String& text, int& index, int numDigits, int lineNumber)
     {
-        int value = 0;
+        uint32 value = 0;
 
         for (int i = 0; i < numDigits; ++i)
         {
@@ -797,11 +796,48 @@ struct YAMLParser
             if (digit < 0)
                 throwErrorStatic ("Invalid unicode escape sequence", lineNumber);
 
-            value = (value << 4) + digit;
+            value = (value << 4) | (uint32) digit;
             ++index;
         }
 
+        if (value > 0x10ffff)
+            throwErrorStatic ("Invalid unicode escape sequence", lineNumber);
+
         return value;
+    }
+
+    //==============================================================================
+    // Shared rules for \u and \U escapes in every quoted scalar form.
+    static bool isHighSurrogate (uint32 c) noexcept { return c >= 0xd800 && c <= 0xdbff; }
+    static bool isLowSurrogate (uint32 c) noexcept { return c >= 0xdc00 && c <= 0xdfff; }
+
+    // Surrogates are not scalar values and cannot be encoded as UTF-8, so each one becomes a single U+FFFD.
+    static yup_wchar toScalarValue (uint32 value) noexcept
+    {
+        return (isHighSurrogate (value) || isLowSurrogate (value)) ? (yup_wchar) 0xfffd : (yup_wchar) value;
+    }
+
+    static uint32 joinSurrogates (uint32 high, uint32 low) noexcept
+    {
+        return 0x10000 + (((high - 0xd800) << 10) | (low - 0xdc00));
+    }
+
+    // Returns the value of the four hex digits at `index`, or -1 without consuming anything.
+    static int peekHexQuad (const String& text, int index)
+    {
+        uint32 value = 0;
+
+        for (int i = 0; i < 4; ++i)
+        {
+            const auto digit = index + i < text.length() ? CharacterFunctions::getHexDigitValue (text[index + i]) : -1;
+
+            if (digit < 0)
+                return -1;
+
+            value = (value << 4) | (uint32) digit;
+        }
+
+        return (int) value;
     }
 
     static void ensureLineEnd (const String& text, int index, int lineNumber)
@@ -862,28 +898,25 @@ struct YAMLParser
 
                     case 'u':
                     {
-                        auto value = (yup_wchar) readHexEscape (text, index, 4, lineNumber);
+                        auto value = readHexEscape (text, index, 4, lineNumber);
 
-                        // Combine a UTF-16 surrogate pair into a single code point
-                        if (value >= 0xd800 && value <= 0xdbff
-                            && index + 1 < len && text[index] == '\\' && text[index + 1] == 'u')
+                        if (isHighSurrogate (value) && index + 1 < len && text[index] == '\\' && text[index + 1] == 'u')
                         {
-                            int lookahead = index + 2;
-                            const auto low = (yup_wchar) readHexEscape (text, lookahead, 4, lineNumber);
+                            const auto low = peekHexQuad (text, index + 2);
 
                             if (low >= 0xdc00 && low <= 0xdfff)
                             {
-                                value = 0x10000 + ((((value - 0xd800) << 10) | (low - 0xdc00)));
-                                index = lookahead;
+                                value = joinSurrogates (value, (uint32) low);
+                                index += 6;
                             }
                         }
 
-                        buffer.appendUTF8Char (value);
+                        buffer.appendUTF8Char (toScalarValue (value));
                         break;
                     }
 
                     case 'U':
-                        buffer.appendUTF8Char ((yup_wchar) readHexEscape (text, index, 8, lineNumber));
+                        buffer.appendUTF8Char (toScalarValue (readHexEscape (text, index, 8, lineNumber)));
                         break;
                     default:
                         throwErrorStatic ("Invalid escape sequence", lineNumber);
@@ -935,17 +968,20 @@ struct YAMLParser
     }
 
     //==============================================================================
-    static var deepCopy (const var& v, int depthRemaining = maxParseDepth)
+    var deepCopy (const var& v, int lineNumber, int depthRemaining = maxParseDepth)
     {
         if (depthRemaining <= 0)
             return v;
+
+        if (++copiedNodes > maxCopiedNodes)
+            throwError ("Alias expansion is too large", lineNumber);
 
         if (v.isArray())
         {
             auto result = var (Array<var>());
 
             for (const auto& item : *v.getArray())
-                result.getArray()->add (deepCopy (item, depthRemaining - 1));
+                result.getArray()->add (deepCopy (item, lineNumber, depthRemaining - 1));
 
             return result;
         }
@@ -958,7 +994,7 @@ struct YAMLParser
                 var result (copy);
 
                 for (const auto& prop : object->getProperties())
-                    copy->setProperty (prop.name, deepCopy (prop.value, depthRemaining - 1));
+                    copy->setProperty (prop.name, deepCopy (prop.value, lineNumber, depthRemaining - 1));
 
                 return result;
             }
@@ -1175,7 +1211,7 @@ struct YAMLParser
             throwError ("Cyclic alias reference '*" + name + "'", lineNumber);
 
         expandingAliases.set (name, 1);
-        auto result = deepCopy (anchors[name]);
+        auto result = deepCopy (anchors[name], lineNumber);
         expandingAliases.remove (name);
 
         return result;
@@ -1203,7 +1239,7 @@ struct YAMLParser
         {
             for (const auto& prop : source->getProperties())
                 if (! target->hasProperty (prop.name))
-                    target->setProperty (prop.name, deepCopy (prop.value));
+                    target->setProperty (prop.name, deepCopy (prop.value, lineNumber));
 
             return;
         }
@@ -1259,7 +1295,7 @@ struct YAMLParser
         if (line.indent > indent)
             throwError ("Unexpected indentation", line.number);
 
-        enterDepth (line.number);
+        const auto depthScope = enterDepth (line.number);
 
         const auto content = line.text.substring (indent);
         var result;
@@ -1271,7 +1307,6 @@ struct YAMLParser
         else
             result = parseBlockMap (indent, lineIndex);
 
-        leaveDepth();
         return result;
     }
 
@@ -1402,7 +1437,7 @@ struct YAMLParser
         const auto item = parseSequenceItemContent (rest, indent, lineNumber, lineIndex);
 
         if (anchorName.isNotEmpty())
-            addAnchor (anchorName, deepCopy (item), lineNumber);
+            addAnchor (anchorName, deepCopy (item, lineNumber), lineNumber);
 
         if (lineIndex == itemLine)
             ++lineIndex;
@@ -1422,6 +1457,7 @@ struct YAMLParser
 
         if (rest.startsWithChar ('&'))
         {
+            const auto depthScope = enterDepth (lineNumber);
             auto anchoredRest = rest;
             const auto anchorName = stripAnchor (anchoredRest);
 
@@ -1432,7 +1468,7 @@ struct YAMLParser
             else
                 anchored = parseSequenceItemContent (anchoredRest, indent, lineNumber, lineIndex);
 
-            addAnchor (anchorName, deepCopy (anchored), lineNumber);
+            addAnchor (anchorName, deepCopy (anchored, lineNumber), lineNumber);
             return anchored;
         }
 
@@ -1447,6 +1483,7 @@ struct YAMLParser
 
         if (isSequenceEntry (rest))
         {
+            const auto depthScope = enterDepth (lineNumber);
             auto result = var (Array<var>());
             auto destArray = result.getArray();
             const auto firstItemText = rest == "-" ? String() : rest.substring (2);
@@ -1612,25 +1649,26 @@ struct YAMLParser
     //==============================================================================
     struct FlowCursor
     {
-        const String& text;
+        Array<yup_wchar> chars;
         int index = 0;
 
         explicit FlowCursor (const String& t)
-            : text (t)
         {
+            for (auto p = t.getCharPointer(); ! p.isEmpty(); ++p)
+                chars.add (*p);
         }
 
-        yup_wchar peek() const { return index < text.length() ? text[index] : (yup_wchar) 0; }
+        yup_wchar peek() const { return index < chars.size() ? chars[index] : (yup_wchar) 0; }
 
         yup_wchar peekAt (int offset) const
         {
             const auto i = index + offset;
-            return (i >= 0 && i < text.length()) ? text[i] : (yup_wchar) 0;
+            return (i >= 0 && i < chars.size()) ? chars[i] : (yup_wchar) 0;
         }
 
-        yup_wchar get() { return index < text.length() ? text[index++] : (yup_wchar) 0; }
+        yup_wchar get() { return index < chars.size() ? chars[index++] : (yup_wchar) 0; }
 
-        bool eof() const { return index >= text.length(); }
+        bool eof() const { return index >= chars.size(); }
 
         void skipSpaces()
         {
@@ -1726,9 +1764,9 @@ struct YAMLParser
         return buffer.toUTF8().trimEnd();
     }
 
-    int readFlowHexEscape (FlowCursor& cursor, int numDigits)
+    uint32 readFlowHexEscape (FlowCursor& cursor, int numDigits)
     {
-        int value = 0;
+        uint32 value = 0;
 
         for (int i = 0; i < numDigits; ++i)
         {
@@ -1740,10 +1778,31 @@ struct YAMLParser
             if (digit < 0)
                 throwError ("Invalid unicode escape sequence", flowStartLine);
 
-            value = (value << 4) + digit;
+            value = (value << 4) | (uint32) digit;
         }
 
+        if (value > 0x10ffff)
+            throwError ("Invalid unicode escape sequence", flowStartLine);
+
         return value;
+    }
+
+    // Returns the value of the four hex digits starting `offset` characters ahead, or -1 without consuming anything.
+    static int peekFlowHexQuad (const FlowCursor& cursor, int offset)
+    {
+        uint32 value = 0;
+
+        for (int i = 0; i < 4; ++i)
+        {
+            const auto digit = CharacterFunctions::getHexDigitValue (cursor.peekAt (offset + i));
+
+            if (digit < 0)
+                return -1;
+
+            value = (value << 4) | (uint32) digit;
+        }
+
+        return (int) value;
     }
 
     String parseFlowQuoted (FlowCursor& cursor)
@@ -1786,29 +1845,25 @@ struct YAMLParser
 
                     case 'u':
                     {
-                        auto value = (yup_wchar) readFlowHexEscape (cursor, 4);
+                        auto value = readFlowHexEscape (cursor, 4);
 
-                        // Combine a UTF-16 surrogate pair into a single code point
-                        if (value >= 0xd800 && value <= 0xdbff
-                            && cursor.peek() == '\\' && cursor.peekAt (1) == 'u')
+                        if (isHighSurrogate (value) && cursor.peek() == '\\' && cursor.peekAt (1) == 'u')
                         {
-                            const int savedIndex = cursor.index;
-                            cursor.get();
-                            cursor.get();
-                            const auto low = (yup_wchar) readFlowHexEscape (cursor, 4);
+                            const auto low = peekFlowHexQuad (cursor, 2);
 
                             if (low >= 0xdc00 && low <= 0xdfff)
-                                value = 0x10000 + ((((value - 0xd800) << 10) | (low - 0xdc00)));
-                            else
-                                cursor.index = savedIndex;
+                            {
+                                value = joinSurrogates (value, (uint32) low);
+                                cursor.index += 6;
+                            }
                         }
 
-                        buffer.appendUTF8Char (value);
+                        buffer.appendUTF8Char (toScalarValue (value));
                         break;
                     }
 
                     case 'U':
-                        buffer.appendUTF8Char ((yup_wchar) readFlowHexEscape (cursor, 8));
+                        buffer.appendUTF8Char (toScalarValue (readFlowHexEscape (cursor, 8)));
                         break;
                     default:
                         throwError ("Invalid escape sequence", flowStartLine);
@@ -1866,7 +1921,7 @@ struct YAMLParser
                 throwError ("Missing anchor name", flowStartLine);
 
             const auto anchored = parseFlowValueNode (cursor);
-            addAnchor (name, deepCopy (anchored), flowStartLine);
+            addAnchor (name, deepCopy (anchored, flowStartLine), flowStartLine);
             return anchored;
         }
 
@@ -1880,7 +1935,7 @@ struct YAMLParser
 
     var parseFlowMap (FlowCursor& cursor)
     {
-        enterDepth (flowStartLine);
+        const auto depthScope = enterDepth (flowStartLine);
 
         auto resultObject = new DynamicObject();
         var result (resultObject);
@@ -1896,7 +1951,6 @@ struct YAMLParser
             if (cursor.peek() == '}')
             {
                 cursor.get();
-                leaveDepth();
                 return result;
             }
 
@@ -1943,7 +1997,6 @@ struct YAMLParser
             if (cursor.peek() == '}')
             {
                 cursor.get();
-                leaveDepth();
                 return result;
             }
 
@@ -1953,7 +2006,7 @@ struct YAMLParser
 
     var parseFlowSequence (FlowCursor& cursor)
     {
-        enterDepth (flowStartLine);
+        const auto depthScope = enterDepth (flowStartLine);
 
         auto result = var (Array<var>());
         auto destArray = result.getArray();
@@ -1969,7 +2022,6 @@ struct YAMLParser
             if (cursor.peek() == ']')
             {
                 cursor.get();
-                leaveDepth();
                 return result;
             }
 
@@ -1996,7 +2048,6 @@ struct YAMLParser
             if (cursor.peek() == ']')
             {
                 cursor.get();
-                leaveDepth();
                 return result;
             }
 
@@ -2008,14 +2059,16 @@ struct YAMLParser
     {
         flowStartLine = lineNumber;
 
+        const int startLineIndex = lineIndex;
+        int linesToAppend = 1;
+
         for (;;)
         {
             var result;
-            int endIndex = 0;
+            FlowCursor cursor (text);
 
             try
             {
-                FlowCursor cursor (text);
                 const auto c = cursor.peek();
 
                 if (c == '{')
@@ -2024,28 +2077,41 @@ struct YAMLParser
                     result = parseFlowSequence (cursor);
                 else
                     throwError ("Expected a flow mapping or sequence", lineNumber);
-
-                endIndex = cursor.index;
             }
             catch (const NeedMoreTextException&)
             {
                 if (lineIndex + 1 >= lines.size())
                     throwError ("Unterminated flow collection", lineNumber);
 
-                ++lineIndex;
-                const auto& nextLine = lines.getReference (lineIndex);
-                text << "\n"
-                     << nextLine.text.substring (nextLine.indent);
+                // Growing the batch geometrically keeps re-parsing linear in the collection size
+                const int count = jmin (linesToAppend, lines.size() - lineIndex - 1);
+
+                for (int i = 0; i < count; ++i)
+                {
+                    const auto& nextLine = lines.getReference (++lineIndex);
+                    text << "\n" << nextLine.text.substring (nextLine.indent);
+                }
+
+                linesToAppend *= 2;
                 continue;
             }
 
-            const int newlinePos = text.indexOfChar ('\n', endIndex);
+            int consumedLines = 0;
+
+            for (int i = 0; i < cursor.index; ++i)
+            {
+                if (cursor.chars[i] == '\n')
+                    ++consumedLines;
+            }
+
+            const int endIndex = cursor.index;
+            const int newlinePos = text.indexOfChar (endIndex, '\n');
             const auto tail = newlinePos >= 0 ? text.substring (endIndex, newlinePos) : text.substring (endIndex);
 
             if (! isLineEnd (tail))
                 throwError ("Unexpected content after flow collection", lineNumber);
 
-            ++lineIndex;
+            lineIndex = startLineIndex + consumedLines + 1;
             return result;
         }
     }
@@ -2123,6 +2189,7 @@ struct YAMLParser
 
         if (valueText.startsWithChar ('&'))
         {
+            const auto depthScope = enterDepth (lineNumber);
             auto rest = valueText;
             const auto anchorName = stripAnchor (rest);
 
@@ -2133,7 +2200,7 @@ struct YAMLParser
             else
                 anchored = parseMapValue (rest, entryIndent, lineNumber, lineIndex);
 
-            addAnchor (anchorName, deepCopy (anchored), lineNumber);
+            addAnchor (anchorName, deepCopy (anchored, lineNumber), lineNumber);
             return anchored;
         }
 
@@ -2263,7 +2330,7 @@ Result YAML::parseQuotedString (String::CharPointerType& t, var& result)
 
                 case 'u':
                 {
-                    yup_wchar value = 0;
+                    uint32 value = 0;
 
                     for (int i = 0; i < 4; ++i)
                     {
@@ -2271,46 +2338,50 @@ Result YAML::parseQuotedString (String::CharPointerType& t, var& result)
                         if (digit < 0)
                             return Result::fail ("Invalid unicode escape sequence!");
 
-                        value = (yup_wchar) ((value << 4) + digit);
+                        value = (value << 4) | (uint32) digit;
                     }
 
-                    // Combine a UTF-16 surrogate pair into a single code point
-                    if (value >= 0xd800 && value <= 0xdbff && *t == '\\')
+                    if (YAMLParser::isHighSurrogate (value) && *t == '\\')
                     {
                         auto afterBackslash = t;
                         ++afterBackslash;
 
                         if (*afterBackslash == 'u')
                         {
-                            auto savedT = t;
-                            t = afterBackslash;
-                            t.getAndAdvance();
+                            // Peek at the four digits after "\u" and only consume them if they form a low surrogate
+                            auto digits = afterBackslash;
+                            ++digits;
 
-                            yup_wchar low = 0;
+                            uint32 low = 0;
+                            bool validLow = true;
 
-                            for (int i = 0; i < 4; ++i)
+                            for (int i = 0; i < 4 && validLow; ++i)
                             {
-                                const auto digit = CharacterFunctions::getHexDigitValue (t.getAndAdvance());
-                                if (digit < 0)
-                                    return Result::fail ("Invalid unicode escape sequence!");
+                                const auto digit = CharacterFunctions::getHexDigitValue (*digits);
+                                validLow = digit >= 0;
 
-                                low = (yup_wchar) ((low << 4) + digit);
+                                if (validLow)
+                                {
+                                    low = (low << 4) | (uint32) digit;
+                                    ++digits;
+                                }
                             }
 
-                            if (low >= 0xdc00 && low <= 0xdfff)
-                                value = 0x10000 + ((((value - 0xd800) << 10) | (low - 0xdc00)));
-                            else
-                                t = savedT;
+                            if (validLow && YAMLParser::isLowSurrogate (low))
+                            {
+                                value = YAMLParser::joinSurrogates (value, low);
+                                t = digits;
+                            }
                         }
                     }
 
-                    buffer.appendUTF8Char (value);
+                    buffer.appendUTF8Char (YAMLParser::toScalarValue (value));
                     break;
                 }
 
                 case 'U':
                 {
-                    yup_wchar value = 0;
+                    uint32 value = 0;
 
                     for (int i = 0; i < 8; ++i)
                     {
@@ -2318,10 +2389,13 @@ Result YAML::parseQuotedString (String::CharPointerType& t, var& result)
                         if (digit < 0)
                             return Result::fail ("Invalid unicode escape sequence!");
 
-                        value = (yup_wchar) ((value << 4) + digit);
+                        value = (value << 4) | (uint32) digit;
                     }
 
-                    buffer.appendUTF8Char (value);
+                    if (value > 0x10ffff)
+                        return Result::fail ("Invalid unicode escape sequence!");
+
+                    buffer.appendUTF8Char (YAMLParser::toScalarValue (value));
                     break;
                 }
 

@@ -874,6 +874,37 @@ TEST_F (URLTests, DataURLs)
     EXPECT_TRUE (imageUrl.isWellFormed());
 }
 
+#if ! YUP_ANDROID
+TEST_F (URLTests, IsLocalFileIgnoresSchemeCase)
+{
+    EXPECT_TRUE (URL ("file:///etc/passwd").isLocalFile());
+    EXPECT_TRUE (URL ("FILE:///etc/passwd").isLocalFile());
+    EXPECT_TRUE (URL ("File:///etc/passwd").isLocalFile());
+    EXPECT_FALSE (URL ("https://example.com/file").isLocalFile());
+}
+#endif
+
+TEST_F (URLTests, IsSameOriginComparesSchemeHostAndPort)
+{
+    URL base ("https://example.com/a");
+
+    EXPECT_TRUE (base.isSameOrigin (URL ("https://example.com/b?x=1")));
+    EXPECT_TRUE (base.isSameOrigin (URL ("HTTPS://EXAMPLE.com/")));
+    EXPECT_FALSE (base.isSameOrigin (URL ("http://example.com/a")));
+    EXPECT_FALSE (base.isSameOrigin (URL ("https://other.example.com/a")));
+    EXPECT_FALSE (base.isSameOrigin (URL ("https://example.com:8443/a")));
+}
+
+TEST_F (URLTests, IsRedirectAllowedRefusesDowngradeAndNonHttpSchemes)
+{
+    EXPECT_FALSE (URL ("https://example.com/").isRedirectAllowed (URL ("http://example.com/")));
+    EXPECT_FALSE (URL ("https://example.com/").isRedirectAllowed (URL ("ftp://example.com/")));
+    EXPECT_FALSE (URL ("http://example.com/").isRedirectAllowed (URL ("file:///etc/passwd")));
+
+    EXPECT_TRUE (URL ("http://example.com/").isRedirectAllowed (URL ("https://example.com/")));
+    EXPECT_TRUE (URL ("https://example.com/").isRedirectAllowed (URL ("https://cdn.example.net/")));
+}
+
 #if ! YUP_WASM
 TEST_F (URLTests, LocalFileStreams)
 {
@@ -998,5 +1029,12 @@ TEST_F (URLTests, DownloadTask)
             EXPECT_EQ (targetFile.loadFileAsString(), "Download content");
         }
     }
+}
+#endif
+
+#if YUP_ANDROID
+TEST_F (URLTests, UntrustedContentProviderIsNotLocalFile)
+{
+    EXPECT_FALSE (URL ("content://com.example.provider/document/1").isLocalFile());
 }
 #endif

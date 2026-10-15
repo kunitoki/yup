@@ -692,6 +692,9 @@ struct AndroidDocument::Utils
 
         std::unique_ptr<Pimpl> renameTo (const String& name) const override
         {
+            if (! isValidChildName (name))
+                return nullptr;
+
             const auto target = file.getSiblingFile (name);
 
             return file.moveFileTo (target) ? std::make_unique<AndroidDocumentPimplFile> (target)
@@ -730,6 +733,9 @@ struct AndroidDocument::Utils
         std::unique_ptr<Pimpl> createChildDocumentWithTypeAndName (const String& type,
                                                                    const String& name) const override
         {
+            if (! isValidChildName (name))
+                return nullptr;
+
             const auto extension = mimeConverter.getExtensionFromMimeType (type);
             const auto target = file.getChildFile (extension.isNotEmpty() ? name + "." + extension : name);
 
@@ -776,6 +782,11 @@ struct AndroidDocument::Utils
     private:
         File file;
         MimeConverter mimeConverter;
+
+        static bool isValidChildName (const String& name)
+        {
+            return name.isNotEmpty() && name != "." && name != ".." && ! name.containsAnyOf ("/\\");
+        }
     };
 };
 

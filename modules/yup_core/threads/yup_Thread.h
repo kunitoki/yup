@@ -312,9 +312,11 @@ public:
         the stopThread method will wait for a given time-period for this to
         happen.
 
-        If the thread is stuck and fails to respond after the timeout, it gets
-        forcibly killed, which is a very bad thing to happen, as it could still
-        be holding locks, etc. which are needed by other parts of your program.
+        If the thread is stuck and fails to respond after the timeout, it is
+        forcibly stopped where the platform allows it. This is a very bad thing to
+        happen, as the thread could still be holding locks, etc. which are needed by
+        other parts of your program. On Android the stop waits for the thread to exit,
+        so stopThread can take longer than the timeout.
 
         @param timeOutMilliseconds  The number of milliseconds to wait for the
                                     thread to finish before killing it by force. A negative

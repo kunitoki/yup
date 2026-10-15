@@ -142,7 +142,7 @@ public:
 
     static bool createFifo (const String& name, bool mustNotExist)
     {
-        return mkfifo (name.toUTF8(), 0666) == 0 || ((! mustNotExist) && errno == EEXIST);
+        return mkfifo (name.toUTF8(), 0600) == 0 || ((! mustNotExist) && errno == EEXIST);
     }
 
     bool createFifos (bool mustNotExist)
@@ -217,11 +217,23 @@ private:
         return timeoutEnd != 0 && Time::getMillisecondCounter() >= timeoutEnd;
     }
 
+    static bool isOwnedFifo (int fd)
+    {
+        struct stat info;
+        return fstat (fd, &info) == 0 && S_ISFIFO (info.st_mode) && info.st_uid == geteuid();
+    }
+
     int openPipe (const String& name, int flags, uint32 timeoutEnd)
     {
         for (;;)
         {
-            auto p = ::open (name.toUTF8(), flags);
+            auto p = ::open (name.toUTF8(), flags | O_NOFOLLOW);
+
+            if (p != invalidPipe && ! isOwnedFifo (p))
+            {
+                ::close (p);
+                return invalidPipe;
+            }
 
             if (p != invalidPipe || hasExpired (timeoutEnd) || stopReadOperation.load())
                 return p;
@@ -290,7 +302,14 @@ bool NamedPipe::openInternal (const String& pipeName, bool createPipe, bool must
     auto file = pipeName;
 
     if (! File::isAbsolutePath (file))
-        file = "/tmp/" + File::createLegalFileName (file);
+    {
+        auto folder = getPerUserTempFolder ("org.yup.pipes");
+
+        if (folder == File())
+            return false;
+
+        file = folder.getChildFile (File::createLegalFileName (file)).getFullPathName();
+    }
 
     pimpl.reset (new Pimpl (file, createPipe));
 #endif

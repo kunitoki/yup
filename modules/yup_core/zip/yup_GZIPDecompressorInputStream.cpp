@@ -171,6 +171,9 @@ int GZIPDecompressorInputStream::read (void* destBuffer, int howMany)
 {
     jassert (destBuffer != nullptr && howMany >= 0);
 
+    if (uncompressedStreamLength >= 0)
+        howMany = (int) jmin ((int64) howMany, uncompressedStreamLength - currentPos);
+
     if (howMany > 0 && ! isEof)
     {
         int numRead = 0;
@@ -221,7 +224,8 @@ int GZIPDecompressorInputStream::read (void* destBuffer, int howMany)
 
 bool GZIPDecompressorInputStream::isExhausted()
 {
-    return helper->error || helper->finished || isEof;
+    return helper->error || helper->finished || isEof
+        || (uncompressedStreamLength >= 0 && currentPos >= uncompressedStreamLength);
 }
 
 int64 GZIPDecompressorInputStream::getPosition()

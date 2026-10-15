@@ -1759,3 +1759,80 @@ TEST_F (VariantTests, OperatorGreaterThanOrEqual)
     EXPECT_TRUE (v4 >= v6);
     EXPECT_FALSE (v6 >= v4);
 }
+
+class VariantStreamTests : public ::testing::Test
+{
+protected:
+    static constexpr char binaryMarker = 8;
+    static constexpr char arrayMarker = 7;
+};
+
+TEST_F (VariantStreamTests, BinaryPayloadIsBoundedByInput)
+{
+    MemoryOutputStream out;
+    out.writeCompressedInt (0x7FFFFFFF);
+    out.writeByte (binaryMarker);
+    const uint8 payload[] = { 1, 2, 3 };
+    out.write (payload, sizeof (payload));
+
+    MemoryInputStream in (out.getData(), out.getDataSize(), false);
+    var restored = var::readFromStream (in);
+
+    ASSERT_TRUE (restored.isBinaryData());
+    EXPECT_EQ (restored.getBinaryData()->getSize(), sizeof (payload));
+}
+
+TEST_F (VariantStreamTests, ArrayCountIsBoundedByInput)
+{
+    MemoryOutputStream out;
+    out.writeCompressedInt (2);
+    out.writeByte (arrayMarker);
+    out.writeCompressedInt (0x7FFFFFFF);
+
+    MemoryInputStream in (out.getData(), out.getDataSize(), false);
+    var restored = var::readFromStream (in);
+
+    EXPECT_EQ (restored.size(), 0);
+}
+
+TEST_F (VariantStreamTests, DeeplyNestedArraysDoNotExhaustStack)
+{
+    constexpr int nestingLevels = 500000;
+
+    MemoryOutputStream out;
+
+    for (int i = 0; i < nestingLevels; ++i)
+    {
+        out.writeCompressedInt (2);
+        out.writeByte (arrayMarker);
+        out.writeCompressedInt (1);
+    }
+
+    MemoryInputStream in (out.getData(), out.getDataSize(), false);
+    var restored = var::readFromStream (in);
+
+    EXPECT_TRUE (restored.isArray());
+}
+
+TEST_F (VariantStreamTests, ModeratelyNestedArraysRoundTrip)
+{
+    var nested = 42;
+
+    for (int i = 0; i < 64; ++i)
+        nested = Array<var> { nested };
+
+    MemoryOutputStream out;
+    nested.writeToStream (out);
+
+    MemoryInputStream in (out.getData(), out.getDataSize(), false);
+    var restored = var::readFromStream (in);
+
+    for (int i = 0; i < 64; ++i)
+    {
+        ASSERT_TRUE (restored.isArray());
+        ASSERT_EQ (restored.size(), 1);
+        restored = var (restored[0]);
+    }
+
+    EXPECT_EQ ((int) restored, 42);
+}

@@ -127,7 +127,7 @@ public:
         for (;;)
         {
             uint8 buffer[64];
-            const int bytesRead = input.read (buffer, (int) jmin (numBytesToRead, (int64) sizeof (buffer)));
+            const int bytesRead = jmax (0, input.read (buffer, (int) jmin (numBytesToRead, (int64) sizeof (buffer))));
 
             if (bytesRead < (int) sizeof (buffer))
             {

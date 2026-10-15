@@ -129,3 +129,37 @@ TEST (MemoryOutputStreamTests, PreallocateDoesNotAffectDataSize)
     stream.write (data, sizeof (data));
     EXPECT_EQ (stream.getDataSize(), sizeof (data));
 }
+
+class MemoryOutputStreamDeclaredSizeTests : public ::testing::Test
+{
+protected:
+    class DeclaredSizeInputStream : public InputStream
+    {
+    public:
+        int64 getTotalLength() override { return (int64) 1 << 40; }
+        bool isExhausted() override { return remaining == 0; }
+
+        int read (void* destBuffer, int maxBytesToRead) override
+        {
+            const auto numToRead = jmin (maxBytesToRead, remaining);
+            std::memset (destBuffer, 'x', (size_t) numToRead);
+            remaining -= numToRead;
+            return numToRead;
+        }
+
+        int64 getPosition() override { return 10 - remaining; }
+        bool setPosition (int64) override { return false; }
+
+    private:
+        int remaining = 10;
+    };
+};
+
+TEST_F (MemoryOutputStreamDeclaredSizeTests, WriteFromInputDoesNotPreallocateDeclaredSize)
+{
+    DeclaredSizeInputStream input;
+    MemoryOutputStream out;
+
+    EXPECT_EQ (out.writeFromInputStream (input, -1), 10);
+    EXPECT_EQ (out.getDataSize(), 10);
+}

@@ -32,7 +32,9 @@ bool Thread::createNativeThread (Priority)
     PosixThreadAttribute attr { threadStackSize };
     PosixSchedulerPriority::getNativeSchedulerAndPriority (realtimeOptions, {}).apply (attr);
 
-    threadId = threadHandle = makeThreadHandle (attr, this, [] (void* userData) -> void*
+    // The new thread records its own id before it waits on the start event, so the creating thread
+    // must not write threadId again: that write could race with the thread and overwrite its id.
+    threadHandle = makeThreadHandle (attr, this, [] (void* userData) -> void*
     {
         auto* myself = static_cast<Thread*> (userData);
 
@@ -43,7 +45,7 @@ bool Thread::createNativeThread (Priority)
         return nullptr;
     });
 
-    return threadId != nullptr;
+    return threadHandle != nullptr;
 }
 
 void Thread::killThread()
