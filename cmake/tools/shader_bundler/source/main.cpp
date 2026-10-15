@@ -27,49 +27,7 @@ using namespace yup;
 //==============================================================================
 static String getOptionValue (const ArgumentList& args, StringRef option, const String& defaultValue = {})
 {
-    const int index = args.indexOfOption (option);
-    if (index < 0)
-        return defaultValue;
-
-    // Long option assignment form: "--opt=value"
-    const String assigned = args.getValueForOption (option);
-    if (assigned.isNotEmpty())
-        return assigned;
-
-    // Space-separated form: "--opt value"
-    if (index + 1 < args.size() && ! args[index + 1].isOption())
-        return args[index + 1].text;
-
-    return defaultValue;
-}
-
-static StringArray getAllOptionValues (const ArgumentList& args, StringRef option)
-{
-    StringArray values;
-    for (int i = 0; i < args.size(); ++i)
-    {
-        if (args[i] == option)
-        {
-            // Check for "--opt=value" form
-            if (args[i].isLongOption())
-            {
-                const String val = args[i].getLongOptionValue();
-                if (val.isNotEmpty())
-                {
-                    values.add (val);
-                    continue;
-                }
-            }
-
-            // Check for "--opt value" form
-            if (i + 1 < args.size() && ! args[i + 1].isOption())
-            {
-                values.add (args[i + 1].text);
-                ++i;
-            }
-        }
-    }
-    return values;
+    return args.getValueForOption (option).value_or (defaultValue);
 }
 
 // Collects the remainder of every argument that starts with the given prefix,
@@ -457,7 +415,7 @@ static int runInspectMode (const ArgumentList& args)
     Logger* log = Logger::getCurrentLogger();
 
     // Parse --print filters
-    const StringArray printValues = getAllOptionValues (args, "--print");
+    const StringArray printValues = args.getValuesForOption ("--print");
     std::optional<std::vector<ShaderLanguage>> printLanguages;
     bool printAll = false;
 
@@ -480,7 +438,7 @@ static int runInspectMode (const ArgumentList& args)
     }
 
     // Parse --stage filters
-    const StringArray stageValues = getAllOptionValues (args, "--stage");
+    const StringArray stageValues = args.getValuesForOption ("--stage");
     std::optional<std::vector<ShaderStage>> stageFilters;
     bool stageAll = false;
 

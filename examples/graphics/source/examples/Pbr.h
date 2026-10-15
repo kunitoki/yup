@@ -63,7 +63,9 @@
 
     @see GpuTexture, GpuSampler, GpuTarget::createFromTexture, GpuRenderPass
 */
-class PbrDemo : public yup::Component
+class PbrDemo
+    : public yup::Component
+    , public LoadingDemo
 {
 public:
     //==============================================================================
@@ -94,6 +96,22 @@ public:
         statusLabel = std::make_unique<yup::Label> ("status");
         statusLabel->setText ("Initializing GPU...", yup::dontSendNotification);
         addAndMakeVisible (statusLabel.get());
+
+        addLoadingStep ([this]
+        {
+            initGpu();
+
+            if (! pipelinesReady)
+                finishLoading();
+        }, StepThread::render);
+
+        for (int stage = 0; stage < kBakeStageCount; ++stage)
+        {
+            addLoadingStep ([this, stage]
+            {
+                bakeStage (capturedContext->getGpuDevice(), stage);
+            }, StepThread::render);
+        }
     }
 
     ~PbrDemo() override = default;
@@ -114,10 +132,10 @@ public:
         g.fillAll();
 
         if (capturedContext == nullptr)
-        {
             capturedContext = &g.getGraphicsContext();
-            initGpu();
-        }
+
+        if (pumpLoading())
+            return;
 
         const auto sceneBounds = getSceneArea();
         const int w = (int) sceneBounds.getWidth();
@@ -818,7 +836,7 @@ private:
     //==============================================================================
     yup::GraphicsContext* capturedContext = nullptr;
     bool pipelinesReady = false;
-    int bakeStagesDone = 0;
+    int bakeStagesDone = kBakeStageCount; // Re-bakes after loading (the sun slider)
 
     yup::GpuTextureFormat hdrFormat = yup::GpuTextureFormat::rgba16float;
     yup::GpuTextureFormat brdfFormat = yup::GpuTextureFormat::rg16float;

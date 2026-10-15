@@ -45,58 +45,77 @@ static File resolveFilename (const String& name)
     return File::getCurrentWorkingDirectory().getChildFile (name.unquoted());
 }
 
-static File checkFileExists (const File& f)
+static ResultValue<File> checkFileExists (const File& f)
 {
     if (! f.exists())
-        ConsoleApplication::fail ("Could not find file: " + f.getFullPathName());
+        return makeResultValueFail ("Could not find file: " + f.getFullPathName());
 
-    return f;
+    return makeResultValueOk (f);
 }
 
-static File checkFolderExists (const File& f)
+static ResultValue<File> checkFolderExists (const File& f)
 {
     if (! f.isDirectory())
-        ConsoleApplication::fail ("Could not find folder: " + f.getFullPathName());
+        return makeResultValueFail ("Could not find folder: " + f.getFullPathName());
 
-    return f;
+    return makeResultValueOk (f);
 }
 
-static File resolveFilenameForOption (const ArgumentList& args, StringRef option, const String& filename)
+static File getFileOrFail (const ResultValue<File>& result)
 {
-    if (filename.isEmpty())
-    {
-        args.failIfOptionIsMissing (option);
-        ConsoleApplication::fail ("Expected a filename after the " + option + " option");
-    }
+    if (result.failed())
+        ConsoleApplication::fail (result.getErrorMessage());
 
-    return resolveFilename (filename);
+    return result.getReference();
 }
 
+static bool isNumberFormat (const String& s, bool allowFraction)
+{
+    auto digits = s.trim();
+
+    if (digits.startsWithChar ('-') || digits.startsWithChar ('+'))
+        digits = digits.substring (1);
+
+    if (! allowFraction)
+        return digits.isNotEmpty() && digits.containsOnly ("0123456789");
+
+    return digits.containsOnly ("0123456789.eE+-")
+        && (CharacterFunctions::isDigit (digits[0]) || (digits[0] == '.' && CharacterFunctions::isDigit (digits[1])));
+}
+
+static bool isNegativeNumberFormat (StringRef s) { return s[0] == '-' && isNumberFormat (String (s), true); }
+
+static bool isShortOptionFormat (StringRef s) { return s[0] == '-' && s[1] != '-' && ! isNegativeNumberFormat (s); }
+
+static bool isLongOptionFormat (StringRef s) { return s[0] == '-' && s[1] == '-' && s[2] != '-'; }
+
+static bool isOptionFormat (StringRef s) { return s[0] == '-' && ! isNegativeNumberFormat (s); }
+
+//==============================================================================
 File ArgumentList::Argument::resolveAsFile() const
 {
     return resolveFilename (text);
 }
 
-File ArgumentList::Argument::resolveAsExistingFile() const
+ResultValue<File> ArgumentList::Argument::tryResolveAsExistingFile() const
 {
     return checkFileExists (resolveAsFile());
 }
 
-File ArgumentList::Argument::resolveAsExistingFolder() const
+ResultValue<File> ArgumentList::Argument::tryResolveAsExistingFolder() const
 {
-    auto f = resolveAsFile();
-
-    if (! f.isDirectory())
-        ConsoleApplication::fail ("Could not find folder: " + f.getFullPathName());
-
-    return f;
+    return checkFolderExists (resolveAsFile());
 }
 
-static bool isShortOptionFormat (StringRef s) { return s[0] == '-' && s[1] != '-'; }
+File ArgumentList::Argument::resolveAsExistingFile() const
+{
+    return getFileOrFail (tryResolveAsExistingFile());
+}
 
-static bool isLongOptionFormat (StringRef s) { return s[0] == '-' && s[1] == '-' && s[2] != '-'; }
-
-static bool isOptionFormat (StringRef s) { return s[0] == '-'; }
+File ArgumentList::Argument::resolveAsExistingFolder() const
+{
+    return getFileOrFail (tryResolveAsExistingFolder());
+}
 
 bool ArgumentList::Argument::isLongOption() const { return isLongOptionFormat (text); }
 
@@ -115,24 +134,23 @@ bool ArgumentList::Argument::isLongOption (const String& option) const
     return text.upToFirstOccurrenceOf ("=", false, false) == option;
 }
 
-String ArgumentList::Argument::getLongOptionValue() const
+std::optional<String> ArgumentList::Argument::getLongOptionValue() const
 {
-    if (isLongOption())
-    {
-        auto equalsIndex = text.indexOfChar ('=');
+    if (! isLongOption())
+        return std::nullopt;
 
-        if (equalsIndex > 0)
-            return text.substring (equalsIndex + 1);
-    }
+    const auto equalsIndex = text.indexOfChar ('=');
+    if (equalsIndex < 0)
+        return std::nullopt;
 
-    return {};
+    return text.substring (equalsIndex + 1);
 }
 
 bool ArgumentList::Argument::isShortOption (char option) const
 {
     jassert (option != '-'); // this is probably not what you intended to pass in
 
-    return isShortOption() && text.containsChar (String (option)[0]);
+    return isShortOption() && text.containsChar ((yup_wchar) option);
 }
 
 bool ArgumentList::Argument::operator== (StringRef wildcard) const
@@ -152,7 +170,59 @@ bool ArgumentList::Argument::operator== (StringRef wildcard) const
     return false;
 }
 
-bool ArgumentList::Argument::operator!= (StringRef s) const { return ! operator== (s); }
+//==============================================================================
+namespace
+{
+
+struct OptionOccurrence
+{
+    int index = -1;             // Of the option, -1 if not found
+    int numArguments = 0;       // The option plus its separate value arguments
+    StringArray values;
+};
+
+int getTerminatorIndex (const Array<ArgumentList::Argument>& arguments)
+{
+    for (int i = 0; i < arguments.size(); ++i)
+        if (arguments.getReference (i).text == "--")
+            return i;
+
+    return arguments.size();
+}
+
+OptionOccurrence findOptionOccurrence (const Array<ArgumentList::Argument>& arguments, StringRef option, int startIndex)
+{
+    jassert (isOptionFormat (option)); // the thing you're searching for must be an option
+
+    const int endIndex = getTerminatorIndex (arguments);
+
+    for (int i = startIndex; i < endIndex; ++i)
+    {
+        const auto& arg = arguments.getReference (i);
+        if (! (arg == option))
+            continue;
+
+        OptionOccurrence occurrence { i, 1, {} };
+
+        if (auto assigned = arg.getLongOptionValue())
+        {
+            occurrence.values.add (*assigned);
+            return occurrence;
+        }
+
+        for (int v = i + 1; v < endIndex && ! arguments.getReference (v).isOption(); ++v)
+        {
+            occurrence.values.add (arguments.getReference (v).text);
+            ++occurrence.numArguments;
+        }
+
+        return occurrence;
+    }
+
+    return {};
+}
+
+} // namespace
 
 //==============================================================================
 ArgumentList::ArgumentList (String exeName, StringArray args)
@@ -189,7 +259,9 @@ int ArgumentList::indexOfOption (StringRef option) const
 {
     jassert (option == String (option).trim()); // passing non-trimmed strings will always fail to find a match!
 
-    for (int i = 0; i < arguments.size(); ++i)
+    const int endIndex = getTerminatorIndex (arguments);
+
+    for (int i = 0; i < endIndex; ++i)
         if (arguments.getReference (i) == option)
             return i;
 
@@ -203,7 +275,7 @@ bool ArgumentList::containsOption (StringRef option) const
 
 bool ArgumentList::removeOptionIfFound (StringRef option)
 {
-    auto i = indexOfOption (option);
+    const auto i = indexOfOption (option);
 
     if (i >= 0)
         arguments.remove (i);
@@ -217,95 +289,156 @@ void ArgumentList::failIfOptionIsMissing (StringRef option) const
         ConsoleApplication::fail ("Expected the option " + option);
 }
 
-String ArgumentList::getValueForOption (StringRef option) const
+StringArray ArgumentList::getTrailingArguments() const
 {
-    jassert (isOptionFormat (option)); // the thing you're searching for must be an option
+    StringArray result;
 
-    for (int i = 0; i < arguments.size(); ++i)
-    {
-        auto& arg = arguments.getReference (i);
+    for (int i = getTerminatorIndex (arguments) + 1; i < arguments.size(); ++i)
+        result.add (arguments.getReference (i).text);
 
-        if (arg == option)
-        {
-            if (arg.isShortOption())
-            {
-                if (i < arguments.size() - 1 && ! arguments.getReference (i + 1).isOption())
-                    return arguments.getReference (i + 1).text;
-
-                return {};
-            }
-
-            if (arg.isLongOption())
-                return arg.getLongOptionValue();
-        }
-    }
-
-    return {};
+    return result;
 }
 
-String ArgumentList::removeValueForOption (StringRef option)
+//==============================================================================
+std::optional<String> ArgumentList::getValueForOption (StringRef option) const
 {
-    jassert (isOptionFormat (option)); // the thing you're searching for must be an option
+    const auto occurrence = findOptionOccurrence (arguments, option, 0);
+    if (occurrence.values.isEmpty())
+        return std::nullopt;
 
-    for (int i = 0; i < arguments.size(); ++i)
+    return occurrence.values[0];
+}
+
+StringArray ArgumentList::getValuesForOption (StringRef option) const
+{
+    StringArray result;
+
+    for (auto o = findOptionOccurrence (arguments, option, 0); o.index >= 0; o = findOptionOccurrence (arguments, option, o.index + o.numArguments))
+        result.addArray (o.values);
+
+    return result;
+}
+
+std::optional<String> ArgumentList::removeValueForOption (StringRef option)
+{
+    const auto occurrence = findOptionOccurrence (arguments, option, 0);
+    if (occurrence.index < 0)
+        return std::nullopt;
+
+    arguments.removeRange (occurrence.index, jmin (occurrence.numArguments, 2));
+
+    if (occurrence.values.isEmpty())
+        return std::nullopt;
+
+    return occurrence.values[0];
+}
+
+StringArray ArgumentList::removeValuesForOption (StringRef option)
+{
+    StringArray result;
+
+    for (auto o = findOptionOccurrence (arguments, option, 0); o.index >= 0; o = findOptionOccurrence (arguments, option, o.index))
     {
-        auto& arg = arguments.getReference (i);
-
-        if (arg == option)
-        {
-            if (arg.isShortOption())
-            {
-                if (i < arguments.size() - 1 && ! arguments.getReference (i + 1).isOption())
-                {
-                    auto result = arguments.getReference (i + 1).text;
-                    arguments.removeRange (i, 2);
-                    return result;
-                }
-
-                arguments.remove (i);
-                return {};
-            }
-
-            if (arg.isLongOption())
-            {
-                auto result = arg.getLongOptionValue();
-                arguments.remove (i);
-                return result;
-            }
-        }
+        result.addArray (o.values);
+        arguments.removeRange (o.index, o.numArguments);
     }
 
-    return {};
+    return result;
+}
+
+int ArgumentList::getIntValueForOption (StringRef option, int defaultValue) const
+{
+    const auto value = getValueForOption (option);
+    if (! value.has_value() || ! isNumberFormat (*value, false))
+        return defaultValue;
+
+    return value->trim().trimCharactersAtStart ("+").getIntValue();
+}
+
+double ArgumentList::getDoubleValueForOption (StringRef option, double defaultValue) const
+{
+    const auto value = getValueForOption (option);
+    if (! value.has_value() || ! isNumberFormat (*value, true))
+        return defaultValue;
+
+    return value->trim().trimCharactersAtStart ("+").getDoubleValue();
+}
+
+bool ArgumentList::getBoolValueForOption (StringRef option, bool defaultValue) const
+{
+    if (! containsOption (option))
+        return defaultValue;
+
+    const auto value = getValueForOption (option).value_or (String()).trim();
+
+    return ! (value.equalsIgnoreCase ("false") || value.equalsIgnoreCase ("no") || value.equalsIgnoreCase ("off") || value == "0");
+}
+
+//==============================================================================
+ResultValue<File> ArgumentList::tryGetFileForOption (StringRef option) const
+{
+    if (! containsOption (option))
+        return makeResultValueFail ("Expected the option " + option);
+
+    const auto value = getValueForOption (option);
+    if (! value.has_value() || value->isEmpty())
+        return makeResultValueFail ("Expected a filename after the " + option + " option");
+
+    return makeResultValueOk (resolveFilename (*value));
+}
+
+ResultValue<File> ArgumentList::tryGetExistingFileForOption (StringRef option) const
+{
+    auto file = tryGetFileForOption (option);
+    if (file.failed())
+        return file;
+
+    return checkFileExists (file.getReference());
+}
+
+ResultValue<File> ArgumentList::tryGetExistingFolderForOption (StringRef option) const
+{
+    auto folder = tryGetFileForOption (option);
+    if (folder.failed())
+        return folder;
+
+    return checkFolderExists (folder.getReference());
 }
 
 File ArgumentList::getFileForOption (StringRef option) const
 {
-    return resolveFilenameForOption (*this, option, getValueForOption (option));
+    return getFileOrFail (tryGetFileForOption (option));
 }
 
 File ArgumentList::getFileForOptionAndRemove (StringRef option)
 {
-    return resolveFilenameForOption (*this, option, removeValueForOption (option));
+    auto file = getFileForOption (option);
+    removeValueForOption (option);
+    return file;
 }
 
 File ArgumentList::getExistingFileForOption (StringRef option) const
 {
-    return checkFileExists (getFileForOption (option));
+    return getFileOrFail (tryGetExistingFileForOption (option));
 }
 
 File ArgumentList::getExistingFileForOptionAndRemove (StringRef option)
 {
-    return checkFileExists (getFileForOptionAndRemove (option));
+    auto file = getExistingFileForOption (option);
+    removeValueForOption (option);
+    return file;
 }
 
 File ArgumentList::getExistingFolderForOption (StringRef option) const
 {
-    return checkFolderExists (getFileForOption (option));
+    return getFileOrFail (tryGetExistingFolderForOption (option));
 }
 
 File ArgumentList::getExistingFolderForOptionAndRemove (StringRef option)
 {
-    return checkFolderExists (getFileForOptionAndRemove (option));
+    auto folder = getExistingFolderForOption (option);
+    removeValueForOption (option);
+    return folder;
 }
 
 //==============================================================================
