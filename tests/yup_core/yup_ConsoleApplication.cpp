@@ -82,15 +82,16 @@ TEST (ArgumentTests, GetLongOptionValue)
 
 TEST (ArgumentTests, IsShortOptionWithChar)
 {
-    ArgumentList list ("test", "-h -abc --help");
+    ArgumentList list ("test", "-h -abc --help -I/home/shaders");
 
     EXPECT_TRUE (list[0].isShortOption ('h'));
     EXPECT_FALSE (list[0].isShortOption ('x'));
-    EXPECT_TRUE (list[1].isShortOption ('a'));
-    EXPECT_TRUE (list[1].isShortOption ('b'));
-    EXPECT_TRUE (list[1].isShortOption ('c'));
-    EXPECT_FALSE (list[1].isShortOption ('d'));
+    EXPECT_FALSE (list[1].isShortOption ('a'));
+    EXPECT_FALSE (list[1].isShortOption ('b'));
+    EXPECT_FALSE (list[1].isShortOption ('c'));
     EXPECT_FALSE (list[2].isShortOption ('h'));
+    EXPECT_FALSE (list[3].isShortOption ('I'));
+    EXPECT_FALSE (list[3].isShortOption ('h'));
 }
 
 TEST (ArgumentTests, IsOption)
@@ -133,6 +134,15 @@ TEST (ArgumentTests, EqualityOperator)
     EXPECT_TRUE (arg == "--help|--h|-h");
     EXPECT_TRUE (arg == "-h|--help|--h");
     EXPECT_FALSE (arg == "-v|--version");
+}
+
+TEST (ArgumentTests, ShortOptionsMatchExactly)
+{
+    EXPECT_TRUE (ArgumentList::Argument { "-h" } == "--help|-h");
+    EXPECT_FALSE (ArgumentList::Argument { "-I/home/shaders" } == "--help|-h");
+    EXPECT_FALSE (ArgumentList::Argument { "-DSHADOWS=1" } == "-h");
+    EXPECT_FALSE (ArgumentList::Argument { "-abc" } == "-a");
+    EXPECT_FALSE (ArgumentList::Argument { "-hv" } == "-h");
 }
 
 TEST (ArgumentTests, InequalityOperator)
@@ -278,6 +288,16 @@ TEST (ArgumentListTests, GetValueForShortOption)
 
     EXPECT_EQ (list.getValueForOption ("-f"), "input.txt");
     EXPECT_EQ (list.getValueForOption ("-o"), "output.dat");
+}
+
+TEST (ArgumentListTests, ShortOptionsIgnoreArgumentsContainingTheirCharacter)
+{
+    ArgumentList list ("myapp", "--output out.ysl -I/home/shaders -i a.wav b.wav");
+
+    EXPECT_FALSE (list.containsOption ("--help|-h"));
+    EXPECT_EQ (list.indexOfOption ("-i"), 3);
+    EXPECT_EQ (list.getValuesForOption ("--inputs|-i"), StringArray ({ "a.wav", "b.wav" }));
+    EXPECT_FALSE (list.containsOption ("-s"));
 }
 
 TEST (ArgumentListTests, RemoveValueForOption)

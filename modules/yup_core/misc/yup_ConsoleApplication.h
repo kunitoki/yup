@@ -136,7 +136,9 @@ struct YUP_API ArgumentList
         */
         std::optional<String> getLongOptionValue() const;
 
-        /** Returns true if this argument starts with a single dash and then contains the given character somewhere inside it. */
+        /** Returns true if this argument is exactly a single dash followed by the given character, e.g. "-h".
+            Short options are never grouped, so "-abc" or "-I/home" don't match 'a' or 'h'.
+        */
         bool isShortOption (char shortOptionCharacter) const;
 
         /** Returns true if this argument starts with one or more dashes, and isn't a negative number. */

@@ -150,7 +150,7 @@ bool ArgumentList::Argument::isShortOption (char option) const
 {
     jassert (option != '-'); // this is probably not what you intended to pass in
 
-    return isShortOption() && text.containsChar ((yup_wchar) option);
+    return text.length() == 2 && isShortOption() && text[1] == (yup_wchar) option;
 }
 
 bool ArgumentList::Argument::operator== (StringRef wildcard) const
@@ -158,9 +158,6 @@ bool ArgumentList::Argument::operator== (StringRef wildcard) const
     for (auto& o : StringArray::fromTokens (wildcard, "|", {}))
     {
         if (text == o)
-            return true;
-
-        if (isShortOptionFormat (o) && o.length() == 2 && isShortOption ((char) o[1]))
             return true;
 
         if (isLongOptionFormat (o) && isLongOption (o))

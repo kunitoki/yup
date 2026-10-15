@@ -73,7 +73,8 @@ The `ArgumentList` passed to each command finds options and their values. A
 value is assigned (`--out=a.wav`) or follows the option (`--out a.wav`), and an
 option can take several (`--inputs a.wav b.wav`) or be repeated. Values run
 until the next option, negative numbers count as values, and a lone `--` ends
-the options.
+the options. Short options match exactly and are never grouped: `-i` matches
+`-i`, not `-abi` or `-I/include/path`.
 
 ```cpp
 [] (const ArgumentList& args)
