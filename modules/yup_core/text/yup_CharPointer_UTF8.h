@@ -100,68 +100,32 @@ public:
     /** Returns the unicode character that this pointer is pointing to. */
     yup_wchar operator*() const noexcept
     {
-        auto byte = (signed char) *data;
-
-        if (byte >= 0)
-            return (yup_wchar) (uint8) byte;
-
-        uint32 n = (uint32) (uint8) byte;
-        uint32 mask = 0x7f;
-        uint32 bit = 0x40;
-        int numExtraValues = 0;
-
-        while ((n & bit) != 0 && bit > 0x8)
-        {
-            mask >>= 1;
-            ++numExtraValues;
-            bit >>= 1;
-        }
-
-        n &= mask;
-
-        for (int i = 1; i <= numExtraValues; ++i)
-        {
-            auto nextByte = (uint32) (uint8) data[i];
-
-            if ((nextByte & 0xc0) != 0x80)
-                break;
-
-            n <<= 6;
-            n |= (nextByte & 0x3f);
-        }
-
-        return (yup_wchar) n;
+        int numBytes;
+        return decodeCharacter (data, numBytes);
     }
 
     /** Moves this pointer along to the next character in the string. */
     CharPointer_UTF8& operator++() noexcept
     {
         jassert (*data != 0); // trying to advance past the end of the string?
-        auto n = (signed char) *data++;
-
-        if (n < 0)
-        {
-            uint8 bit = 0x40;
-
-            while ((static_cast<uint8> (n) & bit) != 0 && bit > 0x8)
-            {
-                ++data;
-                bit = static_cast<uint8> (bit >> 1);
-            }
-        }
-
+        int numBytes;
+        decodeCharacter (data, numBytes);
+        data += numBytes;
         return *this;
     }
 
     /** Moves this pointer back to the previous character in the string. */
     CharPointer_UTF8 operator--() noexcept
     {
-        int count = 0;
+        auto* lead = data - 1;
 
-        while ((*--data & 0xc0) == 0x80 && ++count < 4)
-        {
-        }
+        for (int count = 0; count < 3 && (static_cast<uint8> (*lead) & 0xc0) == 0x80; ++count)
+            --lead;
 
+        int numBytes;
+        decodeCharacter (lead, numBytes);
+
+        data = lead + numBytes == data ? lead : data - 1;
         return *this;
     }
 
@@ -169,38 +133,28 @@ public:
         advances the pointer to point to the next character. */
     yup_wchar getAndAdvance() noexcept
     {
-        auto byte = (signed char) *data++;
+        int numBytes;
+        auto character = decodeCharacter (data, numBytes);
 
-        if (byte >= 0)
-            return (yup_wchar) (uint8) byte;
+        if (character != 0)
+            data += numBytes;
 
-        uint32 n = (uint32) (uint8) byte;
-        uint32 mask = 0x7f;
-        uint32 bit = 0x40;
-        int numExtraValues = 0;
+        return character;
+    }
 
-        while ((n & bit) != 0 && bit > 0x8)
-        {
-            mask >>= 1;
-            ++numExtraValues;
-            bit >>= 1;
-        }
+    /** Returns the character at this position and advances past it, without reading
+        more than maxBytes bytes. A sequence cut off by the bound is a replacement
+        character. The bound must be at least 1.
+    */
+    yup_wchar getAndAdvance (int maxBytes) noexcept
+    {
+        int numBytes;
+        auto character = decodeCharacter (data, numBytes, maxBytes);
 
-        n &= mask;
+        if (character != 0)
+            data += numBytes;
 
-        while (--numExtraValues >= 0)
-        {
-            auto nextByte = (uint32) (uint8) *data;
-
-            if ((nextByte & 0xc0) != 0x80)
-                break;
-
-            ++data;
-            n <<= 6;
-            n |= (nextByte & 0x3f);
-        }
-
-        return (yup_wchar) n;
+        return character;
     }
 
     /** Moves this pointer along to the next character in the string. */
@@ -262,18 +216,11 @@ public:
         auto* d = data;
         size_t count = 0;
 
-        for (;;)
+        while (*d != 0)
         {
-            auto n = (uint32) (uint8) *d++;
-
-            if ((n & 0x80) != 0)
-            {
-                while ((*d & 0xc0) == 0x80)
-                    ++d;
-            }
-            else if (n == 0)
-                break;
-
+            int numBytes;
+            decodeCharacter (d, numBytes);
+            d += numBytes;
             ++count;
         }
 
@@ -309,7 +256,7 @@ public:
     static size_t getBytesRequiredFor (const yup_wchar charToWrite) noexcept
     {
         size_t num = 1;
-        auto c = (uint32) charToWrite;
+        auto c = toEncodableValue (charToWrite);
 
         if (c >= 0x80)
         {
@@ -349,7 +296,7 @@ public:
     /** Writes a unicode character to this string, and advances this pointer to point to the next position. */
     void write (const yup_wchar charToWrite) noexcept
     {
-        auto c = (uint32) charToWrite;
+        auto c = toEncodableValue (charToWrite);
 
         if (c >= 0x80)
         {
@@ -383,18 +330,6 @@ public:
     void writeAll (const CharPointer src) noexcept
     {
         CharacterFunctions::copyAll (*this, src);
-    }
-
-    /** Copies a source string to this pointer, advancing this pointer as it goes. */
-    void writeAll (const CharPointer_UTF8 src) noexcept
-    {
-        auto* s = src.data;
-
-        while ((*data = *s) != 0)
-        {
-            ++data;
-            ++s;
-        }
     }
 
     /** Copies a source string to this pointer, advancing this pointer as it goes.
@@ -530,38 +465,21 @@ public:
     /** Returns true if this data contains a valid string in this encoding. */
     static bool isValidString (const CharType* dataToTest, int maxBytesToRead)
     {
-        while (--maxBytesToRead >= 0 && *dataToTest != 0)
+        while (maxBytesToRead > 0 && *dataToTest != 0)
         {
-            auto byte = (signed char) *dataToTest++;
+            int numBytes;
+            const auto character = decodeCharacter (dataToTest, numBytes, maxBytesToRead);
 
-            if (byte < 0)
-            {
-                int bit = 0x40;
-                int numExtraValues = 0;
+            const bool isEncodedReplacement = numBytes == 3
+                                              && (uint8) dataToTest[0] == 0xef
+                                              && (uint8) dataToTest[1] == 0xbf
+                                              && (uint8) dataToTest[2] == 0xbd;
 
-                while ((byte & bit) != 0)
-                {
-                    if (bit < 8)
-                        return false;
+            if (character == replacementCharacter && ! isEncodedReplacement)
+                return false;
 
-                    ++numExtraValues;
-                    bit >>= 1;
-
-                    if (bit == 8 && (numExtraValues > maxBytesToRead || *CharPointer_UTF8 (dataToTest - 1) > 0x10ffff))
-                        return false;
-                }
-
-                if (numExtraValues == 0)
-                    return false;
-
-                maxBytesToRead -= numExtraValues;
-                if (maxBytesToRead < 0)
-                    return false;
-
-                while (--numExtraValues >= 0)
-                    if ((*dataToTest++ & 0xc0) != 0x80)
-                        return false;
-            }
+            dataToTest += numBytes;
+            maxBytesToRead -= numBytes;
         }
 
         return true;
@@ -597,6 +515,76 @@ public:
     }
 
 private:
+    static constexpr yup_wchar replacementCharacter = 0xfffd;
+
+    // Surrogates and values above U+10FFFF have no UTF-8 form, so they're written as the replacement character
+    static uint32 toEncodableValue (yup_wchar character) noexcept
+    {
+        const auto c = (uint32) character;
+        return (c > 0x10ffff || (c >= 0xd800 && c <= 0xdfff)) ? (uint32) replacementCharacter : c;
+    }
+
+    /*  Decodes the character at data, setting numBytes to the bytes it spans. Malformed
+        sequences decode to the replacement character spanning only their valid prefix, so
+        every byte is consumed once and a null byte is only ever returned as the terminator.
+        A sequence cut off by maxBytes is malformed, so nothing past that bound is read.
+    */
+    static yup_wchar decodeCharacter (const CharType* data, int& numBytes, int maxBytes = std::numeric_limits<int>::max()) noexcept
+    {
+        const auto lead = (uint8) data[0];
+        numBytes = 1;
+
+        if (lead < 0x80)
+            return lead;
+
+        int length = 0;
+        uint32 value = 0;
+        uint8 minNext = 0x80;
+        uint8 maxNext = 0xbf;
+
+        if (lead >= 0xc2 && lead <= 0xdf)
+        {
+            length = 2;
+            value = lead & 0x1f;
+        }
+        else if (lead >= 0xe0 && lead <= 0xef)
+        {
+            length = 3;
+            value = lead & 0x0f;
+            minNext = lead == 0xe0 ? 0xa0 : 0x80;
+            maxNext = lead == 0xed ? 0x9f : 0xbf;
+        }
+        else if (lead >= 0xf0 && lead <= 0xf4)
+        {
+            length = 4;
+            value = lead & 0x07;
+            minNext = lead == 0xf0 ? 0x90 : 0x80;
+            maxNext = lead == 0xf4 ? 0x8f : 0xbf;
+        }
+        else
+        {
+            return replacementCharacter;
+        }
+
+        for (int i = 1; i < length; ++i)
+        {
+            if (i >= maxBytes)
+                return replacementCharacter;
+
+            const auto next = (uint8) data[i];
+
+            if (next < minNext || next > maxNext)
+                return replacementCharacter;
+
+            numBytes = i + 1;
+            value = (value << 6) | (next & 0x3f);
+            minNext = 0x80;
+            maxNext = 0xbf;
+        }
+
+        return (yup_wchar) value;
+    }
+
     CharType* data;
 };
 

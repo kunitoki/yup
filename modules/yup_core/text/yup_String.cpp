@@ -150,18 +150,39 @@ public:
         if (start.getAddress() == nullptr || start.isEmpty())
             return CharPointerType (emptyString.text);
 
-        auto numBytes = (size_t) (reinterpret_cast<const char*> (end.getAddress())
-                                  - reinterpret_cast<const char*> (start.getAddress()));
-        auto dest = createUninitialisedBytes (numBytes + sizeof (CharType));
-        memcpy (dest.getAddress(), start, numBytes);
-        dest.getAddress()[numBytes / sizeof (CharType)] = 0;
-        return dest;
+        if constexpr (std::is_same_v<CharPointerType, CharPointer_UTF8>)
+        {
+            const auto* first = reinterpret_cast<const char*> (start.getAddress());
+            const auto* last = reinterpret_cast<const char*> (end.getAddress());
+            return createFromFixedLength (first, last > first ? (size_t) (last - first) : 0);
+        }
+        else
+        {
+            return createFromCharPointer<CharPointerType> (start, end);
+        }
     }
 
     static CharPointerType createFromFixedLength (const char* const src, const size_t numChars)
     {
-        auto dest = createUninitialisedBytes (numChars * sizeof (CharType) + sizeof (CharType));
-        CharPointerType (dest).writeWithCharLimit (CharPointer_UTF8 (src), (int) (numChars + 1));
+        const auto end = CharPointer_UTF8 (src + numChars);
+        auto pos = CharPointer_UTF8 (src);
+        size_t numCodePoints = 0;
+        size_t bytesNeeded = sizeof (CharType);
+
+        while (pos < end && ! pos.isEmpty())
+        {
+            bytesNeeded += CharPointer_UTF8::getBytesRequiredFor (pos.getAndAdvance ((int) (end.getAddress() - pos.getAddress())));
+            ++numCodePoints;
+        }
+
+        auto dest = createUninitialisedBytes (bytesNeeded);
+        CharPointerType out (dest);
+        pos = CharPointer_UTF8 (src);
+
+        for (size_t i = 0; i < numCodePoints; ++i)
+            out.write (pos.getAndAdvance ((int) (end.getAddress() - pos.getAddress())));
+
+        out.writeNull();
         return dest;
     }
 
@@ -868,9 +889,10 @@ void String::appendCharPointer (const CharPointerType startOfTextToAppend,
 {
     jassert (startOfTextToAppend.getAddress() != nullptr && endOfTextToAppend.getAddress() != nullptr);
 
-    auto extraBytesNeeded = getAddressDifference (endOfTextToAppend.getAddress(),
-                                                  startOfTextToAppend.getAddress());
-    jassert (extraBytesNeeded >= 0);
+    // Copy the well-formed form of the range, so the stored bytes match getNumBytesAsUTF8()
+    auto sanitised = StringHolderUtils::createFromCharPointer (startOfTextToAppend, endOfTextToAppend);
+    auto extraBytesNeeded = getAddressDifference (sanitised.findTerminatingNull().getAddress(),
+                                                  sanitised.getAddress());
 
     if (extraBytesNeeded > 0)
     {
@@ -878,9 +900,11 @@ void String::appendCharPointer (const CharPointerType startOfTextToAppend,
         preallocateBytes ((size_t) extraBytesNeeded + byteOffsetOfNull);
 
         auto* newStringStart = addBytesToPointer (text.getAddress(), (int) byteOffsetOfNull);
-        memcpy (newStringStart, startOfTextToAppend.getAddress(), (size_t) extraBytesNeeded);
+        memcpy (newStringStart, sanitised.getAddress(), (size_t) extraBytesNeeded);
         CharPointerType (addBytesToPointer (newStringStart, extraBytesNeeded)).writeNull();
     }
+
+    StringHolderUtils::release (sanitised);
 }
 
 String& String::operator+= (const wchar_t* t)
@@ -2077,18 +2101,18 @@ String String::formattedRaw (const char* pf, ...)
         // On Windows, use narrow character functions to avoid encoding issues
         // with mixed narrow format strings and arguments
         HeapBlock<char> temp (bufferSize);
-        int num = (int) _vsnprintf (temp.get(), bufferSize - 1, pf, args);
+        int num = (int) _vsnprintf (temp.get(), bufferSize, pf, args);
         if (num >= static_cast<int> (bufferSize))
             num = -1;
 #elif YUP_ANDROID
         HeapBlock<char> temp (bufferSize);
-        int num = (int) vsnprintf (temp.get(), bufferSize - 1, pf, args);
+        int num = (int) vsnprintf (temp.get(), bufferSize, pf, args);
         if (num >= static_cast<int> (bufferSize))
             num = -1;
 #else
         String wideCharVersion (pf);
         HeapBlock<wchar_t> temp (bufferSize);
-        const int num = (int) vswprintf (temp.get(), bufferSize - 1, wideCharVersion.toWideCharPointer(), args);
+        const int num = (int) vswprintf (temp.get(), bufferSize, wideCharVersion.toWideCharPointer(), args);
 #endif
 
         YUP_END_IGNORE_DEPRECATION_WARNINGS

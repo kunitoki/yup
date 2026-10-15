@@ -1501,3 +1501,44 @@ TEST (ExpressionTests, MixedOperatorsAndFunctions)
     EXPECT_TRUE (error.isEmpty());
     EXPECT_EQ (26.0, e.evaluate()); // 20 + (3 * 2) = 26
 }
+
+TEST (ExpressionTests, DeeplyNestedParenthesesReportParseError)
+{
+    String error;
+    Expression e (String::repeatedString ("(", 10000) + "1" + String::repeatedString (")", 10000), error);
+
+    EXPECT_FALSE (error.isEmpty());
+}
+
+TEST (ExpressionTests, VeryLongOperatorChainReportsParseError)
+{
+    String error;
+    Expression e ("1" + String::repeatedString (" + 1", 10000), error);
+
+    EXPECT_FALSE (error.isEmpty());
+}
+
+TEST (ExpressionTests, VeryLongUnaryChainReportsParseError)
+{
+    String error;
+    Expression e (String::repeatedString ("-", 10000) + "1", error);
+
+    EXPECT_FALSE (error.isEmpty());
+}
+
+TEST (ExpressionTests, VeryLongDottedSymbolChainReportsParseError)
+{
+    String error;
+    Expression e ("a" + String::repeatedString (".a", 10000), error);
+
+    EXPECT_FALSE (error.isEmpty());
+}
+
+TEST (ExpressionTests, ModeratelyNestedParenthesesStillEvaluate)
+{
+    String error;
+    Expression e (String::repeatedString ("(", 50) + "2" + String::repeatedString (")", 50), error);
+
+    EXPECT_TRUE (error.isEmpty());
+    EXPECT_EQ (2.0, e.evaluate());
+}

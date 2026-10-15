@@ -321,6 +321,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "misc/yup_FlagSet.h"
 #include "misc/yup_Result.h"
 #include "misc/yup_ResultValue.h"
+#include "misc/yup_SecureRandom.h"
 #include "misc/yup_Uuid.h"
 #include "misc/yup_ConsoleApplication.h"
 #include "containers/yup_Variant.h"

@@ -115,6 +115,13 @@ void Thread::threadEntryPoint()
         {
             run();
         }
+#if YUP_LINUX && defined (__GLIBCXX__)
+        catch (abi::__forced_unwind&)
+        {
+            // pthread_cancel unwinds the stack with this exception, which must keep propagating
+            throw;
+        }
+#endif
         catch (...)
         {
             jassertfalse; // Your run() method mustn't throw any exceptions!

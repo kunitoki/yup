@@ -574,7 +574,10 @@ TEST_F (GltfModelTests, MapsSamplers)
                                               .replace ("$IMAGE", toDataUri (fromBase64 (redPngBase64), "image/png"))));
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
-    const auto& sampler = result.getReference().getMaterials()[0]->baseColorTexture->getSamplerDesc();
+    const auto& texture = result.getReference().getMaterials()[0]->baseColorTexture;
+    ASSERT_NE (texture, nullptr);
+
+    const auto& sampler = texture->getSamplerDesc();
     EXPECT_EQ (sampler.magFilter, GpuFilter::nearest);
     EXPECT_EQ (sampler.minFilter, GpuFilter::linear);
     EXPECT_FLOAT_EQ (sampler.maxLod, 0.0f);

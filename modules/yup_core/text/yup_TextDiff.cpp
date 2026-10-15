@@ -139,7 +139,7 @@ struct TextDiffHelpers
         if (lenA == 0 || lenB == 0)
             return 0;
 
-        if (lenA * lenB > maxComplexity)
+        if ((int64) lenA * (int64) lenB > maxComplexity)
             return findCommonSuffix (a, lenA, indexInA, b, lenB, indexInB);
 
         auto scratchSpace = sizeof (int) * (2 + 2 * (size_t) lenB);

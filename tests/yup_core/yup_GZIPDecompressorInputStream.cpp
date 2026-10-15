@@ -174,3 +174,23 @@ TEST (GZIPDecompressorInputStreamTests, DecompressedContentMatchesOriginal)
 
     EXPECT_EQ (0, memcmp (result.getData(), originalText, len));
 }
+
+TEST (GZIPDecompressorInputStreamTests, OutputIsBoundedByDeclaredLength)
+{
+    const MemoryBlock data ("abcdefghijklmnopqrstuvwxyz", 26);
+
+    MemoryOutputStream mo;
+    GZIPCompressorOutputStream gzipOutputStream (mo);
+    gzipOutputStream.write (data.getData(), data.getSize());
+    gzipOutputStream.flush();
+
+    MemoryInputStream mi (mo.getData(), mo.getDataSize(), false);
+    GZIPDecompressorInputStream stream (&mi, false, GZIPDecompressorInputStream::zlibFormat, 5);
+
+    MemoryBlock result (data.getSize());
+    EXPECT_EQ (stream.read (result.getData(), (int) data.getSize()), 5);
+    EXPECT_EQ (stream.getPosition(), (int64) 5);
+    EXPECT_TRUE (stream.isExhausted());
+    EXPECT_EQ (stream.read (result.getData(), (int) data.getSize()), 0);
+    EXPECT_EQ (0, memcmp (result.getData(), "abcde", 5));
+}

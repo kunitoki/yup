@@ -33,6 +33,7 @@
     license:              ISC
 
     dependencies:         yup_rhi yup_gui tinygltf
+    testDeps:             libpng
     searchpaths:          native
 
   END_YUP_MODULE_DECLARATION

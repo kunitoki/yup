@@ -82,8 +82,8 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 {
     RootObject()
     {
-        setMethod ("exec", exec);
-        setMethod ("eval", eval);
+        setMethod ("exec", [this] (Args a) { execute (getString (a, 0)); return var::undefined(); });
+        setMethod ("eval", [this] (Args a) { return evaluate (getString (a, 0)); });
         setMethod ("trace", trace);
         setMethod ("charToInt", charToInt);
         setMethod ("parseInt", IntegerClass::parseInt);
@@ -92,6 +92,12 @@ struct JavascriptEngine::RootObject final : public DynamicObject
     }
 
     Time timeout;
+    int callDepth = 0;
+
+    static constexpr int maxNestingDepth = 256;
+    // Calls use more native stack than nesting does, so they get a lower limit to stay within small thread stacks
+    static constexpr int maxCallDepth = 64;
+    static constexpr int maxArrayIndex = 1 << 20;
 
     using Args = const var::NativeFunctionArgs&;
     using TokenType = const char*;
@@ -145,6 +151,30 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
     static var* getPropertyPointer (DynamicObject& o, const Identifier& i) noexcept { return o.getProperties().getVarPointer (i); }
 
+    static void checkNesting (const var& v, int depth = 0)
+    {
+        if (depth > maxNestingDepth)
+            throw String ("Value is nested too deeply or is cyclic");
+
+        if (const auto* array = v.getArray())
+            for (const auto& element : *array)
+                checkNesting (element, depth + 1);
+        else if (auto* o = v.getDynamicObject())
+            for (int i = 0; i < o->getProperties().size(); ++i)
+                checkNesting (o->getProperties().getValueAt (i), depth + 1);
+    }
+
+    static bool toArrayIndex (const var& key, int& index) noexcept
+    {
+        const double d = key;
+
+        if (! (d >= -maxArrayIndex && d <= maxArrayIndex))
+            return false;
+
+        index = (int) d;
+        return true;
+    }
+
     //==============================================================================
     struct CodeLocation
     {
@@ -182,6 +212,34 @@ struct JavascriptEngine::RootObject final : public DynamicObject
     };
 
     //==============================================================================
+    struct NestingGuard
+    {
+        NestingGuard (int& counter, const CodeLocation& l, int n = 1, int maxDepth = maxNestingDepth)
+            : depth (counter)
+            , location (l)
+            , limit (maxDepth)
+        {
+            add (n);
+        }
+
+        ~NestingGuard() { depth -= levels; }
+
+        void add (int n = 1)
+        {
+            if (depth + n > limit)
+                location.throwError ("Expression or call nesting is too deep");
+
+            depth += n;
+            levels += n;
+        }
+
+        int& depth;
+        const CodeLocation& location;
+        int levels = 0;
+        int limit;
+    };
+
+    //==============================================================================
     struct Scope
     {
         Scope (const Scope* p,
@@ -210,6 +268,8 @@ struct JavascriptEngine::RootObject final : public DynamicObject
                 for (auto* p = o->getProperty (getPrototypeIdentifier()).getDynamicObject(); p != nullptr;
                      p = p->getProperty (getPrototypeIdentifier()).getDynamicObject())
                 {
+                    checkTimeOut (location);
+
                     if (auto* prop = getPropertyPointer (*p, functionName))
                         return *prop;
                 }
@@ -259,7 +319,9 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             {
                 if (auto* m = getPropertyPointer (*scope, function))
                 {
-                    if (auto fo = dynamic_cast<FunctionObject*> (m->getObject()))
+                    const var functionHolder (*m);
+
+                    if (auto fo = dynamic_cast<FunctionObject*> (functionHolder.getObject()))
                     {
                         result = fo->invoke (*this, args);
                         return true;
@@ -560,7 +622,9 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         void assign (const Scope& s, const var& newValue) const override
         {
-            if (auto* o = parent->getResult (s).getDynamicObject())
+            auto object = parent->getResult (s);
+
+            if (auto* o = object.getDynamicObject())
                 o->setProperty (child, newValue);
             else
                 Expression::assign (s, newValue);
@@ -584,7 +648,10 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
             if (const auto* array = arrayVar.getArray())
                 if (key.isInt() || key.isInt64() || key.isDouble())
-                    return (*array)[static_cast<int> (key)];
+                {
+                    int index = 0;
+                    return toArrayIndex (key, index) ? (*array)[index] : var();
+                }
 
             if (auto* o = arrayVar.getDynamicObject())
                 if (key.isString())
@@ -602,7 +669,10 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             {
                 if (key.isInt() || key.isInt64() || key.isDouble())
                 {
-                    const int i = key;
+                    int i = 0;
+                    if (! toArrayIndex (key, i))
+                        location.throwError ("Array index is out of range");
+
                     while (array->size() < i)
                         array->add (var::undefined());
 
@@ -695,7 +765,12 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         var getWithStrings (const String& a, const String& b) const override { return a == b; }
 
-        var getWithArrayOrObject (const var& a, const var& b) const override { return a == b; }
+        var getWithArrayOrObject (const var& a, const var& b) const override
+        {
+            checkNesting (a);
+            checkNesting (b);
+            return a == b;
+        }
     };
 
     struct NotEqualsOp final : public BinaryOperator
@@ -713,7 +788,12 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         var getWithStrings (const String& a, const String& b) const override { return a != b; }
 
-        var getWithArrayOrObject (const var& a, const var& b) const override { return a != b; }
+        var getWithArrayOrObject (const var& a, const var& b) const override
+        {
+            checkNesting (a);
+            checkNesting (b);
+            return a != b;
+        }
     };
 
     struct LessThanOp final : public BinaryOperator
@@ -831,7 +911,13 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         var getWithDoubles (double a, double b) const override { return exactlyEqual (b, 0.0) ? std::numeric_limits<double>::infinity() : fmod (a, b); }
 
-        var getWithInts (int64 a, int64 b) const override { return b != 0 ? var (a % b) : var (std::numeric_limits<double>::infinity()); }
+        var getWithInts (int64 a, int64 b) const override
+        {
+            if (b == -1) // INT64_MIN % -1 traps on x86-64
+                return 0;
+
+            return b != 0 ? var (a % b) : var (std::numeric_limits<double>::infinity());
+        }
     };
 
     struct BitwiseOrOp final : public BinaryOperator
@@ -1025,6 +1111,8 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         var invokeFunction (const Scope& s, const var& function, const var& thisObject) const
         {
             s.checkTimeOut (location);
+            NestingGuard nesting (s.root->callDepth, location, 1, RootObject::maxCallDepth);
+
             Array<var> argVars;
 
             for (auto* a : arguments)
@@ -1131,7 +1219,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             , functionCode (other.functionCode)
         {
             ExpressionTreeBuilder tb (functionCode);
-            tb.parseFunctionParamsAndBody (*this);
+            tb.parseFunctionCode (*this);
         }
 
         std::unique_ptr<DynamicObject> clone() const override { return std::make_unique<FunctionObject> (*this); }
@@ -1434,6 +1522,12 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             return b.release();
         }
 
+        void parseFunctionCode (FunctionObject& fo)
+        {
+            matchIf (TokenTypes::identifier);
+            parseFunctionParamsAndBody (fo);
+        }
+
         void parseFunctionParamsAndBody (FunctionObject& fo)
         {
             match (TokenTypes::openParen);
@@ -1454,6 +1548,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         Expression* parseExpression()
         {
+            NestingGuard nesting (nestingDepth, location);
             ExpPtr lhs (parseLogicOperator());
 
             if (matchIf (TokenTypes::question))
@@ -1484,6 +1579,8 @@ struct JavascriptEngine::RootObject final : public DynamicObject
     private:
         void throwError (const String& err) const { location.throwError (err); }
 
+        int nestingDepth = 0;
+
         template <typename OpType>
         Expression* parseInPlaceOpExpression (ExpPtr& lhs)
         {
@@ -1502,6 +1599,8 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         Statement* parseStatement()
         {
+            NestingGuard nesting (nestingDepth, location);
+
             if (currentType == TokenTypes::openBrace)
                 return parseBlock();
             if (matchIf (TokenTypes::var))
@@ -1589,6 +1688,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         Statement* parseVar()
         {
+            NestingGuard nesting (nestingDepth, location);
             std::unique_ptr<VarStatement> s (new VarStatement (location));
             s->name = parseIdentifier();
             s->initialiser.reset (matchIf (TokenTypes::assign) ? parseExpression() : new Expression (location));
@@ -1707,6 +1807,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         Expression* parseSuffixes (Expression* e)
         {
             ExpPtr input (e);
+            NestingGuard nesting (nestingDepth, location);
 
             if (matchIf (TokenTypes::dot))
                 return parseSuffixes (new DotOperator (location, input, parseIdentifier()));
@@ -1805,10 +1906,14 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
             if (matchIf (TokenTypes::new_))
             {
+                NestingGuard chain (nestingDepth, location, 0);
                 ExpPtr name (new UnqualifiedName (location, parseIdentifier()));
 
                 while (matchIf (TokenTypes::dot))
+                {
+                    chain.add();
                     name.reset (new DotOperator (location, name, parseIdentifier()));
+                }
 
                 return parseFunctionCall (new NewOperator (location), name);
             }
@@ -1843,6 +1948,8 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         Expression* parseUnary()
         {
+            NestingGuard nesting (nestingDepth, location);
+
             if (matchIf (TokenTypes::minus))
             {
                 ExpPtr a (new LiteralValue (location, (int) 0)), b (parseUnary());
@@ -1866,21 +1973,25 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         Expression* parseMultiplyDivide()
         {
             ExpPtr a (parseUnary());
+            NestingGuard chain (nestingDepth, location, 0);
 
             for (;;)
             {
                 if (matchIf (TokenTypes::times))
                 {
+                    chain.add();
                     ExpPtr b (parseUnary());
                     a.reset (new MultiplyOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::divide))
                 {
+                    chain.add();
                     ExpPtr b (parseUnary());
                     a.reset (new DivideOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::modulo))
                 {
+                    chain.add();
                     ExpPtr b (parseUnary());
                     a.reset (new ModuloOp (location, a, b));
                 }
@@ -1894,16 +2005,19 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         Expression* parseAdditionSubtraction()
         {
             ExpPtr a (parseMultiplyDivide());
+            NestingGuard chain (nestingDepth, location, 0);
 
             for (;;)
             {
                 if (matchIf (TokenTypes::plus))
                 {
+                    chain.add();
                     ExpPtr b (parseMultiplyDivide());
                     a.reset (new AdditionOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::minus))
                 {
+                    chain.add();
                     ExpPtr b (parseMultiplyDivide());
                     a.reset (new SubtractionOp (location, a, b));
                 }
@@ -1917,21 +2031,25 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         Expression* parseShiftOperator()
         {
             ExpPtr a (parseAdditionSubtraction());
+            NestingGuard chain (nestingDepth, location, 0);
 
             for (;;)
             {
                 if (matchIf (TokenTypes::leftShift))
                 {
+                    chain.add();
                     ExpPtr b (parseExpression());
                     a.reset (new LeftShiftOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::rightShift))
                 {
+                    chain.add();
                     ExpPtr b (parseExpression());
                     a.reset (new RightShiftOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::rightShiftUnsigned))
                 {
+                    chain.add();
                     ExpPtr b (parseExpression());
                     a.reset (new RightShiftUnsignedOp (location, a, b));
                 }
@@ -1945,46 +2063,55 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         Expression* parseComparator()
         {
             ExpPtr a (parseShiftOperator());
+            NestingGuard chain (nestingDepth, location, 0);
 
             for (;;)
             {
                 if (matchIf (TokenTypes::equals))
                 {
+                    chain.add();
                     ExpPtr b (parseShiftOperator());
                     a.reset (new EqualsOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::notEquals))
                 {
+                    chain.add();
                     ExpPtr b (parseShiftOperator());
                     a.reset (new NotEqualsOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::typeEquals))
                 {
+                    chain.add();
                     ExpPtr b (parseShiftOperator());
                     a.reset (new TypeEqualsOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::typeNotEquals))
                 {
+                    chain.add();
                     ExpPtr b (parseShiftOperator());
                     a.reset (new TypeNotEqualsOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::lessThan))
                 {
+                    chain.add();
                     ExpPtr b (parseShiftOperator());
                     a.reset (new LessThanOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::lessThanOrEqual))
                 {
+                    chain.add();
                     ExpPtr b (parseShiftOperator());
                     a.reset (new LessThanOrEqualOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::greaterThan))
                 {
+                    chain.add();
                     ExpPtr b (parseShiftOperator());
                     a.reset (new GreaterThanOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::greaterThanOrEqual))
                 {
+                    chain.add();
                     ExpPtr b (parseShiftOperator());
                     a.reset (new GreaterThanOrEqualOp (location, a, b));
                 }
@@ -1998,31 +2125,37 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         Expression* parseLogicOperator()
         {
             ExpPtr a (parseComparator());
+            NestingGuard chain (nestingDepth, location, 0);
 
             for (;;)
             {
                 if (matchIf (TokenTypes::logicalAnd))
                 {
+                    chain.add();
                     ExpPtr b (parseComparator());
                     a.reset (new LogicalAndOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::logicalOr))
                 {
+                    chain.add();
                     ExpPtr b (parseComparator());
                     a.reset (new LogicalOrOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::bitwiseAnd))
                 {
+                    chain.add();
                     ExpPtr b (parseComparator());
                     a.reset (new BitwiseAndOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::bitwiseOr))
                 {
+                    chain.add();
                     ExpPtr b (parseComparator());
                     a.reset (new BitwiseOrOp (location, a, b));
                 }
                 else if (matchIf (TokenTypes::bitwiseXor))
                 {
+                    chain.add();
                     ExpPtr b (parseComparator());
                     a.reset (new BitwiseXorOp (location, a, b));
                 }
@@ -2072,13 +2205,18 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             return i;
         }
 
-        static var dump ([[maybe_unused]] Args a)
+        static var dump (Args a)
         {
+            checkNesting (a.thisObject);
             YUP_DBG (JSON::toString (a.thisObject));
             return var::undefined();
         }
 
-        static var cloneFn (Args a) { return a.thisObject.clone(); }
+        static var cloneFn (Args a)
+        {
+            checkNesting (a.thisObject);
+            return a.thisObject.clone();
+        }
     };
 
     //==============================================================================
@@ -2181,7 +2319,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             {
                 auto target = get (a, 0);
 
-                for (int i = (a.numArguments > 1 ? getInt (a, 1) : 0); i < array->size(); ++i)
+                for (int i = jmax (0, a.numArguments > 1 ? getInt (a, 1) : 0); i < array->size(); ++i)
                     if (array->getReference (i) == target)
                         return i;
             }
@@ -2244,7 +2382,16 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         static var indexOf (Args a) { return a.thisObject.toString().indexOf (getString (a, 0)); }
 
-        static var charCodeAt (Args a) { return (int) a.thisObject.toString()[getInt (a, 0)]; }
+        static var charCodeAt (Args a)
+        {
+            auto text = a.thisObject.toString();
+            auto index = getInt (a, 0);
+
+            if (! isPositiveAndBelow (index, text.length()))
+                return std::numeric_limits<double>::quiet_NaN();
+
+            return (int) text[index];
+        }
 
         static var charAt (Args a)
         {
@@ -2412,7 +2559,11 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             return i;
         }
 
-        static var stringify (Args a) { return JSON::toString (get (a, 0)); }
+        static var stringify (Args a)
+        {
+            checkNesting (get (a, 0));
+            return JSON::toString (get (a, 0));
+        }
     };
 
     //==============================================================================
@@ -2438,6 +2589,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
     //==============================================================================
     static var trace (Args a)
     {
+        checkNesting (a.thisObject);
         Logger::outputDebugString (JSON::toString (a.thisObject));
         return var::undefined();
     }
@@ -2464,21 +2616,6 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         return "undefined";
     }
 
-    static var exec (Args a)
-    {
-        if (auto* root = dynamic_cast<RootObject*> (a.thisObject.getObject()))
-            root->execute (getString (a, 0));
-
-        return var::undefined();
-    }
-
-    static var eval (Args a)
-    {
-        if (auto* root = dynamic_cast<RootObject*> (a.thisObject.getObject()))
-            return root->evaluate (getString (a, 0));
-
-        return var::undefined();
-    }
 };
 
 //==============================================================================
@@ -2522,6 +2659,10 @@ Result JavascriptEngine::execute (const String& code)
     {
         return Result::fail (error);
     }
+    catch (const std::bad_alloc&)
+    {
+        return Result::fail ("Out of memory");
+    }
 
     return Result::ok();
 }
@@ -2536,6 +2677,10 @@ ResultValue<var> JavascriptEngine::executeWithResult (const String& code)
     catch (String& error)
     {
         return makeResultValueFail (error);
+    }
+    catch (const std::bad_alloc&)
+    {
+        return makeResultValueFail ("Out of memory");
     }
 }
 
@@ -2552,6 +2697,11 @@ var JavascriptEngine::evaluate (const String& code, Result* result)
     {
         if (result != nullptr)
             *result = Result::fail (error);
+    }
+    catch (const std::bad_alloc&)
+    {
+        if (result != nullptr)
+            *result = Result::fail ("Out of memory");
     }
 
     return var::undefined();
@@ -2576,6 +2726,11 @@ var JavascriptEngine::callFunction (const Identifier& function, const var::Nativ
         if (result != nullptr)
             *result = Result::fail (error);
     }
+    catch (const std::bad_alloc&)
+    {
+        if (result != nullptr)
+            *result = Result::fail ("Out of memory");
+    }
 
     return returnVal;
 }
@@ -2597,6 +2752,11 @@ var JavascriptEngine::callFunctionObject (DynamicObject* objectScope, const var&
     {
         if (result != nullptr)
             *result = Result::fail (error);
+    }
+    catch (const std::bad_alloc&)
+    {
+        if (result != nullptr)
+            *result = Result::fail ("Out of memory");
     }
 
     return returnVal;

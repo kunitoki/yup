@@ -96,6 +96,21 @@ TEST (MemoryInputStreamTests, Basics)
     EXPECT_EQ (mi.readDoubleBigEndian(), randomDouble);
 }
 
+TEST (MemoryInputStreamTests, CompressedIntRoundTripsExtremeValues)
+{
+    const int values[] = { 0, 1, -1, std::numeric_limits<int>::max(), std::numeric_limits<int>::min() };
+
+    MemoryOutputStream mo;
+
+    for (auto value : values)
+        mo.writeCompressedInt (value);
+
+    MemoryInputStream mi (mo.getData(), mo.getDataSize(), false);
+
+    for (auto value : values)
+        EXPECT_EQ (mi.readCompressedInt(), value);
+}
+
 TEST (MemoryInputStreamTests, Read)
 {
     const MemoryBlock data ("abcdefghijklmnopqrstuvwxyz", 26);

@@ -48,6 +48,9 @@ namespace yup
     functions allow you to parse JSON into a var object, and to convert a var
     object to JSON-formatted text.
 
+    Arrays and objects are limited to 256 levels of nesting: parsing fails when the
+    input goes deeper, and writing emits null in place of any container nested deeper.
+
     @see var
 
     @tags{Core}

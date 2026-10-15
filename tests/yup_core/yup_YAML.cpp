@@ -310,7 +310,7 @@ TEST_F (YAMLTests, FlowQuotedUnpairedHighSurrogateEscape)
     auto v = YAML::parse ("{k: \"\\uD800\\u0041\"}");
 
     auto chars = v["k"].toString().getCharPointer();
-    EXPECT_EQ ((yup_wchar) 0xd800, chars.getAndAdvance());
+    EXPECT_EQ ((yup_wchar) 0xfffd, chars.getAndAdvance());
     EXPECT_EQ ((yup_wchar) 'A', chars.getAndAdvance());
 }
 
@@ -339,7 +339,7 @@ TEST_F (YAMLTests, QuotedScalars)
     auto unpaired = YAML::fromString ("\"\\uD800\\u0041\"");
     EXPECT_TRUE (unpaired.isString());
     auto unpairedChars = unpaired.toString().getCharPointer();
-    EXPECT_EQ ((yup_wchar) 0xd800, unpairedChars.getAndAdvance());
+    EXPECT_EQ ((yup_wchar) 0xfffd, unpairedChars.getAndAdvance());
     EXPECT_EQ ((yup_wchar) 'A', unpairedChars.getAndAdvance());
 }
 
@@ -577,8 +577,13 @@ TEST_F (YAMLTests, EscapeStringAndParseQuotedString)
     t = surrogate.getCharPointer();
     EXPECT_TRUE (YAML::parseQuotedString (t, result).wasOk());
     auto surrogateChars = result.toString().getCharPointer();
-    EXPECT_EQ ((yup_wchar) 0xd800, surrogateChars.getAndAdvance());
+    EXPECT_EQ ((yup_wchar) 0xfffd, surrogateChars.getAndAdvance());
     EXPECT_EQ ((yup_wchar) 'A', surrogateChars.getAndAdvance());
+
+    // A high surrogate followed by a truncated "\u" must not step past the terminator
+    String truncatedLow = "\"\\uD800\\u";
+    t = truncatedLow.getCharPointer();
+    EXPECT_TRUE (YAML::parseQuotedString (t, result).failed());
 }
 
 TEST_F (YAMLTests, Yaml11Booleans)
@@ -792,6 +797,17 @@ TEST_F (YAMLTests, InvalidEscapeSequence)
     EXPECT_TRUE (YAML::parse ("\"\\q\"", result).failed());
 }
 
+TEST_F (YAMLTests, OutOfRangeUnicodeEscapeIsRejected)
+{
+    var result;
+    EXPECT_TRUE (YAML::parse ("k: \"\\UFFFFFFFF\"", result).failed());
+    EXPECT_TRUE (YAML::parse ("k: \"\\U00110000\"", result).failed());
+    EXPECT_TRUE (YAML::parse ("k: \"\\U0010FFFF\"", result).wasOk());
+
+    // U+10FFFF is the last scalar value: F4 8F BF BF in UTF-8
+    EXPECT_EQ (String::fromUTF8 ("\xf4\x8f\xbf\xbf"), result["k"].toString());
+}
+
 TEST_F (YAMLTests, UnexpectedContentAfterFlowCollection)
 {
     var result;
@@ -811,4 +827,64 @@ TEST_F (YAMLTests, AliasAnchorAsMapKey)
     // Aliases and anchors are not allowed as map keys
     EXPECT_TRUE (YAML::parse ("*alias: value", result).failed());
     EXPECT_TRUE (YAML::parse ("&anchor: value", result).failed());
+}
+
+TEST_F (YAMLTests, MultilineFlowSequenceOfManyLines)
+{
+    String yaml = "k: [\n";
+
+    for (int i = 0; i < 5000; ++i)
+        yaml << "1,\n";
+
+    yaml << "2]\nj: 3";
+
+    var result;
+    ASSERT_TRUE (YAML::parse (yaml, result).wasOk());
+
+    auto* object = result.getDynamicObject();
+    ASSERT_NE (object, nullptr);
+    auto* array = object->getProperty ("k").getArray();
+    ASSERT_NE (array, nullptr);
+    EXPECT_EQ (array->size(), 5001);
+}
+
+#if ! YUP_WASM
+TEST_F (YAMLTests, SequenceAndAnchorChainsCountTowardsDepthLimit)
+{
+    var result;
+
+    String sequences;
+
+    for (int i = 0; i < 600; ++i)
+        sequences << "- ";
+
+    sequences << "x";
+    EXPECT_TRUE (YAML::parse (sequences, result).failed());
+
+    String anchors = "k: ";
+
+    for (int i = 0; i < 600; ++i)
+        anchors << "&a" << String (i) << " ";
+
+    anchors << "1";
+    EXPECT_TRUE (YAML::parse (anchors, result).failed());
+}
+#endif
+
+TEST_F (YAMLTests, AliasExpansionIsBounded)
+{
+    String yaml = "a0: &a0 [x, x, x, x, x, x, x, x, x, x]\n";
+
+    for (int i = 1; i <= 9; ++i)
+    {
+        yaml << "a" << String (i) << ": &a" << String (i) << " [";
+
+        for (int j = 0; j < 10; ++j)
+            yaml << (j > 0 ? ", " : "") << "*a" << String (i - 1);
+
+        yaml << "]\n";
+    }
+
+    var result;
+    EXPECT_TRUE (YAML::parse (yaml, result).failed());
 }

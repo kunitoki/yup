@@ -208,6 +208,14 @@ LocalRef<jobject> AndroidContentUriResolver::getContentResolver()
     return LocalRef<jobject> (getEnv()->CallObjectMethod (getAppContext().get(), AndroidContext.getContentResolver));
 }
 
+static File getFileIfContainedIn (const File& root, const File& candidate)
+{
+    if (root == File() || (candidate != root && ! candidate.isAChildOf (root)))
+        return {};
+
+    return candidate;
+}
+
 File AndroidContentUriResolver::getLocalFileFromContentUri (const URL& url)
 {
     // only use this method for content URIs
@@ -217,6 +225,7 @@ File AndroidContentUriResolver::getLocalFileFromContentUri (const URL& url)
     auto documentId = URL::removeEscapeChars (url.getSubPath().fromFirstOccurrenceOf ("/", false, false));
     auto tokens = StringArray::fromTokens (documentId, ":", "");
 
+    // The URI text is untrusted, so any path built from it must stay inside the expected storage root
     if (authority == "com.android.externalstorage.documents")
     {
         auto storageId = tokens[0];
@@ -224,8 +233,8 @@ File AndroidContentUriResolver::getLocalFileFromContentUri (const URL& url)
 
         auto storagePath = getStorageDevicePath (storageId);
 
-        if (storagePath != File())
-            return storagePath.getChildFile (subpath);
+        if (storagePath != File() && ! File::isAbsolutePath (subpath))
+            return getFileIfContainedIn (storagePath, storagePath.getChildFile (subpath));
     }
     else if (authority == "com.android.providers.downloads.documents")
     {
@@ -233,12 +242,22 @@ File AndroidContentUriResolver::getLocalFileFromContentUri (const URL& url)
         auto downloadId = tokens[1];
 
         if (type.equalsIgnoreCase ("raw"))
-            return File (downloadId);
+        {
+            if (! File::isAbsolutePath (downloadId))
+                return {};
+
+            return getFileIfContainedIn (getPrimaryStorageDirectory(), File (downloadId));
+        }
 
         if (type.equalsIgnoreCase ("downloads"))
         {
-            auto subDownloadPath = url.getSubPath().fromFirstOccurrenceOf ("tree/downloads", false, false);
-            return File (getWellKnownFolder ("DIRECTORY_DOWNLOADS").getFullPathName() + "/" + subDownloadPath);
+            auto downloadsFolder = getWellKnownFolder ("DIRECTORY_DOWNLOADS");
+            auto subDownloadPath = url.getSubPath().fromFirstOccurrenceOf ("tree/downloads", false, false).trimCharactersAtStart ("/");
+
+            if (File::isAbsolutePath (subDownloadPath))
+                return {};
+
+            return getFileIfContainedIn (downloadsFolder, downloadsFolder.getChildFile (subDownloadPath));
         }
 
         return getLocalFileFromContentUri (URL ("content://downloads/public_downloads/" + documentId));
@@ -255,6 +274,17 @@ File AndroidContentUriResolver::getLocalFileFromContentUri (const URL& url)
                                           "_id=?",
                                           StringArray { mediaId }));
     }
+
+    // Only system providers can be trusted to return a real _data path, other providers
+    // could redirect the file to app private locations, so they are read as content streams
+    const auto isSystemProvider = authority == "com.android.externalstorage.documents"
+                               || authority == "com.android.providers.downloads.documents"
+                               || authority == "com.android.providers.media.documents"
+                               || authority == "downloads"
+                               || authority == "media";
+
+    if (! isSystemProvider)
+        return {};
 
     return File (getCursorDataColumn (url));
 }

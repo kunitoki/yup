@@ -174,7 +174,9 @@ private:
     Mirror of BinaryOutputArchive - reads data in the same order and format.
     SerialisationSize<T> values are read as int64 and assigned back to the
     size reference so that dynamically-sized containers can be resized before
-    reading their elements.
+    reading their elements. A size that is negative, does not fit its type, or
+    exceeds the remaining input is rejected and the size is set to zero, so
+    containers load empty, since each element needs at least one byte of input.
 
     @code
     MemoryInputStream buf (data, size, false);
@@ -216,7 +218,15 @@ private:
         else if constexpr (detail::is_serialisation_size_v<D>)
         {
             using SizeT = std::remove_cv_t<std::remove_reference_t<decltype (t.size)>>;
-            t.size = static_cast<SizeT> (stream_.readInt64());
+            const auto size = stream_.readInt64();
+
+            if (size < 0 || (uint64) size > (uint64) std::numeric_limits<SizeT>::max() || ! isWithinInput (size))
+            {
+                t.size = 0;
+                return false;
+            }
+
+            t.size = static_cast<SizeT> (size);
             return true;
         }
         else if constexpr (detail::serialisationKind<D> == detail::SerialisationKind::primitive)
@@ -248,7 +258,7 @@ private:
         else if constexpr (std::is_same_v<T, String>)
         {
             const auto len = stream_.readInt();
-            if (len < 0)
+            if (! isWithinInput (len))
                 return false;
             MemoryBlock buf (static_cast<size_t> (len), false);
             if (stream_.read (buf.getData(), len) != len)
@@ -286,6 +296,12 @@ private:
         }
 
         return true;
+    }
+
+    bool isWithinInput (int64 numBytes) const
+    {
+        const auto numBytesRemaining = stream_.getNumBytesRemaining();
+        return numBytes >= 0 && (numBytesRemaining < 0 || numBytes <= numBytesRemaining);
     }
 
     InputStream& stream_;

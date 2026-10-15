@@ -793,6 +793,28 @@ struct Expression::Helpers
     private:
         String::CharPointerType& text;
 
+        static constexpr int maxParseDepth = 256;
+        int parseDepth = 0;
+
+        struct NestingGuard
+        {
+            explicit NestingGuard (int& counter) noexcept
+                : depth (counter)
+            {
+            }
+
+            ~NestingGuard() { depth -= levels; }
+
+            bool addLevel() noexcept
+            {
+                ++levels;
+                return ++depth <= maxParseDepth;
+            }
+
+            int& depth;
+            int levels = 0;
+        };
+
         TermPtr parseError (const String& message)
         {
             if (error.isEmpty())
@@ -893,11 +915,18 @@ struct Expression::Helpers
 
         TermPtr readExpression()
         {
+            NestingGuard nesting (parseDepth);
+            if (! nesting.addLevel())
+                return parseError ("Expression is nested too deeply");
+
             auto lhs = readMultiplyOrDivideExpression();
             char opType;
 
             while (lhs != nullptr && readOperator ("+-", &opType))
             {
+                if (! nesting.addLevel())
+                    return parseError ("Expression is nested too deeply");
+
                 auto rhs = readMultiplyOrDivideExpression();
 
                 if (rhs == nullptr)
@@ -914,11 +943,15 @@ struct Expression::Helpers
 
         TermPtr readMultiplyOrDivideExpression()
         {
+            NestingGuard nesting (parseDepth);
             auto lhs = readUnaryExpression();
             char opType;
 
             while (lhs != nullptr && readOperator ("*/", &opType))
             {
+                if (! nesting.addLevel())
+                    return parseError ("Expression is nested too deeply");
+
                 TermPtr rhs (readUnaryExpression());
 
                 if (rhs == nullptr)
@@ -938,6 +971,10 @@ struct Expression::Helpers
             char opType;
             if (readOperator ("+-", &opType))
             {
+                NestingGuard nesting (parseDepth);
+                if (! nesting.addLevel())
+                    return parseError ("Expression is nested too deeply");
+
                 TermPtr e (readUnaryExpression());
 
                 if (e == nullptr)
@@ -1004,6 +1041,10 @@ struct Expression::Helpers
 
                 if (readOperator ("."))
                 {
+                    NestingGuard nesting (parseDepth);
+                    if (! nesting.addLevel())
+                        return parseError ("Expression is nested too deeply");
+
                     TermPtr rhs (readSymbolOrFunction());
 
                     if (rhs == nullptr)

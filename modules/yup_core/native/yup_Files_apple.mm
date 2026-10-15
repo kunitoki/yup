@@ -104,25 +104,36 @@ static String getIOSSystemLocation(NSSearchPathDirectory type)
         objectAtIndex:0]);
 }
 #else
-static bool launchExecutable(const String& pathAndArguments, const Array<char*>* environment = nullptr)
+static bool launchExecutable(const String& fileName, const String& parameters, const Array<char*>* environment = nullptr)
 {
+    StringArray arguments;
+    arguments.add(fileName);
+
+    for (const auto& parameter : StringArray::fromTokens(parameters, true))
+        if (parameter.isNotEmpty())
+            arguments.add(parameter.unquoted());
+
+    Array<const char*> argv;
+
+    for (const auto& argument : arguments)
+        argv.add(argument.toRawUTF8());
+
+    argv.add(nullptr);
+
     auto cpid = fork();
 
     if (cpid == 0)
     {
-        const char* const argv[4] = {"/bin/sh", "-c", pathAndArguments.toUTF8(), nullptr};
+        if (fork() == 0)
+            execve(fileName.toRawUTF8(), (char**)argv.getRawDataPointer(), environment ? environment->getRawDataPointer() : environ);
 
-        // Child process
-        if (execve(argv[0], (char**)argv, environment ? environment->getRawDataPointer() : environ) < 0)
-            exit(0);
-    }
-    else
-    {
-        if (cpid < 0)
-            return false;
+        _exit(0);
     }
 
-    return true;
+    if (cpid > 0)
+        waitpid(cpid, nullptr, 0);
+
+    return cpid >= 0;
 }
 #endif
 
@@ -237,7 +248,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
         }
 
         if (File(fileName).exists())
-            return MacFileHelpers::launchExecutable("\"" + fileName + "\" " + parameters, environment);
+            return MacFileHelpers::launchExecutable(fileName, parameters, environment);
 
         return false;
 #endif
@@ -674,15 +685,27 @@ bool File::isBundle() const
 }
 
 #if YUP_MAC
+static void runCommandAndWait(const StringArray& arguments)
+{
+    ChildProcess process;
+
+    if (process.start(arguments, 0))
+        process.waitForProcessToFinish(-1);
+}
+
 void File::addToDock() const
 {
-    // check that it's not already there...
-    if (!yup_getOutputFromCommand("defaults read com.apple.dock persistent-apps").containsIgnoreCase(getFullPathName()))
-    {
-        yup_runSystemCommand("defaults write com.apple.dock persistent-apps -array-add \"<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>" + getFullPathName() + "</string><key>_CFURLStringType</key><integer>0</integer></dict></dict></dict>\"");
+    ChildProcess readDock;
 
-        yup_runSystemCommand("osascript -e \"tell application \\\"Dock\\\" to quit\"");
-    }
+    if (readDock.start(StringArray { "defaults", "read", "com.apple.dock", "persistent-apps" })
+        && readDock.readAllProcessOutput().containsIgnoreCase(getFullPathName()))
+        return;
+
+    StringArray writeArguments { "defaults", "write", "com.apple.dock", "persistent-apps", "-array-add" };
+    writeArguments.add("<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>" + getFullPathName() + "</string><key>_CFURLStringType</key><integer>0</integer></dict></dict></dict>");
+
+    runCommandAndWait(writeArguments);
+    runCommandAndWait(StringArray { "osascript", "-e", "tell application \"Dock\" to quit" });
 }
 #endif
 

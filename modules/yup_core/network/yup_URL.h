@@ -143,8 +143,26 @@ public:
     */
     String getScheme() const;
 
-    /** Returns true if this URL refers to a local file. */
+    /** Returns true if this URL refers to a local file.
+
+        The scheme is compared case-insensitively, so "FILE:///path" is a local file too.
+    */
     bool isLocalFile() const;
+
+    /** Returns true if the other URL has the same scheme, host and port as this URL.
+
+        Scheme and host are compared case-insensitively. Use this to decide whether
+        credentials and cookies may be carried over to a redirect target.
+    */
+    bool isSameOrigin (const URL& other) const;
+
+    /** Returns true if following a redirect from this URL to the target URL is allowed.
+
+        Only http and https targets are accepted, and a redirect from https to http
+        (a downgrade) is refused. Backends should call this before following a
+        redirect and fail the request when it returns false.
+    */
+    bool isRedirectAllowed (const URL& target) const;
 
     /** Returns the file path of the local file to which this URL refers to.
 

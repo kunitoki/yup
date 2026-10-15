@@ -163,8 +163,11 @@ public:
                                 newLocation = address + "/" + newLocation;
                         }
 
-                        if (newLocation.isNotEmpty() && newLocation != address)
+                        if (newLocation.isNotEmpty() && newLocation != address && URL (address).isRedirectAllowed (URL (newLocation)))
                         {
+                            if (! URL (address).isSameOrigin (URL (newLocation)))
+                                headers = removeCredentialHeaders (headers);
+
                             address = newLocation;
                             continue;
                         }
@@ -178,6 +181,17 @@ public:
         }
 
         return (request != nullptr);
+    }
+
+    static String removeCredentialHeaders (const String& userHeaders)
+    {
+        String result;
+
+        for (const auto& line : StringArray::fromLines (userHeaders))
+            if (line.isNotEmpty() && ! (line.startsWithIgnoreCase ("Authorization:") || line.startsWithIgnoreCase ("Cookie:")))
+                result << line << "\r\n";
+
+        return result;
     }
 
     bool isError() const { return request == nullptr; }

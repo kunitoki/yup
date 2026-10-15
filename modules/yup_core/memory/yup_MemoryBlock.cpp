@@ -244,13 +244,16 @@ void MemoryBlock::copyFrom (const void* const src, int offset, size_t num) noexc
 
     if (offset < 0)
     {
-        d -= offset;
-        num += (size_t) -offset;
+        const auto numToSkip = jmin (num, (size_t) -(int64) offset);
+        d += numToSkip;
+        num -= numToSkip;
         offset = 0;
     }
 
-    if ((size_t) offset + num > size)
-        num = size - (size_t) offset;
+    if ((size_t) offset >= size)
+        return;
+
+    num = jmin (num, size - (size_t) offset);
 
     if (num > 0)
         memcpy (data + offset, d, num);
@@ -262,21 +265,19 @@ void MemoryBlock::copyTo (void* const dst, int offset, size_t num) const noexcep
 
     if (offset < 0)
     {
-        zeromem (d, (size_t) -offset);
-        d -= offset;
-        num -= (size_t) -offset;
+        const auto numToZero = jmin (num, (size_t) -(int64) offset);
+        zeromem (d, numToZero);
+        d += numToZero;
+        num -= numToZero;
         offset = 0;
     }
 
-    if ((size_t) offset + num > size)
-    {
-        auto newNum = (size_t) size - (size_t) offset;
-        zeromem (d + newNum, num - newNum);
-        num = newNum;
-    }
+    const auto numFromBlock = (size_t) offset < size ? jmin (num, size - (size_t) offset) : (size_t) 0;
 
-    if (num > 0)
-        memcpy (d, data + offset, num);
+    if (numFromBlock > 0)
+        memcpy (d, data + offset, numFromBlock);
+
+    zeromem (d + numFromBlock, num - numFromBlock);
 }
 
 String MemoryBlock::toString() const
@@ -418,10 +419,16 @@ bool MemoryBlock::fromBase64Encoding (StringRef s)
         return false;
 
     auto numBytesNeeded = String (s.text, dot).getIntValue();
+    auto srcChars = dot + 1;
+
+    if (numBytesNeeded < 0 || (size_t) numBytesNeeded > srcChars.length() * 6 / 8)
+    {
+        reset();
+        return false;
+    }
 
     setSize ((size_t) numBytesNeeded, true);
 
-    auto srcChars = dot + 1;
     std::size_t pos = 0;
 
     for (;;)

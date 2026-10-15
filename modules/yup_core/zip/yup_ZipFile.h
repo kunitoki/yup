@@ -216,7 +216,9 @@ public:
                                     between 0 and (getNumEntries() - 1).
         @param targetDirectory      the root folder to uncompress into
         @param overwriteFiles       whether to overwrite existing files with similarly-named ones
-        @param followSymlinks       whether to follow symlinks inside the target directory
+        @param followSymlinks       whether to follow symlinks inside the target directory. When this is
+                                    FollowSymlinks::no, symbolic link entries whose target is absolute or
+                                    resolves outside the target directory are rejected
         @returns success if all the files are successfully unzipped
     */
     Result uncompressEntry (int index,

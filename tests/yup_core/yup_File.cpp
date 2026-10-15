@@ -23,6 +23,10 @@
 
 #include <yup_core/yup_core.h>
 
+#if YUP_MAC || YUP_LINUX
+#include <sys/stat.h>
+#endif
+
 using namespace yup;
 
 class FileTests : public ::testing::Test
@@ -40,6 +44,14 @@ protected:
     {
         tempFolder.deleteRecursively();
     }
+
+#if YUP_MAC || YUP_LINUX
+    static mode_t getPermissions (const File& file)
+    {
+        struct stat info;
+        return stat (file.getFullPathName().toRawUTF8(), &info) == 0 ? (info.st_mode & 0777) : 0;
+    }
+#endif
 
     File tempFolder;
 };
@@ -1142,3 +1154,32 @@ TEST_F (FileTests, DISABLED_RevealToUser)
     File nonExistent = tempFolder.getChildFile ("does_not_exist.txt");
     EXPECT_NO_THROW (nonExistent.revealToUser());
 }
+
+#if YUP_MAC || YUP_LINUX
+TEST_F (FileTests, CreateDirectoryDoesNotInheritWorldWrite)
+{
+    ASSERT_TRUE (tempFolder.createDirectory().wasOk());
+    ASSERT_EQ (chmod (tempFolder.getFullPathName().toRawUTF8(), 0777), 0);
+
+    auto child = tempFolder.getChildFile ("child");
+    ASSERT_TRUE (child.createDirectory().wasOk());
+
+    auto currentUmask = ::umask (0);
+    ::umask (currentUmask);
+
+    EXPECT_EQ (getPermissions (child), (mode_t) (0777 & ~currentUmask));
+}
+
+TEST_F (FileTests, ReplaceWithTextPreservesPermissions)
+{
+    ASSERT_TRUE (tempFolder.createDirectory().wasOk());
+
+    auto target = tempFolder.getChildFile ("target.txt");
+    ASSERT_TRUE (target.replaceWithText ("old"));
+    ASSERT_EQ (chmod (target.getFullPathName().toRawUTF8(), 0600), 0);
+
+    ASSERT_TRUE (target.replaceWithText ("new"));
+    EXPECT_EQ (target.loadFileAsString(), "new");
+    EXPECT_EQ (getPermissions (target), (mode_t) 0600);
+}
+#endif

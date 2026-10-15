@@ -90,25 +90,30 @@ bool YUP_CALLTYPE Process::openEmailWithAttachments([[maybe_unused]] const Strin
 #else
     YUP_AUTORELEASEPOOL
     {
+        const auto escapeAppleScriptString = [] (const String& text)
+        {
+            return text.replace ("\\", "\\\\").replace ("\"", "\\\"");
+        };
+
         String script;
         script << "tell application \"Mail\"\r\n"
                   "set newMessage to make new outgoing message with properties {subject:\""
-               << emailSubject.replace("\"", "\\\"")
+               << escapeAppleScriptString (emailSubject)
                << "\", content:\""
-               << bodyText.replace("\"", "\\\"")
+               << escapeAppleScriptString (bodyText)
                << "\" & return & return}\r\n"
                   "tell newMessage\r\n"
                   "set visible to true\r\n"
                   "set sender to \"sdfsdfsdfewf\"\r\n"
                   "make new to recipient at end of to recipients with properties {address:\""
-               << targetEmailAddress
+               << escapeAppleScriptString (targetEmailAddress)
                << "\"}\r\n";
 
         for (int i = 0; i < filesToAttach.size(); ++i)
         {
             script << "tell content\r\n"
                       "make new attachment with properties {file name:\""
-                   << filesToAttach[i].replace("\"", "\\\"")
+                   << escapeAppleScriptString (filesToAttach[i])
                    << "\"} at after the last paragraph\r\n"
                       "end tell\r\n";
         }
@@ -126,6 +131,24 @@ bool YUP_CALLTYPE Process::openEmailWithAttachments([[maybe_unused]] const Strin
 }
 
 //==============================================================================
+static NSURLRequest* requestForRedirect (NSURL* previousURL, NSURLRequest* newRequest)
+{
+    const URL previous (nsStringToYup (previousURL.absoluteString));
+    const URL target (nsStringToYup (newRequest.URL.absoluteString));
+
+    if (! previous.isRedirectAllowed (target))
+        return nil;
+
+    if (previous.isSameOrigin (target))
+        return newRequest;
+
+    NSMutableURLRequest* request = [newRequest mutableCopy];
+    [request setValue:nil forHTTPHeaderField:@"Authorization"];
+    [request setValue:nil forHTTPHeaderField:@"Cookie"];
+
+    return request;
+}
+
 class URLConnectionStateBase : public Thread
 {
    public:
@@ -287,6 +310,8 @@ class URLConnectionStatePreYosemite final : public URLConnectionStateBase
                 return nil; // Cancel redirect and allow connection to continue
 
             ++numRedirects;
+
+            return requestForRedirect (redirectResponse.URL, newRequest);
         }
 
         return newRequest;
@@ -565,7 +590,7 @@ class API_AVAILABLE(macos(10.9)) URLConnectionState final : public URLConnection
         latestTotalBytes = static_cast<int>(totalBytesWritten);
     }
 
-    void willPerformHTTPRedirection(NSURLRequest* urlRequest, void (^completionHandler)(NSURLRequest*))
+    void willPerformHTTPRedirection(NSURL* previousURL, NSURLRequest* urlRequest, void (^completionHandler)(NSURLRequest*))
     {
         {
             const ScopedLock sl(dataLock);
@@ -574,7 +599,7 @@ class API_AVAILABLE(macos(10.9)) URLConnectionState final : public URLConnection
                 return;
         }
 
-        completionHandler(numRedirects++ < numRedirectsToFollow ? urlRequest : nil);
+        completionHandler(numRedirects++ < numRedirectsToFollow ? requestForRedirect (previousURL, urlRequest) : nil);
     }
 
     void run() override
@@ -677,11 +702,11 @@ class API_AVAILABLE(macos(10.9)) URLConnectionState final : public URLConnection
             });
         }
 
-        static void willPerformHTTPRedirection(id self, SEL, NSURLSession*, NSURLSessionTask*, NSHTTPURLResponse*, NSURLRequest* request, void (^completionHandler)(NSURLRequest*))
+        static void willPerformHTTPRedirection(id self, SEL, NSURLSession*, NSURLSessionTask*, NSHTTPURLResponse* response, NSURLRequest* request, void (^completionHandler)(NSURLRequest*))
         {
             withState(self, [&] (URLConnectionState& state)
             {
-                state.willPerformHTTPRedirection(request, completionHandler);
+                state.willPerformHTTPRedirection(response.URL, request, completionHandler);
             });
         }
 
