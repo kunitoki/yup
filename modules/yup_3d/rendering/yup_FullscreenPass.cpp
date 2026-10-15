@@ -31,12 +31,18 @@ FullscreenPass::~FullscreenPass() = default;
 Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bundleData, size_t bundleSize,
                                 GpuTextureFormat outputFormat, bool additiveBlend, int colorTargets)
 {
+    return prepare (newDevice, bundleData, bundleSize, std::vector<GpuTextureFormat> (static_cast<size_t> (jmax (1, colorTargets)), outputFormat), additiveBlend);
+}
+
+Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bundleData, size_t bundleSize,
+                                Span<const GpuTextureFormat> outputFormats, bool additiveBlend)
+{
     device = nullptr;
     pipeline = nullptr;
     targets.clear();
 
-    if (newDevice == nullptr || bundleData == nullptr || bundleSize == 0)
-        return Result::fail ("No device or no shader bundle");
+    if (newDevice == nullptr || bundleData == nullptr || bundleSize == 0 || outputFormats.empty())
+        return Result::fail ("No device, shader bundle or output format");
 
     auto bundle = ShaderBundle::loadFromData (bundleData, bundleSize);
     if (bundle.failed())
@@ -46,10 +52,10 @@ Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bu
     options.topology = GpuPrimitiveTopology::triangleList;
     options.cullMode = GpuCullMode::none;
 
-    for (int i = 0; i < jmax (1, colorTargets); ++i)
+    for (const auto format : outputFormats)
     {
         auto& target = options.colorTargets.emplace_back();
-        target.format = outputFormat;
+        target.format = format;
         target.blendEnabled = additiveBlend;
         target.blend.srcColor = GpuBlendFactor::one;
         target.blend.dstColor = GpuBlendFactor::one;

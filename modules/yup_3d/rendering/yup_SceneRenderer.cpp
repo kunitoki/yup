@@ -25,6 +25,18 @@ namespace yup
 namespace
 {
 
+// Precompiled bundle (do not edit the .inc by hand). Regenerate it after changing
+// shaders/yup_DebugView.frag with: just yup3d_shaders
+constexpr uint8_t debugViewShaderBundle[] = {
+#include "../shaders/yup_DebugView.inc"
+};
+
+// std140 mirror of DebugViewBlock in yup_DebugView.frag
+struct DebugViewBlock
+{
+    float options[4]; // x what to show: 0 black, else the RenderSettings::DebugView of the texture bound
+};
+
 /** The largest power of two within both @p requested and what @p device supports. */
 uint32_t getSupportedSampleCount (int requested, const GpuDevice& device) noexcept
 {
@@ -285,10 +297,13 @@ struct SceneRenderer::Impl
         it, so turning ambient occlusion back on compiles nothing. A pass that cannot compile, or
         targets that cannot be created, are logged once and leave the frames without it, the shading
         passes binding white. Block::probeInfo.w is the frame's ambient occlusion flag, which LightingPass reads. Returns false
-        only when the pass could not be recorded.
+        only when the pass could not be recorded. On full, @p radiance (getIndirectDiffuseRadiance()) makes the pass gather
+        the screen-space diffuse GI too, which addIndirectDiffuse() adds after LightingPass; @p failIndirectDiffuseForTesting
+        makes every GI pass fail from then on.
     */
     bool renderAmbientOcclusion (GpuFrame& frame, const RenderSettings& settings, bool temporal,
-                                 const GpuTexture::Ptr& depth, const GpuTexture::Ptr& normalRoughness, LightingInputs& lighting)
+                                 const GpuTexture::Ptr& depth, const GpuTexture::Ptr& normalRoughness, LightingInputs& lighting,
+                                 const AmbientOcclusionPass::Radiance& radiance = {}, bool failIndirectDiffuseForTesting = false)
     {
         lighting.ambientOcclusion = nullptr;
         lighting.block.probeInfo[3] = 0.0f;
@@ -304,16 +319,45 @@ struct SceneRenderer::Impl
         if (ambientOcclusionPass == nullptr)
             ambientOcclusionPass = std::make_unique<AmbientOcclusionPass> (device);
 
+        if (failIndirectDiffuseForTesting)
+            ambientOcclusionPass->failIndirectDiffuseForTesting();
+
         if (ambientOcclusionPass->prepare().failed())
             return true;
 
-        if (! ambientOcclusionPass->render (frame, viewData, capabilities->getTier(), temporal, depth, normalRoughness, settings.aoDistance, frameResources))
+        if (! ambientOcclusionPass->render (frame, viewData, capabilities->getTier(), temporal, depth, normalRoughness, settings.aoDistance, frameResources, radiance))
             return false;
 
         ambientOcclusionPass->trimUnusedTargets();
         lighting.ambientOcclusion = ambientOcclusionPass->getOutput();
         lighting.block.probeInfo[3] = lighting.ambientOcclusion != nullptr ? 1.0f : 0.0f;
         return true;
+    }
+
+    /** Full tier: the radiance the screen-space diffuse GI gathers, the history of temporal
+        anti-aliasing and the exposure it holds, while the GI is enabled and has not given up.
+        Empty otherwise, and on the frames without a valid history to read (the first one, after a
+        resize, restartAccumulation(), a taaSamples change, a failed frame or once released), which
+        then trace the ambient occlusion alone, exactly as without GI.
+    */
+    AmbientOcclusionPass::Radiance getIndirectDiffuseRadiance (const RenderSettings& settings, const GpuTexture::Ptr& velocity) const
+    {
+        // An exposure of 0 left nothing to divide the history by
+        if (! isGatheringIndirectDiffuse (settings) || ! (previousExposure > 0.0f))
+            return {};
+
+        const auto history = frameResources.findHistory (TemporalAA::historyName);
+        if (! history.valid || history.read == nullptr)
+            return {};
+
+        return { history.read, velocity, previousExposure };
+    }
+
+    /** True while the frames gather screen-space diffuse GI: enabled, and not given up after failures. */
+    bool isGatheringIndirectDiffuse (const RenderSettings& settings) const
+    {
+        return capabilities->isEnabled (RenderCapabilities::Feature::screenSpaceGI, settings)
+            && (ambientOcclusionPass == nullptr || ! ambientOcclusionPass->hasGivenUpIndirectDiffuse());
     }
 
     /** Full tier: traces the screen-space reflections of @p gbuffer into lighting.reflections while
@@ -474,12 +518,65 @@ struct SceneRenderer::Impl
             probeBaker->forgetBakes();
     }
 
+    /** Full tier: draws RenderSettings::debugView into @p output in place of the final image, from
+        this frame's @p lighting and @p indirectDiffuse, or black when the frame has none of them,
+        binding @p standIn instead. The pass is created by the first frame with a debug view, then
+        kept; the frames without one release its targets. A pass that cannot compile or record is
+        logged once and leaves the final image.
+    */
+    void renderDebugView (GpuFrame& frame, const RenderSettings& settings, bool full, const LightingInputs& lighting,
+                          const GpuTexture::Ptr& indirectDiffuse, const GpuTexture::Ptr& standIn, const GpuTexture::Ptr& output)
+    {
+        using DebugView = RenderSettings::DebugView;
+
+        if (! full || settings.debugView == DebugView::none)
+        {
+            if (debugViewPass != nullptr)
+                debugViewPass->releaseTargets();
+
+            return;
+        }
+
+        if (debugViewPass == nullptr)
+        {
+            debugViewPass = std::make_unique<FullscreenPass>();
+            if (debugViewPass->prepare (device, debugViewShaderBundle, sizeof (debugViewShaderBundle), output->getFormat()).failed())
+                YUP_DBG ("SceneRenderer: unable to compile the debug view, the frames show the final image");
+        }
+
+        if (! debugViewPass->isPrepared())
+            return;
+
+        const auto source = settings.debugView == DebugView::ambientOcclusion ? lighting.ambientOcclusion
+                          : settings.debugView == DebugView::reflections      ? lighting.reflections
+                                                                              : indirectDiffuse;
+
+        DebugViewBlock block {};
+        block.options[0] = source != nullptr ? static_cast<float> (settings.debugView) : 0.0f;
+
+        const auto drawn = debugViewPass->draw (frame, output, {}, [&] (GpuRenderPass& renderPass)
+        {
+            renderPass.setUniformBuffer (0, 0, &viewData.getBlock(), sizeof (ViewData::Block));
+            renderPass.setSampler (0, 3, lighting.samplers.pointClamp);
+            renderPass.setUniformBuffer (1, 0, &block, sizeof (block));
+            renderPass.setTexture (1, 1, source != nullptr ? source : standIn);
+        });
+
+        if (! drawn && ! std::exchange (debugViewFailed, true))
+            YUP_DBG ("SceneRenderer: unable to record the debug view, the frames show the final image");
+
+        debugViewPass->trimUnusedTargets();
+    }
+
     /** Releases the render targets the passes keep for the next frames. */
     void releasePassTargets() noexcept
     {
         postChain.releaseTargets();
         gbufferPass.releaseTargets();
         lightingPass.releaseTargets();
+
+        if (debugViewPass != nullptr)
+            debugViewPass->releaseTargets();
 
         if (depthNormalPrepass != nullptr)
             depthNormalPrepass->releaseTargets();
@@ -580,6 +677,7 @@ struct SceneRenderer::Impl
 
         // Giving up on them after failures changes the image as much as turning them off
         signature.addBits (isTracingReflections (settings) ? 1u : 0u);
+        signature.addBits (isGatheringIndirectDiffuse (settings) ? 1u : 0u);
 
         // Each item's transform is hashed with what it draws, so swapping transforms between items still counts
         const auto addItem = [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
@@ -750,6 +848,8 @@ struct SceneRenderer::Impl
     LightingPass lightingPass;
     ForwardPass forwardPass;
     PostChain postChain;
+    std::unique_ptr<FullscreenPass> debugViewPass; // Created by the first full frame with a debug view, see renderDebugView(), for the format of colorTarget, which never changes
+    bool debugViewFailed = false;                  // A debug view draw failed, logged once
     GpuTarget::Ptr colorTarget;
     GpuTexture::Ptr depthTexture;
     GpuTexture::Ptr lookupTables; // The lookup tables of this renderer and device, created once, black if that failed
@@ -763,7 +863,10 @@ struct SceneRenderer::Impl
     GpuTexture::Ptr prepassNormalOutput;
     GpuTexture::Ptr ambientOcclusionOutput;
     GpuTexture::Ptr reflectionsOutput;
-    float previousExposure = 1.0f; // The exposure of the last frame, which its history holds, see renderScreenSpaceReflections()
+    GpuTexture::Ptr indirectDiffuseOutput;
+    GpuTexture::Ptr circleOfConfusionOutput;
+    GpuTexture::Ptr depthOfFieldOutput;
+    float previousExposure = 1.0f; // The exposure of the last frame, which its history holds, see renderScreenSpaceReflections() and getIndirectDiffuseRadiance()
     uint64 frameIndex = 0;
     uint64 lastStamp = 0;
     uint64 invalidatingSignature = 0;
@@ -862,6 +965,9 @@ GpuTexture::Ptr SceneRenderer::getPassOutput (PassOutput output) const
         case PassOutput::prepassNormal: return impl->prepassNormalOutput;
         case PassOutput::ambientOcclusion: return impl->ambientOcclusionOutput;
         case PassOutput::reflections: return impl->reflectionsOutput;
+        case PassOutput::indirectDiffuse: return impl->indirectDiffuseOutput;
+        case PassOutput::circleOfConfusion: return impl->circleOfConfusionOutput;
+        case PassOutput::depthOfField: return impl->depthOfFieldOutput;
     }
 
     return nullptr;
@@ -940,6 +1046,16 @@ const HiZPyramid* SceneRenderer::getHiZPyramid() const noexcept
     return impl != nullptr ? impl->hiZPyramid.get() : nullptr;
 }
 
+const DepthOfField* SceneRenderer::getDepthOfField() const noexcept
+{
+    return impl != nullptr ? impl->postChain.getDepthOfField() : nullptr;
+}
+
+const FullscreenPass* SceneRenderer::getDebugViewPass() const noexcept
+{
+    return impl != nullptr ? impl->debugViewPass.get() : nullptr;
+}
+
 const LightingPass* SceneRenderer::getLightingPass() const noexcept
 {
     return impl != nullptr ? &impl->lightingPass : nullptr;
@@ -970,6 +1086,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
             impl->prepassNormalOutput = nullptr;
             impl->ambientOcclusionOutput = nullptr;
             impl->reflectionsOutput = nullptr;
+            impl->indirectDiffuseOutput = nullptr;
+            impl->circleOfConfusionOutput = nullptr;
+            impl->depthOfFieldOutput = nullptr;
         }
 
         lastError = error;
@@ -1141,6 +1260,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     }
 
     const auto output = full ? ForwardPass::Output::hdrLinear : (hdr ? ForwardPass::Output::hdrReversible : ForwardPass::Output::ldrInline);
+    GpuTexture::Ptr indirectDiffuse; // The screen-space diffuse GI this frame added, if any
 
     if (full)
     {
@@ -1156,7 +1276,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         if (lighting.materials == nullptr)
             return failFrame ("Unable to upload the material table");
 
-        if (! impl->renderAmbientOcclusion (frame, settings, temporalAntiAliasing, gbuffer.depth, gbuffer.normalRoughness, lighting))
+        if (! impl->renderAmbientOcclusion (frame, settings, temporalAntiAliasing, gbuffer.depth, gbuffer.normalRoughness, lighting,
+                                            impl->getIndirectDiffuseRadiance (settings, gbuffer.velocity), failScreenSpaceGI))
             return failFrame ("Unable to render the ambient occlusion");
 
         impl->renderScreenSpaceReflections (frame, settings, gbuffer, lighting, failScreenSpaceReflections);
@@ -1169,6 +1290,10 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
         if (! impl->lightingPass.render (device, frame, impl->viewData, gbuffer, lighting, targets.color))
             return failFrame ("Unable to render the lighting pass");
+
+        // The screen-space diffuse GI the ambient occlusion gathered, if any: a failure leaves the frame without it
+        if (impl->ambientOcclusionPass != nullptr && impl->ambientOcclusionPass->addIndirectDiffuse (frame, impl->viewData, gbuffer, lighting, targets.color))
+            indirectDiffuse = impl->ambientOcclusionPass->getIndirectDiffuse();
 
         impl->lightingPass.trimUnusedTargets();
     }
@@ -1211,10 +1336,17 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     {
         // Raster: the resolved color, reversibly tone mapped, and no depth or motion for the post effects
         const auto sceneColor = targets.resolve != nullptr ? targets.resolve : targets.color;
-        const PostChain::Inputs inputs { sceneColor, full ? targets.depth : nullptr, targets.velocity, ! full, scene.getBackgroundColor(), impl->getTemporalSampleIndex(), impl->changing };
+        const PostChain::Inputs inputs { sceneColor, full ? targets.depth : nullptr, targets.velocity, ! full, scene.getBackgroundColor(),
+                                         impl->getTemporalSampleIndex(), impl->changing, scene.getActiveCamera() };
+
+        if (depthOfFieldFailures > 0)
+            impl->postChain.failDepthOfFieldForTesting (std::exchange (depthOfFieldFailures, 0));
+
         if (! impl->postChain.render (device, frame, *impl->capabilities, settings, impl->viewData, impl->frameResources, inputs, impl->colorTarget->asTexture()))
             return failFrame ("Unable to render the post effects");
     }
+
+    impl->renderDebugView (frame, settings, full, lighting, indirectDiffuse, impl->postChain.getResolvedColor(), impl->colorTarget->asTexture());
 
     frame.submit();
     impl->commitPreviousTransforms (stamp);
@@ -1229,6 +1361,11 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->prepassNormalOutput = impl->depthNormalPrepass != nullptr ? impl->depthNormalPrepass->getNormalRoughness() : nullptr;
     impl->ambientOcclusionOutput = lighting.ambientOcclusion;
     impl->reflectionsOutput = lighting.reflections;
+    impl->indirectDiffuseOutput = indirectDiffuse;
+
+    const auto* depthOfField = hdr ? impl->postChain.getDepthOfField() : nullptr;
+    impl->circleOfConfusionOutput = depthOfField != nullptr ? depthOfField->getCircleOfConfusionTexture() : nullptr;
+    impl->depthOfFieldOutput = depthOfField != nullptr ? depthOfField->getOutput() : nullptr;
     impl->previousExposure = impl->viewData.getBlock().cameraPosition[3];
 
     lastError = {};

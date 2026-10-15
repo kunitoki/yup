@@ -262,3 +262,18 @@ TEST_F (SceneTests, RenderSettingsDefaultAndAreKept)
 
     EXPECT_TRUE (scene.getRenderSettings() == settings);
 }
+
+TEST_F (SceneTests, WorldFogIsDisabledByDefaultAndIsKept)
+{
+    EXPECT_FALSE (scene->getWorldFog().enabled);
+    EXPECT_TRUE (scene->getWorldFog() == WorldFog {});
+
+    WorldFog fog;
+    fog.enabled = true;
+    fog.density = 0.1f;
+    fog.heightFalloff = 0.5f;
+    fog.anisotropy = 0.3f;
+    scene->setWorldFog (fog);
+
+    EXPECT_TRUE (scene->getWorldFog() == fog);
+}

@@ -24,7 +24,9 @@
 #include "../mocks/yup_rhi.h"
 
 #include "yup_BoundingBox.cpp"
+#include "yup_CameraNode.cpp"
 #include "yup_DepthNormalPrepass.cpp"
+#include "yup_DepthOfField.cpp"
 #include "yup_EntityNode.cpp"
 #include "yup_EnvironmentMap.cpp"
 #include "yup_FrameResources.cpp"
@@ -56,3 +58,4 @@
 #include "yup_TemporalAA.cpp"
 #include "yup_Texture.cpp"
 #include "yup_ViewData.cpp"
+#include "yup_WorldFog.cpp"

@@ -33,8 +33,13 @@ class GpuComputePassImplMetal final : public GpuComputePass::Impl
 {
 public:
     /** Encodes into @p commandBufferToEncode, and commits it on finish() when
-        @p commitOnFinish is set: a frame commits its own command buffer. */
-    GpuComputePassImplMetal (id<MTLDevice> device, rive::ore::Context* oreCtx, id<MTLCommandBuffer> commandBufferToEncode, bool commitOnFinish)
+        @p commitOnFinish is set: a frame commits its own command buffer. A pass of a
+        frame measuring its scopes is created with @p passDescriptor, which samples it. */
+    GpuComputePassImplMetal (id<MTLDevice> device,
+                             rive::ore::Context* oreCtx,
+                             id<MTLCommandBuffer> commandBufferToEncode,
+                             bool commitOnFinish,
+                             MTLComputePassDescriptor* passDescriptor = nil)
         : device (device)
         , oreCtx (oreCtx)
     {
@@ -43,7 +48,18 @@ public:
 
         YUP_AUTORELEASEPOOL
         {
-            encoder = [commandBufferToEncode computeCommandEncoder];
+            if (passDescriptor != nil)
+            {
+                if (@available (macOS 11.0, iOS 14.0, *))
+                {
+                    encoder = [commandBufferToEncode computeCommandEncoderWithDescriptor:passDescriptor];
+                    sampled = encoder != nil;
+                }
+            }
+
+            if (encoder == nil)
+                encoder = [commandBufferToEncode computeCommandEncoder];
+
             encodedInto = commandBufferToEncode;
             if (encoder != nil && commitOnFinish)
                 commandBuffer = commandBufferToEncode;
@@ -221,16 +237,17 @@ std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&
     return impl;
 }
 
-std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice& ctx, rive::ore::Context& frameContext)
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice& ctx, rive::ore::Context& frameContext, void* passDescriptor)
 {
     auto& metalCtx = static_cast<GpuDeviceMetal&> (ctx);
+    MTLComputePassDescriptor* descriptor = (__bridge_transfer MTLComputePassDescriptor*) passDescriptor;
 
     id<MTLCommandBuffer> frameCommandBuffer = static_cast<rive::ore::ContextMetal&> (frameContext).commandBuffer();
     jassert (frameCommandBuffer != nil); // Only set between the frame's begin and its submission
     if (frameCommandBuffer == nil)
         return nullptr;
 
-    auto impl = std::make_unique<GpuComputePassImplMetal> (metalCtx.getDevice(), &frameContext, frameCommandBuffer, false);
+    auto impl = std::make_unique<GpuComputePassImplMetal> (metalCtx.getDevice(), &frameContext, frameCommandBuffer, false, descriptor);
     if (! impl->isValid())
         return nullptr;
 

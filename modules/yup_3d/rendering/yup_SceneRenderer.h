@@ -60,6 +60,9 @@ namespace yup
     inline. The background color is display-referred on both tiers: it shows exactly as picked,
     never tone mapped. Silhouettes and transparent surfaces over the background blend with it after
     tone mapping on every path, so they look the same on both tiers and with or without bloom.
+    RenderSettings::depthOfField blurs what lies away from the focus of the active camera, on the
+    full tier after the temporal accumulation and before bloom; the frames it blurs composite over
+    the background color in radiance, so blurred highlights keep their brightness there.
     Highlights of very smooth surfaces are widened where normals change quickly across a pixel, to
     keep them from sparkling.
 
@@ -155,8 +158,9 @@ public:
           frame of the accumulation that follows;
         - the size, the tier, RenderSettings::taaSamples and restartAccumulation() discard the
           history, and the accumulation starts over from the next frame alone;
-        - tone mapping and the bloom settings apply after the accumulation, so changing them
-          neither restarts nor discards it.
+        - tone mapping, the bloom and depth of field settings, the depth of field fields of the
+          camera and RenderSettings::debugView apply after the accumulation, so changing them
+          neither restarts nor discards it: repaint after changing them.
 
         Repaint until this returns true, see SceneComponent. Always true on the raster tier, before
         the first render and after a failed one.
@@ -184,7 +188,10 @@ public:
         gbufferNormal, ///< Full: the rgba16float G-buffer RT1, the octahedral shading normal in xy, the filtered roughness in z and metallic in w, 0 where nothing was drawn. Raster: none.
         prepassNormal, ///< Raster with ambient occlusion: the rgba16float depth and normal prepass target, encoded as the G-buffer RT1, single sampled. Otherwise none.
         ambientOcclusion, ///< With ambient occlusion: the rgba8 AmbientOcclusionPass output, the view-space bent normal * 0.5 + 0.5 in rgb and the visibility in a, at half resolution. Otherwise none.
-        reflections ///< Full, with screen-space reflections and a history to read them from: the rgba16float ReflectionPass output, the reflected radiance (unexposed) in rgb and its confidence in a. Otherwise none, the first frame included.
+        reflections, ///< Full, with screen-space reflections and a history to read them from: the rgba16float ReflectionPass output, the reflected radiance (unexposed) in rgb and its confidence in a. Otherwise none, the first frame included.
+        indirectDiffuse, ///< Full, with screen-space diffuse GI added to the frame: the rgba16float AmbientOcclusionPass::getIndirectDiffuse(), the gathered irradiance (unexposed) in rgb and the share of the hemisphere it came from in a, at half resolution. Otherwise none, the first frame included.
+        circleOfConfusion, ///< Full, with depth of field blurring the frame: the r16float signed circle of confusion radius of DepthOfField, in texels of its half resolution, negative in front of the focus. Otherwise none.
+        depthOfField       ///< Full, with depth of field blurring the frame: the rgba16float DepthOfField result, the scene color after the blur and before bloom. Otherwise none.
     };
 
     /** @internal Returns an intermediate texture of the last frame, valid until the next render,
@@ -206,6 +213,12 @@ public:
 
     /** @internal The Hi-Z pyramid of the screen-space reflections, for tests, created with getReflectionPass(). */
     const HiZPyramid* getHiZPyramid() const noexcept;
+
+    /** @internal The depth of field, for tests, or nullptr before the first frame blurring with it. */
+    const DepthOfField* getDepthOfField() const noexcept;
+
+    /** @internal The pass drawing RenderSettings::debugView, for tests, or nullptr before the first full tier frame with one. */
+    const FullscreenPass* getDebugViewPass() const noexcept;
 
     /** @internal The deferred lighting pass of the full tier, for tests, or nullptr before the first render. */
     const LightingPass* getLightingPass() const noexcept;
@@ -285,6 +298,20 @@ public:
     */
     void failScreenSpaceReflectionsForTesting() noexcept { failScreenSpaceReflections = true; }
 
+    /** @internal Test hook, not for production use: from the next render on, every screen-space
+        diffuse GI pass of this renderer fails, as if the device could not record it. Frames still
+        render, with the ambient occlusion and without the GI; the renderer stops trying after the
+        second failure in a row, which restarts the accumulation.
+    */
+    void failScreenSpaceGIForTesting() noexcept { failScreenSpaceGI = true; }
+
+    /** @internal Test hook, not for production use: the next @p count depth of field passes of this
+        renderer fail, every one from now on by default, as if the device could not record them.
+        Frames still render, without the blur; the renderer stops trying after the second failure in
+        a row.
+    */
+    void failDepthOfFieldForTesting (int count = std::numeric_limits<int>::max()) noexcept { depthOfFieldFailures = count; }
+
     /** @internal Test hook, not for production use: the environment cube and the other radiance
         textures of this renderer hold RGBM in rgba8unorm, as below the float floor, even when the
         device renders half floats. Call it before the first render.
@@ -324,6 +351,8 @@ private:
     bool failLocalIndirectLighting = false;
     bool failMaterialLayers = false;
     bool failScreenSpaceReflections = false;
+    bool failScreenSpaceGI = false;
+    int depthOfFieldFailures = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneRenderer)
 };

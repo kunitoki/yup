@@ -320,7 +320,15 @@ bool GpuRenderPass::Impl::ensurePassOpen()
         if (framePools->openComputePass != nullptr)
             yup_finishComputePass (*framePools->openComputePass);
 
+        auto scopeIndex = -1;
+        auto* sampler = framePools->samplerForNextPass (scopeIndex);
+        if (sampler != nullptr)
+            sampler->beginRenderPass (scopeIndex);
+
         orePass = oreCtx->beginRenderPass (rpDesc);
+
+        if (sampler != nullptr)
+            sampler->endRenderPass();
     }
 
     if (orePass == nullptr)

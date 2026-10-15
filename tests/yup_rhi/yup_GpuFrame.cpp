@@ -45,8 +45,12 @@ protected:
         using OreInjectedGpuDevice::OreInjectedGpuDevice;
         using GpuDevice::getFrameCompletion;
         using GpuDevice::getCurrentFrameGeneration;
+        using GpuDevice::getScopeTimeline;
+        using GpuDevice::ScopeTimeline;
 
         bool reportsFrameCompletion() const noexcept override { return reportsCompletion; }
+
+        bool isScopeTimingAvailable() const noexcept override { return scopeTiming; }
 
         void* beginFrameCommands (uint64_t) override { return &commandBuffer; }
 
@@ -72,6 +76,7 @@ protected:
 
         int commandBuffer = 0;
         bool reportsCompletion = false;
+        bool scopeTiming = false;
         Result submitResult = Result::ok();
         Result waitResult = Result::ok();
         int submits = 0;
@@ -303,10 +308,343 @@ TEST_F (GpuFrameTests, FrameThatCouldNotBeSubmittedFails)
     EXPECT_EQ (frame.waitForGPU().getErrorMessage(), "not submitted");
 }
 
+TEST_F (GpuFrameTests, TimingsReportedByTheBackendReachTheStatus)
+{
+    device->reportsCompletion = true;
+    const auto completeFrame = device->getFrameCompletion();
+
+    auto frame = GpuFrame::begin (device);
+    frame.setTimingEnabled (true);
+    const auto status = frame.getStatus();
+    frame.submit();
+
+    completeFrame (device->getCurrentFrameGeneration(), Result::ok(), { true, 4.5 });
+
+    const auto timings = status.getTimings();
+    EXPECT_TRUE (timings.available);
+    EXPECT_DOUBLE_EQ (timings.frameMilliseconds, 4.5);
+}
+
+TEST_F (GpuFrameTests, FrameWithoutTimingEnabledReportsTimingsUnavailable)
+{
+    device->reportsCompletion = true;
+    const auto completeFrame = device->getFrameCompletion();
+
+    auto frame = GpuFrame::begin (device);
+    const auto status = frame.getStatus();
+    frame.submit();
+
+    // Too late: the frame was submitted without measuring
+    frame.setTimingEnabled (true);
+
+    completeFrame (device->getCurrentFrameGeneration(), Result::ok(), { true, 4.5 });
+
+    ASSERT_TRUE (status.poll().has_value());
+    EXPECT_FALSE (status.getTimings().available);
+    EXPECT_EQ (status.getTimings().frameMilliseconds, 0.0);
+}
+
+TEST_F (GpuFrameTests, FailedFrameReportsTimingsUnavailable)
+{
+    device->reportsCompletion = true;
+    const auto completeFrame = device->getFrameCompletion();
+
+    auto failedOnGpu = GpuFrame::begin (device);
+    failedOnGpu.setTimingEnabled (true);
+    const auto failedStatus = failedOnGpu.getStatus();
+    failedOnGpu.submit();
+    completeFrame (device->getCurrentFrameGeneration(), Result::fail ("faulted"), { true, 4.5 });
+
+    device->failNextFrameForTesting ("injected");
+    auto injected = GpuFrame::begin (device);
+    injected.setTimingEnabled (true);
+    const auto injectedStatus = injected.getStatus();
+    injected.submit();
+    completeFrame (device->getCurrentFrameGeneration(), Result::ok(), { true, 4.5 });
+
+    EXPECT_TRUE (failedStatus.wait().failed());
+    EXPECT_FALSE (failedStatus.getTimings().available);
+    EXPECT_TRUE (injectedStatus.wait().failed());
+    EXPECT_FALSE (injectedStatus.getTimings().available);
+}
+
+TEST_F (GpuFrameTests, PendingFrameReportsTimingsUnavailableWithoutBlocking)
+{
+    device->reportsCompletion = true;
+
+    auto frame = GpuFrame::begin (device);
+    frame.setTimingEnabled (true);
+    const auto status = frame.getStatus();
+    EXPECT_FALSE (status.getTimings().available);
+
+    frame.submit();
+    EXPECT_FALSE (status.poll().has_value());
+    EXPECT_FALSE (status.getTimings().available);
+    EXPECT_FALSE (GpuFrameStatus().getTimings().available);
+}
+
+TEST_F (GpuFrameTests, FramesCompletedOutOfOrderKeepTheirOwnTimings)
+{
+    device->reportsCompletion = true;
+    const auto completeFrame = device->getFrameCompletion();
+
+    GpuFrameStatus first, second;
+    uint64_t firstGeneration = 0, secondGeneration = 0;
+    {
+        auto firstFrame = GpuFrame::begin (device);
+        firstGeneration = device->getCurrentFrameGeneration();
+        auto secondFrame = GpuFrame::begin (device);
+        secondGeneration = device->getCurrentFrameGeneration();
+
+        firstFrame.setTimingEnabled (true);
+        secondFrame.setTimingEnabled (true);
+        first = firstFrame.getStatus();
+        second = secondFrame.getStatus();
+    }
+
+    // Both frames are gone and still in flight: the later one completes first
+    completeFrame (secondGeneration, Result::ok(), { true, 2.0 });
+    EXPECT_FALSE (first.getTimings().available);
+    EXPECT_DOUBLE_EQ (second.getTimings().frameMilliseconds, 2.0);
+
+    completeFrame (firstGeneration, Result::ok(), { true, 1.0 });
+    EXPECT_DOUBLE_EQ (first.getTimings().frameMilliseconds, 1.0);
+    EXPECT_DOUBLE_EQ (second.getTimings().frameMilliseconds, 2.0);
+}
+
+TEST_F (GpuFrameTests, ScopesAreListedInTheOrderTheyOpened)
+{
+    device->reportsCompletion = true;
+    device->scopeTiming = true;
+    const auto completeFrame = device->getFrameCompletion();
+
+    auto frame = GpuFrame::begin (device);
+    frame.setTimingEnabled (true);
+    frame.beginScope ("a");
+    frame.beginScope ("b");
+    frame.beginScope ("c");
+    frame.beginScope ("a");
+    frame.endScope();
+    const auto status = frame.getStatus();
+    frame.submit();
+
+    // The backend reports the scopes it sampled by index: the last "a" opened no pass
+    completeFrame (device->getCurrentFrameGeneration(), Result::ok(), { true, 4.5, { { {}, 1.0, true }, { {}, 2.0, true }, { {}, 3.0, true } } });
+
+    const auto timings = status.getTimings();
+    ASSERT_EQ (timings.scopes.size(), 4u);
+
+    const char* names[] = { "a", "b", "c", "a" };
+    const double milliseconds[] = { 1.0, 2.0, 3.0, 0.0 };
+    for (size_t i = 0; i < timings.scopes.size(); ++i)
+    {
+        EXPECT_EQ (timings.scopes[i].name, names[i]);
+        EXPECT_DOUBLE_EQ (timings.scopes[i].milliseconds, milliseconds[i]);
+        EXPECT_TRUE (timings.scopes[i].available);
+    }
+}
+
+TEST_F (GpuFrameTests, BeginningAScopeEndsTheOpenOne)
+{
+    device->reportsCompletion = true;
+    device->scopeTiming = true;
+    const auto completeFrame = device->getFrameCompletion();
+
+    auto frame = GpuFrame::begin (device);
+    frame.setTimingEnabled (true);
+    frame.beginScope ("outer");
+    frame.beginScope ("inner");
+    frame.endScope();
+    frame.endScope();
+    frame.beginScope ("after");
+    const auto status = frame.getStatus();
+    frame.submit();
+
+    completeFrame (device->getCurrentFrameGeneration(), Result::ok(), { true, 4.5, { { {}, 1.0, true }, { {}, 2.0, true }, { {}, 3.0, true } } });
+
+    const auto timings = status.getTimings();
+    ASSERT_EQ (timings.scopes.size(), 3u);
+    EXPECT_EQ (timings.scopes[0].name, "outer");
+    EXPECT_EQ (timings.scopes[1].name, "inner");
+    EXPECT_EQ (timings.scopes[2].name, "after");
+    EXPECT_DOUBLE_EQ (timings.scopes[0].milliseconds, 1.0);
+}
+
+TEST_F (GpuFrameTests, ScopeTheBackendCouldNotSampleIsUnavailable)
+{
+    device->reportsCompletion = true;
+    device->scopeTiming = true;
+    const auto completeFrame = device->getFrameCompletion();
+
+    auto frame = GpuFrame::begin (device);
+    frame.setTimingEnabled (true);
+    frame.beginScope ("sampled");
+    frame.beginScope ("outOfSamples");
+    const auto status = frame.getStatus();
+    frame.submit();
+
+    completeFrame (device->getCurrentFrameGeneration(), Result::ok(), { true, 4.5, { { {}, 1.0, true }, { {}, 2.0, false } } });
+
+    const auto timings = status.getTimings();
+    ASSERT_EQ (timings.scopes.size(), 2u);
+    EXPECT_TRUE (timings.scopes[0].available);
+    EXPECT_FALSE (timings.scopes[1].available);
+    EXPECT_EQ (timings.scopes[1].milliseconds, 0.0);
+    EXPECT_DOUBLE_EQ (timings.frameMilliseconds, 4.5);
+}
+
+TEST_F (GpuFrameTests, FrameThatDoesNotMeasureScopesReportsNone)
+{
+    device->reportsCompletion = true;
+    const auto completeFrame = device->getFrameCompletion();
+    const GpuFrameTimings reported { true, 4.5, { { {}, 1.0, true } } };
+
+    // Timing off, on a device that measures scopes
+    device->scopeTiming = true;
+    auto unmeasured = GpuFrame::begin (device);
+    unmeasured.beginScope ("a");
+    const auto unmeasuredStatus = unmeasured.getStatus();
+    unmeasured.submit();
+    completeFrame (device->getCurrentFrameGeneration(), Result::ok(), reported);
+
+    // Timing on, on a device that measures only frames
+    device->scopeTiming = false;
+    auto framesOnly = GpuFrame::begin (device);
+    framesOnly.setTimingEnabled (true);
+    framesOnly.beginScope ("a");
+    const auto framesOnlyStatus = framesOnly.getStatus();
+    framesOnly.submit();
+    completeFrame (device->getCurrentFrameGeneration(), Result::ok(), reported);
+
+    EXPECT_FALSE (unmeasuredStatus.getTimings().available);
+    EXPECT_TRUE (unmeasuredStatus.getTimings().scopes.empty());
+    EXPECT_TRUE (framesOnlyStatus.getTimings().available);
+    EXPECT_TRUE (framesOnlyStatus.getTimings().scopes.empty());
+}
+
+TEST_F (GpuFrameTests, FramesCompletedOutOfOrderKeepTheirOwnScopes)
+{
+    device->reportsCompletion = true;
+    device->scopeTiming = true;
+    const auto completeFrame = device->getFrameCompletion();
+
+    GpuFrameStatus first, second;
+    uint64_t firstGeneration = 0, secondGeneration = 0;
+    {
+        auto firstFrame = GpuFrame::begin (device);
+        firstGeneration = device->getCurrentFrameGeneration();
+        auto secondFrame = GpuFrame::begin (device);
+        secondGeneration = device->getCurrentFrameGeneration();
+
+        firstFrame.setTimingEnabled (true);
+        firstFrame.beginScope ("first");
+        secondFrame.setTimingEnabled (true);
+        secondFrame.beginScope ("second");
+        secondFrame.beginScope ("secondAgain");
+        first = firstFrame.getStatus();
+        second = secondFrame.getStatus();
+    }
+
+    completeFrame (secondGeneration, Result::ok(), { true, 2.0, { { {}, 0.5, true }, { {}, 0.25, true } } });
+    EXPECT_TRUE (first.getTimings().scopes.empty());
+    ASSERT_EQ (second.getTimings().scopes.size(), 2u);
+
+    completeFrame (firstGeneration, Result::ok(), { true, 1.0, { { {}, 0.75, true } } });
+
+    const auto firstTimings = first.getTimings();
+    const auto secondTimings = second.getTimings();
+    ASSERT_EQ (firstTimings.scopes.size(), 1u);
+    EXPECT_EQ (firstTimings.scopes[0].name, "first");
+    EXPECT_DOUBLE_EQ (firstTimings.scopes[0].milliseconds, 0.75);
+    ASSERT_EQ (secondTimings.scopes.size(), 2u);
+    EXPECT_EQ (secondTimings.scopes[0].name, "second");
+    EXPECT_DOUBLE_EQ (secondTimings.scopes[0].milliseconds, 0.5);
+    EXPECT_EQ (secondTimings.scopes[1].name, "secondAgain");
+    EXPECT_DOUBLE_EQ (secondTimings.scopes[1].milliseconds, 0.25);
+}
+
+TEST_F (GpuFrameTests, ScopeTimelineCreditsOnlyTheTimePastEarlierWork)
+{
+    auto timeline = device->getScopeTimeline();
+
+    // One tick is 1 ms. The first frame was not measured, its work ended at 300
+    const auto unmeasured = timeline->commit();
+    const auto measured = timeline->commit();
+    timeline->advance (unmeasured, 300);
+
+    // Its first pass began under that work, the second under the first
+    const auto scopes = timeline->attribute (measured, { { 0, true, 200, 400 }, { 1, true, 350, 450 } }, 1000, 1.0e6);
+    ASSERT_EQ (scopes.size(), 2u);
+    EXPECT_DOUBLE_EQ (scopes[0].milliseconds, 100.0);
+    EXPECT_DOUBLE_EQ (scopes[1].milliseconds, 50.0);
+}
+
+TEST_F (GpuFrameTests, ScopeTimelineIgnoresAFrameCompletingOutOfOrder)
+{
+    auto timeline = device->getScopeTimeline();
+
+    const auto first = timeline->commit();
+    const auto second = timeline->commit();
+
+    // The later frame resolves first: the earlier one must not start after its end
+    const auto later = timeline->attribute (second, { { 0, true, 100, 200 } }, 1000, 1.0e6);
+    const auto earlier = timeline->attribute (first, { { 0, true, 50, 150 } }, 1000, 1.0e6);
+
+    ASSERT_EQ (later.size(), 1u);
+    ASSERT_EQ (earlier.size(), 1u);
+    EXPECT_DOUBLE_EQ (later[0].milliseconds, 100.0);
+    EXPECT_DOUBLE_EQ (earlier[0].milliseconds, 100.0);
+    EXPECT_TRUE (earlier[0].available);
+}
+
+TEST_F (GpuFrameTests, ScopeTimelineIgnoresWorkEndingAfterNow)
+{
+    auto timeline = device->getScopeTimeline();
+
+    // GPU timestamps went back between the frames, as after a GPU clock reset
+    const auto before = timeline->commit();
+    timeline->advance (before, 5000);
+
+    const auto after = timeline->commit();
+    const auto scopes = timeline->attribute (after, { { 0, true, 10, 20 } }, 500, 1.0e6);
+
+    ASSERT_EQ (scopes.size(), 1u);
+    EXPECT_DOUBLE_EQ (scopes[0].milliseconds, 10.0);
+}
+
+TEST_F (GpuFrameTests, ScopeTimelineReportsPassesItCouldNotSampleUnavailable)
+{
+    auto timeline = device->getScopeTimeline();
+
+    // An unscoped pass, a scope missing a sample and an empty pass
+    const auto scopes = timeline->attribute (timeline->commit(), { { -1, true, 0, 100 }, { 0, false, 0, 0 }, { 1, true, 0, 0 } }, 1000, 1.0e6);
+    ASSERT_EQ (scopes.size(), 2u);
+    EXPECT_FALSE (scopes[0].available);
+    EXPECT_EQ (scopes[0].milliseconds, 0.0);
+    EXPECT_TRUE (scopes[1].available);
+    EXPECT_EQ (scopes[1].milliseconds, 0.0);
+}
+
+TEST_F (GpuFrameTests, DeviceThatDoesNotReportCompletionCannotMeasureFrames)
+{
+    EXPECT_FALSE (device->isFrameTimingAvailable());
+
+    const auto headless = GpuDevice::create (GpuPlatform::Headless, {});
+    ASSERT_NE (headless, nullptr);
+    EXPECT_FALSE (headless->isFrameTimingAvailable());
+
+    auto frame = GpuFrame::begin (device);
+    frame.setTimingEnabled (true);
+    const auto status = frame.getStatus();
+
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+    EXPECT_FALSE (status.getTimings().available);
+}
+
 //==============================================================================
 
 #if YUP_APPLE
-class GpuFrameMetalTests : public ::testing::Test
+class GpuFrameMetalTests : public GpuReadbackFixture
 {
 protected:
     void SetUp() override
@@ -341,7 +679,145 @@ protected:
         return Result::ok();
     }
 
-    GpuDevice::Ptr device;
+#if YUP_ENABLE_SHADER_TRANSPILER
+    /** Draws @p draws blended fullscreen triangles into a 512x512 target in one frame, waits for it
+        and returns its timings. The frame turns timing on when @p measure is set, and otherwise
+        keeps the default. */
+    GpuFrameTimings drawAndMeasure (int draws, bool measure)
+    {
+        auto frame = GpuFrame::begin (device);
+        if (! prepareDrawing() || ! frame.isValid())
+        {
+            ADD_FAILURE() << "Unable to draw";
+            return {};
+        }
+
+        if (measure)
+            frame.setTimingEnabled (true);
+
+        drawPass (frame, draws);
+
+        const auto status = frame.getStatus();
+        const auto submitted = Time::getMillisecondCounterHiRes();
+        lastWait = frame.waitForGPU();
+        lastWallMilliseconds = Time::getMillisecondCounterHiRes() - submitted;
+        return status.getTimings();
+    }
+
+    /** Creates the 512x512 target and the blended pipeline drawPass() uses, once. */
+    bool prepareDrawing()
+    {
+        if (target == nullptr)
+            target = GpuTarget::create (device, 512, 512);
+
+        if (pipeline == nullptr)
+            pipeline = compileRenderPipeline ("#version 450\n"
+                                              "layout(location = 0) in vec2 uv;\n"
+                                              "layout(location = 0) out vec4 color;\n"
+                                              "void main() { color = vec4 (uv, 0.5, 0.5); }\n");
+
+        return target != nullptr && pipeline != nullptr;
+    }
+
+    /** Draws @p draws blended fullscreen triangles into the target, in a render pass of their own. */
+    void drawPass (GpuFrame& frame, int draws)
+    {
+        auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+        pass.setPipeline (pipeline);
+
+        for (int i = 0; i < draws; ++i)
+            pass.draw (3);
+    }
+
+    /** Dispatches a compute shader writing a storage buffer, in a compute pass of its own: each
+        invocation iterates @p iterations times. */
+    void dispatchPass (GpuFrame& frame, int iterations = 1)
+    {
+        auto& computePipeline = computePipelines[iterations];
+        if (computePipeline == nullptr)
+        {
+            const auto source = String ("#version 450\n"
+                                        "layout(local_size_x = 64) in;\n"
+                                        "layout(std430, set = 0, binding = 0) buffer Values { float values[]; };\n"
+                                        "void main()\n"
+                                        "{\n"
+                                        "    float value = float (gl_GlobalInvocationID.x);\n"
+                                        "    for (int i = 0; i < ")
+                              + String (iterations)
+                              + ("; ++i)\n"
+                                 "        value = value * 0.999 + 1.0;\n"
+                                 "    values[gl_GlobalInvocationID.x] = value;\n"
+                                 "}\n");
+
+            auto compiled = GpuComputePipeline::compileFromGlsl (device, source, GpuWorkgroupSize { 64, 1, 1 });
+            ASSERT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+            computePipeline = compiled.getValue();
+        }
+
+        if (computeValues == nullptr)
+        {
+            const std::vector<float> zeros (64 * 64, 0.0f);
+            computeValues = device->createBuffer (GpuBufferType::storage, zeros.data(), zeros.size() * sizeof (float));
+            ASSERT_NE (computeValues, nullptr);
+        }
+
+        auto pass = GpuComputePass::begin (frame);
+        ASSERT_TRUE (pass.isValid());
+        pass.setPipeline (computePipeline);
+        pass.setStorageBuffer (0, 0, computeValues);
+        EXPECT_TRUE (pass.dispatch (64, 1, 1));
+    }
+
+    /** Records a frame with @p record, timing on from its start unless @p timingFromStart is
+        false, waits for it and returns its timings. */
+    template <typename Record>
+    GpuFrameTimings measureFrame (Record&& record, bool timingFromStart = true)
+    {
+        auto frame = GpuFrame::begin (device);
+        if (! prepareDrawing() || ! frame.isValid())
+        {
+            ADD_FAILURE() << "Unable to draw";
+            return {};
+        }
+
+        if (timingFromStart)
+            frame.setTimingEnabled (true);
+
+        record (frame);
+
+        const auto status = frame.getStatus();
+        lastWait = frame.waitForGPU();
+        return status.getTimings();
+    }
+
+    /** The scope named @p name of @p timings, or nullptr. */
+    static const GpuScopeTiming* findScope (const GpuFrameTimings& timings, const String& name)
+    {
+        const auto found = std::find_if (timings.scopes.begin(), timings.scopes.end(), [&] (const auto& scope)
+        {
+            return scope.name == name;
+        });
+
+        return found != timings.scopes.end() ? &*found : nullptr;
+    }
+
+    static double median (std::vector<double> values)
+    {
+        std::sort (values.begin(), values.end());
+        return values[values.size() / 2];
+    }
+
+    GpuTarget::Ptr target;
+    GpuPipeline::Ptr pipeline;
+    GpuTarget::Ptr otherTarget;
+    GpuPipeline::Ptr otherPipeline;
+    std::map<int, GpuComputePipeline::Ptr> computePipelines;
+    GpuBuffer::Ptr computeValues;
+    Result lastWait = Result::ok();
+
+    /** The CPU wall time of the last drawAndMeasure(), from just before submission to the end of its wait. */
+    double lastWallMilliseconds = 0.0;
+#endif
 };
 
 TEST_F (GpuFrameMetalTests, WaitForGpuSucceedsAndNoFailureIsReported)
@@ -377,4 +853,435 @@ TEST_F (GpuFrameMetalTests, FramesDoNotKeepTheirQueueAliveAfterTheDevice)
     EXPECT_FALSE (queueIsAlive());
     objc_storeWeak (&weakQueue, nil);
 }
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (GpuFrameMetalTests, FrameTimingIsMeasuredOnMetal)
+{
+    EXPECT_TRUE (device->isFrameTimingAvailable());
+
+    const auto timings = drawAndMeasure (200, true);
+    EXPECT_TRUE (lastWait.wasOk()) << lastWait.getErrorMessage();
+    EXPECT_TRUE (timings.available);
+    EXPECT_TRUE (std::isfinite (timings.frameMilliseconds));
+    EXPECT_GT (timings.frameMilliseconds, 0.0);
+
+    // The GPU ran the frame between its submission and the end of the wait, so a correct unit never
+    // exceeds that wall time. The slack covers rounding between the GPU and CPU clocks, far below
+    // the factor 1000 of a wrong unit
+    EXPECT_LE (timings.frameMilliseconds, lastWallMilliseconds + 0.05);
+}
+
+TEST_F (GpuFrameMetalTests, FrameTimingIsOffByDefault)
+{
+    const auto timings = drawAndMeasure (200, false);
+    EXPECT_TRUE (lastWait.wasOk()) << lastWait.getErrorMessage();
+    EXPECT_FALSE (timings.available);
+}
+
+TEST_F (GpuFrameMetalTests, HeavierFrameMeasuresLonger)
+{
+    if (! device->isFrameTimingAvailable())
+        GTEST_SKIP() << "Frame timing is unavailable on this device";
+
+    // The first frames compile and warm up, and are not counted
+    drawAndMeasure (20, true);
+    drawAndMeasure (2000, true);
+
+    std::vector<double> light, heavy;
+    for (int i = 0; i < 5; ++i)
+    {
+        const auto lightTimings = drawAndMeasure (20, true);
+        const auto heavyTimings = drawAndMeasure (2000, true);
+        ASSERT_TRUE (lightTimings.available && heavyTimings.available);
+
+        light.push_back (lightTimings.frameMilliseconds);
+        heavy.push_back (heavyTimings.frameMilliseconds);
+    }
+
+    EXPECT_GT (median (heavy), median (light));
+}
+
+TEST_F (GpuFrameMetalTests, FailedFrameReportsUnavailable)
+{
+    device->failNextFrameForTesting ("injected");
+
+    const auto timings = drawAndMeasure (20, true);
+    EXPECT_EQ (lastWait.getErrorMessage(), "injected");
+    EXPECT_FALSE (timings.available);
+}
+
+TEST_F (GpuFrameMetalTests, ScopesAreReportedInOrder)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    // Each scope ends the one before it
+    const auto timings = measureFrame ([this] (GpuFrame& frame)
+    {
+        frame.beginScope ("a");
+        drawPass (frame, 20);
+        frame.beginScope ("b");
+        drawPass (frame, 20);
+        frame.beginScope ("c");
+        drawPass (frame, 20);
+    });
+
+    EXPECT_TRUE (lastWait.wasOk()) << lastWait.getErrorMessage();
+    ASSERT_TRUE (timings.available);
+    ASSERT_EQ (timings.scopes.size(), 3u);
+
+    const char* names[] = { "a", "b", "c" };
+    for (size_t i = 0; i < timings.scopes.size(); ++i)
+    {
+        EXPECT_EQ (timings.scopes[i].name, names[i]);
+        EXPECT_TRUE (timings.scopes[i].available);
+        EXPECT_TRUE (std::isfinite (timings.scopes[i].milliseconds));
+        EXPECT_GE (timings.scopes[i].milliseconds, 0.0);
+    }
+}
+
+TEST_F (GpuFrameMetalTests, HeavierScopeMeasuresLonger)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    const auto lightAndHeavy = [this] (GpuFrame& frame)
+    {
+        frame.beginScope ("light");
+        drawPass (frame, 10);
+        frame.beginScope ("heavy");
+        drawPass (frame, 2000);
+        frame.endScope();
+    };
+
+    // The first frame compiles and warms up, and is not counted
+    measureFrame (lightAndHeavy);
+
+    std::vector<double> light, heavy;
+    for (int i = 0; i < 5; ++i)
+    {
+        const auto timings = measureFrame (lightAndHeavy);
+        ASSERT_EQ (timings.scopes.size(), 2u);
+        ASSERT_TRUE (timings.scopes[0].available && timings.scopes[1].available);
+
+        light.push_back (timings.scopes[0].milliseconds);
+        heavy.push_back (timings.scopes[1].milliseconds);
+    }
+
+    EXPECT_GT (median (heavy), median (light));
+}
+
+TEST_F (GpuFrameMetalTests, ScopeSumsItsEncoders)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    // The same work twice: three scopes of one encoder each, then one scope of all three encoders.
+    // The two render parts weigh about the same, so a scope counting one encoder only reads about
+    // half of the whole
+    const auto separate = [this] (GpuFrame& frame)
+    {
+        frame.beginScope ("first");
+        drawPass (frame, 500);
+        frame.beginScope ("compute");
+        dispatchPass (frame);
+        frame.beginScope ("last");
+        drawPass (frame, 500);
+        frame.endScope();
+    };
+
+    const auto together = [this] (GpuFrame& frame)
+    {
+        frame.beginScope ("all");
+        drawPass (frame, 500);
+        dispatchPass (frame);
+        drawPass (frame, 500);
+        frame.endScope();
+    };
+
+    measureFrame (separate);
+    measureFrame (together);
+
+    std::vector<double> first, compute, last, all;
+    for (int i = 0; i < 5; ++i)
+    {
+        const auto parts = measureFrame (separate);
+        const auto whole = measureFrame (together);
+        ASSERT_EQ (parts.scopes.size(), 3u);
+        ASSERT_EQ (whole.scopes.size(), 1u);
+        ASSERT_TRUE (whole.scopes[0].available);
+
+        first.push_back (parts.scopes[0].milliseconds);
+        compute.push_back (parts.scopes[1].milliseconds);
+        last.push_back (parts.scopes[2].milliseconds);
+        all.push_back (whole.scopes[0].milliseconds);
+    }
+
+    EXPECT_GE (median (all), median (compute));
+    EXPECT_GE (median (all), 1.5 * jmax (median (first), median (last)));
+}
+
+TEST_F (GpuFrameMetalTests, ComputeScopeIsMeasured)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    // The dispatch is the frame's only pass, so no earlier pass absorbs it
+    const auto timings = measureFrame ([this] (GpuFrame& frame)
+    {
+        frame.beginScope ("compute");
+        dispatchPass (frame, 4000);
+        frame.endScope();
+    });
+
+    EXPECT_TRUE (lastWait.wasOk()) << lastWait.getErrorMessage();
+    ASSERT_EQ (timings.scopes.size(), 1u);
+    EXPECT_TRUE (timings.scopes[0].available);
+    EXPECT_GT (timings.scopes[0].milliseconds, 0.0);
+}
+
+TEST_F (GpuFrameMetalTests, FirstScopeIsNotChargedForTheUnmeasuredFrameBeforeIt)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    const auto heavyFrame = [this] (GpuFrame& frame)
+    {
+        auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+        pass.setPipeline (pipeline);
+        pass.draw (3, 1500);
+    };
+
+    const auto lightScope = [this] (GpuFrame& frame)
+    {
+        frame.beginScope ("light");
+        drawPass (frame, 5);
+    };
+
+    // The heavy work measured alone, which also starts the device measuring
+    const auto heavy = measureFrame ([&] (GpuFrame& frame)
+    {
+        frame.beginScope ("heavy");
+        heavyFrame (frame);
+    });
+    ASSERT_EQ (heavy.scopes.size(), 1u);
+
+    // Then a heavy frame that does not measure, queued right before a measured light one
+    std::vector<double> light;
+    for (int i = 0; i < 5; ++i)
+    {
+        {
+            auto unmeasured = GpuFrame::begin (device);
+            ASSERT_TRUE (unmeasured.isValid());
+            heavyFrame (unmeasured);
+        }
+
+        const auto timings = measureFrame (lightScope);
+        ASSERT_EQ (timings.scopes.size(), 1u);
+        ASSERT_TRUE (timings.scopes[0].available);
+        light.push_back (timings.scopes[0].milliseconds);
+    }
+
+    EXPECT_LT (median (light), heavy.scopes[0].milliseconds * 0.1);
+}
+
+TEST_F (GpuFrameMetalTests, UnscopedWorkIsNotAttributed)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    // On a tile-based GPU the light pass begins its vertex stage while the heavy one before it
+    // still shades: only the time past the end of the earlier passes belongs to it
+    const auto timings = measureFrame ([this] (GpuFrame& frame)
+    {
+        drawPass (frame, 2000);
+        frame.beginScope ("scoped");
+        drawPass (frame, 10);
+        frame.endScope();
+        drawPass (frame, 2000);
+    });
+
+    ASSERT_TRUE (timings.available);
+    ASSERT_EQ (timings.scopes.size(), 1u);
+    EXPECT_EQ (timings.scopes[0].name, "scoped");
+    EXPECT_TRUE (timings.scopes[0].available);
+    EXPECT_LT (timings.scopes[0].milliseconds, timings.frameMilliseconds * 0.1);
+}
+
+TEST_F (GpuFrameMetalTests, QueuedFrameIsNotChargedForTheFrameBeforeIt)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    ASSERT_TRUE (prepareDrawing());
+
+    // Queued back to back, a frame's first pass begins while the heavy last pass of the frame
+    // before it still shades
+    std::vector<GpuFrameStatus> statuses;
+    for (int i = 0; i < 6; ++i)
+    {
+        auto frame = GpuFrame::begin (device);
+        ASSERT_TRUE (frame.isValid());
+        frame.setTimingEnabled (true);
+        statuses.push_back (frame.getStatus());
+
+        frame.beginScope ("light");
+        drawPass (frame, 5);
+
+        frame.beginScope ("heavy");
+        auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+        pass.setPipeline (pipeline);
+        pass.draw (3, 1500);
+    }
+
+    std::vector<double> light, heavy;
+    for (size_t i = 1; i < statuses.size(); ++i)
+    {
+        EXPECT_TRUE (statuses[i].wait().wasOk());
+
+        const auto timings = statuses[i].getTimings();
+        ASSERT_EQ (timings.scopes.size(), 2u);
+        ASSERT_TRUE (timings.scopes[0].available && timings.scopes[1].available);
+
+        light.push_back (timings.scopes[0].milliseconds);
+        heavy.push_back (timings.scopes[1].milliseconds);
+    }
+
+    EXPECT_LT (median (light), median (heavy) * 0.1);
+}
+
+TEST_F (GpuFrameMetalTests, ScopeOpenedBeforeTimingWasEnabledReportsNothing)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    const auto timings = measureFrame ([this] (GpuFrame& frame)
+    {
+        frame.beginScope ("early");
+        drawPass (frame, 200);
+
+        frame.setTimingEnabled (true);
+        drawPass (frame, 200);
+
+        frame.beginScope ("late");
+        drawPass (frame, 200);
+    },
+                                       false);
+
+    ASSERT_TRUE (timings.available);
+    ASSERT_EQ (timings.scopes.size(), 2u);
+
+    const auto* early = findScope (timings, "early");
+    const auto* late = findScope (timings, "late");
+    ASSERT_TRUE (early != nullptr && late != nullptr);
+    EXPECT_FALSE (early->available);
+    EXPECT_EQ (early->milliseconds, 0.0);
+    EXPECT_TRUE (late->available);
+    EXPECT_GT (late->milliseconds, 0.0);
+}
+
+TEST_F (GpuFrameMetalTests, ManyFramesInFlightLeaveSamplesToOtherDevices)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    // Metal lets only a few dozen counter sample buffers live at once in a process. A second
+    // device, ready to draw before the first one fills its queue
+    auto otherDevice = GpuDevice::create (GpuPlatform::Metal, {});
+    ASSERT_NE (otherDevice, nullptr);
+
+    const auto useOtherDevice = [&]
+    {
+        std::swap (device, otherDevice);
+        std::swap (target, otherTarget);
+        std::swap (pipeline, otherPipeline);
+    };
+
+    useOtherDevice();
+    ASSERT_TRUE (prepareDrawing());
+    useOtherDevice();
+    ASSERT_TRUE (prepareDrawing());
+
+    // Frames heavy on the GPU and cheap to record fill the queue: more measuring frames in flight
+    // than counter sample buffers may live
+    std::vector<GpuFrameStatus> statuses;
+    for (int i = 0; i < 40; ++i)
+    {
+        auto frame = GpuFrame::begin (device);
+        ASSERT_TRUE (frame.isValid());
+        frame.setTimingEnabled (true);
+        statuses.push_back (frame.getStatus());
+        frame.beginScope ("scope");
+
+        auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+        pass.setPipeline (pipeline);
+        pass.draw (3, 1000);
+    }
+
+    useOtherDevice();
+    const auto other = measureFrame ([this] (GpuFrame& frame)
+    {
+        frame.beginScope ("other");
+        drawPass (frame, 5);
+    });
+    useOtherDevice();
+
+    ASSERT_EQ (other.scopes.size(), 1u);
+    EXPECT_TRUE (other.scopes[0].available);
+
+    // Every queued frame completes with its total, and its scope measured or unavailable
+    for (const auto& status : statuses)
+    {
+        EXPECT_TRUE (status.wait().wasOk());
+
+        const auto timings = status.getTimings();
+        ASSERT_TRUE (timings.available);
+        ASSERT_EQ (timings.scopes.size(), 1u);
+        EXPECT_TRUE (std::isfinite (timings.scopes[0].milliseconds));
+        EXPECT_GE (timings.scopes[0].milliseconds, 0.0);
+    }
+
+    // Once they completed, the device measures again
+    const auto after = measureFrame ([this] (GpuFrame& frame)
+    {
+        frame.beginScope ("after");
+        drawPass (frame, 5);
+    });
+
+    ASSERT_EQ (after.scopes.size(), 1u);
+    EXPECT_TRUE (after.scopes[0].available);
+}
+
+TEST_F (GpuFrameMetalTests, RunningOutOfSamplesKeepsTheFrameTotal)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    // Room for one render pass only
+    device->setScopeSampleCapacityForTesting (4);
+
+    const auto timings = measureFrame ([this] (GpuFrame& frame)
+    {
+        frame.beginScope ("sampled");
+        drawPass (frame, 200);
+        frame.beginScope ("outOfSamples");
+        drawPass (frame, 200);
+        frame.beginScope ("empty");
+        frame.endScope();
+    });
+
+    device->setScopeSampleCapacityForTesting (0);
+
+    EXPECT_TRUE (lastWait.wasOk()) << lastWait.getErrorMessage();
+    ASSERT_TRUE (timings.available);
+    EXPECT_GT (timings.frameMilliseconds, 0.0);
+    ASSERT_EQ (timings.scopes.size(), 3u);
+    EXPECT_TRUE (timings.scopes[0].available);
+    EXPECT_GT (timings.scopes[0].milliseconds, 0.0);
+    EXPECT_FALSE (timings.scopes[1].available);
+    EXPECT_EQ (timings.scopes[1].milliseconds, 0.0);
+    EXPECT_TRUE (timings.scopes[2].available);
+    EXPECT_EQ (timings.scopes[2].milliseconds, 0.0);
+}
+#endif
 #endif

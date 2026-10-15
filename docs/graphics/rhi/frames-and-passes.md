@@ -25,12 +25,15 @@ frame.submit();
 
 ### Methods
 
-| Method            | Description                                                              |
-| ----------------- | ------------------------------------------------------------------------ |
-| `isValid()`       | True if the frame holds a valid GPU context.                             |
-| `submit()`        | Submits all passes recorded since `begin()`. Idempotent; does not block. |
-| `waitForGPU()`    | Submits if needed, waits for the frame's work, releases transient resources, returns a `Result`. |
-| `getStatus()`     | The frame's GPU outcome, to check later without blocking.                |
+| Method               | Description                                                              |
+| -------------------- | ------------------------------------------------------------------------ |
+| `isValid()`          | True if the frame holds a valid GPU context.                             |
+| `submit()`           | Submits all passes recorded since `begin()`. Idempotent; does not block. |
+| `waitForGPU()`       | Submits if needed, waits for the frame's work, releases transient resources, returns a `Result`. |
+| `getStatus()`        | The frame's GPU outcome, to check later without blocking.                |
+| `setTimingEnabled()` | Measures the frame's GPU time (off by default). Call before `submit()`.  |
+| `beginScope()`       | Opens a named scope whose passes are timed together; ends the open one.  |
+| `endScope()`         | Ends the open scope.                                                     |
 
 `submit()` returns `false` if the frame is invalid or was already submitted. The
 destructor submits the frame automatically if you have not already done so.
@@ -53,6 +56,96 @@ waits for them.
 Do not submit a frame while one of its render passes is still open. Finish every
 pass first (explicitly, or by letting it leave scope).
 ```
+
+### Frame timing
+
+A frame can measure how long the GPU spent executing it. Turn it on with
+`setTimingEnabled (true)` before submitting, keep the status, and read
+`getTimings()` once the frame completed:
+
+```cpp
+auto frame = GpuFrame::begin (device);
+frame.setTimingEnabled (true);
+const auto status = frame.getStatus();
+
+// ... encode passes into `frame` ...
+
+frame.submit();
+
+// Later, for instance before the next frame
+if (const auto timings = status.getTimings(); timings.available)
+    YUP_DBG ("GPU frame time: " << timings.frameMilliseconds << " ms");
+```
+
+`frameMilliseconds` is the time from the GPU's start of the frame's command buffer
+to its end. It does not include GPU work submitted outside the frame (texture
+uploads, the window's own drawing), nor the time before the GPU started it. With
+several frames in flight, though, it includes the time the frame ran alongside, or
+waited behind, the frames before it. Measure with few frames in flight (two or
+three, as a window presenting to the display has), or wait for each measured frame.
+`getTimings()` never blocks: the timings are unavailable while the frame is pending,
+when it failed, and when it was not measured.
+
+Timing is off by default, so frames that do not measure pay nothing. Only Metal
+measures for now (`GpuDevice::isFrameTimingAvailable()`); on every other backend
+the timings stay unavailable.
+
+### Scope timing
+
+A measured frame can also report the GPU time of named scopes. Turn timing on
+**before the frame's first pass**, then open a scope before the passes it covers:
+
+```cpp
+auto frame = GpuFrame::begin (device);
+frame.setTimingEnabled (true);
+const auto status = frame.getStatus();
+
+frame.beginScope ("shadows");
+renderShadows (frame);
+
+frame.beginScope ("lighting"); // ends "shadows"
+renderLighting (frame);
+frame.endScope();
+
+frame.submit();
+
+// Later
+for (const auto& scope : status.getTimings().scopes)
+    if (scope.available)
+        YUP_DBG (scope.name << ": " << scope.milliseconds << " ms");
+```
+
+- `scopes` lists the scopes in the order they were opened. A name opened twice
+  appears twice.
+- Scopes do not nest: opening one ends the scope already open.
+- A pass belongs to the scope that was open when it began. Its time is summed
+  into that scope, including every pass a compute pass split in two.
+- Passes outside any scope are not attributed to a scope.
+- A scope is measured only if timing was on before its first pass began. A scope
+  whose passes began earlier reports `available == false` and 0 ms. So does a scope
+  the frame had no timestamp samples left for (about 1000 passes); the frame total
+  stays valid.
+- On a tile-based GPU a pass starts while the passes before it still shade, those
+  of the previous frames included. Each pass is credited only the time past the end
+  of the work before it, so the overlapped work counts for the earlier pass.
+  - A scope's milliseconds rank what lengthens the frame, not a pass's own cost:
+    work that ran entirely under an earlier pass reads 0. To learn a pass's own
+    cost, compare the frame total with and without it.
+  - The scopes need not add up to `frameMilliseconds`.
+  - The first scope of a frame may include the time it overlapped GPU work of the
+    device that is not a `GpuFrame`, such as the window's drawing and uploads.
+- Only the passes of `GpuRenderPass` and `GpuComputePass` are timed. Rive drawing,
+  and the passes of scripted canvases, are not part of the scope open meanwhile.
+- A device keeps up to 8 frames' worth of timestamp samples in flight, because Metal
+  allows 32 per process. A frame queued beyond that measures its total but not its
+  scopes, so measure with at most 8 frames in flight. A device keeps the buffers it
+  allocated until it is destroyed.
+- A frame that measures only its total, on a device that measures scopes, still
+  samples its passes, so later scopes are attributed correctly.
+
+Only Metal measures scopes (`GpuDevice::isScopeTimingAvailable()`), on GPUs that
+sample timestamps at stage boundaries. Elsewhere `scopes` is empty, and a frame
+that does not measure only records the scope names.
 
 ## `GpuRenderPass`
 

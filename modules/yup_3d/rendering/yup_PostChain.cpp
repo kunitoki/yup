@@ -31,6 +31,10 @@ PostChain::~PostChain() = default;
 void PostChain::releaseTargets() noexcept
 {
     temporalAA.releaseTargets();
+
+    if (depthOfField != nullptr)
+        depthOfField->releaseTargets();
+
     bloom.releaseTargets();
     toneMapping.releaseTargets();
 }
@@ -64,20 +68,53 @@ bool PostChain::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Ren
         resolvedColor = resolved;
     }
 
+    // The depth of field is created by the first frame blurring. A failure leaves the frame unblurred
+    auto color = resolvedColor;
+    auto colorIsReversible = inputs.colorIsReversible;
+    const auto blurring = caps.isEnabled (RenderCapabilities::Feature::depthOfField, settings)
+                       && DepthOfField::canBlur (inputs.camera, settings)
+                       && (depthOfField == nullptr || ! depthOfField->hasGivenUp());
+
+    if (blurring)
+    {
+        if (depthOfField == nullptr)
+            depthOfField = std::make_unique<DepthOfField> (device);
+
+        if (depthOfFieldFailures > 0)
+            depthOfField->failRendersForTesting (std::exchange (depthOfFieldFailures, 0));
+
+        const DepthOfField::Inputs dofInputs { color, colorIsReversible, inputs.depth, inputs.camera };
+        if (auto blurred = depthOfField->render (frame, view, settings, resources, dofInputs))
+        {
+            // The blur writes linear color
+            color = std::move (blurred);
+            colorIsReversible = false;
+        }
+    }
+
+    // A frame without the blur, skipped or failed, releases its targets and its last outputs
+    if (depthOfField != nullptr && color == resolvedColor)
+        depthOfField->releaseTargets();
+
     GpuTexture::Ptr glow;
 
     if (caps.isEnabled (RenderCapabilities::Feature::bloom, settings))
     {
-        glow = bloom.render (device, frame, resources, settings, resolvedColor, inputs.colorIsReversible);
+        glow = bloom.render (device, frame, resources, settings, color, colorIsReversible);
         if (glow == nullptr)
             return false;
     }
 
-    if (! toneMapping.render (device, frame, view, resources, resolvedColor, inputs.colorIsReversible, glow, output, inputs.background))
+    // The blur spreads light over partial coverage, which tone mapping then composites in radiance (preflight R20)
+    if (! toneMapping.render (device, frame, view, resources, color, colorIsReversible, glow, output, inputs.background, color != resolvedColor))
         return false;
 
     // Targets of textures this frame no longer drew into, like the pool's after a resize, go now
     temporalAA.trimUnusedTargets();
+
+    if (depthOfField != nullptr)
+        depthOfField->trimUnusedTargets();
+
     bloom.trimUnusedTargets();
     toneMapping.trimUnusedTargets();
     return true;

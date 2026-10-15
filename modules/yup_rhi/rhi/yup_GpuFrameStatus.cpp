@@ -35,6 +35,17 @@ struct GpuFrameStatus::Block
     bool submitted = false;
     bool completed = false;
 
+    /** Set by GpuFrame::setTimingEnabled(), before the frame is submitted. */
+    bool timingEnabled = false;
+
+    /** Kept only for a measured frame that completed successfully. */
+    GpuFrameTimings timings;
+
+    /** The scopes of a frame that measures them, moved in when it is submitted. Completing the
+        frame fills in their times and moves them into the timings, so nothing allocates under
+        the lock. */
+    std::vector<GpuScopeTiming> scopes;
+
     /** A waiter or an owner reads the outcome, so the device does not report it. */
     bool claimed = false;
 };
@@ -75,6 +86,22 @@ Result GpuFrameStatus::wait() const
 
     const ScopedLock sl (*block->lock);
     return block->result;
+}
+
+GpuFrameTimings GpuFrameStatus::getTimings() const
+{
+    if (block == nullptr)
+        return {};
+
+    // Completing a frame writes its timings once, under the lock, so a completed frame's are read
+    // without holding the lock its device's completions take
+    {
+        const ScopedLock sl (*block->lock);
+        if (! block->completed)
+            return {};
+    }
+
+    return block->timings;
 }
 
 } // namespace yup

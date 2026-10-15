@@ -37,6 +37,11 @@ namespace yup
     raster output. The background color is display-referred, shown exactly as picked, never tone
     mapped. HDR effects running before this pass must therefore carry the alpha through.
 
+    On frames blurred by the depth of field, the partial coverage is spread light rather than the
+    edge of a surface: a second pipeline then tone maps the premultiplied radiance and adds the
+    background over the uncovered share (preflight R20), so a blurred highlight over the background
+    keeps its brightness. It is compiled by the first such frame.
+
     An optional glow (see Bloom) is added to the covered color before tone mapping, and onto the
     background in display space. NaN and infinite inputs are sanitized: NaN and -infinity count as
     0, +infinity as the largest half float.
@@ -57,33 +62,49 @@ public:
     /** Maps HDR @p source (exposed radiance, or reversibly tone-mapped when @p sourceIsReversible)
         to display sRGB into the rgba8 @p destination, over the display-encoded @p background.
 
-        @param resources  The pool the shared samplers come from.
-        @param glow       A linear rgba16float glow of the size of @p source, or nullptr for none.
+        @param resources          The pool the shared samplers come from.
+        @param glow               A linear rgba16float glow of the size of @p source, or nullptr for none.
+        @param blurredCoverage    True when the coverage of @p source was spread by a blur (the depth
+                                  of field): composites in radiance instead of in display space,
+                                  or in display space, logged once, if that pipeline cannot compile.
 
         @returns False if the pipeline could not be prepared or the pass could not be recorded.
     */
     bool render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, FrameResources& resources,
                  const GpuTexture::Ptr& source, bool sourceIsReversible, const GpuTexture::Ptr& glow,
-                 const GpuTexture::Ptr& destination, Color background);
+                 const GpuTexture::Ptr& destination, Color background, bool blurredCoverage = false);
 
     /** Releases the render targets not drawn into since the previous call, once per frame. */
     void trimUnusedTargets()
     {
         pass.trimUnusedTargets();
+        radiancePass.trimUnusedTargets();
     }
+
+    /** @internal Test hook: the radiance composite pipeline fails to compile, as if the device
+        rejected it. Call it before the first frame with blurred coverage. Those frames then
+        composite in display space.
+    */
+    void failRadianceCompositeForTesting() noexcept { failRadianceComposite = true; }
 
     /** Releases the render targets kept for the next renders, when the pass is skipped this frame. */
     void releaseTargets() noexcept
     {
         pass.releaseTargets();
+        radiancePass.releaseTargets();
     }
 
 private:
-    Result prepare (const GpuDevice::Ptr& device, GpuTextureFormat format, const FrameResources::Samplers* samplers);
+    Result prepare (const GpuDevice::Ptr& device, GpuTextureFormat format, const FrameResources::Samplers* samplers, bool radiance);
 
     FullscreenPass pass;
     std::optional<Result> prepared;
     GpuTextureFormat preparedFormat = GpuTextureFormat::rgba8unorm;
+    FullscreenPass radiancePass; // The radiance composite, see blurredCoverage, compiled by the first frame needing it
+    std::optional<Result> radiancePrepared;
+    GpuTextureFormat radiancePreparedFormat = GpuTextureFormat::rgba8unorm;
+    bool failRadianceComposite = false;
+    bool radianceFailureLogged = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToneMapping)
 };

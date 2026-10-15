@@ -125,6 +125,56 @@ public:
     */
     GpuFrameStatus getStatus();
 
+    /** Measures the GPU time of this frame, reported by GpuFrameStatus::getTimings()
+        once the frame completed.
+
+        Off by default, so frames that do not measure pay nothing. Only devices where
+        GpuDevice::isFrameTimingAvailable() is true measure; on the others the timings
+        stay unavailable. Call it before submit(): a frame already submitted keeps the
+        setting it was submitted with.
+
+        To measure scopes too, call it before the first pass of the frame: a scope is
+        measured only when timing was on before its first pass began. A scope whose
+        passes began earlier reports 0 milliseconds, unavailable.
+
+        @param shouldMeasure  True to measure this frame.
+
+        @see beginScope
+    */
+    void setTimingEnabled (bool shouldMeasure);
+
+    /** Opens a named scope: the GPU time of the passes begun until it ends is reported
+        as one GpuScopeTiming of the frame's timings.
+
+        Scopes do not nest: opening one ends the scope already open. The same name may be
+        opened several times, and is then reported once for each. Passes begun outside
+        any scope are not attributed to one. A pass is attributed to the scope open when
+        it began, so begin each scope's passes after opening it.
+
+        Only measured on devices where GpuDevice::isScopeTimingAvailable() is true, in a
+        frame that turned timing on before the scope's first pass (see setTimingEnabled()).
+        A frame that does not measure only records the name.
+
+        @code
+            frame.setTimingEnabled (true);
+
+            frame.beginScope ("shadows");
+            renderShadows (frame);
+
+            frame.beginScope ("lighting");
+            renderLighting (frame);
+            frame.endScope();
+        @endcode
+
+        @param name  The name the scope is reported with.
+
+        @see GpuFrameTimings::scopes
+    */
+    void beginScope (StringRef name);
+
+    /** Ends the open scope, if any: later passes are not attributed to a scope. */
+    void endScope();
+
 private:
     friend class GpuCanvas;
     friend class GpuTarget;

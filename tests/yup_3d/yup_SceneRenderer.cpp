@@ -1952,19 +1952,50 @@ protected:
         EXPECT_GE (hues.size(), 3u) << "materials: distinct hues on the plate";
     }
 
-    /** Silhouettes have intermediate gray levels, which only MSAA coverage produces. */
-    static void checkEdges (const Image& image)
+    /** The red levels of the edges scene's pixels between the background and the lit plate, which
+        only MSAA coverage produces along the silhouettes. */
+    static std::vector<int> intermediateEdgeLevels (const Image& image)
     {
-        std::set<int> levels;
+        std::vector<int> levels;
         for (int y = 30; y < 100; ++y)
             for (int x = 0; x < image.getWidth(); ++x)
             {
                 const auto red = static_cast<int> (image.getPixelColor (x, y).getRed());
                 if (red > 30 && red < 147)
-                    levels.insert (red);
+                    levels.push_back (red);
             }
 
-        EXPECT_GE (levels.size(), 3u) << "edges: intermediate levels";
+        return levels;
+    }
+
+    /** Silhouettes have intermediate gray levels, which only MSAA coverage produces. */
+    static void checkEdges (const Image& image)
+    {
+        const auto levels = intermediateEdgeLevels (image);
+        EXPECT_GE (std::set<int> (levels.begin(), levels.end()).size(), 3u) << "edges: intermediate levels";
+    }
+
+    /** The pixels with a channel at 0 or 255 in @p image, where @p baseline has none. A raster rgba8
+        frame hides non-finite values, but a channel holding one reads as either end, depending on
+        where it enters the shading and on the backend (Metal returns the other operand of min (NaN, x)).
+    */
+    static int countNewExtremePixels (const Image& image, const Image& baseline)
+    {
+        const auto isExtreme = [] (Color color)
+        {
+            for (const auto level : { color.getRed(), color.getGreen(), color.getBlue() })
+                if (level == 0 || level == 255)
+                    return true;
+
+            return false;
+        };
+
+        int extreme = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+            for (int x = 0; x < image.getWidth(); ++x)
+                extreme += isExtreme (image.getPixelColor (x, y)) && ! isExtreme (baseline.getPixelColor (x, y)) ? 1 : 0;
+
+        return extreme;
     }
 
     /** Selects the rendering tier of a scene. */
@@ -2180,6 +2211,7 @@ protected:
         RecordProperty ("platePixels", platePixels);
         RecordProperty ("platesMeanLuminance", String (plateLuminance / jmax (platePixels, 1), 2).toStdString());
         RecordProperty ("baselinePlatesMeanLuminance", String (baselinePlateLuminance / jmax (platePixels, 1), 2).toStdString());
+        RecordProperty ("platesLuminanceChangePercent", String (100.0 * (plateLuminance - baselinePlateLuminance) / jmax (baselinePlateLuminance, 1.0), 2).toStdString());
 
         EXPECT_GT (baselineShadowPixels, 0);
         EXPECT_GE (shadowPixels, baselineShadowPixels * 4 / 5);
@@ -2254,8 +2286,12 @@ protected:
         }
     }
 
-    /** Each baseline scene on the raster tier stays within 0.5% of the pixels of the Phase 0 image of
-        @p platform, except the shadows scene, checked by statistics (checkShadowsAgainstBaseline()). */
+    /** The raster no-regression gate, at the default settings: the materials and edges scenes match
+        the Phase 0 images of @p platform exactly (no pixel beyond 2 levels), the shadows scene is
+        checked by statistics (checkShadowsAgainstBaseline()), the silhouettes of the edges scene
+        keep at least the baseline's MSAA coverage, and no scene has a channel at 0 or 255 where the
+        baseline has none, as a non-finite value would leave.
+    */
     void checkMatchesPhaseZeroBaseline (const String& platform)
     {
         const std::pair<const char*, void (*) (Scene&)> scenes[] = {
@@ -2277,17 +2313,86 @@ protected:
             const auto image = renderToImage (renderer, scene, 128);
             ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
 
+            const auto baseline = loadBaseline (platform + "_" + name + ".png");
+            ASSERT_TRUE (baseline.isValid()) << "capture the Phase 0 baselines first";
+
+            const auto newExtreme = countNewExtremePixels (image, baseline);
+            RecordProperty ((String (name) + "NewExtremePixels").toStdString(), newExtreme);
+            EXPECT_EQ (newExtreme, 0) << name;
+
             if (String (name) == "shadows")
             {
                 checkShadowsAgainstBaseline (image, platform);
                 continue;
             }
 
-            const auto differing = countBaselineDifferences (image, platform + "_" + name + ".png");
-            ASSERT_GE (differing, 0) << "capture the Phase 0 baselines first";
+            if (String (name) == "edges")
+            {
+                const auto coverage = static_cast<int> (intermediateEdgeLevels (image).size());
+                const auto baselineCoverage = static_cast<int> (intermediateEdgeLevels (baseline).size());
+                RecordProperty ("edgeCoveragePixels", coverage);
+                RecordProperty ("baselineEdgeCoveragePixels", baselineCoverage);
+                EXPECT_GE (coverage, baselineCoverage);
+            }
 
+            const auto differing = countDifferences (image, baseline);
             RecordProperty ((String (name) + "Differing").toStdString(), differing);
-            EXPECT_LE (differing, 128 * 128 / 200) << name; // At most 0.5% of the pixels beyond 2 levels
+            EXPECT_EQ (differing, 0) << name;
+        }
+    }
+
+    /** The baseline scenes at the default settings on @p tier, without a probe or a volume, add
+        none of the opt-in passes: no depth and normal prepass, no probe baker, no probe list (only
+        the local indirect variants declare its block, and the default variants shade), no
+        screen-space GI and no depth of field. On raster, no ambient occlusion, screen-space reflections or Hi-Z pyramid
+        either; the full tier traces its ambient occlusion and reflections, on there by default.
+        No pass or allocation count is exposed, so the getters of each pass stand in for them.
+    */
+    void checkDefaultSettingsAddNoOptInPass (RenderSettings::TierPreference tier)
+    {
+        const auto full = tier == RenderSettings::TierPreference::full;
+
+        const std::pair<const char*, void (*) (Scene&)> scenes[] = {
+            { "shadows", buildShadowsScene },
+            { "materials", buildMaterialsScene },
+            { "edges", buildEdgesScene },
+        };
+
+        for (const auto& [name, build] : scenes)
+        {
+            Scene scene;
+            build (scene);
+            setTier (scene, tier);
+
+            // The reflections need the history of an earlier frame
+            SceneRenderer renderer;
+            for (int frame = 0; frame < 2; ++frame)
+                ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << name << ": " << renderer.getLastError();
+
+            EXPECT_TRUE (renderer.waitForGPU().wasOk()) << name;
+
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr) << name;
+            EXPECT_EQ (renderer.getProbeBaker(), nullptr) << name;
+
+            ASSERT_NE (renderer.getForwardPass(), nullptr) << name;
+            EXPECT_FALSE (renderer.getForwardPass()->usesLocalIndirect()) << name;
+            EXPECT_FALSE (renderer.getForwardPass()->usesMaterialLayers()) << name;
+            EXPECT_FALSE (renderer.getLightingPass()->usesLocalIndirect()) << name;
+
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion) != nullptr, full) << name;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections) != nullptr, full) << name;
+            EXPECT_EQ (renderer.getReflectionPass() != nullptr, full) << name;
+            EXPECT_EQ (renderer.getHiZPyramid() != nullptr, full) << name;
+            EXPECT_EQ (renderer.getDepthOfField(), nullptr) << name;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr) << name;
+
+            const auto* ambientOcclusion = renderer.getAmbientOcclusionPass();
+            EXPECT_EQ (ambientOcclusion != nullptr, full) << name;
+            if (ambientOcclusion != nullptr)
+            {
+                EXPECT_EQ (ambientOcclusion->getIndirectDiffuse(), nullptr) << name;
+                EXPECT_EQ (ambientOcclusion->getNumCachedIndirectDiffuseTargets(), 0u) << name;
+            }
         }
     }
 
@@ -6058,6 +6163,86 @@ vec4 encodeLuma(vec3 c)
         return static_cast<float> (color.getRed()) / static_cast<float> (jmax (1, static_cast<int> (color.getGreen())));
     }
 
+    /** buildRedRoomScene() without the divider, on the full tier with 8 TAA samples and screen-space
+        diffuse GI on or off, seen from (1.5, 2.5, 0) towards (-1, 0.3, 0): the red wall faces the
+        camera across the floor, which giveRedWallFloorRegion() finds. Seen from above, as in the
+        other red room tests, the wall would cover about a texel within the reach of the horizon
+        search, which screen-space GI cannot gather from. The ambient occlusion distance, which the
+        GI gathers within, is 1 m.
+    */
+    static void buildGIRedRoomScene (Scene& scene, bool screenSpaceGI)
+    {
+        buildRedRoomScene (scene, false);
+        scene.getRoot()->removeChild (scene.getRoot()->findChild ("camera"));
+        addCamera (scene, { 1.5f, 2.5f, 0.0f }, { -1.0f, 0.3f, 0.0f });
+        setFullTierTaa (scene, 8);
+
+        auto settings = scene.getRenderSettings();
+        settings.aoDistance = 1.0f;
+        settings.screenSpaceGI = screenSpaceGI;
+        scene.setRenderSettings (settings);
+    }
+
+    /** The first and last rows of the middle column of a 64 x 64 @p image where an emissive red wall
+        saturates the red and not the green, or -1 for none. */
+    static std::pair<int, int> findRedWallRows (const Image& image)
+    {
+        auto top = -1, bottom = -1;
+        for (int y = 0; image.isValid() && y < 64; ++y)
+        {
+            const auto color = image.getPixelColor (32, y);
+            if (color.getRed() > 200 && color.getGreen() < 100)
+            {
+                top = top < 0 ? y : top;
+                bottom = y;
+            }
+        }
+
+        return { top, bottom };
+    }
+
+    /** A white floor 8 x 8 at y = 0 under a constant gray environment of 0.5, and a red emissive
+        wall 4 m wide and 0.5 m high across it at z = 0, single-sided and facing the camera, which
+        looks down at it from (0, 4, 2.5). The floor in front of the wall sees its emitting side; the
+        floor behind it, which shows above its top edge from 0.3 m behind it, only its back. GI on the full tier with
+        8 TAA samples and an ambient occlusion distance of 1 m.
+    */
+    static void buildFacingAwayWallScene (Scene& scene, bool screenSpaceGI)
+    {
+        auto white = Material::Ptr (new Material());
+        white->baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
+        white->metallicFactor = 0.0f;
+        white->roughnessFactor = 1.0f;
+        scene.getRoot()->addChild (makeHorizontalQuad ("floor", 0.0f, { -4.0f, -4.0f, 8.0f, 8.0f }, true, white));
+
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { -2.0f, 0.0f, 0.0f };
+        vertices[1].position = { 2.0f, 0.0f, 0.0f };
+        vertices[2].position = { 2.0f, 0.5f, 0.0f };
+        vertices[3].position = { -2.0f, 0.5f, 0.0f };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        auto wall = Mesh::Ptr (new Mesh ("red wall"));
+        wall->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeEmitterMaterial ({ 6.0f, 0.0f, 0.0f }));
+
+        auto entity = EntityNode::Ptr (new EntityNode ("red wall"));
+        entity->attach<MeshNode> (wall);
+        scene.getRoot()->addChild (entity);
+
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.setAmbientColor (Colors::black);
+        scene.setUsingDefaultLight (false);
+        addCamera (scene, { 0.0f, 4.0f, 2.5f }, { 0.0f, 0.0f, -0.5f });
+
+        setFullTierTaa (scene, 8);
+        auto settings = scene.getRenderSettings();
+        settings.aoDistance = 1.0f;
+        settings.screenSpaceGI = screenSpaceGI;
+        scene.setRenderSettings (settings);
+    }
+
     /** The number of irradiance volumes the renderer baked, or -1 before it had a baker. */
     static int getNumVolumeBakes (const SceneRenderer& renderer)
     {
@@ -9142,6 +9327,746 @@ TEST_F (SceneRendererMetalTests, SsrUnavailableOnRasterRendersFallback)
     checkScreenSpaceReflectionsUnavailableOnRasterRendersFallback (RenderSettings::TierPreference::raster);
 }
 
+// The screen-space diffuse GI tests converge 8 jittered samples at 64 x 64 on the full tier. The GI
+// reads the TAA history, so the first frame of a renderer gathers nothing (preflight R3)
+TEST_F (SceneRendererMetalTests, ScreenSpaceGIBouncesColorOntoTheFloor)
+{
+    // The red room without a volume: the floor in front of the red wall shows the gray environment
+    // alone without GI, and with it also the red the wall emits
+    const auto render = [&] (bool screenSpaceGI, SceneRenderer& renderer)
+    {
+        Scene scene;
+        buildGIRedRoomScene (scene, screenSpaceGI);
+
+        const auto image = renderConverged (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        EXPECT_TRUE (renderer.isConverged());
+        return image;
+    };
+
+    SceneRenderer on, off;
+    const auto withGI = render (true, on);
+    const auto without = render (false, off);
+    ASSERT_TRUE (withGI.isValid() && without.isValid());
+
+    // The floor right in front of the wall, below its bottom edge
+    const auto [top, bottom] = findRedWallRows (without);
+    ASSERT_GE (top, 0);
+    ASSERT_LT (bottom, 56);
+    const Rectangle<int> floor { 16, bottom + 2, 32, 6 };
+
+    const auto floorOn = meanColor (withGI, floor);
+    const auto floorOff = meanColor (without, floor);
+    RecordProperty ("wallRows", (String (top) + " to " + String (bottom)).toStdString());
+    RecordProperty ("floorOn", floorOn.toString().toStdString());
+    RecordProperty ("floorOff", floorOff.toString().toStdString());
+    RecordProperty ("ratioOn", String (redOverGreen (floorOn), 3).toStdString());
+    RecordProperty ("ratioOff", String (redOverGreen (floorOff), 3).toStdString());
+    EXPECT_NEAR (redOverGreen (floorOff), 1.0f, 0.05f);
+    // Measured 1.232 against 1.000: the threshold keeps three quarters of that margin
+    EXPECT_GT (redOverGreen (floorOn), redOverGreen (floorOff) + 0.17f);
+
+    // The gathered light adds to the environment's: a mix of the two would trade some of the
+    // gray for the wall's red, and the green would drop
+    EXPECT_GE (static_cast<int> (floorOn.getGreen()), static_cast<int> (floorOff.getGreen()) - 1);
+
+    // At the default ambient occlusion distance of 0.2 m, for the record
+    {
+        Scene scene;
+        buildGIRedRoomScene (scene, true);
+        auto settings = scene.getRenderSettings();
+        settings.aoDistance = 0.2f;
+        scene.setRenderSettings (settings);
+
+        SceneRenderer renderer;
+        const auto image = renderConverged (renderer, scene, 64);
+        RecordProperty ("ratioOnDefaultDistance", String (redOverGreen (meanColor (image, floor)), 3).toStdString());
+    }
+
+    // Only the renderer with GI keeps its output: rgba16float at half resolution
+    ASSERT_NE (off.getAmbientOcclusionPass(), nullptr);
+    EXPECT_EQ (off.getAmbientOcclusionPass()->getIndirectDiffuse(), nullptr);
+    ASSERT_NE (on.getAmbientOcclusionPass(), nullptr);
+    const auto indirect = on.getAmbientOcclusionPass()->getIndirectDiffuse();
+    ASSERT_NE (indirect, nullptr);
+    EXPECT_EQ (indirect->getFormat(), GpuTextureFormat::rgba16float);
+    EXPECT_EQ (indirect->getWidth(), 32u);
+    EXPECT_EQ (on.getAmbientOcclusionPass()->getOutput()->getFormat(), GpuTextureFormat::rgba8unorm);
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    EXPECT_TRUE (isFiniteTexture (indirect));
+    EXPECT_FALSE (isSaturatedTexture (indirect));
+#endif
+}
+
+TEST_F (SceneRendererMetalTests, ScreenSpaceGILeavesAnOpenPlaneAsItIs)
+{
+    // Nothing occludes an open plane: the gather adds nothing, so the frame is the one without GI
+    // up to a level of rounding, within two at the far edge of the floor. A regression guard: the
+    // samples on the plane itself are rejected as not facing the pixel, so the confidence is about
+    // 0 and a mix of the probe light and the gathered light would leave the plane as it is too
+    // (ScreenSpaceGIBouncesColorOntoTheFloor checks that the gathered light only adds)
+    const auto render = [&] (bool screenSpaceGI, SceneRenderer& renderer)
+    {
+        Scene scene;
+        buildFacingAwayWallScene (scene, screenSpaceGI);
+        scene.getRoot()->removeChild (scene.getRoot()->findChild ("red wall"));
+
+        const auto image = renderConverged (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    };
+
+    SceneRenderer on, off;
+    const auto withGI = render (true, on);
+    const auto without = render (false, off);
+    ASSERT_TRUE (withGI.isValid() && without.isValid());
+    ASSERT_NE (on.getAmbientOcclusionPass(), nullptr);
+    EXPECT_NE (on.getAmbientOcclusionPass()->getIndirectDiffuse(), nullptr);
+
+    // The largest difference of a channel, over the frame and below its first rows, where the far
+    // edge of the floor meets the background: a sample there carries the background's tint
+    const auto largestDifference = [&] (int firstRow)
+    {
+        auto largest = 0;
+        for (int y = firstRow; y < 64; ++y)
+        {
+            for (int x = 0; x < 64; ++x)
+            {
+                const auto a = withGI.getPixelColor (x, y);
+                const auto b = without.getPixelColor (x, y);
+                largest = jmax (largest, std::abs (a.getRed() - b.getRed()), std::abs (a.getGreen() - b.getGreen()), std::abs (a.getBlue() - b.getBlue()));
+            }
+        }
+
+        return largest;
+    };
+
+    RecordProperty ("largestDifference", largestDifference (0));
+    RecordProperty ("largestDifferenceBelowTheEdge", largestDifference (6));
+    EXPECT_LE (largestDifference (0), 2);
+    EXPECT_LE (largestDifference (6), 1);
+    EXPECT_GT (meanLuminance (without, { 0, 32, 64, 32 }), 60.0); // Not vacuous: the floor is lit
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (SceneRendererMetalTests, SsgiWithoutHistoryShadesAsWithoutIt)
+{
+    // A frame without a history to gather from traces the ambient occlusion alone, which leaves it
+    // bit for bit as without GI: a renderer's first frame, and the frame after restartAccumulation(),
+    // which keeps the history's textures but no longer trusts them
+    SceneRenderer warmUp;
+    {
+        Scene scene;
+        buildGIRedRoomScene (scene, false);
+        ASSERT_TRUE (renderToImage (warmUp, scene, 64).isValid());
+    }
+
+    // The 8 bytes of the half float scene color, three to an opaque rgba8 image
+    const auto sceneColorBits = [&] (SceneRenderer& renderer)
+    {
+        std::vector<Image> bits;
+        const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+        for (const auto* bytes : { "vec4(lo.xyz, 1.0)", "vec4(lo.w, hi.xy, 1.0)", "vec4(hi.zw, 0.0, 1.0)" })
+        {
+            const auto* halves = "#define lo unpackUnorm4x8(packHalf2x16(t.rg))\n#define hi unpackUnorm4x8(packHalf2x16(t.ba))\n";
+            bits.push_back (sceneColor != nullptr ? mapTexels (sceneColor, bytes, halves) : Image());
+        }
+
+        return bits;
+    };
+
+    const auto expectSameBits = [&] (const std::vector<Image>& withGI, const std::vector<Image>& without, const char* when)
+    {
+        for (size_t part = 0; part < withGI.size(); ++part)
+        {
+            ASSERT_TRUE (withGI[part].isValid() && without[part].isValid()) << when;
+
+            auto differing = 0;
+            for (int y = 0; y < without[part].getHeight(); ++y)
+                for (int x = 0; x < without[part].getWidth(); ++x)
+                    differing += withGI[part].getPixelColor (x, y) != without[part].getPixelColor (x, y) ? 1 : 0;
+
+            EXPECT_EQ (differing, 0) << when << " " << part;
+        }
+    };
+
+    // Each renderer draws as many frames, so both jitter alike, then the history is invalidated
+    const auto renderBits = [&] (bool screenSpaceGI, int frames, bool restart)
+    {
+        Scene scene;
+        buildGIRedRoomScene (scene, screenSpaceGI);
+
+        SceneRenderer renderer;
+        for (int i = 0; i < frames; ++i)
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+        if (restart)
+        {
+            EXPECT_TRUE (renderer.getAmbientOcclusionPass() != nullptr && (renderer.getAmbientOcclusionPass()->getIndirectDiffuse() != nullptr) == screenSpaceGI);
+            renderer.restartAccumulation();
+        }
+
+        EXPECT_TRUE (renderToImage (renderer, scene, 64).isValid()) << renderer.getLastError();
+        EXPECT_TRUE (renderer.getAmbientOcclusionPass() != nullptr && renderer.getAmbientOcclusionPass()->getIndirectDiffuse() == nullptr);
+        return sceneColorBits (renderer);
+    };
+
+    expectSameBits (renderBits (true, 0, false), renderBits (false, 0, false), "first frame");
+    expectSameBits (renderBits (true, 9, true), renderBits (false, 9, true), "after restartAccumulation()");
+}
+#endif
+
+TEST_F (SceneRendererMetalTests, SsgiConvergedRendersAreIdentical)
+{
+    // The slices turn with the frame only under temporal anti-aliasing, whose running mean freezes
+    // once converged (preflight R13): two renderers converging on the same scene end on one image
+    Scene scene;
+    buildGIRedRoomScene (scene, true);
+
+    SceneRenderer warmUp;
+    ASSERT_TRUE (renderToImage (warmUp, scene, 64).isValid());
+
+    SceneRenderer a, b;
+    const auto imageA = renderConverged (a, scene, 64);
+    const auto imageB = renderConverged (b, scene, 64);
+    ASSERT_TRUE (imageA.isValid() && imageB.isValid());
+    EXPECT_TRUE (a.isConverged() && b.isConverged());
+    ASSERT_NE (a.getAmbientOcclusionPass(), nullptr);
+    EXPECT_NE (a.getAmbientOcclusionPass()->getIndirectDiffuse(), nullptr);
+
+    auto differing = 0;
+    for (int y = 0; y < imageA.getHeight(); ++y)
+        for (int x = 0; x < imageA.getWidth(); ++x)
+            differing += imageA.getPixelColor (x, y) != imageB.getPixelColor (x, y) ? 1 : 0;
+
+    EXPECT_EQ (differing, 0);
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (SceneRendererMetalTests, SsgiScalesWithTheExposure)
+{
+    // The history holds exposed radiance, divided by the exposure of the frame it was rendered with:
+    // converged at exposure 0.25 then at 0.5, the floor with GI doubles like the floor without it.
+    // Dividing by nothing, or by the exposure twice, would scale the gathered red by 4 or 1
+    const auto renderRatio = [&] (bool screenSpaceGI)
+    {
+        Scene scene;
+        buildGIRedRoomScene (scene, screenSpaceGI);
+        scene.setExposure (0.25f);
+
+        SceneRenderer renderer;
+        Rectangle<int> floor;
+        const auto meanRed = [&]
+        {
+            const auto [top, bottom] = findRedWallRows (renderConverged (renderer, scene, 64));
+            EXPECT_TRUE (top >= 0 && bottom < 56) << top << " " << bottom;
+            floor = floor.isEmpty() ? Rectangle<int> { 16, bottom + 2, 32, 6 } : floor;
+
+            const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+            return sceneColor != nullptr ? meanLinearRed (sceneColor, floor) : -1.0;
+        };
+
+        const auto atQuarter = meanRed();
+        scene.setExposure (0.5f);
+        const auto atHalf = meanRed();
+        RecordProperty (screenSpaceGI ? "floorRedOn" : "floorRedOff", (String (atQuarter, 4) + " -> " + String (atHalf, 4)).toStdString());
+        return atQuarter > 0.0 ? atHalf / atQuarter : -1.0;
+    };
+
+    const auto ratioOn = renderRatio (true);
+    const auto ratioOff = renderRatio (false);
+    RecordProperty ("ratioOn", String (ratioOn, 3).toStdString());
+    RecordProperty ("ratioOff", String (ratioOff, 3).toStdString());
+    EXPECT_GT (ratioOff, 1.5);
+
+    // Measured 1.977 against 1.995: the gathered light, more than half of the red, changes a lot
+    // from frame to frame, and the running mean of temporal anti-aliasing weighs each frame by
+    // 1 / (1 + luma), more so at the higher exposure. A missing division moved the ratio to 2.459
+    EXPECT_NEAR (ratioOn, ratioOff, 0.03 * ratioOff);
+}
+#endif
+
+TEST_F (SceneRendererMetalTests, SsgiConvergedRegionMatchesAPrimedHistory)
+{
+    // A renderer's first frame has no history to gather from, and enters the running mean of temporal
+    // anti-aliasing without GI (preflight R31, extended to GI by R33). The converged light then
+    // barely depends on the history the renderer started from: it matches a renderer whose history
+    // was primed by an earlier convergence, then restarted by a setting that changes nothing on
+    // screen (contact shadows, without a light)
+    const auto renderRed = [&] (bool primed)
+    {
+        Scene scene;
+        buildGIRedRoomScene (scene, true);
+        scene.setExposure (0.5f); // The floor's red stays below 1, which meanLinearRed() reads
+
+        SceneRenderer renderer;
+        const auto [top, bottom] = findRedWallRows (renderConverged (renderer, scene, 64));
+        EXPECT_TRUE (top >= 0 && bottom < 56) << top << " " << bottom;
+
+        if (primed)
+        {
+            auto settings = scene.getRenderSettings();
+            settings.contactShadows = false;
+            scene.setRenderSettings (settings);
+            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr);
+            EXPECT_FALSE (renderer.isConverged());
+            EXPECT_TRUE (renderConverged (renderer, scene, 64).isValid()) << renderer.getLastError();
+        }
+
+        EXPECT_TRUE (renderer.isConverged());
+        const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+        return sceneColor != nullptr ? meanLinearRed (sceneColor, { 16, bottom + 2, 32, 6 }) : -1.0;
+    };
+
+    const auto fresh = renderRed (false);
+    const auto primed = renderRed (true);
+    RecordProperty ("floorRedFresh", String (fresh, 4).toStdString());
+    RecordProperty ("floorRedPrimed", String (primed, 4).toStdString());
+    EXPECT_GT (fresh, 0.3);
+
+    // Measured 0.5107 against 0.5182. The gathered light is noisy, so the converged floor depends on
+    // which frames the 8 samples were: renderers starting 0 to 3 frames apart converge between 0.5085
+    // and 0.5223, 2.7% apart. The first frame dilutes the converged GI by about 1.4% on average over
+    // those starts, which this tolerance cannot see: it guards against a larger dilution
+    EXPECT_NEAR (fresh, primed, 0.03 * primed);
+}
+
+TEST_F (SceneRendererMetalTests, SsgiIgnoresSurfacesFacingAway)
+{
+    // The floor behind the wall sees only its back: the wall occludes it, but lights it with nothing.
+    // The floor in front of it, which its emitting side faces, turns red
+    const auto render = [&] (bool screenSpaceGI)
+    {
+        Scene scene;
+        buildFacingAwayWallScene (scene, screenSpaceGI);
+
+        SceneRenderer renderer;
+        const auto image = renderConverged (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    };
+
+    const auto withGI = render (true);
+    const auto without = render (false);
+    ASSERT_TRUE (withGI.isValid() && without.isValid());
+
+    const auto [top, bottom] = findRedWallRows (without);
+    ASSERT_GT (top, 4);
+    ASSERT_LT (bottom, 59);
+
+    const Rectangle<int> behind { 16, top - 6, 32, 3 };
+    const Rectangle<int> front { 16, bottom + 2, 32, 3 };
+    const auto behindOn = meanColor (withGI, behind);
+    const auto behindOff = meanColor (without, behind);
+    const auto frontOn = meanColor (withGI, front);
+    const auto frontOff = meanColor (without, front);
+    RecordProperty ("wallRows", (String (top) + " to " + String (bottom)).toStdString());
+    RecordProperty ("behindOn", behindOn.toString().toStdString());
+    RecordProperty ("behindOff", behindOff.toString().toStdString());
+    RecordProperty ("frontOn", frontOn.toString().toStdString());
+    RecordProperty ("frontOff", frontOff.toString().toStdString());
+
+    // Measured 1.374 against 1.000 in front, and the same color behind with and without GI, in a
+    // band 4 to 6 rows above the wall's edge, which its antialiasing does not reach. Lighting from
+    // the wall's back too made the band 1.045 against 1.000: 2 levels of red are about 0.013
+    EXPECT_GT (redOverGreen (frontOn), redOverGreen (frontOff) + 0.2f); // Not vacuous: the wall lights what it faces
+    EXPECT_NEAR (redOverGreen (behindOn), redOverGreen (behindOff), 0.015f);
+}
+
+TEST_F (SceneRendererMetalTests, SsgiSettingRestartsAccumulation)
+{
+    Scene scene;
+    buildGIRedRoomScene (scene, false);
+
+    SceneRenderer renderer;
+    for (int i = 0; i < 8; ++i)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    ASSERT_TRUE (renderer.isConverged());
+
+    // Restarted, not invalidated: the history stays valid for the GI to gather at once
+    auto settings = scene.getRenderSettings();
+    settings.screenSpaceGI = true;
+    scene.setRenderSettings (settings);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_FALSE (renderer.isConverged());
+    ASSERT_NE (renderer.getAmbientOcclusionPass(), nullptr);
+    EXPECT_NE (renderer.getAmbientOcclusionPass()->getIndirectDiffuse(), nullptr);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_F (SceneRendererMetalTests, FailedSsgiKeepsTheAmbientOcclusionAndGivesUp)
+{
+    // A GI failure leaves the frame with its ambient occlusion; the second in a row gives the GI
+    // up, which changes the image as much as turning it off: a converged renderer starts over
+    Scene scene;
+    buildGIRedRoomScene (scene, true);
+
+    // Renders until converged, counting the frames, so a reference renderer can draw as many
+    auto frames = 0;
+    const auto converge = [&] (SceneRenderer& renderer, Scene& target)
+    {
+        for (int i = 0; i < 64; ++i)
+        {
+            ++frames;
+            if (renderer.render (device, target, 64, 64) == nullptr || renderer.isConverged())
+                break;
+        }
+
+        ++frames;
+        return renderToImage (renderer, target, 64);
+    };
+
+    SceneRenderer renderer;
+    ASSERT_TRUE (converge (renderer, scene).isValid()) << renderer.getLastError();
+    ASSERT_TRUE (renderer.isConverged());
+    const auto* pass = renderer.getAmbientOcclusionPass();
+    ASSERT_NE (pass, nullptr);
+    ASSERT_NE (pass->getIndirectDiffuse(), nullptr);
+
+    renderer.failScreenSpaceGIForTesting();
+
+    for (const auto givesUp : { false, true })
+    {
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        ++frames;
+        EXPECT_EQ (renderer.getAmbientOcclusionPass(), pass);
+        EXPECT_EQ (pass->getIndirectDiffuse(), nullptr);
+        EXPECT_NE (pass->getOutput(), nullptr);
+        EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion), nullptr);
+        EXPECT_EQ (pass->getNumCachedIndirectDiffuseTargets(), 0u);
+        EXPECT_EQ (pass->hasGivenUpIndirectDiffuse(), givesUp);
+    }
+
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    ++frames;
+    EXPECT_FALSE (renderer.isConverged());
+    EXPECT_TRUE (renderer.getLastError().isEmpty());
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+    Scene offScene;
+    buildGIRedRoomScene (offScene, false);
+
+    // The restart keeps the history, which still holds a share of the light gathered before: how
+    // much of it the converged frame keeps, against a renderer that never had GI
+    {
+        const auto lingering = converge (renderer, scene);
+        SceneRenderer off;
+        const auto without = renderConverged (off, offScene, 64);
+        ASSERT_TRUE (lingering.isValid() && without.isValid());
+
+        const auto [top, bottom] = findRedWallRows (without);
+        const Rectangle<int> floor { 16, bottom + 2, 32, 6 };
+        RecordProperty ("lingeringPixels", countDifferencesAboveOneLevel (lingering, without));
+        RecordProperty ("lingeringFloor", (meanColor (lingering, floor).toString() + " against " + meanColor (without, floor).toString()).toStdString());
+    }
+
+    // A new size discards the history: given up, the frame is then the one without GI, against a
+    // renderer that drew as many frames before the resize, so both jitter alike
+    ASSERT_NE (renderer.render (device, scene, 48, 48), nullptr) << renderer.getLastError();
+    const auto failing = renderConverged (renderer, scene, 64);
+
+    SceneRenderer off;
+    for (int i = 0; i < frames; ++i)
+        ASSERT_NE (off.render (device, offScene, 64, 64), nullptr) << off.getLastError();
+
+    ASSERT_NE (off.render (device, offScene, 48, 48), nullptr) << off.getLastError();
+    const auto without = renderConverged (off, offScene, 64);
+    ASSERT_TRUE (failing.isValid() && without.isValid());
+    EXPECT_EQ (countDifferencesAboveOneLevel (failing, without), 0);
+}
+
+TEST_F (SceneRendererMetalTests, SsgiOffReleasesItsTargets)
+{
+    // A frame without GI releases the GI targets only, the ambient occlusion keeps its own
+    Scene scene;
+    buildGIRedRoomScene (scene, true);
+
+    SceneRenderer renderer;
+    for (int i = 0; i < 2; ++i)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    const auto* pass = renderer.getAmbientOcclusionPass();
+    ASSERT_NE (pass, nullptr);
+    EXPECT_GT (pass->getNumCachedIndirectDiffuseTargets(), 0u);
+
+    auto settings = scene.getRenderSettings();
+    settings.screenSpaceGI = false;
+    scene.setRenderSettings (settings);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (pass->getNumCachedIndirectDiffuseTargets(), 0u);
+    EXPECT_EQ (pass->getIndirectDiffuse(), nullptr);
+    EXPECT_GT (pass->getNumCachedTargets(), 0u);
+
+    settings.screenSpaceGI = true;
+    scene.setRenderSettings (settings);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_GT (pass->getNumCachedIndirectDiffuseTargets(), 0u);
+
+    // A new size has no history yet: the frame traces the ambient occlusion alone
+    ASSERT_NE (renderer.render (device, scene, 48, 48), nullptr) << renderer.getLastError();
+    EXPECT_EQ (pass->getNumCachedIndirectDiffuseTargets(), 0u);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+// RenderSettings::debugView on 64 x 64 frames of the full tier
+class SceneRendererDebugViewTests : public SceneRendererMetalTests
+{
+protected:
+    static void setDebugView (Scene& scene, RenderSettings::DebugView debugView)
+    {
+        auto settings = scene.getRenderSettings();
+        settings.debugView = debugView;
+        scene.setRenderSettings (settings);
+    }
+
+    /** The pixels of @p image with any color channel above 0. */
+    static int countNonBlackPixels (const Image& image)
+    {
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+        {
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto color = image.getPixelColor (x, y);
+                count += color.getRed() > 0 || color.getGreen() > 0 || color.getBlue() > 0 ? 1 : 0;
+            }
+        }
+
+        return count;
+    }
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    /** Shows @p view at an exposure of 0.25, which keeps it below saturation, and checks that each
+        pixel shows the texel of @p output covering it as clamp (rgb * @p weight * 0.25). Both the
+        render and the expected image round the same float expression to 8 bits, so they agree
+        within one level. At least @p minLit pixels must be lit, and @p minPartial texels must have
+        a confidence or share below 0.9 with some light, so a wrong weight shows.
+    */
+    void checkExposedPerTexel (Scene& scene, RenderSettings::DebugView view, SceneRenderer::PassOutput output, const String& weight, int minLit, int minPartial)
+    {
+        scene.setExposure (0.25f);
+        setDebugView (scene, view);
+
+        SceneRenderer renderer;
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        const auto image = renderToImage (renderer, scene, 64);
+        const auto source = renderer.getPassOutput (output);
+        ASSERT_TRUE (image.isValid());
+        ASSERT_NE (source, nullptr);
+
+        const auto expected = mapTexels (source, "vec4(clamp(t.rgb * " + weight + " * 0.25, 0.0, 1.0), 1.0)");
+        const auto partial = mapTexels (source, "vec4(t.a < 0.9 && max(t.r, max(t.g, t.b)) * 0.25 > 0.04 ? 1.0 : 0.0, 0.0, 0.0, 1.0)");
+        ASSERT_TRUE (expected.isValid() && partial.isValid());
+        const auto scale = image.getWidth() / expected.getWidth();
+
+        auto differing = 0, lit = 0, partialTexels = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+        {
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto shown = image.getPixelColor (x, y);
+                const auto wanted = expected.getPixelColor (x / scale, y / scale);
+                differing += std::abs (shown.getRed() - wanted.getRed()) > 1 || std::abs (shown.getGreen() - wanted.getGreen()) > 1
+                                     || std::abs (shown.getBlue() - wanted.getBlue()) > 1 ? 1 : 0;
+                lit += wanted.getRed() > 16 ? 1 : 0;
+            }
+        }
+
+        for (int y = 0; y < partial.getHeight(); ++y)
+            for (int x = 0; x < partial.getWidth(); ++x)
+                partialTexels += partial.getPixelColor (x, y).getRed() > 127 ? 1 : 0;
+
+        RecordProperty ("litPixels", lit);
+        RecordProperty ("partialTexels", partialTexels);
+        EXPECT_EQ (differing, 0) << weight;
+        EXPECT_GT (lit, minLit) << weight;
+        EXPECT_GT (partialTexels, minPartial) << weight;
+    }
+#endif
+};
+
+TEST_F (SceneRendererDebugViewTests, NoneCreatesNoPassAndReleasesItsTargets)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    setFullTierTaa (scene, 8);
+
+    SceneRenderer renderer;
+    for (int i = 0; i < 2; ++i)
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+
+    EXPECT_EQ (renderer.getDebugViewPass(), nullptr);
+
+    setDebugView (scene, RenderSettings::DebugView::reflections);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    const auto* pass = renderer.getDebugViewPass();
+    ASSERT_NE (pass, nullptr);
+    EXPECT_GT (pass->getNumCachedTargets(), 0u);
+
+    // Kept, with no target, so showing a view again compiles nothing
+    setDebugView (scene, RenderSettings::DebugView::none);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getDebugViewPass(), pass);
+    EXPECT_EQ (pass->getNumCachedTargets(), 0u);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_F (SceneRendererDebugViewTests, ChangingTheViewKeepsTheAccumulation)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    setFullTierTaa (scene, 8);
+
+    SceneRenderer renderer;
+    ASSERT_TRUE (renderConverged (renderer, scene, 64).isValid());
+    ASSERT_TRUE (renderer.isConverged());
+
+    setDebugView (scene, RenderSettings::DebugView::reflections);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.isConverged());
+
+    setDebugView (scene, RenderSettings::DebugView::none);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.isConverged());
+}
+
+TEST_F (SceneRendererDebugViewTests, ReflectionsShowBlackWithoutThemAndNeverStale)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    setFullTierTaa (scene, 8);
+    setDebugView (scene, RenderSettings::DebugView::reflections);
+
+    // The first frame has no history to trace the reflections from
+    SceneRenderer renderer;
+    const auto first = renderToImage (renderer, scene, 64);
+    ASSERT_TRUE (first.isValid());
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+    EXPECT_EQ (countNonBlackPixels (first), 0);
+
+    // The floor reflects the red emitter
+    const auto traced = renderToImage (renderer, scene, 64);
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+    const auto floor = meanColor (traced, reflectedEmitterRegion());
+    RecordProperty ("floorRed", static_cast<int> (floor.getRed()));
+    EXPECT_GT (floor.getRed(), 200); // Measured 255
+    EXPECT_LE (floor.getGreen(), 2);
+
+    // Turned off, the view shows black, not the reflections of the frame before
+    setScreenSpaceReflections (scene, false);
+    const auto off = renderToImage (renderer, scene, 64);
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
+    EXPECT_EQ (countNonBlackPixels (off), 0);
+}
+
+TEST_F (SceneRendererDebugViewTests, IndirectDiffuseShowsTheGatheredLight)
+{
+    Scene scene;
+    buildGIRedRoomScene (scene, true);
+    setDebugView (scene, RenderSettings::DebugView::indirectDiffuse);
+
+    SceneRenderer renderer;
+    const auto first = renderToImage (renderer, scene, 64);
+    ASSERT_TRUE (first.isValid());
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::indirectDiffuse), nullptr);
+    EXPECT_EQ (countNonBlackPixels (first), 0);
+
+    // The red wall bounces red onto the floor at its foot
+    const auto gathered = renderToImage (renderer, scene, 64);
+    const auto indirect = renderer.getPassOutput (SceneRenderer::PassOutput::indirectDiffuse);
+    ASSERT_NE (indirect, nullptr);
+    EXPECT_EQ (indirect, renderer.getAmbientOcclusionPass()->getIndirectDiffuse());
+    EXPECT_EQ (indirect->getWidth(), 32u);
+
+    auto redder = 0;
+    for (int y = 0; y < gathered.getHeight(); ++y)
+        for (int x = 0; x < gathered.getWidth(); ++x)
+            redder += gathered.getPixelColor (x, y).getRed() > gathered.getPixelColor (x, y).getGreen() + 8 ? 1 : 0;
+
+    RecordProperty ("redderPixels", redder);
+    EXPECT_GT (redder, 400); // Measured 572 of 4096
+
+    auto settings = scene.getRenderSettings();
+    settings.screenSpaceGI = false;
+    scene.setRenderSettings (settings);
+    const auto off = renderToImage (renderer, scene, 64);
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::indirectDiffuse), nullptr);
+    EXPECT_EQ (countNonBlackPixels (off), 0);
+}
+
+TEST_F (SceneRendererDebugViewTests, RasterIgnoresIt)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    auto settings = scene.getRenderSettings();
+    settings.tier = RenderSettings::TierPreference::raster;
+    settings.ambientOcclusion = true;
+    scene.setRenderSettings (settings);
+
+    SceneRenderer renderer;
+    const auto finalImage = renderToImage (renderer, scene, 64);
+
+    setDebugView (scene, RenderSettings::DebugView::ambientOcclusion);
+    const auto withView = renderToImage (renderer, scene, 64);
+    ASSERT_TRUE (finalImage.isValid() && withView.isValid());
+    EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion), nullptr);
+    EXPECT_EQ (renderer.getDebugViewPass(), nullptr);
+    EXPECT_EQ (countDifferencesAboveOneLevel (withView, finalImage), 0); // Two raster frames of this scene differ by up to one level
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (SceneRendererDebugViewTests, AmbientOcclusionShowsTheVisibilityAsGray)
+{
+    // Each pixel shows the visibility of the half resolution texel covering it, unfiltered
+    Scene scene;
+    buildGIRedRoomScene (scene, false);
+    setDebugView (scene, RenderSettings::DebugView::ambientOcclusion);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, 64);
+    const auto ambientOcclusion = renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion);
+    ASSERT_TRUE (image.isValid());
+    ASSERT_NE (ambientOcclusion, nullptr);
+    ASSERT_EQ (ambientOcclusion->getWidth(), 32u);
+
+    const auto visibility = mapTexels (ambientOcclusion, "vec4(t.aaa, 1.0)");
+    ASSERT_TRUE (visibility.isValid());
+
+    auto differing = 0, occluded = 0;
+    for (int y = 0; y < image.getHeight(); ++y)
+    {
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            const auto shown = image.getPixelColor (x, y);
+            const auto expected = visibility.getPixelColor (x / 2, y / 2).getRed();
+            differing += std::abs (shown.getRed() - expected) > 1 || shown.getGreen() != shown.getRed() || shown.getBlue() != shown.getRed() ? 1 : 0;
+            occluded += expected < 200 ? 1 : 0;
+        }
+    }
+
+    RecordProperty ("occludedPixels", occluded);
+    EXPECT_EQ (differing, 0);
+    EXPECT_GT (occluded, 80); // Measured 120: the comparison is not of a white image
+}
+
+TEST_F (SceneRendererDebugViewTests, ReflectionsAreExposedAndWeightedByTheirConfidence)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    setFullTierTaa (scene, 8);
+    checkExposedPerTexel (scene, RenderSettings::DebugView::reflections, SceneRenderer::PassOutput::reflections, "t.a", 250, 30); // Measured 382 and 58
+}
+
+TEST_F (SceneRendererDebugViewTests, IndirectDiffuseIsExposedAsGathered)
+{
+    // Not weighted by a: the gathered rgb already carries the share, as the composite adds it
+    Scene scene;
+    buildGIRedRoomScene (scene, true);
+    checkExposedPerTexel (scene, RenderSettings::DebugView::indirectDiffuse, SceneRenderer::PassOutput::indirectDiffuse, "1.0", 250, 50); // Measured 384 and 96
+}
+#endif
+
 TEST_F (SceneRendererMetalTests, SilhouetteEdgesMatchRasterOnBothTiers)
 {
     Scene scene;
@@ -10691,6 +11616,11 @@ TEST_P (SceneRendererTierTests, RendersEveryBaselineSceneWithoutNonFiniteValues)
     }
 }
 #endif
+
+TEST_P (SceneRendererTierTests, DefaultSettingsAddNoOptInPass)
+{
+    checkDefaultSettingsAddNoOptInPass (GetParam());
+}
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 TEST_P (SceneRendererTierTests, ZeroTangentFallsBackToDerivativeFrame)
@@ -13493,6 +14423,759 @@ TEST_F (HiZPyramidMetalTests, ReusesThePooledPyramidAndOneTargetPerMip)
 }
 #endif
 
+/** DepthOfField through the full tier, without temporal anti-aliasing unless a test asks for it, at
+    128 x 128 with the camera at the origin looking down -Z (yFov 0.8: 15.1 px per unit at a distance
+    of 10, a focal length of 28.4 mm). The circles of confusion of each scene are checked on the CPU
+    first, through CameraNode::getCircleOfConfusion(), so the thresholds stand on known blur sizes.
+*/
+class DepthOfFieldMetalTests : public SceneRendererMetalTests
+{
+protected:
+    static constexpr int size = 128;
+
+    /** The full tier with depth of field on and @p taaSamples, the camera at the origin looking down -Z at f/1.4, focused at @p focusDistance. */
+    static CameraNode& setUpScene (Scene& scene, float focusDistance, int taaSamples = 1)
+    {
+        setFullTierTaa (scene, taaSamples);
+        setDepthOfField (scene, true);
+        scene.setBackgroundColor (Colors::black);
+        scene.setAmbientColor (Colors::black);
+        addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
+
+        auto& camera = *scene.getActiveCamera();
+        camera.fStop = 1.4f;
+        camera.focusDistance = focusDistance;
+        return camera;
+    }
+
+    static void setDepthOfField (Scene& scene, bool depthOfField, float maxSize = 32.0f)
+    {
+        auto settings = scene.getRenderSettings();
+        settings.depthOfField = depthOfField;
+        settings.depthOfFieldMaxSize = maxSize;
+        scene.setRenderSettings (settings);
+    }
+
+    /** An emissive rectangle facing the camera at @p distance down -Z, @p area in world units,
+        blended with @p alpha below 1.
+    */
+    static void addEmitter (Scene& scene, Rectangle<float> area, float distance, float emission, float alpha = 1.0f)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { area.getX(), area.getY(), -distance };
+        vertices[1].position = { area.getRight(), area.getY(), -distance };
+        vertices[2].position = { area.getRight(), area.getBottom(), -distance };
+        vertices[3].position = { area.getX(), area.getBottom(), -distance };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        auto mesh = Mesh::Ptr (new Mesh ("emitter"));
+        auto material = makeEmitterMaterial ({ emission, emission, emission });
+        if (alpha < 1.0f)
+        {
+            material->alphaMode = Material::AlphaMode::blend;
+            material->baseColorFactor[3] = alpha;
+        }
+
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, std::move (material));
+
+        auto entity = EntityNode::Ptr (new EntityNode ("emitter"));
+        entity->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (entity);
+    }
+
+    /** Three vertical white emissive bars at @p barDistance, 0.15 of the distance wide with gaps as
+        wide (23 px at 128 x 128), the middle one centered: its left edge is at x = 52.7 px. With an
+        @p occluderDistance, a brighter square in front, 0.2 of that distance wide (30 px), centered.
+    */
+    static void buildBarsScene (Scene& scene, float barDistance, float occluderDistance = 0.0f)
+    {
+        const auto width = 0.15f * barDistance;
+        for (int bar = -1; bar <= 1; ++bar)
+            addEmitter (scene, { (2.0f * static_cast<float> (bar) - 0.5f) * width, -barDistance, width, 2.0f * barDistance }, barDistance, 2.0f);
+
+        if (occluderDistance > 0.0f)
+            addEmitter (scene, { -0.1f * occluderDistance, -0.1f * occluderDistance, 0.2f * occluderDistance, 0.2f * occluderDistance }, occluderDistance, 8.0f);
+    }
+
+    /** The pixels between 10% and 90% of the luminance range along the row segment [xFrom, xTo). */
+    static int edgeWidth (const Image& image, int row, int xFrom, int xTo)
+    {
+        std::vector<double> luma;
+        for (int x = xFrom; x < xTo; ++x)
+            luma.push_back (meanLuminance (image, { x, row, 1, 1 }));
+
+        const auto [low, high] = std::minmax_element (luma.begin(), luma.end());
+        const auto range = *high - *low;
+
+        return static_cast<int> (std::count_if (luma.begin(), luma.end(), [&] (double l)
+        {
+            return l > *low + 0.1 * range && l < *low + 0.9 * range;
+        }));
+    }
+
+    /** The mean luma of the ring from 2 to 5 px around the occluder of buildBarsScene(), 30 px wide at the center. */
+    static double occluderHaloLuminance (const Image& image)
+    {
+        const auto occluder = Rectangle<int> (49, 49, 30, 30);
+        const auto outer = occluder.enlarged (5);
+        const auto inner = occluder.enlarged (2);
+        const auto outerArea = static_cast<double> (outer.getWidth() * outer.getHeight());
+        const auto innerArea = static_cast<double> (inner.getWidth() * inner.getHeight());
+
+        return (meanLuminance (image, outer) * outerArea - meanLuminance (image, inner) * innerArea) / (outerArea - innerArea);
+    }
+
+    /** A black backdrop at 10, in focus with a focus of 10, and an emissive square at
+        @p occluderDistance in front, 30 px tall, from x = 36 px to its right edge at x = 64 px. That
+        edge is the border of the half resolution texels 31 and 32, so of tiles 1 and 2: the halo
+        right of it lies in tiles holding no occluder texel, which only the dilation reaches.
+    */
+    static void buildTileEdgeScene (Scene& scene, float occluderDistance, float emission)
+    {
+        const auto unitsPerPixel = 2.0f * occluderDistance * std::tan (0.4f) / static_cast<float> (size);
+        addEmitter (scene, { -50.0f, -50.0f, 100.0f, 100.0f }, 10.0f, 0.0f);
+        addEmitter (scene, { -28.0f * unitsPerPixel, -15.0f * unitsPerPixel, 28.0f * unitsPerPixel, 30.0f * unitsPerPixel }, occluderDistance, emission);
+    }
+
+    /** How much further the light of a bokeh centered in the frame reaches towards the vertices of
+        a 5-blade aperture than towards its edges: the luma-weighted mean radius of the 5 sectors of
+        36 degrees around the vertex directions over that of the 5 around the edge directions, less 1.
+        Sectors average over the dots of the sample pattern, so a round bokeh gives about 0.
+    */
+    static double vertexExcess (const Image& image)
+    {
+        std::array<double, 2> moment {}, weight {};
+
+        for (int y = 0; y < size; ++y)
+        {
+            for (int x = 0; x < size; ++x)
+            {
+                const auto dx = x + 0.5 - size / 2;
+                const auto dy = y + 0.5 - size / 2;
+                const auto luma = meanLuminance (image, { x, y, 1, 1 });
+                const auto sector = static_cast<int> (std::round (std::atan2 (dy, dx) / (MathConstants<double>::twoPi / 10.0)));
+                const auto parity = static_cast<size_t> ((sector % 2 + 2) % 2);
+
+                moment[parity] += luma * std::sqrt (dx * dx + dy * dy);
+                weight[parity] += luma;
+            }
+        }
+
+        return (moment[0] / jmax (weight[0], 1.0)) / jmax (moment[1] / jmax (weight[1], 1.0), 1.0) - 1.0;
+    }
+
+    /** The CoC diameter in pixels of the frame of a point at @p distance. */
+    static float circleOfConfusion (const Scene& scene, float distance)
+    {
+        return scene.getActiveCamera()->getCircleOfConfusion (distance, static_cast<float> (size));
+    }
+};
+
+TEST_F (DepthOfFieldMetalTests, DepthOfFieldBlursOutOfFocusBarsOnly)
+{
+    Scene scene;
+    auto& camera = setUpScene (scene, 10.0f);
+    buildBarsScene (scene, 10.0f);
+
+    SceneRenderer renderer;
+    const auto sharp = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (sharp.isValid()) << renderer.getLastError();
+
+    // Focused on the bars, nothing blurs by a texel: the frame is the one without depth of field
+    setDepthOfField (scene, false);
+    const auto off = renderToImage (renderer, scene, size);
+    EXPECT_EQ (countDifferences (sharp, off), 0);
+
+    setDepthOfField (scene, true);
+    camera.focusDistance = 0.2f;
+    ASSERT_GT (circleOfConfusion (scene, 10.0f), 16.0f);
+
+    const auto blurred = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+
+    // The left edge of the middle bar, at x = 52.7: a step in focus, a ramp out of focus. The scene
+    // color of the frame, the output of TAA, stays sharp: the blur runs after it
+    const auto sharpWidth = edgeWidth (sharp, size / 2, 40, 66);
+    const auto blurredWidth = edgeWidth (blurred, size / 2, 40, 66);
+    EXPECT_LE (edgeWidth (readBack (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)), size / 2, 40, 66), 2);
+    RecordProperty ("sharpEdgeWidth", sharpWidth);
+    RecordProperty ("blurredEdgeWidth", blurredWidth);
+
+    EXPECT_LE (sharpWidth, 2);
+    EXPECT_GE (blurredWidth, 6);
+}
+
+TEST_F (DepthOfFieldMetalTests, NearFieldBleedsOverTheFocusedBackground)
+{
+    // With temporal anti-aliasing, so the blur runs after it as in the default chain
+    Scene scene;
+    setUpScene (scene, 10.0f, 16);
+    buildBarsScene (scene, 10.0f, 0.3f);
+    ASSERT_LT (circleOfConfusion (scene, 0.3f), -8.0f);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+
+    // The blur runs after the accumulation, so the same renderer gives the image without it
+    setDepthOfField (scene, false);
+    const auto without = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (without.isValid()) << renderer.getLastError();
+
+    // The out-of-focus occluder spreads beyond its silhouette onto the sharp background
+    const auto halo = occluderHaloLuminance (image);
+    const auto haloWithout = occluderHaloLuminance (without);
+    RecordProperty ("halo", String (halo, 2).toStdString());
+    RecordProperty ("haloWithout", String (haloWithout, 2).toStdString());
+
+    EXPECT_GT (halo, haloWithout + 10.0);
+}
+
+TEST_F (DepthOfFieldMetalTests, DepthOfFieldOffChangesNothing)
+{
+    Scene scene;
+    auto& camera = setUpScene (scene, 10.0f);
+    setDepthOfField (scene, false);
+    buildBarsScene (scene, 10.0f, 0.3f);
+
+    SceneRenderer renderer;
+    const auto focusedFar = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (focusedFar.isValid()) << renderer.getLastError();
+
+    camera.focusDistance = 1.0f;
+    const auto focusedNear = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (focusedNear.isValid()) << renderer.getLastError();
+
+    int largest = 0;
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            const auto a = focusedFar.getPixelColor (x, y);
+            const auto b = focusedNear.getPixelColor (x, y);
+            largest = jmax (largest, std::abs (a.getRed() - b.getRed()), std::abs (a.getGreen() - b.getGreen()), std::abs (a.getBlue() - b.getBlue()));
+        }
+    }
+
+    EXPECT_LE (largest, 1);
+}
+
+TEST_F (DepthOfFieldMetalTests, DepthOfFieldRecordsNothingWhenItCannotBlur)
+{
+    // Nothing is created, drawn or kept while it is off or the camera cannot blur
+    Scene scene;
+    auto& camera = setUpScene (scene, 0.2f);
+    buildBarsScene (scene, 10.0f);
+
+    const auto expectNoPass = [&] (SceneRenderer& renderer, const char* name)
+    {
+        ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << name << ": " << renderer.getLastError();
+        EXPECT_EQ (renderer.getDepthOfField(), nullptr) << name;
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr) << name;
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr) << name;
+        EXPECT_TRUE (renderer.waitForGPU().wasOk()) << name;
+    };
+
+    {
+        setDepthOfField (scene, false);
+        SceneRenderer renderer;
+        expectNoPass (renderer, "off");
+        setDepthOfField (scene, true);
+    }
+
+    {
+        camera.fStop = 0.0f;
+        SceneRenderer renderer;
+        expectNoPass (renderer, "fStop 0");
+        camera.fStop = 1.4f;
+    }
+
+    {
+        camera.projection = CameraNode::Projection::orthographic;
+        SceneRenderer renderer;
+        expectNoPass (renderer, "orthographic");
+        camera.projection = CameraNode::Projection::perspective;
+    }
+
+    {
+        setDepthOfField (scene, true, 0.0f);
+        SceneRenderer renderer;
+        expectNoPass (renderer, "no blur size");
+        setDepthOfField (scene, true);
+    }
+
+    {
+        // The default camera of a scene without one has no depth of field
+        Scene withoutCamera;
+        setFullTierTaa (withoutCamera, 1);
+        setDepthOfField (withoutCamera, true);
+        buildBarsScene (withoutCamera, 10.0f);
+
+        SceneRenderer renderer;
+        ASSERT_NE (renderer.render (device, withoutCamera, size, size), nullptr) << renderer.getLastError();
+        EXPECT_EQ (renderer.getDepthOfField(), nullptr);
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    {
+        // The raster tier ignores it, even on its HDR path with bloom, the one running the post chain
+        auto settings = scene.getRenderSettings();
+        settings.tier = RenderSettings::TierPreference::raster;
+        settings.bloom = true;
+        scene.setRenderSettings (settings);
+
+        SceneRenderer renderer;
+        expectNoPass (renderer, "raster");
+        EXPECT_TRUE (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::bloom, scene.getRenderSettings()));
+
+        settings.tier = RenderSettings::TierPreference::full;
+        settings.bloom = false;
+        scene.setRenderSettings (settings);
+    }
+
+    // Once blurring, a frame that cannot blur any more keeps nothing but the pipelines
+    SceneRenderer renderer;
+    ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+    ASSERT_NE (renderer.getDepthOfField(), nullptr);
+    EXPECT_GT (renderer.getDepthOfField()->getNumCachedTargets(), 0u);
+    EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr);
+
+    camera.fStop = 0.0f;
+    ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getDepthOfField()->getNumCachedTargets(), 0u);
+    EXPECT_EQ (renderer.getDepthOfField()->getOutput(), nullptr);
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (DepthOfFieldMetalTests, DepthOfFieldWithInfiniteFarPlaneStaysFinite)
+{
+    Scene scene;
+    auto& camera = setUpScene (scene, 1.0f);
+    camera.zFar = 0.0f;
+    buildBarsScene (scene, 1000.0f);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+    EXPECT_GT (meanLuminance (image, { 0, 0, size, size }), 10.0);
+
+    const auto blurred = renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField);
+    const auto coc = renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion);
+    ASSERT_NE (blurred, nullptr);
+    ASSERT_NE (coc, nullptr);
+    EXPECT_EQ (blurred->getFormat(), GpuTextureFormat::rgba16float);
+    EXPECT_EQ (coc->getFormat(), GpuTextureFormat::r16float);
+    EXPECT_EQ (coc->getWidth(), size / 2);
+
+    // Each check compiles a shader at runtime, about 0.2 s: the result alone stays well within the
+    // budget, and DepthOfFieldTests.ShaderLinearizationGivesTheInverseViewDistance pins the finite CoC at depth 1
+    EXPECT_TRUE (isFiniteTexture (blurred));
+}
+#endif
+
+TEST_F (DepthOfFieldMetalTests, PolygonBokehDiffersFromRound)
+{
+    // A small bright square far out of focus: the blur takes the shape of the aperture, a disk or a
+    // pentagon. The pentagon reaches further towards its vertices than towards its edges, so on a
+    // circle between its apothem and its corners, every other one of 10 directions 36 degrees apart
+    // is darker. One renderer changes the blades between its frames
+    Scene scene;
+    auto& camera = setUpScene (scene, 0.1f);
+    camera.fStop = 0.7f;
+    setDepthOfField (scene, true, 64.0f);
+    addEmitter (scene, { -0.2f, -0.2f, 0.4f, 0.4f }, 10.0f, 200.0f);
+
+    // A black backdrop covers the frame, so the blur keeps its focus on the aperture shape
+    addEmitter (scene, { -50.0f, -50.0f, 100.0f, 100.0f }, 50.0f, 0.0f);
+    ASSERT_GT (circleOfConfusion (scene, 10.0f), 64.0f);
+
+    SceneRenderer renderer;
+    const auto alternation = [&] (int blades, double* ringLuma = nullptr)
+    {
+        camera.apertureBlades = blades;
+        const auto image = renderToImage (renderer, scene, size);
+        EXPECT_TRUE (image.isValid()) << renderer.getLastError();
+
+        // The bokeh is 64 px wide: its edges lie 26 px (apothem) to 32 px (vertices) from the center, plus 3 px of the square
+        std::array<double, 2> sums {};
+        for (int i = 0; i < 10; ++i)
+        {
+            const auto angle = MathConstants<double>::twoPi * i / 10.0;
+            const auto x = static_cast<int> (std::round (64.0 + 31.0 * std::cos (angle)));
+            const auto y = static_cast<int> (std::round (64.0 + 31.0 * std::sin (angle)));
+            sums[static_cast<size_t> (i % 2)] += meanLuminance (image, { x - 1, y - 1, 3, 3 });
+        }
+
+        if (ringLuma != nullptr)
+            *ringLuma = (sums[0] + sums[1]) / 10.0;
+
+        return std::abs (sums[0] - sums[1]) / jmax (sums[0], sums[1], 1.0);
+    };
+
+    // Any count below 3 is round, -1 included, from the first frame on
+    double negativeRing = 0.0;
+    const auto negative = alternation (-1, &negativeRing);
+    const auto round = alternation (0);
+    const auto pentagon = alternation (5);
+
+    RecordProperty ("round", String (round, 3).toStdString());
+    RecordProperty ("pentagon", String (pentagon, 3).toStdString());
+
+    EXPECT_LT (round, 0.1);
+    EXPECT_GT (pentagon, 0.1);
+    EXPECT_LT (negative, 0.1);
+    EXPECT_GT (negativeRing, 50.0);
+}
+
+TEST_F (DepthOfFieldMetalTests, PolygonBokehHoldsBelowTheGatherRadius)
+{
+    // The square's CoC is 0.66 of its backdrop's, which sets the gather radius around it: the
+    // gather must still take the pentagon of the square's own CoC, not the polygon of the gather
+    // radius cut by a disk of the square's CoC, which keeps the samples near the edges of the third
+    // ring and drops those near its vertices
+    Scene scene;
+    auto& camera = setUpScene (scene, 0.1f);
+    camera.fStop = 0.7f;
+    setDepthOfField (scene, true, 64.0f);
+
+    constexpr float distance = 0.197f;
+    const auto unitsPerPixel = 2.0f * distance * std::tan (0.4f) / static_cast<float> (size);
+    addEmitter (scene, { -3.0f * unitsPerPixel, -3.0f * unitsPerPixel, 6.0f * unitsPerPixel, 6.0f * unitsPerPixel }, distance, 200.0f);
+    addEmitter (scene, { -50.0f, -50.0f, 100.0f, 100.0f }, 50.0f, 0.0f);
+
+    const auto ratio = circleOfConfusion (scene, distance) / jmin (64.0f, circleOfConfusion (scene, 50.0f));
+    ASSERT_GT (ratio, 0.62f);
+    ASSERT_LT (ratio, 0.70f);
+
+    SceneRenderer renderer;
+    camera.apertureBlades = 5;
+    const auto pentagon = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (pentagon.isValid()) << renderer.getLastError();
+
+    camera.apertureBlades = 0;
+    const auto round = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (round.isValid()) << renderer.getLastError();
+
+    const auto pentagonExcess = vertexExcess (pentagon);
+    const auto roundExcess = vertexExcess (round);
+    RecordProperty ("pentagonExcess", String (pentagonExcess, 3).toStdString());
+    RecordProperty ("roundExcess", String (roundExcess, 3).toStdString());
+
+    // Measured 0.095 for the pentagon, 0.052 with the polygon cut by a disk, and 0.002 for the round bokeh
+    EXPECT_GT (pentagonExcess, 0.075);
+    EXPECT_LT (std::abs (roundExcess), 0.03);
+}
+
+TEST_F (DepthOfFieldMetalTests, DepthOfFieldKeepsTheSilhouetteBlendOverTheBackground)
+{
+    // A white square out of focus over a red background color, without environment: across its
+    // edge the blur fades white into red through pink, never through a darker ring
+    Scene scene;
+    setUpScene (scene, 0.2f);
+    scene.setBackgroundColor (Colors::red);
+    addEmitter (scene, { -1.5f, -1.5f, 3.0f, 3.0f }, 10.0f, 8.0f);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+
+    // The square spans x 41.4 to 86.6: across its left edge along the middle row
+    int blended = 0;
+    int darkest = 255;
+    for (int x = 20; x < 64; ++x)
+    {
+        const auto color = image.getPixelColor (x, size / 2);
+        darkest = jmin (darkest, static_cast<int> (color.getRed()));
+        blended += color.getGreen() > 25 && color.getGreen() < 230 ? 1 : 0;
+    }
+
+    RecordProperty ("blendedPixels", blended);
+    RecordProperty ("darkestRed", darkest);
+
+    EXPECT_GE (blended, 6);
+    EXPECT_GE (darkest, 230);
+}
+
+TEST_F (DepthOfFieldMetalTests, GivingUpDepthOfFieldRendersUnblurred)
+{
+    Scene scene;
+    setUpScene (scene, 0.2f);
+    buildBarsScene (scene, 10.0f);
+
+    SceneRenderer renderer;
+    const auto render = [&] (bool blurs, bool givenUp, const char* name)
+    {
+        ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << name << ": " << renderer.getLastError();
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField) != nullptr, blurs) << name;
+        ASSERT_NE (renderer.getDepthOfField(), nullptr) << name;
+        EXPECT_EQ (renderer.getDepthOfField()->hasGivenUp(), givenUp) << name;
+
+        // A frame without the blur keeps none of its targets, after a frame that blurred too
+        if (! blurs)
+            EXPECT_EQ (renderer.getDepthOfField()->getNumCachedTargets(), 0u) << name;
+    };
+
+    // Only failures in a row give up: a frame that blurs in between starts the count over
+    renderer.failDepthOfFieldForTesting (1);
+    render (false, false, "first failure");
+    render (true, false, "recovered");
+    EXPECT_GT (renderer.getDepthOfField()->getNumCachedTargets(), 0u);
+
+    renderer.failDepthOfFieldForTesting (1);
+    render (false, false, "failure after a blur");
+    render (true, false, "recovered again");
+
+    renderer.failDepthOfFieldForTesting (2);
+    render (false, false, "first of two failures");
+    render (false, true, "second of two failures");
+    EXPECT_FALSE (renderer.getDepthOfField()->getGiveUpReason().isEmpty());
+
+    // Given up, it no longer tries, and the frames are the ones without depth of field
+    const auto image = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+
+    setDepthOfField (scene, false);
+    const auto without = renderToImage (renderer, scene, size);
+    EXPECT_EQ (countDifferences (image, without), 0);
+}
+
+TEST_F (DepthOfFieldMetalTests, MissingInputIsASkipNotAFailure)
+{
+    // A frame without the depth (the raster prepass that could not be drawn) skips the blur, and
+    // never counts towards giving up, so the blur comes back with the depth
+    DepthOfField depthOfField (device);
+    FrameResources resources (device);
+    ViewData view;
+    CameraNode camera;
+    RenderSettings settings;
+    settings.depthOfField = true;
+
+    for (int i = 0; i < 3; ++i)
+    {
+        resources.beginFrame (64, 64);
+        auto frame = GpuFrame::begin (device);
+        EXPECT_EQ (depthOfField.render (frame, view, settings, resources, { nullptr, false, nullptr, &camera }), nullptr);
+        frame.submit();
+        resources.endFrame();
+    }
+
+    EXPECT_FALSE (depthOfField.hasGivenUp());
+    EXPECT_EQ (depthOfField.getNumCachedTargets(), 0u);
+}
+
+TEST_F (DepthOfFieldMetalTests, NearFieldReachesAcrossTileEdges)
+{
+    // The occluder ends on a tile border, so its halo on the right lies in tiles without it: only
+    // the dilation of the tiles gathers it there
+    Scene scene;
+    setUpScene (scene, 10.0f);
+    buildTileEdgeScene (scene, 0.2f, 8.0f);
+    ASSERT_LT (circleOfConfusion (scene, 0.2f), -14.0f);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    setDepthOfField (scene, false);
+    const auto without = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (without.isValid()) << renderer.getLastError();
+
+    const Rectangle<int> halo (66, 52, 4, 24);
+    const auto lit = meanLuminance (image, halo);
+    const auto dark = meanLuminance (without, halo);
+    RecordProperty ("halo", String (lit, 2).toStdString());
+    RecordProperty ("haloWithout", String (dark, 2).toStdString());
+
+    // Measured 222 against 0: without the dilation the tiles right of the edge hold no near CoC
+    EXPECT_GT (lit, dark + 20.0);
+}
+
+TEST_F (DepthOfFieldMetalTests, NearFieldIsContinuousAcrossTheSilhouette)
+{
+    // Across the right edge of an out-of-focus occluder over a black backdrop, the radiance falls
+    // from the occluder's to 0 over the blur, without a step at the silhouette
+    Scene scene;
+    setUpScene (scene, 10.0f);
+    buildTileEdgeScene (scene, 0.2f, 1.0f);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    std::vector<double> radiance;
+    for (int x = 50; x < 78; ++x)
+        radiance.push_back (reinhardRadiance (image.getPixelColor (x, size / 2).getGreen()));
+
+    const auto contrast = *std::max_element (radiance.begin(), radiance.end()) - *std::min_element (radiance.begin(), radiance.end());
+    ASSERT_GT (contrast, 0.3);
+
+    double largestStep = 0.0;
+    for (size_t i = 1; i < radiance.size(); ++i)
+        largestStep = jmax (largestStep, std::abs (radiance[i] - radiance[i - 1]));
+
+    RecordProperty ("largestStep", String (largestStep / contrast, 3).toStdString());
+
+    // A disk of 7.5 px spreads the contrast over 15 px: about 0.07 a pixel, and measured 0.14 at
+    // the steepest. A step at the silhouette measured 0.42
+    EXPECT_LT (largestStep / contrast, 0.25);
+}
+
+TEST_F (DepthOfFieldMetalTests, BlurredHighlightsKeepTheirBrightnessOverTheBackground)
+{
+    // A bright square far out of focus over the black background color, without an environment,
+    // against the same square over a visible black environment: the blur spreads the same light
+    // over both, so the bokeh is as bright, not capped by its coverage (preflight R20)
+    Scene scene;
+    auto& camera = setUpScene (scene, 0.1f);
+    camera.fStop = 0.7f;
+    setDepthOfField (scene, true, 64.0f);
+    addEmitter (scene, { -0.2f, -0.2f, 0.4f, 0.4f }, 10.0f, 200.0f);
+
+    SceneRenderer renderer;
+    const auto overBackground = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
+
+    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    scene.setEnvironmentVisible (true);
+    const auto overEnvironment = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
+
+    const auto background = meanLuminance (overBackground, { 0, 0, size, size });
+    const auto environment = meanLuminance (overEnvironment, { 0, 0, size, size });
+    RecordProperty ("overBackground", String (background, 2).toStdString());
+    RecordProperty ("overEnvironment", String (environment, 2).toStdString());
+
+    ASSERT_GT (environment, 20.0);
+    // Measured 54.43 against 54.52: both tone map the same spread radiance over black. The display
+    // space blend gave 0.4, as each pixel kept only its coverage share of the tone mapped highlight
+    EXPECT_NEAR (background, environment, 0.05 * environment);
+}
+
+TEST_F (DepthOfFieldMetalTests, FaintCoverageKeepsItsLightOverTheBackground)
+{
+    // A bright square of very low coverage (a blended material of alpha 0.004, as a light much
+    // smaller than a pixel resolves after antialiasing) far out of focus: spread by the blur, its
+    // coverage falls below 1e-4 in every pixel while its premultiplied light stays visible. Over the
+    // black background color it keeps that light, as over a visible black environment
+    Scene scene;
+    auto& camera = setUpScene (scene, 0.1f);
+    camera.fStop = 0.7f;
+    setDepthOfField (scene, true, 64.0f);
+    addEmitter (scene, { -0.2f, -0.2f, 0.4f, 0.4f }, 10.0f, 60000.0f, 0.004f);
+
+    SceneRenderer renderer;
+    const auto overBackground = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
+
+    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    scene.setEnvironmentVisible (true);
+    const auto overEnvironment = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
+
+    const auto background = meanLuminance (overBackground, { 0, 0, size, size });
+    const auto environment = meanLuminance (overEnvironment, { 0, 0, size, size });
+    RecordProperty ("overBackground", String (background, 2).toStdString());
+    RecordProperty ("overEnvironment", String (environment, 2).toStdString());
+    // Measured 56.23 against 56.24; tone mapping the un-premultiplied color times the coverage gave 0
+    ASSERT_GT (environment, 10.0);
+    EXPECT_NEAR (background, environment, 0.05 * environment);
+}
+
+TEST_F (DepthOfFieldMetalTests, RadianceCompositeFailureFallsBackToTheDisplayBlend)
+{
+    // A blurred frame whose radiance composite cannot compile still tone maps, with the display
+    // space blend of the frames without depth of field, instead of failing the frame
+    FrameResources resources (device);
+    ViewData view;
+    ToneMapping toneMapping;
+    toneMapping.failRadianceCompositeForTesting();
+
+    for (int i = 0; i < 2; ++i)
+    {
+        resources.beginFrame (8, 8);
+        const auto source = resources.acquire (GpuTextureDesc (8, 8, GpuTextureFormat::rgba16float, true));
+        const auto destination = resources.acquire (GpuTextureDesc (8, 8, GpuTextureFormat::rgba8unorm, true));
+        ASSERT_NE (source, nullptr);
+        ASSERT_NE (destination, nullptr);
+
+        auto frame = GpuFrame::begin (device);
+        EXPECT_TRUE (toneMapping.render (device, frame, view, resources, source, false, nullptr, destination, Colors::black, true)) << i;
+        EXPECT_TRUE (frame.waitForGPU().wasOk()) << i;
+        resources.endFrame();
+    }
+}
+
+TEST_F (DepthOfFieldMetalTests, DepthOfFieldChangesKeepTheAccumulationConverged)
+{
+    // The blur runs after the accumulation: turning it on and moving the focus change the image
+    // but neither restart nor discard the converged history
+    Scene scene;
+    auto& camera = setUpScene (scene, 10.0f, 8);
+    setDepthOfField (scene, false);
+    buildBarsScene (scene, 10.0f);
+
+    SceneRenderer renderer;
+    const auto converged = renderConverged (renderer, scene, 64);
+    ASSERT_TRUE (converged.isValid()) << renderer.getLastError();
+    ASSERT_TRUE (renderer.isConverged());
+
+    setDepthOfField (scene, true);
+    camera.focusDistance = 0.2f;
+    const auto blurred = renderToImage (renderer, scene, 64);
+    EXPECT_TRUE (renderer.isConverged());
+    EXPECT_GT (countDifferences (blurred, converged), 0);
+
+    camera.fStop = 4.0f;
+    camera.apertureBlades = 6;
+    const auto stoppedDown = renderToImage (renderer, scene, 64);
+    EXPECT_TRUE (renderer.isConverged());
+    EXPECT_GT (countDifferences (stoppedDown, blurred), 0);
+}
+
+TEST_F (DepthOfFieldMetalTests, DepthOfFieldRunsBeforeBloom)
+{
+    // A square bright enough to glow when sharp spreads below the bloom threshold once blurred:
+    // with the blur before bloom, no glow reaches past the bokeh
+    Scene scene;
+    auto& camera = setUpScene (scene, 0.1f);
+    camera.fStop = 0.7f;
+    setDepthOfField (scene, true, 64.0f);
+    addEmitter (scene, { -0.2f, -0.2f, 0.4f, 0.4f }, 10.0f, 30.0f);
+    addEmitter (scene, { -50.0f, -50.0f, 100.0f, 100.0f }, 50.0f, 0.0f);
+
+    const auto glowRing = [] (const Image& image)
+    {
+        return meanLuminance (image, { 4, 4, 120, 6 }) + meanLuminance (image, { 4, 118, 120, 6 });
+    };
+
+    SceneRenderer renderer;
+    const auto withoutBloom = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (withoutBloom.isValid()) << renderer.getLastError();
+
+    auto settings = scene.getRenderSettings();
+    settings.bloom = true;
+    settings.bloomIntensity = 1.0f;
+    scene.setRenderSettings (settings);
+    const auto withBloom = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (withBloom.isValid()) << renderer.getLastError();
+
+    // Sharp, the square glows over the whole frame
+    setDepthOfField (scene, false, 64.0f);
+    const auto sharpBloom = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (sharpBloom.isValid()) << renderer.getLastError();
+
+    ASSERT_GT (glowRing (sharpBloom), glowRing (withoutBloom) + 10.0);
+    EXPECT_LT (glowRing (withBloom), glowRing (withoutBloom) + 2.0);
+}
+
 /** Frame times of the Scene3D light show, measured by hand: disabled in the normal suites. Run them
     on a Release build with
 
@@ -13819,6 +15502,51 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
     }
 }
 
+/** The cost of the depth of field on the full tier, in the light show with 16 show lights, at the
+    demo size and at 2560 x 1600. Run it like DISABLED_LightShowFrameTimes. Each round times the
+    frame without depth of field twice (A/A) and with it twice: focused on the model, where only the
+    background blurs, and focused well in front of it, where every pixel blurs by the largest size.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_DepthOfFieldFrameTimes)
+{
+    for (const auto& [width, height] : { std::pair { 1280, 800 }, std::pair { 2560, 1600 } })
+    {
+        std::map<String, std::vector<double>> times;
+
+        for (int round = 0; round < 3; ++round)
+        {
+            for (const auto [name, focus] : { std::pair { "off", 0.0f }, std::pair { "focused", 1.0f }, std::pair { "all blurred", 0.3f }, std::pair { "off again", 0.0f } })
+            {
+                LightShow show;
+                if (! show.build (16, 0.5f, 0.08f, RenderSettings::TierPreference::full, static_cast<float> (width) / static_cast<float> (height)))
+                    GTEST_SKIP() << "mpc.glb is missing";
+
+                auto settings = show.scene.getRenderSettings();
+                settings.depthOfField = focus > 0.0f;
+                show.scene.setRenderSettings (settings);
+
+                auto& camera = *show.scene.getActiveCamera();
+                camera.fStop = 1.4f;
+                camera.focusDistance = show.cameraDistance * focus;
+
+                int shadowRedraws = 0;
+                const auto milliseconds = timeFrames (show, width, height, shadowRedraws);
+                ASSERT_GT (milliseconds, 0.0) << name;
+                times[name].push_back (milliseconds);
+            }
+        }
+
+        for (const auto& [name, values] : times)
+        {
+            String line;
+            for (const auto value : values)
+                line << String (value, 3) << " ";
+
+            std::cout << width << " x " << height << " " << name << ": " << line << "ms" << std::endl;
+        }
+    }
+}
+
 /** The Scene3D panel under automation: the demo's key light and pad spot plus two shadowed point
     lights over the pads, while one knob turns every frame, outside the reach of every point and spot
     light when one is (the test reports whether it is). Run it like DISABLED_LightShowFrameTimes, in
@@ -14011,6 +15739,11 @@ TEST_F (SceneRendererGLTests, MatchesPhaseZeroBaselineOnRaster)
             GTEST_SKIP() << "No gl_" << name << ".png baseline captured yet";
 
     checkMatchesPhaseZeroBaseline ("gl");
+}
+
+TEST_F (SceneRendererGLTests, DefaultSettingsAddNoOptInPass)
+{
+    checkDefaultSettingsAddNoOptInPass (RenderSettings::TierPreference::raster);
 }
 
 #if YUP_ENABLE_SHADER_TRANSPILER

@@ -241,6 +241,66 @@ void main() { first = vec4(1.0, 0.0, 0.0, 1.0); second = vec4(0.0, 1.0, 0.0, 1.0
     EXPECT_EQ (secondImage.getPixelColor (3, 3).getGreen(), 255);
 }
 
+TEST_F (FullscreenPassMetalTests, WritesColorTargetsOfDifferentFormats)
+{
+    // One rgba8 target and one rgba16float target holding a value an rgba8 target would clamp
+    const auto bundle = compileBundle (R"(#version 450
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 first;
+layout(location = 1) out vec4 second;
+void main() { first = vec4(1.0, 0.0, 0.0, 1.0); second = vec4(0.0, 3.0, 0.0, 1.0); })");
+
+    const std::array formats { GpuTextureFormat::rgba8unorm, GpuTextureFormat::rgba16float };
+    FullscreenPass pass;
+    const auto prepared = pass.prepare (device, static_cast<const uint8*> (bundle.getData()), bundle.getSize(), formats);
+    ASSERT_TRUE (prepared.wasOk()) << prepared.getErrorMessage();
+
+    auto first = createTarget();
+    auto second = GpuTexture::create (device, GpuTextureDesc (size, size, GpuTextureFormat::rgba16float, true));
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+
+    // The half float target read back through a quarter of its green, into an rgba8 target
+    const auto quarter = compileBundle (R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D source;
+layout(set = 0, binding = 1) uniform sampler sourceSampler;
+layout(location = 0) out vec4 color;
+void main() { color = vec4(0.0, texelFetch(sampler2D(source, sourceSampler), ivec2(gl_FragCoord.xy), 0).g * 0.25, 0.0, 1.0); })");
+
+    FullscreenPass reader;
+    ASSERT_TRUE (reader.prepare (device, static_cast<const uint8*> (quarter.getData()), quarter.getSize(), GpuTextureFormat::rgba8unorm).wasOk());
+
+    auto readable = createTarget();
+    ASSERT_NE (readable, nullptr);
+    auto sampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
+
+    auto frame = GpuFrame::begin (device);
+    EXPECT_TRUE (pass.draw (frame, first, {}, [&] (GpuRenderPass& renderPass)
+    {
+        renderPass.setColorAttachment (1, second, { true, GpuColor::transparentBlack() });
+    }, GpuColor::transparentBlack()));
+    EXPECT_TRUE (reader.draw (frame, readable, {}, [&] (GpuRenderPass& renderPass)
+    {
+        renderPass.setTexture (0, 0, second);
+        renderPass.setSampler (0, 1, sampler);
+    }, GpuColor::transparentBlack()));
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    const auto firstImage = readBack (first);
+    const auto secondImage = readBack (readable);
+    ASSERT_TRUE (firstImage.isValid());
+    ASSERT_TRUE (secondImage.isValid());
+
+    EXPECT_EQ (firstImage.getPixelColor (3, 3).getRed(), 255);
+    EXPECT_NEAR (secondImage.getPixelColor (3, 3).getGreen(), 191, 1); // 3 / 4, not 1 / 4 from a clamped 1
+
+    // No format, nothing to compile
+    FullscreenPass none;
+    EXPECT_TRUE (none.prepare (device, static_cast<const uint8*> (bundle.getData()), bundle.getSize(), Span<const GpuTextureFormat>()).failed());
+    EXPECT_FALSE (none.isPrepared());
+}
+
 TEST_F (FullscreenPassMetalTests, DrawWithoutPrepareFails)
 {
     FullscreenPass pass;

@@ -64,6 +64,15 @@ public:
     */
     Result wait() const;
 
+    /** Returns the GPU time of the frame, without blocking.
+
+        @returns A copy of the timings, available only once the frame completed
+                 successfully, when it was measured (see GpuFrame::setTimingEnabled()).
+                 Unavailable while the frame is pending, when it failed, and for an
+                 invalid status.
+    */
+    GpuFrameTimings getTimings() const;
+
     //==============================================================================
     /** @internal The state a frame shares with its device and its statuses. */
     struct Block;

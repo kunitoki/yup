@@ -30,6 +30,8 @@
 // by how close it lies to the tangent plane of the texel, relative to the texel's distance from the
 // camera, and by how little its normal turns from the texel's, so the occlusion does not bleed
 // across depth or normal edges. The mean bent normal is renormalized.
+// The screen-space diffuse GI variant (YUP_3D_SCREEN_SPACE_GI) filters the gathered light of the
+// trace (binding 4) alongside, with the same weights, into its second target.
 
 layout(set = 1, binding = 3) uniform texture2D u_trace;
 
@@ -37,12 +39,22 @@ layout(location = 0) in vec2 uv;
 
 layout(location = 0) out vec4 fragColor;
 
+#ifdef YUP_3D_SCREEN_SPACE_GI
+layout(set = 1, binding = 4) uniform texture2D u_traceIndirect;
+
+layout(location = 1) out vec4 fragIndirect;
+#endif
+
 void main()
 {
     ivec2 outputPixel = ivec2(gl_FragCoord.xy);
     ivec2 pixel = gtaoInputPixel(outputPixel);
     vec4 center = texelFetch(sampler2D(u_trace, pointClamp), outputPixel, 0);
     float depth = gtaoDepth(pixel);
+
+#ifdef YUP_3D_SCREEN_SPACE_GI
+    fragIndirect = texelFetch(sampler2D(u_traceIndirect, pointClamp), outputPixel, 0);
+#endif
 
     if (depth >= 1.0)
     {
@@ -61,6 +73,9 @@ void main()
     // The texel itself weighs 1, so the weights never sum to 0
     vec4 sum = vec4(0.0);
     float weights = 0.0;
+#ifdef YUP_3D_SCREEN_SPACE_GI
+    vec4 indirect = vec4(0.0);
+#endif
 
     for (int i = -2; i <= 2; ++i)
     {
@@ -80,10 +95,16 @@ void main()
         float weight = (abs(i) == 2 ? 0.5 : 1.0) * plane * facing;
         sum += texelFetch(sampler2D(u_trace, pointClamp), neighbor, 0) * weight;
         weights += weight;
+#ifdef YUP_3D_SCREEN_SPACE_GI
+        indirect += texelFetch(sampler2D(u_traceIndirect, pointClamp), neighbor, 0) * weight;
+#endif
     }
 
     vec4 result = sum / weights;
     vec3 bentNormal = result.rgb * 2.0 - 1.0;
     float bentLength = length(bentNormal);
     fragColor = vec4(bentLength > 1.0e-4 ? bentNormal / bentLength * 0.5 + 0.5 : center.rgb, result.a);
+#ifdef YUP_3D_SCREEN_SPACE_GI
+    fragIndirect = indirect / weights;
+#endif
 }

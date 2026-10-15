@@ -25,10 +25,14 @@ namespace yup
 namespace
 {
 
-// Precompiled bundle (do not edit the .inc by hand). Regenerate it after changing
+// Precompiled bundles (do not edit the .inc by hand). Regenerate them after changing
 // shaders/yup_ToneMapping.frag with: just yup3d_shaders
 constexpr uint8_t toneMappingShaderBundle[] = {
 #include "../shaders/yup_ToneMapping.inc"
+};
+
+constexpr uint8_t toneMappingRadianceShaderBundle[] = {
+#include "../shaders/yup_ToneMapping_radiance_composite.inc"
 };
 
 // std140 mirror of ToneMappingBlock in yup_ToneMapping.frag
@@ -46,31 +50,47 @@ ToneMapping::ToneMapping() = default;
 ToneMapping::~ToneMapping() = default;
 
 //==============================================================================
-Result ToneMapping::prepare (const GpuDevice::Ptr& device, GpuTextureFormat format, const FrameResources::Samplers* samplers)
+Result ToneMapping::prepare (const GpuDevice::Ptr& device, GpuTextureFormat format, const FrameResources::Samplers* samplers, bool radiance)
 {
     if (samplers == nullptr)
         return Result::fail ("Unable to create the tone mapping sampler");
 
-    return pass.prepare (device, toneMappingShaderBundle, sizeof (toneMappingShaderBundle), format);
+    return radiance ? radiancePass.prepare (device, toneMappingRadianceShaderBundle, sizeof (toneMappingRadianceShaderBundle), format)
+                    : pass.prepare (device, toneMappingShaderBundle, sizeof (toneMappingShaderBundle), format);
 }
 
 bool ToneMapping::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, FrameResources& resources,
                           const GpuTexture::Ptr& source, bool sourceIsReversible, const GpuTexture::Ptr& glow,
-                          const GpuTexture::Ptr& destination, Color background)
+                          const GpuTexture::Ptr& destination, Color background, bool blurredCoverage)
 {
     if (device == nullptr || source == nullptr || destination == nullptr)
         return false;
 
     const auto* samplers = resources.getSamplers();
 
-    // Compiled once per destination format, remembering a failure instead of retrying every frame
-    if (! prepared.has_value() || preparedFormat != destination->getFormat())
+    // Each pipeline is compiled once per destination format, remembering a failure instead of retrying every frame
+    const auto prepareVariant = [&] (std::optional<Result>& variantPrepared, GpuTextureFormat& variantFormat, bool radiance) -> const Result&
     {
-        preparedFormat = destination->getFormat();
-        prepared = prepare (device, preparedFormat, samplers);
+        if (! variantPrepared.has_value() || variantFormat != destination->getFormat())
+        {
+            variantFormat = destination->getFormat();
+            variantPrepared = radiance && failRadianceComposite ? Result::fail ("The radiance composite failed for testing")
+                                                                : prepare (device, variantFormat, samplers, radiance);
+        }
+
+        return *variantPrepared;
+    };
+
+    // Without the radiance composite, blurred frames still render, with the display space blend
+    if (blurredCoverage && prepareVariant (radiancePrepared, radiancePreparedFormat, true).failed())
+    {
+        if (! std::exchange (radianceFailureLogged, true))
+            YUP_DBG ("ToneMapping: " << radiancePrepared->getErrorMessage() << ", blurred frames composite in display space");
+
+        blurredCoverage = false;
     }
 
-    if (prepared->failed() || samplers == nullptr)
+    if ((! blurredCoverage && prepareVariant (prepared, preparedFormat, false).failed()) || samplers == nullptr)
         return false;
 
     ToneMappingBlock block {};
@@ -82,7 +102,7 @@ bool ToneMapping::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     block.background[3] = background.getAlphaFloat();
 
     // Every texel is written, so the previous contents are cleared rather than loaded
-    return pass.draw (frame, destination, {}, [&] (GpuRenderPass& renderPass)
+    return (blurredCoverage ? radiancePass : pass).draw (frame, destination, {}, [&] (GpuRenderPass& renderPass)
     {
         renderPass.setUniformBuffer (0, 0, &view.getBlock(), sizeof (ViewData::Block));
         renderPass.setSampler (0, 3, samplers->pointClamp);

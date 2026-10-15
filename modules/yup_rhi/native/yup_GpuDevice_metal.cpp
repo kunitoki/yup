@@ -30,6 +30,90 @@ namespace yup
 {
 
 //==============================================================================
+/** The counter sample buffers of the measuring frames of one device, recycled once their frame
+    completed. Metal lets only 32 of them live at once in a process, so a device keeps at most a
+    few: a frame finding none left measures no scope, and other devices still can.
+*/
+class API_AVAILABLE (macos (11.0), ios (14.0)) GpuCounterSampleBufferPool
+{
+public:
+    static constexpr int maxBuffers = 8;
+
+    /** A buffer holds at most 32 KB of 8-byte timestamps. */
+    static constexpr NSUInteger samplesPerBuffer = 4096;
+
+    GpuCounterSampleBufferPool (id<MTLDevice> deviceToUse, id<MTLCounterSet> timestampCounters)
+        : device (deviceToUse)
+        , counters (timestampCounters)
+    {
+        idle.reserve (maxBuffers);
+    }
+
+    /** Returns an idle buffer, or a new one while the device has fewer than maxBuffers, or nil. */
+    id<MTLCounterSampleBuffer> acquire()
+    {
+        {
+            const ScopedLock sl (lock);
+
+            if (! idle.empty())
+            {
+                id<MTLCounterSampleBuffer> buffer = idle.back();
+                idle.pop_back();
+                return buffer;
+            }
+
+            if (numBuffers >= maxBuffers)
+                return nil;
+
+            ++numBuffers;
+        }
+
+        id<MTLCounterSampleBuffer> buffer = nil;
+
+        YUP_AUTORELEASEPOOL
+        {
+            MTLCounterSampleBufferDescriptor* descriptor = [MTLCounterSampleBufferDescriptor new];
+            descriptor.counterSet = counters;
+            descriptor.storageMode = MTLStorageModeShared;
+            descriptor.sampleCount = samplesPerBuffer;
+            buffer = [device newCounterSampleBufferWithDescriptor:descriptor error:nil];
+        }
+
+        if (buffer == nil)
+        {
+            static std::atomic<bool> logged = false;
+            if (! logged.exchange (true))
+                YUP_DBG ("GpuDevice: unable to allocate GPU timestamp samples, scopes are unavailable");
+
+            const ScopedLock sl (lock);
+            --numBuffers;
+        }
+
+        return buffer;
+    }
+
+    /** Takes back a buffer the GPU no longer writes. */
+    void release (id<MTLCounterSampleBuffer> buffer)
+    {
+        const ScopedLock sl (lock);
+        idle.push_back (buffer);
+    }
+
+    /** The length of a GPU timestamp tick in nanoseconds, as the latest measuring frame calibrated it. */
+    double getNanosecondsPerTick() const noexcept { return nanosecondsPerTick.load(); }
+
+    void setNanosecondsPerTick (double nanoseconds) noexcept { nanosecondsPerTick = nanoseconds; }
+
+private:
+    id<MTLDevice> device = nil;
+    id<MTLCounterSet> counters = nil;
+    CriticalSection lock;
+    std::vector<id<MTLCounterSampleBuffer>> idle;
+    int numBuffers = 0;
+    std::atomic<double> nanosecondsPerTick { 1.0 };
+};
+
+//==============================================================================
 
 class GpuDeviceMetal : public GpuDevice
 {
@@ -37,6 +121,18 @@ public:
     GpuDeviceMetal (GpuDevice::Options options)
         : options (options)
     {
+        if (@available (macOS 11.0, iOS 14.0, *))
+        {
+            if (device != nil && [device supportsCounterSampling:MTLCounterSamplingPointAtStageBoundary])
+            {
+                for (id<MTLCounterSet> counterSet in device.counterSets)
+                {
+                    if ([counterSet.name isEqualToString:MTLCommonCounterSetTimestamp])
+                        sampleBuffers = std::make_shared<GpuCounterSampleBufferPool> (device, counterSet);
+                }
+            }
+        }
+
         rive::gpu::RenderContextMetalImpl::ContextOptions renderContexOptions;
 
         if (options.synchronousShaderCompilations)
@@ -75,6 +171,12 @@ public:
     bool isDynamicUniformOffsetAvailable() const noexcept override { return true; }
 
     bool isStorageTextureAvailable() const noexcept override { return true; }
+
+    bool isFrameTimingAvailable() const noexcept override { return true; }
+
+    bool isScopeTimingAvailable() const noexcept override { return sampleBuffers != nullptr; }
+
+    void setScopeSampleCapacityForTesting (int samples) override { scopeSampleCapacity = samples; }
 
     //==============================================================================
 
@@ -359,7 +461,7 @@ protected:
         GPU status can be checked once they complete. */
     bool reportsFrameCompletion() const noexcept override { return true; }
 
-    void* beginFrameCommands (uint64_t generation) override
+    void* beginFrameCommands (uint64_t) override
     {
         id<MTLCommandBuffer> commandBuffer = nil;
 
@@ -382,31 +484,97 @@ protected:
         if (commandBuffer == nil)
             return nullptr;
 
-        // Not the device: the handler may run after it was destroyed, when the destructor could
-        // not create the command buffer it waits for the handlers with
-        const auto completeFrame = getFrameCompletion();
-
-        [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completed)
-        {
-            completeFrame (generation, completed.status == MTLCommandBufferStatusError
-                                           ? Result::fail (describeFailure (completed))
-                                           : Result::ok());
-        }];
-
         return (__bridge_retained void*) commandBuffer;
     }
 
-    Result submitFrameCommands (void* commandBuffer) override
+    Result submitFrame (void* commandBuffer, uint64_t generation, std::shared_ptr<ScopeSampler> scopeSampler, bool measuresScopes) override
     {
         if (commandBuffer == nullptr)
             return Result::ok();
 
+        // Not the device: the handler may run after it was destroyed, when the destructor could
+        // not create the command buffer it waits for the handlers with
+        const auto completeFrame = getFrameCompletion();
+        const auto timeline = getScopeTimeline();
+        const auto sequence = timeline->commit();
+        const auto sampleBuffers = this->sampleBuffers;
+
         YUP_AUTORELEASEPOOL
         {
-            [(__bridge id<MTLCommandBuffer>) commandBuffer commit];
+            id<MTLCommandBuffer> frameCommands = (__bridge id<MTLCommandBuffer>) commandBuffer;
+
+            // The GPU times of the frame are two property reads, kept by the status only when the
+            // frame measures. Only a frame measuring its scopes has samples to resolve
+            [frameCommands addCompletedHandler:^(id<MTLCommandBuffer> completed)
+            {
+                const auto failed = completed.status == MTLCommandBufferStatusError;
+
+                GpuFrameTimings timings;
+                const auto start = completed.GPUStartTime;
+                const auto end = completed.GPUEndTime;
+                if (start > 0.0 && end >= start)
+                {
+                    timings.available = true;
+                    timings.frameMilliseconds = (end - start) * 1000.0;
+                }
+
+                if (scopeSampler != nullptr && measuresScopes && timings.available && ! failed)
+                    timings.scopes = scopeSampler->resolveScopes (*timeline, sequence);
+
+                // Every frame of a device that measured moves the timeline to where its work ended,
+                // so the first pass of the next measured frame is not credited the time it overlapped
+                // this one. Its end is on the host clock the CPU timestamps of the GPU use
+                if (sampleBuffers != nullptr && timeline->isActive() && timings.available)
+                {
+                    if (@available (macOS 11.0, iOS 14.0, *))
+                    {
+                        MTLTimestamp cpuNow = 0, gpuNow = 0;
+                        [completed.device sampleTimestamps:&cpuNow gpuTimestamp:&gpuNow];
+
+                        const auto hostEnd = end * 1.0e9;
+                        const auto sinceEnd = static_cast<double> (cpuNow) > hostEnd ? static_cast<double> (cpuNow) - hostEnd : 0.0;
+                        const auto ticksSinceEnd = static_cast<uint64> (sinceEnd / sampleBuffers->getNanosecondsPerTick());
+
+                        if (gpuNow > ticksSinceEnd)
+                            timeline->advance (sequence, gpuNow - ticksSinceEnd);
+                    }
+                }
+
+                completeFrame (generation,
+                               failed ? Result::fail (describeFailure (completed)) : Result::ok(),
+                               std::move (timings));
+            }];
+
+            [frameCommands commit];
         }
 
         return Result::ok();
+    }
+
+    std::shared_ptr<ScopeSampler> createScopeSampler (rive::ore::Context& frameContext) override
+    {
+        if (@available (macOS 11.0, iOS 14.0, *))
+        {
+            if (sampleBuffers == nullptr)
+                return nullptr;
+
+            id<MTLCounterSampleBuffer> sampleBuffer = sampleBuffers->acquire();
+            if (sampleBuffer == nil)
+                return nullptr;
+
+            const auto maxSamples = GpuCounterSampleBufferPool::samplesPerBuffer;
+            const auto capacity = scopeSampleCapacity > 0 ? jmin (static_cast<NSUInteger> (scopeSampleCapacity), maxSamples) : maxSamples;
+
+            getScopeTimeline()->activate();
+
+            return std::make_shared<ScopeSamplerMetal> (device,
+                                                        static_cast<rive::ore::ContextMetal&> (frameContext),
+                                                        sampleBuffers,
+                                                        sampleBuffer,
+                                                        capacity);
+        }
+
+        return nullptr;
     }
 
     Result waitFrameCommands (void* commandBuffer) override
@@ -435,6 +603,184 @@ protected:
     }
 
 private:
+    //==============================================================================
+    /** Samples the GPU timestamps of the passes of one measuring frame into one counter sample
+        buffer, at the stage boundaries, and attributes them to its scopes once it completed.
+
+        A render pass takes the vertex start and end and the fragment start and end samples, a
+        compute pass its start and end, and its span runs from its earliest to its latest valid
+        sample. The scope timeline then credits each pass the part of its span past the end of
+        the work before it (see GpuDevice::ScopeTimeline).
+    */
+    class API_AVAILABLE (macos (11.0), ios (14.0)) ScopeSamplerMetal final : public ScopeSampler
+    {
+    public:
+        /** Samples into @p buffer of @p pool, at most @p maxSamples of it. The frame must keep the
+            sampler until it completed, which hands the buffer back. */
+        ScopeSamplerMetal (id<MTLDevice> deviceToUse,
+                           rive::ore::ContextMetal& contextToUse,
+                           std::shared_ptr<GpuCounterSampleBufferPool> poolToUse,
+                           id<MTLCounterSampleBuffer> buffer,
+                           NSUInteger maxSamples)
+            : device (deviceToUse)
+            , context (contextToUse)
+            , pool (std::move (poolToUse))
+            , sampleBuffer (buffer)
+            , capacity (maxSamples)
+        {
+            passes.reserve (64);
+            [device sampleTimestamps:&cpuStart gpuTimestamp:&gpuStart];
+        }
+
+        ~ScopeSamplerMetal() override
+        {
+            pool->release (sampleBuffer);
+        }
+
+        void beginRenderPass (int scopeIndex) override
+        {
+            if (const auto first = reserveSamples (scopeIndex, 4); first >= 0)
+                context.setRenderPassSampleBuffer (sampleBuffer, static_cast<NSUInteger> (first));
+        }
+
+        void endRenderPass() override
+        {
+            context.setRenderPassSampleBuffer (nil, 0);
+        }
+
+        void* beginComputePass (int scopeIndex) override
+        {
+            const auto first = reserveSamples (scopeIndex, 2);
+            if (first < 0)
+                return nullptr;
+
+            MTLComputePassDescriptor* descriptor = [MTLComputePassDescriptor computePassDescriptor];
+            auto* sampling = descriptor.sampleBufferAttachments[0];
+            sampling.sampleBuffer = sampleBuffer;
+            sampling.startOfEncoderSampleIndex = static_cast<NSUInteger> (first);
+            sampling.endOfEncoderSampleIndex = static_cast<NSUInteger> (first) + 1;
+            return (__bridge_retained void*) descriptor;
+        }
+
+        void endComputePass (bool sampled) override
+        {
+            if (! sampled && ! passes.empty())
+                passes.back().sampleCount = 0;
+        }
+
+        std::vector<GpuScopeTiming> resolveScopes (ScopeTimeline& timeline, uint64 sequence) const override
+        {
+            // Only the passes of a scope are reported: the frame's end moves the timeline otherwise
+            const auto scoped = std::any_of (passes.begin(), passes.end(), [] (const auto& pass)
+            {
+                return pass.scopeIndex >= 0;
+            });
+
+            if (! scoped)
+                return {};
+
+            // The GPU ticks are converted with the CPU nanoseconds elapsed since the first pass
+            MTLTimestamp cpuEnd = 0, gpuEnd = 0;
+            [device sampleTimestamps:&cpuEnd gpuTimestamp:&gpuEnd];
+
+            const auto nanosecondsPerTick = gpuEnd > gpuStart && cpuEnd > cpuStart
+                                              ? static_cast<double> (cpuEnd - cpuStart) / static_cast<double> (gpuEnd - gpuStart)
+                                              : 0.0;
+
+            if (nanosecondsPerTick > 0.0)
+                pool->setNanosecondsPerTick (nanosecondsPerTick);
+
+            const MTLCounterResultTimestamp* samples = nullptr;
+            NSData* resolved = nil;
+
+            YUP_AUTORELEASEPOOL
+            {
+                if (usedSamples > 0)
+                    resolved = [sampleBuffer resolveCounterRange:NSMakeRange (0, usedSamples)];
+            }
+
+            if (resolved != nil && resolved.length >= usedSamples * sizeof (MTLCounterResultTimestamp))
+                samples = static_cast<const MTLCounterResultTimestamp*> (resolved.bytes);
+
+            std::vector<ScopeTimeline::Pass> spans;
+            spans.reserve (passes.size());
+
+            for (const auto& pass : passes)
+            {
+                auto& span = spans.emplace_back();
+                span.scopeIndex = pass.scopeIndex;
+                span.sampled = pass.sampleCount > 0 && samples != nullptr;
+
+                if (! span.sampled)
+                    continue;
+
+                // Pairs of start and end samples: one for a compute pass, its vertex then its
+                // fragment stage for a render pass
+                for (int pair = 0; pair < pass.sampleCount; pair += 2)
+                {
+                    const auto stageStart = samples[pass.firstSample + pair].timestamp;
+                    const auto stageEnd = samples[pass.firstSample + pair + 1].timestamp;
+
+                    if (isSample (stageStart))
+                        span.start = span.start == 0 ? stageStart : jmin (span.start, stageStart);
+
+                    if (isSample (stageEnd))
+                        span.end = jmax (span.end, stageEnd);
+                }
+            }
+
+            return timeline.attribute (sequence, spans, gpuEnd, nanosecondsPerTick);
+        }
+
+    private:
+        struct SampledPass
+        {
+            int scopeIndex = -1; // -1 for a pass of no measured scope
+            int firstSample = 0;
+            int sampleCount = 0; // 0 when the pass is not sampled
+        };
+
+        /** A stage without work writes no sample: its slot reads 0, or what an earlier frame wrote
+            in the recycled buffer, which predates this sampler. */
+        bool isSample (uint64 timestamp) const noexcept
+        {
+            return timestamp != 0 && timestamp != MTLCounterErrorValue && timestamp >= gpuStart;
+        }
+
+        /** Records a pass of the scope of @p scopeIndex, and returns the first of its @p count samples,
+            or -1 when the frame ran out of them. Once a pass could not be sampled no later one is, as
+            it could not tell how long they waited behind it. */
+        int reserveSamples (int scopeIndex, int count)
+        {
+            if (outOfSamples || usedSamples + static_cast<NSUInteger> (count) > capacity)
+            {
+                outOfSamples = true;
+
+                static std::atomic<bool> logged = false;
+                if (! logged.exchange (true))
+                    YUP_DBG ("GpuDevice: a frame ran out of GPU timestamp samples, its later scopes are unavailable");
+
+                passes.push_back ({ scopeIndex, 0, 0 });
+                return -1;
+            }
+
+            const auto first = static_cast<int> (usedSamples);
+            passes.push_back ({ scopeIndex, first, count });
+            usedSamples += static_cast<NSUInteger> (count);
+            return first;
+        }
+
+        id<MTLDevice> device = nil;
+        rive::ore::ContextMetal& context;
+        std::shared_ptr<GpuCounterSampleBufferPool> pool;
+        id<MTLCounterSampleBuffer> sampleBuffer = nil;
+        const NSUInteger capacity;
+        NSUInteger usedSamples = 0;
+        bool outOfSamples = false;
+        std::vector<SampledPass> passes;
+        MTLTimestamp cpuStart = 0, gpuStart = 0;
+    };
+
     /** Makes a backing no in-flight work uses the storage buffer's current one. Earlier backings
         are recycled once their last use completed, so steady updates stop allocating after a
         pool miss or two. The old contents are carried over when the update does not cover the
@@ -620,6 +966,8 @@ private:
     std::unique_ptr<rive::ore::ContextMetal> oreContext;
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> queue = [device newCommandQueue];
+    std::shared_ptr<GpuCounterSampleBufferPool> sampleBuffers;
+    int scopeSampleCapacity = 0;
 };
 
 //==============================================================================

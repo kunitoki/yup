@@ -376,9 +376,11 @@ material.
 
 The environment is sampled once on the CPU from any function returning the
 radiance along a direction, for example an analytic sky or a studio of soft
-boxes. The first time a renderer draws it, it is turned into a cube on the GPU and
-filtered for every roughness, one mip each, without stalling the frame. The
-environment itself never changes, so several scenes and windows can share one:
+boxes. Everything else happens on the GPU: the first time a renderer draws it,
+it is turned into a cube and filtered for every roughness, one mip each, in a
+frame of its own that never stalls the one drawing it. The environment itself
+never changes and holds no GPU objects, so several scenes, windows and devices
+can share one:
 
 ```cpp
 auto sky = [] (const yup::Vector3<float>& direction)
@@ -404,6 +406,41 @@ are a quarter of it) and `numLevels` the number of roughness mips.
   filmic curve, which suits bright environments better than the default Reinhard.
   `Scene::ToneMapping::agx` is a third option, a filmic curve that keeps very
   saturated highlights from skewing in hue. See [Render settings](#render-settings).
+
+On devices that cannot render half floats, the environment cube, the reflection
+probes and the irradiance volumes hold their light in 8 bits per channel
+(RGBM), which reaches up to 8 times the brightness of white: brighter
+highlights, such as a small sun, are clamped there and reflect dimmer than on
+other devices.
+
+**Upgrading.** The `EnvironmentMap` constructor is unchanged, but the map no
+longer keeps filtered images or GPU objects. `getLevelWidth`, `getLevelHeight`,
+`getLevelPixels`, `getBlurForRoughness`, `getIrradiance`, `getGpuTexture` and
+`getGpuSampler` are removed:
+
+- for the diffuse light along a normal, pass `getIrradianceCoefficients()` to
+  `SphericalHarmonics::evaluateIrradiance`;
+- `getFaceSize()` gives the size of the cube faces, a quarter of `width`;
+- the background blur (`setEnvironmentBlur()`) now shows the same filtered
+  levels as the reflections, a slightly different look from the former blur.
+
+### Indirect lighting overview
+
+Besides the lights, a surface receives the light bouncing off everything around
+it. Five features provide it, from the farthest to the closest, and add up:
+
+| Feature | What it gives | Raster | Full | Cost when on (Apple M2 Max) |
+| ------- | ------------- | ------ | ---- | --------------------------- |
+| [Reflection probes](#reflection-probes) | Reflections of the scene around a point | Each object blends its 2 probes, picked by its bounds | Per pixel, up to 64 a frame | Baked when added, moved or asked for |
+| [Irradiance volumes](#irradiance-volumes) | Diffuse light baked in a box | Blended from the 8 probes around a surface, with visibility; one volume per object | The same per pixel, up to 8 volumes a frame | Baked when added, moved or asked for |
+| [Ambient occlusion](#ambient-occlusion) | Darkens creases and contacts | Opt-in, at half resolution | On by default, at half resolution | About 1 ms at 2560 x 1600 |
+| [Screen-space reflections](#screen-space-reflections) | Reflections of what the camera sees | No | On by default | About 0.2 ms on the Scene 3D demo at 1280 x 800, 0.7 ms at 2560 x 1600 |
+| [Screen-space diffuse GI](#screen-space-diffuse-gi) | Light bounced by nearby surfaces | No | Off by default | About 0.3 ms at 1280 x 800, 1.2 ms at 2560 x 1600 |
+
+Where none of them reaches, the environment and the ambient color light the
+surface. Probes and volumes cost nothing until a scene has them, and the
+screen-space effects nothing while they are off. To see what an effect adds,
+show it alone with `RenderSettings::debugView`, see [Render settings](#render-settings).
 
 ### Ambient occlusion
 
@@ -618,6 +655,52 @@ yet and renders without them. They cost about 0.7 ms per frame at 2560 x 1600 an
 save it. A device that cannot compile them renders without them, which is logged
 once in debug builds.
 
+### Screen-space diffuse GI
+
+Reflection probes, irradiance volumes and the environment light a surface from
+afar; the ambient occlusion only darkens what nearby objects hide. On the full
+tier, screen-space diffuse global illumination also lights each surface with what
+those nearby objects send back: a red wall tints the floor at its foot, a lit
+panel brightens the knob next to it. It is off by default:
+
+```cpp
+yup::RenderSettings settings;
+settings.screenSpaceGI = true; // off by default on every tier
+scene->setRenderSettings (settings);
+```
+
+- It extends the ambient occlusion: the search that finds what hides each part
+  of a surface's sky also takes the light of what it found, from the previous
+  frame of the image. So it gathers only within `aoDistance` (0.2 by default),
+  and at most a tenth of the view height on screen: raise `aoDistance` for a
+  wider reach, at the cost of a coarser ambient occlusion.
+- The gathered light adds to what the probes, the volumes and the environment
+  give the rest of the sky, so an open surface looks the same with and without
+  it. Colored materials, clearcoats and sheens take it as they take the
+  environment's diffuse light.
+- It is the light the previous frame shows, so it builds up over frames: one
+  bounce per frame, and the light that bounced in the previous frame bounces
+  again. Like the soft shadows, it is noisy while the image changes and settles
+  as it converges.
+- Only what the camera sees counts. Something off screen, behind another object,
+  or seen only from its back lights nothing, and a thin object seen edge on
+  (a wall seen from straight above) gives little or no light.
+- Only the diffuse light of non-metals takes it: metals, which have no diffuse
+  color, get none, and the reflections of the hidden part of the sky (the
+  specular light it loses to the ambient occlusion, including the light bounced
+  inside rough surfaces) are not replaced either.
+- It gathers the image as the camera saw it, highlights included, so a shiny
+  object's highlight bounces onto its surroundings as if every viewer saw it.
+
+Screen-space diffuse GI needs ambient occlusion and the history of temporal
+anti-aliasing (`taaSamples` above 1): without either it is off, and the raster
+tier ignores the setting. A frame without that history (the first one after
+the renderer is created or resized, after `restartAccumulation()` or a change of
+`taaSamples`) renders without it. It costs about 0.3 ms per frame at
+1280 x 800 and 1.2 ms at 2560 x 1600 on an Apple M2 Max, and nothing while it is
+off. A device that cannot compile it renders without it, which is logged once in
+debug builds.
+
 ## Lights and shadows
 
 Set `castsShadows` on any `LightNode` to make it cast shadows of the opaque
@@ -753,6 +836,28 @@ scene->setExposure (1.2f);
 | `ambientOcclusion` | unset     | Darkens the indirect light in creases, see [Ambient occlusion](#ambient-occlusion). Unset follows the tier: on for full, off for raster. |
 | `aoDistance`     | 0.2         | How far, in scene units, surfaces occlude each other for ambient occlusion. 0 or less turns it off. |
 | `screenSpaceReflections` | unset | Smooth surfaces reflect what the camera sees, see [Screen-space reflections](#screen-space-reflections). Unset follows the tier: on for full; raster never has them. Needs `taaSamples` above 1. |
+| `screenSpaceGI` | unset | Nearby surfaces light each other, see [Screen-space diffuse GI](#screen-space-diffuse-gi). Unset is off on every tier; raster never has it. Needs `ambientOcclusion` and `taaSamples` above 1. |
+| `depthOfField` | off | Full tier: blurs what lies away from the camera's focus, see [Depth of field](#depth-of-field). |
+| `depthOfFieldMaxSize` | 32 | The largest depth of field blur, as a diameter in pixels of the image, at most 64. |
+| `debugView` | `none` | Full tier: shows an intermediate image instead of the final one, see below. |
+
+**Debug view.** `debugView` shows what one screen-space effect computes, in
+place of the final image, to tune it:
+
+- `ambientOcclusion`: the ambient occlusion as gray, white where nothing is
+  occluded;
+- `reflections`: the screen-space reflections, exposed and weighted by how
+  confident each one is;
+- `indirectDiffuse`: the light the screen-space diffuse GI gathers, exposed,
+  before the color of the surfaces is applied.
+
+The image is shown pixel for pixel, without tone mapping, bloom or background,
+so the half-resolution effects show their 2 x 2 blocks. It shows the effect of a
+single frame, before temporal anti-aliasing averages it: the ambient occlusion
+and the reflections look grainy, and stay so once the image has converged. An
+effect that is off, unavailable, or has no history to read yet shows black. The
+raster tier ignores `debugView`. It changes nothing before the accumulation, so
+switching it neither restarts nor discards it, and `none` costs nothing.
 
 Settings a device or tier cannot provide are ignored instead of failing. Ask
 `getRenderer().getCapabilities()` what is in effect after a frame was rendered:
@@ -824,8 +929,10 @@ shadows, at the cost of more frames before the image is final.
   shot, call `restartAccumulation()`.
 - Changing the size of the view, the tier or `taaSamples` discards the history,
   and the image starts over.
-- Tone mapping and the bloom settings are applied after the accumulation, so
-  changing them neither restarts nor discards it.
+- Tone mapping, the bloom and depth of field settings, the depth of field
+  fields of the camera and the debug view are applied after the accumulation,
+  so changing them neither restarts nor discards it. Repaint after changing
+  them: the component does not repaint by itself for them.
 - When you change something the renderer cannot see, such as vertices edited in
   place in a `Mesh`, or a `GpuTexture` redrawn without calling
   `Texture::setGpuTexture()`, call `getRenderer().restartAccumulation()`. It
@@ -850,3 +957,52 @@ works on both tiers:
   a pixel, the brighter one weighs a little less than without bloom.
 - The glow strength depends somewhat on the resolution of the view: the same
   intensity looks a little different at different sizes.
+
+### Depth of field
+
+**Depth of field** blurs what lies in front of or behind the distance the camera
+focuses at, like a photographic lens. Turn it on with `depthOfField`, then shape
+it with the fields of the active `CameraNode`:
+
+| Field            | Default | Unit                     | What it does                                                    |
+| ---------------- | ------- | ------------------------ | --------------------------------------------------------------- |
+| `fStop`          | 2.8     | f-number                 | The aperture: smaller blurs more. 0 or less turns the blur off. |
+| `focusDistance`  | 10      | world units, read as meters | The distance along the view that stays perfectly sharp.      |
+| `apertureBlades` | 0       | count                    | The shape of the out-of-focus highlights: round below 3, otherwise a polygon with that many sides. |
+| `sensorHeight`   | 0.024 (24 mm) | world units, read as meters (constant) | With `yFov`, it sets the focal length of the lens. |
+
+```cpp
+auto* camera = scene->getActiveCamera();
+camera->fStop = 1.8f;
+camera->focusDistance = 2.5f;
+
+auto settings = scene->getRenderSettings();
+settings.depthOfField = true;
+scene->setRenderSettings (settings);
+view.repaint();
+```
+
+- It is available on the full tier only for now; the raster tier ignores the
+  setting, which `isAvailable (RenderCapabilities::Feature::depthOfField)`
+  reports.
+- It is off by default and costs nothing while off. A camera that cannot blur
+  (orthographic, `fStop` or `yFov` of 0 or less, or no active camera) costs
+  nothing either, and neither does a `depthOfFieldMaxSize` of 0 or less.
+- It runs after temporal anti-aliasing and before bloom, so changing it or the
+  camera's depth of field fields keeps the accumulation: repaint after such a
+  change.
+- `depthOfFieldMaxSize` caps the blur, as a diameter in pixels of the image, at
+  most 64.
+- The blur carries the coverage of the scene, so silhouettes over the background
+  color fade into it. On frames it blurs, the image is composited over the
+  background color in light rather than in display values: a bright highlight
+  blurred over the background keeps the brightness it has over a surface or a
+  visible environment, and the edges of blurred objects over the background
+  look as they do over a dark environment. Frames without depth of field keep
+  the usual blend, where antialiased edges over the background match the
+  raster tier. Over a transparent background color, blurred frames output
+  premultiplied light, which compositors adding it over what lies behind show
+  correctly.
+- Cost: six draws, all but the last at half resolution or less. On an Apple
+  M2 Max it adds about 0.2 to 0.3 ms per frame at 1280 x 800 and 0.5 to 0.8 ms at
+  2560 x 1600, the most when every pixel is out of focus.

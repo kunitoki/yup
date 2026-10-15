@@ -68,4 +68,13 @@ void main()
     float alpha = scene.a + toneMapping.background.a * (1.0 - scene.a);
 
     fragColor = clamp(vec4(mix(uncovered, covered, scene.a), alpha), 0.0, 1.0);
+
+#ifdef YUP_3D_RADIANCE_COMPOSITE
+    // Frames blurred by the depth of field: their partial coverage is spread light, not the edge of a
+    // surface, so the premultiplied radiance is tone mapped and the background added over the rest
+    // (preflight R20). Equal to the blend above at full and at zero coverage
+    // The premultiplied radiance itself, so texels covered by less than the threshold above keep their light
+    vec3 radiance = toneMapping.options.x > 0.5 ? color * scene.a : scene.rgb;
+    fragColor = clamp(vec4(yupLinearToSrgb(yupToneMap(radiance + glow, view.clipPlanes.w)) + (1.0 - scene.a) * toneMapping.background.rgb, alpha), 0.0, 1.0);
+#endif
 }

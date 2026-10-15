@@ -56,6 +56,18 @@ public:
     /** Returns the view matrix: the inverse of the world matrix of the entity, or identity if unattached. */
     Matrix4 getViewMatrix() const noexcept;
 
+    /** Returns the signed circle of confusion diameter, in pixels, of a point at a view distance.
+
+        Uses the thin lens model with the focal length implied by yFov and sensorHeight. Negative in
+        front of the focus distance, positive behind it, and 0 for orthographic cameras, for fStop <= 0,
+        for yFov <= 0, for distances <= 0 and for a viewportHeight <= 0. Tends to a finite value as the
+        distance grows. A focusDistance at or below the focal length is treated as just past it.
+
+        @param distance        View-space distance along -Z, in world units (read as meters, like sensorHeight).
+        @param viewportHeight  The height of the rendered image in pixels, 0 or less gives 0.
+    */
+    float getCircleOfConfusion (float distance, float viewportHeight) const noexcept;
+
     //==============================================================================
     Projection projection = Projection::perspective; ///< The kind of projection.
     float yFov = 0.8f;                               ///< Perspective vertical field of view in radians.
@@ -63,6 +75,15 @@ public:
     float zFar = 1000.0f;                            ///< Distance of the far clipping plane, 0 for infinite (perspective only).
     float xMag = 1.0f;                               ///< Orthographic half width.
     float yMag = 1.0f;                               ///< Orthographic half height.
+
+    /** The height of the virtual sensor in world units, read as meters: 24 mm, a full-frame sensor held
+        in landscape. Together with yFov it defines the focal length the depth of field uses.
+    */
+    static constexpr float sensorHeight = 0.024f;
+
+    float fStop = 2.8f;          ///< Aperture f-number for depth of field; smaller blurs more, 0 or less disables it.
+    float focusDistance = 10.0f; ///< Distance along -Z, in world units read as meters, that stays perfectly sharp.
+    int apertureBlades = 0;      ///< Diaphragm blades shaping the bokeh: below 3 is round, otherwise a regular polygon.
 };
 
 } // namespace yup

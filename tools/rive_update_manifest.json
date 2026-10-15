@@ -1541,6 +1541,69 @@
           }
         },
         {
+          "path": "include/rive/renderer/ore/ore_context_metal.hpp",
+          "note": "Ore Metal context: setRenderPassSampleBuffer(sampleBuffer, firstSampleIndex) arms the render passes begun next to write GPU timestamps into an MTLCounterSampleBuffer, so YUP measures the GPU time of each scope of a GpuFrame (GpuFrameTimings::scopes). Ore builds the MTLRenderPassDescriptor and opens the encoder inside mtlBeginRenderPass, and RenderPassDesc has no native extension point, so YUP cannot reach the descriptor otherwise. The buffer is typed id so the header needs no availability annotation on targets older than macOS 11 / iOS 14. YUP arms it right before ContextMetal::beginRenderPass and disarms it (nil) right after, so a pass replayed at endFrame (the RIVE_ORE_DEFER path of scripted canvases) is never sampled",
+          "already_contains": "    void setRenderPassSampleBuffer(id sampleBuffer, NSUInteger firstSampleIndex)",
+          "replace": {
+            "from": [
+              "    ContextMetal(const ContextMetal&) = delete;"
+            ],
+            "to": [
+              "    void setRenderPassSampleBuffer(id sampleBuffer, NSUInteger firstSampleIndex)",
+              "    {",
+              "        m_renderPassSampleBuffer = sampleBuffer;",
+              "        m_renderPassSampleIndex = firstSampleIndex;",
+              "    }",
+              "",
+              "    ContextMetal(const ContextMetal&) = delete;"
+            ]
+          }
+        },
+        {
+          "path": "include/rive/renderer/ore/ore_context_metal.hpp",
+          "note": "Ore Metal context: the sample buffer and first sample index set by setRenderPassSampleBuffer, nil when the next render pass is not sampled",
+          "already_contains": "    id m_renderPassSampleBuffer = nil;",
+          "replace": {
+            "from": [
+              "    std::vector<rcp<BindGroup>> m_deferredBindGroups;"
+            ],
+            "to": [
+              "    std::vector<rcp<BindGroup>> m_deferredBindGroups;",
+              "",
+              "    id m_renderPassSampleBuffer = nil;",
+              "    NSUInteger m_renderPassSampleIndex = 0;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/metal/ore_context_metal.mm",
+          "note": "Ore Metal mtlBeginRenderPass: when a sample buffer is armed with setRenderPassSampleBuffer, attach it to the render pass descriptor at the stage boundaries, four consecutive samples from the first index (vertex start, vertex end, fragment start, fragment end), the only sampling point Apple GPUs support. YUP reads the earliest valid start and the latest valid end, as a stage without work writes no sample. Guarded by @available since sampleBufferAttachments needs macOS 11 / iOS 14",
+          "already_contains": "    if (m_renderPassSampleBuffer != nil)",
+          "replace": {
+            "from": [
+              "    id<MTLRenderCommandEncoder> encoder =",
+              "        [m_mtlCommandBuffer renderCommandEncoderWithDescriptor:rpd];"
+            ],
+            "to": [
+              "    if (m_renderPassSampleBuffer != nil)",
+              "    {",
+              "        if (@available(macOS 11.0, iOS 14.0, tvOS 14.0, *))",
+              "        {",
+              "            auto* sampling = rpd.sampleBufferAttachments[0];",
+              "            sampling.sampleBuffer = m_renderPassSampleBuffer;",
+              "            sampling.startOfVertexSampleIndex = m_renderPassSampleIndex;",
+              "            sampling.endOfVertexSampleIndex = m_renderPassSampleIndex + 1;",
+              "            sampling.startOfFragmentSampleIndex = m_renderPassSampleIndex + 2;",
+              "            sampling.endOfFragmentSampleIndex = m_renderPassSampleIndex + 3;",
+              "        }",
+              "    }",
+              "",
+              "    id<MTLRenderCommandEncoder> encoder =",
+              "        [m_mtlCommandBuffer renderCommandEncoderWithDescriptor:rpd];"
+            ]
+          }
+        },
+        {
           "path": "include/rive/renderer/ore/ore_buffer.hpp",
           "note": "Ore Buffer: writeUnsynchronized(data, size, offset, discard) for an append-only uniform ring that binds one buffer at many dynamic offsets within a frame. It writes [offset, offset + size) of the storage already bound, without the orphan update() does when the buffer was bound since its last update, because the caller guarantees no recorded command reads that range. discard marks the first write of a new use of the buffer: storage the GPU may still read is replaced without copying, so every byte outside the written range becomes undefined. The bound-since-update state is left alone, so a later update() still orphans. The base default is update(), correct but slow, which is what GL (glBufferSubData at the offset, implicitly synchronized) and D3D12 use. Contract the ring relies on: within a frame each range is written at most once and only before the commands reading it are recorded, since on WebGPU every queued write lands before that frame's submit",
           "already_contains": "    virtual void writeUnsynchronized(const void* data,",

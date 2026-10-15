@@ -130,7 +130,7 @@ public:
 
         if (settingsPanel.isVisible())
         {
-            settingsPanel.setBounds (bounds.removeFromRight (250.0f));
+            settingsPanel.setBounds (bounds.removeFromRight (320.0f));
             bounds.removeFromRight (6.0f);
         }
 
@@ -530,7 +530,7 @@ private:
 
                 auto gltfRoot = model.getReference().createEntity();
                 scene->getRoot()->addChild (gltfRoot);
-                tuneMaterials (*gltfRoot);
+                tuneMaterials (*gltfRoot, coatedMaterials, sheenMaterials);
 
                 auto* device = gltfRoot->findChild ("Cube");
                 if (device != nullptr)
@@ -599,7 +599,7 @@ private:
             const auto deviceSize = deviceBounds.getSize();
             const auto probePosition = padBounds.isEmpty() ? deviceCenter + yup::Vector3<float> (0.0f, deviceSize.getY(), 0.0f)
                                                            : padBounds.getCenter() + yup::Vector3<float> (0.0f, padBounds.getSize().getY() * 0.5f + 0.25f, 0.0f);
-            auto probeEntity = yup::EntityNode::Ptr (new yup::EntityNode ("reflectionProbe"));
+            probeEntity = new yup::EntityNode ("reflectionProbe");
             probeEntity->setPosition (probePosition);
             reflectionProbe = &probeEntity->attach<yup::ReflectionProbeNode>();
             reflectionProbe->shape = yup::ReflectionProbeNode::Shape::box;
@@ -617,7 +617,7 @@ private:
             const auto layerSpacing = 0.45f;
             const auto volumeBottom = panelTop + 0.05f - layerSpacing * 0.5f;
             const auto volumeTop = volumeBottom + layerSpacing * 2.0f;
-            auto volumeEntity = yup::EntityNode::Ptr (new yup::EntityNode ("irradianceVolume"));
+            volumeEntity = new yup::EntityNode ("irradianceVolume");
             volumeEntity->setPosition ({ deviceCenter.getX(), (volumeBottom + volumeTop) * 0.5f, deviceCenter.getZ() });
             irradianceVolume = &volumeEntity->attach<yup::IrradianceVolumeNode>();
             irradianceVolume->extents = { deviceSize.getX() * 0.5f + 0.6f, (volumeTop - volumeBottom) * 0.5f, deviceSize.getZ() * 0.5f + 0.6f };
@@ -662,6 +662,9 @@ private:
 
         /** The graphics backend of the last paint. */
         yup::GpuPlatform getPlatform() const noexcept { return platform; }
+
+        /** The camera of the view, whose depth of field fields the settings panel edits. */
+        yup::CameraNode& getCamera() const noexcept { return *cameraNode; }
 
         /** Lets the mouse orbit, pan and zoom the camera, or brings it back to the top view.
 
@@ -713,6 +716,38 @@ private:
         {
             reflectionProbe->requestBake();
             irradianceVolume->requestBake();
+            repaint();
+        }
+
+        /** Shows or hides the reflection probe over the pads: without it, the glossy parts reflect the studio. */
+        void setReflectionProbe (bool shouldShow)
+        {
+            probeEntity->setVisible (shouldShow);
+            repaint();
+        }
+
+        /** Shows or hides the irradiance volume over the panel: without it, the panel takes no bounce light. */
+        void setIrradianceVolume (bool shouldShow)
+        {
+            volumeEntity->setVisible (shouldShow);
+            repaint();
+        }
+
+        /** Varnishes the knobs and the black trim, or leaves them satin. */
+        void setClearcoat (bool shouldCoat)
+        {
+            for (const auto& material : coatedMaterials)
+                material->clearcoatFactor = shouldCoat ? knobClearcoat : 0.0f;
+
+            repaint();
+        }
+
+        /** Gives the rubber pads their velvet sheen, or leaves them plain. */
+        void setSheen (bool shouldShine)
+        {
+            for (const auto& material : sheenMaterials)
+                material->sheenColorFactor = shouldShine ? padSheenColor : std::array<float, 3> {};
+
             repaint();
         }
 
@@ -994,9 +1029,10 @@ private:
         }
 
         /** Makes the painted panel matte, varnishes the black knobs and trim with a sharp clearcoat over
-            a satin base, and gives the rubber pads a soft velvet sheen at their edges.
+            a satin base, and gives the rubber pads a soft velvet sheen at their edges. Collects the
+            varnished and the velvet materials into @p coated and @p sheened, for setClearcoat() and setSheen().
         */
-        static void tuneMaterials (const yup::EntityNode& entity)
+        static void tuneMaterials (const yup::EntityNode& entity, std::vector<yup::Material::Ptr>& coated, std::vector<yup::Material::Ptr>& sheened)
         {
             if (auto* meshNode = entity.getNode<yup::MeshNode>(); meshNode != nullptr && meshNode->mesh != nullptr)
             {
@@ -1014,19 +1050,21 @@ private:
                     else if (material.name == "Knob Rubber" || material.name == "Black Plastic")
                     {
                         material.roughnessFactor = 0.45f;
-                        material.clearcoatFactor = 1.0f;
+                        material.clearcoatFactor = knobClearcoat;
                         material.clearcoatRoughnessFactor = 0.08f;
+                        coated.push_back (primitive.material);
                     }
                     else if (material.name == "Pad Rubber")
                     {
-                        material.sheenColorFactor = { 0.35f, 0.36f, 0.38f };
+                        material.sheenColorFactor = padSheenColor;
                         material.sheenRoughnessFactor = 0.5f;
+                        sheened.push_back (primitive.material);
                     }
                 }
             }
 
             for (const auto& child : entity.getChildren())
-                tuneMaterials (*child);
+                tuneMaterials (*child, coated, sheened);
         }
 
         /** Rebuilds the light show with @p count lights, their hues around the color wheel, or
@@ -1229,6 +1267,8 @@ private:
         static constexpr float maxOrbitPitch = 1.56f;
         static constexpr int numShowLightsFull = 64;
         static constexpr int numShowLightsRaster = 16;
+        static constexpr float knobClearcoat = 1.0f;
+        static constexpr std::array<float, 3> padSheenColor { 0.35f, 0.36f, 0.38f };
 
         enum class DragMode
         {
@@ -1252,8 +1292,12 @@ private:
         CameraAnimator* animator = nullptr;
 
         yup::EntityNode::Ptr lightShow;
+        yup::EntityNode::Ptr probeEntity;
         yup::ReflectionProbeNode* reflectionProbe = nullptr;
+        yup::EntityNode::Ptr volumeEntity;
         yup::IrradianceVolumeNode* irradianceVolume = nullptr;
+        std::vector<yup::Material::Ptr> coatedMaterials;
+        std::vector<yup::Material::Ptr> sheenMaterials;
 
         yup::EntityNode* screenEntity = nullptr;
         yup::Vector3<float> screenCenter;
@@ -1307,7 +1351,6 @@ private:
             taaLabel.setText ("TAA samples", yup::dontSendNotification);
             taaSlider.setRange (1.0, 32.0, 1.0);
             taaSlider.setNumDecimalPlacesToDisplay (0);
-            taaSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
             taaSlider.setValue (settings.taaSamples, yup::dontSendNotification);
             taaSlider.onValueChanged = [this] (double value)
             {
@@ -1317,8 +1360,7 @@ private:
                 });
             };
 
-            bloomLabel.setText ("Bloom", yup::dontSendNotification);
-            bloomToggle.setButtonText ("Enabled");
+            bloomToggle.setButtonText ("Bloom");
             bloomToggle.setToggleState (settings.bloom, yup::dontSendNotification);
             bloomToggle.onClick = [this]
             {
@@ -1333,7 +1375,6 @@ private:
                 label.setText (text, yup::dontSendNotification);
                 slider.setRange (0.0, maximum, 0.0);
                 slider.setNumDecimalPlacesToDisplay (2);
-                slider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
                 slider.setValue (value, yup::dontSendNotification);
                 slider.onValueChanged = [this, field] (double newValue)
                 {
@@ -1364,7 +1405,6 @@ private:
             exposureSlider.setRange (0.1, 8.0, 0.0);
             exposureSlider.setSkewFactorFromMidpoint (1.0);
             exposureSlider.setNumDecimalPlacesToDisplay (2);
-            exposureSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
             exposureSlider.setValue (scene->getExposure(), yup::dontSendNotification);
             exposureSlider.onValueChanged = [this] (double value)
             {
@@ -1375,7 +1415,6 @@ private:
             keyLightSizeLabel.setText ("Key light size", yup::dontSendNotification);
             keyLightSizeSlider.setRange (0.0, 0.3, 0.0);
             keyLightSizeSlider.setNumDecimalPlacesToDisplay (3);
-            keyLightSizeSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
 
             if (auto* keyLight = findKeyLight())
                 keyLightSizeSlider.setValue (keyLight->radius, yup::dontSendNotification);
@@ -1415,8 +1454,7 @@ private:
             };
 
             // The shadow toggles show what the last frame ran with: the tier default until clicked, see refresh()
-            softShadowsLabel.setText ("Soft shadows", yup::dontSendNotification);
-            softShadowsToggle.setButtonText ("Enabled");
+            softShadowsToggle.setButtonText ("Soft shadows");
             softShadowsToggle.onClick = [this]
             {
                 editSettings ([this] (yup::RenderSettings& s)
@@ -1425,8 +1463,7 @@ private:
                 });
             };
 
-            contactShadowsLabel.setText ("Contact shadows", yup::dontSendNotification);
-            contactShadowsToggle.setButtonText ("Enabled");
+            contactShadowsToggle.setButtonText ("Contact shadows");
             contactShadowsToggle.onClick = [this]
             {
                 editSettings ([this] (yup::RenderSettings& s)
@@ -1436,8 +1473,7 @@ private:
             };
 
             // Like the shadow toggles, it shows what the last frame ran with, see refresh()
-            ambientOcclusionLabel.setText ("Ambient occlusion", yup::dontSendNotification);
-            ambientOcclusionToggle.setButtonText ("Enabled");
+            ambientOcclusionToggle.setButtonText ("Ambient occlusion");
             ambientOcclusionToggle.onClick = [this]
             {
                 editSettings ([this] (yup::RenderSettings& s)
@@ -1450,7 +1486,6 @@ private:
             aoDistanceSlider.setRange (0.01, 0.4, 0.0);
             aoDistanceSlider.setSkewFactorFromMidpoint (0.1);
             aoDistanceSlider.setNumDecimalPlacesToDisplay (3);
-            aoDistanceSlider.setTextBoxStyle (yup::Slider::TextBoxRight, false, 50, 20);
             aoDistanceSlider.setValue (settings.aoDistance, yup::dontSendNotification);
             aoDistanceSlider.onValueChanged = [this] (double value)
             {
@@ -1460,12 +1495,88 @@ private:
                 });
             };
 
-            lightShowLabel.setText ("Light show", yup::dontSendNotification);
-            lightShowToggle.setButtonText (yup::String (view.getNumShowLights()) + " orbiting lights");
+            // Like the shadow toggles, they show what the last frame ran with, see refresh()
+            screenSpaceReflectionsToggle.setButtonText ("Reflections (SSR)");
+            screenSpaceReflectionsToggle.onClick = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.screenSpaceReflections = screenSpaceReflectionsToggle.getToggleState();
+                });
+            };
+
+            screenSpaceGIToggle.setButtonText ("Diffuse GI (SSGI)");
+            screenSpaceGIToggle.onClick = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.screenSpaceGI = screenSpaceGIToggle.getToggleState();
+                });
+            };
+
+            debugViewLabel.setText ("Debug view", yup::dontSendNotification);
+            debugViewCombo.addItem ("None", 1);
+            debugViewCombo.addItem ("Ambient occlusion", 2);
+            debugViewCombo.addItem ("Reflections", 3);
+            debugViewCombo.addItem ("Indirect diffuse (SSGI)", 4);
+            debugViewCombo.setSelectedId (static_cast<int> (settings.debugView) + 1, yup::dontSendNotification);
+            debugViewCombo.onSelectedItemChanged = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.debugView = static_cast<yup::RenderSettings::DebugView> (debugViewCombo.getSelectedId() - 1);
+                });
+            };
+
+            // Depth of field applies after the accumulation: every change repaints, nothing restarts
+            depthOfFieldToggle.setButtonText ("Depth of field");
+            depthOfFieldToggle.setToggleState (settings.depthOfField, yup::dontSendNotification);
+            depthOfFieldToggle.onClick = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.depthOfField = depthOfFieldToggle.getToggleState();
+                });
+            };
+
+            const auto setupCameraSlider = [this] (yup::Label& label, const char* text, yup::Slider& slider, double minimum, double maximum, int decimals, float yup::CameraNode::*field)
+            {
+                label.setText (text, yup::dontSendNotification);
+                slider.setRange (minimum, maximum, 0.0);
+                slider.setSkewFactorFromMidpoint (std::sqrt (minimum * maximum));
+                slider.setNumDecimalPlacesToDisplay (decimals);
+                slider.setValue (view.getCamera().*field, yup::dontSendNotification);
+                slider.onValueChanged = [this, field] (double value)
+                {
+                    view.getCamera().*field = static_cast<float> (value);
+                    view.repaint();
+                };
+            };
+
+            setupCameraSlider (fStopLabel, "f-stop", fStopSlider, 0.7, 16.0, 1, &yup::CameraNode::fStop);
+            setupCameraSlider (focusDistanceLabel, "Focus distance", focusDistanceSlider, 0.1, 10.0, 2, &yup::CameraNode::focusDistance);
+
+            lightShowToggle.setButtonText (getLightShowText());
             lightShowToggle.onClick = [this]
             {
                 view.setLightShow (lightShowToggle.getToggleState());
             };
+
+            // The scene's local indirect light and material layers, on both tiers, to see what each adds
+            const auto setupSceneToggle = [this] (const char* text, yup::ToggleButton& toggle, void (MpcView::*apply) (bool))
+            {
+                toggle.setButtonText (text);
+                toggle.setToggleState (true, yup::dontSendNotification);
+                toggle.onClick = [this, &toggle, apply]
+                {
+                    (view.*apply) (toggle.getToggleState());
+                };
+            };
+
+            setupSceneToggle ("Reflection probe", reflectionProbeToggle, &MpcView::setReflectionProbe);
+            setupSceneToggle ("Irradiance volume", irradianceVolumeToggle, &MpcView::setIrradianceVolume);
+            setupSceneToggle ("Clearcoat", clearcoatToggle, &MpcView::setClearcoat);
+            setupSceneToggle ("Sheen", sheenToggle, &MpcView::setSheen);
 
             benchmarkButton.onClick = [this]
             {
@@ -1477,12 +1588,63 @@ private:
                 view.bakeProbes();
             };
 
-            for (auto* child : std::initializer_list<yup::Component*> { &tierLabel, &tierCombo, &taaLabel, &taaSlider, &bloomLabel, &bloomToggle, &bloomThresholdLabel, &bloomThresholdSlider,
-                                                                        &bloomIntensityLabel, &bloomIntensitySlider, &bloomRadiusLabel, &bloomRadiusSlider, &toneMappingLabel, &toneMappingCombo, &exposureLabel, &exposureSlider,
-                                                                        &keyLightSizeLabel, &keyLightSizeSlider, &aoDistanceLabel, &aoDistanceSlider, &lightShowLabel, &lightShowToggle, &cascadesLabel, &cascadesCombo,
-                                                                        &shadowResolutionLabel, &shadowResolutionCombo, &softShadowsLabel, &softShadowsToggle, &contactShadowsLabel,
-                                                                        &contactShadowsToggle, &ambientOcclusionLabel, &ambientOcclusionToggle, &statusLabel, &detailLabel, &benchmarkButton, &bakeProbesButton })
-                addAndMakeVisible (*child);
+            // Three grids of equal rows: the values with their labels in one column, the switches two per row, then the status
+            // The sliders show their value in a third column, which the combo boxes span, so both end at the same edge
+            valuesGrid.templateColumns.add (yup::Grid::TrackInfo::px (labelWidth));
+            valuesGrid.templateColumns.add (yup::Grid::TrackInfo::fr (1.0f));
+            valuesGrid.templateColumns.add (yup::Grid::TrackInfo::px (valueWidth));
+
+            for (auto [label, control, value] : { std::tuple<yup::Label*, yup::Component*, yup::Label*> { &tierLabel, &tierCombo, nullptr },
+                                                  { &taaLabel, &taaSlider, &taaValue },
+                                                  { &toneMappingLabel, &toneMappingCombo, nullptr },
+                                                  { &exposureLabel, &exposureSlider, &exposureValue },
+                                                  { &bloomThresholdLabel, &bloomThresholdSlider, &bloomThresholdValue },
+                                                  { &bloomIntensityLabel, &bloomIntensitySlider, &bloomIntensityValue },
+                                                  { &bloomRadiusLabel, &bloomRadiusSlider, &bloomRadiusValue },
+                                                  { &keyLightSizeLabel, &keyLightSizeSlider, &keyLightSizeValue },
+                                                  { &cascadesLabel, &cascadesCombo, nullptr },
+                                                  { &shadowResolutionLabel, &shadowResolutionCombo, nullptr },
+                                                  { &aoDistanceLabel, &aoDistanceSlider, &aoDistanceValue },
+                                                  { &fStopLabel, &fStopSlider, &fStopValue },
+                                                  { &focusDistanceLabel, &focusDistanceSlider, &focusDistanceValue },
+                                                  { &debugViewLabel, &debugViewCombo, nullptr } })
+            {
+                label->setJustification (yup::Justification::centerLeft);
+                valuesGrid.items.add (yup::GridItem (*label));
+
+                if (value == nullptr)
+                {
+                    valuesGrid.items.add (yup::GridItem (*control).withColumnSpan (2));
+                    continue;
+                }
+
+                value->setJustification (yup::Justification::centerRight);
+                valuesGrid.items.add (yup::GridItem (*control));
+                valuesGrid.items.add (yup::GridItem (*value));
+            }
+
+            togglesGrid.templateColumns.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::fr (1.0f)));
+
+            for (auto* child : std::initializer_list<yup::Component*> { &bloomToggle, &lightShowToggle, &softShadowsToggle, &contactShadowsToggle, &ambientOcclusionToggle, &screenSpaceGIToggle,
+                                                                        &screenSpaceReflectionsToggle, &depthOfFieldToggle, &reflectionProbeToggle, &irradianceVolumeToggle, &clearcoatToggle, &sheenToggle })
+                togglesGrid.items.add (yup::GridItem (*child));
+
+            footerGrid.templateColumns.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::fr (1.0f)));
+            for (auto* label : { &hintLabel, &statusLabel, &detailLabel })
+                label->setJustification (yup::Justification::centerLeft);
+
+            footerGrid.items.add (yup::GridItem (hintLabel).withColumnSpan (2));
+            for (auto* child : std::initializer_list<yup::Component*> { &statusLabel, &detailLabel, &benchmarkButton, &bakeProbesButton })
+                footerGrid.items.add (yup::GridItem (*child));
+
+            for (auto* grid : { &valuesGrid, &togglesGrid, &footerGrid })
+            {
+                grid->autoRows = rowHeight;
+                grid->gap = rowGap;
+
+                for (auto& item : grid->items)
+                    addAndMakeVisible (*item.associatedComponent);
+            }
         }
 
         /** Updates the status and the enabled state of the controls from what the last frame ran with. */
@@ -1499,60 +1661,64 @@ private:
             const auto detail = isFull ? (view.getRenderer().isConverged() ? yup::String ("TAA converged") : yup::String ("TAA accumulating"))
                                        : "MSAA " + yup::String (view.getRenderer().getSampleCount()) + "x";
 
-            setLabelText (statusLabel, "Tier: " + yup::String (isFull ? "full" : "raster") + " (" + getPlatformName (view.getPlatform()) + ")");
-
-            const auto lightShowText = yup::String (view.getNumShowLights()) + " orbiting lights";
-            if (lightShowToggle.getButtonText() != lightShowText)
-                lightShowToggle.setButtonText (lightShowText);
-
+            setLabelText (statusLabel, yup::String (isFull ? "Full, " : "Raster, ") + getPlatformName (view.getPlatform()));
             setLabelText (detailLabel, detail);
-            setLabelText (taaLabel, canTaa ? yup::String ("TAA samples") : yup::String ("TAA samples (needs the full tier)"));
 
-            if (taaSlider.isEnabled() != canTaa)
-            {
-                taaSlider.setEnabled (canTaa);
-                taaLabel.setEnabled (canTaa);
-            }
+            if (lightShowToggle.getButtonText() != getLightShowText())
+                lightShowToggle.setButtonText (getLightShowText());
 
             const auto canBloom = capabilities->isAvailable (yup::RenderCapabilities::Feature::bloom);
-            setLabelText (bloomLabel, canBloom ? yup::String ("Bloom") : yup::String ("Bloom (needs MSAA half-float targets)"));
-
-            if (bloomToggle.isEnabled() != canBloom)
-            {
-                for (auto* control : std::initializer_list<yup::Component*> { &bloomLabel, &bloomToggle, &bloomThresholdLabel, &bloomThresholdSlider,
-                                                                              &bloomIntensityLabel, &bloomIntensitySlider, &bloomRadiusLabel, &bloomRadiusSlider })
-                    control->setEnabled (canBloom);
-            }
-
-            const auto softShadows = capabilities->isEnabled (yup::RenderCapabilities::Feature::softShadows, settings);
-            if (softShadowsToggle.getToggleState() != softShadows)
-                softShadowsToggle.setToggleState (softShadows, yup::dontSendNotification);
-
-            const auto contactShadows = capabilities->isEnabled (yup::RenderCapabilities::Feature::contactShadows, settings);
-            if (contactShadowsToggle.getToggleState() != contactShadows)
-                contactShadowsToggle.setToggleState (contactShadows, yup::dontSendNotification);
-
             const auto canContactShadows = capabilities->isAvailable (yup::RenderCapabilities::Feature::contactShadows);
-            const auto contactShadowsText = canContactShadows ? yup::String ("Enabled") : yup::String ("Needs the full tier");
-            if (contactShadowsToggle.getButtonText() != contactShadowsText)
-                contactShadowsToggle.setButtonText (contactShadowsText);
-
-            if (contactShadowsToggle.isEnabled() != canContactShadows)
-            {
-                contactShadowsToggle.setEnabled (canContactShadows);
-                contactShadowsLabel.setEnabled (canContactShadows);
-            }
-
-            const auto ambientOcclusion = capabilities->isEnabled (yup::RenderCapabilities::Feature::ambientOcclusion, settings);
-            if (ambientOcclusionToggle.getToggleState() != ambientOcclusion)
-                ambientOcclusionToggle.setToggleState (ambientOcclusion, yup::dontSendNotification);
-
             const auto canAmbientOcclusion = capabilities->isAvailable (yup::RenderCapabilities::Feature::ambientOcclusion);
-            if (ambientOcclusionToggle.isEnabled() != canAmbientOcclusion)
-            {
-                for (auto* control : std::initializer_list<yup::Component*> { &ambientOcclusionLabel, &ambientOcclusionToggle, &aoDistanceLabel, &aoDistanceSlider })
-                    control->setEnabled (canAmbientOcclusion);
-            }
+            const auto canDepthOfField = capabilities->isAvailable (yup::RenderCapabilities::Feature::depthOfField);
+            const auto ambientOcclusion = capabilities->isEnabled (yup::RenderCapabilities::Feature::ambientOcclusion, settings);
+            const auto taa = capabilities->isEnabled (yup::RenderCapabilities::Feature::temporalAntiAliasing, settings);
+
+            // The screen-space effects read the TAA history of the full tier, and the GI extends the ambient occlusion
+            const auto canReflections = isFull && taa;
+            const auto canGI = canReflections && ambientOcclusion;
+
+            for (auto [slider, value] : { std::pair<yup::Slider*, yup::Label*> { &taaSlider, &taaValue }, { &exposureSlider, &exposureValue }, { &bloomThresholdSlider, &bloomThresholdValue },
+                                          { &bloomIntensitySlider, &bloomIntensityValue }, { &bloomRadiusSlider, &bloomRadiusValue }, { &keyLightSizeSlider, &keyLightSizeValue },
+                                          { &aoDistanceSlider, &aoDistanceValue }, { &fStopSlider, &fStopValue }, { &focusDistanceSlider, &focusDistanceValue } })
+                setLabelText (*value, yup::String (slider->getValue(), slider->getNumDecimalPlacesToDisplay()));
+
+            for (auto* control : std::initializer_list<yup::Component*> { &taaLabel, &taaSlider, &taaValue })
+                setAvailable (*control, canTaa);
+
+            for (auto* control : std::initializer_list<yup::Component*> { &bloomThresholdLabel, &bloomThresholdSlider, &bloomThresholdValue, &bloomIntensityLabel, &bloomIntensitySlider,
+                                                                          &bloomIntensityValue, &bloomRadiusLabel, &bloomRadiusSlider, &bloomRadiusValue })
+                setAvailable (*control, canBloom);
+
+            for (auto* control : std::initializer_list<yup::Component*> { &aoDistanceLabel, &aoDistanceSlider, &aoDistanceValue })
+                setAvailable (*control, canAmbientOcclusion);
+
+            for (auto* control : std::initializer_list<yup::Component*> { &fStopLabel, &fStopSlider, &fStopValue, &focusDistanceLabel, &focusDistanceSlider, &focusDistanceValue })
+                setAvailable (*control, canDepthOfField);
+
+            for (auto* control : std::initializer_list<yup::Component*> { &debugViewLabel, &debugViewCombo })
+                setAvailable (*control, isFull);
+
+            refreshToggle (bloomToggle, settings.bloom, canBloom);
+            refreshToggle (softShadowsToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::softShadows, settings), true);
+            refreshToggle (contactShadowsToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::contactShadows, settings), canContactShadows);
+            refreshToggle (ambientOcclusionToggle, ambientOcclusion, canAmbientOcclusion);
+            refreshToggle (screenSpaceReflectionsToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::screenSpaceReflections, settings), canReflections);
+            refreshToggle (screenSpaceGIToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::screenSpaceGI, settings), canGI);
+            refreshToggle (depthOfFieldToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::depthOfField, settings), canDepthOfField);
+
+            // One line says why the dimmed controls are off, so no label changes its text or size
+            auto hint = yup::String();
+            if (! isFull)
+                hint = "TAA, contact shadows, SSR, SSGI, DoF, debug: full tier";
+            else if (! taa)
+                hint = "SSR and SSGI need TAA samples above 1";
+            else if (! ambientOcclusion)
+                hint = "SSGI needs ambient occlusion";
+            else if (! canBloom)
+                hint = "Bloom needs half-float multisampled targets";
+
+            setLabelText (hintLabel, hint);
         }
 
         void paint (yup::Graphics& g) override
@@ -1563,47 +1729,17 @@ private:
 
         void resized() override
         {
-            auto bounds = getLocalBounds().reduced (8.0f);
-            constexpr float rowHeight = 22.0f;
-            constexpr float gap = 6.0f;
+            auto bounds = getLocalBounds().reduced (10.0f);
 
-            for (auto [label, control] : { std::pair<yup::Component*, yup::Component*> { &tierLabel, &tierCombo },
-                                           { &taaLabel, &taaSlider },
-                                           { &bloomLabel, &bloomToggle },
-                                           { &bloomThresholdLabel, &bloomThresholdSlider },
-                                           { &bloomIntensityLabel, &bloomIntensitySlider },
-                                           { &bloomRadiusLabel, &bloomRadiusSlider },
-                                           { &toneMappingLabel, &toneMappingCombo },
-                                           { &exposureLabel, &exposureSlider } })
+            const auto layOut = [&bounds] (yup::Grid& grid, int rows)
             {
-                label->setBounds (bounds.removeFromTop (rowHeight));
-                control->setBounds (bounds.removeFromTop (rowHeight));
-                bounds.removeFromTop (gap);
-            }
+                grid.performLayout (bounds.removeFromTop (static_cast<float> (rows) * (rowHeight + rowGap) - rowGap));
+                bounds.removeFromTop (sectionGap);
+            };
 
-            // The lighting settings go two per row, to fit the default window
-            const auto halfWidth = (bounds.getWidth() - gap) * 0.5f;
-
-            for (auto [left, leftControl, right, rightControl] : { std::tuple<yup::Component*, yup::Component*, yup::Component*, yup::Component*> { &keyLightSizeLabel, &keyLightSizeSlider, &aoDistanceLabel, &aoDistanceSlider },
-                                                                   { &cascadesLabel, &cascadesCombo, &shadowResolutionLabel, &shadowResolutionCombo },
-                                                                   { &softShadowsLabel, &softShadowsToggle, &contactShadowsLabel, &contactShadowsToggle },
-                                                                   { &ambientOcclusionLabel, &ambientOcclusionToggle, &lightShowLabel, &lightShowToggle } })
-            {
-                auto labels = bounds.removeFromTop (rowHeight);
-                auto controls = bounds.removeFromTop (rowHeight);
-                left->setBounds (labels.removeFromLeft (halfWidth));
-                right->setBounds (labels.removeFromRight (halfWidth));
-                leftControl->setBounds (controls.removeFromLeft (halfWidth));
-                rightControl->setBounds (controls.removeFromRight (halfWidth));
-                bounds.removeFromTop (gap);
-            }
-
-            statusLabel.setBounds (bounds.removeFromTop (rowHeight));
-            detailLabel.setBounds (bounds.removeFromTop (rowHeight));
-            bounds.removeFromTop (gap);
-            auto buttons = bounds.removeFromTop (rowHeight);
-            benchmarkButton.setBounds (buttons.removeFromLeft (110.0f));
-            bakeProbesButton.setBounds (buttons.removeFromRight (110.0f));
+            layOut (valuesGrid, numValueRows);
+            layOut (togglesGrid, (togglesGrid.items.size() + 1) / 2);
+            layOut (footerGrid, 3);
         }
 
     private:
@@ -1621,6 +1757,30 @@ private:
             edit (settings);
             view.getScene()->setRenderSettings (settings);
             view.repaint();
+        }
+
+        /** Shows whether a feature ran, dimmed and disabled when @p isAvailable is false. */
+        static void refreshToggle (yup::ToggleButton& toggle, bool isOn, bool isAvailable)
+        {
+            if (toggle.getToggleState() != isOn)
+                toggle.setToggleState (isOn, yup::dontSendNotification);
+
+            setAvailable (toggle, isAvailable);
+        }
+
+        /** Enables @p component, or disables and dims it: the theme draws disabled buttons and labels as enabled ones. */
+        static void setAvailable (yup::Component& component, bool isAvailable)
+        {
+            if (component.isEnabled() == isAvailable)
+                return;
+
+            component.setEnabled (isAvailable);
+            component.setOpacity (isAvailable ? 1.0f : 0.4f);
+        }
+
+        yup::String getLightShowText() const
+        {
+            return "Light show (" + yup::String (view.getNumShowLights()) + ")";
         }
 
         static void setLabelText (yup::Label& label, const yup::String& text)
@@ -1649,7 +1809,6 @@ private:
         yup::ComboBox tierCombo { "tierCombo" };
         yup::Label taaLabel { "taaLabel" };
         yup::Slider taaSlider { yup::Slider::LinearHorizontal, "taaSlider" };
-        yup::Label bloomLabel { "bloomLabel" };
         yup::ToggleButton bloomToggle { "bloomToggle" };
         yup::Label bloomThresholdLabel { "bloomThresholdLabel" };
         yup::Slider bloomThresholdSlider { yup::Slider::LinearHorizontal, "bloomThresholdSlider" };
@@ -1663,24 +1822,54 @@ private:
         yup::Slider exposureSlider { yup::Slider::LinearHorizontal, "exposureSlider" };
         yup::Label keyLightSizeLabel { "keyLightSizeLabel" };
         yup::Slider keyLightSizeSlider { yup::Slider::LinearHorizontal, "keyLightSizeSlider" };
-        yup::Label lightShowLabel { "lightShowLabel" };
         yup::ToggleButton lightShowToggle { "lightShowToggle" };
         yup::Label cascadesLabel { "cascadesLabel" };
         yup::ComboBox cascadesCombo { "cascadesCombo" };
         yup::Label shadowResolutionLabel { "shadowResolutionLabel" };
         yup::ComboBox shadowResolutionCombo { "shadowResolutionCombo" };
-        yup::Label softShadowsLabel { "softShadowsLabel" };
         yup::ToggleButton softShadowsToggle { "softShadowsToggle" };
-        yup::Label contactShadowsLabel { "contactShadowsLabel" };
         yup::ToggleButton contactShadowsToggle { "contactShadowsToggle" };
-        yup::Label ambientOcclusionLabel { "ambientOcclusionLabel" };
         yup::ToggleButton ambientOcclusionToggle { "ambientOcclusionToggle" };
         yup::Label aoDistanceLabel { "aoDistanceLabel" };
         yup::Slider aoDistanceSlider { yup::Slider::LinearHorizontal, "aoDistanceSlider" };
+        yup::ToggleButton screenSpaceReflectionsToggle { "screenSpaceReflectionsToggle" };
+        yup::ToggleButton screenSpaceGIToggle { "screenSpaceGIToggle" };
+        yup::ToggleButton depthOfFieldToggle { "depthOfFieldToggle" };
+        yup::Label fStopLabel { "fStopLabel" };
+        yup::Slider fStopSlider { yup::Slider::LinearHorizontal, "fStopSlider" };
+        yup::Label focusDistanceLabel { "focusDistanceLabel" };
+        yup::Slider focusDistanceSlider { yup::Slider::LinearHorizontal, "focusDistanceSlider" };
+        yup::ToggleButton reflectionProbeToggle { "reflectionProbeToggle" };
+        yup::ToggleButton irradianceVolumeToggle { "irradianceVolumeToggle" };
+        yup::ToggleButton clearcoatToggle { "clearcoatToggle" };
+        yup::ToggleButton sheenToggle { "sheenToggle" };
+        yup::Label debugViewLabel { "debugViewLabel" };
+        yup::ComboBox debugViewCombo { "debugViewCombo" };
+        yup::Label taaValue { "taaValue" };
+        yup::Label exposureValue { "exposureValue" };
+        yup::Label bloomThresholdValue { "bloomThresholdValue" };
+        yup::Label bloomIntensityValue { "bloomIntensityValue" };
+        yup::Label bloomRadiusValue { "bloomRadiusValue" };
+        yup::Label keyLightSizeValue { "keyLightSizeValue" };
+        yup::Label aoDistanceValue { "aoDistanceValue" };
+        yup::Label fStopValue { "fStopValue" };
+        yup::Label focusDistanceValue { "focusDistanceValue" };
+        yup::Label hintLabel { "hintLabel" };
         yup::Label statusLabel { "statusLabel" };
         yup::Label detailLabel { "detailLabel" };
         yup::TextButton benchmarkButton { "Benchmark" };
         yup::TextButton bakeProbesButton { "Bake probes" };
+
+        yup::Grid valuesGrid;
+        yup::Grid togglesGrid;
+        yup::Grid footerGrid;
+
+        static constexpr int numValueRows = 14;
+        static constexpr float labelWidth = 120.0f;
+        static constexpr float valueWidth = 40.0f;
+        static constexpr float rowHeight = 24.0f;
+        static constexpr float rowGap = 4.0f;
+        static constexpr float sectionGap = 12.0f;
     };
 
     //==============================================================================

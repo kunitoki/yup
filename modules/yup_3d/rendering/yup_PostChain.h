@@ -27,9 +27,10 @@ namespace yup
 //==============================================================================
 /** Owns the post effects and runs the enabled ones in contract order, ending with tone mapping.
 
-    TemporalAA runs first when enabled, then Bloom when enabled, then ToneMapping. Bloom renders
-    only the glow, which ToneMapping adds while it maps the scene color. Each pass reading a
-    reversibly tone mapped color inverts it per texel, un-premultiplied by its coverage first.
+    TemporalAA runs first when enabled, then DepthOfField when enabled and the camera can blur, then
+    Bloom when enabled, then ToneMapping. Bloom renders only the glow, which ToneMapping adds while
+    it maps the scene color. Each pass reading a reversibly tone mapped color inverts it per texel,
+    un-premultiplied by its coverage first.
 
     @internal
 */
@@ -47,6 +48,7 @@ public:
         Color background;               ///< Display-referred, composited under the uncovered pixels.
         int temporalSampleIndex = 0;    ///< Frames accumulated in the TAA history, see TemporalAA::render().
         bool temporalChanging = false;  ///< True while the scene changes, see TemporalAA::getBlendWeight().
+        const CameraNode* camera = nullptr; ///< The active camera, for the depth of field; nullptr has none.
     };
 
     //==============================================================================
@@ -71,13 +73,23 @@ public:
     void releaseTargets() noexcept;
 
     /** The HDR color the last render() passed to the effects after temporal anti-aliasing: the
-        resolved color when TAA ran, the input color otherwise, before bloom. Valid until the next
-        render().
+        resolved color when TAA ran, the input color otherwise, before the depth of field and bloom.
+        Valid until the next render().
     */
     const GpuTexture::Ptr& getResolvedColor() const noexcept { return resolvedColor; }
 
+    /** The depth of field, for its outputs and for tests: created by the first render() blurring
+        (enabled, and a camera that can blur), then kept; nullptr before.
+    */
+    const DepthOfField* getDepthOfField() const noexcept { return depthOfField.get(); }
+
+    /** @internal Test hook: the next @p count depth of field renders fail, see DepthOfField::failRendersForTesting(). */
+    void failDepthOfFieldForTesting (int count) noexcept { depthOfFieldFailures = count; }
+
 private:
     TemporalAA temporalAA;
+    std::unique_ptr<DepthOfField> depthOfField;
+    int depthOfFieldFailures = 0; // Handed to the depth of field by the next frame blurring
     Bloom bloom;
     ToneMapping toneMapping;
     GpuTexture::Ptr resolvedColor;

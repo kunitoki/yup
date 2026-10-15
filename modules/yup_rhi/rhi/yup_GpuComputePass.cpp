@@ -26,7 +26,7 @@ namespace yup
 
 #if YUP_RIVE_USE_METAL && YUP_APPLE
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&);
-std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&, rive::ore::Context& frameContext);
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&, rive::ore::Context& frameContext, void* passDescriptor);
 #endif
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplD3D11 (GpuDevice&);
@@ -48,6 +48,9 @@ struct GpuComputePass::Impl
 {
     GpuComputePipeline::Ptr pipelineRef;
     bool finished = false;
+
+    /** True when the native pass was created with the descriptor that samples its GPU time. */
+    bool sampled = false;
 
     /** The frame this pass records into, until either of them finishes it. */
     GpuFrame::Impl* frame = nullptr;
@@ -200,8 +203,18 @@ GpuComputePass GpuComputePass::begin (GpuFrame& frame)
     {
 #if YUP_RIVE_USE_METAL && YUP_APPLE
         case GpuPlatform::Metal:
-            pass.impl = yup_createComputePassImplMetal (device, *frameImpl->oreCtx);
+        {
+            YUP_AUTORELEASEPOOL
+            {
+                auto scopeIndex = -1;
+                auto* sampler = frameImpl->samplerForNextPass (scopeIndex);
+                pass.impl = yup_createComputePassImplMetal (device, *frameImpl->oreCtx, sampler != nullptr ? sampler->beginComputePass (scopeIndex) : nullptr);
+
+                if (sampler != nullptr)
+                    sampler->endComputePass (pass.impl != nullptr && pass.impl->sampled);
+            }
             break;
+        }
 #endif
 
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS

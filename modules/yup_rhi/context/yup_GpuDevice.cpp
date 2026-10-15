@@ -363,6 +363,16 @@ Result GpuDevice::submitFrameCommands (void*)
     return Result::ok();
 }
 
+Result GpuDevice::submitFrame (void* commandBuffer, uint64_t, std::shared_ptr<ScopeSampler>, bool)
+{
+    return submitFrameCommands (commandBuffer);
+}
+
+std::shared_ptr<GpuDevice::ScopeSampler> GpuDevice::createScopeSampler (rive::ore::Context&)
+{
+    return nullptr;
+}
+
 Result GpuDevice::waitFrameCommands (void*)
 {
     return Result::ok();
@@ -411,20 +421,112 @@ GpuFrameStatus GpuDevice::beginFrameStatus (uint64_t generation)
     return GpuFrameStatus (std::move (block));
 }
 
-void GpuDevice::completeFrameStatus (uint64_t generation, const Result& result)
+void GpuDevice::completeFrameStatus (uint64_t generation, const Result& result, GpuFrameTimings timings)
 {
-    frameStatuses->complete (generation, result);
+    frameStatuses->complete (generation, result, std::move (timings));
 }
 
-std::function<void (uint64_t, const Result&)> GpuDevice::getFrameCompletion() const
+//==============================================================================
+
+uint64 GpuDevice::ScopeTimeline::commit() noexcept
 {
-    return [statuses = frameStatuses] (uint64_t generation, const Result& result)
+    const ScopedLock sl (lock);
+    return ++nextSequence;
+}
+
+void GpuDevice::ScopeTimeline::activate() noexcept
+{
+    active = true;
+}
+
+bool GpuDevice::ScopeTimeline::isActive() const noexcept
+{
+    return active;
+}
+
+void GpuDevice::ScopeTimeline::advance (uint64 sequence, uint64 end)
+{
+    const ScopedLock sl (lock);
+
+    if (sequence > latestSequence)
     {
-        statuses->complete (generation, result);
-    };
+        latestSequence = sequence;
+        latestEnd = end;
+    }
+    else if (sequence == latestSequence)
+    {
+        latestEnd = jmax (latestEnd, end);
+    }
 }
 
-void GpuDevice::FrameStatuses::complete (uint64_t generation, const Result& result)
+std::vector<GpuScopeTiming> GpuDevice::ScopeTimeline::attribute (uint64 sequence, const std::vector<Pass>& passes, uint64 now, double nanosecondsPerTick)
+{
+    std::vector<GpuScopeTiming> scopes;
+
+    for (const auto& pass : passes)
+    {
+        if (pass.scopeIndex >= static_cast<int> (scopes.size()))
+            scopes.resize (static_cast<size_t> (pass.scopeIndex) + 1, { {}, 0.0, true });
+    }
+
+    // The work of an earlier frame bounds this one's only when it was committed before it, and
+    // ended before now: otherwise the frame completed out of order or the GPU clock went back
+    uint64 frontier = 0;
+    {
+        const ScopedLock sl (lock);
+        if (latestSequence < sequence && latestEnd <= now)
+            frontier = latestEnd;
+    }
+
+    for (const auto& pass : passes)
+    {
+        auto* scope = pass.scopeIndex >= 0 ? &scopes[static_cast<size_t> (pass.scopeIndex)] : nullptr;
+
+        if (! pass.sampled || nanosecondsPerTick <= 0.0)
+        {
+            if (scope != nullptr)
+                scope->available = false;
+
+            continue;
+        }
+
+        if (pass.start == 0 || pass.end < pass.start)
+            continue;
+
+        const auto from = jmax (pass.start, frontier);
+        if (scope != nullptr && pass.end > from)
+            scope->milliseconds += static_cast<double> (pass.end - from) * nanosecondsPerTick * 1.0e-6;
+
+        frontier = jmax (frontier, pass.end);
+    }
+
+    if (frontier > 0)
+        advance (sequence, frontier);
+
+    for (auto& scope : scopes)
+    {
+        if (! scope.available)
+            scope.milliseconds = 0.0;
+    }
+
+    return scopes;
+}
+
+//==============================================================================
+
+GpuDevice::FrameCompletion GpuDevice::getFrameCompletion() const
+{
+    FrameCompletion completion;
+    completion.statuses = frameStatuses;
+    return completion;
+}
+
+void GpuDevice::FrameCompletion::operator() (uint64_t generation, const Result& result, GpuFrameTimings timings) const
+{
+    statuses->complete (generation, result, std::move (timings));
+}
+
+void GpuDevice::FrameStatuses::complete (uint64_t generation, const Result& result, GpuFrameTimings timings)
 {
     std::shared_ptr<GpuFrameStatus::Block> block;
 
@@ -440,6 +542,32 @@ void GpuDevice::FrameStatuses::complete (uint64_t generation, const Result& resu
 
         block->completed = true;
         block->result = block->injectedFailure.isNotEmpty() ? Result::fail (block->injectedFailure) : result;
+
+        if (block->timingEnabled && block->result.wasOk())
+        {
+            block->timings.available = timings.available;
+            block->timings.frameMilliseconds = timings.frameMilliseconds;
+
+            // The frame's own list names the scopes: only numbers are copied, nothing allocates
+            if (timings.available)
+            {
+                for (size_t index = 0; index < block->scopes.size(); ++index)
+                {
+                    auto& scope = block->scopes[index];
+
+                    if (index < timings.scopes.size())
+                    {
+                        scope.available = scope.available && timings.scopes[index].available;
+                        scope.milliseconds = timings.scopes[index].milliseconds;
+                    }
+
+                    if (! scope.available)
+                        scope.milliseconds = 0.0;
+                }
+
+                block->timings.scopes = std::move (block->scopes);
+            }
+        }
 
         if (block->result.failed())
         {

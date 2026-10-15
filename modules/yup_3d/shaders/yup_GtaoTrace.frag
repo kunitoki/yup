@@ -37,10 +37,23 @@
 // also turns with the frame under temporal anti-aliasing, on raster by a fixed 4x4 pattern that the
 // separable denoise averages out. The screen footprint is capped at a tenth of the view height.
 // Output: the view-space bent normal * 0.5 + 0.5 in rgb, the visibility in a.
+// The screen-space diffuse GI variant (YUP_3D_SCREEN_SPACE_GI, full tier only) also gathers the
+// light of the occluded arcs along the same horizon search, see gtaoHorizon().
 
 layout(location = 0) in vec2 uv;
 
 layout(location = 0) out vec4 fragColor;
+
+#ifdef YUP_3D_SCREEN_SPACE_GI
+// The previous frame's radiance where each sample was: the TemporalAA history (exposed and
+// premultiplied by its coverage), reprojected by the G-buffer velocity
+layout(set = 0, binding = 1) uniform sampler linearClamp;
+layout(set = 1, binding = 4) uniform texture2D u_velocity;
+layout(set = 1, binding = 5) uniform texture2D u_previousSceneColor;
+
+// The gathered irradiance in rgb, the share of the cosine-weighted hemisphere it came from in a
+layout(location = 1) out vec4 fragIndirect;
+#endif
 
 // The 4x4 ordered dither (Bayer) matrix at a pixel, in [0, 1): every value once per 4x4 block
 float gtaoPattern(ivec2 pixel)
@@ -61,12 +74,40 @@ vec2 gtaoBentIntegrals(float t, float cosNormal, float sinNormal)
                 cosNormal * s * s * s + sinNormal * (c * c * c - 3.0 * c)) / 3.0;
 }
 
-// The highest horizon cosine towards side (+1 or -1) of a screen direction, -1 without any
+#ifdef YUP_3D_SCREEN_SPACE_GI
+// The cosine-weighted integral of a slice from the view vector to the slice angle h: the term of
+// Jimenez et al. 2016 the visibility adds up on each side
+float gtaoArc(float h, float normalAngle, float cosNormal, float sinNormal)
+{
+    return 0.25 * (-cos(2.0 * h - normalAngle) + cosNormal + 2.0 * h * sinNormal);
+}
+#endif
+
+// The highest horizon cosine towards side (+1 or -1) of a screen direction, -1 without any.
+// The screen-space diffuse GI variant also gathers the light of the arcs the search occludes, as
+// Horizon-Based Indirect Lighting does (Mayaux 2018, "Horizon-Based Indirect Lighting"): each step
+// that raises the horizon occludes the arc between the old and the new horizon, clamped to the
+// hemisphere of the projected normal, and lights it with the radiance at the sample, weighted by
+// that arc's share of the visibility integral, so the weights of all the steps add up to the
+// occluded share. A sample whose surface faces away from the pixel, or that the previous frame did
+// not see, still occludes but lights nothing (HBIL fades such a sample to the radiance of the
+// previous one instead). Unlike HBIL, the radiance is the previous frame's TemporalAA history, all of
+// its exposed light, rather than a reprojected diffuse-only buffer. Adds the radiance times the
+// weight to rgb, and the weight that found radiance to a, of @p gathered
+#ifdef YUP_3D_SCREEN_SPACE_GI
+float gtaoHorizon(ivec2 pixel, vec3 position, vec3 v, vec2 direction, float side, float radius, float jitter,
+                  float normalAngle, float cosNormal, float sinNormal, inout vec4 gathered)
+#else
 float gtaoHorizon(ivec2 pixel, vec3 position, vec3 v, vec2 direction, float side, float radius, float jitter)
+#endif
 {
     float reach = gtao.params.x;
     int steps = int(gtao.params.z);
     float horizon = -1.0;
+#ifdef YUP_3D_SCREEN_SPACE_GI
+    float limit = normalAngle + side * 0.5 * yupPi;
+    float arc = gtaoArc(limit, normalAngle, cosNormal, sinNormal);
+#endif
 
     for (int i = 0; i < steps; ++i)
     {
@@ -88,7 +129,34 @@ float gtaoHorizon(ivec2 pixel, vec3 position, vec3 v, vec2 direction, float side
             continue;
 
         float falloff = clamp((reach - deltaLength) / (0.4 * reach), 0.0, 1.0);
+#ifdef YUP_3D_SCREEN_SPACE_GI
+        float candidate = mix(-1.0, dot(delta, v) / deltaLength, falloff);
+        if (candidate <= horizon)
+            continue;
+
+        horizon = candidate;
+        float horizonAngle = acos(clamp(horizon, -1.0, 1.0));
+        float newArc = gtaoArc(side > 0.0 ? min(horizonAngle, limit) : max(-horizonAngle, limit), normalAngle, cosNormal, sinNormal);
+        float weight = arc - newArc;
+        arc = newArc;
+
+        // delta points from the pixel to the sample, whose surface lights the pixel only if it faces back
+        if (weight <= 0.0 || dot(gtaoViewNormal(samplePixel), delta) >= 0.0)
+            continue;
+
+        vec2 previousUv = (vec2(samplePixel) + 0.5) * view.viewport.zw - texelFetch(sampler2D(u_velocity, pointClamp), samplePixel, 0).xy;
+        if (any(lessThan(previousUv, vec2(0.0))) || any(greaterThan(previousUv, vec2(1.0))))
+            continue;
+
+        vec4 previous = textureLod(sampler2D(u_previousSceneColor, linearClamp), previousUv, 0.0);
+        if (previous.a <= 1.0e-3)
+            continue;
+
+        // gtao.noise.z: 1 / the exposure the history was rendered with
+        gathered += vec4(min(previous.rgb / previous.a * gtao.noise.z, vec3(65504.0)), 1.0) * weight;
+#else
         horizon = max(horizon, mix(-1.0, dot(delta, v) / deltaLength, falloff));
+#endif
     }
 
     return clamp(horizon, -1.0, 1.0);
@@ -99,6 +167,9 @@ void main()
     ivec2 outputPixel = ivec2(gl_FragCoord.xy);
     ivec2 pixel = gtaoInputPixel(outputPixel);
     float depth = gtaoDepth(pixel);
+#ifdef YUP_3D_SCREEN_SPACE_GI
+    fragIndirect = vec4(0.0);
+#endif
 
     // Nothing drawn: unoccluded, facing the camera
     if (depth >= 1.0)
@@ -139,6 +210,9 @@ void main()
     int slices = int(gtao.params.y);
     float visibility = 0.0;
     vec3 bentNormal = vec3(0.0);
+#ifdef YUP_3D_SCREEN_SPACE_GI
+    vec4 indirect = vec4(0.0);
+#endif
 
     for (int slice = 0; slice < slices; ++slice)
     {
@@ -158,8 +232,15 @@ void main()
         float normalAngle = (dot(projectedNormal, tangent) < 0.0 ? -1.0 : 1.0) * acos(cosNormal);
         float sinNormal = sin(normalAngle);
 
+#ifdef YUP_3D_SCREEN_SPACE_GI
+        vec4 gathered = vec4(0.0);
+        float h0 = normalAngle + max(-acos(gtaoHorizon(pixel, position, v, direction, -1.0, radius, noise.y, normalAngle, cosNormal, sinNormal, gathered)) - normalAngle, -0.5 * yupPi);
+        float h1 = normalAngle + min(acos(gtaoHorizon(pixel, position, v, direction, 1.0, radius, noise.y, normalAngle, cosNormal, sinNormal, gathered)) - normalAngle, 0.5 * yupPi);
+        indirect += gathered * projectedLength;
+#else
         float h0 = normalAngle + max(-acos(gtaoHorizon(pixel, position, v, direction, -1.0, radius, noise.y)) - normalAngle, -0.5 * yupPi);
         float h1 = normalAngle + min(acos(gtaoHorizon(pixel, position, v, direction, 1.0, radius, noise.y)) - normalAngle, 0.5 * yupPi);
+#endif
 
         float arc = 0.25 * (-cos(2.0 * h0 - normalAngle) + cosNormal + 2.0 * h0 * sinNormal)
                   + 0.25 * (-cos(2.0 * h1 - normalAngle) + cosNormal + 2.0 * h1 * sinNormal);
@@ -178,4 +259,8 @@ void main()
     bentNormal = bentLength > 1.0e-4 ? bentNormal / bentLength : n;
 
     fragColor = vec4(bentNormal * 0.5 + 0.5, visibility);
+#ifdef YUP_3D_SCREEN_SPACE_GI
+    indirect /= float(max(slices, 1));
+    fragIndirect = vec4(min(indirect.rgb, vec3(65504.0)), indirect.a);
+#endif
 }

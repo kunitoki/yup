@@ -943,4 +943,68 @@ struct GpuWorkgroupSize
     uint32_t z = 1;
 };
 
+//==============================================================================
+/** The GPU time of one scope of a frame, opened with GpuFrame::beginScope().
+
+    @see GpuFrameTimings
+*/
+struct GpuScopeTiming
+{
+    /** The name given to GpuFrame::beginScope(). */
+    String name;
+
+    /** How far the native encoders opened while the scope was open pushed the GPU's work
+        forward, in milliseconds: each encoder counts from its first to its last timestamp,
+        less the part that overlapped earlier work, and the scope sums its encoders. 0 for a
+        scope that opened none.
+
+        This ranks what lengthens the frame, not what a pass costs on its own: work that ran
+        entirely under an earlier pass reads 0, and its time counts for that earlier pass.
+        To learn a pass's own cost, compare the frame total with and without it.
+    */
+    double milliseconds = 0;
+
+    /** False when some encoder of the scope could not be measured: it opened before the
+        frame turned timing on, or the frame ran out of timestamp samples. The scope then
+        reports 0 milliseconds. */
+    bool available = false;
+};
+
+//==============================================================================
+/** The GPU time of one frame, once it completed.
+
+    Measured only for frames that asked for it with GpuFrame::setTimingEnabled(), on
+    devices where GpuDevice::isFrameTimingAvailable() is true.
+
+    @see GpuFrameStatus::getTimings
+*/
+struct GpuFrameTimings
+{
+    /** False when the device, or this frame, could not measure: timing was off, the
+        frame is still pending, or it failed. */
+    bool available = false;
+
+    /** The time from the GPU's start of the frame's command buffer to its end, in
+        milliseconds. It excludes work submitted outside the frame and the time before the
+        GPU started it. With several frames in flight it includes the time the frame ran
+        alongside, or waited behind, the frames before it: measure with few frames in
+        flight (two or three), or wait for each measured frame. */
+    double frameMilliseconds = 0;
+
+    /** The scopes of the frame (see GpuFrame::beginScope()), in the order they were first
+        opened: a name opened twice appears twice. Empty when the device (see
+        GpuDevice::isScopeTimingAvailable()) or the frame could not measure scopes.
+
+        A tile-based GPU overlaps passes: one starts while the passes before it still
+        shade. Each pass is credited only the time past the end of the passes encoded
+        before it and of the device's earlier frames, so overlapped work counts for the
+        earlier pass and a light pass after a heavy one stays light (see
+        GpuScopeTiming::milliseconds). The first scope of a frame may still include time it
+        overlapped GPU work of the device that is not a GpuFrame, such as window drawing
+        and uploads. The scopes attribute the frame's time; they need not add up to
+        frameMilliseconds, which is measured with another clock.
+    */
+    std::vector<GpuScopeTiming> scopes;
+};
+
 } // namespace yup

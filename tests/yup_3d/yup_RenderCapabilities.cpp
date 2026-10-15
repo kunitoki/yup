@@ -335,3 +335,87 @@ TEST_F (RenderCapabilitiesTests, ScreenSpaceReflectionsNeedTheTemporalHistory)
         EXPECT_TRUE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::screenSpaceReflections, settings)) << samples;
     }
 }
+
+TEST_F (RenderCapabilitiesTests, ScreenSpaceGIIsOffByDefaultAndFullTierOnly)
+{
+    RenderSettings settings;
+    const RenderCapabilities full (desktopMetal(), settings, 4);
+    EXPECT_TRUE (full.isAvailable (Feature::screenSpaceGI));
+    EXPECT_FALSE (full.isEnabled (Feature::screenSpaceGI, settings));
+
+    settings.screenSpaceGI = true;
+    EXPECT_TRUE (full.isEnabled (Feature::screenSpaceGI, settings));
+
+    // Raster ignores the setting, even with ambient occlusion on a device that can draw its prepass
+    for (const auto& facts : { webgl2 (true, 4), desktopMetal() })
+    {
+        auto raster = settings;
+        raster.tier = Preference::raster;
+        raster.ambientOcclusion = true;
+        const RenderCapabilities capabilities (facts, raster, 4);
+        EXPECT_EQ (capabilities.getTier(), Tier::raster);
+        EXPECT_TRUE (capabilities.isEnabled (Feature::ambientOcclusion, raster));
+        EXPECT_FALSE (capabilities.isAvailable (Feature::screenSpaceGI));
+        EXPECT_FALSE (capabilities.isEnabled (Feature::screenSpaceGI, raster));
+    }
+}
+
+TEST_F (RenderCapabilitiesTests, ScreenSpaceGIRequiresAmbientOcclusion)
+{
+    // It extends the horizon search of the ambient occlusion: without it, no GI
+    RenderSettings settings;
+    settings.screenSpaceGI = true;
+    settings.ambientOcclusion = false;
+    const RenderCapabilities capabilities (desktopMetal(), settings, 4);
+    EXPECT_FALSE (capabilities.isEnabled (Feature::ambientOcclusion, settings));
+    EXPECT_FALSE (capabilities.isEnabled (Feature::screenSpaceGI, settings));
+
+    // Ambient occlusion off through its distance too
+    settings.ambientOcclusion = std::nullopt;
+    for (const auto distance : { 0.0f, -1.0f, std::numeric_limits<float>::infinity() })
+    {
+        settings.aoDistance = distance;
+        EXPECT_FALSE (capabilities.isEnabled (Feature::screenSpaceGI, settings)) << distance;
+    }
+
+    settings.aoDistance = 0.2f;
+    EXPECT_TRUE (capabilities.isEnabled (Feature::screenSpaceGI, settings));
+}
+
+TEST_F (RenderCapabilitiesTests, ScreenSpaceGINeedsTheTemporalHistory)
+{
+    // It reads the history temporal anti-aliasing keeps, which only taaSamples above 1 keep
+    RenderSettings settings;
+    settings.screenSpaceGI = true;
+
+    for (const auto samples : { 1, 0, -4 })
+    {
+        settings.taaSamples = samples;
+        EXPECT_FALSE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::screenSpaceGI, settings)) << samples;
+    }
+
+    for (const auto samples : { 2, 16 })
+    {
+        settings.taaSamples = samples;
+        EXPECT_TRUE (RenderCapabilities (desktopMetal(), settings, 4).isEnabled (Feature::screenSpaceGI, settings)) << samples;
+    }
+}
+
+TEST_F (RenderCapabilitiesTests, DepthOfFieldIsAnOptInOfTheFullTier)
+{
+    RenderSettings settings;
+    const RenderCapabilities full (desktopMetal(), settings, 4);
+    EXPECT_TRUE (full.isAvailable (Feature::depthOfField));
+    EXPECT_FALSE (full.isEnabled (Feature::depthOfField, settings));
+
+    settings.depthOfField = true;
+    EXPECT_TRUE (full.isEnabled (Feature::depthOfField, settings));
+
+    // Raster ignores the setting for now, even on a device with half-float targets and the prepass
+    auto facts = webgl2 (true, 4);
+    facts.depthNormalPrepass = true;
+    const RenderCapabilities raster (facts, settings, 4);
+    EXPECT_EQ (raster.getTier(), Tier::raster);
+    EXPECT_FALSE (raster.isAvailable (Feature::depthOfField));
+    EXPECT_FALSE (raster.isEnabled (Feature::depthOfField, settings));
+}

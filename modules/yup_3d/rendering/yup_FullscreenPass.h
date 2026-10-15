@@ -30,8 +30,8 @@ namespace yup
     The bundle pairs shaders/yup_Fullscreen.vert with a fragment shader of the pass. The vertex
     shader outputs `uv` at location 0, running from (0, 0) at the top-left texel to (1, 1) at the
     bottom-right one on every backend. The pipeline has no vertex buffer, culls nothing, has no
-    depth, and writes one color target, or several of one format (bind attaches the extra ones
-    with GpuRenderPass::setColorAttachment).
+    depth, and writes one color target, or several (bind attaches the extra ones with
+    GpuRenderPass::setColorAttachment).
 
     The render target of each texture and view drawn into is kept for the next draws, until a
     trimUnusedTargets() finds it was not drawn into since the previous one: call it once per frame.
@@ -67,10 +67,22 @@ public:
     Result prepare (const GpuDevice::Ptr& device, const uint8* bundleData, size_t bundleSize,
                     GpuTextureFormat outputFormat, bool additiveBlend = false, int colorTargets = 1);
 
+    /** Compiles the bundle (yup_Fullscreen.vert + a fragment) for color targets of different formats.
+
+        @param device         The device to compile for.
+        @param bundleData     The serialized shader bundle.
+        @param bundleSize     The size of the bundle in bytes.
+        @param outputFormats  The format of each color target the fragment writes, the first one
+                              the texture draw() renders into, at least one.
+        @param additiveBlend  True to add the outputs to the targets instead of replacing them.
+    */
+    Result prepare (const GpuDevice::Ptr& device, const uint8* bundleData, size_t bundleSize,
+                    Span<const GpuTextureFormat> outputFormats, bool additiveBlend = false);
+
     /** Draws one fullscreen triangle into @p target (one mip / layer of it), binding through @p bind.
 
         @param frame   The frame to record into.
-        @param target  A render-target texture of the prepared format.
+        @param target  A render-target texture of the first prepared format.
         @param view    The mip level and layer of @p target to render into.
         @param bind    Sets the textures, samplers and uniforms of the draw, and attaches the
                        color targets after the first one.

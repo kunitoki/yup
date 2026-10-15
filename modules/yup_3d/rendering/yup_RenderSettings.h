@@ -48,6 +48,20 @@ struct YUP_API RenderSettings
     float bloomIntensity = 0.05f; ///< How much of the blurred glow is added.
     float bloomRadius = 0.85f;    ///< 0 to 1: how far the glow spreads.
 
+    /** Depth of field: what lies away from CameraNode::focusDistance blurs by the camera's
+        CameraNode::fStop, with a bokeh shaped by CameraNode::apertureBlades. Full tier only for now:
+        the raster tier ignores it, which is not an error. Off by default, costing nothing then; a
+        camera that cannot blur (orthographic, an fStop of 0 or less, or no active camera) costs
+        nothing either. It applies after the temporal accumulation: changing it, or the depth of
+        field fields of the camera, neither restarts nor discards it, so repaint after such a change.
+    */
+    bool depthOfField = false;
+
+    /** The largest blur of the depth of field, as a diameter in pixels of the final image, at most
+        DepthOfField::maxBlurSize (64). 0 or less blurs nothing.
+    */
+    float depthOfFieldMaxSize = 32.0f;
+
     /** Shadow cascades of the shadow casting directional light, from 1 to 4. More cascades keep
         shadows sharp further away, at the cost of one depth pass each. 0 picks the tier default:
         4 on full, RenderCapabilities::defaultRasterCascades on raster. See RenderCapabilities::getCascadeCount().
@@ -93,6 +107,32 @@ struct YUP_API RenderSettings
         Unset picks the tier default: on for full. The raster tier ignores it, which is not an error.
     */
     std::optional<bool> screenSpaceReflections;
+
+    /** Screen-space diffuse global illumination: the ambient occlusion's horizon search also
+        gathers the light of what occludes each surface, taken from the previous frame, so nearby
+        lit surfaces bounce their color onto it. On-screen and within aoDistance only, one bounce
+        per frame. Full tier only, and only with ambient occlusion and temporal anti-aliasing
+        (taaSamples above 1), whose history it reads (see RenderCapabilities::Feature::screenSpaceGI).
+        Unset picks the tier default: off on every tier. The raster tier ignores it, which is not an error.
+    */
+    std::optional<bool> screenSpaceGI;
+
+    /** An intermediate image of the full tier shown in place of the final one, see debugView. */
+    enum class DebugView
+    {
+        none,             ///< The final image.
+        ambientOcclusion, ///< The ambient occlusion visibility, as gray: white is unoccluded.
+        reflections,      ///< The screen-space reflections, exposed and weighted by their confidence.
+        indirectDiffuse   ///< The light the screen-space diffuse GI gathers, exposed, before the surface colors.
+    };
+
+    /** Shows an intermediate image instead of the final one, for tuning the screen-space effects.
+        Full tier only: the raster tier ignores it, which is not an error. An image the frame did not
+        produce (its feature off or unavailable, or no history to read it from yet) shows black. It
+        is shown at the size of the frame without filtering, tone mapping, bloom or background. It
+        neither restarts nor discards the temporal accumulation, and none, the default, costs nothing.
+    */
+    DebugView debugView = DebugView::none;
 
     bool operator== (const RenderSettings&) const = default;
 };

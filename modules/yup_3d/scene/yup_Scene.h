@@ -161,6 +161,16 @@ public:
     void setRenderSettings (const RenderSettings& newSettings) noexcept { renderSettings = newSettings; }
 
     //==============================================================================
+    /** Returns the height fog filling the scene, disabled by default. */
+    const WorldFog& getWorldFog() const noexcept { return worldFog; }
+
+    /** Changes the height fog filling the scene.
+
+        @param newFog The fog, which renders only when WorldFog::enabled is true.
+    */
+    void setWorldFog (const WorldFog& newFog) noexcept { worldFog = newFog; }
+
+    //==============================================================================
     /** Calls Node::update() on every part of every visible entity, depth-first.
 
         Parts must not attach or detach parts of their own entity from update().
@@ -184,6 +194,7 @@ private:
     bool environmentVisible = false;
     float environmentBlur = 0.0f;
     RenderSettings renderSettings;
+    WorldFog worldFog;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scene)
 };

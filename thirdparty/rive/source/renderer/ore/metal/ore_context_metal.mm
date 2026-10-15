@@ -1089,6 +1089,19 @@ inline std::unique_ptr<RenderPass> ContextMetal::mtlBeginRenderPass(
         }
     }
 
+    if (m_renderPassSampleBuffer != nil)
+    {
+        if (@available(macOS 11.0, iOS 14.0, tvOS 14.0, *))
+        {
+            auto* sampling = rpd.sampleBufferAttachments[0];
+            sampling.sampleBuffer = m_renderPassSampleBuffer;
+            sampling.startOfVertexSampleIndex = m_renderPassSampleIndex;
+            sampling.endOfVertexSampleIndex = m_renderPassSampleIndex + 1;
+            sampling.startOfFragmentSampleIndex = m_renderPassSampleIndex + 2;
+            sampling.endOfFragmentSampleIndex = m_renderPassSampleIndex + 3;
+        }
+    }
+
     id<MTLRenderCommandEncoder> encoder =
         [m_mtlCommandBuffer renderCommandEncoderWithDescriptor:rpd];
 

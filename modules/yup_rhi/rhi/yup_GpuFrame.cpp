@@ -52,6 +52,23 @@ struct GpuFrame::Impl
         pass, so beginning one finishes it, and so does submitting the frame. */
     GpuComputePass::Impl* openComputePass = nullptr;
 
+    /** Set by GpuFrame::setTimingEnabled() with the status, read without its lock when passes begin. */
+    bool timingEnabled = false;
+
+    /** The scopes opened so far, in order, and the index of the open one, or -1. A scope stays
+        available while every pass begun in it can be sampled. */
+    std::vector<GpuScopeTiming> scopes;
+    int openScope = -1;
+
+    /** Samples every pass of a measuring frame, created by its first pass. */
+    std::shared_ptr<GpuDevice::ScopeSampler> scopeSampler;
+    bool scopeSamplerFailed = false;
+
+    /** Returns the sampler the pass about to begin is sampled with, or nullptr when it is not
+        sampled, which makes the open scope unavailable. @p scopeIndex receives the scope the
+        pass is attributed to, or -1 for none. */
+    GpuDevice::ScopeSampler* samplerForNextPass (int& scopeIndex);
+
     std::vector<rive::rcp<rive::ore::Buffer>> liveBuffers;
     std::vector<rive::rcp<rive::ore::TextureView>> liveViews;
     std::vector<rive::rcp<rive::ore::Sampler>> liveSamplers;
@@ -216,6 +233,34 @@ void GpuFrame::Impl::releaseCommands()
         device->releaseFrameCommands (std::exchange (commandBuffer, nullptr));
 }
 
+GpuDevice::ScopeSampler* GpuFrame::Impl::samplerForNextPass (int& scopeIndex)
+{
+    scopeIndex = -1;
+    auto* scope = openScope >= 0 ? &scopes[static_cast<size_t> (openScope)] : nullptr;
+
+    if (timingEnabled && scopeSampler == nullptr && ! scopeSamplerFailed && device->isScopeTimingAvailable())
+    {
+        scopeSampler = device->createScopeSampler (*oreCtx);
+        scopeSamplerFailed = scopeSampler == nullptr;
+    }
+
+    // A scope is measured only when all of its passes are
+    if (! timingEnabled || scopeSampler == nullptr)
+    {
+        if (scope != nullptr)
+            scope->available = false;
+
+        return nullptr;
+    }
+
+    // Passes outside a measured scope are sampled too, so a later pass is not credited the time it
+    // waited behind them
+    if (scope != nullptr && scope->available)
+        scopeIndex = openScope;
+
+    return scopeSampler.get();
+}
+
 //==============================================================================
 
 GpuFrame::Impl* GpuFrame::getImpl() noexcept
@@ -322,10 +367,16 @@ bool GpuFrame::submit()
     if (i == nullptr || i->oreCtx == nullptr || i->submitted)
         return false;
 
+    const auto measuresScopes = i->timingEnabled && i->device->isScopeTimingAvailable();
+    i->openScope = -1;
+
     if (auto& block = i->status.block)
     {
         const ScopedLock sl (*block->lock);
         block->submitted = true;
+
+        if (measuresScopes)
+            block->scopes = std::move (i->scopes);
     }
 
     auto submitted = Result::ok();
@@ -341,7 +392,7 @@ bool GpuFrame::submit()
             yup_finishComputePass (*i->openComputePass);
 
         i->oreCtx->endFrame();
-        submitted = i->device->submitFrameCommands (i->commandBuffer);
+        submitted = i->device->submitFrame (i->commandBuffer, i->generation, i->scopeSampler, i->timingEnabled);
     }
 
     i->submitted = true;
@@ -381,6 +432,34 @@ GpuFrameStatus GpuFrame::getStatus()
 
     i->claimStatus();
     return i->status;
+}
+
+void GpuFrame::setTimingEnabled (bool shouldMeasure)
+{
+    auto* i = getImpl();
+    if (i == nullptr || i->submitted || i->status.block == nullptr)
+        return;
+
+    i->timingEnabled = shouldMeasure;
+
+    const ScopedLock sl (*i->status.block->lock);
+    i->status.block->timingEnabled = shouldMeasure;
+}
+
+void GpuFrame::beginScope (StringRef name)
+{
+    auto* i = getImpl();
+    if (i == nullptr || i->submitted)
+        return;
+
+    i->openScope = static_cast<int> (i->scopes.size());
+    i->scopes.push_back ({ String (name), 0.0, true });
+}
+
+void GpuFrame::endScope()
+{
+    if (auto* i = getImpl())
+        i->openScope = -1;
 }
 
 } // namespace yup

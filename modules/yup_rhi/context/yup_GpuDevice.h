@@ -308,6 +308,26 @@ public:
     */
     virtual bool isDeviceLost() const noexcept { return false; }
 
+    /** Returns true if this device measures the GPU time of the frames that ask for it
+        with GpuFrame::setTimingEnabled().
+
+        Only Metal measures for now; every other backend returns false, and its frames
+        report their timings unavailable.
+
+        @see GpuFrameStatus::getTimings
+    */
+    virtual bool isFrameTimingAvailable() const noexcept { return false; }
+
+    /** Returns true if the frames that measure their GPU time also measure the time of
+        their scopes (see GpuFrame::beginScope()).
+
+        Only Metal devices that sample GPU timestamps at stage boundaries measure scopes;
+        on every other device the timings of a frame list no scopes.
+
+        @see GpuFrameTimings::scopes
+    */
+    virtual bool isScopeTimingAvailable() const noexcept { return false; }
+
     /** Returns the first GPU execution failure of a frame nobody owns, and clears them.
 
         Frames are submitted without waiting, so a frame the GPU fails to execute
@@ -328,6 +348,13 @@ public:
         device report @p error once it completes, as if the GPU had failed to execute it.
     */
     void failNextFrameForTesting (const String& error);
+
+    /** @internal Test hook, not for production use: caps the GPU timestamp samples each frame
+        measuring its scopes can take, so a test runs out of them with a few encoders. A render
+        pass takes 4 samples and a compute pass 2. 0 restores the default. Only devices where
+        isScopeTimingAvailable() is true take samples.
+    */
+    virtual void setScopeSampleCapacityForTesting (int samples) { ignoreUnused (samples); }
 
     /** @internal Test accessor, not for production use: the number of uniform buffers this device keeps for reuse, pooled or
         held by submitted frames until the GPU is done with them, and their total capacity in bytes.
@@ -616,6 +643,125 @@ protected:
     */
     virtual Result submitFrameCommands (void* commandBuffer);
 
+    //==============================================================================
+    /** The order the frames of the device were committed in, and the GPU timestamp the work of
+        the latest one ended at, shared with the completion handlers, which may outlive the device.
+
+        A tile-based GPU begins a pass while the passes before it still shade, those of earlier
+        frames included, so a pass is credited only the time past the end of the work before it
+        (see GpuFrameTimings::scopes). Within a frame the passes it sampled tell where that work
+        ended; across frames this timeline does, fed by every frame once one has measured. A
+        frame completing out of commit order, or GPU timestamps going back, makes it ignore the
+        timeline rather than credit a pass 0 ms. Thread safe.
+    */
+    class YUP_API ScopeTimeline
+    {
+    public:
+        /** One sampled pass, in GPU timestamp ticks. */
+        struct Pass
+        {
+            int scopeIndex = -1; ///< The scope it is attributed to, or -1 for none.
+            bool sampled = false; ///< False when the pass could not be sampled.
+            uint64 start = 0;     ///< Its earliest sample, or 0 when it wrote none (no work).
+            uint64 end = 0;       ///< Its latest sample.
+        };
+
+        /** Returns the sequence number of the frame committed next. */
+        uint64 commit() noexcept;
+
+        /** Starts following the frames, once the first one measures its scopes. */
+        void activate() noexcept;
+
+        /** True once a frame measured its scopes. */
+        bool isActive() const noexcept;
+
+        /** Records that the GPU work of the frame of @p sequence ended at @p end. Frames
+            committed before the latest one recorded are ignored. */
+        void advance (uint64 sequence, uint64 end);
+
+        /** Returns the time of each scope the @p passes of the frame of @p sequence were
+            attributed to, by scope index, each pass credited the part of it past the end of
+            the work before it, and records where the frame's work ended.
+
+            @param sequence            The frame's commit() number.
+            @param passes              The frame's passes, in the order they were encoded.
+            @param now                 A GPU timestamp taken after the frame completed.
+            @param nanosecondsPerTick  The length of a GPU timestamp tick.
+        */
+        std::vector<GpuScopeTiming> attribute (uint64 sequence, const std::vector<Pass>& passes, uint64 now, double nanosecondsPerTick);
+
+    private:
+        CriticalSection lock;
+        uint64 nextSequence = 0;
+        uint64 latestSequence = 0;
+        uint64 latestEnd = 0;
+        std::atomic<bool> active { false };
+    };
+
+    /** Returns the scope timeline of this device, for completion handlers to capture. */
+    std::shared_ptr<ScopeTimeline> getScopeTimeline() const { return scopeTimeline; }
+
+    /** Samples the GPU time of the native encoders of one frame, for its scopes.
+
+        Created by a measuring frame when its first encoder opens, on devices where
+        isScopeTimingAvailable() is true, and handed to the device when the frame is
+        submitted, so the device resolves the samples once the frame completed. Every
+        encoder of the frame is sampled, so each is credited only the time past the end
+        of the work before it.
+    */
+    class ScopeSampler
+    {
+    public:
+        virtual ~ScopeSampler() = default;
+
+        /** Samples the render pass the frame opens next, attributing it to the scope of
+            index @p scopeIndex, or to none when it is -1. Called right before the pass opens. */
+        virtual void beginRenderPass (int scopeIndex) = 0;
+
+        /** Called right after the render pass opened, or failed to: later passes are not sampled. */
+        virtual void endRenderPass() = 0;
+
+        /** Returns the native descriptor the compute pass the frame opens next is created with
+            to be sampled for the scope of @p scopeIndex (-1 for none), or nullptr once the frame
+            ran out of samples. On Metal a retained MTLComputePassDescriptor, which the
+            backend creating the pass takes ownership of. */
+        virtual void* beginComputePass (int scopeIndex) = 0;
+
+        /** Called right after the compute pass opened: @p sampled is false when it could not
+            take the descriptor, which leaves its scope unmeasured. */
+        virtual void endComputePass (bool sampled) = 0;
+
+        /** Returns the time of each scope a pass was sampled for, by scope index, once the frame
+            of commit number @p sequence completed, attributed with @p timeline. Scopes no pass
+            was sampled for, past the last sampled one, are left out. */
+        virtual std::vector<GpuScopeTiming> resolveScopes (ScopeTimeline& timeline, uint64 sequence) const = 0;
+    };
+
+    /** Submits the command buffer the frame of @p generation recorded into.
+
+        Backends that report completion arrange here to call completeFrameStatus() once the
+        GPU finished the frame, when they know whether it measures its scopes. The default
+        calls submitFrameCommands().
+
+        @param commandBuffer   The handle beginFrameCommands() returned.
+        @param generation      The generation of the frame.
+        @param scopeSampler    The sampler the frame created when it measured, or nullptr. The
+                               device keeps it until the GPU finished the frame.
+        @param measuresScopes  False when the frame turned timing off since: the samples are
+                               then not resolved.
+
+        @returns Result::ok(), or why the frame could not be submitted.
+    */
+    virtual Result submitFrame (void* commandBuffer, uint64_t generation, std::shared_ptr<ScopeSampler> scopeSampler, bool measuresScopes);
+
+    /** Creates the sampler of a frame that starts measuring its scopes, whose passes begin on
+        @p frameContext.
+
+        @returns The sampler, or nullptr when the device cannot measure scopes (the default)
+                 or could not allocate the samples: the scopes then report unavailable.
+    */
+    virtual std::shared_ptr<ScopeSampler> createScopeSampler (rive::ore::Context& frameContext);
+
     /** Waits until the GPU finished a submitted frame command buffer.
 
         @returns Result::ok(), or the failure the GPU reported executing it. Does
@@ -634,15 +780,21 @@ protected:
     virtual bool reportsFrameCompletion() const noexcept { return false; }
 
     /** Records the GPU outcome of the frame of @p generation, for its status, its waiter
-        or takeGpuFailure(). Thread safe.
-    */
-    void completeFrameStatus (uint64_t generation, const Result& result);
+        or takeGpuFailure(), with the GPU time the backend measured for it. The timings are
+        kept only when the frame asked for them and succeeded. Thread safe.
 
-    /** Returns a function doing what completeFrameStatus() does, which stays safe to call after
-        this device is gone: completion handlers capture it rather than the device, as they may
-        run after it was destroyed.
+        The backend lists in GpuFrameTimings::scopes the time of each scope it sampled, by
+        scope index and without names: the frame's own scope list provides the names.
     */
-    std::function<void (uint64_t generation, const Result& result)> getFrameCompletion() const;
+    void completeFrameStatus (uint64_t generation, const Result& result, GpuFrameTimings timings = {});
+
+    /** Does what completeFrameStatus() does, and stays safe to call after the device is gone. */
+    class YUP_API FrameCompletion;
+
+    /** Returns a FrameCompletion for this device: completion handlers capture it rather than
+        the device, as they may run after it was destroyed.
+    */
+    FrameCompletion getFrameCompletion() const;
 
     /** Pool of in-flight frames assumed by the default getSafeFrameGeneration(). */
     static constexpr uint64_t framesInFlight = 3;
@@ -769,12 +921,26 @@ private:
         std::vector<std::shared_ptr<GpuFrameStatus::Block>> unclaimedFailures;
         String nextFrameFailure;
 
-        void complete (uint64_t generation, const Result& result);
+        void complete (uint64_t generation, const Result& result, GpuFrameTimings timings);
     };
 
     std::shared_ptr<FrameStatuses> frameStatuses = std::make_shared<FrameStatuses>();
+    std::shared_ptr<ScopeTimeline> scopeTimeline = std::make_shared<ScopeTimeline>();
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuDevice)
+};
+
+//==============================================================================
+class YUP_API GpuDevice::FrameCompletion
+{
+public:
+    /** Completes the status of the frame of @p generation, as completeFrameStatus() does. */
+    void operator() (uint64_t generation, const Result& result, GpuFrameTimings timings = {}) const;
+
+private:
+    friend class GpuDevice;
+
+    std::shared_ptr<FrameStatuses> statuses;
 };
 
 } // namespace yup

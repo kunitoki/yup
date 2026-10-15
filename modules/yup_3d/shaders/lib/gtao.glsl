@@ -37,7 +37,7 @@ layout(set = 0, binding = 3) uniform sampler pointClamp;
 layout(set = 1, binding = 0) uniform GtaoBlock
 {
     vec4 params; // x the occlusion distance in view units, y slices, z steps per side, w input texels per output texel
-    vec4 noise;  // x 1 for the fixed 4x4 pattern, else interleaved gradient noise; y 1 when it turns with the frame
+    vec4 noise;  // x 1 for the fixed 4x4 pattern, else interleaved gradient noise; y 1 when it turns with the frame; z the screen-space GI trace: 1 / the exposure of the previous scene color
     vec4 denoise; // xy the output texel step of the 1D denoise pass
 } gtao;
 

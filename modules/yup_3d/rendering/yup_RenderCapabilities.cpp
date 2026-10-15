@@ -90,6 +90,8 @@ bool RenderCapabilities::isAvailable (Feature feature) const noexcept
         case Feature::temporalAntiAliasing:
         case Feature::contactShadows:
         case Feature::screenSpaceReflections:
+        case Feature::screenSpaceGI:
+        case Feature::depthOfField:
             return false;
 
         case Feature::softShadows:
@@ -132,6 +134,13 @@ bool RenderCapabilities::isEnabled (Feature feature, const RenderSettings& setti
         case Feature::screenSpaceReflections:
             return isAvailable (feature) && settings.screenSpaceReflections.value_or (tier == Tier::full)
                 && isEnabled (Feature::temporalAntiAliasing, settings);
+
+        case Feature::screenSpaceGI:
+            return isAvailable (feature) && settings.screenSpaceGI.value_or (false)
+                && isEnabled (Feature::ambientOcclusion, settings) && isEnabled (Feature::temporalAntiAliasing, settings);
+
+        case Feature::depthOfField:
+            return isAvailable (feature) && settings.depthOfField;
     }
 
     return false;
