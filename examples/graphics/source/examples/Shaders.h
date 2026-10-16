@@ -23,7 +23,25 @@
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 
-#include "shaders/ShaderPresets.h"
+//==============================================================================
+/** A Shadertoy-style fragment shader shown in the Shaders demo list, read from data/shaders/live. */
+struct ShaderPreset
+{
+    const char* name;
+    const char* fragment;
+};
+
+inline constexpr ShaderPreset shaderPresets[] = {
+    { "Default", "data/shaders/live/default.shader" },
+    { "Creation", "data/shaders/live/creation.shader" },
+    { "Plasma", "data/shaders/live/plasma.shader" },
+    { "Raymarched Spheres", "data/shaders/live/spheres.shader" },
+    { "Mouse Ripples", "data/shaders/live/ripples.shader" },
+    { "Noise Warp", "data/shaders/live/noisewarp.shader" },
+    { "Art", "data/shaders/live/art.shader" },
+    { "Curl Bands", "data/shaders/live/curlbands.shader" },
+    { "Ribbon Clouds", "data/shaders/live/ribbon.shader" }
+};
 
 //==============================================================================
 /**
@@ -114,22 +132,22 @@ public:
     //==============================================================================
     void refreshDisplay (double lastFrameTimeSeconds) override
     {
-        frameDelta = (float) lastFrameTimeSeconds;
-
         if (playing)
         {
+            frameDelta = (float) lastFrameTimeSeconds;
             playbackTime += lastFrameTimeSeconds;
             ++playbackFrame;
+
+            if (auto* native = getNativeComponent())
+                frameRate = native->getCurrentFrameRate();
+
+            fpsLabel.setText (yup::String (frameRate, 1) + " fps", yup::dontSendNotification);
+            requestFrame();
         }
 
-        if (auto* native = getNativeComponent())
-            frameRate = native->getCurrentFrameRate();
-
+        // Labels only repaint when their text changes, so these stay idle while paused unless rewound or resized
         timeLabel.setText (yup::String (playbackTime, 2) + "s", yup::dontSendNotification);
-        fpsLabel.setText (yup::String (frameRate, 1) + " fps", yup::dontSendNotification);
         sizeLabel.setText (yup::String (pixelWidth) + " x " + yup::String (pixelHeight) + " px", yup::dontSendNotification);
-
-        repaint (viewportArea);
     }
 
     //==============================================================================
@@ -168,27 +186,36 @@ public:
             return;
 
         if (target == nullptr || target->getWidth() != pixelWidth || target->getHeight() != pixelHeight)
+        {
             target = yup::GpuTarget::create (device, pixelWidth, pixelHeight);
+            frameNeeded = true;
+        }
 
         if (target == nullptr)
             return;
 
-        const auto inputs = makeInputs();
-
-        auto frame = yup::GpuFrame::begin (device);
-        auto pass = target->beginRenderPass (frame, { true, yup::GpuColor::transparentBlack() });
-        pass.setPipeline (pipeline);
-        pass.setUniformBuffer (0, 0, &inputs, sizeof (inputs));
-
-        for (int i = 0; i < numChannels; ++i)
+        // Repaints of the labels or the editor just redraw the last frame, the shader runs only when requested
+        if (frameNeeded)
         {
-            pass.setTexture (0, 1 + i, channelTextures[(size_t) i]);
-            pass.setSampler (0, 1 + numChannels + i, channelSampler);
-        }
+            frameNeeded = false;
 
-        pass.draw (3);
-        pass.finish();
-        frame.submit();
+            const auto inputs = makeInputs();
+
+            auto frame = yup::GpuFrame::begin (device);
+            auto pass = target->beginRenderPass (frame, { true, yup::GpuColor::transparentBlack() });
+            pass.setPipeline (pipeline);
+            pass.setUniformBuffer (0, 0, &inputs, sizeof (inputs));
+
+            for (int i = 0; i < numChannels; ++i)
+            {
+                pass.setTexture (0, 1 + i, channelTextures[(size_t) i]);
+                pass.setSampler (0, 1 + numChannels + i, channelSampler);
+            }
+
+            pass.draw (3);
+            pass.finish();
+            frame.submit();
+        }
 
         g.drawTexture (target->asTexture(), viewportArea);
     }
@@ -257,6 +284,7 @@ public:
 
         const auto position = toShaderPixels (event.getPosition());
         mouse = { position.getX(), position.getY(), position.getX(), position.getY() };
+        requestFrame();
     }
 
     void mouseDrag (const yup::MouseEvent& event) override
@@ -267,6 +295,7 @@ public:
         const auto position = toShaderPixels (event.getPosition());
         mouse[0] = position.getX();
         mouse[1] = position.getY();
+        requestFrame();
     }
 
     void mouseUp (const yup::MouseEvent&) override
@@ -277,6 +306,7 @@ public:
         mouseDragging = false;
         mouse[2] = -std::abs (mouse[2]);
         mouse[3] = -std::abs (mouse[3]);
+        requestFrame();
     }
 
 private:
@@ -404,9 +434,17 @@ void main()
         if (! yup::isPositiveAndBelow (row, (int) std::size (shaderPresets)))
             return;
 
-        fragmentDocument.setText (shaderPresets[row].fragment);
+        const auto file = getAssetPath (shaderPresets[row].fragment);
+        if (! file.existsAsFile())
+        {
+            setStatus ("Missing preset " + file.getFullPathName(), yup::Colors::tomato);
+            return;
+        }
+
+        fragmentDocument.setText (file.loadFileAsString());
         vertexDocument.setText (defaultVertexSource);
         showStage (false);
+        resetEditor();
 
         rewind();
         requestCompile();
@@ -426,6 +464,15 @@ void main()
             for (const int line : errorLines)
                 codeEditor.setErrorLine (line, true);
         }
+    }
+
+    // setDocument() only resets the editor for a different document, not for new text in the shown one
+    void resetEditor()
+    {
+        errorLines.clear();
+        codeEditor.clearErrorLines();
+        codeEditor.setCaretPosition (0); // also collapses the selection
+        codeEditor.setScrollOffset ({});
     }
 
     void setPresetsVisible (bool shouldBeVisible)
@@ -448,6 +495,14 @@ void main()
     {
         playbackTime = 0.0;
         playbackFrame = 0;
+        requestFrame();
+    }
+
+    /** Runs the shader again on the next paint, which otherwise redraws the last frame. */
+    void requestFrame()
+    {
+        frameNeeded = true;
+        repaint (viewportArea);
     }
 
     void setPlaying (bool shouldPlay)
@@ -492,6 +547,7 @@ void main()
         }
 
         pipeline = result.getValue();
+        frameNeeded = true;
         postCompileResult ({}, elapsedMs);
     }
 
@@ -600,6 +656,7 @@ void main()
             vertexDocument.setText (*vertexCode);
             fragmentDocument.setText (*fragmentCode);
             showStage (false);
+            resetEditor();
 
             rewind();
             requestCompile();
@@ -740,6 +797,7 @@ void main()
     yup::String pendingVertexSource;
     yup::String pendingFragmentSource;
     bool compilePending = false;
+    bool frameNeeded = true;
 
     // Lines (0-based) of the last failed compile, in the stage that failed
     std::vector<int> errorLines;
