@@ -201,6 +201,7 @@ static void printUsage()
         "  --vert <path>           Shorthand for --stage vertex <path>\n"
         "  --frag <path>           Shorthand for --stage fragment <path>\n"
         "  --output <path>         Output .ysl bundle file path\n"
+        "  --compress <level>      LZAV compression: none, fast, high (default: high)\n"
         "\n"
         "Source options:\n"
         "  --source-lang <lang>    Source language: glsl, hlsl, essl (default: glsl)\n"
@@ -295,6 +296,21 @@ static int runCompileMode (const ArgumentList& args)
     }
 
     const auto outputPath = resolveFile (getOptionValue (args, "--output"));
+
+    auto compression = ShaderBundle::Compression::high;
+    if (args.containsOption ("--compress"))
+    {
+        const String level = getOptionValue (args, "--compress");
+        if (level == "none")
+            compression = ShaderBundle::Compression::none;
+        else if (level == "fast")
+            compression = ShaderBundle::Compression::fast;
+        else if (level != "high")
+        {
+            log->writeToLog ("Unknown compression level: " + level);
+            return 1;
+        }
+    }
 
     // -- Source language
     ShaderLanguage sourceLanguage = ShaderLanguage::glsl;
@@ -407,7 +423,7 @@ static int runCompileMode (const ArgumentList& args)
     const ShaderBundle& bundle = result.getReference();
 
     // Persist to file
-    const auto saveResult = bundle.saveToFile (outputPath);
+    const auto saveResult = bundle.saveToFile (outputPath, compression);
     if (saveResult.failed())
     {
         log->writeToLog ("Failed to save bundle: " + saveResult.getErrorMessage());

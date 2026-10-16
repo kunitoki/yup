@@ -106,6 +106,22 @@ The whole file is a single `RIFF` chunk whose form type is `YSLB`.
 > Both older and newer versions are rejected with an error message that
 > identifies the mismatch.
 
+### Compressed bundles (`YSLZ`)
+
+Bundles are compressed by default. A compressed bundle is a `RIFF` chunk whose
+form type is `YSLZ`, wrapping the complete `YSLB` file compressed with
+[LZAV](https://github.com/avaneev/lzav):
+
+```
++--------+--------+----------+-----------------+---------------------------+
+|  RIFF  |  size  |  'YSLZ'  |  raw size (u32) |  LZAV payload (YSLB file) |
++--------+--------+----------+-----------------+---------------------------+
+```
+
+`raw size` is the byte length of the uncompressed `YSLB` file. Every load function
+detects the form type and decompresses transparently; the decompressed data must
+be a `YSLB` bundle, so compressed bundles never nest.
+
 ---
 
 ## 3. Per-Stage Chunk (`SHDR`)
@@ -254,6 +270,7 @@ as `SBRO` does, which older readers skip.
 | `RIFF` | `kFourCC_RIFF`    | Outer RIFF container.                                |
 | `LIST` | `kFourCC_LIST`    | Generic list container.                              |
 | `YSLB` | `kFourCC_YSLB`    | Bundle form type (magic).                            |
+| `YSLZ` | `kFourCC_YSLZ`    | Compressed bundle form type.                         |
 | `VERS` | `kFourCC_VERS`    | Format version chunk.                                |
 | `SHAD` | `kFourCC_SHAD`    | List type for the stage list.                        |
 | `SHDR` | `kFourCC_SHDR`    | Per-stage chunk.                                     |
@@ -361,6 +378,10 @@ if (auto* info = loaded.getReference().findShader (ShaderStage::vertex, ShaderLa
 | `saveToFile`             | `loadFromFile`                           |
 | `saveToMemoryBlock`      | `loadFromMemoryBlock`                    |
 |                          | `loadFromData` (raw pointer + size)      |
+
+Every save function takes an optional `ShaderBundle::Compression`: `high` (the
+default, smallest output), `fast` (quicker to save) or `none` (a plain `YSLB`
+file). Both compressed levels decompress at the same speed.
 
 ### Version rejection
 

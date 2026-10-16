@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core
+    dependencies:       yup_core lzav_library
     optionalDeps:       glslang spirv_cross
 
   END_YUP_MODULE_DECLARATION

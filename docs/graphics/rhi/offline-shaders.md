@@ -193,6 +193,7 @@ flags verbatim.
 --vert <path>            Shorthand for --stage vertex <path>
 --frag <path>            Shorthand for --stage fragment <path>
 --output <path>          Output .ysl bundle file path
+--compress <level>       LZAV compression: none, fast, high (default: high)
 ```
 
 ### Source options

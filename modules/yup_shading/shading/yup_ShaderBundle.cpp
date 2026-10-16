@@ -50,6 +50,7 @@ constexpr uint32_t kFourCC_REFL = makeFourCC ('R', 'E', 'F', 'L');
 constexpr uint32_t kFourCC_ISRC = makeFourCC ('I', 'S', 'R', 'C');
 constexpr uint32_t kFourCC_BINY = makeFourCC ('B', 'I', 'N', 'Y');
 constexpr uint32_t kFourCC_SBRO = makeFourCC ('S', 'B', 'R', 'O');
+constexpr uint32_t kFourCC_YSLZ = makeFourCC ('Y', 'S', 'L', 'Z');
 
 constexpr uint32_t kCurrentVersion = 2;
 
@@ -148,7 +149,7 @@ const MemoryBlock* ShaderBundle::getSPIRV (ShaderStage stage) const
 //==============================================================================
 // Save
 
-Result ShaderBundle::saveToStream (OutputStream& stream) const
+Result ShaderBundle::saveToStream (OutputStream& stream, Compression compression) const
 {
     MemoryOutputStream buf;
 
@@ -256,26 +257,60 @@ Result ShaderBundle::saveToStream (OutputStream& stream) const
         });
     });
 
+    if (compression == Compression::none)
+    {
+        if (! stream.write (buf.getData(), buf.getDataSize()))
+            return Result::fail ("ShaderBundle: failed to write to stream");
+
+        return Result::ok();
+    }
+
+    // A compressed bundle is a RIFF 'YSLZ' form wrapping the whole YSLB bundle
+    if (buf.getDataSize() > static_cast<size_t> (std::numeric_limits<int>::max()))
+        return Result::fail ("ShaderBundle: bundle too large to compress");
+
+    const auto rawLength = static_cast<int> (buf.getDataSize());
+    const auto bound = compression == Compression::high ? lzav::lzav_compress_bound_hi (rawLength)
+                                                        : lzav::lzav_compress_bound (rawLength);
+    if (bound <= 0)
+        return Result::fail ("ShaderBundle: bundle too large to compress");
+
+    HeapBlock<char> packed (static_cast<size_t> (bound));
+    const auto packedLength = compression == Compression::high
+                                ? lzav::lzav_compress_hi (buf.getData(), packed.get(), rawLength, bound)
+                                : lzav::lzav_compress_default (buf.getData(), packed.get(), rawLength, bound);
+    if (packedLength <= 0)
+        return Result::fail ("ShaderBundle: compression failed");
+
+    buf.reset();
+
+    writeChunk (kFourCC_RIFF, [&]
+    {
+        buf.writeInt (static_cast<int> (kFourCC_YSLZ));
+        buf.writeInt (rawLength);
+        buf.write (packed.get(), static_cast<size_t> (packedLength));
+    });
+
     if (! stream.write (buf.getData(), buf.getDataSize()))
         return Result::fail ("ShaderBundle: failed to write to stream");
 
     return Result::ok();
 }
 
-Result ShaderBundle::saveToFile (const File& file) const
+Result ShaderBundle::saveToFile (const File& file, Compression compression) const
 {
     FileOutputStream fos (file);
     if (fos.failedToOpen())
         return Result::fail ("ShaderBundle: failed to open file for writing: " + file.getFullPathName());
     fos.setPosition (0);
     fos.truncate();
-    return saveToStream (fos);
+    return saveToStream (fos, compression);
 }
 
-Result ShaderBundle::saveToMemoryBlock (MemoryBlock& block) const
+Result ShaderBundle::saveToMemoryBlock (MemoryBlock& block, Compression compression) const
 {
     MemoryOutputStream mos (block, false);
-    return saveToStream (mos);
+    return saveToStream (mos, compression);
 }
 
 //==============================================================================
@@ -290,14 +325,36 @@ ResultValue<ShaderBundle> ShaderBundle::loadFromStream (InputStream& stream)
         return makeResultValueFail ("ShaderBundle: missing RIFF signature");
 
     const auto riffSize = static_cast<uint32_t> (stream.readInt());
+    const auto formType = static_cast<uint32_t> (stream.readInt());
 
-    if (static_cast<uint32_t> (stream.readInt()) != kFourCC_YSLB)
+    if (formType != kFourCC_YSLB && formType != kFourCC_YSLZ)
         return makeResultValueFail ("ShaderBundle: not an YSLB bundle (wrong form type)");
 
     const auto dataLen = static_cast<size_t> (riffSize - 4);
     MemoryBlock riffData (dataLen, false);
     if (stream.read (riffData.getData(), static_cast<int> (dataLen)) != static_cast<int> (dataLen))
         return makeResultValueFail ("ShaderBundle: truncated RIFF data");
+
+    if (formType == kFourCC_YSLZ)
+    {
+        if (dataLen <= 4)
+            return makeResultValueFail ("ShaderBundle: invalid compressed data size");
+
+        const auto rawLength = static_cast<int> (ByteOrder::littleEndianInt (riffData.getData()));
+        if (rawLength < 12)
+            return makeResultValueFail ("ShaderBundle: invalid compressed data size");
+
+        MemoryBlock raw (static_cast<size_t> (rawLength), false);
+        const auto* packed = static_cast<const char*> (riffData.getData()) + 4;
+        if (lzav::lzav_decompress (packed, raw.getData(), static_cast<int> (dataLen - 4), rawLength) != rawLength)
+            return makeResultValueFail ("ShaderBundle: corrupted compressed data");
+
+        // Only a plain YSLB may be nested, never another YSLZ
+        if (ByteOrder::littleEndianInt (static_cast<const char*> (raw.getData()) + 8) != kFourCC_YSLB)
+            return makeResultValueFail ("ShaderBundle: compressed data is not an YSLB bundle");
+
+        return loadFromMemoryBlock (raw);
+    }
 
     MemoryInputStream riffStream (riffData, false);
 

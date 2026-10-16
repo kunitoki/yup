@@ -34,6 +34,7 @@ include (${yup_root}/cmake/yup.cmake)
 # Adding all default modules would pull in audio modules that require host
 # system packages (e.g. alsa, pulseaudio) which may not be available.
 yup_add_module ("${yup_root}/thirdparty/zlib" "" "Thirdparty")
+yup_add_module ("${yup_root}/thirdparty/lzav_library" "" "Thirdparty")
 yup_add_module ("${yup_root}/thirdparty/glslang" "" "Thirdparty")
 yup_add_module ("${yup_root}/thirdparty/spirv_cross" "" "Thirdparty")
 yup_add_module ("${yup_root}/thirdparty/spirv_tools" "" "Thirdparty")

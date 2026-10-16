@@ -180,7 +180,7 @@ def main() -> int:
     shader_dir = REPO_ROOT / bundle_set["directory"]
 
     # Builds the bundler, through its own recipe
-    if subprocess.run([args.just, "shader_bundler", "--help"], cwd=REPO_ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+    if subprocess.run([args.just, "shader_bundler", "--help"], cwd=REPO_ROOT).returncode != 0:
         print("could not build yup_shader_bundler", file=sys.stderr)
         return 1
 

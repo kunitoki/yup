@@ -774,7 +774,7 @@ TEST_F (ShaderBundleTests, VersionTooHighRejected)
     ShaderBundle original;
 
     MemoryBlock mem;
-    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+    ASSERT_TRUE (original.saveToMemoryBlock (mem, ShaderBundle::Compression::none).wasOk());
     ASSERT_GE (mem.getSize(), 24u);
 
     // Version field is at bytes 20-23 (big-endian uint32 written by writeInt).
@@ -863,6 +863,114 @@ TEST_F (ShaderBundleTests, SaveAndLoadViaStreamDirectly)
         EXPECT_EQ (loaded.getReference().getShaders()[0].stage, ShaderStage::vertex);
         EXPECT_EQ (loaded.getReference().getShaders()[0].language, ShaderLanguage::hlsl);
     }
+}
+
+TEST_F (ShaderBundleTests, RoundtripEveryCompressionLevel)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::msl));
+
+    for (const auto compression : { ShaderBundle::Compression::none, ShaderBundle::Compression::fast, ShaderBundle::Compression::high })
+    {
+        MemoryBlock mem;
+        ASSERT_TRUE (original.saveToMemoryBlock (mem, compression).wasOk());
+
+        auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
+        ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+        const auto& shaders = loaded.getReference().getShaders();
+        ASSERT_EQ (shaders.size(), 2u);
+        EXPECT_EQ (shaders[0].source, original.getShaders()[0].source);
+        EXPECT_EQ (shaders[1].source, original.getShaders()[1].source);
+    }
+}
+
+TEST_F (ShaderBundleTests, DefaultSaveIsCompressed)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+    ASSERT_GE (mem.getSize(), 16u);
+
+    const auto* bytes = static_cast<const char*> (mem.getData());
+    EXPECT_EQ (memcmp (bytes, "RIFF", 4), 0);
+    EXPECT_EQ (memcmp (bytes + 8, "YSLZ", 4), 0);
+}
+
+TEST_F (ShaderBundleTests, UncompressedSaveIsPlainBundle)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem, ShaderBundle::Compression::none).wasOk());
+    ASSERT_GE (mem.getSize(), 16u);
+
+    EXPECT_EQ (memcmp (static_cast<const char*> (mem.getData()) + 8, "YSLB", 4), 0);
+}
+
+TEST_F (ShaderBundleTests, CompressedBundleIsSmaller)
+{
+    ShaderInfo info = makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::glsl);
+    for (int i = 0; i < 200; ++i)
+        info.source << "float value" << i << " = texture (tex, uv).r * 0.5;\n";
+
+    ShaderBundle original;
+    original.addShader (info);
+
+    MemoryBlock raw, fast, high;
+    ASSERT_TRUE (original.saveToMemoryBlock (raw, ShaderBundle::Compression::none).wasOk());
+    ASSERT_TRUE (original.saveToMemoryBlock (fast, ShaderBundle::Compression::fast).wasOk());
+    ASSERT_TRUE (original.saveToMemoryBlock (high, ShaderBundle::Compression::high).wasOk());
+
+    EXPECT_LT (fast.getSize(), raw.getSize() / 2);
+    EXPECT_LE (high.getSize(), fast.getSize());
+}
+
+TEST_F (ShaderBundleTests, CorruptedCompressedPayloadFails)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+    ASSERT_GT (mem.getSize(), 16u);
+
+    // Everything after the YSLZ raw size
+    for (size_t i = 16; i < mem.getSize(); ++i)
+        mem[i] = static_cast<char> (0xff);
+
+    EXPECT_FALSE (ShaderBundle::loadFromMemoryBlock (mem).wasOk());
+}
+
+TEST_F (ShaderBundleTests, CompressedRawSizeMismatchFails)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+    ASSERT_GT (mem.getSize(), 16u);
+
+    // The YSLZ raw size at bytes 12-15 no longer matches the payload
+    mem[12] = static_cast<char> (mem[12] + 1);
+
+    EXPECT_FALSE (ShaderBundle::loadFromMemoryBlock (mem).wasOk());
+}
+
+TEST_F (ShaderBundleTests, TruncatedCompressedBundleFails)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock full;
+    ASSERT_TRUE (original.saveToMemoryBlock (full).wasOk());
+
+    for (size_t truncLen = 4; truncLen < full.getSize(); truncLen += 7)
+        EXPECT_FALSE (ShaderBundle::loadFromData (full.getData(), truncLen).wasOk()) << "truncLen=" << truncLen;
 }
 
 //==============================================================================
