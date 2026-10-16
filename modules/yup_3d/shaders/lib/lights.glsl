@@ -578,8 +578,10 @@ float lightsSheenAlbedo(float cosine, float roughness)
 
 // The layers of a surface from the clearcoat and sheen rows of its GpuMaterial, the clearcoat over
 // @p clearcoatNormal, each read from the tables at its own roughness: the clearcoat's lobe (layer 1
-// xy) and the sheen albedo E (n.v) (layer 1 z). Nothing is read without a layer
-BsdfLayers lightsLayers(BsdfSurface s, vec4 clearcoat, vec4 sheen, vec3 clearcoatNormal)
+// xy) and the sheen albedo E (n.v) (layer 1 z). The clearcoat is widened by @p kernelRoughness
+// (bsdfKernelRoughness) as the base is, so a smooth coat over fine curved detail doesn't sparkle,
+// and its reflections are read at the widened roughness. Nothing is read without a layer
+BsdfLayers lightsLayers(BsdfSurface s, vec4 clearcoat, vec4 sheen, vec3 clearcoatNormal, float kernelRoughness)
 {
     BsdfLayers layers = bsdfNoLayers();
 
@@ -587,9 +589,9 @@ BsdfLayers lightsLayers(BsdfSurface s, vec4 clearcoat, vec4 sheen, vec3 clearcoa
     {
         layers.clearcoat = clearcoat.x;
         layers.clearcoatNormal = clearcoatNormal;
-        layers.clearcoatRoughness = clamp(clearcoat.y, 0.04, 1.0);
-        float alpha = layers.clearcoatRoughness * layers.clearcoatRoughness;
-        layers.clearcoatAlpha2 = alpha * alpha;
+        float coatRoughness = clamp(clearcoat.y, 0.04, 1.0);
+        layers.clearcoatAlpha2 = bsdfFilteredAlpha2(coatRoughness * coatRoughness, kernelRoughness);
+        layers.clearcoatRoughness = clamp(sqrt(sqrt(layers.clearcoatAlpha2)), 0.04, 1.0);
         layers.clearcoatNDotV = max(dot(clearcoatNormal, s.v), 0.0001);
         layers.clearcoatBase = 1.0 - clearcoat.x * bsdfClearcoatFresnel(layers.clearcoatNDotV);
         layers.clearcoatUv = (vec2(sqrt(1.0 - layers.clearcoatNDotV), layers.clearcoatRoughness) * 63.0 + 0.5) / 64.0;
@@ -804,15 +806,15 @@ vec3 lightsIndirectLayers(BsdfSurface s, BsdfLayers layers, vec3 worldPosition, 
 // layerIrradiance of lightsIndirect. The occlusions follow the base's: the diffuse one is
 // min (@p visibility, @p materialOcclusion), and the clearcoat's specular one is taken at its own
 // view angle and roughness in the shaders reading the ambient occlusion (1 for @p visibility
-// without it)
+// without it). @p kernelRoughness widens the clearcoat, see lightsLayers
 vec3 lightsLayered(BsdfSurface s, vec4 clearcoat, vec4 sheen, vec3 emission, vec3 worldPosition, vec3 geometricNormal,
-                   vec3 irradiance, float visibility, float materialOcclusion, out float baseScale)
+                   vec3 irradiance, float visibility, float materialOcclusion, float kernelRoughness, out float baseScale)
 {
     baseScale = 1.0;
     if (clearcoat.x <= 0.0 && max(max(sheen.r, sheen.g), sheen.b) <= 0.0)
         return emission;
 
-    BsdfLayers layers = lightsLayers(s, clearcoat, sheen, geometricNormal);
+    BsdfLayers layers = lightsLayers(s, clearcoat, sheen, geometricNormal, kernelRoughness);
     baseScale = (1.0 - layers.sheenMax * layers.sheenAlbedo) * layers.clearcoatBase;
 
 #ifdef YUP_3D_AMBIENT_OCCLUSION

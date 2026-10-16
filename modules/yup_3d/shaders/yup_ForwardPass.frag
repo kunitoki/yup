@@ -101,7 +101,7 @@ void main()
     vec3 layerIrradiance;
     vec3 indirect = lightsIndirect(surface, lookup, v_worldPosition, m.geometricNormal, bentNormal, diffuseOcclusion, reflectionOcclusion, layerIrradiance);
     float baseScale;
-    vec3 layered = lightsLayered(surface, material.clearcoat, material.sheen, m.emissive, v_worldPosition, m.geometricNormal, layerIrradiance, ambientOcclusion.a, m.occlusion, baseScale);
+    vec3 layered = lightsLayered(surface, material.clearcoat, material.sheen, m.emissive, v_worldPosition, m.geometricNormal, layerIrradiance, ambientOcclusion.a, m.occlusion, m.kernelRoughness, baseScale);
 #else
     vec3 indirect = lightsIndirect(surface, lookup, v_worldPosition, m.geometricNormal, bentNormal, diffuseOcclusion, reflectionOcclusion);
 #endif
@@ -110,7 +110,7 @@ void main()
     vec3 layerIrradiance;
     vec3 indirect = lightsIndirect(surface, lookup, v_worldPosition, m.geometricNormal, m.occlusion, m.occlusion, layerIrradiance);
     float baseScale;
-    vec3 layered = lightsLayered(surface, material.clearcoat, material.sheen, m.emissive, v_worldPosition, m.geometricNormal, layerIrradiance, 1.0, m.occlusion, baseScale);
+    vec3 layered = lightsLayered(surface, material.clearcoat, material.sheen, m.emissive, v_worldPosition, m.geometricNormal, layerIrradiance, 1.0, m.occlusion, m.kernelRoughness, baseScale);
 #else
     vec3 indirect = lightsIndirect(surface, lookup, v_worldPosition, m.geometricNormal, m.occlusion, m.occlusion);
 #endif

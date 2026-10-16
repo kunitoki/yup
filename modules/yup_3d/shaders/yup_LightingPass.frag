@@ -156,6 +156,12 @@ void main()
     vec2 clip = vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
     float depth = texelFetch(sampler2D(u_depth, pointClamp), pixel, 0).r;
 
+#ifdef YUP_3D_MATERIAL_LAYERS
+    // The clearcoat's specular antialiasing, from the shading normals of the pixel's quad, which the
+    // G-buffer pass widened the base with: derivatives need every pixel, so before any return
+    float kernelRoughness = bsdfKernelRoughness(octahedralDecode(texelFetch(sampler2D(u_normalRoughness, pointClamp), pixel, 0).xy));
+#endif
+
     if (depth >= 1.0)
     {
         fragColor = lighting.ambient.w > 0.5 ? vec4(min(lightingBackground(clip), vec3(yupMaxHalf)), 1.0) : vec4(0.0);
@@ -196,7 +202,7 @@ void main()
     vec3 layerIrradiance;
     vec3 indirect = lightsIndirect(surface, lookup, worldPosition, n, bentNormal, diffuseOcclusion, reflectionOcclusion, layerIrradiance);
     float baseScale;
-    vec3 layered = lightsLayered(surface, materials[materialId].clearcoat, materials[materialId].sheen, emissionMaterial.rgb, worldPosition, n, layerIrradiance, ambientOcclusion.a, albedoOcclusion.a, baseScale);
+    vec3 layered = lightsLayered(surface, materials[materialId].clearcoat, materials[materialId].sheen, emissionMaterial.rgb, worldPosition, n, layerIrradiance, ambientOcclusion.a, albedoOcclusion.a, kernelRoughness, baseScale);
 #else
     vec3 indirect = lightsIndirect(surface, lookup, worldPosition, n, bentNormal, diffuseOcclusion, reflectionOcclusion);
 #endif
