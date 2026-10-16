@@ -20,7 +20,7 @@
 */
 
 /*
-    Fits the GGX lookup tables of yup_3d's area lights with linearly transformed cosines, after:
+    Fits the GGX lookup tables of yup_renderer's area lights with linearly transformed cosines, after:
 
     E. Heitz, J. Dupuy, S. Hill and D. Neubelt, "Real-Time Polygonal-Light Shading with Linearly
     Transformed Cosines", ACM Transactions on Graphics 35 (4), SIGGRAPH 2016.

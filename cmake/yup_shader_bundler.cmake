@@ -222,3 +222,187 @@ function (yup_add_shader_bundle library_name)
         RESOURCES
             "${bundle_path}")
 endfunction()
+
+#==============================================================================
+# Adds the target that builds the host yup_shader_bundler at build time, once
+# per build tree, and returns the path of the executable it produces.
+#
+# Unlike _yup_build_shader_bundler_tool, configuring a project never builds the
+# tool: only building a target that needs a shader bundle does.
+
+function (_yup_add_shader_bundler_host_target output_executable output_target)
+    set (tool_target yup_shader_bundler_host)
+    set (tool_executable "${CMAKE_BINARY_DIR}/_host_tools/bin/yup_shader_bundler")
+    set (tool_executable_name "yup_shader_bundler")
+    if (CMAKE_HOST_WIN32)
+        string (APPEND tool_executable ".exe")
+        string (APPEND tool_executable_name ".exe")
+    endif()
+
+    if (NOT TARGET ${tool_target})
+        get_filename_component (tool_source_dir "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/tools/shader_bundler" ABSOLUTE)
+
+        add_custom_target (${tool_target}
+            COMMAND "${CMAKE_COMMAND}"
+                -DSOURCE_DIR=${tool_source_dir}
+                -DBUILD_DIR=${CMAKE_BINARY_DIR}/_host_tools/shader_bundler
+                -DEXECUTABLE_NAME=${tool_executable_name}
+                -DOUTPUT=${tool_executable}
+                -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/tools/yup_build_host_tool.cmake"
+            BYPRODUCTS "${tool_executable}"
+            COMMENT "Building host yup_shader_bundler"
+            VERBATIM)
+
+        set_target_properties (${tool_target} PROPERTIES FOLDER "Tools")
+    endif()
+
+    set (${output_executable} "${tool_executable}" PARENT_SCOPE)
+    set (${output_target} "${tool_target}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+# Builds the shader bundles a module declares, at build time, for yup_add_module.
+#
+# Module declaration keys:
+#   shaderDirectory:    <dir>       Folder of the stage sources, relative to the module
+#   shaderIncludes:     <dir>...    Folders the sources #include from, relative to the module
+#   shaderDefinePrefix: <prefix>    Prepended to every define of shaderBundles
+#   shaderBundles:      <entry>, ...
+#
+# An entry is a shader name followed by defines, separated by spaces; entries
+# are separated by commas or by continuation lines. A define ending in ? is
+# optional: the entry expands into every combination of its optional defines.
+#
+#   shaderBundles:      ForwardPass AREA_LIGHTS? SOFT_SHADOWS?
+#                       ShadowPass MASKED?
+#
+# The entry Name bundles yup_<Name>.vert (or yup_Fullscreen.vert for a
+# fragment-only pass), yup_<Name>.frag and yup_<Name>.comp, whichever exist,
+# into <module>_shaders/yup_<Name>[_<define>...].inc (defines in lowercase,
+# without the prefix) under the build tree, as a C array initializer:
+#
+#   constexpr uint8_t forwardPassBundle[] = {
+#   #include "yup_renderer_shaders/yup_ForwardPass_area_lights.inc"
+#   };
+
+function (_yup_module_add_shader_bundles module_name module_path shader_directory shader_includes shader_define_prefix shader_bundles)
+    if (NOT shader_directory)
+        _yup_message (FATAL_ERROR "Module ${module_name} declares shaderBundles without a shaderDirectory")
+    endif()
+
+    get_filename_component (shader_dir "${shader_directory}" ABSOLUTE BASE_DIR "${module_path}")
+    if (NOT IS_DIRECTORY "${shader_dir}")
+        _yup_message (FATAL_ERROR "Module ${module_name} shaderDirectory not found: ${shader_dir}")
+    endif()
+
+    set (include_args "-I${shader_dir}")
+    set (include_files "")
+    foreach (include_directory IN LISTS shader_includes)
+        get_filename_component (include_dir "${include_directory}" ABSOLUTE BASE_DIR "${module_path}")
+        list (APPEND include_args "-I${include_dir}")
+        file (GLOB_RECURSE directory_files CONFIGURE_DEPENDS "${include_dir}/*")
+        list (APPEND include_files ${directory_files})
+    endforeach()
+
+    _yup_add_shader_bundler_host_target (bundler_executable bundler_target)
+
+    set (output_root "${CMAKE_BINARY_DIR}/yup_shader_bundles")
+    set (output_dir "${output_root}/${module_name}_shaders")
+    file (MAKE_DIRECTORY "${output_dir}")
+
+    set (bundle_bases "")
+    set (bundle_outputs "")
+
+    string (REPLACE "," ";" bundle_entries "${shader_bundles}")
+    foreach (bundle_entry IN LISTS bundle_entries)
+        string (STRIP "${bundle_entry}" bundle_entry)
+        if ("${bundle_entry}" STREQUAL "")
+            continue()
+        endif()
+
+        string (REGEX REPLACE "[ \t]+" ";" entry_tokens "${bundle_entry}")
+        list (POP_FRONT entry_tokens shader_name)
+
+        # ==== Stage sources
+        set (stage_args "")
+        set (stage_paths "")
+        if (EXISTS "${shader_dir}/yup_${shader_name}.vert")
+            list (APPEND stage_args --vert "${shader_dir}/yup_${shader_name}.vert")
+            list (APPEND stage_paths "${shader_dir}/yup_${shader_name}.vert")
+        elseif (EXISTS "${shader_dir}/yup_${shader_name}.frag" AND EXISTS "${shader_dir}/yup_Fullscreen.vert")
+            list (APPEND stage_args --vert "${shader_dir}/yup_Fullscreen.vert")
+            list (APPEND stage_paths "${shader_dir}/yup_Fullscreen.vert")
+        endif()
+        if (EXISTS "${shader_dir}/yup_${shader_name}.frag")
+            list (APPEND stage_args --frag "${shader_dir}/yup_${shader_name}.frag")
+            list (APPEND stage_paths "${shader_dir}/yup_${shader_name}.frag")
+        endif()
+        if (EXISTS "${shader_dir}/yup_${shader_name}.comp")
+            list (APPEND stage_args --stage compute "${shader_dir}/yup_${shader_name}.comp")
+            list (APPEND stage_paths "${shader_dir}/yup_${shader_name}.comp")
+        endif()
+
+        if (NOT stage_paths)
+            _yup_message (FATAL_ERROR "Module ${module_name} shader ${shader_name} has no yup_${shader_name}.vert/.frag/.comp in ${shader_dir}")
+        endif()
+
+        # ==== Every combination of the optional defines, in declaration order
+        set (optional_count 0)
+        foreach (token IN LISTS entry_tokens)
+            if (token MATCHES "\\?$")
+                math (EXPR optional_count "${optional_count} + 1")
+            endif()
+        endforeach()
+        math (EXPR last_mask "(1 << ${optional_count}) - 1")
+
+        foreach (mask RANGE 0 ${last_mask})
+            set (bundle_base "yup_${shader_name}")
+            set (define_args "")
+            set (optional_index 0)
+
+            foreach (token IN LISTS entry_tokens)
+                if (token MATCHES "^(.+)\\?$")
+                    set (define "${CMAKE_MATCH_1}")
+                    math (EXPR enabled "(${mask} >> ${optional_index}) & 1")
+                    math (EXPR optional_index "${optional_index} + 1")
+                    if (NOT enabled)
+                        continue()
+                    endif()
+                else()
+                    set (define "${token}")
+                endif()
+
+                string (TOLOWER "${define}" define_suffix)
+                string (APPEND bundle_base "_${define_suffix}")
+                list (APPEND define_args "-D${shader_define_prefix}${define}")
+            endforeach()
+
+            if (bundle_base IN_LIST bundle_bases)
+                continue()
+            endif()
+            list (APPEND bundle_bases "${bundle_base}")
+
+            set (bundle_output "${output_dir}/${bundle_base}.inc")
+            add_custom_command (
+                OUTPUT "${bundle_output}"
+                COMMAND "${bundler_executable}" ${stage_args} ${define_args} ${include_args} --output-inc "${bundle_output}"
+                DEPENDS "${bundler_executable}" ${stage_paths} ${include_files}
+                COMMENT "Building shader bundle ${module_name}_shaders/${bundle_base}.inc"
+                VERBATIM)
+
+            list (APPEND bundle_outputs "${bundle_output}")
+        endforeach()
+    endforeach()
+
+    list (LENGTH bundle_outputs bundle_count)
+    _yup_message (STATUS " * ${module_name}: ${bundle_count} shader bundles built in ${output_dir}")
+
+    # ==== Consumers compile the module sources: they build the bundles first, and find them
+    set (bundles_target ${module_name}_shader_bundles)
+    add_custom_target (${bundles_target} DEPENDS ${bundle_outputs})
+    add_dependencies (${bundles_target} ${bundler_target})
+    set_target_properties (${bundles_target} PROPERTIES FOLDER "ShaderBundles")
+
+    add_dependencies (${module_name} ${bundles_target})
+    target_include_directories (${module_name} INTERFACE "${output_root}")
+endfunction()

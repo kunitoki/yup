@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include <yup_3d/yup_3d.h>
+#include <yup_renderer/yup_renderer.h>
 
 #include "scene3d/MpcFaceplate.h"
 #include "scene3d/NpcLogo.h"
@@ -664,10 +664,10 @@ private:
             scene->setEnvironmentBlur (0.5f);
 
             // Ambient occlusion on both tiers, at the scale of the knobs: they are about 0.08 tall
-            auto settings = scene->getRenderSettings();
+            auto settings = getRenderer().getRenderSettings();
             settings.ambientOcclusion = true;
             settings.aoDistance = 0.08f;
-            scene->setRenderSettings (settings);
+            getRenderer().setRenderSettings (settings);
 
             setScene (scene);
 
@@ -1191,7 +1191,7 @@ private:
         void focusAt (yup::Point<float> position)
         {
             const auto* capabilities = getRenderer().getCapabilities();
-            if (capabilities == nullptr || ! capabilities->isEnabled (yup::RenderCapabilities::Feature::depthOfField, getScene()->getRenderSettings()))
+            if (capabilities == nullptr || ! capabilities->isEnabled (yup::RenderCapabilities::Feature::depthOfField, getRenderer().getRenderSettings()))
                 return;
 
             if (const auto distance = findFocusDistance (position))
@@ -1435,7 +1435,7 @@ private:
             , view (viewToControl)
         {
             auto* scene = view.getScene().get();
-            const auto settings = scene->getRenderSettings();
+            const auto settings = view.getRenderer().getRenderSettings();
 
             tierLabel.setText ("Tier", yup::dontSendNotification);
             tierCombo.addItem ("Automatic", 1);
@@ -1832,7 +1832,7 @@ private:
             if (capabilities == nullptr)
                 return;
 
-            const auto settings = view.getScene()->getRenderSettings();
+            const auto settings = view.getRenderer().getRenderSettings();
             const auto isFull = capabilities->getTier() == yup::RenderCapabilities::Tier::full;
             const auto canTaa = capabilities->isAvailable (yup::RenderCapabilities::Feature::temporalAntiAliasing);
 
@@ -2103,9 +2103,9 @@ private:
         template <class Callback>
         void editSettings (Callback&& edit)
         {
-            auto settings = view.getScene()->getRenderSettings();
+            auto settings = view.getRenderer().getRenderSettings();
             edit (settings);
-            view.getScene()->setRenderSettings (settings);
+            view.getRenderer().setRenderSettings (settings);
             view.repaint();
         }
 

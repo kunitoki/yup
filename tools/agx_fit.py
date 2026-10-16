@@ -20,7 +20,7 @@
 # ==============================================================================
 
 """
-Derive the coefficients of yupToneMapAgx in modules/yup_3d/shaders/lib/color.glsl.
+Derive the coefficients of yupToneMapAgx in modules/yup_renderer/shaders/lib/color.glsl.
 
 The AgX idea (an inset of the primaries, a per-channel sigmoid in the log domain,
 then an outset) is public, but the reference repository at

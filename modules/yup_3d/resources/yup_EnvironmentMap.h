@@ -22,18 +22,15 @@
 namespace yup
 {
 
-class ProbeRenderer;
-
 //==============================================================================
 /** The light surrounding a scene, for reflections and soft diffuse light.
 
     The radiance function is sampled once on the CPU into a latitude-longitude image, four
     samples per texel, and projected into nine spherical harmonics coefficients for the
-    diffuse light. On the GPU, buildCube() turns the image into a cube whose faces are a quarter
+    diffuse light. On the GPU, the renderer turns the image into a cube whose faces are a quarter
     of its width, then GGX-prefilters it into a cube with one mip per roughness, from mirror-like
-    at mip 0 to fully rough at the last one. The SceneRenderer drawing the environment builds and
-    keeps its cube; the environment itself never changes after construction, so any number of
-    renderers, on any threads, can share it.
+    at mip 0 to fully rough at the last one, and keeps it. The environment itself never changes
+    after construction, so any number of renderers, on any threads, can share it.
 
     @code
     // A blue sky over a dark ground
@@ -100,34 +97,11 @@ public:
     static Vector3<float> getDirection (Point<float> textureCoordinates) noexcept;
 
     //==============================================================================
-    /** A cube buildCube() submitted, and the outcome of its frame. */
-    struct CubeBuild
-    {
-        GpuTexture::Ptr cube;  ///< The prefiltered cube, or nullptr if nothing could be recorded.
-        GpuFrameStatus status; ///< The frame building it: poll it before trusting the cube, it is undefined if the GPU failed.
+    /** Returns the width of the latitude-longitude image, in texels; its height is half. */
+    int getWidth() const noexcept { return width; }
 
-        /** The rgba16float latitude-longitude image with its mips (about 1.3 MB at the default
-            width), or nullptr on the RGBM path. Keep it as long as the cube: it owns the pipeline
-            of its GpuTexture::generateMips() pass, which the frame does not retain, so dropping it
-            while the build is pending would destroy a pipeline the GPU still uses on Vulkan and
-            Direct3D 12. The frame retains every other texture of the build.
-        */
-        GpuTexture::Ptr image;
-    };
-
-    /** Builds the GGX-prefiltered cube with the passes of @p probes, on its device.
-
-        The cube has getNumLevels() mips, mip m filtered for getRoughnessForLevel (m, getNumLevels()),
-        in ProbeRenderer::getRadianceFormat(): rgba16float, or rgba8unorm holding RGBM below the
-        float floor. The build begins a GpuFrame of its own, records every pass into it and submits
-        it without waiting for the GPU, so call it outside an open frame and keep @p probes alive
-        until the status completes. Every call builds a new cube: the caller keeps it.
-
-        @returns The cube and its frame's status. No cube and an invalid status if the frame could
-                 not begin; no cube with a valid status if the textures could not be created or
-                 the passes could not be recorded, which a retry would not change.
-    */
-    CubeBuild buildCube (ProbeRenderer& probes) const;
+    /** Returns the latitude-longitude image as linear RGBA half floats, row by row from the zenith. */
+    const std::vector<uint16>& getPixels() const noexcept { return pixels; }
 
 private:
     int width = defaultWidth;

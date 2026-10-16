@@ -4,7 +4,15 @@ Build 3D worlds out of entities, load glTF 2.0 assets into them, and show them
 in a component, rendered through the [RHI](../graphics/rhi/index.md) on every
 backend.
 
-**Modules covered:** `yup_3d` (with the `tinygltf` third-party module).
+**Modules covered:** `yup_3d` (with the `tinygltf` third-party module) and
+`yup_renderer`.
+
+`yup_3d` describes the world: entities, parts, resources, scenes and glTF
+loading. It has no renderer and depends only on `yup_rhi` and `yup_graphics`.
+`yup_renderer` builds on it with `SceneRenderer`, `SceneComponent`,
+`RenderSettings` and `RenderCapabilities`; link it to show scenes on screen.
+Its shader permutations are compiled while the module builds, see
+[module format](../build-system/module-format.md).
 
 ## Concepts
 
@@ -21,8 +29,9 @@ backend.
   they are rendered.
 - **`Scene`** - a root entity, the active camera and the global lighting
   settings (background, flat ambient light, exposure, a default light).
-- **`SceneComponent`** - a `Component` that renders a scene and draws it over
-  its whole area.
+- **`SceneComponent`** (`yup_renderer`) - a `Component` that renders a scene and
+  draws it over its whole area. Its `SceneRenderer`, from `getRenderer()`, holds
+  the `RenderSettings`.
 
 Entities, parts and scenes are meant to be used from the message thread, like
 components.
@@ -457,7 +466,7 @@ frame from the depth and normals of the visible surfaces.
 yup::RenderSettings settings;
 settings.ambientOcclusion = true; // on raster; the full tier has it on by default
 settings.aoDistance = 0.1f;       // how far, in scene units, surfaces occlude each other
-scene->setRenderSettings (settings);
+view.getRenderer().setRenderSettings (settings);
 ```
 
 - Only the indirect light is darkened: the flat ambient light and the
@@ -624,7 +633,7 @@ previous frame of the image.
 ```cpp
 yup::RenderSettings settings;
 settings.screenSpaceReflections = false; // on by default on the full tier
-scene->setRenderSettings (settings);
+view.getRenderer().setRenderSettings (settings);
 ```
 
 - A reflection is found by marching a ray over the depth of the frame. Where the
@@ -670,7 +679,7 @@ panel brightens the knob next to it. It is off by default:
 ```cpp
 yup::RenderSettings settings;
 settings.screenSpaceGI = true; // off by default on every tier
-scene->setRenderSettings (settings);
+view.getRenderer().setRenderSettings (settings);
 ```
 
 - It extends the ambient occlusion: the search that finds what hides each part
@@ -815,7 +824,7 @@ What each tier gets:
 
 ## Render settings
 
-`RenderSettings` chooses how a scene is rendered. Set it on the scene, then
+`RenderSettings` chooses how a scene is rendered. Set it on the renderer, then
 repaint:
 
 ```cpp
@@ -824,7 +833,7 @@ settings.bloom = true;
 settings.bloomIntensity = 0.1f;
 settings.taaSamples = 8;
 
-scene->setRenderSettings (settings);
+view.getRenderer().setRenderSettings (settings);
 scene->setToneMapping (yup::Scene::ToneMapping::agx);
 scene->setExposure (1.2f);
 ```
@@ -879,7 +888,7 @@ it returns `nullptr` before the first one.
 if (auto* caps = view.getRenderer().getCapabilities())
 {
     auto tier = caps->getTier(); // RenderCapabilities::Tier::raster or ::full
-    bool glows = caps->isEnabled (yup::RenderCapabilities::Feature::bloom, scene->getRenderSettings());
+    bool glows = caps->isEnabled (yup::RenderCapabilities::Feature::bloom, view.getRenderer().getRenderSettings());
 }
 ```
 
@@ -972,10 +981,10 @@ anti-aliasing rebuilds the full-size image from the jittered frames: each frame
 samples different points of every pixel, and the history gathers them.
 
 ```cpp
-auto settings = scene->getRenderSettings();
+auto settings = view.getRenderer().getRenderSettings();
 settings.upscaling = yup::RenderSettings::Upscaling::temporal;
 settings.renderScale = 0.5f; // a quarter of the pixels
-scene->setRenderSettings (settings);
+view.getRenderer().setRenderSettings (settings);
 ```
 
 - A still image converges to one close to the full-size image, over about
@@ -1029,9 +1038,9 @@ auto* camera = scene->getActiveCamera();
 camera->fStop = 1.8f;
 camera->focusDistance = 2.5f;
 
-auto settings = scene->getRenderSettings();
+auto settings = view.getRenderer().getRenderSettings();
 settings.depthOfField = true;
-scene->setRenderSettings (settings);
+view.getRenderer().setRenderSettings (settings);
 view.repaint();
 ```
 
@@ -1100,10 +1109,10 @@ motion and each object's own. Turn it on with `motionBlur`, and set how long the
 shutter stays open with `motionBlurShutter`:
 
 ```cpp
-auto settings = scene->getRenderSettings();
+auto settings = view.getRenderer().getRenderSettings();
 settings.motionBlur = true;
 settings.motionBlurShutter = 0.5f; // half of the frame time
-scene->setRenderSettings (settings);
+view.getRenderer().setRenderSettings (settings);
 view.repaint();
 ```
 

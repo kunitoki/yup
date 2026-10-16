@@ -45,7 +45,7 @@ namespace yup
     of its probes can see a surface, the environment takes the rest, not an enclosing volume: give a
     volume nested in another a falloff of 0.
 
-    @see SceneRenderer, SceneDrawList, ReflectionProbeNode
+    @see ReflectionProbeNode, and SceneRenderer and SceneDrawList of the yup_renderer module
 */
 class YUP_API IrradianceVolumeNode : public Node
 {

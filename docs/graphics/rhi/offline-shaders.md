@@ -41,6 +41,16 @@ Bundles built without `spirv` in `--target-langs` still load on Vulkan, but
 `compileFromBundle` fails there, since there is no variant to pick. The default
 target list includes it.
 
+## Shader bundles declared by a module
+
+A YUP module can list its shader permutations in its module declaration with
+the `shaderDirectory`, `shaderIncludes`, `shaderDefinePrefix` and
+`shaderBundles` keys. They are compiled **at build time**, in parallel, and only
+rebuilt when a shader or one of its includes changes. The module includes the
+result as `#include "<module>_shaders/yup_<Name>[_<define>...].inc"`. See
+[module format](../../build-system/module-format.md); `yup_rhi` and
+`yup_renderer` use it.
+
 ## The `yup_add_shader_bundle` CMake helper
 
 The easiest path is the `yup_add_shader_bundle()` function. It builds the
@@ -275,6 +285,7 @@ yup_add_shader_bundle(my_shaders
 
 | Approach | When to use |
 |---|---|
+| Module `shaderBundles` + `compileFromBundle` | Shaders that belong to a YUP module: generated with the module, nothing committed. |
 | `yup_add_shader_bundle` + `compileFromBundle` | **Recommended for shipping.** No transpiler in the final binary; cross-compile friendly; deterministic builds. |
 | `compileFromBundle` with a hand-built `.ysl` | Custom asset pipelines, or loading bundles from disk at runtime. |
 | `compileFromGlsl` | Live shader editing / prototyping. Requires `YUP_ENABLE_SHADER_TRANSPILER`. |

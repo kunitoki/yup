@@ -582,54 +582,6 @@ TEST_F (ShaderBundleTests, RoundtripReadOnlyStorageBuffersInReflection)
     EXPECT_EQ (loadedInfo->reflection.uniformBuffers[0].blockSize, 16u);
 }
 
-TEST_F (ShaderBundleTests, LoadsBundleWithoutReadOnlyField)
-{
-    // Serialized before ResourceBinding::readOnly existed. Regenerating the yup_3d shaders
-    // replaces it with a current bundle, so this then only proves current bundles load.
-    static constexpr uint8_t legacyBundle[] = {
-#include "../../modules/yup_3d/shaders/yup_ShadowPass.inc"
-    };
-
-    auto loaded = ShaderBundle::loadFromData (legacyBundle, sizeof (legacyBundle));
-    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
-
-    const auto& shaders = loaded.getReference().getShaders();
-    ASSERT_FALSE (shaders.empty());
-
-    int vertexVariants = 0;
-    for (const auto& info : shaders)
-    {
-        ASSERT_FALSE (info.reflection.entryPoints.empty());
-        EXPECT_EQ (info.reflection.entryPoints[0].name, String ("main"));
-
-        for (const auto& sb : info.reflection.storageBuffers)
-            EXPECT_FALSE (sb.readOnly);
-
-        if (info.stage != ShaderStage::vertex)
-            continue;
-
-        ++vertexVariants;
-
-        // The ViewBlock (set 0) and the DrawBlock (set 2), both at binding 0: every field read
-        // after the first block lands where it was written.
-        const auto& ubos = info.reflection.uniformBuffers;
-        ASSERT_EQ (ubos.size(), 2u) << "language " << (int) info.language;
-
-        for (const auto& ubo : ubos)
-        {
-            EXPECT_TRUE (ubo.name.isNotEmpty());
-            EXPECT_EQ (ubo.binding, 0u);
-            EXPECT_EQ (ubo.blockSize, ubo.set == 0 ? 448u : 208u) << ubo.name;
-            EXPECT_EQ (ubo.type, ShaderReflection::ResourceType::uniformBuffer);
-        }
-
-        // The five Mesh::Vertex attributes of lib/geometry.glsl
-        EXPECT_EQ (info.reflection.stageInputs.size(), 5u);
-    }
-
-    EXPECT_GT (vertexVariants, 0);
-}
-
 TEST_F (ShaderBundleTests, RoundtripSpecializationConstantsInReflection)
 {
     ShaderInfo info;

@@ -36,6 +36,9 @@
     testDeps:           yup_graphics
     appleFrameworks:    Metal
 
+    shaderDirectory:    shaders
+    shaderBundles:      GpuMipDownsample
+
   END_YUP_MODULE_DECLARATION
 
   ==============================================================================

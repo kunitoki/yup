@@ -86,6 +86,29 @@ static StringArray getPrefixedValues (const ArgumentList& args, const String& pr
     return values;
 }
 
+// Formats bytes as the body of a C array initializer, 16 per line, for embedding with #include.
+static String toByteList (const MemoryBlock& data)
+{
+    constexpr const char* hexDigits = "0123456789abcdef";
+    const auto* bytes = static_cast<const uint8*> (data.getData());
+
+    std::string out;
+    out.reserve (data.getSize() * 6 + data.getSize() / 16 * 2 + 2);
+
+    for (size_t i = 0; i < data.getSize(); ++i)
+    {
+        out += (i % 16) == 0 ? "  0x" : " 0x";
+        out += hexDigits[bytes[i] >> 4];
+        out += hexDigits[bytes[i] & 0x0f];
+        out += ',';
+
+        if ((i % 16) == 15 || i + 1 == data.getSize())
+            out += '\n';
+    }
+
+    return String (out);
+}
+
 //==============================================================================
 static String languageToString (ShaderLanguage lang)
 {
@@ -201,6 +224,7 @@ static void printUsage()
         "  --vert <path>           Shorthand for --stage vertex <path>\n"
         "  --frag <path>           Shorthand for --stage fragment <path>\n"
         "  --output <path>         Output .ysl bundle file path\n"
+        "  --output-inc <path>     Output the bundle bytes as a C array initializer list\n"
         "  --compress <level>      LZAV compression: none, fast, high (default: high)\n"
         "\n"
         "Source options:\n"
@@ -251,8 +275,6 @@ static std::optional<SpvOptimizationMode> spirvOptFromString (const String& str)
 //==============================================================================
 static int runCompileMode (const ArgumentList& args)
 {
-    args.failIfOptionIsMissing ("--output");
-
     const auto resolveFile = [] (const String& path) -> File
     {
         if (path.isEmpty())
@@ -296,6 +318,13 @@ static int runCompileMode (const ArgumentList& args)
     }
 
     const auto outputPath = resolveFile (getOptionValue (args, "--output"));
+    const auto outputIncPath = resolveFile (getOptionValue (args, "--output-inc"));
+
+    if (outputPath == File() && outputIncPath == File())
+    {
+        log->writeToLog ("No output specified. Use --output, --output-inc, or both.");
+        return 1;
+    }
 
     auto compression = ShaderBundle::Compression::high;
     if (args.containsOption ("--compress"))
@@ -422,15 +451,35 @@ static int runCompileMode (const ArgumentList& args)
 
     const ShaderBundle& bundle = result.getReference();
 
-    // Persist to file
-    const auto saveResult = bundle.saveToFile (outputPath, compression);
-    if (saveResult.failed())
+    MemoryBlock bundleData;
+    if (const auto saveResult = bundle.saveToMemoryBlock (bundleData, compression); saveResult.failed())
     {
         log->writeToLog ("Failed to save bundle: " + saveResult.getErrorMessage());
         return 1;
     }
 
-    log->writeToLog ("Shader bundle written to: " + outputPath.getFullPathName());
+    if (outputPath != File())
+    {
+        if (! outputPath.replaceWithData (bundleData.getData(), bundleData.getSize()))
+        {
+            log->writeToLog ("Failed to write bundle: " + outputPath.getFullPathName());
+            return 1;
+        }
+
+        log->writeToLog ("Shader bundle written to: " + outputPath.getFullPathName());
+    }
+
+    if (outputIncPath != File())
+    {
+        if (! outputIncPath.replaceWithText (toByteList (bundleData), false, false, "\n"))
+        {
+            log->writeToLog ("Failed to write bundle: " + outputIncPath.getFullPathName());
+            return 1;
+        }
+
+        log->writeToLog ("Shader bundle written to: " + outputIncPath.getFullPathName());
+    }
+
     return 0;
 }
 
@@ -623,7 +672,7 @@ int main (int argc, char* argv[])
         return runInspectMode (args);
 
     if (args.containsOption ("--vert") || args.containsOption ("--frag")
-        || args.containsOption ("--stage") || args.containsOption ("--output"))
+        || args.containsOption ("--stage") || args.containsOption ("--output") || args.containsOption ("--output-inc"))
         return runCompileMode (args);
 
     printUsage();

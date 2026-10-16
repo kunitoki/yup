@@ -40,9 +40,8 @@ uint32_t mipExtent (uint32_t base, uint32_t level)
     return jmax (1u, base >> level);
 }
 
-// Regenerate with: just shader_bundler (see the header of the .inc)
 constexpr uint8_t mipDownsampleShaderBundle[] = {
-#include "../shaders/yup_GpuMipDownsample.inc"
+#include "yup_rhi_shaders/yup_GpuMipDownsample.inc"
 };
 
 } // namespace

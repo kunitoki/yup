@@ -134,16 +134,12 @@ shader_bundler *COMPILE_ARGS:
 perf ACTION="run" CONFIG="Release" FILTER="SceneRendererBenchmarkTests.DISABLED_DemoTargetFrameTimes":
   uv run python tools/perf.py --just "{{just_executable()}}" {{ACTION}} {{CONFIG}} "{{FILTER}}"
 
-[doc("regenerate the shader bundles for modules that have them")]
-update_shaders BUNDLE_SET="yup_3d":
-  uv run python tools/shader_bundles.py --just "{{just_executable()}}" {{BUNDLE_SET}}
-
-[doc("fit the yup_3d GGX area light tables into modules/yup_3d/resources/yup_LtcTables.inc")]
+[doc("fit the yup_renderer GGX area light tables into modules/yup_renderer/core/yup_LtcTables.inc")]
 [working-directory: 'cmake/tools/ltc_fitter']
 ltc_tables:
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
   cmake --build build --config Release -j4
-  build/yup_ltc_fitter --output "{{justfile_directory()}}/modules/yup_3d/resources/yup_LtcTables.inc"
+  build/yup_ltc_fitter --output "{{justfile_directory()}}/modules/yup_renderer/core/yup_LtcTables.inc"
 
 [doc("compile and invoke yup_dsp_compiler tool")]
 [working-directory: 'cmake/tools/ydsp_compiler']

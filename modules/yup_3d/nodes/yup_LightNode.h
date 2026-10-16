@@ -32,7 +32,7 @@ namespace yup
     On the full tier every light reaching a surface shades it, up to 63 point and spot lights per
     screen-space cluster.
 
-    @see SceneRenderer, EntityNode
+    @see EntityNode, and SceneRenderer of the yup_renderer module
 */
 class YUP_API LightNode : public Node
 {

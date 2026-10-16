@@ -28,13 +28,11 @@
     vendor:               yup
     version:              2.0.0
     name:                 YUP 3D
-    description:          3D scenes made of entities and attached parts, glTF loading and PBR rendering through the RHI.
+    description:          3D scenes made of entities and attached parts, their meshes, materials and lights, and glTF loading.
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_rhi yup_gui tinygltf
-    testDeps:             libpng
-    searchpaths:          native
+    dependencies:         yup_rhi yup_graphics tinygltf
 
   END_YUP_MODULE_DECLARATION
 
@@ -45,7 +43,7 @@
 #define YUP_3D_H_INCLUDED
 
 #include <yup_rhi/yup_rhi.h>
-#include <yup_gui/yup_gui.h>
+#include <yup_graphics/yup_graphics.h>
 
 //==============================================================================
 
@@ -71,7 +69,7 @@
 #include "resources/yup_HalfFloat.h"
 #include "resources/yup_Texture.h"
 #include "resources/yup_EnvironmentMap.h"
-#include "rendering/yup_SphericalHarmonics.h"
+#include "resources/yup_SphericalHarmonics.h"
 #include "resources/yup_Material.h"
 #include "resources/yup_Mesh.h"
 #include "scene/yup_EntityNode.h"
@@ -81,41 +79,6 @@
 #include "nodes/yup_LightNode.h"
 #include "nodes/yup_ReflectionProbeNode.h"
 #include "nodes/yup_IrradianceVolumeNode.h"
-#include "rendering/yup_RenderSettings.h"
-#include "rendering/yup_RenderCapabilities.h"
 #include "scene/yup_WorldFog.h"
 #include "scene/yup_Scene.h"
 #include "gltf/yup_GltfModel.h"
-#include "rendering/yup_SceneDrawList.h"
-#include "rendering/yup_GpuSceneData.h"
-#include "rendering/yup_MaterialTable.h"
-#include "rendering/yup_GeometryBindings.h"
-#include "resources/yup_LtcTables.h"
-#include "rendering/yup_LookupTables.h"
-#include "rendering/yup_ViewData.h"
-#include "rendering/yup_ShadowAtlas.h"
-#include "rendering/yup_ProbeAtlas.h"
-#include "rendering/yup_ShadowCascades.h"
-#include "rendering/yup_FrameResources.h"
-#include "rendering/yup_LightClusters.h"
-#include "rendering/yup_FullscreenPass.h"
-#include "rendering/yup_ProbeRenderer.h"
-#include "rendering/yup_ShadowRenderer.h"
-#include "rendering/yup_ProbeBaker.h"
-#include "rendering/yup_LightingInputs.h"
-#include "rendering/yup_ForwardPass.h"
-#include "rendering/yup_GBufferPass.h"
-#include "rendering/yup_LightingPass.h"
-#include "rendering/yup_DepthNormalPrepass.h"
-#include "rendering/yup_AmbientOcclusionPass.h"
-#include "rendering/yup_HiZPyramid.h"
-#include "rendering/yup_ReflectionPass.h"
-#include "rendering/yup_TemporalAA.h"
-#include "rendering/yup_ToneMapping.h"
-#include "rendering/yup_Bloom.h"
-#include "rendering/yup_DepthOfField.h"
-#include "rendering/yup_MotionBlur.h"
-#include "rendering/yup_FogApply.h"
-#include "rendering/yup_PostChain.h"
-#include "rendering/yup_SceneRenderer.h"
-#include "rendering/yup_SceneComponent.h"

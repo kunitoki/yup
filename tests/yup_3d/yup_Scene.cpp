@@ -250,19 +250,6 @@ TEST_F (SceneTests, CameraProjectionHandlesInfiniteFarPlane)
     EXPECT_TRUE (camera.getProjectionMatrix (2.0f).approximatelyEqualTo (Matrix4::perspective (camera.yFov, 2.0f, 0.5f, 100.0f)));
 }
 
-TEST_F (SceneTests, RenderSettingsDefaultAndAreKept)
-{
-    Scene scene;
-    EXPECT_TRUE (scene.getRenderSettings() == RenderSettings {});
-
-    RenderSettings settings;
-    settings.bloom = true;
-    settings.taaSamples = 8;
-    scene.setRenderSettings (settings);
-
-    EXPECT_TRUE (scene.getRenderSettings() == settings);
-}
-
 TEST_F (SceneTests, WorldFogIsDisabledByDefaultAndIsKept)
 {
     EXPECT_FALSE (scene->getWorldFog().enabled);
