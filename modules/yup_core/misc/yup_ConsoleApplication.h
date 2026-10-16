@@ -48,6 +48,30 @@ namespace yup
     You can create an ArgumentList manually, or give it some argv/argc values from a
     main() function to parse.
 
+    Options start with one or two dashes. An option takes its values either assigned
+    (only long options: "--file=a.txt") or as the arguments that follow it ("--file a.txt",
+    "--files a.txt b.txt", "-f a.txt"). Values run until the next option; negative numbers
+    ("--gain -6") are values, not options.
+
+    A lone "--" ends the options: the arguments after it are never options or option values,
+    see getTrailingArguments().
+
+    An option can be given more than once ("--include a --include b"): the single value
+    getters use its first occurrence, getValuesForOption() collects the values of all of them.
+
+    The option passed to the lookup methods can also be a list of alternatives separated by
+    pipes, e.g. "--file|-f".
+
+    @code
+    // myapp --input song.wav --gain -6 --tags rock live --verbose
+    ArgumentList args (argc, argv);
+
+    auto input = args.tryGetExistingFileForOption ("--input|-i"); // ResultValue<File>
+    auto gain = args.getDoubleValueForOption ("--gain", 0.0);     // -6.0
+    auto tags = args.getValuesForOption ("--tags");               // { "rock", "live" }
+    auto verbose = args.getBoolValueForOption ("--verbose", false); // true
+    @endcode
+
     @see ConsoleApplication
 
     @tags{Core}
@@ -82,137 +106,149 @@ struct YUP_API ArgumentList
         */
         File resolveAsFile() const;
 
-        /** Resolves this argument as an absolute File, using the current working
-            directory as a base for resolving relative paths, and also doing a check to
-            make sure the file exists.
-            If the file doesn't exist, this will call fail() with a suitable error.
-            @see resolveAsFile, resolveAsExistingFolder
+        /** Resolves this argument as an absolute File like resolveAsFile(), failing if the file doesn't exist.
+            @see resolveAsExistingFile
         */
+        ResultValue<File> tryResolveAsExistingFile() const;
+
+        /** Resolves this argument as an absolute File like resolveAsFile(), failing if the folder doesn't exist.
+            @see resolveAsExistingFolder
+        */
+        ResultValue<File> tryResolveAsExistingFolder() const;
+
+        /** Like tryResolveAsExistingFile(), but calls ConsoleApplication::fail() if the file doesn't exist. */
         File resolveAsExistingFile() const;
 
-        /** Resolves a user-supplied folder name into an absolute File, using the current working
-            directory as a base for resolving relative paths, and also doing a check to make
-            sure the folder exists.
-            If the folder doesn't exist, this will call fail() with a suitable error.
-            @see resolveAsFile, resolveAsExistingFile
-        */
+        /** Like tryResolveAsExistingFolder(), but calls ConsoleApplication::fail() if the folder doesn't exist. */
         File resolveAsExistingFolder() const;
 
         /** Returns true if this argument starts with a double dash. */
         bool isLongOption() const;
 
-        /** Returns true if this argument starts with a single dash. */
+        /** Returns true if this argument starts with a single dash, and isn't a negative number. */
         bool isShortOption() const;
 
         /** Returns true if this argument starts with a double dash, followed by the given string. */
         bool isLongOption (const String& optionRoot) const;
 
-        /** If this argument is a long option with a value, this returns the value.
-            e.g. for "--foo=bar", this would return 'bar'.
+        /** Returns the value assigned to a long option, e.g. "bar" for "--foo=bar".
+            Returns nullopt if this isn't a long option, or if it has no '=' (an empty string for "--foo=").
         */
-        String getLongOptionValue() const;
+        std::optional<String> getLongOptionValue() const;
 
-        /** Returns true if this argument starts with a single dash and then contains the given character somewhere inside it. */
+        /** Returns true if this argument is exactly a single dash followed by the given character, e.g. "-h".
+            Short options are never grouped, so "-abc" or "-I/home" don't match 'a' or 'h'.
+        */
         bool isShortOption (char shortOptionCharacter) const;
 
-        /** Returns true if this argument starts with one or more dashes. */
+        /** Returns true if this argument starts with one or more dashes, and isn't a negative number. */
         bool isOption() const;
 
         /** Compares this argument against a string.
             The string may be a pipe-separated list of options, e.g. "--help|-h"
         */
         bool operator== (StringRef stringToCompare) const;
-
-        /** Compares this argument against a string.
-            The string may be a pipe-separated list of options, e.g. "--help|-h"
-        */
-        bool operator!= (StringRef stringToCompare) const;
     };
 
     //==============================================================================
     /** Returns the number of arguments in the list. */
     int size() const;
 
-    /** Returns one of the arguments */
+    /** Returns one of the arguments, or an empty one if the index is out of range. */
     Argument operator[] (int index) const;
 
-    /** Throws an error unless there are at least the given number of arguments. */
+    /** Iterates the arguments. */
+    auto begin() const noexcept { return arguments.begin(); }
+
+    /** Iterates the arguments. */
+    auto end() const noexcept { return arguments.end(); }
+
+    /** Calls ConsoleApplication::fail() unless there are at least the given number of arguments. */
     void checkMinNumArguments (int expectedMinNumberOfArgs) const;
 
-    /** Returns true if the given string matches one of the arguments.
-        The option can also be a list of different versions separated by pipes, e.g. "--help|-h"
+    //==============================================================================
+    /** Returns true if the given option appears before any "--".
         @see removeOptionIfFound
     */
     bool containsOption (StringRef option) const;
 
-    /** Returns true if the given string matches one of the arguments, and also removes the
-        argument from the list if found.
-        The option can also be a list of different versions separated by pipes, e.g. "--help|-h"
-        @see containsOption
+    /** Removes the first occurrence of the given option (but not its values), returning true if it was found.
+        @see containsOption, removeValuesForOption
     */
     bool removeOptionIfFound (StringRef option);
 
-    /** Returns the index of the given string if it matches one of the arguments, or -1 if it doesn't.
-        The option can also be a list of different versions separated by pipes, e.g. "--help|-h"
-    */
+    /** Returns the index of the first occurrence of the given option before any "--", or -1 if there isn't one. */
     int indexOfOption (StringRef option) const;
 
-    /** Throws an error unless the given option is found in the argument list. */
+    /** Calls ConsoleApplication::fail() unless the given option is found. */
     void failIfOptionIsMissing (StringRef option) const;
 
-    /** Looks for a given argument and returns either its assigned value (for long options) or the
-        string that follows it (for short options).
-        The option can also be a list of different versions separated by pipes, e.g. "--help|-h"
-        If it finds a long option, it will look for an assignment with a '=' sign, e.g. "--file=foo.txt",
-        and will return the string following the '='. If there's no '=', it will return an empty string.
-        If it finds a short option, it will attempt to return the argument that follows it, unless
-        it's another option.
-        If the argument isn't found, this returns an empty string.
-    */
-    String getValueForOption (StringRef option) const;
+    /** Returns the arguments after a lone "--", which are never options or option values. */
+    StringArray getTrailingArguments() const;
 
-    /** Looks for a given argument and returns either its assigned value (for long options) or the
-        string that follows it (for short options).
-        This works like getValueForOption() but also removes the option argument (and any value arguments)
-        from the list if they are found.
-    */
-    String removeValueForOption (StringRef option);
+    //==============================================================================
+    /** Returns the first value of the first occurrence of the given option.
 
-    /** Looks for the value of argument using getValueForOption() and tries to parse that value as a file.
-        If the option isn't found, or if the value can't be parsed as a filename, it will throw an error.
+        That's the assigned value for "--file=foo.txt", or the argument that follows the option
+        for "--file foo.txt" and "-f foo.txt", unless that's another option.
+        Returns nullopt if the option isn't found or has no value.
     */
+    std::optional<String> getValueForOption (StringRef option) const;
+
+    /** Returns all the values of all the occurrences of the given option, in order.
+
+        For example "--include a b --include=c" gives { "a", "b", "c" } for "--include".
+    */
+    StringArray getValuesForOption (StringRef option) const;
+
+    /** Like getValueForOption(), but also removes the option and that value from the list. */
+    std::optional<String> removeValueForOption (StringRef option);
+
+    /** Like getValuesForOption(), but also removes all the occurrences of the option and their values from the list. */
+    StringArray removeValuesForOption (StringRef option);
+
+    /** Returns the value of the given option as an integer, or defaultValue if it's missing or not an integer. */
+    int getIntValueForOption (StringRef option, int defaultValue) const;
+
+    /** Returns the value of the given option as a double, or defaultValue if it's missing or not a number. */
+    double getDoubleValueForOption (StringRef option, double defaultValue) const;
+
+    /** Returns defaultValue if the given option is missing, false if its value is "false", "no", "off" or "0"
+        (case insensitive), and true otherwise, e.g. for a plain "--verbose".
+    */
+    bool getBoolValueForOption (StringRef option, bool defaultValue) const;
+
+    //==============================================================================
+    /** Resolves the value of the given option as a file, see getValueForOption().
+        Fails if the option is missing or has no value.
+    */
+    ResultValue<File> tryGetFileForOption (StringRef option) const;
+
+    /** Like tryGetFileForOption(), also failing if the file doesn't exist. */
+    ResultValue<File> tryGetExistingFileForOption (StringRef option) const;
+
+    /** Like tryGetFileForOption(), also failing if the folder doesn't exist. */
+    ResultValue<File> tryGetExistingFolderForOption (StringRef option) const;
+
+    /** Like tryGetFileForOption(), but calls ConsoleApplication::fail() on failure. */
     File getFileForOption (StringRef option) const;
 
-    /** Looks for the value of argument using getValueForOption() and tries to parse that value as a file.
-        This works like getFileForOption() but also removes the option argument (and any value arguments)
-        from the list if they are found.
-    */
+    /** Like getFileForOption(), also removing the option and its value from the list. */
     File getFileForOptionAndRemove (StringRef option);
 
-    /** Looks for a file argument using getFileForOption() and fails with a suitable error if
-        the file doesn't exist.
-    */
+    /** Like tryGetExistingFileForOption(), but calls ConsoleApplication::fail() on failure. */
     File getExistingFileForOption (StringRef option) const;
 
-    /** Looks for a file argument using getFileForOption() and fails with a suitable error if
-        the file doesn't exist.
-        This works like getExistingFileForOption() but also removes the option argument (and any
-        value arguments) from the list if they are found.
-    */
+    /** Like getExistingFileForOption(), also removing the option and its value from the list. */
     File getExistingFileForOptionAndRemove (StringRef option);
 
-    /** Looks for a filename argument using getFileForOption() and fails with a suitable error if
-        the file isn't a folder that exists.
-    */
+    /** Like tryGetExistingFolderForOption(), but calls ConsoleApplication::fail() on failure. */
     File getExistingFolderForOption (StringRef option) const;
 
-    /** Looks for a filename argument using getFileForOption() and fails with a suitable error if
-        the file isn't a folder that exists.
-        This works like getExistingFolderForOption() but also removes the option argument (and any
-        value arguments) from the list if they are found.
-    */
+    /** Like getExistingFolderForOption(), also removing the option and its value from the list. */
     File getExistingFolderForOptionAndRemove (StringRef option);
 
+    //==============================================================================
     /** The name or path of the executable that was invoked, as it was specified on the command-line. */
     String executableName;
 

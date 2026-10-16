@@ -295,6 +295,36 @@ public:
     /** Removes all breakpoints. */
     void clearBreakpoints();
 
+    /** Returns true if clicking the line-number gutter toggles breakpoints. */
+    bool areGutterBreakpointsEnabled() const noexcept { return gutterBreakpointsEnabled; }
+
+    /** Sets whether clicking the line-number gutter toggles breakpoints.
+
+        Off by default, in which case a gutter click places the caret like a click in the text.
+        Breakpoints set with setBreakpoint() are shown either way.
+
+        @param shouldBeEnabled  Whether gutter clicks should toggle breakpoints.
+    */
+    void setGutterBreakpointsEnabled (bool shouldBeEnabled) noexcept { gutterBreakpointsEnabled = shouldBeEnabled; }
+
+    //==============================================================================
+    /** Highlights a line as an error, or removes its highlight.
+
+        Error lines are filled across the whole text width with the scheme's
+        CodeEditorScheme::ColorId::errorLine color. They mark lines, not text, so
+        they don't follow edits; setDocument() removes them all.
+
+        @param lineNumber  The 0-based line, clamped to the document.
+        @param isError     Whether the line should be highlighted.
+    */
+    void setErrorLine (int lineNumber, bool isError);
+
+    /** Returns true if a line is highlighted as an error. */
+    bool isErrorLine (int lineNumber) const;
+
+    /** Removes all error line highlights. */
+    void clearErrorLines();
+
     //==============================================================================
     /** Returns true if the minimap overview is visible. */
     bool isMinimapVisible() const noexcept { return minimapVisible; }
@@ -329,6 +359,9 @@ public:
 
     /** @internal Returns the lines that have a breakpoint set. */
     const std::vector<int>& getBreakpointLines() const noexcept;
+
+    /** @internal Returns the lines highlighted as errors. */
+    const std::vector<int>& getErrorLines() const noexcept;
 
     //==============================================================================
     /** @internal */
@@ -458,6 +491,8 @@ private:
     bool searchCaseSensitive = false;
     std::vector<Range<int>> searchMatches;
     std::vector<int> breakpointLines;
+    std::vector<int> errorLines;
+    bool gutterBreakpointsEnabled = false;
     bool minimapVisible = true;
 
     mutable String cachedDocumentText;

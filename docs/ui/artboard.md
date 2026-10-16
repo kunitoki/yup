@@ -116,9 +116,16 @@ artboard->setFitting (std::nullopt);   // the artboard lays itself out
 
 ### Advancing and pausing
 
-`Artboard` advances itself from `Component::refreshDisplay` each frame. Call
-`advanceAndApply` directly only when driving it manually (in tests, or for a
-fixed-step render).
+`Artboard` advances itself from `Component::refreshDisplay` each frame, and
+repaints only while its scene is animating or after something in it changed. A
+still artboard costs nothing to draw, so there is no need for continuous
+rendering or a `refreshDisplay` override that calls `repaint()`. A state machine
+resting in a looping animation never settles, even if nothing visibly moves, and
+a file with scripts stays busy for as long as any script's `advance()` returns
+true.
+
+Call `advanceAndApply` directly only when driving it manually (in tests, or for
+a fixed-step render). It returns true when the artboard needs to be drawn again.
 
 ```cpp
 artboard->setPaused (true);              // stop advancing

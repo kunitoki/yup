@@ -25,16 +25,19 @@ jobs:
       linux_any: ${{ steps.linux.outputs.any }}
       linux_tests: ${{ steps.linux.outputs.full_build == 'true' || steps.linux.outputs.test_modules != '' }}
       linux_test_modules: ${{ steps.linux.outputs.test_modules }}
+      linux_python: ${{ steps.linux.outputs.full_build == 'true' || contains(format(';{0};', steps.linux.outputs.test_modules), ';yup_python;') }}
       linux_examples: ${{ steps.linux.outputs.examples }}
       linux_example_targets: ${{ steps.linux.outputs.example_targets }}
       mac_any: ${{ steps.mac.outputs.any }}
       mac_tests: ${{ steps.mac.outputs.full_build == 'true' || steps.mac.outputs.test_modules != '' }}
       mac_test_modules: ${{ steps.mac.outputs.test_modules }}
+      mac_python: ${{ steps.mac.outputs.full_build == 'true' || contains(format(';{0};', steps.mac.outputs.test_modules), ';yup_python;') }}
       mac_examples: ${{ steps.mac.outputs.examples }}
       mac_example_targets: ${{ steps.mac.outputs.example_targets }}
       windows_any: ${{ steps.windows.outputs.any }}
       windows_tests: ${{ steps.windows.outputs.full_build == 'true' || steps.windows.outputs.test_modules != '' }}
       windows_test_modules: ${{ steps.windows.outputs.test_modules }}
+      windows_python: ${{ steps.windows.outputs.full_build == 'true' || contains(format(';{0};', steps.windows.outputs.test_modules), ';yup_python;') }}
       windows_examples: ${{ steps.windows.outputs.examples }}
       windows_example_targets: ${{ steps.windows.outputs.example_targets }}
       wasm_any: ${{ steps.wasm.outputs.any }}
@@ -96,6 +99,7 @@ jobs:
     with:
       test_modules: ${{ needs.plan.outputs.linux_test_modules }}
       tests: ${{ needs.plan.outputs.linux_tests == 'true' }}
+      python: ${{ needs.plan.outputs.linux_python == 'true' }}
       examples: ${{ needs.plan.outputs.linux_examples }}
       example_targets: ${{ needs.plan.outputs.linux_example_targets }}
 
@@ -107,6 +111,7 @@ jobs:
     with:
       test_modules: ${{ needs.plan.outputs.mac_test_modules }}
       tests: ${{ needs.plan.outputs.mac_tests == 'true' }}
+      python: ${{ needs.plan.outputs.mac_python == 'true' }}
       examples: ${{ needs.plan.outputs.mac_examples }}
       example_targets: ${{ needs.plan.outputs.mac_example_targets }}
 
@@ -118,6 +123,7 @@ jobs:
     with:
       test_modules: ${{ needs.plan.outputs.windows_test_modules }}
       tests: ${{ needs.plan.outputs.windows_tests == 'true' }}
+      python: ${{ needs.plan.outputs.windows_python == 'true' }}
       examples: ${{ needs.plan.outputs.windows_examples }}
       example_targets: ${{ needs.plan.outputs.windows_example_targets }}
 

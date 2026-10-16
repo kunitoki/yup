@@ -42,6 +42,7 @@ TEST (CodeEditorSchemeTests, DefaultSchemeProvidesEveryColor)
     EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::selection).has_value());
     EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::searchHighlight).has_value());
     EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::breakpoint).has_value());
+    EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::errorLine).has_value());
     EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::minimapBackground).has_value());
     EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::minimapForeground).has_value());
     EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::minimapViewport).has_value());
@@ -172,6 +173,7 @@ TEST (CodeEditorSchemeTests, BuiltInSchemesAreComplete)
         EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::selection).has_value());
         EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::searchHighlight).has_value());
         EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::breakpoint).has_value());
+        EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::errorLine).has_value());
         EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::minimapBackground).has_value());
         EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::minimapForeground).has_value());
         EXPECT_TRUE (scheme.getColor (CodeEditorScheme::ColorId::minimapViewport).has_value());

@@ -59,6 +59,7 @@
 */
 class SpinningCubeDemo : public yup::Component
     , public yup::DragAndDropTarget
+    , public LoadingDemo
 {
 public:
     //==============================================================================
@@ -166,6 +167,30 @@ public:
         errorEditor->setColor (yup::TextEditor::Style::textColorId, yup::Colors::red);
         errorEditor->setVisible (false);
         addChildComponent (errorEditor.get());
+
+        addLoadingStep ([this]
+        {
+            if (capturedContext->isGpuAvailable())
+            {
+                initBlur();
+                return;
+            }
+
+            statusLabel->setText ("GPU context unavailable", yup::dontSendNotification);
+            gpuInitialized = true;
+            finishLoading();
+        }, StepThread::render);
+
+        addLoadingStep ([this]
+        {
+            initCube();
+        }, StepThread::render);
+
+        addLoadingStep ([this]
+        {
+            initLottie();
+            finishGpuInit();
+        }, StepThread::render);
     }
 
     ~SpinningCubeDemo() override = default;
@@ -191,10 +216,10 @@ public:
         g.fillAll();
 
         if (capturedContext == nullptr)
-        {
             capturedContext = &g.getGraphicsContext();
-            initGpu();
-        }
+
+        if (pumpLoading())
+            return;
 
         auto bounds = getLocalBounds().to<float>().reduced (10.0f);
         bounds.removeFromBottom (60.0f);
@@ -576,22 +601,9 @@ void main() {
 
     // ---- GPU initialisation --------------------------------------------------
 
-    void initGpu()
+    void finishGpuInit()
     {
-        if (capturedContext == nullptr || gpuInitialized)
-            return;
-
         gpuInitialized = true;
-
-        if (! capturedContext->isGpuAvailable())
-        {
-            statusLabel->setText ("GPU context unavailable", yup::dontSendNotification);
-            return;
-        }
-
-        initBlur();
-        initCube();
-        initLottie();
 
         if (cubePipeline != nullptr && blurPipeline != nullptr)
             statusLabel->setText ("GPU cube + separable blur ready. Drag slider for blur intensity.", yup::dontSendNotification);
@@ -868,58 +880,10 @@ void main() {
             if (! success || results.isEmpty())
                 return;
 
-            const std::vector<yup::ShaderLanguage> targetLanguages = {
-                yup::ShaderLanguage::glsl,
-                yup::ShaderLanguage::essl,
-                yup::ShaderLanguage::hlsl,
-                yup::ShaderLanguage::msl
-            };
-
-            auto makeEntry = [&] (yup::ShaderStage stage)
-            {
-                yup::ShaderBundleEntry entry;
-                entry.stage = stage;
-                entry.targetLanguages = targetLanguages;
-                entry.options.entryPoint = "main";
-                return entry;
-            };
-
-            yup::ShaderBundleCompiler compiler;
-
-            yup::ShaderBundleCompileRequest vertRequest;
-            vertRequest.source = vertSource;
-            vertRequest.sourceLanguage = yup::ShaderLanguage::glsl;
-            vertRequest.entries.push_back (makeEntry (yup::ShaderStage::vertex));
-
-            auto vsBundle = compiler.compile (vertRequest);
-            if (vsBundle.failed())
-            {
-                showError ("Save .ysl: vertex compilation failed: " + vsBundle.getErrorMessage());
-                return;
-            }
-
-            yup::ShaderBundleCompileRequest fragRequest;
-            fragRequest.source = fragSource;
-            fragRequest.sourceLanguage = yup::ShaderLanguage::glsl;
-            fragRequest.entries.push_back (makeEntry (yup::ShaderStage::fragment));
-
-            auto fsBundle = compiler.compile (fragRequest);
-            if (fsBundle.failed())
-            {
-                showError ("Save .ysl: fragment compilation failed: " + fsBundle.getErrorMessage());
-                return;
-            }
-
-            yup::ShaderBundle bundle;
-            for (const auto& info : vsBundle.getReference().getShaders())
-                bundle.addShader (info);
-            for (const auto& info : fsBundle.getReference().getShaders())
-                bundle.addShader (info);
-
-            auto saveResult = bundle.saveToFile (results[0]);
+            auto saveResult = saveGlslShaderBundle (results[0], vertSource, fragSource);
             if (saveResult.failed())
             {
-                showError ("Save .ysl failed: " + saveResult.getErrorMessage());
+                showError ("Save .ysl: " + saveResult.getErrorMessage());
                 return;
             }
 

@@ -205,6 +205,7 @@ website:
 update_emscripten_example NAME DEST DEMOPATH:
   sed -i '' -e 's/YUP_EXAMPLE_GRAPHICS_DEMO:STRING=.*/YUP_EXAMPLE_GRAPHICS_DEMO:STRING={{NAME}}/g' build/emscripten/CMakeCache.txt
   @just emscripten Release example_graphics
+  mkdir -p "{{DEMOPATH}}/{{DEST}}"
   cp -R build/emscripten/examples/graphics/Release/* "{{DEMOPATH}}/{{DEST}}"
 
 [doc("update the example graphics demos")]
@@ -216,6 +217,7 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example FluidSimulation fluid-simulation {{DEMOPATH}}
   @just update_emscripten_example Lottie lottie {{DEMOPATH}}
   @just update_emscripten_example Pbr pbr {{DEMOPATH}}
+  @just update_emscripten_example Shaders shaders {{DEMOPATH}}
   @just update_emscripten_example SpectrumAnalyzer spectrum-analyzer {{DEMOPATH}}
   @just update_emscripten_example Svg svg {{DEMOPATH}}
   @just update_emscripten_example TouchTrails touch-trails {{DEMOPATH}}

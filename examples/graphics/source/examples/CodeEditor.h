@@ -55,6 +55,7 @@ public:
 
         applyLanguage (languageCpp);
         applyScheme (schemeOneDark);
+        editor.setGutterBreakpointsEnabled (true);
         addAndMakeVisible (editor);
 
         setSize (640, 480);

@@ -43,6 +43,7 @@
 #include <yup_python/yup_python.h>
 #endif
 
+#include <atomic>
 #include <memory>
 #include <functional>
 #include <vector>
@@ -100,6 +101,155 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 
     return yup::GpuPipeline::compileFromBundle (std::move (device), bundle.getReference(), options);
 }
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+/** Compiles a GLSL vertex + fragment pair for every target language and saves it as a .ysl shader bundle. */
+inline yup::Result saveGlslShaderBundle (const yup::File& file, const yup::String& vertSource, const yup::String& fragSource)
+{
+    const std::vector<yup::ShaderLanguage> targetLanguages = {
+        yup::ShaderLanguage::glsl,
+        yup::ShaderLanguage::essl,
+        yup::ShaderLanguage::hlsl,
+        yup::ShaderLanguage::msl
+    };
+
+    auto makeEntry = [&] (yup::ShaderStage stage)
+    {
+        yup::ShaderBundleEntry entry;
+        entry.stage = stage;
+        entry.targetLanguages = targetLanguages;
+        entry.options.entryPoint = "main";
+        return entry;
+    };
+
+    yup::ShaderBundleCompiler compiler;
+
+    yup::ShaderBundleCompileRequest vertRequest;
+    vertRequest.source = vertSource;
+    vertRequest.sourceLanguage = yup::ShaderLanguage::glsl;
+    vertRequest.entries.push_back (makeEntry (yup::ShaderStage::vertex));
+
+    auto vsBundle = compiler.compile (vertRequest);
+    if (vsBundle.failed())
+        return yup::Result::fail ("vertex compilation failed: " + vsBundle.getErrorMessage());
+
+    yup::ShaderBundleCompileRequest fragRequest;
+    fragRequest.source = fragSource;
+    fragRequest.sourceLanguage = yup::ShaderLanguage::glsl;
+    fragRequest.entries.push_back (makeEntry (yup::ShaderStage::fragment));
+
+    auto fsBundle = compiler.compile (fragRequest);
+    if (fsBundle.failed())
+        return yup::Result::fail ("fragment compilation failed: " + fsBundle.getErrorMessage());
+
+    yup::ShaderBundle bundle;
+    for (const auto& info : vsBundle.getReference().getShaders())
+        bundle.addShader (info);
+    for (const auto& info : fsBundle.getReference().getShaders())
+        bundle.addShader (info);
+
+    return bundle.saveToFile (file);
+}
+#endif
+
+/** Base for demos that take a while to open: the demo window shows a loading bar until all their loading steps have run.
+
+    Register the steps in the constructor. They run in order, one per tick, starting once the first frame (showing the bar)
+    has been drawn. Message thread steps run from a timer, render thread steps (GPU work) from pumpLoading(), which the
+    demo must call in its paint().
+*/
+class LoadingDemo : private yup::Timer
+{
+public:
+    enum class StepThread
+    {
+        message,
+        render
+    };
+
+    ~LoadingDemo() override = default;
+
+    /** Returns the loading progress from 0 to 1, safe to call from any thread. */
+    double getLoadingProgress() const
+    {
+        return steps.empty() ? 1.0 : (double) stepsDone.load() / (double) steps.size();
+    }
+
+    /** Returns true until every step has run, or loading was finished early. */
+    bool isLoading() const
+    {
+        return stepsDone.load() < (int) steps.size();
+    }
+
+protected:
+    /** Adds a step that runs once on the given thread. */
+    void addLoadingStep (std::function<void()> step, StepThread thread = StepThread::message)
+    {
+        addStep ([step = std::move (step)]
+        {
+            step();
+            return true;
+        }, thread);
+    }
+
+    /** Adds a step that completes once isReady returns true, polled on the message thread (e.g. work on another thread). */
+    void addLoadingWait (std::function<bool()> isReady)
+    {
+        addStep (std::move (isReady), StepThread::message);
+    }
+
+    /** Skips the remaining steps, e.g. after a failure. */
+    void finishLoading()
+    {
+        stepsDone = (int) steps.size();
+    }
+
+    /** Call first thing in paint(): runs the next render thread step, and returns true while still loading. */
+    bool pumpLoading()
+    {
+        if (firstFrameDrawn.exchange (true))
+            runStep (StepThread::render);
+
+        return isLoading();
+    }
+
+private:
+    struct Step
+    {
+        std::function<bool()> run;
+        StepThread thread;
+    };
+
+    void addStep (std::function<bool()> run, StepThread thread)
+    {
+        jassert (stepsDone == 0);
+
+        steps.push_back ({ std::move (run), thread });
+        startTimerHz (60);
+    }
+
+    void runStep (StepThread thread)
+    {
+        const int index = stepsDone.load();
+        if (index >= (int) steps.size() || steps[(size_t) index].thread != thread)
+            return;
+
+        if (steps[(size_t) index].run() && stepsDone.load() == index) // The step may have called finishLoading()
+            stepsDone = index + 1;
+    }
+
+    void timerCallback() override
+    {
+        if (! isLoading())
+            stopTimer();
+        else if (firstFrameDrawn) // Rendering holds the message manager lock, so wait for a frame showing the bar
+            runStep (StepThread::message);
+    }
+
+    std::vector<Step> steps;
+    std::atomic<int> stepsDone { 0 };
+    std::atomic<bool> firstFrameDrawn { false };
+};
 
 //==============================================================================
 
@@ -199,6 +349,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ScrollBar
 #include "examples/ScrollBar.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Shaders && YUP_ENABLE_SHADER_TRANSPILER
+#include "examples/Shaders.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Sliders
 #include "examples/Slider.h"
 #endif
@@ -275,12 +428,76 @@ private:
 
 //==============================================================================
 
+/** Covers the demo area with a progress bar while a LoadingDemo opens.
+
+    Polls the demo on the message thread. Not opaque, so the demo underneath keeps painting
+    (and loading) while hidden.
+*/
+class LoadingOverlay
+    : public yup::Component
+    , private yup::Timer
+{
+public:
+    LoadingOverlay()
+        : yup::Component ("loadingOverlay")
+    {
+        setOpaque (false);
+        addAndMakeVisible (bar);
+    }
+
+    /** Shows the overlay until the demo has loaded; nullptr (a demo that doesn't load) hides it. */
+    void track (const LoadingDemo* demoToTrack)
+    {
+        demo = demoToTrack;
+        update();
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
+        g.fillAll();
+    }
+
+    void resized() override
+    {
+        const auto bounds = getLocalBounds();
+        bar.setBounds (bounds.withSizeKeepingCenter (yup::jmin (560.0f, bounds.getWidth() * 0.7f), 20.0f));
+    }
+
+private:
+    void timerCallback() override
+    {
+        update();
+    }
+
+    void update()
+    {
+        const double progress = demo != nullptr ? demo->getLoadingProgress() : 1.0;
+        const bool isLoading = progress < 1.0;
+
+        if (isLoading)
+            bar.setProgress (progress, yup::dontSendNotification);
+
+        setVisible (isLoading);
+
+        if (! isLoading)
+            stopTimer();
+        else if (! isTimerRunning())
+            startTimerHz (30);
+    }
+
+    const LoadingDemo* demo = nullptr;
+    yup::ProgressBar bar { "loadingBar" };
+};
+
+//==============================================================================
+
 class CustomWindow
     : public yup::DocumentWindow
     , public yup::Timer
 {
 public:
-    CustomWindow()
+    explicit CustomWindow (const std::optional<yup::String>& initialDemo)
         : yup::DocumentWindow (yup::ComponentNative::Options().withVSync (true))
     {
         setTitle ("main");
@@ -302,8 +519,9 @@ public:
         }
 
         // Setup examples
-        auto addDemo = [&] (yup::StringRef name, auto factory)
+        auto addDemo = [&] (yup::StringRef id, yup::StringRef name, auto factory)
         {
+            demoIds.add (id);
             demoNames.add (name);
             demoFactories.push_back (std::move (factory));
             components.add (nullptr);
@@ -311,145 +529,150 @@ public:
 
         // clang-format off
 #if YUP_EXAMPLE_GRAPHICS_DEMO_AI
-        addDemo ("AI", [] { return std::make_unique<AIDemo>(); });
+        addDemo ("AI", "AI", [] { return std::make_unique<AIDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Artboard
-        addDemo ("Artboard", [] { return std::make_unique<ArtboardDemo>(); });
+        addDemo ("Artboard", "Artboard", [] { return std::make_unique<ArtboardDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ArtboardLayout
-        addDemo ("Artboard Layout", [] { return std::make_unique<ArtboardLayoutDemo>(); });
+        addDemo ("ArtboardLayout", "Artboard Layout", [] { return std::make_unique<ArtboardLayoutDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
-        addDemo ("Audio", [] { return std::make_unique<AudioExample>(); });
+        addDemo ("Audio", "Audio", [] { return std::make_unique<AudioExample>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_AudioFile
-        addDemo ("Audio File", [] { return std::make_unique<AudioFileDemo>(); });
+        addDemo ("AudioFile", "Audio File", [] { return std::make_unique<AudioFileDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Clipboard
-        addDemo ("Clipboard", [] { return std::make_unique<ClipboardDemo>(); });
+        addDemo ("Clipboard", "Clipboard", [] { return std::make_unique<ClipboardDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ColorLab
-        addDemo ("Color Lab", [] { return std::make_unique<ColorLabDemo>(); });
+        addDemo ("ColorLab", "Color Lab", [] { return std::make_unique<ColorLabDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Component3D
-        addDemo ("Component 3D", [] { return std::make_unique<Component3DDemo>(); });
+        addDemo ("Component3D", "Component 3D", [] { return std::make_unique<Component3DDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ComponentEffects
-        addDemo ("Component Effects", [] { return std::make_unique<ComponentEffectsDemo>(); });
+        addDemo ("ComponentEffects", "Component Effects", [] { return std::make_unique<ComponentEffectsDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ComputeParticles
-        addDemo ("Compute Particles", [] { return std::make_unique<ComputeParticlesDemo>(); });
+        addDemo ("ComputeParticles", "Compute Particles", [] { return std::make_unique<ComputeParticlesDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Convolution
-        addDemo ("Convolution Demo", [] { return std::make_unique<ConvolutionDemo>(); });
+        addDemo ("Convolution", "Convolution Demo", [] { return std::make_unique<ConvolutionDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Crossover
-        addDemo ("Crossover Demo", [] { return std::make_unique<CrossoverDemo>(); });
+        addDemo ("Crossover", "Crossover Demo", [] { return std::make_unique<CrossoverDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_CodeEditor
-        addDemo ("Code Editor", [] { return std::make_unique<CodeEditorDemo>(); });
+        addDemo ("CodeEditor", "Code Editor", [] { return std::make_unique<CodeEditorDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
-        addDemo ("Drag and Drop", [] { return std::make_unique<DragAndDropDemo>(); });
+        addDemo ("DragAndDrop", "Drag and Drop", [] { return std::make_unique<DragAndDropDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Emoji
-        addDemo ("Emoji", [] { return std::make_unique<EmojiDemo>(); });
+        addDemo ("Emoji", "Emoji", [] { return std::make_unique<EmojiDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
-        addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
+        addDemo ("FileChooser", "File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Filter
-        addDemo ("Filter Demo", [] { return std::make_unique<FilterDemo>(); });
+        addDemo ("Filter", "Filter Demo", [] { return std::make_unique<FilterDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FluidSimulation
-        addDemo ("Fluid Simulation", [] { return std::make_unique<FluidSimulationDemo>(); });
+        addDemo ("FluidSimulation", "Fluid Simulation", [] { return std::make_unique<FluidSimulationDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_GpuAudio
-        addDemo ("GPU Audio", [] { return std::make_unique<GpuAudioProcessingDemo>(); });
+        addDemo ("GpuAudio", "GPU Audio", [] { return std::make_unique<GpuAudioProcessingDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
-        addDemo ("Images", [] { return std::make_unique<ImagesDemo>(); });
+        addDemo ("Images", "Images", [] { return std::make_unique<ImagesDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ImageMesh
-        addDemo ("Image Mesh", [] { return std::make_unique<ImageMeshDemo>(); });
+        addDemo ("ImageMesh", "Image Mesh", [] { return std::make_unique<ImageMeshDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
-        addDemo ("Layout", [] { return std::make_unique<LayoutExample>(); });
+        addDemo ("Layout", "Layout", [] { return std::make_unique<LayoutExample>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ListBox
-        addDemo ("List Box", [] { return std::make_unique<ListBoxDemo>(); });
+        addDemo ("ListBox", "List Box", [] { return std::make_unique<ListBoxDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Lottie
-        addDemo ("Lottie", [] { return std::make_unique<LottieDemo>(); });
+        addDemo ("Lottie", "Lottie", [] { return std::make_unique<LottieDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_OffscreenRender
-        addDemo ("Offscreen Render", [] { return std::make_unique<OffscreenRenderDemo>(); });
+        addDemo ("OffscreenRender", "Offscreen Render", [] { return std::make_unique<OffscreenRenderDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Opaque
-        addDemo ("Opaque Demo", [] { return std::make_unique<OpaqueDemo>(); });
+        addDemo ("Opaque", "Opaque Demo", [] { return std::make_unique<OpaqueDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PaintProfiler
-        addDemo ("Paint Profiler", [] { return std::make_unique<PaintProfilerDemo>(); });
+        addDemo ("PaintProfiler", "Paint Profiler", [] { return std::make_unique<PaintProfilerDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
-        addDemo ("Paths", [] { return std::make_unique<PathsExample>(); });
+        addDemo ("Paths", "Paths", [] { return std::make_unique<PathsExample>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Pbr
-        addDemo ("PBR IBL", [] { return std::make_unique<PbrDemo>(); });
+        addDemo ("Pbr", "PBR IBL", [] { return std::make_unique<PbrDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
-        addDemo ("Popup Menu", [] { return std::make_unique<PopupMenuDemo>(); });
+        addDemo ("PopupMenu", "Popup Menu", [] { return std::make_unique<PopupMenuDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Scene3D
-        addDemo ("Scene 3D", [] { return std::make_unique<Scene3DDemo>(); });
+        addDemo ("Scene3D", "Scene 3D", [] { return std::make_unique<Scene3DDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ScrollBar
-        addDemo ("ScrollBar", [] { return std::make_unique<ScrollBarDemo>(); });
+        addDemo ("ScrollBar", "ScrollBar", [] { return std::make_unique<ScrollBarDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Shaders && YUP_ENABLE_SHADER_TRANSPILER
+        addDemo ("Shaders", "Shaders", [] { return std::make_unique<ShadersDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Sliders
-        addDemo ("Sliders", [] { return std::make_unique<SliderDemo>(); });
+        addDemo ("Sliders", "Sliders", [] { return std::make_unique<SliderDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_SpectrumAnalyzer
-        addDemo ("FFT Analyzer", [] { return std::make_unique<SpectrumAnalyzerDemo>(); });
+        addDemo ("SpectrumAnalyzer", "FFT Analyzer", [] { return std::make_unique<SpectrumAnalyzerDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_SpinningCube
-        addDemo ("Spinning Cube", [] { return std::make_unique<SpinningCubeDemo>(); });
+        addDemo ("SpinningCube", "Spinning Cube", [] { return std::make_unique<SpinningCubeDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Svg
-        addDemo ("SVG", [] { return std::make_unique<SvgDemo>(); });
+        addDemo ("Svg", "SVG", [] { return std::make_unique<SvgDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
-        addDemo ("Text Editor", [] { return std::make_unique<TextEditorDemo>(); });
+        addDemo ("TextEditor", "Text Editor", [] { return std::make_unique<TextEditorDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Themes
-        addDemo ("Themes", [] { return std::make_unique<ThemesDemo>(); });
+        addDemo ("Themes", "Themes", [] { return std::make_unique<ThemesDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
-        addDemo ("Toast Notifications", [] { return std::make_unique<ToastNotificationDemo>(); });
+        addDemo ("ToastNotification", "Toast Notifications", [] { return std::make_unique<ToastNotificationDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails
-        addDemo ("Touch Trails", [] { return std::make_unique<TouchTrailsDemo>(); });
+        addDemo ("TouchTrails", "Touch Trails", [] { return std::make_unique<TouchTrailsDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TreeView
-        addDemo ("Tree View", [] { return std::make_unique<TreeViewDemo>(); });
+        addDemo ("TreeView", "Tree View", [] { return std::make_unique<TreeViewDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
-        addDemo ("Variable Fonts", [] { return std::make_unique<VariableFontsExample>(); });
+        addDemo ("VariableFonts", "Variable Fonts", [] { return std::make_unique<VariableFontsExample>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
-        addDemo ("Widgets", [] { return std::make_unique<WidgetsDemo>(); });
+        addDemo ("Widgets", "Widgets", [] { return std::make_unique<WidgetsDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_YdspSynths && YUP_MODULE_AVAILABLE_yup_dsp_jit
-        addDemo ("YDSP Synths", [] { return std::make_unique<YdspSynthDemo>(); });
+        addDemo ("YdspSynths", "YDSP Synths", [] { return std::make_unique<YdspSynthDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Python && YUP_MODULE_AVAILABLE_yup_python
-        addDemo ("Python", [] { return std::make_unique<PythonDemo>(); });
+        addDemo ("Python", "Python", [] { return std::make_unique<PythonDemo>(); });
 #endif
         // clang-format on
 
         // A single-demo build (see YUP_EXAMPLE_GRAPHICS_DEMO in CMakeLists.txt) only registers one
         // demo, so skip the picker entirely and let that demo fill the whole window.
         singleDemoMode = (demoNames.size() == 1);
+
+        const int initialIndex = singleDemoMode ? 0 : findDemoIndex (initialDemo.value_or(""));
 
         if (! singleDemoMode)
         {
@@ -463,11 +686,16 @@ public:
             listBox = std::make_unique<yup::ListBox>();
             listBox->setModel (listModel.get());
             listBox->setRowSize (30);
-            listBox->selectRow (0, false, yup::dontSendNotification);
+            listBox->selectRow (initialIndex, false, yup::dontSendNotification);
             addAndMakeVisible (listBox.get());
+
+            // The list has no size yet: scroll to the selection on its first layout
+            scrollToSelectedDemo = true;
         }
 
-        selectComponent (0);
+        addChildComponent (loadingOverlay);
+
+        selectComponent (initialIndex);
 
         startTimerHz (1);
     }
@@ -516,6 +744,12 @@ public:
                 // Add margin between ListBox and demo components
                 bounds.removeFromTop (margin);
             }
+
+            if (scrollToSelectedDemo && currentDemo >= 0 && ! listBox->getLocalBounds().isEmpty())
+            {
+                listBox->scrollToRow (currentDemo);
+                scrollToSelectedDemo = false;
+            }
         }
 
         // Demo components take the remaining space
@@ -524,6 +758,8 @@ public:
             if (component != nullptr)
                 component->setBounds (bounds);
         }
+
+        loadingOverlay.setBounds (bounds);
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
@@ -567,6 +803,7 @@ public:
         {
             components.set (index, demoFactories[index]().release());
             addChildComponent (components[index]);
+            loadingOverlay.toFront (false);
         }
 
         for (int i = 0; i < components.size(); ++i)
@@ -581,12 +818,38 @@ public:
             }
         }
 
+        currentDemo = index;
+
         resized(); // Ensure the newly created component is sized correctly
 
         components[index]->setVisible (true);
+
+        loadingOverlay.track (dynamic_cast<const LoadingDemo*> (components[index]));
     }
 
 private:
+    int findDemoIndex (const yup::String& name) const
+    {
+        if (name.isEmpty())
+            return 0;
+
+        auto normalize = [] (const yup::String& s)
+        {
+            return s.removeCharacters (" ").toLowerCase();
+        };
+
+        const auto wanted = normalize (name);
+
+        for (int i = 0; i < demoIds.size(); ++i)
+        {
+            if (normalize (demoIds[i]) == wanted || normalize (demoNames[i]) == wanted)
+                return i;
+        }
+
+        yup::Logger::outputDebugString ("Unknown demo '" + name + "', available: " + demoIds.joinIntoString (", "));
+        return 0;
+    }
+
     void updateWindowTitle()
     {
         yup::String title;
@@ -642,18 +905,22 @@ private:
         setTitle (title);
     }
 
+    yup::StringArray demoIds;
     yup::Array<yup::String> demoNames;
     std::vector<std::function<std::unique_ptr<yup::Component>()>> demoFactories;
     std::unique_ptr<DemoListModel> listModel;
     std::unique_ptr<yup::ListBox> listBox;
     yup::OwnedArray<yup::Component> components;
+    LoadingOverlay loadingOverlay;
     yup::Image image;
+    int currentDemo = -1;
     bool singleDemoMode = false;
+    bool scrollToSelectedDemo = false;
 };
 
 //==============================================================================
 
-struct Application : yup::YUPApplication
+struct Application : yup::YUPApplication, yup::Timer
 {
     Application() = default;
 
@@ -677,11 +944,25 @@ struct Application : yup::YUPApplication
 
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
-        yup::MessageManager::callAsync ([this]
+        std::optional<yup::String> initialDemo;
+        std::optional<int> exitAfter;
+        
+        auto executable = yup::File::getSpecialLocation (yup::File::currentApplicationFile)
+            .getFileNameWithoutExtension();
+
+        const auto args = yup::ArgumentList (std::move (executable), yup::YUPApplication::getCommandLineParameterArray());
+
+        if (auto demoArg = args.getValueForOption ("--demo"); demoArg.has_value() && demoArg->isNotEmpty())
+            initialDemo = std::move (demoArg);
+
+        if (const auto exitAfterArg = args.getIntValueForOption ("--exit", 0); exitAfterArg > 0)
+            exitAfter = exitAfterArg;
+
+        yup::MessageManager::callAsync ([this, initialDemo, exitAfter]
         {
             yup::Process::makeForegroundProcess();
 
-            window = std::make_unique<CustomWindow>();
+            window = std::make_unique<CustomWindow> (initialDemo);
 
 #if YUP_MOBILE
             window->centreWithSize ({ 720, 1280 });
@@ -690,6 +971,9 @@ struct Application : yup::YUPApplication
 #endif
 
             window->setVisible (true);
+
+            if (exitAfter.has_value())
+                startTimer (*exitAfter);
         });
     }
 
@@ -703,6 +987,13 @@ struct Application : yup::YUPApplication
     }
 
 private:
+    void timerCallback() override
+    {
+        yup::YUPApplication::getInstance()->systemRequestedQuit();
+
+        stopTimer();
+    }
+
     std::unique_ptr<CustomWindow> window;
 };
 
