@@ -440,6 +440,67 @@ TEST_F (RenderCapabilitiesTests, MotionBlurIsAnOptInOfTheFullTier)
     EXPECT_FALSE (raster.isEnabled (Feature::hdrSceneColor, settings));
 }
 
+TEST_F (RenderCapabilitiesTests, UpscalingIsAnOptInOfTheFullTierWithTemporalAntiAliasing)
+{
+    RenderSettings settings;
+    const RenderCapabilities full (desktopMetal(), settings, 4);
+    EXPECT_TRUE (full.isAvailable (Feature::upscaling));
+    EXPECT_FALSE (full.isEnabled (Feature::upscaling, settings));
+    EXPECT_EQ (settings.upscaling, RenderSettings::Upscaling::off);
+    EXPECT_EQ (settings.renderScale, 0.5f);
+    EXPECT_EQ (full.getRenderScale (settings), 1.0f);
+
+    settings.upscaling = RenderSettings::Upscaling::temporal;
+    EXPECT_TRUE (full.isEnabled (Feature::upscaling, settings));
+    EXPECT_EQ (full.getRenderScale (settings), 0.5f);
+
+    // The reconstruction is the temporal anti-aliasing's
+    for (const auto samples : { 1, 0, -4 })
+    {
+        settings.taaSamples = samples;
+        EXPECT_FALSE (full.isEnabled (Feature::upscaling, settings)) << samples;
+        EXPECT_EQ (full.getRenderScale (settings), 1.0f) << samples;
+    }
+
+    // The raster tier has no temporal anti-aliasing to reconstruct the frame with
+    settings.taaSamples = 16;
+    auto capable = webgl2 (true, 4);
+    capable.depthNormalPrepass = true;
+    const RenderCapabilities raster (capable, settings, 4);
+    EXPECT_FALSE (raster.isAvailable (Feature::upscaling));
+    EXPECT_FALSE (raster.isEnabled (Feature::upscaling, settings));
+    EXPECT_EQ (raster.getRenderScale (settings), 1.0f);
+}
+
+TEST_F (RenderCapabilitiesTests, RenderScaleIsClamped)
+{
+    RenderSettings settings;
+    settings.upscaling = RenderSettings::Upscaling::temporal;
+    const RenderCapabilities full (desktopMetal(), settings, 4);
+
+    const std::pair<float, float> cases[] = {
+        { 0.75f, 0.75f },
+        { 0.5f, 0.5f },
+        { 0.25f, 0.5f },
+        { 0.0f, 0.5f },
+        { -1.0f, 0.5f },
+        { 1.0f, 1.0f },
+        { 2.0f, 1.0f },
+        { std::numeric_limits<float>::quiet_NaN(), 1.0f },
+        { std::numeric_limits<float>::infinity(), 1.0f },
+        { -std::numeric_limits<float>::infinity(), 1.0f },
+    };
+
+    for (const auto& [scale, expected] : cases)
+    {
+        settings.renderScale = scale;
+        EXPECT_EQ (full.getRenderScale (settings), expected) << scale;
+
+        // A scale of 1 shades at full size: nothing to upscale
+        EXPECT_EQ (full.isEnabled (Feature::upscaling, settings), expected < 1.0f) << scale;
+    }
+}
+
 TEST_F (RenderCapabilitiesTests, RasterDofIsUnavailableWithoutHdrTargetsOrPrepass)
 {
     RenderSettings settings;

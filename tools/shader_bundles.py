@@ -42,7 +42,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BUNDLER = REPO_ROOT / "cmake" / "tools" / "shader_bundler" / "build" / "yup_shader_bundler"
 TARGET_LANGS = "glsl,essl,hlsl,msl,spirv,wgsl"
 
-# The bundle sets: the just recipe that regenerates them, their shader folder and their entries, in order
+# The bundle sets, named as `just update_shaders` takes them: their shader folder and their entries, in order
 BUNDLE_SETS = {
     "yup_3d": {
         "directory": "modules/yup_3d/shaders",
@@ -82,6 +82,7 @@ BUNDLE_SETS = {
             "ShadowPass",
             "ShadowPass:YUP_3D_MASKED",
             "TemporalAA",
+            "TemporalAA:YUP_3D_UPSCALE",
             "ToneMapping",
             "BloomDownsample",
             "BloomUpsample",

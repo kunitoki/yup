@@ -43,6 +43,29 @@ struct YUP_API RenderSettings
     TierPreference tier = TierPreference::automatic; ///< automatic picks full on capable desktop GPUs, raster elsewhere.
     int taaSamples = 16;                             ///< Full tier: jittered frames accumulated before the image is final.
 
+    /** How the full tier reaches the size of the frame, see upscaling. */
+    enum class Upscaling
+    {
+        off,     ///< The scene is shaded at the size of the frame.
+        temporal ///< The scene is shaded at renderScale of the size, and the temporal anti-aliasing reconstructs the full size from the jittered frames.
+    };
+
+    /** Shades fewer pixels and reconstructs the frame from them: most passes cost about the
+        square of renderScale. Full tier only, and only with temporal anti-aliasing (taaSamples
+        above 1), which does the reconstruction (see RenderCapabilities::Feature::upscaling): the
+        raster tier ignores it, which is not an error. The image converges over about taaSamples /
+        renderScale squared frames to one close to the full size, and moving parts look softer than
+        at full size while they move. Textures are sampled at the mip level of the smaller size, so
+        their detail stays softer at low scales. Off by default, costing nothing then; a change of
+        either setting discards the temporal accumulation, as a resize does.
+    */
+    Upscaling upscaling = Upscaling::off;
+
+    /** The share of the frame's width and height the scene is shaded at with upscaling, clamped
+        to [0.5, 1]. 1, and a value that is not finite, shade at full size as without upscaling.
+    */
+    float renderScale = 0.5f;
+
     bool bloom = false;           ///< Glow around highlights. Raster: needs an MSAA rgba16float target.
     float bloomThreshold = 1.0f;  ///< Exposed radiance above which pixels glow.
     float bloomIntensity = 0.05f; ///< How much of the blurred glow is added.
@@ -146,7 +169,7 @@ struct YUP_API RenderSettings
         ambientOcclusion, ///< The ambient occlusion visibility, as gray: white is unoccluded.
         reflections,      ///< The screen-space reflections, exposed and weighted by their confidence.
         indirectDiffuse,  ///< The light the screen-space diffuse GI gathers, exposed, before the surface colors.
-        circleOfConfusion ///< The signed circle of confusion of the depth of field, as a share of depthOfFieldMaxSize: orange in front of the focus, blue behind it, black in focus.
+        circleOfConfusion ///< The signed circle of confusion of the depth of field, as the square root of its share of depthOfFieldMaxSize, so blurs of a pixel or two show: orange in front of the focus, blue behind it, black in focus. Black everywhere while the depth of field is off.
     };
 
     /** Shows an intermediate image instead of the final one, for tuning the screen-space effects

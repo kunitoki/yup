@@ -92,6 +92,7 @@ bool RenderCapabilities::isAvailable (Feature feature) const noexcept
         case Feature::screenSpaceReflections:
         case Feature::screenSpaceGI:
         case Feature::motionBlur:
+        case Feature::upscaling:
             return false;
 
         case Feature::softShadows:
@@ -153,9 +154,24 @@ bool RenderCapabilities::isEnabled (Feature feature, const RenderSettings& setti
         // The scene switches the fog on
         case Feature::worldFog:
             return isAvailable (feature);
+
+        // At a scale of 1 the frame is shaded at its size, as without upscaling
+        case Feature::upscaling:
+            return isAvailable (feature) && settings.upscaling != RenderSettings::Upscaling::off
+                && isEnabled (Feature::temporalAntiAliasing, settings) && getClampedRenderScale (settings) < 1.0f;
     }
 
     return false;
+}
+
+float RenderCapabilities::getRenderScale (const RenderSettings& settings) const noexcept
+{
+    return isEnabled (Feature::upscaling, settings) ? getClampedRenderScale (settings) : 1.0f;
+}
+
+float RenderCapabilities::getClampedRenderScale (const RenderSettings& settings) noexcept
+{
+    return std::isfinite (settings.renderScale) ? jlimit (minRenderScale, 1.0f, settings.renderScale) : 1.0f;
 }
 
 int RenderCapabilities::getCascadeCount (const RenderSettings& settings) const noexcept

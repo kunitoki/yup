@@ -829,6 +829,8 @@ scene->setExposure (1.2f);
 | ---------------- | ----------- | ---------------------------------------------------------------------------------------------- |
 | `tier`           | `automatic` | `automatic`, `raster` or `full`, see [Platform tiers](#platform-tiers).                        |
 | `taaSamples`     | 16          | Full tier: how many jittered frames are accumulated before the image is final. Fewer converge sooner and antialias less. |
+| `upscaling`      | `off`       | Full tier: `temporal` shades the scene smaller and rebuilds the full image over several frames, see [Upscaling](#upscaling). |
+| `renderScale`    | 0.5         | With `upscaling`: the share of the width and height the scene is shaded at, from 0.5 to 1. |
 | `bloom`          | off         | Glow around bright highlights, see [Post effects](#post-effects).                              |
 | `bloomThreshold` | 1.0         | Exposed radiance above which pixels glow.                                                      |
 | `bloomIntensity` | 0.05        | How much of the blurred glow is added to the image.                                            |
@@ -852,9 +854,10 @@ final image, to tune it:
   confident each one is;
 - `indirectDiffuse`: the light the screen-space diffuse GI gathers, exposed,
   before the color of the surfaces is applied;
-- `circleOfConfusion`: how much the depth of field blurs each pixel, as a share
-  of `depthOfFieldMaxSize`: orange in front of the focus, blue behind it, black
-  in focus.
+- `circleOfConfusion`: how much the depth of field blurs each pixel, brighter as
+  the blur nears `depthOfFieldMaxSize` (the square root of its share, so blurs of
+  a pixel or two show): orange in front of the focus, blue behind it, black in
+  focus. It needs `depthOfField` on.
 
 The image is shown pixel for pixel, without tone mapping, bloom or background,
 so the half-resolution effects show their 2 x 2 blocks. It shows the effect of a
@@ -918,6 +921,7 @@ falls back to raster.
 | [Depth of field](#depth-of-field) | Off by default, where the device has multisampled half-float targets and the depth and normal pass | Off by default |
 | [Motion blur](#motion-blur)       | No: the raster tier has no motion to read                                                  | Off by default               |
 | [Fog](#fog)                       | When the scene has it, where the device has multisampled half-float targets and the depth and normal pass | When the scene has it |
+| [Upscaling](#upscaling)           | No: it rebuilds the image with the temporal anti-aliasing of the full tier                 | Off by default               |
 
 Volumetric fog and fog volumes, subsurface scattering and refraction are not in
 this release, on either tier.
@@ -941,8 +945,8 @@ shadows, at the cost of more frames before the image is final.
   single frame among the `taaSamples` that follow, so edges keep only a faint
   trace of the image before the change. After a large change, such as a cut to another
   shot, call `restartAccumulation()`.
-- Changing the size of the view, the tier or `taaSamples` discards the history,
-  and the image starts over.
+- Changing the size of the view, the tier, `taaSamples`, `upscaling` or
+  `renderScale` discards the history, and the image starts over.
 - Tone mapping, the bloom, depth of field and motion blur settings, the depth
   of field fields of the camera and the debug view are applied after the
   accumulation, so changing them neither restarts nor discards it. Repaint
@@ -954,6 +958,43 @@ shadows, at the cost of more frames before the image is final.
 - Calling `Texture::setGpuTexture()` on every frame stops the image from ever
   converging, and the component then repaints forever. Call it only when the
   content changed.
+
+### Upscaling
+
+Most of a full tier frame is spent shading pixels, so shading fewer of them is
+the largest saving. With `upscaling = Upscaling::temporal`, the scene is shaded
+at `renderScale` of the view's width and height, and the temporal
+anti-aliasing rebuilds the full-size image from the jittered frames: each frame
+samples different points of every pixel, and the history gathers them.
+
+```cpp
+auto settings = scene->getRenderSettings();
+settings.upscaling = yup::RenderSettings::Upscaling::temporal;
+settings.renderScale = 0.5f; // a quarter of the pixels
+scene->setRenderSettings (settings);
+```
+
+- A still image converges to one close to the full-size image, over about
+  `taaSamples / (renderScale * renderScale)` frames: 64 at a scale of 0.5 with
+  the default 16 samples.
+- While things move, the image is softer than at full size, since each frame
+  holds fewer samples.
+- Textures are sampled at the mip level of the smaller size, so their fine detail
+  stays softer at low scales.
+- Effects after the accumulation (bloom, depth of field, motion blur, tone
+  mapping) run at the full size.
+- It needs the full tier and `taaSamples` above 1; otherwise frames are shaded at
+  full size. `renderScale` is clamped to [0.5, 1], and a scale of 1 renders
+  exactly as `off`. `FrameStats::internalWidth` and `internalHeight` report the
+  size shaded.
+
+GPU time of the Scene 3D demo (full tier, light show on, orbiting camera) on an
+Apple M2 Max:
+
+| View size            | Off     | `renderScale` 0.75 | `renderScale` 0.5 |
+| -------------------- | ------- | ------------------ | ----------------- |
+| 1578 x 1404 (demo)   | 6.3 ms  | 4.3 ms             | 3.2 ms            |
+| 3456 x 2234 (Retina) | 22.0 ms | 13.9 ms            | 7.7 ms            |
 
 ## Post effects
 

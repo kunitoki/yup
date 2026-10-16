@@ -88,8 +88,8 @@ def main() -> int:
         output = OUTPUT_DIR / f"{name}-record.json"
         output.unlink(missing_ok=True)
 
-        # Built first, so the load check sees the machine as the timing will
-        if run_just(args.just, "_configure_mac") != 0 or run_just(args.just, "build", "mac", args.config, "yup_tests") != 0:
+        # Configured and built first by a test run matching no test, so the load check sees the machine as the timing will
+        if run_just(args.just, "test", args.config, "-*") != 0:
             return 1
 
         max_load = float(env.get("YUP_PERF_MAX_LOAD", DEFAULT_MAX_LOAD))

@@ -47,6 +47,7 @@ public:
         bool colorIsReversible = false; ///< True when color is reversibly tone mapped (raster HDR path).
         Color background;               ///< Display-referred, composited under the uncovered pixels.
         int temporalSampleIndex = 0;    ///< Frames accumulated in the TAA history, see TemporalAA::render().
+        int temporalSampleCount = 0;    ///< Frames the TAA accumulates, see TemporalAA::render(): more when the color is smaller than the output. 0 takes RenderSettings::taaSamples.
         bool temporalChanging = false;  ///< True while the scene changes, see TemporalAA::getBlendWeight().
         const CameraNode* camera = nullptr; ///< The active camera, for the depth of field; nullptr has none.
         bool blurring = false;          ///< True when the depth of field blurs this frame: willBlur(), and on raster a depth and normal prepass that compiles.
@@ -109,6 +110,12 @@ public:
 
     /** @internal Test hook: the next @p count motion blur renders fail, see MotionBlur::failRendersForTesting(). */
     void failMotionBlurForTesting (int count) noexcept { motionBlurFailures = count; }
+
+    /** The temporal anti-aliasing, for tests. */
+    const TemporalAA& getTemporalAA() const noexcept { return temporalAA; }
+
+    /** Compiles the upscaling of the temporal anti-aliasing once, see TemporalAA::prepareUpscaling(). */
+    bool prepareUpscaling (const GpuDevice::Ptr& device) { return temporalAA.prepareUpscaling (device); }
 
 private:
     TemporalAA temporalAA;

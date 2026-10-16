@@ -1461,6 +1461,30 @@ private:
                 });
             };
 
+            upscalingLabel.setText ("Upscaling", yup::dontSendNotification);
+            upscalingCombo.addItem ("Off", 1);
+            upscalingCombo.addItem ("Temporal", 2);
+            upscalingCombo.setSelectedId (static_cast<int> (settings.upscaling) + 1, yup::dontSendNotification);
+            upscalingCombo.onSelectedItemChanged = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.upscaling = static_cast<yup::RenderSettings::Upscaling> (upscalingCombo.getSelectedId() - 1);
+                });
+            };
+
+            renderScaleLabel.setText ("Render scale", yup::dontSendNotification);
+            renderScaleSlider.setRange (yup::RenderCapabilities::minRenderScale, 1.0, 0.05);
+            renderScaleSlider.setNumDecimalPlacesToDisplay (2);
+            renderScaleSlider.setValue (settings.renderScale, yup::dontSendNotification);
+            renderScaleSlider.onValueChanged = [this] (double value)
+            {
+                editSettings ([value] (yup::RenderSettings& s)
+                {
+                    s.renderScale = static_cast<float> (value);
+                });
+            };
+
             bloomToggle.setButtonText ("Bloom");
             bloomToggle.setToggleState (settings.bloom, yup::dontSendNotification);
             bloomToggle.onClick = [this]
@@ -1749,6 +1773,8 @@ private:
             // Three pages of the settings by topic, then the status, always shown below them
             for (auto [label, control, value] : { std::tuple<yup::Label*, yup::Component*, yup::Label*> { &tierLabel, &tierCombo, nullptr },
                                                   { &taaLabel, &taaSlider, &taaValue },
+                                                  { &upscalingLabel, &upscalingCombo, nullptr },
+                                                  { &renderScaleLabel, &renderScaleSlider, &renderScaleValue },
                                                   { &toneMappingLabel, &toneMappingCombo, nullptr },
                                                   { &exposureLabel, &exposureSlider, &exposureValue },
                                                   { &keyLightSizeLabel, &keyLightSizeSlider, &keyLightSizeValue },
@@ -1837,7 +1863,7 @@ private:
             if (static_cast<float> (focusDistanceSlider.getValue()) != static_cast<float> (focusDistance))
                 focusDistanceSlider.setValue (focusDistance, yup::dontSendNotification);
 
-            for (auto [slider, value] : { std::pair<yup::Slider*, yup::Label*> { &taaSlider, &taaValue }, { &exposureSlider, &exposureValue }, { &bloomThresholdSlider, &bloomThresholdValue },
+            for (auto [slider, value] : { std::pair<yup::Slider*, yup::Label*> { &taaSlider, &taaValue }, { &renderScaleSlider, &renderScaleValue }, { &exposureSlider, &exposureValue }, { &bloomThresholdSlider, &bloomThresholdValue },
                                           { &bloomIntensitySlider, &bloomIntensityValue }, { &bloomRadiusSlider, &bloomRadiusValue }, { &keyLightSizeSlider, &keyLightSizeValue },
                                           { &aoDistanceSlider, &aoDistanceValue }, { &fStopSlider, &fStopValue }, { &focusDistanceSlider, &focusDistanceValue },
                                           { &shutterSlider, &shutterValue }, { &fogDensitySlider, &fogDensityValue }, { &fogFalloffSlider, &fogFalloffValue } })
@@ -1845,6 +1871,14 @@ private:
 
             for (auto* control : std::initializer_list<yup::Component*> { &taaLabel, &taaSlider, &taaValue })
                 setAvailable (*control, canTaa);
+
+            // Upscaling reconstructs the frame with the TAA of the full tier
+            const auto canUpscale = isFull && taa;
+            for (auto* control : std::initializer_list<yup::Component*> { &upscalingLabel, &upscalingCombo })
+                setAvailable (*control, canUpscale);
+
+            for (auto* control : std::initializer_list<yup::Component*> { &renderScaleLabel, &renderScaleSlider, &renderScaleValue })
+                setAvailable (*control, canUpscale && settings.upscaling != yup::RenderSettings::Upscaling::off);
 
             for (auto* control : std::initializer_list<yup::Component*> { &bloomThresholdLabel, &bloomThresholdSlider, &bloomThresholdValue, &bloomIntensityLabel, &bloomIntensitySlider,
                                                                           &bloomIntensityValue, &bloomRadiusLabel, &bloomRadiusSlider, &bloomRadiusValue })
@@ -1889,7 +1923,9 @@ private:
             else if (! isFull)
                 hint = "TAA, MB, SSR, SSGI, contact shadows, debug: full";
             else if (! taa)
-                hint = "SSR and SSGI need TAA samples above 1";
+                hint = "SSR, SSGI, upscaling need TAA samples above 1";
+            else if (settings.debugView == yup::RenderSettings::DebugView::circleOfConfusion && ! settings.depthOfField)
+                hint = "The CoC debug view needs depth of field on";
             else if (! ambientOcclusion)
                 hint = "SSGI needs ambient occlusion";
 
@@ -2134,6 +2170,10 @@ private:
         yup::ComboBox tierCombo { "tierCombo" };
         yup::Label taaLabel { "taaLabel" };
         yup::Slider taaSlider { yup::Slider::LinearHorizontal, "taaSlider" };
+        yup::Label upscalingLabel { "upscalingLabel" };
+        yup::ComboBox upscalingCombo { "upscalingCombo" };
+        yup::Label renderScaleLabel { "renderScaleLabel" };
+        yup::Slider renderScaleSlider { yup::Slider::LinearHorizontal, "renderScaleSlider" };
         yup::ToggleButton bloomToggle { "bloomToggle" };
         yup::Label bloomThresholdLabel { "bloomThresholdLabel" };
         yup::Slider bloomThresholdSlider { yup::Slider::LinearHorizontal, "bloomThresholdSlider" };
@@ -2181,6 +2221,7 @@ private:
         yup::Label debugViewLabel { "debugViewLabel" };
         yup::ComboBox debugViewCombo { "debugViewCombo" };
         yup::Label taaValue { "taaValue" };
+        yup::Label renderScaleValue { "renderScaleValue" };
         yup::Label exposureValue { "exposureValue" };
         yup::Label bloomThresholdValue { "bloomThresholdValue" };
         yup::Label bloomIntensityValue { "bloomIntensityValue" };

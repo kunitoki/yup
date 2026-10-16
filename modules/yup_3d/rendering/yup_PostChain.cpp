@@ -61,7 +61,7 @@ bool PostChain::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Ren
                         const Inputs& inputs, const GpuTexture::Ptr& output)
 {
     resolvedColor = inputs.color;
-    if (inputs.color == nullptr)
+    if (inputs.color == nullptr || output == nullptr)
         return false;
 
     const auto beginScope = [&inputs] (const char* name)
@@ -82,13 +82,16 @@ bool PostChain::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Ren
         YUP_PROFILE_NAMED_INTERNAL_TRACE (temporalAA);
         beginScope ("temporalAA");
 
-        GpuTextureDesc desc (static_cast<uint32_t> (inputs.color->getWidth()), static_cast<uint32_t> (inputs.color->getHeight()), GpuTextureFormat::rgba16float, true);
+        // At the output's size: a color shaded smaller is upscaled
+        GpuTextureDesc desc (static_cast<uint32_t> (output->getWidth()), static_cast<uint32_t> (output->getHeight()), GpuTextureFormat::rgba16float, true);
         desc.label = "PostChain temporal anti-aliasing";
+
+        const auto sampleCount = inputs.temporalSampleCount > 0 ? inputs.temporalSampleCount : settings.taaSamples;
 
         auto resolved = resources.acquire (desc);
         if (resolved == nullptr
             || ! temporalAA.render (device, frame, view, resources, inputs.color, inputs.depth, inputs.velocity,
-                                    inputs.temporalSampleIndex, settings.taaSamples, resolved, inputs.temporalChanging))
+                                    inputs.temporalSampleIndex, sampleCount, resolved, inputs.temporalChanging))
             return false;
 
         resolvedColor = resolved;

@@ -29,7 +29,7 @@ namespace yup
     2014, "Next Generation Post Processing in Call of Duty: Advanced Warfare"; Abadie 2018, "A Life
     of a Bokeh"), four FullscreenPass draws after temporal anti-aliasing:
 
-    - Setup, at half the size of the depth ((w + 1) / 2): the 2x2 footprint of the scene color,
+    - Setup, at half the size of the scene color ((w + 1) / 2): the 2x2 footprint of the scene color,
       sanitized per texel, and the signed circle of confusion (CoC) of the closest of its four
       depths, the thin lens of CameraNode::getCircleOfConfusion() as a radius in texels of this
       half size, clamped to RenderSettings::depthOfFieldMaxSize.
@@ -45,7 +45,7 @@ namespace yup
     Every pass carries the premultiplied rgba of the scene color, so silhouettes over the
     background keep their blend. The sample pattern is fixed: the passes are deterministic, as post
     passes after TAA must be. Sizes come from the textures read, so the depth may be smaller than
-    the color (an upscaling renderer), the intermediates following the depth.
+    the color (an upscaling renderer), the intermediates following the color.
 
     Bindings: set 0 binding 0 the ViewBlock, 1 linearClamp and 3 pointClamp; set 1 binding 0 the
     pass block, then the inputs of each pass. Its targets come from the frame's FrameResources; its

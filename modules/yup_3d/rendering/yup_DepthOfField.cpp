@@ -186,9 +186,9 @@ GpuTexture::Ptr DepthOfField::render (GpuFrame& frame, const ViewData& view, con
             return resources.acquire (desc);
         };
 
-        // The intermediates follow the depth, the result the color
-        const auto halfWidth = (inputs.depth->getWidth() + 1) / 2;
-        const auto halfHeight = (inputs.depth->getHeight() + 1) / 2;
+        // Everything follows the color, which upscaling makes larger than the depth
+        const auto halfWidth = (inputs.color->getWidth() + 1) / 2;
+        const auto halfHeight = (inputs.color->getHeight() + 1) / 2;
         const auto quarterWidth = (halfWidth + 3) / 4;
         const auto quarterHeight = (halfHeight + 3) / 4;
         const auto tileWidth = (quarterWidth + 3) / 4;

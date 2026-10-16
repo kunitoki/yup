@@ -199,8 +199,8 @@ public:
         int drawItems = 0;           ///< The opaque and blended draws of the main view.
         int shadowCasterDraws = 0;   ///< The shadow caster draws the frame recorded.
         bool shadowsRedrawn = false; ///< True when the frame drew shadow maps, false when it kept the previous ones.
-        int internalWidth = 0;       ///< The width the scene was shaded at: the width render() was called with.
-        int internalHeight = 0;      ///< The height the scene was shaded at: the height render() was called with.
+        int internalWidth = 0;       ///< The width the scene was shaded at: the width render() was called with, times RenderCapabilities::getRenderScale() when upscaling.
+        int internalHeight = 0;      ///< The height the scene was shaded at: the height render() was called with, times RenderCapabilities::getRenderScale() when upscaling.
     };
 
     /** Collects the FrameStats of the frames rendered from now on, see getLastFrameStats().
@@ -244,7 +244,10 @@ public:
     const FrameStats& getLastFrameStats() const noexcept { return lastFrameStats; }
 
     //==============================================================================
-    /** @internal Intermediate textures of the last frame, for tests and debug views. */
+    /** @internal Intermediate textures of the last frame, for tests and debug views. With upscaling
+        (RenderSettings::upscaling), the ones before the temporal anti-aliasing are at the internal
+        size (FrameStats::internalWidth), sceneColor and the ones after it at the frame's.
+    */
     enum class PassOutput
     {
         sceneColor, ///< Full: the rgba16float scene color after the world fog and temporal anti-aliasing, before the other post effects. Raster: the resolved forward output, rgba16float reversibly tone mapped when bloom is on or the depth of field blurs the frame; on frames drawing the world fog, the fogged rgba16float linear color instead.
@@ -284,6 +287,9 @@ public:
 
     /** @internal The motion blur, for tests, or nullptr before the first moving frame smeared with it. */
     const MotionBlur* getMotionBlur() const noexcept;
+
+    /** @internal The temporal anti-aliasing, for tests, or nullptr before the first render. */
+    const TemporalAA* getTemporalAA() const noexcept;
 
     /** @internal The world fog pass, for tests, or nullptr before the first frame drawing the scene's WorldFog. */
     const FogApply* getFogApply() const noexcept;

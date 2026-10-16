@@ -58,8 +58,8 @@ void main()
 
     if (mode == 1)
         fragColor.rgb = vec3(t.a);
-    else if (mode == 4) // Signed: not sanitized, which clamps it to positive values; the setup pass keeps it finite
-        fragColor.rgb = (texelValue.r < 0.0 ? vec3(1.0, 0.5, 0.0) : vec3(0.0, 0.5, 1.0)) * clamp(abs(texelValue.r) * debugView.options.y, 0.0, 1.0);
+    else if (mode == 4) // Signed: not sanitized, which clamps it to positive values; the setup pass keeps it finite. The square root shows small blurs
+        fragColor.rgb = (texelValue.r < 0.0 ? vec3(1.0, 0.5, 0.0) : vec3(0.0, 0.5, 1.0)) * sqrt(clamp(abs(texelValue.r) * debugView.options.y, 0.0, 1.0));
     else
         fragColor.rgb = clamp(t.rgb * (mode == 2 ? t.a : 1.0) * view.cameraPosition.w, 0.0, 1.0);
 }

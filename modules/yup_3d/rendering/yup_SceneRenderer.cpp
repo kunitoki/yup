@@ -654,10 +654,17 @@ struct SceneRenderer::Impl
         block.options[0] = source != nullptr ? static_cast<float> (settings.debugView) : 0.0f;
         block.options[1] = depthOfField != nullptr && depthOfField->getMaxCircleOfConfusion() > 0.0f ? 1.0f / depthOfField->getMaxCircleOfConfusion() : 0.0f;
 
+        // The shader scales the output pixels to the source through the viewport: the frame's size, also when upscaling
+        auto outputView = viewData.getBlock();
+        outputView.viewport[0] = static_cast<float> (output->getWidth());
+        outputView.viewport[1] = static_cast<float> (output->getHeight());
+        outputView.viewport[2] = 1.0f / outputView.viewport[0];
+        outputView.viewport[3] = 1.0f / outputView.viewport[1];
+
         beginScope (frame, "debugView");
         const auto drawn = debugViewPass->draw (frame, output, {}, [&] (GpuRenderPass& renderPass)
         {
-            renderPass.setUniformBuffer (0, 0, &viewData.getBlock(), sizeof (ViewData::Block));
+            renderPass.setUniformBuffer (0, 0, &outputView, sizeof (ViewData::Block));
             renderPass.setSampler (0, 3, lighting.samplers.pointClamp);
             renderPass.setUniformBuffer (1, 0, &block, sizeof (block));
             renderPass.setTexture (1, 1, source != nullptr ? source : standIn);
@@ -736,15 +743,16 @@ struct SceneRenderer::Impl
         return false;
     }
 
-    /** True when the history of the previous frame carries on into a frame of @p width x @p height
-        with @p settings: there was a previous frame that did not fail, no restartAccumulation()
-        since, and the size, the tier and the TAA samples are unchanged. Call it before
+    /** True when the history of the previous frame carries on into a frame of @p width x @p height,
+        shaded at @p internalWidth x @p internalHeight, with @p settings: there was a previous frame
+        that did not fail, no restartAccumulation() since, and the sizes, the tier and the TAA
+        samples are unchanged. Call it before
         trackChanges(). The motion of a frame is measured against that previous one, so without it
         the frame does not move (preflight R23).
     */
-    bool historyContinues (const RenderSettings& settings, int width, int height) const
+    bool historyContinues (const RenderSettings& settings, int width, int height, int internalWidth, int internalHeight) const
     {
-        return hasSignature && getInvalidatingSignature (width, height, settings.taaSamples) == invalidatingSignature;
+        return hasSignature && getInvalidatingSignature (width, height, internalWidth, internalHeight, settings.taaSamples) == invalidatingSignature;
     }
 
     /** Stamps every drawn node with this frame, so the next frame of this renderer reads its transform as the previous one. */
@@ -784,12 +792,15 @@ struct SceneRenderer::Impl
         signature.addBits (sum);
     }
 
-    /** The changes that discard the history, which no longer fits the frame. */
-    uint64 getInvalidatingSignature (int width, int height, int taaSamples) const
+    /** The changes that discard the history, which no longer fits the frame: the upscaling changes
+        the size the scene is shaded at, and the frames to converge with it. */
+    uint64 getInvalidatingSignature (int width, int height, int internalWidth, int internalHeight, int taaSamples) const
     {
         FrameSignature signature;
         signature.addBits (static_cast<uint64> (width));
         signature.addBits (static_cast<uint64> (height));
+        signature.addBits (static_cast<uint64> (internalWidth));
+        signature.addBits (static_cast<uint64> (internalHeight));
         signature.addBits (static_cast<uint64> (capabilities->getTier()));
         signature.addBits (static_cast<uint64> (taaSamples));
         return signature.get();
@@ -945,14 +956,15 @@ struct SceneRenderer::Impl
         return global.get();
     }
 
-    /** Full tier: compares this frame with the previous one. A new size, tier or TAA sample count
-        discards the history and starts over; any other change only restarts the convergence. The
+    /** Full tier: compares this frame with the previous one. A new size, internal size, tier or TAA
+        sample count discards the history and starts over; any other change only restarts the convergence. The
         first unchanged frame after changes counts the history as a single sample, so the frames
         that follow average it out instead of keeping a share of the image before the changes.
     */
-    void trackChanges (const Scene& scene, const RenderSettings& settings, int width, int height, const GpuTexture* environmentCube, int pendingBakes)
+    void trackChanges (const Scene& scene, const RenderSettings& settings, int width, int height, int internalWidth, int internalHeight,
+                       const GpuTexture* environmentCube, int pendingBakes)
     {
-        const auto invalidating = getInvalidatingSignature (width, height, settings.taaSamples);
+        const auto invalidating = getInvalidatingSignature (width, height, internalWidth, internalHeight, settings.taaSamples);
         const auto restarting = getRestartingSignature (scene, settings, environmentCube, pendingBakes);
 
         if (! hasSignature || invalidating != invalidatingSignature)
@@ -1263,6 +1275,11 @@ const MotionBlur* SceneRenderer::getMotionBlur() const noexcept
     return impl != nullptr ? impl->postChain.getMotionBlur() : nullptr;
 }
 
+const TemporalAA* SceneRenderer::getTemporalAA() const noexcept
+{
+    return impl != nullptr ? &impl->postChain.getTemporalAA() : nullptr;
+}
+
 const FogApply* SceneRenderer::getFogApply() const noexcept
 {
     return impl != nullptr ? impl->fogApply.get() : nullptr;
@@ -1373,6 +1390,18 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     const auto forwardSamples = full ? 1u : samples;
     const auto temporalAntiAliasing = impl->capabilities->isEnabled (RenderCapabilities::Feature::temporalAntiAliasing, settings);
 
+    // Upscaling shades the scene at a share of the frame's size, which TAA reconstructs over more
+    // frames, as many more as the share of the pixels it skips. A variant that cannot compile shades at full size
+    auto renderScale = impl->capabilities->getRenderScale (settings);
+    if (renderScale < 1.0f && ! impl->postChain.prepareUpscaling (device))
+        renderScale = 1.0f;
+
+    const auto internalWidth = jmax (1, roundToInt (static_cast<float> (widthPx) * renderScale));
+    const auto internalHeight = jmax (1, roundToInt (static_cast<float> (heightPx) * renderScale));
+    const auto shadedShare = (static_cast<float> (internalWidth) * static_cast<float> (internalHeight)) / (static_cast<float> (widthPx) * static_cast<float> (heightPx));
+    const auto temporalSamples = internalWidth == widthPx && internalHeight == heightPx ? settings.taaSamples
+                                                                                        : static_cast<int> (std::ceil (static_cast<float> (settings.taaSamples) / shadedShare));
+
     if (! impl->prepareTargets (widthPx, heightPx, ! full))
         return fail ("Unable to create the render targets");
 
@@ -1395,7 +1424,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         return fail (error);
     };
 
-    const auto targets = full ? impl->acquireFullTargets (widthPx, heightPx)
+    const auto targets = full ? impl->acquireFullTargets (internalWidth, internalHeight)
                               : (hdr ? impl->acquireRasterHdrTargets (widthPx, heightPx) : impl->getForwardTargets());
     if (targets.color == nullptr || targets.depth == nullptr || (full && targets.velocity == nullptr))
         return failFrame ("Unable to create the scene targets");
@@ -1407,8 +1436,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
     const auto stamp = ++Impl::nextStamp;
 
-    // The jitter cycles with the frame index: any taaSamples consecutive frames cover every point
-    impl->viewData.update (scene, widthPx, heightPx, temporalAntiAliasing, settings.taaSamples, impl->frameIndex++);
+    // The jitter cycles with the frame index: any temporalSamples consecutive frames cover every point
+    impl->viewData.update (scene, internalWidth, internalHeight, temporalAntiAliasing, temporalSamples, impl->frameIndex++);
 
     auto& drawList = impl->drawList;
     // The raster tier lights each draw with its own selection, the full tier through the clusters
@@ -1426,13 +1455,13 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->resolvePreviousTransforms();
 
     // Before TAA fetches its history, so a change invalidates it for this very frame
-    impl->samplesToConverge = full ? (temporalAntiAliasing ? settings.taaSamples : 1) : 0;
+    impl->samplesToConverge = full ? (temporalAntiAliasing ? temporalSamples : 1) : 0;
     impl->hasSignature = impl->hasSignature && full;
 
     // Only a frame where something moved since a previous frame whose history carries on gives the
     // motion blur anything to smear (preflight R4, R23)
     const auto moving = impl->postChain.willMotionBlur (*impl->capabilities, settings)
-                     && impl->historyContinues (settings, widthPx, heightPx)
+                     && impl->historyContinues (settings, widthPx, heightPx, internalWidth, internalHeight)
                      && impl->hasMotion();
 
     // Built in a frame of its own the first time, never inside this one
@@ -1444,7 +1473,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
                                                           : static_cast<int> (drawList.getReflectionProbes().size() + drawList.getIrradianceVolumes().size());
 
     if (full)
-        impl->trackChanges (scene, settings, widthPx, heightPx, environmentCube.get(), pendingBakes);
+        impl->trackChanges (scene, settings, widthPx, heightPx, internalWidth, internalHeight, environmentCube.get(), pendingBakes);
 
     auto frame = GpuFrame::begin (device);
     if (! frame.isValid())
@@ -1643,7 +1672,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (hdr)
     {
         const PostChain::Inputs inputs { sceneColor, depth, targets.velocity, colorIsReversible, scene.getBackgroundColor(),
-                                         impl->getTemporalSampleIndex(), impl->changing, scene.getActiveCamera(), blurs, moving,
+                                         impl->getTemporalSampleIndex(), temporalSamples, impl->changing, scene.getActiveCamera(), blurs, moving,
                                          impl->measuring ? std::function<void (const char*)> ([this, &frame] (const char* name) { impl->beginScope (frame, name); })
                                                          : nullptr };
 
@@ -1667,8 +1696,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         stats.drawItems = static_cast<int> (drawList.getOpaqueItems().size() + drawList.getBlendItems().size());
         stats.shadowCasterDraws = impl->shadowRenderer.getNumCasterDraws() - casterDrawsBefore;
         stats.shadowsRedrawn = impl->shadowRenderer.getNumRenderedFrames() != shadowFramesBefore;
-        stats.internalWidth = widthPx;
-        stats.internalHeight = heightPx;
+        stats.internalWidth = internalWidth;
+        stats.internalHeight = internalHeight;
         impl->pendingFrames.back().stats = std::move (stats);
     }
 

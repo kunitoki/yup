@@ -48,6 +48,11 @@ public:
     /** The name of the FrameResources history the pass keeps its accumulation in. */
     static constexpr const char* historyName = "temporalAA";
 
+    /** The name of the FrameResources history keeping, when upscaling, the weight each pixel of
+        the history accumulated, in frames' worth of samples.
+    */
+    static constexpr const char* weightHistoryName = "temporalAAWeight";
+
     //==============================================================================
     /** Creates the pass. GPU objects are created on the first render. */
     TemporalAA();
@@ -58,6 +63,12 @@ public:
     //==============================================================================
     /** Resolves @p current (jittered) against the history into @p output and updates the history.
         @p sampleIndex counts frames since the last reset, starting at 0.
+
+        A @p current smaller than @p output is upscaled: the history is kept at the size of
+        @p output, with the weight each of its pixels accumulated (weightHistoryName), and
+        @p sampleCount should grow with the share of the output the current frame lacks, as the
+        jitter must cover each of its texels for every pixel to gather samples near its center.
+        See prepareUpscaling().
 
         @param device       The device to render with.
         @param frame        The frame to record into.
@@ -91,19 +102,41 @@ public:
     void trimUnusedTargets()
     {
         pass.trimUnusedTargets();
+        upscalePass.trimUnusedTargets();
     }
 
     /** Releases the render targets kept for the next renders, when the pass is skipped this frame. */
     void releaseTargets() noexcept
     {
         pass.releaseTargets();
+        upscalePass.releaseTargets();
     }
 
+    /** Compiles the upscaling variant, once, remembering a failure: call it before shading a
+        frame smaller than its output, and shade at the output's size when it fails.
+
+        @returns True when the variant is compiled.
+    */
+    bool prepareUpscaling (const GpuDevice::Ptr& device);
+
+    /** True once prepareUpscaling() compiled the upscaling variant: never while every frame is
+        resolved at its own size.
+    */
+    bool isUpscalingPrepared() const noexcept { return upscalingPrepared.has_value() && upscalingPrepared->wasOk(); }
+
 private:
+    static constexpr auto weightFormat = GpuTextureFormat::r16float;
+
     Result prepare (const GpuDevice::Ptr& device, const FrameResources::Samplers* samplers);
+
+    bool renderUpscaled (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, FrameResources& resources,
+                         const GpuTexture::Ptr& current, const GpuTexture::Ptr& depth, const GpuTexture::Ptr& velocity,
+                         int sampleIndex, int sampleCount, const GpuTexture::Ptr& output, bool changing);
 
     FullscreenPass pass;
     std::optional<Result> prepared;
+    FullscreenPass upscalePass;
+    std::optional<Result> upscalingPrepared;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TemporalAA)
 };
