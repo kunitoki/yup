@@ -85,6 +85,7 @@ graphics_demo (Pbr SHADERS
 graphics_demo (PopupMenu)
 graphics_demo (Scene3D MODULES yup::yup_3d tinygltf libjpeg libwebp RESOURCES gltf)
 graphics_demo (ScrollBar)
+graphics_demo (Shaders LIVE_SHADERS)
 graphics_demo (Sliders)
 graphics_demo (SpectrumAnalyzer MODULES ${audio_modules} dr_libs RESOURCES audio)
 graphics_demo (SpinningCube MODULES yup::yup_animation RESOURCES lottie LIVE_SHADERS)

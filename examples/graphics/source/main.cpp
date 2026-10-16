@@ -102,6 +102,56 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
     return yup::GpuPipeline::compileFromBundle (std::move (device), bundle.getReference(), options);
 }
 
+#if YUP_ENABLE_SHADER_TRANSPILER
+/** Compiles a GLSL vertex + fragment pair for every target language and saves it as a .ysl shader bundle. */
+inline yup::Result saveGlslShaderBundle (const yup::File& file, const yup::String& vertSource, const yup::String& fragSource)
+{
+    const std::vector<yup::ShaderLanguage> targetLanguages = {
+        yup::ShaderLanguage::glsl,
+        yup::ShaderLanguage::essl,
+        yup::ShaderLanguage::hlsl,
+        yup::ShaderLanguage::msl
+    };
+
+    auto makeEntry = [&] (yup::ShaderStage stage)
+    {
+        yup::ShaderBundleEntry entry;
+        entry.stage = stage;
+        entry.targetLanguages = targetLanguages;
+        entry.options.entryPoint = "main";
+        return entry;
+    };
+
+    yup::ShaderBundleCompiler compiler;
+
+    yup::ShaderBundleCompileRequest vertRequest;
+    vertRequest.source = vertSource;
+    vertRequest.sourceLanguage = yup::ShaderLanguage::glsl;
+    vertRequest.entries.push_back (makeEntry (yup::ShaderStage::vertex));
+
+    auto vsBundle = compiler.compile (vertRequest);
+    if (vsBundle.failed())
+        return yup::Result::fail ("vertex compilation failed: " + vsBundle.getErrorMessage());
+
+    yup::ShaderBundleCompileRequest fragRequest;
+    fragRequest.source = fragSource;
+    fragRequest.sourceLanguage = yup::ShaderLanguage::glsl;
+    fragRequest.entries.push_back (makeEntry (yup::ShaderStage::fragment));
+
+    auto fsBundle = compiler.compile (fragRequest);
+    if (fsBundle.failed())
+        return yup::Result::fail ("fragment compilation failed: " + fsBundle.getErrorMessage());
+
+    yup::ShaderBundle bundle;
+    for (const auto& info : vsBundle.getReference().getShaders())
+        bundle.addShader (info);
+    for (const auto& info : fsBundle.getReference().getShaders())
+        bundle.addShader (info);
+
+    return bundle.saveToFile (file);
+}
+#endif
+
 /** Base for demos that take a while to open: the demo window shows a loading bar until all their loading steps have run.
 
     Register the steps in the constructor. They run in order, one per tick, starting once the first frame (showing the bar)
@@ -298,6 +348,9 @@ private:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ScrollBar
 #include "examples/ScrollBar.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Shaders && YUP_ENABLE_SHADER_TRANSPILER
+#include "examples/Shaders.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Sliders
 #include "examples/Slider.h"
@@ -571,6 +624,9 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ScrollBar
         addDemo ("ScrollBar", "ScrollBar", [] { return std::make_unique<ScrollBarDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Shaders && YUP_ENABLE_SHADER_TRANSPILER
+        addDemo ("Shaders", "Shaders", [] { return std::make_unique<ShadersDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Sliders
         addDemo ("Sliders", "Sliders", [] { return std::make_unique<SliderDemo>(); });
 #endif
@@ -827,6 +883,10 @@ private:
 
                     case yup::GpuPlatform::WebGPU:
                         title << " | WebGPU";
+                        break;
+
+                    case yup::GpuPlatform::Vulkan:
+                        title << " | Vulkan";
                         break;
 
                     case yup::GpuPlatform::Headless:

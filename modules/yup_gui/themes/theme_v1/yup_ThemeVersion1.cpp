@@ -413,6 +413,18 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
         g.fillRect (Rectangle<float> (textArea.getX(), lineY, textArea.getWidth(), editor.getLineHeight()));
     }
 
+    // Error lines
+    if (! editor.getErrorLines().empty())
+    {
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::errorLine).value_or (Color (0x40e51400)));
+
+        for (const int line : editor.getErrorLines())
+        {
+            const float lineY = textArea.getY() + line * editor.getLineHeight() - scrollOffset.getY();
+            g.fillRect (Rectangle<float> (textArea.getX(), lineY, textArea.getWidth(), editor.getLineHeight()));
+        }
+    }
+
     // Gutter
     if (editor.isLineNumbersVisible() && editor.getDocument() != nullptr)
     {

@@ -155,6 +155,28 @@ if (YUP_TEST_MODULES)
         endforeach()
     endforeach()
 
+    # Linked modules (and their required deps) also get their third-party optional
+    # deps, so guarded features match a full build (e.g. dr_libs for WAV reading).
+    set (modules_to_visit ${target_modules})
+    set (visited_modules "")
+    while (modules_to_visit)
+        list (POP_FRONT modules_to_visit current_module)
+        if (current_module IN_LIST visited_modules OR NOT TARGET ${current_module})
+            continue()
+        endif()
+        list (APPEND visited_modules ${current_module})
+
+        get_target_property (required_modules ${current_module} YUP_MODULE_DEPENDENCIES)
+        get_target_property (optional_modules ${current_module} YUP_MODULE_OPTIONAL_DEPENDENCIES)
+        list (APPEND modules_to_visit ${required_modules})
+        foreach (extra_module IN LISTS optional_modules)
+            if (TARGET ${extra_module} AND NOT extra_module MATCHES "^yup_")
+                list (APPEND target_modules ${extra_module})
+                list (APPEND modules_to_visit ${extra_module})
+            endif()
+        endforeach()
+    endwhile()
+
     list (REMOVE_DUPLICATES target_modules)
 endif()
 

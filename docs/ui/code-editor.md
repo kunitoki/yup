@@ -138,7 +138,7 @@ invalidate the right lines automatically.
 
 A `CodeEditorScheme` owns every color the editor needs to paint itself: the
 editor chrome (background, gutter, caret, current line, selection, search
-highlight, breakpoint, minimap background/foreground/viewport) and the
+highlight, breakpoint, error line, minimap background/foreground/viewport) and the
 per-token syntax colors. Colors are stored keyed by `Identifier` and accessed through
 `setColor` / `getColor`, using the string constants in
 `CodeEditorScheme::ColorId` for the chrome colors and the token-type names
@@ -186,8 +186,12 @@ Highlights:
 - **Syntax colors** — tokens are rendered from the active `CodeEditorScheme`;
   the colored text layout is rebuilt only when the document, font, definition
   or scheme changes.
-- **Gutter** — optional line numbers; clicking the gutter toggles a
-  breakpoint marker.
+- **Gutter** — optional line numbers. Clicking the gutter toggles a
+  breakpoint marker once `setGutterBreakpointsEnabled (true)` is called (off
+  by default); `setBreakpoint` works either way.
+- **Error lines** - `setErrorLine` highlights whole lines with the scheme's
+  `errorLine` color, for example to show compiler errors; `clearErrorLines`
+  removes them, and so does switching documents with `setDocument`.
 - **Find / replace** — `findAll`, `findNext`/`findPrevious` (wrap-around),
   `replaceNext`, `replaceAll` (single undo step), and
   `highlightSearchMatches`.
@@ -198,7 +202,7 @@ Highlights:
 - **Scrollbar** — a vertical scrollbar appears automatically (auto-hide) when
   the document has more lines than fit the viewport.
 - **Styling** — every color (background, gutter, caret, selection, search
-  highlight, breakpoint, and the per-token syntax colors) comes from the
+  highlight, breakpoint, error line, and the per-token syntax colors) comes from the
   active `CodeEditorScheme`; the painting itself is provided by the theme
   (Themes v1). `setFont` defaults to the theme's monospace font.
 
@@ -209,7 +213,10 @@ editor.setScheme (yup::CodeEditorScheme::getBuiltIn ("monokai"));
 ```cpp
 editor.setLineNumbersVisible (false);
 editor.setReadOnly (true);
+editor.setGutterBreakpointsEnabled (true);
 editor.setBreakpoint (3, true);
+editor.setErrorLine (7, true);
+editor.clearErrorLines();
 editor.findNext ("main");
 editor.replaceAll ("main", "entry");
 editor.undo();

@@ -65,6 +65,7 @@ public:
         static inline const Identifier selection { "selection" };                 /**< The text selection color. */
         static inline const Identifier searchHighlight { "searchHighlight" };     /**< The search-match highlight color. */
         static inline const Identifier breakpoint { "breakpoint" };               /**< The breakpoint marker color. */
+        static inline const Identifier errorLine { "errorLine" };                 /**< The error line highlight color. */
         static inline const Identifier minimapBackground { "minimapBackground" }; /**< The minimap background color. */
         static inline const Identifier minimapForeground { "minimapForeground" }; /**< The minimap code overview color. */
         static inline const Identifier minimapViewport { "minimapViewport" };     /**< The minimap viewport indicator color. */
