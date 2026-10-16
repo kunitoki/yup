@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - A new Shaders demo in the graphics example edits and runs Shadertoy-style shaders live, with presets (including Danilo Guanabara's "Creation"), playback controls, compile errors shown by line, and .ysl bundle load/save.
 - `CodeEditor::setErrorLine` / `clearErrorLines` highlight whole lines in the new `CodeEditorScheme::ColorId::errorLine` color. **Behavior change** Clicking the gutter only toggles breakpoints after `setGutterBreakpointsEnabled (true)`.
-- Added the Curl Bands graphics shader example by Abhishek Shivakumar (@godofecht).
+- Added the Curl Bands and Ribbon Clouds graphics shader examples by Abhishek Shivakumar (@godofecht).
 
 - The graphics example opens a demo directly with `--demo NAME` and shows a shared loading bar while slow demos (PBR IBL, Spinning Cube, YDSP Synths) open.
 - **Breaking** `ArgumentList` takes option values as `--opt=X`, `--opt X` or `--opt X Y Z`, collects repeated options with `getValuesForOption` / `removeValuesForOption`, treats negative numbers as values, and stops at a lone `--` (`getTrailingArguments`). `getValueForOption`, `removeValueForOption` and `Argument::getLongOptionValue` now return `std::optional<String>`. Adds typed getters (`getIntValueForOption`, `getDoubleValueForOption`, `getBoolValueForOption`), `ResultValue<File>` variants (`tryGetFileForOption`, `tryGetExistingFileForOption`, `tryGetExistingFolderForOption`, `Argument::tryResolveAsExisting*`) and range-for iteration. Short options match exactly and are never grouped, so `-h` no longer matches `-abc` or `-I/home/...` (which made `yup_shader_bundler` print its usage instead of compiling).

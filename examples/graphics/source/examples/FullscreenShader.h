@@ -21,18 +21,21 @@
 
 #pragma once
 
-/** Animated curl-noise bands by Abhishek Shivakumar (@godofecht).
+/** Fullscreen fragment shader examples by Abhishek Shivakumar (@godofecht).
 
     Renders a precompiled fragment shader using the shared fullscreen triangle.
     The uniform buffer supplies elapsed time and the render target dimensions.
 */
-class CurlBandsDemo : public yup::Component
+class FullscreenShaderDemo : public yup::Component
 {
 public:
-    CurlBandsDemo()
-        : yup::Component ("CurlBandsDemo")
+    /** Creates a demo for a precompiled shader bundle and its display name. */
+    FullscreenShaderDemo (yup::String name, yup::String shaderBundle)
+        : yup::Component (name)
+        , displayName (std::move (name))
+        , bundleName (std::move (shaderBundle))
     {
-        statusLabel.setText ("Curl Bands by Abhishek Shivakumar (@godofecht)", yup::dontSendNotification);
+        statusLabel.setText (displayName + " by Abhishek Shivakumar (@godofecht)", yup::dontSendNotification);
         addAndMakeVisible (statusLabel);
     }
 
@@ -104,7 +107,7 @@ private:
 
         if (! context.isGpuAvailable())
         {
-            statusLabel.setText ("Curl Bands requires GPU rendering. Shader by Abhishek Shivakumar (@godofecht).", yup::dontSendNotification);
+            statusLabel.setText (displayName + " requires GPU rendering. Shader by Abhishek Shivakumar (@godofecht).", yup::dontSendNotification);
             return false;
         }
 
@@ -112,11 +115,11 @@ private:
         device = context.getGpuDevice();
         yup::GpuPipelineOptions options;
         options.colorTargets.emplace_back().blendEnabled = false;
-        auto result = compilePipelineFromBundle (device, "curl_bands", options);
+        auto result = compilePipelineFromBundle (device, bundleName, options);
         if (result.failed())
         {
-            statusLabel.setText ("Curl Bands: " + result.getErrorMessage(), yup::dontSendNotification);
-            yup::Logger::outputDebugString ("CurlBandsDemo: " + result.getErrorMessage());
+            statusLabel.setText (displayName + ": " + result.getErrorMessage(), yup::dontSendNotification);
+            yup::Logger::outputDebugString (displayName + ": " + result.getErrorMessage());
             return false;
         }
 
@@ -124,6 +127,8 @@ private:
         return true;
     }
 
+    const yup::String displayName;
+    const yup::String bundleName;
     yup::Label statusLabel;
     yup::GpuDevice::Ptr device;
     yup::GpuPipeline::Ptr pipeline;

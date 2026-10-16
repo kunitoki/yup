@@ -292,8 +292,8 @@ private:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_CodeEditor
 #include "examples/CodeEditor.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_CurlBands
-#include "examples/CurlBands.h"
+#if YUP_EXAMPLE_GRAPHICS_DEMO_CurlBands || YUP_EXAMPLE_GRAPHICS_DEMO_RibbonClouds
+#include "examples/FullscreenShader.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
 #include "examples/DragAndDrop.h"
@@ -571,7 +571,7 @@ public:
         addDemo ("CodeEditor", "Code Editor", [] { return std::make_unique<CodeEditorDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_CurlBands
-        addDemo ("CurlBands", "Curl Bands", [] { return std::make_unique<CurlBandsDemo>(); });
+        addDemo ("CurlBands", "Curl Bands", [] { return std::make_unique<FullscreenShaderDemo> ("Curl Bands", "curl_bands"); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
         addDemo ("DragAndDrop", "Drag and Drop", [] { return std::make_unique<DragAndDropDemo>(); });
@@ -623,6 +623,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
         addDemo ("PopupMenu", "Popup Menu", [] { return std::make_unique<PopupMenuDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_RibbonClouds
+        addDemo ("RibbonClouds", "Ribbon Clouds", [] { return std::make_unique<FullscreenShaderDemo> ("Ribbon Clouds", "ribbon_clouds"); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Scene3D
         addDemo ("Scene3D", "Scene 3D", [] { return std::make_unique<Scene3DDemo>(); });
