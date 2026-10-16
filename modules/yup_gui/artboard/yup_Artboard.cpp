@@ -369,11 +369,13 @@ void Artboard::shouldPauseWhenHidden (bool shouldPause)
 
 //==============================================================================
 
-void Artboard::advanceAndApply (float elapsedSeconds)
+bool Artboard::advanceAndApply (float elapsedSeconds)
 {
-    advanceScene (elapsedSeconds);
+    const bool needsRedraw = advanceScene (elapsedSeconds);
 
     notifyNodeBoundsChanged();
+
+    return needsRedraw;
 }
 
 float Artboard::durationSeconds() const
@@ -883,7 +885,8 @@ void Artboard::refreshDisplay (double lastFrameTimeSeconds)
     if (paused || (pauseWhenHidden && ! isShowing()))
         return;
 
-    advanceAndApply (static_cast<float> (lastFrameTimeSeconds));
+    if (advanceAndApply (static_cast<float> (lastFrameTimeSeconds)))
+        repaint();
 }
 
 //==============================================================================
@@ -1266,16 +1269,18 @@ void Artboard::updateSceneFromFile()
 
 //==============================================================================
 
-void Artboard::advanceScene (float elapsedSeconds)
+bool Artboard::advanceScene (float elapsedSeconds)
 {
     if (scene == nullptr)
-        return;
+        return false;
 
     artboardFile->bindDeferredRecordingThread();
 
-    scene->advanceAndApply (elapsedSeconds);
+    const bool keepGoing = scene->advanceAndApply (elapsedSeconds);
 
     pullEventsFromStateMachines();
+
+    return keepGoing || (artboard != nullptr && artboard->didChange());
 }
 
 //==============================================================================

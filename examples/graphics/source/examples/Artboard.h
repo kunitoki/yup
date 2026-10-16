@@ -89,11 +89,6 @@ public:
         return true;
     }
 
-    void refreshDisplay (double lastFrameTimeSeconds) override
-    {
-        repaint();
-    }
-
     void resized() override
     {
         auto bounds = getLocalBounds().reduced (10, 20);

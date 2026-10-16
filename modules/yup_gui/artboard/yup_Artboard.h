@@ -152,9 +152,15 @@ public:
     //==============================================================================
     /** Advances the Rive artboard by a given number of seconds.
 
+        refreshDisplay() calls this every frame and repaints the artboard only when
+        it returns true, so a still artboard costs nothing to draw.
+
         @param elapsedSeconds The number of seconds to advance the Rive artboard by.
+
+        @returns True if the artboard needs to be drawn again: the scene is still
+                 animating, or something changed since it was last painted.
     */
-    void advanceAndApply (float elapsedSeconds);
+    bool advanceAndApply (float elapsedSeconds);
 
     /** Returns the duration of the Rive artboard in seconds. */
     float durationSeconds() const;
@@ -573,7 +579,7 @@ private:
     void bindDefaultViewModelInstances();
     void placeGlobalViewModelInstances();
     void applyGlobalViewModelInstances();
-    void advanceScene (float elapsedSeconds);
+    bool advanceScene (float elapsedSeconds);
     void pullEventsFromStateMachines();
     void updateViewTransform();
     void updateNodeBounds();

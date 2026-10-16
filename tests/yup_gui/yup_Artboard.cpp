@@ -3480,6 +3480,14 @@ protected:
         artboard->advanceAndApply (0.016f);
     }
 
+    void paintArtboard()
+    {
+        RecordingRenderer renderer;
+        Graphics g (*context, renderer);
+
+        artboard->paint (g);
+    }
+
     static DynamicObject* findInput (const var& inputs, const String& name)
     {
         if (auto* array = inputs.getArray())
@@ -3839,6 +3847,49 @@ TEST_F (ArtboardLabTests, PaintDrawsNothingOnceCleared)
 
     EXPECT_TRUE (renderer.transforms.empty());
     EXPECT_EQ (0, renderer.paths);
+}
+
+TEST_F (ArtboardLabTests, AdvanceAndApplyReportsAChangeUntilTheArtboardIsPainted)
+{
+    artboard->setFile (artboardFile, "Timeline");
+
+    // Past the end of the animation, only the change not drawn yet is left to report.
+    EXPECT_TRUE (artboard->advanceAndApply (1.0f));
+    EXPECT_TRUE (artboard->advanceAndApply (1.0f));
+
+    paintArtboard();
+
+    EXPECT_FALSE (artboard->advanceAndApply (0.016f));
+}
+
+TEST_F (ArtboardLabTests, AdvanceAndApplyReportsAPlayingAnimationUntilItEnds)
+{
+    artboard->setFile (artboardFile, "Timeline");
+    paintArtboard();
+
+    EXPECT_TRUE (artboard->advanceAndApply (0.1f));
+
+    artboard->advanceAndApply (1.0f);
+    paintArtboard();
+
+    EXPECT_FALSE (artboard->advanceAndApply (0.016f));
+}
+
+TEST_F (ArtboardLabTests, AdvanceAndApplyKeepsReportingWhileTheStateMachineAnimates)
+{
+    // The state machine sits in a looping state, so it never settles.
+    for (int i = 0; i < 3; ++i)
+    {
+        paintArtboard();
+        EXPECT_TRUE (artboard->advanceAndApply (0.016f));
+    }
+}
+
+TEST_F (ArtboardLabTests, AdvanceAndApplyReportsNothingOnceCleared)
+{
+    artboard->clear();
+
+    EXPECT_FALSE (artboard->advanceAndApply (0.016f));
 }
 
 //==============================================================================
