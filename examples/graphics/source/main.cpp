@@ -885,6 +885,10 @@ private:
                         title << " | WebGPU";
                         break;
 
+                    case yup::GpuPlatform::Vulkan:
+                        title << " | Vulkan";
+                        break;
+
                     case yup::GpuPlatform::Headless:
                         title << " | Headless";
                         break;
