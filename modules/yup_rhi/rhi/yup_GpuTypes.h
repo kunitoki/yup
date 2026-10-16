@@ -987,8 +987,8 @@ struct GpuFrameTimings
     /** The time from the GPU's start of the frame's command buffer to its end, in
         milliseconds. It excludes work submitted outside the frame and the time before the
         GPU started it. With several frames in flight it includes the time the frame ran
-        alongside, or waited behind, the frames before it: measure with few frames in
-        flight (two or three), or wait for each measured frame. */
+        alongside, or waited behind, the frames before it, even with two in flight: wait
+        for each measured frame to read its own cost. */
     double frameMilliseconds = 0;
 
     /** The scopes of the frame (see GpuFrame::beginScope()), in the order they were first

@@ -129,11 +129,14 @@ shader_bundler *COMPILE_ARGS:
   cmake --build build --config Release -j4
   build/yup_shader_bundler {{COMPILE_ARGS}}
 
-[doc("regenerate the yup_3d shader bundles (entries are Name or Name:DEF1+DEF2)")]
-yup3d_shaders: (_shader_bundles "yup3d_shaders" "modules/yup_3d/shaders" "ForwardPass ForwardPass:YUP_3D_AREA_LIGHTS ForwardPass:YUP_3D_SOFT_SHADOWS ForwardPass:YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS ForwardPass:YUP_3D_LOCAL_INDIRECT ForwardPass:YUP_3D_AREA_LIGHTS+YUP_3D_LOCAL_INDIRECT ForwardPass:YUP_3D_SOFT_SHADOWS+YUP_3D_LOCAL_INDIRECT ForwardPass:YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS+YUP_3D_LOCAL_INDIRECT ForwardPass:YUP_3D_LOCAL_INDIRECT+YUP_3D_LAYERS ForwardPass:YUP_3D_AREA_LIGHTS+YUP_3D_LOCAL_INDIRECT+YUP_3D_LAYERS ForwardPass:YUP_3D_SOFT_SHADOWS+YUP_3D_LOCAL_INDIRECT+YUP_3D_LAYERS ForwardPass:YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS+YUP_3D_LOCAL_INDIRECT+YUP_3D_LAYERS ForwardPass:YUP_3D_TIER_FULL ForwardPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS ForwardPass:YUP_3D_TIER_FULL+YUP_3D_SOFT_SHADOWS ForwardPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS Background GBufferPass:YUP_3D_TIER_FULL GBufferBackground DepthNormalPrepass LightingPass:YUP_3D_TIER_FULL LightingPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS LightingPass:YUP_3D_TIER_FULL+YUP_3D_SOFT_SHADOWS LightingPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS LightingPass:YUP_3D_TIER_FULL+YUP_3D_LOCAL_INDIRECT LightingPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS+YUP_3D_LOCAL_INDIRECT LightingPass:YUP_3D_TIER_FULL+YUP_3D_SOFT_SHADOWS+YUP_3D_LOCAL_INDIRECT LightingPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS+YUP_3D_LOCAL_INDIRECT LightingPass:YUP_3D_TIER_FULL+YUP_3D_LOCAL_INDIRECT+YUP_3D_LAYERS LightingPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS+YUP_3D_LOCAL_INDIRECT+YUP_3D_LAYERS LightingPass:YUP_3D_TIER_FULL+YUP_3D_SOFT_SHADOWS+YUP_3D_LOCAL_INDIRECT+YUP_3D_LAYERS LightingPass:YUP_3D_TIER_FULL+YUP_3D_AREA_LIGHTS+YUP_3D_SOFT_SHADOWS+YUP_3D_LOCAL_INDIRECT+YUP_3D_LAYERS ShadowPass ShadowPass:YUP_3D_MASKED TemporalAA ToneMapping BloomDownsample BloomUpsample LightClusters ProbeEquirectToCube ProbeCubeDownsample ProbePrefilter ProbeCaptureResolve ProbeCaptureDistance ProbeShProjection ProbeVisibility GtaoTrace GtaoTrace:YUP_3D_SCREEN_SPACE_GI GtaoDenoise GtaoDenoise:YUP_3D_SCREEN_SPACE_GI SsgiComposite HiZCopy HiZDownsample SsrTrace SsrResolve DebugView DofSetup DofTiles DofGather DofComposite ToneMapping:YUP_3D_RADIANCE_COMPOSITE MotionTileMax MotionNeighborMax MotionReconstruct FogApply")
+[doc("time the Scene3D demo target frames on the GPU: ACTION is run, record (the baseline) or compare (with it)")]
+[macos]
+perf ACTION="run" CONFIG="Release" FILTER="SceneRendererBenchmarkTests.DISABLED_DemoTargetFrameTimes":
+  uv run python tools/perf.py --just "{{just_executable()}}" {{ACTION}} {{CONFIG}} "{{FILTER}}"
 
-[doc("regenerate the yup_rhi shader bundles")]
-yup_rhi_shaders: (_shader_bundles "yup_rhi_shaders" "modules/yup_rhi/shaders" "GpuMipDownsample")
+[doc("regenerate the shader bundles for modules that have them")]
+update_shaders BUNDLE_SET="yup_3d":
+  uv run python tools/shader_bundles.py --just "{{just_executable()}}" {{BUNDLE_SET}}
 
 [doc("fit the yup_3d GGX area light tables into modules/yup_3d/resources/yup_LtcTables.inc")]
 [working-directory: 'cmake/tools/ltc_fitter']
@@ -141,58 +144,6 @@ ltc_tables:
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
   cmake --build build --config Release -j4
   build/yup_ltc_fitter --output "{{justfile_directory()}}/modules/yup_3d/resources/yup_LtcTables.inc"
-
-# Bundles each SHADERS entry (Name or Name:DEF1+DEF2) of DIR into DIR/yup_<Name>[_<defs>].inc
-_shader_bundles RECIPE DIR SHADERS:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  SHADERS="{{SHADERS}}"
-
-  just shader_bundler --help > /dev/null
-  bundler="{{justfile_directory()}}/cmake/tools/shader_bundler/build/yup_shader_bundler"
-  shaderDir="{{justfile_directory()}}/{{DIR}}"
-  scratch="$(mktemp -d)"
-  trap 'rm -rf "$scratch"' EXIT
-
-  for entry in $SHADERS; do
-    name="${entry%%:*}"
-    defines=""
-    suffix=""
-    args=()
-    if [[ "$entry" == *:* ]]; then
-      IFS='+' read -r -a defs <<< "${entry#*:}"
-      for def in "${defs[@]}"; do
-        args+=("-D$def")
-        part="${def#YUP_3D_TIER_}"
-        [[ "$part" == "$def" ]] && part="${def#YUP_3D_}"
-        suffix+="_$(echo "$part" | tr '[:upper:]' '[:lower:]')"
-      done
-    fi
-
-    base="yup_${name}${suffix}"
-    stages=()
-    if [[ -f "$shaderDir/yup_$name.vert" ]]; then
-      stages+=(--vert "$shaderDir/yup_$name.vert")
-    elif [[ -f "$shaderDir/yup_$name.frag" && -f "$shaderDir/yup_Fullscreen.vert" ]]; then
-      # Fullscreen passes pair their fragment with the shared fullscreen triangle
-      stages+=(--vert "$shaderDir/yup_Fullscreen.vert")
-    fi
-    [[ -f "$shaderDir/yup_$name.frag" ]] && stages+=(--frag "$shaderDir/yup_$name.frag")
-    [[ -f "$shaderDir/yup_$name.comp" ]] && stages+=(--stage compute "$shaderDir/yup_$name.comp")
-
-    "$bundler" "${stages[@]}" ${args[@]+"${args[@]}"} "-I$shaderDir" \
-      --output "$scratch/$base.ysl" \
-      --target-langs glsl,essl,hlsl,msl,spirv,wgsl
-
-    xxd -i "$scratch/$base.ysl" \
-      | sed -e '1d' -e '/^};/d' -e '/_len =/d' -e '/^[[:space:]]*$/d' > "$scratch/$base.inc.body"
-    {
-      echo "// Generated shader bundle ($base.ysl) - do not edit by hand."
-      echo "// Regenerate with: just {{RECIPE}}"
-      cat "$scratch/$base.inc.body"
-    } > "$shaderDir/$base.inc"
-    echo "wrote $shaderDir/$base.inc"
-  done
 
 [doc("compile and invoke yup_dsp_compiler tool")]
 [working-directory: 'cmake/tools/ydsp_compiler']

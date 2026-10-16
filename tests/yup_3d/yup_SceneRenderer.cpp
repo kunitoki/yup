@@ -18194,7 +18194,8 @@ TEST_F (SceneRendererFrameStatsTests, HeavierPassMeasuresLonger)
 
     GTEST_ALSO_RUN_DISABLED_TESTS=1 just test Release "SceneRendererBenchmarkTests.*"
 
-    The scene is the demo's: examples/graphics/data/gltf/mpc.glb seen from the top, the shadowed
+    or one of them with "just perf run Release <filter>"; "just perf" alone runs the demo target,
+    DISABLED_DemoTargetFrameTimes (see tests/data/yup_3d/perf/README.md). The scene is the demo's: examples/graphics/data/gltf/mpc.glb seen from the top, the shadowed
     key light, the orbiting show lights and a dim environment. The "moving model" configurations
     also shift the model every frame, so the shadow maps are drawn again in each one, as while
     dragging it in the demo. The "orbiting camera" configurations turn the camera around the model
@@ -18213,6 +18214,7 @@ protected:
         std::vector<EntityNode*> showLights;
         BoundingBox bounds;
         EntityNode* modelRoot = nullptr;
+        EntityNode* body = nullptr; // the device the camera frames, or the model root without it
         EntityNode* cameraEntity = nullptr;
         std::vector<Material::Ptr> materials; // the model's
         Vector3<float> modelPosition;
@@ -18240,6 +18242,7 @@ protected:
             auto* framed = device != nullptr ? device : root.get();
             root->setPosition (-framed->computeWorldBounds().getCenter());
             bounds = framed->computeWorldBounds();
+            body = framed;
             modelRoot = root.get();
             modelPosition = root->getPosition();
 
@@ -18301,6 +18304,113 @@ protected:
             return true;
         }
 
+        /** Adds to the built scene what examples/graphics/source/examples/Scene3D.h has on top of it:
+            the contact shadows of the key light, the shadowed spot light over the pads, the box
+            reflection probe above them, the 4 x 2 x 4 irradiance volume over the panel, the materials
+            as its tuneMaterials() leaves them, the glossy emissive screen of its attachScreen(), without
+            the LCD texture, and the logo it drops, and its ambient occlusion at the scale of the knobs.
+            Returns false when the model has no pads to place them by.
+        */
+        bool matchDemo()
+        {
+            BoundingBox padBounds;
+            for (const auto& child : body->getChildren())
+                if (child->getName().startsWith ("Pad."))
+                    padBounds.expand (child->computeWorldBounds());
+
+            if (padBounds.isEmpty())
+                return false;
+
+            auto& root = *scene.getRoot();
+            root.findChild ("keyLight")->getNode<LightNode>()->contactShadows = true;
+
+            const auto padCenter = padBounds.getCenter();
+            const auto azimuth = degreesToRadians (-45.0f);
+            const auto elevation = degreesToRadians (45.0f);
+            const Vector3<float> padDirection (std::cos (elevation) * std::cos (azimuth), std::sin (elevation), std::cos (elevation) * std::sin (azimuth));
+
+            auto padEntity = EntityNode::Ptr (new EntityNode ("padLight"));
+            auto& pad = padEntity->attach<LightNode> (LightNode::Type::spot);
+            pad.castsShadows = true;
+            pad.intensity = 10.0f;
+            pad.radius = 0.03f;
+            pad.range = 4.0f;
+            pad.innerConeAngle = 0.3f;
+            pad.outerConeAngle = 0.6f;
+            pad.color = { 0.9f, 0.94f, 1.0f };
+            aimCamera (*padEntity, padCenter + padDirection * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f });
+            root.addChild (padEntity);
+
+            const auto center = bounds.getCenter();
+            const auto size = bounds.getSize();
+            const auto probePosition = padCenter + Vector3<float> (0.0f, padBounds.getSize().getY() * 0.5f + 0.25f, 0.0f);
+            auto probeEntity = EntityNode::Ptr (new EntityNode ("reflectionProbe"));
+            probeEntity->setPosition (probePosition);
+            auto& probe = probeEntity->attach<ReflectionProbeNode>();
+            probe.shape = ReflectionProbeNode::Shape::box;
+            probe.influenceExtents = { std::abs (center.getX() - probePosition.getX()) + size.getX() * 0.5f + 0.3f,
+                                       probePosition.getY() - bounds.getMin().getY() + 0.1f,
+                                       std::abs (center.getZ() - probePosition.getZ()) + size.getZ() * 0.5f + 0.3f };
+            probe.falloff = 0.2f;
+            probe.parallaxCorrection = false;
+            root.addChild (probeEntity);
+
+            const auto layerSpacing = 0.45f;
+            const auto volumeBottom = padBounds.getMax().getY() + 0.05f - layerSpacing * 0.5f;
+            const auto volumeTop = volumeBottom + layerSpacing * 2.0f;
+            auto volumeEntity = EntityNode::Ptr (new EntityNode ("irradianceVolume"));
+            volumeEntity->setPosition ({ center.getX(), (volumeBottom + volumeTop) * 0.5f, center.getZ() });
+            auto& volume = volumeEntity->attach<IrradianceVolumeNode>();
+            volume.extents = { size.getX() * 0.5f + 0.6f, (volumeTop - volumeBottom) * 0.5f, size.getZ() * 0.5f + 0.6f };
+            volume.resolutionX = 4;
+            volume.resolutionY = 2;
+            volume.resolutionZ = 4;
+            volume.falloff = 0.15f;
+            root.addChild (volumeEntity);
+
+            for (const auto& material : materials)
+            {
+                if (material->name == "Faceplate" || material->name == "Case")
+                {
+                    material->roughnessFactor = 0.7f;
+                }
+                else if (material->name == "Knob Rubber" || material->name == "Black Plastic")
+                {
+                    material->roughnessFactor = 0.45f;
+                    material->clearcoatFactor = 1.0f;
+                    material->clearcoatRoughnessFactor = 0.08f;
+                }
+                else if (material->name == "Pad Rubber")
+                {
+                    material->sheenColorFactor = { 0.35f, 0.36f, 0.38f };
+                    material->sheenRoughnessFactor = 0.5f;
+                }
+                else if (material->name == "Glass")
+                {
+                    material->baseColorFactor = { 0.02f, 0.02f, 0.02f, 1.0f };
+                    material->metallicFactor = 0.0f;
+                    material->roughnessFactor = 0.05f;
+                    material->emissiveFactor = { 1.6f, 1.6f, 1.6f };
+                }
+            }
+
+            if (auto* meshNode = body->getNode<MeshNode>(); meshNode != nullptr && meshNode->mesh != nullptr)
+            {
+                auto withoutLogo = Mesh::Ptr (new Mesh (meshNode->mesh->getName()));
+                for (const auto& primitive : meshNode->mesh->getPrimitives())
+                    if (primitive.material == nullptr || primitive.material->name != "Material.001")
+                        withoutLogo->addPrimitive (primitive.vertices, primitive.indices, primitive.material);
+
+                meshNode->mesh = withoutLogo;
+            }
+
+            auto settings = scene.getRenderSettings();
+            settings.ambientOcclusion = true;
+            settings.aoDistance = 0.08f;
+            scene.setRenderSettings (settings);
+            return true;
+        }
+
         /** Moves the show lights one 120 Hz frame further along the orbits of the demo's LightShowAnimator,
             and the model by a hundredth of its size when moveModel is set. */
         void animate()
@@ -18340,35 +18450,82 @@ protected:
         }
     };
 
+    /** The frame stats of the timed frames of timeFrames() that arrived, and the CPU time of their render() calls. */
+    struct FrameSamples
+    {
+        std::vector<double> gpu;                      // GpuFrameTimings::frameMilliseconds, one per frame whose stats arrived
+        std::vector<double> cpu;                      // the milliseconds of each timed render() call, all 120
+        std::map<String, std::vector<double>> scopes; // the milliseconds of each available scope, by name
+        int drawItems = 0;                            // of the last frame whose stats arrived
+        RenderCapabilities::Tier tier = RenderCapabilities::Tier::raster; // the tier the last frame whose stats arrived rendered with
+        int internalWidth = 0;
+        int internalHeight = 0;
+    };
+
     /** The wall milliseconds per frame of 120 queued frames after 30 warm-up ones, or -1 on a failure.
         @p shadowRedraws receives the number of the timed frames that drew shadow maps, and
         @p casterDraws the shadow caster draws of the timed frames. The renderer collects its frame
-        stats when @p frameStats is set, and waits for its frames after every @p maxFramesInFlight
-        ones when it is above 0. */
+        stats when @p frameStats or @p samples is set, and waits for its frames after every @p maxFramesInFlight
+        ones when it is above 0. @p samples receives the stats of the timed frames, read after every
+        render() and every wait: only the latest finished frame is kept, so a wait finishing two frames
+        leaves the first one out. */
     double timeFrames (LightShow& show, int width, int height, int& shadowRedraws, int* casterDraws = nullptr,
-                       bool frameStats = false, int maxFramesInFlight = 0)
+                       bool frameStats = false, int maxFramesInFlight = 0, FrameSamples* samples = nullptr)
     {
         SceneRenderer renderer;
-        renderer.setFrameStatsEnabled (frameStats);
+        renderer.setFrameStatsEnabled (frameStats || samples != nullptr);
+
+        auto timed = false;
+        uint64 lastFrame = 0;
+        const auto take = [&]
+        {
+            const auto& stats = renderer.getLastFrameStats();
+            if (samples == nullptr || ! timed || stats.frameIndex <= lastFrame || ! stats.gpu.available)
+                return;
+
+            lastFrame = stats.frameIndex;
+            samples->gpu.push_back (stats.gpu.frameMilliseconds);
+            for (const auto& scope : stats.gpu.scopes)
+                if (scope.available)
+                    samples->scopes[scope.name].push_back (scope.milliseconds);
+
+            samples->drawItems = stats.drawItems;
+            if (const auto* capabilities = renderer.getCapabilities())
+                samples->tier = capabilities->getTier();
+            samples->internalWidth = stats.internalWidth;
+            samples->internalHeight = stats.internalHeight;
+        };
 
         const auto renderFrames = [&] (int count)
         {
             for (int i = 0; i < count; ++i)
             {
                 show.animate();
+                const auto renderStart = Time::getMillisecondCounterHiRes();
                 if (renderer.render (device, show.scene, width, height) == nullptr)
                     return false;
 
+                if (samples != nullptr && timed)
+                    samples->cpu.push_back (Time::getMillisecondCounterHiRes() - renderStart);
+
+                take();
+
                 if (maxFramesInFlight > 0 && (i + 1) % maxFramesInFlight == 0 && renderer.waitForGPU().failed())
                     return false;
+
+                take();
             }
 
-            return renderer.waitForGPU().wasOk();
+            const auto finished = renderer.waitForGPU().wasOk();
+            take();
+            return finished;
         };
 
         if (! renderFrames (30))
             return -1.0;
 
+        timed = true;
+        lastFrame = renderer.getLastFrameStats().frameIndex;
         const auto redrawsBefore = shadows (renderer).getNumRenderedFrames();
         const auto drawsBefore = shadows (renderer).getNumCasterDraws();
         const auto start = Time::getMillisecondCounterHiRes();
@@ -18391,7 +18548,82 @@ protected:
 
         return (Time::getMillisecondCounterHiRes() - start) / 120.0;
     }
+
+    /** What compareWithBaseline() decides for a row. */
+    enum class Verdict
+    {
+        pass,      ///< Within 3% of the baseline, within the A/A spread of the run, or faster.
+        regressed, ///< More than 3% slower than the baseline, and slower by more than the A/A spread.
+        newRow,    ///< The baseline has no such row.
+        invalid    ///< A time is not a positive finite number, or the spread is negative or not finite.
+    };
+
+    /** Whether a row of DISABLED_DemoTargetFrameTimes regressed against its baseline.
+
+        @param baseline  The baseline GPU median of the row in milliseconds, empty when the baseline lacks the row.
+        @param current   The GPU median of the row in this run, in milliseconds.
+        @param spread    The A/A spread of the row in this run, |a - b| of its two rounds, in milliseconds.
+    */
+    static Verdict compareWithBaseline (std::optional<double> baseline, double current, double spread)
+    {
+        if (! std::isfinite (current) || current <= 0.0 || ! std::isfinite (spread) || spread < 0.0)
+            return Verdict::invalid;
+
+        if (! baseline.has_value())
+            return Verdict::newRow;
+
+        if (! std::isfinite (*baseline) || *baseline <= 0.0)
+            return Verdict::invalid;
+
+        return current > *baseline * 1.03 && current - *baseline > spread ? Verdict::regressed : Verdict::pass;
+    }
+
+    /** The value below which @p fraction of @p values lie, 0.5 for the median; 0 without values. */
+    static double percentile (std::vector<double> values, double fraction)
+    {
+        if (values.empty())
+            return 0.0;
+
+        std::sort (values.begin(), values.end());
+        return values[jmin (values.size() - 1, static_cast<size_t> (fraction * static_cast<double> (values.size())))];
+    }
 };
+
+TEST_F (SceneRendererBenchmarkTests, CompareWithBaselinePassesEqualSmallAndFasterChanges)
+{
+    EXPECT_EQ (compareWithBaseline (10.0, 10.0, 0.0), Verdict::pass);
+    EXPECT_EQ (compareWithBaseline (10.0, 10.2, 0.0), Verdict::pass);
+    EXPECT_EQ (compareWithBaseline (10.0, 8.0, 0.0), Verdict::pass);
+    EXPECT_EQ (compareWithBaseline (10.0, 8.0, 5.0), Verdict::pass);
+}
+
+TEST_F (SceneRendererBenchmarkTests, CompareWithBaselinePassesSlowdownInsideTheSpread)
+{
+    EXPECT_EQ (compareWithBaseline (10.0, 10.4, 0.5), Verdict::pass);
+    EXPECT_EQ (compareWithBaseline (10.0, 10.4, 1.0), Verdict::pass);
+}
+
+TEST_F (SceneRendererBenchmarkTests, CompareWithBaselineFlagsSlowdownOutsideTheSpread)
+{
+    EXPECT_EQ (compareWithBaseline (10.0, 10.4, 0.1), Verdict::regressed);
+    EXPECT_EQ (compareWithBaseline (10.0, 10.4, 0.0), Verdict::regressed);
+    EXPECT_EQ (compareWithBaseline (10.0, 20.0, 1.0), Verdict::regressed);
+}
+
+TEST_F (SceneRendererBenchmarkTests, CompareWithBaselineReportsMissingRowAsNew)
+{
+    EXPECT_EQ (compareWithBaseline (std::nullopt, 10.0, 0.1), Verdict::newRow);
+}
+
+TEST_F (SceneRendererBenchmarkTests, CompareWithBaselineRejectsZeroAndNegativeInputs)
+{
+    EXPECT_EQ (compareWithBaseline (0.0, 10.0, 0.1), Verdict::invalid);
+    EXPECT_EQ (compareWithBaseline (-1.0, 10.0, 0.1), Verdict::invalid);
+    EXPECT_EQ (compareWithBaseline (10.0, 0.0, 0.1), Verdict::invalid);
+    EXPECT_EQ (compareWithBaseline (10.0, -2.0, 0.1), Verdict::invalid);
+    EXPECT_EQ (compareWithBaseline (10.0, 10.0, -0.1), Verdict::invalid);
+    EXPECT_EQ (compareWithBaseline (10.0, std::numeric_limits<double>::quiet_NaN(), 0.1), Verdict::invalid);
+}
 
 TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
 {
@@ -19106,6 +19338,259 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_KnobAutomationFrameTimes)
                       << shadowRedraws << " of 120 frames drew shadow maps, "
                       << String (casterDraws / 120.0, 1).toStdString() << " caster draws per frame" << std::endl;
         }
+    }
+}
+
+/** The Scene3D demo target, timed on the GPU: the demo's scene (LightShow::matchDemo()) with its
+    light show on, 64 show lights on the full tier and 16 on the raster tier, while the camera orbits
+    from the top as the demo's free movement starts. Two sizes: the demo's 3D view in its default
+    1024 x 768 point window at 2x, 1578 x 1404 pixels, and native Retina, 3456 x 2234 pixels. The
+    full tier rows are the gate, the raster ones context. Each row runs twice, interleaved (A/A), with
+    the frame stats on, waiting for each frame: with more in flight, a frame's command buffer time
+    also spans the frames it waited behind.
+
+    Prints a table per row, writes the same as JSON to the absolute path in the environment variable
+    YUP_PERF_OUTPUT when set, and compares the rows with the JSON of an earlier run named by
+    YUP_PERF_BASELINE when set: it reports, it never fails on a regression. Run it with "just perf",
+    see tests/data/yup_3d/perf/README.md.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_DemoTargetFrameTimes)
+{
+    if (! device->isFrameTimingAvailable())
+        GTEST_SKIP() << "Frame timing is unavailable on this device";
+
+    const struct
+    {
+        const char* name;
+        RenderSettings::TierPreference tier;
+        int numShowLights;
+        int width;
+        int height;
+    } rows[] = {
+        { "full demo 1578x1404 px", RenderSettings::TierPreference::full, 64, 1578, 1404 },
+        { "full retina 3456x2234 px", RenderSettings::TierPreference::full, 64, 3456, 2234 },
+        { "raster demo 1578x1404 px", RenderSettings::TierPreference::raster, 16, 1578, 1404 },
+        { "raster retina 3456x2234 px", RenderSettings::TierPreference::raster, 16, 3456, 2234 },
+    };
+
+    struct Round
+    {
+        FrameSamples samples;
+        double wallMilliseconds = 0.0;
+        int shadowRedraws = 0;
+        int casterDraws = 0;
+        double shadowsMean = 0.0; // the shadows scope over every sampled frame, those that kept the maps reading 0
+        double load = 0.0;
+    };
+
+    const auto tierName = [] (RenderCapabilities::Tier tier) { return tier == RenderCapabilities::Tier::full ? "full" : "raster"; };
+    std::vector<std::vector<Round>> results (std::size (rows));
+
+    double load[3] = {};
+    getloadavg (load, 3);
+
+    for (int round = 0; round < 2; ++round)
+    {
+        for (size_t i = 0; i < std::size (rows); ++i)
+        {
+            const auto& row = rows[i];
+
+            LightShow show;
+            if (! show.build (row.numShowLights, 0.5f, 0.08f, row.tier, static_cast<float> (row.width) / static_cast<float> (row.height)))
+                GTEST_SKIP() << "mpc.glb is missing";
+
+            ASSERT_TRUE (show.matchDemo());
+            show.orbitPitch = 1.56f;
+
+            Round result;
+            double roundLoad[3] = {};
+            getloadavg (roundLoad, 3);
+            result.load = roundLoad[0];
+            result.wallMilliseconds = timeFrames (show, row.width, row.height, result.shadowRedraws, &result.casterDraws, false, 1, &result.samples);
+            ASSERT_GT (result.wallMilliseconds, 0.0) << row.name;
+            ASSERT_FALSE (result.samples.gpu.empty()) << row.name;
+
+            // A full row timed on the raster tier would gate the wrong renderer under the full label
+            if (row.tier == RenderSettings::TierPreference::full && result.samples.tier != RenderCapabilities::Tier::full)
+                GTEST_SKIP() << row.name << " rendered on the " << tierName (result.samples.tier) << " tier: this device has no full tier, so the gate rows cannot run";
+
+            if (const auto shadowTimes = result.samples.scopes.find ("shadows"); shadowTimes != result.samples.scopes.end())
+                result.shadowsMean = std::accumulate (shadowTimes->second.begin(), shadowTimes->second.end(), 0.0) / static_cast<double> (shadowTimes->second.size());
+
+            results[i].push_back (std::move (result));
+        }
+    }
+
+    const auto gpuName = SystemStats::getEnvironmentVariable ("YUP_PERF_GPU", "unknown");
+#if YUP_DEBUG
+    const String config ("Debug");
+#else
+    const String config ("Release");
+#endif
+
+    var json (new DynamicObject());
+    json.getDynamicObject()->setProperty ("gpu", gpuName);
+    json.getDynamicObject()->setProperty ("config", config);
+    json.getDynamicObject()->setProperty ("date", Time::getCurrentTime().toISO8601 (true));
+    json.getDynamicObject()->setProperty ("load", Array<var> { load[0], load[1], load[2] });
+
+    Array<var> rowsJson;
+    std::vector<double> gpuMedians, spreads;
+
+    for (size_t i = 0; i < std::size (rows); ++i)
+    {
+        const auto& row = rows[i];
+        const auto& rounds = results[i];
+        const auto a = percentile (rounds[0].samples.gpu, 0.5);
+        const auto b = percentile (rounds[1].samples.gpu, 0.5);
+        gpuMedians.push_back ((a + b) * 0.5);
+        spreads.push_back (std::abs (a - b));
+
+        std::cout << "\n"
+                  << String::formatted ("%s: GPU median %.3f ms (rounds %.3f and %.3f, A/A spread %.1f%%), internal %dx%d",
+                                        row.name, gpuMedians.back(), a, b, spreads.back() / gpuMedians.back() * 100.0,
+                                        rounds[0].samples.internalWidth, rounds[0].samples.internalHeight)
+                  << "\n"
+                  << String::formatted ("  %5s %8s %8s %8s %8s %8s %10s %13s %6s %6s", "round", "samples", "gpu med", "gpu p95", "wall", "cpu med", "draw items", "casters/frame", "load", "tier")
+                  << std::endl;
+
+        Array<var> roundsJson;
+        std::map<String, double> scopeOrder; // the sum of the round medians of each scope
+        for (size_t r = 0; r < rounds.size(); ++r)
+        {
+            const auto& round = rounds[r];
+            const auto& samples = round.samples;
+            const auto gpuMedian = percentile (samples.gpu, 0.5);
+            const auto casterDraws = round.casterDraws / 120.0;
+
+            std::cout << String::formatted ("  %5d %4d/120 %8.3f %8.3f %8.3f %8.3f %10d %13.1f %6.2f %6s",
+                                            static_cast<int> (r + 1), static_cast<int> (samples.gpu.size()), gpuMedian, percentile (samples.gpu, 0.95),
+                                            round.wallMilliseconds, percentile (samples.cpu, 0.5), samples.drawItems, casterDraws, round.load, tierName (samples.tier))
+                      << std::endl;
+
+            var scopesJson (new DynamicObject());
+            for (const auto& [name, values] : samples.scopes)
+            {
+                scopeOrder[name] += percentile (values, 0.5);
+                scopesJson.getDynamicObject()->setProperty (name, percentile (values, 0.5));
+            }
+
+            var roundJson (new DynamicObject());
+            auto& properties = *roundJson.getDynamicObject();
+            properties.setProperty ("gpuMedian", gpuMedian);
+            properties.setProperty ("gpuP95", percentile (samples.gpu, 0.95));
+            properties.setProperty ("samples", static_cast<int> (samples.gpu.size()));
+            properties.setProperty ("frames", 120);
+            properties.setProperty ("wallMilliseconds", round.wallMilliseconds);
+            properties.setProperty ("cpuMedian", percentile (samples.cpu, 0.5));
+            properties.setProperty ("shadowsMean", round.shadowsMean);
+            properties.setProperty ("shadowRedraws", round.shadowRedraws);
+            properties.setProperty ("casterDrawsPerFrame", casterDraws);
+            properties.setProperty ("drawItems", samples.drawItems);
+            properties.setProperty ("internalWidth", samples.internalWidth);
+            properties.setProperty ("internalHeight", samples.internalHeight);
+            properties.setProperty ("tier", String (tierName (samples.tier)));
+            properties.setProperty ("load", round.load);
+            properties.setProperty ("scopes", scopesJson);
+            roundsJson.add (roundJson);
+        }
+
+        std::vector<std::pair<double, String>> sortedScopes;
+        for (const auto& [name, sum] : scopeOrder)
+            sortedScopes.push_back ({ sum, name });
+
+        std::sort (sortedScopes.begin(), sortedScopes.end(), [] (const auto& x, const auto& y) { return x.first > y.first; });
+
+        std::cout << String::formatted ("  %-24s %8s %6s %8s %6s", "scope", "r1 med", "share", "r2 med", "share") << std::endl;
+        for (const auto& [sum, name] : sortedScopes)
+        {
+            String line = String::formatted ("  %-24s", name.toRawUTF8());
+            for (const auto& round : rounds)
+            {
+                const auto& values = round.samples.scopes.count (name) != 0 ? round.samples.scopes.at (name) : std::vector<double>();
+                const auto value = percentile (values, 0.5);
+                line << String::formatted (" %8.3f %5.1f%%", value, value / percentile (round.samples.gpu, 0.5) * 100.0);
+            }
+
+            // Frames that keep the shadow maps read 0, so the median alone hides the cost of a redraw
+            if (name == "shadows")
+                line << String::formatted ("  mean %.3f and %.3f ms, redrawn in %d and %d of 120 frames",
+                                           rounds[0].shadowsMean, rounds[1].shadowsMean,
+                                           rounds[0].shadowRedraws, rounds[1].shadowRedraws);
+
+            std::cout << line << std::endl;
+        }
+
+        if (row.tier == RenderSettings::TierPreference::full && spreads.back() > gpuMedians.back() * 0.03)
+            std::cout << String::formatted ("  Warning: the A/A spread of this gate row is %.1f%%, above 3%%: the machine was not idle enough to trust it", spreads.back() / gpuMedians.back() * 100.0) << std::endl;
+
+        var rowJson (new DynamicObject());
+        rowJson.getDynamicObject()->setProperty ("name", String (row.name));
+        rowJson.getDynamicObject()->setProperty ("gpuMedian", gpuMedians.back());
+        rowJson.getDynamicObject()->setProperty ("spread", spreads.back() / gpuMedians.back());
+        rowJson.getDynamicObject()->setProperty ("spreadMilliseconds", spreads.back());
+        rowJson.getDynamicObject()->setProperty ("rounds", roundsJson);
+        rowsJson.add (rowJson);
+    }
+
+    json.getDynamicObject()->setProperty ("rows", rowsJson);
+
+    if (const auto outputPath = SystemStats::getEnvironmentVariable ("YUP_PERF_OUTPUT", {}); outputPath.isNotEmpty())
+    {
+        if (! File::isAbsolutePath (outputPath))
+            ADD_FAILURE() << "YUP_PERF_OUTPUT is not an absolute path, nothing written: " << outputPath;
+        else if (File (outputPath).getParentDirectory().createDirectory().wasOk() && File (outputPath).replaceWithText (JSON::toString (json)))
+            std::cout << "\nWrote " << outputPath << std::endl;
+        else
+            ADD_FAILURE() << "Could not write " << outputPath;
+    }
+
+    const auto baselinePath = SystemStats::getEnvironmentVariable ("YUP_PERF_BASELINE", {});
+    if (baselinePath.isEmpty())
+        return;
+
+    if (! File::isAbsolutePath (baselinePath) || ! File (baselinePath).existsAsFile())
+    {
+        std::cout << "\nNo baseline to compare with at " << baselinePath << std::endl;
+        return;
+    }
+
+    const auto baseline = JSON::parse (File (baselinePath));
+    if (! baseline.isObject())
+    {
+        std::cout << "\nThe baseline is not a JSON object, not compared: " << baselinePath << std::endl;
+        return;
+    }
+
+    if (baseline["gpu"].toString() != gpuName || baseline["config"].toString() != config)
+    {
+        std::cout << "\nWarning: the baseline was recorded on " << baseline["gpu"].toString() << " in " << baseline["config"].toString()
+                  << ", this run is on " << gpuName << " in " << config << ": not compared" << std::endl;
+        return;
+    }
+
+    std::cout << "\nCompared with " << baselinePath << " (" << baseline["date"].toString() << "):" << std::endl;
+    for (size_t i = 0; i < std::size (rows); ++i)
+    {
+        std::optional<double> baselineMedian;
+        if (const auto* baselineRows = baseline["rows"].getArray(); baselineRows != nullptr)
+            for (const auto& baselineRow : *baselineRows)
+                if (baselineRow["name"].toString() == rows[i].name)
+                    baselineMedian = static_cast<double> (baselineRow["gpuMedian"]);
+
+        const auto current = gpuMedians[i];
+        const auto verdict = compareWithBaseline (baselineMedian, current, spreads[i]);
+        if (verdict == Verdict::newRow)
+        {
+            std::cout << String::formatted ("  new        %s: %.3f ms, not in the baseline", rows[i].name, current) << std::endl;
+            continue;
+        }
+
+        const auto before = baselineMedian.value_or (0.0);
+        std::cout << String::formatted ("  %-10s %s: %.3f ms, baseline %.3f ms, %+.3f ms (%+.1f%%), A/A spread %.3f ms",
+                                        verdict == Verdict::pass ? "PASS" : (verdict == Verdict::regressed ? "REGRESSED" : "INVALID"),
+                                        rows[i].name, current, before, current - before, before > 0.0 ? (current / before - 1.0) * 100.0 : 0.0, spreads[i])
+                  << std::endl;
     }
 }
 

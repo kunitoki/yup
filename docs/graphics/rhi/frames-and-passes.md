@@ -81,8 +81,9 @@ if (const auto timings = status.getTimings(); timings.available)
 to its end. It does not include GPU work submitted outside the frame (texture
 uploads, the window's own drawing), nor the time before the GPU started it. With
 several frames in flight, though, it includes the time the frame ran alongside, or
-waited behind, the frames before it. Measure with few frames in flight (two or
-three, as a window presenting to the display has), or wait for each measured frame.
+waited behind, the frames before it, even with two in flight: wait for each measured
+frame to read its own cost. A window presenting to the display keeps about three in
+flight, so the Scene 3D demo's own readout reads higher than `just perf`.
 `getTimings()` never blocks: the timings are unavailable while the frame is pending,
 when it failed, and when it was not measured.
 

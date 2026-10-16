@@ -221,7 +221,8 @@ public:
         own (see GpuScopeTiming::milliseconds); only devices measuring scopes report them (see
         GpuDevice::isScopeTimingAvailable(), Metal today). Measured with at most 8 frames in flight,
         the scopes are reliable; the frame total (GpuFrameTimings::frameMilliseconds) also includes
-        the time the frame waited behind earlier ones, so it is best read with 2 or 3 in flight.
+        the time the frame waited behind earlier ones, even with 2 in flight, so it is best read
+        waiting for each frame.
 
         @param shouldCollect  True to collect the stats of the next frames.
     */

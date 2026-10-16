@@ -1229,9 +1229,11 @@ for (const auto& scope : stats.gpu.scopes)
   the shadow maps were redrawn) may also include time it overlapped work outside
   the renderer's frames, such as window drawing and uploads.
 - The pass times stay meaningful with up to 8 frames in flight. The frame total
-  includes the time the frame waited behind earlier ones, so read it with 2 or 3
-  frames in flight. A window repainting a `SceneComponent` keeps at most about 3
-  (the drawables of a Metal window).
+  includes the time the frame waited behind earlier ones, even with 2 in flight,
+  so wait for each measured frame to read its own cost (`just perf` does).
+- A window repainting a `SceneComponent` keeps about 3 frames in flight (the
+  drawables of a Metal window), so the demo's own readout reads higher than
+  `just perf`.
 - The stats move on only when the renderer renders (or `waitForGPU()` or
   `bakeProbes()` runs): a view that stopped repainting keeps its last ones.
 - With profiling enabled, the CPU side of the same passes shows in the traces
