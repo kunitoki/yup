@@ -2021,6 +2021,11 @@ TEST_P (SceneRendererTierTests, ClearcoatAddsASharpHighlightOnARoughBase)
     checkClearcoatAddsASharpHighlightOnARoughBase (GetParam());
 }
 
+TEST_P (SceneRendererTierTests, ClearcoatIsWidenedOverCurvedPixels)
+{
+    checkClearcoatIsWidenedOverCurvedPixels (GetParam());
+}
+
 TEST_P (SceneRendererTierTests, SheenBrightensGrazingEdges)
 {
     checkSheenBrightensGrazingEdges (GetParam());

@@ -314,6 +314,10 @@ their normal-mapped normal, so there the clearcoat highlights follow the normal
 map too. Reflection probes and irradiance volumes capture the materials without
 their layers.
 
+Where the surface curves sharply within a pixel, as on the ribs of a small knob
+seen from afar, the clearcoat's reflections are blurred as the material's own
+are, so a smooth varnish doesn't break into thin, flickering lines.
+
 Two approximations keep layered frames fast:
 
 - The sheen dims the material under it by how much it reflects towards the

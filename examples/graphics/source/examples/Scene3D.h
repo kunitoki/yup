@@ -614,7 +614,8 @@ private:
             scene->getRoot()->addChild (padLightEntity);
 
             // Probed from above the pads, the glossy caps and the screen glass reflect the panel around
-            // them instead of the studio floor. Parallax correction suits closed rooms, not an open studio
+            // them instead of the studio floor. Parallax correction places the panel where it lies
+            // around each knob, rather than as if far away, which bent it across the knobs' rims
             const auto deviceCenter = deviceBounds.getCenter();
             const auto deviceSize = deviceBounds.getSize();
             const auto probePosition = padBounds.isEmpty() ? deviceCenter + yup::Vector3<float> (0.0f, deviceSize.getY(), 0.0f)
@@ -627,7 +628,7 @@ private:
                                                   probePosition.getY() - deviceBounds.getMin().getY() + 0.1f,
                                                   std::abs (deviceCenter.getZ() - probePosition.getZ()) + deviceSize.getZ() * 0.5f + 0.3f };
             reflectionProbe->falloff = 0.2f;
-            reflectionProbe->parallaxCorrection = false;
+            reflectionProbe->parallaxCorrection = true;
             scene->getRoot()->addChild (probeEntity);
 
             // Bakes the light the case and the screen bounce onto the panel, from 4 x 2 x 4 probes. The probes

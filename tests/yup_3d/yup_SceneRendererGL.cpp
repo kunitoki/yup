@@ -489,6 +489,11 @@ TEST_F (SceneRendererGLTests, ClearcoatAddsASharpHighlightOnARoughBase)
     checkClearcoatAddsASharpHighlightOnARoughBase (RenderSettings::TierPreference::raster);
 }
 
+TEST_F (SceneRendererGLTests, ClearcoatIsWidenedOverCurvedPixels)
+{
+    checkClearcoatIsWidenedOverCurvedPixels (RenderSettings::TierPreference::raster);
+}
+
 TEST_F (SceneRendererGLTests, SheenBrightensGrazingEdges)
 {
     checkSheenBrightensGrazingEdges (RenderSettings::TierPreference::raster);

@@ -681,7 +681,7 @@ protected:
                                        probePosition.getY() - bounds.getMin().getY() + 0.1f,
                                        std::abs (center.getZ() - probePosition.getZ()) + size.getZ() * 0.5f + 0.3f };
             probe.falloff = 0.2f;
-            probe.parallaxCorrection = false;
+            probe.parallaxCorrection = true;
             root.addChild (probeEntity);
 
             const auto layerSpacing = 0.45f;

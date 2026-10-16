@@ -5412,12 +5412,12 @@ vec4 encodeLuma(vec3 c)
         return material;
     }
 
-    /** A sphere of radius 1.5 drawn with @p material, lit head-on by a white sun of intensity 3
+    /** A sphere of radius @p radius drawn with @p material, lit head-on by a white sun of intensity 3
         alone, rendered on @p tier at 128 x 128 without temporal anti-aliasing. */
-    Image renderLitSphere (Material::Ptr material, RenderSettings::TierPreference tier)
+    Image renderLitSphere (Material::Ptr material, RenderSettings::TierPreference tier, float radius = 1.5f)
     {
         Scene scene;
-        addSphere (scene, 1.5f, std::move (material));
+        addSphere (scene, radius, std::move (material));
         scene.setAmbientColor (Colors::black);
         setTierForExactFrames (scene, tier);
 
@@ -5464,6 +5464,35 @@ vec4 encodeLuma(vec3 c)
 
         RecordProperty ("brightenedPixels", brightened);
         EXPECT_GT (brightened, 0);
+    }
+
+    /** On @p tier, the clearcoat is widened where its normal varies within a pixel, as the base is
+        (specular antialiasing): on a sphere about 4 pixels wide, so curved that the widening
+        dominates, a mirror coat of roughness 0.04 peaks about as one of 0.3, while on the large
+        sphere, where the widening is negligible, the mirror's peak stands far above.
+    */
+    void checkClearcoatIsWidenedOverCurvedPixels (RenderSettings::TierPreference tier)
+    {
+        const auto peak = [&] (float radius, float clearcoatRoughness)
+        {
+            const auto image = renderLitSphere (makeLayeredMaterial ({ 0.05f, 0.05f, 0.05f }, 1.0f, clearcoatRoughness, {}, 0.0f, 0.0f), tier, radius);
+            EXPECT_TRUE (image.isValid());
+            return brightestLuminance (image);
+        };
+
+        const auto smallMirror = peak (0.15f, 0.04f);
+        const auto smallRough = peak (0.15f, 0.3f);
+        const auto largeMirror = peak (1.5f, 0.04f);
+        const auto largeRough = peak (1.5f, 0.3f);
+        RecordProperty ("smallMirror", String (smallMirror, 1).toStdString());
+        RecordProperty ("smallRough", String (smallRough, 1).toStdString());
+        RecordProperty ("largeMirror", String (largeMirror, 1).toStdString());
+        RecordProperty ("largeRough", String (largeRough, 1).toStdString());
+
+        // On Apple M2 Max: 101 against 100 small, 247 against 194 large; without the widening the
+        // small mirror peaks at 59, the pixel missing most of its highlight, and the large one at 179
+        EXPECT_GT (largeMirror, largeRough + 40.0);
+        EXPECT_LT (std::abs (smallMirror - smallRough), 15.0);
     }
 
     /** On @p tier, a white sheen (KHR_materials_sheen) over a black base without specular light
