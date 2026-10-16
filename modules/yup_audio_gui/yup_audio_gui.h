@@ -34,6 +34,9 @@
 
     dependencies:         yup_audio_basics yup_audio_devices yup_audio_formats yup_audio_processors yup_audio_graph yup_dsp yup_gui
 
+    shaderDirectory:      displays
+    shaderBundles:        SpectrogramComponentShader
+
   END_YUP_MODULE_DECLARATION
 
   ==============================================================================

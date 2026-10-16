@@ -804,6 +804,8 @@ protected:
         RenderCapabilities::Tier tier = RenderCapabilities::Tier::raster; // the tier the last frame whose stats arrived rendered with
         int internalWidth = 0;
         int internalHeight = 0;
+        bool localIndirect = false; // the last frame whose stats arrived shaded with the local indirect LightingPass variant
+        bool layers = false;        // ... with its material layers variant
     };
 
     /** The wall milliseconds per frame of 120 queued frames after 30 warm-up ones, or -1 on a failure.
@@ -839,6 +841,11 @@ protected:
                 samples->tier = capabilities->getTier();
             samples->internalWidth = stats.internalWidth;
             samples->internalHeight = stats.internalHeight;
+            if (const auto* lightingPass = renderer.getLightingPass())
+            {
+                samples->localIndirect = lightingPass->usesLocalIndirect();
+                samples->layers = lightingPass->usesMaterialLayers();
+            }
         };
 
         const auto renderFrames = [&] (int count)
@@ -1685,6 +1692,205 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_KnobAutomationFrameTimes)
             std::cout << label.toStdString() << ": " << String (milliseconds, 3).toStdString() << " ms, "
                       << shadowRedraws << " of 120 frames drew shadow maps, "
                       << String (casterDraws / 120.0, 1).toStdString() << " caster draws per frame" << std::endl;
+        }
+    }
+}
+
+/** What each feature of the Scene3D demo target costs on the full tier: the demo's scene
+    (LightShow::matchDemo()) with its light show and orbit, as DISABLED_DemoTargetFrameTimes renders
+    it, then with one feature off or changed per row. Each row is timed at native Retina and at
+    Retina upscaled from 0.5, in three interleaved rounds, and printed with its GPU median and the
+    median of each scope, next to their difference with the unchanged demo row, and the
+    LightingPass variant it shaded with. Run it with
+    "just perf run Release SceneRendererBenchmarkTests.DISABLED_FeatureCostFrameTimes".
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_FeatureCostFrameTimes)
+{
+    if (! device->isFrameTimingAvailable())
+        GTEST_SKIP() << "Frame timing is unavailable on this device";
+
+    const auto setSettings = [] (LightShow& show, auto&& change)
+    {
+        auto settings = show.renderSettings;
+        change (settings);
+        show.renderSettings = settings;
+    };
+
+    const auto removeLayers = [] (LightShow& show)
+    {
+        for (const auto& material : show.materials)
+        {
+            material->clearcoatFactor = 0.0f;
+            material->sheenColorFactor = { 0.0f, 0.0f, 0.0f };
+        }
+    };
+
+    const auto removeProbes = [] (LightShow& show)
+    {
+        for (const auto* name : { "reflectionProbe", "irradianceVolume" })
+            show.scene.getRoot()->findChild (name)->removeFromParent();
+    };
+
+    const struct
+    {
+        const char* name;
+        int numShowLights = 64;
+        std::function<void (LightShow&)> change;
+    } rows[] = {
+        { "demo", 64, [] (LightShow&) {} },
+        { "ambient occlusion off", 64, [&] (LightShow& show) { setSettings (show, [] (RenderSettings& s) { s.ambientOcclusion = false; }); } },
+        { "reflections off", 64, [&] (LightShow& show) { setSettings (show, [] (RenderSettings& s) { s.screenSpaceReflections = false; }); } },
+        { "contact shadows off", 64, [&] (LightShow& show) { setSettings (show, [] (RenderSettings& s) { s.contactShadows = false; }); } },
+        { "ao + reflections + contact off", 64, [&] (LightShow& show) { setSettings (show, [] (RenderSettings& s) { s.ambientOcclusion = false; s.screenSpaceReflections = false; s.contactShadows = false; }); } },
+        { "soft shadows off", 64, [&] (LightShow& show) { setSettings (show, [] (RenderSettings& s) { s.softShadows = false; }); } },
+        { "no light radius", 64, [] (LightShow& show)
+          {
+              for (const auto* name : { "keyLight", "padLight" })
+                  show.scene.getRoot()->findChild (name)->getNode<LightNode>()->radius = 0.0f;
+          } },
+        { "soft shadows off, no light radius", 64, [&] (LightShow& show)
+          {
+              setSettings (show, [] (RenderSettings& s) { s.softShadows = false; });
+              for (const auto* name : { "keyLight", "padLight" })
+                  show.scene.getRoot()->findChild (name)->getNode<LightNode>()->radius = 0.0f;
+          } },
+        { "no layers", 64, removeLayers },
+        { "no probes or volume", 64, removeProbes },
+        { "no local indirect", 64, [&] (LightShow& show) { removeLayers (show); removeProbes (show); } },
+        { "one layered speck", 64, [&] (LightShow& show)
+          {
+              removeLayers (show);
+              removeProbes (show);
+
+              // A clearcoated box a hundredth of the device's size on its top: the layers variant shades every pixel for a few
+              auto material = makeWallMaterial();
+              material->clearcoatFactor = 1.0f;
+              auto speck = EntityNode::Ptr (new EntityNode ("speck"));
+              speck->attach<MeshNode> (makeBox (show.bounds.getRadius() * 0.01f, material));
+              speck->setPosition (show.bounds.getCenter() + Vector3<float> (0.0f, show.bounds.getSize().getY() * 0.5f, 0.0f));
+              show.scene.getRoot()->addChild (speck);
+          } },
+        { "16 show lights", 16, [] (LightShow&) {} },
+        { "no show lights", 0, [] (LightShow&) {} },
+    };
+
+    const struct
+    {
+        const char* name;
+        int width;
+        int height;
+        float renderScale;
+    } sizes[] = {
+        { "retina 3456x2234 px", 3456, 2234, 1.0f },
+        { "retina 3456x2234 px scale 0.5", 3456, 2234, 0.5f },
+    };
+
+    constexpr int numRounds = 3;
+    std::vector<std::vector<FrameSamples>> results (std::size (sizes) * std::size (rows));
+
+    double load[3] = {};
+    getloadavg (load, 3);
+    std::cout << String::formatted ("Load before: %.2f %.2f %.2f", load[0], load[1], load[2]) << std::endl;
+
+    for (int round = 0; round < numRounds; ++round)
+    {
+        for (size_t s = 0; s < std::size (sizes); ++s)
+        {
+            for (size_t i = 0; i < std::size (rows); ++i)
+            {
+                const auto& size = sizes[s];
+                const auto& row = rows[i];
+
+                LightShow show;
+                if (! show.build (row.numShowLights, 0.5f, 0.08f, RenderSettings::TierPreference::full, static_cast<float> (size.width) / static_cast<float> (size.height)))
+                    GTEST_SKIP() << "mpc.glb is missing";
+
+                ASSERT_TRUE (show.matchDemo());
+                show.orbitPitch = 1.56f;
+
+                if (size.renderScale < 1.0f)
+                    setSettings (show, [&] (RenderSettings& settings)
+                    {
+                        settings.upscaling = RenderSettings::Upscaling::temporal;
+                        settings.renderScale = size.renderScale;
+                    });
+
+                row.change (show);
+
+                FrameSamples samples;
+                auto shadowRedraws = 0;
+                ASSERT_GT (timeFrames (show, size.width, size.height, shadowRedraws, nullptr, false, 1, &samples), 0.0) << row.name;
+                ASSERT_FALSE (samples.gpu.empty()) << row.name;
+
+                if (samples.tier != RenderCapabilities::Tier::full)
+                    GTEST_SKIP() << "This device has no full tier";
+
+                results[s * std::size (rows) + i].push_back (std::move (samples));
+            }
+        }
+    }
+
+    getloadavg (load, 3);
+    std::cout << String::formatted ("Load after: %.2f %.2f %.2f", load[0], load[1], load[2]) << std::endl;
+
+    // The median of each round and their mean, of the frame total when scope is empty
+    const auto medians = [] (const std::vector<FrameSamples>& rounds, const String& scope)
+    {
+        std::vector<double> values;
+        for (const auto& samples : rounds)
+        {
+            if (scope.isEmpty())
+                values.push_back (percentile (samples.gpu, 0.5));
+            else
+                values.push_back (samples.scopes.count (scope) != 0 ? percentile (samples.scopes.at (scope), 0.5) : 0.0);
+        }
+
+        return values;
+    };
+
+    const auto mean = [] (const std::vector<double>& values)
+    {
+        return std::accumulate (values.begin(), values.end(), 0.0) / static_cast<double> (values.size());
+    };
+
+    for (size_t s = 0; s < std::size (sizes); ++s)
+    {
+        const auto& reference = results[s * std::size (rows)];
+        const auto referenceTotal = mean (medians (reference, {}));
+
+        std::cout << "\n"
+                  << sizes[s].name << ", internal " << reference[0].internalWidth << "x" << reference[0].internalHeight
+                  << ", demo GPU median " << String (referenceTotal, 3) << " ms" << std::endl;
+
+        for (size_t i = 0; i < std::size (rows); ++i)
+        {
+            const auto& rounds = results[s * std::size (rows) + i];
+
+            // The frame total first, then every scope of the row or the demo row
+            std::vector<String> scopes { String() };
+            for (const auto* samples : { &rounds[0], &reference[0] })
+                for (const auto& [name, values] : samples->scopes)
+                    if (std::find (scopes.begin(), scopes.end(), name) == scopes.end())
+                        scopes.push_back (name);
+
+            std::cout << String::formatted ("  %-32s variant%s%s", rows[i].name,
+                                            rounds[0].localIndirect ? " localIndirect" : "", rounds[0].layers ? " layers" : "")
+                      << std::endl;
+
+            for (const auto& scope : scopes)
+            {
+                const auto values = medians (rounds, scope);
+                const auto referenceValue = mean (medians (reference, scope));
+                const auto [low, high] = std::minmax_element (values.begin(), values.end());
+                const auto value = mean (values);
+                if (value == 0.0 && referenceValue == 0.0)
+                    continue;
+
+                std::cout << String::formatted ("    %-24s %8.3f ms  %+8.3f ms  %+6.1f%% of the demo frame  rounds %.3f..%.3f",
+                                                scope.isEmpty() ? "frame" : scope.toRawUTF8(), value, value - referenceValue,
+                                                (value - referenceValue) / referenceTotal * 100.0, *low, *high)
+                          << std::endl;
+            }
         }
     }
 }

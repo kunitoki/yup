@@ -48,8 +48,8 @@ the `shaderDirectory`, `shaderIncludes`, `shaderDefinePrefix` and
 `shaderBundles` keys. They are compiled **at build time**, in parallel, and only
 rebuilt when a shader or one of its includes changes. The module includes the
 result as `#include "<module>_shaders/yup_<Name>[_<define>...].inc"`. See
-[module format](../../build-system/module-format.md); `yup_rhi` and
-`yup_renderer` use it.
+[module format](../../build-system/module-format.md); `yup_rhi`,
+`yup_renderer` and `yup_audio_gui` use it.
 
 ## The `yup_add_shader_bundle` CMake helper
 

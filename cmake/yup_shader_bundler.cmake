@@ -33,7 +33,7 @@ function (_yup_build_shader_bundler_tool output_variable)
     endif()
 
     get_filename_component (tool_source_dir "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/tools/shader_bundler" ABSOLUTE)
-    set (tool_build_dir "${CMAKE_BINARY_DIR}/_host_tools/shader_bundler")
+    set (tool_build_dir "${CMAKE_BINARY_DIR}/_yup_host_tools/shader_bundler")
 
     # ==== Configure the host build (no toolchain file -> host compiler)
     _yup_message (STATUS "Configuring host shader bundler tool")
@@ -232,7 +232,7 @@ endfunction()
 
 function (_yup_add_shader_bundler_host_target output_executable output_target)
     set (tool_target yup_shader_bundler_host)
-    set (tool_executable "${CMAKE_BINARY_DIR}/_host_tools/bin/yup_shader_bundler")
+    set (tool_executable "${CMAKE_BINARY_DIR}/_yup_host_tools/bin/yup_shader_bundler")
     set (tool_executable_name "yup_shader_bundler")
     if (CMAKE_HOST_WIN32)
         string (APPEND tool_executable ".exe")
@@ -245,7 +245,7 @@ function (_yup_add_shader_bundler_host_target output_executable output_target)
         add_custom_target (${tool_target}
             COMMAND "${CMAKE_COMMAND}"
                 -DSOURCE_DIR=${tool_source_dir}
-                -DBUILD_DIR=${CMAKE_BINARY_DIR}/_host_tools/shader_bundler
+                -DBUILD_DIR=${CMAKE_BINARY_DIR}/_yup_host_tools/shader_bundler
                 -DEXECUTABLE_NAME=${tool_executable_name}
                 -DOUTPUT=${tool_executable}
                 -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/tools/yup_build_host_tool.cmake"
@@ -306,7 +306,7 @@ function (_yup_module_add_shader_bundles module_name module_path shader_director
 
     _yup_add_shader_bundler_host_target (bundler_executable bundler_target)
 
-    set (output_root "${CMAKE_BINARY_DIR}/yup_shader_bundles")
+    set (output_root "${CMAKE_BINARY_DIR}/_yup_shader_bundles")
     set (output_dir "${output_root}/${module_name}_shaders")
     file (MAKE_DIRECTORY "${output_dir}")
 
