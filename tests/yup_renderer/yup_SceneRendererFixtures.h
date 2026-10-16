@@ -1179,7 +1179,7 @@ protected:
             scene.getRoot()->addChild (light);
         }
 
-        SceneRenderer renderer;
+        auto& renderer = sharedRenderer();
         setTier (renderer, tier);
         const auto image = renderToImage (renderer, scene, 128);
         ASSERT_TRUE (image.isValid()) << renderer.getLastError();
@@ -2949,7 +2949,7 @@ vec4 encodeLuma(vec3 c)
         // Scene color holds raw radiance on full without temporal anti-aliasing. Raster rgba8 hides
         // non-finite values, but a NaN pixel reads black there: every quad center must stay lit
         const auto full = tier == RenderSettings::TierPreference::full;
-        SceneRenderer renderer;
+        auto& renderer = sharedRenderer();
         if (full)
             setFullTierTaa (renderer, 1);
         else
@@ -3137,7 +3137,7 @@ vec4 encodeLuma(vec3 c)
         // Scene color holds raw radiance on full without temporal anti-aliasing. Raster rgba8 hides
         // non-finite values, but a NaN pixel reads black there
         const auto full = tier == RenderSettings::TierPreference::full;
-        SceneRenderer renderer;
+        auto& renderer = sharedRenderer();
         if (full)
             setFullTierTaa (renderer, 1);
         else
@@ -5767,7 +5767,7 @@ vec4 encodeLuma(vec3 c)
             scene.setUsingDefaultLight (false);
             scene.setToneMapping (Scene::ToneMapping::reinhard);
 
-            SceneRenderer renderer;
+            auto& renderer = sharedRenderer();
             setTierForExactFrames (renderer, tier);
             const auto image = renderToImage (renderer, scene, 64);
             EXPECT_TRUE (image.isValid()) << renderer.getLastError();
@@ -6175,7 +6175,7 @@ vec4 encodeLuma(vec3 c)
         scene.setBackgroundColor (Colors::red);
         addEmitter (scene, { -1.5f, -1.5f, 3.0f, 3.0f }, 10.0f, 8.0f);
 
-        SceneRenderer renderer;
+        auto& renderer = sharedRenderer();
         setDepthOfFieldTier (renderer, tier);
         const auto image = renderToImage (renderer, scene, size);
         ASSERT_TRUE (image.isValid()) << renderer.getLastError();
@@ -7283,8 +7283,46 @@ vec4 encodeUnit(float value)
         }
     }
 
+    /** A renderer shared by the tests of a suite on the same device, so that its pipelines compile
+        once, returned with the default settings, a restarted accumulation and the default options.
+        It keeps the rest of its history (the jitter phase, the previous view, pass objects, probe
+        bakes, counters and failures): tests that depend on any of it use their own renderer.
+    */
+    SceneRenderer& sharedRenderer()
+    {
+        if (suiteRenderer == nullptr || suiteRendererDevice != device)
+        {
+            suiteRenderer.reset();
+            suiteRenderer = std::make_unique<SceneRenderer>();
+            suiteRendererDevice = device;
+        }
+
+        suiteRenderer->setRenderSettings (RenderSettings {});
+        suiteRenderer->restartAccumulation();
+        suiteRenderer->setFrameStatsEnabled (false);
+        suiteRenderer->setDeviceFactsOverride ({});
+        suiteRenderer->setSampleCount (4);
+        return *suiteRenderer;
+    }
+
+    /** Releases the shared renderer, before the device it renders on goes away. */
+    static void releaseSharedRenderer()
+    {
+        suiteRenderer.reset();
+        suiteRendererDevice = nullptr;
+    }
+
+    static void TearDownTestSuite()
+    {
+        releaseSharedRenderer();
+    }
+
     GpuDevice::Ptr device;
     std::unique_ptr<GraphicsContext> context;
+
+private:
+    static inline std::unique_ptr<SceneRenderer> suiteRenderer;
+    static inline GpuDevice::Ptr suiteRendererDevice;
 };
 #endif
 
@@ -7292,9 +7330,19 @@ vec4 encodeUnit(float value)
 class SceneRendererMetalTests : public SceneRendererBaselineScenes
 {
 protected:
+    /** One device per test suite, so that the suite's shared renderer keeps its pipelines. */
+    static void TearDownTestSuite()
+    {
+        SceneRendererBaselineScenes::TearDownTestSuite();
+        suiteDevice = nullptr;
+    }
+
     void SetUp() override
     {
-        device = GpuDevice::create (GpuPlatform::Metal, {});
+        if (suiteDevice == nullptr)
+            suiteDevice = GpuDevice::create (GpuPlatform::Metal, {});
+
+        device = suiteDevice;
         if (device == nullptr)
             GTEST_SKIP() << "No Metal device available";
 
@@ -7597,6 +7645,9 @@ protected:
             lights[i]->setPosition ({ std::cos (angle) * radius, std::sin (angle) * radius, 0.1f + 0.05f * ring });
         }
     }
+
+private:
+    static inline GpuDevice::Ptr suiteDevice;
 };
 
 class SceneRendererTierTests : public SceneRendererMetalTests

@@ -122,10 +122,11 @@ TEST_F (SceneRendererMetalTests, OneEnvironmentDrawnByTwoRenderers)
     buildEdgesScene (scene);
     scene.setEnvironment (environment);
     scene.setEnvironmentVisible (true);
-    setFullTierTaa (scene, 4);
 
     {
         SceneRenderer first, second;
+        setFullTierTaa (first, 4);
+        setFullTierTaa (second, 4);
         for (int i = 0; i < 4; ++i)
         {
             ASSERT_NE (first.render (device, scene, 64, 64), nullptr) << first.getLastError();
@@ -262,9 +263,9 @@ TEST_F (SceneRendererMetalTests, AmbientOcclusionSettingsRestartAccumulation)
             ASSERT_NE (renderer.render (device, scene, 128, 128), nullptr) << renderer.getLastError();
         ASSERT_TRUE (renderer.isConverged()) << name;
 
-        auto settings = scene.getRenderSettings();
+        auto settings = renderer.getRenderSettings();
         change (settings);
-        scene.setRenderSettings (settings);
+        renderer.setRenderSettings (settings);
 
         // Restarted, not invalidated, see ShadowSettingsRestartAccumulation
         const auto first = renderToImage (renderer, scene, 128);
@@ -284,8 +285,8 @@ TEST_F (SceneRendererMetalTests, SsrReflectsAnOnScreenEmitter)
     {
         Scene scene;
         buildOnScreenEmitterScene (scene);
-        setFullTierTaa (scene, 8);
-        setScreenSpaceReflections (scene, screenSpaceReflections);
+        setFullTierTaa (renderer, 8);
+        setScreenSpaceReflections (renderer, screenSpaceReflections);
 
         const auto image = renderConverged (renderer, scene, 64);
         EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
@@ -336,6 +337,8 @@ TEST_F (SceneRendererMetalTests, SsrConvergedRendersAreIdentical)
     ASSERT_TRUE (renderToImage (warmUp, scene, 64).isValid());
 
     SceneRenderer a, b;
+    a.setRenderSettings (warmUp.getRenderSettings());
+    b.setRenderSettings (warmUp.getRenderSettings());
     const auto imageA = renderConverged (a, scene, 64);
     const auto imageB = renderConverged (b, scene, 64);
     ASSERT_TRUE (imageA.isValid() && imageB.isValid());
@@ -479,8 +482,8 @@ TEST_F (SceneRendererMetalTests, SsrFallsBackToProbesOffScreen)
     {
         Scene scene;
         buildMirrorFloorScene (scene);
-        setFullTierTaa (scene, 8);
-        setScreenSpaceReflections (scene, screenSpaceReflections);
+        setFullTierTaa (renderer, 8);
+        setScreenSpaceReflections (renderer, screenSpaceReflections);
         addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
 
         const auto image = renderConverged (renderer, scene, 64);
@@ -526,12 +529,12 @@ TEST_F (SceneRendererMetalTests, SsrSettingRestartsAccumulation)
     ASSERT_TRUE (renderer.isConverged());
 
     // Restarted, not invalidated: the history stays valid for the reflections to come back at once
-    setScreenSpaceReflections (scene, false);
+    setScreenSpaceReflections (renderer, false);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_FALSE (renderer.isConverged());
     EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
 
-    setScreenSpaceReflections (scene, std::nullopt);
+    setScreenSpaceReflections (renderer, std::nullopt);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_FALSE (renderer.isConverged());
     EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
@@ -557,9 +560,9 @@ TEST_F (SceneRendererMetalTests, SsrConvergedRegionMatchesAPrimedHistory)
 
         if (primed)
         {
-            auto settings = scene.getRenderSettings();
+            auto settings = renderer.getRenderSettings();
             settings.contactShadows = false;
-            scene.setRenderSettings (settings);
+            renderer.setRenderSettings (settings);
             EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr);
             EXPECT_FALSE (renderer.isConverged());
             EXPECT_TRUE (renderConverged (renderer, scene, 64).isValid()) << renderer.getLastError();
@@ -665,7 +668,6 @@ TEST_F (SceneRendererMetalTests, SsrWeighsNeighborRaysByThePixelsLobe)
     // the 4 rays would blend each band into the next
     Scene scene;
     buildMirrorFloorScene (scene, false);
-    setFullTierTaa (scene, 8);
 
     for (int band = 0; band < 4; ++band)
     {
@@ -687,6 +689,7 @@ TEST_F (SceneRendererMetalTests, SsrWeighsNeighborRaysByThePixelsLobe)
     }
 
     SceneRenderer renderer;
+    setFullTierTaa (renderer, 8);
     const auto image = renderConverged (renderer, scene, 64);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
 
@@ -731,14 +734,14 @@ TEST_F (SceneRendererMetalTests, SsrOffReleasesItsTargets)
     EXPECT_GT (hiZ->getNumCachedTargets(), 0u);
 
     // Kept, with no target, so turning them back on compiles nothing
-    setScreenSpaceReflections (scene, false);
+    setScreenSpaceReflections (renderer, false);
     EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (renderer.getReflectionPass(), pass);
     EXPECT_EQ (pass->getNumCachedTargets(), 0u);
     EXPECT_EQ (hiZ->getNumCachedTargets(), 0u);
 
     // Back on, then a resize: the new size has no history yet, and keeps no target of the old one
-    setScreenSpaceReflections (scene, std::nullopt);
+    setScreenSpaceReflections (renderer, std::nullopt);
     EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_GT (hiZ->getNumCachedTargets(), 0u);
 
@@ -757,8 +760,8 @@ TEST_F (SceneRendererMetalTests, FailedSsrShadesWithoutIt)
     {
         Scene scene;
         buildOnScreenEmitterScene (scene);
-        setFullTierTaa (scene, 8);
-        setScreenSpaceReflections (scene, screenSpaceReflections);
+        setFullTierTaa (renderer, 8);
+        setScreenSpaceReflections (renderer, screenSpaceReflections);
 
         if (fail)
             renderer.failScreenSpaceReflectionsForTesting();
@@ -805,7 +808,7 @@ TEST_F (SceneRendererMetalTests, ScreenSpaceGIBouncesColorOntoTheFloor)
     {
         Scene scene;
         buildGIRedRoomScene (scene);
-        setScreenSpaceGI (scene, screenSpaceGI);
+        setScreenSpaceGI (renderer, screenSpaceGI);
 
         const auto image = renderConverged (renderer, scene, 64);
         EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
@@ -843,12 +846,12 @@ TEST_F (SceneRendererMetalTests, ScreenSpaceGIBouncesColorOntoTheFloor)
     {
         Scene scene;
         buildGIRedRoomScene (scene);
-        setScreenSpaceGI (scene, true);
-        auto settings = scene.getRenderSettings();
-        settings.aoDistance = 0.2f;
-        scene.setRenderSettings (settings);
 
         SceneRenderer renderer;
+        setScreenSpaceGI (renderer, true);
+        auto settings = renderer.getRenderSettings();
+        settings.aoDistance = 0.2f;
+        renderer.setRenderSettings (settings);
         const auto image = renderConverged (renderer, scene, 64);
         RecordProperty ("ratioOnDefaultDistance", String (redOverGreen (meanColor (image, floor)), 3).toStdString());
     }
@@ -880,7 +883,7 @@ TEST_F (SceneRendererMetalTests, ScreenSpaceGILeavesAnOpenPlaneAsItIs)
     {
         Scene scene;
         buildFacingAwayWallScene (scene);
-        setScreenSpaceGI (scene, screenSpaceGI);
+        setScreenSpaceGI (renderer, screenSpaceGI);
         scene.getRoot()->removeChild (scene.getRoot()->findChild ("red wall"));
 
         const auto image = renderConverged (renderer, scene, 64);
@@ -930,7 +933,7 @@ TEST_F (SceneRendererMetalTests, SsgiWithoutHistoryShadesAsWithoutIt)
     {
         Scene scene;
         buildGIRedRoomScene (scene);
-        setScreenSpaceGI (scene, false);
+        setScreenSpaceGI (warmUp, false);
         ASSERT_TRUE (renderToImage (warmUp, scene, 64).isValid());
     }
 
@@ -1002,6 +1005,8 @@ TEST_F (SceneRendererMetalTests, SsgiConvergedRendersAreIdentical)
     ASSERT_TRUE (renderToImage (warmUp, scene, 64).isValid());
 
     SceneRenderer a, b;
+    a.setRenderSettings (warmUp.getRenderSettings());
+    b.setRenderSettings (warmUp.getRenderSettings());
     const auto imageA = renderConverged (a, scene, 64);
     const auto imageB = renderConverged (b, scene, 64);
     ASSERT_TRUE (imageA.isValid() && imageB.isValid());
@@ -1082,9 +1087,9 @@ TEST_F (SceneRendererMetalTests, SsgiConvergedRegionMatchesAPrimedHistory)
 
         if (primed)
         {
-            auto settings = scene.getRenderSettings();
+            auto settings = renderer.getRenderSettings();
             settings.contactShadows = false;
-            scene.setRenderSettings (settings);
+            renderer.setRenderSettings (settings);
             EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr);
             EXPECT_FALSE (renderer.isConverged());
             EXPECT_TRUE (renderConverged (renderer, scene, 64).isValid()) << renderer.getLastError();
@@ -1163,9 +1168,9 @@ TEST_F (SceneRendererMetalTests, SsgiSettingRestartsAccumulation)
     ASSERT_TRUE (renderer.isConverged());
 
     // Restarted, not invalidated: the history stays valid for the GI to gather at once
-    auto settings = scene.getRenderSettings();
+    auto settings = renderer.getRenderSettings();
     settings.screenSpaceGI = true;
-    scene.setRenderSettings (settings);
+    renderer.setRenderSettings (settings);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_FALSE (renderer.isConverged());
     ASSERT_NE (renderer.getAmbientOcclusionPass(), nullptr);
@@ -1179,7 +1184,6 @@ TEST_F (SceneRendererMetalTests, FailedSsgiKeepsTheAmbientOcclusionAndGivesUp)
     // up, which changes the image as much as turning it off: a converged renderer starts over
     Scene scene;
     buildGIRedRoomScene (scene);
-    setScreenSpaceGI (scene, true);
 
     // Renders until converged, counting the frames, so a reference renderer can draw as many
     auto frames = 0;
@@ -1197,6 +1201,7 @@ TEST_F (SceneRendererMetalTests, FailedSsgiKeepsTheAmbientOcclusionAndGivesUp)
     };
 
     SceneRenderer renderer;
+    setScreenSpaceGI (renderer, true);
     ASSERT_TRUE (converge (renderer, scene).isValid()) << renderer.getLastError();
     ASSERT_TRUE (renderer.isConverged());
     const auto* pass = renderer.getAmbientOcclusionPass();
@@ -1225,13 +1230,13 @@ TEST_F (SceneRendererMetalTests, FailedSsgiKeepsTheAmbientOcclusionAndGivesUp)
 
     Scene offScene;
     buildGIRedRoomScene (offScene);
-    setScreenSpaceGI (offScene, false);
 
     // The restart keeps the history, which still holds a share of the light gathered before: how
     // much of it the converged frame keeps, against a renderer that never had GI
     {
         const auto lingering = converge (renderer, scene);
         SceneRenderer off;
+        setScreenSpaceGI (off, false);
         const auto without = renderConverged (off, offScene, 64);
         ASSERT_TRUE (lingering.isValid() && without.isValid());
 
@@ -1247,6 +1252,7 @@ TEST_F (SceneRendererMetalTests, FailedSsgiKeepsTheAmbientOcclusionAndGivesUp)
     const auto failing = renderConverged (renderer, scene, 64);
 
     SceneRenderer off;
+    setScreenSpaceGI (off, false);
     for (int i = 0; i < frames; ++i)
         ASSERT_NE (off.render (device, offScene, 64, 64), nullptr) << off.getLastError();
 
@@ -1271,16 +1277,16 @@ TEST_F (SceneRendererMetalTests, SsgiOffReleasesItsTargets)
     ASSERT_NE (pass, nullptr);
     EXPECT_GT (pass->getNumCachedIndirectDiffuseTargets(), 0u);
 
-    auto settings = scene.getRenderSettings();
+    auto settings = renderer.getRenderSettings();
     settings.screenSpaceGI = false;
-    scene.setRenderSettings (settings);
+    renderer.setRenderSettings (settings);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (pass->getNumCachedIndirectDiffuseTargets(), 0u);
     EXPECT_EQ (pass->getIndirectDiffuse(), nullptr);
     EXPECT_GT (pass->getNumCachedTargets(), 0u);
 
     settings.screenSpaceGI = true;
-    scene.setRenderSettings (settings);
+    renderer.setRenderSettings (settings);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_GT (pass->getNumCachedIndirectDiffuseTargets(), 0u);
 
@@ -1445,12 +1451,12 @@ TEST_P (SceneRendererTierTests, InfiniteFarPlaneShowsTheEnvironment)
         scene.setActiveCamera (camera.get());
 
         // Scene color holds raw radiance on full without temporal anti-aliasing
-        if (full)
-            setFullTierTaa (scene, 1);
-        else
-            setTier (scene, RenderSettings::TierPreference::raster);
-
         SceneRenderer renderer;
+        if (full)
+            setFullTierTaa (renderer, 1);
+        else
+            setTier (renderer, RenderSettings::TierPreference::raster);
+
         const auto image = renderToImage (renderer, scene, 64);
         EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
 
@@ -1970,8 +1976,12 @@ TEST_F (SceneRendererMetalTests, VolumeBakeUniformPoolStaysSmall)
     // Preflight R18 and R28: volume bakes in the red room plus 100 small casters, each its own draw
     // on every capture face: the brief's 6 x 2 x 4 volume, then the largest one, 7 x 7 x 7, which
     // bakes over several frames, waited on and then not. The device's uniform buffers, pooled or held
-    // by frames in flight, are recorded once each bake completed and the frames returned them
-    const auto bake = [this] (int nx, int ny, int nz, const char* name, bool waitEachFrame = true)
+    // by frames in flight, are recorded once each bake completed and the frames returned them. On a
+    // device of its own: the pool only grows, so the suite's device holds the peaks of earlier tests
+    const auto poolDevice = GpuDevice::create (GpuPlatform::Metal, {});
+    ASSERT_NE (poolDevice, nullptr);
+
+    const auto bake = [&poolDevice] (int nx, int ny, int nz, const char* name, bool waitEachFrame = true)
     {
         Scene scene;
         buildRedRoomScene (scene);
@@ -1982,7 +1992,7 @@ TEST_F (SceneRendererMetalTests, VolumeBakeUniformPoolStaysSmall)
         auto frames = 0;
         while (getNumVolumeBakes (renderer) < 1 && frames < 64)
         {
-            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_NE (renderer.render (poolDevice, scene, 64, 64), nullptr) << renderer.getLastError();
             if (waitEachFrame)
                 EXPECT_TRUE (renderer.waitForGPU().wasOk());
             ++frames;
@@ -1990,13 +2000,13 @@ TEST_F (SceneRendererMetalTests, VolumeBakeUniformPoolStaysSmall)
 
         for (int i = 0; i < 3; ++i)
         {
-            EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_NE (renderer.render (poolDevice, scene, 64, 64), nullptr) << renderer.getLastError();
             EXPECT_TRUE (renderer.waitForGPU().wasOk());
         }
 
         EXPECT_EQ (getNumVolumeBakes (renderer), 1) << name;
 
-        const auto pool = device->getUniformBufferPoolSizeForTesting();
+        const auto pool = poolDevice->getUniformBufferPoolSizeForTesting();
         RecordProperty ((String (name) + "FramesToBake").toStdString(), frames);
         RecordProperty ((String (name) + "UniformBuffers").toStdString(), pool.first);
         RecordProperty ((String (name) + "UniformBytes").toStdString(), static_cast<int> (pool.second));
@@ -2004,7 +2014,7 @@ TEST_F (SceneRendererMetalTests, VolumeBakeUniformPoolStaysSmall)
     };
 
     // The pool only grows, so each figure is the running peak of the device after that bake, an upper bound of it
-    const auto before = device->getUniformBufferPoolSizeForTesting();
+    const auto before = poolDevice->getUniformBufferPoolSizeForTesting();
     const auto brief = bake (6, 2, 4, "brief");
     const auto largest = bake (IrradianceVolumeNode::maxResolution, IrradianceVolumeNode::maxResolution, IrradianceVolumeNode::maxResolution, "largest");
 

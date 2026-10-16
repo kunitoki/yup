@@ -69,9 +69,9 @@ TEST_F (SceneRendererMetalTests, RasterBloomOffStaysOnTheBaseline)
         settings.bloomThreshold = 0.1f;
         settings.bloomIntensity = 1.0f;
         settings.bloomRadius = 1.0f;
-        scene.setRenderSettings (settings);
 
         SceneRenderer renderer;
+        renderer.setRenderSettings (settings);
         const auto image = renderToImage (renderer, scene, 128);
         ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
 
@@ -113,6 +113,7 @@ TEST_F (SceneRendererMetalTests, RasterBloomIsUnavailableWhenHalfFloatCannotMult
     ASSERT_TRUE (reference.isValid()) << withoutBloom.getLastError();
 
     SceneRenderer withBloom;
+    withBloom.setRenderSettings (withoutBloom.getRenderSettings());
     setBloom (withBloom, true);
     withBloom.setDeviceFactsOverride (halfFloatTakesTwoSamples);
     const auto image = renderToImage (withBloom, scene, 64);
@@ -122,7 +123,7 @@ TEST_F (SceneRendererMetalTests, RasterBloomIsUnavailableWhenHalfFloatCannotMult
     ASSERT_NE (capabilities, nullptr);
     EXPECT_EQ (capabilities->getTier(), RenderCapabilities::Tier::raster);
     EXPECT_FALSE (capabilities->isAvailable (RenderCapabilities::Feature::bloom));
-    EXPECT_FALSE (capabilities->isEnabled (RenderCapabilities::Feature::hdrSceneColor, scene.getRenderSettings()));
+    EXPECT_FALSE (capabilities->isEnabled (RenderCapabilities::Feature::hdrSceneColor, withBloom.getRenderSettings()));
 
     // Still the multisampled rgba8 inline frame: not black, not one sample, identical to bloom off
     const auto sceneColor = withBloom.getPassOutput (SceneRenderer::PassOutput::sceneColor);
@@ -150,6 +151,7 @@ TEST_F (SceneRendererMetalTests, BloomStaysFiniteOverSaturatedHighlights)
     ASSERT_FALSE (area.isEmpty());
 
     SceneRenderer withBloom;
+    withBloom.setRenderSettings (withoutBloom.getRenderSettings());
     setBloom (withBloom, true);
     for (int frame = 1; frame <= 4; ++frame)
     {
@@ -180,6 +182,7 @@ TEST_F (SceneRendererMetalTests, RasterBloomRingMatchesTheFullTier)
         ASSERT_TRUE (off.isValid()) << withoutBloom.getLastError();
 
         SceneRenderer withBloom;
+        withBloom.setRenderSettings (withoutBloom.getRenderSettings());
         setBloom (withBloom, true);
         const auto on = renderToImage (withBloom, scene, 128);
         ASSERT_TRUE (on.isValid()) << withBloom.getLastError();
@@ -208,10 +211,11 @@ TEST_F (SceneRendererMetalTests, RasterRendererTogglesBloomOnOffOn)
     const auto quad = findBrightBounds (inline8);
 
     SceneRenderer renderer;
+    renderer.setRenderSettings (reference.getRenderSettings());
     GpuTexture::Ptr halfFloatSceneColor;
     for (const auto bloom : { true, false, true })
     {
-        setBloom (scene, bloom);
+        setBloom (renderer, bloom);
 
         const auto image = renderToImage (renderer, scene, 128);
         ASSERT_TRUE (image.isValid()) << renderer.getLastError();
@@ -227,7 +231,7 @@ TEST_F (SceneRendererMetalTests, RasterRendererTogglesBloomOnOffOn)
             halfFloatSceneColor = sceneColor;
         else if (halfFloatSceneColor != nullptr)
             EXPECT_EQ (std::exchange (halfFloatSceneColor, nullptr)->getReferenceCount(), 1);
-        EXPECT_EQ (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::hdrSceneColor, scene.getRenderSettings()), bloom);
+        EXPECT_EQ (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::hdrSceneColor, renderer.getRenderSettings()), bloom);
 
         const auto ring = ringLuminance (image, quad);
         RecordProperty ((String ("ring") + (bloom ? "On" : "Off")).toStdString(), String (ring, 2).toStdString());
@@ -257,9 +261,9 @@ TEST_F (SceneRendererMetalTests, BloomChangesKeepTheTaaHistory)
     ASSERT_TRUE (renderer.isConverged());
 
     // Bloom runs after temporal anti-aliasing, so its settings apply to the kept history
-    auto settings = scene.getRenderSettings();
+    auto settings = renderer.getRenderSettings();
     settings.bloomIntensity = 0.5f;
-    scene.setRenderSettings (settings);
+    renderer.setRenderSettings (settings);
 
     const auto image = renderToImage (renderer, scene, 128);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
@@ -486,7 +490,6 @@ TEST_F (SceneRendererMetalTests, SignedZeroAndNanPayloadsAreNoChange)
 {
     Scene scene;
     buildEdgesScene (scene);
-    setFullTierTaa (scene, 2);
 
     // No normal texture: the normal scale is never read, so a NaN there renders nothing wrong
     auto material = Material::Ptr (new Material());
@@ -495,6 +498,7 @@ TEST_F (SceneRendererMetalTests, SignedZeroAndNanPayloadsAreNoChange)
     scene.getRoot()->findChild ("plates")->attach<MaterialNode> (material);
 
     SceneRenderer renderer;
+    setFullTierTaa (renderer, 2);
     for (int i = 0; i < 2; ++i)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     ASSERT_TRUE (renderer.isConverged());
@@ -509,11 +513,11 @@ TEST_F (SceneRendererMetalTests, SampleCountChangesKeepTheFullTierConverged)
 {
     Scene scene;
     buildEdgesScene (scene);
-    setFullTierTaa (scene, 4);
 
     // The full tier renders one sample per pixel whatever the count, so its accumulation is kept,
     // and so is the texture it renders into
     SceneRenderer renderer;
+    setFullTierTaa (renderer, 4);
     GpuTexture::Ptr output;
     for (int i = 0; i < 4; ++i)
         ASSERT_NE (output = renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
@@ -524,7 +528,7 @@ TEST_F (SceneRendererMetalTests, SampleCountChangesKeepTheFullTierConverged)
     EXPECT_TRUE (renderer.isConverged());
 
     // The raster tier recreates its multisampled targets for the new count
-    setTier (scene, RenderSettings::TierPreference::raster);
+    setTier (renderer, RenderSettings::TierPreference::raster);
     renderer.setSampleCount (4);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     renderer.setSampleCount (1);
@@ -603,7 +607,6 @@ TEST_F (SceneRendererMetalTests, RedrawnTextureRestartsAndShows)
 {
     Scene scene;
     buildEdgesScene (scene);
-    setFullTierTaa (scene, 4);
 
     const auto upload = [] (const GpuTexture::Ptr& texture, uint8 r, uint8 g, uint8 b)
     {
@@ -626,6 +629,7 @@ TEST_F (SceneRendererMetalTests, RedrawnTextureRestartsAndShows)
     scene.getRoot()->findChild ("plates")->attach<MaterialNode> (material);
 
     SceneRenderer renderer;
+    setFullTierTaa (renderer, 4);
     Image image;
     for (int i = 0; i < 4; ++i)
         image = renderToImage (renderer, scene, 64);
@@ -674,11 +678,11 @@ TEST_F (SceneRendererMetalTests, RestartAccumulationStartsOver)
 class SceneRendererDebugViewTests : public SceneRendererMetalTests
 {
 protected:
-    static void setDebugView (Scene& scene, RenderSettings::DebugView debugView)
+    static void setDebugView (SceneRenderer& renderer, RenderSettings::DebugView debugView)
     {
-        auto settings = scene.getRenderSettings();
+        auto settings = renderer.getRenderSettings();
         settings.debugView = debugView;
-        scene.setRenderSettings (settings);
+        renderer.setRenderSettings (settings);
     }
 
     /** The pixels of @p image with any color channel above 0. */
@@ -704,12 +708,11 @@ protected:
         within one level. At least @p minLit pixels must be lit, and @p minPartial texels must have
         a confidence or share below 0.9 with some light, so a wrong weight shows.
     */
-    void checkExposedPerTexel (Scene& scene, RenderSettings::DebugView view, SceneRenderer::PassOutput output, const String& weight, int minLit, int minPartial)
+    void checkExposedPerTexel (Scene& scene, SceneRenderer& renderer, RenderSettings::DebugView view, SceneRenderer::PassOutput output, const String& weight, int minLit, int minPartial)
     {
         scene.setExposure (0.25f);
-        setDebugView (scene, view);
+        setDebugView (renderer, view);
 
-        SceneRenderer renderer;
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
         const auto image = renderToImage (renderer, scene, 64);
         const auto source = renderer.getPassOutput (output);
@@ -759,14 +762,14 @@ TEST_F (SceneRendererDebugViewTests, NoneCreatesNoPassAndReleasesItsTargets)
 
     EXPECT_EQ (renderer.getDebugViewPass(), nullptr);
 
-    setDebugView (scene, RenderSettings::DebugView::reflections);
+    setDebugView (renderer, RenderSettings::DebugView::reflections);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     const auto* pass = renderer.getDebugViewPass();
     ASSERT_NE (pass, nullptr);
     EXPECT_GT (pass->getNumCachedTargets(), 0u);
 
     // Kept, with no target, so showing a view again compiles nothing
-    setDebugView (scene, RenderSettings::DebugView::none);
+    setDebugView (renderer, RenderSettings::DebugView::none);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (renderer.getDebugViewPass(), pass);
     EXPECT_EQ (pass->getNumCachedTargets(), 0u);
@@ -783,11 +786,11 @@ TEST_F (SceneRendererDebugViewTests, ChangingTheViewKeepsTheAccumulation)
     ASSERT_TRUE (renderConverged (renderer, scene, 64).isValid());
     ASSERT_TRUE (renderer.isConverged());
 
-    setDebugView (scene, RenderSettings::DebugView::reflections);
+    setDebugView (renderer, RenderSettings::DebugView::reflections);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_TRUE (renderer.isConverged());
 
-    setDebugView (scene, RenderSettings::DebugView::none);
+    setDebugView (renderer, RenderSettings::DebugView::none);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_TRUE (renderer.isConverged());
 }
@@ -796,11 +799,11 @@ TEST_F (SceneRendererDebugViewTests, ReflectionsShowBlackWithoutThemAndNeverStal
 {
     Scene scene;
     buildOnScreenEmitterScene (scene);
-    setFullTierTaa (scene, 8);
-    setDebugView (scene, RenderSettings::DebugView::reflections);
 
     // The first frame has no history to trace the reflections from
     SceneRenderer renderer;
+    setFullTierTaa (renderer, 8);
+    setDebugView (renderer, RenderSettings::DebugView::reflections);
     const auto first = renderToImage (renderer, scene, 64);
     ASSERT_TRUE (first.isValid());
     EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
@@ -815,7 +818,7 @@ TEST_F (SceneRendererDebugViewTests, ReflectionsShowBlackWithoutThemAndNeverStal
     EXPECT_LE (floor.getGreen(), 2);
 
     // Turned off, the view shows black, not the reflections of the frame before
-    setScreenSpaceReflections (scene, false);
+    setScreenSpaceReflections (renderer, false);
     const auto off = renderToImage (renderer, scene, 64);
     EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::reflections), nullptr);
     EXPECT_EQ (countNonBlackPixels (off), 0);
@@ -825,10 +828,10 @@ TEST_F (SceneRendererDebugViewTests, IndirectDiffuseShowsTheGatheredLight)
 {
     Scene scene;
     buildGIRedRoomScene (scene);
-    setScreenSpaceGI (scene, true);
-    setDebugView (scene, RenderSettings::DebugView::indirectDiffuse);
 
     SceneRenderer renderer;
+    setScreenSpaceGI (renderer, true);
+    setDebugView (renderer, RenderSettings::DebugView::indirectDiffuse);
     const auto first = renderToImage (renderer, scene, 64);
     ASSERT_TRUE (first.isValid());
     EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::indirectDiffuse), nullptr);
@@ -849,9 +852,9 @@ TEST_F (SceneRendererDebugViewTests, IndirectDiffuseShowsTheGatheredLight)
     RecordProperty ("redderPixels", redder);
     EXPECT_GT (redder, 400); // Measured 572 of 4096
 
-    auto settings = scene.getRenderSettings();
+    auto settings = renderer.getRenderSettings();
     settings.screenSpaceGI = false;
-    scene.setRenderSettings (settings);
+    renderer.setRenderSettings (settings);
     const auto off = renderToImage (renderer, scene, 64);
     EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::indirectDiffuse), nullptr);
     EXPECT_EQ (countNonBlackPixels (off), 0);
@@ -861,15 +864,15 @@ TEST_F (SceneRendererDebugViewTests, RasterIgnoresIt)
 {
     Scene scene;
     buildOnScreenEmitterScene (scene);
-    auto settings = scene.getRenderSettings();
-    settings.tier = RenderSettings::TierPreference::raster;
-    settings.ambientOcclusion = true;
-    scene.setRenderSettings (settings);
 
     SceneRenderer renderer;
+    auto settings = renderer.getRenderSettings();
+    settings.tier = RenderSettings::TierPreference::raster;
+    settings.ambientOcclusion = true;
+    renderer.setRenderSettings (settings);
     const auto finalImage = renderToImage (renderer, scene, 64);
 
-    setDebugView (scene, RenderSettings::DebugView::ambientOcclusion);
+    setDebugView (renderer, RenderSettings::DebugView::ambientOcclusion);
     const auto withView = renderToImage (renderer, scene, 64);
     ASSERT_TRUE (finalImage.isValid() && withView.isValid());
     EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion), nullptr);
@@ -883,10 +886,10 @@ TEST_F (SceneRendererDebugViewTests, AmbientOcclusionShowsTheVisibilityAsGray)
     // Each pixel shows the visibility of the half resolution texel covering it, unfiltered
     Scene scene;
     buildGIRedRoomScene (scene);
-    setScreenSpaceGI (scene, false);
-    setDebugView (scene, RenderSettings::DebugView::ambientOcclusion);
 
     SceneRenderer renderer;
+    setScreenSpaceGI (renderer, false);
+    setDebugView (renderer, RenderSettings::DebugView::ambientOcclusion);
     const auto image = renderToImage (renderer, scene, 64);
     const auto ambientOcclusion = renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion);
     ASSERT_TRUE (image.isValid());
@@ -919,15 +922,16 @@ TEST_F (SceneRendererDebugViewTests, UpscaledFrameShowsTheWholeSmallerTexture)
     // texels covers 4 x 4 pixels of the view, all the way to its right and bottom edges
     Scene scene;
     buildGIRedRoomScene (scene);
-    setScreenSpaceGI (scene, false);
-    setDebugView (scene, RenderSettings::DebugView::ambientOcclusion);
-
-    auto settings = scene.getRenderSettings();
-    settings.upscaling = RenderSettings::Upscaling::temporal;
-    settings.renderScale = 0.5f;
-    scene.setRenderSettings (settings);
 
     SceneRenderer renderer;
+    setScreenSpaceGI (renderer, false);
+    setDebugView (renderer, RenderSettings::DebugView::ambientOcclusion);
+
+    auto settings = renderer.getRenderSettings();
+    settings.upscaling = RenderSettings::Upscaling::temporal;
+    settings.renderScale = 0.5f;
+    renderer.setRenderSettings (settings);
+
     const auto image = renderToImage (renderer, scene, 64);
     const auto ambientOcclusion = renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion);
     ASSERT_TRUE (image.isValid());
@@ -957,8 +961,10 @@ TEST_F (SceneRendererDebugViewTests, ReflectionsAreExposedAndWeightedByTheirConf
 {
     Scene scene;
     buildOnScreenEmitterScene (scene);
-    setFullTierTaa (scene, 8);
-    checkExposedPerTexel (scene, RenderSettings::DebugView::reflections, SceneRenderer::PassOutput::reflections, "t.a", 250, 30); // Measured 382 and 58
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 8);
+    checkExposedPerTexel (scene, renderer, RenderSettings::DebugView::reflections, SceneRenderer::PassOutput::reflections, "t.a", 250, 30); // Measured 382 and 58
 }
 
 TEST_F (SceneRendererDebugViewTests, IndirectDiffuseIsExposedAsGathered)
@@ -966,8 +972,10 @@ TEST_F (SceneRendererDebugViewTests, IndirectDiffuseIsExposedAsGathered)
     // Not weighted by a: the gathered rgb already carries the share, as the composite adds it
     Scene scene;
     buildGIRedRoomScene (scene);
-    setScreenSpaceGI (scene, true);
-    checkExposedPerTexel (scene, RenderSettings::DebugView::indirectDiffuse, SceneRenderer::PassOutput::indirectDiffuse, "1.0", 250, 50); // Measured 384 and 96
+
+    SceneRenderer renderer;
+    setScreenSpaceGI (renderer, true);
+    checkExposedPerTexel (scene, renderer, RenderSettings::DebugView::indirectDiffuse, SceneRenderer::PassOutput::indirectDiffuse, "1.0", 250, 50); // Measured 384 and 96
 }
 #endif
 
@@ -978,15 +986,15 @@ TEST_F (SceneRendererDebugViewTests, CircleOfConfusionShowsNearAndFarInTwoColors
     constexpr auto size = depthOfFieldSize;
 
     Scene scene;
-    setDepthOfFieldTier (scene, RenderSettings::TierPreference::full);
     setUpDepthOfFieldScene (scene, 0.5f);
-    setDepthOfField (scene, true, 8.0f);
     buildBarsScene (scene, 0.5f, 0.25f);
-    setDebugView (scene, RenderSettings::DebugView::circleOfConfusion);
     ASSERT_NEAR (circleOfConfusion (scene, 0.25f), -6.5f, 0.1f);
     ASSERT_NEAR (circleOfConfusion (scene, 1000.0f), 6.5f, 0.1f);
 
     SceneRenderer renderer;
+    setDepthOfFieldTier (renderer, RenderSettings::TierPreference::full);
+    setDepthOfField (renderer, true, 8.0f);
+    setDebugView (renderer, RenderSettings::DebugView::circleOfConfusion);
     const auto image = renderToImage (renderer, scene, size);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr);
@@ -1046,19 +1054,19 @@ TEST_F (SceneRendererDebugViewTests, CircleOfConfusionShowsNearAndFarInTwoColors
 TEST_F (SceneRendererDebugViewTests, CircleOfConfusionShowsBlackWithoutDepthOfFieldAndNeverStale)
 {
     Scene scene;
-    setDepthOfFieldTier (scene, RenderSettings::TierPreference::full);
     auto& camera = setUpDepthOfFieldScene (scene, 0.5f);
     buildBarsScene (scene, 0.5f, 0.25f);
-    setDepthOfField (scene, false);
-    setDebugView (scene, RenderSettings::DebugView::circleOfConfusion);
 
     SceneRenderer renderer;
+    setDepthOfFieldTier (renderer, RenderSettings::TierPreference::full);
+    setDepthOfField (renderer, false);
+    setDebugView (renderer, RenderSettings::DebugView::circleOfConfusion);
     const auto off = renderToImage (renderer, scene, 64);
     ASSERT_TRUE (off.isValid()) << renderer.getLastError();
     EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr);
     EXPECT_EQ (countNonBlackPixels (off), 0);
 
-    setDepthOfField (scene, true);
+    setDepthOfField (renderer, true);
     const auto on = renderToImage (renderer, scene, 64);
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr);
     EXPECT_GT (countNonBlackPixels (on), 1000);
@@ -1082,12 +1090,11 @@ TEST_F (SceneRendererMetalTests, SilhouetteEdgesMatchRasterOnBothTiers)
     ASSERT_TRUE (raster.isValid()) << rasterRenderer.getLastError();
 
     // Raster with bloom at zero intensity: the half-float path through the same samples
-    auto settings = scene.getRenderSettings();
+    SceneRenderer bloomRenderer;
+    auto settings = rasterRenderer.getRenderSettings();
     settings.bloom = true;
     settings.bloomIntensity = 0.0f;
-    scene.setRenderSettings (settings);
-
-    SceneRenderer bloomRenderer;
+    bloomRenderer.setRenderSettings (settings);
     const auto bloom = renderToImage (bloomRenderer, scene, 128);
     ASSERT_TRUE (bloom.isValid()) << bloomRenderer.getLastError();
     ASSERT_EQ (bloomRenderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)->getFormat(), GpuTextureFormat::rgba16float);
@@ -1095,6 +1102,7 @@ TEST_F (SceneRendererMetalTests, SilhouetteEdgesMatchRasterOnBothTiers)
     // The full tier, converged: its jittered frames estimate each pixel's coverage differently
 
     SceneRenderer fullRenderer;
+    fullRenderer.setRenderSettings (bloomRenderer.getRenderSettings());
     setBloom (fullRenderer, false);
     setFullTierTaa (fullRenderer, 16);
     Image full;
@@ -1139,17 +1147,18 @@ TEST_F (SceneRendererMetalTests, FullRasterFullRoundTripStartsOver)
     ASSERT_TRUE (reference.isConverged());
 
     SceneRenderer renderer;
+    renderer.setRenderSettings (reference.getRenderSettings());
     for (int i = 0; i < 8; ++i)
         ASSERT_NE (renderer.render (device, scene, 128, 128), nullptr) << renderer.getLastError();
     ASSERT_TRUE (renderer.isConverged());
 
-    setTier (scene, RenderSettings::TierPreference::raster);
+    setTier (renderer, RenderSettings::TierPreference::raster);
     ASSERT_NE (renderer.render (device, scene, 128, 128), nullptr) << renderer.getLastError();
     ASSERT_EQ (renderer.getCapabilities()->getTier(), RenderCapabilities::Tier::raster);
 
     // Back on the full tier the history is gone: the first frame stands alone, so no pixel of its
     // silhouettes is partially covered yet
-    setTier (scene, RenderSettings::TierPreference::full);
+    setTier (renderer, RenderSettings::TierPreference::full);
     auto image = renderToImage (renderer, scene, 128);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
     EXPECT_FALSE (renderer.isConverged());
@@ -1312,7 +1321,6 @@ TEST_F (SceneRendererMetalTests, CameraMotionReorderingBlendedItemsKeepsTheHisto
 {
     Scene scene;
     buildEdgesScene (scene);
-    setFullTierTaa (scene, 16);
 
     // Two blended quads below row 40, 0.005 apart in depth: turning the camera by 0.01 swaps
     // which one is farther, and so their drawing order
@@ -1345,6 +1353,7 @@ TEST_F (SceneRendererMetalTests, CameraMotionReorderingBlendedItemsKeepsTheHisto
     scene.setActiveCamera (camera.get());
 
     SceneRenderer renderer;
+    setFullTierTaa (renderer, 16);
     for (int i = 0; i < 16; ++i)
         ASSERT_NE (renderer.render (device, scene, 128, 128), nullptr) << renderer.getLastError();
     ASSERT_TRUE (renderer.isConverged());
@@ -1495,7 +1504,6 @@ TEST_F (SceneRendererMetalTests, BlendedItemsKeepTheDeferredVelocityAroundThem)
     // G-buffer wrote, which a cleared velocity attachment would zero
     Scene scene;
     buildShadowsScene (scene);
-    setTier (scene, RenderSettings::TierPreference::full);
 
     std::vector<Mesh::Vertex> vertices (4);
     vertices[0].position = { -0.9f, 0.5f, 0.6f };
@@ -1522,6 +1530,7 @@ TEST_F (SceneRendererMetalTests, BlendedItemsKeepTheDeferredVelocityAroundThem)
     scene.setActiveCamera (camera.get());
 
     SceneRenderer renderer;
+    setTier (renderer, RenderSettings::TierPreference::full);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
     // Moving the camera right moves the scene left on screen: x decreases everywhere
@@ -1540,7 +1549,6 @@ TEST_F (SceneRendererMetalTests, TwoRenderersKeepIndependentHistory)
 {
     Scene scene;
     buildShadowsScene (scene);
-    setTier (scene, RenderSettings::TierPreference::full);
 
     auto* plates = scene.getRoot()->findChild ("plates");
     ASSERT_NE (plates, nullptr);
@@ -1557,12 +1565,15 @@ TEST_F (SceneRendererMetalTests, TwoRenderersKeepIndependentHistory)
 
     // A single renderer sees the plates move between its frames
     SceneRenderer single;
+    setTier (single, RenderSettings::TierPreference::full);
     EXPECT_EQ (velocityAfterMove (single, 0.0f), 0);
     EXPECT_GT (velocityAfterMove (single, 0.1f), 64);
 
     // Alternating renderers never take the other's transform as their previous frame
     SceneRenderer a;
     SceneRenderer b;
+    setTier (a, RenderSettings::TierPreference::full);
+    setTier (b, RenderSettings::TierPreference::full);
     for (int i = 0; i < 3; ++i)
     {
         EXPECT_EQ (velocityAfterMove (a, 0.1f * static_cast<float> (2 * i)), 0) << "a, frame " << i;
@@ -1635,12 +1646,12 @@ TEST_F (SceneRendererMetalTests, ResizeResetsAccumulation)
 class UpscalingMetalTests : public SceneRendererMetalTests
 {
 protected:
-    static void setUpscaling (Scene& scene, RenderSettings::Upscaling upscaling, float renderScale)
+    static void setUpscaling (SceneRenderer& renderer, RenderSettings::Upscaling upscaling, float renderScale)
     {
-        auto settings = scene.getRenderSettings();
+        auto settings = renderer.getRenderSettings();
         settings.upscaling = upscaling;
         settings.renderScale = renderScale;
-        scene.setRenderSettings (settings);
+        renderer.setRenderSettings (settings);
     }
 
     /** Thin emissive bars on black, a little rotated, 1.5 to 2 pixels wide at 128 x 128: half
@@ -1732,10 +1743,10 @@ TEST_F (UpscalingMetalTests, OffAndScaleOneAreUnchanged)
     {
         Scene scene;
         buildEdgesScene (scene);
-        setFullTierTaa (scene, 4);
-        setUpscaling (scene, upscaling, renderScale);
 
         SceneRenderer renderer;
+        setFullTierTaa (renderer, 4);
+        setUpscaling (renderer, upscaling, renderScale);
         std::vector<Image> images;
         for (int i = 0; i < 5; ++i)
             images.push_back (renderToImage (renderer, scene, 64));
@@ -1765,10 +1776,10 @@ TEST_F (UpscalingMetalTests, ShadesTheSceneSmallerAndReturnsTheFullSize)
 {
     Scene scene;
     buildEdgesScene (scene);
-    setFullTierTaa (scene, 4);
-    setUpscaling (scene, RenderSettings::Upscaling::temporal, 0.5f);
 
     SceneRenderer renderer;
+    setFullTierTaa (renderer, 4);
+    setUpscaling (renderer, RenderSettings::Upscaling::temporal, 0.5f);
     renderer.setFrameStatsEnabled (true);
 
     const auto output = renderer.render (device, scene, 100, 60);
@@ -1809,11 +1820,11 @@ TEST_F (UpscalingMetalTests, ConvergedImageApproachesTheFullSizeOne)
     {
         Scene scene;
         buildBarsScene (scene);
-        setFullTierTaa (scene, 16);
-        setUpscaling (scene, upscaled ? RenderSettings::Upscaling::temporal : RenderSettings::Upscaling::off, 0.5f);
 
         // 16 samples, over 64 frames at a quarter of the pixels
         SceneRenderer renderer;
+        setFullTierTaa (renderer, 16);
+        setUpscaling (renderer, upscaled ? RenderSettings::Upscaling::temporal : RenderSettings::Upscaling::off, 0.5f);
         auto image = renderConverged (renderer, scene, size);
         EXPECT_TRUE (renderer.isConverged()) << size << (upscaled ? " upscaled" : "");
         return image;
@@ -1849,10 +1860,10 @@ TEST_F (UpscalingMetalTests, ScaleOrModeChangesRestartCleanly)
 {
     Scene scene;
     buildEdgesScene (scene);
-    setFullTierTaa (scene, 4);
-    setUpscaling (scene, RenderSettings::Upscaling::temporal, 0.5f);
 
     SceneRenderer renderer;
+    setFullTierTaa (renderer, 4);
+    setUpscaling (renderer, RenderSettings::Upscaling::temporal, 0.5f);
     ASSERT_TRUE (renderConverged (renderer, scene, 64).isValid());
     ASSERT_TRUE (renderer.isConverged());
 
@@ -1870,13 +1881,13 @@ TEST_F (UpscalingMetalTests, ScaleOrModeChangesRestartCleanly)
         EXPECT_TRUE (renderer.isConverged()) << change;
     };
 
-    setUpscaling (scene, RenderSettings::Upscaling::temporal, 0.75f);
+    setUpscaling (renderer, RenderSettings::Upscaling::temporal, 0.75f);
     expectRestarted ("scale");
 
-    setUpscaling (scene, RenderSettings::Upscaling::off, 0.75f);
+    setUpscaling (renderer, RenderSettings::Upscaling::off, 0.75f);
     expectRestarted ("off");
 
-    setUpscaling (scene, RenderSettings::Upscaling::temporal, 0.75f);
+    setUpscaling (renderer, RenderSettings::Upscaling::temporal, 0.75f);
     expectRestarted ("on");
 }
 
@@ -1887,9 +1898,9 @@ TEST_F (UpscalingMetalTests, ScreenSpaceReflectionsReadTheFullSizeHistory)
     {
         Scene scene;
         buildOnScreenEmitterScene (scene);
-        setFullTierTaa (scene, 8);
-        setScreenSpaceReflections (scene, screenSpaceReflections);
-        setUpscaling (scene, RenderSettings::Upscaling::temporal, 0.5f);
+        setFullTierTaa (renderer, 8);
+        setScreenSpaceReflections (renderer, screenSpaceReflections);
+        setUpscaling (renderer, RenderSettings::Upscaling::temporal, 0.5f);
 
         const auto image = renderConverged (renderer, scene, 64);
         EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
@@ -1922,18 +1933,18 @@ TEST_F (UpscalingMetalTests, RasterAndFramesWithoutTaaShadeAtFullSize)
     {
         Scene scene;
         buildEdgesScene (scene);
-        setFullTierTaa (scene, taaSamples);
-        setTier (scene, tier);
-        setUpscaling (scene, RenderSettings::Upscaling::temporal, 0.5f);
 
         SceneRenderer renderer;
+        setFullTierTaa (renderer, taaSamples);
+        setTier (renderer, tier);
+        setUpscaling (renderer, RenderSettings::Upscaling::temporal, 0.5f);
         renderer.setFrameStatsEnabled (true);
         ASSERT_NE (renderer.render (device, scene, 64, 48), nullptr) << renderer.getLastError();
         ASSERT_TRUE (renderer.waitForGPU().wasOk());
 
         EXPECT_EQ (renderer.getLastFrameStats().internalWidth, 64) << taaSamples;
         EXPECT_EQ (renderer.getLastFrameStats().internalHeight, 48) << taaSamples;
-        EXPECT_FALSE (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::upscaling, scene.getRenderSettings())) << taaSamples;
+        EXPECT_FALSE (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::upscaling, renderer.getRenderSettings())) << taaSamples;
     }
 }
 
@@ -1943,7 +1954,7 @@ TEST_F (SceneRendererMetalTests, NonFiniteInputDoesNotPoisonHistory)
     // zero normals, a NaN emissive factor and a NaN alpha. Metal saturates overflowing half floats,
     // and max() and the clamp of the shaded color drop NaN, so the alpha is what reliably reaches
     // the scene color, through the blending
-    const auto buildScene = [] (Scene& scene, int taaSamples)
+    const auto buildScene = [] (Scene& scene)
     {
         scene.getRoot()->addChild (makePlates());
 
@@ -1977,24 +1988,24 @@ TEST_F (SceneRendererMetalTests, NonFiniteInputDoesNotPoisonHistory)
         node.intensity = 1.0e8f;
         light->setPosition ({ 1.0f, 1.0f, 0.01f });
         scene.getRoot()->addChild (light);
-
-        setFullTierTaa (scene, taaSamples);
     };
 
     // Without temporal anti-aliasing the scene color really holds non-finite values
     {
         Scene scene;
-        buildScene (scene, 1);
+        buildScene (scene);
 
         SceneRenderer renderer;
+        setFullTierTaa (renderer, 1);
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
         ASSERT_FALSE (isFiniteTexture (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)));
     }
 
     Scene scene;
-    buildScene (scene, 16);
+    buildScene (scene);
 
     SceneRenderer renderer;
+    setFullTierTaa (renderer, 16);
     for (int i = 0; i < 8; ++i)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
@@ -2017,10 +2028,10 @@ TEST_F (SceneRendererMetalTests, FullTierWithoutTaaKeepsOverflowingHighlightsFin
     light->setPosition ({ 0.5f, 0.5f, 0.05f });
     scene.getRoot()->addChild (light);
 
-    SceneRenderer renderer;
+    auto& renderer = sharedRenderer();
     setFullTierTaa (renderer, 1);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    ASSERT_FALSE (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::temporalAntiAliasing, scene.getRenderSettings()));
+    ASSERT_FALSE (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::temporalAntiAliasing, renderer.getRenderSettings()));
     EXPECT_TRUE (isFiniteTexture (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)));
 }
 #endif
@@ -2042,10 +2053,11 @@ TEST_P (SceneRendererTierTests, BloomBrightensAroundAnEmissiveQuad)
     ASSERT_GE (quad.getHeight(), 12);
 
     SceneRenderer withBloom;
+    withBloom.setRenderSettings (withoutBloom.getRenderSettings());
     setBloom (withBloom, true);
     const auto on = renderToImage (withBloom, scene, 128);
     ASSERT_TRUE (on.isValid()) << withBloom.getLastError();
-    EXPECT_TRUE (withBloom.getCapabilities()->isEnabled (RenderCapabilities::Feature::bloom, scene.getRenderSettings()));
+    EXPECT_TRUE (withBloom.getCapabilities()->isEnabled (RenderCapabilities::Feature::bloom, withBloom.getRenderSettings()));
 
     const auto ringOff = ringLuminance (off, quad);
     const auto ringOn = ringLuminance (on, quad);
@@ -2070,13 +2082,13 @@ TEST_P (SceneRendererTierTests, BloomThresholdAboveTheHighlightAddsNoGlow)
     ASSERT_TRUE (off.isValid()) << withoutBloom.getLastError();
 
     // The quad emits 20: a threshold of 50 keeps nothing, even with the soft knee from 25
-    auto settings = scene.getRenderSettings();
+    auto settings = withoutBloom.getRenderSettings();
     settings.bloom = true;
     settings.bloomThreshold = 50.0f;
     settings.bloomIntensity = 1.0f;
-    scene.setRenderSettings (settings);
 
     SceneRenderer withBloom;
+    withBloom.setRenderSettings (settings);
     const auto on = renderToImage (withBloom, scene, 128);
     ASSERT_TRUE (on.isValid()) << withBloom.getLastError();
     ASSERT_TRUE (withBloom.getCapabilities()->isEnabled (RenderCapabilities::Feature::bloom, settings));

@@ -309,7 +309,7 @@ TEST_F (DepthOfFieldMetalTests, DepthOfFieldWithInfiniteFarPlaneStaysFinite)
     camera.zFar = 0.0f;
     buildBarsScene (scene, 1000.0f);
 
-    SceneRenderer renderer;
+    auto& renderer = sharedRenderer();
     setUpDepthOfField (renderer);
     const auto image = renderToImage (renderer, scene, size);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
@@ -403,7 +403,7 @@ TEST_F (DepthOfFieldMetalTests, PolygonBokehHoldsBelowTheGatherRadius)
     ASSERT_GT (ratio, 0.62f);
     ASSERT_LT (ratio, 0.70f);
 
-    SceneRenderer renderer;
+    auto& renderer = sharedRenderer();
     setUpDepthOfField (renderer);
     setDepthOfField (renderer, true, 64.0f);
     camera.apertureBlades = 5;
@@ -522,7 +522,7 @@ TEST_F (DepthOfFieldMetalTests, NearFieldReachesAcrossTileEdges)
     buildTileEdgeScene (scene, 0.2f, 8.0f);
     ASSERT_LT (circleOfConfusion (scene, 0.2f), -14.0f);
 
-    SceneRenderer renderer;
+    auto& renderer = sharedRenderer();
     setUpDepthOfField (renderer);
     const auto image = renderToImage (renderer, scene, size);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
@@ -596,7 +596,7 @@ TEST_F (DepthOfFieldMetalTests, NearFieldIsContinuousAcrossTheSilhouette)
     setUpScene (scene, 10.0f);
     buildTileEdgeScene (scene, 0.2f, 1.0f);
 
-    SceneRenderer renderer;
+    auto& renderer = sharedRenderer();
     setUpDepthOfField (renderer);
     const auto image = renderToImage (renderer, scene, size);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
@@ -719,7 +719,7 @@ TEST_F (DepthOfFieldMetalTests, DepthOfFieldRunsBeforeBloom)
         return meanLuminance (image, { 4, 4, 120, 6 }) + meanLuminance (image, { 4, 118, 120, 6 });
     };
 
-    SceneRenderer renderer;
+    auto& renderer = sharedRenderer();
     setUpDepthOfField (renderer);
     setDepthOfField (renderer, true, 64.0f);
     const auto withoutBloom = renderToImage (renderer, scene, size);

@@ -1934,7 +1934,7 @@ TEST_P (SceneRendererTierTests, BlendItemsDrawOverDeferred)
     addQuad (scene, 0.0f, 0.5f);
     addQuad (scene, -0.6f, -0.5f);
 
-    SceneRenderer renderer;
+    auto& renderer = sharedRenderer();
     setTier (renderer, GetParam());
     const auto image = renderToImage (renderer, scene, 64);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();

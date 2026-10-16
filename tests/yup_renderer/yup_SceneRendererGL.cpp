@@ -64,6 +64,7 @@ protected:
 
     void TearDown() override
     {
+        releaseSharedRenderer();
         context = nullptr;
         device = nullptr;
 

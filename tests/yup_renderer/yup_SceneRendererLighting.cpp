@@ -276,7 +276,7 @@ TEST_F (SceneRendererMetalTests, FullTierRendersWithoutAnyLight)
     buildGlowScene (scene, 0.5f);
     scene.setUsingDefaultLight (false);
 
-    SceneRenderer renderer;
+    auto& renderer = sharedRenderer();
     setTier (renderer, RenderSettings::TierPreference::full);
     const auto image = renderToImage (renderer, scene, 128);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();

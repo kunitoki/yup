@@ -133,6 +133,7 @@ TEST_F (WorldFogMetalTests, GivingUpWorldFogRendersWithoutIt)
     // One failure is retried on the next frame
     {
         SceneRenderer renderer;
+        setFogTier (renderer, RenderSettings::TierPreference::full);
         renderer.failWorldFogForTesting (1);
 
         const auto failed = renderToImage (renderer, scene, fogSize);
@@ -148,6 +149,7 @@ TEST_F (WorldFogMetalTests, GivingUpWorldFogRendersWithoutIt)
 
     // The second failure in a row gives up for good, every frame then rendering without the fog
     SceneRenderer renderer;
+    setFogTier (renderer, RenderSettings::TierPreference::full);
     renderer.failWorldFogForTesting (2);
 
     for (int frame = 0; frame < 3; ++frame)
@@ -190,6 +192,7 @@ TEST_F (WorldFogMetalTests, NonFiniteFogDrawsNothing)
         scene.setWorldFog (fog);
 
         SceneRenderer renderer;
+        setFogTier (renderer, RenderSettings::TierPreference::full);
         const auto image = renderToImage (renderer, scene, fogSize);
         ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
         EXPECT_EQ (renderer.getFogApply(), nullptr) << name;

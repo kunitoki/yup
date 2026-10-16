@@ -41,8 +41,9 @@ protected:
     /** The plates under a shadowed sun, a blended quad in front of them, a reflection probe, and a
         camera at f/1.4 focused on the small plate, on @p tier with ambient occlusion, screen-space
         reflections and GI, depth of field and bloom: every pass of the tier but the debug view, and
-        the motion blur and the fog, which tests add (the scene is still and has no fog). */
-    static void buildEveryPassScene (Scene& scene, RenderSettings::TierPreference tier)
+        the motion blur and the fog, which tests add (the scene is still and has no fog). Render it
+        with setEveryPass(). */
+    static void buildEveryPassScene (Scene& scene)
     {
         buildShadowsScene (scene);
 
@@ -59,15 +60,19 @@ protected:
         auto& camera = *scene.getActiveCamera();
         camera.fStop = 1.4f;
         camera.focusDistance = 2.5f;
+    }
 
-        auto settings = scene.getRenderSettings();
+    /** Selects @p tier with every pass of buildEveryPassScene() on. */
+    static void setEveryPass (SceneRenderer& renderer, RenderSettings::TierPreference tier)
+    {
+        auto settings = renderer.getRenderSettings();
         settings.tier = tier;
         settings.ambientOcclusion = true;
         settings.screenSpaceReflections = true;
         settings.screenSpaceGI = true;
         settings.depthOfField = true;
         settings.bloom = true;
-        scene.setRenderSettings (settings);
+        renderer.setRenderSettings (settings);
     }
 
     /** Renders @p frames frames of @p scene at size x size, waiting for each. */
@@ -202,13 +207,17 @@ protected:
             entity->setPosition ({ std::cos (angle) * 1.5f, std::sin (angle) * 1.5f, 0.5f });
             scene.getRoot()->addChild (entity);
         }
+    }
 
-        auto settings = scene.getRenderSettings();
+    /** The full tier with TAA and nothing else, as buildLightsScene() is rendered. */
+    static void setLightingOnly (SceneRenderer& renderer)
+    {
+        auto settings = renderer.getRenderSettings();
         settings.tier = RenderSettings::TierPreference::full;
         settings.ambientOcclusion = false;
         settings.screenSpaceReflections = false;
         settings.screenSpaceGI = false;
-        scene.setRenderSettings (settings);
+        renderer.setRenderSettings (settings);
     }
 
     static double median (std::vector<double> values)
@@ -221,9 +230,10 @@ protected:
 TEST_F (SceneRendererFrameStatsTests, FrameStatsListTheFullTierPasses)
 {
     Scene scene;
-    buildEveryPassScene (scene, RenderSettings::TierPreference::full);
+    buildEveryPassScene (scene);
 
     SceneRenderer renderer;
+    setEveryPass (renderer, RenderSettings::TierPreference::full);
     renderer.setFrameStatsEnabled (true);
 
     // The first frame bakes the probe, and has no history yet for the screen-space effects to read
@@ -252,9 +262,9 @@ TEST_F (SceneRendererFrameStatsTests, FrameStatsListTheFullTierPasses)
     EXPECT_EQ (stats.shadowCasterDraws, 0);
 
     // A debug view draws last, over the final image
-    auto settings = scene.getRenderSettings();
+    auto settings = renderer.getRenderSettings();
     settings.debugView = RenderSettings::DebugView::ambientOcclusion;
-    scene.setRenderSettings (settings);
+    renderer.setRenderSettings (settings);
     renderAndWait (renderer, scene, 1);
 
     const auto& debugged = renderer.getLastFrameStats();
@@ -266,9 +276,10 @@ TEST_F (SceneRendererFrameStatsTests, FrameStatsListTheFullTierPasses)
 TEST_F (SceneRendererFrameStatsTests, FrameStatsListTheRasterPasses)
 {
     Scene scene;
-    buildEveryPassScene (scene, RenderSettings::TierPreference::raster);
+    buildEveryPassScene (scene);
 
     SceneRenderer renderer;
+    setEveryPass (renderer, RenderSettings::TierPreference::raster);
     renderer.setFrameStatsEnabled (true);
     renderAndWait (renderer, scene, 2);
 
@@ -280,10 +291,10 @@ TEST_F (SceneRendererFrameStatsTests, FrameStatsListTheRasterPasses)
     EXPECT_EQ (stats.drawItems, 3);
 
     // Depth of field alone draws the prepass for its depth, without the ambient occlusion
-    auto settings = scene.getRenderSettings();
+    auto settings = renderer.getRenderSettings();
     settings.ambientOcclusion = false;
     settings.bloom = false;
-    scene.setRenderSettings (settings);
+    renderer.setRenderSettings (settings);
     renderAndWait (renderer, scene, 1);
     EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows depthNormalPrepass forward depthOfField toneMapping");
     expectScopesMeasured (renderer.getLastFrameStats());
@@ -298,7 +309,7 @@ TEST_F (SceneRendererFrameStatsTests, FrameStatsListTheRasterPasses)
     // Ambient occlusion alone keeps its frame: no post chain
     settings.ambientOcclusion = true;
     settings.depthOfField = false;
-    scene.setRenderSettings (settings);
+    renderer.setRenderSettings (settings);
     renderAndWait (renderer, scene, 1);
     EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows depthNormalPrepass ambientOcclusion forward");
     expectScopesMeasured (renderer.getLastFrameStats());
@@ -308,12 +319,13 @@ TEST_F (SceneRendererFrameStatsTests, MotionBlurIsListedOnMovingFramesOnly)
 {
     // Motion blur on, after the depth of field and before bloom, only on the frames that moved
     Scene scene;
-    buildEveryPassScene (scene, RenderSettings::TierPreference::full);
-    auto settings = scene.getRenderSettings();
-    settings.motionBlur = true;
-    scene.setRenderSettings (settings);
+    buildEveryPassScene (scene);
 
     SceneRenderer renderer;
+    setEveryPass (renderer, RenderSettings::TierPreference::full);
+    auto settings = renderer.getRenderSettings();
+    settings.motionBlur = true;
+    renderer.setRenderSettings (settings);
     renderer.setFrameStatsEnabled (true);
     renderAndWait (renderer, scene, 2);
     EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows lightCulling gbuffer ambientOcclusion hiZ screenSpaceReflections lighting indirectDiffuse forward temporalAA depthOfField bloom toneMapping");
@@ -335,10 +347,11 @@ TEST_F (SceneRendererFrameStatsTests, FogIsListedRightAfterTheForwardPass)
     for (const auto tier : { RenderSettings::TierPreference::full, RenderSettings::TierPreference::raster })
     {
         Scene scene;
-        buildEveryPassScene (scene, tier);
+        buildEveryPassScene (scene);
         scene.setWorldFog (makeFog (0.08f));
 
         SceneRenderer renderer;
+        setEveryPass (renderer, tier);
         renderer.setFrameStatsEnabled (true);
         renderAndWait (renderer, scene, 2);
 
@@ -351,11 +364,11 @@ TEST_F (SceneRendererFrameStatsTests, FogIsListedRightAfterTheForwardPass)
         // Fog alone on raster draws the prepass for its depth, then the fog and the tone mapping
         if (tier == RenderSettings::TierPreference::raster)
         {
-            auto settings = scene.getRenderSettings();
+            auto settings = renderer.getRenderSettings();
             settings.ambientOcclusion = false;
             settings.depthOfField = false;
             settings.bloom = false;
-            scene.setRenderSettings (settings);
+            renderer.setRenderSettings (settings);
             renderAndWait (renderer, scene, 1);
             EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows depthNormalPrepass forward fog toneMapping");
         }
@@ -379,9 +392,9 @@ TEST_F (SceneRendererFrameStatsTests, FrameStatsBelongToOneFrame)
         for (auto* plate : plates)
             plate->setVisible (odd);
 
-        auto settings = scene.getRenderSettings();
+        auto settings = renderer.getRenderSettings();
         settings.bloom = odd;
-        scene.setRenderSettings (settings);
+        renderer.setRenderSettings (settings);
         return std::pair { size, size };
     };
 
@@ -465,9 +478,10 @@ TEST_F (SceneRendererFrameStatsTests, ResizeDoesNotMixFrames)
 TEST_F (SceneRendererFrameStatsTests, StatsOffOpensNoScope)
 {
     Scene scene;
-    buildEveryPassScene (scene, RenderSettings::TierPreference::full);
+    buildEveryPassScene (scene);
 
     SceneRenderer renderer;
+    setEveryPass (renderer, RenderSettings::TierPreference::full);
     EXPECT_FALSE (renderer.isFrameStatsEnabled());
     renderAndWait (renderer, scene, 2);
     EXPECT_EQ (renderer.getNumTimingCallsForTesting(), 0);
@@ -494,6 +508,8 @@ TEST_F (SceneRendererFrameStatsTests, HeavierPassMeasuresLonger)
     buildLightsScene (manyLights, LightClusters::maxLightsPerCluster);
 
     SceneRenderer oneRenderer, manyRenderer;
+    setLightingOnly (oneRenderer);
+    setLightingOnly (manyRenderer);
     oneRenderer.setFrameStatsEnabled (true);
     manyRenderer.setFrameStatsEnabled (true);
 
@@ -540,6 +556,7 @@ protected:
     struct LightShow
     {
         Scene scene;
+        RenderSettings renderSettings; // what the renderer timing the scene draws it with
         std::vector<EntityNode*> showLights;
         BoundingBox bounds;
         EntityNode* modelRoot = nullptr;
@@ -629,7 +646,7 @@ protected:
             scene.setToneMapping (Scene::ToneMapping::agx);
             scene.setEnvironmentVisible (true);
             scene.setEnvironmentBlur (0.5f);
-            setTier (scene, tier);
+            renderSettings.tier = tier;
             return true;
         }
 
@@ -733,10 +750,8 @@ protected:
                 meshNode->mesh = withoutLogo;
             }
 
-            auto settings = scene.getRenderSettings();
-            settings.ambientOcclusion = true;
-            settings.aoDistance = 0.08f;
-            scene.setRenderSettings (settings);
+            renderSettings.ambientOcclusion = true;
+            renderSettings.aoDistance = 0.08f;
             return true;
         }
 
@@ -802,6 +817,7 @@ protected:
                        bool frameStats = false, int maxFramesInFlight = 0, FrameSamples* samples = nullptr)
     {
         SceneRenderer renderer;
+        renderer.setRenderSettings (show.renderSettings);
         renderer.setFrameStatsEnabled (frameStats || samples != nullptr);
 
         auto timed = false;
@@ -1011,23 +1027,23 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
 
                 if (! config.softShadows)
                 {
-                    auto settings = show.scene.getRenderSettings();
+                    auto settings = show.renderSettings;
                     settings.softShadows = false;
-                    show.scene.setRenderSettings (settings);
+                    show.renderSettings = settings;
                 }
 
                 if (! config.ambientOcclusion)
                 {
-                    auto settings = show.scene.getRenderSettings();
+                    auto settings = show.renderSettings;
                     settings.ambientOcclusion = false;
-                    show.scene.setRenderSettings (settings);
+                    show.renderSettings = settings;
                 }
 
                 if (! config.screenSpaceReflections)
                 {
-                    auto settings = show.scene.getRenderSettings();
+                    auto settings = show.renderSettings;
                     settings.screenSpaceReflections = false;
-                    show.scene.setRenderSettings (settings);
+                    show.renderSettings = settings;
                 }
 
                 // Baked by the warm-up frames: the probes stay still
@@ -1112,9 +1128,9 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_DepthOfFieldFrameTimes)
                 if (! show.build (16, 0.5f, 0.08f, RenderSettings::TierPreference::full, static_cast<float> (width) / static_cast<float> (height)))
                     GTEST_SKIP() << "mpc.glb is missing";
 
-                auto settings = show.scene.getRenderSettings();
+                auto settings = show.renderSettings;
                 settings.depthOfField = focus > 0.0f;
-                show.scene.setRenderSettings (settings);
+                show.renderSettings = settings;
 
                 auto& camera = *show.scene.getActiveCamera();
                 camera.fStop = 1.4f;
@@ -1181,16 +1197,17 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_RasterDepthOfFieldFrameTimes)
                 if (! show.build (16, 0.5f, 0.08f, RenderSettings::TierPreference::raster, static_cast<float> (width) / static_cast<float> (height)))
                     GTEST_SKIP() << "mpc.glb is missing";
 
-                auto settings = show.scene.getRenderSettings();
+                auto settings = show.renderSettings;
                 settings.depthOfField = config.depthOfField;
                 settings.ambientOcclusion = config.ambientOcclusion;
-                show.scene.setRenderSettings (settings);
+                show.renderSettings = settings;
 
                 auto& camera = *show.scene.getActiveCamera();
                 camera.fStop = 1.4f;
                 camera.focusDistance = show.cameraDistance;
 
                 SceneRenderer renderer;
+                renderer.setRenderSettings (show.renderSettings);
                 renderer.setFrameStatsEnabled (true);
 
                 std::map<String, double> sums;
@@ -1306,11 +1323,12 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_MotionBlurFrameTimes)
 
                 show.orbitPitch = config.orbit ? 0.6f : 0.0f;
 
-                auto settings = show.scene.getRenderSettings();
+                auto settings = show.renderSettings;
                 settings.motionBlur = config.motionBlur;
-                show.scene.setRenderSettings (settings);
+                show.renderSettings = settings;
 
                 SceneRenderer renderer;
+                renderer.setRenderSettings (show.renderSettings);
                 renderer.setFrameStatsEnabled (true);
 
                 std::map<String, double> sums;
@@ -1436,6 +1454,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_WorldFogFrameTimes)
                 }
 
                 SceneRenderer renderer;
+                renderer.setRenderSettings (show.renderSettings);
                 renderer.setFrameStatsEnabled (true);
 
                 std::map<String, double> sums;
@@ -1565,9 +1584,9 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_KnobAutomationFrameTimes)
 
             if (! screenSpaceReflections)
             {
-                auto settings = show.scene.getRenderSettings();
+                auto settings = show.renderSettings;
                 settings.screenSpaceReflections = false;
-                show.scene.setRenderSettings (settings);
+                show.renderSettings = settings;
             }
 
             auto& root = *show.scene.getRoot();
@@ -1739,10 +1758,10 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_DemoTargetFrameTimes)
 
             if (row.renderScale < 1.0f)
             {
-                auto settings = show.scene.getRenderSettings();
+                auto settings = show.renderSettings;
                 settings.upscaling = RenderSettings::Upscaling::temporal;
                 settings.renderScale = row.renderScale;
-                show.scene.setRenderSettings (settings);
+                show.renderSettings = settings;
             }
 
             Round result;
