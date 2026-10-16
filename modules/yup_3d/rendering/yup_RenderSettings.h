@@ -145,14 +145,16 @@ struct YUP_API RenderSettings
         none,             ///< The final image.
         ambientOcclusion, ///< The ambient occlusion visibility, as gray: white is unoccluded.
         reflections,      ///< The screen-space reflections, exposed and weighted by their confidence.
-        indirectDiffuse   ///< The light the screen-space diffuse GI gathers, exposed, before the surface colors.
+        indirectDiffuse,  ///< The light the screen-space diffuse GI gathers, exposed, before the surface colors.
+        circleOfConfusion ///< The signed circle of confusion of the depth of field, as a share of depthOfFieldMaxSize: orange in front of the focus, blue behind it, black in focus.
     };
 
-    /** Shows an intermediate image instead of the final one, for tuning the screen-space effects.
-        Full tier only: the raster tier ignores it, which is not an error. An image the frame did not
-        produce (its feature off or unavailable, or no history to read it from yet) shows black. It
-        is shown at the size of the frame without filtering, tone mapping, bloom or background. It
-        neither restarts nor discards the temporal accumulation, and none, the default, costs nothing.
+    /** Shows an intermediate image instead of the final one, for tuning the screen-space effects
+        and the depth of field. Full tier only: the raster tier ignores it, which is not an error.
+        An image the frame did not produce (its feature off or unavailable, or no history to read
+        it from yet) shows black. It is shown at the size of the frame without filtering, tone
+        mapping, bloom or background. It neither restarts nor discards the temporal accumulation,
+        and none, the default, costs nothing.
     */
     DebugView debugView = DebugView::none;
 

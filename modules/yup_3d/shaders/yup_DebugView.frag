@@ -35,7 +35,8 @@ layout(set = 0, binding = 3) uniform sampler pointClamp;
 layout(set = 1, binding = 0) uniform DebugViewBlock
 {
     vec4 options; // x what to show: 0 black (no texture this frame), 1 the ambient occlusion visibility in a,
-                  // 2 radiance in rgb weighted by a, 3 radiance in rgb; both unexposed
+                  // 2 radiance in rgb weighted by a, 3 radiance in rgb; both unexposed, 4 a signed circle of
+                  // confusion in r; y the scale of the circle of confusion, 1 / its largest radius
 } debugView;
 
 layout(set = 1, binding = 1) uniform texture2D u_source;
@@ -52,10 +53,13 @@ void main()
 
     ivec2 size = textureSize(sampler2D(u_source, pointClamp), 0);
     ivec2 texel = min(ivec2(gl_FragCoord.xy) * size / ivec2(view.viewport.xy), size - 1);
-    vec4 t = yupSanitize(texelFetch(sampler2D(u_source, pointClamp), texel, 0));
+    vec4 texelValue = texelFetch(sampler2D(u_source, pointClamp), texel, 0);
+    vec4 t = yupSanitize(texelValue);
 
     if (mode == 1)
         fragColor.rgb = vec3(t.a);
+    else if (mode == 4) // Signed: not sanitized, which clamps it to positive values; the setup pass keeps it finite
+        fragColor.rgb = (texelValue.r < 0.0 ? vec3(1.0, 0.5, 0.0) : vec3(0.0, 0.5, 1.0)) * clamp(abs(texelValue.r) * debugView.options.y, 0.0, 1.0);
     else
         fragColor.rgb = clamp(t.rgb * (mode == 2 ? t.a : 1.0) * view.cameraPosition.w, 0.0, 1.0);
 }

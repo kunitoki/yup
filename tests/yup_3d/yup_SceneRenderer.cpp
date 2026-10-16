@@ -2344,9 +2344,10 @@ protected:
     /** The baseline scenes at the default settings on @p tier, without a probe or a volume, add
         none of the opt-in passes: no depth and normal prepass, no probe baker, no probe list (only
         the local indirect variants declare its block, and the default variants shade), no
-        screen-space GI and no depth of field. On raster, no ambient occlusion, screen-space reflections or Hi-Z pyramid
-        either; the full tier traces its ambient occlusion and reflections, on there by default.
-        No pass or allocation count is exposed, so the getters of each pass stand in for them.
+        screen-space GI, no depth of field, no motion blur, even on a frame that moved, and no fog,
+        disabled or without density. On raster, no ambient occlusion, screen-space reflections or
+        Hi-Z pyramid either; the full tier traces its ambient occlusion and reflections, on there by
+        default. No pass or allocation count is exposed, so the getters of each pass stand in for them.
     */
     void checkDefaultSettingsAddNoOptInPass (RenderSettings::TierPreference tier)
     {
@@ -2384,10 +2385,16 @@ protected:
             build (scene);
             setTier (scene, tier);
 
-            // The reflections need the history of an earlier frame
+            // The reflections need the history of an earlier frame, and the last frame moves
+            // everything, which motion blur would smear
             SceneRenderer renderer;
-            for (int frame = 0; frame < 2; ++frame)
+            for (int frame = 0; frame < 3; ++frame)
+            {
+                if (frame == 2)
+                    scene.getRoot()->setPosition ({ 0.05f, 0.0f, 0.0f });
+
                 ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << name << ": " << renderer.getLastError();
+            }
 
             EXPECT_TRUE (renderer.waitForGPU().wasOk()) << name;
 
@@ -2405,6 +2412,7 @@ protected:
             EXPECT_EQ (renderer.getHiZPyramid() != nullptr, full) << name;
             EXPECT_EQ (renderer.getDepthOfField(), nullptr) << name;
             EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr) << name;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr) << name;
             EXPECT_EQ (renderer.getMotionBlur(), nullptr) << name;
             EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << name;
             EXPECT_EQ (renderer.getFogApply(), nullptr) << name;
@@ -2420,6 +2428,19 @@ protected:
             {
                 EXPECT_EQ (ambientOcclusion->getIndirectDiffuse(), nullptr) << name;
                 EXPECT_EQ (ambientOcclusion->getNumCachedIndirectDiffuseTargets(), 0u) << name;
+            }
+
+            // Not vacuous: with motion blur on, the full tier smears the next move
+            if (full)
+            {
+                auto settings = scene.getRenderSettings();
+                settings.motionBlur = true;
+                scene.setRenderSettings (settings);
+                scene.getRoot()->setPosition ({ 0.1f, 0.0f, 0.0f });
+
+                ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << name << ": " << renderer.getLastError();
+                EXPECT_TRUE (renderer.waitForGPU().wasOk()) << name;
+                EXPECT_NE (renderer.getMotionBlur(), nullptr) << name;
             }
         }
     }
@@ -7683,14 +7704,38 @@ vec4 encodeLuma(vec3 c)
     }
 
     /** Raster depth of field skips the frames whose prepass gave no depth, without counting them as
-        failures: a prepass that cannot compile leaves every frame unblurred, and once prepass targets
-        that could not be created come back, so does the blur.
+        failures: once prepass targets that could not be created come back, so does the blur. A
+        prepass that cannot compile takes the depth of field off the route: its frames create no
+        depth of field and, without bloom, keep the inline frame.
     */
     void checkRasterDepthOfFieldSkipsFramesWithoutThePrepassDepth()
     {
         Scene scene;
         setUpDepthOfFieldScene (scene, RenderSettings::TierPreference::raster, 0.2f);
         buildBarsScene (scene, 10.0f);
+
+        for (const auto bloom : { false, true })
+        {
+            const auto name = bloom ? "prepass not compiled, bloom" : "prepass not compiled";
+            setBloom (scene, bloom);
+
+            SceneRenderer renderer;
+            renderer.failDepthNormalPrepassForTesting();
+
+            for (int frame = 0; frame < 3; ++frame)
+            {
+                ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << name << ": " << renderer.getLastError();
+                EXPECT_TRUE (renderer.waitForGPU().wasOk()) << name;
+                EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr) << name;
+                EXPECT_EQ (renderer.getDepthOfField(), nullptr) << name;
+
+                const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+                ASSERT_NE (sceneColor, nullptr) << name;
+                EXPECT_EQ (sceneColor->getFormat() == GpuTextureFormat::rgba16float, bloom) << name;
+            }
+        }
+
+        setBloom (scene, false);
 
         // More frames than the two failures in a row that give up
         const auto expectSkipped = [&] (SceneRenderer& renderer, const char* name)
@@ -7706,12 +7751,6 @@ vec4 encodeLuma(vec3 c)
                 EXPECT_EQ (renderer.getDepthOfField()->getNumCachedTargets(), 0u) << name;
             }
         };
-
-        {
-            SceneRenderer renderer;
-            renderer.failDepthNormalPrepassForTesting();
-            expectSkipped (renderer, "prepass not compiled");
-        }
 
         SceneRenderer renderer;
         renderer.failDepthNormalPrepassTargetsForTesting (3);
@@ -8294,6 +8333,50 @@ vec4 encodeUnit(float value)
         EXPECT_LE (maxChannelDifference (on, off), 2);
     }
 
+    /** On @p tier, bloom after the fog reads the fog's linear color, not the reversible one: fog lit by
+        nothing only absorbs, so the emissive quad of buildGlowScene() seen through it glows like the
+        same quad dimmed by the fog's transmittance, without fog and without depth of field.
+    */
+    void checkFogBeforeBloomGlowsLikeADimmerEmitter (RenderSettings::TierPreference tier)
+    {
+        constexpr auto density = 0.3f;
+        constexpr auto distance = 2.0f;
+
+        const auto render = [&] (float emission, bool withFog)
+        {
+            Scene scene;
+            buildGlowScene (scene, emission);
+            setFogTier (scene, tier);
+            setBloom (scene, true);
+            addFogCamera (scene, {}, { 0.0f, 0.0f, distance });
+
+            if (withFog)
+                scene.setWorldFog (makeFog (density));
+
+            SceneRenderer renderer;
+            auto image = renderToImage (renderer, scene, 128);
+            EXPECT_TRUE (image.isValid()) << renderer.getLastError();
+            EXPECT_EQ (renderer.getFogApply() != nullptr, withFog);
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+            return image;
+        };
+
+        const auto foggy = render (20.0f, true);
+        const auto dimmer = render (20.0f * std::exp (-density * distance), false);
+        ASSERT_TRUE (foggy.isValid() && dimmer.isValid());
+
+        const auto quad = findBrightBounds (dimmer);
+        const auto foggyRing = ringLuminance (foggy, quad);
+        const auto dimmerRing = ringLuminance (dimmer, quad);
+        RecordProperty ("foggyRing", String (foggyRing, 2).toStdString());
+        RecordProperty ("dimmerRing", String (dimmerRing, 2).toStdString());
+
+        // Not vacuous: the dimmed quad still glows
+        ASSERT_FALSE (quad.isEmpty());
+        EXPECT_GT (dimmerRing, 5.0);
+        EXPECT_NEAR (foggyRing, dimmerRing, 0.05 * dimmerRing);
+    }
+
     /** On @p tier, pixels of the background color blend towards the fog by its coverage: with the far
         plane 10 units away, the background color shows through by the transmittance T to the far plane.
     */
@@ -8505,15 +8588,39 @@ vec4 encodeUnit(float value)
         EXPECT_GT (foggy, clear + 0.3f);
     }
 
-    /** Raster fog skips the frames whose prepass gave no depth, without counting them as failures: a
-        prepass that cannot compile leaves every frame without fog, and once prepass targets that
-        could not be created come back, so does the fog.
+    /** Raster fog skips the frames whose prepass gave no depth, without counting them as failures:
+        once prepass targets that could not be created come back, so does the fog. A prepass that
+        cannot compile takes the fog off the route: its frames create no fog pass and, without
+        bloom, keep the inline frame.
     */
     void checkRasterWorldFogSkipsFramesWithoutThePrepassDepth()
     {
         Scene scene;
         setFogTier (scene, RenderSettings::TierPreference::raster);
         buildFogWallsScene (scene, true);
+
+        for (const auto bloom : { false, true })
+        {
+            const auto name = bloom ? "prepass not compiled, bloom" : "prepass not compiled";
+            setBloom (scene, bloom);
+
+            SceneRenderer renderer;
+            renderer.failDepthNormalPrepassForTesting();
+
+            for (int frame = 0; frame < 3; ++frame)
+            {
+                ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << name << ": " << renderer.getLastError();
+                EXPECT_TRUE (renderer.waitForGPU().wasOk()) << name;
+                EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr) << name;
+                EXPECT_EQ (renderer.getFogApply(), nullptr) << name;
+
+                const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+                ASSERT_NE (sceneColor, nullptr) << name;
+                EXPECT_EQ (sceneColor->getFormat() == GpuTextureFormat::rgba16float, bloom) << name;
+            }
+        }
+
+        setBloom (scene, false);
 
         // More frames than the two failures in a row that give up
         const auto expectSkipped = [&] (SceneRenderer& renderer, const char* name)
@@ -8528,12 +8635,6 @@ vec4 encodeUnit(float value)
                 EXPECT_EQ (renderer.getFogApply()->getNumCachedTargets(), 0u) << name;
             }
         };
-
-        {
-            SceneRenderer renderer;
-            renderer.failDepthNormalPrepassForTesting();
-            expectSkipped (renderer, "prepass not compiled");
-        }
 
         SceneRenderer renderer;
         renderer.failDepthNormalPrepassTargetsForTesting (3);
@@ -9266,17 +9367,25 @@ TEST_F (SceneRendererMetalTests, RasterRendererTogglesBloomOnOffOn)
     const auto quad = findBrightBounds (inline8);
 
     SceneRenderer renderer;
+    GpuTexture::Ptr halfFloatSceneColor;
     for (const auto bloom : { true, false, true })
     {
         setBloom (scene, bloom);
 
         const auto image = renderToImage (renderer, scene, 128);
         ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        ASSERT_TRUE (renderer.waitForGPU().wasOk());
 
         // Bloom renders the reversible half-float scene color, without it the rgba8 inline frame
         const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
         ASSERT_NE (sceneColor, nullptr);
         EXPECT_EQ (sceneColor->getFormat(), bloom ? GpuTextureFormat::rgba16float : GpuTextureFormat::rgba8unorm) << "bloom " << bloom;
+
+        // The frame without bloom keeps nothing of the half-float scene color of the frame before it
+        if (bloom)
+            halfFloatSceneColor = sceneColor;
+        else if (halfFloatSceneColor != nullptr)
+            EXPECT_EQ (std::exchange (halfFloatSceneColor, nullptr)->getReferenceCount(), 1);
         EXPECT_EQ (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::hdrSceneColor, scene.getRenderSettings()), bloom);
 
         const auto ring = ringLuminance (image, quad);
@@ -11439,6 +11548,103 @@ TEST_F (SceneRendererDebugViewTests, IndirectDiffuseIsExposedAsGathered)
     checkExposedPerTexel (scene, RenderSettings::DebugView::indirectDiffuse, SceneRenderer::PassOutput::indirectDiffuse, "1.0", 250, 50); // Measured 384 and 96
 }
 #endif
+
+TEST_F (SceneRendererDebugViewTests, CircleOfConfusionShowsNearAndFarInTwoColorsAndFocusBlack)
+{
+    // Focused on the bars at 0.5, the square at 0.25 in front blurs as much as the background
+    // behind: both reach 0.8 of the largest CoC (8 px), the bars 0
+    constexpr auto size = depthOfFieldSize;
+
+    Scene scene;
+    setUpDepthOfFieldScene (scene, RenderSettings::TierPreference::full, 0.5f);
+    setDepthOfField (scene, true, 8.0f);
+    buildBarsScene (scene, 0.5f, 0.25f);
+    setDebugView (scene, RenderSettings::DebugView::circleOfConfusion);
+    ASSERT_NEAR (circleOfConfusion (scene, 0.25f), -6.5f, 0.1f);
+    ASSERT_NEAR (circleOfConfusion (scene, 1000.0f), 6.5f, 0.1f);
+
+    SceneRenderer renderer;
+    const auto image = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr);
+
+    const auto near = meanColor (image, { 56, 56, 16, 16 });
+    const auto far = meanColor (image, { 36, 12, 10, 30 });
+    RecordProperty ("nearRed", static_cast<int> (near.getRed()));
+    RecordProperty ("farBlue", static_cast<int> (far.getBlue()));
+    // 0.81 of 255 (1.625 of 2 texels): without the scale both would saturate at 255
+    EXPECT_NEAR (near.getRed(), 207, 12);
+    EXPECT_NEAR (near.getGreen(), 103, 12);
+    EXPECT_LE (near.getBlue(), 2);
+    EXPECT_NEAR (far.getBlue(), 207, 12);
+    EXPECT_NEAR (far.getGreen(), 103, 12);
+    EXPECT_LE (far.getRed(), 2);
+
+    auto focusedLevel = 0;
+    for (int y = 12; y < 116; ++y)
+    {
+        for (int x = 12; x < 24; ++x)
+        {
+            const auto color = image.getPixelColor (x, y);
+            focusedLevel = jmax (focusedLevel, static_cast<int> (color.getRed()), static_cast<int> (color.getGreen()), static_cast<int> (color.getBlue()));
+        }
+    }
+
+    RecordProperty ("focusedLevel", focusedLevel);
+    EXPECT_LE (focusedLevel, 1);
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    // Each pixel shows the CoC texel covering it as a share of the largest CoC, 2 texels of the half size
+    const auto* depthOfField = renderer.getDepthOfField();
+    ASSERT_NE (depthOfField, nullptr);
+    ASSERT_FLOAT_EQ (depthOfField->getMaxCircleOfConfusion(), 2.0f);
+
+    const auto expected = mapTexels (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion),
+                                     "vec4((t.r < 0.0 ? vec3(1.0, 0.5, 0.0) : vec3(0.0, 0.5, 1.0)) * clamp(abs(t.r) * 0.5, 0.0, 1.0), 1.0)");
+    ASSERT_TRUE (expected.isValid());
+    ASSERT_EQ (expected.getWidth(), size / 2);
+
+    auto differing = 0;
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            const auto shown = image.getPixelColor (x, y);
+            const auto wanted = expected.getPixelColor (x / 2, y / 2);
+            differing += std::abs (shown.getRed() - wanted.getRed()) > 1 || std::abs (shown.getGreen() - wanted.getGreen()) > 1
+                                 || std::abs (shown.getBlue() - wanted.getBlue()) > 1 ? 1 : 0;
+        }
+    }
+
+    EXPECT_EQ (differing, 0);
+#endif
+}
+
+TEST_F (SceneRendererDebugViewTests, CircleOfConfusionShowsBlackWithoutDepthOfFieldAndNeverStale)
+{
+    Scene scene;
+    auto& camera = setUpDepthOfFieldScene (scene, RenderSettings::TierPreference::full, 0.5f);
+    buildBarsScene (scene, 0.5f, 0.25f);
+    setDepthOfField (scene, false);
+    setDebugView (scene, RenderSettings::DebugView::circleOfConfusion);
+
+    SceneRenderer renderer;
+    const auto off = renderToImage (renderer, scene, 64);
+    ASSERT_TRUE (off.isValid()) << renderer.getLastError();
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr);
+    EXPECT_EQ (countNonBlackPixels (off), 0);
+
+    setDepthOfField (scene, true);
+    const auto on = renderToImage (renderer, scene, 64);
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr);
+    EXPECT_GT (countNonBlackPixels (on), 1000);
+
+    // A camera that cannot blur draws no depth of field: black, not the CoC of the frame before
+    camera.fStop = 0.0f;
+    const auto cannotBlur = renderToImage (renderer, scene, 64);
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr);
+    EXPECT_EQ (countNonBlackPixels (cannotBlur), 0);
+}
 
 TEST_F (SceneRendererMetalTests, SilhouetteEdgesMatchRasterOnBothTiers)
 {
@@ -15287,6 +15493,11 @@ TEST_P (SceneRendererTierTests, FogOverTheBackgroundKeepsItsBlendWithDepthOfFiel
     checkFogOverTheBackgroundKeepsItsBlendWithDepthOfField (GetParam());
 }
 
+TEST_P (SceneRendererTierTests, FogBeforeBloomGlowsLikeADimmerEmitter)
+{
+    checkFogBeforeBloomGlowsLikeADimmerEmitter (GetParam());
+}
+
 TEST_P (SceneRendererTierTests, BackgroundColorLerpsTowardsTheFog)
 {
     checkBackgroundColorLerpsTowardsTheFog (GetParam());
@@ -16730,6 +16941,35 @@ TEST_F (MotionBlurMetalTests, MotionBlurOnAStillFrameRecordsNoPass)
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
+TEST_F (MotionBlurMetalTests, NonFiniteTransformsAreNoMotion)
+{
+    // An item whose transform holds a NaN, the same every frame, compares as the restarting
+    // signature hashes it: no motion, so the still frames record no motion blur and converge
+    Scene scene;
+    buildMovingBarScene (scene);
+    auto* broken = addMotionQuad (scene, { -0.8f, -0.1f, 0.2f, 0.2f }, 2.0f);
+    broken->setPosition ({ std::numeric_limits<float>::quiet_NaN(), 0.0f, -motionBarDistance });
+    setUpMotionBlur (scene, 4);
+
+    SceneRenderer renderer;
+    renderer.setFrameStatsEnabled (true);
+    for (int frame = 0; frame < 8; ++frame)
+    {
+        ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+        EXPECT_EQ (renderer.getMotionBlur(), nullptr) << frame;
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << frame;
+
+        if (renderer.isConverged())
+            break;
+    }
+
+    EXPECT_TRUE (renderer.isConverged());
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+    // Not vacuous: the item with the NaN is drawn
+    EXPECT_EQ (renderer.getLastFrameStats().drawItems, 2);
+}
+
 TEST_F (MotionBlurMetalTests, MotionBlurOffOrAClosedShutterRecordsNothingWhileMoving)
 {
     Scene scene;
@@ -16824,85 +17064,78 @@ TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessWhileTheCamera
 TEST_F (MotionBlurMetalTests, FogOverTheBackgroundKeepsItsBlendWhileTheCameraTurns)
 {
     // Turning the camera smears the fog's coverage of the background color into itself: none of it
-    // moves, so it keeps its display-space blend (preflight R24). The rgba8 frame the renderer stores is
-    // compared as stored, within 1 level of the frame without motion blur on the rows above and below
-    // the bar: a read back through a canvas can move a stored level by one either way
-    const auto turn = [&] (bool motionBlur)
-    {
-        std::array<std::vector<float>, 3> channels;
+    // moves, so the blur amount stays near 0 there and tone mapping keeps its display-space blend
+    // (preflight R24). On the rows above and below the bar, the linear output of the motion blur
+    // stays near its input, and its blur amount is at most 0.02
+    Scene scene;
+    buildMovingBarScene (scene);
+    setUpMotionBlur (scene);
+    scene.setAmbientColor (fogAmbientColor());
+    scene.setWorldFog (makeFog (0.08f));
+    scene.getActiveCamera()->zFar = 10.0f;
 
-        Scene scene;
-        buildMovingBarScene (scene);
-        setUpMotionBlur (scene);
-        setMotionBlur (scene, motionBlur);
-        scene.setAmbientColor (fogAmbientColor());
-        scene.setWorldFog (makeFog (0.08f));
-        scene.getActiveCamera()->zFar = 10.0f;
+    auto* camera = scene.getRoot()->findChild ("camera");
+    ASSERT_NE (camera, nullptr);
 
-        auto* camera = scene.getRoot()->findChild ("camera");
-        EXPECT_NE (camera, nullptr);
-        if (camera == nullptr)
-            return channels;
+    SceneRenderer renderer;
+    aimCamera (*camera, {}, { 0.0f, 0.0f, -1.0f });
+    ASSERT_TRUE (renderToImage (renderer, scene, size).isValid()) << renderer.getLastError();
 
-        SceneRenderer renderer;
-        aimCamera (*camera, {}, { 0.0f, 0.0f, -1.0f });
-        if (! renderToImage (renderer, scene, size).isValid())
-            return channels;
+    aimCamera (*camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
+    ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+    ASSERT_TRUE (renderer.waitForGPU().wasOk());
 
-        aimCamera (*camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
-        const auto stored = renderer.render (device, scene, size, size);
-        EXPECT_TRUE (renderer.waitForGPU().wasOk());
-        EXPECT_NE (stored, nullptr) << renderer.getLastError();
-        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur) != nullptr, motionBlur);
+    const auto output = renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur);
+    const auto input = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+    ASSERT_NE (output, nullptr);
+    ASSERT_NE (input, nullptr);
+    ASSERT_NE (renderer.getMotionBlur(), nullptr);
+    ASSERT_NE (renderer.getMotionBlur()->getBlurAmount(), nullptr);
 
-        if (stored != nullptr)
-            channels = { readUnitChannel (stored, "r"), readUnitChannel (stored, "g"), readUnitChannel (stored, "b") };
-
-        return channels;
-    };
-
-    const auto off = turn (false);
-    const auto on = turn (true);
+    const auto mask = readUnitChannel (renderer.getMotionBlur()->getBlurAmount(), "r");
+    std::array<std::vector<float>, 3> smeared, sharp;
     for (size_t channel = 0; channel < 3; ++channel)
     {
-        ASSERT_EQ (off[channel].size(), static_cast<size_t> (size * size));
-        ASSERT_EQ (on[channel].size(), off[channel].size());
+        const char* name = std::array<const char*, 3> { "r", "g", "b" }[channel];
+        smeared[channel] = readUnitChannel (output, name);
+        sharp[channel] = readUnitChannel (input, name);
+        ASSERT_EQ (smeared[channel].size(), static_cast<size_t> (size * size));
+        ASSERT_EQ (sharp[channel].size(), smeared[channel].size());
     }
 
-    // The bar spans rows 26 to 102. Stored levels, so a level is exactly 1 / 255
-    int largest = 0;
-    Point<int> where;
-    double background = 0.0;
-    for (const auto band : { Rectangle<int> (0, 0, size, 20), Rectangle<int> (0, 108, size, 20) })
+    ASSERT_EQ (mask.size(), static_cast<size_t> (size * size));
+
+    // The bar spans rows 26 to 102. The taps of the 8 columns at each side, half the smear's reach,
+    // clamp at the frame edge, so they average the fog's coverage unevenly: they are left out
+    auto largestMask = 0.0f;
+    auto largestDifference = 0.0f;
+    auto background = 0.0;
+    for (const auto band : { Rectangle<int> (8, 0, size - 16, 20), Rectangle<int> (8, 108, size - 16, 20) })
     {
         for (int y = band.getY(); y < band.getBottom(); ++y)
         {
-            for (int x = 0; x < size; ++x)
+            for (int x = band.getX(); x < band.getRight(); ++x)
             {
                 const auto index = static_cast<size_t> (y * size + x);
-                background += off[0][index] * 255.0;
+                largestMask = jmax (largestMask, mask[index]);
+                background += sharp[0][index];
 
                 for (size_t channel = 0; channel < 3; ++channel)
-                {
-                    const auto difference = static_cast<int> (std::lround (std::abs (on[channel][index] - off[channel][index]) * 255.0f));
-                    if (difference > largest)
-                    {
-                        largest = difference;
-                        where = { x, y };
-                    }
-                }
+                    largestDifference = jmax (largestDifference, std::abs (smeared[channel][index] - sharp[channel][index]));
             }
         }
     }
 
-    background /= 2.0 * 20.0 * size;
-    RecordProperty ("largestStoredDifference", largest);
-    RecordProperty ("at", (String (where.getX()) + ", " + String (where.getY())).toStdString());
-    RecordProperty ("background", String (background, 1).toStdString());
+    background /= 2.0 * 20.0 * (size - 16);
+    RecordProperty ("largestBlurAmount", String (largestMask, 4).toStdString());
+    RecordProperty ("largestLinearDifference", String (largestDifference, 5).toStdString());
+    RecordProperty ("background", String (background, 4).toStdString());
 
-    // Not vacuous: the background shows the fog's partial coverage
-    EXPECT_GT (background, 30.0);
-    EXPECT_LE (largest, 1);
+    // Not vacuous: the background shows the fog's partial coverage. Measured: a blur amount of
+    // 3 / 255 and a linear difference of 5e-4, against a background of about 0.25
+    EXPECT_GT (background, 0.1);
+    EXPECT_LE (largestMask, 0.02f);
+    EXPECT_LE (largestDifference, 2.0e-3f);
 }
 
 TEST_F (MotionBlurMetalTests, StillPartialCoverageKeepsItsBlendWhileTheBarMoves)
@@ -17478,7 +17711,8 @@ protected:
 
     /** The plates under a shadowed sun, a blended quad in front of them, a reflection probe, and a
         camera at f/1.4 focused on the small plate, on @p tier with ambient occlusion, screen-space
-        reflections and GI, depth of field and bloom: every pass of the tier but the debug view. */
+        reflections and GI, depth of field and bloom: every pass of the tier but the debug view, and
+        the motion blur and the fog, which tests add (the scene is still and has no fog). */
     static void buildEveryPassScene (Scene& scene, RenderSettings::TierPreference tier)
     {
         buildShadowsScene (scene);
@@ -17723,6 +17957,13 @@ TEST_F (SceneRendererFrameStatsTests, FrameStatsListTheRasterPasses)
     scene.setRenderSettings (settings);
     renderAndWait (renderer, scene, 1);
     EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows depthNormalPrepass forward depthOfField toneMapping");
+    expectScopesMeasured (renderer.getLastFrameStats());
+
+    // A frame whose prepass targets could not be created records neither the prepass nor the depth
+    // of field reading its depth, so it lists neither
+    renderer.failDepthNormalPrepassTargetsForTesting (1);
+    renderAndWait (renderer, scene, 1);
+    EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows forward toneMapping");
     expectScopesMeasured (renderer.getLastFrameStats());
 
     // Ambient occlusion alone keeps its frame: no post chain
@@ -19494,6 +19735,14 @@ TEST_F (SceneRendererGLTests, RasterFogOverTheBackgroundKeepsItsBlendWithDepthOf
         GTEST_SKIP() << "Raster world fog is unavailable on this device";
 
     checkFogOverTheBackgroundKeepsItsBlendWithDepthOfField (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterFogBeforeBloomGlowsLikeADimmerEmitter)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkFogBeforeBloomGlowsLikeADimmerEmitter (RenderSettings::TierPreference::raster);
 }
 
 TEST_F (SceneRendererGLTests, RasterBackgroundColorLerpsTowardsTheFog)

@@ -53,6 +53,7 @@ void PostChain::releaseTargets() noexcept
 
     bloom.releaseTargets();
     toneMapping.releaseTargets();
+    resolvedColor = nullptr;
 }
 
 bool PostChain::render (const GpuDevice::Ptr& device, GpuFrame& frame, const RenderCapabilities& caps,
@@ -99,18 +100,20 @@ bool PostChain::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Ren
     auto color = resolvedColor;
     auto colorIsReversible = inputs.colorIsReversible;
     GpuTexture::Ptr blurAmount;
-    const auto blurring = willBlur (caps, settings, inputs.camera);
 
-    if (blurring)
+    if (inputs.blurring)
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (depthOfField);
-        beginScope ("depthOfField");
 
         if (depthOfField == nullptr)
             depthOfField = std::make_unique<DepthOfField> (device);
 
         if (depthOfFieldFailures > 0)
             depthOfField->failRendersForTesting (std::exchange (depthOfFieldFailures, 0));
+
+        // A frame missing its depth records nothing, so it opens no scope
+        if (inputs.depth != nullptr)
+            beginScope ("depthOfField");
 
         const DepthOfField::Inputs dofInputs { color, colorIsReversible, inputs.depth, inputs.camera };
         if (auto blurred = depthOfField->render (frame, view, settings, resources, dofInputs))

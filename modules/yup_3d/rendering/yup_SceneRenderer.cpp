@@ -34,7 +34,7 @@ constexpr uint8_t debugViewShaderBundle[] = {
 // std140 mirror of DebugViewBlock in yup_DebugView.frag
 struct DebugViewBlock
 {
-    float options[4]; // x what to show: 0 black, else the RenderSettings::DebugView of the texture bound
+    float options[4]; // x what to show: 0 black, else the RenderSettings::DebugView of the texture bound; y the scale of a circle of confusion
 };
 
 /** The largest power of two within both @p requested and what @p device supports. */
@@ -276,8 +276,9 @@ struct SceneRenderer::Impl
 
     /** True when the frame draws the scene's @p fog: it is visible (FogApply::isVisible()), the tier
         can draw it (RenderCapabilities::Feature::worldFog) and it has not given up. The one predicate
-        deciding whether the frame pays for it: the raster tier routes the scene color through half
-        float and draws the depth and normal prepass only then.
+        deciding whether the frame pays for it, with a raster prepass that compiles
+        (prepareDepthNormalPrepass()): the raster tier routes the scene color through half float and
+        draws the depth and normal prepass only then.
     */
     bool willDrawWorldFog (const WorldFog& fog) const
     {
@@ -324,12 +325,28 @@ struct SceneRenderer::Impl
         return fogged;
     }
 
+    /** Raster: true when the depth and normal prepass compiles. It is created by the first frame
+        needing it, @p failForTesting making it fail to compile, and its compile result is kept: a
+        prepass that cannot compile is logged once, and takes the depth of field and the world fog
+        off the raster route, so their frames pay nothing for them.
+    */
+    bool prepareDepthNormalPrepass (bool failForTesting)
+    {
+        if (depthNormalPrepass == nullptr)
+        {
+            depthNormalPrepass = std::make_unique<DepthNormalPrepass> (device);
+            if (failForTesting)
+                depthNormalPrepass->failPipelinesForTesting();
+        }
+
+        return depthNormalPrepass->prepare().wasOk();
+    }
+
     /** Raster: draws the depth and normal prepass while needsDepthNormalPrepass(). It is created by
         the first frame needing it, and only releases its targets on the frames without it, so
-        turning its effects back on compiles nothing. A prepass that cannot compile is logged once
-        and leaves the frames without it. Returns false only when the prepass could not be recorded.
-        @p failForTesting makes a new prepass fail to compile; depthNormalPrepassTargetFailures is
-        handed to the prepass once it exists.
+        turning its effects back on compiles nothing. A prepass that cannot compile leaves the frames
+        without it (prepareDepthNormalPrepass()). Returns false only when the prepass could not be
+        recorded. depthNormalPrepassTargetFailures is handed to the prepass once it exists.
     */
     bool renderDepthNormalPrepass (GpuFrame& frame, const RenderSettings& settings, bool depthOfField, bool worldFog, int width, int height, bool failForTesting)
     {
@@ -343,21 +360,17 @@ struct SceneRenderer::Impl
             return true;
         }
 
-        if (depthNormalPrepass == nullptr)
-        {
-            depthNormalPrepass = std::make_unique<DepthNormalPrepass> (device);
-            if (failForTesting)
-                depthNormalPrepass->failPipelinesForTesting();
-        }
+        if (! prepareDepthNormalPrepass (failForTesting))
+            return true;
 
         if (depthNormalPrepassTargetFailures > 0)
             depthNormalPrepass->failTargetsForTesting (std::exchange (depthNormalPrepassTargetFailures, 0));
 
-        if (depthNormalPrepass->prepare().failed())
-            return true;
-
-        beginScope (frame, "depthNormalPrepass");
-        return depthNormalPrepass->render (frame, viewData, drawList, frameResources, width, height);
+        // Targets that cannot be created record nothing, so they open no scope
+        return depthNormalPrepass->render (frame, viewData, drawList, frameResources, width, height, [this, &frame]
+        {
+            beginScope (frame, "depthNormalPrepass");
+        });
     }
 
     /** Traces the ambient occlusion of @p depth and @p normalRoughness into lighting.ambientOcclusion
@@ -602,7 +615,7 @@ struct SceneRenderer::Impl
     }
 
     /** Full tier: draws RenderSettings::debugView into @p output in place of the final image, from
-        this frame's @p lighting and @p indirectDiffuse, or black when the frame has none of them,
+        this frame's @p lighting, @p indirectDiffuse and depth of field, or black when the frame has none of them,
         binding @p standIn instead. The pass is created by the first frame with a debug view, then
         kept; the frames without one release its targets. A pass that cannot compile or record is
         logged once and leaves the final image.
@@ -631,12 +644,15 @@ struct SceneRenderer::Impl
         if (! debugViewPass->isPrepared())
             return;
 
-        const auto source = settings.debugView == DebugView::ambientOcclusion ? lighting.ambientOcclusion
-                          : settings.debugView == DebugView::reflections      ? lighting.reflections
-                                                                              : indirectDiffuse;
+        const auto* depthOfField = postChain.getDepthOfField();
+        const auto source = settings.debugView == DebugView::ambientOcclusion  ? lighting.ambientOcclusion
+                          : settings.debugView == DebugView::reflections       ? lighting.reflections
+                          : settings.debugView == DebugView::circleOfConfusion ? (depthOfField != nullptr ? depthOfField->getCircleOfConfusionTexture() : nullptr)
+                                                                               : indirectDiffuse;
 
         DebugViewBlock block {};
         block.options[0] = source != nullptr ? static_cast<float> (settings.debugView) : 0.0f;
+        block.options[1] = depthOfField != nullptr && depthOfField->getMaxCircleOfConfusion() > 0.0f ? 1.0f / depthOfField->getMaxCircleOfConfusion() : 0.0f;
 
         beginScope (frame, "debugView");
         const auto drawn = debugViewPass->draw (frame, output, {}, [&] (GpuRenderPass& renderPass)
@@ -690,19 +706,29 @@ struct SceneRenderer::Impl
 
     /** True when the unjittered camera or the world matrix of a drawn item changed since the
         previous frame, after resolvePreviousTransforms(): the first frame, and a node that was not
-        drawn in the previous one, do not move.
+        drawn in the previous one, do not move. Floats compare as the restarting signature hashes
+        them (FrameSignature::getCanonicalBits()), so a non-finite matrix that stays the same, or a
+        0 turning into -0, is no motion either.
     */
     bool hasMotion() const
     {
+        const auto same = [] (const float* a, const float* b)
+        {
+            return std::equal (a, a + 16, b, [] (float x, float y)
+            {
+                return FrameSignature::getCanonicalBits (x) == FrameSignature::getCanonicalBits (y);
+            });
+        };
+
         const auto& block = viewData.getBlock();
-        if (! std::equal (std::begin (block.unjitteredViewProjection), std::end (block.unjitteredViewProjection), std::begin (block.previousViewProjection)))
+        if (! same (block.unjitteredViewProjection, block.previousViewProjection))
             return true;
 
         for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
         {
             for (const auto& item : items)
             {
-                if (item.node != nullptr && item.node->previousWorld != item.world)
+                if (item.node != nullptr && ! same (item.node->previousWorld.getData(), item.world.getData()))
                     return true;
             }
         }
@@ -1327,11 +1353,13 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
     // The full tier shades one sample per pixel into HDR targets, then runs the post chain. The
     // raster tier does the same with its samples only for effects needing HDR: bloom, the depth of
-    // field on the frames it blurs, and the scene's world fog
+    // field on the frames it blurs, and the scene's world fog. Raster depth of field and fog read
+    // the depth of the prepass, so they take the route only while it compiles
     const auto full = impl->capabilities->getTier() == RenderCapabilities::Tier::full;
-    const auto blurs = impl->postChain.willBlur (*impl->capabilities, settings, scene.getActiveCamera());
+    const auto prepassCompiles = [&] { return full || impl->prepareDepthNormalPrepass (failDepthNormalPrepass); };
+    const auto blurs = impl->postChain.willBlur (*impl->capabilities, settings, scene.getActiveCamera()) && prepassCompiles();
     const auto& worldFog = scene.getWorldFog();
-    const auto fogs = impl->willDrawWorldFog (worldFog);
+    const auto fogs = impl->willDrawWorldFog (worldFog) && prepassCompiles();
     const auto hdr = full || impl->capabilities->isEnabled (RenderCapabilities::Feature::bloom, settings) || blurs || fogs;
 
     if (settings.depthOfField && ! impl->capabilities->isAvailable (RenderCapabilities::Feature::depthOfField)
@@ -1615,7 +1643,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (hdr)
     {
         const PostChain::Inputs inputs { sceneColor, depth, targets.velocity, colorIsReversible, scene.getBackgroundColor(),
-                                         impl->getTemporalSampleIndex(), impl->changing, scene.getActiveCamera(), moving,
+                                         impl->getTemporalSampleIndex(), impl->changing, scene.getActiveCamera(), blurs, moving,
                                          impl->measuring ? std::function<void (const char*)> ([this, &frame] (const char* name) { impl->beginScope (frame, name); })
                                                          : nullptr };
 

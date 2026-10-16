@@ -40,14 +40,20 @@ public:
 
     void addFloat (float value) noexcept
     {
-        auto bits = std::bit_cast<uint32> (value);
+        addBytes (getCanonicalBits (value), 4);
+    }
+
+    /** The bits addFloat() hashes for @p value: every NaN as one quiet NaN, and -0 as 0. Comparing
+        them compares floats as the signature does.
+    */
+    static uint32 getCanonicalBits (float value) noexcept
+    {
+        const auto bits = std::bit_cast<uint32> (value);
 
         if ((bits & 0x7f800000u) == 0x7f800000u && (bits & 0x007fffffu) != 0)
-            bits = 0x7fc00000u;
-        else if (bits == 0x80000000u)
-            bits = 0;
+            return 0x7fc00000u;
 
-        addBytes (bits, 4);
+        return bits == 0x80000000u ? 0u : bits;
     }
 
     void addFloats (Span<const float> values) noexcept

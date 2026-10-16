@@ -843,15 +843,18 @@ scene->setExposure (1.2f);
 | `motionBlurShutter` | 0.5 | The fraction of the frame time the shutter stays open, from 0 to 1. 0 or less blurs nothing. |
 | `debugView` | `none` | Full tier: shows an intermediate image instead of the final one, see below. |
 
-**Debug view.** `debugView` shows what one screen-space effect computes, in
-place of the final image, to tune it:
+**Debug view.** `debugView` shows what one effect computes, in place of the
+final image, to tune it:
 
 - `ambientOcclusion`: the ambient occlusion as gray, white where nothing is
   occluded;
 - `reflections`: the screen-space reflections, exposed and weighted by how
   confident each one is;
 - `indirectDiffuse`: the light the screen-space diffuse GI gathers, exposed,
-  before the color of the surfaces is applied.
+  before the color of the surfaces is applied;
+- `circleOfConfusion`: how much the depth of field blurs each pixel, as a share
+  of `depthOfFieldMaxSize`: orange in front of the focus, blue behind it, black
+  in focus.
 
 The image is shown pixel for pixel, without tone mapping, bloom or background,
 so the half-resolution effects show their 2 x 2 blocks. It shows the effect of a
@@ -910,6 +913,15 @@ the full tier is validated on them. OpenGL and OpenGL ES never run the full
 tier. Mobile defaults to raster. Asking for `full` on a device that cannot run it
 falls back to raster.
 
+| Feature                           | Raster                                                                                     | Full                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------- |
+| [Depth of field](#depth-of-field) | Off by default, where the device has multisampled half-float targets and the depth and normal pass | Off by default |
+| [Motion blur](#motion-blur)       | No: the raster tier has no motion to read                                                  | Off by default               |
+| [Fog](#fog)                       | When the scene has it, where the device has multisampled half-float targets and the depth and normal pass | When the scene has it |
+
+Volumetric fog and fog volumes, subsurface scattering and refraction are not in
+this release, on either tier.
+
 ### Temporal anti-aliasing
 
 On the full tier a still image is not final after the first frame. Each frame is
@@ -964,15 +976,8 @@ works on both tiers:
 ### Depth of field
 
 **Depth of field** blurs what lies in front of or behind the distance the camera
-focuses at, like a photographic lens. Turn it on with `depthOfField`, then shape
+focuses at, like a photographic lens. Turn it on with `depthOfField`, and shape
 it with the fields of the active `CameraNode`:
-
-| Field            | Default | Unit                     | What it does                                                    |
-| ---------------- | ------- | ------------------------ | --------------------------------------------------------------- |
-| `fStop`          | 2.8     | f-number                 | The aperture: smaller blurs more. 0 or less turns the blur off. |
-| `focusDistance`  | 10      | world units, read as meters | The distance along the view that stays perfectly sharp.      |
-| `apertureBlades` | 0       | count                    | The shape of the out-of-focus highlights: round below 3, otherwise a polygon with that many sides. |
-| `sensorHeight`   | 0.024 (24 mm) | world units, read as meters (constant) | With `yFov`, it sets the focal length of the lens. |
 
 ```cpp
 auto* camera = scene->getActiveCamera();
@@ -984,6 +989,17 @@ settings.depthOfField = true;
 scene->setRenderSettings (settings);
 view.repaint();
 ```
+
+| Field                                 | Default       | Unit                  | What it does                                                    |
+| ------------------------------------- | ------------- | --------------------- | --------------------------------------------------------------- |
+| `RenderSettings::depthOfField`        | off           |                       | Draws the depth of field.                                       |
+| `RenderSettings::depthOfFieldMaxSize` | 32            | pixels of the image   | The largest blur, as a diameter, at most 64. 0 or less blurs nothing. |
+| `CameraNode::fStop`                   | 2.8           | f-number              | The aperture: smaller blurs more. 0 or less turns the blur off. |
+| `CameraNode::focusDistance`           | 10            | meters                | The distance along the view that stays perfectly sharp.         |
+| `CameraNode::apertureBlades`          | 0             | count                 | The shape of the out-of-focus highlights: round below 3, otherwise a polygon with that many sides. |
+| `CameraNode::sensorHeight`            | 0.024 (24 mm) | meters (constant)     | With `yFov`, it sets the focal length of the lens.              |
+
+World units are read as meters.
 
 - It works on both tiers. On the raster tier it needs multisampled half-float
   render targets at the current sample count, as bloom does, and the depth and
@@ -1006,8 +1022,8 @@ view.repaint();
 - It runs after temporal anti-aliasing and before bloom, so changing it or the
   camera's depth of field fields keeps the accumulation: repaint after such a
   change.
-- `depthOfFieldMaxSize` caps the blur, as a diameter in pixels of the image, at
-  most 64.
+- `RenderSettings::debugView` set to `circleOfConfusion` shows how much each
+  pixel blurs, see [Render settings](#render-settings).
 - The blur carries the coverage of the scene, so silhouettes over the background
   color fade into it. What the blur spreads is composited over the background
   color in light rather than in display values: a bright highlight blurred over
@@ -1046,6 +1062,11 @@ scene->setRenderSettings (settings);
 view.repaint();
 ```
 
+| Field                               | Default | Unit                    | What it does                                     |
+| ----------------------------------- | ------- | ----------------------- | ------------------------------------------------ |
+| `RenderSettings::motionBlur`        | off     |                         | Draws the motion blur.                           |
+| `RenderSettings::motionBlurShutter` | 0.5     | fraction of a frame     | How long the shutter stays open, from 0 to 1. 0 or less blurs nothing. |
+
 - It runs on the full tier only, which knows how each pixel moved. The raster
   tier ignores the setting, which is not an error, and
   `isAvailable (RenderCapabilities::Feature::motionBlur)` reports it.
@@ -1053,6 +1074,8 @@ view.repaint();
   nothing moved cost nothing either: still frames, the frames of a converged
   image and the first frame after the scene is shown draw no motion blur at
   all. A shutter of 0 or less blurs nothing.
+- It runs after temporal anti-aliasing and the depth of field, and before bloom,
+  so changing its settings keeps the accumulation: repaint after such a change.
 - Motion is measured against the previous frame, so the frames that start
   over do not blur: after a resize, a change of tier or `taaSamples`,
   `restartAccumulation()` (use it on a camera cut) or a failed frame.
@@ -1063,8 +1086,6 @@ view.repaint();
   shutter stays open, from 0 to 1: at 1 a smear spans the whole motion since the
   previous frame, centered on where the object is now. A smear spans at most 32
   pixels of the image, so very fast motion is shortened.
-- It runs after temporal anti-aliasing and the depth of field, and before bloom,
-  so changing its settings keeps the accumulation: repaint after such a change.
 - The smear carries the coverage of the scene, so a moving object over the
   background color smears into it, and what it spreads keeps its brightness
   there, as the depth of field's blur does. Still parts of a frame where
@@ -1077,7 +1098,7 @@ view.repaint();
   48 x 48 pixels around it, and smears that reach the 32 pixel cap tie: where
   two fast motions in different directions meet, one of them smears along the
   other's.
-- Cost, only on frames where something moves: four draws, all but the last
+- Cost: only on frames where something moves, four draws, all but the last
   at a quarter of the resolution or less, plus the same mask as the depth of
   field for tone mapping. Where everything around a pixel moves alike, as when
   the camera turns, the smear skips most of its work. On an Apple M2 Max, with
@@ -1090,7 +1111,8 @@ view.repaint();
 
 `Scene::setWorldFog()` fills the whole scene with an exponential height fog. It
 is part of the scene rather than of the render settings: a scene with fog asks
-for it.
+for it. It is analytic: volumetric fog, with fog volumes and light shafts, is not
+in this release.
 
 ```cpp
 yup::WorldFog fog;
@@ -1102,18 +1124,31 @@ scene->setWorldFog (fog);
 view.repaint();
 ```
 
-| Field           | Default | Unit          | What it does                                                    |
-| --------------- | ------- | ------------- | --------------------------------------------------------------- |
-| `enabled`       | false   |               | Draws the fog.                                                  |
-| `density`       | 0.02    | per meter     | How much light the fog takes per meter of distance, at `baseHeight`. 0 or less draws nothing. |
-| `heightFalloff` | 0       | per meter     | How fast the fog thins with height above `baseHeight`, and thickens below it: 0 is uniform, negative thickens upwards. |
-| `baseHeight`    | 0       | meters        | The height where the fog has `density`.                         |
-| `color`         | white   | linear RGB    | The share of the light the fog scatters back, per channel.     |
-| `anisotropy`    | 0       | -0.95 to 0.95 | Henyey-Greenstein g: positive scatters forward, so the fog glows looking towards the sun. |
+| Field                     | Default | Unit          | What it does                                                    |
+| ------------------------- | ------- | ------------- | --------------------------------------------------------------- |
+| `WorldFog::enabled`       | false   |               | Draws the fog.                                                  |
+| `WorldFog::density`       | 0.02    | per meter     | How much light the fog takes per meter of distance, at `baseHeight`. 0 or less draws nothing. |
+| `WorldFog::heightFalloff` | 0       | per meter     | How fast the fog thins with height above `baseHeight`, and thickens below it: 0 is uniform, negative thickens upwards. |
+| `WorldFog::baseHeight`    | 0       | meters        | The height where the fog has `density`.                         |
+| `WorldFog::color`         | white   | linear RGB    | The share of the light the fog scatters back, per channel.      |
+| `WorldFog::anisotropy`    | 0       | -0.95 to 0.95 | Henyey-Greenstein g: positive scatters forward, so the fog glows looking towards the sun. |
 
 World units are read as meters. A fog with any field that is not a finite
 number is not drawn.
 
+- It works on both tiers. On the raster tier it needs multisampled half-float
+  render targets at the current sample count, and the depth and normal pass of
+  ambient occlusion, as depth of field does. Frames with fog then render the
+  scene in half float and draw that pass, and the fog is the first post effect. Its depth comes from one
+  sample per pixel while the color is antialiased, so fogged silhouettes against
+  a far background can differ by about a pixel. Where the device lacks them,
+  the fog is not drawn, which `isAvailable (RenderCapabilities::Feature::worldFog)`
+  reports, and it is logged once in debug builds.
+- It is off by default and costs nothing while off, even with its other fields
+  set.
+- On the full tier the fog is drawn before temporal anti-aliasing, so changing
+  it restarts the accumulation. Screen-space reflections and GI read the
+  previous frames, fog included, so a reflected surface is fogged once more.
 - The fog dims each pixel by the transmittance from the camera to the first
   surface, and adds the light it scatters towards the camera over that
   distance. That light is the ambient color, the mean light of the environment
@@ -1139,19 +1174,6 @@ number is not drawn.
   already covers those pixels. A visible environment is unaffected.
 - Transparent surfaces take the fog of what lies behind them, since only opaque
   surfaces write the depth the fog reads.
-- On the full tier the fog is drawn before temporal anti-aliasing, so changing
-  it restarts the accumulation. Screen-space reflections and GI read the
-  previous frames, fog included, so a reflected surface is fogged once more.
-- On the raster tier it needs multisampled half-float render targets at the
-  current sample count, and the depth and normal pass of ambient occlusion, as
-  depth of field does. Frames with fog then render the scene in half float and
-  draw that pass, and the fog is the first post effect. Its depth comes from one
-  sample per pixel while the color is antialiased, so fogged silhouettes against
-  a far background can differ by about a pixel. Where the device lacks them,
-  the fog is not drawn, which `isAvailable (RenderCapabilities::Feature::worldFog)`
-  reports, and it is logged once in debug builds.
-- It is off by default and costs nothing while off, even with its other fields
-  set.
 - Cost: one full-screen draw. On an Apple M2 Max, in the Scene 3D light show
   with the camera orbiting, it takes about 0.04 ms of GPU time per frame at
   1280 x 800 and 0.15 ms at 2560 x 1600 on the full tier. On the raster tier

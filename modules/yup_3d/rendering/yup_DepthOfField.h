@@ -147,6 +147,11 @@ public:
     /** The r16float signed CoC of the last render(), in texels of its half size, or nullptr when it drew nothing. */
     const GpuTexture::Ptr& getCircleOfConfusionTexture() const noexcept { return circleOfConfusion; }
 
+    /** The largest CoC radius of the last render(), in texels of its half size: the clamp of
+        RenderSettings::depthOfFieldMaxSize. 0 when it drew nothing.
+    */
+    float getMaxCircleOfConfusion() const noexcept { return maxCircleOfConfusion; }
+
     /** True after two failed renders in a row: the frames no longer blur. */
     bool hasGivenUp() const noexcept { return givenUp; }
 
@@ -177,6 +182,7 @@ private:
     GpuTexture::Ptr output;
     GpuTexture::Ptr blurAmount;
     GpuTexture::Ptr circleOfConfusion;
+    float maxCircleOfConfusion = 0.0f;
     int consecutiveFailures = 0;
     bool givenUp = false;
     int failRenders = 0; // The renders still to fail, see failRendersForTesting()

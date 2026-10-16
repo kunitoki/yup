@@ -67,12 +67,12 @@ void main()
     }
 
 #ifdef YUP_3D_RADIANCE_COMPOSITE
-    // Frames blurred by the depth of field: their partial coverage is spread light, not the edge of a
-    // surface, so the premultiplied radiance is tone mapped and the background added over the rest
-    // (preflight R20). Equal to the blend below at full and at zero coverage
-    // The premultiplied radiance itself, so texels covered by less than the threshold above keep their light
-    // Only by the share the blur wrote: pixels it left sharp keep the blend below (preflight R21), and
-    // each pixel evaluates only the composites its share needs
+    // Frames blurred by the depth of field or motion blur: their partial coverage is spread light, not
+    // the edge of a surface, so the premultiplied radiance itself is tone mapped, keeping the light of
+    // texels covered by less than the 1e-4 threshold above, and the background added over the rest
+    // (preflight R20). It is equal to the blend below at full and at zero coverage, and weighed by the
+    // share the blur moved (u_blurAmount): pixels it left sharp keep the blend below (preflight R21,
+    // R22), and each pixel evaluates only the composites its share needs
     float blurred = texelFetch(sampler2D(u_blurAmount, pointClamp), pixel, 0).r;
     vec4 spread = vec4(0.0);
     if (blurred > 0.0)

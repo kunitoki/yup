@@ -103,7 +103,8 @@ Result DepthNormalPrepass::prepare()
     return *prepared;
 }
 
-bool DepthNormalPrepass::render (GpuFrame& frame, const ViewData& view, const SceneDrawList& drawList, FrameResources& resources, int width, int height)
+bool DepthNormalPrepass::render (GpuFrame& frame, const ViewData& view, const SceneDrawList& drawList, FrameResources& resources, int width, int height,
+                                 const std::function<void()>& beginScope)
 {
     normalRoughness = nullptr;
     depth = nullptr;
@@ -142,6 +143,9 @@ bool DepthNormalPrepass::render (GpuFrame& frame, const ViewData& view, const Sc
 
     if (surface == nullptr)
         return false;
+
+    if (beginScope != nullptr)
+        beginScope();
 
     auto pass = surface->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
     if (! pass.isValid())

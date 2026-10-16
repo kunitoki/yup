@@ -92,7 +92,6 @@ GpuTexture::Ptr MotionBlur::render (GpuFrame& frame, const ViewData& view, const
 {
     output = nullptr;
     blurAmount = nullptr;
-    neighborMax = nullptr;
 
     // A closed shutter or a missing input skips the frame without counting as a failure
     const auto* samplers = resources.getSamplers();
@@ -200,7 +199,6 @@ GpuTexture::Ptr MotionBlur::render (GpuFrame& frame, const ViewData& view, const
             return nullptr;
         }
 
-        neighborMax = neighbors;
         blurAmount = amount;
         return smeared;
     }();
@@ -236,7 +234,6 @@ void MotionBlur::releaseTargets() noexcept
     reconstruct.releaseTargets();
     output = nullptr;
     blurAmount = nullptr;
-    neighborMax = nullptr;
 }
 
 size_t MotionBlur::getNumCachedTargets() const noexcept

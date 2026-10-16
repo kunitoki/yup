@@ -156,6 +156,7 @@ GpuTexture::Ptr DepthOfField::render (GpuFrame& frame, const ViewData& view, con
     output = nullptr;
     blurAmount = nullptr;
     circleOfConfusion = nullptr;
+    maxCircleOfConfusion = 0.0f;
 
     // A missing input, like a raster prepass that could not be drawn, skips the frame without counting as a failure
     const auto* samplers = resources.getSamplers();
@@ -306,6 +307,7 @@ GpuTexture::Ptr DepthOfField::render (GpuFrame& frame, const ViewData& view, con
         }
 
         circleOfConfusion = coc;
+        maxCircleOfConfusion = maxRadius;
         blurAmount = amount;
         return blurred;
     }();
@@ -344,6 +346,7 @@ void DepthOfField::releaseTargets() noexcept
     output = nullptr;
     blurAmount = nullptr;
     circleOfConfusion = nullptr;
+    maxCircleOfConfusion = 0.0f;
 }
 
 size_t DepthOfField::getNumCachedTargets() const noexcept

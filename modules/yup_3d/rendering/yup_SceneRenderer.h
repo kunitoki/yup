@@ -60,9 +60,11 @@ namespace yup
     inline. The background color is display-referred on both tiers: it shows exactly as picked,
     never tone mapped. Silhouettes and transparent surfaces over the background blend with it after
     tone mapping on every path, so they look the same on both tiers and with or without bloom.
-    RenderSettings::depthOfField blurs what lies away from the focus of the active camera, on the
-    full tier after the temporal accumulation and before bloom; the frames it blurs composite over
-    the background color in radiance, so blurred highlights keep their brightness there.
+    RenderSettings::depthOfField blurs what lies away from the focus of the active camera, after
+    the temporal accumulation and before bloom, on both tiers: on the raster tier where the device
+    allows half-float targets and the depth and normal prepass (RenderCapabilities::Feature::depthOfField).
+    The frames it blurs composite over the background color in radiance, so blurred highlights keep
+    their brightness there.
     RenderSettings::motionBlur smears what moves on the full tier, after the depth of field, on the
     frames where the camera or an item moved, composited over the background color the same way.
     The scene's WorldFog (Scene::setWorldFog()) is applied from the camera to each opaque surface, or

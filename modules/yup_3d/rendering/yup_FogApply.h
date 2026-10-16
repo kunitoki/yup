@@ -26,7 +26,8 @@ namespace yup
 
 //==============================================================================
 /** Applies the scene's analytic WorldFog to the scene color, one FullscreenPass draw from the
-    camera to the depth of each pixel, before temporal anti-aliasing at the size of the depth.
+    camera to the depth of each pixel, before temporal anti-aliasing, at the size of the color
+    target, reading the depth by uv.
 
     Each pixel takes the transmittance T of the fog in front of it, the closed form of
     WorldFog::getOpticalDepth() mirrored in shaders/lib/fog.glsl, and the light S the fog scatters

@@ -72,9 +72,13 @@ public:
         Targets the device cannot create leave the frame without the pass: it is logged once, nothing
         is drawn and the getters return nullptr, which is not a failure.
 
+        @param beginScope  Called once the targets exist, right before the pass records, to open its
+                           GPU scope (see SceneRenderer::setFrameStatsEnabled()); may be empty.
+
         @returns False if the pass is not prepared or could not be recorded. The targets are then nullptr.
     */
-    bool render (GpuFrame& frame, const ViewData& view, const SceneDrawList& drawList, FrameResources& resources, int width, int height);
+    bool render (GpuFrame& frame, const ViewData& view, const SceneDrawList& drawList, FrameResources& resources, int width, int height,
+                 const std::function<void()>& beginScope = {});
 
     /** The rgba16float normal target of the last render, in the G-buffer RT1 encoding, or nullptr. */
     GpuTexture::Ptr getNormalRoughness() const noexcept { return normalRoughness; }

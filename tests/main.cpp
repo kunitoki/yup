@@ -482,7 +482,7 @@ private:
             }
             else if (result.skipped())
             {
-                skipReason = yup::String (result.message()).trim().toStdString();
+                skipReason = yup::String::fromUTF8 (result.message()).trim().toStdString();
             }
         }
 

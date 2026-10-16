@@ -562,6 +562,7 @@ private:
                 auto* framed = device != nullptr ? device : gltfRoot.get();
                 gltfRoot->setPosition (-framed->computeWorldBounds().getCenter());
 
+                focusEntity = framed;
                 deviceBounds = framed->computeWorldBounds();
                 radius = yup::jmax (0.001f, deviceBounds.getRadius());
 
@@ -863,6 +864,8 @@ private:
             {
                 if (hitsScreen (event.getPosition()))
                     zoomTo (true);
+                else
+                    focusAt (event.getPosition());
 
                 return;
             }
@@ -914,8 +917,13 @@ private:
             const auto wasClick = dragMode == DragMode::rotate && dragDistance < 4.0f;
             dragMode = DragMode::none;
 
-            if (wasClick && hitsScreen (event.getPosition()))
+            if (! wasClick)
+                return;
+
+            if (hitsScreen (event.getPosition()))
                 zoomTo (true);
+            else
+                focusAt (event.getPosition());
         }
 
         void mouseWheel (const yup::MouseEvent&, const yup::MouseWheelData& wheelData) override
@@ -1178,6 +1186,76 @@ private:
             orbitDistance = yup::jlimit (radius * 0.3f, radius * 10.0f, orbitDistance * std::exp (amount));
         }
 
+        /** With depth of field on, focuses the camera on what the click at @p position hits, if anything. */
+        void focusAt (yup::Point<float> position)
+        {
+            const auto* capabilities = getRenderer().getCapabilities();
+            if (capabilities == nullptr || ! capabilities->isEnabled (yup::RenderCapabilities::Feature::depthOfField, getScene()->getRenderSettings()))
+                return;
+
+            if (const auto distance = findFocusDistance (position))
+            {
+                cameraNode->focusDistance = *distance;
+                repaint();
+            }
+        }
+
+        /** The view depth of the nearest child of the device the camera ray through @p position hits,
+            or else of the device's own meshes (the bare panel), by a slab test of their world bounds.
+        */
+        std::optional<float> findFocusDistance (yup::Point<float> position) const
+        {
+            if (focusEntity == nullptr || getWidth() <= 0.0f || getHeight() <= 0.0f)
+                return std::nullopt;
+
+            // One unit of t is one unit of view depth (along -Z), the camera being unscaled: the t of a hit is its focus distance
+            const auto toArray = [] (const yup::Vector3<float>& v) { return std::array { v.getX(), v.getY(), v.getZ() }; };
+            const auto tanHalfFov = std::tan (cameraNode->yFov * 0.5f);
+            const auto world = cameraEntity->getWorldMatrix();
+            const auto origin = toArray (world.transformPoint ({}));
+            const auto direction = toArray (world.transformVector ({ (2.0f * position.getX() / getWidth() - 1.0f) * tanHalfFov * getAspectRatio(),
+                                                                     (1.0f - 2.0f * position.getY() / getHeight()) * tanHalfFov,
+                                                                     -1.0f }));
+
+            // Where the ray enters @p box past the near plane; a box it starts inside is a miss
+            const auto hit = [&] (const yup::BoundingBox& box) -> std::optional<float>
+            {
+                if (box.isEmpty())
+                    return std::nullopt;
+
+                const auto low = toArray (box.getMin()), high = toArray (box.getMax());
+                auto enter = std::numeric_limits<float>::lowest(), leave = std::numeric_limits<float>::max();
+
+                for (size_t axis = 0; axis < 3; ++axis)
+                {
+                    const auto t0 = (low[axis] - origin[axis]) / direction[axis], t1 = (high[axis] - origin[axis]) / direction[axis];
+                    enter = yup::jmax (enter, yup::jmin (t0, t1));
+                    leave = yup::jmin (leave, yup::jmax (t0, t1));
+                }
+
+                return enter >= cameraNode->zNear && enter <= leave ? std::optional (enter) : std::nullopt;
+            };
+
+            std::optional<float> nearest;
+            for (const auto& child : focusEntity->getChildren())
+                if (const auto t = hit (child->computeWorldBounds()); t && (! nearest || *t < *nearest))
+                    nearest = t;
+
+            // The body only when no control was hit: its box encloses them all, so it would always win
+            if (nearest || ! focusEntity->isVisible())
+                return nearest;
+
+            yup::BoundingBox body;
+            const auto deviceWorld = focusEntity->getWorldMatrix();
+            focusEntity->forEachNode<yup::MeshNode> ([&] (yup::MeshNode& node, int)
+            {
+                if (node.mesh != nullptr)
+                    body.expand (node.mesh->getBounds().transformedBy (deviceWorld));
+            });
+
+            return hit (body);
+        }
+
         bool hitsScreen (yup::Point<float> position) const
         {
             if (screenEntity == nullptr)
@@ -1319,6 +1397,7 @@ private:
         std::vector<yup::Material::Ptr> sheenMaterials;
 
         yup::EntityNode* screenEntity = nullptr;
+        yup::EntityNode* focusEntity = nullptr; // The device, whose children, or else its body, a click focuses on
         yup::Vector3<float> screenCenter;
         yup::Vector3<float> screenUp;
         yup::Vector3<float> screenRight;
@@ -1541,6 +1620,7 @@ private:
             debugViewCombo.addItem ("Ambient occlusion", 2);
             debugViewCombo.addItem ("Reflections", 3);
             debugViewCombo.addItem ("Indirect diffuse (SSGI)", 4);
+            debugViewCombo.addItem ("Circle of confusion", 5);
             debugViewCombo.setSelectedId (static_cast<int> (settings.debugView) + 1, yup::dontSendNotification);
             debugViewCombo.onSelectedItemChanged = [this]
             {
@@ -1577,6 +1657,17 @@ private:
 
             setupCameraSlider (fStopLabel, "f-stop", fStopSlider, 0.7, 16.0, 1, &yup::CameraNode::fStop);
             setupCameraSlider (focusDistanceLabel, "Focus distance", focusDistanceSlider, 0.1, 10.0, 2, &yup::CameraNode::focusDistance);
+
+            // The ids are the blade counts plus one: round is 0 blades
+            bladesLabel.setText ("Blades", yup::dontSendNotification);
+            for (const auto blades : { 0, 5, 6, 8 })
+                bladesCombo.addItem (blades == 0 ? yup::String ("Round") : yup::String (blades), blades + 1);
+            bladesCombo.setSelectedId (view.getCamera().apertureBlades + 1, yup::dontSendNotification);
+            bladesCombo.onSelectedItemChanged = [this]
+            {
+                view.getCamera().apertureBlades = bladesCombo.getSelectedId() - 1;
+                view.repaint();
+            };
 
             // Motion blur applies after the accumulation too, and only to frames where something moved
             motionBlurToggle.setButtonText ("Motion blur");
@@ -1674,6 +1765,7 @@ private:
                                                   { &aoDistanceLabel, &aoDistanceSlider, &aoDistanceValue },
                                                   { &fStopLabel, &fStopSlider, &fStopValue },
                                                   { &focusDistanceLabel, &focusDistanceSlider, &focusDistanceValue },
+                                                  { &bladesLabel, &bladesCombo, nullptr },
                                                   { &shutterLabel, &shutterSlider, &shutterValue } })
                 effectsPage.addValue (*label, *control, value);
 
@@ -1739,6 +1831,12 @@ private:
             const auto canReflections = isFull && taa;
             const auto canGI = canReflections && ambientOcclusion;
 
+            // A click on the view focuses the camera: the slider follows, within its range
+            const auto focusRange = focusDistanceSlider.getRange();
+            const auto focusDistance = yup::jlimit (focusRange.start, focusRange.end, static_cast<double> (view.getCamera().focusDistance));
+            if (static_cast<float> (focusDistanceSlider.getValue()) != static_cast<float> (focusDistance))
+                focusDistanceSlider.setValue (focusDistance, yup::dontSendNotification);
+
             for (auto [slider, value] : { std::pair<yup::Slider*, yup::Label*> { &taaSlider, &taaValue }, { &exposureSlider, &exposureValue }, { &bloomThresholdSlider, &bloomThresholdValue },
                                           { &bloomIntensitySlider, &bloomIntensityValue }, { &bloomRadiusSlider, &bloomRadiusValue }, { &keyLightSizeSlider, &keyLightSizeValue },
                                           { &aoDistanceSlider, &aoDistanceValue }, { &fStopSlider, &fStopValue }, { &focusDistanceSlider, &focusDistanceValue },
@@ -1755,7 +1853,7 @@ private:
             for (auto* control : std::initializer_list<yup::Component*> { &aoDistanceLabel, &aoDistanceSlider, &aoDistanceValue })
                 setAvailable (*control, canAmbientOcclusion);
 
-            for (auto* control : std::initializer_list<yup::Component*> { &fStopLabel, &fStopSlider, &fStopValue, &focusDistanceLabel, &focusDistanceSlider, &focusDistanceValue })
+            for (auto* control : std::initializer_list<yup::Component*> { &fStopLabel, &fStopSlider, &fStopValue, &focusDistanceLabel, &focusDistanceSlider, &focusDistanceValue, &bladesLabel, &bladesCombo })
                 setAvailable (*control, canDepthOfField);
 
             for (auto* control : std::initializer_list<yup::Component*> { &shutterLabel, &shutterSlider, &shutterValue })
@@ -1775,7 +1873,8 @@ private:
             refreshToggle (screenSpaceGIToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::screenSpaceGI, settings), canGI);
             refreshToggle (depthOfFieldToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::depthOfField, settings), canDepthOfField);
             refreshToggle (motionBlurToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::motionBlur, settings), canMotionBlur);
-            refreshToggle (fogToggle, view.getScene()->getWorldFog().enabled && canFog, canFog);
+            const auto& fog = view.getScene()->getWorldFog();
+            refreshToggle (fogToggle, fog.enabled && fog.density > 0.0f && canFog, canFog);
 
             // One line says why the dimmed controls are off, so no label changes its text or size
             // Raster bloom, DoF and fog need multisampled half floats ("f16"), raster AO, DoF and fog the
@@ -2065,6 +2164,8 @@ private:
         yup::Slider fStopSlider { yup::Slider::LinearHorizontal, "fStopSlider" };
         yup::Label focusDistanceLabel { "focusDistanceLabel" };
         yup::Slider focusDistanceSlider { yup::Slider::LinearHorizontal, "focusDistanceSlider" };
+        yup::Label bladesLabel { "bladesLabel" };
+        yup::ComboBox bladesCombo { "bladesCombo" };
         yup::ToggleButton motionBlurToggle { "motionBlurToggle" };
         yup::Label shutterLabel { "shutterLabel" };
         yup::Slider shutterSlider { yup::Slider::LinearHorizontal, "shutterSlider" };

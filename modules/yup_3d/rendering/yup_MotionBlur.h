@@ -110,12 +110,6 @@ public:
     */
     const GpuTexture::Ptr& getBlurAmount() const noexcept { return blurAmount; }
 
-    /** The rgba16float tiles of the last render(), or nullptr when it drew nothing: the longest
-        motion of the tiles around each tile in xy, in pixels of the color, and the length of the
-        shortest in z.
-    */
-    const GpuTexture::Ptr& getNeighborMaxTexture() const noexcept { return neighborMax; }
-
     /** True after two failed renders in a row: the frames no longer blur. */
     bool hasGivenUp() const noexcept { return givenUp; }
 
@@ -142,7 +136,6 @@ private:
     FullscreenPass reconstruct;
     GpuTexture::Ptr output;
     GpuTexture::Ptr blurAmount;
-    GpuTexture::Ptr neighborMax;
     int consecutiveFailures = 0;
     bool givenUp = false;
     int failRenders = 0; // The renders still to fail, see failRendersForTesting()

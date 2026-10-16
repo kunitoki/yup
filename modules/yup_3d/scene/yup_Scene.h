@@ -166,7 +166,14 @@ public:
 
     /** Changes the height fog filling the scene.
 
-        @param newFog The fog, which renders only when WorldFog::enabled is true.
+        The fog renders only when WorldFog::enabled is true, its density is positive and every field
+        is finite. The full tier draws it, and the raster tier where the device allows it
+        (RenderCapabilities::Feature::worldFog); elsewhere the frames render without it. A change
+        of the fog that is drawn restarts the full tier's temporal accumulation.
+
+        @param newFog The fog.
+
+        @see WorldFog, RenderCapabilities::Feature::worldFog
     */
     void setWorldFog (const WorldFog& newFog) noexcept { worldFog = newFog; }
 

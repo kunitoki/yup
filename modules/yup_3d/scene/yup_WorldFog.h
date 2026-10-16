@@ -33,9 +33,9 @@ namespace yup
     heightFalloff), the extinction stops growing at density * exp (40), so it stays finite.
 
     The fog is applied over the rendered scene by a pass of its own, from the camera to the first
-    surface or to the background. It is lit by the ambient light (or the environment, when the scene
-    has one) and by the sun, as single scattering with no shadowing: light reaches the fog everywhere,
-    even behind objects that would shadow it.
+    surface or to the background. It is lit by the ambient light plus the environment's mean light,
+    when the scene has one, and by the sun, as single scattering with no shadowing: light reaches the
+    fog everywhere, even behind objects that would shadow it.
 
     @see Scene::setWorldFog
 */

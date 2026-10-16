@@ -49,6 +49,7 @@ public:
         int temporalSampleIndex = 0;    ///< Frames accumulated in the TAA history, see TemporalAA::render().
         bool temporalChanging = false;  ///< True while the scene changes, see TemporalAA::getBlendWeight().
         const CameraNode* camera = nullptr; ///< The active camera, for the depth of field; nullptr has none.
+        bool blurring = false;          ///< True when the depth of field blurs this frame: willBlur(), and on raster a depth and normal prepass that compiles.
         bool moving = false;            ///< True when the camera or a drawn item moved since the previous frame, whose history carries on, so the motion blur has something to smear.
         std::function<void (const char*)> beginScope; ///< Called with the name of each effect right before it records, to open its GPU scope (see SceneRenderer::setFrameStatsEnabled()); may be empty.
     };
@@ -71,19 +72,19 @@ public:
                  const RenderSettings& settings, const ViewData& view, FrameResources& resources,
                  const Inputs& inputs, const GpuTexture::Ptr& output);
 
-    /** Releases the render targets every effect keeps between frames, for frames without the chain. */
+    /** Releases the render targets every effect keeps between frames, and the resolved color, for frames without the chain. */
     void releaseTargets() noexcept;
 
     /** The HDR color the last render() passed to the effects after temporal anti-aliasing: the
         resolved color when TAA ran, the input color otherwise, before the depth of field and bloom.
-        Valid until the next render().
+        Valid until the next render() or releaseTargets().
     */
     const GpuTexture::Ptr& getResolvedColor() const noexcept { return resolvedColor; }
 
-    /** True when the depth of field will blur the next render(): it is enabled, @p camera can blur
-        (DepthOfField::canBlur()) and it has not given up. The one predicate deciding whether the
-        frame pays for it: the raster tier routes the scene color through half float and draws the
-        depth and normal prepass only then.
+    /** True when the depth of field can blur the next render(): it is enabled, @p camera can blur
+        (DepthOfField::canBlur()) and it has not given up. The caller adds its own terms, like the
+        raster prepass compiling, and passes the decision in Inputs::blurring: the raster tier routes
+        the scene color through half float and draws the depth and normal prepass only then.
     */
     bool willBlur (const RenderCapabilities& caps, const RenderSettings& settings, const CameraNode* camera) const noexcept;
 
