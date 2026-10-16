@@ -23,7 +23,24 @@
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 
-#include "shaders/ShaderPresets.h"
+//==============================================================================
+/** A Shadertoy-style fragment shader shown in the Shaders demo list, read from data/shaders/live. */
+struct ShaderPreset
+{
+    const char* name;
+    const char* fragment;
+};
+
+inline constexpr ShaderPreset shaderPresets[] = {
+    { "Default", "data/shaders/live/default.shader" },
+    { "Creation", "data/shaders/live/creation.shader" },
+    { "Plasma", "data/shaders/live/plasma.shader" },
+    { "Raymarched Spheres", "data/shaders/live/spheres.shader" },
+    { "Mouse Ripples", "data/shaders/live/ripples.shader" },
+    { "Noise Warp", "data/shaders/live/noisewarp.shader" },
+    { "Art", "data/shaders/live/art.shader" },
+    { "Curl Bands", "data/shaders/live/curlbands.shader" },
+};
 
 //==============================================================================
 /**
@@ -404,9 +421,17 @@ void main()
         if (! yup::isPositiveAndBelow (row, (int) std::size (shaderPresets)))
             return;
 
-        fragmentDocument.setText (shaderPresets[row].fragment);
+        const auto file = getAssetPath (shaderPresets[row].fragment);
+        if (! file.existsAsFile())
+        {
+            setStatus ("Missing preset " + file.getFullPathName(), yup::Colors::tomato);
+            return;
+        }
+
+        fragmentDocument.setText (file.loadFileAsString());
         vertexDocument.setText (defaultVertexSource);
         showStage (false);
+        resetEditor();
 
         rewind();
         requestCompile();
@@ -426,6 +451,15 @@ void main()
             for (const int line : errorLines)
                 codeEditor.setErrorLine (line, true);
         }
+    }
+
+    // setDocument() only resets the editor for a different document, not for new text in the shown one
+    void resetEditor()
+    {
+        errorLines.clear();
+        codeEditor.clearErrorLines();
+        codeEditor.setCaretPosition (0); // also collapses the selection
+        codeEditor.setScrollOffset ({});
     }
 
     void setPresetsVisible (bool shouldBeVisible)
@@ -600,6 +634,7 @@ void main()
             vertexDocument.setText (*vertexCode);
             fragmentDocument.setText (*fragmentCode);
             showStage (false);
+            resetEditor();
 
             rewind();
             requestCompile();
