@@ -265,13 +265,63 @@ struct SceneRenderer::Impl
     }
 
     /** Returns true on the raster tier when an effect reading the depth and normal prepass is
-        enabled: ambient occlusion, or the depth of field when @p depthOfField (PostChain::willBlur()).
-        The full tier reads its G-buffer instead.
+        enabled: ambient occlusion, the depth of field when @p depthOfField (PostChain::willBlur()),
+        or the world fog when @p worldFog (willDrawWorldFog()). The full tier reads its G-buffer instead.
     */
-    bool needsDepthNormalPrepass (const RenderSettings& settings, bool depthOfField) const
+    bool needsDepthNormalPrepass (const RenderSettings& settings, bool depthOfField, bool worldFog) const
     {
         return capabilities->getTier() == RenderCapabilities::Tier::raster
-            && (capabilities->isEnabled (RenderCapabilities::Feature::ambientOcclusion, settings) || depthOfField);
+            && (capabilities->isEnabled (RenderCapabilities::Feature::ambientOcclusion, settings) || depthOfField || worldFog);
+    }
+
+    /** True when the frame draws the scene's @p fog: it is visible (FogApply::isVisible()), the tier
+        can draw it (RenderCapabilities::Feature::worldFog) and it has not given up. The one predicate
+        deciding whether the frame pays for it: the raster tier routes the scene color through half
+        float and draws the depth and normal prepass only then.
+    */
+    bool willDrawWorldFog (const WorldFog& fog) const
+    {
+        return FogApply::isVisible (fog) && capabilities->isAvailable (RenderCapabilities::Feature::worldFog)
+            && (fogApply == nullptr || ! fogApply->hasGivenUp());
+    }
+
+    /** Applies the scene's @p fog to @p inputs.color while @p drawn (willDrawWorldFog()): on full in
+        place, after the forward pass and before TAA; on raster into a new target, the first post
+        pass. The pass is created by the first frame drawing the fog, then kept; frames without it
+        release its targets only. A failure, or a missing input (no prepass depth), leaves the frame
+        without the fog. Returns the fogged color, or nullptr when the frame has none.
+    */
+    GpuTexture::Ptr renderWorldFog (GpuFrame& frame, const WorldFog& fog, bool drawn, const LightingInputs& lighting, const FogApply::Inputs& inputs)
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (fog);
+
+        if (! drawn)
+        {
+            if (fogApply != nullptr)
+                fogApply->releaseTargets();
+
+            return nullptr;
+        }
+
+        if (fogApply == nullptr)
+            fogApply = std::make_unique<FogApply> (device);
+
+        if (worldFogFailures > 0)
+            fogApply->failRendersForTesting (std::exchange (worldFogFailures, 0));
+
+        // A frame missing an input records nothing, so it opens no scope
+        if (inputs.color != nullptr && inputs.depth != nullptr)
+            beginScope (frame, "fog");
+
+        auto fogged = fogApply->render (frame, viewData, fog, lighting, drawList.getLights(), frameResources, inputs);
+        if (fogged == nullptr)
+        {
+            fogApply->releaseTargets();
+            return nullptr;
+        }
+
+        fogApply->trimUnusedTargets();
+        return fogged;
     }
 
     /** Raster: draws the depth and normal prepass while needsDepthNormalPrepass(). It is created by
@@ -281,11 +331,11 @@ struct SceneRenderer::Impl
         @p failForTesting makes a new prepass fail to compile; depthNormalPrepassTargetFailures is
         handed to the prepass once it exists.
     */
-    bool renderDepthNormalPrepass (GpuFrame& frame, const RenderSettings& settings, bool depthOfField, int width, int height, bool failForTesting)
+    bool renderDepthNormalPrepass (GpuFrame& frame, const RenderSettings& settings, bool depthOfField, bool worldFog, int width, int height, bool failForTesting)
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (depthNormalPrepass);
 
-        if (! needsDepthNormalPrepass (settings, depthOfField))
+        if (! needsDepthNormalPrepass (settings, depthOfField, worldFog))
         {
             if (depthNormalPrepass != nullptr)
                 depthNormalPrepass->releaseTargets();
@@ -619,6 +669,9 @@ struct SceneRenderer::Impl
         if (ambientOcclusionPass != nullptr)
             ambientOcclusionPass->releaseTargets();
 
+        if (fogApply != nullptr)
+            fogApply->releaseTargets();
+
         releaseReflectionTargets();
     }
 
@@ -746,6 +799,20 @@ struct SceneRenderer::Impl
         // Giving up on them after failures changes the image as much as turning them off
         signature.addBits (isTracingReflections (settings) ? 1u : 0u);
         signature.addBits (isGatheringIndirectDiffuse (settings) ? 1u : 0u);
+
+        // The world fog is applied before TAA: every field WorldFog::operator== compares, while it is drawn
+        const auto& fog = scene.getWorldFog();
+        const auto fogged = willDrawWorldFog (fog);
+        signature.addBits (fogged ? 1u : 0u);
+
+        if (fogged)
+        {
+            signature.addFloats (fog.color);
+            signature.addFloat (fog.density);
+            signature.addFloat (fog.heightFalloff);
+            signature.addFloat (fog.baseHeight);
+            signature.addFloat (fog.anisotropy);
+        }
 
         // Each item's transform is hashed with what it draws, so swapping transforms between items still counts
         const auto addItem = [] (FrameSignature& itemSignature, const SceneDrawList::DrawItem& item)
@@ -908,7 +975,7 @@ struct SceneRenderer::Impl
     std::vector<uint64> shadowCasterSignatures; // One per opaque item of drawList, see getShadowSignature()
     LightClusters lightClusters;
     GBufferPass gbufferPass;
-    std::unique_ptr<DepthNormalPrepass> depthNormalPrepass; // Created by the first raster frame with ambient occlusion or depth of field, see renderDepthNormalPrepass()
+    std::unique_ptr<DepthNormalPrepass> depthNormalPrepass; // Created by the first raster frame with ambient occlusion, depth of field or world fog, see renderDepthNormalPrepass()
     std::unique_ptr<AmbientOcclusionPass> ambientOcclusionPass; // Created by the first frame with ambient occlusion, see renderAmbientOcclusion()
     std::unique_ptr<HiZPyramid> hiZPyramid;         // Created by the first frame tracing screen-space reflections, see renderScreenSpaceReflections()
     std::unique_ptr<ReflectionPass> reflectionPass; // Created with hiZPyramid
@@ -916,9 +983,12 @@ struct SceneRenderer::Impl
     LightingPass lightingPass;
     ForwardPass forwardPass;
     PostChain postChain;
+    std::unique_ptr<FogApply> fogApply;            // Created by the first frame drawing the scene's fog, see renderWorldFog()
     std::unique_ptr<FullscreenPass> debugViewPass; // Created by the first full frame with a debug view, see renderDebugView(), for the format of colorTarget, which never changes
     bool debugViewFailed = false;                  // A debug view draw failed, logged once
     bool depthOfFieldUnavailableLogged = false;    // Depth of field was asked for where the tier cannot run it, logged once
+    bool worldFogUnavailableLogged = false;        // A scene's world fog was asked for where the tier cannot draw it, logged once
+    int worldFogFailures = 0;                      // Handed to the fog by the next frame drawing it, see SceneRenderer::failWorldFogForTesting()
     int depthNormalPrepassTargetFailures = 0;      // Handed to the prepass by the next frame drawing it, see SceneRenderer::failDepthNormalPrepassTargetsForTesting()
     GpuTarget::Ptr colorTarget;
     GpuTexture::Ptr depthTexture;
@@ -1167,6 +1237,11 @@ const MotionBlur* SceneRenderer::getMotionBlur() const noexcept
     return impl != nullptr ? impl->postChain.getMotionBlur() : nullptr;
 }
 
+const FogApply* SceneRenderer::getFogApply() const noexcept
+{
+    return impl != nullptr ? impl->fogApply.get() : nullptr;
+}
+
 const FullscreenPass* SceneRenderer::getDebugViewPass() const noexcept
 {
     return impl != nullptr ? impl->debugViewPass.get() : nullptr;
@@ -1251,15 +1326,21 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->capabilities.emplace (deviceFacts, settings, samples);
 
     // The full tier shades one sample per pixel into HDR targets, then runs the post chain. The
-    // raster tier does the same with its samples only for effects needing HDR: bloom, and the depth
-    // of field on the frames it blurs
+    // raster tier does the same with its samples only for effects needing HDR: bloom, the depth of
+    // field on the frames it blurs, and the scene's world fog
     const auto full = impl->capabilities->getTier() == RenderCapabilities::Tier::full;
     const auto blurs = impl->postChain.willBlur (*impl->capabilities, settings, scene.getActiveCamera());
-    const auto hdr = full || impl->capabilities->isEnabled (RenderCapabilities::Feature::bloom, settings) || blurs;
+    const auto& worldFog = scene.getWorldFog();
+    const auto fogs = impl->willDrawWorldFog (worldFog);
+    const auto hdr = full || impl->capabilities->isEnabled (RenderCapabilities::Feature::bloom, settings) || blurs || fogs;
 
     if (settings.depthOfField && ! impl->capabilities->isAvailable (RenderCapabilities::Feature::depthOfField)
         && ! std::exchange (impl->depthOfFieldUnavailableLogged, true))
         YUP_DBG ("SceneRenderer: raster depth of field needs multisampled half-float targets and the depth and normal prepass, the frames render without it");
+
+    if (FogApply::isVisible (worldFog) && ! impl->capabilities->isAvailable (RenderCapabilities::Feature::worldFog)
+        && ! std::exchange (impl->worldFogUnavailableLogged, true))
+        YUP_DBG ("SceneRenderer: raster world fog needs multisampled half-float targets and the depth and normal prepass, the frames render without it");
 
     const auto forwardSamples = full ? 1u : samples;
     const auto temporalAntiAliasing = impl->capabilities->isEnabled (RenderCapabilities::Feature::temporalAntiAliasing, settings);
@@ -1480,7 +1561,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (depthNormalPrepassTargetFailures > 0)
         impl->depthNormalPrepassTargetFailures = std::exchange (depthNormalPrepassTargetFailures, 0);
 
-    if (! impl->renderDepthNormalPrepass (frame, settings, blurs, widthPx, heightPx, failDepthNormalPrepass))
+    if (! impl->renderDepthNormalPrepass (frame, settings, blurs, fogs, widthPx, heightPx, failDepthNormalPrepass))
         return failFrame ("Unable to render the depth and normal prepass");
 
     if (! full)
@@ -1515,13 +1596,25 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (! hdr)
         impl->postChain.releaseTargets();
 
+    // Raster: the resolved color, reversibly tone mapped, the single sampled depth of the prepass
+    // when it ran, and no motion for the post effects
+    auto sceneColor = targets.resolve != nullptr ? targets.resolve : targets.color;
+    auto colorIsReversible = ! full;
+    const auto depth = full ? targets.depth : (impl->depthNormalPrepass != nullptr ? impl->depthNormalPrepass->getDepth() : nullptr);
+
+    if (worldFogFailures > 0)
+        impl->worldFogFailures = std::exchange (worldFogFailures, 0);
+
+    // The world fog, before TAA: in place on full, the first post pass on raster, which writes linear color
+    if (auto fogged = impl->renderWorldFog (frame, worldFog, fogs, lighting, { sceneColor, colorIsReversible, depth }))
+    {
+        sceneColor = std::move (fogged);
+        colorIsReversible = false;
+    }
+
     if (hdr)
     {
-        // Raster: the resolved color, reversibly tone mapped, the single sampled depth of the prepass
-        // when it ran, and no motion for the post effects
-        const auto sceneColor = targets.resolve != nullptr ? targets.resolve : targets.color;
-        const auto depth = full ? targets.depth : (impl->depthNormalPrepass != nullptr ? impl->depthNormalPrepass->getDepth() : nullptr);
-        const PostChain::Inputs inputs { sceneColor, depth, targets.velocity, ! full, scene.getBackgroundColor(),
+        const PostChain::Inputs inputs { sceneColor, depth, targets.velocity, colorIsReversible, scene.getBackgroundColor(),
                                          impl->getTemporalSampleIndex(), impl->changing, scene.getActiveCamera(), moving,
                                          impl->measuring ? std::function<void (const char*)> ([this, &frame] (const char* name) { impl->beginScope (frame, name); })
                                                          : nullptr };

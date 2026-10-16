@@ -81,6 +81,18 @@ float cylinder(float distance, float radius)
 // The reconstruction filter of McGuire, Hennessy, Bukowski and Osman 2012, "A Reconstruction
 // Filter for Plausible Motion Blur" (I3D): taps along the longest neighboring motion, jittered by
 // interleaved gradient noise of the pixel position only, so frames stay deterministic
+// The share of the coverage the smear moved, with the depth of field's own share of the center
+// (preflight R22, R24), measured as the depth of field does: the change of coverage relative to the
+// larger coverage, in full from a tenth. A still pixel, or a uniform partial coverage the smear
+// leaves as it was (fog over the background color), keeps the depth of field's share. Pixels without
+// coverage count as blurred
+float motionBlurAmount(float sharp, float smeared, float spread)
+{
+    float largest = max(smeared, sharp);
+    float moved = largest > 1.0e-4 ? min(abs(smeared - sharp) / (0.1 * largest), 1.0) : 1.0;
+    return 1.0 - (1.0 - moved) * (1.0 - spread);
+}
+
 void main()
 {
     ivec2 colorSize = textureSize(sampler2D(u_color, pointClamp), 0);
@@ -125,7 +137,7 @@ void main()
         }
 
         fragColor = uniformSum / taps;
-        blurAmount = fragColor.a > 1.0e-4 ? clamp(1.0 - center.a * (1.0 - centerSpread) / (taps * fragColor.a), 0.0, 1.0) : 1.0;
+        blurAmount = motionBlurAmount(center.a, fragColor.a, centerSpread);
         return;
     }
 
@@ -163,6 +175,5 @@ void main()
 
     fragColor = sum / weight;
 
-    float sharpCoverage = center.a * (1.0 - centerSpread) / (radiusX * weight);
-    blurAmount = fragColor.a > 1.0e-4 ? clamp(1.0 - sharpCoverage / fragColor.a, 0.0, 1.0) : 1.0;
+    blurAmount = motionBlurAmount(center.a, fragColor.a, centerSpread);
 }

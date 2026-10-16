@@ -924,10 +924,10 @@ shadows, at the cost of more frames before the image is final.
   true on the raster tier.
 - Most changes keep the history and only restart the convergence, so animated
   scenes stay smooth: moving the camera or objects, changing the content of a
-  `Texture`, a material, a light, the ambient light, the environment or the
-  exposure. Once the scene is still again, the history counts as a single
-  frame among the `taaSamples` that follow, so edges keep only a faint trace of
-  the image before the change. After a large change, such as a cut to another
+  `Texture`, a material, a light, the ambient light, the environment, the world
+  fog or the exposure. Once the scene is still again, the history counts as a
+  single frame among the `taaSamples` that follow, so edges keep only a faint
+  trace of the image before the change. After a large change, such as a cut to another
   shot, call `restartAccumulation()`.
 - Changing the size of the view, the tier or `taaSamples` discards the history,
   and the image starts over.
@@ -1015,9 +1015,13 @@ view.repaint();
   environment, and the edges of blurred objects over the background look as
   they do over a dark environment. Pixels the blur leaves sharp, and frames
   without depth of field, keep the usual blend, where antialiased edges over
-  the background match the raster tier. Over a transparent background color,
-  blurred frames output premultiplied light, which compositors adding it over
-  what lies behind show correctly.
+  the background match the raster tier. So do partly covered areas the blur
+  leaves as they were, such as fog over the background color; highlights
+  blurred over such a fogged background color therefore look dimmer than over
+  a clear one, about half as bright at a fog transmittance of 0.8, while a
+  visible environment is unaffected. Over a
+  transparent background color, blurred frames output premultiplied light,
+  which compositors adding it over what lies behind show correctly.
 - Cost: six draws, all but the last at half resolution or less, plus a small
   per-pixel mask that tone mapping reads to tell blurred pixels from sharp
   ones. On an Apple M2 Max it adds about 0.2 to 0.3 ms per frame at 1280 x 800
@@ -1064,7 +1068,8 @@ view.repaint();
 - The smear carries the coverage of the scene, so a moving object over the
   background color smears into it, and what it spreads keeps its brightness
   there, as the depth of field's blur does. Still parts of a frame where
-  something else moves keep the usual blend.
+  something else moves keep the usual blend, and so do partly covered areas
+  the smear leaves as they were, such as fog over the background color.
 - How far each pixel moved comes from the previous frame the renderer drew, so
   render every frame of an animation: a renderer that skipped frames sees the
   whole jump as one motion.
@@ -1080,6 +1085,79 @@ view.repaint();
   frame at 1280 x 800 and 0.7 ms at 2560 x 1600, plus 0.1 ms there for tone
   mapping. Frames where only lights change, with nothing moving on screen,
   cost exactly what they cost with it off.
+
+## Fog
+
+`Scene::setWorldFog()` fills the whole scene with an exponential height fog. It
+is part of the scene rather than of the render settings: a scene with fog asks
+for it.
+
+```cpp
+yup::WorldFog fog;
+fog.enabled = true;
+fog.density = 0.05f;       // extinction per meter at baseHeight
+fog.heightFalloff = 0.3f;  // thinner above baseHeight, denser below
+fog.color = { 0.8f, 0.85f, 0.9f };
+scene->setWorldFog (fog);
+view.repaint();
+```
+
+| Field           | Default | Unit          | What it does                                                    |
+| --------------- | ------- | ------------- | --------------------------------------------------------------- |
+| `enabled`       | false   |               | Draws the fog.                                                  |
+| `density`       | 0.02    | per meter     | How much light the fog takes per meter of distance, at `baseHeight`. 0 or less draws nothing. |
+| `heightFalloff` | 0       | per meter     | How fast the fog thins with height above `baseHeight`, and thickens below it: 0 is uniform, negative thickens upwards. |
+| `baseHeight`    | 0       | meters        | The height where the fog has `density`.                         |
+| `color`         | white   | linear RGB    | The share of the light the fog scatters back, per channel.     |
+| `anisotropy`    | 0       | -0.95 to 0.95 | Henyey-Greenstein g: positive scatters forward, so the fog glows looking towards the sun. |
+
+World units are read as meters. A fog with any field that is not a finite
+number is not drawn.
+
+- The fog dims each pixel by the transmittance from the camera to the first
+  surface, and adds the light it scatters towards the camera over that
+  distance. That light is the ambient color, the mean light of the environment
+  times its intensity, and the first directional light that is not dark. It is
+  single scattering without shadows: light reaches the fog everywhere, behind
+  objects too.
+- The scattering is physically scaled. A dense isotropic fog lit by a sun of
+  intensity E shows E / (4 pi) times its color, a quarter of what a white wall
+  facing that sun shows; forward scattering makes it brighter looking towards
+  the sun. Ambient light and the environment come from every direction, so the
+  same fog shows them at their full radiance.
+- Where nothing was drawn, the fog reaches the camera's far plane, so the
+  background color, or the visible environment, blends towards the fog. With an
+  infinite far plane (`zFar` of 0, or not past `zNear`), a view that never
+  leaves the fog is fully fogged: in uniform fog, looking level, or looking
+  down into denser fog. A view climbing out of fog that thins upwards meets
+  only a limited amount of it, so the background still shows through.
+- Depth of field and motion blur keep the fog's blend with the background
+  color: they composite in light only what they spread, and blurring the fog's
+  even coverage spreads nothing. The other side of this: out-of-focus
+  highlights spread over a partly fogged background color look dimmer than over
+  a clear one, about half as bright at a transmittance of 0.8, since the fog
+  already covers those pixels. A visible environment is unaffected.
+- Transparent surfaces take the fog of what lies behind them, since only opaque
+  surfaces write the depth the fog reads.
+- On the full tier the fog is drawn before temporal anti-aliasing, so changing
+  it restarts the accumulation. Screen-space reflections and GI read the
+  previous frames, fog included, so a reflected surface is fogged once more.
+- On the raster tier it needs multisampled half-float render targets at the
+  current sample count, and the depth and normal pass of ambient occlusion, as
+  depth of field does. Frames with fog then render the scene in half float and
+  draw that pass, and the fog is the first post effect. Its depth comes from one
+  sample per pixel while the color is antialiased, so fogged silhouettes against
+  a far background can differ by about a pixel. Where the device lacks them,
+  the fog is not drawn, which `isAvailable (RenderCapabilities::Feature::worldFog)`
+  reports, and it is logged once in debug builds.
+- It is off by default and costs nothing while off, even with its other fields
+  set.
+- Cost: one full-screen draw. On an Apple M2 Max, in the Scene 3D light show
+  with the camera orbiting, it takes about 0.04 ms of GPU time per frame at
+  1280 x 800 and 0.15 ms at 2560 x 1600 on the full tier. On the raster tier
+  the half-float scene, the depth and normal pass and the tone mapping pass
+  come on top: in all about 0.15 ms per frame at 1280 x 800 and 0.5 ms at
+  2560 x 1600.
 
 ## Frame statistics
 
@@ -1111,8 +1189,9 @@ for (const auto& scope : stats.gpu.scopes)
 - `gpu.scopes` lists the passes the frame recorded, in order: `probeBake`,
   `shadows`, `lightCulling`, `gbuffer`, `ambientOcclusion`, `hiZ`,
   `screenSpaceReflections`, `lighting`, `indirectDiffuse`,
-  `depthNormalPrepass`, `ambientOcclusion` (raster), `forward`, `temporalAA`,
-  `depthOfField`, `motionBlur`, `bloom`, `toneMapping`, `debugView`. A pass
+  `depthNormalPrepass`, `ambientOcclusion` (raster), `forward`, `fog`,
+  `temporalAA`, `depthOfField`, `motionBlur`, `bloom`, `toneMapping`,
+  `debugView`. A pass
   the frame does not run is not listed, and one that fails reads 0. `shadows`
   is listed in every frame, and reads 0 when the frame kept the previous
   shadow maps.

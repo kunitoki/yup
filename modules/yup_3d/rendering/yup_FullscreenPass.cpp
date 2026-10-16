@@ -29,13 +29,13 @@ FullscreenPass::~FullscreenPass() = default;
 
 //==============================================================================
 Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bundleData, size_t bundleSize,
-                                GpuTextureFormat outputFormat, bool additiveBlend, int colorTargets)
+                                GpuTextureFormat outputFormat, Blend blend, int colorTargets)
 {
-    return prepare (newDevice, bundleData, bundleSize, std::vector<GpuTextureFormat> (static_cast<size_t> (jmax (1, colorTargets)), outputFormat), additiveBlend);
+    return prepare (newDevice, bundleData, bundleSize, std::vector<GpuTextureFormat> (static_cast<size_t> (jmax (1, colorTargets)), outputFormat), blend);
 }
 
 Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bundleData, size_t bundleSize,
-                                Span<const GpuTextureFormat> outputFormats, bool additiveBlend)
+                                Span<const GpuTextureFormat> outputFormats, Blend blend)
 {
     device = nullptr;
     pipeline = nullptr;
@@ -56,11 +56,12 @@ Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bu
     {
         auto& target = options.colorTargets.emplace_back();
         target.format = format;
-        target.blendEnabled = additiveBlend;
+        const auto destination = blend == Blend::premultipliedOver ? GpuBlendFactor::oneMinusSrcAlpha : GpuBlendFactor::one;
+        target.blendEnabled = blend != Blend::replace;
         target.blend.srcColor = GpuBlendFactor::one;
-        target.blend.dstColor = GpuBlendFactor::one;
+        target.blend.dstColor = destination;
         target.blend.srcAlpha = GpuBlendFactor::one;
-        target.blend.dstAlpha = GpuBlendFactor::one;
+        target.blend.dstAlpha = destination;
     }
 
     auto compiled = GpuPipeline::compileFromBundle (newDevice, bundle.getReference(), options);

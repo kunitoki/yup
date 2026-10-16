@@ -1623,6 +1623,38 @@ private:
             setupSceneToggle ("Clearcoat", clearcoatToggle, &MpcView::setClearcoat);
             setupSceneToggle ("Sheen", sheenToggle, &MpcView::setSheen);
 
+            // The scene's world fog, in its default white: the device is about 3.6 units long, seen from a few
+            // units away, so a density of 0.08 leaves about two thirds of its light
+            fogToggle.setButtonText ("Fog");
+            fogToggle.setToggleState (scene->getWorldFog().enabled, yup::dontSendNotification);
+            fogToggle.onClick = [this]
+            {
+                editFog ([this] (yup::WorldFog& fog)
+                {
+                    fog.enabled = fogToggle.getToggleState();
+                });
+            };
+
+            const auto setupFogSlider = [this] (yup::Label& label, const char* text, yup::Slider& slider, double maximum, double midpoint, double value, float yup::WorldFog::*field)
+            {
+                label.setText (text, yup::dontSendNotification);
+                slider.setRange (0.0, maximum, 0.0);
+                slider.setSkewFactorFromMidpoint (midpoint);
+                slider.setNumDecimalPlacesToDisplay (3);
+                slider.setValue (value, yup::dontSendNotification);
+                slider.onValueChanged = [this, field] (double newValue)
+                {
+                    editFog ([field, newValue] (yup::WorldFog& fog)
+                    {
+                        fog.*field = static_cast<float> (newValue);
+                    });
+                };
+            };
+
+            const auto initialFog = scene->getWorldFog();
+            setupFogSlider (fogDensityLabel, "Fog density", fogDensitySlider, 0.5, 0.08, initialFog.enabled ? initialFog.density : 0.08, &yup::WorldFog::density);
+            setupFogSlider (fogFalloffLabel, "Height falloff", fogFalloffSlider, 4.0, 1.0, initialFog.heightFalloff, &yup::WorldFog::heightFalloff);
+
             // Three pages of the settings by topic, then the status, always shown below them
             for (auto [label, control, value] : { std::tuple<yup::Label*, yup::Component*, yup::Label*> { &tierLabel, &tierCombo, nullptr },
                                                   { &taaLabel, &taaSlider, &taaValue },
@@ -1646,7 +1678,11 @@ private:
                 effectsPage.addValue (*label, *control, value);
 
             effectsPage.addSwitches ({ &bloomToggle, &ambientOcclusionToggle, &screenSpaceGIToggle, &screenSpaceReflectionsToggle, &depthOfFieldToggle, &motionBlurToggle, &lightShowToggle });
-            scenePage.addSwitches ({ &reflectionProbeToggle, &irradianceVolumeToggle, &clearcoatToggle, &sheenToggle });
+            for (auto [label, control, value] : { std::tuple<yup::Label*, yup::Component*, yup::Label*> { &fogDensityLabel, &fogDensitySlider, &fogDensityValue },
+                                                  { &fogFalloffLabel, &fogFalloffSlider, &fogFalloffValue } })
+                scenePage.addValue (*label, *control, value);
+
+            scenePage.addSwitches ({ &reflectionProbeToggle, &irradianceVolumeToggle, &clearcoatToggle, &sheenToggle, &fogToggle });
 
             tabs.addTab ("quality", "Quality", qualityPage);
             tabs.addTab ("effects", "Effects", effectsPage);
@@ -1695,6 +1731,7 @@ private:
             const auto canAmbientOcclusion = capabilities->isAvailable (yup::RenderCapabilities::Feature::ambientOcclusion);
             const auto canDepthOfField = capabilities->isAvailable (yup::RenderCapabilities::Feature::depthOfField);
             const auto canMotionBlur = capabilities->isAvailable (yup::RenderCapabilities::Feature::motionBlur);
+            const auto canFog = capabilities->isAvailable (yup::RenderCapabilities::Feature::worldFog);
             const auto ambientOcclusion = capabilities->isEnabled (yup::RenderCapabilities::Feature::ambientOcclusion, settings);
             const auto taa = capabilities->isEnabled (yup::RenderCapabilities::Feature::temporalAntiAliasing, settings);
 
@@ -1705,7 +1742,7 @@ private:
             for (auto [slider, value] : { std::pair<yup::Slider*, yup::Label*> { &taaSlider, &taaValue }, { &exposureSlider, &exposureValue }, { &bloomThresholdSlider, &bloomThresholdValue },
                                           { &bloomIntensitySlider, &bloomIntensityValue }, { &bloomRadiusSlider, &bloomRadiusValue }, { &keyLightSizeSlider, &keyLightSizeValue },
                                           { &aoDistanceSlider, &aoDistanceValue }, { &fStopSlider, &fStopValue }, { &focusDistanceSlider, &focusDistanceValue },
-                                          { &shutterSlider, &shutterValue } })
+                                          { &shutterSlider, &shutterValue }, { &fogDensitySlider, &fogDensityValue }, { &fogFalloffSlider, &fogFalloffValue } })
                 setLabelText (*value, yup::String (slider->getValue(), slider->getNumDecimalPlacesToDisplay()));
 
             for (auto* control : std::initializer_list<yup::Component*> { &taaLabel, &taaSlider, &taaValue })
@@ -1724,6 +1761,9 @@ private:
             for (auto* control : std::initializer_list<yup::Component*> { &shutterLabel, &shutterSlider, &shutterValue })
                 setAvailable (*control, canMotionBlur);
 
+            for (auto* control : std::initializer_list<yup::Component*> { &fogDensityLabel, &fogDensitySlider, &fogDensityValue, &fogFalloffLabel, &fogFalloffSlider, &fogFalloffValue })
+                setAvailable (*control, canFog);
+
             for (auto* control : std::initializer_list<yup::Component*> { &debugViewLabel, &debugViewCombo })
                 setAvailable (*control, isFull);
 
@@ -1735,16 +1775,18 @@ private:
             refreshToggle (screenSpaceGIToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::screenSpaceGI, settings), canGI);
             refreshToggle (depthOfFieldToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::depthOfField, settings), canDepthOfField);
             refreshToggle (motionBlurToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::motionBlur, settings), canMotionBlur);
+            refreshToggle (fogToggle, view.getScene()->getWorldFog().enabled && canFog, canFog);
 
             // One line says why the dimmed controls are off, so no label changes its text or size
-            // Raster bloom and DoF need multisampled half floats ("f16"), raster AO and DoF the prepass,
-            // and motion blur (MB) the motion of the full tier; the lines stay within the panel's
-            // width at the default font, so none shrinks
+            // Raster bloom, DoF and fog need multisampled half floats ("f16"), raster AO, DoF and fog the
+            // prepass, and motion blur (MB) the motion of the full tier, which the limited lines leave out
+            // since raster never has it; the lines stay within the panel's width at the default font
+            // (the longest is 288.8 of 300 pixels), so none shrinks
             auto hint = yup::String();
             if (! isFull && ! canBloom)
-                hint = "No f16: bloom, DoF; full: TAA, MB, SSR, GI, debug";
+                hint = "No f16: bloom, DoF, fog; full: TAA, SSR, GI, debug";
             else if (! isFull && ! canDepthOfField)
-                hint = "No prepass: AO, DoF; full: TAA, MB, SSR, GI, debug";
+                hint = "No prepass: AO, DoF, fog; full: TAA, SSR, GI, debug";
             else if (! isFull)
                 hint = "TAA, MB, SSR, SSGI, contact shadows, debug: full";
             else if (! taa)
@@ -1931,6 +1973,18 @@ private:
             view.repaint();
         }
 
+        /** Edits the scene's world fog, which the sliders shape even while it is off. */
+        template <class Callback>
+        void editFog (Callback&& edit)
+        {
+            auto fog = view.getScene()->getWorldFog();
+            fog.density = static_cast<float> (fogDensitySlider.getValue());
+            fog.heightFalloff = static_cast<float> (fogFalloffSlider.getValue());
+            edit (fog);
+            view.getScene()->setWorldFog (fog);
+            view.repaint();
+        }
+
         /** Shows whether a feature ran, dimmed and disabled when @p isAvailable is false. */
         static void refreshToggle (yup::ToggleButton& toggle, bool isOn, bool isAvailable)
         {
@@ -2018,6 +2072,11 @@ private:
         yup::ToggleButton irradianceVolumeToggle { "irradianceVolumeToggle" };
         yup::ToggleButton clearcoatToggle { "clearcoatToggle" };
         yup::ToggleButton sheenToggle { "sheenToggle" };
+        yup::ToggleButton fogToggle { "fogToggle" };
+        yup::Label fogDensityLabel { "fogDensityLabel" };
+        yup::Slider fogDensitySlider { yup::Slider::LinearHorizontal, "fogDensitySlider" };
+        yup::Label fogFalloffLabel { "fogFalloffLabel" };
+        yup::Slider fogFalloffSlider { yup::Slider::LinearHorizontal, "fogFalloffSlider" };
         yup::Label debugViewLabel { "debugViewLabel" };
         yup::ComboBox debugViewCombo { "debugViewCombo" };
         yup::Label taaValue { "taaValue" };
@@ -2030,6 +2089,8 @@ private:
         yup::Label fStopValue { "fStopValue" };
         yup::Label focusDistanceValue { "focusDistanceValue" };
         yup::Label shutterValue { "shutterValue" };
+        yup::Label fogDensityValue { "fogDensityValue" };
+        yup::Label fogFalloffValue { "fogFalloffValue" };
         yup::Label hintLabel { "hintLabel" };
         yup::Label statusLabel { "statusLabel" };
         yup::Label detailLabel { "detailLabel" };

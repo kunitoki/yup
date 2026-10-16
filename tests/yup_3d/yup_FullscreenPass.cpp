@@ -214,7 +214,7 @@ layout(location = 1) out vec4 second;
 void main() { first = vec4(1.0, 0.0, 0.0, 1.0); second = vec4(0.0, 1.0, 0.0, 1.0); })");
 
     FullscreenPass pass;
-    const auto prepared = pass.prepare (device, static_cast<const uint8*> (bundle.getData()), bundle.getSize(), GpuTextureFormat::rgba8unorm, false, 2);
+    const auto prepared = pass.prepare (device, static_cast<const uint8*> (bundle.getData()), bundle.getSize(), GpuTextureFormat::rgba8unorm, FullscreenPass::Blend::replace, 2);
     ASSERT_TRUE (prepared.wasOk()) << prepared.getErrorMessage();
 
     auto first = createTarget();
@@ -299,6 +299,52 @@ void main() { color = vec4(0.0, texelFetch(sampler2D(source, sourceSampler), ive
     FullscreenPass none;
     EXPECT_TRUE (none.prepare (device, static_cast<const uint8*> (bundle.getData()), bundle.getSize(), Span<const GpuTextureFormat>()).failed());
     EXPECT_FALSE (none.isPrepared());
+}
+
+TEST_F (FullscreenPassMetalTests, PremultipliedOverCoversTheTargetByItsAlpha)
+{
+    // (S, 1 - T) over the target gives dst * T + S, alpha included: here S = (0.25, 0, 0) and T = 0.5
+    const auto bundle = compileBundle (R"(#version 450
+layout(location = 0) out vec4 color;
+void main() { color = vec4(0.25, 0.0, 0.0, 0.5); })");
+
+    FullscreenPass pass;
+    const auto prepared = pass.prepare (device, static_cast<const uint8*> (bundle.getData()), bundle.getSize(), GpuTextureFormat::rgba16float, FullscreenPass::Blend::premultipliedOver);
+    ASSERT_TRUE (prepared.wasOk()) << prepared.getErrorMessage();
+
+    // The half float target read back into an rgba8 one, its alpha into blue
+    const auto copy = compileBundle (R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D source;
+layout(set = 0, binding = 1) uniform sampler sourceSampler;
+layout(location = 0) out vec4 color;
+void main() { vec4 t = texelFetch(sampler2D(source, sourceSampler), ivec2(gl_FragCoord.xy), 0); color = vec4(t.rg, t.a, 1.0); })");
+
+    FullscreenPass reader;
+    ASSERT_TRUE (reader.prepare (device, static_cast<const uint8*> (copy.getData()), copy.getSize(), GpuTextureFormat::rgba8unorm).wasOk());
+
+    auto target = GpuTexture::create (device, GpuTextureDesc (size, size, GpuTextureFormat::rgba16float, true));
+    auto readable = createTarget();
+    auto sampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
+    ASSERT_NE (target, nullptr);
+    ASSERT_NE (readable, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    EXPECT_TRUE (pass.draw (frame, target, {}, nullptr, GpuColor (0.0f, 0.8f, 0.0f, 0.4f)));
+    EXPECT_TRUE (reader.draw (frame, readable, {}, [&] (GpuRenderPass& renderPass)
+    {
+        renderPass.setTexture (0, 0, target);
+        renderPass.setSampler (0, 1, sampler);
+    }, GpuColor::transparentBlack()));
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    const auto image = readBack (readable);
+    ASSERT_TRUE (image.isValid());
+
+    const auto pixel = image.getPixelColor (3, 3);
+    EXPECT_NEAR (pixel.getRed(), 64, 1);    // 0.25 + 0 * 0.5
+    EXPECT_NEAR (pixel.getGreen(), 102, 1); // 0 + 0.8 * 0.5
+    EXPECT_NEAR (pixel.getBlue(), 179, 1);  // alpha 0.5 + 0.4 * 0.5
 }
 
 TEST_F (FullscreenPassMetalTests, DrawWithoutPrepareFails)

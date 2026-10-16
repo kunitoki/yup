@@ -61,7 +61,7 @@ Result TemporalAA::prepare (const GpuDevice::Ptr& device, const FrameResources::
         return Result::fail ("Unable to create the temporal anti-aliasing samplers");
 
     // One color target for the output, one for the history of the next frame
-    return pass.prepare (device, temporalAAShaderBundle, sizeof (temporalAAShaderBundle), GpuTextureFormat::rgba16float, false, 2);
+    return pass.prepare (device, temporalAAShaderBundle, sizeof (temporalAAShaderBundle), GpuTextureFormat::rgba16float, FullscreenPass::Blend::replace, 2);
 }
 
 bool TemporalAA::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, FrameResources& resources,

@@ -68,7 +68,7 @@ Result Bloom::prepare (const GpuDevice::Ptr& device, const FrameResources::Sampl
         return result;
 
     // Each upsampled level is added onto the downsampled one already there
-    return upsample.prepare (device, bloomUpsampleShaderBundle, sizeof (bloomUpsampleShaderBundle), GpuTextureFormat::rgba16float, true);
+    return upsample.prepare (device, bloomUpsampleShaderBundle, sizeof (bloomUpsampleShaderBundle), GpuTextureFormat::rgba16float, FullscreenPass::Blend::additive);
 }
 
 GpuTexture::Ptr Bloom::render (const GpuDevice::Ptr& device, GpuFrame& frame, FrameResources& resources,

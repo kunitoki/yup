@@ -27,9 +27,13 @@
 // The last depth of field pass, at the size of the scene color: the far field, upsampled bilinearly,
 // replaces the sharp color as the CoC of the pixel grows past a texel, then the near field covers the
 // result by its coverage. All four channels mix, so silhouettes keep their blend with the background.
-// The share of the coverage the blur wrote goes to the second target, so tone mapping composites
-// that share in radiance and the coverage left sharp, such as antialiased edges, in display space
-// (preflight R21). Pixels without coverage count as blurred: both composites agree there.
+// The share of the coverage the blur moved goes to the second target, so tone mapping composites
+// that share in radiance and the rest in display space (preflight R21, R24). A pixel whose coverage
+// the blur changed holds spread light, whether it gained coverage or lost it, so the share is the
+// change relative to the larger coverage, in full from a tenth: a uniform coverage the blur leaves
+// as it was (fog over the background color, antialiased edges in focus) stays at 0, its rounding
+// (well below a hundredth) weighing under a tenth.
+// Pixels without coverage count as blurred: both composites agree there.
 
 layout(set = 1, binding = 1) uniform texture2D u_color;
 layout(set = 1, binding = 2) uniform texture2D u_depth;
@@ -54,6 +58,6 @@ void main()
     float farShare = smoothstep(0.5, 1.5, abs(dofCircleOfConfusion(depth)));
     vec4 color = mix(sharp, far, farShare);
     fragColor = color * (1.0 - coverage) + near;
-    float sharpCoverage = sharp.a * (1.0 - farShare) * (1.0 - coverage);
-    blurAmount = fragColor.a > 1.0e-4 ? clamp(1.0 - sharpCoverage / fragColor.a, 0.0, 1.0) : 1.0;
+    float largest = max(fragColor.a, sharp.a);
+    blurAmount = largest > 1.0e-4 ? min(abs(fragColor.a - sharp.a) / (0.1 * largest), 1.0) : 1.0;
 }

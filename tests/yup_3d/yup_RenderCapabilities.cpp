@@ -477,3 +477,42 @@ TEST_F (RenderCapabilitiesTests, RasterDofAlonePullsInTheHdrTarget)
     EXPECT_TRUE (caps.isEnabled (Feature::depthOfField, settings));
     EXPECT_TRUE (caps.isEnabled (Feature::hdrSceneColor, settings));
 }
+
+TEST_F (RenderCapabilitiesTests, WorldFogIsAlwaysAvailableOnFull)
+{
+    // No settings field: available means enabled, the scene switches the fog on
+    RenderSettings settings;
+    const RenderCapabilities full (desktopMetal(), settings, 4);
+    ASSERT_EQ (full.getTier(), Tier::full);
+    EXPECT_TRUE (full.isAvailable (Feature::worldFog));
+    EXPECT_TRUE (full.isEnabled (Feature::worldFog, settings));
+}
+
+TEST_F (RenderCapabilitiesTests, RasterWorldFogNeedsTheHdrTargetsAndThePrepass)
+{
+    RenderSettings settings;
+
+    const RenderCapabilities noHalfFloat (webgl2 (false, 0), settings, 4);
+    EXPECT_FALSE (noHalfFloat.isAvailable (Feature::worldFog));
+    EXPECT_FALSE (noHalfFloat.isEnabled (Feature::worldFog, settings));
+
+    // The half float targets must take the requested samples, as for bloom
+    auto fewSamples = webgl2 (true, 2);
+    fewSamples.depthNormalPrepass = true;
+    EXPECT_FALSE (RenderCapabilities (fewSamples, settings, 4).isAvailable (Feature::worldFog));
+    EXPECT_TRUE (RenderCapabilities (fewSamples, settings, 2).isAvailable (Feature::worldFog));
+
+    // The fog reads the depth of the DepthNormalPrepass
+    auto noPrepass = webgl2 (true, 4);
+    noPrepass.depthNormalPrepass = false;
+    EXPECT_FALSE (RenderCapabilities (noPrepass, settings, 4).isAvailable (Feature::worldFog));
+
+    auto capable = webgl2 (true, 4);
+    capable.depthNormalPrepass = true;
+    const RenderCapabilities caps (capable, settings, 4);
+    EXPECT_TRUE (caps.isAvailable (Feature::worldFog));
+    EXPECT_TRUE (caps.isEnabled (Feature::worldFog, settings));
+
+    // The capability alone takes no route: the renderer does, for scenes with fog
+    EXPECT_FALSE (caps.isEnabled (Feature::hdrSceneColor, settings));
+}

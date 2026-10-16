@@ -48,6 +48,15 @@ class YUP_API FullscreenPass
 {
 public:
     //==============================================================================
+    /** How the fragment's output combines with the target. */
+    enum class Blend
+    {
+        replace,          ///< The output replaces the target.
+        additive,         ///< The output is added to the target: (one, one).
+        premultipliedOver ///< A premultiplied output covers the target by its alpha: (one, oneMinusSrcAlpha), alpha included.
+    };
+
+    //==============================================================================
     /** Creates an unprepared pass. */
     FullscreenPass();
 
@@ -61,11 +70,11 @@ public:
         @param bundleData     The serialized shader bundle.
         @param bundleSize     The size of the bundle in bytes.
         @param outputFormat   The format of the textures draw() renders into.
-        @param additiveBlend  True to add the output to the target instead of replacing it.
+        @param blend          How the output combines with the target.
         @param colorTargets   The number of color targets the fragment writes, all of outputFormat.
     */
     Result prepare (const GpuDevice::Ptr& device, const uint8* bundleData, size_t bundleSize,
-                    GpuTextureFormat outputFormat, bool additiveBlend = false, int colorTargets = 1);
+                    GpuTextureFormat outputFormat, Blend blend = Blend::replace, int colorTargets = 1);
 
     /** Compiles the bundle (yup_Fullscreen.vert + a fragment) for color targets of different formats.
 
@@ -74,10 +83,10 @@ public:
         @param bundleSize     The size of the bundle in bytes.
         @param outputFormats  The format of each color target the fragment writes, the first one
                               the texture draw() renders into, at least one.
-        @param additiveBlend  True to add the outputs to the targets instead of replacing them.
+        @param blend          How the outputs combine with the targets.
     */
     Result prepare (const GpuDevice::Ptr& device, const uint8* bundleData, size_t bundleSize,
-                    Span<const GpuTextureFormat> outputFormats, bool additiveBlend = false);
+                    Span<const GpuTextureFormat> outputFormats, Blend blend = Blend::replace);
 
     /** Draws one fullscreen triangle into @p target (one mip / layer of it), binding through @p bind.
 

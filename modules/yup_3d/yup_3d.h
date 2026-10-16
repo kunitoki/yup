@@ -115,6 +115,7 @@
 #include "rendering/yup_Bloom.h"
 #include "rendering/yup_DepthOfField.h"
 #include "rendering/yup_MotionBlur.h"
+#include "rendering/yup_FogApply.h"
 #include "rendering/yup_PostChain.h"
 #include "rendering/yup_SceneRenderer.h"
 #include "rendering/yup_SceneComponent.h"

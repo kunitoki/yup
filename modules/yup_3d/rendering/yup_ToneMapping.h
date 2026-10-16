@@ -67,7 +67,7 @@ public:
         @param resources          The pool the shared samplers come from.
         @param glow               A linear rgba16float glow of the size of @p source, or nullptr for none.
         @param blurAmount         For a @p source blurred by the depth of field, the share of each
-                                  pixel the blur wrote (DepthOfField::getBlurAmount()), composited
+                                  pixel's coverage the blur moved (DepthOfField::getBlurAmount()), composited
                                   in radiance rather than in display space; nullptr for a frame
                                   without the blur. If that pipeline cannot compile, blurred frames
                                   composite in display space, logged once.

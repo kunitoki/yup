@@ -65,6 +65,10 @@ namespace yup
     the background color in radiance, so blurred highlights keep their brightness there.
     RenderSettings::motionBlur smears what moves on the full tier, after the depth of field, on the
     frames where the camera or an item moved, composited over the background color the same way.
+    The scene's WorldFog (Scene::setWorldFog()) is applied from the camera to each opaque surface, or
+    to the far plane where nothing was drawn, before the temporal accumulation: in place on the full
+    tier, and on the raster tier where the device allows half-float targets and the depth and
+    normal prepass, as the first post effect.
     Highlights of very smooth surfaces are widened where normals change quickly across a pixel, to
     keep them from sparkling.
 
@@ -205,7 +209,7 @@ public:
         opens a scope (see GpuFrame::beginScope()) for each pass it records, in frame order:
         probeBake, shadows, lightCulling, gbuffer, ambientOcclusion, hiZ, screenSpaceReflections,
         lighting, indirectDiffuse, depthNormalPrepass, ambientOcclusion (on the raster tier, after
-        the prepass), forward, temporalAA, depthOfField, motionBlur, bloom, toneMapping and debugView. A pass the
+        the prepass), forward, fog, temporalAA, depthOfField, motionBlur, bloom, toneMapping and debugView. A pass the
         frame does not run is not listed, and one that fails reads 0. shadows is listed in every
         frame: it reads 0 when the frame kept the previous shadow maps (FrameStats::shadowsRedrawn
         is then false). With screen-space GI on, ambientOcclusion includes the GI gather, which
@@ -240,10 +244,10 @@ public:
     /** @internal Intermediate textures of the last frame, for tests and debug views. */
     enum class PassOutput
     {
-        sceneColor, ///< Full: the rgba16float scene color after temporal anti-aliasing, before the other post effects. Raster: the resolved forward output, rgba16float reversibly tone mapped when bloom is on or the depth of field blurs the frame.
+        sceneColor, ///< Full: the rgba16float scene color after the world fog and temporal anti-aliasing, before the other post effects. Raster: the resolved forward output, rgba16float reversibly tone mapped when bloom is on or the depth of field blurs the frame; on frames drawing the world fog, the fogged rgba16float linear color instead.
         velocity,     ///< Full: the rg16float screen-space motion, current uv minus previous uv, both unjittered, uv from the top-left. Raster: none.
         gbufferNormal, ///< Full: the rgba16float G-buffer RT1, the octahedral shading normal in xy, the filtered roughness in z and metallic in w, 0 where nothing was drawn. Raster: none.
-        prepassNormal, ///< Raster with ambient occlusion, or a frame the depth of field blurs: the rgba16float depth and normal prepass target, encoded as the G-buffer RT1, single sampled. Otherwise none.
+        prepassNormal, ///< Raster with ambient occlusion, a frame the depth of field blurs, or one drawing the world fog: the rgba16float depth and normal prepass target, encoded as the G-buffer RT1, single sampled. Otherwise none.
         ambientOcclusion, ///< With ambient occlusion: the rgba8 AmbientOcclusionPass output, the view-space bent normal * 0.5 + 0.5 in rgb and the visibility in a, at half resolution. Otherwise none.
         reflections, ///< Full, with screen-space reflections and a history to read them from: the rgba16float ReflectionPass output, the reflected radiance (unexposed) in rgb and its confidence in a. Otherwise none, the first frame included.
         indirectDiffuse, ///< Full, with screen-space diffuse GI added to the frame: the rgba16float AmbientOcclusionPass::getIndirectDiffuse(), the gathered irradiance (unexposed) in rgb and the share of the hemisphere it came from in a, at half resolution. Otherwise none, the first frame included.
@@ -277,6 +281,9 @@ public:
 
     /** @internal The motion blur, for tests, or nullptr before the first moving frame smeared with it. */
     const MotionBlur* getMotionBlur() const noexcept;
+
+    /** @internal The world fog pass, for tests, or nullptr before the first frame drawing the scene's WorldFog. */
+    const FogApply* getFogApply() const noexcept;
 
     /** @internal The pass drawing RenderSettings::debugView, for tests, or nullptr before the first full tier frame with one. */
     const FullscreenPass* getDebugViewPass() const noexcept;
@@ -322,8 +329,8 @@ public:
 
     /** @internal Test hook, not for production use: the depth and normal prepass of this renderer
         fails to compile, as if the device rejected it. Call it before the first raster render
-        drawing it (ambient occlusion, or the depth of field blurring). Frames still render, without the prepass and
-        the effects reading it.
+        drawing it (ambient occlusion, the depth of field blurring, or the world fog). Frames still render, without the
+        prepass and the effects reading it.
     */
     void failDepthNormalPrepassForTesting() noexcept { failDepthNormalPrepass = true; }
 
@@ -387,6 +394,13 @@ public:
     */
     void failMotionBlurForTesting (int count = std::numeric_limits<int>::max()) noexcept { motionBlurFailures = count; }
 
+    /** @internal Test hook, not for production use: the next @p count world fog passes of this
+        renderer fail, every one from now on by default, as if the device could not record them.
+        Frames still render, without the fog; the renderer stops trying after the second failure in
+        a row, and the raster tier then leaves the route the fog took (the prepass and half float).
+    */
+    void failWorldFogForTesting (int count = std::numeric_limits<int>::max()) noexcept { worldFogFailures = count; }
+
     /** @internal Test hook, not for production use: the environment cube and the other radiance
         textures of this renderer hold RGBM in rgba8unorm, as below the float floor, even when the
         device renders half floats. Call it before the first render.
@@ -438,6 +452,7 @@ private:
     bool failScreenSpaceGI = false;
     int depthOfFieldFailures = 0;
     int motionBlurFailures = 0;
+    int worldFogFailures = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneRenderer)
 };

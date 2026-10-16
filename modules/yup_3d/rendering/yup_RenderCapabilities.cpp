@@ -104,8 +104,9 @@ bool RenderCapabilities::isAvailable (Feature feature) const noexcept
         case Feature::ambientOcclusion:
             return facts.depthNormalPrepass;
 
-        // The blur reads the scene color through the HDR path and its depth from the prepass
+        // The blur and the fog read the scene color through the HDR path and its depth from the prepass
         case Feature::depthOfField:
+        case Feature::worldFog:
             return isAvailable (Feature::hdrSceneColor) && facts.depthNormalPrepass;
     }
 
@@ -148,6 +149,10 @@ bool RenderCapabilities::isEnabled (Feature feature, const RenderSettings& setti
 
         case Feature::motionBlur:
             return isAvailable (feature) && settings.motionBlur && std::isfinite (settings.motionBlurShutter) && settings.motionBlurShutter > 0.0f;
+
+        // The scene switches the fog on
+        case Feature::worldFog:
+            return isAvailable (feature);
     }
 
     return false;

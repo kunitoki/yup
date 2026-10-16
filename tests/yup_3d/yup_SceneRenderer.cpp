@@ -2356,6 +2356,26 @@ protected:
             { "shadows", buildShadowsScene },
             { "materials", buildMaterialsScene },
             { "edges", buildEdgesScene },
+            { "disabled fog", [] (Scene& scene)
+              {
+                  // Every field but enabled away from its default
+                  buildEdgesScene (scene);
+                  WorldFog fog;
+                  fog.color = { 1.0f, 0.5f, 0.2f };
+                  fog.density = 0.5f;
+                  fog.heightFalloff = 0.3f;
+                  fog.baseHeight = 1.0f;
+                  fog.anisotropy = 0.6f;
+                  scene.setWorldFog (fog);
+              } },
+            { "fog without density", [] (Scene& scene)
+              {
+                  buildEdgesScene (scene);
+                  WorldFog fog;
+                  fog.enabled = true;
+                  fog.density = 0.0f;
+                  scene.setWorldFog (fog);
+              } },
         };
 
         for (const auto& [name, build] : scenes)
@@ -2387,6 +2407,12 @@ protected:
             EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr) << name;
             EXPECT_EQ (renderer.getMotionBlur(), nullptr) << name;
             EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << name;
+            EXPECT_EQ (renderer.getFogApply(), nullptr) << name;
+
+            // Raster keeps its inline frame: no half float scene color
+            ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr) << name;
+            if (! full)
+                EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)->getFormat(), GpuTextureFormat::rgba16float) << name;
 
             const auto* ambientOcclusion = renderer.getAmbientOcclusionPass();
             EXPECT_EQ (ambientOcclusion != nullptr, full) << name;
@@ -7317,12 +7343,12 @@ vec4 encodeLuma(vec3 c)
         return scene.getActiveCamera()->getCircleOfConfusion (distance, static_cast<float> (depthOfFieldSize));
     }
 
-    /** True when depth of field can run on @p tier on this device, at the default sample count. */
-    bool isDepthOfFieldAvailable (RenderSettings::TierPreference tier) const
+    /** True when @p feature can run on @p tier on this device, at the default sample count. */
+    bool isFeatureAvailable (RenderCapabilities::Feature feature, RenderSettings::TierPreference tier) const
     {
         RenderSettings settings;
         settings.tier = tier;
-        return RenderCapabilities (RenderCapabilities::queryDevice (*device), settings, 4).isAvailable (RenderCapabilities::Feature::depthOfField);
+        return RenderCapabilities (RenderCapabilities::queryDevice (*device), settings, 4).isAvailable (feature);
     }
 
     /** On @p tier, bars in focus stay as sharp as without depth of field, and blur out of focus. The
@@ -7802,6 +7828,748 @@ vec4 encodeLuma(vec3 c)
             const auto off = renderToImage (renderer, scene, motionBlurSize);
             ASSERT_TRUE (off.isValid()) << name << ": " << renderer.getLastError();
             EXPECT_LE (maxChannelDifference (on, off), 1) << name;
+        }
+    }
+
+    //==============================================================================
+    /** The size of the world fog scenes. */
+    static constexpr int fogSize = 64;
+
+    /** Enabled white fog of @p density, thinning upwards from y = 0 by @p heightFalloff. */
+    static WorldFog makeFog (float density, float heightFalloff = 0.0f)
+    {
+        WorldFog fog;
+        fog.enabled = true;
+        fog.density = density;
+        fog.heightFalloff = heightFalloff;
+        return fog;
+    }
+
+    /** Selects @p tier for the fog scenes: the full tier without TAA, so one frame is final. */
+    static void setFogTier (Scene& scene, RenderSettings::TierPreference tier)
+    {
+        if (tier == RenderSettings::TierPreference::full)
+            setFullTierTaa (scene, 1);
+        else
+            setTier (scene, tier);
+    }
+
+    /** A camera at @p eye looking towards @p target (yFov 0.8) over a black background color,
+        with black ambient light and no default light: only what a test adds lights the fog.
+    */
+    static CameraNode& addFogCamera (Scene& scene, Vector3<float> target = { 0.0f, 0.0f, -1.0f }, Vector3<float> eye = {})
+    {
+        scene.setUsingDefaultLight (false);
+        scene.setBackgroundColor (Colors::black);
+        scene.setAmbientColor (Colors::black);
+        addCamera (scene, eye, target);
+        return *scene.getActiveCamera();
+    }
+
+    /** The ambient color that is 0.2 once linear, lighting the fog of the tests. */
+    static Color fogAmbientColor() { return Color (0xff7c7c7c); }
+
+    /** The linear radiance of fogAmbientColor(), as LightingInputs converts it. */
+    static float fogAmbientRadiance()
+    {
+        const auto encoded = 0x7c / 255.0f;
+        return std::pow ((encoded + 0.055f) / 1.055f, 2.4f);
+    }
+
+    /** Two white emissive walls facing a camera at the origin looking down -Z (addFogCamera()),
+        across the middle half of the rows: a near one 5 units away on the left half of the view and a
+        far one 20 units away on the right half, under an ambient light of 0.2 (linear), no other light
+        and a black background color. With @p withFog, uniform white fog of density 0.08.
+    */
+    static void buildFogWallsScene (Scene& scene, bool withFog)
+    {
+        addFogCamera (scene);
+        scene.setAmbientColor (fogAmbientColor());
+        addEmitter (scene, { -3.0f, -1.0f, 3.0f, 2.0f }, 5.0f, 1.0f);
+        addEmitter (scene, { 0.0f, -4.0f, 12.0f, 8.0f }, 20.0f, 1.0f);
+
+        if (withFog)
+            scene.setWorldFog (makeFog (0.08f));
+    }
+
+    /** The pixels of the near wall, the far wall and the background of buildFogWallsScene() at fogSize. */
+    static Rectangle<int> fogNearWallArea() { return { 6, 26, 20, 12 }; }
+    static Rectangle<int> fogFarWallArea() { return { 38, 26, 20, 12 }; }
+    static Rectangle<int> fogBackgroundArea() { return { 4, 2, 56, 10 }; }
+
+    /** The unit world direction through the center of pixel (@p x, @p y) of a square frame of @p size
+        pixels, row 0 at the top, seen by the perspective @p camera.
+    */
+    static Vector3<float> pixelDirection (const CameraNode& camera, int x, int y, int size)
+    {
+        const auto scale = std::tan (camera.yFov * 0.5f);
+        const auto ndcX = 2.0f * (static_cast<float> (x) + 0.5f) / static_cast<float> (size) - 1.0f;
+        const auto ndcY = 1.0f - 2.0f * (static_cast<float> (y) + 0.5f) / static_cast<float> (size);
+        return camera.getEntity()->getWorldMatrix().transformVector ({ ndcX * scale, ndcY * scale, -1.0f }).normalized();
+    }
+
+    /** One channel ("r", "g", "b" or "a") of every texel of a float texture, clamped to [0, 1) and
+        read back to about 1.5e-5. The read back through a canvas can be a level off, so the value is
+        written as two base-16 digits, each in the middle of its 16 levels (red, green), then the rest
+        in blue: only the rest takes that level, 1 / 255 of 1 / 256. Indexed y * width + x, row 0 at the top.
+    */
+    std::vector<float> readUnitChannel (const GpuTexture::Ptr& texture, const char* channel)
+    {
+        const auto image = mapTexels (texture, "encodeUnit(t." + String (channel) + ")", R"(
+vec4 encodeUnit(float value)
+{
+    float scaled = clamp(value, 0.0, 0.99999) * 16.0;
+    float first = floor(scaled);
+    float rest = fract(scaled) * 16.0;
+    float second = floor(rest);
+    return vec4((first * 16.0 + 8.0) / 255.0, (second * 16.0 + 8.0) / 255.0, fract(rest), 1.0);
+})");
+
+        std::vector<float> values;
+        for (int y = 0; image.isValid() && y < image.getHeight(); ++y)
+        {
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto pixel = image.getPixelColor (x, y);
+                const auto first = static_cast<float> (pixel.getRed() / 16);
+                const auto second = static_cast<float> (pixel.getGreen() / 16);
+                values.push_back ((first + (second + static_cast<float> (pixel.getBlue()) / 255.0f) / 16.0f) / 16.0f);
+            }
+        }
+
+        return values;
+    }
+
+    /** Renders one frame of @p scene at fogSize and returns its scene color: on full the HDR color
+        before the post effects, on raster the fogged linear color of a frame drawing the fog.
+    */
+    GpuTexture::Ptr renderFogSceneColor (SceneRenderer& renderer, Scene& scene)
+    {
+        const auto texture = renderer.render (device, scene, fogSize, fogSize);
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+        EXPECT_NE (texture, nullptr) << renderer.getLastError();
+
+        auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+        EXPECT_TRUE (sceneColor != nullptr && sceneColor->getFormat() == GpuTextureFormat::rgba16float);
+        return sceneColor;
+    }
+
+    /** On @p tier, the fog dims the far wall of buildFogWallsScene() more than the near one, and
+        brightens the background with the ambient light it scatters.
+    */
+    void checkFogAttenuatesWithDistance (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (bool withFog)
+        {
+            Scene scene;
+            setFogTier (scene, tier);
+            buildFogWallsScene (scene, withFog);
+
+            SceneRenderer renderer;
+            auto image = renderToImage (renderer, scene, fogSize);
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+            return image;
+        };
+
+        const auto clear = render (false);
+        const auto foggy = render (true);
+        ASSERT_TRUE (clear.isValid() && foggy.isValid());
+
+        const auto clearNear = meanLuminance (clear, fogNearWallArea());
+        const auto clearFar = meanLuminance (clear, fogFarWallArea());
+        const auto foggyNear = meanLuminance (foggy, fogNearWallArea());
+        const auto foggyFar = meanLuminance (foggy, fogFarWallArea());
+        const auto nearLoss = (clearNear - foggyNear) / clearNear;
+        const auto farLoss = (clearFar - foggyFar) / clearFar;
+
+        RecordProperty ("nearLoss", String (nearLoss, 3).toStdString());
+        RecordProperty ("farLoss", String (farLoss, 3).toStdString());
+        RecordProperty ("background", String (meanLuminance (foggy, fogBackgroundArea()), 1).toStdString());
+
+        EXPECT_GT (foggyNear, 20.0); // Not a black frame
+        EXPECT_GT (farLoss, nearLoss + 0.1);
+        EXPECT_GT (meanLuminance (foggy, fogBackgroundArea()), meanLuminance (clear, fogBackgroundArea()) + 20.0);
+    }
+
+    /** On @p tier, the transmittance the fog leaves at pixels of three white walls 2, 6 and 12 units
+        away matches exp (-WorldFog::getOpticalDepth()) from the camera to the wall, under black fog (it
+        scatters no light, so each pixel keeps T of its emission of 0.5):
+        - thinning upwards from y = -1, the camera at the origin;
+        - with the camera far below the base (y -22, falloff 2), where the density exponent passes the
+          clamp at 40: the rows level with the camera stay past it, the top rows of the far wall cross it.
+    */
+    void checkFogTransmittanceMatchesTheCpu (RenderSettings::TierPreference tier)
+    {
+        const std::array<float, 3> distances { 2.0f, 6.0f, 12.0f };
+
+        auto thinning = makeFog (0.12f, 0.4f);
+        thinning.baseHeight = -1.0f;
+
+        auto belowTheClamp = makeFog (1.0e-18f, 2.0f);
+
+        const struct
+        {
+            const char* name;
+            Vector3<float> eye;
+            WorldFog fog;
+        } cases[] = {
+            { "thinning", {}, thinning },
+            { "below the clamp", { 0.0f, -22.0f, 0.0f }, belowTheClamp },
+        };
+
+        for (auto [name, eye, fog] : cases)
+        {
+            fog.color = { 0.0f, 0.0f, 0.0f };
+
+            Scene scene;
+            setFogTier (scene, tier);
+            auto& camera = addFogCamera (scene, eye + Vector3<float> (0.0f, 0.0f, -1.0f), eye);
+
+            // Each wall fills a third of the columns, and every row
+            for (size_t wall = 0; wall < distances.size(); ++wall)
+            {
+                const auto halfSize = distances[wall] * std::tan (camera.yFov * 0.5f);
+                const auto left = (-1.0f + 2.0f * static_cast<float> (wall) / 3.0f) * halfSize;
+                addEmitter (scene, { left, eye.getY() - 1.2f * halfSize, 2.0f / 3.0f * halfSize, 2.4f * halfSize }, distances[wall], 0.5f);
+            }
+
+            // The reference takes the same route with fog too faint to change anything
+            const auto read = [&] (const WorldFog& sceneFog)
+            {
+                scene.setWorldFog (sceneFog);
+                SceneRenderer renderer;
+                const auto sceneColor = renderFogSceneColor (renderer, scene);
+                return sceneColor != nullptr ? readUnitChannel (sceneColor, "r") : std::vector<float>();
+            };
+
+            auto faint = fog;
+            faint.density *= 1.0e-9f;
+            const auto reference = read (faint);
+            const auto fogged = read (fog);
+            ASSERT_EQ (reference.size(), static_cast<size_t> (fogSize * fogSize)) << name;
+            ASSERT_EQ (fogged.size(), reference.size()) << name;
+
+            auto lowest = 1.0f, highest = 0.0f, largestError = 0.0f;
+            int crossing = 0, pastTheClamp = 0;
+            for (size_t wall = 0; wall < distances.size(); ++wall)
+            {
+                const auto x = static_cast<int> ((2 * wall + 1) * fogSize / 6);
+                for (const auto y : { 6, 32, 58 })
+                {
+                    const auto direction = pixelDirection (camera, x, y, fogSize);
+                    const auto point = eye + direction * (distances[wall] / -direction.getZ());
+                    const auto expected = std::exp (-fog.getOpticalDepth (eye, point));
+                    const auto index = static_cast<size_t> (y * fogSize + x);
+
+                    // The reference is the emission itself, linear on raster too: the reversible map was inverted
+                    EXPECT_NEAR (reference[index], 0.5f, 2.0e-3f) << name << ", wall " << wall << ", row " << y;
+
+                    // Absolute on T. Half floats round both colors by half an ulp, at most 1.2e-4 in [0.25, 0.5),
+                    // so the ratio by about 5e-4; the read back adds 1.5e-5
+                    EXPECT_NEAR (fogged[index] / reference[index], expected, 2.0e-3f) << name << ", wall " << wall << ", row " << y;
+                    largestError = jmax (largestError, std::abs (fogged[index] / reference[index] - expected));
+                    lowest = jmin (lowest, expected);
+                    highest = jmax (highest, expected);
+
+                    // The exponent at the wall, against 40 at the camera's side of the clamp
+                    const auto exponent = -fog.heightFalloff * (point.getY() - fog.baseHeight);
+                    crossing += exponent < 40.0f && -fog.heightFalloff * (eye.getY() - fog.baseHeight) > 40.0f ? 1 : 0;
+                    pastTheClamp += exponent >= 40.0f ? 1 : 0;
+                }
+            }
+
+            RecordProperty (String (name).replace (" ", "_").toStdString() + "_largestError", String (largestError, 6).toStdString());
+            RecordProperty (String (name).replace (" ", "_").toStdString() + "_range", (String (lowest, 3) + " to " + String (highest, 3)).toStdString());
+
+            // Not vacuous: the pixels span thin and thick fog, and below the clamp both of its branches
+            EXPECT_LT (lowest, 0.3f) << name;
+            EXPECT_GT (highest, 0.55f) << name;
+
+            if (eye.getY() < 0.0f)
+            {
+                EXPECT_GT (crossing, 0) << name;
+                EXPECT_GT (pastTheClamp, 0) << name;
+            }
+        }
+    }
+
+    /** On @p tier, with an infinite far plane, background pixels:
+        - in uniform fog, seen level by a camera whose far plane lies within its near plane (which
+          projects to infinity too), are fully fogged, with the ambient radiance;
+        - climbing out of fog thinning upwards are partly fogged, by the limit of the closed form at
+          infinity, from the origin and from far below the base, past the clamp of the exponent;
+        - looking down from there, into ever denser fog, are fully fogged.
+        Every texel stays finite.
+    */
+    void checkInfiniteFarPlaneFogStaysFinite (RenderSettings::TierPreference tier)
+    {
+        {
+            Scene scene;
+            setFogTier (scene, tier);
+            auto& camera = addFogCamera (scene);
+            camera.zFar = camera.zNear * 0.5f;
+            scene.setAmbientColor (fogAmbientColor());
+            scene.setWorldFog (makeFog (0.08f));
+
+            SceneRenderer renderer;
+            const auto sceneColor = renderFogSceneColor (renderer, scene);
+            ASSERT_NE (sceneColor, nullptr);
+            EXPECT_TRUE (isFiniteTexture (sceneColor));
+
+            const auto alpha = readUnitChannel (sceneColor, "a");
+            const auto red = readUnitChannel (sceneColor, "r");
+            ASSERT_EQ (alpha.size(), static_cast<size_t> (fogSize * fogSize));
+            ASSERT_EQ (red.size(), alpha.size());
+
+            auto largestError = 0.0f;
+            for (size_t i = 0; i < alpha.size(); ++i)
+            {
+                EXPECT_GE (alpha[i], 0.999f) << i;
+                EXPECT_NEAR (red[i], fogAmbientRadiance(), 2.0e-3f) << i;
+                largestError = jmax (largestError, std::abs (red[i] - fogAmbientRadiance()));
+            }
+
+            RecordProperty ("horizontalLargestError", String (largestError, 6).toStdString());
+        }
+
+        const auto renderAlpha = [&] (Vector3<float> eye, Vector3<float> direction, const WorldFog& fog, const char* name, std::vector<Vector3<float>>& directions)
+        {
+            Scene scene;
+            setFogTier (scene, tier);
+            auto& camera = addFogCamera (scene, eye + direction, eye);
+            camera.zFar = 0.0f;
+            scene.setWorldFog (fog);
+
+            for (const auto y : { 2, 32, 61 })
+                directions.push_back (pixelDirection (camera, 32, y, fogSize));
+
+            SceneRenderer renderer;
+            const auto sceneColor = renderFogSceneColor (renderer, scene);
+            EXPECT_TRUE (sceneColor != nullptr && isFiniteTexture (sceneColor)) << name;
+            return sceneColor != nullptr ? readUnitChannel (sceneColor, "a") : std::vector<float>();
+        };
+
+        const auto belowTheClamp = makeFog (1.0e-18f, 2.0f);
+        const struct
+        {
+            const char* name;
+            Vector3<float> eye, direction;
+            WorldFog fog;
+        } climbing[] = {
+            { "upwards", {}, { 0.0f, 1.0f, -1.0f }, makeFog (0.08f, 0.5f) },
+            { "upwards below the clamp", { 0.0f, -22.0f, 0.0f }, { 0.0f, 0.5774f, -1.0f }, belowTheClamp },
+        };
+
+        for (const auto& [name, eye, direction, fog] : climbing)
+        {
+            std::vector<Vector3<float>> directions;
+            const auto alpha = renderAlpha (eye, direction, fog, name, directions);
+            ASSERT_EQ (alpha.size(), static_cast<size_t> (fogSize * fogSize)) << name;
+
+            for (size_t row = 0; row < directions.size(); ++row)
+            {
+                // The far end 10000 units away, where the fog has thinned to nothing
+                const auto y = std::array<int, 3> { 2, 32, 61 }[row];
+                const auto transmittance = std::exp (-fog.getOpticalDepth (eye, eye + directions[row] * 1.0e4f));
+                EXPECT_GT (transmittance, 0.01f) << name << ", row " << y;
+                EXPECT_LT (transmittance, 0.95f) << name << ", row " << y;
+                EXPECT_NEAR (alpha[static_cast<size_t> (y * fogSize + 32)], 1.0f - transmittance, 2.0e-3f) << name << ", row " << y;
+                RecordProperty (String (name).replace (" ", "_").toStdString() + std::to_string (y), (String (alpha[static_cast<size_t> (y * fogSize + 32)], 5) + " vs " + String (1.0f - transmittance, 5)).toStdString());
+            }
+        }
+
+        // Looking down from below the clamp, into ever denser fog: no light gets through
+        std::vector<Vector3<float>> directions;
+        const auto belowAlpha = renderAlpha ({ 0.0f, -22.0f, 0.0f }, { 0.0f, -1.0f, -1.0f }, belowTheClamp, "downwards", directions);
+        ASSERT_EQ (belowAlpha.size(), static_cast<size_t> (fogSize * fogSize));
+
+        for (size_t i = 0; i < belowAlpha.size(); ++i)
+            EXPECT_GE (belowAlpha[i], 0.999f) << i;
+    }
+
+    /** On @p tier, fog the camera sees no end of scatters the ambient color plus the mean radiance of
+        the environment (the L0 of its spherical harmonics) times its intensity, exposed.
+    */
+    void checkFogIsLitByTheAmbientLightAndTheEnvironment (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        setFogTier (scene, tier);
+        addFogCamera (scene);
+        scene.setAmbientColor (fogAmbientColor());
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.setEnvironmentIntensity (0.4f);
+        scene.setExposure (2.0f);
+        scene.setWorldFog (makeFog (0.08f));
+
+        SceneRenderer renderer;
+        const auto sceneColor = renderFogSceneColor (renderer, scene);
+        ASSERT_NE (sceneColor, nullptr);
+
+        // The far plane 1000 units away: no light gets through the fog
+        const auto red = readUnitChannel (sceneColor, "r");
+        ASSERT_EQ (red.size(), static_cast<size_t> (fogSize * fogSize));
+
+        // L0 of a uniform environment is its radiance
+        const auto meanRadiance = scene.getEnvironment()->getIrradianceCoefficients()[0].getX();
+        EXPECT_NEAR (meanRadiance, 0.5f, 1.0e-3f);
+        const auto expected = (fogAmbientRadiance() + meanRadiance * 0.4f) * 2.0f;
+        RecordProperty ("measured", String (red[static_cast<size_t> (32 * fogSize + 32)], 5).toStdString());
+        RecordProperty ("expected", String (expected, 5).toStdString());
+
+        for (size_t i = 0; i < red.size(); ++i)
+            EXPECT_NEAR (red[i], expected, 2.0e-3f) << i;
+    }
+
+    /** On @p tier, isotropic fog lit by the sun alone, which no ray leaves, scatters E / (4 pi) of the
+        sun's irradiance E towards the camera (preflight R25): the phase function is normalized over the
+        sphere. A dark directional light listed before the sun lights nothing, the fog included.
+    */
+    void checkFogScattersTheSunPhysically (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        setFogTier (scene, tier);
+        addFogCamera (scene).zFar = 0.0f;
+        scene.setWorldFog (makeFog (0.08f));
+
+        auto dark = EntityNode::Ptr (new EntityNode ("dark"));
+        dark->attach<LightNode>().intensity = 0.0f;
+        scene.getRoot()->addChild (dark);
+
+        constexpr auto irradiance = 2.0f;
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        sun->attach<LightNode>().intensity = irradiance;
+        aimCamera (*sun, { 3.0f, 10.0f, 2.0f }, {});
+        scene.getRoot()->addChild (sun);
+
+        SceneRenderer renderer;
+        const auto sceneColor = renderFogSceneColor (renderer, scene);
+        ASSERT_NE (sceneColor, nullptr);
+
+        const auto red = readUnitChannel (sceneColor, "r");
+        ASSERT_EQ (red.size(), static_cast<size_t> (fogSize * fogSize));
+
+        // One half float step on store (1.22e-4 in [0.125, 0.25), and this GPU may truncate rather than
+        // round) plus 1.5e-5 of read back: 1e-3 is about 8 steps
+        const auto expected = irradiance / (4.0f * MathConstants<float>::pi);
+        RecordProperty ("measured", String (red[static_cast<size_t> (32 * fogSize + 32)], 5).toStdString());
+        RecordProperty ("expected", String (expected, 5).toStdString());
+
+        for (size_t i = 0; i < red.size(); ++i)
+            EXPECT_NEAR (red[i], expected, 1.0e-3f) << i;
+    }
+
+    /** On @p tier, fog over the background color keeps its display-space blend on frames the depth of
+        field blurs (preflight R24): blurring a uniform coverage moves none of it, so the background,
+        far out of focus, stays within 2 levels of the frame without depth of field.
+    */
+    void checkFogOverTheBackgroundKeepsItsBlendWithDepthOfField (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        setFogTier (scene, tier);
+        auto& camera = addFogCamera (scene);
+        camera.zFar = 10.0f;
+        camera.fStop = 1.4f;
+        camera.focusDistance = 0.2f;
+        scene.setAmbientColor (fogAmbientColor());
+        scene.setWorldFog (makeFog (0.08f));
+
+        const auto render = [&] (bool depthOfField)
+        {
+            setDepthOfField (scene, depthOfField);
+            SceneRenderer renderer;
+            auto image = renderToImage (renderer, scene, fogSize);
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField) != nullptr, depthOfField);
+            return image;
+        };
+
+        const auto off = render (false);
+        const auto on = render (true);
+        ASSERT_TRUE (off.isValid() && on.isValid());
+
+        RecordProperty ("largestDifference", maxChannelDifference (on, off));
+        RecordProperty ("background", String (meanLuminance (off, { 0, 0, fogSize, fogSize }), 1).toStdString());
+
+        // Not vacuous: the background shows the fog's partial coverage
+        EXPECT_GT (meanLuminance (off, { 0, 0, fogSize, fogSize }), 30.0);
+        EXPECT_LE (maxChannelDifference (on, off), 2);
+    }
+
+    /** On @p tier, pixels of the background color blend towards the fog by its coverage: with the far
+        plane 10 units away, the background color shows through by the transmittance T to the far plane.
+    */
+    void checkBackgroundColorLerpsTowardsTheFog (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (Color background, bool withFog)
+        {
+            Scene scene;
+            setFogTier (scene, tier);
+            addFogCamera (scene).zFar = 10.0f;
+            scene.setAmbientColor (fogAmbientColor());
+            scene.setBackgroundColor (background);
+
+            if (withFog)
+                scene.setWorldFog (makeFog (0.08f));
+
+            SceneRenderer renderer;
+            const auto image = renderToImage (renderer, scene, fogSize);
+            EXPECT_TRUE (image.isValid()) << renderer.getLastError();
+            return image.isValid() ? static_cast<int> (image.getPixelColor (32, 32).getRed()) : -1;
+        };
+
+        const auto gray = Color (0xff646464);
+        EXPECT_NEAR (render (gray, false), 100, 1);
+
+        const auto overBlack = render (Colors::black, true);
+        const auto overGray = render (gray, true);
+
+        Scene scene;
+        const auto& camera = addFogCamera (scene);
+        const auto direction = pixelDirection (camera, 32, 32, fogSize);
+        const auto transmittance = std::exp (-0.08f * 10.0f / -direction.getZ());
+
+        RecordProperty ("overBlack", overBlack);
+        RecordProperty ("overGray", overGray);
+
+        EXPECT_GT (overBlack, 30);                                        // The fog over black
+        EXPECT_NEAR (overGray - overBlack, transmittance * 100.0f, 3.0f); // The background color by T
+    }
+
+    /** On @p tier, fog with a forward scattering anisotropy (g = 0.8) is brighter looking towards the
+        sun than with the sun behind the camera.
+    */
+    void checkFogScattersForwardTowardsTheSun (RenderSettings::TierPreference tier)
+    {
+        const auto render = [&] (Vector3<float> sunPosition)
+        {
+            Scene scene;
+            setFogTier (scene, tier);
+            addFogCamera (scene);
+
+            auto fog = makeFog (0.08f);
+            fog.anisotropy = 0.8f;
+            scene.setWorldFog (fog);
+
+            auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+            sun->attach<LightNode>().intensity = 0.1f;
+            aimCamera (*sun, sunPosition, {});
+            scene.getRoot()->addChild (sun);
+
+            SceneRenderer renderer;
+            const auto image = renderToImage (renderer, scene, fogSize);
+            EXPECT_TRUE (image.isValid()) << renderer.getLastError();
+            return image.isValid() ? meanLuminance (image, { 28, 28, 8, 8 }) : 0.0;
+        };
+
+        // A sun ahead of the camera shines towards it
+        const auto towards = render ({ 0.0f, 0.0f, -10.0f });
+        const auto away = render ({ 0.0f, 0.0f, 10.0f });
+
+        RecordProperty ("towards", String (towards, 1).toStdString());
+        RecordProperty ("away", String (away, 1).toStdString());
+
+        EXPECT_GT (towards, away + 100.0);
+    }
+
+    /** Raster fog where the device cannot run it, without the prepass or with too few multisampled
+        half-float samples: the frames are the ones without fog, with no prepass, no half float scene
+        color and no fog pass.
+    */
+    void checkRasterWorldFogUnavailableRecordsNothing()
+    {
+        Scene scene;
+        setFogTier (scene, RenderSettings::TierPreference::raster);
+        buildFogWallsScene (scene, false);
+
+        SceneRenderer reference;
+        const auto off = renderToImage (reference, scene, fogSize);
+        ASSERT_TRUE (off.isValid()) << reference.getLastError();
+        scene.setWorldFog (makeFog (0.08f));
+
+        const std::pair<const char*, std::function<void (RenderCapabilities::DeviceFacts&)>> devices[] = {
+            { "no prepass", [] (RenderCapabilities::DeviceFacts& facts) { facts.depthNormalPrepass = false; } },
+            { "one half float sample", [] (RenderCapabilities::DeviceFacts& facts) { facts.rgba16floatSamples = 1; } },
+        };
+
+        for (const auto& [name, edit] : devices)
+        {
+            SceneRenderer renderer;
+            renderer.setDeviceFactsOverride (edit);
+
+            for (int frame = 0; frame < 2; ++frame)
+            {
+                const auto image = renderToImage (renderer, scene, fogSize);
+                ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
+                EXPECT_LE (maxChannelDifference (image, off), 1) << name;
+            }
+
+            EXPECT_FALSE (renderer.getCapabilities()->isAvailable (RenderCapabilities::Feature::worldFog)) << name;
+            EXPECT_EQ (renderer.getFogApply(), nullptr) << name;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr) << name;
+            ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr) << name;
+            EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)->getFormat(), GpuTextureFormat::rgba16float) << name;
+        }
+    }
+
+    /** A raster frame with fog only draws the prepass for its depth and takes the half float route,
+        without the ambient occlusion: no ambient occlusion pass, and the forward pass shades with its
+        default variant. Turning ambient occlusion on takes its variant, so the check is not vacuous.
+    */
+    void checkRasterWorldFogDrawsThePrepassWithoutAmbientOcclusion()
+    {
+        Scene scene;
+        setFogTier (scene, RenderSettings::TierPreference::raster);
+        buildFogWallsScene (scene, true);
+
+        SceneRenderer renderer;
+        const auto render = [&] (bool ambientOcclusion)
+        {
+            auto settings = scene.getRenderSettings();
+            settings.ambientOcclusion = ambientOcclusion;
+            scene.setRenderSettings (settings);
+
+            ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+            EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr);
+            ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr);
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)->getFormat(), GpuTextureFormat::rgba16float);
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion) != nullptr, ambientOcclusion);
+            ASSERT_NE (renderer.getFogApply(), nullptr);
+            EXPECT_GT (renderer.getFogApply()->getNumCachedTargets(), 0u);
+            EXPECT_EQ (renderer.getDepthOfField(), nullptr);
+            ASSERT_NE (renderer.getForwardPass(), nullptr);
+            EXPECT_EQ (renderer.getForwardPass()->usesLocalIndirect(), ambientOcclusion);
+        };
+
+        render (false);
+        EXPECT_EQ (renderer.getAmbientOcclusionPass(), nullptr);
+
+        // Not vacuous: ambient occlusion takes the variant reading it
+        render (true);
+        EXPECT_NE (renderer.getAmbientOcclusionPass(), nullptr);
+
+        // Turning the fog off releases its target and leaves the half float route
+        auto settings = scene.getRenderSettings();
+        settings.ambientOcclusion = false;
+        scene.setRenderSettings (settings);
+        auto fog = scene.getWorldFog();
+        fog.enabled = false;
+        scene.setWorldFog (fog);
+
+        ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << renderer.getLastError();
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+        ASSERT_NE (renderer.getFogApply(), nullptr);
+        EXPECT_EQ (renderer.getFogApply()->getNumCachedTargets(), 0u);
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr);
+        ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr);
+        EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)->getFormat(), GpuTextureFormat::rgba16float);
+    }
+
+    /** On raster the fog is the first post pass: the depth of field blurs the fogged color, whose
+        background the fog covers, and both outputs stay finite.
+    */
+    void checkRasterWorldFogRunsBeforeTheDepthOfField()
+    {
+        Scene scene;
+        setUpDepthOfFieldScene (scene, RenderSettings::TierPreference::raster, 0.2f);
+        buildBarsScene (scene, 10.0f);
+        scene.setAmbientColor (fogAmbientColor());
+
+        SceneRenderer renderer;
+        const auto meanBlurredCoverage = [&]
+        {
+            const auto texture = renderer.render (device, scene, fogSize, fogSize);
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+            EXPECT_NE (texture, nullptr) << renderer.getLastError();
+
+            const auto blurred = renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField);
+            EXPECT_NE (blurred, nullptr);
+            if (blurred == nullptr)
+                return 0.0f;
+
+            EXPECT_TRUE (isFiniteTexture (blurred));
+            const auto alpha = readUnitChannel (blurred, "a");
+            return alpha.empty() ? 0.0f : std::accumulate (alpha.begin(), alpha.end(), 0.0f) / static_cast<float> (alpha.size());
+        };
+
+        const auto clear = meanBlurredCoverage();
+
+        scene.setWorldFog (makeFog (0.08f));
+        const auto foggy = meanBlurredCoverage();
+        EXPECT_TRUE (isFiniteTexture (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)));
+
+        RecordProperty ("clearCoverage", String (clear, 3).toStdString());
+        RecordProperty ("foggyCoverage", String (foggy, 3).toStdString());
+
+        // The bars cover about half the frame; the fog covers the background they leave
+        EXPECT_LT (clear, 0.7f);
+        EXPECT_GT (foggy, clear + 0.3f);
+    }
+
+    /** Raster fog skips the frames whose prepass gave no depth, without counting them as failures: a
+        prepass that cannot compile leaves every frame without fog, and once prepass targets that
+        could not be created come back, so does the fog.
+    */
+    void checkRasterWorldFogSkipsFramesWithoutThePrepassDepth()
+    {
+        Scene scene;
+        setFogTier (scene, RenderSettings::TierPreference::raster);
+        buildFogWallsScene (scene, true);
+
+        // More frames than the two failures in a row that give up
+        const auto expectSkipped = [&] (SceneRenderer& renderer, const char* name)
+        {
+            for (int frame = 0; frame < 3; ++frame)
+            {
+                ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << name << ": " << renderer.getLastError();
+                EXPECT_TRUE (renderer.waitForGPU().wasOk()) << name;
+                EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr) << name;
+                ASSERT_NE (renderer.getFogApply(), nullptr) << name;
+                EXPECT_FALSE (renderer.getFogApply()->hasGivenUp()) << name;
+                EXPECT_EQ (renderer.getFogApply()->getNumCachedTargets(), 0u) << name;
+            }
+        };
+
+        {
+            SceneRenderer renderer;
+            renderer.failDepthNormalPrepassForTesting();
+            expectSkipped (renderer, "prepass not compiled");
+        }
+
+        SceneRenderer renderer;
+        renderer.failDepthNormalPrepassTargetsForTesting (3);
+        expectSkipped (renderer, "prepass without targets");
+
+        ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << renderer.getLastError();
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+        EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr);
+        ASSERT_NE (renderer.getFogApply(), nullptr);
+        EXPECT_GT (renderer.getFogApply()->getNumCachedTargets(), 0u);
+    }
+
+    /** Raster fog that gave up after two failures in a row leaves the route it took: the frames after
+        it draw no prepass and no half float scene color.
+    */
+    void checkRasterWorldFogThatGaveUpStopsItsRoute()
+    {
+        Scene scene;
+        setFogTier (scene, RenderSettings::TierPreference::raster);
+        buildFogWallsScene (scene, true);
+
+        SceneRenderer renderer;
+        renderer.failWorldFogForTesting (2);
+
+        for (int frame = 0; frame < 3; ++frame)
+        {
+            ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << frame << ": " << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk()) << frame;
+            ASSERT_NE (renderer.getFogApply(), nullptr) << frame;
+            EXPECT_EQ (renderer.getFogApply()->hasGivenUp(), frame >= 1) << frame;
+
+            // The two failing frames took the route; the one after the fog gave up does not
+            const auto routed = frame < 2;
+            ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor), nullptr) << frame;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal) != nullptr, routed) << frame;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)->getFormat() == GpuTextureFormat::rgba16float, routed) << frame;
         }
     }
 
@@ -14489,6 +15257,46 @@ TEST_P (SceneRendererTierTests, MotionBlurOnRasterRendersTheUnblurredFallback)
     checkMotionBlurOnRasterRendersTheUnblurredFallback();
 }
 
+TEST_P (SceneRendererTierTests, FogAttenuatesWithDistance)
+{
+    checkFogAttenuatesWithDistance (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FogTransmittanceMatchesTheCpu)
+{
+    checkFogTransmittanceMatchesTheCpu (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, InfiniteFarPlaneFogStaysFinite)
+{
+    checkInfiniteFarPlaneFogStaysFinite (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FogIsLitByTheAmbientLightAndTheEnvironment)
+{
+    checkFogIsLitByTheAmbientLightAndTheEnvironment (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FogScattersTheSunPhysically)
+{
+    checkFogScattersTheSunPhysically (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FogOverTheBackgroundKeepsItsBlendWithDepthOfField)
+{
+    checkFogOverTheBackgroundKeepsItsBlendWithDepthOfField (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, BackgroundColorLerpsTowardsTheFog)
+{
+    checkBackgroundColorLerpsTowardsTheFog (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, FogScattersForwardTowardsTheSun)
+{
+    checkFogScattersForwardTowardsTheSun (GetParam());
+}
+
 INSTANTIATE_TEST_SUITE_P (SceneRendererTiers,
                           SceneRendererTierTests,
                           ::testing::Values (RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full),
@@ -16013,6 +16821,90 @@ TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessWhileTheCamera
     EXPECT_NEAR (background, environment, 0.02 * environment);
 }
 
+TEST_F (MotionBlurMetalTests, FogOverTheBackgroundKeepsItsBlendWhileTheCameraTurns)
+{
+    // Turning the camera smears the fog's coverage of the background color into itself: none of it
+    // moves, so it keeps its display-space blend (preflight R24). The rgba8 frame the renderer stores is
+    // compared as stored, within 1 level of the frame without motion blur on the rows above and below
+    // the bar: a read back through a canvas can move a stored level by one either way
+    const auto turn = [&] (bool motionBlur)
+    {
+        std::array<std::vector<float>, 3> channels;
+
+        Scene scene;
+        buildMovingBarScene (scene);
+        setUpMotionBlur (scene);
+        setMotionBlur (scene, motionBlur);
+        scene.setAmbientColor (fogAmbientColor());
+        scene.setWorldFog (makeFog (0.08f));
+        scene.getActiveCamera()->zFar = 10.0f;
+
+        auto* camera = scene.getRoot()->findChild ("camera");
+        EXPECT_NE (camera, nullptr);
+        if (camera == nullptr)
+            return channels;
+
+        SceneRenderer renderer;
+        aimCamera (*camera, {}, { 0.0f, 0.0f, -1.0f });
+        if (! renderToImage (renderer, scene, size).isValid())
+            return channels;
+
+        aimCamera (*camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
+        const auto stored = renderer.render (device, scene, size, size);
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+        EXPECT_NE (stored, nullptr) << renderer.getLastError();
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur) != nullptr, motionBlur);
+
+        if (stored != nullptr)
+            channels = { readUnitChannel (stored, "r"), readUnitChannel (stored, "g"), readUnitChannel (stored, "b") };
+
+        return channels;
+    };
+
+    const auto off = turn (false);
+    const auto on = turn (true);
+    for (size_t channel = 0; channel < 3; ++channel)
+    {
+        ASSERT_EQ (off[channel].size(), static_cast<size_t> (size * size));
+        ASSERT_EQ (on[channel].size(), off[channel].size());
+    }
+
+    // The bar spans rows 26 to 102. Stored levels, so a level is exactly 1 / 255
+    int largest = 0;
+    Point<int> where;
+    double background = 0.0;
+    for (const auto band : { Rectangle<int> (0, 0, size, 20), Rectangle<int> (0, 108, size, 20) })
+    {
+        for (int y = band.getY(); y < band.getBottom(); ++y)
+        {
+            for (int x = 0; x < size; ++x)
+            {
+                const auto index = static_cast<size_t> (y * size + x);
+                background += off[0][index] * 255.0;
+
+                for (size_t channel = 0; channel < 3; ++channel)
+                {
+                    const auto difference = static_cast<int> (std::lround (std::abs (on[channel][index] - off[channel][index]) * 255.0f));
+                    if (difference > largest)
+                    {
+                        largest = difference;
+                        where = { x, y };
+                    }
+                }
+            }
+        }
+    }
+
+    background /= 2.0 * 20.0 * size;
+    RecordProperty ("largestStoredDifference", largest);
+    RecordProperty ("at", (String (where.getX()) + ", " + String (where.getY())).toStdString());
+    RecordProperty ("background", String (background, 1).toStdString());
+
+    // Not vacuous: the background shows the fog's partial coverage
+    EXPECT_GT (background, 30.0);
+    EXPECT_LE (largest, 1);
+}
+
 TEST_F (MotionBlurMetalTests, StillPartialCoverageKeepsItsBlendWhileTheBarMoves)
 {
     // Half transparent quads, standing for antialiased edges, keep the frame's blend with the
@@ -16375,6 +17267,203 @@ TEST_F (MotionBlurMetalTests, MotionBlurChangesKeepTheAccumulationConverged)
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
 
+//==============================================================================
+/** The analytic world fog (FogApply) on Metal: both tiers against each other, the restarting
+    signature and the failures. The checks shared with the GL twins are in SceneRendererBaselineScenes.
+*/
+class WorldFogMetalTests : public SceneRendererMetalTests
+{
+protected:
+    /** The mean luminance of the near wall, the far wall and the background of buildFogWallsScene()
+        with fog, rendered on @p tier. */
+    std::array<double, 3> renderFogWalls (RenderSettings::TierPreference tier)
+    {
+        Scene scene;
+        setFogTier (scene, tier);
+        buildFogWallsScene (scene, true);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, fogSize);
+        EXPECT_TRUE (image.isValid()) << renderer.getLastError();
+        if (! image.isValid())
+            return {};
+
+        return { meanLuminance (image, fogNearWallArea()), meanLuminance (image, fogFarWallArea()), meanLuminance (image, fogBackgroundArea()) };
+    }
+};
+
+TEST_F (WorldFogMetalTests, AnalyticFogAgreesAcrossTiers)
+{
+    // Both tiers apply lib/fog.glsl: the full tier in place before TAA, the raster tier as its first post pass
+    const auto full = renderFogWalls (RenderSettings::TierPreference::full);
+    const auto raster = renderFogWalls (RenderSettings::TierPreference::raster);
+
+    const char* names[] = { "near", "far", "background" };
+    for (size_t i = 0; i < 3; ++i)
+    {
+        RecordProperty (std::string (names[i]) + "Full", String (full[i], 2).toStdString());
+        RecordProperty (std::string (names[i]) + "Raster", String (raster[i], 2).toStdString());
+        EXPECT_GT (full[i], 20.0) << names[i];
+        EXPECT_NEAR (raster[i], full[i], 0.03 * full[i]) << names[i];
+    }
+}
+
+TEST_F (WorldFogMetalTests, ChangingTheFogRestartsAccumulation)
+{
+    // The fog is applied before TAA, so every field of an enabled fog restarts the convergence
+    Scene scene;
+    buildFogWallsScene (scene, true);
+    setFullTierTaa (scene, 4);
+
+    SceneRenderer renderer;
+    const auto converge = [&]
+    {
+        for (int frame = 0; frame < 16 && ! renderer.isConverged(); ++frame)
+            ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << renderer.getLastError();
+
+        ASSERT_TRUE (renderer.isConverged());
+    };
+
+    const std::pair<const char*, std::function<void (WorldFog&)>> edits[] = {
+        { "density", [] (WorldFog& fog) { fog.density *= 2.0f; } },
+        { "heightFalloff", [] (WorldFog& fog) { fog.heightFalloff = 0.1f; } },
+        { "baseHeight", [] (WorldFog& fog) { fog.baseHeight = 1.0f; } },
+        { "color", [] (WorldFog& fog) { fog.color = { 1.0f, 0.5f, 0.2f }; } },
+        { "anisotropy", [] (WorldFog& fog) { fog.anisotropy = 0.5f; } },
+        { "enabled", [] (WorldFog& fog) { fog.enabled = false; } },
+    };
+
+    for (const auto& [name, edit] : edits)
+    {
+        converge();
+
+        auto fog = scene.getWorldFog();
+        edit (fog);
+        scene.setWorldFog (fog);
+
+        ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << renderer.getLastError();
+        EXPECT_FALSE (renderer.isConverged()) << name;
+    }
+
+    // A disabled fog draws nothing, so editing it changes nothing
+    converge();
+    auto fog = scene.getWorldFog();
+    ASSERT_FALSE (fog.enabled);
+    fog.density = 0.5f;
+    scene.setWorldFog (fog);
+    ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.isConverged());
+}
+
+TEST_F (WorldFogMetalTests, GivingUpWorldFogRendersWithoutIt)
+{
+    Scene scene;
+    setFogTier (scene, RenderSettings::TierPreference::full);
+    buildFogWallsScene (scene, false);
+
+    SceneRenderer reference;
+    const auto clear = renderToImage (reference, scene, fogSize);
+    ASSERT_TRUE (clear.isValid()) << reference.getLastError();
+    scene.setWorldFog (makeFog (0.08f));
+
+    const auto isFogged = [&] (const Image& image)
+    {
+        return meanLuminance (image, fogBackgroundArea()) > meanLuminance (clear, fogBackgroundArea()) + 20.0;
+    };
+
+    // One failure is retried on the next frame
+    {
+        SceneRenderer renderer;
+        renderer.failWorldFogForTesting (1);
+
+        const auto failed = renderToImage (renderer, scene, fogSize);
+        ASSERT_TRUE (failed.isValid()) << renderer.getLastError();
+        EXPECT_LE (maxChannelDifference (failed, clear), 1);
+
+        const auto retried = renderToImage (renderer, scene, fogSize);
+        ASSERT_TRUE (retried.isValid()) << renderer.getLastError();
+        EXPECT_TRUE (isFogged (retried));
+        ASSERT_NE (renderer.getFogApply(), nullptr);
+        EXPECT_FALSE (renderer.getFogApply()->hasGivenUp());
+    }
+
+    // The second failure in a row gives up for good, every frame then rendering without the fog
+    SceneRenderer renderer;
+    renderer.failWorldFogForTesting (2);
+
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        const auto image = renderToImage (renderer, scene, fogSize);
+        ASSERT_TRUE (image.isValid()) << frame << ": " << renderer.getLastError();
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << frame;
+        EXPECT_LE (maxChannelDifference (image, clear), 1) << frame;
+        ASSERT_NE (renderer.getFogApply(), nullptr);
+        EXPECT_EQ (renderer.getFogApply()->hasGivenUp(), frame >= 1) << frame;
+        EXPECT_EQ (renderer.getFogApply()->getNumCachedTargets(), 0u) << frame;
+    }
+
+    EXPECT_EQ (renderer.getFogApply()->getGiveUpReason(), "the renders failed for testing");
+}
+
+TEST_F (WorldFogMetalTests, NonFiniteFogDrawsNothing)
+{
+    // A fog with any field that is not finite draws nothing, so nothing that is not finite reaches the scene color
+    Scene scene;
+    setFogTier (scene, RenderSettings::TierPreference::full);
+    buildFogWallsScene (scene, false);
+
+    SceneRenderer reference;
+    const auto clear = renderToImage (reference, scene, fogSize);
+    ASSERT_TRUE (clear.isValid()) << reference.getLastError();
+
+    const auto nan = std::numeric_limits<float>::quiet_NaN();
+    const std::pair<const char*, std::function<void (WorldFog&)>> edits[] = {
+        { "heightFalloff", [nan] (WorldFog& fog) { fog.heightFalloff = nan; } },
+        { "color", [nan] (WorldFog& fog) { fog.color[1] = nan; } },
+        { "baseHeight", [nan] (WorldFog& fog) { fog.baseHeight = nan; } },
+        { "anisotropy", [] (WorldFog& fog) { fog.anisotropy = std::numeric_limits<float>::infinity(); } },
+    };
+
+    for (const auto& [name, edit] : edits)
+    {
+        auto fog = makeFog (0.08f, 0.3f);
+        edit (fog);
+        scene.setWorldFog (fog);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, fogSize);
+        ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
+        EXPECT_EQ (renderer.getFogApply(), nullptr) << name;
+        EXPECT_TRUE (isFiniteTexture (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor))) << name;
+        EXPECT_LE (maxChannelDifference (image, clear), 1) << name;
+    }
+}
+
+TEST_F (WorldFogMetalTests, RasterWorldFogUnavailableRecordsNothing)
+{
+    checkRasterWorldFogUnavailableRecordsNothing();
+}
+
+TEST_F (WorldFogMetalTests, RasterWorldFogDrawsThePrepassWithoutAmbientOcclusion)
+{
+    checkRasterWorldFogDrawsThePrepassWithoutAmbientOcclusion();
+}
+
+TEST_F (WorldFogMetalTests, RasterWorldFogRunsBeforeTheDepthOfField)
+{
+    checkRasterWorldFogRunsBeforeTheDepthOfField();
+}
+
+TEST_F (WorldFogMetalTests, RasterWorldFogSkipsFramesWithoutThePrepassDepth)
+{
+    checkRasterWorldFogSkipsFramesWithoutThePrepassDepth();
+}
+
+TEST_F (WorldFogMetalTests, RasterWorldFogThatGaveUpStopsItsRoute)
+{
+    checkRasterWorldFogThatGaveUpStopsItsRoute();
+}
+
 class SceneRendererFrameStatsTests : public SceneRendererMetalTests
 {
 protected:
@@ -16668,6 +17757,39 @@ TEST_F (SceneRendererFrameStatsTests, MotionBlurIsListedOnMovingFramesOnly)
 
     renderAndWait (renderer, scene, 1);
     EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows lightCulling gbuffer ambientOcclusion hiZ screenSpaceReflections lighting indirectDiffuse forward temporalAA depthOfField bloom toneMapping");
+}
+
+TEST_F (SceneRendererFrameStatsTests, FogIsListedRightAfterTheForwardPass)
+{
+    // Full: in place before TAA. Raster: the first post pass, before the depth of field
+    for (const auto tier : { RenderSettings::TierPreference::full, RenderSettings::TierPreference::raster })
+    {
+        Scene scene;
+        buildEveryPassScene (scene, tier);
+        scene.setWorldFog (makeFog (0.08f));
+
+        SceneRenderer renderer;
+        renderer.setFrameStatsEnabled (true);
+        renderAndWait (renderer, scene, 2);
+
+        const auto* expected = tier == RenderSettings::TierPreference::full
+                                 ? "shadows lightCulling gbuffer ambientOcclusion hiZ screenSpaceReflections lighting indirectDiffuse forward fog temporalAA depthOfField bloom toneMapping"
+                                 : "shadows depthNormalPrepass ambientOcclusion forward fog depthOfField bloom toneMapping";
+        EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), expected);
+        expectScopesMeasured (renderer.getLastFrameStats());
+
+        // Fog alone on raster draws the prepass for its depth, then the fog and the tone mapping
+        if (tier == RenderSettings::TierPreference::raster)
+        {
+            auto settings = scene.getRenderSettings();
+            settings.ambientOcclusion = false;
+            settings.depthOfField = false;
+            settings.bloom = false;
+            scene.setRenderSettings (settings);
+            renderAndWait (renderer, scene, 1);
+            EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows depthNormalPrepass forward fog toneMapping");
+        }
+    }
 }
 
 TEST_F (SceneRendererFrameStatsTests, FrameStatsBelongToOneFrame)
@@ -17459,6 +18581,130 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_MotionBlurFrameTimes)
     }
 }
 
+/** The cost of the world fog in the light show with 16 show lights while the camera orbits, on both
+    tiers, at the demo size and at 2560 x 1600: off, on, then off again (A/A), each with a renderer of
+    its own, 3 interleaved rounds. Run it like DISABLED_LightShowFrameTimes.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_WorldFogFrameTimes)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    const char* const columns[] = { "wall", "gpu", "depthNormalPrepass", "forward", "fog", "temporalAA", "toneMapping" };
+
+    const struct
+    {
+        const char* name;
+        RenderSettings::TierPreference tier;
+        bool fog;
+    } configs[] = {
+        { "full a off", RenderSettings::TierPreference::full, false },
+        { "full b fog", RenderSettings::TierPreference::full, true },
+        { "full c off again", RenderSettings::TierPreference::full, false },
+        { "raster d off", RenderSettings::TierPreference::raster, false },
+        { "raster e fog", RenderSettings::TierPreference::raster, true },
+        { "raster f off again", RenderSettings::TierPreference::raster, false },
+    };
+
+    for (const auto& [width, height] : { std::pair { 1280, 800 }, std::pair { 2560, 1600 } })
+    {
+        std::map<String, std::map<String, std::vector<double>>> times;
+
+        for (int round = 0; round < 3; ++round)
+        {
+            double load[3] = {};
+            getloadavg (load, 3);
+            std::cout << width << " x " << height << " round " << round << ": load " << String (load[0], 2) << std::endl;
+
+            for (const auto& config : configs)
+            {
+                LightShow show;
+                if (! show.build (16, 0.5f, 0.08f, config.tier, static_cast<float> (width) / static_cast<float> (height)))
+                    GTEST_SKIP() << "mpc.glb is missing";
+
+                show.orbitPitch = 0.6f;
+
+                if (config.fog)
+                {
+                    WorldFog fog;
+                    fog.enabled = true;
+                    fog.density = 0.08f;
+                    fog.heightFalloff = 0.5f;
+                    show.scene.setWorldFog (fog);
+                }
+
+                SceneRenderer renderer;
+                renderer.setFrameStatsEnabled (true);
+
+                std::map<String, double> sums;
+                int measured = 0;
+                uint64 lastFrame = 0;
+                const auto take = [&]
+                {
+                    const auto& stats = renderer.getLastFrameStats();
+                    if (stats.frameIndex == lastFrame || ! stats.gpu.available)
+                        return;
+
+                    lastFrame = stats.frameIndex;
+                    ++measured;
+                    sums["gpu"] += stats.gpu.frameMilliseconds;
+                    for (const auto& scope : stats.gpu.scopes)
+                        if (scope.available)
+                            sums[scope.name] += scope.milliseconds;
+                };
+
+                const auto renderFrames = [&] (int count, bool collect)
+                {
+                    for (int i = 0; i < count; ++i)
+                    {
+                        show.animate();
+                        if (renderer.render (device, show.scene, width, height) == nullptr)
+                            return false;
+
+                        if ((i + 1) % 2 == 0 && renderer.waitForGPU().failed())
+                            return false;
+
+                        if (collect)
+                            take();
+                    }
+
+                    return renderer.waitForGPU().wasOk();
+                };
+
+                ASSERT_TRUE (renderFrames (30, false)) << config.name;
+                lastFrame = renderer.getLastFrameStats().frameIndex;
+
+                const auto start = Time::getMillisecondCounterHiRes();
+                ASSERT_TRUE (renderFrames (120, true)) << config.name;
+                const auto wall = (Time::getMillisecondCounterHiRes() - start) / 120.0;
+                take();
+                ASSERT_GT (measured, 0) << config.name;
+
+                EXPECT_EQ (renderer.getFogApply() != nullptr, config.fog) << config.name;
+
+                times[config.name]["wall"].push_back (wall);
+                for (const auto* column : columns)
+                    if (String (column) != "wall")
+                        times[config.name][column].push_back (sums[column] / measured);
+            }
+        }
+
+        for (const auto& config : configs)
+        {
+            String line;
+            line << width << " x " << height << " " << config.name << ":";
+            for (const auto* column : columns)
+            {
+                line << " " << column;
+                for (const auto value : times[config.name][column])
+                    line << " " << String (value, 3);
+            }
+
+            std::cout << line << std::endl;
+        }
+    }
+}
+
 /** The cost of SceneRenderer::setFrameStatsEnabled() in the light show with 64 show lights on the
     full tier, at the demo size, with 2 frames in flight. Run it like DISABLED_LightShowFrameTimes.
     Each round times the frames with the stats off, on, off again (A/A) and on again, each on a device
@@ -18125,7 +19371,7 @@ TEST_F (SceneRendererGLTests, ClearcoatReflectsTheProbe)
 
 TEST_F (SceneRendererGLTests, RasterDepthOfFieldBlursOutOfFocusBarsOnly)
 {
-    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+    if (! isFeatureAvailable (RenderCapabilities::Feature::depthOfField, RenderSettings::TierPreference::raster))
         GTEST_SKIP() << "Raster depth of field is unavailable on this device";
 
     checkDepthOfFieldBlursOutOfFocusBarsOnly (RenderSettings::TierPreference::raster);
@@ -18133,7 +19379,7 @@ TEST_F (SceneRendererGLTests, RasterDepthOfFieldBlursOutOfFocusBarsOnly)
 
 TEST_F (SceneRendererGLTests, RasterNearFieldBleedsOverTheFocusedBackground)
 {
-    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+    if (! isFeatureAvailable (RenderCapabilities::Feature::depthOfField, RenderSettings::TierPreference::raster))
         GTEST_SKIP() << "Raster depth of field is unavailable on this device";
 
     checkNearFieldBleedsOverTheFocusedBackground (RenderSettings::TierPreference::raster);
@@ -18141,7 +19387,7 @@ TEST_F (SceneRendererGLTests, RasterNearFieldBleedsOverTheFocusedBackground)
 
 TEST_F (SceneRendererGLTests, RasterInFocusEdgesMatchWithoutDepthOfField)
 {
-    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+    if (! isFeatureAvailable (RenderCapabilities::Feature::depthOfField, RenderSettings::TierPreference::raster))
         GTEST_SKIP() << "Raster depth of field is unavailable on this device";
 
     checkInFocusEdgesMatchWithoutDepthOfField (RenderSettings::TierPreference::raster);
@@ -18154,7 +19400,7 @@ TEST_F (SceneRendererGLTests, RasterDepthOfFieldOffChangesNothing)
 
 TEST_F (SceneRendererGLTests, RasterDepthOfFieldKeepsTheSilhouetteBlendOverTheBackground)
 {
-    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+    if (! isFeatureAvailable (RenderCapabilities::Feature::depthOfField, RenderSettings::TierPreference::raster))
         GTEST_SKIP() << "Raster depth of field is unavailable on this device";
 
     checkDepthOfFieldKeepsTheSilhouetteBlendOverTheBackground (RenderSettings::TierPreference::raster);
@@ -18162,7 +19408,7 @@ TEST_F (SceneRendererGLTests, RasterDepthOfFieldKeepsTheSilhouetteBlendOverTheBa
 
 TEST_F (SceneRendererGLTests, RasterBlurredHighlightsKeepTheirBrightnessOverTheBackground)
 {
-    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+    if (! isFeatureAvailable (RenderCapabilities::Feature::depthOfField, RenderSettings::TierPreference::raster))
         GTEST_SKIP() << "Raster depth of field is unavailable on this device";
 
     checkBlurredHighlightsKeepTheirBrightnessOverTheBackground (RenderSettings::TierPreference::raster);
@@ -18170,7 +19416,7 @@ TEST_F (SceneRendererGLTests, RasterBlurredHighlightsKeepTheirBrightnessOverTheB
 
 TEST_F (SceneRendererGLTests, RasterDepthOfFieldDrawsThePrepassWithoutAmbientOcclusion)
 {
-    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+    if (! isFeatureAvailable (RenderCapabilities::Feature::depthOfField, RenderSettings::TierPreference::raster))
         GTEST_SKIP() << "Raster depth of field is unavailable on this device";
 
     checkRasterDepthOfFieldDrawsThePrepassWithoutAmbientOcclusion();
@@ -18183,7 +19429,7 @@ TEST_F (SceneRendererGLTests, RasterDepthOfFieldUnavailableRecordsNothing)
 
 TEST_F (SceneRendererGLTests, RasterDepthOfFieldSkipsFramesWithoutThePrepassDepth)
 {
-    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+    if (! isFeatureAvailable (RenderCapabilities::Feature::depthOfField, RenderSettings::TierPreference::raster))
         GTEST_SKIP() << "Raster depth of field is unavailable on this device";
 
     checkRasterDepthOfFieldSkipsFramesWithoutThePrepassDepth();
@@ -18191,7 +19437,7 @@ TEST_F (SceneRendererGLTests, RasterDepthOfFieldSkipsFramesWithoutThePrepassDept
 
 TEST_F (SceneRendererGLTests, RasterDepthOfFieldThatGaveUpStopsItsRoute)
 {
-    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+    if (! isFeatureAvailable (RenderCapabilities::Feature::depthOfField, RenderSettings::TierPreference::raster))
         GTEST_SKIP() << "Raster depth of field is unavailable on this device";
 
     checkRasterDepthOfFieldThatGaveUpStopsItsRoute();
@@ -18200,5 +19446,106 @@ TEST_F (SceneRendererGLTests, RasterDepthOfFieldThatGaveUpStopsItsRoute)
 TEST_F (SceneRendererGLTests, RasterMotionBlurRendersTheUnblurredFallback)
 {
     checkMotionBlurOnRasterRendersTheUnblurredFallback();
+}
+
+TEST_F (SceneRendererGLTests, RasterFogAttenuatesWithDistance)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkFogAttenuatesWithDistance (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterFogTransmittanceMatchesTheCpu)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkFogTransmittanceMatchesTheCpu (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterInfiniteFarPlaneFogStaysFinite)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkInfiniteFarPlaneFogStaysFinite (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterFogIsLitByTheAmbientLightAndTheEnvironment)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkFogIsLitByTheAmbientLightAndTheEnvironment (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterFogScattersTheSunPhysically)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkFogScattersTheSunPhysically (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterFogOverTheBackgroundKeepsItsBlendWithDepthOfField)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkFogOverTheBackgroundKeepsItsBlendWithDepthOfField (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterBackgroundColorLerpsTowardsTheFog)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkBackgroundColorLerpsTowardsTheFog (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterFogScattersForwardTowardsTheSun)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkFogScattersForwardTowardsTheSun (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterWorldFogUnavailableRecordsNothing)
+{
+    checkRasterWorldFogUnavailableRecordsNothing();
+}
+
+TEST_F (SceneRendererGLTests, RasterWorldFogDrawsThePrepassWithoutAmbientOcclusion)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkRasterWorldFogDrawsThePrepassWithoutAmbientOcclusion();
+}
+
+TEST_F (SceneRendererGLTests, RasterWorldFogRunsBeforeTheDepthOfField)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkRasterWorldFogRunsBeforeTheDepthOfField();
+}
+
+TEST_F (SceneRendererGLTests, RasterWorldFogSkipsFramesWithoutThePrepassDepth)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkRasterWorldFogSkipsFramesWithoutThePrepassDepth();
+}
+
+TEST_F (SceneRendererGLTests, RasterWorldFogThatGaveUpStopsItsRoute)
+{
+    if (! isFeatureAvailable (RenderCapabilities::Feature::worldFog, RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster world fog is unavailable on this device";
+
+    checkRasterWorldFogThatGaveUpStopsItsRoute();
 }
 #endif

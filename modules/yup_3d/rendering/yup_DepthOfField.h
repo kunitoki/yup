@@ -136,9 +136,11 @@ public:
     const GpuTexture::Ptr& getOutput() const noexcept { return output; }
 
     /** The r8unorm blur amount of the last render(), of the size of the color, or nullptr when it
-        drew nothing: per pixel, the share of the coverage the blur wrote, 0 where it left the pixel
-        sharp, 1 where it covers nothing. ToneMapping composites that share in radiance and the rest
-        in display space (preflight R21).
+        drew nothing: per pixel, how much the blur moved the coverage, the change of coverage
+        relative to the larger of the sharp and blurred coverage, in full from a tenth: 0 where the
+        coverage stayed as it was (in-focus edges, a uniform partial coverage such as fog over the
+        background color), 1 where it covers nothing. ToneMapping composites that share in radiance
+        and the rest in display space (preflight R21, R24).
     */
     const GpuTexture::Ptr& getBlurAmount() const noexcept { return blurAmount; }
 

@@ -94,8 +94,8 @@ bool PostChain::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Ren
     }
 
     // The depth of field is created by the first frame blurring. A failure leaves the frame unblurred.
-    // blurAmount is the share of each pixel's coverage a blur spread, which tone mapping composites
-    // in radiance (preflight R20, R21, R22)
+    // blurAmount is the share of each pixel's coverage a blur moved, which tone mapping composites
+    // in radiance (preflight R20, R21, R22, R24)
     auto color = resolvedColor;
     auto colorIsReversible = inputs.colorIsReversible;
     GpuTexture::Ptr blurAmount;

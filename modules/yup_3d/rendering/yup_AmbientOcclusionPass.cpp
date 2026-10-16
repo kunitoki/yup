@@ -111,7 +111,7 @@ Result AmbientOcclusionPass::prepareIndirectDiffuse()
         if (auto result = denoiseIndirect.prepare (device, gtaoDenoiseIndirectShaderBundle, sizeof (gtaoDenoiseIndirectShaderBundle), indirectDiffuseFormats); result.failed())
             return Result::fail ("Unable to compile the GI denoise: " + result.getErrorMessage());
 
-        if (auto result = composite.prepare (device, ssgiCompositeShaderBundle, sizeof (ssgiCompositeShaderBundle), indirectDiffuseFormat, true); result.failed())
+        if (auto result = composite.prepare (device, ssgiCompositeShaderBundle, sizeof (ssgiCompositeShaderBundle), indirectDiffuseFormat, FullscreenPass::Blend::additive); result.failed())
             return Result::fail ("Unable to compile the GI composite: " + result.getErrorMessage());
 
         return Result::ok();

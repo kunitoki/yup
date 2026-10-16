@@ -43,9 +43,11 @@ namespace yup
       pixel, average their taps without reading depth or motion (Jimenez 2014).
 
     It carries the premultiplied rgba of the scene color, so a moving silhouette smears its coverage
-    over the background, and writes the share of each pixel's coverage that came from the motion,
-    not from the pixel itself, for tone mapping to composite in radiance (preflight R22). The share
-    the depth of field already spread, when its mask is given, counts as spread too. Sizes come from
+    over the background, and writes how much the smear moved each pixel's coverage, for tone
+    mapping to composite that share in radiance (preflight R22, R24): the change of coverage
+    relative to the larger of the sharp and smeared coverage, in full from a tenth, so a uniform
+    partial coverage the smear leaves as it was (fog over the background color) keeps the display
+    blend. The share the depth of field already spread, when its mask is given, counts as spread too. Sizes come from
     the textures read, so the depth and velocity may be smaller than the color (an upscaling
     renderer). The sample pattern is fixed per pixel: the passes are deterministic, as post passes
     after TAA must be.
@@ -72,7 +74,7 @@ public:
         GpuTexture::Ptr color;      ///< The linear rgba16float scene color, premultiplied by its coverage alpha.
         GpuTexture::Ptr depth;      ///< The single-sampled depth of the scene, read by uv: color's size or smaller.
         GpuTexture::Ptr velocity;   ///< The rg16float screen-space motion, current uv minus previous uv, read by uv.
-        GpuTexture::Ptr blurAmount; ///< The r8unorm share of each pixel's coverage the depth of field spread, or nullptr.
+        GpuTexture::Ptr blurAmount; ///< The r8unorm share of each pixel's coverage the depth of field moved (DepthOfField::getBlurAmount()), or nullptr.
     };
 
     //==============================================================================
@@ -102,9 +104,9 @@ public:
     const GpuTexture::Ptr& getOutput() const noexcept { return output; }
 
     /** The r8unorm blur amount of the last render(), of the size of the color, or nullptr when it
-        drew nothing: per pixel, the share of the coverage the motion or the depth of field spread,
-        0 where the pixel kept its own sharp coverage, 1 where it covers nothing. ToneMapping
-        composites that share in radiance and the rest in display space (preflight R21, R22).
+        drew nothing: per pixel, the share of the coverage the motion or the depth of field moved,
+        0 where the pixel kept its coverage, 1 where it covers nothing. ToneMapping composites that
+        share in radiance and the rest in display space (preflight R21, R22, R24).
     */
     const GpuTexture::Ptr& getBlurAmount() const noexcept { return blurAmount; }
 
