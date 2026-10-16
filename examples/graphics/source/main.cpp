@@ -292,6 +292,9 @@ private:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_CodeEditor
 #include "examples/CodeEditor.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_CurlBands
+#include "examples/CurlBands.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
 #include "examples/DragAndDrop.h"
 #endif
@@ -566,6 +569,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_CodeEditor
         addDemo ("CodeEditor", "Code Editor", [] { return std::make_unique<CodeEditorDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_CurlBands
+        addDemo ("CurlBands", "Curl Bands", [] { return std::make_unique<CurlBandsDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
         addDemo ("DragAndDrop", "Drag and Drop", [] { return std::make_unique<DragAndDropDemo>(); });

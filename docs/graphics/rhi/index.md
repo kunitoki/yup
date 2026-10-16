@@ -73,6 +73,18 @@ Things to know when targeting it:
   driver crash), `GpuDevice::isDeviceLost` turns true and the device stops
   submitting work instead of hanging. Create a new device to render again.
 
+## Curl Bands example
+
+Select "Curl Bands" in the graphics example, or launch it with `--demo CurlBands`.
+For a single-demo build, select `YUP_EXAMPLE_GRAPHICS_DEMO=CurlBands`.
+
+The shader is by Abhishek Shivakumar (@godofecht). It uses two drifting FBM
+fields to displace coordinates with curl noise, then maps density and flow
+to color bands. The demo supplies elapsed time and target dimensions through
+a uniform buffer and uses the shared fullscreen vertex shader.
+
+Source: `examples/graphics/data/shaders/curl_bands.frag`.
+
 ## In this area
 
 - [Concepts & lifecycle](concepts.md) - the GPU bridge, GPU capability
