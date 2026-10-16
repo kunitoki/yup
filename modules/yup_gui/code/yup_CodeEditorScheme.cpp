@@ -37,6 +37,7 @@ CodeEditorScheme::CodeEditorScheme()
     setColor (ColorId::selection, Color (0x33264692));
     setColor (ColorId::searchHighlight, Color (0x3348c0ff));
     setColor (ColorId::breakpoint, Color (0xffe51400));
+    setColor (ColorId::errorLine, Color (0x40e51400));
     setColor (ColorId::minimapBackground, Color (0xff202020));
     setColor (ColorId::minimapForeground, Color (0x66ffffff));
     setColor (ColorId::minimapViewport, Color (0x3300a0ff));
@@ -134,6 +135,7 @@ CodeEditorScheme makeMonokai()
     scheme.setColor (CodeEditorScheme::ColorId::selection, Color (0xff49483e));
     scheme.setColor (CodeEditorScheme::ColorId::searchHighlight, Color (0x665f5a41));
     scheme.setColor (CodeEditorScheme::ColorId::breakpoint, Color (0xfff92672));
+    scheme.setColor (CodeEditorScheme::ColorId::errorLine, Color (0x40f92672));
     scheme.setColor (CodeEditorScheme::ColorId::minimapBackground, Color (0xff1f1f1c));
     scheme.setColor (CodeEditorScheme::ColorId::minimapForeground, Color (0x66f8f8f2));
     scheme.setColor (CodeEditorScheme::ColorId::minimapViewport, Color (0x3366d9ef));
@@ -166,6 +168,7 @@ CodeEditorScheme makeAlabaster()
     scheme.setColor (CodeEditorScheme::ColorId::selection, Color (0xffbfdbfe));       // "selection"
     scheme.setColor (CodeEditorScheme::ColorId::searchHighlight, Color (0x66ffbc5d)); // "find_highlight" (orange)
     scheme.setColor (CodeEditorScheme::ColorId::breakpoint, Color (0xffaa3731));      // "red"
+    scheme.setColor (CodeEditorScheme::ColorId::errorLine, Color (0x33aa3731));
     scheme.setColor (CodeEditorScheme::ColorId::minimapBackground, Color (0xffe8e8e8));
     scheme.setColor (CodeEditorScheme::ColorId::minimapForeground, Color (0x66000000));
     scheme.setColor (CodeEditorScheme::ColorId::minimapViewport, Color (0x33007acc));
@@ -198,6 +201,7 @@ CodeEditorScheme makeOneDark()
     scheme.setColor (CodeEditorScheme::ColorId::selection, Color (0xff3e4451));
     scheme.setColor (CodeEditorScheme::ColorId::searchHighlight, Color (0x556c7180));
     scheme.setColor (CodeEditorScheme::ColorId::breakpoint, Color (0xffe06c75));
+    scheme.setColor (CodeEditorScheme::ColorId::errorLine, Color (0x40e06c75));
     scheme.setColor (CodeEditorScheme::ColorId::minimapBackground, Color (0xff21252b));
     scheme.setColor (CodeEditorScheme::ColorId::minimapForeground, Color (0x66abb2bf));
     scheme.setColor (CodeEditorScheme::ColorId::minimapViewport, Color (0x33528bff));
@@ -230,6 +234,7 @@ CodeEditorScheme makeSolarizedDark()
     scheme.setColor (CodeEditorScheme::ColorId::selection, Color (0xff174956));
     scheme.setColor (CodeEditorScheme::ColorId::searchHighlight, Color (0x80586e75));
     scheme.setColor (CodeEditorScheme::ColorId::breakpoint, Color (0xffdc322f));
+    scheme.setColor (CodeEditorScheme::ColorId::errorLine, Color (0x40dc322f));
     scheme.setColor (CodeEditorScheme::ColorId::minimapBackground, Color (0xff073642));
     scheme.setColor (CodeEditorScheme::ColorId::minimapForeground, Color (0x66839496));
     scheme.setColor (CodeEditorScheme::ColorId::minimapViewport, Color (0x33268bd2));
@@ -262,6 +267,7 @@ CodeEditorScheme makeSolarizedLight()
     scheme.setColor (CodeEditorScheme::ColorId::selection, Color (0xffd5d8c4));
     scheme.setColor (CodeEditorScheme::ColorId::searchHighlight, Color (0x8093a1a1));
     scheme.setColor (CodeEditorScheme::ColorId::breakpoint, Color (0xffdc322f));
+    scheme.setColor (CodeEditorScheme::ColorId::errorLine, Color (0x33dc322f));
     scheme.setColor (CodeEditorScheme::ColorId::minimapBackground, Color (0xffeee8d5));
     scheme.setColor (CodeEditorScheme::ColorId::minimapForeground, Color (0x66657b83));
     scheme.setColor (CodeEditorScheme::ColorId::minimapViewport, Color (0x33268bd2));

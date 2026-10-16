@@ -36,10 +36,11 @@
     compiled at runtime with GpuPipeline::compileFromGlsl(); iChannel0 is an
     RGBA noise texture, iChannel1..3 are black.
 
-    The list on the left holds the presets, the transport row rewinds, pauses
-    and shows time, frame rate and size in pixels, and the editor below (which
-    can be hidden) edits the vertex and fragment stages and reports compile
-    errors. Load/Save read and write .ysl shader bundles.
+    The preset list on the left (hidden until Show Presets is pressed) loads
+    the presets, the transport row rewinds, pauses and shows time, frame rate
+    and size in pixels, and the editor below (which can be hidden) edits the
+    vertex and fragment stages and reports compile errors. Load/Save read and
+    write .ysl shader bundles.
 */
 class ShadersDemo : public yup::Component
 {
@@ -55,7 +56,7 @@ public:
         };
         presetList.setModel (&presetModel);
         presetList.setRowSize (30);
-        addAndMakeVisible (presetList);
+        addChildComponent (presetList);
 
         rewindButton.onClick = [this]
         {
@@ -77,12 +78,16 @@ public:
         {
             setEditorVisible (! editorVisible);
         };
+        presetsButton.onClick = [this]
+        {
+            setPresetsVisible (! presetsVisible);
+        };
         compileButton.onClick = [this]
         {
             requestCompile();
         };
 
-        for (auto* button : { &rewindButton, &playButton, &loadButton, &saveButton, &editorButton })
+        for (auto* button : { &presetsButton, &rewindButton, &playButton, &loadButton, &saveButton, &editorButton })
             addAndMakeVisible (button);
 
         for (auto* label : { &timeLabel, &fpsLabel, &sizeLabel })
@@ -97,6 +102,7 @@ public:
 
         codeEditor.setSyntaxDefinition ("glsl");
         codeEditor.setScheme (yup::CodeEditorScheme::getBuiltIn ("oneDark"));
+        codeEditor.setMinimapVisible (false);
 
         for (auto* component : std::initializer_list<yup::Component*> { &stageTabs, &codeEditor, &statusLabel, &compileButton })
             addAndMakeVisible (component);
@@ -192,8 +198,13 @@ public:
     {
         auto bounds = getLocalBounds().to<float>().reduced (10.0f);
 
-        presetList.setBounds (bounds.removeFromLeft (200.0f));
-        bounds.removeFromLeft (10.0f);
+        presetList.setVisible (presetsVisible);
+
+        if (presetsVisible)
+        {
+            presetList.setBounds (bounds.removeFromLeft (200.0f));
+            bounds.removeFromLeft (10.0f);
+        }
 
         for (auto* component : std::initializer_list<yup::Component*> { &stageTabs, &codeEditor, &statusLabel, &compileButton })
             component->setVisible (editorVisible);
@@ -217,6 +228,8 @@ public:
         bounds.removeFromBottom (6.0f);
         viewportArea = bounds;
 
+        presetsButton.setBounds (transportRow.removeFromLeft (110.0f));
+        transportRow.removeFromLeft (10.0f);
         rewindButton.setBounds (transportRow.removeFromLeft (70.0f));
         transportRow.removeFromLeft (4.0f);
         playButton.setBounds (transportRow.removeFromLeft (70.0f));
@@ -224,13 +237,13 @@ public:
 
         editorButton.setBounds (transportRow.removeFromRight (100.0f));
         transportRow.removeFromRight (4.0f);
-        saveButton.setBounds (transportRow.removeFromRight (90.0f));
+        saveButton.setBounds (transportRow.removeFromRight (80.0f));
         transportRow.removeFromRight (4.0f);
-        loadButton.setBounds (transportRow.removeFromRight (90.0f));
+        loadButton.setBounds (transportRow.removeFromRight (80.0f));
         transportRow.removeFromRight (10.0f);
 
-        timeLabel.setBounds (transportRow.removeFromLeft (80.0f));
-        fpsLabel.setBounds (transportRow.removeFromLeft (80.0f));
+        timeLabel.setBounds (transportRow.removeFromLeft (70.0f));
+        fpsLabel.setBounds (transportRow.removeFromLeft (70.0f));
         sizeLabel.setBounds (transportRow);
     }
 
@@ -406,6 +419,21 @@ void main()
 
         // The highlighter keeps the lines of the previous document until its syntax is set again
         codeEditor.setSyntaxDefinition ("glsl");
+
+        // setDocument() drops the error lines, so put back the ones belonging to this stage
+        if (vertex == errorsInVertex)
+        {
+            for (const int line : errorLines)
+                codeEditor.setErrorLine (line, true);
+        }
+    }
+
+    void setPresetsVisible (bool shouldBeVisible)
+    {
+        presetsVisible = shouldBeVisible;
+        presetsButton.setButtonText (presetsVisible ? "Hide Presets" : "Show Presets");
+        resized();
+        repaint();
     }
 
     void setEditorVisible (bool shouldBeVisible)
@@ -440,6 +468,9 @@ void main()
         pendingVertexSource = wrapUserCode (vertexDocument.getText(), false);
         pendingFragmentSource = wrapUserCode (fragmentDocument.getText(), true);
         compilePending = true;
+
+        errorLines.clear();
+        codeEditor.clearErrorLines();
 
         setStatus ("Compiling...");
         repaint();
@@ -483,8 +514,7 @@ void main()
         }
 
         // glslang reports "ERROR: <string>:<line>: <message>" lines
-        int numErrors = 0;
-        int firstLine = 0;
+        std::vector<int> lines;
         yup::String firstMessage;
 
         for (const auto& line : yup::StringArray::fromLines (error))
@@ -497,14 +527,13 @@ void main()
             if (sourceIndex.isEmpty() || lineNumber.isEmpty() || ! sourceIndex.containsOnly ("0123456789") || ! lineNumber.containsOnly ("0123456789"))
                 continue;
 
-            if (numErrors++ == 0)
-            {
-                firstLine = lineNumber.getIntValue();
+            if (lines.empty())
                 firstMessage = afterSource.fromFirstOccurrenceOf (":", false, false).trim();
-            }
+
+            lines.push_back (yup::jmax (0, lineNumber.getIntValue() - 1));
         }
 
-        if (numErrors == 0)
+        if (lines.empty())
         {
             auto text = error;
             for (const char* prefix : { "Vertex shader compile failed: ", "Fragment shader compile failed: ", "ShaderBundleCompiler: " })
@@ -519,14 +548,24 @@ void main()
 
         const bool vertexFailed = error.startsWith ("Vertex");
 
-        auto status = yup::String (vertexFailed ? "Vertex" : "Fragment") + " line " + yup::String (firstLine) + ": " + firstMessage;
-        if (numErrors > 1)
-            status << " (+" << (numErrors - 1) << " more)";
+        auto status = yup::String (vertexFailed ? "Vertex" : "Fragment") + " line " + yup::String (lines.front() + 1) + ": " + firstMessage;
+        if (lines.size() > 1)
+            status << " (+" << (int) (lines.size() - 1) << " more)";
 
         setStatus (status, yup::Colors::tomato);
 
+        errorLines = std::move (lines);
+        errorsInVertex = vertexFailed;
+
+        if (! editorVisible)
+            setEditorVisible (true);
+
         showStage (vertexFailed);
-        codeEditor.scrollToLine (firstLine - 1);
+
+        auto& document = vertexFailed ? vertexDocument : fragmentDocument;
+        codeEditor.setCaretPosition (document.getLineStartOffset (errorLines.front()));
+        codeEditor.scrollToLine (errorLines.front());
+        codeEditor.takeKeyboardFocus();
     }
 
     //==============================================================================
@@ -663,6 +702,7 @@ void main()
     PresetListModel presetModel;
     yup::ListBox presetList;
 
+    yup::TextButton presetsButton { "Show Presets" };
     yup::TextButton rewindButton { "Rewind" };
     yup::TextButton playButton { "Pause" };
     yup::TextButton loadButton { "Load .ysl" };
@@ -680,6 +720,7 @@ void main()
     yup::TextButton compileButton { "Compile" };
 
     yup::Rectangle<float> viewportArea;
+    bool presetsVisible = false;
     bool editorVisible = true;
 
     // Playback
@@ -699,6 +740,10 @@ void main()
     yup::String pendingVertexSource;
     yup::String pendingFragmentSource;
     bool compilePending = false;
+
+    // Lines (0-based) of the last failed compile, in the stage that failed
+    std::vector<int> errorLines;
+    bool errorsInVertex = false;
 
     yup::GpuPipeline::Ptr pipeline;
     yup::GpuTarget::Ptr target;

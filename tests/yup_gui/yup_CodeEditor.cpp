@@ -648,6 +648,101 @@ TEST (CodeEditorTest, BreakpointLifecycle)
     EXPECT_FALSE (editor.getBreakpoint (2));
 }
 
+TEST (CodeEditorTest, GutterBreakpointsCanBeToggled)
+{
+    CodeEditor editor;
+
+    EXPECT_FALSE (editor.areGutterBreakpointsEnabled());
+
+    editor.setGutterBreakpointsEnabled (true);
+    EXPECT_TRUE (editor.areGutterBreakpointsEnabled());
+
+    editor.setGutterBreakpointsEnabled (false);
+    EXPECT_FALSE (editor.areGutterBreakpointsEnabled());
+}
+
+TEST (CodeEditorTest, BreakpointsCanBeSetWithGutterBreakpointsDisabled)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("one\ntwo");
+
+    editor.setBreakpoint (1, true);
+    EXPECT_TRUE (editor.getBreakpoint (1));
+}
+
+TEST (CodeEditorTest, ErrorLineLifecycle)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("one\ntwo\nthree");
+
+    EXPECT_FALSE (editor.isErrorLine (1));
+    EXPECT_TRUE (editor.getErrorLines().empty());
+
+    editor.setErrorLine (1, true);
+    EXPECT_TRUE (editor.isErrorLine (1));
+    EXPECT_FALSE (editor.isErrorLine (0));
+
+    editor.setErrorLine (1, true);
+    EXPECT_EQ (1u, editor.getErrorLines().size());
+
+    editor.setErrorLine (1, false);
+    EXPECT_FALSE (editor.isErrorLine (1));
+
+    editor.setErrorLine (0, true);
+    editor.setErrorLine (2, true);
+    editor.clearErrorLines();
+    EXPECT_FALSE (editor.isErrorLine (0));
+    EXPECT_FALSE (editor.isErrorLine (2));
+    EXPECT_TRUE (editor.getErrorLines().empty());
+}
+
+TEST (CodeEditorTest, ErrorLineOnOutOfRangeLineClamps)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("one\ntwo");
+
+    editor.setErrorLine (99, true);
+    EXPECT_TRUE (editor.isErrorLine (1));
+
+    editor.setErrorLine (-1, true);
+    EXPECT_TRUE (editor.isErrorLine (0));
+}
+
+TEST (CodeEditorTest, ErrorLinesAreIndependentOfBreakpoints)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("one\ntwo");
+
+    editor.setErrorLine (1, true);
+    editor.setBreakpoint (0, true);
+
+    editor.clearBreakpoints();
+    EXPECT_TRUE (editor.isErrorLine (1));
+
+    editor.setBreakpoint (0, true);
+    editor.clearErrorLines();
+    EXPECT_TRUE (editor.getBreakpoint (0));
+}
+
+TEST (CodeEditorTest, SetDocumentClearsErrorLines)
+{
+    CodeDocument first;
+    CodeDocument second;
+    first.setText ("one\ntwo");
+    second.setText ("three\nfour");
+
+    CodeEditor editor (first);
+    editor.setErrorLine (1, true);
+
+    editor.setDocument (second);
+    EXPECT_FALSE (editor.isErrorLine (1));
+    EXPECT_TRUE (editor.getErrorLines().empty());
+}
+
 TEST (CodeEditorTest, MinimapVisibility)
 {
     CodeDocument document;
@@ -1865,6 +1960,7 @@ TEST (CodeEditorTest, MouseDownInGutterTogglesBreakpoint)
     CodeEditor editor (document);
     editor.setText ("one\ntwo\nthree");
     editor.setSize (400, 200);
+    editor.setGutterBreakpointsEnabled (true);
 
     const float lineHeight = editor.getLineHeight();
     const float clickY = editor.getTextArea().getY() + lineHeight * 1.5f; // Line index 1.
@@ -1873,6 +1969,24 @@ TEST (CodeEditorTest, MouseDownInGutterTogglesBreakpoint)
     editor.mouseDown (event);
 
     EXPECT_TRUE (editor.getBreakpoint (1));
+}
+
+TEST (CodeEditorTest, MouseDownInGutterIgnoresBreakpointsByDefault)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("one\ntwo\nthree");
+    editor.setSize (400, 200);
+
+    EXPECT_FALSE (editor.areGutterBreakpointsEnabled());
+
+    const float clickY = editor.getTextArea().getY() + editor.getLineHeight() * 1.5f; // Line index 1.
+
+    MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (2.0f, clickY));
+    editor.mouseDown (event);
+
+    EXPECT_FALSE (editor.getBreakpoint (1));
+    EXPECT_TRUE (editor.getBreakpointLines().empty());
 }
 
 TEST (CodeEditorTest, MouseDownInTextAreaMovesCaretAndClearsSelection)
@@ -2111,6 +2225,28 @@ TEST (CodeEditorTest, PaintUsesRegisteredThemeStyle)
     editor.setSyntaxDefinition ("cpp");
     editor.setText ("int main() {}");
     editor.setSize (400, 300);
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (nullptr, context);
+    auto renderer = context->makeRenderer (400, 300);
+    ASSERT_NE (nullptr, renderer);
+    Graphics g (*context, *renderer);
+
+    editor.paint (g);
+
+    ApplicationTheme::setGlobalTheme (oldTheme.get());
+}
+
+TEST (CodeEditorTest, PaintsErrorLines)
+{
+    auto oldTheme = ApplicationTheme::getGlobalTheme();
+    ApplicationTheme::setGlobalTheme (createThemeVersion1());
+
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("one\ntwo\nthree");
+    editor.setSize (400, 300);
+    editor.setErrorLine (1, true);
 
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (nullptr, context);

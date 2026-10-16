@@ -228,6 +228,7 @@ void CodeEditor::setDocument (CodeDocument& newDocument)
     caretPosition = 0;
     selection = {};
     scrollOffset = {};
+    errorLines.clear();
     needsStyledTextUpdate = true;
     cachedDocumentTextDirty = true;
 
@@ -925,6 +926,11 @@ const std::vector<int>& CodeEditor::getBreakpointLines() const noexcept
     return breakpointLines;
 }
 
+const std::vector<int>& CodeEditor::getErrorLines() const noexcept
+{
+    return errorLines;
+}
+
 int CodeEditor::getGlyphIndexAtPosition (const Point<float>& position) const
 {
     const auto textArea = getTextArea();
@@ -1026,7 +1032,7 @@ void CodeEditor::mouseDown (const MouseEvent& event)
     const auto position = event.getPosition().to<float>();
     const auto bounds = getLocalBounds();
 
-    if (lineNumbersVisible && position.getX() <= bounds.getX() + 4.0f + getGutterWidth())
+    if (gutterBreakpointsEnabled && lineNumbersVisible && position.getX() <= bounds.getX() + 4.0f + getGutterWidth())
     {
         toggleBreakpointAt (position);
         return;
@@ -1757,6 +1763,36 @@ bool CodeEditor::getBreakpoint (int lineNumber) const
 void CodeEditor::clearBreakpoints()
 {
     breakpointLines.clear();
+    repaint();
+}
+
+void CodeEditor::setErrorLine (int lineNumber, bool isError)
+{
+    if (document == nullptr)
+        return;
+
+    lineNumber = jlimit (0, document->getNumLines() - 1, lineNumber);
+
+    const auto it = std::find (errorLines.begin(), errorLines.end(), lineNumber);
+    const bool alreadySet = it != errorLines.end();
+
+    if (isError && ! alreadySet)
+        errorLines.push_back (lineNumber);
+
+    if (! isError && alreadySet)
+        errorLines.erase (it);
+
+    repaint();
+}
+
+bool CodeEditor::isErrorLine (int lineNumber) const
+{
+    return std::find (errorLines.begin(), errorLines.end(), lineNumber) != errorLines.end();
+}
+
+void CodeEditor::clearErrorLines()
+{
+    errorLines.clear();
     repaint();
 }
 
