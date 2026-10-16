@@ -73,27 +73,17 @@ Things to know when targeting it:
   driver crash), `GpuDevice::isDeviceLost` turns true and the device stops
   submitting work instead of hanging. Create a new device to render again.
 
-## Fragment shader examples
+## Fragment shader presets
 
-Select "Curl Bands" in the graphics example, or launch it with `--demo CurlBands`.
-For a single-demo build, select `YUP_EXAMPLE_GRAPHICS_DEMO=CurlBands`.
+Open the graphics example's "Shaders" demo (`--demo Shaders`), press
+"Show Presets", and select "Curl Bands" or "Ribbon Clouds".
+Both shaders are by Abhishek Shivakumar (@godofecht), credited in their
+editable source in `examples/graphics/source/examples/shaders/ShaderPresets.h`.
 
-The shader is by Abhishek Shivakumar (@godofecht). It uses two drifting FBM
-fields to displace coordinates with curl noise, then maps density and flow
-to color bands. The demo supplies elapsed time and target dimensions through
-a uniform buffer and uses the shared fullscreen vertex shader.
-
-Source: `examples/graphics/data/shaders/curl_bands.frag`.
-
-"Ribbon Clouds", also by Abhishek Shivakumar (@godofecht), accumulates 56 layers
-of 3D FBM ribbons, clouds, and shells with exponential zoom. Open it with
-`--demo RibbonClouds`, or select `YUP_EXAMPLE_GRAPHICS_DEMO=RibbonClouds` when
-building. Both examples share the same fullscreen renderer.
-
-Source: `examples/graphics/data/shaders/ribbon_clouds.frag`.
-The vignette is clamped to zero so wide windows do not produce negative
-inputs to gamma correction. The original exponential zoom is retained;
-reopen the demo to restart it when large coordinates lose noise precision.
+Curl Bands uses drifting FBM fields and curl displacement to produce color bands.
+Ribbon Clouds accumulates 56 layers of 3D FBM ribbons, clouds, and shells with
+exponential zoom. Use Rewind to restart it when large coordinates lose noise
+precision. The shared demo provides playback controls and live shader editing.
 
 ## In this area
 
