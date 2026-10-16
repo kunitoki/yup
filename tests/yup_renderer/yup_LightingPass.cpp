@@ -151,6 +151,22 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle lightingClassify()
+    {
+        static constexpr uint8 data[] = {
+#include "yup_renderer_shaders/yup_LightingClassify_tier_full.inc"
+        };
+        return load (data, sizeof (data));
+    }
+
+    static ShaderBundle lightingClassifyLocalIndirect()
+    {
+        static constexpr uint8 data[] = {
+#include "yup_renderer_shaders/yup_LightingClassify_tier_full_local_indirect.inc"
+        };
+        return load (data, sizeof (data));
+    }
+
     /** The (set, binding) pairs of @p resources, sorted. */
     static std::vector<std::pair<uint32_t, uint32_t>> bindingsOf (const std::vector<ShaderReflection::ResourceBinding>& resources)
     {
@@ -264,4 +280,36 @@ TEST_F (LightingPassTests, WritesOnlyTheSceneColor)
 
     ASSERT_EQ (fragment->stageOutputs.size(), 1u);
     EXPECT_EQ (fragment->stageOutputs[0].location, 0u);
+}
+
+TEST_F (LightingPassTests, ClassificationReadsTheLightingBindings)
+{
+    // LightingClassify reads, at the lighting pass's own bindings, which a classified frame binds
+    // once for it and the variants: RT2 and the depth through pointClamp and the material table,
+    // and in its local indirect variant the view and lighting blocks with the probes and volumes
+    using Bindings = std::vector<std::pair<uint32_t, uint32_t>>;
+
+    const struct
+    {
+        const char* name;
+        ShaderBundle bundle;
+        Bindings blocks;
+        Bindings buffers;
+    } variants[] = {
+        { "default", lightingClassify(), {}, { { 1, 8 } } },
+        { "local indirect", lightingClassifyLocalIndirect(), { { 0, 0 }, { 1, 0 } }, { { 1, 8 }, { 1, 14 }, { 1, 15 } } },
+    };
+
+    for (const auto& variant : variants)
+    {
+        const auto* fragment = fragmentOf (variant.bundle);
+        ASSERT_NE (fragment, nullptr) << variant.name;
+
+        EXPECT_EQ (bindingsOf (fragment->uniformBuffers), variant.blocks) << variant.name;
+        EXPECT_EQ (bindingsOf (fragment->separateImages), (Bindings { { 1, 11 }, { 1, 12 } })) << variant.name;
+        EXPECT_EQ (bindingsOf (fragment->separateSamplers), (Bindings { { 0, 3 } })) << variant.name;
+        EXPECT_EQ (bindingsOf (fragment->storageBuffers), variant.buffers) << variant.name;
+        for (const auto& buffer : fragment->storageBuffers)
+            EXPECT_TRUE (buffer.readOnly) << variant.name << ": " << buffer.name;
+    }
 }

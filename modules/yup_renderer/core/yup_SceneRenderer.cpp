@@ -1586,6 +1586,11 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         if (failMaterialLayers)
             impl->lightingPass.failMaterialLayersForTesting();
 
+        if (failLightingClassification)
+            impl->lightingPass.failClassificationForTesting();
+
+        impl->lightingPass.disableClassificationForTesting (disableLightingClassification);
+
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (lighting);
             impl->beginScope (frame, "lighting");

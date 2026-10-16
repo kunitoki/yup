@@ -2244,6 +2244,113 @@ TEST_F (SceneRendererMetalTests, LayersAreShadowedWithTheBase)
     }
 }
 
+TEST_F (SceneRendererMetalTests, ClassifiedLightingMatchesOneVariant)
+{
+    // A frame with every class of the lighting pass's classification: the mirror floor reflecting
+    // the hidden emitter through a probe whose influence covers part of it (local indirect), the
+    // floor outside it and the background (default), and a clearcoated sphere (layers), under a sun.
+    // Each renderer first draws a magenta sky, whose scene color a pixel no class shaded would keep.
+    // The classified frame matches the frame shaded with one variant; the variants are separately
+    // compiled, so a level of rounding is allowed
+    const auto render = [this] (bool classified)
+    {
+        SceneRenderer renderer;
+        setFullTierTaa (renderer, 1);
+        renderer.disableLightingClassificationForTesting (! classified);
+
+        Scene magenta;
+        magenta.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 4.0f); }, 32, 3));
+        magenta.setEnvironmentVisible (true);
+        EXPECT_TRUE (renderToImage (renderer, magenta, 128).isValid());
+
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        addReflectionProbe (scene, { 1.2f, 0.5f, -0.5f }, 1.2f);
+        addSphere (scene, 0.35f, makeLayeredMaterial ({ 0.6f, 0.1f, 0.1f }, 1.0f, 0.1f, {}, 0.0f))->setPosition ({ -0.9f, 0.35f, 0.0f });
+
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        sun->attach<LightNode>().intensity = 3.0f;
+        aimCamera (*sun, { 1.0f, 4.0f, 3.0f }, {});
+        scene.getRoot()->addChild (sun);
+
+        const auto image = renderToImage (renderer, scene, 128);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+
+        const auto* lightingPass = renderer.getLightingPass();
+        EXPECT_TRUE (lightingPass != nullptr && lightingPass->usesMaterialLayers() && lightingPass->usesLocalIndirect());
+        EXPECT_EQ (lightingPass != nullptr && lightingPass->usesClassification(), classified);
+        return image;
+    };
+
+    const auto classified = render (true);
+    const auto oneVariant = render (false);
+    ASSERT_TRUE (classified.isValid() && oneVariant.isValid());
+
+    const auto difference = maxChannelDifference (classified, oneVariant);
+    RecordProperty ("maxChannelDifference", difference);
+    EXPECT_LE (difference, 1);
+}
+
+TEST_F (SceneRendererMetalTests, FramesWithoutLocalIndirectOrLayersAreNotClassified)
+{
+    // Only the frames needing the local indirect or the layers variant classify their pixels: a
+    // frame needing neither draws one variant and keeps no class depth, and drops the class depth
+    // a classified frame before it kept
+    Scene plain;
+    buildMirrorFloorScene (plain);
+
+    Scene layered;
+    buildMirrorFloorScene (layered);
+    addSphere (layered, 0.35f, makeLayeredMaterial ({ 0.6f, 0.1f, 0.1f }, 1.0f, 0.1f, {}, 0.0f));
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 1);
+
+    ASSERT_NE (renderer.render (device, plain, 64, 64), nullptr) << renderer.getLastError();
+    ASSERT_NE (renderer.getLightingPass(), nullptr);
+    EXPECT_FALSE (renderer.getLightingPass()->usesClassification());
+    EXPECT_FALSE (renderer.getLightingPass()->holdsClassDepth());
+
+    ASSERT_NE (renderer.render (device, layered, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_TRUE (renderer.getLightingPass()->usesClassification());
+    EXPECT_TRUE (renderer.getLightingPass()->holdsClassDepth());
+
+    ASSERT_NE (renderer.render (device, plain, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_FALSE (renderer.getLightingPass()->usesClassification());
+    EXPECT_FALSE (renderer.getLightingPass()->holdsClassDepth());
+}
+
+TEST_F (SceneRendererMetalTests, FailedClassificationShadesWithOneVariant)
+{
+    // A classification the device rejects leaves the frames shading every pixel with one variant, as
+    // they do without classification
+    const auto render = [this] (bool fail)
+    {
+        Scene scene;
+        buildMirrorFloorScene (scene);
+        addReflectionProbe (scene, { 1.2f, 0.5f, -0.5f }, 1.2f);
+        addSphere (scene, 0.35f, makeLayeredMaterial ({ 0.6f, 0.1f, 0.1f }, 1.0f, 0.1f, {}, 0.0f));
+
+        SceneRenderer renderer;
+        setFullTierTaa (renderer, 1);
+        if (fail)
+            renderer.failLightingClassificationForTesting();
+        else
+            renderer.disableLightingClassificationForTesting (true);
+
+        const auto image = renderToImage (renderer, scene, 64);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        EXPECT_FALSE (renderer.getLightingPass() != nullptr && renderer.getLightingPass()->usesClassification());
+        EXPECT_FALSE (renderer.getLightingPass() != nullptr && renderer.getLightingPass()->holdsClassDepth());
+        return image;
+    };
+
+    const auto failed = render (true);
+    const auto oneVariant = render (false);
+    ASSERT_TRUE (failed.isValid() && oneVariant.isValid());
+    EXPECT_EQ (maxChannelDifference (failed, oneVariant), 0);
+}
+
 TEST_F (SceneRendererMetalTests, MaterialLayerChangesRestartAccumulation)
 {
     // Preflight R11: each clearcoat and sheen field shows on the full tier once converged

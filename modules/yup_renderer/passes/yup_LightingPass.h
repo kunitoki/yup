@@ -117,12 +117,39 @@ public:
     /** @internal Test hook: the layers variants not compiled yet fail to compile, as if the device rejected them. */
     void failMaterialLayersForTesting() noexcept { layersFailForTesting = true; }
 
+    /** @internal True when the last render() classified its pixels, for tests. */
+    bool usesClassification() const noexcept { return usedClassification; }
+
+    /** @internal Test hook: shades every frame with one variant, as without classification. */
+    void disableClassificationForTesting (bool disabled) noexcept { classificationDisabled = disabled; }
+
+    /** @internal Test hook: the classification not compiled yet fails to compile, as if the device rejected it. */
+    void failClassificationForTesting() noexcept { classificationFailsForTesting = true; }
+
+    /** @internal True while the pass keeps the class depth of a classified frame, for tests. */
+    bool holdsClassDepth() const noexcept { return classDepth != nullptr; }
+
 private:
     struct Variant
     {
         std::optional<Result> prepared;
         FullscreenPass pass;
+        std::optional<Result> classifiedPrepared;
+        FullscreenPass classified; // The same bundle drawing where the class depth equals its own
     };
+
+    struct Classes
+    {
+        bool localIndirect = false; // Pixels where a reflection probe or an irradiance volume weighs anything
+        bool layers = false;        // Pixels of materials with a clearcoat or a sheen, shaded with the layers variant
+        bool layeredPixels = false; // Pixels of materials with a clearcoat or a sheen, with or without the layers variant
+    };
+
+    using Bind = std::function<void (GpuRenderPass&, bool localIndirect)>;
+
+    Result prepareClassification (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters, Classes classes);
+    bool renderClassified (const GpuDevice::Ptr& device, GpuFrame& frame, const GpuTexture::Ptr& sceneColor,
+                           bool areaLights, bool shadowFilters, Classes classes, const Bind& bind);
 
     std::optional<Result> defaults;
     std::array<Variant, 12> variants; // Punctual lights only, then with area lights; then both again with the shadow filters; then all four again with the local indirect code, and again with its layers
@@ -137,6 +164,14 @@ private:
     bool layersFailureReported = false;        // The layers variant failed to compile, and was logged once
     bool layersFailForTesting = false;         // failMaterialLayersForTesting(): the layers variants not compiled yet fail
     bool usedLayers = false;                   // The last render() shaded with the layers variant
+    std::array<std::optional<Result>, 2> classifyPrepared; // Without, then with the local indirect classes
+    std::array<FullscreenPass, 2> classify;               // Writes the class depth of every pixel
+    GpuTexture::Ptr classDepth;                           // The class depth of the last classified frame, transient
+    bool classDepthUsed = false;                          // classDepth was drawn into since the last trimUnusedTargets()
+    bool classificationDisabled = false;                  // disableClassificationForTesting()
+    bool classificationFailsForTesting = false;           // failClassificationForTesting(): the classification not compiled yet fails
+    bool classificationFailureReported = false;           // The classification failed to compile, and was logged once
+    bool usedClassification = false;                      // The last render() classified its pixels
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LightingPass)
 };

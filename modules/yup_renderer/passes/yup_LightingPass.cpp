@@ -80,11 +80,23 @@ const std::pair<const uint8_t*, size_t> lightingPassShaderBundles[] = {
     { lightingPassAreaLightsSoftShadowsLocalIndirectLayersShaderBundle, sizeof (lightingPassAreaLightsSoftShadowsLocalIndirectLayersShaderBundle) },
 };
 
+constexpr uint8_t lightingClassifyShaderBundle[] = {
+#include "yup_renderer_shaders/yup_LightingClassify_tier_full.inc"
+};
+constexpr uint8_t lightingClassifyLocalIndirectShaderBundle[] = {
+#include "yup_renderer_shaders/yup_LightingClassify_tier_full_local_indirect.inc"
+};
+
 // The layers variants are local indirect variants too
 size_t getVariantIndex (bool areaLights, bool shadowFilters, bool localIndirect, bool layers) noexcept
 {
     return (areaLights ? 1u : 0u) + (shadowFilters ? 2u : 0u) + (layers ? 8u : (localIndirect ? 4u : 0u));
 }
+
+// The class depth LightingClassify writes for the pixels each variant shades: exact in depth32float
+constexpr float plainClassDepth = 0.25f;
+constexpr float localIndirectClassDepth = 0.5f;
+constexpr float layersClassDepth = 0.75f;
 
 } // namespace
 
@@ -140,6 +152,7 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
     auto prepared = prepare (device, lighting.areaLights, shadowFilters, localIndirect, layers);
     usedLocalIndirect = false;
     usedLayers = false;
+    usedClassification = false;
 
     // Without its layers variant, the frame shades the materials without their layers
     if (prepared.failed() && layers)
@@ -185,8 +198,7 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
     usedLocalIndirect = localIndirect;
     usedLayers = layers;
 
-    // Every pixel is written, so the scene color needs no clear
-    return variant.pass.draw (frame, sceneColor, {}, [&] (GpuRenderPass& renderPass)
+    const Bind bind = [&] (GpuRenderPass& renderPass, bool variantLocalIndirect)
     {
         renderPass.setUniformBuffer (0, 0, &view.getBlock(), sizeof (ViewData::Block));
         renderPass.setSampler (0, 1, lighting.samplers.linearClamp);
@@ -220,7 +232,7 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
         renderPass.setTexture (1, 16, lighting.reflections != nullptr ? lighting.reflections : transparentTexture);
 
         // The probe and volume atlases stand in black without probes or volumes
-        if (localIndirect)
+        if (variantLocalIndirect)
         {
             renderPass.setTexture (0, 8, lighting.reflectionAtlas != nullptr ? lighting.reflectionAtlas : blackTexture);
             renderPass.setTexture (0, 9, lighting.irradianceAtlas != nullptr ? lighting.irradianceAtlas : blackTexture);
@@ -228,20 +240,155 @@ bool LightingPass::render (const GpuDevice::Ptr& device, GpuFrame& frame, const 
             renderPass.setStorageBuffer (1, 14, lighting.reflectionProbeBuffer);
             renderPass.setStorageBuffer (1, 15, lighting.irradianceVolumeBuffer);
         }
-    });
+    };
+
+    // The frames needing the local indirect or the layers variant shade every other pixel with a
+    // cheaper one, where its class (LightingClassify) says nothing it adds weighs there
+    if (localIndirect && ! classificationDisabled)
+    {
+        const Classes classes { lighting.hasReflectionProbes() || lighting.hasIrradianceVolumes(), layers, lighting.materialLayers };
+        if (auto classified = prepareClassification (device, lighting.areaLights, shadowFilters, classes); classified.wasOk())
+        {
+            usedClassification = true;
+            return renderClassified (device, frame, sceneColor, lighting.areaLights, shadowFilters, classes, bind);
+        }
+        else if (! std::exchange (classificationFailureReported, true))
+        {
+            YUP_DBG ("LightingPass: the classification is unavailable, shading every pixel with one variant: " << classified.getErrorMessage());
+        }
+    }
+
+    // Every pixel is written, so the scene color needs no clear
+    return variant.pass.draw (frame, sceneColor, {}, [&] (GpuRenderPass& renderPass) { bind (renderPass, localIndirect); });
+}
+
+Result LightingPass::prepareClassification (const GpuDevice::Ptr& device, bool areaLights, bool shadowFilters, Classes classes)
+{
+    GpuDepthStencilState writesClass;
+    writesClass.enabled = true;
+    writesClass.format = GpuTextureFormat::depth32float;
+    writesClass.depthCompare = GpuCompareFunction::always;
+    writesClass.depthWriteEnabled = true;
+
+    auto& classifyResult = classifyPrepared[classes.localIndirect ? 1 : 0];
+    if (! classifyResult)
+    {
+        const auto& [data, size] = classes.localIndirect ? std::pair<const uint8_t*, size_t> { lightingClassifyLocalIndirectShaderBundle, sizeof (lightingClassifyLocalIndirectShaderBundle) }
+                                                         : std::pair<const uint8_t*, size_t> { lightingClassifyShaderBundle, sizeof (lightingClassifyShaderBundle) };
+        const GpuTextureFormat formats[] = { GpuTextureFormat::rgba16float };
+        classifyResult = classificationFailsForTesting ? Result::fail ("The classification failed for testing")
+                                                       : classify[classes.localIndirect ? 1 : 0].prepare (device, data, size, formats, FullscreenPass::Blend::replace, writesClass, GpuColorWriteMask::none);
+    }
+
+    if (classifyResult->failed())
+        return *classifyResult;
+
+    GpuDepthStencilState tested;
+    tested.enabled = true;
+    tested.format = GpuTextureFormat::depth32float;
+    tested.depthCompare = GpuCompareFunction::equal;
+    tested.depthWriteEnabled = false;
+
+    for (const auto [localIndirect, layers] : { std::pair { false, false }, std::pair { true, false }, std::pair { true, true } })
+    {
+        if ((localIndirect && ! layers && ! classes.localIndirect) || (layers && ! classes.layers))
+            continue;
+
+        const auto index = getVariantIndex (areaLights, shadowFilters, localIndirect, layers);
+        auto& variant = variants[index];
+        if (! variant.classifiedPrepared)
+        {
+            const auto& [data, size] = lightingPassShaderBundles[index];
+            const GpuTextureFormat formats[] = { GpuTextureFormat::rgba16float };
+            variant.classifiedPrepared = variant.classified.prepare (device, data, size, formats, FullscreenPass::Blend::replace, tested);
+        }
+
+        if (variant.classifiedPrepared->failed())
+            return *variant.classifiedPrepared;
+    }
+
+    return Result::ok();
+}
+
+bool LightingPass::renderClassified (const GpuDevice::Ptr& device, GpuFrame& frame, const GpuTexture::Ptr& sceneColor,
+                                     bool areaLights, bool shadowFilters, Classes classes, const Bind& bind)
+{
+    const auto width = sceneColor->getWidth();
+    const auto height = sceneColor->getHeight();
+
+    if (classDepth == nullptr || classDepth->getWidth() != width || classDepth->getHeight() != height)
+    {
+        GpuTextureDesc desc (static_cast<uint32_t> (width), static_cast<uint32_t> (height), GpuTextureFormat::depth32float, true);
+        desc.label = "LightingPass class depth";
+        classDepth = GpuTexture::create (device, desc);
+        if (classDepth == nullptr)
+            return false;
+    }
+
+    classDepthUsed = true;
+
+    auto& classifier = classify[classes.localIndirect ? 1 : 0];
+    auto pass = classifier.begin (frame, sceneColor, {});
+    if (! pass.has_value() || ! pass->isValid())
+        return false;
+
+    // Every pixel is written, so the scene color needs no clear; the class depth lives for this pass only
+    GpuDepthStencilOptions depthOptions (1.0f);
+    depthOptions.depthStoreOp = GpuStoreOp::discard;
+    pass->setDepthStencilAttachment (classDepth, depthOptions);
+
+    auto recorded = classifier.record (*pass, [&] (GpuRenderPass& renderPass) { bind (renderPass, classes.localIndirect); });
+
+    const auto drawClass = [&] (bool localIndirect, bool layers, float depth)
+    {
+        pass->setViewport (0.0f, 0.0f, static_cast<float> (width), static_cast<float> (height), depth, depth);
+        recorded = variants[getVariantIndex (areaLights, shadowFilters, localIndirect, layers)].classified.record (*pass, [&] (GpuRenderPass& renderPass)
+        {
+            bind (renderPass, localIndirect);
+        }) && recorded;
+    };
+
+    drawClass (false, false, plainClassDepth);
+
+    if (classes.localIndirect)
+        drawClass (true, false, localIndirectClassDepth);
+
+    // Without the layers variant, the layered pixels shade without their layers, as with one variant
+    if (classes.layeredPixels)
+        drawClass (classes.localIndirect || classes.layers, classes.layers, layersClassDepth);
+
+    return pass->finish() && recorded;
 }
 
 void LightingPass::trimUnusedTargets()
 {
     // The variants not drawn this frame release every target they kept
     for (auto& variant : variants)
+    {
         variant.pass.trimUnusedTargets();
+        variant.classified.trimUnusedTargets();
+    }
+
+    for (auto& classifier : classify)
+        classifier.trimUnusedTargets();
+
+    if (! std::exchange (classDepthUsed, false))
+        classDepth = nullptr;
 }
 
 void LightingPass::releaseTargets() noexcept
 {
     for (auto& variant : variants)
+    {
         variant.pass.releaseTargets();
+        variant.classified.releaseTargets();
+    }
+
+    for (auto& classifier : classify)
+        classifier.releaseTargets();
+
+    classDepth = nullptr;
+    classDepthUsed = false;
 }
 
 } // namespace yup

@@ -43,6 +43,7 @@
                           ForwardPass TIER_FULL AREA_LIGHTS? SOFT_SHADOWS?
                           LightingPass TIER_FULL AREA_LIGHTS? SOFT_SHADOWS?
                           LightingPass TIER_FULL AREA_LIGHTS? SOFT_SHADOWS? LOCAL_INDIRECT LAYERS?
+                          LightingClassify TIER_FULL LOCAL_INDIRECT?
                           GBufferPass TIER_FULL
                           ShadowPass MASKED?
                           TemporalAA UPSCALE?

@@ -84,9 +84,13 @@ public:
         @param outputFormats  The format of each color target the fragment writes, the first one
                               the texture draw() renders into, at least one.
         @param blend          How the outputs combine with the targets.
+        @param depthStencil   The depth test of the draws, for passes begun with a depth attachment
+                              of its format (see begin()); disabled by default.
+        @param writeMask      The channels of the color targets the draws write.
     */
     Result prepare (const GpuDevice::Ptr& device, const uint8* bundleData, size_t bundleSize,
-                    Span<const GpuTextureFormat> outputFormats, Blend blend = Blend::replace);
+                    Span<const GpuTextureFormat> outputFormats, Blend blend = Blend::replace,
+                    const GpuDepthStencilState& depthStencil = {}, GpuColorWriteMask writeMask = GpuColorWriteMask::all);
 
     /** Draws one fullscreen triangle into @p target (one mip / layer of it), binding through @p bind.
 
@@ -101,6 +105,22 @@ public:
     */
     bool draw (GpuFrame& frame, const GpuTexture::Ptr& target, const GpuTextureViewDesc& view,
                const std::function<void (GpuRenderPass&)>& bind, std::optional<GpuColor> clear = {});
+
+    /** Begins a render pass into @p target (one mip / layer of it) through the render target this
+        pass keeps for it, for several record() calls, of this pass or of others prepared for the
+        same formats, into one render pass: attach a depth with GpuRenderPass::setDepthStencilAttachment
+        before the first one, and finish it after the last.
+
+        @returns The pass, empty if this pass is not prepared or no render target could be made,
+                 invalid if the pass could not begin.
+    */
+    std::optional<GpuRenderPass> begin (GpuFrame& frame, const GpuTexture::Ptr& target, const GpuTextureViewDesc& view, std::optional<GpuColor> clear = {});
+
+    /** Draws one fullscreen triangle into the open @p pass, binding through @p bind.
+
+        @returns False if this pass is not prepared or the draw could not be recorded.
+    */
+    bool record (GpuRenderPass& pass, const std::function<void (GpuRenderPass&)>& bind);
 
     /** Returns true once prepare() succeeded. */
     bool isPrepared() const noexcept;

@@ -35,7 +35,8 @@ Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bu
 }
 
 Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bundleData, size_t bundleSize,
-                                Span<const GpuTextureFormat> outputFormats, Blend blend)
+                                Span<const GpuTextureFormat> outputFormats, Blend blend,
+                                const GpuDepthStencilState& depthStencil, GpuColorWriteMask writeMask)
 {
     device = nullptr;
     pipeline = nullptr;
@@ -51,11 +52,13 @@ Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bu
     GpuPipelineOptions options;
     options.topology = GpuPrimitiveTopology::triangleList;
     options.cullMode = GpuCullMode::none;
+    options.depthStencil = depthStencil;
 
     for (const auto format : outputFormats)
     {
         auto& target = options.colorTargets.emplace_back();
         target.format = format;
+        target.writeMask = writeMask;
         const auto destination = blend == Blend::premultipliedOver ? GpuBlendFactor::oneMinusSrcAlpha : GpuBlendFactor::one;
         target.blendEnabled = blend != Blend::replace;
         target.blend.srcColor = GpuBlendFactor::one;
@@ -76,8 +79,18 @@ Result FullscreenPass::prepare (const GpuDevice::Ptr& newDevice, const uint8* bu
 bool FullscreenPass::draw (GpuFrame& frame, const GpuTexture::Ptr& target, const GpuTextureViewDesc& view,
                            const std::function<void (GpuRenderPass&)>& bind, std::optional<GpuColor> clear)
 {
-    if (! isPrepared() || target == nullptr)
+    auto pass = begin (frame, target, view, clear);
+    if (! pass.has_value() || ! pass->isValid())
         return false;
+
+    const auto drawn = record (*pass, bind);
+    return pass->finish() && drawn;
+}
+
+std::optional<GpuRenderPass> FullscreenPass::begin (GpuFrame& frame, const GpuTexture::Ptr& target, const GpuTextureViewDesc& view, std::optional<GpuColor> clear)
+{
+    if (! isPrepared() || target == nullptr)
+        return std::nullopt;
 
     auto cached = std::find_if (targets.begin(), targets.end(), [&] (const CachedTarget& t)
     {
@@ -88,7 +101,7 @@ bool FullscreenPass::draw (GpuFrame& frame, const GpuTexture::Ptr& target, const
     {
         auto surface = GpuTarget::createFromTexture (device, target, view);
         if (surface == nullptr)
-            return false;
+            return std::nullopt;
 
         targets.push_back ({ target, view, std::move (surface) });
         cached = std::prev (targets.end());
@@ -99,8 +112,12 @@ bool FullscreenPass::draw (GpuFrame& frame, const GpuTexture::Ptr& target, const
     const auto options = clear.has_value() ? GpuRenderOptions (true, *clear)
                                            : GpuRenderOptions (GpuLoadOp::load, GpuStoreOp::store);
 
-    auto pass = cached->target->beginRenderPass (frame, options);
-    if (! pass.isValid())
+    return cached->target->beginRenderPass (frame, options);
+}
+
+bool FullscreenPass::record (GpuRenderPass& pass, const std::function<void (GpuRenderPass&)>& bind)
+{
+    if (! isPrepared() || ! pass.isValid())
         return false;
 
     pass.setPipeline (pipeline);
@@ -108,8 +125,7 @@ bool FullscreenPass::draw (GpuFrame& frame, const GpuTexture::Ptr& target, const
     if (bind)
         bind (pass);
 
-    const auto drawn = pass.draw (3);
-    return pass.finish() && drawn;
+    return pass.draw (3);
 }
 
 void FullscreenPass::trimUnusedTargets()

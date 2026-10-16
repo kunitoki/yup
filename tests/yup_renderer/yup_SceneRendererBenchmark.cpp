@@ -568,6 +568,7 @@ protected:
         bool moveModel = false;
         float orbitPitch = 0.0f; // the camera orbits at this pitch when not 0
         EntityNode* knob = nullptr; // turned a little every frame when set, as by automation
+        bool lightingClassification = true; // false shades every pixel of a frame with one LightingPass variant
         Quaternion knobRotation;
         double time = 0.0;
         int frame = 0;
@@ -804,8 +805,9 @@ protected:
         RenderCapabilities::Tier tier = RenderCapabilities::Tier::raster; // the tier the last frame whose stats arrived rendered with
         int internalWidth = 0;
         int internalHeight = 0;
-        bool localIndirect = false; // the last frame whose stats arrived shaded with the local indirect LightingPass variant
-        bool layers = false;        // ... with its material layers variant
+        bool localIndirect = false;  // the last frame whose stats arrived shaded with the local indirect LightingPass variant
+        bool layers = false;         // ... with its material layers variant
+        bool classification = false; // ... with its pixels classified
     };
 
     /** The wall milliseconds per frame of 120 queued frames after 30 warm-up ones, or -1 on a failure.
@@ -821,6 +823,7 @@ protected:
         SceneRenderer renderer;
         renderer.setRenderSettings (show.renderSettings);
         renderer.setFrameStatsEnabled (frameStats || samples != nullptr);
+        renderer.disableLightingClassificationForTesting (! show.lightingClassification);
 
         auto timed = false;
         uint64 lastFrame = 0;
@@ -845,6 +848,7 @@ protected:
             {
                 samples->localIndirect = lightingPass->usesLocalIndirect();
                 samples->layers = lightingPass->usesMaterialLayers();
+                samples->classification = lightingPass->usesClassification();
             }
         };
 
@@ -1731,6 +1735,21 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_FeatureCostFrameTimes)
             show.scene.getRoot()->findChild (name)->removeFromParent();
     };
 
+    // Only a clearcoated box a hundredth of the device's size on its top: without classification the
+    // layers variant shades every pixel for a few
+    const auto addSpeck = [&] (LightShow& show)
+    {
+        removeLayers (show);
+        removeProbes (show);
+
+        auto material = makeWallMaterial();
+        material->clearcoatFactor = 1.0f;
+        auto speck = EntityNode::Ptr (new EntityNode ("speck"));
+        speck->attach<MeshNode> (makeBox (show.bounds.getRadius() * 0.01f, material));
+        speck->setPosition (show.bounds.getCenter() + Vector3<float> (0.0f, show.bounds.getSize().getY() * 0.5f, 0.0f));
+        show.scene.getRoot()->addChild (speck);
+    };
+
     const struct
     {
         const char* name;
@@ -1757,21 +1776,13 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_FeatureCostFrameTimes)
         { "no layers", 64, removeLayers },
         { "no probes or volume", 64, removeProbes },
         { "no local indirect", 64, [&] (LightShow& show) { removeLayers (show); removeProbes (show); } },
-        { "one layered speck", 64, [&] (LightShow& show)
-          {
-              removeLayers (show);
-              removeProbes (show);
-
-              // A clearcoated box a hundredth of the device's size on its top: the layers variant shades every pixel for a few
-              auto material = makeWallMaterial();
-              material->clearcoatFactor = 1.0f;
-              auto speck = EntityNode::Ptr (new EntityNode ("speck"));
-              speck->attach<MeshNode> (makeBox (show.bounds.getRadius() * 0.01f, material));
-              speck->setPosition (show.bounds.getCenter() + Vector3<float> (0.0f, show.bounds.getSize().getY() * 0.5f, 0.0f));
-              show.scene.getRoot()->addChild (speck);
-          } },
+        { "one layered speck", 64, addSpeck },
         { "16 show lights", 16, [] (LightShow&) {} },
         { "no show lights", 0, [] (LightShow&) {} },
+        { "demo unclassified", 64, [] (LightShow& show) { show.lightingClassification = false; } },
+        { "no layers unclassified", 64, [&] (LightShow& show) { removeLayers (show); show.lightingClassification = false; } },
+        { "no probes or volume unclassified", 64, [&] (LightShow& show) { removeProbes (show); show.lightingClassification = false; } },
+        { "one layered speck unclassified", 64, [&] (LightShow& show) { addSpeck (show); show.lightingClassification = false; } },
     };
 
     const struct
@@ -1873,8 +1884,9 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_FeatureCostFrameTimes)
                     if (std::find (scopes.begin(), scopes.end(), name) == scopes.end())
                         scopes.push_back (name);
 
-            std::cout << String::formatted ("  %-32s variant%s%s", rows[i].name,
-                                            rounds[0].localIndirect ? " localIndirect" : "", rounds[0].layers ? " layers" : "")
+            std::cout << String::formatted ("  %-32s variant%s%s%s", rows[i].name,
+                                            rounds[0].localIndirect ? " localIndirect" : "", rounds[0].layers ? " layers" : "",
+                                            rounds[0].classification ? " classified" : "")
                       << std::endl;
 
             for (const auto& scope : scopes)

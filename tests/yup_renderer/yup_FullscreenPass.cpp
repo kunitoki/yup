@@ -411,4 +411,82 @@ void main() { color = vec4(1.0); })");
     EXPECT_EQ (pass.getNumCachedTargets(), 0u);
     EXPECT_EQ (second->getReferenceCount(), 1);
 }
+
+TEST_F (FullscreenPassMetalTests, RecordsDepthTestedDrawsIntoOnePass)
+{
+    // One pass cleared to blue: a classifier writing no color stores depth 0.25 in the left columns,
+    // 0.5 in the two middle ones and 0.75 in the right ones, then a red and a green draw, each at
+    // one of those depths through the viewport's depth range, cover only the columns whose depth
+    // they equal. The middle columns, which no draw tests for, keep the blue: the classifier wrote
+    // no color there (white otherwise)
+    const auto classifierBundle = compileBundle (R"(#version 450
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main() { color = vec4(1.0); gl_FragDepth = uv.x < 0.375 ? 0.25 : (uv.x < 0.625 ? 0.5 : 0.75); })");
+    const auto redBundle = compileBundle (R"(#version 450
+layout(location = 0) out vec4 color;
+void main() { color = vec4(1.0, 0.0, 0.0, 1.0); })");
+    const auto greenBundle = compileBundle (R"(#version 450
+layout(location = 0) out vec4 color;
+void main() { color = vec4(0.0, 1.0, 0.0, 1.0); })");
+
+    GpuDepthStencilState writes;
+    writes.enabled = true;
+    writes.format = GpuTextureFormat::depth32float;
+    writes.depthCompare = GpuCompareFunction::always;
+    writes.depthWriteEnabled = true;
+
+    GpuDepthStencilState tested = writes;
+    tested.depthCompare = GpuCompareFunction::equal;
+    tested.depthWriteEnabled = false;
+
+    const GpuTextureFormat formats[] = { GpuTextureFormat::rgba8unorm };
+    FullscreenPass classifier, red, green;
+    ASSERT_TRUE (classifier.prepare (device, static_cast<const uint8*> (classifierBundle.getData()), classifierBundle.getSize(), formats, FullscreenPass::Blend::replace, writes, GpuColorWriteMask::none).wasOk());
+    ASSERT_TRUE (red.prepare (device, static_cast<const uint8*> (redBundle.getData()), redBundle.getSize(), formats, FullscreenPass::Blend::replace, tested).wasOk());
+    ASSERT_TRUE (green.prepare (device, static_cast<const uint8*> (greenBundle.getData()), greenBundle.getSize(), formats, FullscreenPass::Blend::replace, tested).wasOk());
+
+    auto target = createTarget();
+    auto depth = GpuTexture::create (device, GpuTextureDesc (size, size, GpuTextureFormat::depth32float, true));
+    ASSERT_NE (target, nullptr);
+    ASSERT_NE (depth, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    auto pass = classifier.begin (frame, target, {}, GpuColor (0.0f, 0.0f, 1.0f, 1.0f));
+    ASSERT_TRUE (pass.has_value() && pass->isValid());
+
+    GpuDepthStencilOptions depthOptions (1.0f);
+    depthOptions.depthStoreOp = GpuStoreOp::discard;
+    pass->setDepthStencilAttachment (depth, depthOptions);
+
+    EXPECT_TRUE (classifier.record (*pass, nullptr));
+    pass->setViewport (0.0f, 0.0f, size, size, 0.25f, 0.25f);
+    EXPECT_TRUE (red.record (*pass, nullptr));
+    pass->setViewport (0.0f, 0.0f, size, size, 0.75f, 0.75f);
+    EXPECT_TRUE (green.record (*pass, nullptr));
+    EXPECT_TRUE (pass->finish());
+
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    const auto image = readBack (target);
+    ASSERT_TRUE (image.isValid());
+
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            const auto color = image.getPixelColor (x, y);
+            const auto left = x < 3, middle = x == 3 || x == 4;
+            EXPECT_EQ (color.getRed(), left ? 255 : 0) << x << ", " << y;
+            EXPECT_EQ (color.getGreen(), ! left && ! middle ? 255 : 0) << x << ", " << y;
+            EXPECT_EQ (color.getBlue(), middle ? 255 : 0) << x << ", " << y;
+        }
+    }
+
+    // Unprepared, nothing begins or records
+    FullscreenPass unprepared;
+    auto otherFrame = GpuFrame::begin (device);
+    EXPECT_FALSE (unprepared.begin (otherFrame, target, {}).has_value());
+}
 #endif

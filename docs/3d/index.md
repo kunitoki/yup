@@ -340,6 +340,10 @@ Two approximations keep layered frames fast:
   ones, but a large, close light gives a slightly different sheen than a bank of
   small ones would.
 
+On the full tier only the pixels of clearcoat and sheen materials pay for the
+layers: a few small layered objects leave the rest of the frame at the cost of a
+scene without them.
+
 ### Lights
 
 A scene can hold any number of `LightNode`s: directional lights, in lux, and
@@ -452,7 +456,9 @@ it. Five features provide it, from the farthest to the closest, and add up:
 
 Where none of them reaches, the environment and the ambient color light the
 surface. Probes and volumes cost nothing until a scene has them, and the
-screen-space effects nothing while they are off. To see what an effect adds,
+screen-space effects nothing while they are off. On the full tier, a scene with
+probes or volumes pays for them only on the pixels they reach: the rest of the
+frame shades as without them. To see what an effect adds,
 show it alone with `RenderSettings::debugView`, see [Render settings](#render-settings).
 
 ### Ambient occlusion

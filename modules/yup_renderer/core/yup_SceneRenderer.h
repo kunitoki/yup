@@ -382,6 +382,17 @@ public:
     */
     void failMaterialLayersForTesting() noexcept { failMaterialLayers = true; }
 
+    /** @internal Test hook, not for production use: the full tier's LightingPass shades every pixel
+        of a frame with one variant, as without its classification, while @p disabled is set.
+    */
+    void disableLightingClassificationForTesting (bool disabled) noexcept { disableLightingClassification = disabled; }
+
+    /** @internal Test hook, not for production use: the classification of the full tier's
+        LightingPass fails to compile, as if the device rejected it. Call it before the first render.
+        Frames still render, every pixel with one variant.
+    */
+    void failLightingClassificationForTesting() noexcept { failLightingClassification = true; }
+
     /** @internal Test hook, not for production use: from the next render on, every screen-space
         reflection pass of this renderer fails, as if the device could not record it. Frames still
         render, without screen-space reflections; the renderer stops trying after the second failure
@@ -465,6 +476,8 @@ private:
     bool failVolumeCaptures = false;
     bool failLocalIndirectLighting = false;
     bool failMaterialLayers = false;
+    bool disableLightingClassification = false;
+    bool failLightingClassification = false;
     bool failScreenSpaceReflections = false;
     bool failScreenSpaceGI = false;
     int depthOfFieldFailures = 0;
