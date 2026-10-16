@@ -2385,6 +2385,8 @@ protected:
             EXPECT_EQ (renderer.getHiZPyramid() != nullptr, full) << name;
             EXPECT_EQ (renderer.getDepthOfField(), nullptr) << name;
             EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr) << name;
+            EXPECT_EQ (renderer.getMotionBlur(), nullptr) << name;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << name;
 
             const auto* ambientOcclusion = renderer.getAmbientOcclusionPass();
             EXPECT_EQ (ambientOcclusion != nullptr, full) << name;
@@ -7183,6 +7185,626 @@ vec4 encodeLuma(vec3 c)
         EXPECT_LT (floorAfter.getRed(), floorBefore.getRed() - 20);     // and the sky no more where the probe weighs 1
     }
 
+    /** The largest difference of any channel of any pixel between two images, in 8 bit levels. */
+    static int maxChannelDifference (const Image& image, const Image& reference)
+    {
+        int difference = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+        {
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto a = image.getPixelColor (x, y);
+                const auto b = reference.getPixelColor (x, y);
+                difference = std::max ({ difference, std::abs (a.getRed() - b.getRed()), std::abs (a.getGreen() - b.getGreen()), std::abs (a.getBlue() - b.getBlue()) });
+            }
+        }
+
+        return difference;
+    }
+
+    //==============================================================================
+    /** The size of the depth of field scenes, rendered with the camera at the origin looking down -Z
+        (yFov 0.8: 15.1 px per unit at a distance of 10, a focal length of 28.4 mm). The circles of
+        confusion of each scene are checked on the CPU first, through CameraNode::getCircleOfConfusion(),
+        so the thresholds stand on known blur sizes.
+    */
+    static constexpr int depthOfFieldSize = 128;
+
+    /** @p tier with depth of field on (the full tier accumulating @p taaSamples) over a black
+        background and ambient light, the camera at the origin looking down -Z at f/1.4, focused at
+        @p focusDistance.
+    */
+    static CameraNode& setUpDepthOfFieldScene (Scene& scene, RenderSettings::TierPreference tier, float focusDistance, int taaSamples = 1)
+    {
+        if (tier == RenderSettings::TierPreference::full)
+            setFullTierTaa (scene, taaSamples);
+        else
+            setTier (scene, tier);
+
+        setDepthOfField (scene, true);
+        scene.setBackgroundColor (Colors::black);
+        scene.setAmbientColor (Colors::black);
+        addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
+
+        auto& camera = *scene.getActiveCamera();
+        camera.fStop = 1.4f;
+        camera.focusDistance = focusDistance;
+        return camera;
+    }
+
+    static void setDepthOfField (Scene& scene, bool depthOfField, float maxSize = 32.0f)
+    {
+        auto settings = scene.getRenderSettings();
+        settings.depthOfField = depthOfField;
+        settings.depthOfFieldMaxSize = maxSize;
+        scene.setRenderSettings (settings);
+    }
+
+    /** An emissive rectangle facing the camera at @p distance down -Z, @p area in world units,
+        blended with @p alpha below 1.
+    */
+    static void addEmitter (Scene& scene, Rectangle<float> area, float distance, float emission, float alpha = 1.0f)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { area.getX(), area.getY(), -distance };
+        vertices[1].position = { area.getRight(), area.getY(), -distance };
+        vertices[2].position = { area.getRight(), area.getBottom(), -distance };
+        vertices[3].position = { area.getX(), area.getBottom(), -distance };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        auto mesh = Mesh::Ptr (new Mesh ("emitter"));
+        auto material = makeEmitterMaterial ({ emission, emission, emission });
+        if (alpha < 1.0f)
+        {
+            material->alphaMode = Material::AlphaMode::blend;
+            material->baseColorFactor[3] = alpha;
+        }
+
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, std::move (material));
+
+        auto entity = EntityNode::Ptr (new EntityNode ("emitter"));
+        entity->attach<MeshNode> (mesh);
+        scene.getRoot()->addChild (entity);
+    }
+
+    /** Three vertical white emissive bars at @p barDistance, 0.15 of the distance wide with gaps as
+        wide (23 px at 128 x 128), the middle one centered: its left edge is at x = 52.7 px. With an
+        @p occluderDistance, a brighter square in front, 0.2 of that distance wide (30 px), centered.
+    */
+    static void buildBarsScene (Scene& scene, float barDistance, float occluderDistance = 0.0f)
+    {
+        const auto width = 0.15f * barDistance;
+        for (int bar = -1; bar <= 1; ++bar)
+            addEmitter (scene, { (2.0f * static_cast<float> (bar) - 0.5f) * width, -barDistance, width, 2.0f * barDistance }, barDistance, 2.0f);
+
+        if (occluderDistance > 0.0f)
+            addEmitter (scene, { -0.1f * occluderDistance, -0.1f * occluderDistance, 0.2f * occluderDistance, 0.2f * occluderDistance }, occluderDistance, 8.0f);
+    }
+
+    /** The pixels between 10% and 90% of the luminance range along the row segment [xFrom, xTo). */
+    static int edgeWidth (const Image& image, int row, int xFrom, int xTo)
+    {
+        std::vector<double> luma;
+        for (int x = xFrom; x < xTo; ++x)
+            luma.push_back (meanLuminance (image, { x, row, 1, 1 }));
+
+        const auto [low, high] = std::minmax_element (luma.begin(), luma.end());
+        const auto range = *high - *low;
+
+        return static_cast<int> (std::count_if (luma.begin(), luma.end(), [&] (double l)
+        {
+            return l > *low + 0.1 * range && l < *low + 0.9 * range;
+        }));
+    }
+
+    /** The mean luma of the ring from 2 to 5 px around the occluder of buildBarsScene(), 30 px wide at the center. */
+    static double occluderHaloLuminance (const Image& image)
+    {
+        const auto occluder = Rectangle<int> (49, 49, 30, 30);
+        const auto outer = occluder.enlarged (5);
+        const auto inner = occluder.enlarged (2);
+        const auto outerArea = static_cast<double> (outer.getWidth() * outer.getHeight());
+        const auto innerArea = static_cast<double> (inner.getWidth() * inner.getHeight());
+
+        return (meanLuminance (image, outer) * outerArea - meanLuminance (image, inner) * innerArea) / (outerArea - innerArea);
+    }
+
+    /** The CoC diameter in pixels of the depth of field frame of a point at @p distance. */
+    static float circleOfConfusion (const Scene& scene, float distance)
+    {
+        return scene.getActiveCamera()->getCircleOfConfusion (distance, static_cast<float> (depthOfFieldSize));
+    }
+
+    /** True when depth of field can run on @p tier on this device, at the default sample count. */
+    bool isDepthOfFieldAvailable (RenderSettings::TierPreference tier) const
+    {
+        RenderSettings settings;
+        settings.tier = tier;
+        return RenderCapabilities (RenderCapabilities::queryDevice (*device), settings, 4).isAvailable (RenderCapabilities::Feature::depthOfField);
+    }
+
+    /** On @p tier, bars in focus stay as sharp as without depth of field, and blur out of focus. The
+        scene color, before the blur, stays sharp.
+    */
+    void checkDepthOfFieldBlursOutOfFocusBarsOnly (RenderSettings::TierPreference tier)
+    {
+        constexpr auto size = depthOfFieldSize;
+
+        Scene scene;
+        auto& camera = setUpDepthOfFieldScene (scene, tier, 10.0f);
+        buildBarsScene (scene, 10.0f);
+
+        SceneRenderer renderer;
+        const auto sharp = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (sharp.isValid()) << renderer.getLastError();
+
+        // Focused on the bars, nothing blurs by a texel: the frame is the one without depth of field
+        setDepthOfField (scene, false);
+        const auto off = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (off.isValid()) << renderer.getLastError();
+        RecordProperty ("focusedDifference", maxChannelDifference (sharp, off));
+        EXPECT_EQ (countDifferences (sharp, off), 0);
+
+        setDepthOfField (scene, true);
+        camera.focusDistance = 0.2f;
+        ASSERT_GT (circleOfConfusion (scene, 10.0f), 16.0f);
+
+        const auto blurred = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
+        ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+
+        // The left edge of the middle bar, at x = 52.7: a step in focus, a ramp out of focus. The scene
+        // color of the frame, the output of TAA on full and the resolved color on raster, stays sharp: the blur runs after it
+        const auto sharpWidth = edgeWidth (sharp, size / 2, 40, 66);
+        const auto blurredWidth = edgeWidth (blurred, size / 2, 40, 66);
+        EXPECT_LE (edgeWidth (readBack (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)), size / 2, 40, 66), 2);
+        RecordProperty ("sharpEdgeWidth", sharpWidth);
+        RecordProperty ("blurredEdgeWidth", blurredWidth);
+
+        EXPECT_LE (sharpWidth, 2);
+        EXPECT_GE (blurredWidth, 6);
+    }
+
+    /** On @p tier, bars in focus look the same with depth of field on and off, over the background
+        color and over a visible black environment: the composite blurs nothing there, so tone
+        mapping keeps the blend of the frames without it, their partly covered antialiased edges
+        included (preflight R21). The full tier accumulates 8 jittered frames, which leave the edges
+        partly covered, and converges first. Over the environment, the raster reference renders in
+        half float too (bloom at intensity 0): the resolve of that path alone moves the edges against
+        the default frame.
+    */
+    void checkInFocusEdgesMatchWithoutDepthOfField (RenderSettings::TierPreference tier)
+    {
+        constexpr auto size = depthOfFieldSize;
+        const auto full = tier == RenderSettings::TierPreference::full;
+
+        for (const auto overEnvironment : { false, true })
+        {
+            const auto name = overEnvironment ? "over the environment" : "over the background color";
+
+            Scene scene;
+            setUpDepthOfFieldScene (scene, tier, 10.0f, 8);
+            buildBarsScene (scene, 10.0f);
+            if (overEnvironment)
+            {
+                scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+                scene.setEnvironmentVisible (true);
+            }
+
+            SceneRenderer renderer;
+            const auto on = full ? renderConverged (renderer, scene, size) : renderToImage (renderer, scene, size);
+            ASSERT_TRUE (on.isValid()) << name << ": " << renderer.getLastError();
+            ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr) << name;
+
+            auto settings = scene.getRenderSettings();
+            settings.depthOfField = false;
+            settings.bloom = overEnvironment && ! full;
+            settings.bloomIntensity = 0.0f;
+            scene.setRenderSettings (settings);
+
+            const auto off = renderToImage (renderer, scene, size);
+            ASSERT_TRUE (off.isValid()) << name << ": " << renderer.getLastError();
+            EXPECT_TRUE (! full || renderer.isConverged()) << name;
+
+            // Not vacuous: the edges are partly covered
+            const auto interior = static_cast<int> (off.getPixelColor (size / 2, size / 2).getGreen());
+            int partial = 0;
+            for (int y = 0; y < size; ++y)
+                for (int x = 0; x < size; ++x)
+                    partial += off.getPixelColor (x, y).getGreen() > 2 && off.getPixelColor (x, y).getGreen() < interior - 2 ? 1 : 0;
+
+            RecordProperty (String (name).replace (" ", "_").toStdString() + "_partialPixels", partial);
+            RecordProperty (String (name).replace (" ", "_").toStdString() + "_largestDifference", maxChannelDifference (on, off));
+            EXPECT_GT (partial, size) << name;
+            EXPECT_EQ (countDifferences (on, off), 0) << name;
+        }
+    }
+
+    /** Raster depth of field that gave up stops paying for its route: the frames after it no longer
+        draw the depth and normal prepass nor render in half float.
+    */
+    void checkRasterDepthOfFieldThatGaveUpStopsItsRoute()
+    {
+        Scene scene;
+        setUpDepthOfFieldScene (scene, RenderSettings::TierPreference::raster, 0.2f);
+        buildBarsScene (scene, 10.0f);
+
+        SceneRenderer renderer;
+        renderer.failDepthOfFieldForTesting (2);
+
+        for (int frame = 0; frame < 3; ++frame)
+        {
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+
+            // The two failing frames try, so they draw the route; the third finds it given up
+            const auto tries = frame < 2;
+            ASSERT_NE (renderer.getDepthOfField(), nullptr) << frame;
+            EXPECT_EQ (renderer.getDepthOfField()->hasGivenUp(), frame >= 1) << frame;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal) != nullptr, tries) << frame;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)->getFormat() == GpuTextureFormat::rgba16float, tries) << frame;
+        }
+    }
+
+    /** On @p tier, a near occluder out of focus spreads beyond its silhouette onto the sharp
+        background. On full, with temporal anti-aliasing, so the blur runs after it as in the default
+        chain, and the same renderer gives the image without it.
+    */
+    void checkNearFieldBleedsOverTheFocusedBackground (RenderSettings::TierPreference tier)
+    {
+        constexpr auto size = depthOfFieldSize;
+
+        Scene scene;
+        setUpDepthOfFieldScene (scene, tier, 10.0f, 16);
+        buildBarsScene (scene, 10.0f, 0.3f);
+        ASSERT_LT (circleOfConfusion (scene, 0.3f), -8.0f);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+
+        setDepthOfField (scene, false);
+        const auto without = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (without.isValid()) << renderer.getLastError();
+
+        const auto halo = occluderHaloLuminance (image);
+        const auto haloWithout = occluderHaloLuminance (without);
+        RecordProperty ("halo", String (halo, 2).toStdString());
+        RecordProperty ("haloWithout", String (haloWithout, 2).toStdString());
+
+        EXPECT_GT (halo, haloWithout + 10.0);
+
+        // The halo over the background color is spread light, composited in radiance as over a
+        // visible black environment (preflight R20, R21), not dimmed by its partial coverage
+        setDepthOfField (scene, true);
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+        scene.setEnvironmentVisible (true);
+        const auto overEnvironment = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
+
+        const auto haloOverEnvironment = occluderHaloLuminance (overEnvironment);
+        RecordProperty ("haloOverEnvironment", String (haloOverEnvironment, 2).toStdString());
+        EXPECT_NEAR (halo, haloOverEnvironment, 0.05 * haloOverEnvironment);
+    }
+
+    /** On @p tier, with depth of field off, moving the focus changes nothing. */
+    void checkDepthOfFieldOffChangesNothing (RenderSettings::TierPreference tier)
+    {
+        constexpr auto size = depthOfFieldSize;
+
+        Scene scene;
+        auto& camera = setUpDepthOfFieldScene (scene, tier, 10.0f);
+        setDepthOfField (scene, false);
+        buildBarsScene (scene, 10.0f, 0.3f);
+
+        SceneRenderer renderer;
+        const auto focusedFar = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (focusedFar.isValid()) << renderer.getLastError();
+
+        camera.focusDistance = 1.0f;
+        const auto focusedNear = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (focusedNear.isValid()) << renderer.getLastError();
+
+        EXPECT_LE (maxChannelDifference (focusedFar, focusedNear), 1);
+        EXPECT_EQ (renderer.getDepthOfField(), nullptr);
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr);
+    }
+
+    /** On @p tier, a white square out of focus over a red background color, without environment:
+        across its edge the blur fades white into red through pink, never through a darker ring (R5).
+    */
+    void checkDepthOfFieldKeepsTheSilhouetteBlendOverTheBackground (RenderSettings::TierPreference tier)
+    {
+        constexpr auto size = depthOfFieldSize;
+
+        Scene scene;
+        setUpDepthOfFieldScene (scene, tier, 0.2f);
+        scene.setBackgroundColor (Colors::red);
+        addEmitter (scene, { -1.5f, -1.5f, 3.0f, 3.0f }, 10.0f, 8.0f);
+
+        SceneRenderer renderer;
+        const auto image = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+
+        // The square spans x 41.4 to 86.6: across its left edge along the middle row
+        int blended = 0;
+        int darkest = 255;
+        for (int x = 20; x < 64; ++x)
+        {
+            const auto color = image.getPixelColor (x, size / 2);
+            darkest = jmin (darkest, static_cast<int> (color.getRed()));
+            blended += color.getGreen() > 25 && color.getGreen() < 230 ? 1 : 0;
+        }
+
+        RecordProperty ("blendedPixels", blended);
+        RecordProperty ("darkestRed", darkest);
+
+        EXPECT_GE (blended, 6);
+        EXPECT_GE (darkest, 230);
+    }
+
+    /** On @p tier, a bright square far out of focus over the black background color, without an
+        environment, against the same square over a visible black environment: the blur spreads the
+        same light over both, so the bokeh is as bright, not capped by its coverage (preflight R20).
+    */
+    void checkBlurredHighlightsKeepTheirBrightnessOverTheBackground (RenderSettings::TierPreference tier)
+    {
+        constexpr auto size = depthOfFieldSize;
+
+        Scene scene;
+        auto& camera = setUpDepthOfFieldScene (scene, tier, 0.1f);
+        camera.fStop = 0.7f;
+        setDepthOfField (scene, true, 64.0f);
+        addEmitter (scene, { -0.2f, -0.2f, 0.4f, 0.4f }, 10.0f, 200.0f);
+
+        SceneRenderer renderer;
+        const auto overBackground = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
+
+        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+        scene.setEnvironmentVisible (true);
+        const auto overEnvironment = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
+
+        const auto background = meanLuminance (overBackground, { 0, 0, size, size });
+        const auto environment = meanLuminance (overEnvironment, { 0, 0, size, size });
+        RecordProperty ("overBackground", String (background, 2).toStdString());
+        RecordProperty ("overEnvironment", String (environment, 2).toStdString());
+
+        ASSERT_GT (environment, 20.0);
+        // Measured 54.43 against 54.52 on full: both tone map the same spread radiance over black. The
+        // display space blend gave 0.4, as each pixel kept only its coverage share of the tone mapped highlight
+        EXPECT_NEAR (background, environment, 0.05 * environment);
+    }
+
+    /** Raster depth of field alone draws the depth and normal prepass for its depth, but creates no
+        ambient occlusion pass, and the forward pass shades with its default variant, not the local
+        indirect one ambient occlusion selects. With ambient occlusion on too, both run.
+    */
+    void checkRasterDepthOfFieldDrawsThePrepassWithoutAmbientOcclusion()
+    {
+        Scene scene;
+        setUpDepthOfFieldScene (scene, RenderSettings::TierPreference::raster, 0.2f);
+        buildBarsScene (scene, 10.0f);
+
+        SceneRenderer renderer;
+        const auto render = [&] (bool ambientOcclusion)
+        {
+            auto settings = scene.getRenderSettings();
+            settings.ambientOcclusion = ambientOcclusion;
+            scene.setRenderSettings (settings);
+
+            ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+            EXPECT_TRUE (renderer.waitForGPU().wasOk());
+            EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr);
+            EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)->getFormat(), GpuTextureFormat::rgba16float);
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::ambientOcclusion) != nullptr, ambientOcclusion);
+            ASSERT_NE (renderer.getForwardPass(), nullptr);
+            EXPECT_EQ (renderer.getForwardPass()->usesLocalIndirect(), ambientOcclusion);
+        };
+
+        render (false);
+        EXPECT_EQ (renderer.getAmbientOcclusionPass(), nullptr);
+
+        // Not vacuous: ambient occlusion takes the variant reading it
+        render (true);
+        EXPECT_NE (renderer.getAmbientOcclusionPass(), nullptr);
+    }
+
+    /** Raster depth of field where the device cannot run it, without the prepass or with too few
+        multisampled half-float samples: the frames are the ones without depth of field, with no
+        prepass, no HDR scene color and no depth of field object.
+    */
+    void checkRasterDepthOfFieldUnavailableRecordsNothing()
+    {
+        Scene scene;
+        setUpDepthOfFieldScene (scene, RenderSettings::TierPreference::raster, 0.2f);
+        buildBarsScene (scene, 10.0f);
+
+        setDepthOfField (scene, false);
+        SceneRenderer reference;
+        const auto off = renderToImage (reference, scene, 64);
+        ASSERT_TRUE (off.isValid()) << reference.getLastError();
+        setDepthOfField (scene, true);
+
+        const std::pair<const char*, std::function<void (RenderCapabilities::DeviceFacts&)>> devices[] = {
+            { "no prepass", [] (RenderCapabilities::DeviceFacts& facts) { facts.depthNormalPrepass = false; } },
+            { "one half float sample", [] (RenderCapabilities::DeviceFacts& facts) { facts.rgba16floatSamples = 1; } },
+        };
+
+        for (const auto& [name, edit] : devices)
+        {
+            SceneRenderer renderer;
+            renderer.setDeviceFactsOverride (edit);
+
+            for (int frame = 0; frame < 2; ++frame)
+            {
+                const auto image = renderToImage (renderer, scene, 64);
+                ASSERT_TRUE (image.isValid()) << name << ": " << renderer.getLastError();
+                EXPECT_LE (maxChannelDifference (image, off), 1) << name;
+            }
+
+            EXPECT_FALSE (renderer.getCapabilities()->isAvailable (RenderCapabilities::Feature::depthOfField)) << name;
+            EXPECT_EQ (renderer.getDepthOfField(), nullptr) << name;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr) << name;
+            EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)->getFormat(), GpuTextureFormat::rgba16float) << name;
+        }
+    }
+
+    /** Raster depth of field skips the frames whose prepass gave no depth, without counting them as
+        failures: a prepass that cannot compile leaves every frame unblurred, and once prepass targets
+        that could not be created come back, so does the blur.
+    */
+    void checkRasterDepthOfFieldSkipsFramesWithoutThePrepassDepth()
+    {
+        Scene scene;
+        setUpDepthOfFieldScene (scene, RenderSettings::TierPreference::raster, 0.2f);
+        buildBarsScene (scene, 10.0f);
+
+        // More frames than the two failures in a row that give up
+        const auto expectSkipped = [&] (SceneRenderer& renderer, const char* name)
+        {
+            for (int frame = 0; frame < 3; ++frame)
+            {
+                ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << name << ": " << renderer.getLastError();
+                EXPECT_TRUE (renderer.waitForGPU().wasOk()) << name;
+                EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr) << name;
+                EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr) << name;
+                ASSERT_NE (renderer.getDepthOfField(), nullptr) << name;
+                EXPECT_FALSE (renderer.getDepthOfField()->hasGivenUp()) << name;
+                EXPECT_EQ (renderer.getDepthOfField()->getNumCachedTargets(), 0u) << name;
+            }
+        };
+
+        {
+            SceneRenderer renderer;
+            renderer.failDepthNormalPrepassForTesting();
+            expectSkipped (renderer, "prepass not compiled");
+        }
+
+        SceneRenderer renderer;
+        renderer.failDepthNormalPrepassTargetsForTesting (3);
+        expectSkipped (renderer, "prepass without targets");
+
+        ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+        EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr);
+        EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+    }
+
+    //==============================================================================
+    /** The size of the motion blur scenes, and the distance of their bar from the camera at the
+        origin looking down -Z (yFov 0.8: 75.7 px per unit there at 128 x 128).
+    */
+    static constexpr int motionBlurSize = 128;
+    static constexpr float motionBarDistance = 2.0f;
+
+    /** An emissive quad facing the camera of buildMovingBarScene(), @p area in world units around
+        the center of its entity, which sits motionBarDistance down the view axis, blended with
+        @p alpha below 1. Returns the entity, which tests move with moveBar().
+    */
+    static EntityNode* addMotionQuad (Scene& scene, Rectangle<float> area, float emission, float alpha = 1.0f)
+    {
+        std::vector<Mesh::Vertex> vertices (4);
+        vertices[0].position = { area.getX(), area.getY(), 0.0f };
+        vertices[1].position = { area.getRight(), area.getY(), 0.0f };
+        vertices[2].position = { area.getRight(), area.getBottom(), 0.0f };
+        vertices[3].position = { area.getX(), area.getBottom(), 0.0f };
+
+        for (auto& vertex : vertices)
+            vertex.normal = { 0.0f, 0.0f, 1.0f };
+
+        auto material = makeEmitterMaterial ({ emission, emission, emission });
+        if (alpha < 1.0f)
+        {
+            material->alphaMode = Material::AlphaMode::blend;
+            material->baseColorFactor[3] = alpha;
+        }
+
+        auto mesh = Mesh::Ptr (new Mesh ("quad"));
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, std::move (material));
+
+        auto entity = EntityNode::Ptr (new EntityNode ("quad"));
+        entity->attach<MeshNode> (mesh);
+        entity->setPosition ({ 0.0f, 0.0f, -motionBarDistance });
+        scene.getRoot()->addChild (entity);
+        return entity.get();
+    }
+
+    /** One white emissive bar, 0.2 x 1.0 units (about 15 x 76 px at 128 x 128), at the center of
+        the view of a camera at the origin looking down -Z, over the black background color, with
+        black ambient light. Returns the bar, which tests move with moveBar().
+    */
+    static EntityNode* buildMovingBarScene (Scene& scene, float emission = 2.0f)
+    {
+        scene.setBackgroundColor (Colors::black);
+        scene.setAmbientColor (Colors::black);
+        addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
+        return addMotionQuad (scene, { -0.1f, -0.5f, 0.2f, 1.0f }, emission);
+    }
+
+    /** Moves an entity of addMotionQuad() to @p x units right of the view axis. */
+    static void moveBar (EntityNode& bar, float x)
+    {
+        bar.setPosition ({ x, 0.0f, -motionBarDistance });
+    }
+
+    /** The pixels per unit at motionBarDistance in the view of buildMovingBarScene(). */
+    static float motionPixelsPerUnit (const Scene& scene)
+    {
+        return static_cast<float> (motionBlurSize) / (2.0f * motionBarDistance * std::tan (scene.getActiveCamera()->yFov * 0.5f));
+    }
+
+    static void setMotionBlur (Scene& scene, bool motionBlur, float shutter = 1.0f)
+    {
+        auto settings = scene.getRenderSettings();
+        settings.motionBlur = motionBlur;
+        settings.motionBlurShutter = shutter;
+        scene.setRenderSettings (settings);
+    }
+
+    /** Motion blur on the raster tier, which has no screen-space motion: after a move, the frame
+        is the one without it, without an error and without a motion blur object, on the default
+        route and on the half float route of bloom, where the post chain runs.
+    */
+    void checkMotionBlurOnRasterRendersTheUnblurredFallback()
+    {
+        for (const auto bloom : { false, true })
+        {
+            const auto name = bloom ? "bloom" : "default";
+
+            Scene scene;
+            auto* bar = buildMovingBarScene (scene);
+            auto settings = scene.getRenderSettings();
+            settings.tier = RenderSettings::TierPreference::raster;
+            settings.bloom = bloom;
+            scene.setRenderSettings (settings);
+            setMotionBlur (scene, true);
+
+            SceneRenderer renderer;
+            ASSERT_TRUE (renderToImage (renderer, scene, motionBlurSize).isValid()) << name << ": " << renderer.getLastError();
+
+            moveBar (*bar, 0.1f);
+            const auto on = renderToImage (renderer, scene, motionBlurSize);
+            ASSERT_TRUE (on.isValid()) << name << ": " << renderer.getLastError();
+            EXPECT_TRUE (renderer.getLastError().isEmpty()) << name;
+            EXPECT_FALSE (renderer.getCapabilities()->isAvailable (RenderCapabilities::Feature::motionBlur)) << name;
+            EXPECT_FALSE (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::motionBlur, scene.getRenderSettings())) << name;
+            EXPECT_EQ (renderer.getMotionBlur(), nullptr) << name;
+            EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << name;
+
+            setMotionBlur (scene, false);
+            const auto off = renderToImage (renderer, scene, motionBlurSize);
+            ASSERT_TRUE (off.isValid()) << name << ": " << renderer.getLastError();
+            EXPECT_LE (maxChannelDifference (on, off), 1) << name;
+        }
+    }
+
     GpuDevice::Ptr device;
     std::unique_ptr<GraphicsContext> context;
 };
@@ -7496,23 +8118,6 @@ protected:
 
             lights[i]->setPosition ({ std::cos (angle) * radius, std::sin (angle) * radius, 0.1f + 0.05f * ring });
         }
-    }
-
-    /** The largest difference of any channel of any pixel between two images, in 8 bit levels. */
-    static int maxChannelDifference (const Image& image, const Image& reference)
-    {
-        int difference = 0;
-        for (int y = 0; y < image.getHeight(); ++y)
-        {
-            for (int x = 0; x < image.getWidth(); ++x)
-            {
-                const auto a = image.getPixelColor (x, y);
-                const auto b = reference.getPixelColor (x, y);
-                difference = std::max ({ difference, std::abs (a.getRed() - b.getRed()), std::abs (a.getGreen() - b.getGreen()), std::abs (a.getBlue() - b.getBlue()) });
-            }
-        }
-
-        return difference;
     }
 };
 
@@ -13846,6 +14451,44 @@ TEST_F (SceneRendererMetalTests, MaterialLayerChangesRestartAccumulation)
     }
 }
 
+TEST_P (SceneRendererTierTests, DepthOfFieldBlursOutOfFocusBarsOnly)
+{
+    checkDepthOfFieldBlursOutOfFocusBarsOnly (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, NearFieldBleedsOverTheFocusedBackground)
+{
+    checkNearFieldBleedsOverTheFocusedBackground (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, InFocusEdgesMatchWithoutDepthOfField)
+{
+    checkInFocusEdgesMatchWithoutDepthOfField (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, DepthOfFieldOffChangesNothing)
+{
+    checkDepthOfFieldOffChangesNothing (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, DepthOfFieldKeepsTheSilhouetteBlendOverTheBackground)
+{
+    checkDepthOfFieldKeepsTheSilhouetteBlendOverTheBackground (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, BlurredHighlightsKeepTheirBrightnessOverTheBackground)
+{
+    checkBlurredHighlightsKeepTheirBrightnessOverTheBackground (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, MotionBlurOnRasterRendersTheUnblurredFallback)
+{
+    if (GetParam() != RenderSettings::TierPreference::raster)
+        GTEST_SKIP() << "The full tier smears, see MotionBlurMetalTests";
+
+    checkMotionBlurOnRasterRendersTheUnblurredFallback();
+}
+
 INSTANTIATE_TEST_SUITE_P (SceneRendererTiers,
                           SceneRendererTierTests,
                           ::testing::Values (RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full),
@@ -14423,108 +15066,20 @@ TEST_F (HiZPyramidMetalTests, ReusesThePooledPyramidAndOneTargetPerMip)
 }
 #endif
 
-/** DepthOfField through the full tier, without temporal anti-aliasing unless a test asks for it, at
-    128 x 128 with the camera at the origin looking down -Z (yFov 0.8: 15.1 px per unit at a distance
-    of 10, a focal length of 28.4 mm). The circles of confusion of each scene are checked on the CPU
-    first, through CameraNode::getCircleOfConfusion(), so the thresholds stand on known blur sizes.
+/** DepthOfField through the full tier, without temporal anti-aliasing unless a test asks for it, in
+    the depth of field scenes of SceneRendererBaselineScenes (depthOfFieldSize). The behaviors both
+    tiers share are SceneRendererTierTests, these are the full tier's own, plus the raster tier's
+    prepass and capability rules.
 */
 class DepthOfFieldMetalTests : public SceneRendererMetalTests
 {
 protected:
-    static constexpr int size = 128;
+    static constexpr int size = depthOfFieldSize;
 
-    /** The full tier with depth of field on and @p taaSamples, the camera at the origin looking down -Z at f/1.4, focused at @p focusDistance. */
+    /** The full tier with depth of field on and @p taaSamples, see setUpDepthOfFieldScene(). */
     static CameraNode& setUpScene (Scene& scene, float focusDistance, int taaSamples = 1)
     {
-        setFullTierTaa (scene, taaSamples);
-        setDepthOfField (scene, true);
-        scene.setBackgroundColor (Colors::black);
-        scene.setAmbientColor (Colors::black);
-        addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
-
-        auto& camera = *scene.getActiveCamera();
-        camera.fStop = 1.4f;
-        camera.focusDistance = focusDistance;
-        return camera;
-    }
-
-    static void setDepthOfField (Scene& scene, bool depthOfField, float maxSize = 32.0f)
-    {
-        auto settings = scene.getRenderSettings();
-        settings.depthOfField = depthOfField;
-        settings.depthOfFieldMaxSize = maxSize;
-        scene.setRenderSettings (settings);
-    }
-
-    /** An emissive rectangle facing the camera at @p distance down -Z, @p area in world units,
-        blended with @p alpha below 1.
-    */
-    static void addEmitter (Scene& scene, Rectangle<float> area, float distance, float emission, float alpha = 1.0f)
-    {
-        std::vector<Mesh::Vertex> vertices (4);
-        vertices[0].position = { area.getX(), area.getY(), -distance };
-        vertices[1].position = { area.getRight(), area.getY(), -distance };
-        vertices[2].position = { area.getRight(), area.getBottom(), -distance };
-        vertices[3].position = { area.getX(), area.getBottom(), -distance };
-
-        for (auto& vertex : vertices)
-            vertex.normal = { 0.0f, 0.0f, 1.0f };
-
-        auto mesh = Mesh::Ptr (new Mesh ("emitter"));
-        auto material = makeEmitterMaterial ({ emission, emission, emission });
-        if (alpha < 1.0f)
-        {
-            material->alphaMode = Material::AlphaMode::blend;
-            material->baseColorFactor[3] = alpha;
-        }
-
-        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, std::move (material));
-
-        auto entity = EntityNode::Ptr (new EntityNode ("emitter"));
-        entity->attach<MeshNode> (mesh);
-        scene.getRoot()->addChild (entity);
-    }
-
-    /** Three vertical white emissive bars at @p barDistance, 0.15 of the distance wide with gaps as
-        wide (23 px at 128 x 128), the middle one centered: its left edge is at x = 52.7 px. With an
-        @p occluderDistance, a brighter square in front, 0.2 of that distance wide (30 px), centered.
-    */
-    static void buildBarsScene (Scene& scene, float barDistance, float occluderDistance = 0.0f)
-    {
-        const auto width = 0.15f * barDistance;
-        for (int bar = -1; bar <= 1; ++bar)
-            addEmitter (scene, { (2.0f * static_cast<float> (bar) - 0.5f) * width, -barDistance, width, 2.0f * barDistance }, barDistance, 2.0f);
-
-        if (occluderDistance > 0.0f)
-            addEmitter (scene, { -0.1f * occluderDistance, -0.1f * occluderDistance, 0.2f * occluderDistance, 0.2f * occluderDistance }, occluderDistance, 8.0f);
-    }
-
-    /** The pixels between 10% and 90% of the luminance range along the row segment [xFrom, xTo). */
-    static int edgeWidth (const Image& image, int row, int xFrom, int xTo)
-    {
-        std::vector<double> luma;
-        for (int x = xFrom; x < xTo; ++x)
-            luma.push_back (meanLuminance (image, { x, row, 1, 1 }));
-
-        const auto [low, high] = std::minmax_element (luma.begin(), luma.end());
-        const auto range = *high - *low;
-
-        return static_cast<int> (std::count_if (luma.begin(), luma.end(), [&] (double l)
-        {
-            return l > *low + 0.1 * range && l < *low + 0.9 * range;
-        }));
-    }
-
-    /** The mean luma of the ring from 2 to 5 px around the occluder of buildBarsScene(), 30 px wide at the center. */
-    static double occluderHaloLuminance (const Image& image)
-    {
-        const auto occluder = Rectangle<int> (49, 49, 30, 30);
-        const auto outer = occluder.enlarged (5);
-        const auto inner = occluder.enlarged (2);
-        const auto outerArea = static_cast<double> (outer.getWidth() * outer.getHeight());
-        const auto innerArea = static_cast<double> (inner.getWidth() * inner.getHeight());
-
-        return (meanLuminance (image, outer) * outerArea - meanLuminance (image, inner) * innerArea) / (outerArea - innerArea);
+        return setUpDepthOfFieldScene (scene, RenderSettings::TierPreference::full, focusDistance, taaSamples);
     }
 
     /** A black backdrop at 10, in focus with a focus of 10, and an emissive square at
@@ -14565,104 +15120,7 @@ protected:
 
         return (moment[0] / jmax (weight[0], 1.0)) / jmax (moment[1] / jmax (weight[1], 1.0), 1.0) - 1.0;
     }
-
-    /** The CoC diameter in pixels of the frame of a point at @p distance. */
-    static float circleOfConfusion (const Scene& scene, float distance)
-    {
-        return scene.getActiveCamera()->getCircleOfConfusion (distance, static_cast<float> (size));
-    }
 };
-
-TEST_F (DepthOfFieldMetalTests, DepthOfFieldBlursOutOfFocusBarsOnly)
-{
-    Scene scene;
-    auto& camera = setUpScene (scene, 10.0f);
-    buildBarsScene (scene, 10.0f);
-
-    SceneRenderer renderer;
-    const auto sharp = renderToImage (renderer, scene, size);
-    ASSERT_TRUE (sharp.isValid()) << renderer.getLastError();
-
-    // Focused on the bars, nothing blurs by a texel: the frame is the one without depth of field
-    setDepthOfField (scene, false);
-    const auto off = renderToImage (renderer, scene, size);
-    EXPECT_EQ (countDifferences (sharp, off), 0);
-
-    setDepthOfField (scene, true);
-    camera.focusDistance = 0.2f;
-    ASSERT_GT (circleOfConfusion (scene, 10.0f), 16.0f);
-
-    const auto blurred = renderToImage (renderer, scene, size);
-    ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
-    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
-
-    // The left edge of the middle bar, at x = 52.7: a step in focus, a ramp out of focus. The scene
-    // color of the frame, the output of TAA, stays sharp: the blur runs after it
-    const auto sharpWidth = edgeWidth (sharp, size / 2, 40, 66);
-    const auto blurredWidth = edgeWidth (blurred, size / 2, 40, 66);
-    EXPECT_LE (edgeWidth (readBack (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)), size / 2, 40, 66), 2);
-    RecordProperty ("sharpEdgeWidth", sharpWidth);
-    RecordProperty ("blurredEdgeWidth", blurredWidth);
-
-    EXPECT_LE (sharpWidth, 2);
-    EXPECT_GE (blurredWidth, 6);
-}
-
-TEST_F (DepthOfFieldMetalTests, NearFieldBleedsOverTheFocusedBackground)
-{
-    // With temporal anti-aliasing, so the blur runs after it as in the default chain
-    Scene scene;
-    setUpScene (scene, 10.0f, 16);
-    buildBarsScene (scene, 10.0f, 0.3f);
-    ASSERT_LT (circleOfConfusion (scene, 0.3f), -8.0f);
-
-    SceneRenderer renderer;
-    const auto image = renderToImage (renderer, scene, size);
-    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
-    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
-
-    // The blur runs after the accumulation, so the same renderer gives the image without it
-    setDepthOfField (scene, false);
-    const auto without = renderToImage (renderer, scene, size);
-    ASSERT_TRUE (without.isValid()) << renderer.getLastError();
-
-    // The out-of-focus occluder spreads beyond its silhouette onto the sharp background
-    const auto halo = occluderHaloLuminance (image);
-    const auto haloWithout = occluderHaloLuminance (without);
-    RecordProperty ("halo", String (halo, 2).toStdString());
-    RecordProperty ("haloWithout", String (haloWithout, 2).toStdString());
-
-    EXPECT_GT (halo, haloWithout + 10.0);
-}
-
-TEST_F (DepthOfFieldMetalTests, DepthOfFieldOffChangesNothing)
-{
-    Scene scene;
-    auto& camera = setUpScene (scene, 10.0f);
-    setDepthOfField (scene, false);
-    buildBarsScene (scene, 10.0f, 0.3f);
-
-    SceneRenderer renderer;
-    const auto focusedFar = renderToImage (renderer, scene, size);
-    ASSERT_TRUE (focusedFar.isValid()) << renderer.getLastError();
-
-    camera.focusDistance = 1.0f;
-    const auto focusedNear = renderToImage (renderer, scene, size);
-    ASSERT_TRUE (focusedNear.isValid()) << renderer.getLastError();
-
-    int largest = 0;
-    for (int y = 0; y < size; ++y)
-    {
-        for (int x = 0; x < size; ++x)
-        {
-            const auto a = focusedFar.getPixelColor (x, y);
-            const auto b = focusedNear.getPixelColor (x, y);
-            largest = jmax (largest, std::abs (a.getRed() - b.getRed()), std::abs (a.getGreen() - b.getGreen()), std::abs (a.getBlue() - b.getBlue()));
-        }
-    }
-
-    EXPECT_LE (largest, 1);
-}
 
 TEST_F (DepthOfFieldMetalTests, DepthOfFieldRecordsNothingWhenItCannotBlur)
 {
@@ -14722,18 +15180,20 @@ TEST_F (DepthOfFieldMetalTests, DepthOfFieldRecordsNothingWhenItCannotBlur)
     }
 
     {
-        // The raster tier ignores it, even on its HDR path with bloom, the one running the post chain
+        // The raster tier, where a camera that cannot blur takes neither the HDR route nor the prepass
         auto settings = scene.getRenderSettings();
         settings.tier = RenderSettings::TierPreference::raster;
-        settings.bloom = true;
         scene.setRenderSettings (settings);
+        camera.fStop = 0.0f;
 
         SceneRenderer renderer;
         expectNoPass (renderer, "raster");
-        EXPECT_TRUE (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::bloom, scene.getRenderSettings()));
+        EXPECT_TRUE (renderer.getCapabilities()->isEnabled (RenderCapabilities::Feature::depthOfField, scene.getRenderSettings()));
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::prepassNormal), nullptr);
+        EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)->getFormat(), GpuTextureFormat::rgba16float);
 
+        camera.fStop = 1.4f;
         settings.tier = RenderSettings::TierPreference::full;
-        settings.bloom = false;
         scene.setRenderSettings (settings);
     }
 
@@ -14872,37 +15332,6 @@ TEST_F (DepthOfFieldMetalTests, PolygonBokehHoldsBelowTheGatherRadius)
     EXPECT_LT (std::abs (roundExcess), 0.03);
 }
 
-TEST_F (DepthOfFieldMetalTests, DepthOfFieldKeepsTheSilhouetteBlendOverTheBackground)
-{
-    // A white square out of focus over a red background color, without environment: across its
-    // edge the blur fades white into red through pink, never through a darker ring
-    Scene scene;
-    setUpScene (scene, 0.2f);
-    scene.setBackgroundColor (Colors::red);
-    addEmitter (scene, { -1.5f, -1.5f, 3.0f, 3.0f }, 10.0f, 8.0f);
-
-    SceneRenderer renderer;
-    const auto image = renderToImage (renderer, scene, size);
-    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
-    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
-
-    // The square spans x 41.4 to 86.6: across its left edge along the middle row
-    int blended = 0;
-    int darkest = 255;
-    for (int x = 20; x < 64; ++x)
-    {
-        const auto color = image.getPixelColor (x, size / 2);
-        darkest = jmin (darkest, static_cast<int> (color.getRed()));
-        blended += color.getGreen() > 25 && color.getGreen() < 230 ? 1 : 0;
-    }
-
-    RecordProperty ("blendedPixels", blended);
-    RecordProperty ("darkestRed", darkest);
-
-    EXPECT_GE (blended, 6);
-    EXPECT_GE (darkest, 230);
-}
-
 TEST_F (DepthOfFieldMetalTests, GivingUpDepthOfFieldRendersUnblurred)
 {
     Scene scene;
@@ -14971,6 +15400,26 @@ TEST_F (DepthOfFieldMetalTests, MissingInputIsASkipNotAFailure)
     EXPECT_EQ (depthOfField.getNumCachedTargets(), 0u);
 }
 
+TEST_F (DepthOfFieldMetalTests, RasterDepthOfFieldDrawsThePrepassWithoutAmbientOcclusion)
+{
+    checkRasterDepthOfFieldDrawsThePrepassWithoutAmbientOcclusion();
+}
+
+TEST_F (DepthOfFieldMetalTests, RasterDepthOfFieldUnavailableRecordsNothing)
+{
+    checkRasterDepthOfFieldUnavailableRecordsNothing();
+}
+
+TEST_F (DepthOfFieldMetalTests, RasterDepthOfFieldSkipsFramesWithoutThePrepassDepth)
+{
+    checkRasterDepthOfFieldSkipsFramesWithoutThePrepassDepth();
+}
+
+TEST_F (DepthOfFieldMetalTests, RasterDepthOfFieldThatGaveUpStopsItsRoute)
+{
+    checkRasterDepthOfFieldThatGaveUpStopsItsRoute();
+}
+
 TEST_F (DepthOfFieldMetalTests, NearFieldReachesAcrossTileEdges)
 {
     // The occluder ends on a tile border, so its halo on the right lies in tiles without it: only
@@ -15028,37 +15477,6 @@ TEST_F (DepthOfFieldMetalTests, NearFieldIsContinuousAcrossTheSilhouette)
     EXPECT_LT (largestStep / contrast, 0.25);
 }
 
-TEST_F (DepthOfFieldMetalTests, BlurredHighlightsKeepTheirBrightnessOverTheBackground)
-{
-    // A bright square far out of focus over the black background color, without an environment,
-    // against the same square over a visible black environment: the blur spreads the same light
-    // over both, so the bokeh is as bright, not capped by its coverage (preflight R20)
-    Scene scene;
-    auto& camera = setUpScene (scene, 0.1f);
-    camera.fStop = 0.7f;
-    setDepthOfField (scene, true, 64.0f);
-    addEmitter (scene, { -0.2f, -0.2f, 0.4f, 0.4f }, 10.0f, 200.0f);
-
-    SceneRenderer renderer;
-    const auto overBackground = renderToImage (renderer, scene, size);
-    ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
-
-    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
-    scene.setEnvironmentVisible (true);
-    const auto overEnvironment = renderToImage (renderer, scene, size);
-    ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
-
-    const auto background = meanLuminance (overBackground, { 0, 0, size, size });
-    const auto environment = meanLuminance (overEnvironment, { 0, 0, size, size });
-    RecordProperty ("overBackground", String (background, 2).toStdString());
-    RecordProperty ("overEnvironment", String (environment, 2).toStdString());
-
-    ASSERT_GT (environment, 20.0);
-    // Measured 54.43 against 54.52: both tone map the same spread radiance over black. The display
-    // space blend gave 0.4, as each pixel kept only its coverage share of the tone mapped highlight
-    EXPECT_NEAR (background, environment, 0.05 * environment);
-}
-
 TEST_F (DepthOfFieldMetalTests, FaintCoverageKeepsItsLightOverTheBackground)
 {
     // A bright square of very low coverage (a blended material of alpha 0.004, as a light much
@@ -15103,11 +15521,13 @@ TEST_F (DepthOfFieldMetalTests, RadianceCompositeFailureFallsBackToTheDisplayBle
         resources.beginFrame (8, 8);
         const auto source = resources.acquire (GpuTextureDesc (8, 8, GpuTextureFormat::rgba16float, true));
         const auto destination = resources.acquire (GpuTextureDesc (8, 8, GpuTextureFormat::rgba8unorm, true));
+        const auto blurAmount = resources.acquire (GpuTextureDesc (8, 8, GpuTextureFormat::r8unorm, true));
         ASSERT_NE (source, nullptr);
         ASSERT_NE (destination, nullptr);
+        ASSERT_NE (blurAmount, nullptr);
 
         auto frame = GpuFrame::begin (device);
-        EXPECT_TRUE (toneMapping.render (device, frame, view, resources, source, false, nullptr, destination, Colors::black, true)) << i;
+        EXPECT_TRUE (toneMapping.render (device, frame, view, resources, source, false, nullptr, destination, Colors::black, blurAmount)) << i;
         EXPECT_TRUE (frame.waitForGPU().wasOk()) << i;
         resources.endFrame();
     }
@@ -15174,6 +15594,1236 @@ TEST_F (DepthOfFieldMetalTests, DepthOfFieldRunsBeforeBloom)
 
     ASSERT_GT (glowRing (sharpBloom), glowRing (withoutBloom) + 10.0);
     EXPECT_LT (glowRing (withBloom), glowRing (withoutBloom) + 2.0);
+}
+
+//==============================================================================
+/** MotionBlur through the full tier, without temporal anti-aliasing unless a test asks for it,
+    in the scenes of buildMovingBarScene(): the camera at the origin looking down -Z, a bar
+    motionBarDistance away moved between two frames. The raster tier's fallback is
+    SceneRendererTierTests.MotionBlurOnRasterRendersTheUnblurredFallback.
+*/
+class MotionBlurMetalTests : public SceneRendererMetalTests
+{
+protected:
+    static constexpr int size = motionBlurSize;
+
+    /** The full tier accumulating @p taaSamples, with motion blur on, the shutter open @p shutter of the frame. */
+    static void setUpMotionBlur (Scene& scene, int taaSamples = 1, float shutter = 1.0f)
+    {
+        setFullTierTaa (scene, taaSamples);
+        setMotionBlur (scene, true, shutter);
+    }
+
+    /** The column analogue of edgeWidth(): the pixels between 10% and 90% of the luminance range
+        along the column segment [yFrom, yTo).
+    */
+    static int verticalEdgeWidth (const Image& image, int column, int yFrom, int yTo)
+    {
+        std::vector<double> luma;
+        for (int y = yFrom; y < yTo; ++y)
+            luma.push_back (meanLuminance (image, { column, y, 1, 1 }));
+
+        const auto [low, high] = std::minmax_element (luma.begin(), luma.end());
+        const auto range = *high - *low;
+
+        return static_cast<int> (std::count_if (luma.begin(), luma.end(), [&] (double l)
+        {
+            return l > *low + 0.1 * range && l < *low + 0.9 * range;
+        }));
+    }
+
+    /** The horizontal pixel span [left, right) of the bar of buildMovingBarScene() at @p x units. */
+    static Range<float> barSpan (const Scene& scene, float x)
+    {
+        const auto pixelsPerUnit = motionPixelsPerUnit (scene);
+        return { size * 0.5f + (x - 0.1f) * pixelsPerUnit, size * 0.5f + (x + 0.1f) * pixelsPerUnit };
+    }
+
+    /** Renders the bar at @p from then at @p to with @p renderer, and returns the second frame. */
+    Image renderMove (SceneRenderer& renderer, Scene& scene, EntityNode& bar, float from, float to)
+    {
+        moveBar (bar, from);
+        if (! renderToImage (renderer, scene, size).isValid())
+            return {};
+
+        moveBar (bar, to);
+        return renderToImage (renderer, scene, size);
+    }
+
+    /** The summed luma of the smear outside a bar spanning @p span: the 8 px wide strips left and
+        right of it, over the rows the bar covers.
+    */
+    static double smearLuminance (const Image& image, Range<float> span)
+    {
+        const auto left = static_cast<int> (std::floor (span.getStart())) - 8;
+        const auto right = static_cast<int> (std::ceil (span.getEnd()));
+        return (meanLuminance (image, { left, 30, 8, 68 }) + meanLuminance (image, { right, 30, 8, 68 })) * 8.0 * 68.0;
+    }
+};
+
+TEST_F (MotionBlurMetalTests, MotionBlurSmearsAlongTheMotionOnly)
+{
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene);
+    setUpMotionBlur (scene);
+
+    // 0.1 units at the bar's distance move it 7.6 px: with the shutter open all frame, the smear
+    // spans that much, centered on where the bar is now, so its vertical edges ramp and reach about
+    // 3.8 px out of it, and its horizontal ones stay steps
+    const auto motion = 0.1f * motionPixelsPerUnit (scene);
+    ASSERT_GT (motion, 6.0f);
+    ASSERT_LT (motion, 2.0f * MotionBlur::tileSize);
+
+    SceneRenderer renderer;
+    const auto blurred = renderMove (renderer, scene, *bar, 0.0f, 0.1f);
+    ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+    // The bar spans x 64.0 to 79.1 and y 26.2 to 101.8: the ramps of both vertical edges along the
+    // middle row, the plan's measure, the smear past each of them, and the top edge
+    const auto rampWidth = edgeWidth (blurred, size / 2, 50, 94);
+    const auto leftReach = meanLuminance (blurred, { 61, 40, 2, 48 });
+    const auto rightReach = meanLuminance (blurred, { 80, 40, 2, 48 });
+    const auto topWidth = verticalEdgeWidth (blurred, 72, 10, 50);
+    RecordProperty ("rampWidth", rampWidth);
+    RecordProperty ("leftReach", String (leftReach, 1).toStdString());
+    RecordProperty ("rightReach", String (rightReach, 1).toStdString());
+    RecordProperty ("topEdgeWidth", topWidth);
+
+    EXPECT_GE (rampWidth, 4);
+    EXPECT_GT (leftReach, 50.0);
+    EXPECT_GT (rightReach, 50.0);
+    EXPECT_LE (topWidth, 2);
+
+    // A smear, not a dilation: the outermost lit pixels are partly covered, dimmer than the interior
+    const auto interior = meanLuminance (blurred, { 72, 40, 1, 48 });
+    EXPECT_LT (meanLuminance (blurred, { 61, 40, 1, 48 }), interior - 30.0);
+    EXPECT_LT (meanLuminance (blurred, { 81, 40, 1, 48 }), interior - 30.0);
+
+    // The scene color before the blur stays sharp: the smear runs after it
+    EXPECT_LE (edgeWidth (readBack (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)), size / 2, 50, 94), 2);
+
+    // Not the move alone: the same move without motion blur keeps steps
+    setMotionBlur (scene, false);
+    const auto sharp = renderMove (renderer, scene, *bar, 0.0f, 0.1f);
+    ASSERT_TRUE (sharp.isValid()) << renderer.getLastError();
+    EXPECT_LE (edgeWidth (sharp, size / 2, 50, 94), 2);
+    EXPECT_LT (meanLuminance (sharp, { 61, 40, 2, 48 }), 1.0);
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+}
+
+TEST_F (MotionBlurMetalTests, FirstFrameIsNotBlurred)
+{
+    // A transform set before the first frame is no motion: the frame records no smear and equals
+    // the frame without motion blur
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene);
+    setUpMotionBlur (scene);
+    moveBar (*bar, 0.1f);
+
+    SceneRenderer renderer;
+    const auto first = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (first.isValid()) << renderer.getLastError();
+    EXPECT_EQ (renderer.getMotionBlur(), nullptr);
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+    setMotionBlur (scene, false);
+    const auto off = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (off.isValid()) << renderer.getLastError();
+    EXPECT_LE (maxChannelDifference (first, off), 1);
+}
+
+TEST_F (MotionBlurMetalTests, TeleportIsClampedToMaximumRadius)
+{
+    // A jump of a whole unit, 76 px, far more than a smear spans: nothing lights up farther than
+    // tileSize from where the bar lands, so no pixel is reached farther than 2 * tileSize, the
+    // longest smear. A gather blur can only smear what is on screen, so the bar lands in view
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene);
+    setUpMotionBlur (scene);
+    ASSERT_GT (motionPixelsPerUnit (scene), 4.0f * MotionBlur::tileSize);
+
+    SceneRenderer renderer;
+    const auto blurred = renderMove (renderer, scene, *bar, -0.6f, 0.4f);
+    ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+    const auto span = barSpan (scene, 0.4f);
+    const auto reach = static_cast<float> (MotionBlur::tileSize) + 2.0f;
+
+    int litBeyondReach = 0;
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            const auto center = static_cast<float> (x) + 0.5f;
+            const auto distance = jmax (span.getStart() - center, center - span.getEnd(), 0.0f);
+            if ((distance > reach || y < 24 || y > 104) && meanLuminance (blurred, { x, y, 1, 1 }) > 2.0)
+                ++litBeyondReach;
+        }
+    }
+
+    // Within its reach the smear shows, on both sides of the landing place
+    const auto leftSmear = meanLuminance (blurred, { static_cast<int> (span.getStart()) - 12, 40, 8, 48 });
+    const auto rightSmear = meanLuminance (blurred, { static_cast<int> (span.getEnd()) + 5, 40, 8, 48 });
+    RecordProperty ("litBeyondReach", litBeyondReach);
+    RecordProperty ("leftSmear", String (leftSmear, 2).toStdString());
+    RecordProperty ("rightSmear", String (rightSmear, 2).toStdString());
+
+    EXPECT_EQ (litBeyondReach, 0);
+    EXPECT_GT (leftSmear, 10.0);
+    EXPECT_GT (rightSmear, 10.0);
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    EXPECT_TRUE (isFiniteTexture (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur)));
+#endif
+}
+
+TEST_F (MotionBlurMetalTests, CameraMotionBlursStaticObjects)
+{
+    {
+        // Moving the camera 0.1 to the right moves the still bar 7.6 px to the left on screen
+        Scene scene;
+        buildMovingBarScene (scene);
+        setUpMotionBlur (scene);
+        auto* camera = scene.getRoot()->findChild ("camera");
+        ASSERT_NE (camera, nullptr);
+
+        SceneRenderer renderer;
+        ASSERT_TRUE (renderToImage (renderer, scene, size).isValid()) << renderer.getLastError();
+        camera->setPosition ({ 0.1f, 0.0f, 0.0f });
+        const auto blurred = renderToImage (renderer, scene, size);
+        ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
+        ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+        // The bar spans x 48.9 to 64.0
+        EXPECT_GE (edgeWidth (blurred, size / 2, 36, 78), 4);
+        EXPECT_GT (meanLuminance (blurred, { 46, 40, 2, 48 }), 50.0);
+        EXPECT_GT (meanLuminance (blurred, { 65, 40, 2, 48 }), 50.0);
+        EXPECT_LE (verticalEdgeWidth (blurred, 56, 10, 50), 2);
+    }
+
+    // Turning the camera moves the environment, whose motion only GBufferBackground writes: its
+    // sharp edge, a white half to the right of the view axis, smears as the geometry does
+    Scene scene;
+    setUpMotionBlur (scene);
+    scene.setBackgroundColor (Colors::black);
+    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& direction)
+    {
+        return direction.getX() > 0.0f ? Vector3<float> (1.0f, 1.0f, 1.0f) : Vector3<float>();
+    }, 512, 1));
+    scene.setEnvironmentVisible (true);
+    addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
+    auto* camera = scene.getRoot()->findChild ("camera");
+    ASSERT_NE (camera, nullptr);
+
+    const auto turn = [&] (SceneRenderer& renderer)
+    {
+        aimCamera (*camera, {}, { 0.0f, 0.0f, -1.0f });
+        if (! renderToImage (renderer, scene, size).isValid())
+            return Image();
+
+        aimCamera (*camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
+        return renderToImage (renderer, scene, size);
+    };
+
+    SceneRenderer renderer;
+    const auto blurred = turn (renderer);
+    ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+    setMotionBlur (scene, false);
+    const auto sharp = turn (renderer);
+    ASSERT_TRUE (sharp.isValid()) << renderer.getLastError();
+
+    const auto blurredWidth = edgeWidth (blurred, size / 2, 32, 96);
+    const auto sharpWidth = edgeWidth (sharp, size / 2, 32, 96);
+    RecordProperty ("environmentEdgeWidth", blurredWidth);
+    RecordProperty ("environmentSharpEdgeWidth", sharpWidth);
+    EXPECT_GE (blurredWidth, sharpWidth + 3);
+}
+
+TEST_F (MotionBlurMetalTests, MotionBlurSmearsAfterAMoveUnderTemporalAntiAliasing)
+{
+    // With TAA, the frame after a move restarts the convergence and reprojects the history along
+    // the motion, clipping it to the new frame: the TAA output shows the bar where it moved to,
+    // and the motion blur smears that
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene);
+    setUpMotionBlur (scene, 8);
+
+    SceneRenderer renderer;
+    ASSERT_TRUE (renderConverged (renderer, scene, size).isValid()) << renderer.getLastError();
+    ASSERT_TRUE (renderer.isConverged());
+    EXPECT_EQ (renderer.getMotionBlur(), nullptr);
+
+    moveBar (*bar, 0.1f);
+    const auto blurred = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+    EXPECT_FALSE (renderer.isConverged());
+
+    const auto resolved = readBack (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor));
+    const auto resolvedWidth = edgeWidth (resolved, size / 2, 50, 94);
+    const auto rampWidth = edgeWidth (blurred, size / 2, 50, 94);
+    const auto leftReach = meanLuminance (blurred, { 61, 40, 2, 48 });
+    RecordProperty ("resolvedRampWidth", resolvedWidth);
+    RecordProperty ("resolvedLeftReach", String (meanLuminance (resolved, { 61, 40, 2, 48 }), 1).toStdString());
+    RecordProperty ("rampWidth", rampWidth);
+    RecordProperty ("leftReach", String (leftReach, 1).toStdString());
+
+    // TAA shows the bar where it moved to, sharp and without a trail where it was: the smear is the motion blur's
+    EXPECT_LE (resolvedWidth, 2);
+    EXPECT_LT (meanLuminance (resolved, { 61, 40, 2, 48 }), 1.0);
+    EXPECT_GE (rampWidth, resolvedWidth + 2);
+    EXPECT_GT (leftReach, 50.0);
+}
+
+TEST_F (MotionBlurMetalTests, MotionBlurOnAStillFrameRecordsNoPass)
+{
+    // With motion blur on, still frames create, draw and keep nothing: the frames converging, the
+    // converged ones, and those after a move
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene);
+    setUpMotionBlur (scene, 4);
+
+    SceneRenderer renderer;
+    for (int frame = 0; frame < 8; ++frame)
+    {
+        ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+        EXPECT_EQ (renderer.getMotionBlur(), nullptr) << frame;
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << frame;
+
+        if (renderer.isConverged())
+            break;
+    }
+
+    ASSERT_TRUE (renderer.isConverged());
+    ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getMotionBlur(), nullptr);
+
+    // Not vacuous: a move smears and keeps its targets
+    moveBar (*bar, 0.1f);
+    ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+    ASSERT_NE (renderer.getMotionBlur(), nullptr);
+    EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+    EXPECT_GT (renderer.getMotionBlur()->getNumCachedTargets(), 0u);
+
+    // The still frames after it release them
+    for (int frame = 0; frame < 6; ++frame)
+    {
+        ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << frame;
+        EXPECT_EQ (renderer.getMotionBlur()->getOutput(), nullptr) << frame;
+        EXPECT_EQ (renderer.getMotionBlur()->getNumCachedTargets(), 0u) << frame;
+    }
+
+    EXPECT_TRUE (renderer.isConverged());
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_F (MotionBlurMetalTests, MotionBlurOffOrAClosedShutterRecordsNothingWhileMoving)
+{
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene);
+    setUpMotionBlur (scene);
+
+    for (const auto [motionBlur, shutter] : { std::pair { false, 1.0f }, std::pair { true, 0.0f }, std::pair { true, -1.0f } })
+    {
+        setMotionBlur (scene, motionBlur, shutter);
+
+        SceneRenderer renderer;
+        const auto image = renderMove (renderer, scene, *bar, 0.0f, 0.1f);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        EXPECT_EQ (renderer.getMotionBlur(), nullptr) << shutter;
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << shutter;
+        EXPECT_LE (edgeWidth (image, size / 2, 50, 72), 2) << shutter;
+    }
+}
+
+TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessOverTheBackground)
+{
+    // A bright bar moving over the black background color, without an environment, against the
+    // same move over a visible black environment: the smear spreads the same light over both, so
+    // it is as bright, not capped by its partial coverage (preflight R22)
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene, 20.0f);
+    setUpMotionBlur (scene);
+
+    SceneRenderer renderer;
+    const auto overBackground = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    scene.setEnvironmentVisible (true);
+    const auto overEnvironment = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
+
+    // Not vacuous: the smear reaches out of the bar, which spans x 71.6 to 86.7 at 0.2
+    ASSERT_GT (meanLuminance (overEnvironment, { 64, 40, 6, 48 }), 20.0);
+
+    const auto background = smearLuminance (overBackground, barSpan (scene, 0.2f));
+    const auto environment = smearLuminance (overEnvironment, barSpan (scene, 0.2f));
+    RecordProperty ("overBackground", String (background, 1).toStdString());
+    RecordProperty ("overEnvironment", String (environment, 1).toStdString());
+
+    // Over black both tone map the same smeared radiance, so only the 8 bit rounding differs
+    EXPECT_NEAR (background, environment, 0.02 * environment);
+}
+
+TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessWhileTheCameraTurns)
+{
+    // Turning the camera moves the bar and the background alike, so every tile takes the uniform
+    // path: its smear too keeps its brightness over the background color (preflight R22)
+    Scene scene;
+    buildMovingBarScene (scene, 20.0f);
+    setUpMotionBlur (scene);
+    auto* camera = scene.getRoot()->findChild ("camera");
+    ASSERT_NE (camera, nullptr);
+
+    const auto turn = [&] (SceneRenderer& renderer)
+    {
+        aimCamera (*camera, {}, { 0.0f, 0.0f, -1.0f });
+        if (! renderToImage (renderer, scene, size).isValid())
+            return Image();
+
+        aimCamera (*camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
+        return renderToImage (renderer, scene, size);
+    };
+
+    SceneRenderer renderer;
+    const auto overBackground = turn (renderer);
+    ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    scene.setEnvironmentVisible (true);
+    const auto overEnvironment = turn (renderer);
+    ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
+
+    // Turned 0.08 rad to the right, the bar spans x 44.2 to 59.5, and moved about 15 px
+    const Range<float> span (44.2f, 59.5f);
+    ASSERT_GT (meanLuminance (overEnvironment, { 38, 40, 5, 48 }), 20.0);
+
+    const auto background = smearLuminance (overBackground, span);
+    const auto environment = smearLuminance (overEnvironment, span);
+    RecordProperty ("overBackground", String (background, 1).toStdString());
+    RecordProperty ("overEnvironment", String (environment, 1).toStdString());
+    EXPECT_NEAR (background, environment, 0.02 * environment);
+}
+
+TEST_F (MotionBlurMetalTests, StillPartialCoverageKeepsItsBlendWhileTheBarMoves)
+{
+    // Half transparent quads, standing for antialiased edges, keep the frame's blend with the
+    // background color while the bar moves: one far from the bar, one in its tiles just above its
+    // top edge, which the horizontal motion does not reach (preflight R21, R22). The bar moves
+    // 7.6 px, and 1.5 px, a half motion of 0.76 px: slow enough that the tiles around the still
+    // quad hold motions of almost the same length
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene);
+    addMotionQuad (scene, { -0.8f, -0.1f, 0.2f, 0.2f }, 4.0f, 0.5f);
+    addMotionQuad (scene, { -0.1f, 0.56f, 0.3f, 0.2f }, 4.0f, 0.5f);
+
+    // The quads span x 3.4 to 18.6, y 56.4 to 71.6, and x 56.4 to 79.1, y 7.2 to 22.4
+    const Rectangle<int> quads[] = { { 4, 57, 14, 14 }, { 57, 8, 22, 14 } };
+
+    for (const auto move : { 0.1f, 0.02f })
+    {
+        const auto name = String (move);
+        setUpMotionBlur (scene);
+
+        SceneRenderer renderer;
+        const auto on = renderMove (renderer, scene, *bar, 0.0f, move);
+        ASSERT_TRUE (on.isValid()) << renderer.getLastError();
+        ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << name;
+
+        setMotionBlur (scene, false);
+        const auto off = renderMove (renderer, scene, *bar, 0.0f, move);
+        ASSERT_TRUE (off.isValid()) << renderer.getLastError();
+
+        for (const auto& quad : quads)
+        {
+            ASSERT_GT (meanLuminance (off, quad), 20.0) << name << " " << quad.toString();
+
+            int differing = 0;
+            int largest = 0;
+            for (int y = quad.getY(); y < quad.getBottom(); ++y)
+            {
+                for (int x = quad.getX(); x < quad.getRight(); ++x)
+                {
+                    const auto a = on.getPixelColor (x, y);
+                    const auto b = off.getPixelColor (x, y);
+                    const auto difference = jmax (std::abs (a.getRed() - b.getRed()), std::abs (a.getGreen() - b.getGreen()), std::abs (a.getBlue() - b.getBlue()));
+                    largest = jmax (largest, difference);
+                    differing += difference > 2 ? 1 : 0;
+                }
+            }
+
+            RecordProperty ((name + "_" + quad.toString().replace (" ", "_") + "_largestDifference").toStdString(), largest);
+            EXPECT_EQ (differing, 0) << name << " " << quad.toString();
+        }
+    }
+}
+
+TEST_F (MotionBlurMetalTests, NoSmearWithoutAContinuingHistory)
+{
+    // A resize, a restart of the accumulation (a camera cut) and a frame the GPU failed break the
+    // history the motion is measured against: the next frame does not smear, though the bar moved,
+    // and the one after it does again (preflight R23)
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene);
+    setUpMotionBlur (scene);
+
+    const auto render = [&] (SceneRenderer& renderer, float x, int width, bool smears, const char* name)
+    {
+        moveBar (*bar, x);
+        ASSERT_NE (renderer.render (device, scene, width, size), nullptr) << name << ": " << renderer.getLastError();
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur) != nullptr, smears) << name;
+    };
+
+    {
+        // The aspect ratio changes the projection, which alone would read as motion everywhere
+        SceneRenderer renderer;
+        render (renderer, 0.0f, size, false, "before the resize");
+        render (renderer, 0.1f, size + 32, false, "resized");
+        render (renderer, 0.2f, size + 32, true, "after the resize");
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    {
+        SceneRenderer renderer;
+        render (renderer, 0.0f, size, false, "before the restart");
+        renderer.restartAccumulation();
+        render (renderer, 0.1f, size, false, "restarted");
+        render (renderer, 0.2f, size, true, "after the restart");
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+
+    {
+        SceneRenderer renderer;
+        render (renderer, 0.0f, size, false, "before the failure");
+        device->failNextFrameForTesting ("injected failure");
+        render (renderer, 0.0f, size, false, "failing");
+
+        // Frames complete in order, so once a later frame did the failed one has too
+        {
+            auto fence = GpuFrame::begin (device);
+            EXPECT_TRUE (fence.waitForGPU().wasOk());
+        }
+
+        render (renderer, 0.1f, size, false, "after the failure");
+        EXPECT_EQ (renderer.getLastGpuFailure(), "injected failure");
+        render (renderer, 0.2f, size, true, "the next one");
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+    }
+}
+
+TEST_F (MotionBlurMetalTests, SmearedFrameIsNotFinal)
+{
+    // Without TAA, a smeared frame still reports that it is not converged, so a component repaints
+    // once more and the still frame after it shows the bar sharp (preflight R23)
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene);
+    setUpMotionBlur (scene);
+
+    SceneRenderer renderer;
+    ASSERT_TRUE (renderMove (renderer, scene, *bar, 0.0f, 0.1f).isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+    EXPECT_FALSE (renderer.isConverged());
+
+    const auto still = renderToImage (renderer, scene, size);
+    ASSERT_TRUE (still.isValid()) << renderer.getLastError();
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+    EXPECT_TRUE (renderer.isConverged());
+    EXPECT_LE (edgeWidth (still, size / 2, 50, 94), 2);
+}
+
+TEST_F (MotionBlurMetalTests, SmearBlendsItsCoverageOverAGrayBackground)
+{
+    // The smear carries coverage: outside the bar, a smeared pixel composites the gray background
+    // color by the coverage it lacks. So against the same move over black it is brighter by less
+    // than the gray: not by the whole gray (no coverage kept), nor by nothing (full coverage). The
+    // bar is dim, so the sums stay within the 8 bit range (preflight R22)
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene, 0.1f);
+    setUpMotionBlur (scene);
+
+    SceneRenderer renderer;
+    const auto overBlack = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    ASSERT_TRUE (overBlack.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+    constexpr int gray = 100;
+    scene.setBackgroundColor (Color (static_cast<uint8> (gray), static_cast<uint8> (gray), static_cast<uint8> (gray)));
+    const auto overGray = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    ASSERT_TRUE (overGray.isValid()) << renderer.getLastError();
+
+    // The strips of 8 px on both sides of the bar, which spans x 71.6 to 86.7, where the smear
+    // covers at least a fifth (the level over black above 40)
+    int smeared = 0;
+    int outside = 0;
+    for (const auto x0 : { 63, 87 })
+    {
+        for (int y = 30; y < 98; ++y)
+        {
+            for (int x = x0; x < x0 + 8; ++x)
+            {
+                if (overBlack.getPixelColor (x, y).getGreen() <= 40)
+                    continue;
+
+                ++smeared;
+                const auto added = static_cast<int> (overGray.getPixelColor (x, y).getGreen()) - static_cast<int> (overBlack.getPixelColor (x, y).getGreen());
+                outside += added <= 2 || added >= gray - 5 ? 1 : 0;
+            }
+        }
+    }
+
+    RecordProperty ("smearedPixels", smeared);
+    RecordProperty ("outsideTheBlend", outside);
+    EXPECT_GT (smeared, 40);
+    EXPECT_EQ (outside, 0);
+}
+
+TEST_F (MotionBlurMetalTests, DiagonalMotionSmearsAlongItsDirectionAcrossTiles)
+{
+    // A square moving 7.6 px right and 7.6 px up: its smear reaches past its top right and bottom
+    // left corners, not past the other two. Its top right corner lands at (78, 50), next to the
+    // corner of the 16 px tiles at (80, 48): the tile beyond it holds none of the square, so only
+    // its diagonal neighbor carries the motion there
+    Scene scene;
+    scene.setBackgroundColor (Colors::black);
+    scene.setAmbientColor (Colors::black);
+    addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
+    auto* square = addMotionQuad (scene, { -0.1f, -0.1f, 0.2f, 0.2f }, 20.0f);
+    setUpMotionBlur (scene);
+
+    const auto pixelsPerUnit = motionPixelsPerUnit (scene);
+    const auto x = (70.5f - 64.0f) / pixelsPerUnit;
+    const auto y = (64.0f - 57.5f) / pixelsPerUnit;
+
+    const auto render = [&] (SceneRenderer& renderer)
+    {
+        square->setPosition ({ x - 0.1f, y - 0.1f, -motionBarDistance });
+        if (! renderToImage (renderer, scene, size).isValid())
+            return Image();
+
+        square->setPosition ({ x, y, -motionBarDistance });
+        return renderToImage (renderer, scene, size);
+    };
+
+    SceneRenderer renderer;
+    const auto blurred = render (renderer);
+    ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+    setMotionBlur (scene, false);
+    const auto sharp = render (renderer);
+    ASSERT_TRUE (sharp.isValid()) << renderer.getLastError();
+
+    const auto luma = [] (const Image& image, int px, int py) { return meanLuminance (image, { px, py, 1, 1 }); };
+    RecordProperty ("topRight", String (luma (blurred, 80, 47), 1).toStdString());
+    RecordProperty ("bottomLeft", String (luma (blurred, 61, 67), 1).toStdString());
+    RecordProperty ("topLeft", String (luma (blurred, 61, 47), 1).toStdString());
+    RecordProperty ("bottomRight", String (luma (blurred, 80, 67), 1).toStdString());
+
+    EXPECT_GT (luma (blurred, 80, 47), 10.0);
+    EXPECT_GT (luma (blurred, 61, 67), 10.0);
+    EXPECT_LT (luma (blurred, 61, 47), 2.0);
+    EXPECT_LT (luma (blurred, 80, 67), 2.0);
+    EXPECT_LT (luma (sharp, 80, 47), 2.0);
+    EXPECT_LT (luma (sharp, 61, 67), 2.0);
+}
+
+TEST_F (MotionBlurMetalTests, MotionBlurRunsAfterTheDepthOfField)
+{
+    // Both blur the bar, the depth of field first: the smear carries the share of coverage it
+    // spread, so the blurred light stays as bright over the background color as over a visible
+    // black environment, and the result is finite. A still square far from the bar, blurred by the
+    // depth of field only, lies in tiles where nothing moves, which keep the share as it is
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene, 20.0f);
+    setUpMotionBlur (scene);
+    addMotionQuad (scene, { -0.9f, -0.1f, 0.2f, 0.2f }, 20.0f);
+    setDepthOfField (scene, true);
+    auto& camera = *scene.getActiveCamera();
+    camera.fStop = 1.4f;
+    camera.focusDistance = 0.5f;
+    ASSERT_GT (camera.getCircleOfConfusion (motionBarDistance, static_cast<float> (size)), 4.0f);
+
+    SceneRenderer renderer;
+    const auto overBackground = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
+    ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+    EXPECT_TRUE (isFiniteTexture (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur)));
+#endif
+
+    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    scene.setEnvironmentVisible (true);
+    const auto overEnvironment = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
+
+    const auto background = meanLuminance (overBackground, { 0, 0, size, size }) * size * size;
+    const auto environment = meanLuminance (overEnvironment, { 0, 0, size, size }) * size * size;
+    RecordProperty ("overBackground", String (background, 1).toStdString());
+    RecordProperty ("overEnvironment", String (environment, 1).toStdString());
+    EXPECT_NEAR (background, environment, 0.02 * environment);
+}
+
+TEST_F (MotionBlurMetalTests, GivingUpMotionBlurRendersUnsmeared)
+{
+    // The bar moves on every frame, so each one tries
+    Scene scene;
+    auto* bar = buildMovingBarScene (scene);
+    setUpMotionBlur (scene);
+
+    SceneRenderer renderer;
+    ASSERT_TRUE (renderToImage (renderer, scene, size).isValid()) << renderer.getLastError();
+
+    auto x = 0.0f;
+    const auto render = [&] (bool smears, bool givenUp, const char* name)
+    {
+        x = x > 0.0f ? 0.0f : 0.1f;
+        moveBar (*bar, x);
+        ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << name << ": " << renderer.getLastError();
+        EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur) != nullptr, smears) << name;
+        ASSERT_NE (renderer.getMotionBlur(), nullptr) << name;
+        EXPECT_EQ (renderer.getMotionBlur()->hasGivenUp(), givenUp) << name;
+
+        // A frame without the smear keeps none of its targets, after a frame that smeared too
+        if (! smears)
+            EXPECT_EQ (renderer.getMotionBlur()->getNumCachedTargets(), 0u) << name;
+    };
+
+    // Only failures in a row give up: a frame that smears in between starts the count over
+    renderer.failMotionBlurForTesting (1);
+    render (false, false, "first failure");
+    render (true, false, "recovered");
+    EXPECT_GT (renderer.getMotionBlur()->getNumCachedTargets(), 0u);
+
+    renderer.failMotionBlurForTesting (1);
+    render (false, false, "failure after a smear");
+    render (true, false, "recovered again");
+
+    renderer.failMotionBlurForTesting (2);
+    render (false, false, "first of two failures");
+    render (false, true, "second of two failures");
+    EXPECT_FALSE (renderer.getMotionBlur()->getGiveUpReason().isEmpty());
+
+    // Given up, it no longer tries, and a move renders as without motion blur
+    const auto image = renderMove (renderer, scene, *bar, 0.0f, 0.1f);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+    EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
+
+    setMotionBlur (scene, false);
+    const auto without = renderMove (renderer, scene, *bar, 0.0f, 0.1f);
+    EXPECT_EQ (countDifferences (image, without), 0);
+}
+
+TEST_F (MotionBlurMetalTests, MissingInputIsASkipNotAFailure)
+{
+    // A frame without the velocity, or without any input, skips the smear, and never counts towards
+    // giving up: more frames than the two failures in a row that give up
+    MotionBlur motionBlur (device);
+    FrameResources resources (device);
+    ViewData view;
+    RenderSettings settings;
+    settings.motionBlur = true;
+
+    for (int i = 0; i < 3; ++i)
+    {
+        resources.beginFrame (64, 64);
+        const auto color = resources.acquire (GpuTextureDesc (64, 64, GpuTextureFormat::rgba16float, true));
+        const auto depth = resources.acquire (GpuTextureDesc (64, 64, GpuTextureFormat::depth32float, true));
+        ASSERT_NE (color, nullptr);
+        ASSERT_NE (depth, nullptr);
+
+        auto frame = GpuFrame::begin (device);
+        EXPECT_EQ (motionBlur.render (frame, view, settings, resources, { color, depth, nullptr, nullptr }), nullptr);
+        EXPECT_EQ (motionBlur.render (frame, view, settings, resources, {}), nullptr);
+        frame.submit();
+        resources.endFrame();
+    }
+
+    EXPECT_FALSE (motionBlur.hasGivenUp());
+    EXPECT_EQ (motionBlur.getNumCachedTargets(), 0u);
+}
+
+TEST_F (MotionBlurMetalTests, MotionBlurChangesKeepTheAccumulationConverged)
+{
+    // Motion blur applies after the accumulation: turning it on or changing the shutter neither
+    // restarts nor discards it
+    Scene scene;
+    buildMovingBarScene (scene);
+    setUpMotionBlur (scene, 4);
+    setMotionBlur (scene, false);
+
+    SceneRenderer renderer;
+    ASSERT_TRUE (renderConverged (renderer, scene, size).isValid()) << renderer.getLastError();
+    ASSERT_TRUE (renderer.isConverged());
+
+    for (const auto shutter : { 1.0f, 0.25f })
+    {
+        setMotionBlur (scene, true, shutter);
+        ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+        EXPECT_TRUE (renderer.isConverged()) << shutter;
+    }
+
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+class SceneRendererFrameStatsTests : public SceneRendererMetalTests
+{
+protected:
+    static constexpr int size = 64;
+
+    void SetUp() override
+    {
+        SceneRendererMetalTests::SetUp();
+        if (! IsSkipped() && ! device->isScopeTimingAvailable())
+            GTEST_SKIP() << "Scope timing is unavailable on this device";
+    }
+
+    /** The plates under a shadowed sun, a blended quad in front of them, a reflection probe, and a
+        camera at f/1.4 focused on the small plate, on @p tier with ambient occlusion, screen-space
+        reflections and GI, depth of field and bloom: every pass of the tier but the debug view. */
+    static void buildEveryPassScene (Scene& scene, RenderSettings::TierPreference tier)
+    {
+        buildShadowsScene (scene);
+
+        auto blended = Material::Ptr (new Material());
+        blended->baseColorFactor = { 0.2f, 0.4f, 0.8f, 0.5f };
+        blended->alphaMode = Material::AlphaMode::blend;
+        auto* quad = addPlate (scene, blended);
+        quad->setScale ({ 0.2f, 0.2f, 1.0f });
+        quad->setPosition ({ -0.5f, 0.3f, 0.8f });
+
+        addReflectionProbe (scene, { 0.0f, 0.0f, 1.0f }, 3.0f);
+
+        addCamera (scene, { 0.0f, 0.0f, 3.0f }, {});
+        auto& camera = *scene.getActiveCamera();
+        camera.fStop = 1.4f;
+        camera.focusDistance = 2.5f;
+
+        auto settings = scene.getRenderSettings();
+        settings.tier = tier;
+        settings.ambientOcclusion = true;
+        settings.screenSpaceReflections = true;
+        settings.screenSpaceGI = true;
+        settings.depthOfField = true;
+        settings.bloom = true;
+        scene.setRenderSettings (settings);
+    }
+
+    /** Renders @p frames frames of @p scene at size x size, waiting for each. */
+    void renderAndWait (SceneRenderer& renderer, Scene& scene, int frames)
+    {
+        for (int i = 0; i < frames; ++i)
+        {
+            ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+            ASSERT_TRUE (renderer.waitForGPU().wasOk());
+        }
+    }
+
+    /** The names of the scopes of @p stats, in order, separated by spaces. */
+    static String getScopeNames (const SceneRenderer::FrameStats& stats)
+    {
+        StringArray names;
+        for (const auto& scope : stats.gpu.scopes)
+            names.add (scope.name);
+
+        return names.joinIntoString (" ");
+    }
+
+    /** The milliseconds of the scope named @p name, or -1 when the frame has none or it is unavailable. */
+    static double getScopeMilliseconds (const SceneRenderer::FrameStats& stats, const String& name)
+    {
+        for (const auto& scope : stats.gpu.scopes)
+            if (scope.name == name && scope.available)
+                return scope.milliseconds;
+
+        return -1.0;
+    }
+
+    /** Every scope of @p stats is available, and its time a finite number of milliseconds. */
+    static void expectScopesMeasured (const SceneRenderer::FrameStats& stats)
+    {
+        for (const auto& scope : stats.gpu.scopes)
+        {
+            EXPECT_TRUE (scope.available) << scope.name;
+            EXPECT_TRUE (std::isfinite (scope.milliseconds)) << scope.name;
+            EXPECT_GE (scope.milliseconds, 0.0) << scope.name;
+        }
+    }
+
+    /** @p frames frames of @p scene queued without waiting, but for the frames up to the middle one
+        and then all of them, which deliver the stats of those two frames whatever the speed of the
+        GPU: the distinct stats seen after each render and after each wait, in the order they
+        arrived. @p prepare edits the scene before each frame, given its number in the queue from 1,
+        and returns its size. */
+    template <class Prepare>
+    std::vector<SceneRenderer::FrameStats> queueFrames (SceneRenderer& renderer, Scene& scene, int frames, Prepare&& prepare)
+    {
+        std::vector<SceneRenderer::FrameStats> seen;
+        const auto take = [&]
+        {
+            const auto& stats = renderer.getLastFrameStats();
+            if (stats.frameIndex != 0 && (seen.empty() || seen.back().frameIndex != stats.frameIndex))
+                seen.push_back (stats);
+        };
+
+        for (int frame = 1; frame <= frames; ++frame)
+        {
+            const auto [width, height] = prepare (frame);
+            EXPECT_NE (renderer.render (device, scene, width, height), nullptr) << renderer.getLastError();
+            take();
+
+            if (frame == frames / 2)
+            {
+                EXPECT_TRUE (renderer.waitForGPU().wasOk());
+                take();
+            }
+        }
+
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+        take();
+        return seen;
+    }
+
+    /** Renders a frame with the stats on in the state @p prepare (true) sets up, then one with the
+        stats off in the state @p prepare (false) sets up, then waits: the stats that arrive must be
+        the first frame's, though the renderer then holds the second frame's state and status.
+        @p prepare returns the size to render at. */
+    template <class Prepare>
+    SceneRenderer::FrameStats measureThenRenderAnother (SceneRenderer& renderer, Scene& scene, Prepare&& prepare)
+    {
+        for (const auto measured : { true, false })
+        {
+            renderer.setFrameStatsEnabled (measured);
+            const auto [width, height] = prepare (measured);
+            EXPECT_NE (renderer.render (device, scene, width, height), nullptr) << renderer.getLastError();
+        }
+
+        EXPECT_TRUE (renderer.waitForGPU().wasOk());
+        return renderer.getLastFrameStats();
+    }
+
+    /** Adds @p count small opaque plates in front of the scene, hidden, and returns them. */
+    static std::vector<EntityNode*> addHiddenPlates (Scene& scene, int count)
+    {
+        std::vector<EntityNode*> plates;
+        for (int i = 0; i < count; ++i)
+        {
+            auto* plate = addPlate (scene, makeWallMaterial());
+            plate->setScale ({ 0.05f, 0.05f, 1.0f });
+            plate->setPosition ({ -0.8f + 0.2f * static_cast<float> (i), -0.6f, 0.6f });
+            plate->setVisible (false);
+            plates.push_back (plate);
+        }
+
+        return plates;
+    }
+
+    /** A 4 x 4 plate facing a camera 3 units away, lit by @p numLights point lights 0.5 in front of
+        it whose range covers all of it, in the colors of the light show; on the full tier with TAA
+        and nothing else, so the lighting pass shades every pixel with every light. */
+    static void buildLightsScene (Scene& scene, int numLights)
+    {
+        auto material = Material::Ptr (new Material());
+        material->metallicFactor = 0.0f;
+        addPlate (scene, material)->setScale ({ 2.0f, 2.0f, 1.0f });
+        addCamera (scene, { 0.0f, 0.0f, 3.0f }, {});
+
+        for (int i = 0; i < numLights; ++i)
+        {
+            auto entity = EntityNode::Ptr (new EntityNode ("showLight"));
+            auto& light = entity->attach<LightNode> (LightNode::Type::point);
+            const auto color = Color::fromHSV (static_cast<float> (i) / static_cast<float> (numLights), 0.85f, 1.0f);
+            light.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
+            light.intensity = 0.05f;
+            light.range = 10.0f;
+
+            const auto angle = static_cast<float> (i) * 2.39996f;
+            entity->setPosition ({ std::cos (angle) * 1.5f, std::sin (angle) * 1.5f, 0.5f });
+            scene.getRoot()->addChild (entity);
+        }
+
+        auto settings = scene.getRenderSettings();
+        settings.tier = RenderSettings::TierPreference::full;
+        settings.ambientOcclusion = false;
+        settings.screenSpaceReflections = false;
+        settings.screenSpaceGI = false;
+        scene.setRenderSettings (settings);
+    }
+
+    static double median (std::vector<double> values)
+    {
+        std::sort (values.begin(), values.end());
+        return values[values.size() / 2];
+    }
+};
+
+TEST_F (SceneRendererFrameStatsTests, FrameStatsListTheFullTierPasses)
+{
+    Scene scene;
+    buildEveryPassScene (scene, RenderSettings::TierPreference::full);
+
+    SceneRenderer renderer;
+    renderer.setFrameStatsEnabled (true);
+
+    // The first frame bakes the probe, and has no history yet for the screen-space effects to read
+    renderAndWait (renderer, scene, 1);
+    const auto first = renderer.getLastFrameStats();
+    EXPECT_EQ (first.frameIndex, 1u);
+    ASSERT_TRUE (first.gpu.available);
+    EXPECT_EQ (getScopeNames (first), "probeBake shadows lightCulling gbuffer ambientOcclusion lighting forward temporalAA depthOfField bloom toneMapping");
+    expectScopesMeasured (first);
+    EXPECT_TRUE (first.shadowsRedrawn);
+    EXPECT_GT (first.shadowCasterDraws, 0);
+
+    renderAndWait (renderer, scene, 2);
+    const auto& stats = renderer.getLastFrameStats();
+    EXPECT_EQ (stats.frameIndex, 3u);
+    ASSERT_TRUE (stats.gpu.available);
+    EXPECT_GT (stats.gpu.frameMilliseconds, 0.0);
+    EXPECT_EQ (getScopeNames (stats), "shadows lightCulling gbuffer ambientOcclusion hiZ screenSpaceReflections lighting indirectDiffuse forward temporalAA depthOfField bloom toneMapping");
+    expectScopesMeasured (stats);
+
+    // The two plates and the blended quad, at the size rendered; the shadow maps of the still scene are kept
+    EXPECT_EQ (stats.drawItems, 3);
+    EXPECT_EQ (stats.internalWidth, size);
+    EXPECT_EQ (stats.internalHeight, size);
+    EXPECT_FALSE (stats.shadowsRedrawn);
+    EXPECT_EQ (stats.shadowCasterDraws, 0);
+
+    // A debug view draws last, over the final image
+    auto settings = scene.getRenderSettings();
+    settings.debugView = RenderSettings::DebugView::ambientOcclusion;
+    scene.setRenderSettings (settings);
+    renderAndWait (renderer, scene, 1);
+
+    const auto& debugged = renderer.getLastFrameStats();
+    EXPECT_EQ (debugged.frameIndex, 4u);
+    EXPECT_TRUE (getScopeNames (debugged).endsWith ("toneMapping debugView")) << getScopeNames (debugged);
+    expectScopesMeasured (debugged);
+}
+
+TEST_F (SceneRendererFrameStatsTests, FrameStatsListTheRasterPasses)
+{
+    Scene scene;
+    buildEveryPassScene (scene, RenderSettings::TierPreference::raster);
+
+    SceneRenderer renderer;
+    renderer.setFrameStatsEnabled (true);
+    renderAndWait (renderer, scene, 2);
+
+    const auto& stats = renderer.getLastFrameStats();
+    EXPECT_EQ (stats.frameIndex, 2u);
+    ASSERT_TRUE (stats.gpu.available);
+    EXPECT_EQ (getScopeNames (stats), "shadows depthNormalPrepass ambientOcclusion forward depthOfField bloom toneMapping");
+    expectScopesMeasured (stats);
+    EXPECT_EQ (stats.drawItems, 3);
+
+    // Depth of field alone draws the prepass for its depth, without the ambient occlusion
+    auto settings = scene.getRenderSettings();
+    settings.ambientOcclusion = false;
+    settings.bloom = false;
+    scene.setRenderSettings (settings);
+    renderAndWait (renderer, scene, 1);
+    EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows depthNormalPrepass forward depthOfField toneMapping");
+    expectScopesMeasured (renderer.getLastFrameStats());
+
+    // Ambient occlusion alone keeps its frame: no post chain
+    settings.ambientOcclusion = true;
+    settings.depthOfField = false;
+    scene.setRenderSettings (settings);
+    renderAndWait (renderer, scene, 1);
+    EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows depthNormalPrepass ambientOcclusion forward");
+    expectScopesMeasured (renderer.getLastFrameStats());
+}
+
+TEST_F (SceneRendererFrameStatsTests, MotionBlurIsListedOnMovingFramesOnly)
+{
+    // Motion blur on, after the depth of field and before bloom, only on the frames that moved
+    Scene scene;
+    buildEveryPassScene (scene, RenderSettings::TierPreference::full);
+    auto settings = scene.getRenderSettings();
+    settings.motionBlur = true;
+    scene.setRenderSettings (settings);
+
+    SceneRenderer renderer;
+    renderer.setFrameStatsEnabled (true);
+    renderAndWait (renderer, scene, 2);
+    EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows lightCulling gbuffer ambientOcclusion hiZ screenSpaceReflections lighting indirectDiffuse forward temporalAA depthOfField bloom toneMapping");
+
+    auto* camera = scene.getRoot()->findChild ("camera");
+    ASSERT_NE (camera, nullptr);
+    camera->setPosition (camera->getPosition() + Vector3<float> (0.05f, 0.0f, 0.0f));
+    renderAndWait (renderer, scene, 1);
+    EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows lightCulling gbuffer ambientOcclusion hiZ screenSpaceReflections lighting indirectDiffuse forward temporalAA depthOfField motionBlur bloom toneMapping");
+    expectScopesMeasured (renderer.getLastFrameStats());
+
+    renderAndWait (renderer, scene, 1);
+    EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows lightCulling gbuffer ambientOcclusion hiZ screenSpaceReflections lighting indirectDiffuse forward temporalAA depthOfField bloom toneMapping");
+}
+
+TEST_F (SceneRendererFrameStatsTests, FrameStatsBelongToOneFrame)
+{
+    Scene scene;
+    buildShadowsScene (scene);
+    setFullTierTaa (scene, 16);
+    const auto plates = addHiddenPlates (scene, 8);
+
+    SceneRenderer renderer;
+    renderer.setFrameStatsEnabled (true);
+    renderAndWait (renderer, scene, 1);
+
+    // The odd frames of the queue draw 8 more plates and bloom, the even ones neither
+    const auto setUp = [&] (bool odd)
+    {
+        for (auto* plate : plates)
+            plate->setVisible (odd);
+
+        auto settings = scene.getRenderSettings();
+        settings.bloom = odd;
+        scene.setRenderSettings (settings);
+        return std::pair { size, size };
+    };
+
+    const auto seen = queueFrames (renderer, scene, 6, [&] (int frame) { return setUp (frame % 2 == 1); });
+
+    RecordProperty ("statsSeen", static_cast<int> (seen.size()));
+    ASSERT_GE (seen.size(), 2u);
+    EXPECT_EQ (seen.back().frameIndex, 7u);
+
+    for (size_t i = 0; i < seen.size(); ++i)
+    {
+        const auto& stats = seen[i];
+        if (i > 0)
+            EXPECT_GT (stats.frameIndex, seen[i - 1].frameIndex);
+
+        // The first frame was rendered before the queue: frame n of the queue is frame n + 1
+        const auto odd = (stats.frameIndex - 1) % 2 == 1;
+        ASSERT_TRUE (stats.gpu.available) << stats.frameIndex;
+        EXPECT_GT (stats.gpu.frameMilliseconds, 0.0) << stats.frameIndex;
+        EXPECT_EQ (stats.drawItems, odd ? 10 : 2) << stats.frameIndex;
+        EXPECT_EQ (getScopeNames (stats).contains ("bloom"), odd) << stats.frameIndex;
+        expectScopesMeasured (stats);
+    }
+
+    // Whatever the speed of the GPU: frame 8 measures, frame 9 draws less without bloom and does not
+    const auto measured = measureThenRenderAnother (renderer, scene, setUp);
+    EXPECT_EQ (measured.frameIndex, 8u);
+    ASSERT_TRUE (measured.gpu.available);
+    EXPECT_EQ (measured.drawItems, 10);
+    EXPECT_TRUE (getScopeNames (measured).contains ("bloom"));
+    expectScopesMeasured (measured);
+}
+
+TEST_F (SceneRendererFrameStatsTests, ResizeDoesNotMixFrames)
+{
+    Scene scene;
+    buildShadowsScene (scene);
+    setFullTierTaa (scene, 16);
+    const auto plates = addHiddenPlates (scene, 8);
+
+    SceneRenderer renderer;
+    renderer.setFrameStatsEnabled (true);
+
+    // The odd frames are wider and draw 8 more plates
+    const auto setUp = [&] (bool odd)
+    {
+        for (auto* plate : plates)
+            plate->setVisible (odd);
+
+        return odd ? std::pair { 96, 48 } : std::pair { size, size };
+    };
+
+    const auto seen = queueFrames (renderer, scene, 6, [&] (int frame) { return setUp (frame % 2 == 1); });
+
+    RecordProperty ("statsSeen", static_cast<int> (seen.size()));
+    ASSERT_GE (seen.size(), 2u);
+    EXPECT_EQ (seen.back().frameIndex, 6u);
+
+    for (const auto& stats : seen)
+    {
+        const auto odd = stats.frameIndex % 2 == 1;
+        ASSERT_TRUE (stats.gpu.available) << stats.frameIndex;
+        EXPECT_EQ (stats.internalWidth, odd ? 96 : size) << stats.frameIndex;
+        EXPECT_EQ (stats.internalHeight, odd ? 48 : size) << stats.frameIndex;
+        EXPECT_EQ (stats.drawItems, odd ? 10 : 2) << stats.frameIndex;
+        EXPECT_FALSE (stats.gpu.scopes.empty()) << stats.frameIndex;
+        expectScopesMeasured (stats);
+    }
+
+    // Whatever the speed of the GPU: frame 7 measures at 96x48, frame 8 is smaller, draws less and does not
+    const auto measured = measureThenRenderAnother (renderer, scene, setUp);
+    EXPECT_EQ (measured.frameIndex, 7u);
+    ASSERT_TRUE (measured.gpu.available);
+    EXPECT_FALSE (measured.gpu.scopes.empty());
+    EXPECT_EQ (measured.internalWidth, 96);
+    EXPECT_EQ (measured.internalHeight, 48);
+    EXPECT_EQ (measured.drawItems, 10);
+    expectScopesMeasured (measured);
+}
+
+TEST_F (SceneRendererFrameStatsTests, StatsOffOpensNoScope)
+{
+    Scene scene;
+    buildEveryPassScene (scene, RenderSettings::TierPreference::full);
+
+    SceneRenderer renderer;
+    EXPECT_FALSE (renderer.isFrameStatsEnabled());
+    renderAndWait (renderer, scene, 2);
+    EXPECT_EQ (renderer.getNumTimingCallsForTesting(), 0);
+    EXPECT_EQ (renderer.getLastFrameStats().frameIndex, 0u);
+
+    // On, a frame turns timing on and opens its scopes
+    renderer.setFrameStatsEnabled (true);
+    renderAndWait (renderer, scene, 1);
+    const auto calls = renderer.getNumTimingCallsForTesting();
+    EXPECT_GT (calls, 1);
+    EXPECT_EQ (renderer.getLastFrameStats().frameIndex, 3u);
+
+    // Off again, the frames make no call, and the stats stay those of the last frame measured
+    renderer.setFrameStatsEnabled (false);
+    renderAndWait (renderer, scene, 2);
+    EXPECT_EQ (renderer.getNumTimingCallsForTesting(), calls);
+    EXPECT_EQ (renderer.getLastFrameStats().frameIndex, 3u);
+}
+
+TEST_F (SceneRendererFrameStatsTests, HeavierPassMeasuresLonger)
+{
+    Scene oneLight, manyLights;
+    buildLightsScene (oneLight, 1);
+    buildLightsScene (manyLights, LightClusters::maxLightsPerCluster);
+
+    SceneRenderer oneRenderer, manyRenderer;
+    oneRenderer.setFrameStatsEnabled (true);
+    manyRenderer.setFrameStatsEnabled (true);
+
+    // The first frames compile and warm up, and are not counted
+    renderAndWait (oneRenderer, oneLight, 1);
+    renderAndWait (manyRenderer, manyLights, 1);
+
+    std::vector<double> light, heavy;
+    for (int i = 0; i < 5; ++i)
+    {
+        renderAndWait (oneRenderer, oneLight, 1);
+        renderAndWait (manyRenderer, manyLights, 1);
+
+        light.push_back (getScopeMilliseconds (oneRenderer.getLastFrameStats(), "lighting"));
+        heavy.push_back (getScopeMilliseconds (manyRenderer.getLastFrameStats(), "lighting"));
+    }
+
+    RecordProperty ("oneLight", String (median (light), 4).toStdString());
+    RecordProperty ("manyLights", String (median (heavy), 4).toStdString());
+
+    ASSERT_GE (*std::min_element (light.begin(), light.end()), 0.0);
+    EXPECT_GT (median (heavy), median (light) * 4.0);
 }
 
 /** Frame times of the Scene3D light show, measured by hand: disabled in the normal suites. Run them
@@ -15329,10 +16979,14 @@ protected:
 
     /** The wall milliseconds per frame of 120 queued frames after 30 warm-up ones, or -1 on a failure.
         @p shadowRedraws receives the number of the timed frames that drew shadow maps, and
-        @p casterDraws the shadow caster draws of the timed frames. */
-    double timeFrames (LightShow& show, int width, int height, int& shadowRedraws, int* casterDraws = nullptr)
+        @p casterDraws the shadow caster draws of the timed frames. The renderer collects its frame
+        stats when @p frameStats is set, and waits for its frames after every @p maxFramesInFlight
+        ones when it is above 0. */
+    double timeFrames (LightShow& show, int width, int height, int& shadowRedraws, int* casterDraws = nullptr,
+                       bool frameStats = false, int maxFramesInFlight = 0)
     {
         SceneRenderer renderer;
+        renderer.setFrameStatsEnabled (frameStats);
 
         const auto renderFrames = [&] (int count)
         {
@@ -15340,6 +16994,9 @@ protected:
             {
                 show.animate();
                 if (renderer.render (device, show.scene, width, height) == nullptr)
+                    return false;
+
+                if (maxFramesInFlight > 0 && (i + 1) % maxFramesInFlight == 0 && renderer.waitForGPU().failed())
                     return false;
             }
 
@@ -15358,6 +17015,16 @@ protected:
         shadowRedraws = shadows (renderer).getNumRenderedFrames() - redrawsBefore;
         if (casterDraws != nullptr)
             *casterDraws = shadows (renderer).getNumCasterDraws() - drawsBefore;
+
+        // Frames that measured only their total would leave nothing measured to compare
+        if (frameStats)
+        {
+            const auto& stats = renderer.getLastFrameStats();
+            const auto measured = std::count_if (stats.gpu.scopes.begin(), stats.gpu.scopes.end(), [] (const auto& scope) { return scope.available; });
+            EXPECT_TRUE (stats.gpu.available);
+            EXPECT_GT (measured, 0);
+            std::cout << "frame " << stats.frameIndex << ": " << measured << " of " << stats.gpu.scopes.size() << " scopes measured" << std::endl;
+        }
 
         return (Time::getMillisecondCounterHiRes() - start) / 120.0;
     }
@@ -15544,6 +17211,289 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_DepthOfFieldFrameTimes)
 
             std::cout << width << " x " << height << " " << name << ": " << line << "ms" << std::endl;
         }
+    }
+}
+
+/** Raster depth of field in the light show with 16 show lights, focused on the model at f/1.4: the
+    frames without it, with it, with ambient occlusion, with both, and without it again (A/A), on a
+    renderer each, interleaved over 3 rounds, at the demo size and at 2560 x 1600. Prints the wall
+    milliseconds per frame and the mean GPU milliseconds of the frame and of the passes depth of field
+    adds or changes, measured through the frame stats with 2 frames in flight, and the load average
+    of each round. Run it like DISABLED_LightShowFrameTimes, in Release.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_RasterDepthOfFieldFrameTimes)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    const char* const columns[] = { "wall", "gpu", "depthNormalPrepass", "ambientOcclusion", "forward", "depthOfField", "toneMapping" };
+
+    const struct
+    {
+        const char* name;
+        bool depthOfField;
+        bool ambientOcclusion;
+    } configs[] = {
+        { "a off", false, false },
+        { "b dof", true, false },
+        { "c ao", false, true },
+        { "d ao + dof", true, true },
+        { "e off again", false, false },
+    };
+
+    for (const auto& [width, height] : { std::pair { 1280, 800 }, std::pair { 2560, 1600 } })
+    {
+        std::map<String, std::map<String, std::vector<double>>> times;
+
+        for (int round = 0; round < 3; ++round)
+        {
+            double load[3] = {};
+            getloadavg (load, 3);
+            std::cout << width << " x " << height << " round " << round << ": load " << String (load[0], 2) << std::endl;
+
+            for (const auto& config : configs)
+            {
+                LightShow show;
+                if (! show.build (16, 0.5f, 0.08f, RenderSettings::TierPreference::raster, static_cast<float> (width) / static_cast<float> (height)))
+                    GTEST_SKIP() << "mpc.glb is missing";
+
+                auto settings = show.scene.getRenderSettings();
+                settings.depthOfField = config.depthOfField;
+                settings.ambientOcclusion = config.ambientOcclusion;
+                show.scene.setRenderSettings (settings);
+
+                auto& camera = *show.scene.getActiveCamera();
+                camera.fStop = 1.4f;
+                camera.focusDistance = show.cameraDistance;
+
+                SceneRenderer renderer;
+                renderer.setFrameStatsEnabled (true);
+
+                std::map<String, double> sums;
+                int measured = 0;
+                uint64 lastFrame = 0;
+                const auto take = [&]
+                {
+                    const auto& stats = renderer.getLastFrameStats();
+                    if (stats.frameIndex == lastFrame || ! stats.gpu.available)
+                        return;
+
+                    lastFrame = stats.frameIndex;
+                    ++measured;
+                    sums["gpu"] += stats.gpu.frameMilliseconds;
+                    for (const auto& scope : stats.gpu.scopes)
+                        if (scope.available)
+                            sums[scope.name] += scope.milliseconds;
+                };
+
+                const auto renderFrames = [&] (int count, bool collect)
+                {
+                    for (int i = 0; i < count; ++i)
+                    {
+                        show.animate();
+                        if (renderer.render (device, show.scene, width, height) == nullptr)
+                            return false;
+
+                        if ((i + 1) % 2 == 0 && renderer.waitForGPU().failed())
+                            return false;
+
+                        if (collect)
+                            take();
+                    }
+
+                    return renderer.waitForGPU().wasOk();
+                };
+
+                ASSERT_TRUE (renderFrames (30, false)) << config.name;
+                lastFrame = renderer.getLastFrameStats().frameIndex;
+
+                const auto start = Time::getMillisecondCounterHiRes();
+                ASSERT_TRUE (renderFrames (120, true)) << config.name;
+                const auto wall = (Time::getMillisecondCounterHiRes() - start) / 120.0;
+                take();
+                ASSERT_GT (measured, 0) << config.name;
+
+                times[config.name]["wall"].push_back (wall);
+                for (const auto* column : columns)
+                    if (String (column) != "wall")
+                        times[config.name][column].push_back (sums[column] / measured);
+            }
+        }
+
+        for (const auto& config : configs)
+        {
+            String line;
+            line << width << " x " << height << " " << config.name << ":";
+            for (const auto* column : columns)
+            {
+                line << " " << column;
+                for (const auto value : times[config.name][column])
+                    line << " " << String (value, 3);
+            }
+
+            std::cout << line << std::endl;
+        }
+    }
+}
+
+/** Motion blur in the full tier light show with 16 show lights: off and on while the camera orbits
+    (every frame moves, so every frame smears), on and off while only the lights move (still frames,
+    which skip it), and off again while orbiting (A/A), on a renderer each, interleaved over 3
+    rounds, at the demo size and at 2560 x 1600. Prints the wall milliseconds per frame and the mean
+    GPU milliseconds of the frame and of the passes motion blur adds or changes, measured through
+    the frame stats with 2 frames in flight, and the load average of each round. Run it like
+    DISABLED_LightShowFrameTimes, in Release.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_MotionBlurFrameTimes)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    const char* const columns[] = { "wall", "gpu", "temporalAA", "motionBlur", "toneMapping" };
+
+    const struct
+    {
+        const char* name;
+        bool motionBlur;
+        bool orbit;
+    } configs[] = {
+        { "a off, orbiting", false, true },
+        { "b on, orbiting", true, true },
+        { "c on, still", true, false },
+        { "d off, still", false, false },
+        { "e off, orbiting again", false, true },
+    };
+
+    for (const auto& [width, height] : { std::pair { 1280, 800 }, std::pair { 2560, 1600 } })
+    {
+        std::map<String, std::map<String, std::vector<double>>> times;
+
+        for (int round = 0; round < 3; ++round)
+        {
+            double load[3] = {};
+            getloadavg (load, 3);
+            std::cout << width << " x " << height << " round " << round << ": load " << String (load[0], 2) << std::endl;
+
+            for (const auto& config : configs)
+            {
+                LightShow show;
+                if (! show.build (16, 0.5f, 0.08f, RenderSettings::TierPreference::full, static_cast<float> (width) / static_cast<float> (height)))
+                    GTEST_SKIP() << "mpc.glb is missing";
+
+                show.orbitPitch = config.orbit ? 0.6f : 0.0f;
+
+                auto settings = show.scene.getRenderSettings();
+                settings.motionBlur = config.motionBlur;
+                show.scene.setRenderSettings (settings);
+
+                SceneRenderer renderer;
+                renderer.setFrameStatsEnabled (true);
+
+                std::map<String, double> sums;
+                int measured = 0;
+                uint64 lastFrame = 0;
+                const auto take = [&]
+                {
+                    const auto& stats = renderer.getLastFrameStats();
+                    if (stats.frameIndex == lastFrame || ! stats.gpu.available)
+                        return;
+
+                    lastFrame = stats.frameIndex;
+                    ++measured;
+                    sums["gpu"] += stats.gpu.frameMilliseconds;
+                    for (const auto& scope : stats.gpu.scopes)
+                        if (scope.available)
+                            sums[scope.name] += scope.milliseconds;
+                };
+
+                const auto renderFrames = [&] (int count, bool collect)
+                {
+                    for (int i = 0; i < count; ++i)
+                    {
+                        show.animate();
+                        if (renderer.render (device, show.scene, width, height) == nullptr)
+                            return false;
+
+                        if ((i + 1) % 2 == 0 && renderer.waitForGPU().failed())
+                            return false;
+
+                        if (collect)
+                            take();
+                    }
+
+                    return renderer.waitForGPU().wasOk();
+                };
+
+                ASSERT_TRUE (renderFrames (30, false)) << config.name;
+                lastFrame = renderer.getLastFrameStats().frameIndex;
+
+                const auto start = Time::getMillisecondCounterHiRes();
+                ASSERT_TRUE (renderFrames (120, true)) << config.name;
+                const auto wall = (Time::getMillisecondCounterHiRes() - start) / 120.0;
+                take();
+                ASSERT_GT (measured, 0) << config.name;
+
+                // Orbiting frames smear, still ones never create the pass
+                EXPECT_EQ (renderer.getMotionBlur() != nullptr, config.motionBlur && config.orbit) << config.name;
+
+                times[config.name]["wall"].push_back (wall);
+                for (const auto* column : columns)
+                    if (String (column) != "wall")
+                        times[config.name][column].push_back (sums[column] / measured);
+            }
+        }
+
+        for (const auto& config : configs)
+        {
+            String line;
+            line << width << " x " << height << " " << config.name << ":";
+            for (const auto* column : columns)
+            {
+                line << " " << column;
+                for (const auto value : times[config.name][column])
+                    line << " " << String (value, 3);
+            }
+
+            std::cout << line << std::endl;
+        }
+    }
+}
+
+/** The cost of SceneRenderer::setFrameStatsEnabled() in the light show with 64 show lights on the
+    full tier, at the demo size, with 2 frames in flight. Run it like DISABLED_LightShowFrameTimes.
+    Each round times the frames with the stats off, on, off again (A/A) and on again, each on a device
+    of its own: once a device measured a frame, its later frames pay a timestamp pair each.
+*/
+TEST_F (SceneRendererBenchmarkTests, DISABLED_FrameStatsOverhead)
+{
+    std::map<String, std::vector<double>> times;
+
+    for (int round = 0; round < 5; ++round)
+    {
+        for (const auto [name, frameStats] : { std::pair { "a off", false }, std::pair { "b on", true }, std::pair { "c off again", false }, std::pair { "d on again", true } })
+        {
+            device = GpuDevice::create (GpuPlatform::Metal, {});
+            ASSERT_NE (device, nullptr);
+
+            LightShow show;
+            if (! show.build (64, 0.5f, 0.08f, RenderSettings::TierPreference::full, 3456.0f / 2234.0f))
+                GTEST_SKIP() << "mpc.glb is missing";
+
+            int shadowRedraws = 0;
+            const auto milliseconds = timeFrames (show, 3456, 2234, shadowRedraws, nullptr, frameStats, 2);
+            ASSERT_GT (milliseconds, 0.0) << name;
+            times[name].push_back (milliseconds);
+        }
+    }
+
+    for (auto& [name, values] : times)
+    {
+        String line;
+        for (const auto value : values)
+            line << String (value, 3) << " ";
+
+        std::sort (values.begin(), values.end());
+        std::cout << name << ": " << line << "ms, median " << String (values[values.size() / 2], 3) << " ms" << std::endl;
     }
 }
 
@@ -16171,5 +18121,84 @@ TEST_F (SceneRendererGLTests, ClearcoatDimsTheEmission)
 TEST_F (SceneRendererGLTests, ClearcoatReflectsTheProbe)
 {
     checkClearcoatReflectsTheProbe (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterDepthOfFieldBlursOutOfFocusBarsOnly)
+{
+    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster depth of field is unavailable on this device";
+
+    checkDepthOfFieldBlursOutOfFocusBarsOnly (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterNearFieldBleedsOverTheFocusedBackground)
+{
+    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster depth of field is unavailable on this device";
+
+    checkNearFieldBleedsOverTheFocusedBackground (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterInFocusEdgesMatchWithoutDepthOfField)
+{
+    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster depth of field is unavailable on this device";
+
+    checkInFocusEdgesMatchWithoutDepthOfField (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterDepthOfFieldOffChangesNothing)
+{
+    checkDepthOfFieldOffChangesNothing (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterDepthOfFieldKeepsTheSilhouetteBlendOverTheBackground)
+{
+    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster depth of field is unavailable on this device";
+
+    checkDepthOfFieldKeepsTheSilhouetteBlendOverTheBackground (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterBlurredHighlightsKeepTheirBrightnessOverTheBackground)
+{
+    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster depth of field is unavailable on this device";
+
+    checkBlurredHighlightsKeepTheirBrightnessOverTheBackground (RenderSettings::TierPreference::raster);
+}
+
+TEST_F (SceneRendererGLTests, RasterDepthOfFieldDrawsThePrepassWithoutAmbientOcclusion)
+{
+    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster depth of field is unavailable on this device";
+
+    checkRasterDepthOfFieldDrawsThePrepassWithoutAmbientOcclusion();
+}
+
+TEST_F (SceneRendererGLTests, RasterDepthOfFieldUnavailableRecordsNothing)
+{
+    checkRasterDepthOfFieldUnavailableRecordsNothing();
+}
+
+TEST_F (SceneRendererGLTests, RasterDepthOfFieldSkipsFramesWithoutThePrepassDepth)
+{
+    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster depth of field is unavailable on this device";
+
+    checkRasterDepthOfFieldSkipsFramesWithoutThePrepassDepth();
+}
+
+TEST_F (SceneRendererGLTests, RasterDepthOfFieldThatGaveUpStopsItsRoute)
+{
+    if (! isDepthOfFieldAvailable (RenderSettings::TierPreference::raster))
+        GTEST_SKIP() << "Raster depth of field is unavailable on this device";
+
+    checkRasterDepthOfFieldThatGaveUpStopsItsRoute();
+}
+
+TEST_F (SceneRendererGLTests, RasterMotionBlurRendersTheUnblurredFallback)
+{
+    checkMotionBlurOnRasterRendersTheUnblurredFallback();
 }
 #endif

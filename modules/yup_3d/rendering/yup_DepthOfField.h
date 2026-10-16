@@ -135,6 +135,13 @@ public:
     /** The rgba16float result of the last render(), or nullptr when it drew nothing. */
     const GpuTexture::Ptr& getOutput() const noexcept { return output; }
 
+    /** The r8unorm blur amount of the last render(), of the size of the color, or nullptr when it
+        drew nothing: per pixel, the share of the coverage the blur wrote, 0 where it left the pixel
+        sharp, 1 where it covers nothing. ToneMapping composites that share in radiance and the rest
+        in display space (preflight R21).
+    */
+    const GpuTexture::Ptr& getBlurAmount() const noexcept { return blurAmount; }
+
     /** The r16float signed CoC of the last render(), in texels of its half size, or nullptr when it drew nothing. */
     const GpuTexture::Ptr& getCircleOfConfusionTexture() const noexcept { return circleOfConfusion; }
 
@@ -166,6 +173,7 @@ private:
     std::vector<Point<float>> samples;
     int sampleBlades = 0; // The apertureBlades samples was made for, when not empty
     GpuTexture::Ptr output;
+    GpuTexture::Ptr blurAmount;
     GpuTexture::Ptr circleOfConfusion;
     int consecutiveFailures = 0;
     bool givenUp = false;

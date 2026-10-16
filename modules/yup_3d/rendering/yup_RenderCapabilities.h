@@ -42,7 +42,7 @@ public:
     /** Optional rendering features. */
     enum class Feature
     {
-        hdrSceneColor,        ///< Scene rendered to a half-float target before tone mapping.
+        hdrSceneColor,        ///< Scene rendered to a half-float target before tone mapping: always on full. On raster, isEnabled() says the frames may take that route (bloom or depth of field on); the renderer decides per frame, and the depth of field takes it only on the frames it blurs.
         temporalAntiAliasing, ///< Jittered frames accumulated over time.
         bloom,                ///< Glow around highlights.
         softShadows,          ///< Penumbrae from the light size: both tiers, on by default on full only.
@@ -50,7 +50,8 @@ public:
         ambientOcclusion,     ///< Screen-space ambient occlusion: on by default on full, opt-in on raster where the device can draw the depth and normal prepass. Off whenever RenderSettings::aoDistance is not a positive finite number.
         screenSpaceReflections, ///< Screen-space reflections: full tier only, on by default. They read the history of temporal anti-aliasing, so they are off whenever it is (RenderSettings::taaSamples of 1 or less).
         screenSpaceGI,          ///< Screen-space diffuse global illumination: full tier only, off by default. It extends the horizon search of the ambient occlusion and reads the history of temporal anti-aliasing, so it is off whenever either is.
-        depthOfField            ///< Depth of field: full tier only for now, off by default.
+        depthOfField,           ///< Depth of field: off by default. On raster it renders the scene in half float and draws the depth and normal prepass, so it needs both, as bloom and ambient occlusion do.
+        motionBlur              ///< Motion blur: full tier only, off by default, and off whenever RenderSettings::motionBlurShutter is not a positive finite number. The raster tier has no screen-space motion to read.
     };
 
     /** Shadow cascades of the sun on the raster tier when RenderSettings::sunCascades is 0. */

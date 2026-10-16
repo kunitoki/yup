@@ -512,6 +512,22 @@ std::vector<GpuScopeTiming> GpuDevice::ScopeTimeline::attribute (uint64 sequence
     return scopes;
 }
 
+std::optional<uint64> GpuDevice::ScopeTimeline::getEndTicks (uint64 cpuNow, uint64 gpuNow, double hostEnd, double nanosecondsPerTick) noexcept
+{
+    if (! (nanosecondsPerTick > 0.0))
+        return std::nullopt;
+
+    const auto sinceEnd = static_cast<double> (cpuNow) - hostEnd;
+    if (sinceEnd < -1.0e3)
+        return std::nullopt;
+
+    const auto ticksSinceEnd = static_cast<uint64> (jmax (0.0, sinceEnd) / nanosecondsPerTick);
+    if (gpuNow <= ticksSinceEnd)
+        return std::nullopt;
+
+    return gpuNow - ticksSinceEnd;
+}
+
 //==============================================================================
 
 GpuDevice::FrameCompletion GpuDevice::getFrameCompletion() const

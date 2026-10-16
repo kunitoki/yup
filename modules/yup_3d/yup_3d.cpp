@@ -78,6 +78,7 @@
 #include "rendering/yup_ToneMapping.cpp"
 #include "rendering/yup_Bloom.cpp"
 #include "rendering/yup_DepthOfField.cpp"
+#include "rendering/yup_MotionBlur.cpp"
 #include "rendering/yup_PostChain.cpp"
 #include "rendering/yup_FrameSignature.h"
 #include "rendering/yup_ProbeBaker.cpp"

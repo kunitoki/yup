@@ -118,8 +118,12 @@ bool DepthNormalPrepass::render (GpuFrame& frame, const ViewData& view, const Sc
         return resources.acquire (desc);
     };
 
-    auto normals = targetsFailForTesting ? nullptr : acquire (prepassNormalFormat, "DepthNormalPrepass normal and roughness");
-    auto depthTexture = targetsFailForTesting ? nullptr : acquire (prepassDepthFormat, "DepthNormalPrepass depth");
+    const auto failTargets = targetFailures > 0;
+    if (failTargets)
+        --targetFailures;
+
+    auto normals = failTargets ? nullptr : acquire (prepassNormalFormat, "DepthNormalPrepass normal and roughness");
+    auto depthTexture = failTargets ? nullptr : acquire (prepassDepthFormat, "DepthNormalPrepass depth");
 
     // Like the shadow maps, targets the device cannot create leave the frame without the pass
     if (normals == nullptr || depthTexture == nullptr)

@@ -401,7 +401,7 @@ TEST_F (RenderCapabilitiesTests, ScreenSpaceGINeedsTheTemporalHistory)
     }
 }
 
-TEST_F (RenderCapabilitiesTests, DepthOfFieldIsAnOptInOfTheFullTier)
+TEST_F (RenderCapabilitiesTests, DepthOfFieldIsAnOptInOnFull)
 {
     RenderSettings settings;
     const RenderCapabilities full (desktopMetal(), settings, 4);
@@ -410,12 +410,70 @@ TEST_F (RenderCapabilitiesTests, DepthOfFieldIsAnOptInOfTheFullTier)
 
     settings.depthOfField = true;
     EXPECT_TRUE (full.isEnabled (Feature::depthOfField, settings));
+}
 
-    // Raster ignores the setting for now, even on a device with half-float targets and the prepass
-    auto facts = webgl2 (true, 4);
-    facts.depthNormalPrepass = true;
-    const RenderCapabilities raster (facts, settings, 4);
-    EXPECT_EQ (raster.getTier(), Tier::raster);
-    EXPECT_FALSE (raster.isAvailable (Feature::depthOfField));
-    EXPECT_FALSE (raster.isEnabled (Feature::depthOfField, settings));
+TEST_F (RenderCapabilitiesTests, MotionBlurIsAnOptInOfTheFullTier)
+{
+    RenderSettings settings;
+    const RenderCapabilities full (desktopMetal(), settings, 4);
+    EXPECT_TRUE (full.isAvailable (Feature::motionBlur));
+    EXPECT_FALSE (full.isEnabled (Feature::motionBlur, settings));
+    EXPECT_EQ (settings.motionBlurShutter, 0.5f);
+
+    settings.motionBlur = true;
+    EXPECT_TRUE (full.isEnabled (Feature::motionBlur, settings));
+
+    // A closed shutter blurs nothing
+    for (const auto shutter : { 0.0f, -1.0f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() })
+    {
+        settings.motionBlurShutter = shutter;
+        EXPECT_FALSE (full.isEnabled (Feature::motionBlur, settings)) << shutter;
+    }
+
+    // The raster tier has no screen-space motion, even on a device able to run every raster opt-in
+    settings.motionBlurShutter = 1.0f;
+    auto capable = webgl2 (true, 4);
+    capable.depthNormalPrepass = true;
+    const RenderCapabilities raster (capable, settings, 4);
+    EXPECT_FALSE (raster.isAvailable (Feature::motionBlur));
+    EXPECT_FALSE (raster.isEnabled (Feature::motionBlur, settings));
+    EXPECT_FALSE (raster.isEnabled (Feature::hdrSceneColor, settings));
+}
+
+TEST_F (RenderCapabilitiesTests, RasterDofIsUnavailableWithoutHdrTargetsOrPrepass)
+{
+    RenderSettings settings;
+    settings.depthOfField = true;
+
+    const RenderCapabilities noHalfFloat (webgl2 (false, 0), settings, 4);
+    EXPECT_FALSE (noHalfFloat.isAvailable (Feature::depthOfField));
+    EXPECT_FALSE (noHalfFloat.isEnabled (Feature::depthOfField, settings));
+
+    // The half float targets must take the requested samples, as for bloom
+    auto fewSamples = webgl2 (true, 2);
+    fewSamples.depthNormalPrepass = true;
+    EXPECT_FALSE (RenderCapabilities (fewSamples, settings, 4).isAvailable (Feature::depthOfField));
+
+    // Raster DoF takes its depth from the DepthNormalPrepass (Phase 4)
+    auto noPrepass = webgl2 (true, 4);
+    noPrepass.depthNormalPrepass = false;
+    const RenderCapabilities withoutPrepass (noPrepass, settings, 4);
+    EXPECT_FALSE (withoutPrepass.isAvailable (Feature::depthOfField));
+    EXPECT_FALSE (withoutPrepass.isEnabled (Feature::hdrSceneColor, settings));
+
+    auto capable = webgl2 (true, 4);
+    capable.depthNormalPrepass = true;
+    EXPECT_TRUE (RenderCapabilities (capable, settings, 4).isEnabled (Feature::depthOfField, settings));
+}
+
+TEST_F (RenderCapabilitiesTests, RasterDofAlonePullsInTheHdrTarget)
+{
+    RenderSettings settings;
+    const RenderCapabilities caps (webgl2 (true, 4), settings, 4);
+    EXPECT_FALSE (caps.isEnabled (Feature::hdrSceneColor, settings));
+
+    settings.depthOfField = true;
+    EXPECT_FALSE (caps.isEnabled (Feature::bloom, settings));
+    EXPECT_TRUE (caps.isEnabled (Feature::depthOfField, settings));
+    EXPECT_TRUE (caps.isEnabled (Feature::hdrSceneColor, settings));
 }

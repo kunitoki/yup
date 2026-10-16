@@ -837,8 +837,10 @@ scene->setExposure (1.2f);
 | `aoDistance`     | 0.2         | How far, in scene units, surfaces occlude each other for ambient occlusion. 0 or less turns it off. |
 | `screenSpaceReflections` | unset | Smooth surfaces reflect what the camera sees, see [Screen-space reflections](#screen-space-reflections). Unset follows the tier: on for full; raster never has them. Needs `taaSamples` above 1. |
 | `screenSpaceGI` | unset | Nearby surfaces light each other, see [Screen-space diffuse GI](#screen-space-diffuse-gi). Unset is off on every tier; raster never has it. Needs `ambientOcclusion` and `taaSamples` above 1. |
-| `depthOfField` | off | Full tier: blurs what lies away from the camera's focus, see [Depth of field](#depth-of-field). |
+| `depthOfField` | off | Blurs what lies away from the camera's focus, see [Depth of field](#depth-of-field). |
 | `depthOfFieldMaxSize` | 32 | The largest depth of field blur, as a diameter in pixels of the image, at most 64. |
+| `motionBlur` | off | Full tier: smears what moves on screen, see [Motion blur](#motion-blur). |
+| `motionBlurShutter` | 0.5 | The fraction of the frame time the shutter stays open, from 0 to 1. 0 or less blurs nothing. |
 | `debugView` | `none` | Full tier: shows an intermediate image instead of the final one, see below. |
 
 **Debug view.** `debugView` shows what one screen-space effect computes, in
@@ -929,10 +931,10 @@ shadows, at the cost of more frames before the image is final.
   shot, call `restartAccumulation()`.
 - Changing the size of the view, the tier or `taaSamples` discards the history,
   and the image starts over.
-- Tone mapping, the bloom and depth of field settings, the depth of field
-  fields of the camera and the debug view are applied after the accumulation,
-  so changing them neither restarts nor discards it. Repaint after changing
-  them: the component does not repaint by itself for them.
+- Tone mapping, the bloom, depth of field and motion blur settings, the depth
+  of field fields of the camera and the debug view are applied after the
+  accumulation, so changing them neither restarts nor discards it. Repaint
+  after changing them: the component does not repaint by itself for them.
 - When you change something the renderer cannot see, such as vertices edited in
   place in a `Mesh`, or a `GpuTexture` redrawn without calling
   `Texture::setGpuTexture()`, call `getRenderer().restartAccumulation()`. It
@@ -953,8 +955,9 @@ works on both tiers:
   `isAvailable (RenderCapabilities::Feature::bloom)`.
 - Turning bloom on in the raster tier makes the scene render in half float and
   tone map after antialiasing. Silhouettes and transparent surfaces over the
-  background still look as they do without bloom. Where two surfaces meet inside
-  a pixel, the brighter one weighs a little less than without bloom.
+  background still look as they do without bloom. Antialiased edges between
+  surfaces of very different brightness blend differently: a bright edge over a
+  dark surface looks bolder than without bloom.
 - The glow strength depends somewhat on the resolution of the view: the same
   intensity looks a little different at different sizes.
 
@@ -982,9 +985,21 @@ scene->setRenderSettings (settings);
 view.repaint();
 ```
 
-- It is available on the full tier only for now; the raster tier ignores the
-  setting, which `isAvailable (RenderCapabilities::Feature::depthOfField)`
-  reports.
+- It works on both tiers. On the raster tier it needs multisampled half-float
+  render targets at the current sample count, as bloom does, and the depth and
+  normal pass of ambient occlusion, which gives the blur its depth. Where the
+  device lacks them, the setting is ignored, which
+  `isAvailable (RenderCapabilities::Feature::depthOfField)` reports, and it is
+  logged once in debug builds.
+- On the raster tier, the frames it blurs render the scene in half float, as
+  bloom does, and draw the depth and normal pass, as ambient occlusion does.
+  Frames it does not blur skip both, so moving `fStop` to 0 or back switches
+  the frame's route just like turning the setting off or on. The depth comes
+  from one sample per pixel while the color is antialiased, so silhouettes
+  against a far blurred background can differ from the sharp image by about a
+  pixel. As with bloom, antialiased edges between surfaces of very different
+  brightness blend differently in half float: a bright edge over a dark
+  surface looks bolder.
 - It is off by default and costs nothing while off. A camera that cannot blur
   (orthographic, `fStop` or `yFov` of 0 or less, or no active camera) costs
   nothing either, and neither does a `depthOfFieldMaxSize` of 0 or less.
@@ -994,15 +1009,130 @@ view.repaint();
 - `depthOfFieldMaxSize` caps the blur, as a diameter in pixels of the image, at
   most 64.
 - The blur carries the coverage of the scene, so silhouettes over the background
-  color fade into it. On frames it blurs, the image is composited over the
-  background color in light rather than in display values: a bright highlight
-  blurred over the background keeps the brightness it has over a surface or a
-  visible environment, and the edges of blurred objects over the background
-  look as they do over a dark environment. Frames without depth of field keep
-  the usual blend, where antialiased edges over the background match the
-  raster tier. Over a transparent background color, blurred frames output
-  premultiplied light, which compositors adding it over what lies behind show
-  correctly.
-- Cost: six draws, all but the last at half resolution or less. On an Apple
-  M2 Max it adds about 0.2 to 0.3 ms per frame at 1280 x 800 and 0.5 to 0.8 ms at
-  2560 x 1600, the most when every pixel is out of focus.
+  color fade into it. What the blur spreads is composited over the background
+  color in light rather than in display values: a bright highlight blurred over
+  the background keeps the brightness it has over a surface or a visible
+  environment, and the edges of blurred objects over the background look as
+  they do over a dark environment. Pixels the blur leaves sharp, and frames
+  without depth of field, keep the usual blend, where antialiased edges over
+  the background match the raster tier. Over a transparent background color,
+  blurred frames output premultiplied light, which compositors adding it over
+  what lies behind show correctly.
+- Cost: six draws, all but the last at half resolution or less, plus a small
+  per-pixel mask that tone mapping reads to tell blurred pixels from sharp
+  ones. On an Apple M2 Max it adds about 0.2 to 0.3 ms per frame at 1280 x 800
+  and 0.5 to 0.8 ms at 2560 x 1600, the most when every pixel is out of focus.
+  On the raster tier the half-float scene and the depth and normal pass come on
+  top: in all, about 0.2 to 0.3 ms of GPU time per frame at 1280 x 800 and
+  1.0 ms at 2560 x 1600, or 0.7 ms there when ambient occlusion already draws
+  the depth and normal pass.
+
+### Motion blur
+
+**Motion blur** smears what moves on screen along its motion, as a camera
+shutter left open for part of each frame does. It covers both the camera's
+motion and each object's own. Turn it on with `motionBlur`, and set how long the
+shutter stays open with `motionBlurShutter`:
+
+```cpp
+auto settings = scene->getRenderSettings();
+settings.motionBlur = true;
+settings.motionBlurShutter = 0.5f; // half of the frame time
+scene->setRenderSettings (settings);
+view.repaint();
+```
+
+- It runs on the full tier only, which knows how each pixel moved. The raster
+  tier ignores the setting, which is not an error, and
+  `isAvailable (RenderCapabilities::Feature::motionBlur)` reports it.
+- It is off by default and costs nothing while off. With it on, frames where
+  nothing moved cost nothing either: still frames, the frames of a converged
+  image and the first frame after the scene is shown draw no motion blur at
+  all. A shutter of 0 or less blurs nothing.
+- Motion is measured against the previous frame, so the frames that start
+  over do not blur: after a resize, a change of tier or `taaSamples`,
+  `restartAccumulation()` (use it on a camera cut) or a failed frame.
+- A blurred frame is never the final image, even with `taaSamples` at 1: the
+  renderer reports it as not converged, so the component draws one more frame,
+  and once nothing moves the image is sharp again.
+- `motionBlurShutter` is the fraction of the time between two frames the
+  shutter stays open, from 0 to 1: at 1 a smear spans the whole motion since the
+  previous frame, centered on where the object is now. A smear spans at most 32
+  pixels of the image, so very fast motion is shortened.
+- It runs after temporal anti-aliasing and the depth of field, and before bloom,
+  so changing its settings keeps the accumulation: repaint after such a change.
+- The smear carries the coverage of the scene, so a moving object over the
+  background color smears into it, and what it spreads keeps its brightness
+  there, as the depth of field's blur does. Still parts of a frame where
+  something else moves keep the usual blend.
+- How far each pixel moved comes from the previous frame the renderer drew, so
+  render every frame of an animation: a renderer that skipped frames sees the
+  whole jump as one motion.
+- Each 16 x 16 pixel tile smears along one direction, the fastest within the
+  48 x 48 pixels around it, and smears that reach the 32 pixel cap tie: where
+  two fast motions in different directions meet, one of them smears along the
+  other's.
+- Cost, only on frames where something moves: four draws, all but the last
+  at a quarter of the resolution or less, plus the same mask as the depth of
+  field for tone mapping. Where everything around a pixel moves alike, as when
+  the camera turns, the smear skips most of its work. On an Apple M2 Max, with
+  the camera orbiting the Scene 3D model, it adds about 0.2 ms of GPU time per
+  frame at 1280 x 800 and 0.7 ms at 2560 x 1600, plus 0.1 ms there for tone
+  mapping. Frames where only lights change, with nothing moving on screen,
+  cost exactly what they cost with it off.
+
+## Frame statistics
+
+`SceneRenderer::setFrameStatsEnabled (true)` makes the renderer measure what its
+frames cost on the GPU and what they drew. `getLastFrameStats()` returns the
+`FrameStats` of the latest frame the GPU finished, a few frames behind the last
+render, without waiting for it:
+
+```cpp
+auto& renderer = view.getRenderer();
+renderer.setFrameStatsEnabled (true);
+
+// Later, for example from a timer
+const auto& stats = renderer.getLastFrameStats();
+if (stats.gpu.available)
+    YUP_DBG ("GPU " << stats.gpu.frameMilliseconds << " ms at " << stats.internalWidth << "x" << stats.internalHeight);
+
+for (const auto& scope : stats.gpu.scopes)
+    if (scope.available)
+        YUP_DBG (scope.name << ": " << scope.milliseconds << " ms");
+```
+
+- It is off by default, and frames pay nothing for it while off, until a frame
+  of the device has measured: the device's later frames then pay a GPU
+  timestamp pair each when they complete.
+- GPU times are measured on Metal only for now. Elsewhere `gpu.available` is
+  false, and the draw counts (`drawItems`, `shadowCasterDraws`,
+  `shadowsRedrawn`) and the size are still reported.
+- `gpu.scopes` lists the passes the frame recorded, in order: `probeBake`,
+  `shadows`, `lightCulling`, `gbuffer`, `ambientOcclusion`, `hiZ`,
+  `screenSpaceReflections`, `lighting`, `indirectDiffuse`,
+  `depthNormalPrepass`, `ambientOcclusion` (raster), `forward`, `temporalAA`,
+  `depthOfField`, `motionBlur`, `bloom`, `toneMapping`, `debugView`. A pass
+  the frame does not run is not listed, and one that fails reads 0. `shadows`
+  is listed in every frame, and reads 0 when the frame kept the previous
+  shadow maps.
+- With screen-space GI on, `ambientOcclusion` includes the GI gather, which
+  traces in the same draws, and `indirectDiffuse` is only adding the gathered
+  light to the scene.
+- A pass's time is how much it lengthened the frame on the GPU, not what it
+  costs on its own. The GPU overlaps passes, so each one is credited only the
+  time past the end of the work before it: a pass hidden under an earlier one
+  reads 0, and the passes need not add up to the frame total. To learn what a
+  pass costs on its own, compare the frame total with and without it.
+- The first pass that recorded work (usually `lightCulling`, or `shadows` when
+  the shadow maps were redrawn) may also include time it overlapped work outside
+  the renderer's frames, such as window drawing and uploads.
+- The pass times stay meaningful with up to 8 frames in flight. The frame total
+  includes the time the frame waited behind earlier ones, so read it with 2 or 3
+  frames in flight. A window repainting a `SceneComponent` keeps at most about 3
+  (the drawables of a Metal window).
+- The stats move on only when the renderer renders (or `waitForGPU()` or
+  `bakeProbes()` runs): a view that stopped repainting keeps its last ones.
+- With profiling enabled, the CPU side of the same passes shows in the traces
+  under the same names.
+- The Scene 3D demo shows them in its Render settings panel.

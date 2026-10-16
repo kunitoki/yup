@@ -44,6 +44,7 @@ constexpr uint8_t dofCompositeShaderBundle[] = {
 
 constexpr auto dofColorFormat = GpuTextureFormat::rgba16float;
 constexpr auto dofScalarFormat = GpuTextureFormat::r16float;
+constexpr auto dofBlurAmountFormat = GpuTextureFormat::r8unorm;
 
 // std140 mirror of DofBlock in lib/dof.glsl
 struct DofBlock
@@ -129,6 +130,7 @@ Result DepthOfField::prepare()
 
         const std::array<GpuTextureFormat, 2> setupFormats { dofColorFormat, dofScalarFormat };
         const std::array<GpuTextureFormat, 3> gatherFormats { dofColorFormat, dofColorFormat, dofScalarFormat };
+        const std::array<GpuTextureFormat, 2> compositeFormats { dofColorFormat, dofBlurAmountFormat };
 
         if (auto result = setup.prepare (device, dofSetupShaderBundle, sizeof (dofSetupShaderBundle), setupFormats); result.failed())
             return Result::fail ("Unable to compile the setup: " + result.getErrorMessage());
@@ -139,7 +141,7 @@ Result DepthOfField::prepare()
         if (auto result = gather.prepare (device, dofGatherShaderBundle, sizeof (dofGatherShaderBundle), gatherFormats); result.failed())
             return Result::fail ("Unable to compile the gather: " + result.getErrorMessage());
 
-        if (auto result = composite.prepare (device, dofCompositeShaderBundle, sizeof (dofCompositeShaderBundle), dofColorFormat); result.failed())
+        if (auto result = composite.prepare (device, dofCompositeShaderBundle, sizeof (dofCompositeShaderBundle), compositeFormats); result.failed())
             return Result::fail ("Unable to compile the composite: " + result.getErrorMessage());
 
         return Result::ok();
@@ -152,6 +154,7 @@ GpuTexture::Ptr DepthOfField::render (GpuFrame& frame, const ViewData& view, con
                                       FrameResources& resources, const Inputs& inputs)
 {
     output = nullptr;
+    blurAmount = nullptr;
     circleOfConfusion = nullptr;
 
     // A missing input, like a raster prepass that could not be drawn, skips the frame without counting as a failure
@@ -199,9 +202,10 @@ GpuTexture::Ptr DepthOfField::render (GpuFrame& frame, const ViewData& view, con
         const auto near = acquire (halfWidth, halfHeight, dofColorFormat, "DepthOfField near field");
         const auto coverage = acquire (halfWidth, halfHeight, dofScalarFormat, "DepthOfField near coverage");
         auto blurred = acquire (inputs.color->getWidth(), inputs.color->getHeight(), dofColorFormat, "DepthOfField output");
+        auto amount = acquire (inputs.color->getWidth(), inputs.color->getHeight(), dofBlurAmountFormat, "DepthOfField blur amount");
 
         if (halfColor == nullptr || coc == nullptr || quarterCoc == nullptr || tileCoc == nullptr || dilatedCoc == nullptr
-            || far == nullptr || near == nullptr || coverage == nullptr || blurred == nullptr)
+            || far == nullptr || near == nullptr || coverage == nullptr || blurred == nullptr || amount == nullptr)
         {
             failure = "unable to create the targets";
             return nullptr;
@@ -286,6 +290,7 @@ GpuTexture::Ptr DepthOfField::render (GpuFrame& frame, const ViewData& view, con
                            }, clear)
                         && composite.draw (frame, blurred, {}, [&] (GpuRenderPass& pass)
                            {
+                               pass.setColorAttachment (1, amount, writesEveryTexel);
                                bindCommon (pass, block);
                                pass.setTexture (1, 1, inputs.color);
                                pass.setTexture (1, 2, inputs.depth);
@@ -301,6 +306,7 @@ GpuTexture::Ptr DepthOfField::render (GpuFrame& frame, const ViewData& view, con
         }
 
         circleOfConfusion = coc;
+        blurAmount = amount;
         return blurred;
     }();
 
@@ -336,6 +342,7 @@ void DepthOfField::releaseTargets() noexcept
     gather.releaseTargets();
     composite.releaseTargets();
     output = nullptr;
+    blurAmount = nullptr;
     circleOfConfusion = nullptr;
 }
 

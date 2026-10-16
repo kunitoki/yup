@@ -27,6 +27,9 @@
 // The last depth of field pass, at the size of the scene color: the far field, upsampled bilinearly,
 // replaces the sharp color as the CoC of the pixel grows past a texel, then the near field covers the
 // result by its coverage. All four channels mix, so silhouettes keep their blend with the background.
+// The share of the coverage the blur wrote goes to the second target, so tone mapping composites
+// that share in radiance and the coverage left sharp, such as antialiased edges, in display space
+// (preflight R21). Pixels without coverage count as blurred: both composites agree there.
 
 layout(set = 1, binding = 1) uniform texture2D u_color;
 layout(set = 1, binding = 2) uniform texture2D u_depth;
@@ -37,6 +40,7 @@ layout(set = 1, binding = 5) uniform texture2D u_coverage;
 layout(location = 0) in vec2 uv;
 
 layout(location = 0) out vec4 fragColor;
+layout(location = 1) out float blurAmount;
 
 void main()
 {
@@ -47,6 +51,9 @@ void main()
     vec4 near = textureLod(sampler2D(u_near, linearClamp), uv, 0.0);
     float coverage = textureLod(sampler2D(u_coverage, linearClamp), uv, 0.0).r;
 
-    vec4 color = mix(sharp, far, smoothstep(0.5, 1.5, abs(dofCircleOfConfusion(depth))));
+    float farShare = smoothstep(0.5, 1.5, abs(dofCircleOfConfusion(depth)));
+    vec4 color = mix(sharp, far, farShare);
     fragColor = color * (1.0 - coverage) + near;
+    float sharpCoverage = sharp.a * (1.0 - farShare) * (1.0 - coverage);
+    blurAmount = fragColor.a > 1.0e-4 ? clamp(1.0 - sharpCoverage / fragColor.a, 0.0, 1.0) : 1.0;
 }

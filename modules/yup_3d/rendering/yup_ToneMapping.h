@@ -37,10 +37,12 @@ namespace yup
     raster output. The background color is display-referred, shown exactly as picked, never tone
     mapped. HDR effects running before this pass must therefore carry the alpha through.
 
-    On frames blurred by the depth of field, the partial coverage is spread light rather than the
-    edge of a surface: a second pipeline then tone maps the premultiplied radiance and adds the
-    background over the uncovered share (preflight R20), so a blurred highlight over the background
-    keeps its brightness. It is compiled by the first such frame.
+    On frames blurred by the depth of field, the partial coverage the blur spread is light rather
+    than the edge of a surface: a second pipeline then tone maps the premultiplied radiance and
+    adds the background over the uncovered share (preflight R20), so a blurred highlight over the
+    background keeps its brightness. It weighs that composite per pixel by the blur amount of the
+    depth of field (preflight R21), so the pixels the blur left sharp, antialiased edges included,
+    keep the display space blend. It is compiled by the first such frame.
 
     An optional glow (see Bloom) is added to the covered color before tone mapping, and onto the
     background in display space. NaN and infinite inputs are sanitized: NaN and -infinity count as
@@ -64,15 +66,17 @@ public:
 
         @param resources          The pool the shared samplers come from.
         @param glow               A linear rgba16float glow of the size of @p source, or nullptr for none.
-        @param blurredCoverage    True when the coverage of @p source was spread by a blur (the depth
-                                  of field): composites in radiance instead of in display space,
-                                  or in display space, logged once, if that pipeline cannot compile.
+        @param blurAmount         For a @p source blurred by the depth of field, the share of each
+                                  pixel the blur wrote (DepthOfField::getBlurAmount()), composited
+                                  in radiance rather than in display space; nullptr for a frame
+                                  without the blur. If that pipeline cannot compile, blurred frames
+                                  composite in display space, logged once.
 
         @returns False if the pipeline could not be prepared or the pass could not be recorded.
     */
     bool render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, FrameResources& resources,
                  const GpuTexture::Ptr& source, bool sourceIsReversible, const GpuTexture::Ptr& glow,
-                 const GpuTexture::Ptr& destination, Color background, bool blurredCoverage = false);
+                 const GpuTexture::Ptr& destination, Color background, const GpuTexture::Ptr& blurAmount = nullptr);
 
     /** Releases the render targets not drawn into since the previous call, once per frame. */
     void trimUnusedTargets()
@@ -100,7 +104,7 @@ private:
     FullscreenPass pass;
     std::optional<Result> prepared;
     GpuTextureFormat preparedFormat = GpuTextureFormat::rgba8unorm;
-    FullscreenPass radiancePass; // The radiance composite, see blurredCoverage, compiled by the first frame needing it
+    FullscreenPass radiancePass; // The radiance composite, see blurAmount, compiled by the first frame needing it
     std::optional<Result> radiancePrepared;
     GpuTextureFormat radiancePreparedFormat = GpuTextureFormat::rgba8unorm;
     bool failRadianceComposite = false;

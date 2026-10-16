@@ -44,13 +44,14 @@
     MeshSurfaceMapper, and clicking outside it zooms back out.
     The scene is only redrawn continuously while the camera or the light show moves. The "Scene
     tree" button shows the entity tree of the scene, and "Free movement" lets the mouse orbit,
-    pan and zoom the camera. "Render settings" edits how it is rendered and shadowed, the angular
+    pan and zoom the camera. "Render settings" edits, on three tabs, how it is rendered and shadowed, the angular
     size of the key light, and turns on a light show of colored point lights orbiting the device:
     64 on the full tier, 16 on the raster tier, which shades every draw with its own short list of
     lights. The key light and a small spot light over the pads cast shadows, soft by default on
     the full tier, with ambient occlusion at the scale of its knobs, a reflection probe over its
     panel and an irradiance volume for the light the device bounces onto itself; "Bake probes"
-    captures them again.
+    captures them again. While shown, the panel also reports the GPU time of the frames and of
+    their three most expensive passes, where the device measures them (Metal).
 */
 class Scene3DDemo : public yup::Component
 {
@@ -83,6 +84,18 @@ public:
         };
         addAndMakeVisible (settingsToggle);
 
+        benchmarkButton.onClick = [this]
+        {
+            view.requestBenchmark();
+        };
+        addAndMakeVisible (benchmarkButton);
+
+        bakeProbesButton.onClick = [this]
+        {
+            view.bakeProbes();
+        };
+        addAndMakeVisible (bakeProbesButton);
+
         view.onFramePainted = [this]
         {
             settingsPanel.refresh();
@@ -112,13 +125,19 @@ public:
     {
         auto bounds = getLocalBounds().reduced (10.0f);
 
+        // The actions sit next to "Render settings"; the free movement label takes what is left, up to its width
         auto toolbar = bounds.removeFromTop (30.0f);
         settingsToggle.setBounds (toolbar.removeFromRight (140.0f));
+        toolbar.removeFromRight (8.0f);
+        bakeProbesButton.setBounds (toolbar.removeFromRight (100.0f));
+        toolbar.removeFromRight (8.0f);
+        benchmarkButton.setBounds (toolbar.removeFromRight (100.0f));
+        toolbar.removeFromRight (8.0f);
         treeToggle.setBounds (toolbar.removeFromLeft (140.0f));
         toolbar.removeFromLeft (16.0f);
         freeMovementSwitch.setBounds (toolbar.removeFromLeft (44.0f).reduced (0.0f, 5.0f));
         toolbar.removeFromLeft (8.0f);
-        freeMovementLabel.setBounds (toolbar.removeFromLeft (140.0f));
+        freeMovementLabel.setBounds (toolbar.removeFromLeft (yup::jmin (140.0f, toolbar.getWidth())));
 
         bounds.removeFromTop (6.0f);
 
@@ -1324,8 +1343,11 @@ private:
     };
 
     //==============================================================================
-    /** Edits the render settings of the scene shown by a view, and reports the tier in effect. */
+    /** Edits the render settings of the scene shown by a view, and reports the tier in effect and,
+        while shown, the GPU time of its frames.
+    */
     class RenderSettingsPanel final : public yup::Component
+        , private yup::Timer
     {
     public:
         explicit RenderSettingsPanel (MpcView& viewToControl)
@@ -1556,6 +1578,29 @@ private:
             setupCameraSlider (fStopLabel, "f-stop", fStopSlider, 0.7, 16.0, 1, &yup::CameraNode::fStop);
             setupCameraSlider (focusDistanceLabel, "Focus distance", focusDistanceSlider, 0.1, 10.0, 2, &yup::CameraNode::focusDistance);
 
+            // Motion blur applies after the accumulation too, and only to frames where something moved
+            motionBlurToggle.setButtonText ("Motion blur");
+            motionBlurToggle.setToggleState (settings.motionBlur, yup::dontSendNotification);
+            motionBlurToggle.onClick = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.motionBlur = motionBlurToggle.getToggleState();
+                });
+            };
+
+            shutterLabel.setText ("Shutter", yup::dontSendNotification);
+            shutterSlider.setRange (0.0, 1.0, 0.0);
+            shutterSlider.setNumDecimalPlacesToDisplay (2);
+            shutterSlider.setValue (settings.motionBlurShutter, yup::dontSendNotification);
+            shutterSlider.onValueChanged = [this] (double value)
+            {
+                editSettings ([value] (yup::RenderSettings& s)
+                {
+                    s.motionBlurShutter = static_cast<float> (value);
+                });
+            };
+
             lightShowToggle.setButtonText (getLightShowText());
             lightShowToggle.onClick = [this]
             {
@@ -1578,73 +1623,51 @@ private:
             setupSceneToggle ("Clearcoat", clearcoatToggle, &MpcView::setClearcoat);
             setupSceneToggle ("Sheen", sheenToggle, &MpcView::setSheen);
 
-            benchmarkButton.onClick = [this]
-            {
-                view.requestBenchmark();
-            };
-
-            bakeProbesButton.onClick = [this]
-            {
-                view.bakeProbes();
-            };
-
-            // Three grids of equal rows: the values with their labels in one column, the switches two per row, then the status
-            // The sliders show their value in a third column, which the combo boxes span, so both end at the same edge
-            valuesGrid.templateColumns.add (yup::Grid::TrackInfo::px (labelWidth));
-            valuesGrid.templateColumns.add (yup::Grid::TrackInfo::fr (1.0f));
-            valuesGrid.templateColumns.add (yup::Grid::TrackInfo::px (valueWidth));
-
+            // Three pages of the settings by topic, then the status, always shown below them
             for (auto [label, control, value] : { std::tuple<yup::Label*, yup::Component*, yup::Label*> { &tierLabel, &tierCombo, nullptr },
                                                   { &taaLabel, &taaSlider, &taaValue },
                                                   { &toneMappingLabel, &toneMappingCombo, nullptr },
                                                   { &exposureLabel, &exposureSlider, &exposureValue },
-                                                  { &bloomThresholdLabel, &bloomThresholdSlider, &bloomThresholdValue },
-                                                  { &bloomIntensityLabel, &bloomIntensitySlider, &bloomIntensityValue },
-                                                  { &bloomRadiusLabel, &bloomRadiusSlider, &bloomRadiusValue },
                                                   { &keyLightSizeLabel, &keyLightSizeSlider, &keyLightSizeValue },
                                                   { &cascadesLabel, &cascadesCombo, nullptr },
                                                   { &shadowResolutionLabel, &shadowResolutionCombo, nullptr },
+                                                  { &debugViewLabel, &debugViewCombo, nullptr } })
+                qualityPage.addValue (*label, *control, value);
+
+            qualityPage.addSwitches ({ &softShadowsToggle, &contactShadowsToggle });
+
+            for (auto [label, control, value] : { std::tuple<yup::Label*, yup::Component*, yup::Label*> { &bloomThresholdLabel, &bloomThresholdSlider, &bloomThresholdValue },
+                                                  { &bloomIntensityLabel, &bloomIntensitySlider, &bloomIntensityValue },
+                                                  { &bloomRadiusLabel, &bloomRadiusSlider, &bloomRadiusValue },
                                                   { &aoDistanceLabel, &aoDistanceSlider, &aoDistanceValue },
                                                   { &fStopLabel, &fStopSlider, &fStopValue },
                                                   { &focusDistanceLabel, &focusDistanceSlider, &focusDistanceValue },
-                                                  { &debugViewLabel, &debugViewCombo, nullptr } })
-            {
-                label->setJustification (yup::Justification::centerLeft);
-                valuesGrid.items.add (yup::GridItem (*label));
+                                                  { &shutterLabel, &shutterSlider, &shutterValue } })
+                effectsPage.addValue (*label, *control, value);
 
-                if (value == nullptr)
-                {
-                    valuesGrid.items.add (yup::GridItem (*control).withColumnSpan (2));
-                    continue;
-                }
+            effectsPage.addSwitches ({ &bloomToggle, &ambientOcclusionToggle, &screenSpaceGIToggle, &screenSpaceReflectionsToggle, &depthOfFieldToggle, &motionBlurToggle, &lightShowToggle });
+            scenePage.addSwitches ({ &reflectionProbeToggle, &irradianceVolumeToggle, &clearcoatToggle, &sheenToggle });
 
-                value->setJustification (yup::Justification::centerRight);
-                valuesGrid.items.add (yup::GridItem (*control));
-                valuesGrid.items.add (yup::GridItem (*value));
-            }
-
-            togglesGrid.templateColumns.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::fr (1.0f)));
-
-            for (auto* child : std::initializer_list<yup::Component*> { &bloomToggle, &lightShowToggle, &softShadowsToggle, &contactShadowsToggle, &ambientOcclusionToggle, &screenSpaceGIToggle,
-                                                                        &screenSpaceReflectionsToggle, &depthOfFieldToggle, &reflectionProbeToggle, &irradianceVolumeToggle, &clearcoatToggle, &sheenToggle })
-                togglesGrid.items.add (yup::GridItem (*child));
+            tabs.addTab ("quality", "Quality", qualityPage);
+            tabs.addTab ("effects", "Effects", effectsPage);
+            tabs.addTab ("scene", "Scene", scenePage);
+            addAndMakeVisible (tabs);
 
             footerGrid.templateColumns.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::fr (1.0f)));
-            for (auto* label : { &hintLabel, &statusLabel, &detailLabel })
+            footerGrid.autoRows = rowHeight;
+            footerGrid.gap = rowGap;
+
+            for (auto* label : { &hintLabel, &statusLabel, &detailLabel, &gpuTimeLabel, &gpuPassesLabel })
                 label->setJustification (yup::Justification::centerLeft);
 
             footerGrid.items.add (yup::GridItem (hintLabel).withColumnSpan (2));
-            for (auto* child : std::initializer_list<yup::Component*> { &statusLabel, &detailLabel, &benchmarkButton, &bakeProbesButton })
-                footerGrid.items.add (yup::GridItem (*child));
+            footerGrid.items.add (yup::GridItem (statusLabel));
+            footerGrid.items.add (yup::GridItem (detailLabel));
+            footerGrid.items.add (yup::GridItem (gpuTimeLabel).withColumnSpan (2));
+            footerGrid.items.add (yup::GridItem (gpuPassesLabel).withColumnSpan (2));
 
-            for (auto* grid : { &valuesGrid, &togglesGrid, &footerGrid })
-            {
-                grid->autoRows = rowHeight;
-                grid->gap = rowGap;
-
-                for (auto& item : grid->items)
-                    addAndMakeVisible (*item.associatedComponent);
-            }
+            for (auto& item : footerGrid.items)
+                addAndMakeVisible (*item.associatedComponent);
         }
 
         /** Updates the status and the enabled state of the controls from what the last frame ran with. */
@@ -1671,6 +1694,7 @@ private:
             const auto canContactShadows = capabilities->isAvailable (yup::RenderCapabilities::Feature::contactShadows);
             const auto canAmbientOcclusion = capabilities->isAvailable (yup::RenderCapabilities::Feature::ambientOcclusion);
             const auto canDepthOfField = capabilities->isAvailable (yup::RenderCapabilities::Feature::depthOfField);
+            const auto canMotionBlur = capabilities->isAvailable (yup::RenderCapabilities::Feature::motionBlur);
             const auto ambientOcclusion = capabilities->isEnabled (yup::RenderCapabilities::Feature::ambientOcclusion, settings);
             const auto taa = capabilities->isEnabled (yup::RenderCapabilities::Feature::temporalAntiAliasing, settings);
 
@@ -1680,7 +1704,8 @@ private:
 
             for (auto [slider, value] : { std::pair<yup::Slider*, yup::Label*> { &taaSlider, &taaValue }, { &exposureSlider, &exposureValue }, { &bloomThresholdSlider, &bloomThresholdValue },
                                           { &bloomIntensitySlider, &bloomIntensityValue }, { &bloomRadiusSlider, &bloomRadiusValue }, { &keyLightSizeSlider, &keyLightSizeValue },
-                                          { &aoDistanceSlider, &aoDistanceValue }, { &fStopSlider, &fStopValue }, { &focusDistanceSlider, &focusDistanceValue } })
+                                          { &aoDistanceSlider, &aoDistanceValue }, { &fStopSlider, &fStopValue }, { &focusDistanceSlider, &focusDistanceValue },
+                                          { &shutterSlider, &shutterValue } })
                 setLabelText (*value, yup::String (slider->getValue(), slider->getNumDecimalPlacesToDisplay()));
 
             for (auto* control : std::initializer_list<yup::Component*> { &taaLabel, &taaSlider, &taaValue })
@@ -1696,6 +1721,9 @@ private:
             for (auto* control : std::initializer_list<yup::Component*> { &fStopLabel, &fStopSlider, &fStopValue, &focusDistanceLabel, &focusDistanceSlider, &focusDistanceValue })
                 setAvailable (*control, canDepthOfField);
 
+            for (auto* control : std::initializer_list<yup::Component*> { &shutterLabel, &shutterSlider, &shutterValue })
+                setAvailable (*control, canMotionBlur);
+
             for (auto* control : std::initializer_list<yup::Component*> { &debugViewLabel, &debugViewCombo })
                 setAvailable (*control, isFull);
 
@@ -1706,17 +1734,23 @@ private:
             refreshToggle (screenSpaceReflectionsToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::screenSpaceReflections, settings), canReflections);
             refreshToggle (screenSpaceGIToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::screenSpaceGI, settings), canGI);
             refreshToggle (depthOfFieldToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::depthOfField, settings), canDepthOfField);
+            refreshToggle (motionBlurToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::motionBlur, settings), canMotionBlur);
 
             // One line says why the dimmed controls are off, so no label changes its text or size
+            // Raster bloom and DoF need multisampled half floats ("f16"), raster AO and DoF the prepass,
+            // and motion blur (MB) the motion of the full tier; the lines stay within the panel's
+            // width at the default font, so none shrinks
             auto hint = yup::String();
-            if (! isFull)
-                hint = "TAA, contact shadows, SSR, SSGI, DoF, debug: full tier";
+            if (! isFull && ! canBloom)
+                hint = "No f16: bloom, DoF; full: TAA, MB, SSR, GI, debug";
+            else if (! isFull && ! canDepthOfField)
+                hint = "No prepass: AO, DoF; full: TAA, MB, SSR, GI, debug";
+            else if (! isFull)
+                hint = "TAA, MB, SSR, SSGI, contact shadows, debug: full";
             else if (! taa)
                 hint = "SSR and SSGI need TAA samples above 1";
             else if (! ambientOcclusion)
                 hint = "SSGI needs ambient occlusion";
-            else if (! canBloom)
-                hint = "Bloom needs half-float multisampled targets";
 
             setLabelText (hintLabel, hint);
         }
@@ -1731,18 +1765,156 @@ private:
         {
             auto bounds = getLocalBounds().reduced (10.0f);
 
-            const auto layOut = [&bounds] (yup::Grid& grid, int rows)
-            {
-                grid.performLayout (bounds.removeFromTop (static_cast<float> (rows) * (rowHeight + rowGap) - rowGap));
-                bounds.removeFromTop (sectionGap);
-            };
+            footerGrid.performLayout (bounds.removeFromBottom (getRowsHeight (numFooterRows)));
+            bounds.removeFromBottom (sectionGap);
+            tabs.setBounds (bounds);
+        }
 
-            layOut (valuesGrid, numValueRows);
-            layOut (togglesGrid, (togglesGrid.items.size() + 1) / 2);
-            layOut (footerGrid, 3);
+        /** The renderer collects the GPU times of its frames only while the panel shows them. */
+        void visibilityChanged() override
+        {
+            view.getRenderer().setFrameStatsEnabled (isVisible());
+
+            if (isVisible())
+                startTimerHz (2);
+            else
+                stopTimer();
         }
 
     private:
+        /** A page of settings: the values with their labels in one column, the switches two per row
+            below them. The sliders show their value in a third column, which the combo boxes span,
+            so both end at the same edge. */
+        class SettingsPage final : public yup::Component
+        {
+        public:
+            SettingsPage()
+            {
+                setOpaque (false);
+
+                valuesGrid.templateColumns.add (yup::Grid::TrackInfo::px (labelWidth));
+                valuesGrid.templateColumns.add (yup::Grid::TrackInfo::fr (1.0f));
+                valuesGrid.templateColumns.add (yup::Grid::TrackInfo::px (valueWidth));
+                switchesGrid.templateColumns.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::fr (1.0f)));
+
+                for (auto* grid : { &valuesGrid, &switchesGrid })
+                {
+                    grid->autoRows = rowHeight;
+                    grid->gap = rowGap;
+                }
+            }
+
+            /** Adds a row: @p label, then @p control with @p value after it, or spanning both without one. */
+            void addValue (yup::Label& label, yup::Component& control, yup::Label* value)
+            {
+                label.setJustification (yup::Justification::centerLeft);
+                add (valuesGrid, yup::GridItem (label));
+                ++numValueRows;
+
+                if (value == nullptr)
+                {
+                    add (valuesGrid, yup::GridItem (control).withColumnSpan (2));
+                    return;
+                }
+
+                value->setJustification (yup::Justification::centerRight);
+                add (valuesGrid, yup::GridItem (control));
+                add (valuesGrid, yup::GridItem (*value));
+            }
+
+            void addSwitches (std::initializer_list<yup::Component*> switches)
+            {
+                for (auto* child : switches)
+                    add (switchesGrid, yup::GridItem (*child));
+            }
+
+            void resized() override
+            {
+                auto bounds = getLocalBounds();
+
+                for (auto [grid, rows] : { std::pair { &valuesGrid, numValueRows }, std::pair { &switchesGrid, (switchesGrid.items.size() + 1) / 2 } })
+                {
+                    if (rows == 0)
+                        continue;
+
+                    bounds.removeFromTop (sectionGap);
+                    grid->performLayout (bounds.removeFromTop (getRowsHeight (rows)));
+                }
+            }
+
+        private:
+            void add (yup::Grid& grid, yup::GridItem item)
+            {
+                addAndMakeVisible (*item.associatedComponent);
+                grid.items.add (std::move (item));
+            }
+
+            yup::Grid valuesGrid;
+            yup::Grid switchesGrid;
+            int numValueRows = 0;
+        };
+
+        /** The height of @p rows rows of a grid. */
+        static float getRowsHeight (int rows)
+        {
+            return static_cast<float> (rows) * (rowHeight + rowGap) - rowGap;
+        }
+
+        void timerCallback() override
+        {
+            const auto& stats = view.getRenderer().getLastFrameStats();
+            setLabelText (gpuTimeLabel, getGpuTimeText (stats));
+            setLabelText (gpuPassesLabel, getGpuPassesText (stats));
+        }
+
+        /** The GPU time of a frame and its size: "GPU 8.42 ms at 2048 x 1324". */
+        static yup::String getGpuTimeText (const yup::SceneRenderer::FrameStats& stats)
+        {
+            if (stats.frameIndex == 0)
+                return "GPU n/a";
+
+            return yup::String ("GPU ") + (stats.gpu.available ? yup::String (stats.gpu.frameMilliseconds, 2) + " ms" : yup::String ("n/a"))
+                 + " at " + yup::String (stats.internalWidth) + " x " + yup::String (stats.internalHeight);
+        }
+
+        /** The three passes of a frame adding the most to its GPU time: "lighting 3.1, G-buffer 2.0, AO 1.2". */
+        static yup::String getGpuPassesText (const yup::SceneRenderer::FrameStats& stats)
+        {
+            std::vector<const yup::GpuScopeTiming*> scopes;
+            for (const auto& scope : stats.gpu.scopes)
+                if (scope.available)
+                    scopes.push_back (&scope);
+
+            const auto count = std::min<size_t> (scopes.size(), 3);
+            std::partial_sort (scopes.begin(), scopes.begin() + static_cast<std::ptrdiff_t> (count), scopes.end(), [] (const auto* a, const auto* b)
+            {
+                return a->milliseconds > b->milliseconds;
+            });
+
+            yup::String text;
+            for (size_t i = 0; i < count; ++i)
+                text << (i == 0 ? "" : ", ") << getPassName (scopes[i]->name) << " " << yup::String (scopes[i]->milliseconds, 1);
+
+            return text;
+        }
+
+        /** The name shown for the GPU scope of a pass (see yup::SceneRenderer::setFrameStatsEnabled()),
+            short enough for the three longest to fit one row of the panel unshrunk. */
+        static yup::String getPassName (const yup::String& scopeName)
+        {
+            static const std::pair<const char*, const char*> shortNames[] = {
+                { "probeBake", "probe bake" }, { "lightCulling", "light culling" }, { "gbuffer", "G-buffer" }, { "ambientOcclusion", "AO" },
+                { "hiZ", "Hi-Z" }, { "screenSpaceReflections", "SSR" }, { "indirectDiffuse", "GI add" }, { "depthNormalPrepass", "prepass" },
+                { "temporalAA", "TAA" }, { "depthOfField", "DoF" }, { "motionBlur", "MB" }, { "toneMapping", "tone map" }, { "debugView", "debug" }
+            };
+
+            for (const auto& [name, shortName] : shortNames)
+                if (scopeName == name)
+                    return shortName;
+
+            return scopeName;
+        }
+
         /** The light the scene setup names "keyLight". */
         yup::LightNode* findKeyLight() const
         {
@@ -1839,6 +2011,9 @@ private:
         yup::Slider fStopSlider { yup::Slider::LinearHorizontal, "fStopSlider" };
         yup::Label focusDistanceLabel { "focusDistanceLabel" };
         yup::Slider focusDistanceSlider { yup::Slider::LinearHorizontal, "focusDistanceSlider" };
+        yup::ToggleButton motionBlurToggle { "motionBlurToggle" };
+        yup::Label shutterLabel { "shutterLabel" };
+        yup::Slider shutterSlider { yup::Slider::LinearHorizontal, "shutterSlider" };
         yup::ToggleButton reflectionProbeToggle { "reflectionProbeToggle" };
         yup::ToggleButton irradianceVolumeToggle { "irradianceVolumeToggle" };
         yup::ToggleButton clearcoatToggle { "clearcoatToggle" };
@@ -1854,17 +2029,20 @@ private:
         yup::Label aoDistanceValue { "aoDistanceValue" };
         yup::Label fStopValue { "fStopValue" };
         yup::Label focusDistanceValue { "focusDistanceValue" };
+        yup::Label shutterValue { "shutterValue" };
         yup::Label hintLabel { "hintLabel" };
         yup::Label statusLabel { "statusLabel" };
         yup::Label detailLabel { "detailLabel" };
-        yup::TextButton benchmarkButton { "Benchmark" };
-        yup::TextButton bakeProbesButton { "Bake probes" };
+        yup::Label gpuTimeLabel { "gpuTimeLabel" };
+        yup::Label gpuPassesLabel { "gpuPassesLabel" };
 
-        yup::Grid valuesGrid;
-        yup::Grid togglesGrid;
+        SettingsPage qualityPage;
+        SettingsPage effectsPage;
+        SettingsPage scenePage;
+        yup::TabComponent tabs { "renderSettingsTabs" };
         yup::Grid footerGrid;
 
-        static constexpr int numValueRows = 14;
+        static constexpr int numFooterRows = 4;
         static constexpr float labelWidth = 120.0f;
         static constexpr float valueWidth = 40.0f;
         static constexpr float rowHeight = 24.0f;
@@ -1937,6 +2115,8 @@ private:
     yup::SwitchButton freeMovementSwitch { "freeMovementSwitch" };
     yup::Label freeMovementLabel { "freeMovementLabel" };
     yup::ToggleButton settingsToggle { "settingsToggle" };
+    yup::TextButton benchmarkButton { "Benchmark" };
+    yup::TextButton bakeProbesButton { "Bake probes" };
     yup::TreeView sceneTree { "sceneTree" };
     MpcView view;
     RenderSettingsPanel settingsPanel { view };

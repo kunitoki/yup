@@ -690,6 +690,25 @@ protected:
         */
         std::vector<GpuScopeTiming> attribute (uint64 sequence, const std::vector<Pass>& passes, uint64 now, double nanosecondsPerTick);
 
+        /** Returns the GPU timestamp a frame's work ended at, for advance(), from the host time
+            it ended at and a CPU and a GPU timestamp taken together after it completed.
+
+            An end later than @p cpuNow by more than 1 microsecond means the two clocks disagree
+            (after a system sleep, for one): it returns nothing then, so the timeline stays where
+            it is rather than moving to now, past the next frame's work. A smaller excess is
+            rounding, and counts as now.
+
+            @param cpuNow              The CPU timestamp, in nanoseconds.
+            @param gpuNow              The GPU timestamp taken with it, in ticks.
+            @param hostEnd             When the frame's work ended, in nanoseconds of the clock of @p cpuNow.
+            @param nanosecondsPerTick  The length of a GPU timestamp tick.
+
+            @returns The end in GPU ticks, or nothing when it cannot be placed: the clocks
+                     disagree, the tick length is unknown, or the end lies before the GPU
+                     timestamps began.
+        */
+        static std::optional<uint64> getEndTicks (uint64 cpuNow, uint64 gpuNow, double hostEnd, double nanosecondsPerTick) noexcept;
+
     private:
         CriticalSection lock;
         uint64 nextSequence = 0;

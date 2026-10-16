@@ -43,6 +43,9 @@ layout(set = 1, binding = 0) uniform ToneMappingBlock
 
 layout(set = 1, binding = 1) uniform texture2D u_source;
 layout(set = 1, binding = 2) uniform texture2D u_glow;
+#ifdef YUP_3D_RADIANCE_COMPOSITE
+layout(set = 1, binding = 3) uniform texture2D u_blurAmount;
+#endif
 
 layout(location = 0) out vec4 fragColor;
 
@@ -63,6 +66,29 @@ void main()
             color = yupReversibleToneMapInverse(color);
     }
 
+#ifdef YUP_3D_RADIANCE_COMPOSITE
+    // Frames blurred by the depth of field: their partial coverage is spread light, not the edge of a
+    // surface, so the premultiplied radiance is tone mapped and the background added over the rest
+    // (preflight R20). Equal to the blend below at full and at zero coverage
+    // The premultiplied radiance itself, so texels covered by less than the threshold above keep their light
+    // Only by the share the blur wrote: pixels it left sharp keep the blend below (preflight R21), and
+    // each pixel evaluates only the composites its share needs
+    float blurred = texelFetch(sampler2D(u_blurAmount, pointClamp), pixel, 0).r;
+    vec4 spread = vec4(0.0);
+    if (blurred > 0.0)
+    {
+        vec3 radiance = toneMapping.options.x > 0.5 ? color * scene.a : scene.rgb;
+        float spreadAlpha = scene.a + toneMapping.background.a * (1.0 - scene.a);
+        spread = clamp(vec4(yupLinearToSrgb(yupToneMap(radiance + glow, view.clipPlanes.w)) + (1.0 - scene.a) * toneMapping.background.rgb, spreadAlpha), 0.0, 1.0);
+
+        if (blurred >= 1.0)
+        {
+            fragColor = spread;
+            return;
+        }
+    }
+#endif
+
     vec3 covered = yupLinearToSrgb(yupToneMap(color + glow, view.clipPlanes.w));
     vec3 uncovered = min(toneMapping.background.rgb + yupLinearToSrgb(yupToneMap(glow, view.clipPlanes.w)), vec3(1.0));
     float alpha = scene.a + toneMapping.background.a * (1.0 - scene.a);
@@ -70,11 +96,6 @@ void main()
     fragColor = clamp(vec4(mix(uncovered, covered, scene.a), alpha), 0.0, 1.0);
 
 #ifdef YUP_3D_RADIANCE_COMPOSITE
-    // Frames blurred by the depth of field: their partial coverage is spread light, not the edge of a
-    // surface, so the premultiplied radiance is tone mapped and the background added over the rest
-    // (preflight R20). Equal to the blend above at full and at zero coverage
-    // The premultiplied radiance itself, so texels covered by less than the threshold above keep their light
-    vec3 radiance = toneMapping.options.x > 0.5 ? color * scene.a : scene.rgb;
-    fragColor = clamp(vec4(yupLinearToSrgb(yupToneMap(radiance + glow, view.clipPlanes.w)) + (1.0 - scene.a) * toneMapping.background.rgb, alpha), 0.0, 1.0);
+    fragColor = mix(fragColor, spread, blurred);
 #endif
 }

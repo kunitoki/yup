@@ -93,8 +93,10 @@ public:
     */
     void failPipelinesForTesting() noexcept { pipelinesFailForTesting = true; }
 
-    /** @internal Test hook: the targets of the next renders fail to create, as if the device ran out of memory. */
-    void failTargetsForTesting() noexcept { targetsFailForTesting = true; }
+    /** @internal Test hook: the targets of the next @p count renders fail to create, every one from
+        now on by default, as if the device ran out of memory.
+    */
+    void failTargetsForTesting (int count = std::numeric_limits<int>::max()) noexcept { targetFailures = count; }
 
 private:
     GpuDevice::Ptr device;
@@ -105,7 +107,7 @@ private:
     GpuTexture::Ptr normalRoughness;
     GpuTexture::Ptr depth;
     bool pipelinesFailForTesting = false;
-    bool targetsFailForTesting = false;
+    int targetFailures = 0;
     bool targetsFailed = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DepthNormalPrepass)

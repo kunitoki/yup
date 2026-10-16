@@ -63,6 +63,8 @@ namespace yup
     RenderSettings::depthOfField blurs what lies away from the focus of the active camera, on the
     full tier after the temporal accumulation and before bloom; the frames it blurs composite over
     the background color in radiance, so blurred highlights keep their brightness there.
+    RenderSettings::motionBlur smears what moves on the full tier, after the depth of field, on the
+    frames where the camera or an item moved, composited over the background color the same way.
     Highlights of very smooth surfaces are widened where normals change quickly across a pixel, to
     keep them from sparkling.
 
@@ -158,9 +160,12 @@ public:
           frame of the accumulation that follows;
         - the size, the tier, RenderSettings::taaSamples and restartAccumulation() discard the
           history, and the accumulation starts over from the next frame alone;
-        - tone mapping, the bloom and depth of field settings, the depth of field fields of the
-          camera and RenderSettings::debugView apply after the accumulation, so changing them
-          neither restarts nor discards it: repaint after changing them.
+        - tone mapping, the bloom, depth of field and motion blur settings, the depth of field
+          fields of the camera and RenderSettings::debugView apply after the accumulation, so
+          changing them neither restarts nor discards it: repaint after changing them.
+
+        A frame that motion blur smeared is not final either, with or without temporal
+        anti-aliasing: the still frame after it shows the scene sharp.
 
         Repaint until this returns true, see SceneComponent. Always true on the raster tier, before
         the first render and after a failed one.
@@ -180,18 +185,71 @@ public:
     void restartAccumulation() noexcept;
 
     //==============================================================================
+    /** What one frame of this renderer cost on the GPU and what it drew, see setFrameStatsEnabled(). */
+    struct FrameStats
+    {
+        uint64 frameIndex = 0;       ///< The render() these numbers belong to, counting this renderer's calls from 1; 0 until the stats of a frame arrived.
+        GpuFrameTimings gpu;         ///< The GPU time of the frame and of each pass it recorded; unavailable on devices that cannot measure it.
+        int drawItems = 0;           ///< The opaque and blended draws of the main view.
+        int shadowCasterDraws = 0;   ///< The shadow caster draws the frame recorded.
+        bool shadowsRedrawn = false; ///< True when the frame drew shadow maps, false when it kept the previous ones.
+        int internalWidth = 0;       ///< The width the scene was shaded at: the width render() was called with.
+        int internalHeight = 0;      ///< The height the scene was shaded at: the height render() was called with.
+    };
+
+    /** Collects the FrameStats of the frames rendered from now on, see getLastFrameStats().
+
+        Off by default, so frames pay nothing for it: they neither measure their GPU time nor open
+        GPU scopes. Once a frame of the device measured, though, the device's later frames pay a
+        GPU timestamp pair each when they complete, stats on or off. While on, each frame measures its GPU time (see GpuFrame::setTimingEnabled()) and
+        opens a scope (see GpuFrame::beginScope()) for each pass it records, in frame order:
+        probeBake, shadows, lightCulling, gbuffer, ambientOcclusion, hiZ, screenSpaceReflections,
+        lighting, indirectDiffuse, depthNormalPrepass, ambientOcclusion (on the raster tier, after
+        the prepass), forward, temporalAA, depthOfField, motionBlur, bloom, toneMapping and debugView. A pass the
+        frame does not run is not listed, and one that fails reads 0. shadows is listed in every
+        frame: it reads 0 when the frame kept the previous shadow maps (FrameStats::shadowsRedrawn
+        is then false). With screen-space GI on, ambientOcclusion includes the GI gather, which
+        traces with it, and indirectDiffuse is only adding the gathered light to the scene.
+
+        A scope's time is the time its pass added to the GPU's critical path, not its cost on its
+        own (see GpuScopeTiming::milliseconds); only devices measuring scopes report them (see
+        GpuDevice::isScopeTimingAvailable(), Metal today). Measured with at most 8 frames in flight,
+        the scopes are reliable; the frame total (GpuFrameTimings::frameMilliseconds) also includes
+        the time the frame waited behind earlier ones, so it is best read with 2 or 3 in flight.
+
+        @param shouldCollect  True to collect the stats of the next frames.
+    */
+    void setFrameStatsEnabled (bool shouldCollect) noexcept { frameStatsEnabled = shouldCollect; }
+
+    /** Returns true while the frames collect their stats, see setFrameStatsEnabled(). */
+    bool isFrameStatsEnabled() const noexcept { return frameStatsEnabled; }
+
+    /** Returns the stats of the latest frame rendered with stats on that the GPU finished
+        successfully, a few frames behind the last render().
+
+        The stats of a frame arrive, without waiting for it, when a later render() or bakeProbes()
+        finds it finished, or with waitForGPU(). A failed frame reports none. All the numbers of
+        one FrameStats belong to the same frame, FrameStats::frameIndex.
+
+        @returns The stats, frameIndex 0 until the stats of a frame arrived. Valid until the next
+                 render(), bakeProbes() or waitForGPU().
+    */
+    const FrameStats& getLastFrameStats() const noexcept { return lastFrameStats; }
+
+    //==============================================================================
     /** @internal Intermediate textures of the last frame, for tests and debug views. */
     enum class PassOutput
     {
-        sceneColor, ///< Full: the rgba16float scene color after temporal anti-aliasing, before the other post effects. Raster: the resolved forward output, rgba16float reversibly tone mapped when bloom is on.
+        sceneColor, ///< Full: the rgba16float scene color after temporal anti-aliasing, before the other post effects. Raster: the resolved forward output, rgba16float reversibly tone mapped when bloom is on or the depth of field blurs the frame.
         velocity,     ///< Full: the rg16float screen-space motion, current uv minus previous uv, both unjittered, uv from the top-left. Raster: none.
         gbufferNormal, ///< Full: the rgba16float G-buffer RT1, the octahedral shading normal in xy, the filtered roughness in z and metallic in w, 0 where nothing was drawn. Raster: none.
-        prepassNormal, ///< Raster with ambient occlusion: the rgba16float depth and normal prepass target, encoded as the G-buffer RT1, single sampled. Otherwise none.
+        prepassNormal, ///< Raster with ambient occlusion, or a frame the depth of field blurs: the rgba16float depth and normal prepass target, encoded as the G-buffer RT1, single sampled. Otherwise none.
         ambientOcclusion, ///< With ambient occlusion: the rgba8 AmbientOcclusionPass output, the view-space bent normal * 0.5 + 0.5 in rgb and the visibility in a, at half resolution. Otherwise none.
         reflections, ///< Full, with screen-space reflections and a history to read them from: the rgba16float ReflectionPass output, the reflected radiance (unexposed) in rgb and its confidence in a. Otherwise none, the first frame included.
         indirectDiffuse, ///< Full, with screen-space diffuse GI added to the frame: the rgba16float AmbientOcclusionPass::getIndirectDiffuse(), the gathered irradiance (unexposed) in rgb and the share of the hemisphere it came from in a, at half resolution. Otherwise none, the first frame included.
-        circleOfConfusion, ///< Full, with depth of field blurring the frame: the r16float signed circle of confusion radius of DepthOfField, in texels of its half resolution, negative in front of the focus. Otherwise none.
-        depthOfField       ///< Full, with depth of field blurring the frame: the rgba16float DepthOfField result, the scene color after the blur and before bloom. Otherwise none.
+        circleOfConfusion, ///< With depth of field blurring the frame: the r16float signed circle of confusion radius of DepthOfField, in texels of its half resolution, negative in front of the focus. Otherwise none.
+        depthOfField,      ///< With depth of field blurring the frame: the rgba16float DepthOfField result, the scene color after the blur and before bloom. Otherwise none.
+        motionBlur         ///< Full, with motion blur smearing the frame: the rgba16float MotionBlur result, the scene color after the depth of field and the smear, before bloom. Otherwise none, still frames included.
     };
 
     /** @internal Returns an intermediate texture of the last frame, valid until the next render,
@@ -216,6 +274,9 @@ public:
 
     /** @internal The depth of field, for tests, or nullptr before the first frame blurring with it. */
     const DepthOfField* getDepthOfField() const noexcept;
+
+    /** @internal The motion blur, for tests, or nullptr before the first moving frame smeared with it. */
+    const MotionBlur* getMotionBlur() const noexcept;
 
     /** @internal The pass drawing RenderSettings::debugView, for tests, or nullptr before the first full tier frame with one. */
     const FullscreenPass* getDebugViewPass() const noexcept;
@@ -260,10 +321,17 @@ public:
     void failShadowMapsForTesting() noexcept { failShadowMaps = true; }
 
     /** @internal Test hook, not for production use: the depth and normal prepass of this renderer
-        fails to compile, as if the device rejected it. Call it before the first render with ambient
-        occlusion on the raster tier. Frames still render, without the prepass.
+        fails to compile, as if the device rejected it. Call it before the first raster render
+        drawing it (ambient occlusion, or the depth of field blurring). Frames still render, without the prepass and
+        the effects reading it.
     */
     void failDepthNormalPrepassForTesting() noexcept { failDepthNormalPrepass = true; }
+
+    /** @internal Test hook, not for production use: the targets of the depth and normal prepass of
+        the next @p count raster frames drawing it fail to create, as if the device ran out of memory.
+        Those frames still render, without the prepass, and the next ones draw it again.
+    */
+    void failDepthNormalPrepassTargetsForTesting (int count) noexcept { depthNormalPrepassTargetFailures = count; }
 
     /** @internal Test hook, not for production use: every reflection probe capture of this
         renderer fails to record, as if the device rejected it. Frames still render, without the
@@ -312,11 +380,23 @@ public:
     */
     void failDepthOfFieldForTesting (int count = std::numeric_limits<int>::max()) noexcept { depthOfFieldFailures = count; }
 
+    /** @internal Test hook, not for production use: the next @p count motion blur passes of this
+        renderer fail, every one from now on by default, as if the device could not record them.
+        Frames still render, without the smear; the renderer stops trying after the second failure
+        in a row.
+    */
+    void failMotionBlurForTesting (int count = std::numeric_limits<int>::max()) noexcept { motionBlurFailures = count; }
+
     /** @internal Test hook, not for production use: the environment cube and the other radiance
         textures of this renderer hold RGBM in rgba8unorm, as below the float floor, even when the
         device renders half floats. Call it before the first render.
     */
     void forceRgbmRadianceForTesting() noexcept { forceRgbmRadiance = true; }
+
+    /** @internal Test hook: how many times the frames of this renderer, on its current device,
+        turned GPU timing on or opened a GPU scope: 0 while setFrameStatsEnabled() was off.
+    */
+    int getNumTimingCallsForTesting() const noexcept;
 
     //==============================================================================
     /** Changes the number of MSAA samples per pixel of the raster tier.
@@ -339,12 +419,16 @@ private:
     std::function<void (RenderCapabilities::DeviceFacts&)> deviceFactsOverride;
     String lastError;
     String lastGpuFailure;
+    FrameStats lastFrameStats;
+    uint64 numFrames = 0; // render() calls, numbering the frames of FrameStats
+    bool frameStatsEnabled = false;
     int sampleCount = 4;
     bool failLookupTables = false;
     bool failShadowCompareSampler = false;
     bool failShadowPipelines = false;
     bool failShadowMaps = false;
     bool failDepthNormalPrepass = false;
+    int depthNormalPrepassTargetFailures = 0;
     bool forceRgbmRadiance = false;
     bool failProbeCaptures = false;
     bool failVolumeCaptures = false;
@@ -353,6 +437,7 @@ private:
     bool failScreenSpaceReflections = false;
     bool failScreenSpaceGI = false;
     int depthOfFieldFailures = 0;
+    int motionBlurFailures = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneRenderer)
 };

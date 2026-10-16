@@ -61,7 +61,7 @@ Result ToneMapping::prepare (const GpuDevice::Ptr& device, GpuTextureFormat form
 
 bool ToneMapping::render (const GpuDevice::Ptr& device, GpuFrame& frame, const ViewData& view, FrameResources& resources,
                           const GpuTexture::Ptr& source, bool sourceIsReversible, const GpuTexture::Ptr& glow,
-                          const GpuTexture::Ptr& destination, Color background, bool blurredCoverage)
+                          const GpuTexture::Ptr& destination, Color background, const GpuTexture::Ptr& blurAmount)
 {
     if (device == nullptr || source == nullptr || destination == nullptr)
         return false;
@@ -82,6 +82,7 @@ bool ToneMapping::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
     };
 
     // Without the radiance composite, blurred frames still render, with the display space blend
+    auto blurredCoverage = blurAmount != nullptr;
     if (blurredCoverage && prepareVariant (radiancePrepared, radiancePreparedFormat, true).failed())
     {
         if (! std::exchange (radianceFailureLogged, true))
@@ -111,6 +112,9 @@ bool ToneMapping::render (const GpuDevice::Ptr& device, GpuFrame& frame, const V
 
         // Without a glow the shader doesn't read it, but every binding needs a texture
         renderPass.setTexture (1, 2, glow != nullptr ? glow : source);
+
+        if (blurredCoverage)
+            renderPass.setTexture (1, 3, blurAmount);
     }, GpuColor::transparentBlack());
 }
 

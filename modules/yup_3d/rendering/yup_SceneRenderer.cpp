@@ -243,6 +243,9 @@ struct SceneRenderer::Impl
     */
     bool cullLights (GpuFrame& frame, LightingInputs& lighting)
     {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (lightCulling);
+        beginScope (frame, "lightCulling");
+
         const auto& packed = lighting.packedLights;
         const auto numLights = static_cast<int> (packed.size());
         const auto firstLocalLight = static_cast<int> (std::count_if (packed.begin(), packed.end(), [] (const GpuLight& light)
@@ -261,16 +264,28 @@ struct SceneRenderer::Impl
                                        viewData.getView(), viewData.getJitteredProjection().inverted(), lighting.clusterLights);
     }
 
-    /** Raster: draws the depth and normal prepass while ambient occlusion is enabled. It is created
-        by the first frame needing it, and only releases its targets on the frames without it, so
-        turning ambient occlusion back on compiles nothing. A prepass that cannot compile is logged
-        once and leaves the frames without it. Returns false only when the prepass could not be
-        recorded. @p failForTesting makes a new prepass fail to compile.
+    /** Returns true on the raster tier when an effect reading the depth and normal prepass is
+        enabled: ambient occlusion, or the depth of field when @p depthOfField (PostChain::willBlur()).
+        The full tier reads its G-buffer instead.
     */
-    bool renderDepthNormalPrepass (GpuFrame& frame, const RenderSettings& settings, int width, int height, bool failForTesting)
+    bool needsDepthNormalPrepass (const RenderSettings& settings, bool depthOfField) const
     {
-        if (capabilities->getTier() == RenderCapabilities::Tier::full
-            || ! capabilities->isEnabled (RenderCapabilities::Feature::ambientOcclusion, settings))
+        return capabilities->getTier() == RenderCapabilities::Tier::raster
+            && (capabilities->isEnabled (RenderCapabilities::Feature::ambientOcclusion, settings) || depthOfField);
+    }
+
+    /** Raster: draws the depth and normal prepass while needsDepthNormalPrepass(). It is created by
+        the first frame needing it, and only releases its targets on the frames without it, so
+        turning its effects back on compiles nothing. A prepass that cannot compile is logged once
+        and leaves the frames without it. Returns false only when the prepass could not be recorded.
+        @p failForTesting makes a new prepass fail to compile; depthNormalPrepassTargetFailures is
+        handed to the prepass once it exists.
+    */
+    bool renderDepthNormalPrepass (GpuFrame& frame, const RenderSettings& settings, bool depthOfField, int width, int height, bool failForTesting)
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (depthNormalPrepass);
+
+        if (! needsDepthNormalPrepass (settings, depthOfField))
         {
             if (depthNormalPrepass != nullptr)
                 depthNormalPrepass->releaseTargets();
@@ -285,9 +300,13 @@ struct SceneRenderer::Impl
                 depthNormalPrepass->failPipelinesForTesting();
         }
 
+        if (depthNormalPrepassTargetFailures > 0)
+            depthNormalPrepass->failTargetsForTesting (std::exchange (depthNormalPrepassTargetFailures, 0));
+
         if (depthNormalPrepass->prepare().failed())
             return true;
 
+        beginScope (frame, "depthNormalPrepass");
         return depthNormalPrepass->render (frame, viewData, drawList, frameResources, width, height);
     }
 
@@ -305,6 +324,8 @@ struct SceneRenderer::Impl
                                  const GpuTexture::Ptr& depth, const GpuTexture::Ptr& normalRoughness, LightingInputs& lighting,
                                  const AmbientOcclusionPass::Radiance& radiance = {}, bool failIndirectDiffuseForTesting = false)
     {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (ambientOcclusion);
+
         lighting.ambientOcclusion = nullptr;
         lighting.block.probeInfo[3] = 0.0f;
 
@@ -325,6 +346,7 @@ struct SceneRenderer::Impl
         if (ambientOcclusionPass->prepare().failed())
             return true;
 
+        beginScope (frame, "ambientOcclusion");
         if (! ambientOcclusionPass->render (frame, viewData, capabilities->getTier(), temporal, depth, normalRoughness, settings.aoDistance, frameResources, radiance))
             return false;
 
@@ -372,6 +394,8 @@ struct SceneRenderer::Impl
     void renderScreenSpaceReflections (GpuFrame& frame, const RenderSettings& settings, const GBufferPass::Targets& gbuffer,
                                        LightingInputs& lighting, bool failForTesting)
     {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (screenSpaceReflections);
+
         lighting.reflections = nullptr;
 
         // An exposure of 0 left nothing to divide the history by
@@ -401,7 +425,14 @@ struct SceneRenderer::Impl
             reflectionPass->failRendersForTesting();
 
         // A pyramid that cannot be built counts as a failure of the pass
-        const auto pyramid = reflectionPass->prepare().wasOk() ? hiZPyramid->build (frame, gbuffer.depth, frameResources) : nullptr;
+        GpuTexture::Ptr pyramid;
+        if (reflectionPass->prepare().wasOk())
+        {
+            beginScope (frame, "hiZ");
+            pyramid = hiZPyramid->build (frame, gbuffer.depth, frameResources);
+        }
+
+        beginScope (frame, "screenSpaceReflections");
         lighting.reflections = reflectionPass->render (frame, viewData, pyramid, gbuffer.normalRoughness, gbuffer.velocity,
                                                        history.read, previousExposure, frameResources);
 
@@ -443,6 +474,8 @@ struct SceneRenderer::Impl
                               const GpuTexture::Ptr& environmentCube, const FrameResources::Samplers& samplers, bool failCapturesForTesting,
                               bool failVolumeCapturesForTesting)
     {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (probeBake);
+
         if (probeBaker == nullptr)
         {
             if (probeList.getReflectionProbes().empty() && probeList.getIrradianceVolumes().empty())
@@ -527,6 +560,7 @@ struct SceneRenderer::Impl
     void renderDebugView (GpuFrame& frame, const RenderSettings& settings, bool full, const LightingInputs& lighting,
                           const GpuTexture::Ptr& indirectDiffuse, const GpuTexture::Ptr& standIn, const GpuTexture::Ptr& output)
     {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (debugView);
         using DebugView = RenderSettings::DebugView;
 
         if (! full || settings.debugView == DebugView::none)
@@ -554,6 +588,7 @@ struct SceneRenderer::Impl
         DebugViewBlock block {};
         block.options[0] = source != nullptr ? static_cast<float> (settings.debugView) : 0.0f;
 
+        beginScope (frame, "debugView");
         const auto drawn = debugViewPass->draw (frame, output, {}, [&] (GpuRenderPass& renderPass)
         {
             renderPass.setUniformBuffer (0, 0, &viewData.getBlock(), sizeof (ViewData::Block));
@@ -598,6 +633,39 @@ struct SceneRenderer::Impl
                     item.node->previousWorld = item.world;
             }
         }
+    }
+
+    /** True when the unjittered camera or the world matrix of a drawn item changed since the
+        previous frame, after resolvePreviousTransforms(): the first frame, and a node that was not
+        drawn in the previous one, do not move.
+    */
+    bool hasMotion() const
+    {
+        const auto& block = viewData.getBlock();
+        if (! std::equal (std::begin (block.unjitteredViewProjection), std::end (block.unjitteredViewProjection), std::begin (block.previousViewProjection)))
+            return true;
+
+        for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
+        {
+            for (const auto& item : items)
+            {
+                if (item.node != nullptr && item.node->previousWorld != item.world)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** True when the history of the previous frame carries on into a frame of @p width x @p height
+        with @p settings: there was a previous frame that did not fail, no restartAccumulation()
+        since, and the size, the tier and the TAA samples are unchanged. Call it before
+        trackChanges(). The motion of a frame is measured against that previous one, so without it
+        the frame does not move (preflight R23).
+    */
+    bool historyContinues (const RenderSettings& settings, int width, int height) const
+    {
+        return hasSignature && getInvalidatingSignature (width, height, settings.taaSamples) == invalidatingSignature;
     }
 
     /** Stamps every drawn node with this frame, so the next frame of this renderer reads its transform as the previous one. */
@@ -840,7 +908,7 @@ struct SceneRenderer::Impl
     std::vector<uint64> shadowCasterSignatures; // One per opaque item of drawList, see getShadowSignature()
     LightClusters lightClusters;
     GBufferPass gbufferPass;
-    std::unique_ptr<DepthNormalPrepass> depthNormalPrepass; // Created by the first raster frame with ambient occlusion, see renderDepthNormalPrepass()
+    std::unique_ptr<DepthNormalPrepass> depthNormalPrepass; // Created by the first raster frame with ambient occlusion or depth of field, see renderDepthNormalPrepass()
     std::unique_ptr<AmbientOcclusionPass> ambientOcclusionPass; // Created by the first frame with ambient occlusion, see renderAmbientOcclusion()
     std::unique_ptr<HiZPyramid> hiZPyramid;         // Created by the first frame tracing screen-space reflections, see renderScreenSpaceReflections()
     std::unique_ptr<ReflectionPass> reflectionPass; // Created with hiZPyramid
@@ -850,6 +918,8 @@ struct SceneRenderer::Impl
     PostChain postChain;
     std::unique_ptr<FullscreenPass> debugViewPass; // Created by the first full frame with a debug view, see renderDebugView(), for the format of colorTarget, which never changes
     bool debugViewFailed = false;                  // A debug view draw failed, logged once
+    bool depthOfFieldUnavailableLogged = false;    // Depth of field was asked for where the tier cannot run it, logged once
+    int depthNormalPrepassTargetFailures = 0;      // Handed to the prepass by the next frame drawing it, see SceneRenderer::failDepthNormalPrepassTargetsForTesting()
     GpuTarget::Ptr colorTarget;
     GpuTexture::Ptr depthTexture;
     GpuTexture::Ptr lookupTables; // The lookup tables of this renderer and device, created once, black if that failed
@@ -866,6 +936,7 @@ struct SceneRenderer::Impl
     GpuTexture::Ptr indirectDiffuseOutput;
     GpuTexture::Ptr circleOfConfusionOutput;
     GpuTexture::Ptr depthOfFieldOutput;
+    GpuTexture::Ptr motionBlurOutput;
     float previousExposure = 1.0f; // The exposure of the last frame, which its history holds, see renderScreenSpaceReflections() and getIndirectDiffuseRadiance()
     uint64 frameIndex = 0;
     uint64 lastStamp = 0;
@@ -876,29 +947,66 @@ struct SceneRenderer::Impl
     int samplesToConverge = 0;  // full: the TAA samples (1 without TAA), raster: 0
     int accumulatedSamples = 0; // frames in the history since its last reset
     int stillSamples = 0;       // frames since anything last changed
+    bool measuring = false;     // the frame being rendered collects its stats, see beginScope()
+    int numTimingCalls = 0;     // see SceneRenderer::getNumTimingCallsForTesting()
+
+    /** Opens the GPU scope @p name in @p frame, right before the first pass the frame records for
+        it, while the frame collects its stats (see SceneRenderer::setFrameStatsEnabled()). The only
+        caller of GpuFrame::beginScope() in yup_3d, so getNumTimingCallsForTesting() sees them all.
+    */
+    void beginScope (GpuFrame& frame, const char* name)
+    {
+        if (! measuring)
+            return;
+
+        frame.beginScope (name);
+        ++numTimingCalls;
+    }
+
+    /** A submitted frame of this renderer, with its stats when it collected them, all but the GPU times. */
+    struct PendingFrame
+    {
+        GpuFrameStatus status;
+        std::optional<FrameStats> stats;
+    };
 
     /** The GPU outcomes of this renderer's submitted frames not yet known to have succeeded. */
-    std::vector<GpuFrameStatus> pendingFrames;
+    std::vector<PendingFrame> pendingFrames;
 
-    /** Forgets the frames the GPU finished, waiting for all when @p wait is set. On a failure the
-        targets and history were left unwritten, so the history is discarded. */
-    Result takeFinishedFrames (bool wait)
+    /** Forgets the frames the GPU finished, waiting for all when @p wait is set, and moves the stats
+        of the latest one that succeeded into @p latest when they are newer. On a failure the targets
+        and history were left unwritten, so the history is discarded. */
+    Result takeFinishedFrames (bool wait, FrameStats& latest)
     {
         auto result = Result::ok();
+        std::optional<PendingFrame> newest; // the newest finished frame with stats, its timings copied once
 
         for (auto it = pendingFrames.begin(); it != pendingFrames.end();)
         {
-            const auto outcome = wait ? std::optional<Result> (it->wait()) : it->poll();
+            const auto outcome = wait ? std::optional<Result> (it->status.wait()) : it->status.poll();
             if (! outcome.has_value())
             {
                 ++it;
                 continue;
             }
 
-            if (outcome->failed() && result.wasOk())
-                result = *outcome;
+            if (outcome->failed())
+            {
+                if (result.wasOk())
+                    result = *outcome;
+            }
+            else if (it->stats.has_value() && it->stats->frameIndex > (newest.has_value() ? newest->stats->frameIndex : latest.frameIndex))
+            {
+                newest = std::move (*it);
+            }
 
             it = pendingFrames.erase (it);
+        }
+
+        if (newest.has_value())
+        {
+            latest = std::move (*newest->stats);
+            latest.gpu = newest->status.getTimings();
         }
 
         if (result.failed())
@@ -929,7 +1037,9 @@ const RenderCapabilities* SceneRenderer::getCapabilities() const noexcept
 
 bool SceneRenderer::isConverged() const noexcept
 {
-    return impl == nullptr || lastError.isNotEmpty() || impl->stillSamples >= impl->samplesToConverge;
+    // A smeared frame is never final: the still frame after it shows the scene sharp (preflight R23)
+    return impl == nullptr || lastError.isNotEmpty()
+        || (impl->stillSamples >= impl->samplesToConverge && impl->motionBlurOutput == nullptr);
 }
 
 Result SceneRenderer::waitForGPU()
@@ -937,7 +1047,7 @@ Result SceneRenderer::waitForGPU()
     if (impl == nullptr)
         return Result::ok();
 
-    return impl->takeFinishedFrames (true);
+    return impl->takeFinishedFrames (true, lastFrameStats);
 }
 
 void SceneRenderer::restartAccumulation() noexcept
@@ -968,6 +1078,7 @@ GpuTexture::Ptr SceneRenderer::getPassOutput (PassOutput output) const
         case PassOutput::indirectDiffuse: return impl->indirectDiffuseOutput;
         case PassOutput::circleOfConfusion: return impl->circleOfConfusionOutput;
         case PassOutput::depthOfField: return impl->depthOfFieldOutput;
+        case PassOutput::motionBlur: return impl->motionBlurOutput;
     }
 
     return nullptr;
@@ -990,7 +1101,7 @@ int SceneRenderer::bakeProbes (const GpuDevice::Ptr& device, Scene& scene)
 
     // An earlier frame the GPU failed to execute makes its bakes bake again now
     if (impl != nullptr)
-        if (const auto gpuResult = impl->takeFinishedFrames (false); gpuResult.failed())
+        if (const auto gpuResult = impl->takeFinishedFrames (false, lastFrameStats); gpuResult.failed())
             lastGpuFailure = gpuResult.getErrorMessage();
 
     if (impl == nullptr || device != impl->device)
@@ -1020,7 +1131,7 @@ int SceneRenderer::bakeProbes (const GpuDevice::Ptr& device, Scene& scene)
     if (! frame.isValid())
         return 0;
 
-    impl->pendingFrames.push_back (frame.getStatus());
+    impl->pendingFrames.push_back ({ frame.getStatus(), {} });
 
     // An explicit bake tries again even after the baker gave up
     if (impl->probeBaker != nullptr)
@@ -1051,6 +1162,11 @@ const DepthOfField* SceneRenderer::getDepthOfField() const noexcept
     return impl != nullptr ? impl->postChain.getDepthOfField() : nullptr;
 }
 
+const MotionBlur* SceneRenderer::getMotionBlur() const noexcept
+{
+    return impl != nullptr ? impl->postChain.getMotionBlur() : nullptr;
+}
+
 const FullscreenPass* SceneRenderer::getDebugViewPass() const noexcept
 {
     return impl != nullptr ? impl->debugViewPass.get() : nullptr;
@@ -1064,6 +1180,11 @@ const LightingPass* SceneRenderer::getLightingPass() const noexcept
 const ForwardPass* SceneRenderer::getForwardPass() const noexcept
 {
     return impl != nullptr ? &impl->forwardPass : nullptr;
+}
+
+int SceneRenderer::getNumTimingCallsForTesting() const noexcept
+{
+    return impl != nullptr ? impl->numTimingCalls : 0;
 }
 
 void SceneRenderer::setDeviceFactsOverride (std::function<void (RenderCapabilities::DeviceFacts&)> newOverride)
@@ -1089,17 +1210,20 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
             impl->indirectDiffuseOutput = nullptr;
             impl->circleOfConfusionOutput = nullptr;
             impl->depthOfFieldOutput = nullptr;
+            impl->motionBlurOutput = nullptr;
         }
 
         lastError = error;
         return nullptr;
     };
 
+    const auto frameIndex = ++numFrames;
+
     // A frame of this renderer the GPU failed to execute left its history unwritten: it was
     // discarded, and this frame renders anew rather than leaving the caller without an image
     lastGpuFailure = {};
     if (impl != nullptr)
-        if (const auto gpuResult = impl->takeFinishedFrames (false); gpuResult.failed())
+        if (const auto gpuResult = impl->takeFinishedFrames (false, lastFrameStats); gpuResult.failed())
             lastGpuFailure = gpuResult.getErrorMessage();
 
     if (device == nullptr || widthPx <= 0 || heightPx <= 0)
@@ -1127,9 +1251,16 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->capabilities.emplace (deviceFacts, settings, samples);
 
     // The full tier shades one sample per pixel into HDR targets, then runs the post chain. The
-    // raster tier does the same with its samples only for effects needing HDR, like bloom
+    // raster tier does the same with its samples only for effects needing HDR: bloom, and the depth
+    // of field on the frames it blurs
     const auto full = impl->capabilities->getTier() == RenderCapabilities::Tier::full;
-    const auto hdr = impl->capabilities->isEnabled (RenderCapabilities::Feature::hdrSceneColor, settings);
+    const auto blurs = impl->postChain.willBlur (*impl->capabilities, settings, scene.getActiveCamera());
+    const auto hdr = full || impl->capabilities->isEnabled (RenderCapabilities::Feature::bloom, settings) || blurs;
+
+    if (settings.depthOfField && ! impl->capabilities->isAvailable (RenderCapabilities::Feature::depthOfField)
+        && ! std::exchange (impl->depthOfFieldUnavailableLogged, true))
+        YUP_DBG ("SceneRenderer: raster depth of field needs multisampled half-float targets and the depth and normal prepass, the frames render without it");
+
     const auto forwardSamples = full ? 1u : samples;
     const auto temporalAntiAliasing = impl->capabilities->isEnabled (RenderCapabilities::Feature::temporalAntiAliasing, settings);
 
@@ -1189,6 +1320,12 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     impl->samplesToConverge = full ? (temporalAntiAliasing ? settings.taaSamples : 1) : 0;
     impl->hasSignature = impl->hasSignature && full;
 
+    // Only a frame where something moved since a previous frame whose history carries on gives the
+    // motion blur anything to smear (preflight R4, R23)
+    const auto moving = impl->postChain.willMotionBlur (*impl->capabilities, settings)
+                     && impl->historyContinues (settings, widthPx, heightPx)
+                     && impl->hasMotion();
+
     // Built in a frame of its own the first time, never inside this one
     impl->probeRenderer.setForceRgbmForTesting (forceRgbmRadiance);
     const auto environmentCube = LightingInputs::prepareEnvironment (impl->probeRenderer, scene, impl->environment);
@@ -1204,7 +1341,15 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (! frame.isValid())
         return failFrame ("Unable to begin a GPU frame");
 
-    impl->pendingFrames.push_back (frame.getStatus());
+    impl->pendingFrames.push_back ({ frame.getStatus(), {} });
+
+    // Before the first pass, so every scope is measured
+    impl->measuring = frameStatsEnabled;
+    if (impl->measuring)
+    {
+        frame.setTimingEnabled (true);
+        ++impl->numTimingCalls;
+    }
 
     if (failShadowCompareSampler)
         impl->frameResources.failShadowCompareSamplerForTesting();
@@ -1218,6 +1363,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
     // The pending reflection probes and irradiance volumes bake first, in this frame, so failFrame()
     // and a GPU failure bake them again. A bake that fails leaves the frame without them
+    if (pendingBakes > 0)
+        impl->beginScope (frame, "probeBake");
+
     impl->bakeReflectionProbes (frame, scene, drawList, deviceFacts, environmentCube, *samplers, failProbeCaptures, failVolumeCaptures);
 
     // Without the comparison sampler nothing can read a shadow map: the frame renders unshadowed
@@ -1226,8 +1374,16 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     shadowInputs.casterSignatures = impl->shadowCasterSignatures;
     shadowInputs.enabled = samplers->shadowCompare != nullptr;
 
-    if (auto result = impl->shadowRenderer.render (device, frame, shadowInputs); result.failed())
-        return failFrame (result.getErrorMessage());
+    const auto casterDrawsBefore = impl->shadowRenderer.getNumCasterDraws();
+    const auto shadowFramesBefore = impl->shadowRenderer.getNumRenderedFrames();
+
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (shadows);
+        impl->beginScope (frame, "shadows");
+
+        if (auto result = impl->shadowRenderer.render (device, frame, shadowInputs); result.failed())
+            return failFrame (result.getErrorMessage());
+    }
 
     auto lighting = LightingInputs::create (scene, environmentCube, drawList.getLights(), impl->shadowRenderer.getShadowRecordIndices());
     lighting.shadowCascades = impl->shadowRenderer.getCascadeTexture();
@@ -1268,8 +1424,13 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         if (! impl->cullLights (frame, lighting))
             return failFrame ("Unable to cull the lights");
 
-        if (! impl->gbufferPass.render (frame, impl->viewData, drawList.getOpaqueItems(), impl->materialTable, gbuffer))
-            return failFrame ("Unable to render the G-buffer");
+        {
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (gbuffer);
+            impl->beginScope (frame, "gbuffer");
+
+            if (! impl->gbufferPass.render (frame, impl->viewData, drawList.getOpaqueItems(), impl->materialTable, gbuffer))
+                return failFrame ("Unable to render the G-buffer");
+        }
 
         // Uploaded once the G-buffer draws have numbered the materials
         lighting.materials = impl->uploadStorageBuffer (FrameResources::StorageSlot::materials, impl->materialTable.getEntries());
@@ -1288,12 +1449,23 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
         if (failMaterialLayers)
             impl->lightingPass.failMaterialLayersForTesting();
 
-        if (! impl->lightingPass.render (device, frame, impl->viewData, gbuffer, lighting, targets.color))
-            return failFrame ("Unable to render the lighting pass");
+        {
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (lighting);
+            impl->beginScope (frame, "lighting");
+
+            if (! impl->lightingPass.render (device, frame, impl->viewData, gbuffer, lighting, targets.color))
+                return failFrame ("Unable to render the lighting pass");
+        }
 
         // The screen-space diffuse GI the ambient occlusion gathered, if any: a failure leaves the frame without it
-        if (impl->ambientOcclusionPass != nullptr && impl->ambientOcclusionPass->addIndirectDiffuse (frame, impl->viewData, gbuffer, lighting, targets.color))
-            indirectDiffuse = impl->ambientOcclusionPass->getIndirectDiffuse();
+        if (impl->ambientOcclusionPass != nullptr && impl->ambientOcclusionPass->getIndirectDiffuse() != nullptr)
+        {
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (indirectDiffuse);
+            impl->beginScope (frame, "indirectDiffuse");
+
+            if (impl->ambientOcclusionPass->addIndirectDiffuse (frame, impl->viewData, gbuffer, lighting, targets.color))
+                indirectDiffuse = impl->ambientOcclusionPass->getIndirectDiffuse();
+        }
 
         impl->lightingPass.trimUnusedTargets();
     }
@@ -1305,7 +1477,10 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     }
 
     // Raster screen-space effects read the depth and normals of the prepass, full ones the G-buffer
-    if (! impl->renderDepthNormalPrepass (frame, settings, widthPx, heightPx, failDepthNormalPrepass))
+    if (depthNormalPrepassTargetFailures > 0)
+        impl->depthNormalPrepassTargetFailures = std::exchange (depthNormalPrepassTargetFailures, 0);
+
+    if (! impl->renderDepthNormalPrepass (frame, settings, blurs, widthPx, heightPx, failDepthNormalPrepass))
         return failFrame ("Unable to render the depth and normal prepass");
 
     if (! full)
@@ -1326,27 +1501,55 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (failMaterialLayers)
         impl->forwardPass.failMaterialLayersForTesting();
 
-    if (! impl->forwardPass.render (device, frame, impl->viewData, lighting, opaque, drawList.getBlendItems(), targets, output, forwardSamples, clear))
-        return failFrame ("Unable to render the forward pass");
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (forward);
+
+        // Full: only the blended items, when there are any
+        if (! full || ! drawList.getBlendItems().empty())
+            impl->beginScope (frame, "forward");
+
+        if (! impl->forwardPass.render (device, frame, impl->viewData, lighting, opaque, drawList.getBlendItems(), targets, output, forwardSamples, clear))
+            return failFrame ("Unable to render the forward pass");
+    }
 
     if (! hdr)
         impl->postChain.releaseTargets();
 
     if (hdr)
     {
-        // Raster: the resolved color, reversibly tone mapped, and no depth or motion for the post effects
+        // Raster: the resolved color, reversibly tone mapped, the single sampled depth of the prepass
+        // when it ran, and no motion for the post effects
         const auto sceneColor = targets.resolve != nullptr ? targets.resolve : targets.color;
-        const PostChain::Inputs inputs { sceneColor, full ? targets.depth : nullptr, targets.velocity, ! full, scene.getBackgroundColor(),
-                                         impl->getTemporalSampleIndex(), impl->changing, scene.getActiveCamera() };
+        const auto depth = full ? targets.depth : (impl->depthNormalPrepass != nullptr ? impl->depthNormalPrepass->getDepth() : nullptr);
+        const PostChain::Inputs inputs { sceneColor, depth, targets.velocity, ! full, scene.getBackgroundColor(),
+                                         impl->getTemporalSampleIndex(), impl->changing, scene.getActiveCamera(), moving,
+                                         impl->measuring ? std::function<void (const char*)> ([this, &frame] (const char* name) { impl->beginScope (frame, name); })
+                                                         : nullptr };
 
         if (depthOfFieldFailures > 0)
             impl->postChain.failDepthOfFieldForTesting (std::exchange (depthOfFieldFailures, 0));
+
+        if (motionBlurFailures > 0)
+            impl->postChain.failMotionBlurForTesting (std::exchange (motionBlurFailures, 0));
 
         if (! impl->postChain.render (device, frame, *impl->capabilities, settings, impl->viewData, impl->frameResources, inputs, impl->colorTarget->asTexture()))
             return failFrame ("Unable to render the post effects");
     }
 
     impl->renderDebugView (frame, settings, full, lighting, indirectDiffuse, impl->postChain.getResolvedColor(), impl->colorTarget->asTexture());
+
+    // The counts travel with the frame's status, which adds its GPU times once it completed
+    if (impl->measuring)
+    {
+        FrameStats stats;
+        stats.frameIndex = frameIndex;
+        stats.drawItems = static_cast<int> (drawList.getOpaqueItems().size() + drawList.getBlendItems().size());
+        stats.shadowCasterDraws = impl->shadowRenderer.getNumCasterDraws() - casterDrawsBefore;
+        stats.shadowsRedrawn = impl->shadowRenderer.getNumRenderedFrames() != shadowFramesBefore;
+        stats.internalWidth = widthPx;
+        stats.internalHeight = heightPx;
+        impl->pendingFrames.back().stats = std::move (stats);
+    }
 
     frame.submit();
     impl->commitPreviousTransforms (stamp);
@@ -1366,6 +1569,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     const auto* depthOfField = hdr ? impl->postChain.getDepthOfField() : nullptr;
     impl->circleOfConfusionOutput = depthOfField != nullptr ? depthOfField->getCircleOfConfusionTexture() : nullptr;
     impl->depthOfFieldOutput = depthOfField != nullptr ? depthOfField->getOutput() : nullptr;
+
+    const auto* motionBlur = hdr ? impl->postChain.getMotionBlur() : nullptr;
+    impl->motionBlurOutput = motionBlur != nullptr ? motionBlur->getOutput() : nullptr;
     impl->previousExposure = impl->viewData.getBlock().cameraPosition[3];
 
     lastError = {};

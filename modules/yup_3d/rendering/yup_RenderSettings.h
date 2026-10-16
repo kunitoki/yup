@@ -49,11 +49,14 @@ struct YUP_API RenderSettings
     float bloomRadius = 0.85f;    ///< 0 to 1: how far the glow spreads.
 
     /** Depth of field: what lies away from CameraNode::focusDistance blurs by the camera's
-        CameraNode::fStop, with a bokeh shaped by CameraNode::apertureBlades. Full tier only for now:
-        the raster tier ignores it, which is not an error. Off by default, costing nothing then; a
-        camera that cannot blur (orthographic, an fStop of 0 or less, or no active camera) costs
-        nothing either. It applies after the temporal accumulation: changing it, or the depth of
-        field fields of the camera, neither restarts nor discards it, so repaint after such a change.
+        CameraNode::fStop, with a bokeh shaped by CameraNode::apertureBlades. The raster tier needs
+        multisampled rgba16float targets and the depth and normal prepass for it, see
+        RenderCapabilities::Feature::depthOfField, and ignores it without them, which is not an
+        error. Off by default, costing nothing then; a camera that cannot blur (orthographic, an
+        fStop of 0 or less, or no active camera) costs nothing either, on the raster tier too, so
+        crossing an fStop of 0 switches the raster frame's route like this setting does. It
+        applies after the temporal accumulation: changing it, or the depth of field fields of the
+        camera, neither restarts nor discards it, so repaint after such a change.
     */
     bool depthOfField = false;
 
@@ -61,6 +64,25 @@ struct YUP_API RenderSettings
         DepthOfField::maxBlurSize (64). 0 or less blurs nothing.
     */
     float depthOfFieldMaxSize = 32.0f;
+
+    /** Motion blur: what moves on screen, through the camera or its own transform, smears along
+        its motion while the shutter is open. Full tier only, see
+        RenderCapabilities::Feature::motionBlur: the raster tier has no motion to read and ignores
+        it, which is not an error. Off by default, costing nothing then; frames where nothing moved
+        (still and converged frames, and the first frame) cost nothing either, and neither do the
+        frames after a resize, a tier or taaSamples change, SceneRenderer::restartAccumulation() or
+        a failed frame, which have no previous frame to measure the motion against. It applies
+        after the temporal accumulation and the depth of field: changing it, or motionBlurShutter,
+        neither restarts nor discards the accumulation, so repaint after such a change. A smeared
+        frame is not final (SceneRenderer::isConverged()), so the still frame after it is sharp.
+    */
+    bool motionBlur = false;
+
+    /** The fraction of the frame time the shutter of motion blur stays open, from 0 to 1: a smear
+        spans this share of the motion between two frames, at most 32 pixels of the final image.
+        0 or less blurs nothing.
+    */
+    float motionBlurShutter = 0.5f;
 
     /** Shadow cascades of the shadow casting directional light, from 1 to 4. More cascades keep
         shadows sharp further away, at the cost of one depth pass each. 0 picks the tier default:

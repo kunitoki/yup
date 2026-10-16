@@ -99,7 +99,10 @@ public:
         idle.push_back (buffer);
     }
 
-    /** The length of a GPU timestamp tick in nanoseconds, as the latest measuring frame calibrated it. */
+    /** The length of a GPU timestamp tick in nanoseconds, as the latest measuring frame calibrated it.
+        1 until the first frame with a scope resolved. That is right on Apple GPUs; elsewhere, the
+        frames completing before it place the timeline with a wrong tick length.
+    */
     double getNanosecondsPerTick() const noexcept { return nanosecondsPerTick.load(); }
 
     void setNanosecondsPerTick (double nanoseconds) noexcept { nanosecondsPerTick = nanoseconds; }
@@ -531,12 +534,8 @@ protected:
                         MTLTimestamp cpuNow = 0, gpuNow = 0;
                         [completed.device sampleTimestamps:&cpuNow gpuTimestamp:&gpuNow];
 
-                        const auto hostEnd = end * 1.0e9;
-                        const auto sinceEnd = static_cast<double> (cpuNow) > hostEnd ? static_cast<double> (cpuNow) - hostEnd : 0.0;
-                        const auto ticksSinceEnd = static_cast<uint64> (sinceEnd / sampleBuffers->getNanosecondsPerTick());
-
-                        if (gpuNow > ticksSinceEnd)
-                            timeline->advance (sequence, gpuNow - ticksSinceEnd);
+                        if (const auto endTicks = ScopeTimeline::getEndTicks (cpuNow, gpuNow, end * 1.0e9, sampleBuffers->getNanosecondsPerTick()))
+                            timeline->advance (sequence, *endTicks);
                     }
                 }
 

@@ -28,9 +28,9 @@ namespace yup
 /** Owns the post effects and runs the enabled ones in contract order, ending with tone mapping.
 
     TemporalAA runs first when enabled, then DepthOfField when enabled and the camera can blur, then
-    Bloom when enabled, then ToneMapping. Bloom renders only the glow, which ToneMapping adds while
-    it maps the scene color. Each pass reading a reversibly tone mapped color inverts it per texel,
-    un-premultiplied by its coverage first.
+    MotionBlur when enabled and something moved, then Bloom when enabled, then ToneMapping. Bloom
+    renders only the glow, which ToneMapping adds while it maps the scene color. Each pass reading a
+    reversibly tone mapped color inverts it per texel, un-premultiplied by its coverage first.
 
     @internal
 */
@@ -49,6 +49,8 @@ public:
         int temporalSampleIndex = 0;    ///< Frames accumulated in the TAA history, see TemporalAA::render().
         bool temporalChanging = false;  ///< True while the scene changes, see TemporalAA::getBlendWeight().
         const CameraNode* camera = nullptr; ///< The active camera, for the depth of field; nullptr has none.
+        bool moving = false;            ///< True when the camera or a drawn item moved since the previous frame, whose history carries on, so the motion blur has something to smear.
+        std::function<void (const char*)> beginScope; ///< Called with the name of each effect right before it records, to open its GPU scope (see SceneRenderer::setFrameStatsEnabled()); may be empty.
     };
 
     //==============================================================================
@@ -78,6 +80,13 @@ public:
     */
     const GpuTexture::Ptr& getResolvedColor() const noexcept { return resolvedColor; }
 
+    /** True when the depth of field will blur the next render(): it is enabled, @p camera can blur
+        (DepthOfField::canBlur()) and it has not given up. The one predicate deciding whether the
+        frame pays for it: the raster tier routes the scene color through half float and draws the
+        depth and normal prepass only then.
+    */
+    bool willBlur (const RenderCapabilities& caps, const RenderSettings& settings, const CameraNode* camera) const noexcept;
+
     /** The depth of field, for its outputs and for tests: created by the first render() blurring
         (enabled, and a camera that can blur), then kept; nullptr before.
     */
@@ -86,10 +95,26 @@ public:
     /** @internal Test hook: the next @p count depth of field renders fail, see DepthOfField::failRendersForTesting(). */
     void failDepthOfFieldForTesting (int count) noexcept { depthOfFieldFailures = count; }
 
+    /** True when the motion blur will smear the next render() of a moving frame (Inputs::moving):
+        it is enabled with a positive shutter (RenderCapabilities::Feature::motionBlur, full tier
+        only) and it has not given up.
+    */
+    bool willMotionBlur (const RenderCapabilities& caps, const RenderSettings& settings) const noexcept;
+
+    /** The motion blur, for its outputs and for tests: created by the first render() smearing (enabled,
+        on a moving frame), then kept; nullptr before.
+    */
+    const MotionBlur* getMotionBlur() const noexcept { return motionBlur.get(); }
+
+    /** @internal Test hook: the next @p count motion blur renders fail, see MotionBlur::failRendersForTesting(). */
+    void failMotionBlurForTesting (int count) noexcept { motionBlurFailures = count; }
+
 private:
     TemporalAA temporalAA;
     std::unique_ptr<DepthOfField> depthOfField;
     int depthOfFieldFailures = 0; // Handed to the depth of field by the next frame blurring
+    std::unique_ptr<MotionBlur> motionBlur;
+    int motionBlurFailures = 0; // Handed to the motion blur by the next frame smearing
     Bloom bloom;
     ToneMapping toneMapping;
     GpuTexture::Ptr resolvedColor;

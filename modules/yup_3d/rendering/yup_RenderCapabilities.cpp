@@ -91,7 +91,7 @@ bool RenderCapabilities::isAvailable (Feature feature) const noexcept
         case Feature::contactShadows:
         case Feature::screenSpaceReflections:
         case Feature::screenSpaceGI:
-        case Feature::depthOfField:
+        case Feature::motionBlur:
             return false;
 
         case Feature::softShadows:
@@ -103,6 +103,10 @@ bool RenderCapabilities::isAvailable (Feature feature) const noexcept
 
         case Feature::ambientOcclusion:
             return facts.depthNormalPrepass;
+
+        // The blur reads the scene color through the HDR path and its depth from the prepass
+        case Feature::depthOfField:
+            return isAvailable (Feature::hdrSceneColor) && facts.depthNormalPrepass;
     }
 
     return false;
@@ -113,7 +117,7 @@ bool RenderCapabilities::isEnabled (Feature feature, const RenderSettings& setti
     switch (feature)
     {
         case Feature::hdrSceneColor:
-            return tier == Tier::full || isEnabled (Feature::bloom, settings);
+            return tier == Tier::full || isEnabled (Feature::bloom, settings) || isEnabled (Feature::depthOfField, settings);
 
         case Feature::temporalAntiAliasing:
             return isAvailable (feature) && settings.taaSamples > 1;
@@ -141,6 +145,9 @@ bool RenderCapabilities::isEnabled (Feature feature, const RenderSettings& setti
 
         case Feature::depthOfField:
             return isAvailable (feature) && settings.depthOfField;
+
+        case Feature::motionBlur:
+            return isAvailable (feature) && settings.motionBlur && std::isfinite (settings.motionBlurShutter) && settings.motionBlurShutter > 0.0f;
     }
 
     return false;

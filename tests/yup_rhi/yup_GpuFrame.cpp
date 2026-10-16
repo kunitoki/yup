@@ -625,6 +625,36 @@ TEST_F (GpuFrameTests, ScopeTimelineReportsPassesItCouldNotSampleUnavailable)
     EXPECT_EQ (scopes[1].milliseconds, 0.0);
 }
 
+TEST_F (GpuFrameTests, ScopeTimelineEndTicksCountBackFromNow)
+{
+    using Timeline = FrameCommandsDevice::ScopeTimeline;
+
+    // Ticks of 2 ns: the work ended 1 ms before now, 500000 ticks before the GPU timestamp of now
+    EXPECT_EQ (Timeline::getEndTicks (10'000'000, 5'000'000, 9'000'000.0, 2.0), std::optional<uint64> (4'500'000));
+    EXPECT_EQ (Timeline::getEndTicks (10'000'000, 5'000'000, 10'000'000.0, 2.0), std::optional<uint64> (5'000'000));
+}
+
+TEST_F (GpuFrameTests, ScopeTimelineEndTicksTakeRoundingPastNowAsNow)
+{
+    using Timeline = FrameCommandsDevice::ScopeTimeline;
+
+    // Half a microsecond past now is rounding between the clocks
+    EXPECT_EQ (Timeline::getEndTicks (10'000'000, 5'000'000, 10'000'500.0, 2.0), std::optional<uint64> (5'000'000));
+}
+
+TEST_F (GpuFrameTests, ScopeTimelineEndTicksSkipClocksThatDisagree)
+{
+    using Timeline = FrameCommandsDevice::ScopeTimeline;
+
+    // An end after now means the clocks disagree: placing it at now would hide the next frame's work
+    EXPECT_EQ (Timeline::getEndTicks (10'000'000, 5'000'000, 10'002'000.0, 2.0), std::nullopt);
+    EXPECT_EQ (Timeline::getEndTicks (10'000'000, 5'000'000, 10'500'000.0, 2.0), std::nullopt);
+
+    // An end before the GPU timestamps began, or without a tick length, cannot be placed either
+    EXPECT_EQ (Timeline::getEndTicks (10'000'000, 5'000'000, 0.0, 2.0), std::nullopt);
+    EXPECT_EQ (Timeline::getEndTicks (10'000'000, 5'000'000, 9'000'000.0, 0.0), std::nullopt);
+}
+
 TEST_F (GpuFrameTests, DeviceThatDoesNotReportCompletionCannotMeasureFrames)
 {
     EXPECT_FALSE (device->isFrameTimingAvailable());
@@ -1055,7 +1085,7 @@ TEST_F (GpuFrameMetalTests, FirstScopeIsNotChargedForTheUnmeasuredFrameBeforeIt)
     const auto lightScope = [this] (GpuFrame& frame)
     {
         frame.beginScope ("light");
-        drawPass (frame, 5);
+        drawPass (frame, 100);
     };
 
     // The heavy work measured alone, which also starts the device measuring
@@ -1066,10 +1096,18 @@ TEST_F (GpuFrameMetalTests, FirstScopeIsNotChargedForTheUnmeasuredFrameBeforeIt)
     });
     ASSERT_EQ (heavy.scopes.size(), 1u);
 
-    // Then a heavy frame that does not measure, queued right before a measured light one
-    std::vector<double> light;
-    for (int i = 0; i < 5; ++i)
+    // The light scope measured alone, then right after a heavy frame that does not measure: the
+    // earlier work must not be charged to it. GPUEndTime lags the last sample by a few hundredths
+    // of a millisecond, so the scope may read somewhat less after the heavy frame, but never 0
+    // (ScopeTimelineEndTicks* pin the placement of the frame's end exactly)
+    std::vector<double> alone, afterHeavy;
+    for (int i = 0; i < 3; ++i)
     {
+        const auto single = measureFrame (lightScope);
+        ASSERT_EQ (single.scopes.size(), 1u);
+        ASSERT_TRUE (single.scopes[0].available);
+        alone.push_back (single.scopes[0].milliseconds);
+
         {
             auto unmeasured = GpuFrame::begin (device);
             ASSERT_TRUE (unmeasured.isValid());
@@ -1079,10 +1117,17 @@ TEST_F (GpuFrameMetalTests, FirstScopeIsNotChargedForTheUnmeasuredFrameBeforeIt)
         const auto timings = measureFrame (lightScope);
         ASSERT_EQ (timings.scopes.size(), 1u);
         ASSERT_TRUE (timings.scopes[0].available);
-        light.push_back (timings.scopes[0].milliseconds);
+        afterHeavy.push_back (timings.scopes[0].milliseconds);
     }
 
-    EXPECT_LT (median (light), heavy.scopes[0].milliseconds * 0.1);
+    RecordProperty ("heavy", String (heavy.scopes[0].milliseconds, 3).toStdString());
+    RecordProperty ("lightAlone", String (median (alone), 3).toStdString());
+    RecordProperty ("lightAfterHeavy", String (median (afterHeavy), 3).toStdString());
+
+    ASSERT_GT (median (alone), 0.0);
+    EXPECT_LT (median (alone), heavy.scopes[0].milliseconds * 0.5);
+    EXPECT_GT (median (afterHeavy), median (alone) * 0.2);
+    EXPECT_LT (median (afterHeavy), median (alone) * 2.0);
 }
 
 TEST_F (GpuFrameMetalTests, UnscopedWorkIsNotAttributed)
