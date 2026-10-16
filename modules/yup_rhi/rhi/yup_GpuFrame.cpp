@@ -76,6 +76,17 @@ struct GpuFrame::Impl
     /** Storage buffers bound by render passes. Ore only holds their native handles. */
     std::vector<GpuBuffer::Ptr> liveStorageBuffers;
 
+    /** Pipelines encoded by render passes. Ore only holds a raw pointer, and Vulkan destroys a
+        pipeline the moment its last reference goes, even while submitted commands use it. */
+    std::vector<GpuPipeline::Ptr> livePipelines;
+
+    /** Holds @p pipeline until the GPU finished the frame. */
+    void retainPipeline (const GpuPipeline::Ptr& pipeline)
+    {
+        if (pipeline != nullptr && std::find (livePipelines.begin(), livePipelines.end(), pipeline) == livePipelines.end())
+            livePipelines.push_back (pipeline);
+    }
+
     rive::rcp<rive::ore::Buffer> acquireUniformBuffer (const void* data, size_t byteSize);
 
     /** The uniform blocks of pipelines that declare them dynamic, packed one after the other into
@@ -190,13 +201,15 @@ void GpuFrame::Impl::retire()
                                       std::move (liveBuffers),
                                       std::move (liveViews),
                                       std::move (liveSamplers),
-                                      std::move (liveStorageBuffers));
+                                      std::move (liveStorageBuffers),
+                                      std::move (livePipelines));
     }
 
     liveBuffers.clear();
     liveViews.clear();
     liveSamplers.clear();
     liveStorageBuffers.clear();
+    livePipelines.clear();
 }
 
 void GpuFrame::Impl::releaseNow()
@@ -216,6 +229,7 @@ void GpuFrame::Impl::releaseNow()
     liveViews.clear();
     liveSamplers.clear();
     liveStorageBuffers.clear();
+    livePipelines.clear();
 }
 
 void GpuFrame::Impl::claimStatus()

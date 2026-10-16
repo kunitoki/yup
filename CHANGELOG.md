@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- Fixed Vulkan destroying a `GpuPipeline` released while a submitted frame still drew with it: `GpuFrame` now holds every pipeline its render passes encode until the GPU is done with the frame.
 - Fixed `Artboard` animations not reaching the screen unless the window rendered continuously: an artboard now repaints itself while its scene animates or changes, and draws nothing while still. `Artboard::advanceAndApply` returns whether the artboard needs to be drawn again.
 - A new Shaders demo in the graphics example edits and runs Shadertoy-style shaders live, with presets (including Danilo Guanabara's "Creation"), playback controls, compile errors shown by line, and .ysl bundle load/save.
 - `CodeEditor::setErrorLine` / `clearErrorLines` highlight whole lines in the new `CodeEditorScheme::ColorId::errorLine` color. **Behavior change** Clicking the gutter only toggles breakpoints after `setGutterBreakpointsEnabled (true)`.

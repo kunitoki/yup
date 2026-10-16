@@ -2174,6 +2174,76 @@ TEST_F (SceneRendererMetalTests, ClearcoatShadesAlikeOnBothTiers)
     EXPECT_GE (coatChanges, 2);
 }
 
+TEST_F (SceneRendererMetalTests, LayersAreShadowedWithTheBase)
+{
+    // A plate with a clearcoat and a sheen, lit only by a sun from 45 degrees above it and seen from
+    // 45 degrees below, where the clearcoat mirrors the sun. A box out of view above the plate blocks
+    // the sun: in its shadow the layers reflect no direct light, as the base does not, on both tiers.
+    // Without the box the clearcoat's highlight adds to the base, so the shadow takes it too
+    const auto render = [this] (RenderSettings::TierPreference tier, Material::Ptr material, bool blocked)
+    {
+        Scene scene;
+        addPlate (scene, material);
+        scene.setAmbientColor (Colors::black);
+
+        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        camera->attach<CameraNode>();
+        aimCamera (*camera, { 0.0f, -4.0f, 4.0f }, {});
+        scene.getRoot()->addChild (camera);
+        scene.setActiveCamera (camera.get());
+
+        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto& light = sun->attach<LightNode>();
+        light.intensity = 3.0f;
+        light.castsShadows = true;
+        aimCamera (*sun, { 0.0f, 4.0f, 4.0f }, {});
+        scene.getRoot()->addChild (sun);
+
+        // Spans y 3 to 6 and z 1.5 to 4.5, at least 25 degrees off the camera's axis (0.4 rad above it)
+        if (blocked)
+        {
+            auto box = EntityNode::Ptr (new EntityNode ("blocker"));
+            box->attach<MeshNode> (makeBox (1.5f, makeWallMaterial()));
+            box->setPosition ({ 0.0f, 4.5f, 3.0f });
+            scene.getRoot()->addChild (box);
+        }
+
+        SceneRenderer renderer;
+        setTierForExactFrames (renderer, tier);
+        const auto image = renderToImage (renderer, scene, 128);
+        EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();
+        return image;
+    };
+
+    const Rectangle<int> center { 56, 56, 16, 16 };
+    for (const auto tier : { RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full })
+    {
+        const auto tierName = String (tier == RenderSettings::TierPreference::full ? "full" : "raster");
+        const auto layered = makeLayeredMaterial ({ 0.1f, 0.1f, 0.1f }, 1.0f, 0.3f, { 1.0f, 1.0f, 1.0f }, 0.3f);
+        const auto bare = makeLayeredMaterial ({ 0.1f, 0.1f, 0.1f }, 0.0f, 0.5f, {}, 0.0f);
+
+        const auto litLayered = render (tier, layered, false);
+        const auto litBare = render (tier, bare, false);
+        const auto shadowedLayered = render (tier, layered, true);
+        const auto shadowedBare = render (tier, bare, true);
+        ASSERT_TRUE (litLayered.isValid() && litBare.isValid() && shadowedLayered.isValid() && shadowedBare.isValid()) << tierName;
+
+        const auto litLayeredLuminance = meanLuminance (litLayered, center);
+        const auto litBareLuminance = meanLuminance (litBare, center);
+        const auto shadowedLayeredLuminance = meanLuminance (shadowedLayered, center);
+        const auto shadowedBareLuminance = meanLuminance (shadowedBare, center);
+        RecordProperty ((tierName + " lit layered").toStdString(), String (litLayeredLuminance, 1).toStdString());
+        RecordProperty ((tierName + " lit bare").toStdString(), String (litBareLuminance, 1).toStdString());
+        RecordProperty ((tierName + " shadowed layered").toStdString(), String (shadowedLayeredLuminance, 1).toStdString());
+        RecordProperty ((tierName + " shadowed bare").toStdString(), String (shadowedBareLuminance, 1).toStdString());
+
+        // Not vacuous: the layers reflect the sun where it reaches the plate
+        EXPECT_GT (litLayeredLuminance, litBareLuminance + 10.0) << tierName;
+        EXPECT_LT (shadowedBareLuminance, 2.0) << tierName;
+        EXPECT_LT (shadowedLayeredLuminance, 2.0) << tierName;
+    }
+}
+
 TEST_F (SceneRendererMetalTests, MaterialLayerChangesRestartAccumulation)
 {
     // Preflight R11: each clearcoat and sheen field shows on the full tier once converged

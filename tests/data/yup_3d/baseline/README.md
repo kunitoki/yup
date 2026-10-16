@@ -52,6 +52,8 @@ The raster gate again, at Phase 4 default settings (no probes, volumes or ambien
 
 The gate still compares against the Phase 0 images, as it did through Phase 3. No pixel of the `shadows` scene is more than 2 levels from its image. The plates have no material, so they take the default white dielectric (roughness 0.5): with an f0 of 0.04, neither the split-sum table nor the multiple-scattering compensation shows there. The look change of Phase 4 is on metals, where a rough white metal now reflects all of a uniform environment instead of 45% of it (`RoughWhiteMetalPassesTheWhiteFurnaceTest`).
 
+`metal_shadows.png` was recaptured on 2026-10-17, from the current frame. The Metal test device now compiles Rive's shaders synchronously, so every readback goes through the specialized shader, and the Phase 0 image had been read back through the fallback shader of a fresh context. The new image is within 2 levels of the old one (1259 pixels changed). `metal_materials.png` and `metal_edges.png` remain the Phase 0 images.
+
 There are no `gl_*.png` images yet, so the GL twin skips until they are captured on Linux (see below). Captured now, they record the Phase 4 frame, and the GL gate checks later phases against it.
 
 `SceneRendererTierTests.DefaultSettingsAddNoOptInPass` (and its GL twin) checks the default frame on both tiers, with no probe or volume in the scene. Raster creates no depth and normal prepass, ambient occlusion, screen-space reflections, Hi-Z pyramid, screen-space GI or probe baker, and shades with the default variant, which declares no probe block. The full tier traces ambient occlusion and screen-space reflections (both on by default) and no screen-space GI.

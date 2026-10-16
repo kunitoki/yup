@@ -23,6 +23,7 @@ namespace yup
 {
 
 class GpuBuffer;
+class GpuPipeline;
 
 //==============================================================================
 /** Encapsulates a GPU context that abstracts low-level GPU device operations
@@ -883,8 +884,8 @@ private:
     /** Transient resources of one submitted frame, held until the GPU is known to
         have finished with them.
 
-        A frame's texture views, samplers, pooled uniform buffers and bound storage
-        buffers are still referenced by the commands it submitted, so they cannot be released the
+        A frame's texture views, samplers, pooled uniform buffers, bound storage buffers and
+        encoded pipelines are still referenced by the commands it submitted, so they cannot be released the
         moment submit() returns. Blocking on the GPU to find out when they are
         free costs a full pipeline stall every frame; instead each frame hands its
         resources here tagged with a generation, and a generation is released once
@@ -910,6 +911,7 @@ private:
         std::vector<rive::rcp<rive::ore::TextureView>> views;
         std::vector<rive::rcp<rive::ore::Sampler>> samplers;
         std::vector<ReferenceCountedObjectPtr<GpuBuffer>> storageBuffers;
+        std::vector<ReferenceCountedObjectPtr<GpuPipeline>> pipelines;
     };
 
     /** Takes ownership of a submitted frame's transient resources. */
@@ -917,7 +919,8 @@ private:
                                std::vector<rive::rcp<rive::ore::Buffer>> buffers,
                                std::vector<rive::rcp<rive::ore::TextureView>> views,
                                std::vector<rive::rcp<rive::ore::Sampler>> samplers,
-                               std::vector<ReferenceCountedObjectPtr<GpuBuffer>> storageBuffers);
+                               std::vector<ReferenceCountedObjectPtr<GpuBuffer>> storageBuffers,
+                               std::vector<ReferenceCountedObjectPtr<GpuPipeline>> pipelines);
 
     /** Releases every retired generation up to and including @p generation. */
     void releaseRetiredFrames (uint64_t generation);

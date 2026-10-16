@@ -7330,7 +7330,11 @@ private:
 class SceneRendererMetalTests : public SceneRendererBaselineScenes
 {
 protected:
-    /** One device per test suite, so that the suite's shared renderer keeps its pipelines. */
+    /** One device per test suite, so that the suite's shared renderer keeps its pipelines. It
+        compiles Rive's shaders synchronously: a pooled 2D context would otherwise read a texture back
+        through Rive's fallback shader on its first frame only, a level off the specialized one, so
+        exact comparisons would depend on the order the tests run in.
+    */
     static void TearDownTestSuite()
     {
         SceneRendererBaselineScenes::TearDownTestSuite();
@@ -7340,7 +7344,11 @@ protected:
     void SetUp() override
     {
         if (suiteDevice == nullptr)
-            suiteDevice = GpuDevice::create (GpuPlatform::Metal, {});
+        {
+            GpuDevice::Options options;
+            options.synchronousShaderCompilations = true;
+            suiteDevice = GpuDevice::create (GpuPlatform::Metal, options);
+        }
 
         device = suiteDevice;
         if (device == nullptr)

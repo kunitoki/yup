@@ -1999,6 +1999,125 @@ TEST_F (GpuRenderPassMockTests, ChangingThePipelineLayoutRebuildsEveryGroup)
     frame.submit();
 }
 
+TEST_F (GpuRenderPassMockTests, EncodedPipelineIsHeldUntilTheFrameIsWaitedOn)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto pipeline = compilePipeline ({});
+    ASSERT_NE (pipeline, nullptr);
+    const auto references = pipeline->getReferenceCount();
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    auto frame = makeValidFrame();
+    {
+        auto pass = target->beginRenderPass (frame);
+        ASSERT_TRUE (pass.isValid());
+        pass.setPipeline (pipeline);
+        EXPECT_TRUE (pass.draw (3));
+    }
+
+    frame.submit();
+    EXPECT_EQ (pipeline->getReferenceCount(), references + 1);
+
+    frame.waitForGPU();
+    EXPECT_EQ (pipeline->getReferenceCount(), references);
+}
+
+TEST_F (GpuRenderPassMockTests, EncodedPipelineOfARetiredFrameIsHeldUntilItsGenerationIsSafe)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto pipeline = compilePipeline ({});
+    ASSERT_NE (pipeline, nullptr);
+    const auto references = pipeline->getReferenceCount();
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    {
+        auto frame = makeValidFrame();
+        auto pass = target->beginRenderPass (frame);
+        ASSERT_TRUE (pass.isValid());
+        pass.setPipeline (pipeline);
+        EXPECT_TRUE (pass.draw (3));
+    }
+
+    // The frame retired without waiting on the GPU, so later frames have to begin before the pipeline is let go
+    EXPECT_EQ (pipeline->getReferenceCount(), references + 1);
+
+    int laterFrames = 0;
+    for (; laterFrames < 16 && pipeline->getReferenceCount() > references; ++laterFrames)
+        makeValidFrame().submit();
+
+    EXPECT_EQ (pipeline->getReferenceCount(), references);
+    EXPECT_GE (laterFrames, 1);
+}
+
+TEST_F (GpuRenderPassMockTests, AlternatingPipelinesAreHeldOnceEach)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto first = compilePipeline ({});
+    auto second = compilePipeline ({});
+    ASSERT_NE (first, nullptr);
+    ASSERT_NE (second, nullptr);
+    const auto firstReferences = first->getReferenceCount();
+    const auto secondReferences = second->getReferenceCount();
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    auto frame = makeValidFrame();
+    {
+        auto pass = target->beginRenderPass (frame);
+        ASSERT_TRUE (pass.isValid());
+
+        for (int draw = 0; draw < 3; ++draw)
+        {
+            pass.setPipeline (first);
+            EXPECT_TRUE (pass.draw (3));
+            pass.setPipeline (second);
+            EXPECT_TRUE (pass.draw (3));
+        }
+    }
+
+    frame.submit();
+    EXPECT_EQ (first->getReferenceCount(), firstReferences + 1);
+    EXPECT_EQ (second->getReferenceCount(), secondReferences + 1);
+
+    frame.waitForGPU();
+}
+
+TEST_F (GpuRenderPassMockTests, PipelineSetButNeverDrawnIsNotHeld)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto pipeline = compilePipeline ({});
+    ASSERT_NE (pipeline, nullptr);
+    const auto references = pipeline->getReferenceCount();
+
+    int made = 0, bound = 0;
+    serveDraws (made, bound);
+
+    auto frame = makeValidFrame();
+    {
+        auto pass = target->beginRenderPass (frame);
+        ASSERT_TRUE (pass.isValid());
+        pass.setPipeline (pipeline);
+    }
+
+    frame.submit();
+    EXPECT_EQ (pipeline->getReferenceCount(), references);
+
+    frame.waitForGPU();
+}
+
 TEST_F (GpuRenderPassMockTests, DrawsEncodeOnlyTheStateThatChanged)
 {
     auto target = GpuTarget::create (ctx, 256, 128);

@@ -608,12 +608,13 @@ void GpuDevice::retireFrameResources (uint64_t generation,
                                       std::vector<rive::rcp<rive::ore::Buffer>> buffers,
                                       std::vector<rive::rcp<rive::ore::TextureView>> views,
                                       std::vector<rive::rcp<rive::ore::Sampler>> samplers,
-                                      std::vector<ReferenceCountedObjectPtr<GpuBuffer>> storageBuffers)
+                                      std::vector<ReferenceCountedObjectPtr<GpuBuffer>> storageBuffers,
+                                      std::vector<ReferenceCountedObjectPtr<GpuPipeline>> pipelines)
 {
-    if (buffers.empty() && views.empty() && samplers.empty() && storageBuffers.empty())
+    if (buffers.empty() && views.empty() && samplers.empty() && storageBuffers.empty() && pipelines.empty())
         return;
 
-    retiredFrames.push_back ({ generation, std::move (buffers), std::move (views), std::move (samplers), std::move (storageBuffers) });
+    retiredFrames.push_back ({ generation, std::move (buffers), std::move (views), std::move (samplers), std::move (storageBuffers), std::move (pipelines) });
 }
 
 void GpuDevice::releaseRetiredFrames (uint64_t generation)

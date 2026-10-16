@@ -834,6 +834,8 @@ bool GpuRenderPass::Impl::encode (uint32_t count,
         encodedPipeline = rive::ref_rcp (orePipeline);
         encodedGroups = {};
         passStateDirty = true;
+
+        framePools->retainPipeline (pipelineRef);
     }
 
     if (std::exchange (passStateDirty, false))
