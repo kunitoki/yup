@@ -380,6 +380,57 @@ void registerYupGuiBindings (py::module_& m)
         .def (py::self == py::self)
         .def (py::self != py::self);
 
+    // ============================================================================================ yup::GestureEvent
+
+    py::enum_<GestureType> (m, "GestureType", py::arithmetic())
+        .value ("none", GestureType::none)
+        .value ("tap", GestureType::tap)
+        .value ("longPress", GestureType::longPress)
+        .value ("pinch", GestureType::pinch)
+        .value ("rotate", GestureType::rotate)
+        .value ("pan", GestureType::pan)
+        .value ("swipe", GestureType::swipe)
+        .value ("all", GestureType::all)
+        .export_values();
+
+    py::class_<GestureEvent> classGestureEvent (m, "GestureEvent");
+
+    py::enum_<GestureEvent::Phase> (classGestureEvent, "Phase")
+        .value ("began", GestureEvent::Phase::began)
+        .value ("changed", GestureEvent::Phase::changed)
+        .value ("ended", GestureEvent::Phase::ended)
+        .value ("canceled", GestureEvent::Phase::canceled)
+        .export_values();
+
+    py::enum_<GestureEvent::Direction> (classGestureEvent, "Direction")
+        .value ("none", GestureEvent::Direction::none)
+        .value ("left", GestureEvent::Direction::left)
+        .value ("right", GestureEvent::Direction::right)
+        .value ("up", GestureEvent::Direction::up)
+        .value ("down", GestureEvent::Direction::down)
+        .export_values();
+
+    classGestureEvent
+        .def (py::init<>())
+        .def (py::init<GestureType, GestureEvent::Phase>(), "type"_a, "phase"_a)
+        .def ("getType", &GestureEvent::getType)
+        .def ("getPhase", &GestureEvent::getPhase)
+        .def ("getPosition", &GestureEvent::getPosition)
+        .def ("getTouchCount", &GestureEvent::getTouchCount)
+        .def ("isTrackpad", &GestureEvent::isTrackpad)
+        .def ("getScale", &GestureEvent::getScale)
+        .def ("getScaleDelta", &GestureEvent::getScaleDelta)
+        .def ("getRotation", &GestureEvent::getRotation)
+        .def ("getRotationDelta", &GestureEvent::getRotationDelta)
+        .def ("getTranslation", &GestureEvent::getTranslation)
+        .def ("getTranslationDelta", &GestureEvent::getTranslationDelta)
+        .def ("getVelocity", &GestureEvent::getVelocity)
+        .def ("getSwipeDirection", &GestureEvent::getSwipeDirection)
+        .def ("getTapCount", &GestureEvent::getTapCount)
+        .def ("getModifiers", &GestureEvent::getModifiers)
+        // Same lifetime rule as MouseEvent: only valid while the callback it was built for runs
+        .def ("getSourceComponent", &GestureEvent::getSourceComponent, py::return_value_policy::reference);
+
     // ============================================================================================ yup::MouseListener
 
     // Registered before Component, which derives from it in C++. The MouseListener overrides a
@@ -396,6 +447,19 @@ void registerYupGuiBindings (py::module_& m)
         .def ("mouseUp", &MouseListener::mouseUp, "event"_a)
         .def ("mouseDoubleClick", &MouseListener::mouseDoubleClick, "event"_a)
         .def ("mouseWheel", &MouseListener::mouseWheel, "event"_a, "wheelData"_a);
+
+    // ============================================================================================ yup::GestureListener
+
+    py::class_<GestureListener, PyGestureListenerTrampoline, py::smart_holder> classGestureListener (m, "GestureListener");
+
+    classGestureListener
+        .def (py::init<>())
+        .def ("gestureTap", &GestureListener::gestureTap, "event"_a)
+        .def ("gestureLongPress", &GestureListener::gestureLongPress, "event"_a)
+        .def ("gesturePinch", &GestureListener::gesturePinch, "event"_a)
+        .def ("gestureRotate", &GestureListener::gestureRotate, "event"_a)
+        .def ("gesturePan", &GestureListener::gesturePan, "event"_a)
+        .def ("gestureSwipe", &GestureListener::gestureSwipe, "event"_a);
 
     // ============================================================================================ yup::TextInputTarget
 
@@ -616,9 +680,9 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::Component
 
-    // Component derives from MouseListener in C++, so declaring the base here gives Python
-    // issubclass (Component, MouseListener) and lets a component be used as a mouse listener.
-    py::class_<Component, MouseListener, PyComponent<>, py::smart_holder> classComponent (m, "Component");
+    // Component derives from MouseListener and GestureListener in C++, so declaring the bases here
+    // gives Python issubclass (Component, MouseListener) and lets a component be used as a listener.
+    py::class_<Component, MouseListener, GestureListener, PyComponent<>, py::smart_holder> classComponent (m, "Component");
 
     classComponent
         // Construction and identification
@@ -774,10 +838,18 @@ void registerYupGuiBindings (py::module_& m)
         // Mouse events. The listener list only holds weak references, so the component keeps the
         // Python listener alive for as long as it is registered.
         .def ("setWantsMouseEvents", &Component::setWantsMouseEvents)
+        .def ("setWantedGestures", &Component::setWantedGestures, "gestureTypes"_a)
+        .def ("setWantedGestures", [] (Component& self, uint32 gestureTypes)
+        {
+            self.setWantedGestures (static_cast<GestureType> (gestureTypes));
+        }, "gestureTypes"_a)
+        .def ("getWantedGestures", &Component::getWantedGestures)
         .def ("doesWantSelfMouseEvents", &Component::doesWantSelfMouseEvents)
         .def ("doesWantChildrenMouseEvents", &Component::doesWantChildrenMouseEvents)
         .def ("addMouseListener", &Component::addMouseListener, "listener"_a, py::keep_alive<1, 2>())
         .def ("removeMouseListener", &Component::removeMouseListener, "listener"_a)
+        .def ("addGestureListener", &Component::addGestureListener, "listener"_a, py::keep_alive<1, 2>())
+        .def ("removeGestureListener", &Component::removeGestureListener, "listener"_a)
 
         // Component listeners. The listener list only holds weak references, so the component
         // keeps the Python listener alive for as long as it is registered.

@@ -38,7 +38,9 @@ class ComponentTestHelper;
     It provides a common interface for all components, and is used to create and manage GUI components.
     It is a lightweight class that is used to create and manage GUI components.
  */
-class YUP_API Component : public MouseListener
+class YUP_API Component
+    : public MouseListener
+    , public GestureListener
 {
 public:
     //==============================================================================
@@ -1348,6 +1350,54 @@ public:
 
     //==============================================================================
     /**
+        Chooses which touch and trackpad gestures this component receives.
+
+        A gesture goes to the deepest component under where it starts that wants its type,
+        looking through the parents of the component the fingers hit. Components wanting no
+        gestures (the default) only see the per-finger mouse events.
+
+        When a multi-finger pinch, rotate or pan starts on a component, the fingers involved get
+        a canceled mouseUp and no further mouse events, so a component never sees both.
+
+        @param gestureTypes The gestures wanted, combined with `|`, or GestureType::none.
+
+        @see GestureType, GestureEvent, gesturePinch
+     */
+    void setWantedGestures (GestureType gestureTypes);
+
+    /** Returns the gestures this component wants. @see setWantedGestures */
+    GestureType getWantedGestures() const;
+
+    /**
+        Returns the component a gesture of a given type starting at a point goes to.
+
+        @param position The point, relative to this component.
+        @param gestureType A single gesture type.
+
+        @return The deepest component under the point wanting the gesture, or nullptr.
+     */
+    Component* findGestureTargetAt (const Point<float>& position, GestureType gestureType);
+
+    /** Called when a tap is recognized. @see GestureListener::gestureTap */
+    void gestureTap (const GestureEvent& event) override;
+
+    /** Called when a long press begins, moves or ends. @see GestureListener::gestureLongPress */
+    void gestureLongPress (const GestureEvent& event) override;
+
+    /** Called when a pinch begins, changes or ends. @see GestureListener::gesturePinch */
+    void gesturePinch (const GestureEvent& event) override;
+
+    /** Called when a rotate begins, changes or ends. @see GestureListener::gestureRotate */
+    void gestureRotate (const GestureEvent& event) override;
+
+    /** Called when a multi-finger pan begins, changes or ends. @see GestureListener::gesturePan */
+    void gesturePan (const GestureEvent& event) override;
+
+    /** Called when a swipe is recognized. @see GestureListener::gestureSwipe */
+    void gestureSwipe (const GestureEvent& event) override;
+
+    //==============================================================================
+    /**
         Add a mouse listener to the component.
 
         @param listener The mouse listener to add.
@@ -1360,6 +1410,23 @@ public:
         @param listener The mouse listener to remove.
      */
     void removeMouseListener (MouseListener* listener);
+
+    /**
+        Add a gesture listener to the component.
+
+        The listener receives the gestures this component wants, after the component itself.
+
+        @param listener The gesture listener to add.
+        @see setWantedGestures
+     */
+    void addGestureListener (GestureListener* listener);
+
+    /**
+        Remove a gesture listener from the component.
+
+        @param listener The gesture listener to remove.
+     */
+    void removeGestureListener (GestureListener* listener);
 
     /** Add a component listener to this component. */
     void addComponentListener (ComponentListener* listener);
@@ -1669,6 +1736,7 @@ private:
     void internalMouseUp (const MouseEvent& event);
     void internalMouseDoubleClick (const MouseEvent& event);
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
+    void internalGesture (const GestureEvent& event);
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);
@@ -1718,6 +1786,7 @@ private:
 
     using ComponentListenerList = ListenerList<ComponentListener, Array<WeakReference<ComponentListener>>>;
     using MouseListenerList = ListenerList<MouseListener, Array<WeakReference<MouseListener>>>;
+    using GestureListenerList = ListenerList<GestureListener, Array<WeakReference<GestureListener>>>;
 
     String componentID, componentTitle;
     Component* parentComponent = nullptr;
@@ -1727,10 +1796,12 @@ private:
     ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
+    GestureListenerList gestureListeners;
     ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
+    GestureType wantedGestures = GestureType::none;
     ComponentEffect::Ptr componentEffect;
     GpuCanvas::Ptr cachedTextureCanvas;
     GpuCanvas::Ptr effectOffscreenCanvas;

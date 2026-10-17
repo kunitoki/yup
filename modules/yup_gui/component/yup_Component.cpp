@@ -1304,6 +1304,40 @@ void Component::mouseDoubleClick ([[maybe_unused]] const MouseEvent& event) {}
 
 void Component::mouseWheel ([[maybe_unused]] const MouseEvent& event, [[maybe_unused]] const MouseWheelData& wheelData) {}
 
+//==============================================================================
+
+void Component::setWantedGestures (GestureType gestureTypes)
+{
+    wantedGestures = gestureTypes;
+}
+
+GestureType Component::getWantedGestures() const
+{
+    return wantedGestures;
+}
+
+Component* Component::findGestureTargetAt (const Point<float>& position, GestureType gestureType)
+{
+    auto* target = findComponentAtForMouseEvent (position);
+
+    while (target != nullptr && ! hasBitValueSet (target->wantedGestures, gestureType))
+        target = (target == this) ? nullptr : target->getParentComponent();
+
+    return target;
+}
+
+void Component::gestureTap ([[maybe_unused]] const GestureEvent& event) {}
+
+void Component::gestureLongPress ([[maybe_unused]] const GestureEvent& event) {}
+
+void Component::gesturePinch ([[maybe_unused]] const GestureEvent& event) {}
+
+void Component::gestureRotate ([[maybe_unused]] const GestureEvent& event) {}
+
+void Component::gesturePan ([[maybe_unused]] const GestureEvent& event) {}
+
+void Component::gestureSwipe ([[maybe_unused]] const GestureEvent& event) {}
+
 void Component::keyDown ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) {}
 
 void Component::keyUp ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) {}
@@ -1324,6 +1358,16 @@ void Component::addMouseListener (MouseListener* listener)
 void Component::removeMouseListener (MouseListener* listener)
 {
     mouseListeners.remove (listener);
+}
+
+void Component::addGestureListener (GestureListener* listener)
+{
+    gestureListeners.add (listener);
+}
+
+void Component::removeGestureListener (GestureListener* listener)
+{
+    gestureListeners.remove (listener);
 }
 
 //==============================================================================
@@ -2079,6 +2123,49 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
         return;
 
     mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseWheel, event, wheelData);
+}
+
+//==============================================================================
+
+void Component::internalGesture (const GestureEvent& event)
+{
+    if (! isVisible() || ! isEnabled())
+        return;
+
+    void (GestureListener::*callback) (const GestureEvent&) = nullptr;
+
+    switch (event.getType())
+    {
+        case GestureType::tap:
+            callback = &GestureListener::gestureTap;
+            break;
+        case GestureType::longPress:
+            callback = &GestureListener::gestureLongPress;
+            break;
+        case GestureType::pinch:
+            callback = &GestureListener::gesturePinch;
+            break;
+        case GestureType::rotate:
+            callback = &GestureListener::gestureRotate;
+            break;
+        case GestureType::pan:
+            callback = &GestureListener::gesturePan;
+            break;
+        case GestureType::swipe:
+            callback = &GestureListener::gestureSwipe;
+            break;
+        default:
+            return;
+    }
+
+    auto bailOutChecker = BailOutChecker (this);
+
+    (this->*callback) (event);
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    gestureListeners.callChecked (bailOutChecker, callback, event);
 }
 
 //==============================================================================

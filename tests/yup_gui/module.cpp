@@ -47,6 +47,8 @@
 #include "yup_FileChooser.cpp"
 #include "yup_FlexBox.cpp"
 #include "yup_FlexBoxParity.cpp"
+#include "yup_GestureEvent.cpp"
+#include "yup_GestureRecognizer.cpp"
 #include "yup_Grid.cpp"
 #include "yup_GridParity.cpp"
 #include "yup_KeyModifiers.cpp"

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- Components recognize touch and trackpad gestures: tap and double tap, long press, pinch, rotate, multi-finger pan and swipes with fling velocity. Opt in with `Component::setWantedGestures` and override `gestureTap`, `gestureLongPress`, `gesturePinch`, `gestureRotate`, `gesturePan` and `gestureSwipe` from the new `GestureListener` (also attachable with `Component::addGestureListener`, and bound in Python). Fingers taken by a pinch, rotate or pan get a final `mouseUp`; components that want no gestures behave as before. `GestureRecognizer` is usable on its own. Scene3D free movement pinches, twists, tilts and pans the camera.
 - Fixed `Artboard` animations not reaching the screen unless the window rendered continuously: an artboard now repaints itself while its scene animates or changes, and draws nothing while still. `Artboard::advanceAndApply` returns whether the artboard needs to be drawn again.
 - A new Shaders demo in the graphics example edits and runs Shadertoy-style shaders live, with presets (including Danilo Guanabara's "Creation"), playback controls, compile errors shown by line, and .ysl bundle load/save.
 - `CodeEditor::setErrorLine` / `clearErrorLines` highlight whole lines in the new `CodeEditorScheme::ColorId::errorLine` color. **Behavior change** Clicking the gutter only toggles breakpoints after `setGutterBreakpointsEnabled (true)`.
