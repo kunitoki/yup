@@ -1,9 +1,18 @@
 // Ribbon Clouds by Abhishek Shivakumar (@godofecht).
 // Copyright (c) 2026 Abhishek Shivakumar. Distributed under the ISC license above.
 
-// Value noise from the 256x256 noise texture on iChannel0: each z slice is the texture shifted by (37, 17),
-// and the smoothstepped fraction makes the hardware bilinear fetch do the xy interpolation. The noise repeats
-// every 256 units in z, so z can wrap there without a seam.
+#define STEPS 20
+#define OCTAVES 3
+
+#define TAU 6.28318530718
+
+float hash3(vec3 p)
+{
+    p = fract(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
 float noise3(vec3 x)
 {
     vec3 p = floor(x);
@@ -11,73 +20,112 @@ float noise3(vec3 x)
 
     f = f * f * (3.0 - 2.0 * f);
 
-    vec2 uv = mod(p.xy + vec2(37.0, 17.0) * p.z, 256.0) + f.xy + 0.5;
-    float a = textureLod(iChannel0, uv / 256.0, 0.0).x;
-    float b = textureLod(iChannel0, (uv + vec2(37.0, 17.0)) / 256.0, 0.0).x;
+    float a = hash3(p);
+    float b = hash3(p + vec3(1, 0, 0));
+    float c = hash3(p + vec3(0, 1, 0));
+    float d = hash3(p + vec3(1, 1, 0));
 
-    return mix(a, b, f.z);
+    float e = hash3(p + vec3(0, 0, 1));
+    float g = hash3(p + vec3(1, 0, 1));
+    float h = hash3(p + vec3(0, 1, 1));
+    float j = hash3(p + vec3(1, 1, 1));
+
+    return mix(
+        mix(mix(a, b, f.x), mix(c, d, f.x), f.y),
+        mix(mix(e, g, f.x), mix(h, j, f.x), f.y),
+        f.z
+    );
 }
 
-// One noise scaled to the contrast of the average of two independent ones
-float noise(vec3 x)
+float fbm(vec3 p, float footprint)
 {
-    return 0.5 + 0.7071 * (noise3(x) - 0.5);
-}
-
-// Octaves fade to their mean once a noise cell shrinks below a few pixels, instead of aliasing into bright speckles
-float fbm(vec3 p, int octaves, float cellsPerPixel)
-{
-    float s = 0.5 * (1.0 - exp2(-float(octaves)));
+    float s = 0.0;
+    float total = 0.0;
     float a = 0.5;
 
-    for (int i = 0; i < octaves; ++i)
+    for (int i = 0; i < OCTAVES; ++i)
     {
-        float w = clamp(2.0 - 4.0 * cellsPerPixel, 0.0, 1.0);
-        if (w <= 0.0)
-        {
-            break;
-        }
+        float visibility =
+            1.0 - smoothstep(0.25, 0.85, footprint);
 
-        s += a * w * (noise(p) - 0.5);
-        p *= 2.0; // exact octaves keep the 256 z period, see noise3
+        if (visibility <= 0.001)
+            break;
+
+        float w = a * visibility;
+
+        s += w * noise3(p);
+        total += w;
+
+        p *= 2.02;
+        footprint *= 2.02;
         a *= 0.5;
-        cellsPerPixel *= 2.0;
     }
 
-    return s;
+    float n = 0.97 * s / max(total, 0.0001);
+
+    return mix(0.48, n, clamp(total * 2.0, 0.0, 1.0));
 }
 
 mat2 rot(float a)
 {
     float c = cos(a);
     float s = sin(a);
+
     return mat2(c, -s, s, c);
 }
 
 vec3 palette(float t)
 {
-    return 0.55 + 0.45 * cos(6.28318 * (vec3(0.00, 0.12, 0.24) + t));
+    return 0.55 + 0.45 *
+        cos(TAU * (vec3(0.00, 0.12, 0.24) + t));
 }
 
-// The layers stream between these scales and are recycled at either end, faded in and out, so the zoom can go
-// on in either direction without the coordinates growing
-const int layers = 32;
-const float nearScale = 0.6;
-const float farScale = 5.0;
-const float zoomDepth = 1.4;  // ln(scale) swung each way, about 4x in and out
-const float zoomSpeed = 0.18; // rad/s, a full in and out cycle every ~35 s
+// One damped elastic impulse.
+float spring(float dt)
+{
+    float onset = smoothstep(0.0, 0.4, dt);
+
+    return onset *
+        exp(-0.65 * dt) *
+        sin(10.0 * dt);
+}
+
+// 0 -> 40 -> 0, repeating every 80 seconds.
+// Elastic motion occurs after each turning point.
+float oscillatingTime(float realTime)
+{
+    const float halfPeriod = 40.0;
+    const float period = 80.0;
+    const float elasticity = 0.055;
+
+    float cycle = mod(realTime, period);
+
+    // Sinusoidal position
+    float phase = TAU * cycle / period;
+    float wave = 0.5 - 0.5 * cos(phase);
+
+    float bottomBounce = spring(cycle);
+
+    float peakAge = max(cycle - halfPeriod, 0.0);
+    float topBounce = spring(peakAge);
+
+    wave += elasticity * (bottomBounce - topBounce);
+
+    wave = clamp(wave, 0.0, 1.0);
+
+    return halfPeriod * wave;
+}
 
 void mainImage(out vec4 O, vec2 U)
 {
     vec2 R = iResolution.xy;
     vec2 uv = (2.0 * U - R) / R.y;
-    float t = iTime;
 
-    vec2 p = uv;
-    p *= rot(0.15 * sin(0.35 * t));
+    float t = oscillatingTime(iTime);
 
-    float travel = zoomDepth * sin(zoomSpeed * t) / log(farScale / nearScale) * float(layers);
-    float phase = fract(travel);
+    vec2 p = rot(0.15 * sin(0.35 * t)) * uv;
+
+    float zoom = exp(0.20 * t);
     float pulse = 1.0 + 0.12 * sin(1.3 * t);
 
     vec3 col = vec3(0.0);
@@ -85,61 +133,133 @@ void mainImage(out vec4 O, vec2 U)
     float glow = 0.0;
 
     vec3 bg = vec3(0.01, 0.005, 0.02);
-    bg += 0.04 * palette(0.1 * length(uv) - 0.05 * t);
 
-    for (int i = 0; i < layers; ++i)
+    bg += 0.04 *
+        palette(0.1 * length(uv) - 0.05 * t);
+
+    for (int i = 0; i < STEPS; ++i)
     {
-        float fi = (float(i) + 1.0 - phase) / float(layers);
+        float fi = float(i) / float(STEPS);
+        float depth = fi * fi;
+
         float z = 2.5 * fi + 1.25 * t;
-        float zn = mod(z, 256.0);
 
-        float scale = nearScale * pow(farScale / nearScale, fi) * pulse;
-        vec2 q = p * scale;
+        float scale =
+            mix(0.6, 5.0, depth) * zoom * pulse;
 
-        q *= rot(0.35 * fi + 0.2 * sin(t + 9.0 * fi));
-        q += 0.18 * vec2(sin(z + 2.0 * fi), cos(1.3 * z - fi));
+        float angle =
+            0.35 * fi +
+            0.2 * sin(t + 9.0 * fi);
 
-        vec3 pp = vec3(q * 1.1, zn);
+        vec2 q = rot(angle) * (p * scale);
 
-        // Rotations keep lengths, so one pixel spans 2 / R.y * scale * 1.1 noise cells
-        float cellsPerPixel = 2.2 * scale / R.y;
-        float f1 = fbm(pp, 5, cellsPerPixel);
-        float f2 = fbm(pp * 2.0 + vec3(2.0, -1.0, 0.7), 3, cellsPerPixel * 2.0);
-        float f = mix(f1, f2, 0.35);
+        q += 0.18 * vec2(
+            sin(z + 2.0 * fi),
+            cos(1.3 * z - fi)
+        );
 
-        float bands = sin(6.28318 * (8.0 * f - 1.6 * fi + 0.18 * t));
-        float ribbon = pow(max(0.0, 1.0 - abs(bands)), 14.0);
+
+        float footprint = 2.2 * scale / R.y;
+        float detailReduction =
+            max(1.0, footprint / 0.20);
+
+        vec3 pp = vec3(
+            q * (1.1 / detailReduction),
+            z
+        );
+
+        float filteredFootprint =
+            footprint / detailReduction;
+
+
+        float f = fbm(pp, filteredFootprint);
+
+        if (filteredFootprint < 0.3)
+        {
+            float secondary = noise3(
+                pp * 1.9 + vec3(2.0, -1.0, 0.7)
+            );
+
+            f = mix(f, secondary * 0.97, 0.22);
+        }
+
+        float bands = sin(
+            TAU * (8.0 * f - 1.6 * fi + 0.18 * t)
+        );
+
+        float ribbon = pow(
+            max(0.0, 1.0 - abs(bands)),
+            14.0
+        );
 
         float cloud = smoothstep(0.42, 0.92, f);
-        float shell = exp(-2.5 * abs(length(q) - (0.55 + 0.45 * sin(2.0 * f + 1.7 * fi))));
-        float density = 0.95 * ribbon + 0.28 * cloud + 0.22 * shell;
 
-        // 32 layers stand in for the original 56, so each one carries 56 / 32 of the density
-        float fade = smoothstep(0.0, 0.08, fi) * (1.0 - smoothstep(0.8, 1.0, fi));
-        density *= mix(0.035, 0.11, 1.0 - fi) * 1.75 * fade;
+        float shell = exp(
+            -2.5 * abs(
+                length(q) -
+                (0.55 + 0.45 *
+                    sin(2.0 * f + 1.7 * fi))
+            )
+        );
 
-        vec3 c = palette(f + 0.13 * fi - 0.07 * t);
-        c += 0.35 * palette(0.7 * f - 0.11 * t + 0.4) * shell;
-        c += 0.25 * vec3(1.0, 0.3, 0.8) * ribbon;
+        float density =
+            0.95 * ribbon +
+            0.28 * cloud +
+            0.22 * shell;
+
+        density *=
+            mix(0.035, 0.11, 1.0 - fi) *
+            (56.0 / float(STEPS));
+
+        vec3 c = palette(
+            f + 0.13 * fi - 0.07 * t
+        );
+
+        c += 0.35 *
+            palette(0.7 * f - 0.11 * t + 0.4) *
+            shell;
+
+        c += 0.25 *
+            vec3(1.0, 0.3, 0.8) *
+            ribbon;
 
         col += c * density * trans;
+
         glow += density * (0.6 + 0.4 * cloud);
 
-        trans *= 1.0 - clamp(density * 0.85, 0.0, 0.92);
+        trans *= 1.0 -
+            clamp(density * 0.85, 0.0, 0.92);
 
         if (trans < 0.01)
-        {
             break;
-        }
     }
 
     col += bg * trans;
-    col += 0.12 * glow * palette(0.12 * length(uv) - 0.15 * t);
 
-    float vignette = max(0.0, 1.0 - 0.16 * dot(uv, uv));
+    col += 0.12 * glow *
+        palette(
+            0.12 * length(uv) - 0.15 * t
+        );
+
+    float spark = hash3(
+        vec3(floor(U * 0.5), 0.0)
+    );
+
+    float twinkle =
+        0.5 + 0.5 * sin(6.0 * t + TAU * spark);
+
+    col +=
+        0.18 *
+        smoothstep(0.995, 1.0, spark) *
+        twinkle *
+        palette(length(uv) + 0.2 * t);
+
+    float vignette =
+        max(0.0, 1.0 - 0.16 * dot(uv, uv));
+
     col *= vignette;
 
-    col = 1.0 - exp(-1.4 * col);
+    col = 1.0 - exp(-1.4 * max(col, vec3(0.0)));
     col = pow(col, vec3(0.85));
 
     O = vec4(col, 1.0);
