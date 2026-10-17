@@ -87,9 +87,11 @@ flight, so the Scene 3D demo's own readout reads higher than `just perf`.
 `getTimings()` never blocks: the timings are unavailable while the frame is pending,
 when it failed, and when it was not measured.
 
-Timing is off by default, so frames that do not measure pay nothing. Only Metal
-measures for now (`GpuDevice::isFrameTimingAvailable()`); on every other backend
-the timings stay unavailable.
+Timing is off by default, so frames that do not measure pay nothing. Metal and
+Vulkan measure (`GpuDevice::isFrameTimingAvailable()`); on every other backend the
+timings stay unavailable. On Vulkan the frame time runs from the frame's first
+command to its last, so it does not include the time the frame waited behind the
+frames before it.
 
 ### Scope timing
 
@@ -137,15 +139,19 @@ for (const auto& scope : status.getTimings().scopes)
     device that is not a `GpuFrame`, such as the window's drawing and uploads.
 - Only the passes of `GpuRenderPass` and `GpuComputePass` are timed. Rive drawing,
   and the passes of scripted canvases, are not part of the scope open meanwhile.
-- A device keeps up to 8 frames' worth of timestamp samples in flight, because Metal
-  allows 32 per process. A frame queued beyond that measures its total but not its
-  scopes, so measure with at most 8 frames in flight. A device keeps the buffers it
-  allocated until it is destroyed.
+- A Metal device keeps up to 8 frames' worth of timestamp samples in flight, because
+  Metal allows 32 per process. A frame queued beyond that measures its total but not
+  its scopes, so measure with at most 8 frames in flight. A Vulkan device keeps up to
+  16, and a frame beyond that measures neither. A device keeps the buffers and query
+  pools it allocated until it is destroyed.
+- On Vulkan a pass's time runs from the end of the work before it to its own end,
+  and the uploads recorded between two passes count for the earlier one. A frame
+  has room for about 250 timed passes.
 - A frame that measures only its total, on a device that measures scopes, still
   samples its passes, so later scopes are attributed correctly.
 
-Only Metal measures scopes (`GpuDevice::isScopeTimingAvailable()`), on GPUs that
-sample timestamps at stage boundaries. Elsewhere `scopes` is empty, and a frame
+Metal measures scopes on GPUs that sample timestamps at stage boundaries, and
+Vulkan wherever it measures frames (`GpuDevice::isScopeTimingAvailable()`). Elsewhere `scopes` is empty, and a frame
 that does not measure only records the scope names.
 
 ## `GpuRenderPass`

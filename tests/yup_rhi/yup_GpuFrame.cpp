@@ -47,6 +47,8 @@ protected:
         using GpuDevice::getCurrentFrameGeneration;
         using GpuDevice::getScopeTimeline;
         using GpuDevice::ScopeTimeline;
+        using GpuDevice::setFrameWaiter;
+        using GpuDevice::completeFrameStatus;
 
         bool reportsFrameCompletion() const noexcept override { return reportsCompletion; }
 
@@ -671,17 +673,66 @@ TEST_F (GpuFrameTests, DeviceThatDoesNotReportCompletionCannotMeasureFrames)
     EXPECT_FALSE (status.getTimings().available);
 }
 
+TEST_F (GpuFrameTests, StatusWaitDrivesTheDeviceFrameWaiter)
+{
+    // A device completing frames only when polled lets a status wait drive it
+    device->reportsCompletion = true;
+
+    std::vector<uint64_t> waited;
+    device->setFrameWaiter ([this, &waited] (uint64_t generation)
+    {
+        waited.push_back (generation);
+        device->completeFrameStatus (generation, Result::fail ("completed by the waiter"));
+    });
+
+    GpuFrameStatus status;
+    uint64_t generation = 0;
+    {
+        auto frame = GpuFrame::begin (device);
+        ASSERT_TRUE (frame.isValid());
+        generation = device->getCurrentFrameGeneration();
+        status = frame.getStatus();
+        EXPECT_TRUE (frame.submit());
+    }
+
+    EXPECT_EQ (status.wait().getErrorMessage(), "completed by the waiter");
+    ASSERT_FALSE (waited.empty());
+    EXPECT_EQ (waited.front(), generation);
+
+    device->setFrameWaiter (nullptr);
+}
+
+TEST_F (GpuFrameTests, StatusOutlivingTheDeviceStillWaits)
+{
+    device->reportsCompletion = true;
+    device->setFrameWaiter ([] (uint64_t) {});
+
+    GpuFrameStatus status;
+    {
+        auto frame = GpuFrame::begin (device);
+        ASSERT_TRUE (frame.isValid());
+        status = frame.getStatus();
+        EXPECT_TRUE (frame.submit());
+    }
+
+    device = nullptr;
+
+    EXPECT_TRUE (status.wait().failed());
+}
+
 //==============================================================================
 
-#if YUP_APPLE
-class GpuFrameMetalTests : public GpuReadbackFixture
+#if YUP_APPLE || (YUP_ENABLE_SHADER_TRANSPILER && (YUP_APPLE || (YUP_WINDOWS && YUP_RIVE_USE_D3D) || YUP_RIVE_USE_VULKAN || (YUP_EMSCRIPTEN && RIVE_WEBGPU)))
+/** Draws, dispatches and measures frames on a real device. */
+class GpuFrameDeviceFixture : public GpuReadbackFixture
 {
 protected:
-    void SetUp() override
+    /** Creates the device of @p platform, or skips the test when there is none. */
+    void openDevice (GpuPlatform platform)
     {
-        device = GpuDevice::create (GpuPlatform::Metal, {});
+        device = GpuDevice::create (platform, {});
         if (device == nullptr)
-            GTEST_SKIP() << "No Metal device available";
+            GTEST_SKIP() << "No device available for this platform";
     }
 
     /** Clears a small target in a frame, waits for it and reads the pixels back. */
@@ -849,45 +900,66 @@ protected:
     double lastWallMilliseconds = 0.0;
 #endif
 };
+#endif
 
-TEST_F (GpuFrameMetalTests, WaitForGpuSucceedsAndNoFailureIsReported)
+//==============================================================================
+
+#if YUP_ENABLE_SHADER_TRANSPILER && (YUP_APPLE || (YUP_WINDOWS && YUP_RIVE_USE_D3D) || YUP_RIVE_USE_VULKAN || (YUP_EMSCRIPTEN && RIVE_WEBGPU))
+class GpuFrameBackendTests
+    : public GpuFrameDeviceFixture
+    , public ::testing::WithParamInterface<GpuPlatform>
+{
+protected:
+    void SetUp() override
+    {
+        openDevice (GetParam());
+    }
+
+    /** The timestamp samples one render pass takes on the tested device. */
+    int getSamplesPerRenderPass() const
+    {
+        return GetParam() == GpuPlatform::Metal ? 4 : 2;
+    }
+};
+
+INSTANTIATE_TEST_SUITE_P (GpuFrame,
+                          GpuFrameBackendTests,
+                          ::testing::ValuesIn (GpuComputePassBackendTests::getCompiledPlatforms()),
+                          GpuComputePassBackendTests::getTestNameSuffix);
+
+TEST_P (GpuFrameBackendTests, WaitForGpuSucceedsAndNoFailureIsReported)
 {
     const auto result = clearAndRead (GpuColor (1.0f, 0.0f, 0.0f, 1.0f));
     EXPECT_TRUE (result.wasOk()) << result.getErrorMessage();
     EXPECT_TRUE (device->takeGpuFailure().wasOk());
 }
 
-TEST_F (GpuFrameMetalTests, FramesDoNotKeepTheirQueueAliveAfterTheDevice)
+TEST_P (GpuFrameBackendTests, StatusWaitCompletesWithoutWaitingForTheFrame)
 {
-    // Autoreleased command buffers retain their queue and every resource they encoded. Released
-    // only when the caller's pool drains, a test run inside one pool ran the GPU out of memory
-    id weakQueue = nil;
-    objc_storeWeak (&weakQueue, static_cast<id> (device->getNativeCommandQueue()));
+    auto target = GpuTarget::create (device, 4, 4);
+    ASSERT_NE (target, nullptr);
 
-    const auto result = clearAndRead (GpuColor (0.0f, 1.0f, 0.0f, 1.0f));
-    EXPECT_TRUE (result.wasOk()) << result.getErrorMessage();
-
-    device = nullptr;
-
-    // Loading a weak reference autoreleases the object, which must not keep it alive either
-    const auto queueIsAlive = [&weakQueue]
+    GpuFrameStatus status;
     {
-        const ScopedAutoReleasePool pool;
-        return objc_loadWeak (&weakQueue) != nil;
-    };
+        auto frame = GpuFrame::begin (device);
+        ASSERT_TRUE (frame.isValid());
+        status = frame.getStatus();
 
-    // Metal may release the queue on its own threads shortly after the last command buffer completes
-    for (int attempt = 0; attempt < 200 && queueIsAlive(); ++attempt)
-        Thread::sleep (10);
+        auto pass = target->beginRenderPass (frame, { true, GpuColor (0.0f, 0.0f, 1.0f, 1.0f) });
+        pass.finish();
+        EXPECT_TRUE (frame.submit());
+    }
 
-    EXPECT_FALSE (queueIsAlive());
-    objc_storeWeak (&weakQueue, nil);
+    EXPECT_TRUE (status.wait().wasOk());
 }
 
-#if YUP_ENABLE_SHADER_TRANSPILER
-TEST_F (GpuFrameMetalTests, FrameTimingIsMeasuredOnMetal)
+TEST_P (GpuFrameBackendTests, FrameTimingIsMeasured)
 {
-    EXPECT_TRUE (device->isFrameTimingAvailable());
+    if (GetParam() == GpuPlatform::Metal || GetParam() == GpuPlatform::Vulkan)
+        EXPECT_TRUE (device->isFrameTimingAvailable());
+
+    if (! device->isFrameTimingAvailable())
+        GTEST_SKIP() << "Frame timing is unavailable on this device";
 
     const auto timings = drawAndMeasure (200, true);
     EXPECT_TRUE (lastWait.wasOk()) << lastWait.getErrorMessage();
@@ -901,14 +973,14 @@ TEST_F (GpuFrameMetalTests, FrameTimingIsMeasuredOnMetal)
     EXPECT_LE (timings.frameMilliseconds, lastWallMilliseconds + 0.05);
 }
 
-TEST_F (GpuFrameMetalTests, FrameTimingIsOffByDefault)
+TEST_P (GpuFrameBackendTests, FrameTimingIsOffByDefault)
 {
     const auto timings = drawAndMeasure (200, false);
     EXPECT_TRUE (lastWait.wasOk()) << lastWait.getErrorMessage();
     EXPECT_FALSE (timings.available);
 }
 
-TEST_F (GpuFrameMetalTests, HeavierFrameMeasuresLonger)
+TEST_P (GpuFrameBackendTests, HeavierFrameMeasuresLonger)
 {
     if (! device->isFrameTimingAvailable())
         GTEST_SKIP() << "Frame timing is unavailable on this device";
@@ -931,7 +1003,7 @@ TEST_F (GpuFrameMetalTests, HeavierFrameMeasuresLonger)
     EXPECT_GT (median (heavy), median (light));
 }
 
-TEST_F (GpuFrameMetalTests, FailedFrameReportsUnavailable)
+TEST_P (GpuFrameBackendTests, FailedFrameReportsUnavailable)
 {
     device->failNextFrameForTesting ("injected");
 
@@ -940,7 +1012,7 @@ TEST_F (GpuFrameMetalTests, FailedFrameReportsUnavailable)
     EXPECT_FALSE (timings.available);
 }
 
-TEST_F (GpuFrameMetalTests, ScopesAreReportedInOrder)
+TEST_P (GpuFrameBackendTests, ScopesAreReportedInOrder)
 {
     if (! device->isScopeTimingAvailable())
         GTEST_SKIP() << "Scope timing is unavailable on this device";
@@ -970,7 +1042,7 @@ TEST_F (GpuFrameMetalTests, ScopesAreReportedInOrder)
     }
 }
 
-TEST_F (GpuFrameMetalTests, HeavierScopeMeasuresLonger)
+TEST_P (GpuFrameBackendTests, HeavierScopeMeasuresLonger)
 {
     if (! device->isScopeTimingAvailable())
         GTEST_SKIP() << "Scope timing is unavailable on this device";
@@ -1001,7 +1073,7 @@ TEST_F (GpuFrameMetalTests, HeavierScopeMeasuresLonger)
     EXPECT_GT (median (heavy), median (light));
 }
 
-TEST_F (GpuFrameMetalTests, ScopeSumsItsEncoders)
+TEST_P (GpuFrameBackendTests, ScopeSumsItsEncoders)
 {
     if (! device->isScopeTimingAvailable())
         GTEST_SKIP() << "Scope timing is unavailable on this device";
@@ -1051,7 +1123,7 @@ TEST_F (GpuFrameMetalTests, ScopeSumsItsEncoders)
     EXPECT_GE (median (all), 1.5 * jmax (median (first), median (last)));
 }
 
-TEST_F (GpuFrameMetalTests, ComputeScopeIsMeasured)
+TEST_P (GpuFrameBackendTests, ComputeScopeIsMeasured)
 {
     if (! device->isScopeTimingAvailable())
         GTEST_SKIP() << "Scope timing is unavailable on this device";
@@ -1070,7 +1142,7 @@ TEST_F (GpuFrameMetalTests, ComputeScopeIsMeasured)
     EXPECT_GT (timings.scopes[0].milliseconds, 0.0);
 }
 
-TEST_F (GpuFrameMetalTests, FirstScopeIsNotChargedForTheUnmeasuredFrameBeforeIt)
+TEST_P (GpuFrameBackendTests, FirstScopeIsNotChargedForTheUnmeasuredFrameBeforeIt)
 {
     if (! device->isScopeTimingAvailable())
         GTEST_SKIP() << "Scope timing is unavailable on this device";
@@ -1130,7 +1202,7 @@ TEST_F (GpuFrameMetalTests, FirstScopeIsNotChargedForTheUnmeasuredFrameBeforeIt)
     EXPECT_LT (median (afterHeavy), median (alone) * 2.0);
 }
 
-TEST_F (GpuFrameMetalTests, UnscopedWorkIsNotAttributed)
+TEST_P (GpuFrameBackendTests, UnscopedWorkIsNotAttributed)
 {
     if (! device->isScopeTimingAvailable())
         GTEST_SKIP() << "Scope timing is unavailable on this device";
@@ -1153,7 +1225,7 @@ TEST_F (GpuFrameMetalTests, UnscopedWorkIsNotAttributed)
     EXPECT_LT (timings.scopes[0].milliseconds, timings.frameMilliseconds * 0.1);
 }
 
-TEST_F (GpuFrameMetalTests, QueuedFrameIsNotChargedForTheFrameBeforeIt)
+TEST_P (GpuFrameBackendTests, QueuedFrameIsNotChargedForTheFrameBeforeIt)
 {
     if (! device->isScopeTimingAvailable())
         GTEST_SKIP() << "Scope timing is unavailable on this device";
@@ -1195,7 +1267,7 @@ TEST_F (GpuFrameMetalTests, QueuedFrameIsNotChargedForTheFrameBeforeIt)
     EXPECT_LT (median (light), median (heavy) * 0.1);
 }
 
-TEST_F (GpuFrameMetalTests, ScopeOpenedBeforeTimingWasEnabledReportsNothing)
+TEST_P (GpuFrameBackendTests, ScopeOpenedBeforeTimingWasEnabledReportsNothing)
 {
     if (! device->isScopeTimingAvailable())
         GTEST_SKIP() << "Scope timing is unavailable on this device";
@@ -1225,6 +1297,79 @@ TEST_F (GpuFrameMetalTests, ScopeOpenedBeforeTimingWasEnabledReportsNothing)
     EXPECT_GT (late->milliseconds, 0.0);
 }
 
+TEST_P (GpuFrameBackendTests, RunningOutOfSamplesKeepsTheFrameTotal)
+{
+    if (! device->isScopeTimingAvailable())
+        GTEST_SKIP() << "Scope timing is unavailable on this device";
+
+    // Room for one render pass only
+    device->setScopeSampleCapacityForTesting (getSamplesPerRenderPass());
+
+    const auto timings = measureFrame ([this] (GpuFrame& frame)
+    {
+        frame.beginScope ("sampled");
+        drawPass (frame, 200);
+        frame.beginScope ("outOfSamples");
+        drawPass (frame, 200);
+        frame.beginScope ("empty");
+        frame.endScope();
+    });
+
+    device->setScopeSampleCapacityForTesting (0);
+
+    EXPECT_TRUE (lastWait.wasOk()) << lastWait.getErrorMessage();
+    ASSERT_TRUE (timings.available);
+    EXPECT_GT (timings.frameMilliseconds, 0.0);
+    ASSERT_EQ (timings.scopes.size(), 3u);
+    EXPECT_TRUE (timings.scopes[0].available);
+    EXPECT_GT (timings.scopes[0].milliseconds, 0.0);
+    EXPECT_FALSE (timings.scopes[1].available);
+    EXPECT_EQ (timings.scopes[1].milliseconds, 0.0);
+    EXPECT_TRUE (timings.scopes[2].available);
+    EXPECT_EQ (timings.scopes[2].milliseconds, 0.0);
+}
+#endif
+
+//==============================================================================
+
+#if YUP_APPLE
+class GpuFrameMetalTests : public GpuFrameDeviceFixture
+{
+protected:
+    void SetUp() override
+    {
+        openDevice (GpuPlatform::Metal);
+    }
+};
+
+TEST_F (GpuFrameMetalTests, FramesDoNotKeepTheirQueueAliveAfterTheDevice)
+{
+    // Autoreleased command buffers retain their queue and every resource they encoded. Released
+    // only when the caller's pool drains, a test run inside one pool ran the GPU out of memory
+    id weakQueue = nil;
+    objc_storeWeak (&weakQueue, static_cast<id> (device->getNativeCommandQueue()));
+
+    const auto result = clearAndRead (GpuColor (0.0f, 1.0f, 0.0f, 1.0f));
+    EXPECT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    device = nullptr;
+
+    // Loading a weak reference autoreleases the object, which must not keep it alive either
+    const auto queueIsAlive = [&weakQueue]
+    {
+        const ScopedAutoReleasePool pool;
+        return objc_loadWeak (&weakQueue) != nil;
+    };
+
+    // Metal may release the queue on its own threads shortly after the last command buffer completes
+    for (int attempt = 0; attempt < 200 && queueIsAlive(); ++attempt)
+        Thread::sleep (10);
+
+    EXPECT_FALSE (queueIsAlive());
+    objc_storeWeak (&weakQueue, nil);
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
 TEST_F (GpuFrameMetalTests, ManyFramesInFlightLeaveSamplesToOtherDevices)
 {
     if (! device->isScopeTimingAvailable())
@@ -1295,38 +1440,6 @@ TEST_F (GpuFrameMetalTests, ManyFramesInFlightLeaveSamplesToOtherDevices)
 
     ASSERT_EQ (after.scopes.size(), 1u);
     EXPECT_TRUE (after.scopes[0].available);
-}
-
-TEST_F (GpuFrameMetalTests, RunningOutOfSamplesKeepsTheFrameTotal)
-{
-    if (! device->isScopeTimingAvailable())
-        GTEST_SKIP() << "Scope timing is unavailable on this device";
-
-    // Room for one render pass only
-    device->setScopeSampleCapacityForTesting (4);
-
-    const auto timings = measureFrame ([this] (GpuFrame& frame)
-    {
-        frame.beginScope ("sampled");
-        drawPass (frame, 200);
-        frame.beginScope ("outOfSamples");
-        drawPass (frame, 200);
-        frame.beginScope ("empty");
-        frame.endScope();
-    });
-
-    device->setScopeSampleCapacityForTesting (0);
-
-    EXPECT_TRUE (lastWait.wasOk()) << lastWait.getErrorMessage();
-    ASSERT_TRUE (timings.available);
-    EXPECT_GT (timings.frameMilliseconds, 0.0);
-    ASSERT_EQ (timings.scopes.size(), 3u);
-    EXPECT_TRUE (timings.scopes[0].available);
-    EXPECT_GT (timings.scopes[0].milliseconds, 0.0);
-    EXPECT_FALSE (timings.scopes[1].available);
-    EXPECT_EQ (timings.scopes[1].milliseconds, 0.0);
-    EXPECT_TRUE (timings.scopes[2].available);
-    EXPECT_EQ (timings.scopes[2].milliseconds, 0.0);
 }
 #endif
 #endif

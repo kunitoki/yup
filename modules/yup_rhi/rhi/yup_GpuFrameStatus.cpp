@@ -48,6 +48,9 @@ struct GpuFrameStatus::Block
 
     /** A waiter or an owner reads the outcome, so the device does not report it. */
     bool claimed = false;
+
+    /** Set when the device completes frames as it polls the GPU: waits for this frame. */
+    std::function<void()> waitForGpu;
 };
 
 //==============================================================================
@@ -82,7 +85,18 @@ Result GpuFrameStatus::wait() const
             return Result::fail ("The frame was not submitted");
     }
 
-    block->done.wait();
+    if (block->waitForGpu != nullptr)
+    {
+        do
+        {
+            block->waitForGpu();
+        }
+        while (! block->done.wait (1.0));
+    }
+    else
+    {
+        block->done.wait();
+    }
 
     const ScopedLock sl (*block->lock);
     return block->result;
@@ -93,8 +107,6 @@ GpuFrameTimings GpuFrameStatus::getTimings() const
     if (block == nullptr)
         return {};
 
-    // Completing a frame writes its timings once, under the lock, so a completed frame's are read
-    // without holding the lock its device's completions take
     {
         const ScopedLock sl (*block->lock);
         if (! block->completed)

@@ -76,25 +76,13 @@ public:
         freeMovementLabel.setText ("Free movement", yup::dontSendNotification);
         addAndMakeVisible (freeMovementLabel);
 
-        settingsToggle.setButtonText ("Render settings");
+        settingsToggle.setTitle ("Render settings");
         settingsToggle.onClick = [this]
         {
             settingsPanel.setVisible (settingsToggle.getToggleState());
             resized();
         };
         addAndMakeVisible (settingsToggle);
-
-        benchmarkButton.onClick = [this]
-        {
-            view.requestBenchmark();
-        };
-        addAndMakeVisible (benchmarkButton);
-
-        bakeProbesButton.onClick = [this]
-        {
-            view.bakeProbes();
-        };
-        addAndMakeVisible (bakeProbesButton);
 
         view.onFramePainted = [this]
         {
@@ -125,15 +113,11 @@ public:
     {
         auto bounds = getLocalBounds().reduced (10.0f);
 
-        // The actions sit next to "Render settings"; the free movement label takes what is left, up to its width
+        // The render settings icon sits on the right; the free movement label takes what is left, up to its width
         auto toolbar = bounds.removeFromTop (30.0f);
-        settingsToggle.setBounds (toolbar.removeFromRight (140.0f));
+        settingsToggle.setBounds (toolbar.removeFromRight (toolbar.getHeight()));
         toolbar.removeFromRight (8.0f);
-        bakeProbesButton.setBounds (toolbar.removeFromRight (100.0f));
-        toolbar.removeFromRight (8.0f);
-        benchmarkButton.setBounds (toolbar.removeFromRight (100.0f));
-        toolbar.removeFromRight (8.0f);
-        treeToggle.setBounds (toolbar.removeFromLeft (140.0f));
+        treeToggle.setBounds (toolbar.removeFromLeft (yup::jmin (140.0f, toolbar.getWidth() * 0.35f)));
         toolbar.removeFromLeft (16.0f);
         freeMovementSwitch.setBounds (toolbar.removeFromLeft (44.0f).reduced (0.0f, 5.0f));
         toolbar.removeFromLeft (8.0f);
@@ -1426,6 +1410,27 @@ private:
     /** Edits the render settings of the scene shown by a view, and reports the tier in effect and,
         while shown, the GPU time of its frames.
     */
+    /** A toggle showing the theme icon font gear, small enough for the toolbar of a phone. */
+    class SettingsIconButton final : public yup::ToggleButton
+    {
+    public:
+        using yup::ToggleButton::ToggleButton;
+
+        void paintButton (yup::Graphics& g) override
+        {
+            yup::ToggleButton::paintButton (g);
+
+            const auto theme = yup::ApplicationTheme::getGlobalTheme();
+            const auto bounds = getLocalBounds().reduced (getHeight() * 0.2f);
+
+            g.setFillColor (theme->getPalette().getColor (getToggleState() ? yup::ThemePalette::Role::onAccent : yup::ThemePalette::Role::text));
+            g.fillFittedText (yup::String (yup::CharPointer_UTF8 (YUP_ICON_GEAR)),
+                              theme->getDefaultIconFont().withHeight (bounds.getHeight()),
+                              bounds,
+                              yup::Justification::center);
+        }
+    };
+
     class RenderSettingsPanel final : public yup::Component
         , private yup::Timer
     {
@@ -1785,6 +1790,18 @@ private:
                 qualityPage.addValue (*label, *control, value);
 
             qualityPage.addSwitches ({ &softShadowsToggle, &contactShadowsToggle });
+
+            benchmarkButton.onClick = [this]
+            {
+                view.requestBenchmark();
+            };
+
+            bakeProbesButton.onClick = [this]
+            {
+                view.bakeProbes();
+            };
+
+            qualityPage.addSwitches ({ &benchmarkButton, &bakeProbesButton });
 
             for (auto [label, control, value] : { std::tuple<yup::Label*, yup::Component*, yup::Label*> { &bloomThresholdLabel, &bloomThresholdSlider, &bloomThresholdValue },
                                                   { &bloomIntensityLabel, &bloomIntensitySlider, &bloomIntensityValue },
@@ -2241,6 +2258,8 @@ private:
         yup::Label gpuPassesLabel { "gpuPassesLabel" };
 
         SettingsPage qualityPage;
+        yup::TextButton benchmarkButton { "Benchmark" };
+        yup::TextButton bakeProbesButton { "Bake probes" };
         SettingsPage effectsPage;
         SettingsPage scenePage;
         yup::TabComponent tabs { "renderSettingsTabs" };
@@ -2318,9 +2337,7 @@ private:
     yup::ToggleButton treeToggle { "treeToggle" };
     yup::SwitchButton freeMovementSwitch { "freeMovementSwitch" };
     yup::Label freeMovementLabel { "freeMovementLabel" };
-    yup::ToggleButton settingsToggle { "settingsToggle" };
-    yup::TextButton benchmarkButton { "Benchmark" };
-    yup::TextButton bakeProbesButton { "Bake probes" };
+    SettingsIconButton settingsToggle { "settingsToggle" };
     yup::TreeView sceneTree { "sceneTree" };
     MpcView view;
     RenderSettingsPanel settingsPanel { view };

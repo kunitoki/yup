@@ -368,7 +368,7 @@ Result GpuDevice::submitFrame (void* commandBuffer, uint64_t, std::shared_ptr<Sc
     return submitFrameCommands (commandBuffer);
 }
 
-std::shared_ptr<GpuDevice::ScopeSampler> GpuDevice::createScopeSampler (rive::ore::Context&)
+std::shared_ptr<GpuDevice::ScopeSampler> GpuDevice::createScopeSampler (rive::ore::Context&, void*)
 {
     return nullptr;
 }
@@ -418,7 +418,31 @@ GpuFrameStatus GpuDevice::beginFrameStatus (uint64_t generation)
     block->injectedFailure = std::exchange (frameStatuses->nextFrameFailure, {});
     frameStatuses->pending[generation] = block;
 
+    // The status may outlive the device, which clears its waiter before it goes
+    if (frameStatuses->waiter != nullptr)
+    {
+        block->waitForGpu = [statuses = std::weak_ptr<FrameStatuses> (frameStatuses), generation]
+        {
+            std::function<void (uint64_t)> waiter;
+
+            if (const auto locked = statuses.lock())
+            {
+                const ScopedLock waiterLock (*locked->lock);
+                waiter = locked->waiter;
+            }
+
+            if (waiter != nullptr)
+                waiter (generation);
+        };
+    }
+
     return GpuFrameStatus (std::move (block));
+}
+
+void GpuDevice::setFrameWaiter (std::function<void (uint64_t)> waiter)
+{
+    const ScopedLock sl (*frameStatuses->lock);
+    frameStatuses->waiter = std::move (waiter);
 }
 
 void GpuDevice::completeFrameStatus (uint64_t generation, const Result& result, GpuFrameTimings timings)

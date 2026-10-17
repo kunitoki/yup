@@ -312,8 +312,8 @@ public:
     /** Returns true if this device measures the GPU time of the frames that ask for it
         with GpuFrame::setTimingEnabled().
 
-        Only Metal measures for now; every other backend returns false, and its frames
-        report their timings unavailable.
+        Metal measures, and so does Vulkan on queues that write timestamps. Every other
+        backend returns false, and its frames report their timings unavailable.
 
         @see GpuFrameStatus::getTimings
     */
@@ -322,8 +322,9 @@ public:
     /** Returns true if the frames that measure their GPU time also measure the time of
         their scopes (see GpuFrame::beginScope()).
 
-        Only Metal devices that sample GPU timestamps at stage boundaries measure scopes;
-        on every other device the timings of a frame list no scopes.
+        Metal devices that sample GPU timestamps at stage boundaries measure scopes, and so
+        does every Vulkan device that measures frames. On every other device the timings of
+        a frame list no scopes.
 
         @see GpuFrameTimings::scopes
     */
@@ -351,8 +352,9 @@ public:
     void failNextFrameForTesting (const String& error);
 
     /** @internal Test hook, not for production use: caps the GPU timestamp samples each frame
-        measuring its scopes can take, so a test runs out of them with a few encoders. A render
-        pass takes 4 samples and a compute pass 2. 0 restores the default. Only devices where
+        measuring its scopes can take, so a test runs out of them with a few encoders. On Metal
+        a render pass takes 4 samples and a compute pass 2; on Vulkan every pass takes 2.
+        0 restores the default. Only devices where
         isScopeTimingAvailable() is true take samples.
     */
     virtual void setScopeSampleCapacityForTesting (int samples) { ignoreUnused (samples); }
@@ -728,6 +730,10 @@ protected:
         submitted, so the device resolves the samples once the frame completed. Every
         encoder of the frame is sampled, so each is credited only the time past the end
         of the work before it.
+
+        Metal attaches the samples to the pass descriptors. Vulkan writes them into the
+        frame's command buffer at each pass boundary, so a pass also takes the commands
+        recorded between it and the next one.
     */
     class ScopeSampler
     {
@@ -741,10 +747,11 @@ protected:
         /** Called right after the render pass opened, or failed to: later passes are not sampled. */
         virtual void endRenderPass() = 0;
 
-        /** Returns the native descriptor the compute pass the frame opens next is created with
-            to be sampled for the scope of @p scopeIndex (-1 for none), or nullptr once the frame
-            ran out of samples. On Metal a retained MTLComputePassDescriptor, which the
-            backend creating the pass takes ownership of. */
+        /** Samples the compute pass the frame opens next for the scope of @p scopeIndex (-1 for
+            none), and returns the native descriptor it must be created with: on Metal a retained
+            MTLComputePassDescriptor, which the backend creating the pass takes ownership of, or
+            nullptr once the frame ran out of samples. Backends sampling in the command stream
+            return nullptr. */
         virtual void* beginComputePass (int scopeIndex) = 0;
 
         /** Called right after the compute pass opened: @p sampled is false when it could not
@@ -775,12 +782,12 @@ protected:
     virtual Result submitFrame (void* commandBuffer, uint64_t generation, std::shared_ptr<ScopeSampler> scopeSampler, bool measuresScopes);
 
     /** Creates the sampler of a frame that starts measuring its scopes, whose passes begin on
-        @p frameContext.
+        @p frameContext and record into @p commandBuffer, the handle beginFrameCommands() returned.
 
         @returns The sampler, or nullptr when the device cannot measure scopes (the default)
                  or could not allocate the samples: the scopes then report unavailable.
     */
-    virtual std::shared_ptr<ScopeSampler> createScopeSampler (rive::ore::Context& frameContext);
+    virtual std::shared_ptr<ScopeSampler> createScopeSampler (rive::ore::Context& frameContext, void* commandBuffer);
 
     /** Waits until the GPU finished a submitted frame command buffer.
 
@@ -798,6 +805,13 @@ protected:
         Otherwise a frame counts as complete as soon as it was submitted.
     */
     virtual bool reportsFrameCompletion() const noexcept { return false; }
+
+    /** Installs the function GpuFrameStatus::wait() calls with a frame's generation, for a
+        backend that only learns a frame completed when it polls the GPU: the function waits
+        for the frame and completes it. Frames begun before it was set do not call it. A
+        backend clears it with nullptr before it is destroyed. Thread safe.
+    */
+    void setFrameWaiter (std::function<void (uint64_t generation)> waiter);
 
     /** Records the GPU outcome of the frame of @p generation, for its status, its waiter
         or takeGpuFailure(), with the GPU time the backend measured for it. The timings are
@@ -942,6 +956,9 @@ private:
         /** At most the first failure nobody claimed yet. */
         std::vector<std::shared_ptr<GpuFrameStatus::Block>> unclaimedFailures;
         String nextFrameFailure;
+
+        /** Set by a backend that completes frames as it polls its fences, to wait for one. */
+        std::function<void (uint64_t)> waiter;
 
         void complete (uint64_t generation, const Result& result, GpuFrameTimings timings);
     };

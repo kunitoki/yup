@@ -924,14 +924,17 @@ The renderer has two tiers, picked per device from the `tier` preference:
 | --------------------------------------- | ------------------------------- | ------------------------------ |
 | Metal on desktop                        | Full                            | Full                           |
 | Metal on iOS                            | Raster                          | Full                           |
-| Direct3D 11, Vulkan, WebGPU             | Raster, for now                 | Raster, for now                |
+| Vulkan on desktop                       | Full (experimental)             | Full (experimental)            |
+| Vulkan on Android                       | Raster                          | Full (experimental)            |
+| Direct3D 11, WebGPU                     | Raster, for now                 | Raster, for now                |
 | OpenGL, OpenGL ES, WebGL2               | Raster                          | Raster                         |
 
 `automatic` picks the full tier on desktop GPUs that pass the capability checks
 (half-float render targets, enough color attachments, compute shaders with storage
 buffers readable from fragment shaders, and a verified backend).
-Today only Metal is verified; Direct3D 11, Vulkan and WebGPU stay on raster until
-the full tier is validated on them. OpenGL and OpenGL ES never run the full
+Today only Metal is verified. Vulkan runs the full tier too, as an experiment
+while it is being validated; Direct3D 11 and WebGPU stay on raster until the full
+tier is validated on them. OpenGL and OpenGL ES never run the full
 tier. Mobile defaults to raster. Asking for `full` on a device that cannot run it
 falls back to raster.
 

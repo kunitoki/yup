@@ -254,7 +254,7 @@ GpuDevice::ScopeSampler* GpuFrame::Impl::samplerForNextPass (int& scopeIndex)
 
     if (timingEnabled && scopeSampler == nullptr && ! scopeSamplerFailed && device->isScopeTimingAvailable())
     {
-        scopeSampler = device->createScopeSampler (*oreCtx);
+        scopeSampler = device->createScopeSampler (*oreCtx, commandBuffer);
         scopeSamplerFailed = scopeSampler == nullptr;
     }
 

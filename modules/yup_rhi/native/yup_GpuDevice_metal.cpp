@@ -550,7 +550,7 @@ protected:
         return Result::ok();
     }
 
-    std::shared_ptr<ScopeSampler> createScopeSampler (rive::ore::Context& frameContext) override
+    std::shared_ptr<ScopeSampler> createScopeSampler (rive::ore::Context& frameContext, void*) override
     {
         if (@available (macOS 11.0, iOS 14.0, *))
         {

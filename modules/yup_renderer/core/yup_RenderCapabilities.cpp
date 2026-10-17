@@ -43,10 +43,11 @@ RenderCapabilities::DeviceFacts RenderCapabilities::queryDevice (const GpuDevice
 
 bool RenderCapabilities::passedInteropSpike (GpuPlatform platform) noexcept
 {
-    // Direct3D, Vulkan and WebGPU flip once their spikes pass on the user's devices.
+    // Direct3D and WebGPU flip once their spikes pass on the user's devices.
     switch (platform)
     {
         case GpuPlatform::Metal:
+        case GpuPlatform::Vulkan:
             return true;
 
         default:

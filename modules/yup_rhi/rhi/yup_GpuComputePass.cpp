@@ -225,8 +225,18 @@ GpuComputePass GpuComputePass::begin (GpuFrame& frame)
 
 #if YUP_RIVE_USE_VULKAN
         case GpuPlatform::Vulkan:
+        {
+            auto scopeIndex = -1;
+            auto* sampler = frameImpl->samplerForNextPass (scopeIndex);
+            if (sampler != nullptr)
+                sampler->beginComputePass (scopeIndex);
+
             pass.impl = yup_createComputePassImplVulkan (device, frameImpl->commandBuffer, frameImpl->generation);
+
+            if (sampler != nullptr)
+                sampler->endComputePass (pass.impl != nullptr);
             break;
+        }
 #endif
 
         default:
