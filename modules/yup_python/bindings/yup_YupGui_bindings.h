@@ -244,11 +244,49 @@ struct PyMouseListener : Base, pybind11::trampoline_self_life_support
         //if constexpr (! std::is_same_v<Base, yup::TooltipWindow>)
         //    Base::mouseWheel (event, wheel);
     }
+};
 
-    //void mouseMagnify (const yup::MouseEvent& event, float scaleFactor) override
-    //{
-    //    PYBIND11_OVERRIDE (void, Base, mouseMagnify, event, scaleFactor);
-    //}
+// =================================================================================================
+
+/** Gesture overrides shared by the GestureListener and Component trampolines. */
+template <class Base = yup::GestureListener>
+struct PyGestureListener : Base
+{
+    using Base::Base;
+
+    void gestureTap (const yup::GestureEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, gestureTap, event);
+    }
+
+    void gestureLongPress (const yup::GestureEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, gestureLongPress, event);
+    }
+
+    void gesturePinch (const yup::GestureEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, gesturePinch, event);
+    }
+
+    void gestureRotate (const yup::GestureEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, gestureRotate, event);
+    }
+
+    void gesturePan (const yup::GestureEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, gesturePan, event);
+    }
+
+    void gestureSwipe (const yup::GestureEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, gestureSwipe, event);
+    }
+};
+
+struct PyGestureListenerTrampoline : PyGestureListener<>, pybind11::trampoline_self_life_support
+{
 };
 
 // =================================================================================================
@@ -321,9 +359,9 @@ struct PyComponentEffect : Base
 // =================================================================================================
 
 template <class Base = yup::Component>
-struct PyComponent : PyMouseListener<Base>
+struct PyComponent : PyGestureListener<PyMouseListener<Base>>
 {
-    using PyMouseListener<Base>::PyMouseListener;
+    using PyGestureListener<PyMouseListener<Base>>::PyGestureListener;
 
     ~PyComponent()
     {

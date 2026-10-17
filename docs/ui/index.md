@@ -42,6 +42,8 @@ windowing, widgets, and theming are still to come.
   components on 3D geometry with `setManuallyComposited` and `MeshSurfaceMapper`.
 - [Component snapshots](component-snapshots.md) — `snapshotToImage` and
   `snapshotToTexture` for pixel capture.
+- [Gestures](gestures.md) - touch and trackpad gestures: tap, long press,
+  pinch, rotate, multi-finger pan and swipe, with `setWantedGestures`.
 - [Component Layout](component-layout.md) — `FlexBox` and `Grid`, flexible and track-based
   layout modelled on CSS.
 - [Component paint profiling](component-profiling.md) — measure and
@@ -75,6 +77,7 @@ windowing, widgets, and theming are still to come.
 component-basics
 layout
 component-drag-and-drop
+gestures
 component-styling
 component-effects
 component-3d

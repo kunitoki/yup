@@ -332,6 +332,11 @@ public:
         comp.internalMouseWheel (event, wheelData);
     }
 
+    static void triggerGesture (Component& comp, const GestureEvent& event)
+    {
+        comp.internalGesture (event);
+    }
+
     static void triggerInternalMouseDown (Component& comp, const MouseEvent& event)
     {
         comp.internalMouseDown (event);
@@ -2773,6 +2778,123 @@ TEST_F (ComponentTest, InternalMouseDispatchNotifiesListeners)
     EXPECT_EQ (listener.wheels, 1);
 
     root->removeMouseListener (&listener);
+}
+
+TEST_F (ComponentTest, GesturesAreNotWantedByDefault)
+{
+    EXPECT_EQ (root->getWantedGestures(), GestureType::none);
+
+    root->setWantedGestures (GestureType::pinch | GestureType::pan);
+
+    EXPECT_TRUE (hasBitValueSet (root->getWantedGestures(), GestureType::pinch));
+    EXPECT_TRUE (hasBitValueSet (root->getWantedGestures(), GestureType::pan));
+    EXPECT_FALSE (hasBitValueSet (root->getWantedGestures(), GestureType::tap));
+}
+
+TEST_F (ComponentTest, InternalGestureDispatchNotifiesTheComponentAndListeners)
+{
+    struct GestureCounter : public GestureListener
+    {
+        void gestureTap (const GestureEvent&) override { ++taps; }
+        void gestureLongPress (const GestureEvent&) override { ++longPresses; }
+        void gesturePinch (const GestureEvent&) override { ++pinches; }
+        void gestureRotate (const GestureEvent&) override { ++rotates; }
+        void gesturePan (const GestureEvent&) override { ++pans; }
+        void gestureSwipe (const GestureEvent&) override { ++swipes; }
+
+        int taps = 0;
+        int longPresses = 0;
+        int pinches = 0;
+        int rotates = 0;
+        int pans = 0;
+        int swipes = 0;
+    };
+
+    struct GestureComponent : public Component
+    {
+        void gesturePinch (const GestureEvent& event) override { lastScale = event.getScale(); }
+
+        float lastScale = 0.0f;
+    };
+
+    GestureComponent component;
+    GestureCounter listener;
+    component.addGestureListener (&listener);
+    component.setVisible (true);
+
+    for (const auto type : { GestureType::tap, GestureType::longPress, GestureType::pinch, GestureType::rotate, GestureType::pan, GestureType::swipe })
+        ComponentHelper::triggerGesture (component, GestureEvent (type, GestureEvent::Phase::began).withScale (2.0f, 2.0f));
+
+    EXPECT_FLOAT_EQ (component.lastScale, 2.0f);
+    EXPECT_EQ (listener.taps, 1);
+    EXPECT_EQ (listener.longPresses, 1);
+    EXPECT_EQ (listener.pinches, 1);
+    EXPECT_EQ (listener.rotates, 1);
+    EXPECT_EQ (listener.pans, 1);
+    EXPECT_EQ (listener.swipes, 1);
+
+    component.removeGestureListener (&listener);
+}
+
+TEST_F (ComponentTest, InvisibleOrDisabledComponentsIgnoreGestures)
+{
+    struct GestureCounter : public GestureListener
+    {
+        void gestureTap (const GestureEvent&) override { ++taps; }
+
+        int taps = 0;
+    };
+
+    GestureCounter listener;
+    root->addGestureListener (&listener);
+
+    root->setVisible (false);
+    ComponentHelper::triggerGesture (*root, GestureEvent (GestureType::tap, GestureEvent::Phase::ended));
+
+    root->setVisible (true);
+    root->setEnabled (false);
+    ComponentHelper::triggerGesture (*root, GestureEvent (GestureType::tap, GestureEvent::Phase::ended));
+
+    EXPECT_EQ (listener.taps, 0);
+
+    root->removeGestureListener (&listener);
+}
+
+TEST_F (ComponentTest, GestureTargetIsTheDeepestComponentWantingTheGesture)
+{
+    root->setVisible (true);
+    parent->setVisible (true);
+    child->setVisible (true);
+
+    // (90, 90) in root is inside child, which sits at (75, 75) in root coordinates
+    const Point<float> overChild (90.0f, 90.0f);
+
+    EXPECT_EQ (root->findGestureTargetAt (overChild, GestureType::pinch), nullptr);
+
+    root->setWantedGestures (GestureType::pinch);
+    EXPECT_EQ (root->findGestureTargetAt (overChild, GestureType::pinch), root.get());
+
+    parent->setWantedGestures (GestureType::pinch);
+    EXPECT_EQ (root->findGestureTargetAt (overChild, GestureType::pinch), parent.get());
+
+    child->setWantedGestures (GestureType::pan);
+    EXPECT_EQ (root->findGestureTargetAt (overChild, GestureType::pinch), parent.get());
+    EXPECT_EQ (root->findGestureTargetAt (overChild, GestureType::pan), child.get());
+    EXPECT_EQ (root->findGestureTargetAt (overChild, GestureType::tap), nullptr);
+}
+
+TEST_F (ComponentTest, GestureEventPositionIsMadeRelativeToTheTarget)
+{
+    root->setVisible (true);
+    parent->setVisible (true);
+    child->setVisible (true);
+
+    const auto event = GestureEvent (GestureType::tap, GestureEvent::Phase::ended)
+                           .withPosition ({ 90.0f, 90.0f })
+                           .withRelativePositionTo (child.get());
+
+    EXPECT_EQ (event.getPosition(), Point<float> (15.0f, 15.0f));
+    EXPECT_EQ (event.getSourceComponent(), child.get());
 }
 
 TEST_F (ComponentTest, InternalAttachDetachAndVisibilityDispatch)

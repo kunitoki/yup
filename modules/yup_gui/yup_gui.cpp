@@ -196,6 +196,8 @@
 #include "desktop/yup_Desktop.cpp"
 #include "keyboard/yup_TextInputTarget.cpp"
 #include "mouse/yup_MouseEvent.cpp"
+#include "mouse/yup_GestureEvent.cpp"
+#include "mouse/yup_GestureRecognizer.cpp"
 #include "mouse/yup_MouseCursor.cpp"
 #include "mouse/yup_KineticScroller.cpp"
 #include "clipboard/yup_SystemClipboard.cpp"

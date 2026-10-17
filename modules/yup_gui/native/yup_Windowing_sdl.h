@@ -41,6 +41,7 @@ class SDLComponentNative final
         std::optional<yup::Time> lastDownTime;
         WeakReference<Component> clickedComponent;
         WeakReference<Component> componentUnderPointer;
+        bool ownedByGesture = false;
     };
 
     struct TouchClickState
@@ -171,6 +172,10 @@ public:
     void handleTouchMove (SDL_FingerID fingerId, const Point<float>& position, float pressure);
     void handleTouchUp (SDL_FingerID fingerId, const Point<float>& position, float pressure, bool wasCanceled = false);
     void handleMouseWheel (const Point<float>& position, const MouseWheelData& wheelData);
+    void handleGesture (const GestureEvent& event);
+    void handleTrackpadPinch (SDL_EventType type, float scaleDelta);
+    void cancelFingersForGesture (Component& target);
+    void scheduleLongPressCheck();
     void handleMouseEnter (const Point<float>& position);
     void handleMouseLeave (const Point<float>& position);
     void handleKeyDown (const KeyPress& keys, const Point<float>& position);
@@ -305,6 +310,13 @@ private:
     KeyModifiers currentKeyModifiers;
     Array<TouchFinger> activeTouches;
     Array<TouchClickState> touchClickStates;
+    GestureRecognizer gestureRecognizer { [this] (const GestureEvent& event)
+    {
+        handleGesture (event);
+    } };
+    std::array<WeakReference<Component>, 6> gestureTargets;
+    float trackpadPinchScale = 1.0f;
+    bool trackpadPinchActive = false;
     Array<File> pendingDroppedFiles;
     String pendingDroppedText;
 

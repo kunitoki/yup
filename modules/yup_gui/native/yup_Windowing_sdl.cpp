@@ -1981,6 +1981,9 @@ void SDLComponentNative::handleTouchDown (SDL_FingerID fingerId, const Point<flo
 
     activeTouches.add (finger);
     handleMouseDown (position, MouseEvent::leftButton, toKeyModifiers (SDL_GetModState()), &activeTouches.getReference (activeTouches.size() - 1));
+
+    gestureRecognizer.touchDown (static_cast<int64> (fingerId), position, Time::getMillisecondCounterHiRes());
+    scheduleLongPressCheck();
 }
 
 void SDLComponentNative::handleTouchMove (SDL_FingerID fingerId, const Point<float>& position, float pressure)
@@ -1993,7 +1996,14 @@ void SDLComponentNative::handleTouchMove (SDL_FingerID fingerId, const Point<flo
     finger.position = position;
     finger.pressure = pressure;
 
-    handleMouseMoveOrDrag (position, &finger);
+    gestureRecognizer.touchMove (static_cast<int64> (fingerId), position, Time::getMillisecondCounterHiRes());
+
+    // A gesture recognized above may have taken this finger over, or a callback removed it
+    const auto currentIndex = findTouchFingerIndex (fingerId);
+    if (currentIndex < 0 || activeTouches.getReference (currentIndex).ownedByGesture)
+        return;
+
+    handleMouseMoveOrDrag (position, &activeTouches.getReference (currentIndex));
 }
 
 void SDLComponentNative::handleTouchUp (SDL_FingerID fingerId, const Point<float>& position, float pressure, bool wasCanceled)
@@ -2006,13 +2016,132 @@ void SDLComponentNative::handleTouchUp (SDL_FingerID fingerId, const Point<float
     finger.position = position;
     finger.pressure = pressure;
 
-    handleMouseUp (position, MouseEvent::leftButton, currentKeyModifiers, &finger, wasCanceled);
+    if (! finger.ownedByGesture)
+        handleMouseUp (position, MouseEvent::leftButton, currentKeyModifiers, &finger, wasCanceled);
+
+    if (wasCanceled)
+        gestureRecognizer.touchCancel (static_cast<int64> (fingerId));
+    else
+        gestureRecognizer.touchUp (static_cast<int64> (fingerId), position, Time::getMillisecondCounterHiRes());
 
     // The user callbacks above may have reentered the event loop and reallocated
     // activeTouches, so re-resolve the finger by id before removing it.
     const auto finalIndex = findTouchFingerIndex (fingerId);
     if (finalIndex >= 0)
         activeTouches.remove (finalIndex);
+}
+
+//==============================================================================
+
+void SDLComponentNative::handleGesture (const GestureEvent& event)
+{
+    const auto type = event.getType();
+    const auto phase = event.getPhase();
+    const auto slot = static_cast<std::size_t> (findHighestSetBit (static_cast<uint32> (type)));
+    if (type == GestureType::none || slot >= gestureTargets.size())
+        return;
+
+    const auto isDiscrete = type == GestureType::tap || type == GestureType::swipe;
+    if (phase == GestureEvent::Phase::began || isDiscrete)
+        gestureTargets[slot] = component.findGestureTargetAt (event.getPosition(), type);
+
+    const auto target = gestureTargets[slot];
+    if (phase == GestureEvent::Phase::ended || phase == GestureEvent::Phase::canceled)
+        gestureTargets[slot] = nullptr;
+
+    if (target.get() == nullptr)
+        return;
+
+    const auto isMultiFinger = type == GestureType::pinch || type == GestureType::rotate || type == GestureType::pan;
+    if (phase == GestureEvent::Phase::began && isMultiFinger && event.getTouchCount() >= 2)
+        cancelFingersForGesture (*target.get());
+
+    if (auto* targetComponent = target.get())
+        targetComponent->internalGesture (event.withModifiers (currentKeyModifiers).withRelativePositionTo (targetComponent));
+}
+
+void SDLComponentNative::cancelFingersForGesture (Component& target)
+{
+    Array<SDL_FingerID> fingerIds;
+
+    for (const auto& finger : activeTouches)
+    {
+        if (finger.ownedByGesture)
+            continue;
+
+        for (auto* clicked = finger.clickedComponent.get(); clicked != nullptr; clicked = clicked->getParentComponent())
+        {
+            if (clicked == &target)
+            {
+                fingerIds.add (finger.fingerId);
+                break;
+            }
+        }
+    }
+
+    // Canceling calls back into user code, so every finger is re-resolved by id
+    for (const auto fingerId : fingerIds)
+    {
+        const auto index = findTouchFingerIndex (fingerId);
+        if (index < 0)
+            continue;
+
+        auto& finger = activeTouches.getReference (index);
+        finger.ownedByGesture = true;
+        handleMouseUp (finger.position, MouseEvent::leftButton, currentKeyModifiers, &finger, true);
+    }
+}
+
+void SDLComponentNative::handleTrackpadPinch (SDL_EventType type, float scaleDelta)
+{
+    // Touch screens on iOS and Android report their pinches as SDL pinches too, which the
+    // gesture recognizer already covers from the fingers
+    if (type == SDL_EVENT_PINCH_BEGIN)
+    {
+        if (! activeTouches.isEmpty())
+            return;
+
+        trackpadPinchActive = true;
+        trackpadPinchScale = 1.0f;
+    }
+    else if (! trackpadPinchActive)
+    {
+        return;
+    }
+
+    auto phase = GestureEvent::Phase::began;
+    auto delta = 1.0f;
+
+    if (type == SDL_EVENT_PINCH_UPDATE)
+    {
+        phase = GestureEvent::Phase::changed;
+        delta = scaleDelta > 0.0f ? scaleDelta : 1.0f;
+        trackpadPinchScale *= delta;
+    }
+    else if (type == SDL_EVENT_PINCH_END)
+    {
+        phase = GestureEvent::Phase::ended;
+        trackpadPinchActive = false;
+    }
+
+    handleGesture (GestureEvent (GestureType::pinch, phase)
+                       .withPosition (getCursorPosition())
+                       .withTrackpad (true)
+                       .withScale (trackpadPinchScale, delta));
+}
+
+void SDLComponentNative::scheduleLongPressCheck()
+{
+    if (gestureRecognizer.getNumTouches() != 1)
+        return;
+
+    const auto delayMs = roundToInt (gestureRecognizer.getOptions().longPressDelay) + 1;
+
+    Timer::callAfterDelay (delayMs, [weakSelf = WeakReference<SDLComponentNative> (this)]
+    {
+        if (auto* self = weakSelf.get())
+            self->gestureRecognizer.advanceTo (Time::getMillisecondCounterHiRes());
+    });
 }
 
 //==============================================================================
@@ -2716,6 +2845,21 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
             if (event->wheel.windowID == SDL_GetWindowID (window))
                 processEvent ([this, wheelDelta] { handleMouseWheel (getCursorPosition(), wheelDelta); });
+
+            break;
+        }
+
+        case SDL_EVENT_PINCH_BEGIN:
+        case SDL_EVENT_PINCH_UPDATE:
+        case SDL_EVENT_PINCH_END:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_PINCH " << event->pinch.scale);
+
+            processEvent ([this, pinch = event->pinch]
+            {
+                if (pinch.windowID == 0 || pinch.windowID == SDL_GetWindowID (window))
+                    handleTrackpadPinch (pinch.type, pinch.scale);
+            });
 
             break;
         }
