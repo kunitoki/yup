@@ -60,4 +60,6 @@ if (NOT candidate_executables)
 endif()
 
 list (GET candidate_executables 0 executable)
+get_filename_component (output_directory "${OUTPUT}" DIRECTORY)
+file (MAKE_DIRECTORY "${output_directory}")
 file (COPY_FILE "${executable}" "${OUTPUT}" ONLY_IF_DIFFERENT)

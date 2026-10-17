@@ -392,14 +392,6 @@ TEST_F (FrameResourcesMetalTests, ShadowCompareFailureKeepsTheOtherSamplersAndIs
         EXPECT_EQ (samplers->shadowCompare, nullptr);
     }
 }
-#endif
-
-TEST (FrameResourcesTests, NoSharedSamplersWithoutADevice)
-{
-    FrameResources resources (nullptr);
-    EXPECT_EQ (resources.getSamplers(), nullptr);
-    EXPECT_EQ (resources.getSamplers(), nullptr);
-}
 
 TEST_F (FrameResourcesMetalTests, FindHistoryNeitherCreatesNorReallocatesNorKeeps)
 {
@@ -432,4 +424,12 @@ TEST_F (FrameResourcesMetalTests, FindHistoryNeitherCreatesNorReallocatesNorKeep
     resources.beginFrame (64, 64);
     EXPECT_EQ (resources.findHistory ("taa").read, nullptr);
     resources.endFrame();
+}
+#endif
+
+TEST (FrameResourcesTests, NoSharedSamplersWithoutADevice)
+{
+    FrameResources resources (nullptr);
+    EXPECT_EQ (resources.getSamplers(), nullptr);
+    EXPECT_EQ (resources.getSamplers(), nullptr);
 }
