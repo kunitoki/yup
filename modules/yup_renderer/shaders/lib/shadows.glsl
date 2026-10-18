@@ -23,6 +23,8 @@
 #ifndef YUP_3D_LIB_SHADOWS
 #define YUP_3D_LIB_SHADOWS
 
+#extension GL_EXT_control_flow_attributes : require
+
 #include "lib/light_types.glsl"
 #include "lib/lighting.glsl"
 #include "lib/sampling.glsl"
@@ -381,23 +383,28 @@ float sunShadow(vec3 worldPosition, vec3 geometricNormal, vec3 toLight, float vi
 
     float nDotL = clamp(dot(geometricNormal, toLight), 0.0, 1.0);
 
+    // One call site for the cascade lookups, which shader compilers inline: the dithered handover
+    // reads one cascade, the blended one up to two
+    int first = c;
+    int lookups = 1;
+
 #ifdef YUP_3D_TIER_FULL
     if (shadowsTemporal())
-    {
-        if (! last && noise.y < t)
-            return shadowsCascadeVisibility(c + 1, worldPosition, geometricNormal, nDotL, noise, lightSize);
-
-        float dithered = shadowsCascadeVisibility(c, worldPosition, geometricNormal, nDotL, noise, lightSize);
-        return last ? mix(dithered, 1.0, t) : dithered;
-    }
+        first += ! last && noise.y < t ? 1 : 0;
+    else
 #endif
+        lookups = ! last && t > 0.0 ? 2 : 1;
 
-    float visibility = shadowsCascadeVisibility(c, worldPosition, geometricNormal, nDotL, noise, lightSize);
-    if (t <= 0.0)
-        return visibility;
+    float visibility = 1.0;
 
-    float next = last ? 1.0 : shadowsCascadeVisibility(c + 1, worldPosition, geometricNormal, nDotL, noise, lightSize);
-    return mix(visibility, next, t);
+    [[dont_unroll]]
+    for (int i = 0; i < lookups; ++i)
+    {
+        float cascade = shadowsCascadeVisibility(first + i, worldPosition, geometricNormal, nDotL, noise, lightSize);
+        visibility = i == 0 ? cascade : mix(visibility, cascade, t);
+    }
+
+    return last ? mix(visibility, 1.0, t) : visibility;
 }
 
 // Visibility of a point or spot light: firstRecord from GpuLight.spotRadiusShadow.w. 1 lit, 0 shadowed.

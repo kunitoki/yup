@@ -321,30 +321,32 @@ vec3 lightsEvaluateArea(GpuLight light, BsdfSurface s, LightsLookup lookup, vec3
 
 // What one light reflects: the BSDF times its incoming radiance and its shadow, looked up once towards
 // its center (shadowsVisibility), and its contact shadow in the passes defining YUP_3D_CONTACT_SHADOWS
-// (shadowsContact), marched only where the light reaches the surface: after the range, cone and
-// horizon exits of the punctual path (before its shadow, which measured faster than after it), and
-// after the shadow of the area path. Lights with a radius take the area path (YUP_3D_AREA_LIGHTS
-// only), the others the punctual one
+// (shadowsContact), marched only where the light reaches the surface, after the range, cone and
+// horizon exits and before the shadow, which measured faster than after it. Lights with a radius
+// take the area path (YUP_3D_AREA_LIGHTS only), the others the punctual one, which evaluates the
+// BSDF last. Both paths share one call site of each shadow: shader compilers inline every call, and
+// D3DCompile slows down sharply with the copies
 vec3 lightsShadeLight(BsdfSurface s, LightsLookup lookup, GpuLight light, vec3 worldPosition, vec3 geometricNormal)
 {
+    vec3 l = vec3(0.0);
+    vec3 reflected;
+    bool area = false;
+
 #ifdef YUP_3D_AREA_LIGHTS
     if (light.spotRadiusShadow.z > 0.0)
     {
-        vec3 reflected = lightsEvaluateArea(light, s, lookup, worldPosition);
-        if (reflected != vec3(0.0))
-            reflected = reflected * shadowsVisibility(light, worldPosition, geometricNormal);
-#ifdef YUP_3D_CONTACT_SHADOWS
-        if (reflected != vec3(0.0))
-            reflected = reflected * shadowsContact(light, worldPosition, geometricNormal);
-#endif
-
-        return reflected;
+        reflected = lightsEvaluateArea(light, s, lookup, worldPosition);
+        area = true;
     }
+    else
 #endif
+    {
+        reflected = lightIncoming(light, worldPosition, l);
+        if (dot(s.n, l) <= 0.0)
+            reflected = vec3(0.0);
+    }
 
-    vec3 l;
-    vec3 incoming = lightIncoming(light, worldPosition, l);
-    if (dot(s.n, l) <= 0.0 || incoming == vec3(0.0))
+    if (reflected == vec3(0.0))
         return vec3(0.0);
 
 #ifdef YUP_3D_CONTACT_SHADOWS
@@ -353,14 +355,14 @@ vec3 lightsShadeLight(BsdfSurface s, LightsLookup lookup, GpuLight light, vec3 w
         return vec3(0.0);
 #endif
 
-    incoming = incoming * shadowsVisibility(light, worldPosition, geometricNormal);
+    reflected = reflected * shadowsVisibility(light, worldPosition, geometricNormal);
 #ifdef YUP_3D_CONTACT_SHADOWS
-    incoming = incoming * contact;
+    reflected = reflected * contact;
 #endif
-    if (incoming == vec3(0.0))
-        return vec3(0.0);
+    if (area || reflected == vec3(0.0))
+        return reflected;
 
-    return bsdfEvaluate(s, l) * incoming;
+    return bsdfEvaluate(s, l) * reflected;
 }
 
 #ifdef YUP_3D_TIER_FULL
@@ -379,22 +381,27 @@ uint lightsClusterIndex(vec3 worldPosition)
     return uint(tile.x + tiles.x * (tile.y + tiles.y * slice));
 }
 
+// The light of the i-th iteration of the full-tier loops: every directional light, then the lights
+// of the fragment's cluster at slot. One loop, so the light is inlined once
+uint lightsIndex(uint slot, uint directionalLights, uint i)
+{
+    if (i < directionalLights)
+        return i;
+
+    return clusterLights[slot + 1u + i - directionalLights];
+}
+
 // The light loop: every directional light, then the lights of the fragment's cluster
 vec3 lightsShade(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 geometricNormal)
 {
     vec3 color = vec3(0.0);
-    int directionalLights = int(lighting.clusterDepth.z);
-
-    [[dont_unroll]]
-    for (int i = 0; i < directionalLights; ++i)
-        color += lightsShadeLight(s, lookup, lights[i], worldPosition, geometricNormal);
-
     uint slot = lightsClusterIndex(worldPosition) * 64u;
-    uint count = min(clusterLights[slot], 63u);
+    uint directionalLights = uint(lighting.clusterDepth.z);
+    uint count = directionalLights + min(clusterLights[slot], 63u);
 
     [[dont_unroll]]
     for (uint i = 0u; i < count; ++i)
-        color += lightsShadeLight(s, lookup, lights[clusterLights[slot + 1u + i]], worldPosition, geometricNormal);
+        color += lightsShadeLight(s, lookup, lights[lightsIndex(slot, directionalLights, i)], worldPosition, geometricNormal);
 
     return color;
 }
@@ -697,26 +704,29 @@ vec3 lightsEvaluateLayersArea(GpuLight light, BsdfSurface s, BsdfLayers layers, 
 // under the clearcoat, then the clearcoat, which reflects the lights its own normal faces
 vec3 lightsShadeLayersLight(BsdfSurface s, BsdfLayers layers, GpuLight light, vec3 worldPosition, vec3 geometricNormal)
 {
+    vec3 l = vec3(0.0);
+    vec3 incoming;
+    bool area = false;
+    float nDotL = 0.0;
+    float coatDotL = 0.0;
+
 #ifdef YUP_3D_AREA_LIGHTS
     if (light.spotRadiusShadow.z > 0.0)
     {
-        vec3 reflected = lightsEvaluateLayersArea(light, s, layers, worldPosition);
-        if (reflected != vec3(0.0))
-            reflected = reflected * shadowsVisibility(light, worldPosition, geometricNormal);
-#ifdef YUP_3D_CONTACT_SHADOWS
-        if (reflected != vec3(0.0))
-            reflected = reflected * shadowsContact(light, worldPosition, geometricNormal);
-#endif
-
-        return reflected;
+        incoming = lightsEvaluateLayersArea(light, s, layers, worldPosition);
+        area = true;
     }
+    else
 #endif
+    {
+        incoming = lightIncoming(light, worldPosition, l);
+        nDotL = layers.sheenMax > 0.0 ? dot(s.n, l) : 0.0;
+        coatDotL = layers.clearcoat > 0.0 ? dot(layers.clearcoatNormal, l) : 0.0;
+        if (nDotL <= 0.0 && coatDotL <= 0.0)
+            incoming = vec3(0.0);
+    }
 
-    vec3 l;
-    vec3 incoming = lightIncoming(light, worldPosition, l);
-    float nDotL = layers.sheenMax > 0.0 ? dot(s.n, l) : 0.0;
-    float coatDotL = layers.clearcoat > 0.0 ? dot(layers.clearcoatNormal, l) : 0.0;
-    if ((nDotL <= 0.0 && coatDotL <= 0.0) || incoming == vec3(0.0))
+    if (incoming == vec3(0.0))
         return vec3(0.0);
 
 #ifdef YUP_3D_CONTACT_SHADOWS
@@ -729,8 +739,8 @@ vec3 lightsShadeLayersLight(BsdfSurface s, BsdfLayers layers, GpuLight light, ve
 #ifdef YUP_3D_CONTACT_SHADOWS
     incoming = incoming * contact;
 #endif
-    if (incoming == vec3(0.0))
-        return vec3(0.0);
+    if (area || incoming == vec3(0.0))
+        return incoming;
 
     vec3 reflected = coatDotL > 0.0 ? vec3(bsdfEvaluateClearcoat(s, layers, l)) : vec3(0.0);
     if (nDotL > 0.0)
@@ -744,18 +754,13 @@ vec3 lightsShadeLayers(BsdfSurface s, BsdfLayers layers, vec3 worldPosition, vec
 {
     vec3 color = vec3(0.0);
 #ifdef YUP_3D_TIER_FULL
-    int directionalLights = int(lighting.clusterDepth.z);
-
-    [[dont_unroll]]
-    for (int i = 0; i < directionalLights; ++i)
-        color += lightsShadeLayersLight(s, layers, lights[i], worldPosition, geometricNormal);
-
     uint slot = lightsClusterIndex(worldPosition) * 64u;
-    uint count = min(clusterLights[slot], 63u);
+    uint directionalLights = uint(lighting.clusterDepth.z);
+    uint count = directionalLights + min(clusterLights[slot], 63u);
 
     [[dont_unroll]]
     for (uint i = 0u; i < count; ++i)
-        color += lightsShadeLayersLight(s, layers, lights[clusterLights[slot + 1u + i]], worldPosition, geometricNormal);
+        color += lightsShadeLayersLight(s, layers, lights[lightsIndex(slot, directionalLights, i)], worldPosition, geometricNormal);
 #else
     int lightCount = int(lightList.count.x);
 
