@@ -339,6 +339,18 @@ std::unique_ptr<ContextGL> ContextGL::Make()
 #ifdef RIVE_DESKTOP_GL
     f.colorBufferFloat = true;
     f.colorBufferHalfFloat = true;
+#ifdef GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS
+    // Desktop GL 4.3+ binds shader storage buffers to graphics stages.
+    {
+        GLint major = 0, minor = 0, fragmentSSBOs = 0;
+        glGetIntegerv(GL_MAJOR_VERSION, &major);
+        glGetIntegerv(GL_MINOR_VERSION, &minor);
+        if (major > 4 || (major == 4 && minor >= 3))
+            glGetIntegerv(GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS,
+                          &fragmentSSBOs);
+        f.storageBuffers = fragmentSSBOs > 0;
+    }
+#endif
 #endif
 
     // Query limits.
@@ -1098,6 +1110,25 @@ rcp<BindGroup> ContextGL::makeBindGroup(const BindGroupDesc& desc)
             continue;
         bg->m_glSamplers.push_back(binding);
         bg->m_retainedSamplers.push_back(ref_rcp(entry.sampler));
+    }
+
+    // Storage buffers arrive as native GL buffer names (a GLuint carried in
+    // the pointer), owned by the caller.
+    bg->m_glStorageBuffers.reserve(desc.storageBufferCount);
+    for (uint32_t i = 0; i < desc.storageBufferCount; ++i)
+    {
+        const auto& entry = desc.storageBuffers[i];
+        BindGroupGL::GLStorageBinding binding{};
+        binding.buffer = static_cast<unsigned int>(
+            reinterpret_cast<uintptr_t>(entry.nativeBuffer));
+        binding.offset = entry.offset;
+        binding.size = entry.size;
+        if (binding.buffer == 0 ||
+            !nativeSlot(entry.slot,
+                        BindingKind::storageBufferRO,
+                        &binding.slot))
+            continue;
+        bg->m_glStorageBuffers.push_back(binding);
     }
 
     return bg;

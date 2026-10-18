@@ -46,12 +46,12 @@ RenderCapabilities::DeviceFacts RenderCapabilities::queryDevice (const GpuDevice
 
 bool RenderCapabilities::passedInteropSpike (GpuPlatform platform) noexcept
 {
-    // Direct3D flips once its spike passes on the user's devices.
     switch (platform)
     {
         case GpuPlatform::Metal:
         case GpuPlatform::Vulkan:
         case GpuPlatform::WebGPU:
+        case GpuPlatform::Direct3D:
             return true;
 
         default:
@@ -61,6 +61,7 @@ bool RenderCapabilities::passedInteropSpike (GpuPlatform platform) noexcept
 
 RenderCapabilities::Tier RenderCapabilities::selectTier (const DeviceFacts& facts, RenderSettings::TierPreference preference) noexcept
 {
+    // GL compute runs on an unshared context in apps, so its output cannot reach GL rendering
     if (facts.platform == GpuPlatform::OpenGL || facts.platform == GpuPlatform::OpenGLES)
         return Tier::raster;
 

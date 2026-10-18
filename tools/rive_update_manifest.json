@@ -239,7 +239,7 @@
         },
         {
           "path": "source/renderer/ore/gl/ore_context_gl.cpp",
-          "note": "Ore GL features: report float and half-float color attachments on desktop GL, where they are core since 3.0 and the ES-only GL_EXT_color_buffer_float is never listed",
+          "note": "Ore GL features: report float and half-float color attachments on desktop GL, where they are core since 3.0 and the ES-only GL_EXT_color_buffer_float is never listed; desktop GL 4.3+ also reports storageBuffers when fragment shaders can bind shader storage blocks",
           "already_contains": "#ifdef RIVE_DESKTOP_GL\n    f.colorBufferFloat = true;",
           "replace": {
             "from": [
@@ -253,6 +253,18 @@
               "#ifdef RIVE_DESKTOP_GL",
               "    f.colorBufferFloat = true;",
               "    f.colorBufferHalfFloat = true;",
+              "#ifdef GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS",
+              "    // Desktop GL 4.3+ binds shader storage buffers to graphics stages.",
+              "    {",
+              "        GLint major = 0, minor = 0, fragmentSSBOs = 0;",
+              "        glGetIntegerv(GL_MAJOR_VERSION, &major);",
+              "        glGetIntegerv(GL_MINOR_VERSION, &minor);",
+              "        if (major > 4 || (major == 4 && minor >= 3))",
+              "            glGetIntegerv(GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS,",
+              "                          &fragmentSSBOs);",
+              "        f.storageBuffers = fragmentSSBOs > 0;",
+              "    }",
+              "#endif",
               "#endif",
               "",
               "    // Query limits."
@@ -1857,6 +1869,112 @@
               "                                   depthTexGL->m_glTexture,",
               "                                   desc.depthStencil.view->baseMipLevel());",
               "        }"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_bind_group_gl.hpp",
+          "note": "Ore GL bind group: storage buffer bindings (native GL buffer name, range, binding point)",
+          "already_contains": "    struct GLStorageBinding",
+          "replace": {
+            "from": [
+              "        uint32_t slot = 0;        // sampler unit",
+              "    };"
+            ],
+            "to": [
+              "        uint32_t slot = 0;        // sampler unit",
+              "    };",
+              "    struct GLStorageBinding",
+              "    {",
+              "        unsigned int buffer = 0; // GLuint",
+              "        uint64_t offset = 0;",
+              "        uint64_t size = 0;",
+              "        uint32_t slot = 0; // GL shader storage binding point",
+              "    };"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_bind_group_gl.hpp",
+          "note": "Ore GL bind group: storage buffer binding list",
+          "already_contains": "    std::vector<GLStorageBinding> m_glStorageBuffers;",
+          "replace": {
+            "from": [
+              "    std::vector<GLSamplerBinding> m_glSamplers;"
+            ],
+            "to": [
+              "    std::vector<GLSamplerBinding> m_glSamplers;",
+              "    std::vector<GLStorageBinding> m_glStorageBuffers;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_context_gl.cpp",
+          "note": "Ore GL makeBindGroup: storage buffer entries resolve their native binding point from the layout",
+          "already_contains": "    // Storage buffers arrive as native GL buffer names (a GLuint carried in",
+          "replace": {
+            "from": [
+              "        bg->m_glSamplers.push_back(binding);",
+              "        bg->m_retainedSamplers.push_back(ref_rcp(entry.sampler));",
+              "    }",
+              "",
+              "    return bg;"
+            ],
+            "to": [
+              "        bg->m_glSamplers.push_back(binding);",
+              "        bg->m_retainedSamplers.push_back(ref_rcp(entry.sampler));",
+              "    }",
+              "",
+              "    // Storage buffers arrive as native GL buffer names (a GLuint carried in",
+              "    // the pointer), owned by the caller.",
+              "    bg->m_glStorageBuffers.reserve(desc.storageBufferCount);",
+              "    for (uint32_t i = 0; i < desc.storageBufferCount; ++i)",
+              "    {",
+              "        const auto& entry = desc.storageBuffers[i];",
+              "        BindGroupGL::GLStorageBinding binding{};",
+              "        binding.buffer = static_cast<unsigned int>(",
+              "            reinterpret_cast<uintptr_t>(entry.nativeBuffer));",
+              "        binding.offset = entry.offset;",
+              "        binding.size = entry.size;",
+              "        if (binding.buffer == 0 ||",
+              "            !nativeSlot(entry.slot,",
+              "                        BindingKind::storageBufferRO,",
+              "                        &binding.slot))",
+              "            continue;",
+              "        bg->m_glStorageBuffers.push_back(binding);",
+              "    }",
+              "",
+              "    return bg;"
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_render_pass_gl.cpp",
+          "note": "Ore GL setBindGroup: bind storage buffer ranges",
+          "already_contains": "    for (const auto& ssbo : glBg->m_glStorageBuffers)",
+          "replace": {
+            "from": [
+              "                          ubo.size);",
+              "    }",
+              "",
+              "    for (const auto& tex : glBg->m_glTextures)"
+            ],
+            "to": [
+              "                          ubo.size);",
+              "    }",
+              "",
+              "#ifdef GL_SHADER_STORAGE_BUFFER",
+              "    for (const auto& ssbo : glBg->m_glStorageBuffers)",
+              "    {",
+              "        glBindBufferRange(GL_SHADER_STORAGE_BUFFER,",
+              "                          ssbo.slot,",
+              "                          ssbo.buffer,",
+              "                          static_cast<GLintptr>(ssbo.offset),",
+              "                          static_cast<GLsizeiptr>(ssbo.size));",
+              "    }",
+              "#endif",
+              "",
+              "    for (const auto& tex : glBg->m_glTextures)"
             ]
           }
         }

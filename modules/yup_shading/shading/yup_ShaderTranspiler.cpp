@@ -878,6 +878,21 @@ static void applyHLSLNativeSlots (spirv_cross::CompilerHLSL& compiler, const Sha
     }
 }
 
+static void applyGLStorageNativeSlots (spirv_cross::CompilerGLSL& compiler, const ShaderNativeSlots* nativeSlots)
+{
+    if (nativeSlots == nullptr)
+        return;
+
+    for (const auto& resource : compiler.get_shader_resources().storage_buffers)
+    {
+        const auto* entry = nativeSlots->find (compiler.get_decoration (resource.id, spv::DecorationDescriptorSet),
+                                               compiler.get_decoration (resource.id, spv::DecorationBinding));
+
+        if (entry != nullptr)
+            compiler.set_decoration (resource.id, spv::DecorationBinding, entry->slot);
+    }
+}
+
 //==============================================================================
 // Fills MSL backend slot numbers into a ShaderReflection after CompilerMSL::compile() has run
 //==============================================================================
@@ -1446,6 +1461,8 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
                         compiler.set_entry_point (entryName, entries[0].execution_model);
                 }
 
+                applyGLStorageNativeSlots (compiler, nativeSlots);
+
                 return makeResultValueOk (String (compiler.compile().c_str()));
             }
 
@@ -1837,7 +1854,7 @@ ShaderNativeSlots ShaderTranspiler::assignGraphicsNativeSlots (const ShaderRefle
             add (b, buffer);
 
         for (const auto& b : reflection->storageBuffers)
-            add (b, gl ? noSlot : hlsl ? (b.readOnly ? texture : storage) : buffer);
+            add (b, hlsl ? (b.readOnly ? texture : storage) : gl ? storage : buffer);
 
         for (const auto& b : reflection->separateImages)
             add (b, texture);

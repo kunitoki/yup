@@ -1548,6 +1548,43 @@ TEST_F (ShaderBundleCompilerMultiSetTests, EsslSharesDistinctSlotsAcrossStages)
     }
 }
 
+TEST_F (ShaderBundleCompilerMultiSetTests, GlslStorageBlocksOfDifferentSetsGetDistinctBindings)
+{
+    constexpr const char* storageFragment = R"glsl(
+#version 450
+layout(set = 0, binding = 1) readonly buffer Lights { vec4 lights[]; };
+layout(set = 1, binding = 1) readonly buffer Clusters { uint clusters[]; };
+layout(location = 0) out vec4 color;
+void main() { color = lights[0] * float (clusters[0]); }
+)glsl";
+
+    ShaderBundleCompileRequest request;
+    request.entries.push_back (makeEntry (ShaderStage::vertex, vertexSource, ShaderLanguage::glsl));
+    request.entries.push_back (makeEntry (ShaderStage::fragment, storageFragment, ShaderLanguage::glsl));
+
+    ShaderBundleCompiler compiler (transpiler);
+    auto result = compiler.compile (request);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* fs = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::glsl);
+    ASSERT_NE (fs, nullptr);
+
+    std::map<std::string, int> bindings;
+
+    const auto text = fs->source.toStdString();
+    const std::regex expression (R"(layout\([^)]*binding = (\d+)[^)]*\)\s*readonly buffer (\w+))");
+
+    for (auto it = std::sregex_iterator (text.begin(), text.end(), expression); it != std::sregex_iterator(); ++it)
+        bindings[(*it)[2].str()] = std::stoi ((*it)[1].str());
+
+    ASSERT_EQ (bindings.size(), 2u) << fs->source;
+    EXPECT_NE (bindings["Lights"], bindings["Clusters"]);
+
+    // The reflected slots, which the binding map hands to the GL backend, match the emitted bindings
+    EXPECT_EQ (reflectedSlot (fs->reflection.storageBuffers, "Lights"), bindings["Lights"]);
+    EXPECT_EQ (reflectedSlot (fs->reflection.storageBuffers, "Clusters"), bindings["Clusters"]);
+}
+
 TEST_F (ShaderBundleCompilerMultiSetTests, StagesOutsideAPipelineKeepTheirBindings)
 {
     ShaderBundleCompileRequest fragmentOnly;

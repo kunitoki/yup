@@ -37,6 +37,13 @@ public:
         uint32_t binding = 0;     // WGSL @binding, for pair lookup
         uint32_t slot = 0;        // sampler unit
     };
+    struct GLStorageBinding
+    {
+        unsigned int buffer = 0; // GLuint
+        uint64_t offset = 0;
+        uint64_t size = 0;
+        uint32_t slot = 0; // GL shader storage binding point
+    };
 
     BindGroupGL() = default;
     ~BindGroupGL() override = default;
@@ -47,5 +54,6 @@ private:
     std::vector<GLUBOBinding> m_glUBOs;
     std::vector<GLTexBinding> m_glTextures;
     std::vector<GLSamplerBinding> m_glSamplers;
+    std::vector<GLStorageBinding> m_glStorageBuffers;
 };
 } // namespace rive::ore

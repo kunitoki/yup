@@ -139,9 +139,9 @@ struct TranspileOptions
     - MSL: buffers (uniform and storage), textures (sampled and storage) and samplers.
     - HLSL: @c b (uniform buffers), @c t (textures and read-only storage buffers), @c s
       (samplers) and @c u (read-write storage buffers and storage images).
-    - GLSL / ESSL: uniform buffer binding points and texture units, shared by both stages.
-      A separate sampler takes the unit of the texture it is paired with; storage buffers
-      and storage images keep their binding.
+    - GLSL / ESSL: uniform buffer binding points, texture units and storage buffer binding
+      points, shared by both stages. A separate sampler takes the unit of the texture it is
+      paired with; storage images keep their binding.
 
     Vulkan (SPIR-V) and WebGPU (WGSL) bind (set, binding) natively and get no entries.
 
@@ -159,7 +159,7 @@ struct ShaderNativeSlots
         uint32_t binding = 0;
 
         /** Index of the resource in its own class: buffer, texture, sampler or UAV register,
-            GL uniform buffer binding point or GL texture unit. */
+            GL uniform buffer or storage buffer binding point, or GL texture unit. */
         uint32_t slot = ~0u;
 
         /** Sampler index of a combined image sampler (MSL and HLSL), ~0u otherwise. */

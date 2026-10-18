@@ -454,6 +454,17 @@ void RenderPassGL::setBindGroup(uint32_t groupIndex,
                           ubo.size);
     }
 
+#ifdef GL_SHADER_STORAGE_BUFFER
+    for (const auto& ssbo : glBg->m_glStorageBuffers)
+    {
+        glBindBufferRange(GL_SHADER_STORAGE_BUFFER,
+                          ssbo.slot,
+                          ssbo.buffer,
+                          static_cast<GLintptr>(ssbo.offset),
+                          static_cast<GLsizeiptr>(ssbo.size));
+    }
+#endif
+
     for (const auto& tex : glBg->m_glTextures)
     {
         glActiveTexture(GL_TEXTURE0 + tex.slot);

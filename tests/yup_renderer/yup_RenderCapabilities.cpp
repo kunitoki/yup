@@ -79,6 +79,13 @@ TEST_F (RenderCapabilitiesTests, DesktopGLIsRaster)
     EXPECT_EQ (RenderCapabilities::selectTier (facts, Preference::full), Tier::raster);
 }
 
+TEST_F (RenderCapabilitiesTests, DesktopD3DIsFull)
+{
+    auto facts = desktopMetal();
+    facts.platform = GpuPlatform::Direct3D;
+    EXPECT_EQ (RenderCapabilities::selectTier (facts, Preference::automatic), Tier::full);
+}
+
 TEST_F (RenderCapabilitiesTests, ForcedRasterOnCapableDevice)
 {
     EXPECT_EQ (RenderCapabilities::selectTier (desktopMetal(), Preference::raster), Tier::raster);
@@ -95,9 +102,9 @@ TEST_F (RenderCapabilitiesTests, MobileDefaultsToRasterButCanOptIn)
 TEST_F (RenderCapabilitiesTests, BackendThatFailedTheSpikeIsRaster)
 {
     auto facts = desktopMetal();
-    facts.platform = GpuPlatform::Direct3D;
-    EXPECT_EQ (RenderCapabilities::selectTier (facts, Preference::full),
-               RenderCapabilities::passedInteropSpike (GpuPlatform::Direct3D) ? Tier::full : Tier::raster);
+    facts.platform = GpuPlatform::Headless;
+    EXPECT_FALSE (RenderCapabilities::passedInteropSpike (GpuPlatform::Headless));
+    EXPECT_EQ (RenderCapabilities::selectTier (facts, Preference::full), Tier::raster);
 }
 
 TEST_F (RenderCapabilitiesTests, DesktopWebGPUIsFull)

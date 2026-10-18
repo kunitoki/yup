@@ -3331,18 +3331,22 @@ TEST_F (ShaderNativeSlotsTests, HlslSplitsStorageBuffersAndImagesByAccess)
     EXPECT_EQ (slotOf (slots, 2, 7), 1u);  // s1
 }
 
-TEST_F (ShaderNativeSlotsTests, GlAssignsBlocksAndTextureUnitsOnly)
+TEST_F (ShaderNativeSlotsTests, GlAssignsBlocksTextureUnitsAndStorageBlocks)
 {
     auto fragment = fragmentStage();
-    fragment.storageBuffers = { resource (1, 1) };
+    fragment.storageBuffers = { resource (1, 1), resource (0, 1) };
+    fragment.storageBuffers[0].readOnly = true;
 
     const auto slots = ShaderTranspiler::assignGraphicsNativeSlots (vertexStage(), fragment, ShaderLanguage::essl);
 
-    EXPECT_EQ (slots.entries.size(), 5u);
+    EXPECT_EQ (slots.entries.size(), 7u);
     EXPECT_EQ (slotOf (slots, 2, 0), 2u);
     EXPECT_EQ (slotOf (slots, 2, 3), 1u);
     EXPECT_EQ (slots.find (0, 3), nullptr);
-    EXPECT_EQ (slots.find (1, 1), nullptr);
+
+    // Storage blocks are numbered apart from uniform blocks, read-only or not
+    EXPECT_EQ (slotOf (slots, 0, 1), 0u);
+    EXPECT_EQ (slotOf (slots, 1, 1), 1u);
 }
 
 TEST_F (ShaderNativeSlotsTests, CombinedSamplersTakeATextureAndASamplerSlot)
