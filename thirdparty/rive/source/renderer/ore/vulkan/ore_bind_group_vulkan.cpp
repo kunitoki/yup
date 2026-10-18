@@ -46,7 +46,9 @@ VkDescriptorSet BindGroupVulkan::resolveDescriptorSet()
         return VK_NULL_HANDLE;
 
     constexpr uint32_t kMaxWrites = 32;
-    assert(m_uboWrites.size() + m_imageWrites.size() <= kMaxWrites);
+    assert(m_uboWrites.size() + m_imageWrites.size() +
+               m_storageWrites.size() <=
+           kMaxWrites);
     VkWriteDescriptorSet writes[kMaxWrites] = {};
     VkDescriptorBufferInfo bufferInfos[kMaxWrites] = {};
     VkDescriptorImageInfo imageInfos[kMaxWrites] = {};
@@ -88,6 +90,23 @@ VkDescriptorSet BindGroupVulkan::resolveDescriptorSet()
         w.descriptorCount = 1;
         w.descriptorType = im.type;
         w.pImageInfo = &ii;
+    }
+
+    for (const auto& s : m_storageWrites)
+    {
+        VkDescriptorBufferInfo& bi = bufferInfos[writeIdx];
+        bi.buffer = s.buffer;
+        bi.offset = s.offset;
+        bi.range = s.range;
+
+        VkWriteDescriptorSet& w = writes[writeIdx++];
+        w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet = alloc.set;
+        w.dstBinding = s.dstBinding;
+        w.dstArrayElement = 0;
+        w.descriptorCount = 1;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        w.pBufferInfo = &bi;
     }
 
     if (writeIdx > 0)

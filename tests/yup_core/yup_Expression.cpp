@@ -340,7 +340,7 @@ TEST (ExpressionTests, ParseWhitespaceOnly)
 
 TEST (ExpressionTests, GetInputFromConstantReturnsEmptyExpression)
 {
-#if YUP_ASSERTIONS_ENABLED
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
     GTEST_SKIP() << "Skipping invalid input access test in assertion-enabled builds";
 #else
     Expression e (42.0);
@@ -352,7 +352,7 @@ TEST (ExpressionTests, GetInputFromConstantReturnsEmptyExpression)
 
 TEST (ExpressionTests, GetSymbolOrFunctionForConstantReturnsEmptyString)
 {
-#if YUP_ASSERTIONS_ENABLED
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
     GTEST_SKIP() << "Skipping invalid name access test in assertion-enabled builds";
 #else
     Expression e (42.0);

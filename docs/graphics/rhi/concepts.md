@@ -30,6 +30,20 @@ RHI factory functions honor this contract:
 - `GpuTarget::create(device, ...)` / `GpuCanvas::create(ctx, ...)` return `nullptr` if
   offscreen GPU resources cannot be allocated.
 
+Beyond availability, the device reports what it can do:
+
+| Query | Meaning |
+| ----- | ------- |
+| `getMaximumColorAttachments()` | Color attachments per render pass, 1 to 4 (0 without a GPU). |
+| `getMaximumSampleCount (format)` | Highest MSAA count `format` renders at (0 if it cannot render); the no-argument overload is the device-wide limit. |
+| `isFormatRenderable (format)` | Whether `format` can be a render target. |
+| `isStorageTextureAvailable()` | Whether compute passes can write `GpuTextureDesc::storage` textures. |
+| `isFragmentStorageBufferAvailable()` | Whether render passes can read storage buffers (`setStorageBuffer`). |
+| `isDynamicUniformOffsetAvailable()` | Whether pipelines honor `GpuPipelineOptions::dynamicUniformBuffers`. |
+
+Desktop OpenGL, OpenGL ES and WebGL2 are raster-only: they report no storage
+textures and no fragment storage buffers.
+
 On the web, the page asks the browser for a full WebGPU device and falls back to
 *compatibility mode* when it cannot get one, as on older GPUs or browsers that
 implement WebGPU over OpenGL ES. Rendering works the same, with some GPU features

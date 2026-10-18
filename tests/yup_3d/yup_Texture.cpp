@@ -105,3 +105,14 @@ TEST_F (TextureResourceTests, GpuOnlyTextureHasNoImage)
     texture.setGpuTexture (nullptr);
     EXPECT_FALSE (Texture (Image (1, 1, PixelFormat::RGBA)).isGpuOnly());
 }
+
+TEST_F (TextureResourceTests, CountsEverySetGpuTexture)
+{
+    Texture texture (GpuTexture::Ptr {});
+    EXPECT_EQ (texture.getChangeCount(), 0u);
+
+    // Content redrawn into the same GpuTexture is a change too
+    texture.setGpuTexture (nullptr);
+    texture.setGpuTexture (nullptr);
+    EXPECT_EQ (texture.getChangeCount(), 2u);
+}

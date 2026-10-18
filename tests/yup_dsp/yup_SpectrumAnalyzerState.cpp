@@ -197,7 +197,7 @@ TEST_F (SpectrumAnalyzerStateTests, HandleNullPointerInPushSamples)
     // Should not crash with null pointer - but may assert in debug builds
     // In debug builds, this will trigger an assertion, so we skip this test
     // In release builds, it should handle gracefully
-#if YUP_DEBUG
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
     // In debug builds, we expect this to assert, so we skip the test
     GTEST_SKIP() << "Skipping null pointer test in debug build (triggers assertion)";
 #else

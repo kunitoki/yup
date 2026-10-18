@@ -27,6 +27,8 @@ class GpuCanvas;
 class GpuDevice;
 class GpuTarget;
 class GpuRenderPass;
+class GpuFrame;
+class GpuPipeline;
 class Graphics;
 
 //==============================================================================
@@ -95,9 +97,28 @@ public:
         @param data  The source pixels and the destination region.
 
         @returns True if the upload was encoded, false if this texture cannot be
-                 uploaded to or the descriptor is out of bounds.
+                 uploaded to, the descriptor is out of bounds, or the backend
+                 rejected the upload (e.g. a combined depth-stencil render target
+                 on Metal).
     */
     bool upload (const GpuTextureDataDesc& data);
+
+    //==============================================================================
+    /** Fills mip levels 1..N-1 by successively downsampling the level above, 2x with
+        linear filtering, starting from the contents of level 0.
+
+        The work is encoded into @p frame as one render pass per level, so the base
+        level must already hold its final contents when the frame is submitted.
+
+        @param frame  The active GpuFrame to encode the downsample passes into.
+
+        @returns True if the passes were encoded. False, leaving the contents
+                 untouched, for textures that are not render targets, have a single
+                 mip level, are multisampled or are not GpuTextureType::texture2D
+                 (array, cube and 3D textures are not supported), or if the
+                 downsample pipeline cannot be created for this texture's format.
+    */
+    bool generateMips (GpuFrame& frame);
 
     //==============================================================================
     /** Returns the width of the texture's base mip level in pixels. */
@@ -127,6 +148,13 @@ public:
     /** Returns true if this texture can be used as a render pass attachment. */
     bool isRenderTarget() const noexcept;
 
+    /** Returns true if compute shaders can write this texture through
+        GpuComputePass::setStorageTexture().
+
+        @see GpuTextureDesc::storage
+    */
+    bool isStorage() const noexcept;
+
 private:
     //==============================================================================
     friend class Image;
@@ -134,8 +162,14 @@ private:
     friend class GpuTarget;
     friend class GpuRenderPass;
     friend class Graphics;
+    friend class GpuComputePass;
+    friend class GpuComputePassImplMetal;
+    friend class GpuComputePassImplD3D11;
+    friend class GpuComputePassImplGL;
+    friend class GpuComputePassImplWebGPU;
+    friend class GpuComputePassImplVulkan;
 
-    GpuTexture() = default;
+    GpuTexture();
 
     static GpuTexture::Ptr fromGpuTexture (ReferenceCountedObjectPtr<GpuDevice> device, rive::rcp<rive::gpu::Texture> texture, int width, int height);
     static GpuTexture::Ptr fromRenderCanvas (ReferenceCountedObjectPtr<GpuDevice> device, rive::rcp<rive::gpu::RenderCanvas> canvas, int width, int height);
@@ -165,6 +199,7 @@ private:
     int width = 0;
     int height = 0;
     bool renderTarget = false;
+    bool storage = false;
     GpuTextureFormat format = GpuTextureFormat::rgba8unorm;
     GpuTextureType type = GpuTextureType::texture2D;
     uint32_t mipLevels = 1;
@@ -174,6 +209,7 @@ private:
     ReferenceCountedObjectPtr<GpuDevice> device;
     rive::rcp<rive::ore::Texture> oreTexture;
     mutable std::vector<CachedView> viewCache;
+    std::vector<std::pair<GpuTextureFormat, ReferenceCountedObjectPtr<GpuPipeline>>> mipPipelines;
     mutable rive::rcp<rive::gpu::Texture> gpuTexture;
     rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
 

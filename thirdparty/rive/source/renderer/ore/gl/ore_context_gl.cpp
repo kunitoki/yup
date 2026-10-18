@@ -336,6 +336,11 @@ std::unique_ptr<ContextGL> ContextGL::Make()
     f.etc2 = true; // GLES3 mandates ETC2.
     f.astc = false;
 
+#ifdef RIVE_DESKTOP_GL
+    f.colorBufferFloat = true;
+    f.colorBufferHalfFloat = true;
+#endif
+
     // Query limits.
     GLint maxTexSize = 0, maxCubeSize = 0, max3DSize = 0, maxUBOSize = 0;
     GLint maxDrawBuffers = 0, maxVertexAttribs = 0, maxTexUnits = 0;
@@ -378,6 +383,8 @@ std::unique_ptr<ContextGL> ContextGL::Make()
             f.colorBufferFloat = true;
             f.colorBufferHalfFloat = true;
         }
+        else if (strcmp(ext, "GL_EXT_color_buffer_half_float") == 0)
+            f.colorBufferHalfFloat = true;
         else if (strcmp(ext, "GL_EXT_texture_filter_anisotropic") == 0)
             f.anisotropicFiltering = true;
         else if (strcmp(ext, "GL_KHR_texture_compression_astc_ldr") == 0)
@@ -410,6 +417,13 @@ std::unique_ptr<ContextGL> ContextGL::Make()
     if (emscripten_webgl_enable_extension(webglCtx,
                                           "EXT_texture_filter_anisotropic"))
         f.anisotropicFiltering = true;
+#endif
+
+#ifdef RIVE_DESKTOP_GL
+#ifndef GL_TEXTURE_CUBE_MAP_SEAMLESS
+#define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
+#endif
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 #endif
 
     return ctx;
@@ -1052,6 +1066,18 @@ rcp<BindGroup> ContextGL::makeBindGroup(const BindGroupDesc& desc)
                                                        : texGL->m_glTexture;
         binding.target = texGL->m_glTarget;
         binding.binding = entry.slot;
+        binding.textureGL = texGL;
+        {
+            const uint32_t base = viewGL->baseMipLevel();
+            const uint32_t count = viewGL->mipCount() != 0
+                                       ? viewGL->mipCount()
+                                       : texGL->numMipmaps() - base;
+            if (base != 0 || count < texGL->numMipmaps())
+            {
+                binding.baseLevel = static_cast<int>(base);
+                binding.maxLevel = static_cast<int>(base + count - 1);
+            }
+        }
         if (!nativeSlot(entry.slot, BindingKind::sampledTexture, &binding.slot))
             continue;
         bg->m_glTextures.push_back(binding);
@@ -1228,6 +1254,23 @@ std::unique_ptr<RenderPass> ContextGL::beginRenderPass(
                                       depthAttachment,
                                       GL_RENDERBUFFER,
                                       depthTexGL->m_glRenderbuffer);
+        }
+        else if (depthTexGL->type() == TextureType::cube)
+        {
+            glFramebufferTexture2D(GL_FRAMEBUFFER,
+                                   depthAttachment,
+                                   GL_TEXTURE_CUBE_MAP_POSITIVE_X +
+                                       desc.depthStencil.view->baseLayer(),
+                                   depthTexGL->m_glTexture,
+                                   desc.depthStencil.view->baseMipLevel());
+        }
+        else if (depthTexGL->type() == TextureType::array2D)
+        {
+            glFramebufferTextureLayer(GL_FRAMEBUFFER,
+                                      depthAttachment,
+                                      depthTexGL->m_glTexture,
+                                      desc.depthStencil.view->baseMipLevel(),
+                                      desc.depthStencil.view->baseLayer());
         }
         else
         {

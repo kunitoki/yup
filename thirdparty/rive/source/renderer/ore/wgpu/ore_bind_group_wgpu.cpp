@@ -36,7 +36,7 @@ const wgpu::BindGroup& BindGroupWGPU::resolveBindGroup()
 
     std::vector<wgpu::BindGroupEntry> entries;
     entries.reserve(m_uboEntries.size() + m_texEntries.size() +
-                    m_sampEntries.size());
+                    m_sampEntries.size() + m_storageEntries.size());
     CachedGroup cached;
     cached.key.reserve(m_uboEntries.size());
     for (const auto& u : m_uboEntries)
@@ -61,6 +61,15 @@ const wgpu::BindGroup& BindGroupWGPU::resolveBindGroup()
         wgpu::BindGroupEntry e{};
         e.binding = s.binding;
         e.sampler = s.sampler;
+        entries.push_back(e);
+    }
+    for (const auto& sb : m_storageEntries)
+    {
+        wgpu::BindGroupEntry e{};
+        e.binding = sb.binding;
+        e.buffer = sb.buffer;
+        e.offset = sb.offset;
+        e.size = sb.size;
         entries.push_back(e);
     }
 

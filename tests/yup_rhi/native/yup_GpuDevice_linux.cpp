@@ -118,7 +118,7 @@ struct GLContext
 // GpuDeviceOpenGL — real GPU device tests (Linux, OpenGL via SDL)
 // ==============================================================================
 
-class GpuDeviceOpenGLTests : public ::testing::Test
+class GpuDeviceOpenGLTests : public GpuReadbackFixture
 {
 protected:
     void SetUp() override
@@ -144,7 +144,6 @@ protected:
     }
 
     GLContext gl;
-    GpuDevice::Ptr device;
     std::unique_ptr<GraphicsContext> graphicsContext;
 };
 
@@ -165,6 +164,20 @@ TEST_F (GpuDeviceOpenGLTests, PlatformIsOpenGL)
 TEST_F (GpuDeviceOpenGLTests, GpuContextIsNotNull)
 {
     EXPECT_NE (device->getGpuContext(), nullptr);
+}
+
+// --------------------------------------------------------------------------
+// Capabilities
+// --------------------------------------------------------------------------
+
+TEST_F (GpuDeviceOpenGLTests, DesktopGLRendersHalfFloat)
+{
+    EXPECT_TRUE (device->isFormatRenderable (GpuTextureFormat::rgba16float));
+    EXPECT_TRUE (device->isFormatRenderable (GpuTextureFormat::r11g11b10float));
+    EXPECT_GE (device->getMaximumSampleCount (GpuTextureFormat::rgba16float), 1u);
+    EXPECT_FALSE (device->isFragmentStorageBufferAvailable());
+    EXPECT_FALSE (device->isStorageTextureAvailable());
+    EXPECT_TRUE (device->isDynamicUniformOffsetAvailable());
 }
 
 // --------------------------------------------------------------------------
@@ -426,7 +439,7 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassClearColor)
     ASSERT_TRUE (pass.isValid());
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 
     // Read back the pixels — they should be green.
     std::vector<uint8_t> pixels (64 * 64 * 4);
@@ -1011,7 +1024,7 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassDrawWithVertexAndIndexBuffers)
 
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 #endif
 }
 
@@ -1071,7 +1084,7 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassSetUniformBufferAndTexture)
 
     pass.finish();
     frame.submit();
-    frame.waitForGPU();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
 #endif
 }
 
@@ -1191,3 +1204,502 @@ TEST_F (GpuDeviceOpenGLTests, FrameLoadOpsAndDitherModesReachTheBackend)
     EXPECT_EQ (magenta, renderEmptyFrame ({ .clearColor = GpuColor (1.0f, 0.0f, 1.0f), .ditherMode = GpuDitherMode::none }));
     EXPECT_EQ (green, renderEmptyFrame ({ .clearColor = GpuColor (0.0f, 1.0f, 0.0f), .ditherMode = GpuDitherMode::interleavedGradientNoise }));
 }
+
+// --------------------------------------------------------------------------
+// Depth textures sampled through comparison samplers
+// --------------------------------------------------------------------------
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+
+class GpuTextureOpenGLTests : public GpuDeviceOpenGLTests
+{
+};
+
+TEST_F (GpuTextureOpenGLTests, SamplesOneMipThroughANarrowedView)
+{
+    GpuTextureDesc desc (8, 8, GpuTextureFormat::rgba8unorm, true);
+    desc.mipLevels = 2;
+    auto texture = GpuTexture::create (device, desc);
+    ASSERT_NE (texture, nullptr);
+
+    clearMip (texture, 0, GpuColor (1.0f, 0.0f, 0.0f, 1.0f));
+    clearMip (texture, 1, GpuColor (0.0f, 1.0f, 0.0f, 1.0f));
+
+    GpuTextureViewDesc mipOne (1, 0);
+    const auto pixels = drawIntoReadback (sampleLodZeroFragment, 4, [&] (GpuRenderPass& pass)
+    {
+        pass.setTexture (0, 0, texture, mipOne);
+    });
+
+    ASSERT_FALSE (pixels.empty());
+    EXPECT_LE (pixels[0], 5);
+    EXPECT_GE (pixels[1], 250);
+}
+
+TEST_F (GpuTextureOpenGLTests, GenerateMipsFillsEveryLevelFromTheBase)
+{
+    GpuTextureDesc desc (16, 16, GpuTextureFormat::rgba8unorm, true);
+    desc.mipLevels = 5;
+    auto texture = GpuTexture::create (device, desc);
+    ASSERT_NE (texture, nullptr);
+    clearMip (texture, 0, GpuColor (0.0f, 0.0f, 1.0f, 1.0f));
+
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (texture->generateMips (frame));
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    const auto pixels = drawIntoReadback (sampleLodZeroFragment, 1, [&] (GpuRenderPass& pass)
+    {
+        pass.setTexture (0, 0, texture, GpuTextureViewDesc (4, 0));
+    });
+
+    ASSERT_FALSE (pixels.empty());
+    EXPECT_GE (pixels[2], 250);
+}
+
+TEST_F (GpuTextureOpenGLTests, GenerateMipsKeepsTheOrientationOfEveryLevel)
+{
+    GpuTextureDesc desc (16, 16, GpuTextureFormat::rgba8unorm, true);
+    desc.mipLevels = 3;
+    auto texture = GpuTexture::create (device, desc);
+    ASSERT_NE (texture, nullptr);
+
+    std::vector<uint8_t> source (16 * 16 * 4);
+    for (size_t row = 0; row < 16; ++row)
+    {
+        for (size_t column = 0; column < 16; ++column)
+        {
+            auto* texel = source.data() + (row * 16 + column) * 4;
+            texel[0] = row < 8 ? 255 : 0;
+            texel[2] = row < 8 ? 0 : 255;
+            texel[3] = 255;
+        }
+    }
+
+    GpuTextureDataDesc data;
+    data.data = source.data();
+    ASSERT_TRUE (texture->upload (data));
+
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (texture->generateMips (frame));
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    const auto readLevel = [&] (uint32_t level)
+    {
+        return drawIntoReadback (sampleLodZeroFragment, 4, [&] (GpuRenderPass& pass)
+        {
+            pass.setTexture (0, 0, texture, GpuTextureViewDesc (level, 0));
+        });
+    };
+
+    const auto base = readLevel (0);
+    ASSERT_FALSE (base.empty());
+    const auto topRow = 0u;
+    const auto bottomRow = 3u * 4u * 4u;
+
+    for (uint32_t level = 1; level < 3; ++level)
+    {
+        const auto pixels = readLevel (level);
+        ASSERT_FALSE (pixels.empty());
+
+        for (uint32_t channel = 0; channel < 3; ++channel)
+        {
+            EXPECT_NEAR (pixels[topRow + channel], base[topRow + channel], 4) << "level " << level << " top channel " << channel;
+            EXPECT_NEAR (pixels[bottomRow + channel], base[bottomRow + channel], 4) << "level " << level << " bottom channel " << channel;
+        }
+    }
+}
+
+TEST_F (GpuTextureOpenGLTests, GenerateMipsReachesTheLastLevelOfAnOddSizedTexture)
+{
+    GpuTextureDesc desc (5, 5, GpuTextureFormat::rgba8unorm, true);
+    desc.mipLevels = 3;
+    auto texture = GpuTexture::create (device, desc);
+    ASSERT_NE (texture, nullptr);
+    clearMip (texture, 0, GpuColor (0.0f, 1.0f, 0.0f, 1.0f));
+
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (texture->generateMips (frame));
+    frame.submit();
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    const auto pixels = drawIntoReadback (sampleLodZeroFragment, 1, [&] (GpuRenderPass& pass)
+    {
+        pass.setTexture (0, 0, texture, GpuTextureViewDesc (2, 0));
+    });
+
+    ASSERT_FALSE (pixels.empty());
+    EXPECT_GE (pixels[1], 250);
+}
+
+TEST_F (GpuTextureOpenGLTests, WholeViewAfterNarrowedViewSeesAllLevels)
+{
+    GpuTextureDesc desc (8, 8, GpuTextureFormat::rgba8unorm, true);
+    desc.mipLevels = 2;
+    auto texture = GpuTexture::create (device, desc);
+    ASSERT_NE (texture, nullptr);
+
+    clearMip (texture, 0, GpuColor (1.0f, 0.0f, 0.0f, 1.0f));
+    clearMip (texture, 1, GpuColor (0.0f, 1.0f, 0.0f, 1.0f));
+
+    drawIntoReadback (sampleLodZeroFragment, 4, [&] (GpuRenderPass& pass) { pass.setTexture (0, 0, texture, GpuTextureViewDesc (1, 0)); });
+    const auto pixels = drawIntoReadback (sampleLodZeroFragment, 4, [&] (GpuRenderPass& pass) { pass.setTexture (0, 0, texture); });
+
+    ASSERT_FALSE (pixels.empty());
+    EXPECT_GE (pixels[0], 250); // lod 0 of the whole texture is mip 0 again
+    EXPECT_LE (pixels[1], 5);
+}
+
+TEST_F (GpuTextureOpenGLTests, NarrowedViewLeavesNoMipRangeOnTheTexture)
+{
+    // Rive and raw GL never go through ore's bind groups, so they see whatever
+    // TEXTURE_BASE_LEVEL / MAX_LEVEL the texture object was left with. Read that
+    // state directly with GL, outside ore, once the narrowed pass has finished.
+    using GetIntegervFn = void (*) (unsigned int, int*);
+    using GetTexParameterivFn = void (*) (unsigned int, unsigned int, int*);
+    using BindTextureFn = void (*) (unsigned int, unsigned int);
+    using ActiveTextureFn = void (*) (unsigned int);
+
+    const auto getIntegerv = reinterpret_cast<GetIntegervFn> (SDL_GL_GetProcAddress ("glGetIntegerv"));
+    const auto getTexParameteriv = reinterpret_cast<GetTexParameterivFn> (SDL_GL_GetProcAddress ("glGetTexParameteriv"));
+    const auto bindTexture = reinterpret_cast<BindTextureFn> (SDL_GL_GetProcAddress ("glBindTexture"));
+    const auto activeTexture = reinterpret_cast<ActiveTextureFn> (SDL_GL_GetProcAddress ("glActiveTexture"));
+    ASSERT_TRUE (getIntegerv != nullptr && getTexParameteriv != nullptr && bindTexture != nullptr && activeTexture != nullptr);
+
+    constexpr unsigned int texture2DTarget = 0x0DE1;     // GL_TEXTURE_2D
+    constexpr unsigned int textureBinding2D = 0x8069;    // GL_TEXTURE_BINDING_2D
+    constexpr unsigned int textureBaseLevel = 0x813C;    // GL_TEXTURE_BASE_LEVEL
+    constexpr unsigned int textureMaxLevel = 0x813D;     // GL_TEXTURE_MAX_LEVEL
+    constexpr unsigned int textureUnit0 = 0x84C0;        // GL_TEXTURE0
+
+    GpuTextureDesc desc (8, 8, GpuTextureFormat::rgba8unorm, true);
+    desc.mipLevels = 2;
+    auto texture = GpuTexture::create (device, desc);
+    ASSERT_NE (texture, nullptr);
+
+    clearMip (texture, 0, GpuColor (1.0f, 0.0f, 0.0f, 1.0f));
+    clearMip (texture, 1, GpuColor (0.0f, 1.0f, 0.0f, 1.0f));
+
+    GpuPipelineOptions options;
+    options.colorTargets.emplace_back().format = GpuTextureFormat::rgba8unorm;
+
+    auto pipeline = GpuPipeline::compileFromGlsl (device, fullscreenVertex, sampleLodZeroFragment, options);
+    ASSERT_FALSE (pipeline.failed()) << pipeline.getErrorMessage();
+
+    auto target = GpuTarget::create (device, 4, 4);
+    ASSERT_NE (target, nullptr);
+
+    int textureName = 0;
+    int baseLevel = -1;
+    int maxLevel = -1;
+
+    {
+        auto frame = GpuFrame::begin (device);
+        auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+        pass.setPipeline (pipeline.getValue());
+        pass.setTexture (0, 0, texture, GpuTextureViewDesc (1, 0));
+        ASSERT_TRUE (pass.draw (3));
+
+        // The draw left the sampled texture bound on the active unit, narrowed to mip 1
+        getIntegerv (textureBinding2D, &textureName);
+        ASSERT_NE (textureName, 0);
+        getTexParameteriv (texture2DTarget, textureBaseLevel, &baseLevel);
+        getTexParameteriv (texture2DTarget, textureMaxLevel, &maxLevel);
+        EXPECT_EQ (baseLevel, 1);
+        EXPECT_EQ (maxLevel, 1);
+
+        pass.finish();
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+    }
+
+    activeTexture (textureUnit0);
+    bindTexture (texture2DTarget, static_cast<unsigned int> (textureName));
+    getTexParameteriv (texture2DTarget, textureBaseLevel, &baseLevel);
+    getTexParameteriv (texture2DTarget, textureMaxLevel, &maxLevel);
+    bindTexture (texture2DTarget, 0);
+
+    // Immutable storage may report the max level clamped to the last mip (Mesa) instead of 1000
+    EXPECT_EQ (baseLevel, 0);
+    EXPECT_GE (maxLevel, static_cast<int> (desc.mipLevels) - 1);
+}
+
+TEST_F (GpuTextureOpenGLTests, RendersIntoMipWhileSamplingThePreviousMip)
+{
+    GpuTextureDesc desc (8, 8, GpuTextureFormat::rgba8unorm, true);
+    desc.mipLevels = 2;
+    auto texture = GpuTexture::create (device, desc);
+    ASSERT_NE (texture, nullptr);
+
+    clearMip (texture, 0, GpuColor (0.0f, 0.0f, 1.0f, 1.0f));
+    clearMip (texture, 1, GpuColor (1.0f, 0.0f, 0.0f, 1.0f));
+
+    GpuPipelineOptions options;
+    options.colorTargets.emplace_back().format = GpuTextureFormat::rgba8unorm;
+
+    auto pipeline = GpuPipeline::compileFromGlsl (device, fullscreenVertex, sampleLodZeroFragment, options);
+    ASSERT_FALSE (pipeline.failed()) << pipeline.getErrorMessage();
+
+    // Mip 1 is the attachment while mip 0 of the same texture is sampled: only the
+    // narrowed view keeps WebGL2 from rejecting the draw as a feedback loop.
+    auto mipOneTarget = GpuTarget::createFromTexture (device, texture, GpuTextureViewDesc (1, 0));
+    ASSERT_NE (mipOneTarget, nullptr);
+
+    {
+        auto frame = GpuFrame::begin (device);
+        auto pass = mipOneTarget->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+        pass.setPipeline (pipeline.getValue());
+        pass.setTexture (0, 0, texture, GpuTextureViewDesc (0, 0));
+        EXPECT_TRUE (pass.draw (3));
+        pass.finish();
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+    }
+
+    const auto pixels = drawIntoReadback (sampleLodZeroFragment, 4, [&] (GpuRenderPass& pass)
+    {
+        pass.setTexture (0, 0, texture, GpuTextureViewDesc (1, 0));
+    });
+
+    ASSERT_FALSE (pixels.empty());
+    EXPECT_LE (pixels[0], 5);
+    EXPECT_LE (pixels[1], 5);
+    EXPECT_GE (pixels[2], 250); // mip 1 now holds mip 0's blue
+}
+
+TEST_F (GpuTextureOpenGLTests, ComparisonSamplerComparesAgainstStoredDepth)
+{
+    for (auto format : { GpuTextureFormat::depth16unorm, GpuTextureFormat::depth32float, GpuTextureFormat::depth24plusStencil8 })
+    {
+        auto depth = makeClearedDepth (format, 0.25f, 8);
+        ASSERT_NE (depth, nullptr);
+
+        GpuSamplerDesc compareDesc (GpuFilter::linear, GpuWrapMode::clampToEdge);
+        compareDesc.compare = GpuCompareFunction::lessEqual;
+        auto sampler = GpuSampler::create (device, compareDesc);
+        ASSERT_NE (sampler, nullptr);
+
+        const auto pixels = drawIntoReadback (compareFragment, 8, [&] (GpuRenderPass& pass)
+        {
+            pass.setTexture (0, 0, depth);
+            pass.setSampler (0, 1, sampler);
+        });
+
+        ASSERT_EQ (pixels.size(), 8u * 8u * 4u);
+        const auto center = (4u * 8u + 4u) * 4u;
+        EXPECT_GE (pixels[center + 0], 250) << "format " << (int) format;
+        EXPECT_LE (pixels[center + 1], 5) << "format " << (int) format;
+    }
+}
+
+TEST_F (GpuTextureOpenGLTests, ShadowSamplerSlotDefaultsToAComparisonSampler)
+{
+    auto depth = makeClearedDepth (GpuTextureFormat::depth32float, 0.25f, 8);
+    ASSERT_NE (depth, nullptr);
+
+    // No setSampler: the pipeline's default sampler for the samplerShadow slot must compare
+    const auto pixels = drawIntoReadback (compareFragment, 8, [&] (GpuRenderPass& pass)
+    {
+        pass.setTexture (0, 0, depth);
+    });
+
+    ASSERT_EQ (pixels.size(), 8u * 8u * 4u);
+    const auto center = (4u * 8u + 4u) * 4u;
+    EXPECT_GE (pixels[center + 0], 250);
+    EXPECT_LE (pixels[center + 1], 5);
+}
+
+TEST_F (GpuTextureOpenGLTests, ArrayComparisonSamplerComparesEachLayer)
+{
+    GpuTextureDesc desc (8, 8, GpuTextureFormat::depth32float, true);
+    desc.type = GpuTextureType::array2D;
+    desc.depthOrArrayLayers = 2;
+
+    auto depth = GpuTexture::create (device, desc);
+    ASSERT_NE (depth, nullptr);
+    ASSERT_TRUE (clearDepth (depth, 0.25f, 0));
+    ASSERT_TRUE (clearDepth (depth, 0.75f, 1));
+
+    GpuSamplerDesc compareDesc (GpuFilter::linear, GpuWrapMode::clampToEdge);
+    compareDesc.compare = GpuCompareFunction::lessEqual;
+    auto sampler = GpuSampler::create (device, compareDesc);
+    ASSERT_NE (sampler, nullptr);
+
+    // Reference 0.5 sits between the layers: it fails against 0.25 and passes against 0.75
+    const auto pixels = drawIntoReadback (R"(#version 450
+layout(set = 0, binding = 0) uniform texture2DArray shadowMaps;
+layout(set = 0, binding = 1) uniform samplerShadow shadowSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    float layer0 = texture (sampler2DArrayShadow (shadowMaps, shadowSampler), vec4 (uv, 0.0, 0.5));
+    float layer1 = texture (sampler2DArrayShadow (shadowMaps, shadowSampler), vec4 (uv, 1.0, 0.5));
+    color = vec4 (layer0, layer1, 0.0, 1.0);
+})",
+                                          8,
+                                          [&] (GpuRenderPass& pass)
+    {
+        pass.setTexture (0, 0, depth);
+        pass.setSampler (0, 1, sampler);
+    });
+
+    ASSERT_EQ (pixels.size(), 8u * 8u * 4u);
+    const auto center = (4u * 8u + 4u) * 4u;
+    EXPECT_LE (pixels[center + 0], 5);
+    EXPECT_GE (pixels[center + 1], 250);
+}
+
+TEST_F (GpuTextureOpenGLTests, SameDepthTextureBindsForCompareAndRawReads)
+{
+    auto depth = makeClearedDepth (GpuTextureFormat::depth32float, 0.25f, 8);
+    ASSERT_NE (depth, nullptr);
+
+    GpuSamplerDesc compareDesc (GpuFilter::linear, GpuWrapMode::clampToEdge);
+    compareDesc.compare = GpuCompareFunction::lessEqual;
+    auto compareSampler = GpuSampler::create (device, compareDesc);
+    auto pointSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge));
+    ASSERT_NE (compareSampler, nullptr);
+    ASSERT_NE (pointSampler, nullptr);
+
+    // Two texture units holding the same texture, each with its own sampler object
+    const auto pixels = drawIntoReadback (dualBindingFragment, 8, [&] (GpuRenderPass& pass)
+    {
+        pass.setTexture (0, 0, depth);
+        pass.setTexture (0, 1, depth);
+        pass.setSampler (0, 2, compareSampler);
+        pass.setSampler (0, 3, pointSampler);
+    });
+
+    ASSERT_EQ (pixels.size(), 8u * 8u * 4u);
+    const auto center = (4u * 8u + 4u) * 4u;
+    EXPECT_GE (pixels[center + 0], 250);     // 0.2 <= 0.25
+    EXPECT_NEAR (pixels[center + 1], 64, 2); // 0.25 * 255
+}
+
+// The transpiler remaps GL's [-1, 1] clip range (fixup_clipspace), so clip depth 0.5 is stored as
+// 0.5 as on Metal: without the remap it would be stored as 0.75 and fail the probes
+
+TEST_F (GpuTextureOpenGLTests, DepthOnlyPassWritesALayerOfAnArray)
+{
+    auto depth = makeDepthArray (8);
+    ASSERT_NE (depth, nullptr);
+
+    ASSERT_TRUE (renderDepthOnly (depth, 0, 0.25f));
+    ASSERT_TRUE (renderDepthOnly (depth, 1, 1.0f, { compileDepthOnlyPipeline (0.5f) }));
+
+    const auto written = compareDepthLayer (depth, 1, GpuCompareFunction::lessEqual, 0.4f, 0.6f);
+    ASSERT_FALSE (written.empty());
+    EXPECT_GE (written[0], 250);
+    EXPECT_LE (written[1], 5);
+
+    const auto cleared = compareDepthLayer (depth, 0, GpuCompareFunction::lessEqual, 0.2f, 0.3f);
+    ASSERT_FALSE (cleared.empty());
+    EXPECT_GE (cleared[0], 250);
+    EXPECT_LE (cleared[1], 5);
+}
+
+TEST_F (GpuTextureOpenGLTests, DepthBiasShiftsWrittenDepth)
+{
+    auto depth = makeDepthArray (8);
+    ASSERT_NE (depth, nullptr);
+
+    ASSERT_TRUE (renderDepthOnly (depth, 0, 1.0f, { compileDepthOnlyPipeline (0.5f) }));
+    ASSERT_TRUE (renderDepthOnly (depth, 1, 1.0f, { compileDepthOnlyPipeline (0.5f, 1000) }));
+
+    const auto unbiased = compareDepthLayer (depth, 0, GpuCompareFunction::less, 0.5f, 0.51f);
+    ASSERT_FALSE (unbiased.empty());
+    EXPECT_LE (unbiased[0], 5);
+    EXPECT_LE (unbiased[1], 5);
+
+    const auto biased = compareDepthLayer (depth, 1, GpuCompareFunction::less, 0.5f, 0.51f);
+    ASSERT_FALSE (biased.empty());
+    EXPECT_GE (biased[0], 250);
+    EXPECT_LE (biased[1], 5);
+}
+
+#endif // YUP_ENABLE_SHADER_TRANSPILER
+
+// --------------------------------------------------------------------------
+// Dynamic uniform buffers
+// --------------------------------------------------------------------------
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+
+TEST_F (GpuDeviceOpenGLTests, ManyDrawsReadBackTheirOwnDynamicUniforms)
+{
+    // A 256 byte slot per draw block, and one every third draw for the material: over 64 KB
+    constexpr int draws = 300;
+
+    ASSERT_TRUE (device->isDynamicUniformOffsetAvailable());
+
+    constexpr const char* fragment = R"(#version 450
+layout(set = 0, binding = 0) uniform ViewBlock { vec4 value; } view;
+layout(set = 2, binding = 0) uniform DrawBlock { vec4 value; } draw;
+layout(set = 2, binding = 1) uniform MaterialBlock { vec4 value; } material;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main() { color = vec4 (draw.value.r, draw.value.g, material.value.b, view.value.a); })";
+
+    GpuPipelineOptions options;
+    auto& colorTarget = options.colorTargets.emplace_back();
+    colorTarget.format = GpuTextureFormat::rgba8unorm;
+    colorTarget.blendEnabled = false;
+    options.dynamicUniformBuffers = { { 2, 0 }, { 2, 1 } };
+
+    auto pipeline = GpuPipeline::compileFromGlsl (device, fullscreenVertex, fragment, options);
+    ASSERT_TRUE (pipeline.wasOk()) << pipeline.getErrorMessage();
+
+    auto target = GpuTarget::create (device, draws, 1);
+    ASSERT_NE (target, nullptr);
+
+    const auto colorOf = [] (int index) -> std::array<int, 3>
+    {
+        return { (index * 7) & 255, (index * 37) & 255, ((index / 3) * 53) & 255 };
+    };
+
+    const auto block = [] (int red, int green, int blue, int alpha)
+    {
+        return std::array<float, 4> { (float) red / 255.0f, (float) green / 255.0f, (float) blue / 255.0f, (float) alpha / 255.0f };
+    };
+
+    const auto view = block (0, 0, 0, 255);
+
+    auto frame = GpuFrame::begin (device);
+    auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+    pass.setPipeline (pipeline.getValue());
+    pass.setUniformBuffer (0, 0, view.data(), sizeof (view));
+
+    for (int index = 0; index < draws; ++index)
+    {
+        const auto color = colorOf (index);
+        const auto draw = block (color[0], color[1], 0, 0);
+        const auto material = block (0, 0, color[2], 0);
+
+        pass.setUniformBuffer (2, 0, draw.data(), sizeof (draw));
+        pass.setUniformBuffer (2, 1, material.data(), sizeof (material));
+        pass.setViewport ((float) index, 0.0f, 1.0f, 1.0f);
+        EXPECT_TRUE (pass.draw (3));
+    }
+
+    pass.finish();
+    EXPECT_TRUE (frame.submit());
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    std::vector<uint8_t> pixels ((size_t) draws * 4);
+    ASSERT_TRUE (target->readPixels (pixels.data(), pixels.size()));
+
+    for (int index = 0; index < draws; ++index)
+    {
+        const auto color = colorOf (index);
+        const auto* pixel = pixels.data() + index * 4;
+        EXPECT_NEAR (pixel[0], color[0], 1) << "column " << index << " red";
+        EXPECT_NEAR (pixel[1], color[1], 1) << "column " << index << " green";
+        EXPECT_NEAR (pixel[2], color[2], 1) << "column " << index << " blue";
+        EXPECT_EQ (pixel[3], 255) << "column " << index << " alpha";
+    }
+}
+
+#endif // YUP_ENABLE_SHADER_TRANSPILER

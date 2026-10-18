@@ -26,35 +26,19 @@ namespace
 {
 
 //==============================================================================
-// glslang global init/finalize - reference-counted across all ShaderTranspiler instances
+// glslang global init/finalize - once per process, the first ShaderTranspiler initializes it.
+// Finalizing frees glslang's built-in symbol tables, which every later compile would rebuild
 //==============================================================================
 
-static CriticalSection& getGlslangInitLock()
+static void initializeGlslang()
 {
-    static CriticalSection lock;
-    return lock;
-}
+    struct GlslangProcess
+    {
+        GlslangProcess() { glslang::InitializeProcess(); }
+        ~GlslangProcess() { glslang::FinalizeProcess(); }
+    };
 
-static int& getGlslangInitCount()
-{
-    static int count = 0;
-    return count;
-}
-
-static void incrementGlslangInit()
-{
-    const ScopedLock sl (getGlslangInitLock());
-
-    if (getGlslangInitCount()++ == 0)
-        glslang::InitializeProcess();
-}
-
-static void decrementGlslangInit()
-{
-    const ScopedLock sl (getGlslangInitLock());
-
-    if (--getGlslangInitCount() == 0)
-        glslang::FinalizeProcess();
+    static GlslangProcess process;
 }
 
 //==============================================================================
@@ -608,6 +592,28 @@ static std::unique_ptr<spirv_cross::Compiler> createSpirvCompiler (const uint32_
 }
 
 //==============================================================================
+// SPIR-V has no comparison sampler type: a samplerShadow is a plain OpTypeSampler.
+// spirv-cross recovers comparison samplers (and their depth images) from their use
+// in Dref sampling, but keeps the result in protected state, so this probe reruns
+// that analysis on a copy of the IR.
+//==============================================================================
+
+class ComparisonUsageProbe final : public spirv_cross::Compiler
+{
+public:
+    explicit ComparisonUsageProbe (const spirv_cross::ParsedIR& parsed)
+        : spirv_cross::Compiler (parsed)
+    {
+        analyze_image_and_sampler_usage();
+    }
+
+    bool isComparison (uint32_t id) const
+    {
+        return comparison_ids.count (id) != 0;
+    }
+};
+
+//==============================================================================
 // Extracts full ShaderReflection from a spirv_cross::Compiler
 //==============================================================================
 
@@ -638,6 +644,10 @@ static ShaderReflection extractReflection (spirv_cross::Compiler& compiler)
 
     extractVec (resources.uniform_buffers, ShaderReflection::ResourceType::uniformBuffer, ref.uniformBuffers);
     extractVec (resources.storage_buffers, ShaderReflection::ResourceType::storageBuffer, ref.storageBuffers);
+
+    for (auto& sb : ref.storageBuffers)
+        sb.readOnly = compiler.get_buffer_block_flags (sb.resourceId).get (spv::DecorationNonWritable);
+
     extractVec (resources.stage_inputs, ShaderReflection::ResourceType::stageInput, ref.stageInputs);
     extractVec (resources.stage_outputs, ShaderReflection::ResourceType::stageOutput, ref.stageOutputs);
     extractVec (resources.subpass_inputs, ShaderReflection::ResourceType::subpassInput, ref.subpassInputs);
@@ -651,6 +661,14 @@ static ShaderReflection extractReflection (spirv_cross::Compiler& compiler)
     extractVec (resources.shader_record_buffers, ShaderReflection::ResourceType::shaderRecordBuffer, ref.shaderRecordBuffers);
     extractVec (resources.separate_images, ShaderReflection::ResourceType::separateImage, ref.separateImages);
     extractVec (resources.separate_samplers, ShaderReflection::ResourceType::separateSamplers, ref.separateSamplers);
+
+    const ComparisonUsageProbe comparisons (compiler.get_ir());
+
+    for (auto* bindings : { &ref.separateImages, &ref.separateSamplers })
+    {
+        for (auto& binding : *bindings)
+            binding.imageIsDepth = binding.imageIsDepth || comparisons.isComparison (binding.resourceId);
+    }
 
     // Builtins
     compiler.update_active_builtins();
@@ -818,6 +836,49 @@ static uint32_t esslVersionForExecutionModel (spv::ExecutionModel model)
 }
 
 //==============================================================================
+// Applies a graphics pipeline's native slots to the stage being compiled. Both run after
+// set_entry_point(), since spirv-cross keys each remap by the entry point's execution model.
+// An explicit remap wins over enable_decoration_binding, which stays as the fallback.
+//==============================================================================
+
+static void applyMSLNativeSlots (spirv_cross::CompilerMSL& compiler, const ShaderNativeSlots* nativeSlots)
+{
+    if (nativeSlots == nullptr)
+        return;
+
+    for (const auto& entry : nativeSlots->entries)
+    {
+        spirv_cross::MSLResourceBinding binding;
+        binding.stage = compiler.get_execution_model();
+        binding.desc_set = entry.set;
+        binding.binding = entry.binding;
+        binding.msl_buffer = entry.slot;
+        binding.msl_texture = entry.slot;
+        binding.msl_sampler = entry.samplerSlot != ~0u ? entry.samplerSlot : entry.slot;
+        compiler.add_msl_resource_binding (binding);
+    }
+}
+
+static void applyHLSLNativeSlots (spirv_cross::CompilerHLSL& compiler, const ShaderNativeSlots* nativeSlots)
+{
+    if (nativeSlots == nullptr)
+        return;
+
+    for (const auto& entry : nativeSlots->entries)
+    {
+        spirv_cross::HLSLResourceBinding binding;
+        binding.stage = compiler.get_execution_model();
+        binding.desc_set = entry.set;
+        binding.binding = entry.binding;
+        binding.cbv.register_binding = entry.slot;
+        binding.srv.register_binding = entry.slot;
+        binding.uav.register_binding = entry.slot;
+        binding.sampler.register_binding = entry.samplerSlot != ~0u ? entry.samplerSlot : entry.slot;
+        compiler.add_hlsl_resource_binding (binding);
+    }
+}
+
+//==============================================================================
 // Fills MSL backend slot numbers into a ShaderReflection after CompilerMSL::compile() has run
 //==============================================================================
 
@@ -854,21 +915,29 @@ static void fillMSLBackendSlots (spirv_cross::CompilerMSL& mslCompiler, ShaderRe
 // sampler2D (there are no separate sampler objects). To keep the generated GLSL,
 // the binding-map sidecar and the GL uniform fixup in agreement:
 //
-//   - Uniform buffers keep their SPIR-V binding as the UBO binding point.
-//   - Separate images keep their SPIR-V binding as the GL texture unit.
+//   - Uniform buffers take their assigned slot (or their SPIR-V binding when no
+//     graphics pipeline assignment is given) as the UBO binding point.
+//   - Separate images take their assigned slot (or SPIR-V binding) as the GL texture unit.
 //   - Each separate sampler adopts the GL texture unit of the image it is paired
 //     with (glBindSampler binds to the same unit the combined sampler samples).
+//     Within a graphics pipeline, a sampler the stage never pairs has no slot.
 //   - The emitted combined-sampler uniform name + texture unit are captured in
 //     ShaderReflection::glCombinedSamplers so the GL backend can bind them via
 //     glUniform1i without parsing the generated source.
 //==============================================================================
 
-static void fillGLSLBackendSlots (spirv_cross::CompilerGLSL& compiler, ShaderReflection& ref)
+static void fillGLSLBackendSlots (spirv_cross::CompilerGLSL& compiler, ShaderReflection& ref, const ShaderNativeSlots* nativeSlots)
 {
-    auto fillVec = [] (std::vector<ShaderReflection::ResourceBinding>& bindings)
+    auto slotOf = [nativeSlots] (uint32_t set, uint32_t binding)
+    {
+        const auto* entry = nativeSlots != nullptr ? nativeSlots->find (set, binding) : nullptr;
+        return entry != nullptr ? entry->slot : binding;
+    };
+
+    auto fillVec = [&slotOf] (std::vector<ShaderReflection::ResourceBinding>& bindings)
     {
         for (auto& b : bindings)
-            b.backendSlot = b.binding;
+            b.backendSlot = slotOf (b.set, b.binding);
     };
 
     fillVec (ref.uniformBuffers);
@@ -885,13 +954,22 @@ static void fillGLSLBackendSlots (spirv_cross::CompilerGLSL& compiler, ShaderRef
     fillVec (ref.pushConstantBuffers);
     fillVec (ref.shaderRecordBuffers);
 
+    // In a graphics pipeline a sampler's binding would alias an assigned texture unit, so a
+    // sampler this stage never pairs reports no slot, leaving the other stage's to be used
+    if (nativeSlots != nullptr)
+    {
+        for (auto& samp : ref.separateSamplers)
+            samp.backendSlot = ~0u;
+    }
+
     // Fold texture+sampler pairs into combined samplers, capturing the emitted
-    // uniform name and the GL texture unit (the paired image's binding).
+    // uniform name and the GL texture unit (the paired image's slot).
     ref.glCombinedSamplers.clear();
 
     for (const auto& combined : compiler.get_combined_image_samplers())
     {
-        const uint32_t textureUnit = getVariableDecoration (compiler, combined.image_id, spv::DecorationBinding);
+        const uint32_t textureUnit = slotOf (getVariableDecoration (compiler, combined.image_id, spv::DecorationDescriptorSet),
+                                             getVariableDecoration (compiler, combined.image_id, spv::DecorationBinding));
 
         ShaderReflection::GLCombinedSampler cs;
         cs.name = compiler.get_name (combined.combined_id).c_str();
@@ -911,7 +989,7 @@ static void fillGLSLBackendSlots (spirv_cross::CompilerGLSL& compiler, ShaderRef
 // Fills HLSL backend slot numbers by parsing compiled HLSL source for register() annotations
 //==============================================================================
 
-static void fillHLSLBackendSlots (const std::string& hlslSource, ShaderReflection& ref)
+static void fillHLSLBackendSlots (const spirv_cross::Compiler& compiler, const std::string& hlslSource, ShaderReflection& ref)
 {
     // Parse "identifier : register(XN)" patterns where X is b/t/u/s.
     // Uses a linear-scan vector since shader resource counts are small.
@@ -992,8 +1070,18 @@ static void fillHLSLBackendSlots (const std::string& hlslSource, ShaderReflectio
             b.backendSlot = findSlot (b.name.toStdString());
     };
 
+    // A storage buffer is reflected under its block name but declared under its variable
+    // name, which spirv-cross makes up as "_<id>" for a block without an instance name
+    for (auto& b : ref.storageBuffers)
+    {
+        auto variableName = compiler.get_name (b.resourceId);
+        if (variableName.empty())
+            variableName = "_" + std::to_string (b.resourceId);
+
+        b.backendSlot = findSlot (variableName);
+    }
+
     fillVec (ref.uniformBuffers);
-    fillVec (ref.storageBuffers);
     fillVec (ref.sampledImages);
     fillVec (ref.separateImages);
     fillVec (ref.separateSamplers);
@@ -1144,13 +1232,10 @@ static ResultValue<String> preprocessGlsl (const String& source,
 
 ShaderTranspiler::ShaderTranspiler()
 {
-    incrementGlslangInit();
+    initializeGlslang();
 }
 
-ShaderTranspiler::~ShaderTranspiler()
-{
-    decrementGlslangInit();
-}
+ShaderTranspiler::~ShaderTranspiler() = default;
 
 ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
                                                            ShaderStage stage,
@@ -1307,7 +1392,8 @@ ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
 
 ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spirv,
                                                           ShaderLanguage targetLang,
-                                                          const TranspileOptions& options)
+                                                          const TranspileOptions& options,
+                                                          const ShaderNativeSlots* nativeSlots)
 {
     if (spirv.getSize() < sizeof (uint32_t) * 5) // smallest valid SPIR-V has 5 words
         return makeResultValueFail ("SPIR-V data is too small to be valid");
@@ -1343,6 +1429,10 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
                 glslOpts.vulkan_semantics = false;
                 glslOpts.vertex.flip_vert_y = ! options.flipVertY;
 
+                // Clip depth stays [0, 1] as on every other backend: GL's [-1, 1] range is remapped
+                // here, so the depth GL stores matches what the shaders compute and compare
+                glslOpts.vertex.fixup_clipspace = true;
+
                 if (es)
                     glslOpts.fragment.default_float_precision = spirv_cross::CompilerGLSL::Options::Highp;
 
@@ -1372,6 +1462,9 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
                 if (options.hlslShaderModel >= 10)
                     hlslOpts.shader_model = static_cast<uint32_t> (options.hlslShaderModel);
 
+                // Compute passes bind every storage buffer as a UAV, readonly ones included
+                hlslOpts.force_storage_buffer_as_uav = compiler.get_execution_model() == spv::ExecutionModelGLCompute;
+
                 compiler.set_hlsl_options (hlslOpts);
 
                 if (! entryName.empty())
@@ -1381,6 +1474,8 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
                     if (! entries.empty())
                         compiler.set_entry_point (entryName, entries[0].execution_model);
                 }
+
+                applyHLSLNativeSlots (compiler, nativeSlots);
 
                 return makeResultValueOk (String (compiler.compile().c_str()));
             }
@@ -1409,6 +1504,8 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
                     if (! entries.empty())
                         compiler.set_entry_point (entryName, entries[0].execution_model);
                 }
+
+                applyMSLNativeSlots (compiler, nativeSlots);
 
                 return makeResultValueOk (String (compiler.compile().c_str()));
             }
@@ -1499,7 +1596,8 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
 
 ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBlock& spirv,
                                                                   ShaderLanguage targetLang,
-                                                                  const TranspileOptions& options)
+                                                                  const TranspileOptions& options,
+                                                                  const ShaderNativeSlots* nativeSlots)
 {
     if (spirv.getSize() < sizeof (uint32_t) * 5)
         return makeResultValueFail ("SPIR-V data is too small to be valid");
@@ -1541,6 +1639,8 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
                         compiler.set_entry_point (entryName, entries[0].execution_model);
                 }
 
+                applyMSLNativeSlots (compiler, nativeSlots);
+
                 compiler.compile(); // triggers slot allocation + combined sampler splitting
 
                 auto ref = extractReflection (compiler);
@@ -1565,6 +1665,7 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
                                       : static_cast<uint32_t> (options.glslVersion);
                 glslOpts.vulkan_semantics = false;
                 glslOpts.vertex.flip_vert_y = options.flipVertY;
+                glslOpts.vertex.fixup_clipspace = true;
 
                 if (es)
                     glslOpts.fragment.default_float_precision = spirv_cross::CompilerGLSL::Options::Highp;
@@ -1582,7 +1683,7 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
                 compiler.compile();
 
                 auto ref = extractReflection (compiler);
-                fillGLSLBackendSlots (compiler, ref);
+                fillGLSLBackendSlots (compiler, ref, nativeSlots);
 
                 return makeResultValueOk (std::move (ref));
             }
@@ -1600,6 +1701,9 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
                 if (options.hlslShaderModel >= 10)
                     hlslOpts.shader_model = static_cast<uint32_t> (options.hlslShaderModel);
 
+                // Compute passes bind every storage buffer as a UAV, readonly ones included
+                hlslOpts.force_storage_buffer_as_uav = compiler.get_execution_model() == spv::ExecutionModelGLCompute;
+
                 compiler.set_hlsl_options (hlslOpts);
 
                 if (! entryName.empty())
@@ -1610,10 +1714,12 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
                         compiler.set_entry_point (entryName, entries[0].execution_model);
                 }
 
+                applyHLSLNativeSlots (compiler, nativeSlots);
+
                 auto hlslSource = compiler.compile(); // triggers register allocation
 
                 auto ref = extractReflection (compiler);
-                fillHLSLBackendSlots (hlslSource, ref);
+                fillHLSLBackendSlots (compiler, hlslSource, ref);
 
                 return makeResultValueOk (std::move (ref));
             }
@@ -1678,6 +1784,98 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
     {
         return makeResultValueFail (String ("SPIR-V reflection error: ") + e.what());
     }
+}
+
+ShaderNativeSlots ShaderTranspiler::assignGraphicsNativeSlots (const ShaderReflection& vertex,
+                                                              const ShaderReflection& fragment,
+                                                              ShaderLanguage targetLang)
+{
+    const bool gl = targetLang == ShaderLanguage::glsl || targetLang == ShaderLanguage::essl;
+    const bool hlsl = targetLang == ShaderLanguage::hlsl;
+
+    if (! gl && ! hlsl && targetLang != ShaderLanguage::msl)
+        return {};
+
+    enum SlotClass
+    {
+        buffer,
+        texture,
+        sampler,
+        storage,
+        numSlotClasses,
+        noSlot = numSlotClasses
+    };
+
+    struct Resource
+    {
+        uint32_t set;
+        uint32_t binding;
+        uint32_t count;
+        SlotClass slotClass;
+        bool combined;
+    };
+
+    std::vector<Resource> resources;
+
+    auto add = [&resources] (const ShaderReflection::ResourceBinding& b, SlotClass slotClass, bool combined = false)
+    {
+        if (slotClass == noSlot)
+            return;
+
+        const bool known = std::any_of (resources.begin(), resources.end(), [&b] (const Resource& r)
+        {
+            return r.set == b.set && r.binding == b.binding;
+        });
+
+        if (! known)
+            resources.push_back ({ b.set, b.binding, jmax (1u, b.descriptorCount), slotClass, combined });
+    };
+
+    for (const auto* reflection : { &vertex, &fragment })
+    {
+        for (const auto& b : reflection->uniformBuffers)
+            add (b, buffer);
+
+        for (const auto& b : reflection->storageBuffers)
+            add (b, gl ? noSlot : hlsl ? (b.readOnly ? texture : storage) : buffer);
+
+        for (const auto& b : reflection->separateImages)
+            add (b, texture);
+
+        for (const auto& b : reflection->sampledImages)
+            add (b, texture, ! gl);
+
+        for (const auto& b : reflection->storageImages)
+            add (b, gl ? noSlot : hlsl ? storage : texture);
+
+        for (const auto& b : reflection->separateSamplers)
+            add (b, gl ? noSlot : sampler);
+    }
+
+    std::sort (resources.begin(), resources.end(), [] (const Resource& a, const Resource& b)
+    {
+        return std::tie (a.set, a.binding) < std::tie (b.set, b.binding);
+    });
+
+    uint32_t nextSlot[numSlotClasses] = {};
+
+    ShaderNativeSlots result;
+    result.entries.reserve (resources.size());
+
+    for (const auto& r : resources)
+    {
+        ShaderNativeSlots::Entry entry;
+        entry.set = r.set;
+        entry.binding = r.binding;
+        entry.slot = std::exchange (nextSlot[r.slotClass], nextSlot[r.slotClass] + r.count);
+
+        if (r.combined)
+            entry.samplerSlot = std::exchange (nextSlot[sampler], nextSlot[sampler] + r.count);
+
+        result.entries.push_back (entry);
+    }
+
+    return result;
 }
 
 } // namespace yup

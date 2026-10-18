@@ -132,17 +132,30 @@ public:
     const MemoryBlock* getSPIRV (ShaderStage stage) const;
 
     //==========================================================================
-    /** Serialise the bundle to the YSLB RIFF binary format. */
-    Result saveToStream (OutputStream& stream) const;
+    /** How a bundle is compressed when saved.
 
-    /** Serialise the bundle to a file in the YSLB RIFF binary format. */
-    Result saveToFile (const File& file) const;
+        A compressed bundle is a `RIFF 'YSLZ'` form wrapping the whole YSLB bundle,
+        compressed with LZAV. Both levels decompress equally
+        fast, and every load function accepts compressed and uncompressed bundles alike.
+    */
+    enum class Compression
+    {
+        none, /**< Plain YSLB bundle. */
+        fast, /**< LZAV default compressor, fastest to save. */
+        high  /**< LZAV high ratio compressor, smaller and slower to save. */
+    };
 
-    /** Serialise the bundle to a MemoryBlock in the YSLB RIFF binary format. */
-    Result saveToMemoryBlock (MemoryBlock& block) const;
+    /** Serialise the bundle to the YSLB RIFF binary format, optionally compressed. */
+    Result saveToStream (OutputStream& stream, Compression compression = Compression::high) const;
+
+    /** Serialise the bundle to a file in the YSLB RIFF binary format, optionally compressed. */
+    Result saveToFile (const File& file, Compression compression = Compression::high) const;
+
+    /** Serialise the bundle to a MemoryBlock in the YSLB RIFF binary format, optionally compressed. */
+    Result saveToMemoryBlock (MemoryBlock& block, Compression compression = Compression::high) const;
 
     //==========================================================================
-    /** Deserialise a bundle from an YSLB RIFF stream. */
+    /** Deserialise a bundle from an YSLB RIFF stream, compressed or not. */
     static ResultValue<ShaderBundle> loadFromStream (InputStream& stream);
 
     /** Deserialise a bundle from an YSLB RIFF file. */

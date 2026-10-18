@@ -21,6 +21,19 @@ public:
     ~TextureVulkan() override;
     void uploadImpl(const TextureDataDesc& data) override;
 
+    VkImage vkImage() const { return m_vkImage; }
+    VkImageLayout vkLayout() const { return m_vkLayout; }
+    void vkSetLayout(VkImageLayout layout) { m_vkLayout = layout; }
+    bool vkWasWritten(uint32_t mip, uint32_t layer) const
+    {
+        size_t i = static_cast<size_t>(layer) * m_numMipmaps + mip;
+        return i < m_vkWritten.size() && m_vkWritten[i];
+    }
+    void vkMarkWrittenExternally(uint32_t mip, uint32_t layer)
+    {
+        vkMarkWritten(mip, layer);
+    }
+
 private:
     friend class ContextVulkan;
     friend class RenderPassVulkan;
@@ -60,6 +73,8 @@ public:
     {
         return {aspect, baseMipLevel(), 1, baseLayer(), layerCount()};
     }
+
+    VkImageView vkImageView() const { return m_vkImageView; }
 
 private:
     friend class ContextVulkan;

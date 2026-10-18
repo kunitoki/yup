@@ -17,9 +17,12 @@ the active graphics API.
 
 WGSL variants are produced via a direct GLSL→WGSL transpiler - no SPIRV-Cross WGSL
 backend is needed. Reflection data still originates from SPIR-V: resources keep
-their GLSL bindings in every target, and the extra sampler a combined image
-sampler needs in WGSL follows the rule described in
-[GLSL on the WebGPU target](wgsl-shaders.md#bindings).
+their GLSL bindings in the WGSL and SPIR-V targets, and the extra sampler a
+combined image sampler needs in WGSL follows the rule described in
+[GLSL on the WebGPU target](wgsl-shaders.md#bindings). A bundle built with
+`--vert` and `--frag` together is one graphics pipeline, so its MSL, HLSL, GLSL
+and ESSL variants get their slots assigned across both stages, as described in
+[Several bind groups](pipelines.md#several-bind-groups).
 ```
 
 ## The `spirv` target
@@ -37,6 +40,16 @@ Vulkan descriptor bindings, and drops resources the entry point never uses.
 Bundles built without `spirv` in `--target-langs` still load on Vulkan, but
 `compileFromBundle` fails there, since there is no variant to pick. The default
 target list includes it.
+
+## Shader bundles declared by a module
+
+A YUP module can list its shader permutations in its module declaration with
+the `shaderDirectory`, `shaderIncludes`, `shaderDefinePrefix` and
+`shaderBundles` keys. They are compiled **at build time**, in parallel, and only
+rebuilt when a shader or one of its includes changes. The module includes the
+result as `#include "<module>_shaders/yup_<Name>[_<define>...].inc"`. See
+[module format](../../build-system/module-format.md); `yup_rhi`,
+`yup_renderer` and `yup_audio_gui` use it.
 
 ## The `yup_add_shader_bundle` CMake helper
 
@@ -190,6 +203,7 @@ flags verbatim.
 --vert <path>            Shorthand for --stage vertex <path>
 --frag <path>            Shorthand for --stage fragment <path>
 --output <path>          Output .ysl bundle file path
+--compress <level>       LZAV compression: none, fast, high (default: high)
 ```
 
 ### Source options
@@ -271,6 +285,7 @@ yup_add_shader_bundle(my_shaders
 
 | Approach | When to use |
 |---|---|
+| Module `shaderBundles` + `compileFromBundle` | Shaders that belong to a YUP module: generated with the module, nothing committed. |
 | `yup_add_shader_bundle` + `compileFromBundle` | **Recommended for shipping.** No transpiler in the final binary; cross-compile friendly; deterministic builds. |
 | `compileFromBundle` with a hand-built `.ysl` | Custom asset pipelines, or loading bundles from disk at runtime. |
 | `compileFromGlsl` | Live shader editing / prototyping. Requires `YUP_ENABLE_SHADER_TRANSPILER`. |

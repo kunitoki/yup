@@ -186,7 +186,11 @@ TEST_F (EntityNodeTests, DISABLED_CyclesAreRejected)
     EXPECT_TRUE (root->isAncestorOf (grandChild.get()));
     EXPECT_FALSE (grandChild->isAncestorOf (root.get()));
 
-    grandChild->addChild (root); // FIX: asserts!
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "Adding a cycle triggers an assertion when assertions are enabled or logged";
+#endif
+
+    grandChild->addChild (root);
     root->addChild (root);
 
     EXPECT_EQ (root->getParent(), nullptr);

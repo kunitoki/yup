@@ -101,6 +101,12 @@ public:
     /** True when VK_KHR_swapchain is enabled. */
     bool canPresent() const noexcept { return swapchainEnabled; }
 
+    /** The nanoseconds per tick of the queue's timestamps, or 0 when the queue cannot write any. */
+    double getTimestampPeriod() const noexcept { return timestampValidBits > 0 ? timestampPeriod : 0.0; }
+
+    /** The mask of the bits a queue timestamp holds, so a counter that wrapped can be unwrapped. */
+    uint64_t getTimestampMask() const noexcept { return timestampValidBits >= 64 ? ~uint64_t (0) : (uint64_t (1) << timestampValidBits) - 1; }
+
     //==============================================================================
     /** A ring command buffer in the recording state, with its frame generation. */
     struct Commands
@@ -164,6 +170,10 @@ public:
                               later generation, the work asked for already completed.
     */
     void waitForCommands (VkCommandBuffer commandBuffer, uint64_t generation = 0);
+
+    /** Blocks until the GPU finished the submitted work of @p generation, running its completion
+        handlers. Returns at once when no submitted command buffer holds that generation. */
+    void waitForGeneration (uint64_t generation);
 
     /** True while @p commandBuffer still records the work of @p generation, so more
         commands can be added to it. */
@@ -263,7 +273,12 @@ X (DestroyPipeline)                    \
 X (CreateDescriptorPool)               \
 X (DestroyDescriptorPool)              \
 X (AllocateDescriptorSets)             \
-X (UpdateDescriptorSets)
+X (UpdateDescriptorSets)               \
+X (CreateQueryPool)                    \
+X (DestroyQueryPool)                   \
+X (CmdResetQueryPool)                  \
+X (CmdWriteTimestamp)                  \
+X (GetQueryPoolResults)
 
     struct Functions
     {
@@ -312,6 +327,8 @@ private:
     VkQueue queue = VK_NULL_HANDLE;
     uint32_t queueFamilyIndex = 0;
     bool swapchainEnabled = false;
+    uint32_t timestampValidBits = 0;
+    double timestampPeriod = 0.0;
     rive::gpu::VulkanFeatures features;
     Functions functions;
 

@@ -25,7 +25,7 @@ namespace yup
 //==============================================================================
 /** A 3D world: a root entity, the camera that views it and the global lighting settings.
 
-    Build the world under getRoot(), then show it with a SceneComponent.
+    Build the world under getRoot(), then show it with a SceneComponent of the yup_renderer module.
 
     @code
     auto scene = yup::Scene::Ptr (new yup::Scene());
@@ -40,7 +40,7 @@ namespace yup
 
     Like Component, scenes are meant to be used from the message thread only.
 
-    @see EntityNode, SceneComponent, SceneRenderer
+    @see EntityNode
 */
 class YUP_API Scene : public ReferenceCountedObject
 {
@@ -109,7 +109,8 @@ public:
     enum class ToneMapping
     {
         reinhard, ///< Soft roll-off of the highlights, keeps the colors flat.
-        aces      ///< The ACES filmic curve: more contrast and saturation, photographic highlights.
+        aces,     ///< The ACES filmic curve: more contrast and saturation, photographic highlights.
+        agx       ///< AgX: the filmic default of modern renderers, keeps saturated highlights from skewing.
     };
 
     /** Returns how the lit colors are mapped into the displayable range. */
@@ -153,6 +154,23 @@ public:
     void setEnvironmentBlur (float newBlur) noexcept { environmentBlur = jlimit (0.0f, 1.0f, newBlur); }
 
     //==============================================================================
+    /** Returns the height fog filling the scene, disabled by default. */
+    const WorldFog& getWorldFog() const noexcept { return worldFog; }
+
+    /** Changes the height fog filling the scene.
+
+        The fog renders only when WorldFog::enabled is true, its density is positive and every field
+        is finite. The yup_renderer module draws it on its full tier, and on its raster tier where
+        the device allows it; elsewhere the frames render without it. A change of the fog that is
+        drawn restarts the full tier's temporal accumulation.
+
+        @param newFog The fog.
+
+        @see WorldFog
+    */
+    void setWorldFog (const WorldFog& newFog) noexcept { worldFog = newFog; }
+
+    //==============================================================================
     /** Calls Node::update() on every part of every visible entity, depth-first.
 
         Parts must not attach or detach parts of their own entity from update().
@@ -175,6 +193,7 @@ private:
     float environmentIntensity = 1.0f;
     bool environmentVisible = false;
     float environmentBlur = 0.0f;
+    WorldFog worldFog;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scene)
 };

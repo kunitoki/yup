@@ -22,7 +22,7 @@
 namespace yup
 {
 
-static_assert (sizeof (Mesh::Vertex) == 48, "Mesh::Vertex must stay tightly packed, the renderer uploads it as is");
+static_assert (sizeof (Mesh::Vertex) == 64, "Mesh::Vertex must stay tightly packed, the renderer uploads it as is");
 static_assert (std::is_standard_layout_v<Mesh::Vertex>);
 
 //==============================================================================
@@ -75,6 +75,9 @@ void Mesh::addPrimitive (std::vector<Vertex> vertices, std::vector<uint32> indic
 
             const auto normal = (b.position - a.position).crossProduct (c.position - a.position).normalized();
             a.normal = b.normal = c.normal = normal;
+
+            // Tangents authored for another frame can't be trusted with the generated one
+            a.tangent = b.tangent = c.tangent = {};
 
             unshared.insert (unshared.end(), { a, b, c });
         }

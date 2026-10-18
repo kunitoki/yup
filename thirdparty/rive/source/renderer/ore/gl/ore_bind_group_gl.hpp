@@ -7,6 +7,7 @@ namespace rive::ore
 {
 class ContextGL;
 class RenderPassGL;
+class TextureGL;
 
 class BindGroupGL : public LITE_RTTI_OVERRIDE(BindGroup, BindGroupGL)
 {
@@ -26,6 +27,9 @@ public:
         unsigned int target = 0;  // GLenum (GL_TEXTURE_2D etc.)
         uint32_t binding = 0;     // WGSL @binding, for pair lookup
         uint32_t slot = 0;        // texture unit
+        TextureGL* textureGL = nullptr;
+        int baseLevel = 0;
+        int maxLevel = 1000; // GL's default TEXTURE_MAX_LEVEL
     };
     struct GLSamplerBinding
     {

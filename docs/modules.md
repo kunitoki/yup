@@ -254,18 +254,30 @@ flowchart LR
 ### yup_3d
 
 Entity trees with attached parts (meshes, cameras, lights, material overrides),
-glTF 2.0 loading through `tinygltf`, and static PBR rendering in a
-`SceneComponent`. glTF textures are decoded with the image formats
-`yup_graphics` has: link `libpng`, `libjpeg` and/or `libwebp` for the textures
-your assets use.
+resources and glTF 2.0 loading through `tinygltf`. glTF textures are decoded
+with the image formats `yup_graphics` has: link `libpng`, `libjpeg` and/or
+`libwebp` for the textures your assets use.
 
 ```mermaid
 flowchart LR
     yup_3d:::self --> yup_rhi
-    yup_3d --> yup_gui
+    yup_3d --> yup_graphics
     yup_3d --> tinygltf:::ext
     classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+### yup_renderer
+
+The PBR scene renderer for `yup_3d` scenes: `SceneRenderer`, `SceneComponent`,
+`RenderSettings` and `RenderCapabilities`. Its shader bundles are compiled at
+build time from the permutations declared in its module header.
+
+```mermaid
+flowchart LR
+    yup_renderer:::self --> yup_3d
+    yup_renderer --> yup_gui
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
 ```
 
 ## Audio
@@ -469,7 +481,10 @@ flowchart TD
     gui --> graphics
 
     three[yup_3d] --> rhi
-    three --> gui
+    three --> graphics
+
+    renderer[yup_renderer] --> three
+    renderer --> gui
 
     ab[yup_audio_basics] --> core
     ab --> simd

@@ -416,6 +416,32 @@ rive::ore::SamplerDesc toOreSamplerDesc (const GpuSamplerDesc& src)
     return sd;
 }
 
+/** The most dynamic uniform buffers a pipeline takes: the least every backend supports. */
+constexpr size_t maxDynamicUniformBuffers = 8;
+
+/** True when the dynamic uniform buffers of @p entries are in the same order by Vulkan descriptor
+    binding (the native slot, taken as ore's createDSLFromLayoutDesc takes it) as by binding: Vulkan
+    takes dynamic offsets in descriptor binding order, every other backend in binding order. */
+bool dynamicUniformBuffersKeepTheirOrder (const std::vector<rive::ore::BindGroupLayoutEntry>& entries)
+{
+    constexpr auto absent = rive::ore::BindGroupLayoutEntry::kNativeSlotAbsent;
+
+    std::vector<std::pair<uint32_t, uint32_t>> dynamic;
+    for (const auto& entry : entries)
+    {
+        if (! entry.hasDynamicOffset)
+            continue;
+
+        const uint32_t descriptorBinding = entry.nativeSlotVS != absent   ? entry.nativeSlotVS
+                                         : entry.nativeSlotFS != absent ? entry.nativeSlotFS
+                                                                        : entry.binding;
+        dynamic.emplace_back (entry.binding, descriptorBinding);
+    }
+
+    std::sort (dynamic.begin(), dynamic.end());
+    return std::is_sorted (dynamic.begin(), dynamic.end(), [] (const auto& a, const auto& b) { return a.second < b.second; });
+}
+
 } // namespace GpuPipelineHelpers
 
 //==============================================================================
@@ -426,7 +452,17 @@ struct GpuPipeline::Impl
     {
         uint32_t binding;
         rive::rcp<rive::ore::Sampler> sampler;
+        rive::ore::SamplerDesc desc;
     };
+
+    /** True when a bind group built for @p group of @p other is also valid for this pipeline.
+
+        Every backend reads a bind group's native slots from its layout entries, so equal
+        entries and equal default samplers make the group interchangeable between pipelines.
+        This relies on ore::RenderPass::setBindGroup not comparing layouts by pointer (it does
+        not today, despite the comment in ore_pipeline.hpp); recheck on every Rive update.
+    */
+    bool sharesGroupWith (const Impl& other, size_t group) const;
 
     rive::ore::Context* oreCtx = nullptr;
     rive::rcp<rive::ore::ShaderModule> vertModule;
@@ -434,6 +470,11 @@ struct GpuPipeline::Impl
     rive::rcp<rive::ore::Pipeline> pipeline;
     std::vector<rive::rcp<rive::ore::BindGroupLayout>> layouts;
     std::vector<std::vector<SamplerBinding>> samplersPerGroup;
+
+    /** The bindings of each group's dynamic uniform buffers, ascending: the order a bind of the
+        group takes their offsets in. */
+    std::vector<std::vector<uint32_t>> dynamicBindingsPerGroup;
+
     std::vector<std::vector<rive::ore::VertexAttribute>> vertexAttrStorage;
     std::vector<rive::ore::VertexBufferLayout> vertexLayoutStorage;
 
@@ -442,6 +483,45 @@ struct GpuPipeline::Impl
     std::string vertexEntryPointStorage;
     std::string fragmentEntryPointStorage;
 };
+
+bool GpuPipeline::Impl::sharesGroupWith (const Impl& other, size_t group) const
+{
+    const auto* layout = group < layouts.size() ? layouts[group].get() : nullptr;
+    const auto* otherLayout = group < other.layouts.size() ? other.layouts[group].get() : nullptr;
+
+    if (layout == nullptr || otherLayout == nullptr)
+        return layout == otherLayout;
+
+    // Ore asserts BindGroupLayoutEntry has no padding, so equal bytes mean equal entries
+    const auto& entries = layout->entries();
+    const auto& otherEntries = otherLayout->entries();
+
+    if (layout->groupIndex() != otherLayout->groupIndex()
+        || entries.size() != otherEntries.size()
+        || (! entries.empty() && std::memcmp (entries.data(), otherEntries.data(), entries.size() * sizeof (entries[0])) != 0))
+    {
+        return false;
+    }
+
+    const auto sameSampler = [] (const SamplerBinding& a, const SamplerBinding& b)
+    {
+        return a.binding == b.binding
+            && a.desc.minFilter == b.desc.minFilter
+            && a.desc.magFilter == b.desc.magFilter
+            && a.desc.mipmapFilter == b.desc.mipmapFilter
+            && a.desc.wrapU == b.desc.wrapU
+            && a.desc.wrapV == b.desc.wrapV
+            && a.desc.wrapW == b.desc.wrapW
+            && a.desc.compare == b.desc.compare
+            && exactlyEqual (a.desc.minLod, b.desc.minLod)
+            && exactlyEqual (a.desc.maxLod, b.desc.maxLod)
+            && a.desc.maxAnisotropy == b.desc.maxAnisotropy;
+    };
+
+    const auto& samplers = samplersPerGroup[group];
+    const auto& otherSamplers = other.samplersPerGroup[group];
+    return std::equal (samplers.begin(), samplers.end(), otherSamplers.begin(), otherSamplers.end(), sameSampler);
+}
 
 //==============================================================================
 
@@ -496,6 +576,8 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
         desc.bindingMapSize = (uint32_t) src.bindingMap.size();
         desc.glFixupBytes = src.glFixup.empty() ? nullptr : src.glFixup.data();
         desc.glFixupSize = (uint32_t) src.glFixup.size();
+        desc.texSamplerPairBytes = src.glTextureSamplerPairs.empty() ? nullptr : src.glTextureSamplerPairs.data();
+        desc.texSamplerPairSize = (uint32_t) src.glTextureSamplerPairs.size();
 
         switch (src.language)
         {
@@ -588,9 +670,48 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     for (size_t i = 0; i < fsMap.size(); ++i)
         addEntry (fsMap.at (i));
 
+    // The reflection types every texture read without comparison as filterable, but WebGPU binds a
+    // depth texture only to an unfilterable or depth entry: a texture the WGSL of every stage only
+    // loads (texelFetch) is laid out unfilterable, as WebGPU's own default layout would
+    if (vs.language == GpuShaderLanguage::wgsl || fs.language == GpuShaderLanguage::wgsl)
+    {
+        std::set<std::pair<uint32_t, uint32_t>> loaded, sampled;
+
+        for (const auto* source : { &vs, &fs })
+        {
+            const auto declared = WgslBindingLayout::parse (String::fromUTF8 (reinterpret_cast<const char*> (source->code.data()), static_cast<int> (source->code.size())));
+            if (declared.failed())
+                continue;
+
+            for (const auto& resource : declared.getReference())
+            {
+                if (resource.kind == WgslBindingLayout::ResourceKind::texture)
+                    (resource.sampleType == WgslBindingLayout::SampleType::floatUnfilterable ? loaded : sampled).insert ({ resource.group, resource.binding });
+            }
+        }
+
+        for (auto& me : merged)
+        {
+            const auto slot = std::pair { me.group, me.binding };
+            if (me.kind == rive::ore::ResourceKind::SampledTexture && me.texSampleType == rive::ore::TextureSampleType::Float
+                && loaded.count (slot) > 0 && sampled.count (slot) == 0)
+            {
+                me.texSampleType = rive::ore::TextureSampleType::UnfilterableFloat;
+            }
+        }
+    }
+
+    // Uniform buffers taking dynamic offsets, honored where the device supports them
+    const auto& requestedDynamic = pipelineOptions.dynamicUniformBuffers;
+    jassert (requestedDynamic.size() <= maxDynamicUniformBuffers);
+
+    const auto dynamicCount = jmin (requestedDynamic.size(), maxDynamicUniformBuffers);
+    const bool dynamicOffsets = ctx->isDynamicUniformOffsetAvailable();
+
     // Build one BindGroupLayout per @group used.
     const uint32_t numGroups = merged.empty() ? 0 : maxGroup + 1;
     std::vector<rive::rcp<rive::ore::BindGroupLayout>> layouts (numGroups);
+    std::vector<std::vector<uint32_t>> dynamicBindingsPerGroup (numGroups);
 
     for (uint32_t g = 0; g < numGroups; ++g)
     {
@@ -689,6 +810,33 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
             entries.push_back (entry);
         }
 
+        for (size_t i = 0; i < dynamicCount; ++i)
+        {
+            const auto& slot = requestedDynamic[i];
+
+            for (auto& entry : entries)
+            {
+                if (slot.group != g || entry.binding != slot.binding)
+                    continue;
+
+                // Only uniform buffers take dynamic offsets
+                jassert (entry.kind == rive::ore::BindingKind::uniformBuffer);
+                entry.hasDynamicOffset = dynamicOffsets && entry.kind == rive::ore::BindingKind::uniformBuffer;
+
+                if (entry.hasDynamicOffset)
+                    dynamicBindingsPerGroup[g].push_back (entry.binding);
+            }
+        }
+
+        std::sort (dynamicBindingsPerGroup[g].begin(), dynamicBindingsPerGroup[g].end());
+        dynamicBindingsPerGroup[g].erase (std::unique (dynamicBindingsPerGroup[g].begin(), dynamicBindingsPerGroup[g].end()), dynamicBindingsPerGroup[g].end());
+
+#if YUP_DEBUG
+        // Vulkan would bind the blocks of a set at each other's offsets
+        if (ctx->getPlatform() == GpuPlatform::Vulkan)
+            jassert (dynamicUniformBuffersKeepTheirOrder (entries));
+#endif
+
         if (! entries.empty())
         {
             rive::ore::BindGroupLayoutDesc desc;
@@ -752,7 +900,11 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     // Color targets.
     jassert (pipelineOptions.colorTargets.size() <= 4);
 
-    if (pipelineOptions.colorTargets.empty())
+    if (pipelineOptions.colorTargets.empty() && pipelineOptions.depthStencil.enabled)
+    {
+        pipeDesc.colorCount = 0;
+    }
+    else if (pipelineOptions.colorTargets.empty())
     {
         pipeDesc.colorCount = 1;
         pipeDesc.colorTargets[0].format = rive::ore::TextureFormat::rgba8unorm;
@@ -790,6 +942,9 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
         pipeDesc.depthStencil.format = toOreTextureFormat (pipelineOptions.depthStencil.format);
         pipeDesc.depthStencil.depthCompare = toOreCompare (pipelineOptions.depthStencil.depthCompare);
         pipeDesc.depthStencil.depthWriteEnabled = pipelineOptions.depthStencil.depthWriteEnabled;
+        pipeDesc.depthStencil.depthBias = pipelineOptions.depthStencil.depthBias;
+        pipeDesc.depthStencil.depthBiasSlopeScale = pipelineOptions.depthStencil.depthBiasSlopeScale;
+        pipeDesc.depthStencil.depthBiasClamp = oreCtx->features().depthBiasClamp ? pipelineOptions.depthStencil.depthBiasClamp : 0.0f;
 
         auto fillStencilFace = [] (rive::ore::StencilFaceState& dst, const GpuStencilFaceState& src)
         {
@@ -820,6 +975,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     implRef->fragModule = std::move (fragModule);
     implRef->pipeline = std::move (pipeline);
     implRef->layouts = std::move (layouts);
+    implRef->dynamicBindingsPerGroup = std::move (dynamicBindingsPerGroup);
 
     implRef->samplersPerGroup.resize (implRef->layouts.size());
 
@@ -848,7 +1004,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
                 sd.compare = rive::ore::CompareFunction::lessEqual;
 
             if (auto sampler = oreCtx->makeSampler (sd))
-                implRef->samplersPerGroup[g].push_back ({ entry.binding, std::move (sampler) });
+                implRef->samplersPerGroup[g].push_back ({ entry.binding, std::move (sampler), sd });
         }
     }
 
@@ -934,12 +1090,15 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
     auto fsMap = makeShaderBindingMapBlob (fsInfo->reflection, ShaderStage::fragment);
 
     // GL / GLES bind UBO blocks and sampler units by name after linking, so
-    // build the name→slot fixup table for the GLSL/ESSL targets.
-    std::vector<uint8_t> vsFixup, fsFixup;
+    // build the name→slot fixup table for the GLSL/ESSL targets, plus the
+    // texture each sampler is combined with to bind it on every unit it serves.
+    std::vector<uint8_t> vsFixup, fsFixup, vsPairs, fsPairs;
     if (gpuLang == GpuShaderLanguage::glsl)
     {
         vsFixup = makeGLFixupBlob (vsInfo->reflection);
         fsFixup = makeGLFixupBlob (fsInfo->reflection);
+        vsPairs = makeGLTextureSamplerPairsBlob (vsInfo->reflection);
+        fsPairs = makeGLTextureSamplerPairsBlob (fsInfo->reflection);
     }
 
     // SPIRV-Cross renames the GLSL "main" entry point to "main0" in MSL.
@@ -956,6 +1115,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
     vs.code = shaderCodeBytes (*vsInfo);
     vs.bindingMap = vsMap;
     vs.glFixup = vsFixup;
+    vs.glTextureSamplerPairs = vsPairs;
     vs.entryPoint = resolveEntry (*vsInfo);
 
     GpuShaderSource fs;
@@ -963,6 +1123,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
     fs.code = shaderCodeBytes (*fsInfo);
     fs.bindingMap = fsMap;
     fs.glFixup = fsFixup;
+    fs.glTextureSamplerPairs = fsPairs;
     fs.entryPoint = resolveEntry (*fsInfo);
 
     return compile (ctx, vs, fs, pipelineOptions);
@@ -977,48 +1138,29 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromGlsl (GpuDevice::Ptr ctx,
 {
     const auto targetLang = shaderLanguageForApi (ctx->getPlatform());
 
-    ShaderBundleCompiler compiler;
-
-    auto makeEntry = [&] (ShaderStage stage)
+    // Both stages go in one request, so the pipeline's native slots are assigned together
+    auto makeEntry = [&] (ShaderStage stage, const String& source)
     {
         ShaderBundleEntry entry;
         entry.stage = stage;
         entry.targetLanguages = { targetLang };
         entry.options.spirvOptimization = SpvOptimizationMode::none;
+        entry.source = source;
         return entry;
     };
 
-    auto vsBundle = [&]
-    {
-        ShaderBundleCompileRequest request;
-        request.source = vertexGlsl;
-        request.sourceLanguage = ShaderLanguage::glsl;
-        request.entries.push_back (makeEntry (ShaderStage::vertex));
-        return compiler.compile (request);
-    }();
+    ShaderBundleCompileRequest request;
+    request.sourceLanguage = ShaderLanguage::glsl;
+    request.entries.push_back (makeEntry (ShaderStage::vertex, vertexGlsl));
+    request.entries.push_back (makeEntry (ShaderStage::fragment, fragmentGlsl));
 
-    if (vsBundle.failed())
-        return makeResultValueFail ("Vertex shader compile failed: " + vsBundle.getErrorMessage());
+    ShaderBundleCompiler compiler;
+    auto bundle = compiler.compile (request);
 
-    auto fsBundle = [&]
-    {
-        ShaderBundleCompileRequest request;
-        request.source = fragmentGlsl;
-        request.sourceLanguage = ShaderLanguage::glsl;
-        request.entries.push_back (makeEntry (ShaderStage::fragment));
-        return compiler.compile (request);
-    }();
+    if (bundle.failed())
+        return makeResultValueFail ("Shader compile failed: " + bundle.getErrorMessage());
 
-    if (fsBundle.failed())
-        return makeResultValueFail ("Fragment shader compile failed: " + fsBundle.getErrorMessage());
-
-    ShaderBundle bundle;
-    for (const auto& info : vsBundle.getReference().getShaders())
-        bundle.addShader (info);
-    for (const auto& info : fsBundle.getReference().getShaders())
-        bundle.addShader (info);
-
-    return compileFromBundle (ctx, bundle, pipelineOptions);
+    return compileFromBundle (ctx, bundle.getReference(), pipelineOptions);
 }
 
 #endif

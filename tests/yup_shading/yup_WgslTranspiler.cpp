@@ -3961,6 +3961,14 @@ TEST_F (WgslHardeningTests, FloatLiteralsRoundTrip)
     EXPECT_TRUE (wgsl.contains ("var g: f32 = 2.0;")) << wgsl;
 }
 
+TEST_F (WgslHardeningTests, LargestFloatLiteralStaysWithinRange)
+{
+    // The shortest round trip text of FLT_MAX (3.4028235e+38) is above it, which WGSL rejects
+    const auto wgsl = transpileOk ("void main() { float a = 3.402823466e38; float b = -3.402823466e38; }");
+    EXPECT_TRUE (wgsl.contains ("var a: f32 = 3.402823466e+38;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("-3.402823466e+38")) << wgsl;
+}
+
 TEST_F (WgslHardeningTests, IntegerLiteralForms)
 {
     const auto wgsl = transpileOk ("void main() { int m = -2147483648; int h = 0xFFFFFFFF; int o = 017; uint u = 0x1Fu; float x = 1.0; float n = - -x; }");
@@ -4411,6 +4419,16 @@ TEST_F (WgslHardeningTests, VectorScalarBitwiseOperationsAreSplatted)
     EXPECT_TRUE (wgsl.contains ("v <<= vec4<u32>(1u);")) << wgsl;
     EXPECT_TRUE (wgsl.contains ("v |= vec4<u32>(2u);")) << wgsl;
     EXPECT_TRUE (wgsl.contains ("(i ^ vec2<i32>(1))")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, MatrixDividedByAScalarMultipliesByItsReciprocal)
+{
+    // WGSL has no matrix division: GLSL's component-wise division by a scalar becomes a product
+    const auto wgsl = transpileOk ("void main() { float d = 2.0; mat3 m = mat3(1.0) / d; mat2 n = mat2(1.0) / 4; m /= d; }");
+    EXPECT_TRUE (wgsl.contains ("vec3<f32>(0.0, 0.0, 1.0)) * (1.0 / d))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("vec2<f32>(0.0, 1.0)) * (1.0 / 4))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("m *= (1.0 / d);")) << wgsl;
+    EXPECT_FALSE (wgsl.contains (")) / ")) << wgsl;
 }
 
 TEST_F (WgslHardeningTests, Std140AtomicArraysFail)

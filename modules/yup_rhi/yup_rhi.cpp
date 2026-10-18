@@ -77,6 +77,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 #include "rhi/yup_GpuTypes.cpp"
+#include "rhi/yup_GpuFrameStatus.cpp"
 #include "rhi/yup_GpuBuffer.cpp"
 
 #include "native/yup_GpuDevice_headless.cpp"

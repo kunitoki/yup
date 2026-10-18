@@ -38,7 +38,9 @@ namespace yup
     What is converted:
     - triangle primitives with POSITION, NORMAL, TEXCOORD_0 and COLOR_0, dense or sparse,
       any component type, normalized integers included;
-    - metallic-roughness materials with their textures, alpha modes and double-sided flag;
+    - metallic-roughness materials with their textures, alpha modes and double-sided flag, plus
+      the factors of KHR_materials_emissive_strength, KHR_materials_ior and KHR_materials_specular
+      (the specular extension textures are ignored, with a warning);
     - images from buffer views, data URIs and external files, decoded with the image formats
       the application links (EXT_texture_webp sources need libwebp);
     - nodes with their transforms, meshes, cameras and KHR_lights_punctual lights.

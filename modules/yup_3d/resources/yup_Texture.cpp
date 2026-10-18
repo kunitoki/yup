@@ -45,6 +45,7 @@ void Texture::setGpuTexture (GpuTexture::Ptr newTexture)
 {
     jassert (gpuOnly); // Only textures created from a GpuTexture can be replaced
     gpuTexture = std::move (newTexture);
+    ++changeCount;
 }
 
 //==============================================================================

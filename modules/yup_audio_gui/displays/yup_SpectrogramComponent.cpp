@@ -26,33 +26,9 @@ namespace
 {
 
 //==============================================================================
-/*
-
-// The waterfall shader is precompiled into a .ysl bundle embedded in
-// yup_SpectrogramComponentShader.inc (do not edit by hand). Regenerate it after
-// changing yup_SpectrogramComponentShader.vert / .frag with:
-
-    build/mac/_host_tools/shader_bundler/yup_shader_bundler \
-       --vert  modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.vert \
-       --frag  modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.frag \
-       --output /tmp/yup_SpectrogramComponentShader.ysl \
-       --target-langs glsl,essl,hlsl,msl,spirv,wgsl
-
-// then embed the bundle bytes into the .inc (keep the two-line comment header):
-
-   xxd -i /tmp/yup_SpectrogramComponentShader.ysl \
-       | sed -e '1d' -e '/^};/d' -e '/_len =/d' -e '/^[[:space:]]*$/d' \
-       > /tmp/yup_SpectrogramComponentShader.inc.body
-   { echo '// Generated shader bundle (yup_SpectrogramComponentShader.ysl) - do not edit by hand.'; \
-     echo '// Regenerate with the command at the top of yup_SpectrogramComponent.cpp.'; \
-     cat /tmp/yup_SpectrogramComponentShader.inc.body; } \
-       > modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.inc
-
-*/
-
-// Embedded precompiled shader bundle (.ysl), consumed by ShaderBundle::loadFromData().
+// The waterfall shader bundle, built with the module, see shaderBundles in yup_audio_gui.h
 constexpr uint8_t kSpectrogramShaderBundle[] = {
-#include "yup_SpectrogramComponentShader.inc"
+#include "yup_audio_gui_shaders/yup_SpectrogramComponentShader.inc"
 };
 
 // Uniforms for the waterfall shader (std140: eight floats).

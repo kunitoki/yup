@@ -106,6 +106,22 @@ The whole file is a single `RIFF` chunk whose form type is `YSLB`.
 > Both older and newer versions are rejected with an error message that
 > identifies the mismatch.
 
+### Compressed bundles (`YSLZ`)
+
+Bundles are compressed by default. A compressed bundle is a `RIFF` chunk whose
+form type is `YSLZ`, wrapping the complete `YSLB` file compressed with
+[LZAV](https://github.com/avaneev/lzav):
+
+```
++--------+--------+----------+-----------------+---------------------------+
+|  RIFF  |  size  |  'YSLZ'  |  raw size (u32) |  LZAV payload (YSLB file) |
++--------+--------+----------+-----------------+---------------------------+
+```
+
+`raw size` is the byte length of the uncompressed `YSLB` file. Every load function
+detects the form type and decompresses transparently; the decompressed data must
+be a `YSLB` bundle, so compressed bundles never nest.
+
 ---
 
 ## 3. Per-Stage Chunk (`SHDR`)
@@ -180,6 +196,10 @@ entry point, transpiled source, optional original input source, and reflection.
 |   +--------+--------+----------------------------+                       |
 |   |  REFL  |  size  |  reflection (archive blob) |   binary chunk        |
 |   +--------+--------+----------------------------+                       |
+|                                                                          |
+|   +--------+--------+----------------------------+   (optional)          |
+|   |  SBRO  |  size  |  read-only flags (u8 each) |   binary chunk        |
+|   +--------+--------+----------------------------+                       |
 +--------------------------------------------------------------------------+
 ```
 
@@ -191,6 +211,7 @@ entry point, transpiled source, optional original input source, and reflection.
 | `ISRC`       | chunk         | Original Vulkan GLSL input source, raw UTF-8. Optional — omitted when empty. |
 | `BINY`       | chunk         | Compiled module of binary targets (`ShaderInfo::binary`): the Vulkan SPIR-V of a `spirv` variant, whose `source` is empty. Optional - omitted for text targets. |
 | `REFL`       | chunk         | Serialised `ShaderReflection` (see below).                                   |
+| `SBRO`       | chunk         | One byte per `storageBuffers` entry of the reflection, in order: `1` when the block is `readonly` (`ResourceBinding::readOnly`). Optional - omitted when there are no storage buffers; when absent every storage buffer is writable. |
 
 ### `ISRC` — Original input source
 
@@ -235,8 +256,10 @@ Serialised reflection fields include:
 - `glCombinedSamplers` (folded combined `sampler2D` entries with texture units,
   used by `makeGLFixupBlob` to bind samplers by name after program linking)
 
-Because reflection uses the versioned archive layer, its schema can evolve
-independently of the RIFF envelope version.
+The archive is positional: field names are not stored, so adding a field to
+`SerialisationTraits<ShaderReflection>` (or a nested binding) breaks every older
+bundle. New reflection data goes into its own optional `VART` sub-chunk instead,
+as `SBRO` does, which older readers skip.
 
 ---
 
@@ -247,6 +270,7 @@ independently of the RIFF envelope version.
 | `RIFF` | `kFourCC_RIFF`    | Outer RIFF container.                                |
 | `LIST` | `kFourCC_LIST`    | Generic list container.                              |
 | `YSLB` | `kFourCC_YSLB`    | Bundle form type (magic).                            |
+| `YSLZ` | `kFourCC_YSLZ`    | Compressed bundle form type.                         |
 | `VERS` | `kFourCC_VERS`    | Format version chunk.                                |
 | `SHAD` | `kFourCC_SHAD`    | List type for the stage list.                        |
 | `SHDR` | `kFourCC_SHDR`    | Per-stage chunk.                                     |
@@ -256,6 +280,7 @@ independently of the RIFF envelope version.
 | `ISRC` | `kFourCC_ISRC`    | Original input source chunk (per-variant, optional). |
 | `BINY` | `kFourCC_BINY`    | Compiled binary module chunk (per-variant, optional). |
 | `REFL` | `kFourCC_REFL`    | Reflection archive chunk.                            |
+| `SBRO` | `kFourCC_SBRO`    | Storage buffer read-only flags (per-variant, optional). |
 
 Current format version: **`2`** (`kCurrentVersion`).
 
@@ -313,7 +338,8 @@ RIFF 'YSLB'
     │       │   ├── entryPoint (len-prefixed str)
     │       │   ├── source     (len-prefixed str)
     │       │   ├── ISRC       original input source (optional, raw UTF-8)
-    │       │   └── REFL       reflection archive blob
+    │       │   ├── REFL       reflection archive blob
+    │       │   └── SBRO       storage buffer read-only flags (optional)
     │       └── VART ...
     └── SHDR ...
 ```
@@ -352,6 +378,10 @@ if (auto* info = loaded.getReference().findShader (ShaderStage::vertex, ShaderLa
 | `saveToFile`             | `loadFromFile`                           |
 | `saveToMemoryBlock`      | `loadFromMemoryBlock`                    |
 |                          | `loadFromData` (raw pointer + size)      |
+
+Every save function takes an optional `ShaderBundle::Compression`: `high` (the
+default, smallest output), `fast` (quicker to save) or `none` (a plain `YSLB`
+file). Both compressed levels decompress at the same speed.
 
 ### Version rejection
 

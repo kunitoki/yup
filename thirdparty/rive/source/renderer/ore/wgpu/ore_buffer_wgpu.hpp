@@ -20,6 +20,10 @@ public:
     ~BufferWGPU() override = default; // wgpu::Buffer RAII destructor releases
 
     void update(const void* data, uint32_t size, uint32_t offset) override;
+    void writeUnsynchronized(const void* data,
+                             uint32_t size,
+                             uint32_t offset,
+                             bool) override;
 
     // Backing to bind right now.
     const wgpu::Buffer& current() const

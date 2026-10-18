@@ -80,6 +80,13 @@ TEST_F (SceneTests, NewSceneHasNoEnvironmentAndReinhardToneMapping)
     EXPECT_EQ (scene->getToneMapping(), Scene::ToneMapping::reinhard);
 }
 
+TEST_F (SceneTests, ToneMappingIncludesAgx)
+{
+    scene->setToneMapping (Scene::ToneMapping::agx);
+
+    EXPECT_EQ (scene->getToneMapping(), Scene::ToneMapping::agx);
+}
+
 TEST_F (SceneTests, EnvironmentSettingsAreKeptAndLimited)
 {
     EnvironmentMap::Ptr environment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (1.0f, 1.0f, 1.0f); }, 16, 2));
@@ -241,4 +248,19 @@ TEST_F (SceneTests, CameraProjectionHandlesInfiniteFarPlane)
 
     camera.zFar = 100.0f;
     EXPECT_TRUE (camera.getProjectionMatrix (2.0f).approximatelyEqualTo (Matrix4::perspective (camera.yFov, 2.0f, 0.5f, 100.0f)));
+}
+
+TEST_F (SceneTests, WorldFogIsDisabledByDefaultAndIsKept)
+{
+    EXPECT_FALSE (scene->getWorldFog().enabled);
+    EXPECT_TRUE (scene->getWorldFog() == WorldFog {});
+
+    WorldFog fog;
+    fog.enabled = true;
+    fog.density = 0.1f;
+    fog.heightFalloff = 0.5f;
+    fog.anisotropy = 0.3f;
+    scene->setWorldFog (fog);
+
+    EXPECT_TRUE (scene->getWorldFog() == fog);
 }

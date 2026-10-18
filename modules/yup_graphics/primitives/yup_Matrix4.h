@@ -124,7 +124,10 @@ public:
         @param aspectRatio     The viewport width divided by its height.
         @param nearPlane       The distance of the near clipping plane, must be positive.
         @param farPlane        The distance of the far clipping plane, must be larger than nearPlane.
-        @param depthZeroToOne  True for a [0, 1] depth range (Metal, D3D, WebGPU), false for [-1, 1] (OpenGL).
+        @param depthZeroToOne  True for a [0, 1] clip depth range: Metal, Direct3D, Vulkan, WebGPU, and
+                               OpenGL / OpenGL ES shaders compiled by YUP's shader transpiler, which
+                               remaps clip depth to GL's range. False for [-1, 1], only for shaders that
+                               reach OpenGL without the transpiler.
     */
     [[nodiscard]] static Matrix4 perspective (float fovYInRadians, float aspectRatio, float nearPlane, float farPlane, bool depthZeroToOne = true) noexcept;
 
@@ -136,7 +139,9 @@ public:
         @param top             The top edge of the view volume.
         @param nearPlane       The distance of the near clipping plane.
         @param farPlane        The distance of the far clipping plane.
-        @param depthZeroToOne  True for a [0, 1] depth range, false for [-1, 1].
+        @param depthZeroToOne  True for a [0, 1] clip depth range, as every backend expects from shaders
+                               compiled by YUP's shader transpiler, OpenGL included. False for [-1, 1],
+                               only for shaders that reach OpenGL without the transpiler.
     */
     [[nodiscard]] static Matrix4 orthographic (float left, float right, float bottom, float top, float nearPlane, float farPlane, bool depthZeroToOne = true) noexcept;
 

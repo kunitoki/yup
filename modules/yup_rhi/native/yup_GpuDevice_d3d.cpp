@@ -44,6 +44,7 @@ public:
         , gpuContext (std::move (gpuContextToUse))
         , renderContext (rive::gpu::RenderContextD3DImpl::MakeContext (gpu, gpuContext, renderContextOptions))
         , oreContext (rive::ore::ContextD3D11::Make (gpu.Get(), gpuContext.Get()))
+        , dynamicUniformOffsets (supportsDynamicUniformOffsets (gpu.Get(), gpuContext.Get()))
     {
     }
 
@@ -56,6 +57,12 @@ public:
     rive::ore::Context* getGpuContext() const noexcept override { return oreContext.get(); }
 
     bool isComputeAvailable() const noexcept override { return true; }
+
+    bool isFragmentStorageBufferAvailable() const noexcept override { return true; }
+
+    bool isDynamicUniformOffsetAvailable() const noexcept override { return dynamicUniformOffsets; }
+
+    bool isStorageTextureAvailable() const noexcept override { return true; }
 
     ID3D11Device* getD3DDevice() const noexcept { return gpu.Get(); }
 
@@ -97,7 +104,18 @@ public:
             if (FAILED (hr) || uav == nullptr)
                 return nullptr;
 
-            return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .d3dStorageBuffer = std::move (d3dBuffer), .d3dUav = std::move (uav) });
+            D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc {};
+            srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
+            srvDesc.BufferEx.NumElements = static_cast<UINT> (byteSize / 4);
+            srvDesc.BufferEx.Flags = D3D11_BUFFEREX_SRV_FLAG_RAW;
+
+            ComPtr<ID3D11ShaderResourceView> srv;
+            hr = gpu->CreateShaderResourceView (d3dBuffer.Get(), &srvDesc, srv.ReleaseAndGetAddressOf());
+            if (FAILED (hr) || srv == nullptr)
+                return nullptr;
+
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .d3dStorageBuffer = std::move (d3dBuffer), .d3dUav = std::move (uav), .d3dSrv = std::move (srv) });
         }
 
         return GpuDevice::createBuffer (type, data, byteSize);
@@ -403,6 +421,21 @@ private:
         return result;
     }
 
+    /** The uniform ring binds constant buffer ranges, and maps a dynamic constant buffer without
+        discarding it: both need the Direct3D 11.1 runtime and driver support. */
+    static bool supportsDynamicUniformOffsets (ID3D11Device* device, ID3D11DeviceContext* context)
+    {
+        ComPtr<ID3D11DeviceContext1> context1;
+        if (device == nullptr || context == nullptr || FAILED (context->QueryInterface (IID_PPV_ARGS (context1.GetAddressOf()))))
+            return false;
+
+        D3D11_FEATURE_DATA_D3D11_OPTIONS features = {};
+        if (FAILED (device->CheckFeatureSupport (D3D11_FEATURE_D3D11_OPTIONS, &features, sizeof (features))))
+            return false;
+
+        return features.ConstantBufferOffsetting && features.MapNoOverwriteOnDynamicConstantBuffer;
+    }
+
     Options options;
     rive::gpu::D3DContextOptions renderContextOptions;
     ComPtr<ID3D11Device> gpu;
@@ -410,6 +443,7 @@ private:
     std::unique_ptr<rive::gpu::RenderContext> renderContext;
     std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;
     std::unique_ptr<rive::ore::ContextD3D11> oreContext;
+    bool dynamicUniformOffsets = false;
 };
 
 //==============================================================================

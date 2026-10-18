@@ -87,6 +87,19 @@ TEST_F (GpuDeviceErrorTests, HeadlessDeviceIsNeverLost)
     EXPECT_FALSE (ctx->isDeviceLost());
 }
 
+TEST_F (GpuDeviceErrorTests, HeadlessReportsNoAdvancedCapabilities)
+{
+    // The fixture device carries a mocked ore context, a plain headless device has none
+    auto headless = GpuDevice::create (GpuPlatform::Headless, {});
+    ASSERT_NE (headless, nullptr);
+
+    EXPECT_EQ (headless->getMaximumColorAttachments(), 0u);
+    EXPECT_EQ (headless->getMaximumSampleCount (GpuTextureFormat::rgba8unorm), 0u);
+    EXPECT_FALSE (headless->isFragmentStorageBufferAvailable());
+    EXPECT_FALSE (headless->isStorageTextureAvailable());
+    EXPECT_FALSE (headless->isDynamicUniformOffsetAvailable());
+}
+
 #if YUP_ANDROID || YUP_LINUX
 TEST_F (GpuDeviceErrorTests, CreateOpenGLWithoutAWindowHasNoCompute)
 {
@@ -365,6 +378,58 @@ TEST_F (GpuComputePipelineMetalTests, CompileFromBundleResolvesRenamedMainEntryP
 
     auto result = GpuComputePipeline::compileFromBundle (device, bundle, GpuWorkgroupSize { 8, 1, 1 });
     EXPECT_TRUE (result.wasOk()) << result.getErrorMessage();
+}
+
+// ---------------------------------------------------------------------------
+// GpuDevice capabilities - Metal
+// ---------------------------------------------------------------------------
+
+class GpuDeviceMetalCapabilityTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        device = GpuDevice::create (GpuPlatform::Metal, {});
+        if (device == nullptr)
+            GTEST_SKIP() << "No Metal device available";
+    }
+
+    GpuDevice::Ptr device;
+};
+
+TEST_F (GpuDeviceMetalCapabilityTests, ReportsFourColorAttachments)
+{
+    EXPECT_EQ (device->getMaximumColorAttachments(), 4u);
+}
+
+TEST_F (GpuDeviceMetalCapabilityTests, ReportsDynamicUniformOffsets)
+{
+    EXPECT_TRUE (device->isDynamicUniformOffsetAvailable());
+}
+
+TEST_F (GpuDeviceMetalCapabilityTests, SampleCountIsPerFormat)
+{
+    EXPECT_GE (device->getMaximumSampleCount (GpuTextureFormat::rgba8unorm), 4u);
+    EXPECT_GE (device->getMaximumSampleCount (GpuTextureFormat::rgba16float), 4u);
+    EXPECT_EQ (device->getMaximumSampleCount (GpuTextureFormat::bc1unorm), 0u);
+}
+
+TEST_F (GpuDeviceMetalCapabilityTests, SampleCountsArePowersOfTwo)
+{
+    EXPECT_TRUE (std::has_single_bit (device->getMaximumSampleCount()));
+
+    for (const auto format : { GpuTextureFormat::rgba8unorm,
+                               GpuTextureFormat::rgba16float,
+                               GpuTextureFormat::r11g11b10float,
+                               GpuTextureFormat::depth32float })
+    {
+        EXPECT_TRUE (std::has_single_bit (device->getMaximumSampleCount (format)));
+    }
+}
+
+TEST_F (GpuDeviceMetalCapabilityTests, PackedFloatIsRenderable)
+{
+    EXPECT_TRUE (device->isFormatRenderable (GpuTextureFormat::r11g11b10float));
 }
 #endif // YUP_APPLE
 

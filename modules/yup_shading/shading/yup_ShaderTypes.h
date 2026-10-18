@@ -307,7 +307,9 @@ struct ShaderReflection
         /** Image dimension (valid when baseType is image/sampledImage). */
         ImageDimension imageDim = ImageDimension::unknown;
 
-        /** Whether the image has depth comparison. */
+        /** Whether the image has depth comparison. Also set on a separate image or
+            sampler that the shader uses for depth comparison (sampler2DShadow), so it
+            binds as a depth texture or a comparison sampler. */
         bool imageIsDepth = false;
 
         /** Whether the image is arrayed. */
@@ -322,13 +324,18 @@ struct ShaderReflection
         /** Total block size in bytes (for uniform/storage buffer blocks). */
         uint32_t blockSize = 0;
 
+        /** Whether a storage buffer block is declared `readonly` (SPIR-V NonWritable).
+            Only read-only storage buffers can be bound to vertex and fragment shaders. */
+        bool readOnly = false;
+
         /** Internal resource variable ID (for backend slot queries). */
         uint32_t resourceId = 0;
 
         /** Backend-assigned native slot index.
             Populated by reflectFromSPIRV() when a target language is provided.
             For MSL: the [[buffer(N)]], [[texture(N)]], [[sampler(N)]], or [[id(N)]] index.
-            For GLSL/ESSL: same as the SPIR-V binding point.
+            For GLSL/ESSL: the UBO binding point or texture unit (the SPIR-V binding outside
+            a graphics pipeline, see ShaderNativeSlots).
             Set to ~0u (~0u) when not populated. */
         uint32_t backendSlot = ~0u;
 

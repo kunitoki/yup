@@ -25,13 +25,12 @@ namespace yup
 //==============================================================================
 /** The light surrounding a scene, for reflections and soft diffuse light.
 
-    The environment is baked once on the CPU from a radiance function into a latitude-longitude
-    image with one level per roughness, from mirror-like at level 0 to fully rough at the last
-    level, and into nine spherical harmonics coefficients for the diffuse light.
-
-    Level 0 samples the function four times per texel. Every other level is the previous one
-    halved and blurred on the sphere by a gaussian matching the reflections of its roughness,
-    which keeps the energy of small bright lights like a sun.
+    The radiance function is sampled once on the CPU into a latitude-longitude image, four
+    samples per texel, and projected into nine spherical harmonics coefficients for the
+    diffuse light. On the GPU, the renderer turns the image into a cube whose faces are a quarter
+    of its width, then GGX-prefilters it into a cube with one mip per roughness, from mirror-like
+    at mip 0 to fully rough at the last one, and keeps it. The environment itself never changes
+    after construction, so any number of renderers, on any threads, can share it.
 
     @code
     // A blue sky over a dark ground
@@ -54,15 +53,17 @@ public:
     /** Returns the linear RGB radiance seen along a unit direction. */
     using RadianceFunction = std::function<Vector3<float> (const Vector3<float>& direction)>;
 
-    static constexpr int defaultWidth = 512;   ///< The width of level 0, its height is half.
-    static constexpr int defaultNumLevels = 7; ///< The number of roughness levels.
+    static constexpr int defaultWidth = 512;   ///< The width of the sampled latitude-longitude image; cube faces are a quarter of it.
+    static constexpr int defaultNumLevels = 7; ///< The number of roughness levels (cube mips).
 
     //==============================================================================
-    /** Bakes an environment.
+    /** Samples an environment.
 
-        @param radiance   The radiance function, called four times for every texel of level 0.
-        @param width      The width of level 0, a power of two of at least 8. Its height is half.
-        @param numLevels  The number of levels, each half the size of the previous one.
+        @param radiance   The radiance function, called four times for every texel of the image.
+        @param width      The width of the latitude-longitude image, a power of two of at least 8.
+                          Its height is half, and the cube faces are a quarter of it.
+        @param numLevels  The number of roughness levels, each a cube mip half the size of the
+                          previous one, limited by the face size.
     */
     explicit EnvironmentMap (const RadianceFunction& radiance, int width = defaultWidth, int numLevels = defaultNumLevels);
 
@@ -70,32 +71,19 @@ public:
     ~EnvironmentMap() override;
 
     //==============================================================================
-    /** Returns the number of roughness levels. */
-    int getNumLevels() const noexcept { return static_cast<int> (levels.size()); }
+    /** Returns the number of roughness levels, the mips of the GPU cube. */
+    int getNumLevels() const noexcept { return numLevels; }
 
-    /** Returns the width of a level in texels. */
-    int getLevelWidth (int level) const noexcept;
+    /** Returns the width and height of the GPU cube's faces at mip 0, in texels. */
+    int getFaceSize() const noexcept { return width / 4; }
 
-    /** Returns the height of a level in texels. */
-    int getLevelHeight (int level) const noexcept;
-
-    /** Returns the linear RGBA pixels of a level, four floats per texel, rows from the zenith down. */
-    Span<const float> getLevelPixels (int level) const noexcept;
-
-    /** Returns the perceptual roughness a level is baked for, from 0 to 1. */
+    /** Returns the perceptual roughness a level is filtered for, from 0 to 1. */
     static float getRoughnessForLevel (int level, int numLevels) noexcept;
 
-    /** Returns the gaussian blur, in radians, that approximates the reflections of a roughness. */
-    static float getBlurForRoughness (float roughness) noexcept;
-
     //==============================================================================
-    /** Returns the diffuse light received around a unit normal: the cosine weighted average
-        radiance, to be multiplied by the diffuse color.
-    */
-    Vector3<float> getIrradiance (const Vector3<float>& normal) const noexcept;
-
-    /** Returns the nine coefficients getIrradiance() evaluates, in the order 1, y, z, x, xy, yz,
-        3z^2 - 1, xz, x^2 - y^2.
+    /** Returns the nine irradiance coefficients of the diffuse light, computed on the CPU, in
+        the order 1, y, z, x, xy, yz, 3z^2 - 1, xz, x^2 - y^2. Evaluate them with
+        SphericalHarmonics::evaluateIrradiance().
     */
     const std::array<Vector3<float>, 9>& getIrradianceCoefficients() const noexcept { return irradiance; }
 
@@ -109,22 +97,17 @@ public:
     static Vector3<float> getDirection (Point<float> textureCoordinates) noexcept;
 
     //==============================================================================
-    /** Returns the GPU texture for a device, with every level as a mip level, uploading it if needed. */
-    GpuTexture::Ptr getGpuTexture (const GpuDevice::Ptr& device);
+    /** Returns the width of the latitude-longitude image, in texels; its height is half. */
+    int getWidth() const noexcept { return width; }
 
-    /** Returns the GPU sampler for a device: trilinear, repeating around and clamped at the poles. */
-    GpuSampler::Ptr getGpuSampler (const GpuDevice::Ptr& device);
+    /** Returns the latitude-longitude image as linear RGBA half floats, row by row from the zenith. */
+    const std::vector<uint16>& getPixels() const noexcept { return pixels; }
 
 private:
-    void useDevice (const GpuDevice::Ptr& device);
-
     int width = defaultWidth;
-    std::vector<std::vector<float>> levels;
+    int numLevels = defaultNumLevels;
+    std::vector<uint16> pixels; // The latitude-longitude image as half floats, kept to build again
     std::array<Vector3<float>, 9> irradiance;
-
-    GpuDevice::Ptr cachedDevice;
-    GpuTexture::Ptr gpuTexture;
-    GpuSampler::Ptr gpuSampler;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EnvironmentMap)
 };

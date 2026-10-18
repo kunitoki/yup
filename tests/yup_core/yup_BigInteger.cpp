@@ -492,7 +492,7 @@ TEST (BigIntegerTests, BitRangeAsIntCanCrossWordBoundary)
 
 TEST (BigIntegerTests, BitRangeAsIntClampsToThirtyTwoBits)
 {
-#if YUP_ASSERTIONS_ENABLED
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
     GTEST_SKIP() << "Skipping invalid bit range test in assertion-enabled builds";
 #else
     BigInteger value;
@@ -504,7 +504,7 @@ TEST (BigIntegerTests, BitRangeAsIntClampsToThirtyTwoBits)
 
 TEST (BigIntegerTests, SetBitRangeAsIntClampsToThirtyTwoBits)
 {
-#if YUP_ASSERTIONS_ENABLED
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
     GTEST_SKIP() << "Skipping invalid bit range test in assertion-enabled builds";
 #else
     BigInteger value;
@@ -754,7 +754,7 @@ TEST (BigIntegerTests, ParseStringBase10)
 
 TEST (BigIntegerTests, ToStringReturnsEmptyForUnsupportedBase)
 {
-#if YUP_ASSERTIONS_ENABLED
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
     GTEST_SKIP() << "Skipping invalid base test in assertion-enabled builds";
 #else
     EXPECT_TRUE (BigInteger (123).toString (3).isEmpty());

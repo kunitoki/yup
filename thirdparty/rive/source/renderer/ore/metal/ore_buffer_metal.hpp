@@ -21,6 +21,10 @@ public:
     ~BufferMetal() override = default; // ARC releases the backings
 
     void update(const void* data, uint32_t size, uint32_t offset) override;
+    void writeUnsynchronized(const void* data,
+                             uint32_t size,
+                             uint32_t offset,
+                             bool discard) override;
 
     // Backing to bind right now.
     id<MTLBuffer> current() const { return m_pool[m_currentIndex].mtl; }

@@ -100,6 +100,11 @@ Inside the block, the parser will expect to find a list of value definitions, on
 
     value_name:   value
 
+A line without a `value_name:` continues the previous value, so long lists can be split over several lines:
+
+    shaderBundles:      ForwardPass AREA_LIGHTS? SOFT_SHADOWS?
+                        ShadowPass MASKED?
+
 The value_name must be one of the items listed below, and is case-sensitive. Whitespace on the line is ignored. Some values are compulsory and must be supplied, but others are optional. The order in which they're declared doesn't matter.
 
 Possible values:
@@ -175,6 +180,24 @@ Possible values:
 
 - vsToolOverrides
   - (Optional) A list (space or comma-separated) of `extension=Tool` pairs that set the Visual Studio build tool of the module's non-source files with that extension, e.g. `hlsl=None` keeps MSBuild from compiling shader sources shipped only for reference or offline generation.
+
+- shaderDirectory
+  - (Optional, required by shaderBundles) The folder holding the module's GLSL stage sources, relative to the module folder.
+
+- shaderIncludes
+  - (Optional) A list (space or comma-separated) of folders, relative to the module folder, the shaders `#include` from. Editing a file in them rebuilds the bundles.
+
+- shaderDefinePrefix
+  - (Optional) A prefix added to every define of shaderBundles, e.g. `YUP_3D_`.
+
+- shaderBundles
+  - (Optional) Shader bundles compiled with `yup_shader_bundler` while building the module, separated by commas or continuation lines. Each entry is a shader name followed by space-separated defines; a define ending in `?` is optional and the entry expands into every combination of its optional defines. The entry `Name` bundles `yup_Name.vert` (or `yup_Fullscreen.vert` for a fragment-only pass), `yup_Name.frag` and `yup_Name.comp`, whichever exist in shaderDirectory, into `<module>_shaders/yup_Name[_<define>...].inc` (defines in lowercase, without the prefix), a byte array initializer:
+
+        constexpr uint8_t bundleData[] = {
+        #include "yup_rhi_shaders/yup_GpuMipDownsample.inc"
+        };
+
+    Bundles are generated in the build tree, never committed, and rebuilt only when a stage source, an include or the bundler changes.
 
 ## Optional dependencies
 

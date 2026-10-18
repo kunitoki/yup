@@ -42,6 +42,12 @@ public:
     }
 
     Mesh::Ptr mesh; ///< The mesh to draw, or nullptr to draw nothing.
+
+    /** @internal The world matrix a SceneRenderer drew last frame, for motion vectors. */
+    Matrix4 previousWorld;
+
+    /** @internal The SceneRenderer frame stamp previousWorld belongs to, 0 for none. */
+    uint64 previousStamp = 0;
 };
 
 } // namespace yup

@@ -26,11 +26,16 @@
 
 #include "yup_GpuDevice.cpp"
 #include "yup_GpuTarget.cpp"
+// Defines GpuReadbackFixture: keep it ahead of yup_GpuComputePass.cpp, yup_GpuFrame.cpp and native/yup_GpuDevice_linux.cpp
 #include "yup_GpuTexture.cpp"
 #include "yup_GpuPipeline.cpp"
 #include "yup_GpuPipelineMocked.cpp"
 #include "yup_GpuComputePass.cpp"
+// Uses GpuComputePassDeviceFixture: keep it after yup_GpuComputePass.cpp
+#include "yup_GpuRenderPass.cpp"
+#include "yup_GpuFrame.cpp"
 #include "yup_GpuFrameDescriptor.cpp"
+#include "yup_OreBuffer.cpp"
 
 #if YUP_LINUX
 #include "native/yup_GpuDevice_linux.cpp"

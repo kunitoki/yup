@@ -52,4 +52,19 @@ Matrix4 CameraNode::getViewMatrix() const noexcept
     return {};
 }
 
+float CameraNode::getCircleOfConfusion (float distance, float viewportHeight) const noexcept
+{
+    if (projection != Projection::perspective || fStop <= 0.0f || yFov <= 0.0f || distance <= 0.0f || viewportHeight <= 0.0f)
+        return 0.0f;
+
+    // Thin lens (Jimenez 2014): the focal length follows from the field of view of the sensor
+    const auto focalLength = sensorHeight / (2.0f * std::tan (yFov * 0.5f));
+    const auto focus = jmax (focusDistance, focalLength * 1.001f);
+    const auto aperture = focalLength / fStop;
+
+    // (distance - focus) / distance as 1 - focus / distance, so an infinite distance stays finite
+    const auto onSensor = aperture * focalLength * (1.0f - focus / distance) / (focus - focalLength);
+    return onSensor / sensorHeight * viewportHeight;
+}
+
 } // namespace yup
