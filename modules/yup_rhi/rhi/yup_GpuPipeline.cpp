@@ -600,7 +600,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     rive::ore::ShaderModuleDesc vsd;
     fillModuleDesc (vsd, vs, rive::ore::ShaderStage::vertex, "GpuPipeline VS");
 
-    auto vertModule = oreCtx->makeShaderModule (vsd);
+    auto vertModule = ctx->shaderModuleCache.getOrMake (*oreCtx, vsd);
     if (vertModule == nullptr)
         return makeResultValueFail ("Failed to compile vertex shader: " + oreCtx->lastError());
 
@@ -608,7 +608,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     rive::ore::ShaderModuleDesc fsd;
     fillModuleDesc (fsd, fs, rive::ore::ShaderStage::fragment, "GpuPipeline FS");
 
-    auto fragModule = oreCtx->makeShaderModule (fsd);
+    auto fragModule = ctx->shaderModuleCache.getOrMake (*oreCtx, fsd);
     if (fragModule == nullptr)
         return makeResultValueFail ("Failed to compile fragment shader: " + oreCtx->lastError());
 

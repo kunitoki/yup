@@ -364,6 +364,11 @@ public:
     */
     std::pair<int, size_t> getUniformBufferPoolSizeForTesting() const noexcept;
 
+    /** @internal Test accessor, not for production use: the number of shader modules this device shares across
+        its pipelines.
+    */
+    int getShaderModuleCountForTesting() const;
+
     //==============================================================================
     /** Returns true if textures of the given format can be created and sampled.
 
@@ -835,6 +840,47 @@ protected:
 
 private:
     friend class GpuFrame;
+    friend class GpuPipeline;
+
+    //==============================================================================
+    /** Shader modules shared by every pipeline of the device.
+
+        Pipelines differing only in their state (blending, culling, depth testing)
+        are compiled from the same shaders, and creating a module per pipeline
+        would translate and compile the same source once per pipeline: Direct3D 11
+        runs D3DCompile at first use of each module, which for the large lighting
+        shaders takes seconds. Modules are looked up by a digest of everything that
+        describes them, so a pipeline reuses the module of any earlier pipeline
+        built from the same shader.
+
+        Modules are kept for the lifetime of the device and, like pooled buffers,
+        must not outlive the ore context that created them: the cache is emptied by
+        releasePooledResources().
+    */
+    class ShaderModuleCache
+    {
+    public:
+        /** Returns the module described by @p desc, creating it on a miss.
+
+            @param oreCtx  Context used to create the module on a cache miss.
+            @param desc    Description of the module.
+
+            @returns The module, or nullptr if creation failed (failures are not cached).
+        */
+        rive::rcp<rive::ore::ShaderModule> getOrMake (rive::ore::Context& oreCtx, const rive::ore::ShaderModuleDesc& desc);
+
+        /** Drops every module. */
+        void clear() noexcept;
+
+        /** Returns the number of modules held. */
+        int size() const;
+
+    private:
+        mutable CriticalSection lock;
+        std::map<std::string, rive::rcp<rive::ore::ShaderModule>> modules;
+    };
+
+    ShaderModuleCache shaderModuleCache;
 
     //==============================================================================
     /** Pool of small uniform buffers recycled across frames.

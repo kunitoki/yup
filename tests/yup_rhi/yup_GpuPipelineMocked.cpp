@@ -1033,10 +1033,17 @@ protected:
         EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
             .WillOnce (Return (rive::make_rcp<TestOrePipeline>()));
 
-        auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"), options);
+        // The device shares the modules of identical shaders, and every pipeline here stands for distinct ones
+        ++pipelinesCompiled;
+        const auto vertex = "// VS " + std::to_string (pipelinesCompiled);
+        const auto fragment = "// FS " + std::to_string (pipelinesCompiled);
+
+        auto compileResult = GpuPipeline::compile (ctx, makeShaderSource (vertex.c_str()), makeShaderSource (fragment.c_str()), options);
         EXPECT_TRUE (compileResult.wasOk());
         return compileResult.getValue();
     }
+
+    int pipelinesCompiled = 0;
 
     /** The layout entry of the last layout made for @p group, or nullptr. */
     const rive::ore::BindGroupLayoutEntry* lastLayoutEntry (uint32_t group, uint32_t binding) const

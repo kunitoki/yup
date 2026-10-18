@@ -1771,6 +1771,19 @@
           }
         },
         {
+          "path": "source/renderer/ore/d3d11/ore_shader_module_d3d11.cpp",
+          "note": "Ore D3D11 shader modules compile with D3DCOMPILE_OPTIMIZATION_LEVEL1 (the fxc default, the level Rive's own D3D pipeline manager uses) instead of LEVEL3: D3DCompile at level 3 takes tens of seconds on the large lighting shaders of yup_renderer, and the driver optimizes the DXBC again anyway",
+          "already_contains": "D3DCOMPILE_OPTIMIZATION_LEVEL1",
+          "replace": {
+            "from": [
+              "                                D3DCOMPILE_OPTIMIZATION_LEVEL3,"
+            ],
+            "to": [
+              "                                D3DCOMPILE_OPTIMIZATION_LEVEL1,"
+            ]
+          }
+        },
+        {
           "path": "source/renderer/ore/d3d11/ore_buffer_d3d11.hpp",
           "note": "Ore D3D11 buffer: declare the writeUnsynchronized override (see the ore_buffer.hpp entry)",
           "already_contains": "    void writeUnsynchronized(const void* data,\n                             uint32_t size,",

@@ -312,4 +312,100 @@ INSTANTIATE_TEST_SUITE_P (GpuRenderPass,
                           ::testing::ValuesIn (GpuComputePassBackendTests::getCompiledPlatforms()),
                           GpuComputePassBackendTests::getTestNameSuffix);
 
+//==============================================================================
+// Real devices - pipelines compiled from the same shaders share their shader modules
+//==============================================================================
+
+class GpuPipelineSharedModuleTests
+    : public GpuComputePassDeviceFixture
+    , public ::testing::WithParamInterface<GpuPlatform>
+{
+protected:
+    void SetUp() override { openDevice (GetParam()); }
+
+    static constexpr const char* solidFragment = R"(#version 450
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main() { color = vec4 (0.25, 0.5, 0.75, 1.0); })";
+
+    static constexpr const char* otherFragment = R"(#version 450
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main() { color = vec4 (1.0, 0.0, 0.0, 1.0); })";
+
+    GpuPipeline::Ptr compile (const char* fragment, bool blend)
+    {
+        GpuPipelineOptions options;
+        auto& colorTarget = options.colorTargets.emplace_back();
+        colorTarget.format = GpuTextureFormat::rgba8unorm;
+        colorTarget.blendEnabled = blend;
+
+        auto compiled = GpuPipeline::compileFromGlsl (device, fullscreenVertex, fragment, options);
+        EXPECT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+        return compiled.wasOk() ? compiled.getValue() : nullptr;
+    }
+};
+
+TEST_P (GpuPipelineSharedModuleTests, PipelinesOfTheSameShadersShareTheirModules)
+{
+    const auto before = device->getShaderModuleCountForTesting();
+
+    auto opaque = compile (solidFragment, false);
+    auto blended = compile (solidFragment, true);
+    ASSERT_NE (opaque, nullptr);
+    ASSERT_NE (blended, nullptr);
+
+    // One vertex and one fragment module, whatever the pipeline state
+    EXPECT_EQ (device->getShaderModuleCountForTesting() - before, 2);
+
+    // Another fragment shader adds its own module and reuses the vertex one
+    auto other = compile (otherFragment, false);
+    ASSERT_NE (other, nullptr);
+    EXPECT_EQ (device->getShaderModuleCountForTesting() - before, 3);
+}
+
+TEST_P (GpuPipelineSharedModuleTests, PipelinesSharingModulesRenderTheirOwnState)
+{
+    auto opaque = compile (solidFragment, false);
+    auto blended = compile (solidFragment, true);
+    ASSERT_NE (opaque, nullptr);
+    ASSERT_NE (blended, nullptr);
+
+    auto target = GpuTarget::create (device, 2, 1);
+    ASSERT_NE (target, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+
+    pass.setPipeline (opaque);
+    pass.setViewport (0.0f, 0.0f, 1.0f, 1.0f);
+    EXPECT_TRUE (pass.draw (3));
+
+    pass.setPipeline (blended);
+    pass.setViewport (1.0f, 0.0f, 1.0f, 1.0f);
+    EXPECT_TRUE (pass.draw (3));
+
+    pass.finish();
+    EXPECT_TRUE (frame.submit());
+    EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+    std::vector<uint8_t> pixels (2 * 4);
+    if (! readbackCompleted (target->readPixels (pixels.data(), pixels.size())))
+        return;
+
+    for (int column = 0; column < 2; ++column)
+    {
+        const auto* pixel = pixels.data() + column * 4;
+        EXPECT_NEAR (pixel[0], 64, 1) << "column " << column;
+        EXPECT_NEAR (pixel[1], 128, 1) << "column " << column;
+        EXPECT_NEAR (pixel[2], 191, 1) << "column " << column;
+        EXPECT_EQ (pixel[3], 255) << "column " << column;
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P (GpuPipeline,
+                          GpuPipelineSharedModuleTests,
+                          ::testing::ValuesIn (GpuComputePassBackendTests::getCompiledPlatforms()),
+                          GpuComputePassBackendTests::getTestNameSuffix);
+
 #endif

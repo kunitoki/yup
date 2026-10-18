@@ -23,6 +23,10 @@
 #ifndef YUP_3D_LIB_LIGHTS
 #define YUP_3D_LIB_LIGHTS
 
+// The light loops stay loops ([[dont_unroll]], [loop] in HLSL): unrolled, every iteration inlines
+// the whole light with its shadow filter and contact march, a code size D3DCompile is very slow on
+#extension GL_EXT_control_flow_attributes : require
+
 #include "lib/bsdf.glsl"
 #include "lib/lighting.glsl"
 #include "lib/probes.glsl"
@@ -381,12 +385,14 @@ vec3 lightsShade(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 ge
     vec3 color = vec3(0.0);
     int directionalLights = int(lighting.clusterDepth.z);
 
+    [[dont_unroll]]
     for (int i = 0; i < directionalLights; ++i)
         color += lightsShadeLight(s, lookup, lights[i], worldPosition, geometricNormal);
 
     uint slot = lightsClusterIndex(worldPosition) * 64u;
     uint count = min(clusterLights[slot], 63u);
 
+    [[dont_unroll]]
     for (uint i = 0u; i < count; ++i)
         color += lightsShadeLight(s, lookup, lights[clusterLights[slot + 1u + i]], worldPosition, geometricNormal);
 
@@ -399,6 +405,7 @@ vec3 lightsShade(BsdfSurface s, LightsLookup lookup, vec3 worldPosition, vec3 ge
     vec3 color = vec3(0.0);
     int lightCount = int(lightList.count.x);
 
+    [[dont_unroll]]
     for (int i = 0; i < 8; ++i)
     {
         if (i >= lightCount)
@@ -739,17 +746,20 @@ vec3 lightsShadeLayers(BsdfSurface s, BsdfLayers layers, vec3 worldPosition, vec
 #ifdef YUP_3D_TIER_FULL
     int directionalLights = int(lighting.clusterDepth.z);
 
+    [[dont_unroll]]
     for (int i = 0; i < directionalLights; ++i)
         color += lightsShadeLayersLight(s, layers, lights[i], worldPosition, geometricNormal);
 
     uint slot = lightsClusterIndex(worldPosition) * 64u;
     uint count = min(clusterLights[slot], 63u);
 
+    [[dont_unroll]]
     for (uint i = 0u; i < count; ++i)
         color += lightsShadeLayersLight(s, layers, lights[clusterLights[slot + 1u + i]], worldPosition, geometricNormal);
 #else
     int lightCount = int(lightList.count.x);
 
+    [[dont_unroll]]
     for (int i = 0; i < 8; ++i)
     {
         if (i >= lightCount)

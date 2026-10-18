@@ -310,6 +310,7 @@ GpuDevice::~GpuDevice()
     // A backend that forgets releasePooledResources() would let pooled ore buffers
     // be destroyed after the ore context that created them.
     jassert (uniformBufferPool.isEmpty());
+    jassert (shaderModuleCache.size() == 0);
     jassert (retiredFrames.empty());
 
     // A frame that never completed would leave its waiters blocked forever
@@ -335,6 +336,7 @@ void GpuDevice::releasePooledResources() noexcept
 {
     retiredFrames.clear();
     uniformBufferPool.clear();
+    shaderModuleCache.clear();
 }
 
 //==============================================================================
@@ -662,6 +664,67 @@ void GpuDevice::releaseRetiredFrames (uint64_t generation)
 
     retiredFrames.erase (std::remove_if (retiredFrames.begin(), retiredFrames.end(), isSafe),
                          retiredFrames.end());
+}
+
+//==============================================================================
+
+rive::rcp<rive::ore::ShaderModule> GpuDevice::ShaderModuleCache::getOrMake (rive::ore::Context& oreCtx, const rive::ore::ShaderModuleDesc& desc)
+{
+    // Each field is prefixed by its size, so two descriptions never digest the same bytes
+    MemoryOutputStream description;
+
+    const auto append = [&description] (const void* data, size_t size)
+    {
+        description.writeInt64 ((int64) size);
+        if (data != nullptr && size > 0)
+            description.write (data, size);
+    };
+
+    const auto appendString = [&append] (const char* text)
+    {
+        append (text, text != nullptr ? std::strlen (text) : 0);
+    };
+
+    description.writeInt ((int) desc.language);
+    description.writeInt ((int) desc.stage);
+    description.writeInt ((int) desc.shaderAssetId);
+    append (desc.code, desc.codeSize);
+    append (desc.hlslSource, desc.hlslSourceSize);
+    appendString (desc.hlslEntryPoint);
+    append (desc.bindingMapBytes, desc.bindingMapSize);
+    append (desc.texSamplerPairBytes, desc.texSamplerPairSize);
+    append (desc.glFixupBytes, desc.glFixupSize);
+
+    const auto digest = SHA1 (description.getData(), description.getDataSize()).getRawData();
+    std::string key (reinterpret_cast<const char*> (digest.data()), digest.size());
+
+    const ScopedLock sl (lock);
+
+    if (auto it = modules.find (key); it != modules.end())
+        return it->second;
+
+    auto module = oreCtx.makeShaderModule (desc);
+    if (module != nullptr)
+        modules.emplace (std::move (key), module);
+
+    return module;
+}
+
+void GpuDevice::ShaderModuleCache::clear() noexcept
+{
+    const ScopedLock sl (lock);
+    modules.clear();
+}
+
+int GpuDevice::ShaderModuleCache::size() const
+{
+    const ScopedLock sl (lock);
+    return (int) modules.size();
+}
+
+int GpuDevice::getShaderModuleCountForTesting() const
+{
+    return shaderModuleCache.size();
 }
 
 //==============================================================================
