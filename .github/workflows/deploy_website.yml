@@ -6,8 +6,12 @@ on:
       - "**/workflows/deploy_website.yml"
       - "website/**"
       - "docs/**"
-      - "modules/*/yup_*.h"
       - "logo.svg"
+      # The home page demos are a YUP app built from these
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "modules/**"
+      - "thirdparty/**"
     branches:
       - main
   workflow_dispatch:
@@ -21,6 +25,14 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  INSTALL_DEPS: >-
+    libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
+    libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
+    libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
+  EM_VERSION: 4.0.21
+  EMCC_SKIP_SANITY_CHECK: 1
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,6 +41,23 @@ jobs:
         working-directory: website
     steps:
       - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v15
+        with:
+          version: ${{ env.EM_VERSION }}
+
+      # Builds website_demos, which copies its .js and .wasm into website/src/public/yup for Vite
+      - name: Build home page demos
+        working-directory: ${{ github.workspace }}
+        run: |
+          emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_BUILD_TESTS=OFF -DYUP_BUILD_EXAMPLES=ON
+          cmake --build ${{ runner.workspace }}/build --config Release --target website_demos
+          ls -l website/src/public/yup
 
       - uses: actions/setup-node@v7
         with:

@@ -62,4 +62,4 @@ Each page only declares its `<title>` and `<meta name="description">`. On top of
 
 ## Deployment
 
-`.github/workflows/deploy_website.yml` builds the site (not the wasm demos yet, so the deployed home page shows "not built yet") and publishes it to GitHub Pages on every push to `main` that touches `website/`, `docs/` (screenshots and the search index), a module header in `modules/*/` or `logo.svg`. It also runs on manual dispatch.
+`.github/workflows/deploy_website.yml` builds the home page demos (the `website_demos` target, with Emscripten at the version `build_wasm.yml` uses) and then the site, and publishes it to GitHub Pages on every push to `main` that touches `website/`, `docs/` (screenshots and the search index), `logo.svg`, or what the demos are built from (`CMakeLists.txt`, `cmake/`, `modules/`, `thirdparty/`). It also runs on manual dispatch.
