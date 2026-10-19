@@ -33,9 +33,9 @@ protected:
         return new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (1.0f, 1.0f, 1.0f); }, 16, 2);
     }
 
-    EntityNode::Ptr addChild()
+    Entity::Ptr addChild()
     {
-        EntityNode::Ptr child (new EntityNode());
+        Entity::Ptr child (new Entity());
         scene->getRoot()->addChild (child);
         return child;
     }
@@ -94,7 +94,7 @@ TEST_F (SceneSettingsTests, FeatureNodesOnTheRootAreResolved)
 TEST_F (SceneSettingsTests, FirstNodeFoundDepthFirstWins)
 {
     auto first = addChild();
-    auto deep = EntityNode::Ptr (new EntityNode());
+    auto deep = Entity::Ptr (new Entity());
     first->addChild (deep);
     auto second = addChild();
 

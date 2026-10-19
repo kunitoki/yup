@@ -38,7 +38,7 @@ struct SceneFeatureNodes
 };
 
 template <class T>
-void takeFirstSceneFeature (const EntityNode& entity, const T*& found)
+void takeFirstSceneFeature (const Entity& entity, const T*& found)
 {
     if (found != nullptr)
         return;
@@ -50,7 +50,7 @@ void takeFirstSceneFeature (const EntityNode& entity, const T*& found)
     });
 }
 
-void collectSceneFeatures (const EntityNode& entity, SceneFeatureNodes& nodes)
+void collectSceneFeatures (const Entity& entity, SceneFeatureNodes& nodes)
 {
     if (! entity.isVisible())
         return;
@@ -76,7 +76,7 @@ SceneSettings SceneSettings::resolve (const Scene& scene)
     return resolve (*scene.getRoot());
 }
 
-SceneSettings SceneSettings::resolve (const EntityNode& root)
+SceneSettings SceneSettings::resolve (const Entity& root)
 {
     SceneFeatureNodes nodes;
     collectSceneFeatures (root, nodes);

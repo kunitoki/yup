@@ -35,7 +35,7 @@ namespace yup
     the same type:
 
     @code
-    auto entity = yup::EntityNode::Ptr (new yup::EntityNode ("body"));
+    auto entity = yup::Entity::Ptr (new yup::Entity ("body"));
     entity->attach<yup::MeshNode> (bodyMesh);       // slot 0
     entity->attach<yup::MeshNode, 1> (detailMesh);  // slot 1
 
@@ -51,21 +51,21 @@ namespace yup
 
     @see Node, Scene, GltfModel
 */
-class YUP_API EntityNode : public ReferenceCountedObject
+class YUP_API Entity : public ReferenceCountedObject
 {
 public:
     //==============================================================================
-    using Ptr = ReferenceCountedObjectPtr<EntityNode>;
+    using Ptr = ReferenceCountedObjectPtr<Entity>;
 
     //==============================================================================
     /** Creates an entity.
 
         @param entityName The name of the entity.
     */
-    explicit EntityNode (const String& entityName = {});
+    explicit Entity (const String& entityName = {});
 
     /** Destructor. The children lose their parent, the parts are destroyed. */
-    ~EntityNode() override;
+    ~Entity() override;
 
     //==============================================================================
     /** Returns the name of the entity. */
@@ -97,19 +97,19 @@ public:
 
         @return True if it was a child of this entity and has been removed.
     */
-    bool removeChild (EntityNode* child);
+    bool removeChild (Entity* child);
 
     /** Removes this entity from its parent, if it has one. */
     void removeFromParent();
 
     /** Returns the parent entity, or nullptr for a root. */
-    EntityNode* getParent() const noexcept { return parent; }
+    Entity* getParent() const noexcept { return parent; }
 
     /** Returns the number of children. */
     int getNumChildren() const noexcept { return static_cast<int> (children.size()); }
 
     /** Returns a child, or nullptr if the index is out of range. */
-    EntityNode* getChild (int index) const noexcept;
+    Entity* getChild (int index) const noexcept;
 
     /** Returns every child, in order. */
     Span<const Ptr> getChildren() const noexcept { return children; }
@@ -119,10 +119,10 @@ public:
         @param childName  The name to look for.
         @param recursive  True to search the whole subtree depth-first, false for direct children only.
     */
-    EntityNode* findChild (StringRef childName, bool recursive = true) const;
+    Entity* findChild (StringRef childName, bool recursive = true) const;
 
     /** Returns true if this entity is a parent, grandparent, etc. of another entity. */
-    bool isAncestorOf (const EntityNode* other) const noexcept;
+    bool isAncestorOf (const Entity* other) const noexcept;
 
     //==============================================================================
     /** Returns the translation relative to the parent. */
@@ -294,7 +294,7 @@ private:
     String name;
     bool visible = true;
 
-    EntityNode* parent = nullptr;
+    Entity* parent = nullptr;
     std::vector<Ptr> children;
     std::vector<Entry> nodes;
 
@@ -304,8 +304,8 @@ private:
     mutable Matrix4 localMatrix;
     mutable bool localMatrixDirty = false;
 
-    YUP_DECLARE_WEAK_REFERENCEABLE (EntityNode)
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EntityNode)
+    YUP_DECLARE_WEAK_REFERENCEABLE (Entity)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Entity)
 };
 
 } // namespace yup

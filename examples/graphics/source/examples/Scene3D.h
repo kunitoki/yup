@@ -424,7 +424,7 @@ private:
             return { a.position + (b.position - a.position) * t, rotation.normalized() };
         }
 
-        void applyTo (yup::EntityNode& entity) const
+        void applyTo (yup::Entity& entity) const
         {
             entity.setPosition (position);
             entity.setRotation (rotation);
@@ -562,7 +562,7 @@ private:
                 status = "Unable to load mpc.glb: " + model.getErrorMessage();
             }
 
-            cameraEntity = new yup::EntityNode ("camera");
+            cameraEntity = new yup::Entity ("camera");
             cameraNode = &cameraEntity->attach<yup::CameraNode>();
             animator = &cameraEntity->attach<CameraAnimator>();
             cameraNode->zNear = radius * 0.02f;
@@ -575,7 +575,7 @@ private:
             // Lit like a product shot: one large, low key light from the back left, its soft box in the
             // studio, rakes across the panel and casts long shadows; the dim studio fills the rest. On the
             // full tier contact shadows tighten them where the knobs and pads meet the panel
-            auto keyLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("keyLight"));
+            auto keyLightEntity = yup::Entity::Ptr (new yup::Entity ("keyLight"));
             auto& keyLight = keyLightEntity->attach<yup::LightNode>();
             keyLight.castsShadows = true;
             keyLight.contactShadows = true;
@@ -586,7 +586,7 @@ private:
             rootEntity->addChild (keyLightEntity);
 
             // A small spot light from the front right lights the pads and casts their shadows across the next row
-            auto padLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("padLight"));
+            auto padLightEntity = yup::Entity::Ptr (new yup::Entity ("padLight"));
             auto& padLight = padLightEntity->attach<yup::LightNode> (yup::LightNode::Type::spot);
             padLight.castsShadows = true;
             padLight.intensity = 10.0f;
@@ -606,7 +606,7 @@ private:
             const auto deviceSize = deviceBounds.getSize();
             const auto probePosition = padBounds.isEmpty() ? deviceCenter + yup::Vector3<float> (0.0f, deviceSize.getY(), 0.0f)
                                                            : padBounds.getCenter() + yup::Vector3<float> (0.0f, padBounds.getSize().getY() * 0.5f + 0.25f, 0.0f);
-            probeEntity = new yup::EntityNode ("reflectionProbe");
+            probeEntity = new yup::Entity ("reflectionProbe");
             probeEntity->setPosition (probePosition);
             reflectionProbe = &probeEntity->attach<yup::ReflectionProbeNode>();
             reflectionProbe->shape = yup::ReflectionProbeNode::Shape::box;
@@ -624,7 +624,7 @@ private:
             const auto layerSpacing = 0.45f;
             const auto volumeBottom = panelTop + 0.05f - layerSpacing * 0.5f;
             const auto volumeTop = volumeBottom + layerSpacing * 2.0f;
-            volumeEntity = new yup::EntityNode ("irradianceVolume");
+            volumeEntity = new yup::Entity ("irradianceVolume");
             volumeEntity->setPosition ({ deviceCenter.getX(), (volumeBottom + volumeTop) * 0.5f, deviceCenter.getZ() });
             irradianceVolume = &volumeEntity->attach<yup::IrradianceVolumeNode>();
             irradianceVolume->extents = { deviceSize.getX() * 0.5f + 0.6f, (volumeTop - volumeBottom) * 0.5f, deviceSize.getZ() * 0.5f + 0.6f };
@@ -634,7 +634,7 @@ private:
             irradianceVolume->falloff = 0.15f;
             rootEntity->addChild (volumeEntity);
 
-            lightShow = new yup::EntityNode ("lightShow");
+            lightShow = new yup::Entity ("lightShow");
             lightShow->setVisible (false);
             lightShow->attach<LightShowAnimator> (deviceBounds);
             setNumShowLights (numShowLightsFull);
@@ -1009,7 +1009,7 @@ private:
     private:
         //==============================================================================
         /** Replaces the screen glass of the device with the LCD component, and drops the modeled logo. */
-        void attachScreen (yup::EntityNode& device)
+        void attachScreen (yup::Entity& device)
         {
             auto* meshNode = device.getNode<yup::MeshNode>();
             if (meshNode == nullptr || meshNode->mesh == nullptr)
@@ -1100,7 +1100,7 @@ private:
             a satin base, and gives the rubber pads a soft velvet sheen at their edges. Collects the
             varnished and the velvet materials into @p coated and @p sheened, for setClearcoat() and setSheen().
         */
-        static void tuneMaterials (const yup::EntityNode& entity, std::vector<yup::Material::Ptr>& coated, std::vector<yup::Material::Ptr>& sheened)
+        static void tuneMaterials (const yup::Entity& entity, std::vector<yup::Material::Ptr>& coated, std::vector<yup::Material::Ptr>& sheened)
         {
             if (auto* meshNode = entity.getNode<yup::MeshNode>(); meshNode != nullptr && meshNode->mesh != nullptr)
             {
@@ -1148,7 +1148,7 @@ private:
 
             for (int i = 0; i < count; ++i)
             {
-                auto showLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("showLight"));
+                auto showLightEntity = yup::Entity::Ptr (new yup::Entity ("showLight"));
                 auto& showLight = showLightEntity->attach<yup::LightNode> (yup::LightNode::Type::point);
                 const auto color = yup::Color::fromHSV (static_cast<float> (i) / static_cast<float> (count), 0.85f, 1.0f);
                 showLight.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
@@ -1161,7 +1161,7 @@ private:
         }
 
         /** The number of lights in the visible part of a tree. */
-        static int countLights (const yup::EntityNode& entity)
+        static int countLights (const yup::Entity& entity)
         {
             if (! entity.isVisible())
                 return 0;
@@ -1442,20 +1442,20 @@ private:
         mutable yup::SpinLock mapperLock;
         yup::MeshSurfaceMapper screenMapper;
 
-        yup::EntityNode::Ptr cameraEntity;
+        yup::Entity::Ptr cameraEntity;
         yup::CameraNode* cameraNode = nullptr;
         CameraAnimator* animator = nullptr;
 
-        yup::EntityNode::Ptr lightShow;
-        yup::EntityNode::Ptr probeEntity;
+        yup::Entity::Ptr lightShow;
+        yup::Entity::Ptr probeEntity;
         yup::ReflectionProbeNode* reflectionProbe = nullptr;
-        yup::EntityNode::Ptr volumeEntity;
+        yup::Entity::Ptr volumeEntity;
         yup::IrradianceVolumeNode* irradianceVolume = nullptr;
         std::vector<yup::Material::Ptr> coatedMaterials;
         std::vector<yup::Material::Ptr> sheenMaterials;
 
-        yup::EntityNode* screenEntity = nullptr;
-        yup::EntityNode* focusEntity = nullptr; // The device, whose children, or else its body, a click focuses on
+        yup::Entity* screenEntity = nullptr;
+        yup::Entity* focusEntity = nullptr; // The device, whose children, or else its body, a click focuses on
         yup::Vector3<float> screenCenter;
         yup::Vector3<float> screenUp;
         yup::Vector3<float> screenRight;
@@ -2352,7 +2352,7 @@ private:
     class EntityItem final : public yup::TreeViewItem
     {
     public:
-        explicit EntityItem (yup::EntityNode::Ptr entityToShow)
+        explicit EntityItem (yup::Entity::Ptr entityToShow)
             : entity (std::move (entityToShow))
         {
             for (const auto& child : entity->getChildren())
@@ -2391,7 +2391,7 @@ private:
                 parts.add (count == 1 ? yup::String (name) : yup::String (count) + " " + name + "s");
         }
 
-        yup::EntityNode::Ptr entity;
+        yup::Entity::Ptr entity;
     };
 
     void setSceneTreeVisible (bool shouldBeVisible)

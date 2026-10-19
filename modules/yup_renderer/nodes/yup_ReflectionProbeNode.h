@@ -39,7 +39,7 @@ namespace yup
     one wins near the surfaces it encloses. On the raster tier each draw blends the two probes
     that take priority over it, see SceneDrawList::selectReflectionProbes().
 
-    @see EntityNode, SceneRenderer, SceneDrawList
+    @see Entity, SceneRenderer, SceneDrawList
 */
 class YUP_API ReflectionProbeNode : public Node
 {

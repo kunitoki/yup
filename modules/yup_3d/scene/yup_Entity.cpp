@@ -24,12 +24,12 @@ namespace yup
 
 //==============================================================================
 
-EntityNode::EntityNode (const String& entityName)
+Entity::Entity (const String& entityName)
     : name (entityName)
 {
 }
 
-EntityNode::~EntityNode()
+Entity::~Entity()
 {
     for (auto& child : children)
         child->parent = nullptr;
@@ -37,7 +37,7 @@ EntityNode::~EntityNode()
 
 //==============================================================================
 
-void EntityNode::addChild (Ptr child, int index)
+void Entity::addChild (Ptr child, int index)
 {
     if (child == nullptr || child->isAncestorOf (this) || child.get() == this)
     {
@@ -54,7 +54,7 @@ void EntityNode::addChild (Ptr child, int index)
     children.insert (children.begin() + insertAt, std::move (child));
 }
 
-bool EntityNode::removeChild (EntityNode* child)
+bool Entity::removeChild (Entity* child)
 {
     const auto it = std::find_if (children.begin(), children.end(), [child] (const Ptr& p)
     {
@@ -71,18 +71,18 @@ bool EntityNode::removeChild (EntityNode* child)
     return true;
 }
 
-void EntityNode::removeFromParent()
+void Entity::removeFromParent()
 {
     if (parent != nullptr)
         parent->removeChild (this);
 }
 
-EntityNode* EntityNode::getChild (int index) const noexcept
+Entity* Entity::getChild (int index) const noexcept
 {
     return isPositiveAndBelow (index, getNumChildren()) ? children[static_cast<size_t> (index)].get() : nullptr;
 }
 
-EntityNode* EntityNode::findChild (StringRef childName, bool recursive) const
+Entity* Entity::findChild (StringRef childName, bool recursive) const
 {
     for (const auto& child : children)
     {
@@ -99,7 +99,7 @@ EntityNode* EntityNode::findChild (StringRef childName, bool recursive) const
     return nullptr;
 }
 
-bool EntityNode::isAncestorOf (const EntityNode* other) const noexcept
+bool Entity::isAncestorOf (const Entity* other) const noexcept
 {
     for (auto* p = other != nullptr ? other->parent : nullptr; p != nullptr; p = p->parent)
     {
@@ -112,25 +112,25 @@ bool EntityNode::isAncestorOf (const EntityNode* other) const noexcept
 
 //==============================================================================
 
-void EntityNode::setPosition (const Vector3<float>& newPosition) noexcept
+void Entity::setPosition (const Vector3<float>& newPosition) noexcept
 {
     position = newPosition;
     localMatrixDirty = true;
 }
 
-void EntityNode::setRotation (const Quaternion& newRotation) noexcept
+void Entity::setRotation (const Quaternion& newRotation) noexcept
 {
     rotation = newRotation;
     localMatrixDirty = true;
 }
 
-void EntityNode::setScale (const Vector3<float>& newScale) noexcept
+void Entity::setScale (const Vector3<float>& newScale) noexcept
 {
     scale = newScale;
     localMatrixDirty = true;
 }
 
-const Matrix4& EntityNode::getLocalMatrix() const noexcept
+const Matrix4& Entity::getLocalMatrix() const noexcept
 {
     if (localMatrixDirty)
     {
@@ -144,7 +144,7 @@ const Matrix4& EntityNode::getLocalMatrix() const noexcept
     return localMatrix;
 }
 
-Matrix4 EntityNode::getWorldMatrix() const noexcept
+Matrix4 Entity::getWorldMatrix() const noexcept
 {
     auto world = getLocalMatrix();
 
@@ -154,7 +154,7 @@ Matrix4 EntityNode::getWorldMatrix() const noexcept
     return world;
 }
 
-static void expandEntityWorldBounds (const EntityNode& entity, const Matrix4& world, BoundingBox& bounds)
+static void expandEntityWorldBounds (const Entity& entity, const Matrix4& world, BoundingBox& bounds)
 {
     if (! entity.isVisible())
         return;
@@ -169,7 +169,7 @@ static void expandEntityWorldBounds (const EntityNode& entity, const Matrix4& wo
         expandEntityWorldBounds (*child, child->getLocalMatrix().followedBy (world), bounds);
 }
 
-BoundingBox EntityNode::computeWorldBounds() const
+BoundingBox Entity::computeWorldBounds() const
 {
     BoundingBox bounds;
     expandEntityWorldBounds (*this, getWorldMatrix(), bounds);
@@ -178,7 +178,7 @@ BoundingBox EntityNode::computeWorldBounds() const
 
 //==============================================================================
 
-Node* EntityNode::findNode (const void* typeKey, int slot) const noexcept
+Node* Entity::findNode (const void* typeKey, int slot) const noexcept
 {
     for (const auto& entry : nodes)
     {
@@ -189,7 +189,7 @@ Node* EntityNode::findNode (const void* typeKey, int slot) const noexcept
     return nullptr;
 }
 
-void EntityNode::insertNode (const void* typeKey, int slot, std::unique_ptr<Node> node)
+void Entity::insertNode (const void* typeKey, int slot, std::unique_ptr<Node> node)
 {
     jassert (slot >= 0);
 
@@ -210,7 +210,7 @@ void EntityNode::insertNode (const void* typeKey, int slot, std::unique_ptr<Node
     attached->attachedToEntity();
 }
 
-bool EntityNode::eraseNode (const void* typeKey, int slot)
+bool Entity::eraseNode (const void* typeKey, int slot)
 {
     const auto it = std::find_if (nodes.begin(), nodes.end(), [&] (const Entry& entry)
     {

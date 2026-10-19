@@ -50,7 +50,7 @@ namespace yup
     primitive that isn't made of triangles or an image that can't be decoded, are collected
     in getWarnings().
 
-    @see EntityNode, Mesh, Material
+    @see Entity, Mesh, Material
 */
 class YUP_API GltfModel
 {
@@ -80,14 +80,14 @@ public:
     /** Builds a new entity tree for a scene of the asset.
 
         The returned root entity is named after the scene and holds its root nodes. Every node
-        becomes an EntityNode with a MeshNode, CameraNode or LightNode attached as needed.
+        becomes an Entity with a MeshNode, CameraNode or LightNode attached as needed.
 
         @param sceneIndex The scene to build, or -1 for the default one. An asset without
                           scenes builds every node that has no parent.
 
         @return The root entity, or nullptr if the scene index is out of range.
     */
-    EntityNode::Ptr createEntity (int sceneIndex = -1) const;
+    Entity::Ptr createEntity (int sceneIndex = -1) const;
 
     /** Returns the number of scenes in the asset. */
     int getNumScenes() const noexcept;

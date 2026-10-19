@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 
-static CameraNode* findFirstVisibleCamera (const EntityNode& entity)
+static CameraNode* findFirstVisibleCamera (const Entity& entity)
 {
     if (! entity.isVisible())
         return nullptr;
@@ -48,7 +48,7 @@ static CameraNode* findFirstVisibleCamera (const EntityNode& entity)
     return nullptr;
 }
 
-static void updateEntityParts (EntityNode& entity, double deltaSeconds)
+static void updateEntityParts (Entity& entity, double deltaSeconds)
 {
     if (! entity.isVisible())
         return;
@@ -61,7 +61,7 @@ static void updateEntityParts (EntityNode& entity, double deltaSeconds)
     // Parts may change the tree while updating: hold each child and re-check the count
     for (int i = 0; i < entity.getNumChildren(); ++i)
     {
-        const EntityNode::Ptr child = entity.getChild (i);
+        const Entity::Ptr child = entity.getChild (i);
         updateEntityParts (*child, deltaSeconds);
     }
 }
@@ -69,7 +69,7 @@ static void updateEntityParts (EntityNode& entity, double deltaSeconds)
 //==============================================================================
 
 Scene::Scene()
-    : root (new EntityNode ("root"))
+    : root (new Entity ("root"))
 {
 }
 
@@ -77,7 +77,7 @@ Scene::~Scene() = default;
 
 //==============================================================================
 
-void Scene::setActiveCamera (EntityNode::Ptr entity, int slot)
+void Scene::setActiveCamera (Entity::Ptr entity, int slot)
 {
     activeCameraEntity = std::move (entity);
     activeCameraSlot = slot;

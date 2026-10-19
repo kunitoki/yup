@@ -48,12 +48,12 @@ SceneDrawList::~SceneDrawList() = default;
 
 //==============================================================================
 
-void SceneDrawList::build (const EntityNode& root, const Matrix4& view)
+void SceneDrawList::build (const Entity& root, const Matrix4& view)
 {
     build (root, view, BuildOptions {});
 }
 
-void SceneDrawList::build (const EntityNode& root, const Matrix4& view, const BuildOptions& options)
+void SceneDrawList::build (const Entity& root, const Matrix4& view, const BuildOptions& options)
 {
     clear();
 
@@ -312,7 +312,7 @@ void SceneDrawList::clear()
     irradianceVolumes.clear();
 }
 
-void SceneDrawList::collect (const EntityNode& entity, const Matrix4& world, const Material* overrideMaterial, const Matrix4& view)
+void SceneDrawList::collect (const Entity& entity, const Matrix4& world, const Material* overrideMaterial, const Matrix4& view)
 {
     if (! entity.isVisible())
         return;

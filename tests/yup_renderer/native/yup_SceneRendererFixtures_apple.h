@@ -80,7 +80,7 @@ protected:
     {
         Scene scene;
         buildShadowsScene (scene);
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([radiance] (const Vector3<float>&) { return Vector3<float> (radiance, radiance, radiance); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([radiance] (const Vector3<float>&) { return Vector3<float> (radiance, radiance, radiance); }, 32, 3));
         scene.getRoot()->attach<ToneMappingNode> (toneMapping);
 
         SceneRenderer renderer;
@@ -117,7 +117,7 @@ protected:
 
         const auto addLight = [&] (LightNode::Type type, float intensity, float radius, Vector3<float> position, const Quaternion& rotation)
         {
-            auto light = EntityNode::Ptr (new EntityNode ("light"));
+            auto light = Entity::Ptr (new Entity ("light"));
             auto& node = light->attach<LightNode> (type);
             node.intensity = intensity;
             node.radius = radius;
@@ -151,9 +151,9 @@ protected:
         scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
 
         if (environmentRadiance > 0.0f)
-            scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([environmentRadiance] (const Vector3<float>&) { return Vector3<float> (environmentRadiance, environmentRadiance, environmentRadiance); }, 32, 3));
+            setEnvironmentMap (scene, new EnvironmentMap ([environmentRadiance] (const Vector3<float>&) { return Vector3<float> (environmentRadiance, environmentRadiance, environmentRadiance); }, 32, 3));
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().intensity = sunIntensity;
         scene.getRoot()->addChild (sun);
 
@@ -240,7 +240,7 @@ protected:
 
             auto mesh = Mesh::Ptr (new Mesh (name));
             mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
-            auto entity = EntityNode::Ptr (new EntityNode (name));
+            auto entity = Entity::Ptr (new Entity (name));
             entity->attach<MeshNode> (mesh);
             entity->setPosition ({ x, 0.0f, 0.0f });
             entity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.3f));
@@ -298,7 +298,7 @@ protected:
         under 32 colored point lights of range 0.5 and intensity 0.5, like the light show of the
         Scene3D demo. Returns the light entities, placed by moveOrbitingLights().
     */
-    static std::vector<EntityNode*> buildOrbitingLightsScene (Scene& scene)
+    static std::vector<Entity*> buildOrbitingLightsScene (Scene& scene)
     {
         auto material = Material::Ptr (new Material());
         material->baseColorFactor = { 0.5f, 0.5f, 0.5f, 1.0f };
@@ -315,10 +315,10 @@ protected:
             }
         }
 
-        std::vector<EntityNode*> lights;
+        std::vector<Entity*> lights;
         for (int i = 0; i < 32; ++i)
         {
-            auto light = EntityNode::Ptr (new EntityNode ("showLight"));
+            auto light = Entity::Ptr (new Entity ("showLight"));
             auto& node = light->attach<LightNode> (LightNode::Type::point);
             const auto color = Color::fromHSV (static_cast<float> (i) / 32.0f, 0.85f, 1.0f);
             node.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
@@ -328,7 +328,7 @@ protected:
             lights.push_back (light.get());
         }
 
-        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto camera = Entity::Ptr (new Entity ("camera"));
         camera->attach<CameraNode>();
         camera->setPosition ({ 0.0f, 0.0f, 3.0f });
         scene.getRoot()->addChild (camera);
@@ -340,7 +340,7 @@ protected:
     }
 
     /** Places the lights of buildOrbitingLightsScene() at @p time seconds: four rings of orbits, alternating in direction, as in the demo. */
-    static void moveOrbitingLights (const std::vector<EntityNode*>& lights, double time)
+    static void moveOrbitingLights (const std::vector<Entity*>& lights, double time)
     {
         for (size_t i = 0; i < lights.size(); ++i)
         {
@@ -399,12 +399,12 @@ protected:
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
 
         Scene scene;
-        auto plate = EntityNode::Ptr (new EntityNode ("plate"));
+        auto plate = Entity::Ptr (new Entity ("plate"));
         plate->attach<MeshNode> (mesh);
         plate->setScale ({ xScale, 1.0f, 1.0f });
         scene.getRoot()->addChild (plate);
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>();
         sun->setRotation (sunRotation);
         scene.getRoot()->addChild (sun);
@@ -468,7 +468,7 @@ protected:
     }
 
     /** A square of @p halfSize centered at (@p x, 0, 0), facing the default camera. */
-    static EntityNode::Ptr makeQuad (float x, float halfSize, Material::Ptr material)
+    static Entity::Ptr makeQuad (float x, float halfSize, Material::Ptr material)
     {
         std::vector<Mesh::Vertex> vertices (4);
         vertices[0].position = { x - halfSize, -halfSize, 0.0f };
@@ -482,7 +482,7 @@ protected:
         auto mesh = Mesh::Ptr (new Mesh ("quad"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
 
-        auto entity = EntityNode::Ptr (new EntityNode ("quad"));
+        auto entity = Entity::Ptr (new Entity ("quad"));
         entity->attach<MeshNode> (mesh);
         return entity;
     }

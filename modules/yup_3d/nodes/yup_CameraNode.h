@@ -28,7 +28,7 @@ namespace yup
     Cameras look down the -Z axis of their entity with +Y up, like glTF cameras. Choose which
     camera renders a scene with Scene::setActiveCamera().
 
-    @see Scene, EntityNode
+    @see Scene, Entity
 */
 class YUP_API CameraNode : public Node
 {

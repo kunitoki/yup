@@ -56,7 +56,7 @@ public:
 
     //==============================================================================
     /** Finds the parts of the device and the materials that show the faceplate. */
-    void setDevice (const yup::EntityNode& device)
+    void setDevice (const yup::Entity& device)
     {
         parts.clear();
         materials.clear();
@@ -190,7 +190,7 @@ private:
         return { encode (linear[0]), encode (linear[1]), encode (linear[2]) };
     }
 
-    void collectMaterials (const yup::EntityNode& entity)
+    void collectMaterials (const yup::Entity& entity)
     {
         auto* meshNode = entity.getNode<yup::MeshNode>();
         if (meshNode == nullptr || meshNode->mesh == nullptr)

@@ -89,7 +89,7 @@ TEST_F (LightClustersTests, DegenerateDepthsFallInTheEndSlices)
 TEST_F (LightClustersTests, GridFollowsTheCameraPlanes)
 {
     Scene scene;
-    auto entity = EntityNode::Ptr (new EntityNode ("camera"));
+    auto entity = Entity::Ptr (new Entity ("camera"));
     auto& camera = entity->attach<CameraNode>();
     scene.getRoot()->addChild (entity);
     scene.setActiveCamera (entity.get());

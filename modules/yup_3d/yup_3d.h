@@ -70,7 +70,7 @@
 #include "resources/yup_Texture.h"
 #include "resources/yup_Material.h"
 #include "resources/yup_Mesh.h"
-#include "scene/yup_EntityNode.h"
+#include "scene/yup_Entity.h"
 #include "nodes/yup_MeshNode.h"
 #include "nodes/yup_MaterialNode.h"
 #include "nodes/yup_CameraNode.h"

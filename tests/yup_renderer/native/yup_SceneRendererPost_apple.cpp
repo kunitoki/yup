@@ -331,7 +331,7 @@ TEST_F (SceneRendererMetalTests, FullTierBackgroundColorMatchesRaster)
 
         Scene scene;
         scene.getRoot()->addChild (makePlates());
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>();
         scene.getRoot()->addChild (sun);
         scene.getRoot()->attach<BackgroundNode> (background);
@@ -409,7 +409,7 @@ TEST_F (SceneRendererMetalTests, ConvergesThenRestartsOnChange)
     ASSERT_NE (sun, nullptr);
     plates->attach<MaterialNode> (material);
 
-    auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+    auto camera = Entity::Ptr (new Entity ("camera"));
     camera->attach<CameraNode>();
     camera->setPosition ({ 0.0f, 0.0f, 5.0f });
     scene.getRoot()->addChild (camera);
@@ -579,7 +579,7 @@ TEST_F (SceneRendererMetalTests, MovingObjectKeepsStillPartsAntialiased)
 
     auto mesh = Mesh::Ptr (new Mesh ("spinner"));
     mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 });
-    auto spinner = EntityNode::Ptr (new EntityNode ("spinner"));
+    auto spinner = Entity::Ptr (new Entity ("spinner"));
     spinner->attach<MeshNode> (mesh);
     spinner->setPosition ({ -1.6f, -1.6f, 0.0f });
     scene.getRoot()->addChild (spinner);
@@ -1339,13 +1339,13 @@ TEST_F (SceneRendererMetalTests, CameraMotionReorderingBlendedItemsKeepsTheHisto
 
         auto mesh = Mesh::Ptr (new Mesh ("blended"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, blended);
-        auto quad = EntityNode::Ptr (new EntityNode ("blended"));
+        auto quad = Entity::Ptr (new Entity ("blended"));
         quad->attach<MeshNode> (mesh);
         quad->setPosition ({ x, -0.7f, 0.6f + z });
         scene.getRoot()->addChild (quad);
     }
 
-    auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+    auto camera = Entity::Ptr (new Entity ("camera"));
     camera->attach<CameraNode>();
     camera->setPosition ({ 0.0f, 0.0f, 5.0f });
     scene.getRoot()->addChild (camera);
@@ -1371,7 +1371,7 @@ TEST_F (SceneRendererMetalTests, CameraMotionKeepsTheHistory)
     Scene scene;
     buildEdgesScene (scene);
 
-    auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+    auto camera = Entity::Ptr (new Entity ("camera"));
     camera->attach<CameraNode>();
     camera->setPosition ({ 0.0f, 0.0f, 5.0f });
     scene.getRoot()->addChild (camera);
@@ -1423,7 +1423,7 @@ TEST_F (SceneRendererMetalTests, VelocityIsZeroForAStaticSceneAndCameraMotionOth
     Scene scene;
     buildShadowsScene (scene);
 
-    auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+    auto camera = Entity::Ptr (new Entity ("camera"));
     camera->attach<CameraNode>();
     camera->setPosition ({ 0.0f, 0.0f, 5.0f });
     scene.getRoot()->addChild (camera);
@@ -1465,10 +1465,10 @@ TEST_F (SceneRendererMetalTests, InfiniteFarPlaneSkyMovesWithTheCameraRotation)
     const auto renderTurning = [this] (float zFar)
     {
         Scene scene;
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
         scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
 
-        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto camera = Entity::Ptr (new Entity ("camera"));
         auto& node = camera->attach<CameraNode>();
         node.zNear = 0.05f;
         node.zFar = zFar;
@@ -1518,11 +1518,11 @@ TEST_F (SceneRendererMetalTests, BlendedItemsKeepTheDeferredVelocityAroundThem)
 
     auto mesh = Mesh::Ptr (new Mesh ("blended"));
     mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
-    auto blended = EntityNode::Ptr (new EntityNode ("blended"));
+    auto blended = Entity::Ptr (new Entity ("blended"));
     blended->attach<MeshNode> (mesh);
     scene.getRoot()->addChild (blended);
 
-    auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+    auto camera = Entity::Ptr (new Entity ("camera"));
     camera->attach<CameraNode>();
     camera->setPosition ({ 0.0f, 0.0f, 5.0f });
     scene.getRoot()->addChild (camera);
@@ -1680,7 +1680,7 @@ protected:
             mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
         }
 
-        auto bars = EntityNode::Ptr (new EntityNode ("bars"));
+        auto bars = Entity::Ptr (new Entity ("bars"));
         bars->attach<MeshNode> (mesh);
         bars->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.12f));
         scene.getRoot()->addChild (bars);
@@ -1976,11 +1976,11 @@ TEST_F (SceneRendererMetalTests, NonFiniteInputDoesNotPoisonHistory)
 
         auto mesh = Mesh::Ptr (new Mesh ("degenerate"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 3, 4, 5, 3, 5, 6 }, material);
-        auto degenerate = EntityNode::Ptr (new EntityNode ("degenerate"));
+        auto degenerate = Entity::Ptr (new Entity ("degenerate"));
         degenerate->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (degenerate);
 
-        auto light = EntityNode::Ptr (new EntityNode ("point"));
+        auto light = Entity::Ptr (new Entity ("point"));
         auto& node = light->attach<LightNode>();
         node.type = LightNode::Type::point;
         node.range = 0.0f;
@@ -2019,7 +2019,7 @@ TEST_F (SceneRendererMetalTests, FullTierWithoutTaaKeepsOverflowingHighlightsFin
     Scene scene;
     scene.getRoot()->addChild (makePlates());
 
-    auto light = EntityNode::Ptr (new EntityNode ("point"));
+    auto light = Entity::Ptr (new Entity ("point"));
     auto& node = light->attach<LightNode>();
     node.type = LightNode::Type::point;
     node.range = 0.0f;

@@ -33,7 +33,7 @@ namespace yup
     auto scene = yup::Scene::Ptr (new yup::Scene());
     scene->getRoot()->addChild (yup::GltfModel::loadFromFile (file).getReference().createEntity());
 
-    auto camera = yup::EntityNode::Ptr (new yup::EntityNode ("camera"));
+    auto camera = yup::Entity::Ptr (new yup::Entity ("camera"));
     camera->attach<yup::CameraNode>();
     camera->setPosition ({ 0.0f, 0.0f, 3.0f });
     scene->getRoot()->addChild (camera);
@@ -42,7 +42,7 @@ namespace yup
 
     Like Component, scenes are meant to be used from the message thread only.
 
-    @see EntityNode
+    @see Entity
 */
 class YUP_API Scene : public ReferenceCountedObject
 {
@@ -59,7 +59,7 @@ public:
 
     //==============================================================================
     /** Returns the root entity, which always exists. */
-    const EntityNode::Ptr& getRoot() const noexcept { return root; }
+    const Entity::Ptr& getRoot() const noexcept { return root; }
 
     //==============================================================================
     /** Chooses the camera that renders the scene.
@@ -70,7 +70,7 @@ public:
         @param entity  The entity holding the camera, or nullptr to use the fallback.
         @param slot    The CameraNode slot on the entity.
     */
-    void setActiveCamera (EntityNode::Ptr entity, int slot = 0);
+    void setActiveCamera (Entity::Ptr entity, int slot = 0);
 
     /** Returns the camera that renders the scene.
 
@@ -91,8 +91,8 @@ public:
     void update (double deltaSeconds);
 
 private:
-    EntityNode::Ptr root;
-    WeakReference<EntityNode> activeCameraEntity;
+    Entity::Ptr root;
+    WeakReference<Entity> activeCameraEntity;
     int activeCameraSlot = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scene)

@@ -28,9 +28,9 @@ using namespace yup;
 class SceneDrawListTests : public ::testing::Test
 {
 protected:
-    static EntityNode::Ptr makeEntity (const String& name = {})
+    static Entity::Ptr makeEntity (const String& name = {})
     {
-        return EntityNode::Ptr (new EntityNode (name));
+        return Entity::Ptr (new Entity (name));
     }
 
     static Material::Ptr makeMaterial (const String& name, Material::AlphaMode alphaMode = Material::AlphaMode::opaque, bool doubleSided = false)
@@ -62,7 +62,7 @@ protected:
         EXPECT_NEAR (actual.getZ(), expected.getZ(), tolerance);
     }
 
-    EntityNode::Ptr root = makeEntity ("root");
+    Entity::Ptr root = makeEntity ("root");
     SceneDrawList drawList;
 };
 
@@ -416,7 +416,7 @@ protected:
     }
 
     /** Adds a point light @p distance away from the triangle of addTriangle(), and returns its entity. */
-    EntityNode* addPointLight (float distance, float range = 0.0f)
+    Entity* addPointLight (float distance, float range = 0.0f)
     {
         auto entity = makeEntity();
         entity->attach<LightNode> (LightNode::Type::point).range = range;

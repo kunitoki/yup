@@ -58,7 +58,7 @@ TEST_F (SceneRendererMetalTests, RendersWithoutMultisamplingIntoTheReturnedTextu
         auto mesh = Mesh::Ptr (new Mesh ("marker"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, emissive);
 
-        auto marker = EntityNode::Ptr (new EntityNode ("marker"));
+        auto marker = Entity::Ptr (new Entity ("marker"));
         marker->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (marker);
     };
@@ -214,7 +214,7 @@ TEST_F (SceneRendererMetalTests, SwappingTransformsOfTwoMeshesIsAChange)
 
         auto mesh = Mesh::Ptr (new Mesh (name));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
-        auto entity = EntityNode::Ptr (new EntityNode (name));
+        auto entity = Entity::Ptr (new Entity (name));
         entity->attach<MeshNode> (mesh);
         entity->setPosition ({ x, 0.0f, 0.0f });
         scene.getRoot()->addChild (entity);
@@ -368,7 +368,7 @@ TEST_F (SceneRendererMetalTests, BackgroundIsKeptBehindLitPixels)
     {
         Scene scene;
         buildShadowsScene (scene);
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& d)
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>& d)
         {
             return d.getY() > 0.0f ? Vector3<float> (0.8f, 0.1f, 0.05f) : Vector3<float> (0.05f, 0.1f, 0.8f);
         }, 32, 3));
@@ -432,7 +432,7 @@ TEST_P (SceneRendererTierTests, BlendItemsDrawOverDeferred)
         auto mesh = Mesh::Ptr (new Mesh ("blended"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
 
-        auto entity = EntityNode::Ptr (new EntityNode ("blended"));
+        auto entity = Entity::Ptr (new Entity ("blended"));
         entity->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (entity);
     };

@@ -393,8 +393,8 @@ TEST_F (GpuSceneDataTests, GpuReflectionProbeLayoutIsStd430)
 
 TEST_F (GpuSceneDataTests, PacksASphereProbe)
 {
-    auto root = EntityNode::Ptr (new EntityNode ("root"));
-    auto entity = EntityNode::Ptr (new EntityNode ("probe"));
+    auto root = Entity::Ptr (new Entity ("root"));
+    auto entity = Entity::Ptr (new Entity ("probe"));
     entity->setPosition ({ 1.0f, 2.0f, 3.0f });
     entity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.7f));
     entity->setScale ({ 2.0f, 2.0f, 2.0f });
@@ -443,8 +443,8 @@ TEST_F (GpuSceneDataTests, PacksASphereProbe)
 
 TEST_F (GpuSceneDataTests, PacksABoxProbe)
 {
-    auto root = EntityNode::Ptr (new EntityNode ("root"));
-    auto entity = EntityNode::Ptr (new EntityNode ("probe"));
+    auto root = Entity::Ptr (new Entity ("root"));
+    auto entity = Entity::Ptr (new Entity ("probe"));
     entity->setPosition ({ -4.0f, 0.0f, 1.0f });
     auto& node = entity->attach<ReflectionProbeNode>();
     node.shape = ReflectionProbeNode::Shape::box;
@@ -499,8 +499,8 @@ TEST_F (GpuSceneDataTests, GpuIrradianceVolumeLayoutIsStd430)
 
 TEST_F (GpuSceneDataTests, PacksAVolume)
 {
-    auto root = EntityNode::Ptr (new EntityNode ("root"));
-    auto entity = EntityNode::Ptr (new EntityNode ("volume"));
+    auto root = Entity::Ptr (new Entity ("root"));
+    auto entity = Entity::Ptr (new Entity ("volume"));
     entity->setPosition ({ -4.0f, 1.0f, 2.0f });
     entity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
     auto& node = entity->attach<IrradianceVolumeNode>();
@@ -546,7 +546,7 @@ TEST_F (GpuSceneDataTests, PacksAVolume)
 
 TEST_F (GpuSceneDataTests, PacksAVolumeWithoutVisibilityAndANegativeFalloffAsZero)
 {
-    auto root = EntityNode::Ptr (new EntityNode ("root"));
+    auto root = Entity::Ptr (new Entity ("root"));
     root->attach<IrradianceVolumeNode>().falloff = -1.0f;
 
     SceneDrawList drawList;

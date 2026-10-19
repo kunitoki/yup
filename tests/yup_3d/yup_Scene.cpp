@@ -41,9 +41,9 @@ protected:
         double totalTime = 0.0;
     };
 
-    static EntityNode::Ptr makeEntity (const String& name = {})
+    static Entity::Ptr makeEntity (const String& name = {})
     {
-        return EntityNode::Ptr (new EntityNode (name));
+        return Entity::Ptr (new Entity (name));
     }
 
     Scene::Ptr scene { new Scene() };

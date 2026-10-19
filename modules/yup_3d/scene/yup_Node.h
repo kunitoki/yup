@@ -22,17 +22,17 @@
 namespace yup
 {
 
-class EntityNode;
+class Entity;
 
 //==============================================================================
-/** Base class for the parts attached to an EntityNode.
+/** Base class for the parts attached to an Entity.
 
     A part gives an entity its behavior: MeshNode draws geometry, CameraNode and LightNode
     describe a camera and a light, MaterialNode overrides the materials of a subtree. Parts
     are not tree children: they are owned by one entity, addressed by their exact type and a
     slot, and follow it wherever it moves in the tree.
 
-    Subclass Node to create custom parts and attach them with EntityNode::attach().
+    Subclass Node to create custom parts and attach them with Entity::attach().
 
     @code
     class Spinner : public yup::Node
@@ -52,7 +52,7 @@ class EntityNode;
 
     Like Component, parts are meant to be used from the message thread only.
 
-    @see EntityNode, Scene
+    @see Entity, Scene
 */
 class YUP_API Node
 {
@@ -66,7 +66,7 @@ public:
 
     //==============================================================================
     /** Returns the entity this part is attached to, or nullptr before it is attached. */
-    EntityNode* getEntity() const noexcept { return entity; }
+    Entity* getEntity() const noexcept { return entity; }
 
     //==============================================================================
     /** Called once the part has been attached to its entity, getEntity() is valid from here. */
@@ -79,9 +79,9 @@ public:
     virtual void update ([[maybe_unused]] double deltaSeconds) {}
 
 private:
-    friend class EntityNode;
+    friend class Entity;
 
-    EntityNode* entity = nullptr;
+    Entity* entity = nullptr;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Node)
 };

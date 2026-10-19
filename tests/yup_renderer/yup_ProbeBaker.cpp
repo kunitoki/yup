@@ -39,7 +39,7 @@ protected:
 
     void addProbe()
     {
-        auto entity = EntityNode::Ptr (new EntityNode ("probe"));
+        auto entity = Entity::Ptr (new Entity ("probe"));
         entity->attach<ReflectionProbeNode>();
         entity->setPosition ({ 1.0f, 2.0f, 3.0f });
         scene.getRoot()->addChild (entity);
@@ -107,7 +107,7 @@ TEST_F (ProbeBakerTests, UnbakedProbesArePendingAndWeighNothing)
 
 TEST_F (ProbeBakerTests, VolumeSignatureFollowsEveryFieldAndTheWorldMatrix)
 {
-    auto entity = EntityNode::Ptr (new EntityNode ("volume"));
+    auto entity = Entity::Ptr (new Entity ("volume"));
     auto& volume = entity->attach<IrradianceVolumeNode>();
     entity->setPosition ({ 1.0f, 2.0f, 3.0f });
     scene.getRoot()->addChild (entity);

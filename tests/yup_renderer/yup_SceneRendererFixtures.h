@@ -46,8 +46,20 @@ using namespace yup;
 class SceneRendererBaselineScenes : public ::testing::Test
 {
 protected:
+    /** Sets the environment map of the root EnvironmentNode, attaching one if needed, and keeps
+        the intensity, visibility and blur a scene builder may already have set. */
+    static EnvironmentNode& setEnvironmentMap (Scene& scene, EnvironmentMap::Ptr map)
+    {
+        auto* node = scene.getRoot()->getNode<EnvironmentNode>();
+        if (node == nullptr)
+            node = &scene.getRoot()->attach<EnvironmentNode>();
+
+        node->map = std::move (map);
+        return *node;
+    }
+
     /** A plate facing the default camera, with a smaller one floating over it to cast a shadow. */
-    static EntityNode::Ptr makePlates()
+    static Entity::Ptr makePlates()
     {
         const auto quad = [] (float halfSize, float z)
         {
@@ -67,7 +79,7 @@ protected:
         mesh->addPrimitive (quad (1.0f, 0.0f), { 0, 1, 2, 0, 2, 3 });
         mesh->addPrimitive (quad (0.3f, 0.5f), { 0, 1, 2, 0, 2, 3 });
 
-        auto entity = EntityNode::Ptr (new EntityNode ("plates"));
+        auto entity = Entity::Ptr (new Entity ("plates"));
         entity->attach<MeshNode> (mesh);
         return entity;
     }
@@ -77,12 +89,12 @@ protected:
     {
         scene.getRoot()->addChild (makePlates());
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().castsShadows = true;
         sun->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f));
         scene.getRoot()->addChild (sun);
 
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
         scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
         scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
     }
@@ -107,7 +119,7 @@ protected:
             auto mesh = Mesh::Ptr (new Mesh ("quad"));
             mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
 
-            auto entity = EntityNode::Ptr (new EntityNode ("quad"));
+            auto entity = Entity::Ptr (new Entity ("quad"));
             entity->attach<MeshNode> (mesh);
             return entity;
         };
@@ -138,7 +150,7 @@ protected:
         {
             const auto angle = MathConstants<float>::twoPi * static_cast<float> (i) / 8.0f;
 
-            auto light = EntityNode::Ptr (new EntityNode ("point"));
+            auto light = Entity::Ptr (new Entity ("point"));
             auto& node = light->attach<LightNode>();
             node.type = LightNode::Type::point;
             node.color = { 0.5f + 0.5f * std::cos (angle), 0.5f + 0.5f * std::sin (angle), 0.5f };
@@ -156,13 +168,13 @@ protected:
         plates->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.3f));
         scene.getRoot()->addChild (plates);
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>();
         scene.getRoot()->addChild (sun);
     }
 
     /** Places @p entity at @p eye with its -Z axis, which cameras look along and lights shine along, towards @p target. */
-    static void aimCamera (EntityNode& entity, Vector3<float> eye, Vector3<float> target, Vector3<float> up = { 0.0f, 1.0f, 0.0f })
+    static void aimCamera (Entity& entity, Vector3<float> eye, Vector3<float> target, Vector3<float> up = { 0.0f, 1.0f, 0.0f })
     {
         entity.setPosition (eye);
         entity.setRotation (Quaternion::fromRotationMatrix (Matrix4::lookAt (eye, target, up).inverted()));
@@ -179,7 +191,7 @@ protected:
     }
 
     /** A square ground at y = 0, 2 * @p halfSize wide, drawn with makeWallMaterial(): the entity "ground". */
-    static EntityNode* addGround (Scene& scene, float halfSize)
+    static Entity* addGround (Scene& scene, float halfSize)
     {
         std::vector<Mesh::Vertex> vertices (4);
         vertices[0].position = { -halfSize, 0.0f, halfSize };
@@ -193,7 +205,7 @@ protected:
         auto mesh = Mesh::Ptr (new Mesh ("ground"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeWallMaterial());
 
-        auto ground = EntityNode::Ptr (new EntityNode ("ground"));
+        auto ground = Entity::Ptr (new Entity ("ground"));
         ground->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (ground);
         return ground.get();
@@ -207,7 +219,7 @@ protected:
     {
         addGround (scene, 100.0f);
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         auto& light = sun->attach<LightNode>();
         light.castsShadows = true;
         aimCamera (*sun, { -10.0f * std::sin (0.6f), 10.0f * std::cos (0.6f), 0.0f }, {});
@@ -274,13 +286,13 @@ protected:
             material->metallicFactor = 0.0f;
         }
 
-        auto caster = EntityNode::Ptr (new EntityNode ("caster"));
+        auto caster = Entity::Ptr (new Entity ("caster"));
         caster->attach<MeshNode> (makeBox (size * 0.5f, material));
         caster->setPosition ({ 0.0f, size * 0.5f, -casterDistance });
         scene.getRoot()->addChild (caster);
 
         const Vector3<float> foot (0.0f, 0.0f, -casterDistance);
-        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto camera = Entity::Ptr (new Entity ("camera"));
         camera->attach<CameraNode>();
         aimCamera (*camera, foot + Vector3<float> (0.0f, 2.0f * k, 3.0f * k), foot);
         scene.getRoot()->addChild (camera);
@@ -291,9 +303,9 @@ protected:
 
     /** Adds a 1 m cube, the entity "farCaster", to buildLongGroundScene() 60 m away beside the line
         of sight, in the last cascade only. */
-    static EntityNode& addFarCaster (Scene& scene)
+    static Entity& addFarCaster (Scene& scene)
     {
-        auto caster = EntityNode::Ptr (new EntityNode ("farCaster"));
+        auto caster = Entity::Ptr (new Entity ("farCaster"));
         caster->attach<MeshNode> (makeBox (0.5f, makeWallMaterial()));
         caster->setPosition ({ 0.0f, 0.5f, -60.0f });
         scene.getRoot()->addChild (caster);
@@ -302,16 +314,16 @@ protected:
 
     /** A compact scene: a 0.6 m box, the entity "box", on a 2 m ground under a shadow casting sun,
         without a camera. Returns the box. */
-    static EntityNode& addCompactScene (Scene& scene)
+    static Entity& addCompactScene (Scene& scene)
     {
         addGround (scene, 1.0f);
 
-        auto box = EntityNode::Ptr (new EntityNode ("box"));
+        auto box = Entity::Ptr (new Entity ("box"));
         box->attach<MeshNode> (makeBox (0.3f, makeWallMaterial()));
         box->setPosition ({ 0.0f, 0.3f, 0.0f });
         scene.getRoot()->addChild (box);
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().castsShadows = true;
         aimCamera (*sun, { -3.0f, 8.0f, 2.0f }, {});
         scene.getRoot()->addChild (sun);
@@ -575,7 +587,7 @@ protected:
         auto mesh = Mesh::Ptr (new Mesh ("glow"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, emissive);
 
-        auto entity = EntityNode::Ptr (new EntityNode ("glow"));
+        auto entity = Entity::Ptr (new Entity ("glow"));
         entity->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (entity);
         scene.getRoot()->attach<BackgroundNode> (Colors::black);
@@ -1011,7 +1023,7 @@ protected:
     }
 
     /** Adds a square plate facing the default camera, 2 units wide, drawn with @p material, and returns its entity. */
-    static EntityNode* addPlate (Scene& scene, Material::Ptr material)
+    static Entity* addPlate (Scene& scene, Material::Ptr material)
     {
         std::vector<Mesh::Vertex> vertices (4);
         vertices[0].position = { -1.0f, -1.0f, 0.0f };
@@ -1025,7 +1037,7 @@ protected:
         auto mesh = Mesh::Ptr (new Mesh ("plate"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, std::move (material));
 
-        auto entity = EntityNode::Ptr (new EntityNode ("plate"));
+        auto entity = Entity::Ptr (new Entity ("plate"));
         entity->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (entity);
         return entity.get();
@@ -1080,7 +1092,7 @@ protected:
                     indices.clear();
                 }
 
-                auto light = EntityNode::Ptr (new EntityNode ("light"));
+                auto light = Entity::Ptr (new Entity ("light"));
                 auto& node = light->attach<LightNode> (LightNode::Type::point);
                 node.color = { 1.0f, 0.0f, 0.0f };
                 node.range = 0.4f;
@@ -1092,11 +1104,11 @@ protected:
         if (oneDraw)
             mesh->addPrimitive (std::move (vertices), std::move (indices), material);
 
-        auto grid = EntityNode::Ptr (new EntityNode ("grid"));
+        auto grid = Entity::Ptr (new Entity ("grid"));
         grid->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (grid);
 
-        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto camera = Entity::Ptr (new Entity ("camera"));
         camera->attach<CameraNode>();
         camera->setPosition ({ 0.0f, 0.0f, 9.0f });
         scene.getRoot()->addChild (camera);
@@ -1185,11 +1197,11 @@ protected:
             auto mesh = Mesh::Ptr (new Mesh ("quad"));
             mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
 
-            auto quad = EntityNode::Ptr (new EntityNode ("quad"));
+            auto quad = Entity::Ptr (new Entity ("quad"));
             quad->attach<MeshNode> (mesh);
             scene.getRoot()->addChild (quad);
 
-            auto light = EntityNode::Ptr (new EntityNode ("light"));
+            auto light = Entity::Ptr (new Entity ("light"));
             auto& node = light->attach<LightNode> (LightNode::Type::point);
             node.color = { 1.0f, 0.0f, 0.0f };
             node.range = 0.6f;
@@ -1318,7 +1330,7 @@ protected:
             addLongGround (scene).castsShadows = castsShadows;
             background = SceneSettings::resolve (scene).backgroundColor;
 
-            auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+            auto camera = Entity::Ptr (new Entity ("camera"));
             camera->attach<CameraNode>();
             aimCamera (*camera, { 0.0f, 1.6f, 4.0f }, { 0.0f, 0.0f, -1000.0f });
             scene.getRoot()->addChild (camera);
@@ -1369,7 +1381,7 @@ protected:
     /** A 0.3 m cube, the entity "blocker", centered on @p position. */
     static void addBlocker (Scene& scene, Vector3<float> position)
     {
-        auto blocker = EntityNode::Ptr (new EntityNode ("blocker"));
+        auto blocker = Entity::Ptr (new Entity ("blocker"));
         blocker->attach<MeshNode> (makeBox (0.15f, makeWallMaterial()));
         blocker->setPosition (position);
         scene.getRoot()->addChild (blocker);
@@ -1382,7 +1394,7 @@ protected:
     */
     static LightNode& buildPointLightRoom (Scene& scene, bool withBlockers = true)
     {
-        auto room = EntityNode::Ptr (new EntityNode ("room"));
+        auto room = Entity::Ptr (new Entity ("room"));
         room->attach<MeshNode> (makeBox (2.0f, makeWallMaterial(), true));
         scene.getRoot()->addChild (room);
 
@@ -1390,7 +1402,7 @@ protected:
             for (const auto& axis : getCubeAxes())
                 addBlocker (scene, axis);
 
-        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto entity = Entity::Ptr (new Entity ("point"));
         auto& light = entity->attach<LightNode> (LightNode::Type::point);
         light.intensity = 20.0f;
         light.castsShadows = true;
@@ -1408,7 +1420,7 @@ protected:
     /** Adds a shadow casting point light of intensity 1 at @p position. */
     static void addShadowedPointLight (Scene& scene, Vector3<float> position)
     {
-        auto entity = EntityNode::Ptr (new EntityNode ("shadowedPoint"));
+        auto entity = Entity::Ptr (new Entity ("shadowedPoint"));
         entity->attach<LightNode> (LightNode::Type::point).castsShadows = true;
         entity->setPosition (position);
         scene.getRoot()->addChild (entity);
@@ -1417,7 +1429,7 @@ protected:
     /** Adds a camera at @p eye looking at @p target, and makes it the active one. */
     static void addCamera (Scene& scene, Vector3<float> eye, Vector3<float> target, Vector3<float> up = { 0.0f, 1.0f, 0.0f })
     {
-        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto camera = Entity::Ptr (new Entity ("camera"));
         camera->attach<CameraNode>();
         aimCamera (*camera, eye, target, up);
         scene.getRoot()->addChild (camera);
@@ -1434,7 +1446,7 @@ protected:
         addGround (scene, 5.0f);
         addBlocker (scene, blocker);
 
-        auto entity = EntityNode::Ptr (new EntityNode ("spot"));
+        auto entity = Entity::Ptr (new Entity ("spot"));
         auto& spot = entity->attach<LightNode> (LightNode::Type::spot);
         spot.intensity = 20.0f;
         spot.castsShadows = true;
@@ -1880,7 +1892,7 @@ protected:
         {
             Scene scene;
             auto& spot = buildSpotOverGround (scene);
-            auto sunEntity = EntityNode::Ptr (new EntityNode ("sun"));
+            auto sunEntity = Entity::Ptr (new Entity ("sun"));
             auto& sun = sunEntity->attach<LightNode>();
             sun.intensity = 2.0f;
             aimCamera (*sunEntity, { 2.0f, 6.0f, 3.0f }, {}, { 0.0f, 1.0f, 0.0f });
@@ -1924,7 +1936,7 @@ protected:
             Scene scene;
             buildSpotOverGround (scene).castsShadows = false;
 
-            auto entity = EntityNode::Ptr (new EntityNode ("point"));
+            auto entity = Entity::Ptr (new Entity ("point"));
             auto& light = entity->attach<LightNode> (LightNode::Type::point);
             light.range = 1.0f;
             light.castsShadows = castsShadows;
@@ -1983,12 +1995,12 @@ protected:
         -4) which no light reaches, seen from above both lights. Returns the point light's blocker,
         the spot's blocker and the third one.
     */
-    static std::array<EntityNode*, 3> buildSpotAndPointOverGround (Scene& scene)
+    static std::array<Entity*, 3> buildSpotAndPointOverGround (Scene& scene)
     {
         buildSpotOverGround (scene);
         auto* spotBlocker = scene.getRoot()->findChild ("blocker");
 
-        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto entity = Entity::Ptr (new Entity ("point"));
         auto& point = entity->attach<LightNode> (LightNode::Type::point);
         point.intensity = 4.0f;
         point.range = 1.2f;
@@ -2096,7 +2108,7 @@ protected:
             const Vector3<float> foot ((i % 2 == 0 ? 2.0f : -2.0f), 0.0f, (i / 2 % 2 == 0 ? 2.0f : -2.0f));
             addBlocker (scene, foot + Vector3<float> (0.15f * static_cast<float> (i + 1), 1.0f, 0.0f));
 
-            auto entity = EntityNode::Ptr (new EntityNode ("spot" + String (i + 1)));
+            auto entity = Entity::Ptr (new Entity ("spot" + String (i + 1)));
             auto& spot = entity->attach<LightNode> (LightNode::Type::spot);
             spot.intensity = 20.0f;
             spot.castsShadows = true;
@@ -2270,20 +2282,20 @@ protected:
     {
         addGround (scene, 2.0f);
 
-        auto wall = EntityNode::Ptr (new EntityNode ("wall"));
+        auto wall = Entity::Ptr (new Entity ("wall"));
         wall->attach<MeshNode> (makeBox (0.5f, makeWallMaterial()));
         wall->setScale ({ 2.0f, 1.2f, 0.02f });
         wall->setPosition ({ -1.0f, 0.6f, -0.01f });
         scene.getRoot()->addChild (wall);
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         auto& light = sun->attach<LightNode>();
         light.castsShadows = true;
         light.radius = sunRadius;
         aimCamera (*sun, { 0.0f, 7.0f, -7.0f }, {});
         scene.getRoot()->addChild (sun);
 
-        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto camera = Entity::Ptr (new Entity ("camera"));
         auto& lens = camera->attach<CameraNode>();
         lens.projection = CameraNode::Projection::orthographic;
         lens.xMag = 0.85f;
@@ -2416,7 +2428,7 @@ protected:
         runs along x = 0, across the rows of the frame. */
     static void addPenumbraSpot (Scene& scene, float radius)
     {
-        auto entity = EntityNode::Ptr (new EntityNode ("spot"));
+        auto entity = Entity::Ptr (new Entity ("spot"));
         auto& spot = entity->attach<LightNode> (LightNode::Type::spot);
         spot.intensity = 40.0f;
         spot.outerConeAngle = 0.8f;
@@ -2640,7 +2652,7 @@ protected:
             addGround (scene, 2.0f);
             scene.getRoot()->attach<AmbientLightNode> (Color (0xff3f3f3f));
 
-            auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+            auto sun = Entity::Ptr (new Entity ("sun"));
             auto& light = sun->attach<LightNode>();
             light.castsShadows = true;
             light.radius = 0.2f;
@@ -2955,11 +2967,11 @@ vec4 encodeLuma(vec3 c)
 
         auto mesh = Mesh::Ptr (new Mesh ("degenerate"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2 });
-        auto degenerate = EntityNode::Ptr (new EntityNode ("degenerate"));
+        auto degenerate = Entity::Ptr (new Entity ("degenerate"));
         degenerate->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (degenerate);
 
-        auto atCamera = EntityNode::Ptr (new EntityNode ("atCamera"));
+        auto atCamera = Entity::Ptr (new Entity ("atCamera"));
         atCamera->attach<LightNode> (LightNode::Type::point).intensity = 10.0f;
         atCamera->setPosition ({ 0.0f, 0.0f, 9.0f });
         scene.getRoot()->addChild (atCamera);
@@ -3010,7 +3022,7 @@ vec4 encodeLuma(vec3 c)
             addPlate (scene, material);
             scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-            auto light = EntityNode::Ptr (new EntityNode ("point"));
+            auto light = Entity::Ptr (new Entity ("point"));
             light->attach<LightNode> (LightNode::Type::point).radius = radius;
             light->setPosition ({ 0.0f, 0.0f, 1.0f });
             scene.getRoot()->addChild (light);
@@ -3040,7 +3052,7 @@ vec4 encodeLuma(vec3 c)
             addPlate (scene, material);
             scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-            auto light = EntityNode::Ptr (new EntityNode ("point"));
+            auto light = Entity::Ptr (new Entity ("point"));
             light->attach<LightNode> (LightNode::Type::point).radius = radius;
             light->setPosition ({ 0.6f, 0.0f, 0.8f });
             scene.getRoot()->addChild (light);
@@ -3090,7 +3102,7 @@ vec4 encodeLuma(vec3 c)
             const Vector3<float> toCamera { 0.0f, 0.0f, 1.0f };
             const auto mirrored = normal * (2.0f * normal.dotProduct (toCamera)) - toCamera;
 
-            auto light = EntityNode::Ptr (new EntityNode ("point"));
+            auto light = Entity::Ptr (new Entity ("point"));
             auto& node = light->attach<LightNode> (LightNode::Type::point);
             node.intensity = 20.0f;
             node.radius = radius;
@@ -3138,7 +3150,7 @@ vec4 encodeLuma(vec3 c)
 
         const auto addLight = [&] (LightNode::Type type, float radius, Vector3<float> position, const Quaternion& rotation)
         {
-            auto light = EntityNode::Ptr (new EntityNode ("light"));
+            auto light = Entity::Ptr (new Entity ("light"));
             auto& node = light->attach<LightNode> (type);
             node.intensity = 3.0f;
             node.radius = radius;
@@ -3281,13 +3293,13 @@ vec4 encodeLuma(vec3 c)
     {
         addGround (scene, 25.0f);
 
-        auto step = EntityNode::Ptr (new EntityNode ("step"));
+        auto step = Entity::Ptr (new Entity ("step"));
         step->attach<MeshNode> (makeBox (0.5f, makeWallMaterial()));
         step->setScale ({ 1.0f, 0.05f, 1.0f });
         step->setPosition ({ -0.5f, 0.025f, 0.0f });
         scene.getRoot()->addChild (step);
 
-        auto entity = EntityNode::Ptr (new EntityNode ("sun"));
+        auto entity = Entity::Ptr (new Entity ("sun"));
         auto& sun = entity->attach<LightNode>();
         sun.castsShadows = true;
         sun.contactShadows = contact;
@@ -3394,7 +3406,7 @@ vec4 encodeLuma(vec3 c)
 
             const auto addPoint = [&] (Vector3<float> position, bool castsShadows, float distance, float thickness)
             {
-                auto entity = EntityNode::Ptr (new EntityNode ("point"));
+                auto entity = Entity::Ptr (new Entity ("point"));
                 auto& light = entity->attach<LightNode> (LightNode::Type::point);
                 light.castsShadows = castsShadows;
                 light.contactShadows = true;
@@ -3570,7 +3582,7 @@ vec4 encodeLuma(vec3 c)
     {
         addGround (scene, 3.0f);
 
-        auto box = EntityNode::Ptr (new EntityNode ("box"));
+        auto box = Entity::Ptr (new Entity ("box"));
         box->attach<MeshNode> (makeBox (0.3f, makeWallMaterial()));
         box->setPosition ({ 0.0f, 0.3f, 0.0f });
         scene.getRoot()->addChild (box);
@@ -3783,7 +3795,7 @@ vec4 encodeLuma(vec3 c)
             buildContactCreaseScene (scene);
             scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-            auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+            auto sun = Entity::Ptr (new Entity ("sun"));
             sun->attach<LightNode>();
             aimCamera (*sun, { -3.0f, 8.0f, 4.0f }, {});
             scene.getRoot()->addChild (sun);
@@ -3873,7 +3885,7 @@ vec4 encodeLuma(vec3 c)
             auto mesh = Mesh::Ptr (new Mesh ("pane"));
             mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
 
-            auto pane = EntityNode::Ptr (new EntityNode ("pane"));
+            auto pane = Entity::Ptr (new Entity ("pane"));
             pane->attach<MeshNode> (mesh);
             scene.getRoot()->addChild (pane);
 
@@ -3918,7 +3930,7 @@ vec4 encodeLuma(vec3 c)
             auto* box = scene.getRoot()->findChild ("box");
             box->getNode<MeshNode>()->mesh = makeBox (0.3f, material);
 
-            scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([skyAbove] (const Vector3<float>& direction)
+            setEnvironmentMap (scene, new EnvironmentMap ([skyAbove] (const Vector3<float>& direction)
             {
                 const auto up = jlimit (0.0f, 1.0f, (skyAbove ? direction.getY() : -direction.getY()) * 0.5f + 0.5f);
                 return Vector3<float> (1.0f, 1.0f, 1.0f) * (0.05f + 2.0f * up * up);
@@ -3982,7 +3994,7 @@ vec4 encodeLuma(vec3 c)
         ambient light only. @p withEmitter false leaves the emitter out.
     */
     /** A horizontal quad at height @p y over @p area (x, z), facing up or down, the entity @p name. */
-    static EntityNode::Ptr makeHorizontalQuad (const char* name, float y, Rectangle<float> area, bool facingUp, Material::Ptr material)
+    static Entity::Ptr makeHorizontalQuad (const char* name, float y, Rectangle<float> area, bool facingUp, Material::Ptr material)
     {
         std::vector<Mesh::Vertex> vertices (4);
         vertices[0].position = { area.getX(), y, area.getBottom() };
@@ -3997,7 +4009,7 @@ vec4 encodeLuma(vec3 c)
         auto mesh = Mesh::Ptr (new Mesh (name));
         mesh->addPrimitive (std::move (vertices), facingUp ? std::vector<uint32> { 0, 1, 2, 0, 2, 3 } : std::vector<uint32> { 0, 2, 1, 0, 3, 2 }, std::move (material));
 
-        auto entity = EntityNode::Ptr (new EntityNode (name));
+        auto entity = Entity::Ptr (new Entity (name));
         entity->attach<MeshNode> (mesh);
         return entity;
     }
@@ -4064,7 +4076,7 @@ vec4 encodeLuma(vec3 c)
     /** Adds a spherical reflection probe at @p position, the entity "probe", and returns its part. */
     static ReflectionProbeNode& addReflectionProbe (Scene& scene, Vector3<float> position, float influenceRadius, const char* name = "probe")
     {
-        auto probe = EntityNode::Ptr (new EntityNode (name));
+        auto probe = Entity::Ptr (new Entity (name));
         auto& node = probe->attach<ReflectionProbeNode>();
         node.influenceRadius = influenceRadius;
         probe->setPosition (position);
@@ -4330,7 +4342,7 @@ vec4 encodeLuma(vec3 c)
         {
             Scene scene;
             buildMirrorFloorScene (scene, false);
-            scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& d)
+            setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>& d)
             {
                 return Vector3<float> (0.6f + 0.55f * jlimit (-1.0f, 1.0f, 2.5f * d.getX()),
                                        0.3f + 0.3f * d.getY(),
@@ -4438,7 +4450,7 @@ vec4 encodeLuma(vec3 c)
         metal->roughnessFactor = 1.0f;
         addPlate (scene, metal);
 
-        auto room = EntityNode::Ptr (new EntityNode ("room"));
+        auto room = Entity::Ptr (new Entity ("room"));
         room->attach<MeshNode> (makeBox (10.0f, makeEmitterMaterial ({ 0.5f, 0.5f, 0.5f }), true));
         scene.getRoot()->addChild (room);
 
@@ -4504,7 +4516,7 @@ vec4 encodeLuma(vec3 c)
 
             auto mesh = Mesh::Ptr (new Mesh ("patch"));
             mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeEmitterMaterial ({ 0.0f, 4.0f, 0.0f }));
-            auto patch = EntityNode::Ptr (new EntityNode ("patch"));
+            auto patch = Entity::Ptr (new Entity ("patch"));
             patch->attach<MeshNode> (mesh);
             scene.getRoot()->addChild (patch);
 
@@ -4620,7 +4632,7 @@ vec4 encodeLuma(vec3 c)
         auto mesh = Mesh::Ptr (new Mesh ("emitter"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeEmitterMaterial ({ emission, 0.0f, 0.0f }));
 
-        auto emitter = EntityNode::Ptr (new EntityNode ("emitter"));
+        auto emitter = Entity::Ptr (new Entity ("emitter"));
         emitter->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (emitter);
     }
@@ -4697,7 +4709,7 @@ vec4 encodeLuma(vec3 c)
     }
 
     /** A vertical quad in the plane x = @p x over @p area (z, y), facing +X or -X, the entity @p name. */
-    static EntityNode::Ptr makeWallQuad (const char* name, float x, Rectangle<float> area, bool facingPositiveX, Material::Ptr material)
+    static Entity::Ptr makeWallQuad (const char* name, float x, Rectangle<float> area, bool facingPositiveX, Material::Ptr material)
     {
         std::vector<Mesh::Vertex> vertices (4);
         vertices[0].position = { x, area.getY(), area.getBottom() };
@@ -4712,7 +4724,7 @@ vec4 encodeLuma(vec3 c)
         auto mesh = Mesh::Ptr (new Mesh (name));
         mesh->addPrimitive (std::move (vertices), facingPositiveX ? std::vector<uint32> { 0, 1, 2, 0, 2, 3 } : std::vector<uint32> { 0, 2, 1, 0, 3, 2 }, std::move (material));
 
-        auto entity = EntityNode::Ptr (new EntityNode (name));
+        auto entity = Entity::Ptr (new Entity (name));
         entity->attach<MeshNode> (mesh);
         return entity;
     }
@@ -4745,7 +4757,7 @@ vec4 encodeLuma(vec3 c)
             scene.getRoot()->addChild (makeWallQuad ("divider", 0.0f, { -3.0f, 0.0f, 6.0f, 3.0f }, true, gray));
         }
 
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
         scene.getRoot()->attach<DefaultLightNode> (false);
         addCamera (scene, { 0.0f, 11.0f, 0.0f }, {}, { 0.0f, 0.0f, -1.0f });
@@ -4765,7 +4777,7 @@ vec4 encodeLuma(vec3 c)
     */
     static IrradianceVolumeNode& addIrradianceVolume (Scene& scene, int nx, int ny, int nz)
     {
-        auto entity = EntityNode::Ptr (new EntityNode ("volume"));
+        auto entity = Entity::Ptr (new Entity ("volume"));
         auto& volume = entity->attach<IrradianceVolumeNode>();
         volume.extents = { 4.5f, 2.0f, 3.5f };
         volume.resolutionX = nx;
@@ -4865,11 +4877,11 @@ vec4 encodeLuma(vec3 c)
         auto wall = Mesh::Ptr (new Mesh ("red wall"));
         wall->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeEmitterMaterial ({ 6.0f, 0.0f, 0.0f }));
 
-        auto entity = EntityNode::Ptr (new EntityNode ("red wall"));
+        auto entity = Entity::Ptr (new Entity ("red wall"));
         entity->attach<MeshNode> (wall);
         scene.getRoot()->addChild (entity);
 
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
         scene.getRoot()->attach<DefaultLightNode> (false);
         addCamera (scene, { 0.0f, 4.0f, 2.5f }, { 0.0f, 0.0f, -0.5f });
@@ -5187,7 +5199,7 @@ vec4 encodeLuma(vec3 c)
         {
             Scene scene;
             buildRedRoomScene (scene, false);
-            scene.getRoot()->attach<EnvironmentNode> (nullptr);
+            setEnvironmentMap (scene, nullptr);
             addLeftVolume (scene);
 
             SceneRenderer renderer;
@@ -5357,7 +5369,7 @@ vec4 encodeLuma(vec3 c)
 
     //==============================================================================
     /** Adds a UV sphere of @p radius at the origin, 64 segments by 32 rings, drawn with @p material. */
-    static EntityNode* addSphere (Scene& scene, float radius, Material::Ptr material)
+    static Entity* addSphere (Scene& scene, float radius, Material::Ptr material)
     {
         constexpr int segments = 64, rings = 32;
         const auto pi = MathConstants<float>::pi;
@@ -5394,7 +5406,7 @@ vec4 encodeLuma(vec3 c)
         auto mesh = Mesh::Ptr (new Mesh ("sphere"));
         mesh->addPrimitive (std::move (vertices), std::move (indices), std::move (material));
 
-        auto entity = EntityNode::Ptr (new EntityNode ("sphere"));
+        auto entity = Entity::Ptr (new Entity ("sphere"));
         entity->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (entity);
         return entity.get();
@@ -5467,7 +5479,7 @@ vec4 encodeLuma(vec3 c)
         addSphere (scene, radius, std::move (material));
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().intensity = 3.0f;
         scene.getRoot()->addChild (sun);
 
@@ -5574,7 +5586,7 @@ vec4 encodeLuma(vec3 c)
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
         scene.getRoot()->attach<DefaultLightNode> (false);
         scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 4.0f, 4.0f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 4.0f, 4.0f); }, 32, 3));
 
         SceneRenderer renderer;
         setTierForExactFrames (renderer, tier);
@@ -5686,7 +5698,7 @@ vec4 encodeLuma(vec3 c)
             addSphere (scene, 1.5f, makeLayeredMaterial ({ 0.8f, 0.05f, 0.05f }, clearcoat, 0.05f, {}, 0.0f));
             scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-            auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+            auto sun = Entity::Ptr (new Entity ("sun"));
             sun->attach<LightNode>().intensity = 3.0f;
             scene.getRoot()->addChild (sun);
 
@@ -5752,7 +5764,7 @@ vec4 encodeLuma(vec3 c)
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
         scene.getRoot()->attach<DefaultLightNode> (false);
         scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (1.0f, 1.0f, 1.0f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (1.0f, 1.0f, 1.0f); }, 32, 3));
 
         SceneRenderer renderer;
         setTierForExactFrames (renderer, tier);
@@ -5821,7 +5833,7 @@ vec4 encodeLuma(vec3 c)
         floor.specularFactor = 0.0f;
         floor.clearcoatFactor = 1.0f;
         floor.clearcoatRoughnessFactor = 0.04f;
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 0.0f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 0.0f); }, 32, 3));
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
         SceneRenderer renderer;
@@ -5927,7 +5939,7 @@ vec4 encodeLuma(vec3 c)
 
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, std::move (material));
 
-        auto entity = EntityNode::Ptr (new EntityNode ("emitter"));
+        auto entity = Entity::Ptr (new Entity ("emitter"));
         entity->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (entity);
     }
@@ -6053,7 +6065,7 @@ vec4 encodeLuma(vec3 c)
             buildBarsScene (scene, 10.0f);
             if (overEnvironment)
             {
-                scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+                setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
                 scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
             }
 
@@ -6147,7 +6159,7 @@ vec4 encodeLuma(vec3 c)
         // The halo over the background color is spread light, composited in radiance as over a
         // visible black environment (preflight R20, R21), not dimmed by its partial coverage
         setDepthOfField (renderer, true);
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
         scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
         const auto overEnvironment = renderToImage (renderer, scene, size);
         ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
@@ -6235,7 +6247,7 @@ vec4 encodeLuma(vec3 c)
         const auto overBackground = renderToImage (renderer, scene, size);
         ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
 
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
         scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
         const auto overEnvironment = renderToImage (renderer, scene, size);
         ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
@@ -6399,7 +6411,7 @@ vec4 encodeLuma(vec3 c)
         the center of its entity, which sits motionBarDistance down the view axis, blended with
         @p alpha below 1. Returns the entity, which tests move with moveBar().
     */
-    static EntityNode* addMotionQuad (Scene& scene, Rectangle<float> area, float emission, float alpha = 1.0f)
+    static Entity* addMotionQuad (Scene& scene, Rectangle<float> area, float emission, float alpha = 1.0f)
     {
         std::vector<Mesh::Vertex> vertices (4);
         vertices[0].position = { area.getX(), area.getY(), 0.0f };
@@ -6420,7 +6432,7 @@ vec4 encodeLuma(vec3 c)
         auto mesh = Mesh::Ptr (new Mesh ("quad"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, std::move (material));
 
-        auto entity = EntityNode::Ptr (new EntityNode ("quad"));
+        auto entity = Entity::Ptr (new Entity ("quad"));
         entity->attach<MeshNode> (mesh);
         entity->setPosition ({ 0.0f, 0.0f, -motionBarDistance });
         scene.getRoot()->addChild (entity);
@@ -6431,7 +6443,7 @@ vec4 encodeLuma(vec3 c)
         the view of a camera at the origin looking down -Z, over the black background color, with
         black ambient light. Returns the bar, which tests move with moveBar().
     */
-    static EntityNode* buildMovingBarScene (Scene& scene, float emission = 2.0f)
+    static Entity* buildMovingBarScene (Scene& scene, float emission = 2.0f)
     {
         scene.getRoot()->attach<BackgroundNode> (Colors::black);
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
@@ -6440,7 +6452,7 @@ vec4 encodeLuma(vec3 c)
     }
 
     /** Moves an entity of addMotionQuad() to @p x units right of the view axis. */
-    static void moveBar (EntityNode& bar, float x)
+    static void moveBar (Entity& bar, float x)
     {
         bar.setPosition ({ x, 0.0f, -motionBarDistance });
     }
@@ -6859,7 +6871,7 @@ vec4 encodeUnit(float value)
         Scene scene;
         addFogCamera (scene);
         scene.getRoot()->attach<AmbientLightNode> (fogAmbientColor());
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
         scene.getRoot()->getNode<EnvironmentNode>()->intensity = 0.4f;
         scene.getRoot()->attach<ExposureNode> (2.0f);
         scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
@@ -6894,12 +6906,12 @@ vec4 encodeUnit(float value)
         addFogCamera (scene).zFar = 0.0f;
         scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
 
-        auto dark = EntityNode::Ptr (new EntityNode ("dark"));
+        auto dark = Entity::Ptr (new Entity ("dark"));
         dark->attach<LightNode>().intensity = 0.0f;
         scene.getRoot()->addChild (dark);
 
         constexpr auto irradiance = 2.0f;
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().intensity = irradiance;
         aimCamera (*sun, { 3.0f, 10.0f, 2.0f }, {});
         scene.getRoot()->addChild (sun);
@@ -7056,7 +7068,7 @@ vec4 encodeUnit(float value)
             fog.anisotropy = 0.8f;
             scene.getRoot()->attach<WorldFogNode> (fog);
 
-            auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+            auto sun = Entity::Ptr (new Entity ("sun"));
             sun->attach<LightNode>().intensity = 0.1f;
             aimCamera (*sun, sunPosition, {});
             scene.getRoot()->addChild (sun);

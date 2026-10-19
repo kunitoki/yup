@@ -41,7 +41,7 @@
 
 #include "resources/yup_Texture.cpp"
 #include "resources/yup_Mesh.cpp"
-#include "scene/yup_EntityNode.cpp"
+#include "scene/yup_Entity.cpp"
 #include "nodes/yup_CameraNode.cpp"
 #include "scene/yup_Scene.cpp"
 #include "gltf/yup_GltfModel.cpp"

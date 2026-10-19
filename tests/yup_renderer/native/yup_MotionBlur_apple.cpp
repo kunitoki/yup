@@ -69,7 +69,7 @@ protected:
     }
 
     /** Renders the bar at @p from then at @p to with @p renderer, and returns the second frame. */
-    Image renderMove (SceneRenderer& renderer, Scene& scene, EntityNode& bar, float from, float to)
+    Image renderMove (SceneRenderer& renderer, Scene& scene, Entity& bar, float from, float to)
     {
         moveBar (bar, from);
         if (! renderToImage (renderer, scene, size).isValid())
@@ -236,7 +236,7 @@ TEST_F (MotionBlurMetalTests, CameraMotionBlursStaticObjects)
     // sharp edge, a white half to the right of the view axis, smears as the geometry does
     Scene scene;
     scene.getRoot()->attach<BackgroundNode> (Colors::black);
-    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& direction)
+    setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>& direction)
     {
         return direction.getX() > 0.0f ? Vector3<float> (1.0f, 1.0f, 1.0f) : Vector3<float>();
     }, 512, 1));
@@ -457,7 +457,7 @@ TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessOverTheBackgro
     ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
-    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
     scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     const auto overEnvironment = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
     ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
@@ -499,7 +499,7 @@ TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessWhileTheCamera
     ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
-    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
     scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     const auto overEnvironment = turn (renderer);
     ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
@@ -842,7 +842,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurRunsAfterTheDepthOfField)
     EXPECT_TRUE (isFiniteTexture (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur)));
 #endif
 
-    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
     scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     const auto overEnvironment = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
     ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();

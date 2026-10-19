@@ -27,7 +27,7 @@ namespace yup
 
     Every MeshNode slot of an entity is drawn. The mesh can be shared with other entities.
 
-    @see Mesh, EntityNode
+    @see Mesh, Entity
 */
 class YUP_API MeshNode : public Node
 {

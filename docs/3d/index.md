@@ -16,7 +16,7 @@ Its shader permutations are compiled while the module builds, see
 
 ## Concepts
 
-- **`EntityNode`** - an element of the scene tree. It has a name, a local
+- **`Entity`** - an element of the scene tree. It has a name, a local
   transform (position, `Quaternion` rotation, scale), a visibility flag that
   hides its whole subtree, child entities and attached **parts**.
 - **Parts** (`Node` subclasses) - give an entity its behavior. `MeshNode` draws
@@ -43,11 +43,11 @@ moves it, and adding an entity under itself or one of its descendants is
 rejected.
 
 ```cpp
-auto body = yup::EntityNode::Ptr (new yup::EntityNode ("body"));
+auto body = yup::Entity::Ptr (new yup::Entity ("body"));
 body->setPosition ({ 0.0f, 1.0f, 0.0f });
 body->setRotation (yup::Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f));
 
-auto wheel = yup::EntityNode::Ptr (new yup::EntityNode ("wheel"));
+auto wheel = yup::Entity::Ptr (new yup::Entity ("wheel"));
 body->addChild (wheel);
 ```
 
@@ -227,7 +227,7 @@ public:
         auto scene = yup::Scene::Ptr (new yup::Scene());
         scene->getRoot()->addChild (model.createEntity());
 
-        auto camera = yup::EntityNode::Ptr (new yup::EntityNode ("camera"));
+        auto camera = yup::Entity::Ptr (new yup::Entity ("camera"));
         camera->attach<yup::CameraNode>();
         camera->setPosition ({ 0.0f, 0.5f, 4.0f });
         scene->getRoot()->addChild (camera);
@@ -547,7 +547,7 @@ surfaces near it reflect what really surrounds them, such as the walls of a
 room, the panel around a knob, or a light the camera does not see.
 
 ```cpp
-auto probe = yup::EntityNode::Ptr (new yup::EntityNode ("probe"));
+auto probe = yup::Entity::Ptr (new yup::Entity ("probe"));
 probe->setPosition ({ 0.0f, 1.0f, 0.0f }); // where the scene is captured from
 
 auto& node = probe->attach<yup::ReflectionProbeNode>();
@@ -603,7 +603,7 @@ instead, so a floor next to a red wall turns a little red, and a corner behind a
 wall stays out of the light of the room next door.
 
 ```cpp
-auto volume = yup::EntityNode::Ptr (new yup::EntityNode ("volume"));
+auto volume = yup::Entity::Ptr (new yup::Entity ("volume"));
 volume->setPosition ({ 0.0f, 1.5f, 0.0f }); // the center of the box
 
 auto& node = volume->attach<yup::IrradianceVolumeNode>();
@@ -793,7 +793,7 @@ shadow pipelines renders every frame without shadows, contact shadows included.
 
 ```cpp
 // A sun from above, slightly soft, with contact shadows on the full tier
-auto sun = yup::EntityNode::Ptr (new yup::EntityNode ("sun"));
+auto sun = yup::Entity::Ptr (new yup::Entity ("sun"));
 sun->setRotation (yup::Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, -1.0f));
 auto& sunLight = sun->attach<yup::LightNode>();
 sunLight.intensity = 3.0f;
@@ -803,7 +803,7 @@ sunLight.contactShadows = true;
 scene->getRoot()->addChild (sun);
 
 // A spot light 2 units above the origin, shining down
-auto lamp = yup::EntityNode::Ptr (new yup::EntityNode ("lamp"));
+auto lamp = yup::Entity::Ptr (new yup::Entity ("lamp"));
 lamp->setPosition ({ 0.0f, 2.0f, 0.0f });
 lamp->setRotation (yup::Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, -yup::MathConstants<float>::halfPi));
 auto& spot = lamp->attach<yup::LightNode> (yup::LightNode::Type::spot);

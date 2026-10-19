@@ -87,7 +87,7 @@ TEST_F (ViewDataTests, PreviousIsLastFramesUnjitteredMatrix)
     view.update (scene, SceneSettings::resolve (scene), 100, 100, true, 16, 1);
     const auto first = view.getUnjitteredViewProjection();
 
-    auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+    auto camera = Entity::Ptr (new Entity ("camera"));
     camera->attach<CameraNode>();
     camera->setPosition ({ 1.0f, 0.0f, 5.0f });
     scene.getRoot()->addChild (camera);
@@ -206,7 +206,7 @@ protected:
     static void checkRecoversViewDepth (Configure&& configure, std::initializer_list<float> viewDepths)
     {
         Scene scene;
-        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto camera = Entity::Ptr (new Entity ("camera"));
         configure (camera->attach<CameraNode>());
         scene.getRoot()->addChild (camera);
         scene.setActiveCamera (camera.get());

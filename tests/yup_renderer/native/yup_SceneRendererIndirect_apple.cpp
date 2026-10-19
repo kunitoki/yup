@@ -31,12 +31,12 @@ TEST_F (SceneRendererMetalTests, RendersEnvironmentShadowsAndBackground)
     scene.getRoot()->addChild (makePlates());
 
     // Shining down -Z, tilted so the shadow of the small plate falls beside it
-    auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+    auto sun = Entity::Ptr (new Entity ("sun"));
     sun->attach<LightNode>().castsShadows = true;
     sun->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f));
     scene.getRoot()->addChild (sun);
 
-    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
     scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
 
@@ -61,7 +61,7 @@ TEST_F (SceneRendererMetalTests, RgbmEnvironmentShadesLikeTheFloatOne)
     {
         Scene scene;
         scene.getRoot()->addChild (makePlates());
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
         scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
         scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
 
@@ -93,7 +93,7 @@ TEST_F (SceneRendererMetalTests, RadianceFormatChangeRebuildsTheCube)
     // dropped and built again in the new format, never decoded with the other one
     Scene scene;
     scene.getRoot()->addChild (makePlates());
-    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
     scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
 
@@ -119,7 +119,7 @@ TEST_F (SceneRendererMetalTests, OneEnvironmentDrawnByTwoRenderers)
 
     Scene scene;
     buildEdgesScene (scene);
-    scene.getRoot()->attach<EnvironmentNode> (environment);
+    setEnvironmentMap (scene, environment);
     scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
 
     {
@@ -157,18 +157,18 @@ TEST_F (SceneRendererMetalTests, EnvironmentChangeDropsTheOldCube)
 
     Scene scene;
     buildEdgesScene (scene);
-    scene.getRoot()->attach<EnvironmentNode> (first);
+    setEnvironmentMap (scene, first);
 
     SceneRenderer renderer;
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (first->getReferenceCount(), 3); // The test, the scene and the renderer's slot
 
-    scene.getRoot()->attach<EnvironmentNode> (second);
+    setEnvironmentMap (scene, second);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (first->getReferenceCount(), 1);
     EXPECT_EQ (second->getReferenceCount(), 3);
 
-    scene.getRoot()->attach<EnvironmentNode> (nullptr);
+    setEnvironmentMap (scene, nullptr);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (second->getReferenceCount(), 1);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
@@ -181,7 +181,7 @@ TEST_F (SceneRendererMetalTests, RebuiltEnvironmentRestartsTheFullTier)
     // samples taken with the undefined cube must leave the running mean
     Scene scene;
     buildEdgesScene (scene);
-    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 4);
@@ -211,7 +211,7 @@ TEST_F (SceneRendererMetalTests, RepeatedEnvironmentFailureConvergesWithoutIt)
 
     Scene scene;
     buildEdgesScene (scene);
-    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
     scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
     scene.getRoot()->attach<BackgroundNode> (background);
@@ -369,7 +369,7 @@ TEST_F (SceneRendererMetalTests, SsrWithoutHistoryShadesAsWithoutIt)
     {
         Scene scene;
         buildOnScreenEmitterScene (scene);
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
 
         SceneRenderer renderer;
         setFullTierTaa (renderer, 8);
@@ -422,7 +422,7 @@ TEST_F (SceneRendererMetalTests, SsrWithoutHistoryShadesAsWithoutIt)
         buildOnScreenEmitterScene (scene);
 
         if (environment)
-            scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+            setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
 
         SceneRenderer renderer;
         setFullTierTaa (renderer, 8);
@@ -637,7 +637,7 @@ TEST_F (SceneRendererMetalTests, SsrDoesNotLeakAcrossDepthEdges)
 
     auto mesh = Mesh::Ptr (new Mesh ("bar"));
     mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, rough);
-    auto bar = EntityNode::Ptr (new EntityNode ("bar"));
+    auto bar = Entity::Ptr (new Entity ("bar"));
     bar->attach<MeshNode> (mesh);
     scene.getRoot()->addChild (bar);
 
@@ -682,7 +682,7 @@ TEST_F (SceneRendererMetalTests, SsrWeighsNeighborRaysByThePixelsLobe)
         const auto red = band % 2 == 0;
         auto mesh = Mesh::Ptr (new Mesh ("band"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeEmitterMaterial ({ red ? 1.0f : 0.0f, red ? 0.0f : 1.0f, 0.0f }));
-        auto entity = EntityNode::Ptr (new EntityNode ("band"));
+        auto entity = Entity::Ptr (new Entity ("band"));
         entity->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (entity);
     }
@@ -1435,13 +1435,13 @@ TEST_P (SceneRendererTierTests, InfiniteFarPlaneShowsTheEnvironment)
     const auto renderSky = [&] (float zFar)
     {
         Scene scene;
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& d)
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>& d)
                                                   { return Vector3<float> (0.5f + 0.4f * d.getX(), 0.5f + 0.4f * d.getY(), 0.5f + 0.4f * d.getZ()); },
                                                   64,
                                                   3));
         scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
 
-        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto camera = Entity::Ptr (new Entity ("camera"));
         auto& node = camera->attach<CameraNode>();
         node.zNear = 0.05f;
         node.zFar = zFar;
@@ -1676,11 +1676,11 @@ TEST_F (SceneRendererMetalTests, ReflectionProbeChangesRestartAccumulation)
 {
     // Each change shows on the full tier once converged: a bake asked for, a field of the probe, and
     // its entity moving, which also bakes it again
-    const std::pair<const char*, std::function<void (EntityNode&)>> changes[] = {
-        { "requestBake", [] (EntityNode& probe) { probe.getNode<ReflectionProbeNode>()->requestBake(); } },
-        { "intensity", [] (EntityNode& probe) { probe.getNode<ReflectionProbeNode>()->intensity = 0.5f; } },
-        { "falloff", [] (EntityNode& probe) { probe.getNode<ReflectionProbeNode>()->falloff = 2.0f; } },
-        { "position", [] (EntityNode& probe) { probe.setPosition ({ 0.5f, 1.0f, -1.0f }); } },
+    const std::pair<const char*, std::function<void (Entity&)>> changes[] = {
+        { "requestBake", [] (Entity& probe) { probe.getNode<ReflectionProbeNode>()->requestBake(); } },
+        { "intensity", [] (Entity& probe) { probe.getNode<ReflectionProbeNode>()->intensity = 0.5f; } },
+        { "falloff", [] (Entity& probe) { probe.getNode<ReflectionProbeNode>()->falloff = 2.0f; } },
+        { "position", [] (Entity& probe) { probe.setPosition ({ 0.5f, 1.0f, -1.0f }); } },
     };
 
     for (const auto& [name, change] : changes)
@@ -1846,12 +1846,12 @@ TEST_F (SceneRendererMetalTests, IrradianceVolumeChangesRestartAccumulation)
 {
     // Each change shows on the full tier once converged: a bake asked for, a field of the volume,
     // and its entity moving, which also bakes it again
-    const std::pair<const char*, std::function<void (EntityNode&)>> changes[] = {
-        { "requestBake", [] (EntityNode& volume) { volume.getNode<IrradianceVolumeNode>()->requestBake(); } },
-        { "intensity", [] (EntityNode& volume) { volume.getNode<IrradianceVolumeNode>()->intensity = 0.5f; } },
-        { "falloff", [] (EntityNode& volume) { volume.getNode<IrradianceVolumeNode>()->falloff = 1.0f; } },
-        { "normalBias", [] (EntityNode& volume) { volume.getNode<IrradianceVolumeNode>()->normalBias = 0.2f; } },
-        { "position", [] (EntityNode& volume) { volume.setPosition ({ 0.0f, 1.6f, 0.0f }); } },
+    const std::pair<const char*, std::function<void (Entity&)>> changes[] = {
+        { "requestBake", [] (Entity& volume) { volume.getNode<IrradianceVolumeNode>()->requestBake(); } },
+        { "intensity", [] (Entity& volume) { volume.getNode<IrradianceVolumeNode>()->intensity = 0.5f; } },
+        { "falloff", [] (Entity& volume) { volume.getNode<IrradianceVolumeNode>()->falloff = 1.0f; } },
+        { "normalBias", [] (Entity& volume) { volume.getNode<IrradianceVolumeNode>()->normalBias = 0.2f; } },
+        { "position", [] (Entity& volume) { volume.setPosition ({ 0.0f, 1.6f, 0.0f }); } },
     };
 
     for (const auto& [name, change] : changes)
@@ -1940,7 +1940,7 @@ TEST_F (SceneRendererMetalTests, FullTierShadesAtMost8Volumes)
     Scene scene;
     for (int i = 1; i <= 9; ++i)
     {
-        auto entity = EntityNode::Ptr (new EntityNode ("volume"));
+        auto entity = Entity::Ptr (new Entity ("volume"));
         auto& volume = entity->attach<IrradianceVolumeNode>();
         volume.extents = { static_cast<float> (i), 1.0f, 1.0f };
         volume.resolutionX = volume.resolutionY = volume.resolutionZ = 2;

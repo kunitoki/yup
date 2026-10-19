@@ -57,7 +57,7 @@ TEST_F (GBufferPassMetalTests, BackgroundFillCoversOnlyTheEmptyTexels)
     Scene scene;
     scene.getRoot()->addChild (makeQuad (0.0f, 0.5f, Material::Ptr (new Material())));
 
-    auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+    auto camera = Entity::Ptr (new Entity ("camera"));
     camera->attach<CameraNode>();
     camera->setPosition ({ 0.0f, 0.0f, 5.0f });
     scene.getRoot()->addChild (camera);

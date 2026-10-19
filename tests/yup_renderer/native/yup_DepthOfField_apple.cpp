@@ -514,7 +514,7 @@ TEST_F (DepthOfFieldMetalTests, FaintCoverageKeepsItsLightOverTheBackground)
     const auto overBackground = renderToImage (renderer, scene, size);
     ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
 
-    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
     scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     const auto overEnvironment = renderToImage (renderer, scene, size);
     ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();

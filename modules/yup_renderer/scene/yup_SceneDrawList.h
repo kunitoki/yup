@@ -127,10 +127,10 @@ public:
         @param view     The view matrix, used to sort blended items by distance.
         @param options  What to add beyond the tree.
     */
-    void build (const EntityNode& root, const Matrix4& view, const BuildOptions& options);
+    void build (const Entity& root, const Matrix4& view, const BuildOptions& options);
 
     /** Rebuilds the list from an entity tree with the default BuildOptions. */
-    void build (const EntityNode& root, const Matrix4& view);
+    void build (const Entity& root, const Matrix4& view);
 
     /** Empties the list. */
     void clear();
@@ -226,7 +226,7 @@ private:
     static int selectLights (const BoundingBox& worldBounds, Span<const Light> lights, Span<const LightRanking> rankings,
                              std::array<uint16, maxLightsPerDraw>& indices, std::array<float, maxLightsPerDraw>& weights);
 
-    void collect (const EntityNode& entity, const Matrix4& world, const Material* overrideMaterial, const Matrix4& view);
+    void collect (const Entity& entity, const Matrix4& world, const Material* overrideMaterial, const Matrix4& view);
 
     std::vector<DrawItem> opaqueItems;
     std::vector<DrawItem> blendItems;

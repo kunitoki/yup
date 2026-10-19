@@ -55,7 +55,7 @@ protected:
         Scene scene;
         addCompactScene (scene);
 
-        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto camera = Entity::Ptr (new Entity ("camera"));
         camera->attach<CameraNode>();
         aimCamera (*camera, { 0.0f, 1.2f, 1.8f }, { 0.0f, 0.2f, 0.0f });
         scene.getRoot()->addChild (camera);

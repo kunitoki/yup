@@ -25,7 +25,7 @@
 
 #include "yup_BoundingBox.cpp"
 #include "yup_CameraNode.cpp"
-#include "yup_EntityNode.cpp"
+#include "yup_Entity.cpp"
 #include "yup_GltfModel.cpp"
 #include "yup_HalfFloat.cpp"
 #include "yup_Mesh.cpp"

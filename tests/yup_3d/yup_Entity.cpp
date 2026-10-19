@@ -25,7 +25,7 @@
 
 using namespace yup;
 
-class EntityNodeTests : public ::testing::Test
+class EntityTests : public ::testing::Test
 {
 protected:
     class TaggedNode : public Node
@@ -41,7 +41,7 @@ protected:
         void attachedToEntity() override { entityWhenAttached = getEntity(); }
 
         int tag = 0;
-        EntityNode* entityWhenAttached = nullptr;
+        Entity* entityWhenAttached = nullptr;
     };
 
     class OtherNode : public Node
@@ -61,9 +61,9 @@ protected:
         bool& flag;
     };
 
-    static EntityNode::Ptr makeEntity (const String& name = {})
+    static Entity::Ptr makeEntity (const String& name = {})
     {
-        return EntityNode::Ptr (new EntityNode (name));
+        return Entity::Ptr (new Entity (name));
     }
 
     static Mesh::Ptr makeUnitCubeMesh()
@@ -89,7 +89,7 @@ protected:
 
 //==============================================================================
 
-TEST_F (EntityNodeTests, NewEntityIsAVisibleRootGroup)
+TEST_F (EntityTests, NewEntityIsAVisibleRootGroup)
 {
     auto entity = makeEntity ("root");
 
@@ -101,7 +101,7 @@ TEST_F (EntityNodeTests, NewEntityIsAVisibleRootGroup)
     EXPECT_TRUE (entity->getLocalMatrix().isIdentity());
 }
 
-TEST_F (EntityNodeTests, AddChildAppendsAndInserts)
+TEST_F (EntityTests, AddChildAppendsAndInserts)
 {
     auto root = makeEntity();
     auto a = makeEntity ("a");
@@ -125,7 +125,7 @@ TEST_F (EntityNodeTests, AddChildAppendsAndInserts)
     EXPECT_EQ (children[1].get(), a.get());
 }
 
-TEST_F (EntityNodeTests, RemoveChildAndRemoveFromParent)
+TEST_F (EntityTests, RemoveChildAndRemoveFromParent)
 {
     auto root = makeEntity();
     auto a = makeEntity ("a");
@@ -146,7 +146,7 @@ TEST_F (EntityNodeTests, RemoveChildAndRemoveFromParent)
     EXPECT_EQ (b->getParent(), nullptr);
 }
 
-TEST_F (EntityNodeTests, AddingAChildWithAParentReparentsIt)
+TEST_F (EntityTests, AddingAChildWithAParentReparentsIt)
 {
     auto first = makeEntity();
     auto second = makeEntity();
@@ -160,7 +160,7 @@ TEST_F (EntityNodeTests, AddingAChildWithAParentReparentsIt)
     EXPECT_EQ (child->getParent(), second.get());
 }
 
-TEST_F (EntityNodeTests, AddingAnExistingChildAgainMovesIt)
+TEST_F (EntityTests, AddingAnExistingChildAgainMovesIt)
 {
     auto root = makeEntity();
     auto a = makeEntity ("a");
@@ -175,7 +175,7 @@ TEST_F (EntityNodeTests, AddingAnExistingChildAgainMovesIt)
     EXPECT_EQ (root->getChild (1), a.get());
 }
 
-TEST_F (EntityNodeTests, DISABLED_CyclesAreRejected)
+TEST_F (EntityTests, DISABLED_CyclesAreRejected)
 {
     auto root = makeEntity();
     auto child = makeEntity();
@@ -198,10 +198,10 @@ TEST_F (EntityNodeTests, DISABLED_CyclesAreRejected)
     EXPECT_EQ (root->getNumChildren(), 1);
 }
 
-TEST_F (EntityNodeTests, ChildAddressesStayStableWhenSiblingsChange)
+TEST_F (EntityTests, ChildAddressesStayStableWhenSiblingsChange)
 {
     auto root = makeEntity();
-    std::vector<EntityNode*> addresses;
+    std::vector<Entity*> addresses;
 
     for (int i = 0; i < 64; ++i)
     {
@@ -219,7 +219,7 @@ TEST_F (EntityNodeTests, ChildAddressesStayStableWhenSiblingsChange)
     }
 }
 
-TEST_F (EntityNodeTests, ChildrenOutliveTheirParentWhenReferenced)
+TEST_F (EntityTests, ChildrenOutliveTheirParentWhenReferenced)
 {
     auto child = makeEntity();
 
@@ -231,7 +231,7 @@ TEST_F (EntityNodeTests, ChildrenOutliveTheirParentWhenReferenced)
     EXPECT_EQ (child->getParent(), nullptr);
 }
 
-TEST_F (EntityNodeTests, FindChildSearchesDirectOrRecursive)
+TEST_F (EntityTests, FindChildSearchesDirectOrRecursive)
 {
     auto root = makeEntity();
     auto a = makeEntity ("a");
@@ -247,7 +247,7 @@ TEST_F (EntityNodeTests, FindChildSearchesDirectOrRecursive)
 
 //==============================================================================
 
-TEST_F (EntityNodeTests, AttachAndGetBySlot)
+TEST_F (EntityTests, AttachAndGetBySlot)
 {
     auto entity = makeEntity();
 
@@ -264,7 +264,7 @@ TEST_F (EntityNodeTests, AttachAndGetBySlot)
     EXPECT_EQ (second.tag, 3);
 }
 
-TEST_F (EntityNodeTests, PartsMatchTheExactTypeOnly)
+TEST_F (EntityTests, PartsMatchTheExactTypeOnly)
 {
     auto entity = makeEntity();
     entity->attach<TaggedNode>();
@@ -277,7 +277,7 @@ TEST_F (EntityNodeTests, PartsMatchTheExactTypeOnly)
     EXPECT_NE (static_cast<Node*> (entity->getNode<TaggedNode>()), static_cast<Node*> (&other));
 }
 
-TEST_F (EntityNodeTests, RuntimeSlotFormsMatchTemplateForms)
+TEST_F (EntityTests, RuntimeSlotFormsMatchTemplateForms)
 {
     auto entity = makeEntity();
 
@@ -292,7 +292,7 @@ TEST_F (EntityNodeTests, RuntimeSlotFormsMatchTemplateForms)
     EXPECT_FALSE (entity->detachAt<TaggedNode> (7));
 }
 
-TEST_F (EntityNodeTests, AttachReplacesThePartInTheSameSlot)
+TEST_F (EntityTests, AttachReplacesThePartInTheSameSlot)
 {
     auto entity = makeEntity();
     bool firstDestroyed = false;
@@ -309,7 +309,7 @@ TEST_F (EntityNodeTests, AttachReplacesThePartInTheSameSlot)
     EXPECT_EQ (entity->getNumNodes<DestructionTracker>(), 1);
 }
 
-TEST_F (EntityNodeTests, DetachDestroysThePart)
+TEST_F (EntityTests, DetachDestroysThePart)
 {
     auto entity = makeEntity();
     bool destroyed = false;
@@ -320,7 +320,7 @@ TEST_F (EntityNodeTests, DetachDestroysThePart)
     EXPECT_FALSE (entity->detach<DestructionTracker>());
 }
 
-TEST_F (EntityNodeTests, PartAddressesStayStable)
+TEST_F (EntityTests, PartAddressesStayStable)
 {
     auto entity = makeEntity();
     auto& node = entity->attach<TaggedNode, 3>();
@@ -336,7 +336,7 @@ TEST_F (EntityNodeTests, PartAddressesStayStable)
     EXPECT_EQ ((entity->getNode<TaggedNode, 3>()), &node);
 }
 
-TEST_F (EntityNodeTests, ForEachNodeVisitsSlotsInAscendingOrder)
+TEST_F (EntityTests, ForEachNodeVisitsSlotsInAscendingOrder)
 {
     auto entity = makeEntity();
     entity->attach<TaggedNode, 4> (40);
@@ -360,7 +360,7 @@ TEST_F (EntityNodeTests, ForEachNodeVisitsSlotsInAscendingOrder)
     EXPECT_EQ (all, 4);
 }
 
-TEST_F (EntityNodeTests, PartsAreDestroyedWithTheEntity)
+TEST_F (EntityTests, PartsAreDestroyedWithTheEntity)
 {
     bool destroyed = false;
 
@@ -374,7 +374,7 @@ TEST_F (EntityNodeTests, PartsAreDestroyedWithTheEntity)
 
 //==============================================================================
 
-TEST_F (EntityNodeTests, LocalMatrixAppliesScaleThenRotationThenTranslation)
+TEST_F (EntityTests, LocalMatrixAppliesScaleThenRotationThenTranslation)
 {
     auto entity = makeEntity();
     entity->setScale ({ 2.0f, 2.0f, 2.0f });
@@ -388,7 +388,7 @@ TEST_F (EntityNodeTests, LocalMatrixAppliesScaleThenRotationThenTranslation)
     expectNear (entity->getScale(), { 2.0f, 2.0f, 2.0f });
 }
 
-TEST_F (EntityNodeTests, LocalMatrixFollowsTransformChanges)
+TEST_F (EntityTests, LocalMatrixFollowsTransformChanges)
 {
     auto entity = makeEntity();
     entity->setPosition ({ 1.0f, 0.0f, 0.0f });
@@ -398,7 +398,7 @@ TEST_F (EntityNodeTests, LocalMatrixFollowsTransformChanges)
     expectNear (entity->getLocalMatrix().transformPoint ({}), { 0.0f, 3.0f, 0.0f });
 }
 
-TEST_F (EntityNodeTests, WorldMatrixAccumulatesParents)
+TEST_F (EntityTests, WorldMatrixAccumulatesParents)
 {
     auto root = makeEntity();
     auto child = makeEntity();
@@ -413,7 +413,7 @@ TEST_F (EntityNodeTests, WorldMatrixAccumulatesParents)
     expectNear (grandChild->getWorldMatrix().transformPoint ({}), { 2.0f, 0.0f, 5.0f });
 }
 
-TEST_F (EntityNodeTests, ComputeWorldBoundsAppliesNestedTransforms)
+TEST_F (EntityTests, ComputeWorldBoundsAppliesNestedTransforms)
 {
     auto root = makeEntity();
     auto child = makeEntity();
@@ -428,7 +428,7 @@ TEST_F (EntityNodeTests, ComputeWorldBoundsAppliesNestedTransforms)
     expectNear (bounds.getMax(), { 11.0f, 2.0f, 3.0f });
 }
 
-TEST_F (EntityNodeTests, ComputeWorldBoundsSkipsHiddenSubtrees)
+TEST_F (EntityTests, ComputeWorldBoundsSkipsHiddenSubtrees)
 {
     auto root = makeEntity();
     auto visibleChild = makeEntity();
@@ -450,7 +450,7 @@ TEST_F (EntityNodeTests, ComputeWorldBoundsSkipsHiddenSubtrees)
     EXPECT_TRUE (root->computeWorldBounds().isEmpty());
 }
 
-TEST_F (EntityNodeTests, ComputeWorldBoundsIncludesEveryMeshSlot)
+TEST_F (EntityTests, ComputeWorldBoundsIncludesEveryMeshSlot)
 {
     auto entity = makeEntity();
     entity->attach<MeshNode> (makeUnitCubeMesh());

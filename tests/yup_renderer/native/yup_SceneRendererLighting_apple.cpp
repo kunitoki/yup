@@ -34,7 +34,7 @@ TEST_F (SceneRendererMetalTests, ShadowCastingLightAfterEightOthersCasts)
         Scene scene;
         for (int i = 0; i < numLamps; ++i)
         {
-            auto lamp = EntityNode::Ptr (new EntityNode ("lamp"));
+            auto lamp = Entity::Ptr (new Entity ("lamp"));
             lamp->attach<LightNode> (LightNode::Type::point).intensity = 0.0f;
             scene.getRoot()->addChild (lamp);
         }
@@ -344,7 +344,7 @@ TEST_P (SceneRendererTierTests, AreaLightVariantFollowsTheLightRadius)
     addPlate (scene, material);
     scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-    auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+    auto sun = Entity::Ptr (new Entity ("sun"));
     auto& light = sun->attach<LightNode>();
     scene.getRoot()->addChild (sun);
 
@@ -427,7 +427,7 @@ TEST_P (SceneRendererTierTests, HigherIorBrightensDielectricSpecular)
         addPlate (scene, material);
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().intensity = 10.0f;
         sun->setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 1.3f));
         scene.getRoot()->addChild (sun);
@@ -465,7 +465,7 @@ TEST_P (SceneRendererTierTests, SpecularFactorAndColorShapeTheDielectricHighligh
         addPlate (scene, material);
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().intensity = 10.0f;
         sun->setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 1.3f));
         scene.getRoot()->addChild (sun);
@@ -585,7 +585,7 @@ TEST_P (SceneRendererTierTests, DrawsFindTheirLightsWhenDirectionalLightsArePack
     Scene scene;
     scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-    auto lamp = EntityNode::Ptr (new EntityNode ("lamp"));
+    auto lamp = Entity::Ptr (new Entity ("lamp"));
     auto& point = lamp->attach<LightNode> (LightNode::Type::point);
     point.color = { 1.0f, 0.0f, 0.0f };
     point.intensity = 100.0f;
@@ -593,7 +593,7 @@ TEST_P (SceneRendererTierTests, DrawsFindTheirLightsWhenDirectionalLightsArePack
     lamp->setPosition ({ 10.0f, 0.0f, 1.0f });
     scene.getRoot()->addChild (lamp);
 
-    auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+    auto sun = Entity::Ptr (new Entity ("sun"));
     auto& sunLight = sun->attach<LightNode>();
     sunLight.color = { 0.0f, 1.0f, 0.0f };
     sunLight.intensity = 2.0f;
@@ -737,7 +737,7 @@ TEST_P (SceneRendererTierTests, SunDiskSoftensNothingButSpecular)
         addPlate (scene, material);
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         auto& node = sun->attach<LightNode>();
         node.intensity = 2.0f;
         node.radius = radius;
@@ -793,7 +793,7 @@ TEST_P (SceneRendererTierTests, LargeLowSphereLightDiffuseIsExact)
     addPlate (scene, material);
     scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-    auto light = EntityNode::Ptr (new EntityNode ("sphere"));
+    auto light = Entity::Ptr (new Entity ("sphere"));
     auto& node = light->attach<LightNode> (LightNode::Type::point);
     node.intensity = static_cast<float> (intensity);
     node.radius = static_cast<float> (radius);
@@ -837,7 +837,7 @@ TEST_P (SceneRendererTierTests, SphereLightSpecularMatchesGgx)
     const Vector3<float> toCamera { 0.0f, 0.0f, 1.0f };
     const auto mirrored = normal * (2.0f * normal.dotProduct (toCamera)) - toCamera;
 
-    auto light = EntityNode::Ptr (new EntityNode ("sphere"));
+    auto light = Entity::Ptr (new Entity ("sphere"));
     auto& node = light->attach<LightNode> (LightNode::Type::point);
     node.intensity = static_cast<float> (intensity);
     node.radius = static_cast<float> (radius);
@@ -869,7 +869,7 @@ TEST_P (SceneRendererTierTests, TinySpotMatchesPunctualOffAxis)
         addPlate (scene, material);
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-        auto light = EntityNode::Ptr (new EntityNode ("spot"));
+        auto light = Entity::Ptr (new Entity ("spot"));
         auto& node = light->attach<LightNode> (LightNode::Type::spot);
         node.intensity = 5.0f;
         node.radius = radius;
@@ -904,7 +904,7 @@ TEST_P (SceneRendererTierTests, SunDiskWidensTheHighlight)
         addPlate (scene, material);
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().radius = radius;
         scene.getRoot()->addChild (sun);
 
@@ -1112,7 +1112,7 @@ TEST_P (SceneRendererTierTests, ShadowMapsSurviveMovingLightsAndRedrawnOpaqueTex
     Scene scene;
     buildLongGroundScene (scene, 2.0f, material);
 
-    auto orbiting = EntityNode::Ptr (new EntityNode ("orbiting"));
+    auto orbiting = Entity::Ptr (new Entity ("orbiting"));
     orbiting->attach<LightNode> (LightNode::Type::point);
     scene.getRoot()->addChild (orbiting);
 
@@ -1337,7 +1337,7 @@ TEST_P (SceneRendererTierTests, MovingAShadowedPointLightKeepsTheSunCascades)
     Scene scene;
     buildLongGroundScene (scene, 2.0f);
 
-    auto lamp = EntityNode::Ptr (new EntityNode ("lamp"));
+    auto lamp = Entity::Ptr (new Entity ("lamp"));
     auto& light = lamp->attach<LightNode> (LightNode::Type::point);
     light.castsShadows = true;
     light.range = 5.0f;
@@ -1482,7 +1482,7 @@ TEST_P (SceneRendererTierTests, OrthographicCameraSizesTilesWhateverItsDistance)
         Scene scene;
         addGround (scene, 5.0f);
 
-        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto entity = Entity::Ptr (new Entity ("point"));
         auto& light = entity->attach<LightNode> (LightNode::Type::point);
         light.range = 2.0f;
         light.castsShadows = true;
@@ -1698,7 +1698,7 @@ TEST_P (SceneRendererTierTests, ContactShadowOnlyRecordsHaveNoAtlasTile)
     // views are dropped after its tiles were allocated, and its contact shadows take a record without a map
     for (const auto radius : { 0.0f, 0.5f })
     {
-        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto entity = Entity::Ptr (new Entity ("point"));
         auto& light = entity->attach<LightNode> (LightNode::Type::point);
         light.castsShadows = true;
         light.contactShadows = true;
@@ -1735,7 +1735,7 @@ TEST_P (SceneRendererTierTests, ContactShadowRecordsGoToTheMostImportantLights)
     // One record more than the budget leaves: 63 small far lights listed first, then a large one
     const auto addPoint = [&] (Vector3<float> position, float range, float distance)
     {
-        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto entity = Entity::Ptr (new Entity ("point"));
         auto& light = entity->attach<LightNode> (LightNode::Type::point);
         light.contactShadows = true;
         light.contactShadowDistance = distance;
@@ -1776,7 +1776,7 @@ TEST_P (SceneRendererTierTests, ContactShadowsSpareAreaLightsBelowTheHorizon)
         addGround (scene, 5.0f);
         addCamera (scene, { 0.0f, 2.0f, 1.5f }, {});
 
-        auto entity = EntityNode::Ptr (new EntityNode ("sphere"));
+        auto entity = Entity::Ptr (new Entity ("sphere"));
         auto& light = entity->attach<LightNode> (LightNode::Type::point);
         light.intensity = 5.0f;
         light.radius = 0.4f;
@@ -1944,7 +1944,7 @@ TEST_P (SceneRendererTierTests, ContactOnlyLightWithARadiusLeavesSoftFilteringOf
     Scene scene;
     buildCreaseScene (scene, false);
 
-    auto entity = EntityNode::Ptr (new EntityNode ("point"));
+    auto entity = Entity::Ptr (new Entity ("point"));
     auto& light = entity->attach<LightNode> (LightNode::Type::point);
     light.contactShadows = true;
     light.radius = 0.1f;
@@ -1982,7 +1982,7 @@ TEST_P (SceneRendererTierTests, ContactShadowsOfALightOutOfRangeChangeNothing)
         Scene scene;
         buildCreaseScene (scene, false);
 
-        auto entity = EntityNode::Ptr (new EntityNode ("point"));
+        auto entity = Entity::Ptr (new Entity ("point"));
         auto& light = entity->attach<LightNode> (LightNode::Type::point);
         light.contactShadows = contact;
         light.range = range;
@@ -2080,9 +2080,9 @@ TEST_F (SceneRendererMetalTests, BlendedLayeredItemShadesOnFull)
         Scene scene;
         addPlate (scene, material);
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& d) { return Vector3<float> (0.2f, 0.2f, 0.2f) * (d.getY() * 0.5f + 0.5f); }, 32, 3));
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>& d) { return Vector3<float> (0.2f, 0.2f, 0.2f) * (d.getY() * 0.5f + 0.5f); }, 32, 3));
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().intensity = 3.0f;
         scene.getRoot()->addChild (sun);
 
@@ -2126,13 +2126,13 @@ TEST_F (SceneRendererMetalTests, ClearcoatShadesAlikeOnBothTiers)
         Scene scene;
         addSphere (scene, 1.5f, makeLayeredMaterial ({ 0.6f, 0.1f, 0.1f }, clearcoat, 0.3f, {}, 0.0f));
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
-        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& direction)
+        setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>& direction)
         {
             const auto up = jlimit (0.0f, 1.0f, direction.getY() * 0.5f + 0.5f);
             return Vector3<float> (0.1f, 0.1f, 0.1f) + Vector3<float> (1.0f, 1.2f, 1.5f) * up;
         }, 32, 3));
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().intensity = 2.0f;
         scene.getRoot()->addChild (sun);
 
@@ -2185,13 +2185,13 @@ TEST_F (SceneRendererMetalTests, LayersAreShadowedWithTheBase)
         addPlate (scene, material);
         scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
-        auto camera = EntityNode::Ptr (new EntityNode ("camera"));
+        auto camera = Entity::Ptr (new Entity ("camera"));
         camera->attach<CameraNode>();
         aimCamera (*camera, { 0.0f, -4.0f, 4.0f }, {});
         scene.getRoot()->addChild (camera);
         scene.setActiveCamera (camera.get());
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         auto& light = sun->attach<LightNode>();
         light.intensity = 3.0f;
         light.castsShadows = true;
@@ -2201,7 +2201,7 @@ TEST_F (SceneRendererMetalTests, LayersAreShadowedWithTheBase)
         // Spans y 3 to 6 and z 1.5 to 4.5, at least 25 degrees off the camera's axis (0.4 rad above it)
         if (blocked)
         {
-            auto box = EntityNode::Ptr (new EntityNode ("blocker"));
+            auto box = Entity::Ptr (new Entity ("blocker"));
             box->attach<MeshNode> (makeBox (1.5f, makeWallMaterial()));
             box->setPosition ({ 0.0f, 4.5f, 3.0f });
             scene.getRoot()->addChild (box);
@@ -2258,7 +2258,7 @@ TEST_F (SceneRendererMetalTests, ClassifiedLightingMatchesOneVariant)
         renderer.disableLightingClassificationForTesting (! classified);
 
         Scene magenta;
-        magenta.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 4.0f); }, 32, 3));
+        setEnvironmentMap (magenta, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 4.0f); }, 32, 3));
         magenta.getRoot()->getNode<EnvironmentNode>()->visible = true;
         EXPECT_TRUE (renderToImage (renderer, magenta, 128).isValid());
 
@@ -2267,7 +2267,7 @@ TEST_F (SceneRendererMetalTests, ClassifiedLightingMatchesOneVariant)
         addReflectionProbe (scene, { 1.2f, 0.5f, -0.5f }, 1.2f);
         addSphere (scene, 0.35f, makeLayeredMaterial ({ 0.6f, 0.1f, 0.1f }, 1.0f, 0.1f, {}, 0.0f))->setPosition ({ -0.9f, 0.35f, 0.0f });
 
-        auto sun = EntityNode::Ptr (new EntityNode ("sun"));
+        auto sun = Entity::Ptr (new Entity ("sun"));
         sun->attach<LightNode>().intensity = 3.0f;
         aimCamera (*sun, { 1.0f, 4.0f, 3.0f }, {});
         scene.getRoot()->addChild (sun);

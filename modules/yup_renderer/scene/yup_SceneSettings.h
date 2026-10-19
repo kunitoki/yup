@@ -59,7 +59,7 @@ struct YUP_API SceneSettings
     static SceneSettings resolve (const Scene& scene);
 
     /** Resolves the settings from the feature nodes of a tree. */
-    static SceneSettings resolve (const EntityNode& root);
+    static SceneSettings resolve (const Entity& root);
 };
 
 } // namespace yup

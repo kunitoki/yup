@@ -1055,7 +1055,7 @@ ResultValue<GltfModel> GltfModel::loadFromData (Span<const uint8> bytes, const F
 
 //==============================================================================
 
-EntityNode::Ptr GltfModel::createEntity (int sceneIndex) const
+Entity::Ptr GltfModel::createEntity (int sceneIndex) const
 {
     const auto& d = *data;
 
@@ -1079,12 +1079,12 @@ EntityNode::Ptr GltfModel::createEntity (int sceneIndex) const
         roots = d.scenes[static_cast<size_t> (index)].nodes;
     }
 
-    auto root = EntityNode::Ptr (new EntityNode (name));
+    auto root = Entity::Ptr (new Entity (name));
 
     // Iterative depth-first build: deep hierarchies can't overflow the stack, and nodes reached
     // twice (invalid in glTF, but possible in a malformed file) are built once to stop cycles
     std::vector<bool> built (d.nodes.size(), false);
-    std::vector<std::pair<int, EntityNode*>> pending;
+    std::vector<std::pair<int, Entity*>> pending;
 
     for (auto it = roots.rbegin(); it != roots.rend(); ++it)
         pending.emplace_back (*it, root.get());
@@ -1100,7 +1100,7 @@ EntityNode::Ptr GltfModel::createEntity (int sceneIndex) const
         built[static_cast<size_t> (nodeIndex)] = true;
 
         const auto& node = d.nodes[static_cast<size_t> (nodeIndex)];
-        auto entity = EntityNode::Ptr (new EntityNode (node.name));
+        auto entity = Entity::Ptr (new Entity (node.name));
         entity->setPosition (node.position);
         entity->setRotation (node.rotation);
         entity->setScale (node.scale);

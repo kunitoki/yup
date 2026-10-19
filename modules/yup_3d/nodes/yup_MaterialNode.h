@@ -29,7 +29,7 @@ namespace yup
     nearest MaterialNode up the tree wins. Only the lowest slot is the override: other slots
     are free for application use, for example to keep alternative materials at hand.
 
-    @see Material, EntityNode
+    @see Material, Entity
 */
 class YUP_API MaterialNode : public Node
 {

@@ -175,7 +175,7 @@ TEST_F (ShadowCascadesTests, NearClampsToSceneDepth)
 TEST_F (ShadowCascadesTests, InfiniteFarCapsAtTheClusterLimit)
 {
     Scene scene;
-    auto entity = EntityNode::Ptr (new EntityNode ("camera"));
+    auto entity = Entity::Ptr (new Entity ("camera"));
     auto& camera = entity->attach<CameraNode>();
     camera.zNear = 0.25f;
     camera.zFar = 0.0f;
