@@ -25,7 +25,6 @@
 
 using namespace yup;
 
-#if YUP_APPLE
 class SceneRendererFrameStatsTests : public SceneRendererMetalTests
 {
 protected:
@@ -576,7 +575,7 @@ protected:
         /** Builds the scene, or returns false without the model. */
         bool build (int numShowLights, float showRange, float keyRadius, RenderSettings::TierPreference tier, float aspectRatio)
         {
-            const auto file = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory().getChildFile ("examples/graphics/data/gltf/mpc.glb");
+            const auto file = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory().getParentDirectory().getChildFile ("examples/graphics/data/gltf/mpc.glb");
             auto model = GltfModel::loadFromFile (file);
             if (model.failed())
                 return false;
@@ -2173,4 +2172,3 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_DemoTargetFrameTimes)
                   << std::endl;
     }
 }
-#endif

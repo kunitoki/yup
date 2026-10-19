@@ -25,7 +25,6 @@
 
 using namespace yup;
 
-#if YUP_APPLE
 //==============================================================================
 /** The analytic world fog (FogApply) on Metal: both tiers against each other, the restarting
     signature and the failures. The checks shared with the GL twins are in SceneRendererBaselineScenes.
@@ -225,4 +224,3 @@ TEST_F (WorldFogMetalTests, RasterWorldFogThatGaveUpStopsItsRoute)
 {
     checkRasterWorldFogThatGaveUpStopsItsRoute();
 }
-#endif

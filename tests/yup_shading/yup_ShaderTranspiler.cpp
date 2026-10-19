@@ -3382,3 +3382,67 @@ TEST_F (ShaderNativeSlotsTests, VulkanAndWebGpuKeepTheirBindings)
     EXPECT_TRUE (ShaderTranspiler::assignGraphicsNativeSlots (vertexStage(), fragmentStage(), ShaderLanguage::spirv).entries.empty());
     EXPECT_TRUE (ShaderTranspiler::assignGraphicsNativeSlots (vertexStage(), fragmentStage(), ShaderLanguage::wgsl).entries.empty());
 }
+
+TEST_F (ShaderTranspilerTests, Reflect_ExtensionBuiltinsAreRecognized)
+{
+    using B = ShaderReflection::BuiltInType;
+
+    struct Case
+    {
+        const char* source;
+        ShaderStage stage;
+        std::vector<B> expected;
+    };
+
+    const std::vector<Case> cases = {
+        { "#version 450\n#extension GL_AMD_shader_explicit_vertex_parameter : require\n"
+          "layout(location = 0) out vec4 c;\n"
+          "void main() { c = vec4(gl_BaryCoordNoPerspAMD, gl_BaryCoordNoPerspCentroidAMD) + vec4(gl_BaryCoordPullModelAMD, 0.0); }\n",
+          ShaderStage::fragment,
+          { B::baryCoordNoPerspAMD, B::baryCoordNoPerspCentroidAMD, B::baryCoordPullModel } },
+        { "#version 450\n#extension GL_EXT_fragment_shader_barycentric : require\n"
+          "layout(location = 0) out vec4 c;\n"
+          "void main() { c = vec4(gl_BaryCoordEXT + gl_BaryCoordNoPerspEXT, 1.0); }\n",
+          ShaderStage::fragment,
+          { B::baryCoordKHR, B::baryCoordNoPerspKHR } },
+        { "#version 450\n#extension GL_EXT_fragment_invocation_density : require\n"
+          "layout(location = 0) out vec4 c;\n"
+          "void main() { c = vec4(vec2(gl_FragSizeEXT), float(gl_FragInvocationCountEXT), 1.0); }\n",
+          ShaderStage::fragment,
+          { B::fragSizeEXT, B::fragInvocationCountEXT } },
+        { "#version 450\n#extension GL_EXT_device_group : require\n"
+          "layout(location = 0) out vec4 c;\n"
+          "void main() { c = vec4(float(gl_DeviceIndex)); }\n",
+          ShaderStage::fragment,
+          { B::deviceIndex } },
+        { "#version 450\n#extension GL_ARB_shader_stencil_export : require\n"
+          "void main() { gl_FragStencilRefARB = 1; }\n",
+          ShaderStage::fragment,
+          { B::fragStencilRefEXT } },
+        { "#version 450\n#extension GL_NV_conservative_raster_underestimation : require\n"
+          "layout(location = 0) out vec4 c;\n"
+          "void main() { c = vec4(gl_FragFullyCoveredNV ? 1.0 : 0.0); }\n",
+          ShaderStage::fragment,
+          { B::fullyCoveredEXT } },
+        { "#version 450\n#extension GL_NV_viewport_array2 : require\n#extension GL_NV_stereo_view_rendering : require\n"
+          "layout(secondary_view_offset = 1) out highp int gl_Layer;\n"
+          "void main() { gl_Position = vec4(0.0); gl_SecondaryPositionNV = vec4(1.0); gl_ViewportMask[0] = 1; gl_SecondaryViewportMaskNV[0] = 2; }\n",
+          ShaderStage::vertex,
+          { B::secondaryPositionNV, B::viewportMaskNV, B::secondaryViewportMaskNV } },
+    };
+
+    for (const auto& c : cases)
+    {
+        auto result = transpiler->reflect (c.source, c.stage, ShaderLanguage::glsl);
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage() << "\n" << c.source;
+
+        const auto& ref = result.getValue();
+        for (auto expected : c.expected)
+        {
+            const auto isExpected = [expected] (const ShaderReflection::BuiltInBinding& b) { return b.builtin == expected; };
+            const auto found = std::any_of (ref.builtinInputs.begin(), ref.builtinInputs.end(), isExpected)
+                            || std::any_of (ref.builtinOutputs.begin(), ref.builtinOutputs.end(), isExpected);
+            EXPECT_TRUE (found) << "builtin " << (int) expected << " missing in\n" << c.source;
+        }
+    }
+}

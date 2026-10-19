@@ -43,7 +43,7 @@
       "tests": true,
       "skip": [
         "/native/(generated|java[^/]*)/",
-        "/native/[^/]*_(android|emscripten|linux|wasm|windows)\\.",
+        "/native/[^/]*_(android|emscripten|linux|vulkan|wasm|windows)\\.",
         "/native/[^/]*_ios[^/]*\\."
       ],
       "examples": {
@@ -59,7 +59,7 @@
       "tests": false,
       "skip": [
         "/native/(generated|java[^/]*)/",
-        "/native/[^/]*_(android|emscripten|linux|mac|wasm|windows)\\."
+        "/native/[^/]*_(android|emscripten|linux|mac|vulkan|wasm|windows)\\."
       ],
       "examples": {
         "console": "example_console",
@@ -102,7 +102,7 @@
       "tests": true,
       "skip": [
         "/native/(generated|java[^/]*)/",
-        "/native/[^/]*_(android|apple|linux|mac|windows)\\.",
+        "/native/[^/]*_(android|apple|linux|mac|vulkan|windows)\\.",
         "/native/[^/]*_ios[^/]*\\."
       ],
       "examples": {

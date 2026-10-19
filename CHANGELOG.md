@@ -136,6 +136,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Build: add `YUP_TEST_MODULES` to build only the tests of selected modules, and a `testDeps:` module header field for modules the tests need beyond the module's own dependencies.
 - CI: one `CI` workflow plans the macOS, Linux, Windows, Wasm, iOS and Android builds in a single job and builds and tests only the modules and examples affected on each platform since that platform's last green run on the branch (`.github/tools/smart_ci.py`). Failed work carries over to the next push until it passes, a branch with no green run diffs against `main`, and pushes to `main` still build everything. `CI result` is the single check to require.
 - CI: the Python wheel builds run as `build_python` jobs of the Linux, macOS and Windows CI builds, only when `yup_python` is affected, replacing the separate Python workflows.
+- CI: platform and backend specific tests of `yup_graphics`, `yup_rhi` and `yup_renderer` moved from macro guards to `tests/<module>/native/<file>_<suffix>.cpp` (`_apple`, `_mac`, `_linux`, `_emscripten`, `_vulkan`), so the smart CI only rebuilds them where they run. `_vulkan` files are skipped on macOS, iOS and Wasm.
 
 - YDSP backend (emscripten): mint kernel handles from a module-wide counter instead of a JS-realm-local one, so a realm that runs a graph can no longer find another realm's kernel under the same key and silently invoke the wrong module.
 

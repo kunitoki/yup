@@ -25,7 +25,6 @@
 
 using namespace yup;
 
-#if YUP_APPLE
 TEST_F (SceneRendererMetalTests, AgxToneMapsTheEnvironment)
 {
     const auto mid = renderEnvironmentCorner (0.5f, Scene::ToneMapping::agx);
@@ -2219,4 +2218,3 @@ TEST_P (SceneRendererTierTests, FogScattersForwardTowardsTheSun)
 {
     checkFogScattersForwardTowardsTheSun (GetParam());
 }
-#endif

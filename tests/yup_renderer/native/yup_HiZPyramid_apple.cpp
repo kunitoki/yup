@@ -25,7 +25,6 @@
 
 using namespace yup;
 
-#if YUP_APPLE
 #if YUP_ENABLE_SHADER_TRANSPILER
 /** HiZPyramid over the G-buffer depth of the compact scene, checked by fullscreen passes writing
     255 where a texel holds and 0 where it does not. */
@@ -93,7 +92,7 @@ protected:
         set 0 binding 1 and the textures @p bind sets, and returns its rgba texels. */
     std::vector<uint8> runChecker (const String& fragment, int width, int height, const std::function<void (GpuRenderPass&)>& bind)
     {
-        const auto vertex = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory()
+        const auto vertex = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory().getParentDirectory()
                                 .getChildFile ("modules/yup_renderer/shaders/yup_Fullscreen.vert")
                                 .loadFileAsString();
 
@@ -282,5 +281,4 @@ TEST_F (HiZPyramidMetalTests, ReusesThePooledPyramidAndOneTargetPerMip)
     pyramid->releaseTargets();
     EXPECT_EQ (pyramid->getNumCachedTargets(), 0u);
 }
-#endif
 #endif

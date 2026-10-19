@@ -25,7 +25,6 @@
 
 using namespace yup;
 
-#if YUP_LINUX
 class SceneRendererGLTests : public SceneRendererBaselineScenes
 {
 protected:
@@ -717,4 +716,3 @@ TEST_F (SceneRendererGLTests, RasterWorldFogThatGaveUpStopsItsRoute)
 
     checkRasterWorldFogThatGaveUpStopsItsRoute();
 }
-#endif

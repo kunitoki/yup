@@ -1109,3 +1109,260 @@ TEST_F (GltfModelTests, NodeCyclesDoNotRecurseForever)
         EXPECT_EQ (root->getChild (0)->getChild (0)->getNumChildren(), 0);
     }
 }
+
+TEST_F (GltfModelTests, ReadsEveryComponentType)
+{
+    const auto loadUvs = [] (int componentType, bool normalized, const MemoryBlock& uvs)
+    {
+        const auto json = String (R"({
+            "asset": { "version": "2.0" },
+            "scenes": [ { "nodes": [ 0 ] } ],
+            "nodes": [ { "mesh": 0 } ],
+            "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "TEXCOORD_0": 1 } } ] } ],
+            "buffers": [ { "uri": "$POSITIONS", "byteLength": 36 }, { "uri": "$UVS", "byteLength": $SIZE } ],
+            "bufferViews": [ { "buffer": 0, "byteLength": 36 }, { "buffer": 1, "byteLength": $SIZE } ],
+            "accessors": [
+                { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+                { "bufferView": 1, "componentType": $TYPE, "normalized": $NORMALIZED, "count": 3, "type": "VEC2" }
+            ]
+        })")
+                              .replace ("$POSITIONS", positionsUri())
+                              .replace ("$UVS", toDataUri (uvs))
+                              .replace ("$SIZE", String ((int) uvs.getSize()))
+                              .replace ("$TYPE", String (componentType))
+                              .replace ("$NORMALIZED", normalized ? "true" : "false");
+
+        auto result = loadJson (json);
+        EXPECT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+        std::vector<Point<float>> points;
+        if (result.wasOk())
+            for (const auto& vertex : result.getReference().getMeshes()[0]->getPrimitive (0).vertices)
+                points.push_back (vertex.uv);
+
+        return points;
+    };
+
+    auto bytes = loadUvs (5120, true, toBlock<int8> ({ 127, -127, -128, 0, 0, 0 }));
+    ASSERT_EQ (bytes.size(), 3u);
+    EXPECT_FLOAT_EQ (bytes[0].getX(), 1.0f);
+    EXPECT_FLOAT_EQ (bytes[0].getY(), -1.0f);
+    EXPECT_FLOAT_EQ (bytes[1].getX(), -1.0f);
+
+    auto rawBytes = loadUvs (5120, false, toBlock<int8> ({ -3, 4, 0, 0, 0, 0 }));
+    ASSERT_EQ (rawBytes.size(), 3u);
+    EXPECT_FLOAT_EQ (rawBytes[0].getX(), -3.0f);
+    EXPECT_FLOAT_EQ (rawBytes[0].getY(), 4.0f);
+
+    auto unsignedBytes = loadUvs (5121, false, toBlock<uint8> ({ 200, 1, 0, 0, 0, 0 }));
+    ASSERT_EQ (unsignedBytes.size(), 3u);
+    EXPECT_FLOAT_EQ (unsignedBytes[0].getX(), 200.0f);
+
+    auto shorts = loadUvs (5122, true, toBlock<int16> ({ 32767, -32768, -1000, 0, 0, 0 }));
+    ASSERT_EQ (shorts.size(), 3u);
+    EXPECT_FLOAT_EQ (shorts[0].getX(), 1.0f);
+    EXPECT_FLOAT_EQ (shorts[0].getY(), -1.0f);
+    EXPECT_NEAR (shorts[1].getX(), -1000.0f / 32767.0f, 1.0e-6f);
+
+    auto rawShorts = loadUvs (5122, false, toBlock<int16> ({ -300, 0, 0, 0, 0, 0 }));
+    ASSERT_EQ (rawShorts.size(), 3u);
+    EXPECT_FLOAT_EQ (rawShorts[0].getX(), -300.0f);
+
+    auto unsignedShorts = loadUvs (5123, true, toBlock<uint16> ({ 65535, 0, 0, 0, 0, 0 }));
+    ASSERT_EQ (unsignedShorts.size(), 3u);
+    EXPECT_FLOAT_EQ (unsignedShorts[0].getX(), 1.0f);
+
+    auto rawUnsignedShorts = loadUvs (5123, false, toBlock<uint16> ({ 1000, 0, 0, 0, 0, 0 }));
+    ASSERT_EQ (rawUnsignedShorts.size(), 3u);
+    EXPECT_FLOAT_EQ (rawUnsignedShorts[0].getX(), 1000.0f);
+}
+
+TEST_F (GltfModelTests, MapsEveryMinFilterAndRepeatWrap)
+{
+    struct Case
+    {
+        int minFilter;
+        GpuFilter expectedMin;
+        GpuFilter expectedMipmap;
+        bool mipmapped;
+    };
+
+    for (const auto& c : { Case { 9728, GpuFilter::nearest, GpuFilter::linear, false },
+                           Case { 9984, GpuFilter::nearest, GpuFilter::nearest, true },
+                           Case { 9985, GpuFilter::linear, GpuFilter::nearest, true },
+                           Case { 9986, GpuFilter::nearest, GpuFilter::linear, true },
+                           Case { 9987, GpuFilter::linear, GpuFilter::linear, true } })
+    {
+        auto result = loadJson (texturedJson (String (R"("samplers": [ { "minFilter": $MIN, "wrapS": 10497 } ],
+                                                         "textures": [ { "source": 0, "sampler": 0 } ],
+                                                         "images": [ { "uri": "$IMAGE" } ])")
+                                                  .replace ("$MIN", String (c.minFilter))
+                                                  .replace ("$IMAGE", toDataUri (fromBase64 (redPngBase64), "image/png"))));
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+        const auto& texture = result.getReference().getMaterials()[0]->baseColorTexture;
+        ASSERT_NE (texture, nullptr);
+
+        const auto& sampler = texture->getSamplerDesc();
+        EXPECT_EQ (sampler.minFilter, c.expectedMin) << c.minFilter;
+        EXPECT_EQ (sampler.wrapU, GpuWrapMode::repeat) << c.minFilter;
+
+        if (c.mipmapped)
+        {
+            EXPECT_EQ (sampler.mipmapFilter, c.expectedMipmap) << c.minFilter;
+            EXPECT_GT (sampler.maxLod, 0.0f) << c.minFilter;
+        }
+        else
+        {
+            EXPECT_FLOAT_EQ (sampler.maxLod, 0.0f) << c.minFilter;
+        }
+    }
+}
+
+TEST_F (GltfModelTests, ZeroScaleMatrixNodesHaveNoRotation)
+{
+    auto result = loadJson (R"({
+        "asset": { "version": "2.0" },
+        "scenes": [ { "nodes": [ 0 ] } ],
+        "nodes": [ { "name": "Flat", "matrix": [ 0, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  4, 5, 6, 1 ] } ]
+    })");
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    auto root = result.getReference().createEntity();
+    auto* node = root->findChild ("Flat");
+    ASSERT_NE (node, nullptr);
+
+    expectNear (node->getPosition(), { 4.0f, 5.0f, 6.0f });
+    EXPECT_FLOAT_EQ (node->getScale().getX(), 0.0f);
+    EXPECT_TRUE (node->getRotation().approximatelyEqualTo (Quaternion::identity()));
+}
+
+TEST_F (GltfModelTests, UnloadableImagesAreReported)
+{
+    const auto expectImageWarning = [] (const String& image, const String& expected, const File& baseDirectory = {})
+    {
+        auto result = loadJson (texturedJson (R"("textures": [ { "source": 0 } ], "images": [ )" + image + " ]"), baseDirectory);
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+        const auto& model = result.getReference();
+        EXPECT_EQ (model.getMaterials()[0]->baseColorTexture, nullptr) << image;
+
+        const auto warnings = model.getWarnings().joinIntoString ("\n");
+        EXPECT_TRUE (warnings.contains (expected)) << image << "\n" << warnings;
+    };
+
+    expectImageWarning (R"({ "uri": "data:image/png,notbase64" })", "unsupported data URI");
+    expectImageWarning (R"({ "uri": "missing.png" })", "outside the base directory");
+    expectImageWarning (R"({ "uri": "does_not_exist.png" })", "unable to read", getDataDirectory());
+}
+
+TEST_F (GltfModelTests, ExtTextureWebpIgnoresOtherMembers)
+{
+    auto result = loadJson (texturedJson (String (R"("textures": [ { "source": 0, "extensions": { "EXT_texture_webp": { "comment": 1, "source": 1 } } } ],
+                                                     "images": [ { "uri": "$RED" }, { "uri": "$GREEN" } ])")
+                                              .replace ("$RED", toDataUri (fromBase64 (redPngBase64), "image/png"))
+                                              .replace ("$GREEN", toDataUri (fromBase64 (greenPngBase64), "image/png"))));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& texture = result.getReference().getMaterials()[0]->baseColorTexture;
+    ASSERT_NE (texture, nullptr);
+    EXPECT_EQ (texture->getImage().getWidth(), 2);
+}
+
+TEST_F (GltfModelTests, SecondaryTexCoordSetsAreReported)
+{
+    auto result = loadJson (triangleJson (R"(, "material": 0)",
+                                          String (R"(, "materials": [ { "pbrMetallicRoughness": { "baseColorTexture": { "index": 0, "texCoord": 1 } } } ],
+                                                      "textures": [ { "source": 0 } ], "images": [ { "uri": "$IMAGE" } ])")
+                                              .replace ("$IMAGE", toDataUri (fromBase64 (redPngBase64), "image/png"))));
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto warnings = result.getReference().getWarnings().joinIntoString ("\n");
+    EXPECT_TRUE (warnings.contains ("TEXCOORD_1")) << warnings;
+}
+
+TEST_F (GltfModelTests, InvalidAttributesAndIndicesAreReported)
+{
+    const auto json = String (R"({
+        "asset": { "version": "2.0" },
+        "scenes": [ { "nodes": [ 0 ] } ],
+        "nodes": [ { "mesh": 0 } ],
+        "meshes": [ { "primitives": [
+            { "attributes": { "POSITION": 0, "NORMAL": 1 } },
+            { "attributes": { "POSITION": 0 }, "indices": 2 }
+        ] } ],
+        "buffers": [ { "uri": "$POSITIONS", "byteLength": 36 } ],
+        "bufferViews": [ { "buffer": 0, "byteLength": 36 } ],
+        "accessors": [
+            { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+            { "bufferView": 0, "componentType": 5126, "count": 3, "type": "SCALAR" },
+            { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" }
+        ]
+    })")
+                          .replace ("$POSITIONS", positionsUri());
+
+    auto result = loadJson (json);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& model = result.getReference();
+    EXPECT_EQ (model.getMeshes()[0]->getNumPrimitives(), 1);
+
+    const auto warnings = model.getWarnings().joinIntoString ("\n");
+    EXPECT_TRUE (warnings.contains ("invalid NORMAL")) << warnings;
+    EXPECT_TRUE (warnings.contains ("invalid indices")) << warnings;
+}
+
+TEST_F (GltfModelTests, NonIndexedPrimitivesMustBeTriangleLists)
+{
+    const auto json = String (R"({
+        "asset": { "version": "2.0" },
+        "scenes": [ { "nodes": [ 0 ] } ],
+        "nodes": [ { "mesh": 0 } ],
+        "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 } } ] } ],
+        "buffers": [ { "uri": "$POSITIONS", "byteLength": 24 } ],
+        "bufferViews": [ { "buffer": 0, "byteLength": 24 } ],
+        "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 2, "type": "VEC3" } ]
+    })")
+                          .replace ("$POSITIONS", toDataUri (toBlock<float> ({ 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f })));
+
+    auto result = loadJson (json);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& model = result.getReference();
+    EXPECT_EQ (model.getMeshes()[0]->getNumPrimitives(), 0);
+    EXPECT_TRUE (model.getWarnings().joinIntoString ("\n").contains ("not a list of triangles"));
+}
+
+TEST_F (GltfModelTests, AttachesPointLights)
+{
+    auto result = loadJson (R"({
+        "asset": { "version": "2.0" },
+        "extensionsUsed": [ "KHR_lights_punctual" ],
+        "extensions": { "KHR_lights_punctual": { "lights": [ { "type": "point", "intensity": 2 } ] } },
+        "scenes": [ { "nodes": [ 0 ] } ],
+        "nodes": [ { "name": "Bulb", "extensions": { "KHR_lights_punctual": { "light": 0 } } } ]
+    })");
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    auto root = result.getReference().createEntity();
+    auto* bulb = root->findChild ("Bulb")->getNode<LightNode>();
+    ASSERT_NE (bulb, nullptr);
+    EXPECT_EQ (bulb->type, LightNode::Type::point);
+    EXPECT_FLOAT_EQ (bulb->intensity, 2.0f);
+}
+
+TEST_F (GltfModelTests, SceneIndexWithoutScenesCreatesNothing)
+{
+    auto result = loadJson (R"({
+        "asset": { "version": "2.0" },
+        "nodes": [ { "name": "Loose" } ]
+    })");
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& model = result.getReference();
+    EXPECT_EQ (model.createEntity (0), nullptr);
+
+    auto root = model.createEntity();
+    ASSERT_NE (root, nullptr);
+    EXPECT_NE (root->findChild ("Loose"), nullptr);
+}

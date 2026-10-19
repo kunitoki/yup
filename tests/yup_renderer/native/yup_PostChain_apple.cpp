@@ -25,7 +25,6 @@
 
 using namespace yup;
 
-#if YUP_APPLE
 class PostChainMetalTests : public ::testing::Test
 {
 protected:
@@ -143,4 +142,3 @@ TEST_F (PostChainMetalTests, ResizingReleasesTheTargetsOfTheLastSize)
     EXPECT_EQ (firstLevel->getReferenceCount(), 1);
     EXPECT_EQ (glow->getReferenceCount(), 1);
 }
-#endif

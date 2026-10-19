@@ -25,7 +25,6 @@
 
 using namespace yup;
 
-#if YUP_APPLE
 //==============================================================================
 /** MotionBlur through the full tier, without temporal anti-aliasing unless a test asks for it,
     in the scenes of buildMovingBarScene(): the camera at the origin looking down -Z, a bar
@@ -956,4 +955,3 @@ TEST_F (MotionBlurMetalTests, MotionBlurChangesKeepTheAccumulationConverged)
 
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
 }
-#endif

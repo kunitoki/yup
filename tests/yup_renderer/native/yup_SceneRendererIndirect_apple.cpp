@@ -25,7 +25,6 @@
 
 using namespace yup;
 
-#if YUP_APPLE
 TEST_F (SceneRendererMetalTests, RendersEnvironmentShadowsAndBackground)
 {
     Scene scene;
@@ -1302,7 +1301,7 @@ TEST_F (SceneRendererMetalTests, SpecularOcclusionIsContinuousAndKeepsGrazingRef
     // The self-contained block of lib/probes.glsl the shaders reading the ambient occlusion compile,
     // without the environment lookups and their includes around it
     const auto library = "#define YUP_3D_AMBIENT_OCCLUSION\n"
-                       + File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory()
+                       + File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory().getParentDirectory()
                              .getChildFile ("modules/yup_renderer/shaders/lib/probes.glsl")
                              .loadFileAsString()
                              .fromFirstOccurrenceOf ("#ifdef YUP_3D_AMBIENT_OCCLUSION", true, false)
@@ -1368,7 +1367,7 @@ TEST_F (SceneRendererMetalTests, AmbientOcclusionUpsampleReadsWhereEachTexelWasT
 {
     // Texel i of the half resolution ambient occlusion was traced at the full resolution texel 2i:
     // that fragment must read the center of texel i, and texel 2i + 1 halfway to the next one
-    const auto library = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory()
+    const auto library = File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory().getParentDirectory()
                              .getChildFile ("modules/yup_renderer/shaders/lib/probes.glsl")
                              .loadFileAsString()
                              .fromFirstOccurrenceOf ("#ifdef YUP_3D_AMBIENT_OCCLUSION", true, false)
@@ -2026,4 +2025,3 @@ TEST_F (SceneRendererMetalTests, VolumeBakeUniformPoolStaysSmall)
     EXPECT_LE (largest.second, static_cast<size_t> (16 * 1024 * 1024));
     EXPECT_LE (unwaited.second, static_cast<size_t> (16 * 1024 * 1024));
 }
-#endif

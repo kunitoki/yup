@@ -3677,3 +3677,382 @@ TEST_F (GpuPipelineMockTests, CompileFromGlslWithOptions)
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER
+
+// ==============================================================================
+// GpuPipeline and GpuTexture - every option reaches ore with its matching value
+// ==============================================================================
+
+class GpuPipelineMappingMockTests : public ::testing::Test
+{
+protected:
+    /** Compiles a pipeline with @p options through a fresh mocked context, and hands the descriptor ore receives to @p inspect. */
+    static void compileInspecting (const GpuPipelineOptions& options, const std::function<void (const rive::ore::PipelineDesc&)>& inspect)
+    {
+        NiceMock<MockOreContext> oreCtx;
+        ON_CALL (oreCtx, makeShaderModule (_))
+            .WillByDefault (Invoke ([] (const rive::ore::ShaderModuleDesc&)
+        {
+            return rive::rcp<rive::ore::ShaderModule> (makeShaderModuleWithBindingMap());
+        }));
+        ON_CALL (oreCtx, makeBindGroupLayout (_))
+            .WillByDefault (Invoke ([] (const rive::ore::BindGroupLayoutDesc&)
+        {
+            return rive::rcp<rive::ore::BindGroupLayout> (rive::make_rcp<TestOreBindGroupLayout>());
+        }));
+        EXPECT_CALL (oreCtx, makePipeline (_, _))
+            .WillOnce (Invoke ([&inspect] (const rive::ore::PipelineDesc& desc, std::string*)
+        {
+            inspect (desc);
+            return rive::rcp<rive::ore::Pipeline> (rive::make_rcp<TestOrePipeline>());
+        }));
+
+        GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
+        EXPECT_TRUE (GpuPipeline::compile (device, makeShaderSource ("// VS"), makeShaderSource ("// FS"), options).wasOk());
+    }
+
+    /** Creates a texture from @p desc through a fresh mocked context and returns the descriptor ore receives, if any. */
+    static std::optional<rive::ore::TextureDesc> createTextureCapturing (const GpuTextureDesc& desc)
+    {
+        NiceMock<MockOreContext> oreCtx;
+        std::optional<rive::ore::TextureDesc> captured;
+        ON_CALL (oreCtx, makeTexture (_))
+            .WillByDefault (Invoke ([&captured] (const rive::ore::TextureDesc& d)
+        {
+            captured = d;
+            return rive::rcp<rive::ore::Texture> (rive::make_rcp<NiceMock<MockOreTexture>> (d));
+        }));
+
+        GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
+        const auto texture = GpuTexture::create (device, desc);
+        EXPECT_EQ (texture != nullptr, captured.has_value());
+        return captured;
+    }
+
+    template <class T>
+    static T unknown()
+    {
+        return static_cast<T> (0xff);
+    }
+};
+
+TEST_F (GpuPipelineMappingMockTests, EveryVertexFormatAndStepModeReachesOre)
+{
+    using F = GpuVertexFormat;
+    using O = rive::ore::VertexFormat;
+    const std::vector<std::pair<F, O>> formats = {
+        { F::float1, O::float1 }, { F::float2, O::float2 }, { F::float3, O::float3 }, { F::float4, O::float4 },
+        { F::uint8x4, O::uint8x4 }, { F::sint8x4, O::sint8x4 }, { F::snorm8x4, O::snorm8x4 }, { F::unorm8x4, O::unorm8x4 },
+        { F::uint16x2, O::uint16x2 }, { F::sint16x2, O::sint16x2 }, { F::unorm16x2, O::unorm16x2 }, { F::snorm16x2, O::snorm16x2 },
+        { F::uint16x4, O::uint16x4 }, { F::sint16x4, O::sint16x4 }, { F::float16x2, O::float16x2 }, { F::float16x4, O::float16x4 },
+        { F::uint32, O::uint32 }, { unknown<F>(), O::float4 }
+    };
+
+    GpuPipelineOptions options;
+    GpuVertexBufferLayout instanced;
+    instanced.stride = 64;
+    instanced.stepMode = GpuVertexStepMode::instance;
+    for (uint32_t i = 0; i < formats.size(); ++i)
+        instanced.attributes.push_back ({ formats[i].first, i * 4, i });
+
+    GpuVertexBufferLayout perVertex;
+    perVertex.stride = 16;
+    perVertex.attributes.push_back ({ GpuVertexFormat::float4, 0, 0 });
+
+    options.vertexBuffers = { instanced, perVertex };
+
+    compileInspecting (options, [&] (const rive::ore::PipelineDesc& desc)
+    {
+        ASSERT_EQ (desc.vertexBufferCount, 2u);
+        EXPECT_EQ (desc.vertexBuffers[0].stepMode, rive::ore::VertexStepMode::instance);
+        EXPECT_EQ (desc.vertexBuffers[1].stepMode, rive::ore::VertexStepMode::vertex);
+        ASSERT_EQ (desc.vertexBuffers[0].attributeCount, (uint32_t) formats.size());
+
+        for (size_t i = 0; i < formats.size(); ++i)
+        {
+            EXPECT_EQ (desc.vertexBuffers[0].attributes[i].format, formats[i].second) << "attribute " << i;
+            EXPECT_EQ (desc.vertexBuffers[0].attributes[i].shaderSlot, (uint32_t) i);
+        }
+    });
+}
+
+TEST_F (GpuPipelineMappingMockTests, EveryTopologyReachesOre)
+{
+    using T = GpuPrimitiveTopology;
+    using O = rive::ore::PrimitiveTopology;
+    for (const auto& [topology, expected] : std::vector<std::pair<T, O>> {
+             { T::pointList, O::pointList }, { T::lineList, O::lineList }, { T::lineStrip, O::lineStrip },
+             { T::triangleList, O::triangleList }, { T::triangleStrip, O::triangleStrip }, { unknown<T>(), O::triangleList } })
+    {
+        GpuPipelineOptions options;
+        options.topology = topology;
+        compileInspecting (options, [expected = expected] (const rive::ore::PipelineDesc& desc)
+        {
+            EXPECT_EQ (desc.topology, expected);
+        });
+    }
+}
+
+TEST_F (GpuPipelineMappingMockTests, EveryIndexFormatCullModeAndWindingReachesOre)
+{
+    const std::vector<std::pair<GpuIndexFormat, rive::ore::IndexFormat>> indexFormats = {
+        { GpuIndexFormat::none, rive::ore::IndexFormat::none },
+        { GpuIndexFormat::uint16, rive::ore::IndexFormat::uint16 },
+        { GpuIndexFormat::uint32, rive::ore::IndexFormat::uint32 },
+        { unknown<GpuIndexFormat>(), rive::ore::IndexFormat::none }
+    };
+    const std::vector<std::pair<GpuCullMode, rive::ore::CullMode>> cullModes = {
+        { GpuCullMode::none, rive::ore::CullMode::none },
+        { GpuCullMode::front, rive::ore::CullMode::front },
+        { GpuCullMode::back, rive::ore::CullMode::back },
+        { unknown<GpuCullMode>(), rive::ore::CullMode::none }
+    };
+
+    for (size_t i = 0; i < indexFormats.size(); ++i)
+    {
+        GpuPipelineOptions options;
+        options.indexFormat = indexFormats[i].first;
+        options.cullMode = cullModes[i].first;
+        options.winding = i % 2 == 0 ? GpuFaceWinding::clockwise : GpuFaceWinding::counterClockwise;
+
+        compileInspecting (options, [&] (const rive::ore::PipelineDesc& desc)
+        {
+            EXPECT_EQ (desc.indexFormat, indexFormats[i].second);
+            EXPECT_EQ (desc.cullMode, cullModes[i].second);
+            EXPECT_EQ (desc.winding, i % 2 == 0 ? rive::ore::FaceWinding::clockwise : rive::ore::FaceWinding::counterClockwise);
+        });
+    }
+}
+
+TEST_F (GpuPipelineMappingMockTests, EveryColorFormatReachesOre)
+{
+    using F = GpuTextureFormat;
+    using O = rive::ore::TextureFormat;
+    for (const auto& [format, expected] : std::vector<std::pair<F, O>> {
+             { F::r8unorm, O::r8unorm }, { F::rg8unorm, O::rg8unorm }, { F::rgba8unorm, O::rgba8unorm },
+             { F::rgba8snorm, O::rgba8snorm }, { F::bgra8unorm, O::bgra8unorm }, { F::rgba16float, O::rgba16float },
+             { F::rg16float, O::rg16float }, { F::r16float, O::r16float }, { F::rgba32float, O::rgba32float },
+             { F::rg32float, O::rg32float }, { F::r32float, O::r32float }, { F::rgb10a2unorm, O::rgb10a2unorm },
+             { F::r11g11b10float, O::r11g11b10float }, { F::bc1unorm, O::bc1unorm }, { F::bc3unorm, O::bc3unorm },
+             { F::bc7unorm, O::bc7unorm }, { F::etc2rgb8, O::etc2rgb8 }, { F::etc2rgba8, O::etc2rgba8 },
+             { F::astc4x4, O::astc4x4 }, { F::astc6x6, O::astc6x6 }, { F::astc8x8, O::astc8x8 }, { unknown<F>(), O::rgba8unorm } })
+    {
+        GpuColorTarget target;
+        target.format = format;
+
+        GpuPipelineOptions options;
+        options.colorTargets = { target };
+        compileInspecting (options, [expected = expected] (const rive::ore::PipelineDesc& desc)
+        {
+            ASSERT_EQ (desc.colorCount, 1u);
+            EXPECT_EQ (desc.colorTargets[0].format, expected);
+        });
+    }
+}
+
+TEST_F (GpuPipelineMappingMockTests, EveryBlendFactorAndOperationReachesOre)
+{
+    using F = GpuBlendFactor;
+    using O = rive::ore::BlendFactor;
+    const std::vector<std::pair<F, O>> factors = {
+        { F::zero, O::zero }, { F::one, O::one }, { F::srcColor, O::srcColor }, { F::oneMinusSrcColor, O::oneMinusSrcColor },
+        { F::srcAlpha, O::srcAlpha }, { F::oneMinusSrcAlpha, O::oneMinusSrcAlpha }, { F::dstColor, O::dstColor },
+        { F::oneMinusDstColor, O::oneMinusDstColor }, { F::dstAlpha, O::dstAlpha }, { F::oneMinusDstAlpha, O::oneMinusDstAlpha },
+        { F::srcAlphaSaturated, O::srcAlphaSaturated }, { F::blendColor, O::blendColor },
+        { F::oneMinusBlendColor, O::oneMinusBlendColor }, { unknown<F>(), O::one }
+    };
+    const std::vector<std::pair<GpuBlendOp, rive::ore::BlendOp>> operations = {
+        { GpuBlendOp::add, rive::ore::BlendOp::add }, { GpuBlendOp::subtract, rive::ore::BlendOp::subtract },
+        { GpuBlendOp::reverseSubtract, rive::ore::BlendOp::reverseSubtract }, { GpuBlendOp::min, rive::ore::BlendOp::min },
+        { GpuBlendOp::max, rive::ore::BlendOp::max }, { unknown<GpuBlendOp>(), rive::ore::BlendOp::add }
+    };
+
+    for (size_t i = 0; i < factors.size(); ++i)
+    {
+        const auto& operation = operations[i % operations.size()];
+        const auto& other = factors[factors.size() - 1 - i];
+
+        GpuColorTarget target;
+        target.blend.srcColor = factors[i].first;
+        target.blend.dstColor = other.first;
+        target.blend.srcAlpha = other.first;
+        target.blend.dstAlpha = factors[i].first;
+        target.blend.colorOp = operation.first;
+        target.blend.alphaOp = operation.first;
+
+        GpuPipelineOptions options;
+        options.colorTargets = { target };
+        compileInspecting (options, [&] (const rive::ore::PipelineDesc& desc)
+        {
+            const auto& blend = desc.colorTargets[0].blend;
+            EXPECT_EQ (blend.srcColor, factors[i].second);
+            EXPECT_EQ (blend.dstColor, other.second);
+            EXPECT_EQ (blend.srcAlpha, other.second);
+            EXPECT_EQ (blend.dstAlpha, factors[i].second);
+            EXPECT_EQ (blend.colorOp, operation.second);
+            EXPECT_EQ (blend.alphaOp, operation.second);
+        });
+    }
+}
+
+TEST_F (GpuPipelineMappingMockTests, EveryDepthFormatCompareFunctionAndStencilOpReachesOre)
+{
+    using C = GpuCompareFunction;
+    using OC = rive::ore::CompareFunction;
+    const std::vector<std::pair<C, OC>> compares = {
+        { C::never, OC::never }, { C::less, OC::less }, { C::equal, OC::equal }, { C::lessEqual, OC::lessEqual },
+        { C::greater, OC::greater }, { C::notEqual, OC::notEqual }, { C::greaterEqual, OC::greaterEqual },
+        { C::always, OC::always }, { unknown<C>(), OC::always }
+    };
+
+    using S = GpuStencilOp;
+    using OS = rive::ore::StencilOp;
+    const std::vector<std::pair<S, OS>> stencilOps = {
+        { S::keep, OS::keep }, { S::zero, OS::zero }, { S::replace, OS::replace }, { S::incrementClamp, OS::incrementClamp },
+        { S::decrementClamp, OS::decrementClamp }, { S::invert, OS::invert }, { S::incrementWrap, OS::incrementWrap },
+        { S::decrementWrap, OS::decrementWrap }, { unknown<S>(), OS::keep }
+    };
+
+    const std::vector<std::pair<GpuTextureFormat, rive::ore::TextureFormat>> depthFormats = {
+        { GpuTextureFormat::depth16unorm, rive::ore::TextureFormat::depth16unorm },
+        { GpuTextureFormat::depth24plusStencil8, rive::ore::TextureFormat::depth24plusStencil8 },
+        { GpuTextureFormat::depth32float, rive::ore::TextureFormat::depth32float },
+        { GpuTextureFormat::depth32floatStencil8, rive::ore::TextureFormat::depth32floatStencil8 }
+    };
+
+    for (size_t i = 0; i < compares.size(); ++i)
+    {
+        const auto& depthFormat = depthFormats[i % depthFormats.size()];
+        const auto& reversed = stencilOps[stencilOps.size() - 1 - i];
+
+        GpuPipelineOptions options;
+        options.depthStencil.enabled = true;
+        options.depthStencil.format = depthFormat.first;
+        options.depthStencil.depthCompare = compares[i].first;
+        options.stencilFront.compare = compares[i].first;
+        options.stencilFront.failOp = stencilOps[i].first;
+        options.stencilFront.depthFailOp = reversed.first;
+        options.stencilFront.passOp = stencilOps[i].first;
+        options.stencilBack.compare = compares[compares.size() - 1 - i].first;
+        options.stencilBack.failOp = reversed.first;
+        options.stencilBack.depthFailOp = stencilOps[i].first;
+        options.stencilBack.passOp = reversed.first;
+        options.stencilReadMask = 0x0f;
+        options.stencilWriteMask = 0xf0;
+
+        compileInspecting (options, [&] (const rive::ore::PipelineDesc& desc)
+        {
+            EXPECT_EQ (desc.depthStencil.format, depthFormat.second);
+            EXPECT_EQ (desc.depthStencil.depthCompare, compares[i].second);
+
+            EXPECT_EQ (desc.stencilFront.compare, compares[i].second);
+            EXPECT_EQ (desc.stencilFront.failOp, stencilOps[i].second);
+            EXPECT_EQ (desc.stencilFront.depthFailOp, reversed.second);
+            EXPECT_EQ (desc.stencilFront.passOp, stencilOps[i].second);
+
+            EXPECT_EQ (desc.stencilBack.compare, compares[compares.size() - 1 - i].second);
+            EXPECT_EQ (desc.stencilBack.failOp, reversed.second);
+            EXPECT_EQ (desc.stencilBack.depthFailOp, stencilOps[i].second);
+            EXPECT_EQ (desc.stencilBack.passOp, reversed.second);
+
+            EXPECT_EQ (desc.stencilReadMask, 0x0f);
+            EXPECT_EQ (desc.stencilWriteMask, 0xf0);
+        });
+    }
+}
+
+TEST_F (GpuPipelineMappingMockTests, EveryTextureTypeAndFormatReachesOre)
+{
+    const std::vector<std::tuple<GpuTextureType, uint32_t, rive::ore::TextureType>> types = {
+        { GpuTextureType::texture2D, 1, rive::ore::TextureType::texture2D },
+        { GpuTextureType::cube, 6, rive::ore::TextureType::cube },
+        { GpuTextureType::texture3D, 4, rive::ore::TextureType::texture3D },
+        { GpuTextureType::array2D, 3, rive::ore::TextureType::array2D }
+    };
+
+    for (const auto& [type, layers, expected] : types)
+    {
+        GpuTextureDesc desc;
+        desc.width = 8;
+        desc.height = 8;
+        desc.type = type;
+        desc.depthOrArrayLayers = layers;
+        desc.format = GpuTextureFormat::rgba16float;
+
+        const auto oreDesc = createTextureCapturing (desc);
+        ASSERT_TRUE (oreDesc.has_value());
+        EXPECT_EQ (oreDesc->type, expected);
+        EXPECT_EQ (oreDesc->depthOrArrayLayers, layers);
+        EXPECT_EQ (oreDesc->format, rive::ore::TextureFormat::rgba16float);
+    }
+}
+
+TEST_F (GpuPipelineMappingMockTests, TextureCreationRejectsInvalidDescriptions)
+{
+    EXPECT_EQ (GpuTexture::create (nullptr, {}), nullptr);
+
+    auto invalid = [] (auto&& edit)
+    {
+        GpuTextureDesc desc;
+        desc.width = 8;
+        desc.height = 8;
+        edit (desc);
+        return ! createTextureCapturing (desc).has_value();
+    };
+
+    EXPECT_TRUE (invalid ([] (GpuTextureDesc& d) { d.width = 0; }));
+    EXPECT_TRUE (invalid ([] (GpuTextureDesc& d) { d.mipLevels = 0; }));
+    EXPECT_TRUE (invalid ([] (GpuTextureDesc& d) { d.sampleCount = 0; }));
+    EXPECT_TRUE (invalid ([] (GpuTextureDesc& d) { d.type = GpuTextureType::cube; d.depthOrArrayLayers = 4; }));
+    EXPECT_TRUE (invalid ([] (GpuTextureDesc& d) { d.depthOrArrayLayers = 2; }));
+    EXPECT_TRUE (invalid ([] (GpuTextureDesc& d) { d.sampleCount = 4; }));
+    EXPECT_FALSE (invalid ([] (GpuTextureDesc& d) { d.sampleCount = 4; d.renderTarget = true; }));
+}
+
+TEST_F (GpuPipelineMappingMockTests, EverySamplerFilterWrapModeAndCompareReachesOre)
+{
+    const std::vector<std::pair<GpuWrapMode, rive::ore::WrapMode>> wrapModes = {
+        { GpuWrapMode::repeat, rive::ore::WrapMode::repeat },
+        { GpuWrapMode::mirrorRepeat, rive::ore::WrapMode::mirrorRepeat },
+        { GpuWrapMode::clampToEdge, rive::ore::WrapMode::clampToEdge }
+    };
+    const std::vector<std::pair<std::optional<GpuCompareFunction>, rive::ore::CompareFunction>> compares = {
+        { std::nullopt, rive::ore::CompareFunction::none },
+        { GpuCompareFunction::lessEqual, rive::ore::CompareFunction::lessEqual },
+        { GpuCompareFunction::greater, rive::ore::CompareFunction::greater }
+    };
+
+    for (size_t i = 0; i < wrapModes.size(); ++i)
+    {
+        NiceMock<MockOreContext> oreCtx;
+        std::optional<rive::ore::SamplerDesc> captured;
+        EXPECT_CALL (oreCtx, makeSampler (_))
+            .WillOnce (Invoke ([&captured] (const rive::ore::SamplerDesc& d)
+        {
+            captured = d;
+            return rive::rcp<rive::ore::Sampler> (rive::make_rcp<TestOreSampler>());
+        }));
+
+        GpuSamplerDesc desc;
+        desc.minFilter = i == 0 ? GpuFilter::linear : GpuFilter::nearest;
+        desc.magFilter = i == 1 ? GpuFilter::linear : GpuFilter::nearest;
+        desc.mipmapFilter = i == 2 ? GpuFilter::linear : GpuFilter::nearest;
+        desc.wrapU = wrapModes[i].first;
+        desc.wrapV = wrapModes[(i + 1) % wrapModes.size()].first;
+        desc.wrapW = wrapModes[(i + 2) % wrapModes.size()].first;
+        desc.compare = compares[i].first;
+        desc.maxAnisotropy = 4;
+
+        GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
+        EXPECT_NE (GpuSampler::create (device, desc), nullptr);
+
+        ASSERT_TRUE (captured.has_value());
+        EXPECT_EQ (captured->minFilter, i == 0 ? rive::ore::Filter::linear : rive::ore::Filter::nearest);
+        EXPECT_EQ (captured->magFilter, i == 1 ? rive::ore::Filter::linear : rive::ore::Filter::nearest);
+        EXPECT_EQ (captured->mipmapFilter, i == 2 ? rive::ore::Filter::linear : rive::ore::Filter::nearest);
+        EXPECT_EQ (captured->wrapU, wrapModes[i].second);
+        EXPECT_EQ (captured->wrapV, wrapModes[(i + 1) % wrapModes.size()].second);
+        EXPECT_EQ (captured->wrapW, wrapModes[(i + 2) % wrapModes.size()].second);
+        EXPECT_EQ (captured->compare, compares[i].second);
+        EXPECT_EQ (captured->maxAnisotropy, 4u);
+    }
+}

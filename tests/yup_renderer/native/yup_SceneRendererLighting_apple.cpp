@@ -25,7 +25,6 @@
 
 using namespace yup;
 
-#if YUP_APPLE
 TEST_F (SceneRendererMetalTests, ShadowCastingLightAfterEightOthersCasts)
 {
     // Eight dark lights come first in the list and the shadow casting sun ninth: the frame must
@@ -2380,4 +2379,3 @@ TEST_F (SceneRendererMetalTests, MaterialLayerChangesRestartAccumulation)
         EXPECT_TRUE (renderer.waitForGPU().wasOk());
     }
 }
-#endif

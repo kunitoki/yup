@@ -26,7 +26,7 @@
 
 #include "yup_GpuDevice.cpp"
 #include "yup_GpuTarget.cpp"
-// Defines GpuReadbackFixture: keep it ahead of yup_GpuComputePass.cpp, yup_GpuFrame.cpp and native/yup_GpuDevice_linux.cpp
+// Defines GpuReadbackFixture: keep it ahead of yup_GpuComputePass.cpp, yup_GpuFrame.cpp and the native tests
 #include "yup_GpuTexture.cpp"
 #include "yup_GpuPipeline.cpp"
 #include "yup_GpuPipelineMocked.cpp"
@@ -37,6 +37,24 @@
 #include "yup_GpuFrameDescriptor.cpp"
 #include "yup_OreBuffer.cpp"
 
+#if YUP_APPLE
+#include "native/yup_GpuDevice_apple.cpp"
+#include "native/yup_GpuTexture_apple.cpp"
+#include "native/yup_GpuPipeline_apple.cpp"
+#include "native/yup_GpuComputePass_apple.cpp"
+#include "native/yup_GpuFrame_apple.cpp"
+#include "native/yup_GpuFrameDescriptor_apple.cpp"
+#endif
+
 #if YUP_LINUX
 #include "native/yup_GpuDevice_linux.cpp"
+#endif
+
+#if YUP_EMSCRIPTEN
+#include "native/yup_GpuComputePass_emscripten.cpp"
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+#include "native/yup_GpuDevice_vulkan.cpp"
+#include "native/yup_GpuComputePass_vulkan.cpp"
 #endif

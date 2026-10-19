@@ -25,7 +25,6 @@
 
 using namespace yup;
 
-#if YUP_APPLE
 #if YUP_ENABLE_SHADER_TRANSPILER
 /** ReflectionPass on its own, for the failure paths SceneRenderer reaches. */
 class ReflectionPassMetalTests : public SceneRendererMetalTests
@@ -56,5 +55,4 @@ TEST_F (ReflectionPassMetalTests, PipelinesThatCannotCompileGiveUpWithTheirReaso
     EXPECT_TRUE (pass.hasGivenUp());
     EXPECT_TRUE (pass.getGiveUpReason().contains ("pipelines failed for testing")) << pass.getGiveUpReason();
 }
-#endif
 #endif
