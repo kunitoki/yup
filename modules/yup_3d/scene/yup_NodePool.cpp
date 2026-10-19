@@ -48,17 +48,6 @@ NodePoolBase::~NodePoolBase()
 
 //==============================================================================
 
-Node* NodePoolBase::find (EntityHandle entity) const noexcept
-{
-    if (entity.index >= sparse.size() || sparse[entity.index] == 0)
-        return nullptr;
-
-    const auto slot = sparse[entity.index] - 1;
-    return handles[slot] == entity ? nodes[slot] : nullptr;
-}
-
-//==============================================================================
-
 uint32 NodePoolBase::acquireSlot()
 {
     // While iterating, freed slots could be behind or ahead of the loop: append instead

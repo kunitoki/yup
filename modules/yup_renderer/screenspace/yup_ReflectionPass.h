@@ -41,7 +41,8 @@ namespace yup
       edges. The radiance of a ray is the previous scene color (the history of TemporalAA, exposed)
       at the hit, reprojected by the motion of the hit and rescaled from the previous exposure to
       the current one. The result joins the resolve of the previous frame, reprojected by the
-      motion of the pixel and clipped towards the YCoCg box of the rays' radiance, by an
+      motion of the reflected point (the pixel's motion plus the camera parallax of the mean hit
+      distance behind the surface) and clipped towards the YCoCg box of the rays' radiance, by an
       exponential blend. Output: rgba16float, the reflected radiance in rgb (the prefiltered radiance of the split
       sum, exposed, so a bright scene at a low exposure fits the half floats) and the confidence in
       a, 0 where the probes and the environment reflect alone. It is also the history of the next

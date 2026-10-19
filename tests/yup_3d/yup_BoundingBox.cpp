@@ -124,3 +124,36 @@ TEST_F (BoundingBoxTests, TransformedByRotationContainsAllCorners)
     expectNear (transformed.getMin(), { -1.0f, 0.0f, 0.0f });
     expectNear (transformed.getMax(), { 0.0f, 2.0f, 1.0f });
 }
+
+TEST_F (BoundingBoxTests, TransformedByAffineMatchesTheTransformedCorners)
+{
+    const BoundingBox box ({ -1.0f, 0.5f, 2.0f }, { 3.0f, 1.5f, 4.0f });
+    const auto transform = Matrix4::compose ({ 4.0f, -5.0f, 6.0f },
+                                             Quaternion::fromAxisAngle ({ 1.0f, 2.0f, 3.0f }, 0.8f),
+                                             { 2.0f, -3.0f, 0.5f });
+
+    BoundingBox corners;
+    for (int corner = 0; corner < 8; ++corner)
+        corners.expand (transform.transformPoint (box.getCorner (corner)));
+
+    const auto transformed = box.transformedBy (transform);
+    expectNear (transformed.getMin(), corners.getMin(), 1.0e-4f);
+    expectNear (transformed.getMax(), corners.getMax(), 1.0e-4f);
+}
+
+TEST_F (BoundingBoxTests, TransformedByProjectionContainsTheProjectedCorners)
+{
+    const BoundingBox box ({ -1.0f, -1.0f, -6.0f }, { 1.0f, 1.0f, -4.0f });
+    const auto projection = Matrix4::perspective (1.0f, 1.0f, 0.1f, 10.0f);
+    const auto transformed = box.transformedBy (projection);
+
+    for (int corner = 0; corner < 8; ++corner)
+    {
+        const auto point = projection.transformPoint (box.getCorner (corner));
+        const auto& low = transformed.getMin();
+        const auto& high = transformed.getMax();
+
+        EXPECT_TRUE (point.getX() >= low.getX() && point.getY() >= low.getY() && point.getZ() >= low.getZ());
+        EXPECT_TRUE (point.getX() <= high.getX() && point.getY() <= high.getY() && point.getZ() <= high.getZ());
+    }
+}

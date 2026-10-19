@@ -47,6 +47,7 @@ Scene::Scene()
     : store (std::make_unique<EntityStore>())
 {
     root = store->create ("root");
+    store->setRoot (root.index);
 }
 
 Scene::~Scene()
@@ -54,6 +55,7 @@ Scene::~Scene()
     systems.clear();
     collections.clear();
     poolsByType.clear();
+    poolsByIndex.clear();
     pools.clear();
     store.reset();
 }
@@ -310,7 +312,7 @@ void Scene::update (double deltaSeconds)
         for (uint32 slot = 0, numSlots = pool->getNumSlots(); slot < numSlots; ++slot)
         {
             auto* node = pool->getNodeAt (slot);
-            if (node != nullptr && store->isActive (pool->getEntityAt (slot).index, root.index))
+            if (node != nullptr && store->isActive (pool->getEntityAt (slot).index))
                 node->update (deltaSeconds);
         }
     }

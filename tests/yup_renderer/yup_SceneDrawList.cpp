@@ -201,6 +201,48 @@ TEST_F (SceneDrawListTests, AnOverrideWithoutMaterialInheritsTheParentOne)
     EXPECT_EQ (drawList.getOpaqueItems()[0].material, outer.get());
 }
 
+TEST_F (SceneDrawListTests, OverridesAndVisibilityAreReadAgainOnEachBuild)
+{
+    auto first = makeMaterial ("first");
+    auto second = makeMaterial ("second");
+
+    auto group = makeEntity();
+    auto leaf = group.createChild();
+    auto& materialNode = group.attach<MaterialNode> (first);
+    leaf.attach<MeshNode> (makeTriangle (makeMaterial ("own")));
+
+    drawList.build (root, {});
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].material, first.get());
+
+    materialNode.material = second;
+    drawList.build (root, {});
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].material, second.get());
+
+    group.setVisible (false);
+    drawList.build (root, {});
+    EXPECT_TRUE (drawList.getOpaqueItems().empty());
+}
+
+TEST_F (SceneDrawListTests, OnlyTheSubtreeOfTheBuildRootIsDrawn)
+{
+    auto outer = makeMaterial ("outer");
+    auto group = makeEntity();
+    auto leaf = group.createChild();
+    auto sibling = makeEntity();
+
+    root.attach<MaterialNode> (outer);
+    leaf.attach<MeshNode> (makeTriangle());
+    sibling.attach<MeshNode> (makeTriangle());
+
+    drawList.build (group, {});
+
+    ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
+    EXPECT_EQ (drawList.getOpaqueItems()[0].node, leaf.get<MeshNode>());
+    EXPECT_NE (drawList.getOpaqueItems()[0].material, outer.get());
+}
+
 TEST_F (SceneDrawListTests, BlendItemsAreSortedBackToFront)
 {
     auto glass = makeMaterial ("glass", Material::AlphaMode::blend);

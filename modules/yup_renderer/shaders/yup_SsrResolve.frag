@@ -42,8 +42,8 @@
 // screen edges and for rays turning towards the camera, whose hits the depth may hide behind what
 // faces it; a ray reprojected off screen counts as a miss. The confidence of the pixel is the mean
 // over the similar texels, a miss counting 0, faded out above the roughness fade start.
-// The result then joins the resolve of the previous frame, reprojected by the motion of the pixel
-// and rescaled to this exposure, by an exponential blend of ssrHistoryWeight (Karis 2014): the
+// The result then joins the resolve of the previous frame, reprojected by the motion of the
+// reflected point (the pixel's motion plus the parallax of the mean hit distance behind it) and rescaled to this exposure, by an exponential blend of ssrHistoryWeight (Karis 2014): the
 // history is first clamped to the range of the rays' radiance, wide where the rough lobes scatter
 // the rays and tight on mirrors, so the reflections hold still while the scene changes and
 // TemporalAA, whose clipping follows the noise of a single frame, restarts its running mean.
@@ -60,6 +60,25 @@ layout(set = 1, binding = 6) uniform texture2D u_history;
 const float ssrHistoryWeight = 0.125;
 
 layout(location = 0) in vec2 uv;
+
+// The motion of a reflection beyond the motion of its surface, from the camera alone: the motion of
+// the reflected point, seen at its distance along the view ray behind the surface, minus the
+// motion of the surface's own position (Stachowiak 2015). Both in view space, of this frame
+vec2 reflectionParallax(vec3 surface, vec3 reflected)
+{
+    mat3 rotation = transpose(mat3(view.view));
+    vec4 surfaceWorld = vec4(rotation * (surface - view.view[3].xyz), 1.0);
+    vec4 reflectedWorld = vec4(rotation * (reflected - view.view[3].xyz), 1.0);
+
+    vec4 surfaceNow = view.unjitteredViewProjection * surfaceWorld;
+    vec4 surfaceBefore = view.previousViewProjection * surfaceWorld;
+    vec4 reflectedNow = view.unjitteredViewProjection * reflectedWorld;
+    vec4 reflectedBefore = view.previousViewProjection * reflectedWorld;
+    if (min(min(surfaceNow.w, surfaceBefore.w), min(reflectedNow.w, reflectedBefore.w)) <= 1.0e-6)
+        return vec2(0.0);
+
+    return viewVelocity(reflectedNow, reflectedBefore) - viewVelocity(surfaceNow, surfaceBefore);
+}
 
 layout(location = 0) out vec4 fragColor;
 
@@ -89,6 +108,7 @@ void main()
     float radianceWeight = 0.0;
     float confidence = 0.0;
     float similarity = 0.0;
+    float hitDistance = 0.0;
     vec3 boxMin = vec3(yupMaxHalf);
     vec3 boxMax = vec3(-yupMaxHalf);
 
@@ -152,6 +172,7 @@ void main()
         boxMin = min(boxMin, rayYCoCg);
         boxMax = max(boxMax, rayYCoCg);
         radianceWeight += weight;
+        hitDistance += length(toHit) * weight;
         confidence += similar * valid;
     }
 
@@ -160,8 +181,13 @@ void main()
     vec3 current = traced ? radiance / radianceWeight : vec3(0.0);
     float currentConfidence = traced ? confidence / similarity * fade : 0.0;
 
-    // The history, exposed by the previous frame like the rays' radiance, so both share its tone mapping
-    vec2 previousUv = (vec2(pixel) + 0.5) * view.viewport.zw - texelFetch(sampler2D(u_velocity, pointClamp), pixel, 0).xy;
+    // The history, exposed by the previous frame like the rays' radiance, so both share its tone mapping,
+    // where the previous frame saw the reflected point
+    vec2 velocity = texelFetch(sampler2D(u_velocity, pointClamp), pixel, 0).xy;
+    if (traced)
+        velocity += reflectionParallax(position, position - v * (hitDistance / radianceWeight));
+
+    vec2 previousUv = (vec2(pixel) + 0.5) * view.viewport.zw - velocity;
     vec4 history = vec4(0.0);
     if (ssr.frame.w > 0.5 && all(greaterThanEqual(previousUv, vec2(0.0))) && all(lessThanEqual(previousUv, vec2(1.0))))
         history = yupSanitize(textureLod(sampler2D(u_history, linearClamp), previousUv, 0.0));

@@ -55,9 +55,7 @@ const Matrix4& TransformNode::getLocalMatrix() const noexcept
 {
     if (localDirty)
     {
-        localMatrix = Matrix4::scaling (scale)
-                          .followedBy (rotation.toMatrix4())
-                          .followedBy (Matrix4::translation (position));
+        localMatrix = Matrix4::compose (position, rotation, scale);
 
         localDirty = false;
     }
@@ -69,12 +67,15 @@ const Matrix4& TransformNode::getLocalMatrix() const noexcept
 
 void TransformNode::attachedToEntity()
 {
-    getEntity().invalidateWorldMatrix();
+    // Only the node of the TransformNode pool places the entity, not subclasses stored in other pools
+    if (getEntity().get<TransformNode>() == this)
+        getEntity().setTransform (this);
 }
 
 void TransformNode::detachedFromEntity()
 {
-    getEntity().invalidateWorldMatrix();
+    if (getEntity().get<TransformNode>() == nullptr)
+        getEntity().setTransform (nullptr);
 }
 
 void TransformNode::transformChanged() noexcept

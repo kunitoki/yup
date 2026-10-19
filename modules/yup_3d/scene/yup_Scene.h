@@ -24,8 +24,12 @@ namespace yup
 
 class EntityStore;
 
+template <class Filter, class... Ts>
+class BasicNodeView;
+
+/** A view without predicate, see BasicNodeView and Scene::view(). */
 template <class... Ts>
-class NodeView;
+using NodeView = BasicNodeView<void, Ts...>;
 
 template <class... Ts>
 class NodeCollection;
@@ -274,18 +278,30 @@ public:
     template <class T>
     NodePool<T>& getPool()
     {
-        constexpr auto id = NodeTypeId::get<T>();
+        if (auto* pool = findPool<T>())
+            return *pool;
 
-        if (auto* pool = findPool (id))
-        {
-            jassert (pool->getTypeName() == NodeTypeId::getName<T>()); // Two node types have the same id: give one a nodeTypeName
-            return static_cast<NodePool<T>&> (*pool);
-        }
+        constexpr auto id = NodeTypeId::get<T>();
+        jassert (findPool (id) == nullptr); // Two node types have the same id: give one a nodeTypeName
 
         auto& pool = pools.emplace_back (std::make_unique<NodePool<T>> (*this));
         poolsByType.emplace (id, pool.get());
+
+        const auto index = NodeTypeId::getIndex<T>();
+        if (index >= poolsByIndex.size())
+            poolsByIndex.resize (index + 1, nullptr);
+
+        poolsByIndex[index] = pool.get();
         scheduleDirty = scheduleDirty || pool->updatesNodes();
         return static_cast<NodePool<T>&> (*pool);
+    }
+
+    /** Returns the pool storing the nodes of type T, or nullptr if no node of that type was ever attached. */
+    template <class T>
+    NodePool<T>* findPool() const noexcept
+    {
+        const auto index = NodeTypeId::getIndex<T>();
+        return index < poolsByIndex.size() ? static_cast<NodePool<T>*> (poolsByIndex[index]) : nullptr;
     }
 
     /** Returns the pool of a NodeTypeId, or nullptr if no node of that type was ever attached. */
@@ -329,6 +345,7 @@ private:
     EntityHandle root;
     std::vector<std::unique_ptr<NodePoolBase>> pools;
     std::unordered_map<uint64, NodePoolBase*> poolsByType;
+    std::vector<NodePoolBase*> poolsByIndex;
     std::unordered_map<Uuid, EntityHandle> entitiesByUuid;
     std::map<std::vector<uint64>, std::shared_ptr<void>> collections;
     std::vector<std::unique_ptr<SystemEntry>> systems;
@@ -371,8 +388,8 @@ T* Entity::get() const noexcept
     if (scene == nullptr)
         return nullptr;
 
-    auto* pool = scene->findPool (NodeTypeId::get<T>());
-    return pool != nullptr ? static_cast<T*> (pool->find (handle)) : nullptr;
+    auto* pool = scene->findPool<T>();
+    return pool != nullptr ? pool->get (handle) : nullptr;
 }
 
 template <class T>
@@ -381,7 +398,7 @@ bool Entity::detach()
     if (scene == nullptr)
         return false;
 
-    auto* pool = scene->findPool (NodeTypeId::get<T>());
+    auto* pool = scene->findPool<T>();
     return pool != nullptr && pool->remove (handle);
 }
 

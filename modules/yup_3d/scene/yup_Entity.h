@@ -25,6 +25,7 @@ namespace yup
 class Scene;
 class Node;
 class EntityStore;
+class TransformNode;
 
 //==============================================================================
 /** An element of a 3D scene: a lightweight handle to an entity owned by a Scene.
@@ -274,6 +275,7 @@ private:
     friend class TransformNode;
 
     EntityStore* findStore() const noexcept;
+    void setTransform (const TransformNode* transform) const noexcept;
     void invalidateWorldMatrix() const noexcept;
 
     Scene* scene = nullptr;

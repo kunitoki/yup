@@ -103,7 +103,7 @@ bool Entity::setUuid (const Uuid& newUuid)
 bool Entity::isVisible() const noexcept
 {
     if (auto* store = findStore())
-        return store->get (handle.index).visible;
+        return store->isVisible (handle.index);
 
     return false;
 }
@@ -111,12 +111,12 @@ bool Entity::isVisible() const noexcept
 void Entity::setVisible (bool shouldBeVisible) noexcept
 {
     if (auto* store = findStore())
-        store->get (handle.index).visible = shouldBeVisible;
+        store->setVisible (handle.index, shouldBeVisible);
 }
 
 bool Entity::isActive() const noexcept
 {
-    return isValid() && scene->store->isActive (handle.index, scene->root.index);
+    return isValid() && scene->store->isActive (handle.index);
 }
 
 //==============================================================================
@@ -238,10 +238,13 @@ Matrix4 Entity::getWorldMatrix() const noexcept
     if (store == nullptr)
         return {};
 
-    return store->getWorldMatrix (handle.index, [this, store] (uint32 index)
-    {
-        return Entity (scene, store->getHandle (index)).getLocalMatrix();
-    });
+    return store->getWorldMatrix (handle.index);
+}
+
+void Entity::setTransform (const TransformNode* transform) const noexcept
+{
+    if (isValid())
+        scene->store->setTransform (handle.index, transform);
 }
 
 void Entity::invalidateWorldMatrix() const noexcept

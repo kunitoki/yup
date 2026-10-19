@@ -29,6 +29,22 @@ Prefab::Part::Part (const String& name)
 {
 }
 
+Prefab::Part::~Part()
+{
+    auto pending = std::move (children);
+
+    while (! pending.empty())
+    {
+        auto part = std::move (pending.back());
+        pending.pop_back();
+
+        for (auto& child : part->children)
+            pending.push_back (std::move (child));
+
+        part->children.clear();
+    }
+}
+
 Prefab::Part& Prefab::Part::addChild (const String& childName)
 {
     return *children.emplace_back (std::make_unique<Part> (childName));

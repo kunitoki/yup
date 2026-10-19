@@ -27,6 +27,8 @@ class Mat4;
 namespace yup
 {
 
+class Quaternion;
+
 //==============================================================================
 /** A 4x4 single precision matrix for 3D transformations and projections.
 
@@ -39,7 +41,11 @@ namespace yup
     The projection factories follow the right-handed convention of the GPU backends (camera
     looking down -z), with a choice of [0, 1] or [-1, 1] depth range.
 
-    @see Vector3, Ray, MeshSurfaceMapper, AffineTransform
+    Composition and transforms are constexpr: they compute with plain scalars in constant
+    expressions and with SIMD registers at runtime, so the last bit of a result may differ
+    between the two.
+
+    @see Vector3, Quaternion, Ray, MeshSurfaceMapper, AffineTransform
 */
 class YUP_API Matrix4
 {
@@ -72,6 +78,26 @@ public:
 
     /** Returns true if this is the identity matrix. */
     [[nodiscard]] constexpr bool isIdentity() const noexcept { return *this == identity(); }
+
+    /** Returns true if the bottom row is (0, 0, 0, 1): the matrix is a linear transform plus a
+        translation, without projection. Every transform built from translations, rotations and
+        scales is affine.
+    */
+    [[nodiscard]] constexpr bool isAffine() const noexcept
+    {
+        return m[3] == 0.0f && m[7] == 0.0f && m[11] == 0.0f && m[15] == 1.0f;
+    }
+
+    /** Returns the matrix that scales, then rotates, then translates.
+
+        This equals scaling (scale).followedBy (rotation.toMatrix4()).followedBy (translation (offset))
+        without the two matrix products.
+
+        @param offset    The translation, applied last.
+        @param rotation  The rotation, applied after the scale.
+        @param scale     The scale factor along each axis, applied first.
+    */
+    [[nodiscard]] static Matrix4 compose (const Vector3<float>& offset, const Quaternion& rotation, const Vector3<float>& scale) noexcept;
 
     /** Returns a translation matrix.
 
@@ -164,12 +190,35 @@ public:
 
         @param other The transformation applied after this one.
     */
-    [[nodiscard]] Matrix4 followedBy (const Matrix4& other) const noexcept;
+    [[nodiscard]] constexpr Matrix4 followedBy (const Matrix4& other) const noexcept
+    {
+        // With column vectors, applying this first and then other is other * this: each result
+        // column is a combination of the columns of other, weighted by a column of this
+        std::array<float, 16> result {};
+
+        if (std::is_constant_evaluated())
+        {
+            for (std::size_t column = 0; column < 16; column += 4)
+            {
+                const auto combined = other.combineColumns (m[column], m[column + 1], m[column + 2], m[column + 3]);
+                std::copy (combined.begin(), combined.end(), result.begin() + static_cast<std::ptrdiff_t> (column));
+            }
+        }
+        else
+        {
+            combineColumns (other.m.data(), m.data(), result.data(), 4);
+        }
+
+        return Matrix4 (result);
+    }
 
     /** Same as followedBy(). */
-    [[nodiscard]] Matrix4 operator* (const Matrix4& other) const noexcept { return followedBy (other); }
+    [[nodiscard]] constexpr Matrix4 operator* (const Matrix4& other) const noexcept { return followedBy (other); }
 
-    /** Returns the inverse of this matrix, or the identity if the matrix is singular. */
+    /** Returns the inverse of this matrix, or the identity if the matrix is singular.
+
+        Affine matrices take a faster path that only inverts the 3x3 linear part.
+    */
     [[nodiscard]] Matrix4 inverted() const noexcept;
 
     /** Returns the transposed matrix. */
@@ -184,7 +233,15 @@ public:
 
         @return The transformed point.
     */
-    [[nodiscard]] Vector3<float> transformPoint (const Vector3<float>& point) const noexcept;
+    [[nodiscard]] constexpr Vector3<float> transformPoint (const Vector3<float>& point) const noexcept
+    {
+        const auto [x, y, z, w] = transformPoint4 (point.getX(), point.getY(), point.getZ(), 1.0f);
+
+        if (w == 0.0f || w == 1.0f)
+            return { x, y, z };
+
+        return { x / w, y / w, z / w };
+    }
 
     /** Transforms a direction, ignoring the translation and the perspective row.
 
@@ -192,7 +249,12 @@ public:
 
         @return The transformed direction.
     */
-    [[nodiscard]] Vector3<float> transformVector (const Vector3<float>& vector) const noexcept;
+    [[nodiscard]] constexpr Vector3<float> transformVector (const Vector3<float>& vector) const noexcept
+    {
+        const auto [x, y, z, w] = transformPoint4 (vector.getX(), vector.getY(), vector.getZ(), 0.0f);
+
+        return { x, y, z };
+    }
 
     /** Transforms a homogeneous point without the perspective divide.
 
@@ -201,7 +263,16 @@ public:
 
         @return The transformed x, y, z and w.
     */
-    [[nodiscard]] std::array<float, 4> transformPoint4 (float x, float y, float z, float w) const noexcept;
+    [[nodiscard]] constexpr std::array<float, 4> transformPoint4 (float x, float y, float z, float w) const noexcept
+    {
+        if (std::is_constant_evaluated())
+            return combineColumns (x, y, z, w);
+
+        const float weights[] { x, y, z, w };
+        std::array<float, 4> result {};
+        combineColumns (m.data(), weights, result.data(), 1);
+        return result;
+    }
 
     //==============================================================================
     /** Returns the 16 values in column-major order, ready to be uploaded to the GPU. */
@@ -232,6 +303,35 @@ public:
     rive::Mat4 toMat4() const noexcept;
 
 private:
+    // Each result column is the sum of the 4 columns, weighted by the matching column of weights
+    static void combineColumns (const float* columns, const float* weights, float* result, int numWeightColumns) noexcept
+    {
+        const auto c0 = Float32x4::loadUnaligned (columns);
+        const auto c1 = Float32x4::loadUnaligned (columns + 4);
+        const auto c2 = Float32x4::loadUnaligned (columns + 8);
+        const auto c3 = Float32x4::loadUnaligned (columns + 12);
+
+        for (int i = 0; i < numWeightColumns; ++i, weights += 4, result += 4)
+        {
+            (c0 * Float32x4::broadcast (weights[0]))
+                .mulAdd (c1, Float32x4::broadcast (weights[1]))
+                .mulAdd (c2, Float32x4::broadcast (weights[2]))
+                .mulAdd (c3, Float32x4::broadcast (weights[3]))
+                .storeUnaligned (result);
+        }
+    }
+
+    // The scalar version, for constant expressions
+    constexpr std::array<float, 4> combineColumns (float x, float y, float z, float w) const noexcept
+    {
+        std::array<float, 4> result {};
+
+        for (std::size_t row = 0; row < 4; ++row)
+            result[row] = m[row] * x + m[4 + row] * y + m[8 + row] * z + m[12 + row] * w;
+
+        return result;
+    }
+
     std::array<float, 16> m;
 };
 

@@ -56,6 +56,12 @@ TEST_F (NodeTypeIdTests, DistinctTypesHaveDistinctIds)
     EXPECT_NE (NodeTypeId::get<MeshNode>(), NodeTypeId::get<MaterialNode>());
 }
 
+TEST_F (NodeTypeIdTests, IndicesAreStableAndDistinct)
+{
+    EXPECT_EQ (NodeTypeId::getIndex<PlainNode>(), NodeTypeId::getIndex<PlainNode>());
+    EXPECT_NE (NodeTypeId::getIndex<PlainNode>(), NodeTypeId::getIndex<OtherNode>());
+}
+
 TEST_F (NodeTypeIdTests, NamesAreQualifiedWithoutKeywords)
 {
     EXPECT_EQ (NodeTypeId::getName<MeshNode>(), "yup::MeshNode");

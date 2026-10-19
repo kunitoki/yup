@@ -39,22 +39,22 @@ namespace yup
 
     Range-for yields a std::tuple<Entity, Ts&...> by value: bind it with auto or auto&&.
 
+    Predicates are part of the type of the view and called inline, so where() is only available
+    on a temporary view: chain it, or std::move() a stored view into it.
+
     The scene is iterating for as long as the view lives: nodes detached and entities destroyed
     meanwhile are skipped at once, but only destroyed when the view goes away. Nodes attached
     while iterating are not visited. Keep views short-lived.
 
     @see Scene::view, NodeCollection
 */
-template <class... Ts>
-class NodeView
+template <class Filter, class... Ts>
+class BasicNodeView
 {
 public:
     //==============================================================================
-    using Predicate = std::function<bool (const Ts&...)>;
-
-    //==============================================================================
     /** Creates a view over pools of a scene, use Scene::view() instead. */
-    NodeView (Scene& owner, NodePool<Ts>&... nodePools)
+    BasicNodeView (Scene& owner, NodePool<Ts>&... nodePools)
         : guard (owner)
         , scene (&owner)
         , pools (&nodePools...)
@@ -62,27 +62,30 @@ public:
         ((lead = (lead == nullptr || nodePools.size() < lead->size()) ? &nodePools : lead), ...);
     }
 
-    NodeView (NodeView&& other) = default;
+    BasicNodeView (BasicNodeView&& other) = default;
 
     //==============================================================================
-    /** Only keeps the entities whose nodes pass a predicate, on top of the previous ones.
+    /** Returns a view that only keeps the entities whose nodes pass a predicate, on top of the previous ones.
 
         @param predicate A callable taking (const Ts&... nodes) and returning bool.
     */
-    NodeView& where (Predicate predicate) &
+    template <class Predicate>
+        requires std::predicate<const std::decay_t<Predicate>&, const Ts&...>
+    auto where (Predicate&& predicate) &&
     {
-        addFilter (std::move (predicate));
-        return *this;
-    }
+        if constexpr (hasFilter)
+        {
+            auto combined = [previous = std::move (filter), next = std::forward<Predicate> (predicate)] (const Ts&... n)
+            {
+                return previous (n...) && next (n...);
+            };
 
-    /** Only keeps the entities whose nodes pass a predicate, on top of the previous ones.
-
-        @param predicate A callable taking (const Ts&... nodes) and returning bool.
-    */
-    NodeView where (Predicate predicate) &&
-    {
-        addFilter (std::move (predicate));
-        return std::move (*this);
+            return BasicNodeView<decltype (combined), Ts...> (std::move (*this), std::move (combined));
+        }
+        else
+        {
+            return BasicNodeView<std::decay_t<Predicate>, Ts...> (std::move (*this), std::forward<Predicate> (predicate));
+        }
     }
 
     //==============================================================================
@@ -116,12 +119,19 @@ public:
         return {};
     }
 
-    /** Returns the number of matching entities, walking the whole view. */
+    /** Returns the number of matching entities, walking the whole view unless it has a single node type and no predicate. */
     int size() const
     {
-        int count = 0;
-        forEach ([&count] (Entity, Ts&...) { ++count; });
-        return count;
+        if constexpr (sizeof... (Ts) == 1 && ! hasFilter)
+        {
+            return lead->size();
+        }
+        else
+        {
+            int count = 0;
+            forEach ([&count] (Entity, Ts&...) { ++count; });
+            return count;
+        }
     }
 
     /** Returns true if no entity matches. */
@@ -133,7 +143,7 @@ public:
     public:
         using value_type = std::tuple<Entity, Ts&...>;
 
-        Iterator (const NodeView& owner, uint32 startSlot, uint32 endSlot)
+        Iterator (const BasicNodeView& owner, uint32 startSlot, uint32 endSlot)
             : view (&owner)
             , slot (startSlot)
             , numSlots (endSlot)
@@ -162,7 +172,7 @@ public:
                 ++slot;
         }
 
-        const NodeView* view = nullptr;
+        const BasicNodeView* view = nullptr;
         uint32 slot = 0;
         uint32 numSlots = 0;
         std::tuple<Ts*...> nodes;
@@ -173,14 +183,20 @@ public:
 
 private:
     //==============================================================================
-    void addFilter (Predicate predicate)
-    {
-        jassert (predicate != nullptr);
+    template <class, class...>
+    friend class BasicNodeView;
 
-        if (filter == nullptr)
-            filter = std::move (predicate);
-        else
-            filter = [previous = std::move (filter), next = std::move (predicate)] (const Ts&... n) { return previous (n...) && next (n...); };
+    static constexpr bool hasFilter = ! std::is_void_v<Filter>;
+    using FilterStorage = std::conditional_t<hasFilter, Filter, std::monostate>;
+
+    template <class OtherFilter, class NewFilter>
+    BasicNodeView (BasicNodeView<OtherFilter, Ts...>&& other, NewFilter&& newFilter)
+        : guard (std::move (other.guard))
+        , scene (other.scene)
+        , pools (other.pools)
+        , lead (other.lead)
+        , filter (std::forward<NewFilter> (newFilter))
+    {
     }
 
     bool fetch (uint32 slot, std::tuple<Ts*...>& nodes) const
@@ -193,7 +209,13 @@ private:
 
         return std::apply ([this] (Ts*... n)
         {
-            return ((n != nullptr) && ...) && (filter == nullptr || filter (*n...));
+            if (! ((n != nullptr) && ...))
+                return false;
+
+            if constexpr (hasFilter)
+                return static_cast<bool> (filter (std::as_const (*n)...));
+            else
+                return true;
         }, nodes);
     }
 
@@ -201,7 +223,7 @@ private:
     Scene* scene = nullptr;
     std::tuple<NodePool<Ts>*...> pools;
     NodePoolBase* lead = nullptr;
-    Predicate filter;
+    [[no_unique_address]] FilterStorage filter;
 };
 
 } // namespace yup

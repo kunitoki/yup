@@ -102,7 +102,9 @@ scene->view<yup::LightNode>()
      .forEach ([] (yup::Entity entity, yup::LightNode& light) { light.intensity *= 0.5f; });
 ```
 
-`first()`, `size()` and `isEmpty()` complete views. When the same set is visited
+Predicates passed to `where()` become part of the view's type and are called
+inline, so `where()` works on a temporary view: chain it, or `std::move()` a
+stored view into it. `first()`, `size()` and `isEmpty()` complete views. When the same set is visited
 every frame, `scene->collect<Ts...>()` returns a `NodeCollection`, created once
 and kept up to date as nodes are attached and detached, so visiting it costs no
 lookups. A collection visits its entities in the order they joined it, and the

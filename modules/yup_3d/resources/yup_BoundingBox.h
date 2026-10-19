@@ -94,8 +94,10 @@ public:
 
     /** Returns the box containing this box after a transformation.
 
-        All eight corners are transformed, so rotations give a box that is larger than the
-        transformed geometry but always contains it.
+        The result contains all eight transformed corners, so rotations give a box that is larger
+        than the transformed geometry but always contains it. Affine transforms compute it from
+        the transformed center and the absolute linear part (Arvo's method) instead of
+        transforming each corner.
 
         @param transform The transformation to apply.
     */
@@ -106,10 +108,25 @@ public:
 
         BoundingBox result;
 
-        for (int corner = 0; corner < 8; ++corner)
-            result.expand (transform.transformPoint (getCorner (corner)));
+        if (! transform.isAffine())
+        {
+            for (int corner = 0; corner < 8; ++corner)
+                result.expand (transform.transformPoint (getCorner (corner)));
 
-        return result;
+            return result;
+        }
+
+        const auto halfSize = (maximum - minimum) * 0.5f;
+        const auto extent = [&] (int row)
+        {
+            return std::abs (transform (row, 0)) * halfSize.getX()
+                 + std::abs (transform (row, 1)) * halfSize.getY()
+                 + std::abs (transform (row, 2)) * halfSize.getZ();
+        };
+
+        const auto center = transform.transformPoint ((minimum + maximum) * 0.5f);
+        const Vector3<float> extents (extent (0), extent (1), extent (2));
+        return { center - extents, center + extents };
     }
 
     //==============================================================================

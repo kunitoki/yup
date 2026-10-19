@@ -110,6 +110,32 @@ TEST_F (NodeViewTests, WhereFiltersAndChains)
     EXPECT_EQ (view.size(), 2); // 6, 8
 }
 
+TEST_F (NodeViewTests, StoredViewsCanBeFilteredWhenMoved)
+{
+    for (int i = 0; i < 4; ++i)
+        makeEntity (i, false);
+
+    auto view = scene.view<ValueNode>();
+    EXPECT_EQ (view.size(), 4);
+
+    auto filtered = std::move (view).where ([] (const ValueNode& node) { return node.value < 3; });
+    EXPECT_EQ (filtered.size(), 3);
+}
+
+TEST_F (NodeViewTests, SizeSkipsDetachedNodes)
+{
+    auto first = makeEntity (1, false);
+    makeEntity (2, false);
+
+    scene.view<ValueNode>().forEach ([&] (Entity, ValueNode&)
+    {
+        first.detach<ValueNode>();
+        EXPECT_EQ (scene.view<ValueNode>().size(), 1);
+    });
+
+    EXPECT_EQ (scene.view<ValueNode>().size(), 1);
+}
+
 TEST_F (NodeViewTests, NodesCanBeModifiedThroughTheView)
 {
     makeEntity (1, false);

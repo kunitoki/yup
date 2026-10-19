@@ -53,6 +53,12 @@ protected:
     {
     };
 
+    class DerivedTransformNode : public TransformNode
+    {
+    public:
+        using TransformNode::TransformNode;
+    };
+
     class DestructionTracker : public Node
     {
     public:
@@ -245,6 +251,52 @@ TEST_F (EntityTests, HiddenAncestorsMakeEntitiesInactive)
 
     EXPECT_TRUE (child.isVisible());
     EXPECT_FALSE (child.isActive());
+}
+
+TEST_F (EntityTests, ActiveStateFollowsVisibilityAndReparenting)
+{
+    auto parent = scene.createEntity();
+    auto child = parent.createChild();
+    auto grandChild = child.createChild();
+    EXPECT_TRUE (grandChild.isActive());
+
+    child.setVisible (false);
+    EXPECT_FALSE (grandChild.isActive());
+    EXPECT_TRUE (parent.isActive());
+
+    child.setVisible (true);
+    EXPECT_TRUE (grandChild.isActive());
+
+    auto hidden = scene.createEntity();
+    hidden.setVisible (false);
+    hidden.addChild (child);
+    EXPECT_FALSE (grandChild.isActive());
+
+    child.removeFromParent();
+    EXPECT_FALSE (grandChild.isActive());
+
+    parent.addChild (child);
+    EXPECT_TRUE (grandChild.isActive());
+}
+
+TEST_F (EntityTests, DeepHierarchiesUpdateWithoutOverflowingTheStack)
+{
+    auto top = scene.createEntity();
+    auto leaf = top;
+    for (int i = 0; i < 20000; ++i)
+        leaf = leaf.createChild();
+
+    leaf.attach<TransformNode> (Vector3<float> { 1.0f, 0.0f, 0.0f });
+    EXPECT_TRUE (leaf.isActive());
+    expectNear (leaf.getWorldMatrix().transformPoint ({}), { 1.0f, 0.0f, 0.0f });
+
+    auto other = scene.createEntity();
+    other.attach<TransformNode> (Vector3<float> { 0.0f, 3.0f, 0.0f });
+    other.addChild (top);
+    expectNear (leaf.getWorldMatrix().transformPoint ({}), { 1.0f, 3.0f, 0.0f });
+
+    other.setVisible (false);
+    EXPECT_FALSE (leaf.isActive());
 }
 
 //==============================================================================
@@ -453,6 +505,27 @@ TEST_F (EntityTests, WorldMatrixFollowsChangesAboveIt)
     other.attach<TransformNode> (Vector3<float> { 0.0f, 0.0f, -4.0f });
     other.addChild (child);
     expectNear (child.getWorldMatrix().transformPoint ({}), { 1.0f, 0.0f, -4.0f });
+}
+
+TEST_F (EntityTests, ReplacingTheTransformNodeUsesTheNewOne)
+{
+    auto entity = scene.createEntity();
+    entity.attach<TransformNode> (Vector3<float> { 1.0f, 0.0f, 0.0f });
+    expectNear (entity.getWorldMatrix().transformPoint ({}), { 1.0f, 0.0f, 0.0f });
+
+    entity.attach<TransformNode> (Vector3<float> { 0.0f, 2.0f, 0.0f });
+    expectNear (entity.getWorldMatrix().transformPoint ({}), { 0.0f, 2.0f, 0.0f });
+}
+
+TEST_F (EntityTests, TransformSubclassesDoNotPlaceTheEntity)
+{
+    auto entity = scene.createEntity();
+    entity.attach<DerivedTransformNode> (Vector3<float> { 5.0f, 0.0f, 0.0f });
+    EXPECT_TRUE (entity.getWorldMatrix().isIdentity());
+
+    entity.attach<TransformNode> (Vector3<float> { 1.0f, 0.0f, 0.0f });
+    entity.detach<DerivedTransformNode>();
+    expectNear (entity.getWorldMatrix().transformPoint ({}), { 1.0f, 0.0f, 0.0f });
 }
 
 TEST_F (EntityTests, ComputeWorldBoundsAppliesNestedTransforms)

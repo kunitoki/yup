@@ -52,7 +52,14 @@ public:
 
     //==============================================================================
     /** Returns the node of an entity, or nullptr. */
-    Node* find (EntityHandle entity) const noexcept;
+    Node* find (EntityHandle entity) const noexcept
+    {
+        if (entity.index >= sparse.size() || sparse[entity.index] == 0)
+            return nullptr;
+
+        const auto slot = sparse[entity.index] - 1;
+        return handles[slot] == entity ? nodes[slot] : nullptr;
+    }
 
     /** Returns the number of attached nodes. */
     int size() const noexcept { return numNodes; }

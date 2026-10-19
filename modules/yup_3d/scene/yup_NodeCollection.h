@@ -48,7 +48,7 @@ public:
         : scene (owner)
     {
         (connectTo<Ts>(), ...);
-        owner.view<Ts...>().forEach ([this] (Entity entity, Ts&...) { add (entity.getHandle()); });
+        owner.view<Ts...>().forEach ([this] (Entity entity, Ts&... nodes) { add (entity.getHandle(), &nodes...); });
     }
 
     //==============================================================================
@@ -61,17 +61,20 @@ public:
     /** Returns true if an entity is in the collection. */
     bool contains (const Entity& entity) const
     {
-        const auto it = positions.find (entity.getHandle().index);
-        return entity.getScene() == &scene && it != positions.end() && entities[it->second] == entity.getHandle();
+        const auto index = entity.getHandle().index;
+        return entity.getScene() == &scene
+            && index < positions.size()
+            && positions[index] != 0
+            && entries[positions[index] - 1].handle == entity.getHandle();
     }
 
     /** Returns the first entity of the collection, or an invalid entity. */
     Entity first() const
     {
-        for (const auto& handle : entities)
+        for (const auto& entry : entries)
         {
-            if (! handle.isNull())
-                return { &scene, handle };
+            if (! entry.handle.isNull())
+                return { &scene, entry.handle };
         }
 
         return {};
@@ -90,14 +93,14 @@ public:
         const IterationGuard guard (scene);
         ++iterating;
 
-        for (size_t i = 0, count = entities.size(); i < count; ++i)
+        for (size_t i = 0, count = entries.size(); i < count; ++i)
         {
-            const auto handle = entities[i];
-            if (handle.isNull())
+            // A copy: fn may make entities join, which grows the entries
+            const auto entry = entries[i];
+            if (entry.handle.isNull())
                 continue;
 
-            const Entity entity (&scene, handle);
-            fn (entity, *entity.template get<Ts>()...);
+            std::apply ([&] (Ts*... nodes) { fn (Entity (&scene, entry.handle), *nodes...); }, entry.nodes);
         }
 
         if (--iterating == 0 && hasHoles)
@@ -112,7 +115,7 @@ private:
         connections.push_back (scene.onAttach<T>().connect ([this] (Entity entity, T&)
         {
             if ((entity.template has<Ts>() && ...))
-                add (entity.getHandle());
+                add (entity.getHandle(), entity.template get<Ts>()...);
         }));
 
         connections.push_back (scene.onDetach<T>().connect ([this] (Entity entity, T&)
@@ -121,44 +124,58 @@ private:
         }));
     }
 
-    void add (EntityHandle handle)
+    // Nodes never move while attached, and detaching one removes its entry first
+    struct Entry
     {
-        if (! positions.emplace (handle.index, entities.size()).second)
+        EntityHandle handle;
+        std::tuple<Ts*...> nodes;
+    };
+
+    void add (EntityHandle handle, Ts*... nodes)
+    {
+        if (handle.index >= positions.size())
+            positions.resize (handle.index + 1, 0);
+
+        if (positions[handle.index] != 0)
             return;
 
-        entities.push_back (handle);
+        entries.push_back ({ handle, { nodes... } });
+        positions[handle.index] = static_cast<uint32> (entries.size());
         ++numEntities;
     }
 
     void remove (EntityHandle handle)
     {
-        const auto it = positions.find (handle.index);
-        if (it == positions.end() || entities[it->second] != handle)
+        if (handle.index >= positions.size() || positions[handle.index] == 0)
+            return;
+
+        auto& entry = entries[positions[handle.index] - 1];
+        if (entry.handle != handle)
             return;
 
         // A hole keeps the order, and lets a running loop neither skip nor repeat an entity
-        entities[it->second] = {};
-        positions.erase (it);
+        entry = {};
+        positions[handle.index] = 0;
         --numEntities;
         hasHoles = true;
 
-        if (iterating == 0 && static_cast<size_t> (numEntities) * 2 < entities.size())
+        if (iterating == 0 && static_cast<size_t> (numEntities) * 2 < entries.size())
             compact();
     }
 
     void compact()
     {
-        entities.erase (std::remove_if (entities.begin(), entities.end(), [] (const auto& handle) { return handle.isNull(); }), entities.end());
+        entries.erase (std::remove_if (entries.begin(), entries.end(), [] (const Entry& entry) { return entry.handle.isNull(); }), entries.end());
 
-        for (size_t i = 0; i < entities.size(); ++i)
-            positions[entities[i].index] = i;
+        for (size_t i = 0; i < entries.size(); ++i)
+            positions[entries[i].handle.index] = static_cast<uint32> (i + 1);
 
         hasHoles = false;
     }
 
     Scene& scene;
-    std::vector<EntityHandle> entities;
-    std::unordered_map<uint32, size_t> positions;
+    std::vector<Entry> entries;
+    std::vector<uint32> positions;
     std::vector<SignalConnection> connections;
     int numEntities = 0;
     int iterating = 0;

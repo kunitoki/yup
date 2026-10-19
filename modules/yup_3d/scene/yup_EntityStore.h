@@ -25,6 +25,9 @@ namespace yup
 //==============================================================================
 /** The entities of a Scene: names, visibility, hierarchy and cached world matrices, indexed by slot.
 
+    The data read every frame (world matrices, transforms and flags) lives in dense arrays
+    next to the records, which hold the rest.
+
     Internal to the Scene, use Entity instead.
 */
 class EntityStore
@@ -38,13 +41,9 @@ public:
 
         String name;
         Uuid uuid = Uuid::null();
-        bool visible = true;
 
         uint32 parent = EntityHandle::nullIndex;
         std::vector<uint32> children;
-
-        Matrix4 worldMatrix;
-        bool worldDirty = true;
     };
 
     //==============================================================================
@@ -61,34 +60,27 @@ public:
     int getNumEntities() const noexcept { return numEntities; }
 
     //==============================================================================
+    /** Sets the entity that is active when visible, without a parent. Set once by the Scene. */
+    void setRoot (uint32 index) noexcept { root = index; }
+
     bool setParent (uint32 child, uint32 parent, int index);
     void unlink (uint32 child);
     bool isAncestorOf (uint32 ancestor, uint32 index) const noexcept;
-    bool isActive (uint32 index, uint32 root) const noexcept;
+
+    bool isVisible (uint32 index) const noexcept { return (flags[index] & visibleFlag) != 0; }
+    void setVisible (uint32 index, bool shouldBeVisible) noexcept;
+
+    /** Returns true if the entity and all its parents are visible, up to the root. Cached. */
+    bool isActive (uint32 index) noexcept;
 
     //==============================================================================
+    /** Sets the TransformNode giving the local matrix of an entity, or nullptr for the identity. */
+    void setTransform (uint32 index, const TransformNode* transform) noexcept;
+
     void markWorldDirty (uint32 index) noexcept;
 
-    /** Returns the cached world matrix, computing the dirty ones with localMatrixOf (uint32 index). */
-    template <class LocalMatrixFn>
-    const Matrix4& getWorldMatrix (uint32 index, LocalMatrixFn&& localMatrixOf)
-    {
-        auto& record = records[index];
-
-        if (record.worldDirty)
-        {
-            auto world = localMatrixOf (index);
-
-            if (record.parent != EntityHandle::nullIndex)
-                world = world.followedBy (getWorldMatrix (record.parent, localMatrixOf));
-
-            // The recursion doesn't add records, so the reference is still valid
-            record.worldMatrix = world;
-            record.worldDirty = false;
-        }
-
-        return record.worldMatrix;
-    }
+    /** Returns the cached world matrix, computing it and its dirty parents first. */
+    const Matrix4& getWorldMatrix (uint32 index);
 
     //==============================================================================
     /** Returns a new random (version 4) Uuid from fast streams seeded once by SecureRandom.
@@ -103,7 +95,23 @@ public:
     static Uuid deriveUuid (const Uuid& uuid, uint64 typeId) noexcept;
 
 private:
+    enum : uint8
+    {
+        visibleFlag = 1 << 0,
+        worldDirtyFlag = 1 << 1,
+        activeDirtyFlag = 1 << 2,
+        activeFlag = 1 << 3
+    };
+
+    template <uint8 dirtyFlag>
+    void markSubtree (uint32 index) noexcept;
+
     std::vector<Record> records;
+    std::vector<Matrix4> worldMatrices;
+    std::vector<const TransformNode*> transforms;
+    std::vector<uint8> flags;
+    std::vector<uint32> pendingChain;
+    uint32 root = EntityHandle::nullIndex;
     uint64 uuidStreams[2] = {};
     std::vector<uint32> freeList;
     int numEntities = 0;

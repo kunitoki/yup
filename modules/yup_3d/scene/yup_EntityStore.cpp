@@ -108,6 +108,9 @@ EntityHandle EntityStore::create (const String& name)
     {
         index = static_cast<uint32> (records.size());
         records.emplace_back();
+        worldMatrices.emplace_back();
+        transforms.push_back (nullptr);
+        flags.push_back (0);
     }
 
     auto& record = records[index];
@@ -116,6 +119,9 @@ EntityHandle EntityStore::create (const String& name)
     record.generation = generation;
     record.alive = true;
     record.name = name;
+
+    transforms[index] = nullptr;
+    flags[index] = visibleFlag | worldDirtyFlag | activeDirtyFlag;
 
     ++numEntities;
     return { index, generation };
@@ -130,6 +136,7 @@ void EntityStore::release (uint32 index)
     record.name = {};
     record.uuid = Uuid::null();
     ++record.generation;
+    transforms[index] = nullptr;
     freeList.push_back (index);
     --numEntities;
 }
@@ -158,6 +165,26 @@ EntityHandle EntityStore::getHandle (uint32 index) const noexcept
 
 //==============================================================================
 
+template <uint8 dirtyFlag>
+void EntityStore::markSubtree (uint32 index) noexcept
+{
+    // A clean entity always has clean ancestors, so a dirty one already has a dirty subtree
+    pendingChain.clear();
+    pendingChain.push_back (index);
+
+    while (! pendingChain.empty())
+    {
+        const auto i = pendingChain.back();
+        pendingChain.pop_back();
+
+        if ((flags[i] & dirtyFlag) == dirtyFlag)
+            continue;
+
+        flags[i] |= dirtyFlag;
+        pendingChain.insert (pendingChain.end(), records[i].children.begin(), records[i].children.end());
+    }
+}
+
 bool EntityStore::setParent (uint32 child, uint32 parent, int index)
 {
     if (child == parent || isAncestorOf (child, parent))
@@ -171,7 +198,7 @@ bool EntityStore::setParent (uint32 child, uint32 parent, int index)
     siblings.insert (siblings.begin() + insertAt, child);
 
     records[child].parent = parent;
-    markWorldDirty (child);
+    markSubtree<worldDirtyFlag | activeDirtyFlag> (child);
     return true;
 }
 
@@ -183,7 +210,7 @@ void EntityStore::unlink (uint32 child)
 
     auto& siblings = records[parent].children;
     siblings.erase (std::find (siblings.begin(), siblings.end(), child));
-    markWorldDirty (child);
+    markSubtree<worldDirtyFlag | activeDirtyFlag> (child);
 }
 
 bool EntityStore::isAncestorOf (uint32 ancestor, uint32 index) const noexcept
@@ -197,33 +224,78 @@ bool EntityStore::isAncestorOf (uint32 ancestor, uint32 index) const noexcept
     return false;
 }
 
-bool EntityStore::isActive (uint32 index, uint32 root) const noexcept
+void EntityStore::setVisible (uint32 index, bool shouldBeVisible) noexcept
 {
-    for (; index != EntityHandle::nullIndex; index = records[index].parent)
-    {
-        if (! records[index].visible)
-            return false;
+    if (isVisible (index) == shouldBeVisible)
+        return;
 
-        if (index == root)
-            return true;
+    flags[index] ^= visibleFlag;
+    markSubtree<activeDirtyFlag> (index);
+}
+
+bool EntityStore::isActive (uint32 index) noexcept
+{
+    if ((flags[index] & activeDirtyFlag) != 0)
+    {
+        // Resolve the dirty part of the chain from the top, a clean entity has clean ancestors
+        pendingChain.clear();
+
+        for (auto i = index; i != EntityHandle::nullIndex && (flags[i] & activeDirtyFlag) != 0; i = records[i].parent)
+            pendingChain.push_back (i);
+
+        for (auto it = pendingChain.rbegin(); it != pendingChain.rend(); ++it)
+        {
+            const auto i = *it;
+            const auto parent = records[i].parent;
+            const auto active = isVisible (i) && (i == root || (parent != EntityHandle::nullIndex && (flags[parent] & activeFlag) != 0));
+
+            flags[i] = static_cast<uint8> ((flags[i] & ~(activeDirtyFlag | activeFlag)) | (active ? activeFlag : 0));
+        }
     }
 
-    return false;
+    return (flags[index] & activeFlag) != 0;
 }
 
 //==============================================================================
 
+void EntityStore::setTransform (uint32 index, const TransformNode* transform) noexcept
+{
+    transforms[index] = transform;
+    markWorldDirty (index);
+}
+
 void EntityStore::markWorldDirty (uint32 index) noexcept
 {
-    // A clean entity always has clean ancestors, so a dirty one already has a dirty subtree
-    auto& record = records[index];
-    if (record.worldDirty)
-        return;
+    markSubtree<worldDirtyFlag> (index);
+}
 
-    record.worldDirty = true;
+const Matrix4& EntityStore::getWorldMatrix (uint32 index)
+{
+    if ((flags[index] & worldDirtyFlag) == 0)
+        return worldMatrices[index];
 
-    for (const auto child : record.children)
-        markWorldDirty (child);
+    pendingChain.clear();
+
+    for (auto i = index; i != EntityHandle::nullIndex && (flags[i] & worldDirtyFlag) != 0; i = records[i].parent)
+        pendingChain.push_back (i);
+
+    for (auto it = pendingChain.rbegin(); it != pendingChain.rend(); ++it)
+    {
+        const auto i = *it;
+        const auto parent = records[i].parent;
+        const auto* transform = transforms[i];
+
+        if (parent == EntityHandle::nullIndex)
+            worldMatrices[i] = transform != nullptr ? transform->getLocalMatrix() : Matrix4();
+        else if (transform != nullptr)
+            worldMatrices[i] = transform->getLocalMatrix().followedBy (worldMatrices[parent]);
+        else
+            worldMatrices[i] = worldMatrices[parent];
+
+        flags[i] &= static_cast<uint8> (~worldDirtyFlag);
+    }
+
+    return worldMatrices[index];
 }
 
 } // namespace yup

@@ -228,8 +228,16 @@ private:
     static int selectLights (const BoundingBox& worldBounds, Span<const Light> lights, Span<const LightRanking> rankings,
                              std::array<uint16, maxLightsPerDraw>& indices, std::array<float, maxLightsPerDraw>& weights);
 
+    /** Whether an entity is visible up to the root of the build, and the nearest MaterialNode override. */
+    struct EntityState
+    {
+        uint32 stamp = 0;
+        bool active = false;
+        const Material* overrideMaterial = nullptr;
+    };
+
     void collect (Scene& scene, const Entity& root, const Matrix4& view);
-    static bool isActiveBelow (Entity entity, const Entity& root, const Material** overrideMaterial = nullptr);
+    const EntityState& resolveEntity (Entity entity, const Entity& root);
 
     std::vector<DrawItem> opaqueItems;
     std::vector<DrawItem> blendItems;
@@ -239,6 +247,9 @@ private:
     std::vector<IrradianceVolume> irradianceVolumes;
     Material::Ptr defaultMaterial;
     std::unique_ptr<LightNode> defaultLight;
+    std::vector<EntityState> entityStates;
+    std::vector<Entity> pendingEntities;
+    uint32 buildStamp = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneDrawList)
 };

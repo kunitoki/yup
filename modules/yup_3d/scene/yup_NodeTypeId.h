@@ -71,6 +71,18 @@ public:
         return hash (getName<T>());
     }
 
+    /** Returns a small dense index for a type, assigned on first use.
+
+        Unlike get(), the index depends on the order types are first used in a run, so it must
+        never be stored. Scenes use it to find a pool with an array access.
+    */
+    template <class T>
+    static uint32 getIndex() noexcept
+    {
+        static const uint32 index = nextIndex();
+        return index;
+    }
+
     /** Returns the 64-bit FNV-1a hash of a name, the id of a type with that name. */
     static constexpr uint64 hash (std::string_view name) noexcept
     {
@@ -87,6 +99,12 @@ public:
 
 private:
     //==============================================================================
+    static uint32 nextIndex() noexcept
+    {
+        static std::atomic<uint32> counter { 0 };
+        return counter.fetch_add (1, std::memory_order_relaxed);
+    }
+
     template <class T>
     static constexpr std::string_view getCompilerName() noexcept
     {

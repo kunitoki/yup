@@ -313,33 +313,75 @@ void SceneDrawList::clear()
     irradianceVolumes.clear();
 }
 
-bool SceneDrawList::isActiveBelow (Entity entity, const Entity& root, const Material** overrideMaterial)
+const SceneDrawList::EntityState& SceneDrawList::resolveEntity (Entity entity, const Entity& root)
 {
+    static const EntityState inactive;
+
+    // Walk up to the root or the first entity resolved in this build, then resolve back down
+    pendingEntities.clear();
+
+    const EntityState* parentState = nullptr;
     for (; entity.isValid(); entity = entity.getParent())
     {
-        if (! entity.isVisible())
-            return false;
+        const auto index = entity.getHandle().index;
+        if (index >= entityStates.size())
+            entityStates.resize (static_cast<size_t> (index) + 1);
 
-        if (overrideMaterial != nullptr && *overrideMaterial == nullptr)
+        if (entityStates[index].stamp == buildStamp)
         {
-            if (const auto* node = entity.get<MaterialNode>(); node != nullptr && node->material != nullptr)
-                *overrideMaterial = node->material.get();
+            parentState = &entityStates[index];
+            break;
         }
 
+        pendingEntities.push_back (entity);
+
         if (entity == root)
-            return true;
+            break;
     }
 
-    return false;
+    if (pendingEntities.empty())
+        return parentState != nullptr ? *parentState : inactive;
+
+    for (auto it = pendingEntities.rbegin(); it != pendingEntities.rend(); ++it)
+    {
+        auto& state = entityStates[it->getHandle().index];
+        state.stamp = buildStamp;
+
+        const auto reachesRoot = *it == root || (parentState != nullptr && parentState->active);
+        state.active = reachesRoot && it->isVisible();
+        state.overrideMaterial = nullptr;
+
+        if (state.active)
+        {
+            const auto* node = it->get<MaterialNode>();
+            state.overrideMaterial = node != nullptr && node->material != nullptr ? node->material.get()
+                                                                                  : (*it == root ? nullptr : parentState->overrideMaterial);
+        }
+
+        parentState = &state;
+    }
+
+    return *parentState;
 }
 
 void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& view)
 {
+    if (++buildStamp == 0)
+    {
+        entityStates.clear();
+        buildStamp = 1;
+    }
+
     scene.collect<MeshNode>().forEach ([&] (Entity entity, MeshNode& node)
     {
-        const Material* overrideMaterial = nullptr;
-        if (node.mesh == nullptr || ! isActiveBelow (entity, root, &overrideMaterial))
+        if (node.mesh == nullptr)
             return;
+
+        const auto& state = resolveEntity (entity, root);
+        if (! state.active)
+            return;
+
+        const auto* overrideMaterial = state.overrideMaterial;
 
         const auto world = entity.getWorldMatrix();
         const auto mirrored = getLinearDeterminant (world) < 0.0f;
@@ -369,7 +411,7 @@ void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& vi
 
     scene.collect<LightNode>().forEach ([&] (Entity entity, LightNode& node)
     {
-        if (! isActiveBelow (entity, root))
+        if (! resolveEntity (entity, root).active)
             return;
 
         const auto world = entity.getWorldMatrix();
@@ -385,7 +427,7 @@ void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& vi
         const auto hasInfluence = isBox ? jmin (extents.getX(), extents.getY(), extents.getZ()) > 0.0f
                                         : node.influenceRadius > 0.0f;
 
-        if (! hasInfluence || ! isActiveBelow (entity, root))
+        if (! hasInfluence || ! resolveEntity (entity, root).active)
             return;
 
         // A probe flattened by a zero scale reaches nothing
@@ -414,7 +456,7 @@ void SceneDrawList::collect (Scene& scene, const Entity& root, const Matrix4& vi
     {
         // A volume without extent, or flattened by a zero scale, lights nothing
         const auto& extents = node.extents;
-        if (jmin (extents.getX(), extents.getY(), extents.getZ()) <= 0.0f || ! isActiveBelow (entity, root))
+        if (jmin (extents.getX(), extents.getY(), extents.getZ()) <= 0.0f || ! resolveEntity (entity, root).active)
             return;
 
         const auto world = entity.getWorldMatrix();

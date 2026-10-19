@@ -142,3 +142,29 @@ TEST_F (NodeCollectionTests, KeepsTheOrderEntitiesJoinedIn)
     EXPECT_EQ (visited, expected);
     EXPECT_EQ (collection.first(), entities[1]);
 }
+
+TEST_F (NodeCollectionTests, ForEachPassesTheCurrentNodes)
+{
+    auto& collection = scene.collect<ValueNode, TagNode>();
+
+    auto entity = scene.createEntity();
+    entity.attach<ValueNode>();
+    entity.attach<TagNode>();
+
+    auto& replaced = entity.attach<ValueNode>();
+    auto& tag = *entity.get<TagNode>();
+
+    int visits = 0;
+    collection.forEach ([&] (Entity visited, ValueNode& value, TagNode& visitedTag)
+    {
+        ++visits;
+        EXPECT_EQ (visited, entity);
+        EXPECT_EQ (&value, &replaced);
+        EXPECT_EQ (&visitedTag, &tag);
+    });
+
+    EXPECT_EQ (visits, 1);
+
+    entity.detach<TagNode>();
+    EXPECT_FALSE (collection.contains (entity));
+}

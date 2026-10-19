@@ -28,7 +28,9 @@ namespace yup
 /** Fixed-width SIMD-style register backed by xsimd batches.
 
     The lane count is part of the type, which keeps code portable across platforms
-    where the native SIMD width differs.
+    where the native SIMD width differs. When the target has a native register of exactly N
+    lanes it is used directly, even if a wider one exists: Float32x4 maps to a single SSE
+    register on AVX targets, for example.
 
     @tparam T The element type. Must be supported by xsimd batches.
     @tparam N The number of elements. Must be greater than 0.
@@ -297,7 +299,10 @@ public:
 
     //==============================================================================
     /** Performs a fused multiply-add operation: this + (a * b).
-    
+
+        Floating point lanes use a single rounding where the target has fused multiply-add
+        instructions (NEON, FMA3), and a multiply followed by an add elsewhere.
+
         @param a The first SIMD register to multiply.
         @param b The second SIMD register to multiply.
 
@@ -305,7 +310,17 @@ public:
     */
     forcedinline SIMDRegister mulAdd (SIMDRegister a, SIMDRegister b) const noexcept
     {
-        return *this + a * b;
+        if constexpr (std::is_floating_point_v<T>)
+        {
+            SIMDRegister result;
+            for (std::size_t i = 0; i < numBatches; ++i)
+                result.data[i] = xsimd::fma (a.data[i], b.data[i], data[i]);
+            return result;
+        }
+        else
+        {
+            return *this + a * b;
+        }
     }
 
     //==============================================================================
@@ -377,7 +392,8 @@ public:
     }
 
 private:
-    using Batch = xsimd::batch<T>;
+    using SizedBatch = xsimd::make_sized_batch_t<T, static_cast<std::size_t> (N)>;
+    using Batch = std::conditional_t<std::is_void_v<SizedBatch>, xsimd::batch<T>, SizedBatch>;
 
     static constexpr std::size_t nativeSize = Batch::size;
     static constexpr std::size_t numBatches = (static_cast<std::size_t> (N) + nativeSize - 1) / nativeSize;

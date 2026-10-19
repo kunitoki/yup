@@ -61,6 +61,9 @@ public:
         /** Creates a part making an entity named @p name. */
         explicit Part (const String& name = {});
 
+        /** Destroys the part and its children, without recursing however deep they go. */
+        ~Part();
+
         /** Returns the name of the entities this part makes. */
         const String& getName() const noexcept { return name; }
 

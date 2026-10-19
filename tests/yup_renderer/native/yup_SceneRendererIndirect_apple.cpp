@@ -849,6 +849,51 @@ TEST_F (SceneRendererMetalTests, SsrGlossyReflectionsStaySmoothWhileLightsAnimat
     EXPECT_LT (noise, 1.0);
 }
 
+TEST_F (SceneRendererMetalTests, SsrGlossyReflectionsFollowTheCamera)
+{
+    // While the camera slides, a reflection moves with the reflected point, not with the floor: its
+    // history must follow it, or the reflection trails behind the camera
+    const auto eyeAt = [] (int frame) { return Vector3<float> (0.04f * static_cast<float> (frame), 1.5f, 2.5f); };
+
+    Scene scene;
+    buildOnScreenEmitterScene (scene, 0.5f, 0.2f);
+    auto camera = scene.getRoot().findChild ("camera");
+    ASSERT_TRUE (camera.isValid());
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 16);
+    ASSERT_TRUE (renderConverged (renderer, scene, 128).isValid()) << renderer.getLastError();
+
+    Image moving;
+    for (int frame = 1; frame <= 8; ++frame)
+    {
+        aimCamera (camera, eyeAt (frame), { 0.04f * static_cast<float> (frame), 0.0f, 0.0f });
+        moving = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (moving.isValid()) << renderer.getLastError();
+    }
+
+    SceneRenderer still;
+    setFullTierTaa (still, 16);
+    const auto settled = renderConverged (still, scene, 128);
+    ASSERT_TRUE (settled.isValid()) << still.getLastError();
+
+    auto trail = 0.0;
+    auto count = 0;
+    for (int y = 50; y < 110; ++y)
+    {
+        for (int x = 25; x < 105; ++x)
+        {
+            trail += std::abs (static_cast<double> (moving.getPixelColor (x, y).getRed()) - static_cast<double> (settled.getPixelColor (x, y).getRed()));
+            ++count;
+        }
+    }
+
+    trail /= count;
+    RecordProperty ("trail", String (trail, 2).toStdString());
+    // Measured 0.82, and 1.52 reprojecting the history by the floor's motion
+    EXPECT_LT (trail, 1.15);
+}
+
 TEST_F (SceneRendererMetalTests, SsrOffReleasesItsTargets)
 {
     Scene scene;
