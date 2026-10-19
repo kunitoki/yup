@@ -123,3 +123,62 @@ TEST_F (CameraNodeTests, CircleOfConfusionHandlesDegenerateCameras)
     const auto limit = (0.025f * 0.05f / 1.95f) / CameraNode::sensorHeight * 1000.0f;
     EXPECT_NEAR (camera.getCircleOfConfusion (std::numeric_limits<float>::infinity(), 1000.0f), limit, 1.0e-2f);
 }
+
+TEST_F (CameraNodeTests, EmptyViewportsHaveNoRay)
+{
+    const CameraNode camera;
+
+    EXPECT_FALSE (camera.getRay ({ 0.0f, 0.0f }, {}).has_value());
+    EXPECT_FALSE (camera.getRay ({ 0.0f, 0.0f }, { 0.0f, 0.0f, 100.0f, 0.0f }).has_value());
+}
+
+TEST_F (CameraNodeTests, PerspectiveRaysSpanTheFieldOfView)
+{
+    CameraNode camera;
+    camera.yFov = MathConstants<float>::halfPi;
+
+    const Rectangle<float> viewport { 100.0f, 50.0f, 200.0f, 100.0f };
+
+    const auto center = camera.getRay ({ 200.0f, 100.0f }, viewport);
+    ASSERT_TRUE (center.has_value());
+    EXPECT_NEAR (center->getDirection().getX(), 0.0f, 1.0e-5f);
+    EXPECT_NEAR (center->getDirection().getY(), 0.0f, 1.0e-5f);
+    EXPECT_NEAR (center->getDirection().getZ(), -1.0f, 1.0e-5f);
+
+    // tan (45 degrees) = 1, scaled by the aspect ratio of 2 horizontally, y up
+    const auto topLeft = camera.getRay ({ 100.0f, 50.0f }, viewport);
+    ASSERT_TRUE (topLeft.has_value());
+    EXPECT_NEAR (topLeft->getDirection().getX(), -2.0f, 1.0e-5f);
+    EXPECT_NEAR (topLeft->getDirection().getY(), 1.0f, 1.0e-5f);
+    EXPECT_NEAR (topLeft->getDirection().getZ(), -1.0f, 1.0e-5f);
+    EXPECT_NEAR (topLeft->getOrigin().length(), 0.0f, 1.0e-6f);
+}
+
+TEST_F (CameraNodeTests, OrthographicRaysAreParallel)
+{
+    CameraNode camera;
+    camera.projection = CameraNode::Projection::orthographic;
+    camera.xMag = 4.0f;
+    camera.yMag = 2.0f;
+
+    const auto ray = camera.getRay ({ 100.0f, 0.0f }, { 0.0f, 0.0f, 100.0f, 100.0f });
+    ASSERT_TRUE (ray.has_value());
+    EXPECT_NEAR (ray->getOrigin().getX(), 4.0f, 1.0e-5f);
+    EXPECT_NEAR (ray->getOrigin().getY(), 2.0f, 1.0e-5f);
+    EXPECT_NEAR (ray->getOrigin().getZ(), 0.0f, 1.0e-5f);
+    EXPECT_NEAR (ray->getDirection().getZ(), -1.0f, 1.0e-5f);
+}
+
+TEST_F (CameraNodeTests, RaysFollowTheEntity)
+{
+    Scene scene;
+    auto entity = scene.createEntity ("camera");
+    entity.attach<TransformNode> (Vector3<float> { 0.0f, 0.0f, 5.0f }, Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
+    const auto& camera = entity.attach<CameraNode>();
+
+    const auto ray = camera.getRay ({ 50.0f, 50.0f }, { 0.0f, 0.0f, 100.0f, 100.0f });
+    ASSERT_TRUE (ray.has_value());
+    EXPECT_NEAR (ray->getOrigin().getZ(), 5.0f, 1.0e-5f);
+    EXPECT_NEAR (ray->getDirection().getX(), -1.0f, 1.0e-5f);
+    EXPECT_NEAR (ray->getDirection().getZ(), 0.0f, 1.0e-5f);
+}

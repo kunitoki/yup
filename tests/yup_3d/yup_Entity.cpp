@@ -654,3 +654,67 @@ TEST_F (EntityTests, SameUuidCanLiveInDifferentScenes)
     EXPECT_EQ (copy.getUuid(), entity.getUuid());
     EXPECT_EQ (other.findEntity (entity.getUuid()), copy);
 }
+
+//==============================================================================
+
+TEST_F (EntityTests, IntersectRayReturnsTheNearestMeshOfTheSubtree)
+{
+    auto root = scene.createEntity ("root");
+    auto front = scene.createEntity ("front", root);
+    auto back = scene.createEntity ("back", root);
+    front.attach<MeshNode>().mesh = makeUnitCubeMesh();
+    back.attach<MeshNode>().mesh = makeUnitCubeMesh();
+    back.attach<TransformNode> (Vector3<float> { 0.0f, 0.0f, -5.0f });
+
+    const Ray ray ({ 0.0f, 0.0f, 10.0f }, { 0.0f, 0.0f, -1.0f });
+
+    EXPECT_FLOAT_EQ (root.intersectRay (ray).value_or (-1.0f), 9.0f);
+    EXPECT_FLOAT_EQ (back.intersectRay (ray).value_or (-1.0f), 14.0f);
+    EXPECT_FLOAT_EQ (root.intersectRay (ray, 9.5f).value_or (-1.0f), 9.5f);
+    EXPECT_FALSE (root.intersectRay (Ray ({ 5.0f, 0.0f, 10.0f }, { 0.0f, 0.0f, -1.0f })).has_value());
+}
+
+TEST_F (EntityTests, IntersectRaySkipsHiddenEntities)
+{
+    auto root = scene.createEntity ("root");
+    auto front = scene.createEntity ("front", root);
+    auto back = scene.createEntity ("back", root);
+    front.attach<MeshNode>().mesh = makeUnitCubeMesh();
+    back.attach<MeshNode>().mesh = makeUnitCubeMesh();
+    back.attach<TransformNode> (Vector3<float> { 0.0f, 0.0f, -5.0f });
+
+    const Ray ray ({ 0.0f, 0.0f, 10.0f }, { 0.0f, 0.0f, -1.0f });
+
+    front.setVisible (false);
+    EXPECT_FLOAT_EQ (root.intersectRay (ray).value_or (-1.0f), 14.0f);
+
+    root.setVisible (false);
+    EXPECT_FALSE (root.intersectRay (ray).has_value());
+    EXPECT_FALSE (Entity().intersectRay (ray).has_value());
+}
+
+TEST_F (EntityTests, IntersectRayTestsMeshesInTheirOwnSpace)
+{
+    auto entity = scene.createEntity ("tilted");
+    entity.attach<MeshNode>().mesh = makeUnitCubeMesh();
+    entity.attach<TransformNode> (Vector3<float> {}, Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, MathConstants<float>::halfPi * 0.5f));
+
+    // Inside the world bounds of the rotated cube, but beside the cube itself
+    EXPECT_GT (entity.computeWorldBounds().getMax().getX(), 1.4f);
+    EXPECT_GT (entity.computeWorldBounds().getMax().getY(), 1.4f);
+    EXPECT_FALSE (entity.intersectRay (Ray ({ 1.2f, 1.2f, 10.0f }, { 0.0f, 0.0f, -1.0f })).has_value());
+    EXPECT_TRUE (entity.intersectRay (Ray ({ 1.3f, 0.0f, 10.0f }, { 0.0f, 0.0f, -1.0f })).has_value());
+}
+
+TEST_F (EntityTests, IntersectRayDistancesAreInWorldSpace)
+{
+    auto entity = scene.createEntity ("scaled");
+    entity.attach<MeshNode>().mesh = makeUnitCubeMesh();
+    auto& transform = entity.attach<TransformNode> (Vector3<float> {}, Quaternion(), Vector3<float> { 2.0f, 2.0f, 2.0f });
+
+    const Ray ray ({ 0.0f, 0.0f, 10.0f }, { 0.0f, 0.0f, -1.0f });
+    EXPECT_NEAR (entity.intersectRay (ray).value_or (-1.0f), 8.0f, 1.0e-5f);
+
+    transform.setScale ({ 0.0f, 1.0f, 1.0f });
+    EXPECT_FALSE (entity.intersectRay (ray).has_value());
+}

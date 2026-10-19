@@ -35,6 +35,7 @@
 #include "yup_NodeTypeId.cpp"
 #include "yup_NodeView.cpp"
 #include "yup_Prefab.cpp"
+#include "yup_Ray.cpp"
 #include "yup_Scene.cpp"
 #include "yup_Texture.cpp"
 #include "yup_TransformNode.cpp"

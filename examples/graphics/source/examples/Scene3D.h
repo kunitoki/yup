@@ -409,23 +409,13 @@ private:
         /** The pose of a camera at @a eye looking at @a target. */
         static CameraPose lookingAt (const yup::Vector3<float>& eye, const yup::Vector3<float>& target, const yup::Vector3<float>& up)
         {
-            const auto world = yup::Matrix4::lookAt (eye, target, up).inverted();
-            return { eye, yup::Quaternion::fromRotationMatrix (world) };
+            return { eye, yup::Quaternion::fromLookDirection (target - eye, up) };
         }
 
         /** Interpolates two poses, the rotation along the shorter way round. */
         static CameraPose interpolate (const CameraPose& a, const CameraPose& b, float t)
         {
-            const auto& p = a.rotation;
-            const auto& q = b.rotation;
-            const auto sign = (p.getX() * q.getX() + p.getY() * q.getY() + p.getZ() * q.getZ() + p.getW() * q.getW()) < 0.0f ? -1.0f : 1.0f;
-
-            const yup::Quaternion rotation (p.getX() + (sign * q.getX() - p.getX()) * t,
-                                            p.getY() + (sign * q.getY() - p.getY()) * t,
-                                            p.getZ() + (sign * q.getZ() - p.getZ()) * t,
-                                            p.getW() + (sign * q.getW() - p.getW()) * t);
-
-            return { a.position + (b.position - a.position) * t, rotation.normalized() };
+            return { a.position + (b.position - a.position) * t, a.rotation.nlerp (b.rotation, t) };
         }
 
         void applyTo (yup::Entity entity) const
@@ -1334,81 +1324,10 @@ private:
             }
         }
 
-        /** A camera ray through a point of the view. One unit of t is one unit of view depth (along -Z),
-            the camera being unscaled: the t of a hit is its focus distance.
-        */
-        struct PickRay
+        /** The camera ray through a point of the view. A distance along it is a view depth: the focus distance of a hit. */
+        std::optional<yup::Ray> getPickRay (yup::Point<float> position) const
         {
-            std::array<float, 3> origin;
-            std::array<float, 3> direction;
-            float zNear = 0.0f;
-
-            static std::array<float, 3> toArray (const yup::Vector3<float>& v) { return { v.getX(), v.getY(), v.getZ() }; }
-
-            /** Where the ray enters @p box past the near plane; a box it starts inside is a miss. */
-            std::optional<float> hit (const yup::BoundingBox& box) const
-            {
-                if (box.isEmpty())
-                    return std::nullopt;
-
-                const auto low = toArray (box.getMin()), high = toArray (box.getMax());
-                auto enter = std::numeric_limits<float>::lowest(), leave = std::numeric_limits<float>::max();
-
-                for (size_t axis = 0; axis < 3; ++axis)
-                {
-                    const auto t0 = (low[axis] - origin[axis]) / direction[axis], t1 = (high[axis] - origin[axis]) / direction[axis];
-                    enter = yup::jmax (enter, yup::jmin (t0, t1));
-                    leave = yup::jmin (leave, yup::jmax (t0, t1));
-                }
-
-                return enter >= zNear && enter <= leave ? std::optional (enter) : std::nullopt;
-            }
-
-            /** Where the ray enters the mesh bounds of @p entity or of its visible descendants. Each box
-                is tested in its mesh's own space, where t is the same: a tilted pad's world box would
-                reach over the pad next to it.
-            */
-            std::optional<float> hit (yup::Entity entity) const
-            {
-                return hit (entity, entity.getWorldMatrix());
-            }
-
-            std::optional<float> hit (yup::Entity entity, const yup::Matrix4& world) const
-            {
-                if (! entity.isVisible())
-                    return std::nullopt;
-
-                std::optional<float> nearest;
-                if (const auto* node = entity.get<yup::MeshNode>(); node != nullptr && node->mesh != nullptr)
-                {
-                    const auto toLocal = world.inverted();
-                    const PickRay local { toArray (toLocal.transformPoint ({ origin[0], origin[1], origin[2] })),
-                                          toArray (toLocal.transformVector ({ direction[0], direction[1], direction[2] })),
-                                          zNear };
-                    nearest = local.hit (node->mesh->getBounds());
-                }
-
-                for (const auto child : entity.getChildren())
-                    if (const auto t = hit (child, child.getLocalMatrix().followedBy (world)); t && (! nearest || *t < *nearest))
-                        nearest = t;
-
-                return nearest;
-            }
-        };
-
-        std::optional<PickRay> getPickRay (yup::Point<float> position) const
-        {
-            if (getWidth() <= 0.0f || getHeight() <= 0.0f)
-                return std::nullopt;
-
-            const auto tanHalfFov = std::tan (cameraNode->yFov * 0.5f);
-            const auto world = cameraEntity.getWorldMatrix();
-
-            return PickRay { PickRay::toArray (world.transformPoint ({})),
-                             PickRay::toArray (world.transformVector ({ (2.0f * position.getX() / getWidth() - 1.0f) * tanHalfFov * getAspectRatio(),
-                                                                        (1.0f - 2.0f * position.getY() / getHeight()) * tanHalfFov,
-                                                                        -1.0f })),
-                             cameraNode->zNear };
+            return cameraNode->getRay (position, getLocalBounds());
         }
 
         /** The nearest pad whose bounds the camera ray through @p position hits, if any. */
@@ -1426,7 +1345,7 @@ private:
                 if (! entity.isActive())
                     return;
 
-                if (const auto t = ray->hit (entity); t && (nearest == nullptr || *t < nearestDistance))
+                if (const auto t = entity.intersectRay (*ray, cameraNode->zNear); t && (nearest == nullptr || *t < nearestDistance))
                 {
                     nearest = &button;
                     nearestDistance = *t;
@@ -1437,7 +1356,7 @@ private:
         }
 
         /** The view depth of the nearest child of the device the camera ray through @p position hits,
-            or else of the device's own meshes (the bare panel), by a slab test of their world bounds.
+            or else of the device's own meshes (the bare panel), by their mesh bounds.
         */
         std::optional<float> findFocusDistance (yup::Point<float> position) const
         {
@@ -1447,14 +1366,14 @@ private:
 
             std::optional<float> nearest;
             for (const auto child : focusEntity.getChildren())
-                if (const auto t = ray->hit (child); t && (! nearest || *t < *nearest))
+                if (const auto t = child.intersectRay (*ray, cameraNode->zNear); t && (! nearest || *t < *nearest))
                     nearest = t;
 
             // The body only when no control was hit: its box encloses them all, so it would always win
             if (nearest || ! focusEntity.isVisible())
                 return nearest;
 
-            return ray->hit (focusEntity);
+            return focusEntity.intersectRay (*ray, cameraNode->zNear);
         }
 
         bool hitsScreen (yup::Point<float> position) const

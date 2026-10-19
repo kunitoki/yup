@@ -45,6 +45,13 @@ void TransformNode::setRotation (const Quaternion& newRotation) noexcept
     transformChanged();
 }
 
+void TransformNode::lookAt (const Vector3<float>& target, const Vector3<float>& up) noexcept
+{
+    const auto direction = target - position;
+    if (direction.lengthSquared() > 0.0f)
+        setRotation (Quaternion::fromLookDirection (direction, up));
+}
+
 void TransformNode::setScale (const Vector3<float>& newScale) noexcept
 {
     scale = newScale;

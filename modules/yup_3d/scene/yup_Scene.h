@@ -112,6 +112,41 @@ public:
     int getNumEntities() const noexcept;
 
     //==============================================================================
+    /** What Scene::raycast() hit. */
+    struct RaycastHit
+    {
+        Entity entity;         ///< The entity of the MeshNode that was hit.
+        float distance = 0.0f; ///< The distance along the ray, see Ray.
+    };
+
+    /** Returns the nearest active entity whose mesh bounds a world space ray hits.
+
+        Every MeshNode of an active entity is tested in its own space with MeshNode::intersectRay().
+        Bounds are boxes: a large mesh enclosing smaller ones, a room or a device body, hits first
+        when the ray enters it in front of them. Pass a filter, or test candidate subtrees with
+        Entity::intersectRay(), to pick among parts.
+
+        @param ray          The ray, from CameraNode::getRay() for example.
+        @param minDistance  The smallest distance to consider, the near plane of the camera for example.
+        @param filter       A callable taking (const Entity& entity) and returning false to skip it.
+
+        @code
+        if (const auto ray = camera->getRay (event.getPosition(), getLocalBounds()))
+            if (const auto hit = scene->raycast (*ray, camera->zNear))
+                select (hit->entity);
+        @endcode
+    */
+    template <class Filter>
+        requires std::predicate<Filter&, const Entity&>
+    std::optional<RaycastHit> raycast (const Ray& ray, float minDistance, Filter&& filter);
+
+    /** Returns the nearest active entity whose mesh bounds a world space ray hits, see the filtered version. */
+    std::optional<RaycastHit> raycast (const Ray& ray, float minDistance = 0.0f)
+    {
+        return raycast (ray, minDistance, [] (const Entity&) { return true; });
+    }
+
+    //==============================================================================
     /** Returns a view over the entities that have a node of every type in Ts.
 
         The view iterates the smallest of the pools and ignores visibility. See NodeView.
@@ -414,6 +449,34 @@ void Entity::forEachAttachedNode (Fn&& fn) const
         if (auto* node = scene->pools[i] != nullptr ? scene->pools[i]->find (handle) : nullptr)
             fn (*node);
     }
+}
+
+template <class Filter>
+    requires std::predicate<Filter&, const Entity&>
+std::optional<Scene::RaycastHit> Scene::raycast (const Ray& ray, float minDistance, Filter&& filter)
+{
+    std::optional<RaycastHit> nearest;
+
+    const IterationGuard guard (*this);
+    const auto& pool = getPool<MeshNode>();
+
+    for (uint32 slot = 0, numSlots = pool.getNumSlots(); slot < numSlots; ++slot)
+    {
+        const auto* node = pool.getAt (slot);
+        const auto handle = pool.getEntityAt (slot);
+        if (node == nullptr || handle.isNull())
+            continue;
+
+        const Entity entity (this, handle);
+        if (! entity.isActive() || ! filter (entity))
+            continue;
+
+        const auto maxDistance = nearest ? nearest->distance : std::numeric_limits<float>::max();
+        if (const auto distance = node->intersectRay (ray, minDistance, maxDistance); distance && (! nearest || *distance < nearest->distance))
+            nearest = RaycastHit { entity, *distance };
+    }
+
+    return nearest;
 }
 
 } // namespace yup

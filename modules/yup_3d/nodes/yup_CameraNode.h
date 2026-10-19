@@ -56,6 +56,21 @@ public:
     /** Returns the view matrix: the inverse of the world matrix of the entity, or identity if unattached. */
     Matrix4 getViewMatrix() const noexcept;
 
+    /** Returns the world space ray through a point of a viewport, for picking what is under the mouse.
+
+        A distance along the ray is a view depth along -Z for a camera without scale, so zNear is
+        where it reaches the near plane: pass it as the minimum distance of the hit tests. The rays
+        of an orthographic camera are parallel and start on the plane of the camera.
+
+        @param position  The point, in the same coordinates as the viewport.
+        @param viewport  The area the camera renders into, a component's local bounds for example.
+
+        @return The ray, or nothing for an empty viewport.
+
+        @see Ray, Entity::intersectRay, Scene::raycast
+    */
+    std::optional<Ray> getRay (Point<float> position, Rectangle<float> viewport) const noexcept;
+
     /** Returns the signed circle of confusion diameter, in pixels, of a point at a view distance.
 
         Uses the thin lens model with the focal length implied by yFov and sensorHeight. Negative in

@@ -103,3 +103,21 @@ TEST_F (TransformNodeTests, AttachAndDetachMoveTheWorldMatrix)
     entity.detach<TransformNode>();
     expectNear (entity.getWorldMatrix().transformPoint ({}), { 0.0f, 0.0f, 0.0f });
 }
+
+TEST_F (TransformNodeTests, LookAtTurnsMinusZToTheTarget)
+{
+    TransformNode transform ({ 1.0f, 0.0f, 0.0f });
+    transform.lookAt ({ 4.0f, 0.0f, 4.0f });
+
+    expectNear (transform.getRotation().rotate ({ 0.0f, 0.0f, -1.0f }), { 0.6f, 0.0f, 0.8f });
+    expectNear (transform.getPosition(), { 1.0f, 0.0f, 0.0f });
+}
+
+TEST_F (TransformNodeTests, LookAtItsOwnPositionKeepsTheRotation)
+{
+    const auto rotation = Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f);
+    TransformNode transform ({ 1.0f, 2.0f, 3.0f }, rotation);
+    transform.lookAt ({ 1.0f, 2.0f, 3.0f });
+
+    EXPECT_EQ (transform.getRotation(), rotation);
+}

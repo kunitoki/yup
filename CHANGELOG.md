@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- `yup_3d` picking: `Ray`, `CameraNode::getRay`, `MeshNode::intersectRay`, `Entity::intersectRay` and `Scene::raycast` test rays against mesh bounds in their own space. `TransformNode::lookAt`, `Quaternion::fromLookDirection`, `Quaternion::slerp` and `Quaternion::nlerp` turn and blend rotations. Scene3D uses them in place of its own picking and camera helpers.
 - Faster `yup_3d` scenes: pool lookups by type are array indexing, collections keep node pointers, and entities cache their `TransformNode`, world matrix and active state in dense arrays, computed iteratively and invalidated per subtree. The draw list resolves visibility and material overrides once per entity and build. **Breaking** `NodeView::where` takes predicates as template arguments (no `std::function`) and only applies to temporary views; `size()` of a single-type view without predicate costs nothing.
 - Faster 3D maths: `Matrix4` composition and point and vector transforms are inline and constexpr, scalar in constant expressions and SIMD at runtime; `inverted()` takes a 3x3 path for affine matrices; new `Matrix4::isAffine` and `Matrix4::compose` (used by `TransformNode`); `BoundingBox::transformedBy` uses Arvo's method for affine transforms. `SIMDRegister` uses a native register of exactly N lanes when there is one (`Float32x4` is a single SSE register on AVX targets), and `mulAdd` is a real fused multiply-add on NEON and FMA3.
 

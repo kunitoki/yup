@@ -62,6 +62,37 @@ parents, cached and refreshed when a transform above it changes.
 `computeWorldBounds()` returns the world space box around every mesh in the
 visible subtree, which is handy to frame a model with the camera.
 
+`TransformNode::lookAt (target, up)` turns the entity so its -Z axis, the
+direction a camera or a spot light points, faces a target. For camera moves,
+blend rotations with `Quaternion::slerp` or the cheaper `Quaternion::nlerp`.
+
+## Picking
+
+`CameraNode::getRay()` returns the world space ray through a point of the
+viewport, and `Scene::raycast()` the nearest active entity whose mesh bounds it
+hits. Each `MeshNode` is tested in its own space, so tilted meshes stay tight,
+and a distance along a perspective camera ray is a view depth, ready to use as a
+focus distance.
+
+```cpp
+void mouseDown (const yup::MouseEvent& event) override
+{
+    auto* camera = getScene()->getActiveCamera();
+    if (camera == nullptr)
+        return;
+
+    if (const auto ray = camera->getRay (event.getPosition(), getLocalBounds()))
+        if (const auto hit = getScene()->raycast (*ray, camera->zNear))
+            select (hit->entity);
+}
+```
+
+Bounds are boxes, so a mesh that encloses others, like a room or the body of a
+device, hits first whenever the ray enters it in front of them. Pass a filter
+to `raycast()` to skip such entities, or test the candidates one by one with
+`Entity::intersectRay()`, which returns the nearest hit in the visible subtree
+of an entity. `Ray::intersect()` tests a single `BoundingBox`.
+
 ## Identifiers
 
 Every entity and node has a `Uuid`, to refer to them from saved files, the

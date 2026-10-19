@@ -69,6 +69,16 @@ public:
     /** Changes the rotation relative to the parent. */
     void setRotation (const Quaternion& newRotation) noexcept;
 
+    /** Turns the entity so that its -Z axis points at a target and its +Y axis is as close to @p up as possible.
+
+        Cameras and lights look along -Z, so this aims them. Nothing changes if the target is at the
+        position. See Quaternion::fromLookDirection().
+
+        @param target The point to look at, relative to the parent like the position.
+        @param up     The direction that should appear upwards, relative to the parent.
+    */
+    void lookAt (const Vector3<float>& target, const Vector3<float>& up = { 0.0f, 1.0f, 0.0f }) noexcept;
+
     /** Returns the scale relative to the parent. */
     const Vector3<float>& getScale() const noexcept { return scale; }
 

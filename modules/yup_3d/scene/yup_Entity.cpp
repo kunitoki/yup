@@ -275,6 +275,35 @@ BoundingBox Entity::computeWorldBounds() const
     return bounds;
 }
 
+std::optional<float> Entity::intersectRay (const Ray& ray, float minDistance) const
+{
+    std::optional<float> nearest;
+    if (! isValid())
+        return nearest;
+
+    std::vector<Entity> pending { *this };
+
+    while (! pending.empty())
+    {
+        const auto entity = pending.back();
+        pending.pop_back();
+
+        if (! entity.isVisible())
+            continue;
+
+        if (const auto* node = entity.get<MeshNode>())
+        {
+            if (const auto distance = node->intersectRay (ray, minDistance, nearest.value_or (std::numeric_limits<float>::max())))
+                nearest = distance;
+        }
+
+        for (const auto child : entity.getChildren())
+            pending.push_back (child);
+    }
+
+    return nearest;
+}
+
 //==============================================================================
 
 void Entity::destroy()

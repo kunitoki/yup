@@ -144,3 +144,63 @@ TEST_F (QuaternionTests, NormalizedHasUnitLength)
     EXPECT_NEAR (q.length(), 1.0f, 1.0e-6f);
     EXPECT_EQ (Quaternion (0.0f, 0.0f, 0.0f, 0.0f).normalized(), Quaternion::identity());
 }
+
+TEST_F (QuaternionTests, FromLookDirectionTurnsMinusZToTheDirection)
+{
+    for (const auto direction : { Vector3<float> { 1.0f, 0.0f, 0.0f }, Vector3<float> { 0.0f, 0.0f, 3.0f }, Vector3<float> { 1.0f, 1.0f, -1.0f } })
+    {
+        const auto q = Quaternion::fromLookDirection (direction);
+
+        expectNear (q.rotate ({ 0.0f, 0.0f, -1.0f }), direction.normalized());
+        EXPECT_GT (q.rotate ({ 0.0f, 1.0f, 0.0f }).getY(), 0.0f);
+        EXPECT_NEAR (q.rotate ({ 1.0f, 0.0f, 0.0f }).getY(), 0.0f, 1.0e-5f);
+    }
+}
+
+TEST_F (QuaternionTests, FromLookDirectionHandlesAnUpAlongTheDirection)
+{
+    expectNear (Quaternion::fromLookDirection ({ 0.0f, 2.0f, 0.0f }).rotate ({ 0.0f, 0.0f, -1.0f }), { 0.0f, 1.0f, 0.0f });
+    expectNear (Quaternion::fromLookDirection ({ 0.0f, -1.0f, 0.0f }).rotate ({ 0.0f, 0.0f, -1.0f }), { 0.0f, -1.0f, 0.0f });
+    EXPECT_EQ (Quaternion::fromLookDirection ({}), Quaternion::identity());
+}
+
+TEST_F (QuaternionTests, SlerpReturnsTheEndsAndHalvesTheAngle)
+{
+    const auto a = Quaternion::identity();
+    const auto b = Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, halfPi);
+
+    expectSameRotation (a.slerp (b, 0.0f), a);
+    expectSameRotation (a.slerp (b, 1.0f), b);
+    expectSameRotation (a.slerp (b, 0.5f), Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, halfPi * 0.5f));
+    expectSameRotation (a.slerp (b, 0.25f), Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, halfPi * 0.25f));
+}
+
+TEST_F (QuaternionTests, SlerpAndNlerpTakeTheShorterWay)
+{
+    const auto a = Quaternion::identity();
+    const auto b = Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, halfPi);
+    const Quaternion negated (-b.getX(), -b.getY(), -b.getZ(), -b.getW());
+
+    expectSameRotation (a.slerp (negated, 0.5f), a.slerp (b, 0.5f));
+    expectSameRotation (a.nlerp (negated, 0.5f), a.nlerp (b, 0.5f));
+}
+
+TEST_F (QuaternionTests, NlerpIsNormalizedAndMatchesSlerpAtTheEndsAndHalfway)
+{
+    const auto a = Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 0.3f);
+    const auto b = Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 1.2f);
+
+    for (const auto t : { 0.0f, 0.5f, 1.0f })
+        expectSameRotation (a.nlerp (b, t), a.slerp (b, t));
+
+    EXPECT_NEAR (a.nlerp (b, 0.3f).length(), 1.0f, 1.0e-5f);
+}
+
+TEST_F (QuaternionTests, SlerpOfNearlyEqualRotationsStaysNormalized)
+{
+    const auto a = Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f);
+    const auto b = Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5001f);
+
+    EXPECT_NEAR (a.slerp (b, 0.5f).length(), 1.0f, 1.0e-5f);
+    expectSameRotation (a.slerp (b, 0.5f), Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.50005f));
+}

@@ -102,6 +102,22 @@ protected:
         return log;
     }
 
+    /** Adds a child with a cube mesh spanning [-1, 1] around a position. */
+    Entity addCube (const String& name, const Vector3<float>& position, Entity parent = {})
+    {
+        auto mesh = Mesh::Ptr (new Mesh (name));
+
+        std::vector<Mesh::Vertex> vertices (2);
+        vertices[0].position = { -1.0f, -1.0f, -1.0f };
+        vertices[1].position = { 1.0f, 1.0f, 1.0f };
+        mesh->addPrimitive (vertices, {});
+
+        auto entity = scene->createEntity (name, parent);
+        entity.attach<MeshNode>().mesh = mesh;
+        entity.attach<TransformNode> (position);
+        return entity;
+    }
+
     Scene::Ptr scene { new Scene() };
     std::vector<int> log;
 };
@@ -569,4 +585,44 @@ TEST_F (SceneTests, SystemsAddedWhileUpdatingRunFromTheNextUpdate)
 
     EXPECT_EQ (runLog(), (std::vector<int> { 0 }));
     EXPECT_EQ (runLog(), (std::vector<int> { 0, 5 }));
+}
+
+//==============================================================================
+
+TEST_F (SceneTests, RaycastReturnsTheNearestEntity)
+{
+    const auto back = addCube ("back", { 0.0f, 0.0f, -5.0f });
+    const auto front = addCube ("front", { 0.0f, 0.0f, 0.0f });
+
+    const auto hit = scene->raycast (Ray ({ 0.0f, 0.0f, 10.0f }, { 0.0f, 0.0f, -1.0f }));
+
+    ASSERT_TRUE (hit.has_value());
+    EXPECT_EQ (hit->entity, front);
+    EXPECT_FLOAT_EQ (hit->distance, 9.0f);
+
+    EXPECT_FALSE (scene->raycast (Ray ({ 5.0f, 0.0f, 10.0f }, { 0.0f, 0.0f, -1.0f })).has_value());
+    EXPECT_EQ (scene->raycast (Ray ({ 0.0f, 0.0f, -10.0f }, { 0.0f, 0.0f, 1.0f }))->entity, back);
+}
+
+TEST_F (SceneTests, RaycastSkipsInactiveAndFilteredEntities)
+{
+    auto group = scene->createEntity ("group");
+    const auto back = addCube ("back", { 0.0f, 0.0f, -5.0f });
+    const auto front = addCube ("front", { 0.0f, 0.0f, 0.0f }, group);
+
+    const Ray ray ({ 0.0f, 0.0f, 10.0f }, { 0.0f, 0.0f, -1.0f });
+
+    EXPECT_EQ (scene->raycast (ray, 0.0f, [&] (const Entity& entity) { return entity != front; })->entity, back);
+    EXPECT_FALSE (scene->raycast (ray, 0.0f, [] (const Entity&) { return false; }).has_value());
+
+    group.setVisible (false);
+    EXPECT_EQ (scene->raycast (ray)->entity, back);
+}
+
+TEST_F (SceneTests, RaycastStartsAtTheMinDistance)
+{
+    addCube ("front", { 0.0f, 0.0f, 0.0f });
+
+    EXPECT_FLOAT_EQ (scene->raycast (Ray ({ 0.0f, 0.0f, 10.0f }, { 0.0f, 0.0f, -1.0f }), 10.0f).value_or (Scene::RaycastHit {}).distance, 10.0f);
+    EXPECT_FALSE (scene->raycast (Ray ({ 0.0f, 0.0f, 10.0f }, { 0.0f, 0.0f, -1.0f }), 12.0f).has_value());
 }

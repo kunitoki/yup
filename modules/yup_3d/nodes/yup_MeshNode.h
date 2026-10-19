@@ -42,6 +42,18 @@ public:
     {
     }
 
+    /** Returns where a world space ray enters the bounds of the mesh, placed by the entity.
+
+        The box is tested in the space of the mesh, so it stays tight around rotated meshes.
+        Visibility is ignored. See Ray::intersect() for the range of distances.
+
+        @return The distance along the ray, or nothing without a mesh, without an entity, for a
+                mesh flattened by a zero scale, or when the ray misses it.
+    */
+    std::optional<float> intersectRay (const Ray& ray,
+                                       float minDistance = 0.0f,
+                                       float maxDistance = std::numeric_limits<float>::max()) const noexcept;
+
     Mesh::Ptr mesh; ///< The mesh to draw, or nullptr to draw nothing.
 
     /** @internal The world matrix a SceneRenderer drew last frame, for motion vectors. */

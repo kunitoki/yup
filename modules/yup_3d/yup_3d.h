@@ -72,6 +72,7 @@
 #include "scene/yup_EntityHandle.h"
 #include "scene/yup_NodeTypeId.h"
 #include "resources/yup_BoundingBox.h"
+#include "resources/yup_Ray.h"
 #include "resources/yup_HalfFloat.h"
 #include "resources/yup_Texture.h"
 #include "resources/yup_Material.h"

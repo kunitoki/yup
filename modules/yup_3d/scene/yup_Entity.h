@@ -201,6 +201,20 @@ public:
     */
     BoundingBox computeWorldBounds() const;
 
+    /** Returns where a world space ray first hits the mesh bounds of the visible part of this subtree.
+
+        Each mesh is tested in its own space with MeshNode::intersectRay(), so rotated meshes don't
+        reach over their neighbors as their world bounds would.
+
+        @param ray          The ray, from CameraNode::getRay() for example.
+        @param minDistance  The smallest distance to consider, the near plane of the camera for example.
+
+        @return The nearest distance along the ray, or nothing if it hits no mesh or the entity is hidden.
+
+        @see Scene::raycast
+    */
+    std::optional<float> intersectRay (const Ray& ray, float minDistance = 0.0f) const;
+
     //==============================================================================
     /** Destroys the entity, its whole subtree and all their nodes.
 
