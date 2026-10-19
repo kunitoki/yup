@@ -89,7 +89,7 @@ TEST_F (SceneSettingsTests, FeatureNodesOnTheRootAreResolved)
     EXPECT_FALSE (settings.useDefaultLight);
 }
 
-TEST_F (SceneSettingsTests, FirstNodeFoundDepthFirstWins)
+TEST_F (SceneSettingsTests, NodeNearestToTheRootWins)
 {
     auto first = addChild();
     auto deep = first.createChild();
@@ -98,10 +98,24 @@ TEST_F (SceneSettingsTests, FirstNodeFoundDepthFirstWins)
     deep.attach<ToneMappingNode> (ToneMappingOperator::aces);
     second.attach<ToneMappingNode> (ToneMappingOperator::agx);
 
-    EXPECT_EQ (SceneSettings::resolve (*scene).toneMapping, ToneMappingOperator::aces);
-
-    scene->getRoot().attach<ToneMappingNode> (ToneMappingOperator::agx);
     EXPECT_EQ (SceneSettings::resolve (*scene).toneMapping, ToneMappingOperator::agx);
+
+    scene->getRoot().attach<ToneMappingNode> (ToneMappingOperator::aces);
+    EXPECT_EQ (SceneSettings::resolve (*scene).toneMapping, ToneMappingOperator::aces);
+}
+
+TEST_F (SceneSettingsTests, FirstAttachedWinsAtTheSameDepth)
+{
+    auto first = addChild();
+    auto second = addChild();
+
+    second.attach<ExposureNode> (2.0f);
+    first.attach<ExposureNode> (3.0f);
+    EXPECT_FLOAT_EQ (SceneSettings::resolve (*scene).exposure, 2.0f);
+
+    second.detach<ExposureNode>();
+    second.attach<ExposureNode> (2.0f);
+    EXPECT_FLOAT_EQ (SceneSettings::resolve (*scene).exposure, 3.0f);
 }
 
 TEST_F (SceneSettingsTests, HiddenEntitiesAreIgnored)

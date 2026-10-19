@@ -473,6 +473,51 @@ private:
     };
 
     //==============================================================================
+    /** A node that pushes its entity in along its local -Y while pressed and lets it spring back
+        on release, ticked by Scene::update().
+    */
+    class SimpleButtonNode final : public yup::Node
+    {
+    public:
+        /** @param travelDistance How far the button goes in, in the units of its parent. */
+        explicit SimpleButtonNode (float travelDistance)
+            : travel (travelDistance)
+        {
+        }
+
+        void setPressed (bool shouldBePressed) noexcept { pressed = shouldBePressed; }
+
+        bool isPressed() const noexcept { return pressed; }
+
+        bool isAnimating() const noexcept { return amount != (pressed ? 1.0f : 0.0f); }
+
+        void update (double deltaSeconds) override
+        {
+            if (! isAnimating())
+                return;
+
+            auto& transform = getEntity().getOrAttach<yup::TransformNode>();
+            if (! restPosition)
+                restPosition = transform.getPosition();
+
+            const auto step = static_cast<float> (yup::jmin (deltaSeconds, 1.0 / 30.0)) / (pressed ? pressSeconds : releaseSeconds);
+            amount = pressed ? yup::jmin (1.0f, amount + step) : yup::jmax (0.0f, amount - step);
+
+            const auto eased = amount * amount * (3.0f - 2.0f * amount);
+            transform.setPosition (*restPosition + transform.getRotation().rotate ({ 0.0f, -travel * eased, 0.0f }));
+        }
+
+    private:
+        static constexpr float pressSeconds = 0.05f;
+        static constexpr float releaseSeconds = 0.12f;
+
+        float travel;
+        float amount = 0.0f;
+        bool pressed = false;
+        std::optional<yup::Vector3<float>> restPosition;
+    };
+
+    //==============================================================================
     /** A part that flies the children of its entity along elliptic orbits over a box, ticked by Scene::update().
 
         Child i orbits at its own height, size, speed and direction, so the lights it carries sweep
@@ -552,10 +597,20 @@ private:
                 deviceBounds = framed.computeWorldBounds();
                 radius = yup::jmax (0.001f, deviceBounds.getRadius());
 
-                for (const auto child : framed.getChildren())
+                for (auto child : framed.getChildren())
                 {
-                    if (child.getName().startsWith ("Pad."))
-                        padBounds.expand (child.computeWorldBounds());
+                    if (! child.getName().startsWith ("Pad."))
+                        continue;
+
+                    padBounds.expand (child.computeWorldBounds());
+
+                    // The rubber cap is a child of the pad, so it moves while the lit rim of the pad stays. It has
+                    // no transform of its own: it travels along the tilted Y of the pad, in its units
+                    for (auto cap : child.getChildren())
+                    {
+                        if (const auto* node = cap.get<yup::MeshNode>(); node != nullptr && node->mesh != nullptr && cap.getName().endsWith (" Cap"))
+                            cap.attach<SimpleButtonNode> (node->mesh->getBounds().getSize().getY() * padTravel);
+                    }
                 }
             }
             else
@@ -829,8 +884,13 @@ private:
                     repaint();
             }
 
-            // Only animate while the camera or the light show moves, the scene is static otherwise
-            if (! animator->isAnimating() && ! lightShow.isVisible())
+            // Only animate while the camera, the light show or a pad moves, the scene is static otherwise
+            const auto padsMoving = getScene()->view<SimpleButtonNode>()
+                                        .where ([] (const SimpleButtonNode& button) { return button.isAnimating(); })
+                                        .first()
+                                        .isValid();
+
+            if (! animator->isAnimating() && ! lightShow.isVisible() && ! padsMoving)
                 setContinuousUpdates (false);
         }
 
@@ -848,6 +908,17 @@ private:
             {
                 zoomTo (false);
                 return;
+            }
+
+            if (fingersDown <= 1)
+            {
+                if (auto* button = findButtonAt (event.getPosition()))
+                {
+                    button->setPressed (true);
+                    pressedButton = *button;
+                    setContinuousUpdates (true);
+                    return;
+                }
             }
 
             if (! freeMovement)
@@ -906,6 +977,14 @@ private:
         {
             if (event.isTouch())
                 fingersDown = yup::jmax (0, fingersDown - 1);
+
+            if (auto* button = pressedButton.get())
+            {
+                button->setPressed (false);
+                pressedButton = {};
+                setContinuousUpdates (true);
+                return;
+            }
 
             // Fingers that pinched, rotated or panned never count as a click
             if (multiTouch)
@@ -1251,25 +1330,19 @@ private:
             }
         }
 
-        /** The view depth of the nearest child of the device the camera ray through @p position hits,
-            or else of the device's own meshes (the bare panel), by a slab test of their world bounds.
+        /** A camera ray through a point of the view. One unit of t is one unit of view depth (along -Z),
+            the camera being unscaled: the t of a hit is its focus distance.
         */
-        std::optional<float> findFocusDistance (yup::Point<float> position) const
+        struct PickRay
         {
-            if (! focusEntity.isValid() || getWidth() <= 0.0f || getHeight() <= 0.0f)
-                return std::nullopt;
+            std::array<float, 3> origin;
+            std::array<float, 3> direction;
+            float zNear = 0.0f;
 
-            // One unit of t is one unit of view depth (along -Z), the camera being unscaled: the t of a hit is its focus distance
-            const auto toArray = [] (const yup::Vector3<float>& v) { return std::array { v.getX(), v.getY(), v.getZ() }; };
-            const auto tanHalfFov = std::tan (cameraNode->yFov * 0.5f);
-            const auto world = cameraEntity.getWorldMatrix();
-            const auto origin = toArray (world.transformPoint ({}));
-            const auto direction = toArray (world.transformVector ({ (2.0f * position.getX() / getWidth() - 1.0f) * tanHalfFov * getAspectRatio(),
-                                                                     (1.0f - 2.0f * position.getY() / getHeight()) * tanHalfFov,
-                                                                     -1.0f }));
+            static std::array<float, 3> toArray (const yup::Vector3<float>& v) { return { v.getX(), v.getY(), v.getZ() }; }
 
-            // Where the ray enters @p box past the near plane; a box it starts inside is a miss
-            const auto hit = [&] (const yup::BoundingBox& box) -> std::optional<float>
+            /** Where the ray enters @p box past the near plane; a box it starts inside is a miss. */
+            std::optional<float> hit (const yup::BoundingBox& box) const
             {
                 if (box.isEmpty())
                     return std::nullopt;
@@ -1284,12 +1357,62 @@ private:
                     leave = yup::jmin (leave, yup::jmax (t0, t1));
                 }
 
-                return enter >= cameraNode->zNear && enter <= leave ? std::optional (enter) : std::nullopt;
-            };
+                return enter >= zNear && enter <= leave ? std::optional (enter) : std::nullopt;
+            }
+        };
+
+        std::optional<PickRay> getPickRay (yup::Point<float> position) const
+        {
+            if (getWidth() <= 0.0f || getHeight() <= 0.0f)
+                return std::nullopt;
+
+            const auto tanHalfFov = std::tan (cameraNode->yFov * 0.5f);
+            const auto world = cameraEntity.getWorldMatrix();
+
+            return PickRay { PickRay::toArray (world.transformPoint ({})),
+                             PickRay::toArray (world.transformVector ({ (2.0f * position.getX() / getWidth() - 1.0f) * tanHalfFov * getAspectRatio(),
+                                                                        (1.0f - 2.0f * position.getY() / getHeight()) * tanHalfFov,
+                                                                        -1.0f })),
+                             cameraNode->zNear };
+        }
+
+        /** The nearest pad whose bounds the camera ray through @p position hits, if any. */
+        SimpleButtonNode* findButtonAt (yup::Point<float> position) const
+        {
+            const auto ray = getPickRay (position);
+            if (! ray)
+                return nullptr;
+
+            SimpleButtonNode* nearest = nullptr;
+            auto nearestDistance = 0.0f;
+
+            getScene()->view<SimpleButtonNode>().forEach ([&] (yup::Entity entity, SimpleButtonNode& button)
+            {
+                if (! entity.isActive())
+                    return;
+
+                if (const auto t = ray->hit (entity.computeWorldBounds()); t && (nearest == nullptr || *t < nearestDistance))
+                {
+                    nearest = &button;
+                    nearestDistance = *t;
+                }
+            });
+
+            return nearest;
+        }
+
+        /** The view depth of the nearest child of the device the camera ray through @p position hits,
+            or else of the device's own meshes (the bare panel), by a slab test of their world bounds.
+        */
+        std::optional<float> findFocusDistance (yup::Point<float> position) const
+        {
+            const auto ray = getPickRay (position);
+            if (! focusEntity.isValid() || ! ray)
+                return std::nullopt;
 
             std::optional<float> nearest;
             for (const auto child : focusEntity.getChildren())
-                if (const auto t = hit (child.computeWorldBounds()); t && (! nearest || *t < *nearest))
+                if (const auto t = ray->hit (child.computeWorldBounds()); t && (! nearest || *t < *nearest))
                     nearest = t;
 
             // The body only when no control was hit: its box encloses them all, so it would always win
@@ -1300,7 +1423,7 @@ private:
             if (const auto* node = focusEntity.get<yup::MeshNode>(); node != nullptr && node->mesh != nullptr)
                 body.expand (node->mesh->getBounds().transformedBy (focusEntity.getWorldMatrix()));
 
-            return hit (body);
+            return ray->hit (body);
         }
 
         bool hitsScreen (yup::Point<float> position) const
@@ -1412,6 +1535,7 @@ private:
         static constexpr int numShowLightsFull = 64;
         static constexpr int numShowLightsRaster = 16;
         static constexpr float knobClearcoat = 1.0f;
+        static constexpr float padTravel = 0.3f; // How far a pressed pad goes in, as a fraction of its height
         static constexpr std::array<float, 3> padSheenColor { 0.35f, 0.36f, 0.38f };
 
         enum class DragMode
@@ -1445,6 +1569,7 @@ private:
 
         yup::Entity screenEntity;
         yup::Entity focusEntity; // The device, whose children, or else its body, a click focuses on
+        yup::NodeHandle<SimpleButtonNode> pressedButton;
         yup::Vector3<float> screenCenter;
         yup::Vector3<float> screenUp;
         yup::Vector3<float> screenRight;

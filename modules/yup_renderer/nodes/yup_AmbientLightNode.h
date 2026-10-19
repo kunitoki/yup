@@ -27,8 +27,8 @@ namespace yup
 //==============================================================================
 /** A scene feature: the flat ambient light color added to every surface.
 
-    Lower it, often to black, when an EnvironmentNode lights the scene. The first AmbientLightNode
-    found depth-first in the visible part of the tree wins, see SceneSettings::resolve(). Without
+    Lower it, often to black, when an EnvironmentNode lights the scene. The visible AmbientLightNode
+    nearest to the root wins, see SceneSettings::resolve(). Without
     one the scene behaves as if it had a default-constructed one.
 
     @see SceneSettings

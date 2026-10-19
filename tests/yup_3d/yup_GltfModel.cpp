@@ -1084,6 +1084,29 @@ TEST_F (GltfModelTests, CreateEntityHandlesSceneIndices)
     EXPECT_FALSE (model.instantiate (scene, {}, -2).isValid());
 }
 
+TEST_F (GltfModelTests, EachSceneHasItsPrefab)
+{
+    auto result = loadJson (R"({
+        "asset": { "version": "2.0" },
+        "scene": 1,
+        "scenes": [ { "name": "First", "nodes": [ 0 ] }, { "name": "Second", "nodes": [ 1 ] } ],
+        "nodes": [ { "name": "A" }, { "name": "B" } ]
+    })");
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& model = result.getReference();
+    ASSERT_NE (model.getPrefab(), nullptr);
+    EXPECT_EQ (model.getPrefab(), model.getPrefab (1));
+    EXPECT_EQ (model.getPrefab (0)->getRoot().getName(), "First");
+    EXPECT_EQ (model.getPrefab (0)->getRoot().getChild (0).getName(), "A");
+    EXPECT_EQ (model.getPrefab (2), nullptr);
+
+    const auto copy = model;
+    EXPECT_EQ (copy.getPrefab (0), model.getPrefab (0));
+    EXPECT_NE (GltfModel().getPrefab(), nullptr);
+    EXPECT_EQ (GltfModel().getPrefab (0), nullptr);
+}
+
 TEST_F (GltfModelTests, AssetsWithoutScenesBuildTheirRootNodes)
 {
     auto result = loadJson (R"({

@@ -88,4 +88,5 @@
 #include "scene/yup_Scene.h"
 #include "scene/yup_NodeView.h"
 #include "scene/yup_NodeCollection.h"
+#include "scene/yup_Prefab.h"
 #include "gltf/yup_GltfModel.h"

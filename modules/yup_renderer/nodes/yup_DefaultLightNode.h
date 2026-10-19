@@ -27,8 +27,8 @@ namespace yup
 //==============================================================================
 /** A scene feature: whether a default directional light shines when the tree has no LightNode.
 
-    The default light is on unless a DefaultLightNode turns it off. The first DefaultLightNode found
-    depth-first in the visible part of the tree wins, see SceneSettings::resolve().
+    The default light is on unless a DefaultLightNode turns it off. The visible DefaultLightNode
+    nearest to the root wins, see SceneSettings::resolve().
 
     @code
     scene->getRoot().attach<yup::DefaultLightNode> (false);

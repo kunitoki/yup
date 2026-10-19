@@ -26,39 +26,39 @@ namespace yup
 namespace
 {
 
-struct SceneFeatureNodes
+/** The number of parents between an entity and @p root, or -1 when it isn't under it or something hides it. */
+int getActiveDepthBelow (Entity entity, const Entity& root)
 {
-    const BackgroundNode* background = nullptr;
-    const AmbientLightNode* ambient = nullptr;
-    const ExposureNode* exposure = nullptr;
-    const ToneMappingNode* toneMapping = nullptr;
-    const DefaultLightNode* defaultLight = nullptr;
-    const EnvironmentNode* environment = nullptr;
-    const WorldFogNode* fog = nullptr;
-};
+    for (int depth = 0; entity.isValid(); entity = entity.getParent(), ++depth)
+    {
+        if (! entity.isVisible())
+            return -1;
 
-template <class T>
-void takeFirstSceneFeature (const Entity& entity, const T*& found)
-{
-    if (found == nullptr)
-        found = entity.get<T>();
+        if (entity == root)
+            return depth;
+    }
+
+    return -1;
 }
 
-void collectSceneFeatures (const Entity& entity, SceneFeatureNodes& nodes)
+template <class T>
+const T* findSceneFeature (Scene& scene, const Entity& root)
 {
-    if (! entity.isVisible())
-        return;
+    const T* found = nullptr;
+    int foundDepth = 0;
 
-    takeFirstSceneFeature (entity, nodes.background);
-    takeFirstSceneFeature (entity, nodes.ambient);
-    takeFirstSceneFeature (entity, nodes.exposure);
-    takeFirstSceneFeature (entity, nodes.toneMapping);
-    takeFirstSceneFeature (entity, nodes.defaultLight);
-    takeFirstSceneFeature (entity, nodes.environment);
-    takeFirstSceneFeature (entity, nodes.fog);
+    // A strictly shallower node moves ahead, so ties keep the first attached
+    scene.collect<T>().forEach ([&] (Entity entity, T& node)
+    {
+        const auto depth = getActiveDepthBelow (entity, root);
+        if (depth >= 0 && (found == nullptr || depth < foundDepth))
+        {
+            found = &node;
+            foundDepth = depth;
+        }
+    });
 
-    for (const auto child : entity.getChildren())
-        collectSceneFeatures (child, nodes);
+    return found;
 }
 
 } // namespace
@@ -72,36 +72,37 @@ SceneSettings SceneSettings::resolve (const Scene& scene)
 
 SceneSettings SceneSettings::resolve (const Entity& root)
 {
-    SceneFeatureNodes nodes;
-    collectSceneFeatures (root, nodes);
-
     SceneSettings settings;
 
-    if (nodes.background != nullptr)
-        settings.backgroundColor = nodes.background->color;
+    auto* scene = root.getScene();
+    if (scene == nullptr || ! root.isValid())
+        return settings;
 
-    if (nodes.ambient != nullptr)
-        settings.ambientColor = nodes.ambient->color;
+    if (const auto* node = findSceneFeature<BackgroundNode> (*scene, root))
+        settings.backgroundColor = node->color;
 
-    if (nodes.exposure != nullptr)
-        settings.exposure = nodes.exposure->exposure;
+    if (const auto* node = findSceneFeature<AmbientLightNode> (*scene, root))
+        settings.ambientColor = node->color;
 
-    if (nodes.toneMapping != nullptr)
-        settings.toneMapping = nodes.toneMapping->type;
+    if (const auto* node = findSceneFeature<ExposureNode> (*scene, root))
+        settings.exposure = node->exposure;
 
-    if (nodes.defaultLight != nullptr)
-        settings.useDefaultLight = nodes.defaultLight->enabled;
+    if (const auto* node = findSceneFeature<ToneMappingNode> (*scene, root))
+        settings.toneMapping = node->type;
 
-    if (nodes.environment != nullptr)
+    if (const auto* node = findSceneFeature<DefaultLightNode> (*scene, root))
+        settings.useDefaultLight = node->enabled;
+
+    if (const auto* node = findSceneFeature<EnvironmentNode> (*scene, root))
     {
-        settings.environment = nodes.environment->map;
-        settings.environmentIntensity = jmax (0.0f, nodes.environment->intensity);
-        settings.environmentVisible = nodes.environment->visible;
-        settings.environmentBlur = jlimit (0.0f, 1.0f, nodes.environment->blur);
+        settings.environment = node->map;
+        settings.environmentIntensity = jmax (0.0f, node->intensity);
+        settings.environmentVisible = node->visible;
+        settings.environmentBlur = jlimit (0.0f, 1.0f, node->blur);
     }
 
-    if (nodes.fog != nullptr)
-        settings.fog = nodes.fog->fog;
+    if (const auto* node = findSceneFeature<WorldFogNode> (*scene, root))
+        settings.fog = node->fog;
 
     return settings;
 }

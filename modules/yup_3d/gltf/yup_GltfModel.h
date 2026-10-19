@@ -28,7 +28,8 @@ namespace yup
     Load a .gltf or .glb file once, then instantiate it as many times as needed with
     instantiate(): every call builds a fresh entity tree in a Scene, and all the trees share
     the same meshes, materials and textures, also across scenes. Copies of a GltfModel are
-    cheap and share them too.
+    cheap and share them too. Each glTF scene is turned into a Prefab once, when loading, and
+    getPrefab() returns it.
 
     @code
     auto model = yup::GltfModel::loadFromFile (file);
@@ -54,7 +55,7 @@ namespace yup
     primitive that isn't made of triangles or an image that can't be decoded, are collected
     in getWarnings().
 
-    @see Entity, Mesh, Material
+    @see Prefab, Entity, Mesh, Material
 */
 class YUP_API GltfModel
 {
@@ -94,6 +95,16 @@ public:
         @return The new entity, or an invalid entity if the scene index is out of range.
     */
     Entity instantiate (Scene& scene, Entity parent = {}, int sceneIndex = -1) const;
+
+    /** Returns the prefab instantiate() builds a scene of the asset from.
+
+        @param sceneIndex The glTF scene, or -1 for the default one. An asset without scenes has
+                          a single prefab holding every node that has no parent.
+
+        @return The prefab, which lives as long as any copy of this model, or nullptr if the
+                scene index is out of range.
+    */
+    const Prefab* getPrefab (int sceneIndex = -1) const noexcept;
 
     /** Returns the number of scenes in the asset. */
     int getNumScenes() const noexcept;

@@ -27,7 +27,7 @@ namespace yup
 //==============================================================================
 /** A scene feature: the exposure multiplier applied before tone mapping.
 
-    The first ExposureNode found depth-first in the visible part of the tree wins, see
+    The visible ExposureNode nearest to the root wins, see
     SceneSettings::resolve(). Without one the exposure is 1.
 
     @see ToneMappingNode, SceneSettings

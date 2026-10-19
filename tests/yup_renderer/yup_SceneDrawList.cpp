@@ -1009,3 +1009,190 @@ TEST_F (SceneDrawListTests, VolumeResolutionIsClampedToTheLargestThatFits)
     EXPECT_LE (x * z, ProbeBaker::irradianceAtlasWidth);
     EXPECT_LE (y * 4, ProbeBaker::maxIrradianceAtlasHeight);
 }
+
+//==============================================================================
+class SceneDrawListParityTests : public SceneDrawListTests
+{
+protected:
+    using ItemKey = std::tuple<const MeshNode*, int, const Material*>;
+
+    struct Collected
+    {
+        std::vector<ItemKey> items;
+        std::vector<const LightNode*> lights;
+
+        void sort()
+        {
+            std::sort (items.begin(), items.end());
+            std::sort (lights.begin(), lights.end());
+        }
+    };
+
+    /** What a depth-first walk of the visible tree under @p entity draws, the reference the draw list must match. */
+    void walk (const Entity& entity, const Material* overrideMaterial, Collected& collected) const
+    {
+        if (! entity.isVisible())
+            return;
+
+        if (const auto* node = entity.get<MaterialNode>(); node != nullptr && node->material != nullptr)
+            overrideMaterial = node->material.get();
+
+        if (const auto* node = entity.get<MeshNode>(); node != nullptr && node->mesh != nullptr)
+        {
+            for (int i = 0; i < node->mesh->getNumPrimitives(); ++i)
+            {
+                const auto& primitive = node->mesh->getPrimitive (i);
+                const auto* material = overrideMaterial != nullptr     ? overrideMaterial
+                                     : primitive.material != nullptr ? primitive.material.get()
+                                                                     : &drawList.getDefaultMaterial();
+                collected.items.emplace_back (node, i, material);
+            }
+        }
+
+        if (const auto* node = entity.get<LightNode>())
+            collected.lights.push_back (node);
+
+        for (const auto child : entity.getChildren())
+            walk (child, overrideMaterial, collected);
+    }
+
+    Collected getReference() const
+    {
+        Collected collected;
+        walk (root, nullptr, collected);
+        collected.sort();
+        return collected;
+    }
+
+    Collected getDrawn() const
+    {
+        Collected collected;
+
+        for (const auto items : { drawList.getOpaqueItems(), drawList.getBlendItems() })
+            for (const auto& item : items)
+                collected.items.emplace_back (item.node, item.primitiveIndex, item.material);
+
+        for (const auto& light : drawList.getLights())
+            collected.lights.push_back (light.node);
+
+        collected.sort();
+        return collected;
+    }
+
+    static bool isSameOrBelow (Entity entity, const Entity& ancestor)
+    {
+        for (; entity.isValid(); entity = entity.getParent())
+            if (entity == ancestor)
+                return true;
+
+        return false;
+    }
+
+    /** Builds a random tree of @p count entities with meshes, lights, material overrides and hidden branches. */
+    std::vector<Entity> buildRandomTree (Random& random, int count)
+    {
+        const std::array<Material::Ptr, 3> materials { makeMaterial ("a"),
+                                                       makeMaterial ("b", Material::AlphaMode::blend),
+                                                       nullptr };
+        std::vector<Entity> entities { root };
+
+        for (int i = 0; i < count; ++i)
+        {
+            auto entity = entities[(size_t) random.nextInt ((int) entities.size())].createChild();
+            entities.push_back (entity);
+
+            if (random.nextInt (3) != 0)
+                entity.attach<MeshNode> (makeTriangle (materials[(size_t) random.nextInt (3)]));
+
+            if (random.nextInt (5) == 0)
+                entity.attach<LightNode>();
+
+            if (random.nextInt (6) == 0)
+                entity.attach<MaterialNode> (materials[(size_t) random.nextInt (3)]);
+
+            if (random.nextInt (8) == 0)
+                entity.setVisible (false);
+        }
+
+        return entities;
+    }
+};
+
+TEST_F (SceneDrawListParityTests, MatchesAHierarchyWalkThroughStructuralChanges)
+{
+    Random random (1234);
+    auto entities = buildRandomTree (random, 200);
+
+    for (int round = 0; round < 20; ++round)
+    {
+        for (int change = 0; change < 10; ++change)
+        {
+            auto& entity = entities[(size_t) (1 + random.nextInt ((int) entities.size() - 1))];
+            if (! entity.isValid())
+                continue;
+
+            switch (random.nextInt (6))
+            {
+                case 0:
+                {
+                    auto& parent = entities[(size_t) random.nextInt ((int) entities.size())];
+                    if (parent.isValid() && ! isSameOrBelow (parent, entity))
+                        parent.addChild (entity);
+                    break;
+                }
+                case 1: entity.setVisible (! entity.isVisible()); break;
+                case 2: entity.removeFromParent(); break;
+                case 3: entity.destroy(); break;
+                case 4:
+                    if (entity.has<MeshNode>())
+                        entity.detach<MeshNode>();
+                    else
+                        entity.attach<MeshNode> (makeTriangle());
+                    break;
+                default:
+                    if (entity.has<MaterialNode>())
+                        entity.detach<MaterialNode>();
+                    else
+                        entity.attach<MaterialNode> (makeMaterial ("override"));
+                    break;
+            }
+        }
+
+        drawList.build (root, {});
+
+        const auto reference = getReference();
+        const auto drawn = getDrawn();
+        ASSERT_EQ (drawn.items, reference.items) << "round " << round;
+        ASSERT_EQ (drawn.lights, reference.lights) << "round " << round;
+    }
+}
+
+TEST_F (SceneDrawListParityTests, RecordsCollectionAndChurnTimes)
+{
+    constexpr int numEntities = 10000;
+    constexpr int numFrames = 100;
+
+    Random random (5678);
+    auto entities = buildRandomTree (random, numEntities);
+
+    auto start = Time::getMillisecondCounterHiRes();
+    for (int frame = 0; frame < numFrames; ++frame)
+        drawList.build (root, {});
+
+    RecordProperty ("buildMillisecondsPerFrame", String ((Time::getMillisecondCounterHiRes() - start) / numFrames, 4).toStdString());
+
+    start = Time::getMillisecondCounterHiRes();
+    for (int i = 1; i < (int) entities.size(); ++i)
+    {
+        auto& entity = entities[(size_t) i];
+        if (entity.has<MeshNode>())
+            entity.detach<MeshNode>();
+        else
+            entity.attach<MeshNode> (makeTriangle());
+    }
+
+    RecordProperty ("attachOrDetachMicroseconds", String ((Time::getMillisecondCounterHiRes() - start) * 1000.0 / numEntities, 4).toStdString());
+
+    drawList.build (root, {});
+    EXPECT_EQ (getDrawn().items, getReference().items);
+}

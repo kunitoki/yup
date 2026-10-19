@@ -119,3 +119,26 @@ TEST_F (NodeCollectionTests, ForEachToleratesRemovalWhileIterating)
     EXPECT_EQ (visited, 3);
     EXPECT_EQ (collection.size(), 3);
 }
+
+TEST_F (NodeCollectionTests, KeepsTheOrderEntitiesJoinedIn)
+{
+    auto& collection = scene.collect<ValueNode>();
+    std::vector<Entity> entities;
+
+    for (int i = 0; i < 6; ++i)
+    {
+        entities.push_back (scene.createEntity());
+        entities.back().attach<ValueNode>();
+    }
+
+    entities[0].detach<ValueNode>();
+    entities[3].destroy();
+    entities[0].attach<ValueNode>();
+
+    std::vector<Entity> visited;
+    collection.forEach ([&] (Entity entity, ValueNode&) { visited.push_back (entity); });
+
+    const std::vector<Entity> expected { entities[1], entities[2], entities[4], entities[5], entities[0] };
+    EXPECT_EQ (visited, expected);
+    EXPECT_EQ (collection.first(), entities[1]);
+}

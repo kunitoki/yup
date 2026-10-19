@@ -31,7 +31,7 @@ namespace yup
     light. It adds to the lights and to the ambient color: lower the AmbientLightNode color when an
     environment lights the scene.
 
-    The first EnvironmentNode found depth-first in the visible part of the tree wins, see
+    The visible EnvironmentNode nearest to the root wins, see
     SceneSettings::resolve(). Without one, or with a null map, the scene has no environment.
 
     @code

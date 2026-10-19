@@ -70,8 +70,7 @@ struct YUP_API WorldFog
     on its raster tier where the device allows it; elsewhere the frames render without it. A change
     of the fog that is drawn restarts the full tier's temporal accumulation.
 
-    Like every scene feature, the first WorldFogNode found depth-first in the visible part of the
-    tree wins, see SceneSettings::resolve(). Without one the scene has no fog.
+    Like every scene feature, the visible WorldFogNode nearest to the root wins, see SceneSettings::resolve(). Without one the scene has no fog.
 
     @code
     auto& fogNode = scene->getRoot().attach<yup::WorldFogNode>();

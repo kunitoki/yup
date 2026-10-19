@@ -27,8 +27,8 @@ namespace yup
 //==============================================================================
 /** The scene features of one frame, resolved from the feature nodes of a scene.
 
-    Each field comes from the first node of its type found depth-first in the visible part of the
-    tree: BackgroundNode, AmbientLightNode, ExposureNode, ToneMappingNode, DefaultLightNode,
+    Each field comes from the node of its type nearest to the root in the visible part of the
+    tree, the first attached among equals: BackgroundNode, AmbientLightNode, ExposureNode, ToneMappingNode, DefaultLightNode,
     EnvironmentNode and WorldFogNode. A feature without a node keeps the value of a
     default-constructed node, and the scene has no environment and no fog.
 

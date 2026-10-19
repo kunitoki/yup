@@ -25,11 +25,13 @@ namespace yup
 //==============================================================================
 /** A flat, sorted list of everything to draw in an entity tree, built on the CPU.
 
-    build() walks the tree once, depth-first, accumulating world matrices and the material
-    override of the nearest MaterialNode, and skipping hidden subtrees. Every primitive of
-    every MeshNode slot becomes a DrawItem, every LightNode slot becomes a Light, and every
-    ReflectionProbeNode slot becomes a ReflectionProbe, unless its influence is empty: a radius
-    or an extent of 0 or less, or an entity scaled to 0. Every IrradianceVolumeNode slot becomes
+    build() walks the collections of the scene of the tree (Scene::collect()), so its cost grows
+    with the nodes it draws and not with the size of the tree. It keeps the entities under the
+    root that no hidden entity hides, in the order their nodes were attached, with their cached
+    world matrices and the material override of their nearest MaterialNode up to the root.
+    Every primitive of every MeshNode becomes a DrawItem, every LightNode becomes a Light, and every
+    ReflectionProbeNode becomes a ReflectionProbe, unless its influence is empty: a radius
+    or an extent of 0 or less, or an entity scaled to 0. Every IrradianceVolumeNode becomes
     an IrradianceVolume, under the same conditions.
 
     Opaque and masked items are sorted by pipeline state (double-sided, then mirrored) and then
@@ -123,7 +125,7 @@ public:
     //==============================================================================
     /** Rebuilds the list from an entity tree.
 
-        @param root     The root of the tree. Its own world matrix is used as the starting point.
+        @param root     The root of the tree to draw, usually Scene::getRoot().
         @param view     The view matrix, used to sort blended items by distance.
         @param options  What to add beyond the tree.
     */
@@ -226,7 +228,8 @@ private:
     static int selectLights (const BoundingBox& worldBounds, Span<const Light> lights, Span<const LightRanking> rankings,
                              std::array<uint16, maxLightsPerDraw>& indices, std::array<float, maxLightsPerDraw>& weights);
 
-    void collect (const Entity& entity, const Matrix4& world, const Material* overrideMaterial, const Matrix4& view);
+    void collect (Scene& scene, const Entity& root, const Matrix4& view);
+    static bool isActiveBelow (Entity entity, const Entity& root, const Material** overrideMaterial = nullptr);
 
     std::vector<DrawItem> opaqueItems;
     std::vector<DrawItem> blendItems;

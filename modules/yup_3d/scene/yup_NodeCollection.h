@@ -28,7 +28,7 @@ namespace yup
     Returned by Scene::collect(), which creates it on the first call. Unlike a NodeView, a
     collection stores its entities and follows Scene::onAttach() and Scene::onDetach(), so
     walking it costs nothing beyond the matching entities. It suits sets that are walked
-    every frame. It ignores visibility, and its order changes as entities leave it.
+    every frame. It ignores visibility, and keeps its entities in the order they joined it.
 
     @code
     auto& lights = scene->collect<yup::LightNode>();
@@ -136,25 +136,14 @@ private:
         if (it == positions.end() || entities[it->second] != handle)
             return;
 
-        const auto position = it->second;
+        // A hole keeps the order, and lets a running loop neither skip nor repeat an entity
+        entities[it->second] = {};
         positions.erase (it);
         --numEntities;
+        hasHoles = true;
 
-        // While iterating leave a hole, so the loop neither skips nor repeats an entity
-        if (iterating > 0)
-        {
-            entities[position] = {};
-            hasHoles = true;
-            return;
-        }
-
-        if (position + 1 < entities.size())
-        {
-            entities[position] = entities.back();
-            positions[entities[position].index] = position;
-        }
-
-        entities.pop_back();
+        if (iterating == 0 && static_cast<size_t> (numEntities) * 2 < entities.size())
+            compact();
     }
 
     void compact()

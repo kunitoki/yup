@@ -27,8 +27,8 @@ namespace yup
 //==============================================================================
 /** A scene feature: the color the background is cleared to.
 
-    Scene features apply to the whole scene: the first one of each type found depth-first in the
-    visible part of the tree wins, see SceneSettings::resolve(), so attach them to the root entity.
+    Scene features apply to the whole scene: the visible one of each type nearest to the root wins,
+    the first attached among equals, see SceneSettings::resolve(), so attach them to the root entity.
     Without a BackgroundNode the scene behaves as if it had a default-constructed one.
 
     @code

@@ -53,4 +53,5 @@
 #include "nodes/yup_TransformNode.cpp"
 #include "nodes/yup_CameraNode.cpp"
 #include "scene/yup_Scene.cpp"
+#include "scene/yup_Prefab.cpp"
 #include "gltf/yup_GltfModel.cpp"

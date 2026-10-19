@@ -152,6 +152,7 @@ Changing the scale renders the texture again at the new size.
 
 ## Related
 
+- [Components in a scene](../3d/components-in-a-scene.md) — showing a component on a mesh of a `yup_3d` scene
 - [Component basics](component-basics.md) — transforms and coordinate conversion
 - [Component effects](component-effects.md) — input mapping for distorting effects
 - [Primitives](../graphics/primitives.md) — `Vector3`, `Matrix4`, `Ray`, `MeshSurfaceMapper`

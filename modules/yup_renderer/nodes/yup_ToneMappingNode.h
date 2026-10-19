@@ -36,7 +36,7 @@ enum class ToneMappingOperator
 //==============================================================================
 /** A scene feature: the operator mapping the lit colors into the displayable range.
 
-    The first ToneMappingNode found depth-first in the visible part of the tree wins, see
+    The visible ToneMappingNode nearest to the root wins, see
     SceneSettings::resolve(). Without one the scene uses ToneMappingOperator::reinhard.
 
     @code

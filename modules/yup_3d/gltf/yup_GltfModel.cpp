@@ -74,6 +74,80 @@ struct GltfModel::Data
     std::vector<int> parentlessNodes;
     int defaultScene = -1;
     StringArray warnings;
+
+    /** One per glTF scene, or a single one holding the parentless nodes when there are no scenes. */
+    std::vector<Prefab::Ptr> prefabs;
+
+    void buildPrefabs()
+    {
+        if (scenes.empty())
+            prefabs.push_back (buildPrefab ({}, parentlessNodes));
+
+        for (const auto& scene : scenes)
+            prefabs.push_back (buildPrefab (scene.name, scene.nodes));
+    }
+
+    Prefab::Ptr buildPrefab (const String& name, const std::vector<int>& roots) const
+    {
+        auto prefab = Prefab::Ptr (new Prefab (name));
+
+        // Iterative depth-first build: deep hierarchies can't overflow the stack, and nodes reached
+        // twice (invalid in glTF, but possible in a malformed file) are built once to stop cycles
+        std::vector<bool> built (nodes.size(), false);
+        std::vector<std::pair<int, Prefab::Part*>> pending;
+
+        for (auto it = roots.rbegin(); it != roots.rend(); ++it)
+            pending.emplace_back (*it, &prefab->getRoot());
+
+        while (! pending.empty())
+        {
+            const auto [nodeIndex, parent] = pending.back();
+            pending.pop_back();
+
+            if (! isPositiveAndBelow (nodeIndex, static_cast<int> (nodes.size())) || built[static_cast<size_t> (nodeIndex)])
+                continue;
+
+            built[static_cast<size_t> (nodeIndex)] = true;
+
+            const auto& node = nodes[static_cast<size_t> (nodeIndex)];
+            auto& part = parent->addChild (node.name);
+            part.attach<TransformNode> (node.position, node.rotation, node.scale);
+
+            if (isPositiveAndBelow (node.mesh, static_cast<int> (meshes.size())))
+                part.attach<MeshNode> (meshes[static_cast<size_t> (node.mesh)]);
+
+            if (isPositiveAndBelow (node.camera, static_cast<int> (cameras.size())))
+            {
+                part.attachWith<CameraNode> ([desc = cameras[static_cast<size_t> (node.camera)]] (CameraNode& camera)
+                {
+                    camera.projection = desc.projection;
+                    camera.yFov = desc.yFov;
+                    camera.zNear = desc.zNear;
+                    camera.zFar = desc.zFar;
+                    camera.xMag = desc.xMag;
+                    camera.yMag = desc.yMag;
+                });
+            }
+
+            if (isPositiveAndBelow (node.light, static_cast<int> (lights.size())))
+            {
+                part.attachWith<LightNode> ([desc = lights[static_cast<size_t> (node.light)]] (LightNode& light)
+                {
+                    light.type = desc.type;
+                    light.color = desc.color;
+                    light.intensity = desc.intensity;
+                    light.range = desc.range;
+                    light.innerConeAngle = desc.innerConeAngle;
+                    light.outerConeAngle = desc.outerConeAngle;
+                });
+            }
+
+            for (auto it = node.children.rbegin(); it != node.children.rend(); ++it)
+                pending.emplace_back (*it, &part);
+        }
+
+        return prefab;
+    }
 };
 
 //==============================================================================
@@ -977,8 +1051,10 @@ private:
 //==============================================================================
 
 GltfModel::GltfModel()
-    : data (std::make_shared<const Data>())
 {
+    auto empty = std::make_shared<Data>();
+    empty->buildPrefabs();
+    data = std::move (empty);
 }
 
 ResultValue<GltfModel> GltfModel::loadFromFile (const File& file)
@@ -1048,6 +1124,8 @@ ResultValue<GltfModel> GltfModel::loadFromData (Span<const uint8> bytes, const F
     if (auto result = Loader (state.model, baseDirectory, *loaded).load(); result.failed())
         return makeResultValueFail (result.getErrorMessage());
 
+    loaded->buildPrefabs();
+
     GltfModel gltfModel;
     gltfModel.data = std::move (loaded);
     return makeResultValueOk (std::move (gltfModel));
@@ -1057,83 +1135,24 @@ ResultValue<GltfModel> GltfModel::loadFromData (Span<const uint8> bytes, const F
 
 Entity GltfModel::instantiate (Scene& scene, Entity parent, int sceneIndex) const
 {
+    if (const auto* prefab = getPrefab (sceneIndex))
+        return prefab->instantiate (scene, parent);
+
+    return {};
+}
+
+const Prefab* GltfModel::getPrefab (int sceneIndex) const noexcept
+{
     const auto& d = *data;
 
-    String name;
-    std::vector<int> roots;
-
     if (d.scenes.empty())
-    {
-        if (sceneIndex != -1)
-            return {};
+        return sceneIndex == -1 ? d.prefabs.front().get() : nullptr;
 
-        roots = d.parentlessNodes;
-    }
-    else
-    {
-        const auto index = sceneIndex == -1 ? jmax (0, d.defaultScene) : sceneIndex;
-        if (! isPositiveAndBelow (index, static_cast<int> (d.scenes.size())))
-            return {};
+    const auto index = sceneIndex == -1 ? jmax (0, d.defaultScene) : sceneIndex;
+    if (! isPositiveAndBelow (index, static_cast<int> (d.prefabs.size())))
+        return nullptr;
 
-        name = d.scenes[static_cast<size_t> (index)].name;
-        roots = d.scenes[static_cast<size_t> (index)].nodes;
-    }
-
-    const auto root = scene.createEntity (name, parent);
-
-    // Iterative depth-first build: deep hierarchies can't overflow the stack, and nodes reached
-    // twice (invalid in glTF, but possible in a malformed file) are built once to stop cycles
-    std::vector<bool> built (d.nodes.size(), false);
-    std::vector<std::pair<int, Entity>> pending;
-
-    for (auto it = roots.rbegin(); it != roots.rend(); ++it)
-        pending.emplace_back (*it, root);
-
-    while (! pending.empty())
-    {
-        const auto [nodeIndex, parent] = pending.back();
-        pending.pop_back();
-
-        if (! isPositiveAndBelow (nodeIndex, static_cast<int> (d.nodes.size())) || built[static_cast<size_t> (nodeIndex)])
-            continue;
-
-        built[static_cast<size_t> (nodeIndex)] = true;
-
-        const auto& node = d.nodes[static_cast<size_t> (nodeIndex)];
-        auto entity = scene.createEntity (node.name, parent);
-        entity.attach<TransformNode> (node.position, node.rotation, node.scale);
-
-        if (isPositiveAndBelow (node.mesh, static_cast<int> (d.meshes.size())))
-            entity.attach<MeshNode> (d.meshes[static_cast<size_t> (node.mesh)]);
-
-        if (isPositiveAndBelow (node.camera, static_cast<int> (d.cameras.size())))
-        {
-            const auto& desc = d.cameras[static_cast<size_t> (node.camera)];
-            auto& camera = entity.attach<CameraNode>();
-            camera.projection = desc.projection;
-            camera.yFov = desc.yFov;
-            camera.zNear = desc.zNear;
-            camera.zFar = desc.zFar;
-            camera.xMag = desc.xMag;
-            camera.yMag = desc.yMag;
-        }
-
-        if (isPositiveAndBelow (node.light, static_cast<int> (d.lights.size())))
-        {
-            const auto& desc = d.lights[static_cast<size_t> (node.light)];
-            auto& light = entity.attach<LightNode> (desc.type);
-            light.color = desc.color;
-            light.intensity = desc.intensity;
-            light.range = desc.range;
-            light.innerConeAngle = desc.innerConeAngle;
-            light.outerConeAngle = desc.outerConeAngle;
-        }
-
-        for (auto it = node.children.rbegin(); it != node.children.rend(); ++it)
-            pending.emplace_back (*it, entity);
-    }
-
-    return root;
+    return d.prefabs[static_cast<size_t> (index)].get();
 }
 
 int GltfModel::getNumScenes() const noexcept
