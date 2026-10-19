@@ -1,0 +1,277 @@
+/* The home page. The demo canvas fills the screen under a black mask (.mask) that multiplies it
+   away everywhere except through the letters of the active work, a soft leak around it, and the
+   whole screen once a work is opened. */
+
+@import "./base.css";
+
+:root {
+    --words: min(10vw, 12vh);
+}
+
+html,
+body {
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+input {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+/* ----------------------------------------------------------------- stage */
+
+/* YUP writes a pixel size inline on resize; the page decides the size instead. */
+#canvas {
+    position: fixed;
+    inset: 0;
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    outline: none;
+    opacity: 0;
+    pointer-events: none; /* home.js forwards the pointer, see forwardPointer */
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 1.2s ease;
+}
+
+.ready #canvas {
+    opacity: 1;
+}
+
+.mask {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    mix-blend-mode: multiply;
+    pointer-events: none;
+    transition: background-color 0.7s ease;
+}
+
+.leak {
+    position: absolute;
+    left: -10%;
+    right: -10%;
+    top: var(--leak-top, 20vh);
+    height: 30vh;
+    background: radial-gradient(closest-side, rgb(255 255 255 / 0.28), transparent);
+    transition: top 0.3s ease;
+}
+
+.open .mask {
+    background: #fff;
+}
+
+/* No picture behind the words: the active one is simply lit. */
+.static .mask {
+    display: none;
+}
+
+/* ----------------------------------------------------------------- works */
+
+main {
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+}
+
+.works {
+    position: absolute;
+    top: 17vh;
+    left: 4.5vw;
+    list-style: none;
+    font: 900 var(--words) / 0.88 var(--sans);
+    letter-spacing: -0.045em;
+    transition: opacity 0.4s ease;
+}
+
+.works a,
+.works span {
+    display: block;
+    width: max-content;
+    color: transparent;
+    text-decoration: none;
+}
+
+main .works a {
+    pointer-events: auto;
+    outline: none;
+    -webkit-text-stroke: 1px var(--outline);
+    transition: -webkit-text-stroke-color 0.2s ease;
+}
+
+main .works a:hover,
+main .works a:focus-visible {
+    -webkit-text-stroke-color: #9aa3ad;
+}
+
+main .works a[aria-current="true"] {
+    -webkit-text-stroke-width: 0;
+}
+
+.static main .works a[aria-current="true"] {
+    color: var(--pale);
+}
+
+.mask .works span {
+    color: #000;
+}
+
+.mask .works span.on {
+    color: #fff;
+}
+
+.open .mask .works {
+    opacity: 0;
+}
+
+.readout {
+    position: absolute;
+    top: var(--readout-top, 20vh);
+    left: var(--readout-left, 50vw);
+    font-size: clamp(10px, 1.05vw, 13px);
+    color: var(--pale);
+    white-space: nowrap;
+    transition: top 0.3s ease, left 0.3s ease;
+}
+
+.readout span {
+    display: block;
+    color: var(--ink);
+    opacity: 0.6;
+}
+
+/* ---------------------------------------------------------------- chrome */
+
+.what {
+    position: fixed;
+    z-index: 2;
+    left: var(--edge-x);
+    top: calc(var(--edge-y) + 22px);
+    max-width: 60%;
+    font-size: clamp(11px, 1.1vw, 14px);
+    line-height: 1.4;
+    opacity: 0.8;
+    transition: opacity 0.4s ease;
+}
+
+.back {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.open .back {
+    opacity: 0.8;
+    pointer-events: auto;
+}
+
+.open main,
+.open .what {
+    opacity: 0;
+}
+
+.open main .works a {
+    pointer-events: none;
+}
+
+/* Until YUP is running only the boot line shows. */
+body:not(.ready, .static) :is(main, .what, .corner) {
+    opacity: 0;
+}
+
+body:not(.ready, .static) :is(main .works a, .corner) {
+    pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ boot */
+
+.boot {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    display: grid;
+    place-content: center;
+    grid-auto-flow: column;
+    color: var(--pale);
+    font-size: clamp(14px, 1.6vw, 20px);
+    line-height: 1;
+    letter-spacing: 0.28em;
+    text-shadow: 0 0 2px #fff, 0 0 8px rgb(0 90 255 / 0.9), 0 0 22px rgb(0 90 255 / 0.6);
+    pointer-events: none;
+    animation: flicker 4.5s infinite;
+    transition: opacity 0.8s ease;
+}
+
+/* Pulsing the spans, not .boot, leaves its opacity free to fade out. */
+.boot-text {
+    animation: pulse 3s ease-in-out infinite;
+}
+
+.boot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.28) 0 1px, transparent 1px 3px);
+}
+
+.boot-cursor {
+    animation: blink 1s steps(1) infinite;
+}
+
+.ready .boot,
+.static .boot {
+    opacity: 0;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+}
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
+
+@keyframes flicker {
+    0%, 92%, 100% { filter: none; }
+    93% { filter: brightness(0.6); }
+    94% { filter: brightness(1.2); }
+    96% { filter: brightness(0.8); }
+}
+
+/* ---------------------------------------------------------------- phones */
+
+@media (max-width: 760px) {
+    :root {
+        --words: 15vw;
+    }
+
+    .works {
+        top: 20vh;
+    }
+
+    .what {
+        max-width: 85%;
+    }
+
+    .readout {
+        top: auto;
+        bottom: 12vh;
+        left: 5vw;
+        white-space: normal;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .boot,
+    .boot-text,
+    .boot-cursor {
+        animation: none;
+    }
+}

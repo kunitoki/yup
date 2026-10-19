@@ -1,0 +1,549 @@
+/* The pages next to the home page (start, modules, showcase, compare, the 404): the same black
+   field and corners, a huge outlined lowercase title like the home words, then plain monospace
+   text on hairlines. */
+
+@import "./base.css";
+
+body {
+    position: relative;
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+/* The corners belong to the page here, not to the screen, so they never sit on top of the text. */
+.corner {
+    position: absolute;
+}
+
+::selection {
+    background: rgb(0 90 255 / 0.45);
+}
+
+a {
+    color: var(--pale);
+    text-decoration: none;
+    border-bottom: 1px solid rgb(156 194 255 / 0.3);
+    transition: border-color 0.2s ease;
+}
+
+a:hover {
+    border-bottom-color: var(--pale);
+}
+
+code {
+    font: inherit;
+    color: #fff;
+}
+
+button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+
+/* ------------------------------------------------------------------- nav */
+
+.nav {
+    position: absolute;
+    z-index: 2;
+    left: var(--edge-x);
+    top: calc(var(--edge-y) + 26px);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em 1.8em;
+    font: 500 11px/1.3 var(--sans);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+}
+
+.nav a {
+    color: var(--ink);
+    border: 0;
+    opacity: 0.45;
+    transition: opacity 0.2s ease;
+}
+
+.nav a:hover,
+.nav a[aria-current="page"] {
+    opacity: 1;
+}
+
+.nav a[aria-current="page"] {
+    color: var(--pale);
+}
+
+/* ----------------------------------------------------------------- sheet */
+
+.sheet {
+    padding: 24vh var(--edge-x) 18vh;
+}
+
+.title {
+    margin-left: -0.04em;
+    color: transparent;
+    font: 900 min(15vw, 200px) / 0.86 var(--sans);
+    letter-spacing: -0.045em;
+    -webkit-text-stroke: 1px var(--outline);
+}
+
+.lead {
+    max-width: 62ch;
+    margin-top: 5vh;
+}
+
+.part {
+    max-width: 1000px;
+    margin-top: 14vh;
+}
+
+.part.wide {
+    max-width: none;
+}
+
+.label {
+    display: flex;
+    align-items: baseline;
+    gap: 1.4em;
+    margin-bottom: 28px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--hairline);
+    color: var(--pale);
+    font: 500 11px/1.3 var(--sans);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+}
+
+.label span {
+    color: var(--ink);
+    opacity: 0.45;
+}
+
+.label .blurb {
+    margin-left: auto;
+    font: 12px/1.4 var(--mono);
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: right;
+}
+
+.part > p,
+.part li,
+.part dd {
+    max-width: 70ch;
+}
+
+.part > p + p,
+.part > p + .code-block,
+.part > .rows + .code-block {
+    margin-top: 18px;
+}
+
+.muted {
+    opacity: 0.55;
+}
+
+.note {
+    margin-top: 18px;
+    font-size: 13px;
+    opacity: 0.6;
+}
+
+/* Definition rows: a term and its value on a hairline. */
+.rows {
+    display: grid;
+    grid-template-columns: 12rem 1fr;
+    margin-top: 22px;
+    border-top: 1px solid var(--hairline);
+}
+
+.rows dt,
+.rows dd {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.rows dt {
+    color: #fff;
+}
+
+/* ------------------------------------------------------------------ code */
+
+.code-block {
+    margin-top: 22px;
+    border-left: 1px solid var(--blue);
+}
+
+.code-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 0 10px 18px;
+}
+
+.code-bar > span,
+.code-bar button {
+    color: var(--ink);
+    font: 500 10px/1.3 var(--sans);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    opacity: 0.45;
+    transition: opacity 0.2s ease;
+}
+
+.code-bar button:hover,
+.code-bar button[aria-pressed="true"] {
+    opacity: 1;
+}
+
+.code-bar button[aria-pressed="true"] {
+    color: var(--pale);
+}
+
+.tabs {
+    display: flex;
+    gap: 1.6em;
+}
+
+pre.code {
+    overflow-x: auto;
+    padding: 2px 0 4px 18px;
+    background: none !important;
+    font: 13px/1.7 var(--mono);
+}
+
+pre.code code {
+    color: inherit;
+}
+
+/* ----------------------------------------------------------------- links */
+
+.links {
+    list-style: none;
+    border-top: 1px solid var(--hairline);
+}
+
+.links li {
+    max-width: none;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.links a {
+    display: block;
+    padding: 16px 0;
+    border: 0;
+    color: #fff;
+}
+
+.links a span {
+    display: block;
+    color: var(--ink);
+    opacity: 0.55;
+}
+
+.links a:hover {
+    color: var(--pale);
+}
+
+/* A compact list of references: small links flowing in rows. */
+.sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    list-style: none;
+    font-size: 12px;
+}
+
+.part .sources li {
+    max-width: none;
+}
+
+.sources a {
+    color: var(--ink);
+    opacity: 0.6;
+}
+
+.sources a:hover {
+    color: var(--pale);
+    opacity: 1;
+}
+
+/* --------------------------------------------------------------- modules */
+
+.filter {
+    width: min(100%, 420px);
+    margin-top: 5vh;
+    padding: 10px 0;
+    border: 0;
+    border-bottom: 1px solid var(--outline);
+    outline: none;
+    background: none;
+    color: #fff;
+    font: inherit;
+}
+
+.filter:focus {
+    border-bottom-color: var(--pale);
+}
+
+.modules {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 36px 48px;
+    list-style: none;
+}
+
+.modules li {
+    max-width: none;
+}
+
+.module-name {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 15px;
+    font-weight: 400;
+}
+
+.module-name a:first-child {
+    color: #fff;
+    border: 0;
+}
+
+.module-name a:first-child:hover {
+    color: var(--pale);
+}
+
+.module-name a + a {
+    font-size: 11px;
+}
+
+.modules p {
+    margin-top: 6px;
+    opacity: 0.7;
+}
+
+.modules p.muted {
+    font-size: 12px;
+    opacity: 0.45;
+}
+
+/* -------------------------------------------------------------- showcase */
+
+.gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+    gap: 44px 32px;
+}
+
+.gallery figure a:first-child {
+    display: block;
+    border: 0;
+}
+
+/* Screenshots come in many shapes: every frame is the same size, cropped from the center. */
+.gallery img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    filter: saturate(0.75) brightness(0.9);
+    transition: filter 0.4s ease;
+}
+
+.gallery figure:hover img {
+    filter: none;
+}
+
+.gallery figcaption {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 10px;
+    font-size: 12px;
+}
+
+.gallery figcaption span + span {
+    display: flex;
+    gap: 14px;
+}
+
+/* --------------------------------------------------------------- compare */
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.compare {
+    min-width: 920px;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.compare th,
+.compare td {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--hairline);
+    text-align: left;
+    vertical-align: top;
+}
+
+.compare thead th {
+    color: var(--ink);
+    font: 500 10px/1.3 var(--sans);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    opacity: 0.55;
+}
+
+/* The feature names line up with the page edge. */
+.compare th:first-child {
+    padding-left: 0;
+}
+
+/* The YUP column: a lit band of blue down the whole table, opened by a solid blue cap. */
+.compare thead th:nth-child(2),
+.compare td:nth-child(2) {
+    background: rgb(0 90 255 / 0.14);
+    box-shadow: inset 1px 0 0 rgb(0 90 255 / 0.55), inset -1px 0 0 rgb(0 90 255 / 0.55);
+}
+
+.compare thead th:nth-child(2) {
+    border-top: 2px solid var(--blue);
+    color: #fff;
+    opacity: 1;
+    text-shadow: 0 0 10px rgb(0 90 255 / 0.9);
+}
+
+.compare tbody th {
+    color: #fff;
+    font-weight: 400;
+}
+
+.compare td:nth-child(2) {
+    color: #fff;
+}
+
+.compare tbody tr:last-child td:nth-child(2) {
+    border-bottom-color: rgb(0 90 255 / 0.55);
+}
+
+.columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+    gap: 0 64px;
+}
+
+.columns ul,
+.part > ul:not(.links, .sources) {
+    padding-left: 1.2em;
+}
+
+.columns li + li,
+.part > ul:not(.links, .sources) li + li {
+    margin-top: 10px;
+}
+
+/* ------------------------------------------------------------------- 404 */
+
+.crt {
+    margin-top: 5vh;
+    color: var(--pale);
+    font-size: clamp(14px, 1.6vw, 20px);
+    letter-spacing: 0.28em;
+    text-shadow: 0 0 2px #fff, 0 0 8px rgb(0 90 255 / 0.9), 0 0 22px rgb(0 90 255 / 0.6);
+}
+
+.crt span {
+    animation: blink 1s steps(1) infinite;
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 36px;
+    margin-top: 6vh;
+    font: 500 11px/1.3 var(--sans);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+}
+
+.actions a,
+.actions button {
+    color: var(--pale);
+    border: 0;
+}
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px 72px;
+    padding: 0 var(--edge-x) calc(var(--edge-y) + 56px);
+    font-size: 12px;
+}
+
+.footer ul {
+    list-style: none;
+}
+
+.footer a {
+    color: var(--ink);
+    border: 0;
+    opacity: 0.55;
+}
+
+.footer a:hover {
+    opacity: 1;
+}
+
+.footer p {
+    flex-basis: 100%;
+    opacity: 0.35;
+}
+
+.footer p a {
+    color: inherit;
+    opacity: 1;
+}
+
+/* ---------------------------------------------------------------- phones */
+
+@media (max-width: 760px) {
+    .title {
+        font-size: 19vw;
+    }
+
+    .sheet {
+        padding-top: 30vh;
+    }
+
+    .rows {
+        grid-template-columns: 1fr;
+    }
+
+    .label .blurb {
+        display: none;
+    }
+
+    .rows dt {
+        padding-bottom: 0;
+        border-bottom: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .crt span {
+        animation: none;
+    }
+}

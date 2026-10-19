@@ -1,7 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
 import { defineConfig, normalizePath } from "vite";
-import tailwindcss from "@tailwindcss/vite";
 import { createHighlighter } from "shiki";
 
 const repoRoot = resolve(import.meta.dirname, "..");
@@ -13,24 +12,29 @@ const pages = ["index", "modules", "showcase", "compare", "get-started"];
 const siteUrl = "https://yup.audio";
 const socialImage = resolve(repoRoot, "docs/_static/images/yup_prism_synth.jpg");
 
+// Service worker that cross-origin isolates the site on GitHub Pages, which can't send the headers
+// the threaded YUP demos need. Served from the root so its scope covers every page.
+const miniCoi = resolve(repoRoot, "cmake/platforms/emscripten/mini-coi.js");
+const isolationHeaders = { "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "require-corp" };
+
 // GoatCounter site code (https://<code>.goatcounter.com). Analytics stay off while it is empty.
 const goatCounterCode = "yup";
 
 const docsDir = resolve(repoRoot, "docs");
 const docsUrl = "https://yup.readthedocs.io/en/latest";
 
-// Syntax colors tuned to the site palette.
+// Syntax colors in the site palette: blues and greys only.
 const codeTheme = {
     name: "yup",
     type: "dark",
-    colors: { "editor.background": "#00000000", "editor.foreground": "#E6EAF2" },
+    colors: { "editor.background": "#00000000", "editor.foreground": "#D8DDE0" },
     tokenColors: [
-        { scope: ["comment", "punctuation.definition.comment"], settings: { foreground: "#7C8798", fontStyle: "italic" } },
-        { scope: ["keyword", "storage", "variable.language", "keyword.control.directive", "punctuation.definition.directive"], settings: { foreground: "#FF7AB2" } },
-        { scope: ["string", "punctuation.definition.string"], settings: { foreground: "#FC6A5D" } },
-        { scope: ["constant.numeric", "constant.language", "constant.other"], settings: { foreground: "#D0BF69" } },
-        { scope: ["entity.name.function", "support.function"], settings: { foreground: "#67E8F9" } },
-        { scope: ["entity.name.type", "entity.name.class", "entity.name.scope-resolution", "entity.other.inherited-class", "support.type", "variable.parameter"], settings: { foreground: "#6FB6FF" } },
+        { scope: ["comment", "punctuation.definition.comment"], settings: { foreground: "#59606A", fontStyle: "italic" } },
+        { scope: ["keyword", "storage", "variable.language", "keyword.control.directive", "punctuation.definition.directive"], settings: { foreground: "#4D8DFF" } },
+        { scope: ["string", "punctuation.definition.string"], settings: { foreground: "#9CC2FF" } },
+        { scope: ["constant.numeric", "constant.language", "constant.other"], settings: { foreground: "#9CC2FF" } },
+        { scope: ["entity.name.function", "support.function"], settings: { foreground: "#FFFFFF" } },
+        { scope: ["entity.name.type", "entity.name.class", "entity.name.scope-resolution", "entity.other.inherited-class", "support.type", "variable.parameter"], settings: { foreground: "#C3D6F5" } },
     ],
 };
 
@@ -98,21 +102,12 @@ function analyticsTag() {
     return `<script data-goatcounter="https://${goatCounterCode}.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>`;
 }
 
-const moduleCount = () => readdirSync(resolve(repoRoot, "modules"), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith("yup_")).length;
-
-// Counts the list items or enabled chips inside the page's data-count="<name>" element,
-// so a stat can never disagree with the list it summarizes.
-function countItems(html, name) {
-    const block = html.match(new RegExp(`data-count="${name}"[^>]*>([\\s\\S]*?)</(?:div|ul)>`))[1];
-    return block.match(/<li|chip-on/g).length;
-}
-
 // Same rules as docutils' make_id, so links land on the section ids Sphinx emits.
 const sectionId = (text) => text.toLowerCase().normalize("NFKD").replace(/[^\x00-\x7f]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/^[-0-9]+|-+$/g, "");
 
-const plainText = (markdown) => markdown.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[`*]|<[^>]+>/g, "").trim();
+// Links keep their text; code marks, emphasis, HTML tags and {{ substitutions }} go.
+const plainText = (markdown) => markdown.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\{\{\s*[\w-]+\s*(:[^}]*)?\}\}/g, "").replace(/[`*]|<[^>]+>/g, "").trim();
 
 // One entry per h1-h3 section of the Sphinx docs: page title, heading, link, inline code
 // identifiers and the start of the section text. Loaded lazily by the search dialog.
@@ -149,7 +144,7 @@ function docsSearchIndex() {
                 continue;
             }
 
-            if (!entry || fence || /^\s*(:::|\(.+\)=|\||<!--)/.test(line))
+            if (!entry || fence || /^\s*(:::|\(.+\)=|\||<!--|\{\{\s*[\w-]+\s*(:[^}]*)?\}\}\s*$)/.test(line))
                 continue;
 
             for (const [, code] of line.matchAll(/`([\w:.]+)`/g))
@@ -163,10 +158,9 @@ function docsSearchIndex() {
     return entries.map((e) => ({ ...e, k: [...e.k].join(" "), t: e.t.length > 200 ? `${e.t.slice(0, 200)}...` : e.t }));
 }
 
-// Expands <!-- @name --> into partials/<name>.html, <!-- @code path --> into a highlighted
-// <pre> of partials/<path> and <!-- @count name --> into a number derived from the repository
-// or the page, then marks the current page's nav link. Also serves the docs search index as
-// the virtual:docs-index module.
+// Expands <!-- @name --> into partials/<name>.html and <!-- @code path --> into a highlighted
+// <pre> of partials/<path>, then marks the current page's nav link. Also serves the docs search
+// index as the virtual:docs-index module.
 function partials() {
     const repo = normalizePath(repoRoot).replace(/^\//, "");
 
@@ -178,6 +172,8 @@ function partials() {
             server.middlewares.use((req, _res, next) => {
                 if (req.url?.startsWith("/docs/") || req.url === "/logo.svg")
                     req.url = `/@fs/${repo}${req.url}`;
+                else if (req.url === "/mini-coi.js")
+                    req.url = `/@fs/${normalizePath(miniCoi).replace(/^\//, "")}`;
                 next();
             });
 
@@ -210,10 +206,7 @@ function partials() {
                         }))
                     .replaceAll(`data-nav href="./${page}"`, `data-nav aria-current="page" href="./${page}"`);
 
-                const counted = expanded.replace(/<!-- @count (\w+) -->/g, (_, name) =>
-                    name === "modules" ? moduleCount() : countItems(expanded, name));
-
-                return counted.replace("</head>", `${seoTags(page, counted)}\n${analyticsTag()}\n</head>`);
+                return expanded.replace("</head>", `${seoTags(page, expanded)}\n${analyticsTag()}\n</head>`);
             },
         },
         generateBundle() {
@@ -226,6 +219,7 @@ function partials() {
             });
             this.emitFile({ type: "asset", fileName: "robots.txt", source: `User-agent: *\nAllow: /\n\nSitemap: ${siteUrl}/sitemap.xml\n` });
             this.emitFile({ type: "asset", fileName: "og.jpg", source: readFileSync(socialImage) });
+            this.emitFile({ type: "asset", fileName: "mini-coi.js", source: readFileSync(miniCoi) });
         },
     };
 }
@@ -233,10 +227,14 @@ function partials() {
 export default defineConfig({
     root,
     base: "./",
-    plugins: [tailwindcss(), partials()],
+    plugins: [partials()],
     server: {
         // Screenshots are imported straight from the repository docs/.
         fs: { allow: [repoRoot] },
+        headers: isolationHeaders,
+    },
+    preview: {
+        headers: isolationHeaders,
     },
     build: {
         outDir: resolve(import.meta.dirname, "dist"),
