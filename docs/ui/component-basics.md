@@ -1,7 +1,5 @@
 # Component
 
-{{ pagedepth: 2 }}
-
 The `Component` class is the foundation of all GUI elements in YUP. Every
 visible or interactive element — a button, a slider, a window, or a custom
 drawing surface — derives from `Component`.
