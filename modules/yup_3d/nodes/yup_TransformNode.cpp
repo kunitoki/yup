@@ -67,15 +67,12 @@ const Matrix4& TransformNode::getLocalMatrix() const noexcept
 
 void TransformNode::attachedToEntity()
 {
-    // Only the node of the TransformNode pool places the entity, not subclasses stored in other pools
-    if (getEntity().get<TransformNode>() == this)
-        getEntity().setTransform (this);
+    getEntity().setTransform (this);
 }
 
 void TransformNode::detachedFromEntity()
 {
-    if (getEntity().get<TransformNode>() == nullptr)
-        getEntity().setTransform (nullptr);
+    getEntity().setTransform (nullptr);
 }
 
 void TransformNode::transformChanged() noexcept

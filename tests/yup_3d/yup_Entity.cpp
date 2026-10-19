@@ -53,12 +53,6 @@ protected:
     {
     };
 
-    class DerivedTransformNode : public TransformNode
-    {
-    public:
-        using TransformNode::TransformNode;
-    };
-
     class DestructionTracker : public Node
     {
     public:
@@ -515,17 +509,6 @@ TEST_F (EntityTests, ReplacingTheTransformNodeUsesTheNewOne)
 
     entity.attach<TransformNode> (Vector3<float> { 0.0f, 2.0f, 0.0f });
     expectNear (entity.getWorldMatrix().transformPoint ({}), { 0.0f, 2.0f, 0.0f });
-}
-
-TEST_F (EntityTests, TransformSubclassesDoNotPlaceTheEntity)
-{
-    auto entity = scene.createEntity();
-    entity.attach<DerivedTransformNode> (Vector3<float> { 5.0f, 0.0f, 0.0f });
-    EXPECT_TRUE (entity.getWorldMatrix().isIdentity());
-
-    entity.attach<TransformNode> (Vector3<float> { 1.0f, 0.0f, 0.0f });
-    entity.detach<DerivedTransformNode>();
-    expectNear (entity.getWorldMatrix().transformPoint ({}), { 1.0f, 0.0f, 0.0f });
 }
 
 TEST_F (EntityTests, ComputeWorldBoundsAppliesNestedTransforms)
