@@ -28,7 +28,7 @@ namespace yup
     A default constructed box is empty: expanding it by a point makes it contain just that
     point. Empty boxes are ignored when expanding by another box.
 
-    @see Mesh, Entity::computeWorldBounds
+    @see Ray::intersectBox, Matrix4
 */
 class YUP_API BoundingBox
 {

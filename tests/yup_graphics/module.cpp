@@ -30,6 +30,7 @@
 #endif
 
 #include "yup_AffineTransform.cpp"
+#include "yup_BoundingBox.cpp"
 #include "yup_Color.cpp"
 #include "yup_ColorGradient.cpp"
 #include "yup_CubicBezier.cpp"

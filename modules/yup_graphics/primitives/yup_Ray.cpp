@@ -89,4 +89,41 @@ std::optional<RayTriangleHit> Ray::intersectTriangle (const Vector3<float>& a, c
     return RayTriangleHit { distance, u, v };
 }
 
+std::optional<float> Ray::intersectBox (const BoundingBox& box, float minDistance, float maxDistance) const noexcept
+{
+    if (box.isEmpty())
+        return std::nullopt;
+
+    const float starts[] { origin.getX(), origin.getY(), origin.getZ() };
+    const float steps[] { direction.getX(), direction.getY(), direction.getZ() };
+    const float lows[] { box.getMin().getX(), box.getMin().getY(), box.getMin().getZ() };
+    const float highs[] { box.getMax().getX(), box.getMax().getY(), box.getMax().getZ() };
+
+    auto enter = minDistance;
+    auto leave = maxDistance;
+
+    // The ray is inside the box where it is between all three pairs of planes
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        if (steps[axis] == 0.0f)
+        {
+            if (starts[axis] < lows[axis] || starts[axis] > highs[axis])
+                return std::nullopt;
+
+            continue;
+        }
+
+        const auto t0 = (lows[axis] - starts[axis]) / steps[axis];
+        const auto t1 = (highs[axis] - starts[axis]) / steps[axis];
+
+        enter = jmax (enter, jmin (t0, t1));
+        leave = jmin (leave, jmax (t0, t1));
+
+        if (enter > leave)
+            return std::nullopt;
+    }
+
+    return enter;
+}
+
 } // namespace yup

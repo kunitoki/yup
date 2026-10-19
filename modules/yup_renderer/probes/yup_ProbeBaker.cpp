@@ -111,42 +111,6 @@ float getVolumeCellDiagonal (const SceneDrawList::IrradianceVolume& volume) noex
     return volume.world.transformVector ({ 2.0f * e.getX() / static_cast<float> (nx), 2.0f * e.getY() / static_cast<float> (ny), 2.0f * e.getZ() / static_cast<float> (nz) }).length();
 }
 
-/** The distance along @p ray to where it enters @p box, or a negative one when it misses it. */
-float getRayBoxEntry (const Ray& ray, const BoundingBox& box) noexcept
-{
-    auto entry = 0.0f;
-    auto exit = std::numeric_limits<float>::max();
-
-    for (int axis = 0; axis < 3; ++axis)
-    {
-        const auto origin = axis == 0 ? ray.getOrigin().getX() : (axis == 1 ? ray.getOrigin().getY() : ray.getOrigin().getZ());
-        const auto direction = axis == 0 ? ray.getDirection().getX() : (axis == 1 ? ray.getDirection().getY() : ray.getDirection().getZ());
-        const auto low = axis == 0 ? box.getMin().getX() : (axis == 1 ? box.getMin().getY() : box.getMin().getZ());
-        const auto high = axis == 0 ? box.getMax().getX() : (axis == 1 ? box.getMax().getY() : box.getMax().getZ());
-
-        if (std::abs (direction) < 1.0e-12f)
-        {
-            if (origin < low || origin > high)
-                return -1.0f;
-
-            continue;
-        }
-
-        auto t0 = (low - origin) / direction;
-        auto t1 = (high - origin) / direction;
-        if (t0 > t1)
-            std::swap (t0, t1);
-
-        entry = jmax (entry, t0);
-        exit = jmin (exit, t1);
-
-        if (entry > exit)
-            return -1.0f;
-    }
-
-    return entry;
-}
-
 } // namespace
 
 //==============================================================================
@@ -190,8 +154,7 @@ float ProbeBaker::getVolumeProbeValidity (Span<const SceneDrawList::DrawItem> it
 
         for (auto& hit : rays)
         {
-            const auto entry = getRayBoxEntry (hit.ray, bounds);
-            if (entry >= 0.0f && entry < hit.distance)
+            if (const auto entry = hit.ray.intersectBox (bounds, 0.0f, hit.distance); entry && *entry < hit.distance)
                 candidates.push_back (&hit);
         }
 

@@ -45,7 +45,7 @@ public:
     /** Returns where a world space ray enters the bounds of the mesh, placed by the entity.
 
         The box is tested in the space of the mesh, so it stays tight around rotated meshes.
-        Visibility is ignored. See Ray::intersect() for the range of distances.
+        Visibility is ignored. See Ray::intersectBox() for the range of distances.
 
         @return The distance along the ray, or nothing without a mesh, without an entity, for a
                 mesh flattened by a zero scale, or when the ray misses it.

@@ -38,7 +38,7 @@ std::optional<float> MeshNode::intersectRay (const Ray& ray, float minDistance, 
     if (std::abs (determinant) <= 1.0e-12f)
         return std::nullopt;
 
-    return ray.transformedBy (world.inverted()).intersect (mesh->getBounds(), minDistance, maxDistance);
+    return ray.transformedBy (world.inverted()).intersectBox (mesh->getBounds(), minDistance, maxDistance);
 }
 
 } // namespace yup

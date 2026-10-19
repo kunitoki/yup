@@ -42,8 +42,9 @@ struct YUP_API RayTriangleHit
 /** A half line in 3D space, starting at an origin and extending along a direction.
 
     Rays are used for picking: Ray::fromViewportPoint() turns a point on screen into the ray
-    of all the 3D points displayed under it, which can then be intersected with planes or
-    triangles.
+    of all the 3D points displayed under it, which can then be intersected with planes,
+    triangles or boxes. transformedBy() keeps distances, so a hit found in the local space of
+    a mesh is at the same distance along the world space ray.
 
     @see Vector3, Matrix4, MeshSurfaceMapper
 */
@@ -99,6 +100,12 @@ public:
         return origin + direction * distance;
     }
 
+    /** Returns the ray transformed by a matrix, with the same distances to the same points. */
+    [[nodiscard]] constexpr Ray transformedBy (const Matrix4& matrix) const noexcept
+    {
+        return { matrix.transformPoint (origin), matrix.transformVector (direction) };
+    }
+
     //==============================================================================
     /** Intersects the ray with a plane.
 
@@ -123,6 +130,20 @@ public:
         @return The hit distance and barycentric coordinates, or std::nullopt if the ray misses.
     */
     [[nodiscard]] std::optional<RayTriangleHit> intersectTriangle (const Vector3<float>& a, const Vector3<float>& b, const Vector3<float>& c, bool cullBackFaces) const noexcept;
+
+    /** Intersects the ray with an axis aligned box (the slab method).
+
+        @param box          The box to test, an empty box is never hit.
+        @param minDistance  The smallest distance to consider, the near plane of a camera for example.
+        @param maxDistance  The largest distance to consider.
+
+        @return The nearest distance in [minDistance, maxDistance] where the ray is inside the box:
+                where it enters it, or minDistance when it is already inside. std::nullopt if the
+                ray misses the box within the range.
+    */
+    [[nodiscard]] std::optional<float> intersectBox (const BoundingBox& box,
+                                                     float minDistance = 0.0f,
+                                                     float maxDistance = std::numeric_limits<float>::max()) const noexcept;
 
 private:
     Vector3<float> origin;

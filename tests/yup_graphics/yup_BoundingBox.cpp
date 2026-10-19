@@ -21,7 +21,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_3d/yup_3d.h>
+#include <yup_graphics/yup_graphics.h>
 
 using namespace yup;
 

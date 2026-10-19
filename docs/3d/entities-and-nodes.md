@@ -91,7 +91,7 @@ Bounds are boxes, so a mesh that encloses others, like a room or the body of a
 device, hits first whenever the ray enters it in front of them. Pass a filter
 to `raycast()` to skip such entities, or test the candidates one by one with
 `Entity::intersectRay()`, which returns the nearest hit in the visible subtree
-of an entity. `Ray::intersect()` tests a single `BoundingBox`.
+of an entity. `Ray::intersectBox()` tests a single box.
 
 ## Identifiers
 

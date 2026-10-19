@@ -23,7 +23,6 @@
 #include "../mocks/rive_ore.h"
 #include "../mocks/yup_rhi.h"
 
-#include "yup_BoundingBox.cpp"
 #include "yup_CameraNode.cpp"
 #include "yup_Entity.cpp"
 #include "yup_GltfModel.cpp"
@@ -35,7 +34,6 @@
 #include "yup_NodeTypeId.cpp"
 #include "yup_NodeView.cpp"
 #include "yup_Prefab.cpp"
-#include "yup_Ray.cpp"
 #include "yup_Scene.cpp"
 #include "yup_Texture.cpp"
 #include "yup_TransformNode.cpp"
