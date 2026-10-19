@@ -37,7 +37,7 @@ namespace yup
     when the scene has one, and by the sun, as single scattering with no shadowing: light reaches the
     fog everywhere, even behind objects that would shadow it.
 
-    @see Scene::setWorldFog
+    @see WorldFogNode
 */
 struct YUP_API WorldFog
 {
@@ -60,6 +60,40 @@ struct YUP_API WorldFog
     float getOpticalDepth (const Vector3<float>& from, const Vector3<float>& to) const noexcept;
 
     bool operator== (const WorldFog&) const = default;
+};
+
+//==============================================================================
+/** A scene feature: the height fog filling the whole scene.
+
+    The fog renders only when WorldFog::enabled is true, its density is positive and every field
+    is finite. A new node starts with the fog enabled. The renderer draws it on its full tier, and
+    on its raster tier where the device allows it; elsewhere the frames render without it. A change
+    of the fog that is drawn restarts the full tier's temporal accumulation.
+
+    Like every scene feature, the first WorldFogNode found depth-first in the visible part of the
+    tree wins, see SceneSettings::resolve(). Without one the scene has no fog.
+
+    @code
+    auto& fogNode = scene->getRoot()->attach<yup::WorldFogNode>();
+    fogNode.fog.density = 0.05f;
+    fogNode.fog.heightFalloff = 0.2f;
+    @endcode
+
+    @see WorldFog, SceneSettings
+*/
+class YUP_API WorldFogNode : public Node
+{
+public:
+    /** Creates a node with the default fog, enabled. */
+    WorldFogNode() noexcept { fog.enabled = true; }
+
+    /** Creates a node with a fog, taken as is. */
+    explicit WorldFogNode (const WorldFog& worldFog) noexcept
+        : fog (worldFog)
+    {
+    }
+
+    WorldFog fog; ///< The fog.
 };
 
 } // namespace yup

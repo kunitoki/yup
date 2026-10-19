@@ -121,7 +121,8 @@ public:
     /** What a bake reads besides the ForwardPass drawing the captures. */
     struct Inputs
     {
-        const Scene& scene;                              ///< The scene to capture: its tree, lights, ambient light and environment.
+        const Scene& scene;                              ///< The scene to capture: its tree and lights.
+        const SceneSettings& sceneSettings;              ///< The resolved scene features: the ambient light, the environment and the default light.
         const RenderSettings& settings;                  ///< The settings of the renderer, the captures render on the raster tier with hard shadows.
         const SceneDrawList& drawList;                   ///< The probes and volumes of the frame (SceneDrawList::getReflectionProbes(), getIrradianceVolumes()).
         const RenderCapabilities::DeviceFacts& facts;    ///< The device, for the raster capabilities the captures render with.

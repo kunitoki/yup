@@ -49,13 +49,13 @@ bool LightingInputs::hasMaterialLayers (Span<const SceneDrawList::DrawItem> item
     });
 }
 
-GpuTexture::Ptr LightingInputs::prepareEnvironment (ProbeRenderer& probes, const Scene& scene, EnvironmentCube& slot)
+GpuTexture::Ptr LightingInputs::prepareEnvironment (ProbeRenderer& probes, const SceneSettings& settings, EnvironmentCube& slot)
 {
-    const auto& environment = scene.getEnvironment();
+    const auto& environment = settings.environment;
     if (environment != slot.environment)
         slot = { environment };
 
-    if (environment == nullptr || scene.getEnvironmentIntensity() <= 0.0f)
+    if (environment == nullptr || settings.environmentIntensity <= 0.0f)
         return nullptr;
 
     // A replaced cube stays alive until its replacement exists, so the two never share an address
@@ -132,13 +132,13 @@ GpuTexture::Ptr LightingInputs::createBlackCube (const GpuDevice::Ptr& device)
     return cube;
 }
 
-LightingInputs LightingInputs::create (const Scene& scene, const GpuTexture::Ptr& environmentCube,
+LightingInputs LightingInputs::create (const SceneSettings& settings, const GpuTexture::Ptr& environmentCube,
                                        Span<const SceneDrawList::Light> lights, Span<const int> firstShadowRecord)
 {
     LightingInputs inputs;
     auto& block = inputs.block;
 
-    const auto ambient = scene.getAmbientColor();
+    const auto ambient = settings.ambientColor;
     block.ambient[0] = lightingSrgbToLinear (ambient.getRedFloat());
     block.ambient[1] = lightingSrgbToLinear (ambient.getGreenFloat());
     block.ambient[2] = lightingSrgbToLinear (ambient.getBlueFloat());
@@ -153,17 +153,17 @@ LightingInputs LightingInputs::create (const Scene& scene, const GpuTexture::Ptr
     for (size_t slot = 0; slot < order.size(); ++slot)
         inputs.packedSlots[order[slot]] = static_cast<uint32> (slot);
 
-    const auto& environment = scene.getEnvironment();
-    if (environment == nullptr || scene.getEnvironmentIntensity() <= 0.0f || environmentCube == nullptr)
+    const auto& environment = settings.environment;
+    if (environment == nullptr || settings.environmentIntensity <= 0.0f || environmentCube == nullptr)
         return inputs;
 
     inputs.environment = environmentCube;
 
     const auto lastLevel = static_cast<float> (environment->getNumLevels() - 1);
-    block.ambient[3] = scene.isEnvironmentVisible() ? 1.0f : 0.0f;
-    block.environmentInfo[0] = scene.getEnvironmentIntensity();
+    block.ambient[3] = settings.environmentVisible ? 1.0f : 0.0f;
+    block.environmentInfo[0] = settings.environmentIntensity;
     block.environmentInfo[1] = lastLevel;
-    block.environmentInfo[2] = scene.getEnvironmentBlur() * lastLevel;
+    block.environmentInfo[2] = settings.environmentBlur * lastLevel;
 
     const auto& coefficients = environment->getIrradianceCoefficients();
     for (size_t i = 0; i < coefficients.size(); ++i)

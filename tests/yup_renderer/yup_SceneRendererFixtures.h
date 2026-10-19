@@ -82,9 +82,9 @@ protected:
         sun->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f));
         scene.getRoot()->addChild (sun);
 
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
-        scene.setEnvironmentVisible (true);
-        scene.setToneMapping (Scene::ToneMapping::aces);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
+        scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
     }
 
     /** Emissive, alpha-masked and blended quads over a white plate, lit by eight colored point lights. */
@@ -213,7 +213,7 @@ protected:
         aimCamera (*sun, { -10.0f * std::sin (0.6f), 10.0f * std::cos (0.6f), 0.0f }, {});
         scene.getRoot()->addChild (sun);
 
-        scene.setAmbientColor (Color (0xff3f3f3f)); // 0.05 once linear
+        scene.getRoot()->attach<AmbientLightNode> (Color (0xff3f3f3f)); // 0.05 once linear
         return light;
     }
 
@@ -578,7 +578,7 @@ protected:
         auto entity = EntityNode::Ptr (new EntityNode ("glow"));
         entity->attach<MeshNode> (mesh);
         scene.getRoot()->addChild (entity);
-        scene.setBackgroundColor (Colors::black);
+        scene.getRoot()->attach<BackgroundNode> (Colors::black);
     }
 
     /** Turns bloom on or off in the render settings of a renderer. */
@@ -795,7 +795,7 @@ protected:
             ASSERT_TRUE (image.isValid()) << name;
 
             // Something other than the background was drawn in the middle of the frame
-            const auto background = scene.getBackgroundColor();
+            const auto background = SceneSettings::resolve (scene).backgroundColor;
             bool drewSomething = false;
             for (int y = 32; y < 96 && ! drewSomething; y += 4)
                 for (int x = 32; x < 96 && ! drewSomething; x += 4)
@@ -895,7 +895,7 @@ protected:
                   fog.heightFalloff = 0.3f;
                   fog.baseHeight = 1.0f;
                   fog.anisotropy = 0.6f;
-                  scene.setWorldFog (fog);
+                  scene.getRoot()->attach<WorldFogNode> (fog);
               } },
             { "fog without density", [] (Scene& scene)
               {
@@ -903,7 +903,7 @@ protected:
                   WorldFog fog;
                   fog.enabled = true;
                   fog.density = 0.0f;
-                  scene.setWorldFog (fog);
+                  scene.getRoot()->attach<WorldFogNode> (fog);
               } },
         };
 
@@ -1102,7 +1102,7 @@ protected:
         scene.getRoot()->addChild (camera);
         scene.setActiveCamera (camera.get());
 
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
     }
 
     /** The world position of a quad center of buildLightGridScene(). */
@@ -1164,7 +1164,7 @@ protected:
         material->metallicFactor = 0.0f;
 
         Scene scene;
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
         std::vector<Vector3<float>> centers;
         for (int row = 0; row < 4; ++row)
@@ -1316,7 +1316,7 @@ protected:
         {
             Scene scene;
             addLongGround (scene).castsShadows = castsShadows;
-            background = scene.getBackgroundColor();
+            background = SceneSettings::resolve (scene).backgroundColor;
 
             auto camera = EntityNode::Ptr (new EntityNode ("camera"));
             camera->attach<CameraNode>();
@@ -2292,7 +2292,7 @@ protected:
         scene.getRoot()->addChild (camera);
         scene.setActiveCamera (camera.get());
 
-        scene.setAmbientColor (Color (0xff3f3f3f)); // 0.05 once linear
+        scene.getRoot()->attach<AmbientLightNode> (Color (0xff3f3f3f)); // 0.05 once linear
         return light;
     }
 
@@ -2638,7 +2638,7 @@ protected:
         {
             Scene scene;
             addGround (scene, 2.0f);
-            scene.setAmbientColor (Color (0xff3f3f3f));
+            scene.getRoot()->attach<AmbientLightNode> (Color (0xff3f3f3f));
 
             auto sun = EntityNode::Ptr (new EntityNode ("sun"));
             auto& light = sun->attach<LightNode>();
@@ -3008,7 +3008,7 @@ vec4 encodeLuma(vec3 c)
 
             Scene scene;
             addPlate (scene, material);
-            scene.setAmbientColor (Colors::black);
+            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
             auto light = EntityNode::Ptr (new EntityNode ("point"));
             light->attach<LightNode> (LightNode::Type::point).radius = radius;
@@ -3038,7 +3038,7 @@ vec4 encodeLuma(vec3 c)
         {
             Scene scene;
             addPlate (scene, material);
-            scene.setAmbientColor (Colors::black);
+            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
             auto light = EntityNode::Ptr (new EntityNode ("point"));
             light->attach<LightNode> (LightNode::Type::point).radius = radius;
@@ -3080,7 +3080,7 @@ vec4 encodeLuma(vec3 c)
 
             Scene scene;
             auto* plate = addPlate (scene, material);
-            scene.setAmbientColor (Colors::black);
+            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
             const auto tilt = Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, -MathConstants<float>::pi * 0.25f);
             plate->setRotation (tilt);
@@ -3134,7 +3134,7 @@ vec4 encodeLuma(vec3 c)
 
         Scene scene;
         addPlate (scene, material);
-        scene.setAmbientColor (Color (0xff404040));
+        scene.getRoot()->attach<AmbientLightNode> (Color (0xff404040));
 
         const auto addLight = [&] (LightNode::Type type, float radius, Vector3<float> position, const Quaternion& rotation)
         {
@@ -3296,7 +3296,7 @@ vec4 encodeLuma(vec3 c)
         scene.getRoot()->addChild (entity);
 
         addCamera (scene, { 0.55f, 0.35f, 0.0f }, { 0.05f, 0.0f, 0.0f });
-        scene.setAmbientColor (Color (0xff3f3f3f)); // 0.05 once linear
+        scene.getRoot()->attach<AmbientLightNode> (Color (0xff3f3f3f)); // 0.05 once linear
         return sun;
     }
 
@@ -3579,8 +3579,8 @@ vec4 encodeLuma(vec3 c)
         const auto elevation = degreesToRadians (30.0f);
         addCamera (scene, foot + Vector3<float> (0.0f, std::sin (elevation), std::cos (elevation)) * 0.9f, foot);
 
-        scene.setUsingDefaultLight (false);
-        scene.setAmbientColor (Color (0xffbcbcbc));
+        scene.getRoot()->attach<DefaultLightNode> (false);
+        scene.getRoot()->attach<AmbientLightNode> (Color (0xffbcbcbc));
     }
 
     /** The ground just in front of the box face of buildContactCreaseScene(), in a texture or image
@@ -3781,7 +3781,7 @@ vec4 encodeLuma(vec3 c)
         {
             Scene scene;
             buildContactCreaseScene (scene);
-            scene.setAmbientColor (Colors::black);
+            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
             auto sun = EntityNode::Ptr (new EntityNode ("sun"));
             sun->attach<LightNode>();
@@ -3907,7 +3907,7 @@ vec4 encodeLuma(vec3 c)
         {
             Scene scene;
             buildContactCreaseScene (scene);
-            scene.setAmbientColor (Colors::black);
+            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
             // Diffuse only: no dielectric specular, so only the irradiance tells the skies apart
             auto material = Material::Ptr (new Material());
@@ -3918,7 +3918,7 @@ vec4 encodeLuma(vec3 c)
             auto* box = scene.getRoot()->findChild ("box");
             box->getNode<MeshNode>()->mesh = makeBox (0.3f, material);
 
-            scene.setEnvironment (new EnvironmentMap ([skyAbove] (const Vector3<float>& direction)
+            scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([skyAbove] (const Vector3<float>& direction)
             {
                 const auto up = jlimit (0.0f, 1.0f, (skyAbove ? direction.getY() : -direction.getY()) * 0.5f + 0.5f);
                 return Vector3<float> (1.0f, 1.0f, 1.0f) * (0.05f + 2.0f * up * up);
@@ -4023,7 +4023,7 @@ vec4 encodeLuma(vec3 c)
             scene.getRoot()->addChild (makeHorizontalQuad ("emitter", 2.0f, { -30.0f, -40.0f, 60.0f, 41.5f }, false, makeEmitterMaterial ({ 0.0f, 1.0f, 0.0f })));
 
         addCamera (scene, { 0.0f, 1.5f, 2.5f }, {});
-        scene.setUsingDefaultLight (false);
+        scene.getRoot()->attach<DefaultLightNode> (false);
     }
 
     /** The middle of the floor of buildMirrorFloorScene() in a frame of @p size x @p size. */
@@ -4330,7 +4330,7 @@ vec4 encodeLuma(vec3 c)
         {
             Scene scene;
             buildMirrorFloorScene (scene, false);
-            scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& d)
+            scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& d)
             {
                 return Vector3<float> (0.6f + 0.55f * jlimit (-1.0f, 1.0f, 2.5f * d.getX()),
                                        0.3f + 0.3f * d.getY(),
@@ -4381,7 +4381,7 @@ vec4 encodeLuma(vec3 c)
         {
             Scene scene;
             buildMirrorFloorScene (scene, false);
-            scene.setAmbientColor (Colors::black);
+            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
             scene.getRoot()->addChild (makeHorizontalQuad ("blue", 2.0f, { -30.0f, -40.0f, 30.0f, 41.5f }, false, makeEmitterMaterial ({ 0.0f, 0.0f, 3.0f })));
             scene.getRoot()->addChild (makeHorizontalQuad ("dim", 2.0f, { 0.0f, -40.0f, 30.0f, 41.5f }, false, makeEmitterMaterial ({ 0.006f, 0.006f, 0.006f })));
             addReflectionProbe (scene, { 0.0f, 1.0f, -1.0f }, 20.0f);
@@ -4442,9 +4442,9 @@ vec4 encodeLuma(vec3 c)
         room->attach<MeshNode> (makeBox (10.0f, makeEmitterMaterial ({ 0.5f, 0.5f, 0.5f }), true));
         scene.getRoot()->addChild (room);
 
-        scene.setAmbientColor (Colors::black);
-        scene.setUsingDefaultLight (false);
-        scene.setToneMapping (Scene::ToneMapping::reinhard);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot()->attach<DefaultLightNode> (false);
+        scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
         addReflectionProbe (scene, { 0.0f, 0.0f, 2.0f }, 30.0f).parallaxCorrection = false;
 
         SceneRenderer renderer;
@@ -4485,8 +4485,8 @@ vec4 encodeLuma(vec3 c)
         const auto render = [&] (bool parallax)
         {
             Scene scene;
-            scene.setAmbientColor (Colors::black);
-            scene.setUsingDefaultLight (false);
+            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+            scene.getRoot()->attach<DefaultLightNode> (false);
 
             auto mirror = Material::Ptr (new Material());
             mirror->metallicFactor = 1.0f;
@@ -4745,9 +4745,9 @@ vec4 encodeLuma(vec3 c)
             scene.getRoot()->addChild (makeWallQuad ("divider", 0.0f, { -3.0f, 0.0f, 6.0f, 3.0f }, true, gray));
         }
 
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
-        scene.setAmbientColor (Colors::black);
-        scene.setUsingDefaultLight (false);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot()->attach<DefaultLightNode> (false);
         addCamera (scene, { 0.0f, 11.0f, 0.0f }, {}, { 0.0f, 0.0f, -1.0f });
     }
 
@@ -4869,9 +4869,9 @@ vec4 encodeLuma(vec3 c)
         entity->attach<MeshNode> (wall);
         scene.getRoot()->addChild (entity);
 
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
-        scene.setAmbientColor (Colors::black);
-        scene.setUsingDefaultLight (false);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot()->attach<DefaultLightNode> (false);
         addCamera (scene, { 0.0f, 4.0f, 2.5f }, { 0.0f, 0.0f, -0.5f });
     }
 
@@ -5187,7 +5187,7 @@ vec4 encodeLuma(vec3 c)
         {
             Scene scene;
             buildRedRoomScene (scene, false);
-            scene.setEnvironment (nullptr);
+            scene.getRoot()->attach<EnvironmentNode> (nullptr);
             addLeftVolume (scene);
 
             SceneRenderer renderer;
@@ -5219,7 +5219,7 @@ vec4 encodeLuma(vec3 c)
         SceneRenderer renderer;
         setTierForExactFrames (renderer, tier);
         const auto full = renderToImage (renderer, scene, 64);
-        scene.setEnvironmentIntensity (0.25f);
+        scene.getRoot()->getNode<EnvironmentNode>()->intensity = 0.25f;
         const auto quarter = renderToImage (renderer, scene, 64);
         ASSERT_TRUE (full.isValid() && quarter.isValid()) << renderer.getLastError();
         EXPECT_EQ (getNumVolumeBakes (renderer), 1); // An environment change never bakes it again
@@ -5465,7 +5465,7 @@ vec4 encodeLuma(vec3 c)
     {
         Scene scene;
         addSphere (scene, radius, std::move (material));
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         sun->attach<LightNode>().intensity = 3.0f;
@@ -5571,10 +5571,10 @@ vec4 encodeLuma(vec3 c)
     {
         Scene scene;
         addPlate (scene, makeLayeredMaterial ({ 0.0f, 0.0f, 0.0f }, 0.0f, 0.0f, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f));
-        scene.setAmbientColor (Colors::black);
-        scene.setUsingDefaultLight (false);
-        scene.setToneMapping (Scene::ToneMapping::reinhard);
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 4.0f, 4.0f); }, 32, 3));
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot()->attach<DefaultLightNode> (false);
+        scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 4.0f, 4.0f); }, 32, 3));
 
         SceneRenderer renderer;
         setTierForExactFrames (renderer, tier);
@@ -5684,7 +5684,7 @@ vec4 encodeLuma(vec3 c)
         {
             Scene scene;
             addSphere (scene, 1.5f, makeLayeredMaterial ({ 0.8f, 0.05f, 0.05f }, clearcoat, 0.05f, {}, 0.0f));
-            scene.setAmbientColor (Colors::black);
+            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
             auto sun = EntityNode::Ptr (new EntityNode ("sun"));
             sun->attach<LightNode>().intensity = 3.0f;
@@ -5749,10 +5749,10 @@ vec4 encodeLuma(vec3 c)
     {
         Scene scene;
         addPlate (scene, makeLayeredMaterial ({ 1.0f, 1.0f, 1.0f }, 0.0f, 0.0f, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.0f));
-        scene.setAmbientColor (Colors::black);
-        scene.setUsingDefaultLight (false);
-        scene.setToneMapping (Scene::ToneMapping::reinhard);
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (1.0f, 1.0f, 1.0f); }, 32, 3));
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot()->attach<DefaultLightNode> (false);
+        scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (1.0f, 1.0f, 1.0f); }, 32, 3));
 
         SceneRenderer renderer;
         setTierForExactFrames (renderer, tier);
@@ -5781,9 +5781,9 @@ vec4 encodeLuma(vec3 c)
 
             Scene scene;
             addPlate (scene, material)->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, degreesToRadians (70.0f)));
-            scene.setAmbientColor (Colors::black);
-            scene.setUsingDefaultLight (false);
-            scene.setToneMapping (Scene::ToneMapping::reinhard);
+            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+            scene.getRoot()->attach<DefaultLightNode> (false);
+            scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
 
             auto& renderer = sharedRenderer();
             setTierForExactFrames (renderer, tier);
@@ -5821,8 +5821,8 @@ vec4 encodeLuma(vec3 c)
         floor.specularFactor = 0.0f;
         floor.clearcoatFactor = 1.0f;
         floor.clearcoatRoughnessFactor = 0.04f;
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 0.0f); }, 32, 3));
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 0.0f); }, 32, 3));
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
         SceneRenderer renderer;
         setTierForExactFrames (renderer, tier);
@@ -5885,8 +5885,8 @@ vec4 encodeLuma(vec3 c)
     */
     static CameraNode& setUpDepthOfFieldScene (Scene& scene, float focusDistance)
     {
-        scene.setBackgroundColor (Colors::black);
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<BackgroundNode> (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
         addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
 
         auto& camera = *scene.getActiveCamera();
@@ -6053,8 +6053,8 @@ vec4 encodeLuma(vec3 c)
             buildBarsScene (scene, 10.0f);
             if (overEnvironment)
             {
-                scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
-                scene.setEnvironmentVisible (true);
+                scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+                scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
             }
 
             SceneRenderer renderer;
@@ -6147,8 +6147,8 @@ vec4 encodeLuma(vec3 c)
         // The halo over the background color is spread light, composited in radiance as over a
         // visible black environment (preflight R20, R21), not dimmed by its partial coverage
         setDepthOfField (renderer, true);
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
-        scene.setEnvironmentVisible (true);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+        scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
         const auto overEnvironment = renderToImage (renderer, scene, size);
         ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
 
@@ -6190,7 +6190,7 @@ vec4 encodeLuma(vec3 c)
 
         Scene scene;
         setUpDepthOfFieldScene (scene, 0.2f);
-        scene.setBackgroundColor (Colors::red);
+        scene.getRoot()->attach<BackgroundNode> (Colors::red);
         addEmitter (scene, { -1.5f, -1.5f, 3.0f, 3.0f }, 10.0f, 8.0f);
 
         auto& renderer = sharedRenderer();
@@ -6235,8 +6235,8 @@ vec4 encodeLuma(vec3 c)
         const auto overBackground = renderToImage (renderer, scene, size);
         ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
 
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
-        scene.setEnvironmentVisible (true);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+        scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
         const auto overEnvironment = renderToImage (renderer, scene, size);
         ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
 
@@ -6433,8 +6433,8 @@ vec4 encodeLuma(vec3 c)
     */
     static EntityNode* buildMovingBarScene (Scene& scene, float emission = 2.0f)
     {
-        scene.setBackgroundColor (Colors::black);
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<BackgroundNode> (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
         addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
         return addMotionQuad (scene, { -0.1f, -0.5f, 0.2f, 1.0f }, emission);
     }
@@ -6523,9 +6523,9 @@ vec4 encodeLuma(vec3 c)
     */
     static CameraNode& addFogCamera (Scene& scene, Vector3<float> target = { 0.0f, 0.0f, -1.0f }, Vector3<float> eye = {})
     {
-        scene.setUsingDefaultLight (false);
-        scene.setBackgroundColor (Colors::black);
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<DefaultLightNode> (false);
+        scene.getRoot()->attach<BackgroundNode> (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
         addCamera (scene, eye, target);
         return *scene.getActiveCamera();
     }
@@ -6548,12 +6548,12 @@ vec4 encodeLuma(vec3 c)
     static void buildFogWallsScene (Scene& scene, bool withFog)
     {
         addFogCamera (scene);
-        scene.setAmbientColor (fogAmbientColor());
+        scene.getRoot()->attach<AmbientLightNode> (fogAmbientColor());
         addEmitter (scene, { -3.0f, -1.0f, 3.0f, 2.0f }, 5.0f, 1.0f);
         addEmitter (scene, { 0.0f, -4.0f, 12.0f, 8.0f }, 20.0f, 1.0f);
 
         if (withFog)
-            scene.setWorldFog (makeFog (0.08f));
+            scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
     }
 
     /** The pixels of the near wall, the far wall and the background of buildFogWallsScene() at fogSize. */
@@ -6699,7 +6699,7 @@ vec4 encodeUnit(float value)
             // The reference takes the same route with fog too faint to change anything
             const auto read = [&] (const WorldFog& sceneFog)
             {
-                scene.setWorldFog (sceneFog);
+                scene.getRoot()->attach<WorldFogNode> (sceneFog);
                 SceneRenderer renderer;
                 setFogTier (renderer, tier);
                 const auto sceneColor = renderFogSceneColor (renderer, scene);
@@ -6771,8 +6771,8 @@ vec4 encodeUnit(float value)
             Scene scene;
             auto& camera = addFogCamera (scene);
             camera.zFar = camera.zNear * 0.5f;
-            scene.setAmbientColor (fogAmbientColor());
-            scene.setWorldFog (makeFog (0.08f));
+            scene.getRoot()->attach<AmbientLightNode> (fogAmbientColor());
+            scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
 
             SceneRenderer renderer;
             setFogTier (renderer, tier);
@@ -6801,7 +6801,7 @@ vec4 encodeUnit(float value)
             Scene scene;
             auto& camera = addFogCamera (scene, eye + direction, eye);
             camera.zFar = 0.0f;
-            scene.setWorldFog (fog);
+            scene.getRoot()->attach<WorldFogNode> (fog);
 
             for (const auto y : { 2, 32, 61 })
                 directions.push_back (pixelDirection (camera, 32, y, fogSize));
@@ -6858,11 +6858,11 @@ vec4 encodeUnit(float value)
     {
         Scene scene;
         addFogCamera (scene);
-        scene.setAmbientColor (fogAmbientColor());
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
-        scene.setEnvironmentIntensity (0.4f);
-        scene.setExposure (2.0f);
-        scene.setWorldFog (makeFog (0.08f));
+        scene.getRoot()->attach<AmbientLightNode> (fogAmbientColor());
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.getRoot()->getNode<EnvironmentNode>()->intensity = 0.4f;
+        scene.getRoot()->attach<ExposureNode> (2.0f);
+        scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
 
         SceneRenderer renderer;
         setFogTier (renderer, tier);
@@ -6874,7 +6874,7 @@ vec4 encodeUnit(float value)
         ASSERT_EQ (red.size(), static_cast<size_t> (fogSize * fogSize));
 
         // L0 of a uniform environment is its radiance
-        const auto meanRadiance = scene.getEnvironment()->getIrradianceCoefficients()[0].getX();
+        const auto meanRadiance = SceneSettings::resolve (scene).environment->getIrradianceCoefficients()[0].getX();
         EXPECT_NEAR (meanRadiance, 0.5f, 1.0e-3f);
         const auto expected = (fogAmbientRadiance() + meanRadiance * 0.4f) * 2.0f;
         RecordProperty ("measured", String (red[static_cast<size_t> (32 * fogSize + 32)], 5).toStdString());
@@ -6892,7 +6892,7 @@ vec4 encodeUnit(float value)
     {
         Scene scene;
         addFogCamera (scene).zFar = 0.0f;
-        scene.setWorldFog (makeFog (0.08f));
+        scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
 
         auto dark = EntityNode::Ptr (new EntityNode ("dark"));
         dark->attach<LightNode>().intensity = 0.0f;
@@ -6933,8 +6933,8 @@ vec4 encodeUnit(float value)
         camera.zFar = 10.0f;
         camera.fStop = 1.4f;
         camera.focusDistance = 0.2f;
-        scene.setAmbientColor (fogAmbientColor());
-        scene.setWorldFog (makeFog (0.08f));
+        scene.getRoot()->attach<AmbientLightNode> (fogAmbientColor());
+        scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
 
         const auto render = [&] (bool depthOfField)
         {
@@ -6974,7 +6974,7 @@ vec4 encodeUnit(float value)
             addFogCamera (scene, {}, { 0.0f, 0.0f, distance });
 
             if (withFog)
-                scene.setWorldFog (makeFog (density));
+                scene.getRoot()->attach<WorldFogNode> (makeFog (density));
 
             SceneRenderer renderer;
             setFogTier (renderer, tier);
@@ -7011,11 +7011,11 @@ vec4 encodeUnit(float value)
         {
             Scene scene;
             addFogCamera (scene).zFar = 10.0f;
-            scene.setAmbientColor (fogAmbientColor());
-            scene.setBackgroundColor (background);
+            scene.getRoot()->attach<AmbientLightNode> (fogAmbientColor());
+            scene.getRoot()->attach<BackgroundNode> (background);
 
             if (withFog)
-                scene.setWorldFog (makeFog (0.08f));
+                scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
 
             SceneRenderer renderer;
             setFogTier (renderer, tier);
@@ -7054,7 +7054,7 @@ vec4 encodeUnit(float value)
 
             auto fog = makeFog (0.08f);
             fog.anisotropy = 0.8f;
-            scene.setWorldFog (fog);
+            scene.getRoot()->attach<WorldFogNode> (fog);
 
             auto sun = EntityNode::Ptr (new EntityNode ("sun"));
             sun->attach<LightNode>().intensity = 0.1f;
@@ -7091,7 +7091,7 @@ vec4 encodeUnit(float value)
         setFogTier (reference, RenderSettings::TierPreference::raster);
         const auto off = renderToImage (reference, scene, fogSize);
         ASSERT_TRUE (off.isValid()) << reference.getLastError();
-        scene.setWorldFog (makeFog (0.08f));
+        scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
 
         const std::pair<const char*, std::function<void (RenderCapabilities::DeviceFacts&)>> devices[] = {
             { "no prepass", [] (RenderCapabilities::DeviceFacts& facts) { facts.depthNormalPrepass = false; } },
@@ -7160,9 +7160,9 @@ vec4 encodeUnit(float value)
         auto settings = renderer.getRenderSettings();
         settings.ambientOcclusion = false;
         renderer.setRenderSettings (settings);
-        auto fog = scene.getWorldFog();
+        auto fog = SceneSettings::resolve (scene).fog;
         fog.enabled = false;
-        scene.setWorldFog (fog);
+        scene.getRoot()->attach<WorldFogNode> (fog);
 
         ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << renderer.getLastError();
         EXPECT_TRUE (renderer.waitForGPU().wasOk());
@@ -7181,7 +7181,7 @@ vec4 encodeUnit(float value)
         Scene scene;
         setUpDepthOfFieldScene (scene, 0.2f);
         buildBarsScene (scene, 10.0f);
-        scene.setAmbientColor (fogAmbientColor());
+        scene.getRoot()->attach<AmbientLightNode> (fogAmbientColor());
 
         SceneRenderer renderer;
         setDepthOfFieldTier (renderer, RenderSettings::TierPreference::raster);
@@ -7203,7 +7203,7 @@ vec4 encodeUnit(float value)
 
         const auto clear = meanBlurredCoverage();
 
-        scene.setWorldFog (makeFog (0.08f));
+        scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
         const auto foggy = meanBlurredCoverage();
         EXPECT_TRUE (isFiniteTexture (renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor)));
 

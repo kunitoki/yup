@@ -248,13 +248,46 @@ Cameras look down the -Z axis of their entity with +Y up, like glTF cameras.
 When the active camera's entity is gone or has no camera in the chosen slot, the
 first camera found in the visible tree is used; with no camera at all, a default
 perspective camera at (0, 0, 5) looks at the origin. Without any `LightNode`, a
-default directional light is used unless you turn it off with
-`Scene::setUsingDefaultLight (false)`.
+default directional light is used unless you turn it off with a
+`DefaultLightNode`, see [Scene features](#scene-features).
 
 `SceneComponent` draws only when it repaints: call `repaint()` after changing the
 scene. For animated scenes, `setContinuousUpdates (true)` calls `Scene::update()`
 and repaints on every display frame. On the full tier it also keeps repainting by
 itself until the image has converged, see [Platform tiers](#platform-tiers).
+
+### Scene features
+
+Scene-wide rendering features are nodes from `yup_renderer`, attached like any
+other part. The renderer resolves them once per frame into a `SceneSettings`:
+for each type, the first node found depth-first in the visible part of the tree
+wins, so by convention attach them to the root. A missing node keeps its default.
+
+| Node               | Fields                                   | Default                  |
+| ------------------ | ---------------------------------------- | ------------------------ |
+| `BackgroundNode`   | `color`                                  | dark blue (`0xff1a1a2e`) |
+| `AmbientLightNode` | `color`                                  | gray (`0xff595959`)      |
+| `ExposureNode`     | `exposure`                               | 1                        |
+| `ToneMappingNode`  | `type` (`ToneMappingOperator`)           | `reinhard`               |
+| `DefaultLightNode` | `enabled`                                | true                     |
+| `EnvironmentNode`  | `map`, `intensity`, `visible`, `blur`    | no environment           |
+| `WorldFogNode`     | `fog` (`WorldFog`)                       | no fog                   |
+
+```cpp
+auto& root = *scene->getRoot();
+root.attach<yup::BackgroundNode> (yup::Colors::black);
+root.attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
+
+const auto settings = yup::SceneSettings::resolve (*scene); // what the renderer will use
+```
+
+**Upgrading.** The `Scene` setters and getters for these features are removed:
+`setBackgroundColor`, `setAmbientColor`, `setExposure`, `setToneMapping`
+(`Scene::ToneMapping` is now `ToneMappingOperator`), `setUsingDefaultLight`,
+`setEnvironment`, `setEnvironmentIntensity`, `setEnvironmentVisible`,
+`setEnvironmentBlur` and `setWorldFog`. Attach the matching node instead.
+`EnvironmentMap`, `SphericalHarmonics`, `WorldFog`, `ReflectionProbeNode` and
+`IrradianceVolumeNode` moved from `yup_3d` to `yup_renderer`.
 
 ### Rendering
 
@@ -385,8 +418,8 @@ also softens the shadows of the light, see [Lights and shadows](#lights-and-shad
 
 ### Environment lighting and reflections
 
-An `EnvironmentMap` is the light surrounding the scene. Set one with
-`Scene::setEnvironment()` and every surface reflects it, sharply when smooth and
+An `EnvironmentMap` is the light surrounding the scene. Attach it with an
+`EnvironmentNode` and every surface reflects it, sharply when smooth and
 blurred when rough, and receives its soft diffuse light. Metals and glossy
 plastics, which only had highlights from the punctual lights, look like the real
 material.
@@ -406,9 +439,9 @@ auto sky = [] (const yup::Vector3<float>& direction)
                                     : yup::Vector3<float> (0.05f, 0.05f, 0.05f);
 };
 
-scene->setEnvironment (new yup::EnvironmentMap (sky));
-scene->setEnvironmentIntensity (1.0f);
-scene->setAmbientColor (yup::Colors::black); // the environment replaces the flat ambient
+auto& environment = scene->getRoot()->attach<yup::EnvironmentNode> (new yup::EnvironmentMap (sky));
+environment.intensity = 1.0f;
+scene->getRoot()->attach<yup::AmbientLightNode> (yup::Colors::black); // the environment replaces the flat ambient
 ```
 
 Small bright lights such as a sun keep their energy at every roughness, so they
@@ -416,12 +449,12 @@ show as sharp glints on smooth surfaces and as broad highlights on rough ones.
 The constructor's `width` sets the sharpness of the reflections (the cube faces
 are a quarter of it) and `numLevels` the number of roughness mips.
 
-- `setEnvironmentVisible (true)` draws the environment behind the scene instead
-  of the background color, and `setEnvironmentBlur()` softens it, from 0 (sharp)
+- `EnvironmentNode::visible` draws the environment behind the scene instead
+  of the background color, and `EnvironmentNode::blur` softens it, from 0 (sharp)
   to 1, like a shallow depth of field.
-- `setToneMapping (Scene::ToneMapping::aces)` maps the light with the ACES
+- A `ToneMappingNode` with `ToneMappingOperator::aces` maps the light with the ACES
   filmic curve, which suits bright environments better than the default Reinhard.
-  `Scene::ToneMapping::agx` is a third option, a filmic curve that keeps very
+  `ToneMappingOperator::agx` is a third option, a filmic curve that keeps very
   saturated highlights from skewing in hue. See [Render settings](#render-settings).
 
 On devices that cannot render half floats, the environment cube, the reflection
@@ -438,7 +471,7 @@ longer keeps filtered images or GPU objects. `getLevelWidth`, `getLevelHeight`,
 - for the diffuse light along a normal, pass `getIrradianceCoefficients()` to
   `SphericalHarmonics::evaluateIrradiance`;
 - `getFaceSize()` gives the size of the cube faces, a quarter of `width`;
-- the background blur (`setEnvironmentBlur()`) now shows the same filtered
+- the background blur (`EnvironmentNode::blur`) now shows the same filtered
   levels as the reflections, a slightly different look from the former blur.
 
 ### Indirect lighting overview
@@ -840,8 +873,8 @@ settings.bloomIntensity = 0.1f;
 settings.taaSamples = 8;
 
 view.getRenderer().setRenderSettings (settings);
-scene->setToneMapping (yup::Scene::ToneMapping::agx);
-scene->setExposure (1.2f);
+scene->getRoot()->attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
+scene->getRoot()->attach<yup::ExposureNode> (1.2f);
 ```
 
 | Setting          | Default     | What it does                                                                                   |
@@ -898,15 +931,15 @@ if (auto* caps = view.getRenderer().getCapabilities())
 }
 ```
 
-Related scene settings:
+Related [scene features](#scene-features):
 
-- **Exposure** (`Scene::setExposure`) multiplies the light before tone mapping.
-- **Tone mapping** (`Scene::setToneMapping`) maps the exposed light into the
+- **Exposure** (`ExposureNode`) multiplies the light before tone mapping.
+- **Tone mapping** (`ToneMappingNode`) maps the exposed light into the
   displayable range: `reinhard` (the default) rolls highlights off softly,
   `aces` adds contrast and saturation, and `agx` is a filmic curve that keeps
   saturated highlights from skewing. AgX is YUP's own fit of the look, opt-in
   like ACES.
-- **Background color** (`Scene::setBackgroundColor`) is display-referred on both
+- **Background color** (`BackgroundNode`) is display-referred on both
   tiers: it is never tone mapped nor affected by exposure, and shows exactly as
   set.
 
@@ -1174,24 +1207,22 @@ view.repaint();
 
 ## Fog
 
-`Scene::setWorldFog()` fills the whole scene with an exponential height fog. It
+A `WorldFogNode` fills the whole scene with an exponential height fog. It
 is part of the scene rather than of the render settings: a scene with fog asks
 for it. It is analytic: volumetric fog, with fog volumes and light shafts, is not
 in this release.
 
 ```cpp
-yup::WorldFog fog;
-fog.enabled = true;
+auto& fog = scene->getRoot()->attach<yup::WorldFogNode>().fog; // enabled
 fog.density = 0.05f;       // extinction per meter at baseHeight
 fog.heightFalloff = 0.3f;  // thinner above baseHeight, denser below
 fog.color = { 0.8f, 0.85f, 0.9f };
-scene->setWorldFog (fog);
 view.repaint();
 ```
 
 | Field                     | Default | Unit          | What it does                                                    |
 | ------------------------- | ------- | ------------- | --------------------------------------------------------------- |
-| `WorldFog::enabled`       | false   |               | Draws the fog.                                                  |
+| `WorldFog::enabled`       | false   |               | Draws the fog. A default `WorldFogNode` turns it on.            |
 | `WorldFog::density`       | 0.02    | per meter     | How much light the fog takes per meter of distance, at `baseHeight`. 0 or less draws nothing. |
 | `WorldFog::heightFalloff` | 0       | per meter     | How fast the fog thins with height above `baseHeight`, and thickens below it: 0 is uniform, negative thickens upwards. |
 | `WorldFog::baseHeight`    | 0       | meters        | The height where the fog has `density`.                         |

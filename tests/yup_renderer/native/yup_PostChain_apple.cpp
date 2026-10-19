@@ -54,7 +54,7 @@ TEST_F (PostChainMetalTests, TurningBloomOffReleasesItsTargets)
 
     Scene scene;
     ViewData view;
-    view.update (scene, size, size, false, 1, 0);
+    view.update (scene, SceneSettings::resolve (scene), size, size, false, 1, 0);
 
     PostChain::Inputs inputs;
     inputs.color = GpuTexture::create (device, halfFloat);
@@ -109,7 +109,7 @@ TEST_F (PostChainMetalTests, ResizingReleasesTheTargetsOfTheLastSize)
     const auto render = [&] (int size)
     {
         ViewData view;
-        view.update (scene, size, size, false, 1, 0);
+        view.update (scene, SceneSettings::resolve (scene), size, size, false, 1, 0);
 
         PostChain::Inputs inputs;
         inputs.color = GpuTexture::create (device, halfFloat (size));

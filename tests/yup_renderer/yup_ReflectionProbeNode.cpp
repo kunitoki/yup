@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include <yup_3d/yup_3d.h>
+#include <yup_renderer/yup_renderer.h>
 
 #include <gtest/gtest.h>
 

@@ -102,7 +102,7 @@ public:
     /** Options for build(). */
     struct BuildOptions
     {
-        /** Adds a light owned by the list when the tree has no LightNode, see Scene::isUsingDefaultLight():
+        /** Adds a light owned by the list when the tree has no LightNode, see DefaultLightNode:
             a white directional light of intensity 3, shining towards (-0.35, -0.75, -0.55), that casts no shadows.
         */
         bool addDefaultLight = false;

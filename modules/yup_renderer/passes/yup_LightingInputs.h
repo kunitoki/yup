@@ -64,7 +64,7 @@ struct YUP_API LightingInputs
         bool givenUp = false;             ///< Two failures in a row: the renderer shades without the environment.
     };
 
-    /** Returns the environment cube of @p scene, or nullptr when the scene has no environment or a
+    /** Returns the environment cube of @p settings, or nullptr when the scene has no environment or a
         dark one, or the cube could not be built.
 
         The cube is kept in @p slot, one per renderer, and built with @p probes in a GpuFrame of its
@@ -73,15 +73,15 @@ struct YUP_API LightingInputs
         GPU failed to execute is built once more, and a second failure in a row leaves the renderer
         without the environment until it changes.
     */
-    static GpuTexture::Ptr prepareEnvironment (ProbeRenderer& probes, const Scene& scene, EnvironmentCube& slot);
+    static GpuTexture::Ptr prepareEnvironment (ProbeRenderer& probes, const SceneSettings& settings, EnvironmentCube& slot);
 
-    /** Fills the inputs of a frame: the ambient light and the environment of @p scene, its cube
+    /** Fills the inputs of a frame: the ambient light and the environment of @p settings, its cube
         being @p environmentCube (prepareEnvironment()), and @p lights packed by
         GpuSceneData::packLights() with their first shadow records, @p firstShadowRecord
         (ShadowRenderer::getShadowRecordIndices()). The renderer sets Block::probeInfo from the
         radiance format of its ProbeRenderer.
     */
-    static LightingInputs create (const Scene& scene, const GpuTexture::Ptr& environmentCube,
+    static LightingInputs create (const SceneSettings& settings, const GpuTexture::Ptr& environmentCube,
                                   Span<const SceneDrawList::Light> lights, Span<const int> firstShadowRecord);
 
     /** Creates the 1x1 black cube the shading passes bind at set 0 binding 6 without an environment. */

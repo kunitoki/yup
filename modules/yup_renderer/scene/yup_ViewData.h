@@ -62,7 +62,8 @@ public:
     //==============================================================================
     /** Computes this frame's matrices from the scene's active camera (or the default camera).
 
-        @param scene        The scene to take the camera, exposure and tone mapping from.
+        @param scene        The scene to take the camera from.
+        @param settings     The resolved scene features, for the exposure and the tone mapping.
         @param widthPx      The viewport width in pixels.
         @param heightPx     The viewport height in pixels.
         @param jittered     True to apply the TAA sub-pixel jitter to the projection.
@@ -70,7 +71,7 @@ public:
         @param frameIndex   The index of the frame, which picks the jitter; clipPlanes.z holds it
                             modulo noiseFrameCycle, exact in a float however long the view runs.
     */
-    void update (const Scene& scene, int widthPx, int heightPx, bool jittered, int taaSamples, uint64 frameIndex);
+    void update (const Scene& scene, const SceneSettings& settings, int widthPx, int heightPx, bool jittered, int taaSamples, uint64 frameIndex);
 
     /** Sets the matrices of a capture, such as a face of a reflection probe cube: exposure 1, no
         jitter, frame index 0, no motion (the previous matrix is the current one), and Reinhard
@@ -107,7 +108,7 @@ public:
 
     //==============================================================================
     /** The operator index of yupToneMap in lib/color.glsl: 0 Reinhard, 1 ACES, 2 AgX. */
-    static float getToneMappingOperator (Scene::ToneMapping toneMapping) noexcept;
+    static float getToneMappingOperator (ToneMappingOperator toneMapping) noexcept;
 
     /** Element @p index (1-based) of the Halton sequence in @p base, in [0, 1). */
     static float halton (int index, int base) noexcept;

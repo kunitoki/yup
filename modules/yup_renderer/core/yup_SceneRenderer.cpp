@@ -532,7 +532,7 @@ struct SceneRenderer::Impl
         shade with weight 0 until they bake again, each feature failing on its own.
         @p failCapturesForTesting makes every probe capture fail, @p failVolumeCapturesForTesting every volume one.
     */
-    int bakeReflectionProbes (GpuFrame& frame, const Scene& scene, const RenderSettings& settings, const SceneDrawList& probeList, const RenderCapabilities::DeviceFacts& facts,
+    int bakeReflectionProbes (GpuFrame& frame, const Scene& scene, const SceneSettings& sceneSettings, const RenderSettings& settings, const SceneDrawList& probeList, const RenderCapabilities::DeviceFacts& facts,
                               const GpuTexture::Ptr& environmentCube, const FrameResources::Samplers& samplers, bool failCapturesForTesting,
                               bool failVolumeCapturesForTesting)
     {
@@ -549,7 +549,7 @@ struct SceneRenderer::Impl
         probeBaker->failCapturesForTesting (failCapturesForTesting);
         probeBaker->failVolumeCapturesForTesting (failVolumeCapturesForTesting);
 
-        const ProbeBaker::Inputs inputs { scene, settings, probeList, facts, environmentCube, lookupTables, samplers };
+        const ProbeBaker::Inputs inputs { scene, sceneSettings, settings, probeList, facts, environmentCube, lookupTables, samplers };
         return probeBaker->bake (frame, forwardPass, inputs);
     }
 
@@ -809,17 +809,17 @@ struct SceneRenderer::Impl
         keeps the history, which TAA reprojects and clips to the new frame. Tone mapping and bloom
         run after TAA, so their settings are left out.
     */
-    uint64 getRestartingSignature (const Scene& scene, const RenderSettings& settings, const GpuTexture* environmentCube, int pendingBakes) const
+    uint64 getRestartingSignature (const SceneSettings& sceneSettings, const RenderSettings& settings, const GpuTexture* environmentCube, int pendingBakes) const
     {
         FrameSignature signature;
         signature.addMatrix (viewData.getUnjitteredViewProjection());
-        signature.addFloat (scene.getExposure());
-        signature.addBits (scene.getAmbientColor().getARGB());
-        signature.addPointer (scene.getEnvironment().get());
+        signature.addFloat (sceneSettings.exposure);
+        signature.addBits (sceneSettings.ambientColor.getARGB());
+        signature.addPointer (sceneSettings.environment.get());
         signature.addPointer (environmentCube); // Rebuilt after the GPU failed to build it
-        signature.addFloat (scene.getEnvironmentIntensity());
-        signature.addFloat (scene.getEnvironmentBlur());
-        signature.addBits (scene.isEnvironmentVisible() ? 1u : 0u);
+        signature.addFloat (sceneSettings.environmentIntensity);
+        signature.addFloat (sceneSettings.environmentBlur);
+        signature.addBits (sceneSettings.environmentVisible ? 1u : 0u);
 
         // The RenderSettings shaping the scene color before TAA, as the tier resolves them; bloom runs after it
         signature.addBits (static_cast<uint64> (capabilities->getCascadeCount (settings)));
@@ -837,7 +837,7 @@ struct SceneRenderer::Impl
         signature.addBits (isGatheringIndirectDiffuse (settings) ? 1u : 0u);
 
         // The world fog is applied before TAA: every field WorldFog::operator== compares, while it is drawn
-        const auto& fog = scene.getWorldFog();
+        const auto& fog = sceneSettings.fog;
         const auto fogged = willDrawWorldFog (fog);
         signature.addBits (fogged ? 1u : 0u);
 
@@ -960,11 +960,11 @@ struct SceneRenderer::Impl
         first unchanged frame after changes counts the history as a single sample, so the frames
         that follow average it out instead of keeping a share of the image before the changes.
     */
-    void trackChanges (const Scene& scene, const RenderSettings& settings, int width, int height, int internalWidth, int internalHeight,
+    void trackChanges (const SceneSettings& sceneSettings, const RenderSettings& settings, int width, int height, int internalWidth, int internalHeight,
                        const GpuTexture* environmentCube, int pendingBakes)
     {
         const auto invalidating = getInvalidatingSignature (width, height, internalWidth, internalHeight, settings.taaSamples);
-        const auto restarting = getRestartingSignature (scene, settings, environmentCube, pendingBakes);
+        const auto restarting = getRestartingSignature (sceneSettings, settings, environmentCube, pendingBakes);
 
         if (! hasSignature || invalidating != invalidatingSignature)
         {
@@ -1219,6 +1219,8 @@ int SceneRenderer::bakeProbes (const GpuDevice::Ptr& device, Scene& scene)
     if (probeList.getReflectionProbes().empty() && probeList.getIrradianceVolumes().empty() && impl->probeBaker == nullptr)
         return 0;
 
+    const auto sceneSettings = SceneSettings::resolve (scene);
+
     auto deviceFacts = impl->deviceFacts;
     if (deviceFactsOverride)
         deviceFactsOverride (deviceFacts);
@@ -1228,7 +1230,7 @@ int SceneRenderer::bakeProbes (const GpuDevice::Ptr& device, Scene& scene)
         return 0;
 
     impl->probeRenderer.setForceRgbmForTesting (forceRgbmRadiance);
-    const auto environmentCube = LightingInputs::prepareEnvironment (impl->probeRenderer, scene, impl->environment);
+    const auto environmentCube = LightingInputs::prepareEnvironment (impl->probeRenderer, sceneSettings, impl->environment);
 
     const auto* samplers = impl->frameResources.getSamplers();
     if (samplers == nullptr)
@@ -1244,7 +1246,7 @@ int SceneRenderer::bakeProbes (const GpuDevice::Ptr& device, Scene& scene)
     if (impl->probeBaker != nullptr)
         impl->probeBaker->clearFailures();
 
-    const auto baked = impl->bakeReflectionProbes (frame, scene, renderSettings, probeList, deviceFacts, environmentCube, *samplers, failProbeCaptures, failVolumeCaptures);
+    const auto baked = impl->bakeReflectionProbes (frame, scene, sceneSettings, renderSettings, probeList, deviceFacts, environmentCube, *samplers, failProbeCaptures, failVolumeCaptures);
     frame.submit();
     return baked;
 }
@@ -1367,6 +1369,9 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     const auto& settings = renderSettings;
     impl->capabilities.emplace (deviceFacts, settings, samples);
 
+    // The scene features of this frame, resolved once from the feature nodes of the tree
+    const auto sceneSettings = SceneSettings::resolve (scene);
+
     // The full tier shades one sample per pixel into HDR targets, then runs the post chain. The
     // raster tier does the same with its samples only for effects needing HDR: bloom, the depth of
     // field on the frames it blurs, and the scene's world fog. Raster depth of field and fog read
@@ -1374,7 +1379,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     const auto full = impl->capabilities->getTier() == RenderCapabilities::Tier::full;
     const auto prepassCompiles = [&] { return full || impl->prepareDepthNormalPrepass (failDepthNormalPrepass); };
     const auto blurs = impl->postChain.willBlur (*impl->capabilities, settings, scene.getActiveCamera()) && prepassCompiles();
-    const auto& worldFog = scene.getWorldFog();
+    const auto& worldFog = sceneSettings.fog;
     const auto fogs = impl->willDrawWorldFog (worldFog) && prepassCompiles();
     const auto hdr = full || impl->capabilities->isEnabled (RenderCapabilities::Feature::bloom, settings) || blurs || fogs;
 
@@ -1436,11 +1441,11 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     const auto stamp = ++Impl::nextStamp;
 
     // The jitter cycles with the frame index: any temporalSamples consecutive frames cover every point
-    impl->viewData.update (scene, internalWidth, internalHeight, temporalAntiAliasing, temporalSamples, impl->frameIndex++);
+    impl->viewData.update (scene, sceneSettings, internalWidth, internalHeight, temporalAntiAliasing, temporalSamples, impl->frameIndex++);
 
     auto& drawList = impl->drawList;
     // The raster tier lights each draw with its own selection, the full tier through the clusters
-    drawList.build (*scene.getRoot(), impl->viewData.getView(), { scene.isUsingDefaultLight(), ! full });
+    drawList.build (*scene.getRoot(), impl->viewData.getView(), { sceneSettings.useDefaultLight, ! full });
 
     // A light with a radius selects the area light variants of the shading passes. Only a change
     // of the lights switches variants, and the restarting signature hashes every light radius
@@ -1465,14 +1470,14 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
     // Built in a frame of its own the first time, never inside this one
     impl->probeRenderer.setForceRgbmForTesting (forceRgbmRadiance);
-    const auto environmentCube = LightingInputs::prepareEnvironment (impl->probeRenderer, scene, impl->environment);
+    const auto environmentCube = LightingInputs::prepareEnvironment (impl->probeRenderer, sceneSettings, impl->environment);
 
     // The probes and volumes this frame bakes, counted before it records them so the frame baking them restarts the convergence
     const auto pendingBakes = impl->probeBaker != nullptr ? impl->probeBaker->getNumPending (drawList)
                                                           : static_cast<int> (drawList.getReflectionProbes().size() + drawList.getIrradianceVolumes().size());
 
     if (full)
-        impl->trackChanges (scene, settings, widthPx, heightPx, internalWidth, internalHeight, environmentCube.get(), pendingBakes);
+        impl->trackChanges (sceneSettings, settings, widthPx, heightPx, internalWidth, internalHeight, environmentCube.get(), pendingBakes);
 
     auto frame = GpuFrame::begin (device);
     if (! frame.isValid())
@@ -1503,7 +1508,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     if (pendingBakes > 0)
         impl->beginScope (frame, "probeBake");
 
-    impl->bakeReflectionProbes (frame, scene, settings, drawList, deviceFacts, environmentCube, *samplers, failProbeCaptures, failVolumeCaptures);
+    impl->bakeReflectionProbes (frame, scene, sceneSettings, settings, drawList, deviceFacts, environmentCube, *samplers, failProbeCaptures, failVolumeCaptures);
 
     // Without the comparison sampler nothing can read a shadow map: the frame renders unshadowed
     ShadowRenderer::Inputs shadowInputs { drawList, impl->viewData, *impl->capabilities, settings };
@@ -1522,7 +1527,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
             return failFrame (result.getErrorMessage());
     }
 
-    auto lighting = LightingInputs::create (scene, environmentCube, drawList.getLights(), impl->shadowRenderer.getShadowRecordIndices());
+    auto lighting = LightingInputs::create (sceneSettings, environmentCube, drawList.getLights(), impl->shadowRenderer.getShadowRecordIndices());
     lighting.shadowCascades = impl->shadowRenderer.getCascadeTexture();
     lighting.shadowAtlas = impl->shadowRenderer.getAtlasTexture();
     lighting.shadows = impl->shadowRenderer.getShadowData();
@@ -1637,7 +1642,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     // mapping to composite the display-referred background under it. Full: the blended items over
     // the shaded G-buffer, depth tested against it, writing their motion over its velocity
     const auto clear = full ? std::optional<GpuColor>()
-                            : std::optional<GpuColor> (output == ForwardPass::Output::ldrInline ? GpuColor (scene.getBackgroundColor()) : GpuColor::transparentBlack());
+                            : std::optional<GpuColor> (output == ForwardPass::Output::ldrInline ? GpuColor (sceneSettings.backgroundColor) : GpuColor::transparentBlack());
     const auto opaque = full ? Span<const SceneDrawList::DrawItem>() : drawList.getOpaqueItems();
 
     if (failMaterialLayers)
@@ -1675,7 +1680,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
     if (hdr)
     {
-        const PostChain::Inputs inputs { sceneColor, depth, targets.velocity, colorIsReversible, scene.getBackgroundColor(),
+        const PostChain::Inputs inputs { sceneColor, depth, targets.velocity, colorIsReversible, sceneSettings.backgroundColor,
                                          impl->getTemporalSampleIndex(), temporalSamples, impl->changing, scene.getActiveCamera(), blurs, moving,
                                          impl->measuring ? std::function<void (const char*)> ([this, &frame] (const char* name) { impl->beginScope (frame, name); })
                                                          : nullptr };

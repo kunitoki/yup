@@ -76,12 +76,12 @@ protected:
     }
 
     /** Renders the shadows scene with a uniform environment of the given radiance and returns a corner, which shows the environment. */
-    Color renderEnvironmentCorner (float radiance, Scene::ToneMapping toneMapping)
+    Color renderEnvironmentCorner (float radiance, ToneMappingOperator toneMapping)
     {
         Scene scene;
         buildShadowsScene (scene);
-        scene.setEnvironment (new EnvironmentMap ([radiance] (const Vector3<float>&) { return Vector3<float> (radiance, radiance, radiance); }, 32, 3));
-        scene.setToneMapping (toneMapping);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([radiance] (const Vector3<float>&) { return Vector3<float> (radiance, radiance, radiance); }, 32, 3));
+        scene.getRoot()->attach<ToneMappingNode> (toneMapping);
 
         SceneRenderer renderer;
         const auto image = renderToImage (renderer, scene, 64);
@@ -147,11 +147,11 @@ protected:
 
         Scene scene;
         addPlate (scene, std::move (material));
-        scene.setAmbientColor (ambient);
-        scene.setToneMapping (Scene::ToneMapping::reinhard);
+        scene.getRoot()->attach<AmbientLightNode> (ambient);
+        scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
 
         if (environmentRadiance > 0.0f)
-            scene.setEnvironment (new EnvironmentMap ([environmentRadiance] (const Vector3<float>&) { return Vector3<float> (environmentRadiance, environmentRadiance, environmentRadiance); }, 32, 3));
+            scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([environmentRadiance] (const Vector3<float>&) { return Vector3<float> (environmentRadiance, environmentRadiance, environmentRadiance); }, 32, 3));
 
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         sun->attach<LightNode>().intensity = sunIntensity;
@@ -249,7 +249,7 @@ protected:
 
         addQuad ("bright", 10.0f, -0.8f);
         addQuad ("gray", 0.2f, 0.8f);
-        scene.setBackgroundColor (Color (static_cast<uint8> (40), static_cast<uint8> (70), static_cast<uint8> (110)));
+        scene.getRoot()->attach<BackgroundNode> (Color (static_cast<uint8> (40), static_cast<uint8> (70), static_cast<uint8> (110)));
     }
 
     /** The mean luma of @p image over the band within 2 px of the silhouettes of @p reference, in
@@ -334,8 +334,8 @@ protected:
         scene.getRoot()->addChild (camera);
         scene.setActiveCamera (camera.get());
 
-        scene.setAmbientColor (Colors::black);
-        scene.setBackgroundColor (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot()->attach<BackgroundNode> (Colors::black);
         return lights;
     }
 
@@ -501,7 +501,7 @@ protected:
 
         const auto targets = GBufferPass::acquireTargets (*frameResources, acquire (GpuTextureFormat::rg16float), acquire (GpuTextureFormat::depth32float));
 
-        view.update (scene, size, size, false, 1, 0);
+        view.update (scene, SceneSettings::resolve (scene), size, size, false, 1, 0);
         drawList.build (*scene.getRoot(), view.getView());
 
         for (const auto& item : drawList.getOpaqueItems())

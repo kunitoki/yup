@@ -568,7 +568,8 @@ private:
             cameraNode->zNear = radius * 0.02f;
             cameraNode->zFar = radius * 40.0f;
 
-            scene->getRoot()->addChild (cameraEntity);
+            auto rootEntity = scene->getRoot();
+            rootEntity->addChild (cameraEntity);
             scene->setActiveCamera (cameraEntity.get());
 
             // Lit like a product shot: one large, low key light from the back left, its soft box in the
@@ -582,7 +583,7 @@ private:
             keyLight.radius = 0.08f;
             keyLight.color = { 1.0f, 0.96f, 0.9f };
             CameraPose::lookingAt (directionFromDegrees (studioKeyAzimuthDegrees, studioKeyElevationDegrees) * 10.0f, {}, { 0.0f, 1.0f, 0.0f }).applyTo (*keyLightEntity);
-            scene->getRoot()->addChild (keyLightEntity);
+            rootEntity->addChild (keyLightEntity);
 
             // A small spot light from the front right lights the pads and casts their shadows across the next row
             auto padLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("padLight"));
@@ -596,7 +597,7 @@ private:
             padLight.color = { 0.9f, 0.94f, 1.0f };
             const auto padCenter = padBounds.getCenter();
             CameraPose::lookingAt (padCenter + directionFromDegrees (-45.0f, 45.0f) * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f }).applyTo (*padLightEntity);
-            scene->getRoot()->addChild (padLightEntity);
+            rootEntity->addChild (padLightEntity);
 
             // Probed from above the pads, the glossy caps and the screen glass reflect the panel around
             // them instead of the studio floor. Parallax correction places the panel where it lies
@@ -614,7 +615,7 @@ private:
                                                   std::abs (deviceCenter.getZ() - probePosition.getZ()) + deviceSize.getZ() * 0.5f + 0.3f };
             reflectionProbe->falloff = 0.2f;
             reflectionProbe->parallaxCorrection = true;
-            scene->getRoot()->addChild (probeEntity);
+            rootEntity->addChild (probeEntity);
 
             // Bakes the light the case and the screen bounce onto the panel, from 4 x 2 x 4 probes. The probes
             // sit at the cell centers: both layers stay above the panel, the lower one just over the pads, since
@@ -631,22 +632,27 @@ private:
             irradianceVolume->resolutionY = 2;
             irradianceVolume->resolutionZ = 4;
             irradianceVolume->falloff = 0.15f;
-            scene->getRoot()->addChild (volumeEntity);
+            rootEntity->addChild (volumeEntity);
 
             lightShow = new yup::EntityNode ("lightShow");
             lightShow->setVisible (false);
             lightShow->attach<LightShowAnimator> (deviceBounds);
             setNumShowLights (numShowLightsFull);
 
-            scene->getRoot()->addChild (lightShow);
+            rootEntity->addChild (lightShow);
 
-            scene->setEnvironment (createStudioEnvironment());
-            scene->setEnvironmentIntensity (0.35f);
-            scene->setAmbientColor (yup::Colors::black);
-            scene->setExposure (1.1f);
-            scene->setToneMapping (yup::Scene::ToneMapping::agx);
-            scene->setEnvironmentVisible (true);
-            scene->setEnvironmentBlur (0.5f);
+            auto& environment = rootEntity->attach<yup::EnvironmentNode> (createStudioEnvironment());
+            environment.intensity = 0.35f;
+            environment.visible = true;
+            environment.blur = 0.5f;
+            rootEntity->attach<yup::AmbientLightNode> (yup::Colors::black);
+            rootEntity->attach<yup::ExposureNode> (1.1f);
+            rootEntity->attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
+
+            // Off until the fog toggle switches it on, the sliders shape it meanwhile
+            yup::WorldFog fog;
+            fog.enabled = false;
+            rootEntity->attach<yup::WorldFogNode> (fog);
 
             // Ambient occlusion on both tiers, at the scale of the knobs: they are about 0.08 tall
             auto settings = getRenderer().getRenderSettings();
@@ -1594,10 +1600,10 @@ private:
             toneMappingCombo.addItem ("Reinhard", 1);
             toneMappingCombo.addItem ("ACES", 2);
             toneMappingCombo.addItem ("AgX", 3);
-            toneMappingCombo.setSelectedId (static_cast<int> (scene->getToneMapping()) + 1, yup::dontSendNotification);
+            toneMappingCombo.setSelectedId (static_cast<int> (scene->getRoot()->getNode<yup::ToneMappingNode>()->type) + 1, yup::dontSendNotification);
             toneMappingCombo.onSelectedItemChanged = [this]
             {
-                view.getScene()->setToneMapping (static_cast<yup::Scene::ToneMapping> (toneMappingCombo.getSelectedId() - 1));
+                view.getScene()->getRoot()->getNode<yup::ToneMappingNode>()->type = static_cast<yup::ToneMappingOperator> (toneMappingCombo.getSelectedId() - 1);
                 view.repaint();
             };
 
@@ -1605,10 +1611,10 @@ private:
             exposureSlider.setRange (0.1, 8.0, 0.0);
             exposureSlider.setSkewFactorFromMidpoint (1.0);
             exposureSlider.setNumDecimalPlacesToDisplay (2);
-            exposureSlider.setValue (scene->getExposure(), yup::dontSendNotification);
+            exposureSlider.setValue (scene->getRoot()->getNode<yup::ExposureNode>()->exposure, yup::dontSendNotification);
             exposureSlider.onValueChanged = [this] (double value)
             {
-                view.getScene()->setExposure (static_cast<float> (value));
+                view.getScene()->getRoot()->getNode<yup::ExposureNode>()->exposure = static_cast<float> (value);
                 view.repaint();
             };
 
@@ -1816,7 +1822,7 @@ private:
             // The scene's world fog, in its default white: the device is about 3.6 units long, seen from a few
             // units away, so a density of 0.08 leaves about two thirds of its light
             fogToggle.setButtonText ("Fog");
-            fogToggle.setToggleState (scene->getWorldFog().enabled, yup::dontSendNotification);
+            fogToggle.setToggleState (scene->getRoot()->getNode<yup::WorldFogNode>()->fog.enabled, yup::dontSendNotification);
             fogToggle.onClick = [this]
             {
                 editFog ([this] (yup::WorldFog& fog)
@@ -1841,7 +1847,7 @@ private:
                 };
             };
 
-            const auto initialFog = scene->getWorldFog();
+            const auto initialFog = scene->getRoot()->getNode<yup::WorldFogNode>()->fog;
             setupFogSlider (fogDensityLabel, "Fog density", fogDensitySlider, 0.5, 0.08, initialFog.enabled ? initialFog.density : 0.08, &yup::WorldFog::density);
             setupFogSlider (fogFalloffLabel, "Height falloff", fogFalloffSlider, 4.0, 1.0, initialFog.heightFalloff, &yup::WorldFog::heightFalloff);
 
@@ -1994,7 +2000,7 @@ private:
             refreshToggle (screenSpaceGIToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::screenSpaceGI, settings), canGI);
             refreshToggle (depthOfFieldToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::depthOfField, settings), canDepthOfField);
             refreshToggle (motionBlurToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::motionBlur, settings), canMotionBlur);
-            const auto& fog = view.getScene()->getWorldFog();
+            const auto& fog = view.getScene()->getRoot()->getNode<yup::WorldFogNode>()->fog;
             refreshToggle (fogToggle, fog.enabled && fog.density > 0.0f && canFog, canFog);
 
             // One line says why the dimmed controls are off, so no label changes its text or size
@@ -2199,11 +2205,10 @@ private:
         template <class Callback>
         void editFog (Callback&& edit)
         {
-            auto fog = view.getScene()->getWorldFog();
+            auto& fog = view.getScene()->getRoot()->getNode<yup::WorldFogNode>()->fog;
             fog.density = static_cast<float> (fogDensitySlider.getValue());
             fog.heightFalloff = static_cast<float> (fogFalloffSlider.getValue());
             edit (fog);
-            view.getScene()->setWorldFog (fog);
             view.repaint();
         }
 

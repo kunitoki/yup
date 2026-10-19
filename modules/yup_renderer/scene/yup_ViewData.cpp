@@ -33,20 +33,20 @@ void copyViewMatrix (const Matrix4& matrix, float* destination) noexcept
 
 } // namespace
 
-float ViewData::getToneMappingOperator (Scene::ToneMapping toneMapping) noexcept
+float ViewData::getToneMappingOperator (ToneMappingOperator toneMapping) noexcept
 {
     switch (toneMapping)
     {
-        case Scene::ToneMapping::reinhard: return 0.0f;
-        case Scene::ToneMapping::aces: return 1.0f;
-        case Scene::ToneMapping::agx: return 2.0f;
+        case ToneMappingOperator::reinhard: return 0.0f;
+        case ToneMappingOperator::aces: return 1.0f;
+        case ToneMappingOperator::agx: return 2.0f;
     }
 
     return 0.0f;
 }
 
 //==============================================================================
-void ViewData::update (const Scene& scene, int widthPx, int heightPx, bool jittered, int taaSamples, uint64 frameIndex)
+void ViewData::update (const Scene& scene, const SceneSettings& settings, int widthPx, int heightPx, bool jittered, int taaSamples, uint64 frameIndex)
 {
     const auto width = static_cast<float> (widthPx);
     const auto height = static_cast<float> (heightPx);
@@ -94,7 +94,7 @@ void ViewData::update (const Scene& scene, int widthPx, int heightPx, bool jitte
     block.cameraPosition[0] = cameraPosition.getX();
     block.cameraPosition[1] = cameraPosition.getY();
     block.cameraPosition[2] = cameraPosition.getZ();
-    block.cameraPosition[3] = scene.getExposure();
+    block.cameraPosition[3] = settings.exposure;
 
     block.viewport[0] = width;
     block.viewport[1] = height;
@@ -110,7 +110,7 @@ void ViewData::update (const Scene& scene, int widthPx, int heightPx, bool jitte
     block.clipPlanes[0] = camera->zNear;
     block.clipPlanes[1] = camera->zFar;
     block.clipPlanes[2] = static_cast<float> (frameIndex % noiseFrameCycle);
-    block.clipPlanes[3] = getToneMappingOperator (scene.getToneMapping());
+    block.clipPlanes[3] = getToneMappingOperator (settings.toneMapping);
 }
 
 void ViewData::setCapture (const Matrix4& viewMatrix, const Matrix4& projectionMatrix, Vector3<float> position, int size)

@@ -28,10 +28,11 @@ namespace yup
     Shading follows the glTF metallic-roughness model (GGX distribution, Smith visibility,
     Schlick Fresnel) with KHR_lights_punctual lights, a flat ambient term, normal mapping,
     alpha masking and blending, and double-sided materials. The result is exposed, tone mapped
-    with Reinhard, ACES or AgX (see Scene::setToneMapping) and sRGB encoded into an rgba8unorm texture.
+    with Reinhard, ACES or AgX (see ToneMappingNode and ExposureNode) and sRGB encoded into an rgba8unorm texture.
+    The scene features come from the feature nodes of the tree, resolved once per frame by SceneSettings.
 
-    With a Scene::setEnvironment(), surfaces reflect the environment, blurred by their roughness,
-    and receive its diffuse light; Scene::setEnvironmentVisible() also draws it behind the scene.
+    With an EnvironmentNode, surfaces reflect the environment, blurred by their roughness,
+    and receive its diffuse light; EnvironmentNode::visible also draws it behind the scene.
     Surfaces inside the influence of a ReflectionProbeNode reflect the scene the probe captured
     instead, and surfaces inside an IrradianceVolumeNode take their diffuse light from the volume,
     see bakeProbes().
@@ -67,7 +68,7 @@ namespace yup
     their brightness there.
     RenderSettings::motionBlur smears what moves on the full tier, after the depth of field, on the
     frames where the camera or an item moved, composited over the background color the same way.
-    The scene's WorldFog (Scene::setWorldFog()) is applied from the camera to each opaque surface, or
+    The scene's WorldFog (WorldFogNode) is applied from the camera to each opaque surface, or
     to the far plane where nothing was drawn, before the temporal accumulation: in place on the full
     tier, and on the raster tier where the device allows half-float targets and the depth and
     normal prepass, as the first post effect.

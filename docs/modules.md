@@ -270,7 +270,10 @@ flowchart LR
 ### yup_renderer
 
 The PBR scene renderer for `yup_3d` scenes: `SceneRenderer`, `SceneComponent`,
-`RenderSettings` and `RenderCapabilities`. Its shader bundles are compiled at
+`RenderSettings` and `RenderCapabilities`, the scene feature nodes (background,
+ambient light, exposure, tone mapping, default light, environment and fog,
+resolved by `SceneSettings`), environment maps, reflection probes and
+irradiance volumes. Its shader bundles are compiled at
 build time from the permutations declared in its module header.
 
 ```mermaid

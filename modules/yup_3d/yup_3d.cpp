@@ -40,13 +40,8 @@
 //==============================================================================
 
 #include "resources/yup_Texture.cpp"
-#include "resources/yup_SphericalHarmonics.cpp"
 #include "resources/yup_Mesh.cpp"
 #include "scene/yup_EntityNode.cpp"
 #include "nodes/yup_CameraNode.cpp"
-#include "nodes/yup_ReflectionProbeNode.cpp"
-#include "nodes/yup_IrradianceVolumeNode.cpp"
-#include "scene/yup_WorldFog.cpp"
 #include "scene/yup_Scene.cpp"
 #include "gltf/yup_GltfModel.cpp"
-#include "resources/yup_EnvironmentMap.cpp"

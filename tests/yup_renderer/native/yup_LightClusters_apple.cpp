@@ -85,7 +85,7 @@ TEST_F (LightClustersMetalTests, ClusterCullingMatchesCpuReference)
     // The camera of a TAA frame: the jittered projection is the one rasterized
     Scene scene;
     ViewData viewData;
-    viewData.update (scene, 1600, 900, true, 8, 3);
+    viewData.update (scene, SceneSettings::resolve (scene), 1600, 900, true, 8, 3);
     const auto& cullView = viewData.getView();
     const auto cullInverseProjection = viewData.getJitteredProjection().inverted();
 

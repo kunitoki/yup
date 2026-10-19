@@ -581,7 +581,7 @@ ProbeBaker::CaptureResult ProbeBaker::capture (GpuFrame& frame, ForwardPass& for
 
     // One list for every capture of the call: per-draw light selection only depends on the bounds
     const auto& scene = inputs.scene;
-    captureList->build (*scene.getRoot(), Matrix4::translation (-firstPosition), { scene.isUsingDefaultLight(), true });
+    captureList->build (*scene.getRoot(), Matrix4::translation (-firstPosition), { inputs.sceneSettings.useDefaultLight, true });
 
     // The raster tier with hard shadows: no temporal noise, no contact shadows, no ambient occlusion
     auto settings = inputs.settings;
@@ -607,7 +607,7 @@ ProbeBaker::CaptureResult ProbeBaker::capture (GpuFrame& frame, ForwardPass& for
     // Exposure 1, the environment drawn sharp behind every capture, no probes, no volumes and no
     // ambient occlusion. ViewData::setCapture() picks Reinhard, which the rgba8 captures below the
     // float floor use
-    auto lighting = LightingInputs::create (scene, inputs.environmentCube, captureList->getLights(), captureShadows->getShadowRecordIndices());
+    auto lighting = LightingInputs::create (inputs.sceneSettings, inputs.environmentCube, captureList->getLights(), captureShadows->getShadowRecordIndices());
     lighting.shadowCascades = captureShadows->getCascadeTexture();
     lighting.shadowAtlas = captureShadows->getAtlasTexture();
     lighting.shadows = captureShadows->getShadowData();

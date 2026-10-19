@@ -100,7 +100,7 @@ TEST_F (LightClustersTests, GridFollowsTheCameraPlanes)
         camera.zFar = zFar;
 
         ViewData viewData;
-        viewData.update (scene, 64, 64, false, 1, 0);
+        viewData.update (scene, SceneSettings::resolve (scene), 64, 64, false, 1, 0);
         return LightClusters::getGrid (viewData);
     };
 

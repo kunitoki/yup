@@ -70,7 +70,7 @@ protected:
 
         const auto targets = GBufferPass::acquireTargets (*frameResources, acquire (GpuTextureFormat::rg16float), acquire (GpuTextureFormat::depth32float));
 
-        view.update (scene, width, height, false, 1, 0);
+        view.update (scene, SceneSettings::resolve (scene), width, height, false, 1, 0);
         drawList.build (*scene.getRoot(), view.getView());
         EXPECT_TRUE (gbufferPass.prepare (device).wasOk());
 

@@ -36,9 +36,9 @@ TEST_F (SceneRendererMetalTests, RendersEnvironmentShadowsAndBackground)
     sun->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f));
     scene.getRoot()->addChild (sun);
 
-    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
-    scene.setEnvironmentVisible (true);
-    scene.setToneMapping (Scene::ToneMapping::aces);
+    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
+    scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
 
     SceneRenderer renderer;
     const auto image = renderToImage (renderer, scene, 64);
@@ -61,9 +61,9 @@ TEST_F (SceneRendererMetalTests, RgbmEnvironmentShadesLikeTheFloatOne)
     {
         Scene scene;
         scene.getRoot()->addChild (makePlates());
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
-        scene.setEnvironmentVisible (true);
-        scene.setToneMapping (Scene::ToneMapping::aces);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
+        scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
 
         SceneRenderer renderer;
         if (rgbm)
@@ -93,9 +93,9 @@ TEST_F (SceneRendererMetalTests, RadianceFormatChangeRebuildsTheCube)
     // dropped and built again in the new format, never decoded with the other one
     Scene scene;
     scene.getRoot()->addChild (makePlates());
-    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
-    scene.setEnvironmentVisible (true);
-    scene.setToneMapping (Scene::ToneMapping::aces);
+    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
+    scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
 
     SceneRenderer renderer;
     const auto floatImage = renderToImage (renderer, scene, 64);
@@ -119,8 +119,8 @@ TEST_F (SceneRendererMetalTests, OneEnvironmentDrawnByTwoRenderers)
 
     Scene scene;
     buildEdgesScene (scene);
-    scene.setEnvironment (environment);
-    scene.setEnvironmentVisible (true);
+    scene.getRoot()->attach<EnvironmentNode> (environment);
+    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
 
     {
         SceneRenderer first, second;
@@ -157,18 +157,18 @@ TEST_F (SceneRendererMetalTests, EnvironmentChangeDropsTheOldCube)
 
     Scene scene;
     buildEdgesScene (scene);
-    scene.setEnvironment (first);
+    scene.getRoot()->attach<EnvironmentNode> (first);
 
     SceneRenderer renderer;
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (first->getReferenceCount(), 3); // The test, the scene and the renderer's slot
 
-    scene.setEnvironment (second);
+    scene.getRoot()->attach<EnvironmentNode> (second);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (first->getReferenceCount(), 1);
     EXPECT_EQ (second->getReferenceCount(), 3);
 
-    scene.setEnvironment (nullptr);
+    scene.getRoot()->attach<EnvironmentNode> (nullptr);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (second->getReferenceCount(), 1);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
@@ -181,7 +181,7 @@ TEST_F (SceneRendererMetalTests, RebuiltEnvironmentRestartsTheFullTier)
     // samples taken with the undefined cube must leave the running mean
     Scene scene;
     buildEdgesScene (scene);
-    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 4);
@@ -211,10 +211,10 @@ TEST_F (SceneRendererMetalTests, RepeatedEnvironmentFailureConvergesWithoutIt)
 
     Scene scene;
     buildEdgesScene (scene);
-    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
-    scene.setEnvironmentVisible (true);
-    scene.setToneMapping (Scene::ToneMapping::aces);
-    scene.setBackgroundColor (background);
+    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
+    scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
+    scene.getRoot()->attach<BackgroundNode> (background);
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 4);
@@ -369,7 +369,7 @@ TEST_F (SceneRendererMetalTests, SsrWithoutHistoryShadesAsWithoutIt)
     {
         Scene scene;
         buildOnScreenEmitterScene (scene);
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
 
         SceneRenderer renderer;
         setFullTierTaa (renderer, 8);
@@ -422,7 +422,7 @@ TEST_F (SceneRendererMetalTests, SsrWithoutHistoryShadesAsWithoutIt)
         buildOnScreenEmitterScene (scene);
 
         if (environment)
-            scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+            scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
 
         SceneRenderer renderer;
         setFullTierTaa (renderer, 8);
@@ -458,7 +458,7 @@ TEST_F (SceneRendererMetalTests, SsrScalesWithTheExposure)
         };
 
         const auto atOne = meanRed();
-        scene.setExposure (2.0f);
+        scene.getRoot()->attach<ExposureNode> (2.0f);
         const auto atTwo = meanRed();
         RecordProperty (screenSpaceReflections ? "floorRedOn" : "floorRedOff", (String (atOne, 4) + " -> " + String (atTwo, 4)).toStdString());
         return atOne > 0.0 ? atTwo / atOne : -1.0;
@@ -1031,7 +1031,7 @@ TEST_F (SceneRendererMetalTests, SsgiScalesWithTheExposure)
     {
         Scene scene;
         buildGIRedRoomScene (scene);
-        scene.setExposure (0.25f);
+        scene.getRoot()->attach<ExposureNode> (0.25f);
 
         SceneRenderer renderer;
         setScreenSpaceGI (renderer, screenSpaceGI);
@@ -1047,7 +1047,7 @@ TEST_F (SceneRendererMetalTests, SsgiScalesWithTheExposure)
         };
 
         const auto atQuarter = meanRed();
-        scene.setExposure (0.5f);
+        scene.getRoot()->attach<ExposureNode> (0.5f);
         const auto atHalf = meanRed();
         RecordProperty (screenSpaceGI ? "floorRedOn" : "floorRedOff", (String (atQuarter, 4) + " -> " + String (atHalf, 4)).toStdString());
         return atQuarter > 0.0 ? atHalf / atQuarter : -1.0;
@@ -1077,7 +1077,7 @@ TEST_F (SceneRendererMetalTests, SsgiConvergedRegionMatchesAPrimedHistory)
     {
         Scene scene;
         buildGIRedRoomScene (scene);
-        scene.setExposure (0.5f); // The floor's red stays below 1, which meanLinearRed() reads
+        scene.getRoot()->attach<ExposureNode> (0.5f); // The floor's red stays below 1, which meanLinearRed() reads
 
         SceneRenderer renderer;
         setScreenSpaceGI (renderer, true);
@@ -1435,11 +1435,11 @@ TEST_P (SceneRendererTierTests, InfiniteFarPlaneShowsTheEnvironment)
     const auto renderSky = [&] (float zFar)
     {
         Scene scene;
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& d)
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& d)
                                                   { return Vector3<float> (0.5f + 0.4f * d.getX(), 0.5f + 0.4f * d.getY(), 0.5f + 0.4f * d.getZ()); },
                                                   64,
                                                   3));
-        scene.setEnvironmentVisible (true);
+        scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
 
         auto camera = EntityNode::Ptr (new EntityNode ("camera"));
         auto& node = camera->attach<CameraNode>();

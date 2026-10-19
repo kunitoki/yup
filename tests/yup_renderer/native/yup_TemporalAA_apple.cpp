@@ -86,7 +86,7 @@ void main() { color = vec4(uintBitsToFloat(0x7fc00000u)); })",
 
     Scene scene;
     ViewData view;
-    view.update (scene, size, size, false, 1, 0);
+    view.update (scene, SceneSettings::resolve (scene), size, size, false, 1, 0);
 
     TemporalAA temporalAA;
     resources.beginFrame (size, size);
@@ -130,7 +130,7 @@ TEST_F (TemporalAATests, BlendWeighsColorsByLumaAndKeepsCoverageLinear)
 
         Scene scene;
         ViewData view;
-        view.update (scene, size, size, false, 1, 0);
+        view.update (scene, SceneSettings::resolve (scene), size, size, false, 1, 0);
 
         TemporalAA temporalAA;
         resources.beginFrame (size, size);

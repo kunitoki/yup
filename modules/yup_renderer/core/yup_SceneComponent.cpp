@@ -50,7 +50,7 @@ void SceneComponent::paint (Graphics& g)
     rendered = false;
 
     const auto bounds = getLocalBounds();
-    const auto background = scene != nullptr ? scene->getBackgroundColor() : Color (0xff000000);
+    const auto background = scene != nullptr ? SceneSettings::resolve (*scene).backgroundColor : Color (0xff000000);
 
     g.setFillColor (background);
     g.fillAll();

@@ -166,10 +166,11 @@ TEST_F (SceneRendererMetalTests, GpuFailureStillRendersTheNextFrame)
     const auto image = readBack (texture);
     ASSERT_TRUE (image.isValid());
 
+    const auto background = SceneSettings::resolve (scene).backgroundColor;
     bool drewSomething = false;
     for (int y = 0; y < 64 && ! drewSomething; y += 2)
         for (int x = 0; x < 64 && ! drewSomething; x += 2)
-            drewSomething = image.getPixelColor (x, y) != scene.getBackgroundColor();
+            drewSomething = image.getPixelColor (x, y) != background;
 
     EXPECT_TRUE (drewSomething);
 }
@@ -367,7 +368,7 @@ TEST_F (SceneRendererMetalTests, BackgroundIsKeptBehindLitPixels)
     {
         Scene scene;
         buildShadowsScene (scene);
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& d)
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& d)
         {
             return d.getY() > 0.0f ? Vector3<float> (0.8f, 0.1f, 0.05f) : Vector3<float> (0.05f, 0.1f, 0.8f);
         }, 32, 3));

@@ -52,7 +52,7 @@ public:
         screenSpaceGI,          ///< Screen-space diffuse global illumination: full tier only, off by default. It extends the horizon search of the ambient occlusion and reads the history of temporal anti-aliasing, so it is off whenever either is.
         depthOfField,           ///< Depth of field: off by default. On raster it renders the scene in half float and draws the depth and normal prepass, so it needs both, as bloom and ambient occlusion do.
         motionBlur,             ///< Motion blur: full tier only, off by default, and off whenever RenderSettings::motionBlurShutter is not a positive finite number. The raster tier has no screen-space motion to read.
-        worldFog,               ///< The analytic WorldFog: always on full. On raster it renders the scene in half float and draws the depth and normal prepass, so it needs both, as depth of field does. Enabled wherever available: the Scene switches the fog on (Scene::setWorldFog()), with no RenderSettings field.
+        worldFog,               ///< The analytic WorldFog: always on full. On raster it renders the scene in half float and draws the depth and normal prepass, so it needs both, as depth of field does. Enabled wherever available: a WorldFogNode in the scene switches the fog on, with no RenderSettings field.
         upscaling               ///< Shading the scene smaller and reconstructing the frame with temporal anti-aliasing (RenderSettings::upscaling): full tier only, off by default, and off whenever temporal anti-aliasing is or the scale is 1 (see getRenderScale()).
     };
 

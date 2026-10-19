@@ -183,7 +183,7 @@ TEST_F (ShadowCascadesTests, InfiniteFarCapsAtTheClusterLimit)
     scene.setActiveCamera (entity.get());
 
     ViewData view;
-    view.update (scene, 64, 64, true, 16, 3);
+    view.update (scene, SceneSettings::resolve (scene), 64, 64, true, 16, 3);
 
     auto inputs = makeInputs();
     inputs.setView (view);

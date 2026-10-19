@@ -27,6 +27,7 @@
 
 #include "yup_DepthNormalPrepass.cpp"
 #include "yup_DepthOfField.cpp"
+#include "yup_EnvironmentMap.cpp"
 #include "yup_FrameResources.cpp"
 #include "yup_FullscreenPass.cpp"
 #include "yup_GBufferPass.cpp"
@@ -40,14 +41,18 @@
 #include "yup_ProbeAtlas.cpp"
 #include "yup_ProbeBaker.cpp"
 #include "yup_ProbeRenderer.cpp"
+#include "yup_ReflectionProbeNode.cpp"
 #include "yup_RenderCapabilities.cpp"
 #include "yup_SceneComponent.cpp"
 #include "yup_SceneDrawList.cpp"
 #include "yup_SceneRenderer.cpp"
+#include "yup_SceneSettings.cpp"
 #include "yup_ShadowAtlas.cpp"
 #include "yup_ShadowCascades.cpp"
+#include "yup_SphericalHarmonics.cpp"
 #include "yup_TemporalAA.cpp"
 #include "yup_ViewData.cpp"
+#include "yup_WorldFogNode.cpp"
 
 #if YUP_APPLE
 #include "native/yup_SceneRendererFixtures_apple.h"

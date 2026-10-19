@@ -21,7 +21,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_3d/yup_3d.h>
+#include <yup_renderer/yup_renderer.h>
 
 using namespace yup;
 
@@ -139,4 +139,13 @@ TEST_F (WorldFogTests, EqualityComparesTheFields)
     other = fog;
     other.color = { 0.5f, 1.0f, 1.0f };
     EXPECT_FALSE (fog == other);
+}
+
+TEST_F (WorldFogTests, NodeEnablesItsFogByDefault)
+{
+    const WorldFogNode node;
+    EXPECT_TRUE (node.fog.enabled);
+
+    const auto fog = makeFog (0.1f, 0.5f);
+    EXPECT_TRUE (WorldFogNode (fog).fog == fog);
 }

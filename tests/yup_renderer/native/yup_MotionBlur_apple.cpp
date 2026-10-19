@@ -235,12 +235,12 @@ TEST_F (MotionBlurMetalTests, CameraMotionBlursStaticObjects)
     // Turning the camera moves the environment, whose motion only GBufferBackground writes: its
     // sharp edge, a white half to the right of the view axis, smears as the geometry does
     Scene scene;
-    scene.setBackgroundColor (Colors::black);
-    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& direction)
+    scene.getRoot()->attach<BackgroundNode> (Colors::black);
+    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& direction)
     {
         return direction.getX() > 0.0f ? Vector3<float> (1.0f, 1.0f, 1.0f) : Vector3<float>();
     }, 512, 1));
-    scene.setEnvironmentVisible (true);
+    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
     auto* camera = scene.getRoot()->findChild ("camera");
     ASSERT_NE (camera, nullptr);
@@ -457,8 +457,8 @@ TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessOverTheBackgro
     ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
-    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
-    scene.setEnvironmentVisible (true);
+    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     const auto overEnvironment = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
     ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
 
@@ -499,8 +499,8 @@ TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessWhileTheCamera
     ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
-    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
-    scene.setEnvironmentVisible (true);
+    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     const auto overEnvironment = turn (renderer);
     ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
 
@@ -523,8 +523,8 @@ TEST_F (MotionBlurMetalTests, FogOverTheBackgroundKeepsItsBlendWhileTheCameraTur
     // stays near its input, and its blur amount is at most 0.02
     Scene scene;
     buildMovingBarScene (scene);
-    scene.setAmbientColor (fogAmbientColor());
-    scene.setWorldFog (makeFog (0.08f));
+    scene.getRoot()->attach<AmbientLightNode> (fogAmbientColor());
+    scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
     scene.getActiveCamera()->zFar = 10.0f;
 
     auto* camera = scene.getRoot()->findChild ("camera");
@@ -736,7 +736,7 @@ TEST_F (MotionBlurMetalTests, SmearBlendsItsCoverageOverAGrayBackground)
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
     constexpr int gray = 100;
-    scene.setBackgroundColor (Color (static_cast<uint8> (gray), static_cast<uint8> (gray), static_cast<uint8> (gray)));
+    scene.getRoot()->attach<BackgroundNode> (Color (static_cast<uint8> (gray), static_cast<uint8> (gray), static_cast<uint8> (gray)));
     const auto overGray = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
     ASSERT_TRUE (overGray.isValid()) << renderer.getLastError();
 
@@ -773,8 +773,8 @@ TEST_F (MotionBlurMetalTests, DiagonalMotionSmearsAlongItsDirectionAcrossTiles)
     // corner of the 16 px tiles at (80, 48): the tile beyond it holds none of the square, so only
     // its diagonal neighbor carries the motion there
     Scene scene;
-    scene.setBackgroundColor (Colors::black);
-    scene.setAmbientColor (Colors::black);
+    scene.getRoot()->attach<BackgroundNode> (Colors::black);
+    scene.getRoot()->attach<AmbientLightNode> (Colors::black);
     addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
     auto* square = addMotionQuad (scene, { -0.1f, -0.1f, 0.2f, 0.2f }, 20.0f);
 
@@ -842,8 +842,8 @@ TEST_F (MotionBlurMetalTests, MotionBlurRunsAfterTheDepthOfField)
     EXPECT_TRUE (isFiniteTexture (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur)));
 #endif
 
-    scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
-    scene.setEnvironmentVisible (true);
+    scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
+    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
     const auto overEnvironment = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
     ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
 

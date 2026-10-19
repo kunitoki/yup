@@ -54,62 +54,6 @@ TEST_F (SceneTests, NewSceneHasARootAndNoCamera)
     ASSERT_NE (scene->getRoot(), nullptr);
     EXPECT_EQ (scene->getRoot()->getNumChildren(), 0);
     EXPECT_EQ (scene->getActiveCamera(), nullptr);
-    EXPECT_TRUE (scene->isUsingDefaultLight());
-    EXPECT_FLOAT_EQ (scene->getExposure(), 1.0f);
-}
-
-TEST_F (SceneTests, SettingsAreKept)
-{
-    scene->setBackgroundColor (Colors::red);
-    scene->setAmbientColor (Colors::blue);
-    scene->setExposure (2.0f);
-    scene->setUsingDefaultLight (false);
-
-    EXPECT_EQ (scene->getBackgroundColor(), Colors::red);
-    EXPECT_EQ (scene->getAmbientColor(), Colors::blue);
-    EXPECT_FLOAT_EQ (scene->getExposure(), 2.0f);
-    EXPECT_FALSE (scene->isUsingDefaultLight());
-}
-
-TEST_F (SceneTests, NewSceneHasNoEnvironmentAndReinhardToneMapping)
-{
-    EXPECT_EQ (scene->getEnvironment(), nullptr);
-    EXPECT_FLOAT_EQ (scene->getEnvironmentIntensity(), 1.0f);
-    EXPECT_FALSE (scene->isEnvironmentVisible());
-    EXPECT_FLOAT_EQ (scene->getEnvironmentBlur(), 0.0f);
-    EXPECT_EQ (scene->getToneMapping(), Scene::ToneMapping::reinhard);
-}
-
-TEST_F (SceneTests, ToneMappingIncludesAgx)
-{
-    scene->setToneMapping (Scene::ToneMapping::agx);
-
-    EXPECT_EQ (scene->getToneMapping(), Scene::ToneMapping::agx);
-}
-
-TEST_F (SceneTests, EnvironmentSettingsAreKeptAndLimited)
-{
-    EnvironmentMap::Ptr environment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (1.0f, 1.0f, 1.0f); }, 16, 2));
-
-    scene->setEnvironment (environment);
-    scene->setEnvironmentVisible (true);
-    scene->setToneMapping (Scene::ToneMapping::aces);
-
-    EXPECT_EQ (scene->getEnvironment(), environment);
-    EXPECT_TRUE (scene->isEnvironmentVisible());
-    EXPECT_EQ (scene->getToneMapping(), Scene::ToneMapping::aces);
-
-    scene->setEnvironmentIntensity (-1.0f);
-    EXPECT_FLOAT_EQ (scene->getEnvironmentIntensity(), 0.0f);
-
-    scene->setEnvironmentBlur (2.0f);
-    EXPECT_FLOAT_EQ (scene->getEnvironmentBlur(), 1.0f);
-
-    scene->setEnvironmentBlur (-1.0f);
-    EXPECT_FLOAT_EQ (scene->getEnvironmentBlur(), 0.0f);
-
-    scene->setEnvironment (nullptr);
-    EXPECT_EQ (scene->getEnvironment(), nullptr);
 }
 
 TEST_F (SceneTests, LightsDoNotCastShadowsByDefault)
@@ -248,19 +192,4 @@ TEST_F (SceneTests, CameraProjectionHandlesInfiniteFarPlane)
 
     camera.zFar = 100.0f;
     EXPECT_TRUE (camera.getProjectionMatrix (2.0f).approximatelyEqualTo (Matrix4::perspective (camera.yFov, 2.0f, 0.5f, 100.0f)));
-}
-
-TEST_F (SceneTests, WorldFogIsDisabledByDefaultAndIsKept)
-{
-    EXPECT_FALSE (scene->getWorldFog().enabled);
-    EXPECT_TRUE (scene->getWorldFog() == WorldFog {});
-
-    WorldFog fog;
-    fog.enabled = true;
-    fog.density = 0.1f;
-    fog.heightFalloff = 0.5f;
-    fog.anisotropy = 0.3f;
-    scene->setWorldFog (fog);
-
-    EXPECT_TRUE (scene->getWorldFog() == fog);
 }

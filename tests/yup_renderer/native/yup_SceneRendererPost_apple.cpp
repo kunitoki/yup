@@ -27,7 +27,7 @@ using namespace yup;
 
 TEST_F (SceneRendererMetalTests, AgxToneMapsTheEnvironment)
 {
-    const auto mid = renderEnvironmentCorner (0.5f, Scene::ToneMapping::agx);
+    const auto mid = renderEnvironmentCorner (0.5f, ToneMappingOperator::agx);
     const auto expected = SceneRendererAgxMirrorTests::toneMapAgx ({ 0.5f, 0.5f, 0.5f });
 
     // 0.5 through AgX lands inside the displayable range, neither crushed nor clipped
@@ -37,11 +37,11 @@ TEST_F (SceneRendererMetalTests, AgxToneMapsTheEnvironment)
     EXPECT_NEAR (mid.getGreen(), expected[1], 3);
     EXPECT_NEAR (mid.getBlue(), expected[2], 3);
 
-    const auto aces = renderEnvironmentCorner (0.5f, Scene::ToneMapping::aces);
+    const auto aces = renderEnvironmentCorner (0.5f, ToneMappingOperator::aces);
     EXPECT_GE (std::abs (static_cast<int> (aces.getRed()) - static_cast<int> (mid.getRed())), 3);
 
-    const auto dim = renderEnvironmentCorner (0.25f, Scene::ToneMapping::agx);
-    const auto bright = renderEnvironmentCorner (1.0f, Scene::ToneMapping::agx);
+    const auto dim = renderEnvironmentCorner (0.25f, ToneMappingOperator::agx);
+    const auto bright = renderEnvironmentCorner (1.0f, ToneMappingOperator::agx);
     EXPECT_NEAR (dim.getRed(), SceneRendererAgxMirrorTests::toneMapAgx ({ 0.25f, 0.25f, 0.25f })[0], 3);
     EXPECT_NEAR (bright.getRed(), SceneRendererAgxMirrorTests::toneMapAgx ({ 1.0f, 1.0f, 1.0f })[0], 3);
     EXPECT_GT (bright.getRed(), mid.getRed());
@@ -334,7 +334,7 @@ TEST_F (SceneRendererMetalTests, FullTierBackgroundColorMatchesRaster)
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         sun->attach<LightNode>();
         scene.getRoot()->addChild (sun);
-        scene.setBackgroundColor (background);
+        scene.getRoot()->attach<BackgroundNode> (background);
 
         SceneRenderer renderer;
         setTier (renderer, tier);
@@ -361,7 +361,7 @@ TEST_F (SceneRendererMetalTests, FullTierBackgroundColorSurvivesTaaConvergence)
 
     Scene scene;
     buildEdgesScene (scene);
-    scene.setBackgroundColor (background);
+    scene.getRoot()->attach<BackgroundNode> (background);
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 4);
@@ -392,7 +392,7 @@ TEST_F (SceneRendererMetalTests, RasterIsAlwaysConverged)
     EXPECT_TRUE (renderer.isConverged());
 
     // Changing the scene changes nothing on raster
-    scene.setExposure (2.0f);
+    scene.getRoot()->attach<ExposureNode> (2.0f);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_TRUE (renderer.isConverged());
 }
@@ -432,7 +432,7 @@ TEST_F (SceneRendererMetalTests, ConvergesThenRestartsOnChange)
 
     expectConvergesAfterFourRenders ("first");
 
-    scene.setExposure (2.0f);
+    scene.getRoot()->attach<ExposureNode> (2.0f);
     expectConvergesAfterFourRenders ("exposure");
 
     material->roughnessFactor = 0.5f;
@@ -709,7 +709,7 @@ protected:
     */
     void checkExposedPerTexel (Scene& scene, SceneRenderer& renderer, RenderSettings::DebugView view, SceneRenderer::PassOutput output, const String& weight, int minLit, int minPartial)
     {
-        scene.setExposure (0.25f);
+        scene.getRoot()->attach<ExposureNode> (0.25f);
         setDebugView (renderer, view);
 
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
@@ -1191,7 +1191,7 @@ TEST_F (SceneRendererMetalTests, ToneMappingChangeKeepsTheFullTierConverged)
     ASSERT_TRUE (renderer.isConverged());
 
     // Tone mapping runs after the accumulation: the converged history shows through the new operator
-    scene.setToneMapping (Scene::ToneMapping::aces);
+    scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
     const auto image = renderToImage (renderer, scene, 128);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
     EXPECT_TRUE (renderer.isConverged());
@@ -1203,7 +1203,7 @@ TEST_F (SceneRendererMetalTests, ExposureAndLightChangesRestartButKeepTheHistory
 {
     // Each change sets a value, applied to the edges scene converged with 8 TAA samples
     const std::pair<const char*, std::function<void (Scene&, float)>> changes[] = {
-        { "exposure", [] (Scene& scene, float value) { scene.setExposure (value); } },
+        { "exposure", [] (Scene& scene, float value) { scene.getRoot()->attach<ExposureNode> (value); } },
         { "light", [] (Scene& scene, float value) { scene.getRoot()->findChild ("sun")->setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, value)); } },
     };
 
@@ -1289,7 +1289,7 @@ TEST_F (SceneRendererMetalTests, UncoveredPixelsShowTheBackgroundExactly)
 
     Scene scene;
     buildEdgesScene (scene);
-    scene.setBackgroundColor (background);
+    scene.getRoot()->attach<BackgroundNode> (background);
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 4);
@@ -1465,8 +1465,8 @@ TEST_F (SceneRendererMetalTests, InfiniteFarPlaneSkyMovesWithTheCameraRotation)
     const auto renderTurning = [this] (float zFar)
     {
         Scene scene;
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
-        scene.setEnvironmentVisible (true);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
+        scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
 
         auto camera = EntityNode::Ptr (new EntityNode ("camera"));
         auto& node = camera->attach<CameraNode>();

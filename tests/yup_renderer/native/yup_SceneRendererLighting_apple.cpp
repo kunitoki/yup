@@ -273,7 +273,7 @@ TEST_F (SceneRendererMetalTests, FullTierRendersWithoutAnyLight)
     // fails on it under Metal API validation (MTL_DEBUG_LAYER=1)
     Scene scene;
     buildGlowScene (scene, 0.5f);
-    scene.setUsingDefaultLight (false);
+    scene.getRoot()->attach<DefaultLightNode> (false);
 
     auto& renderer = sharedRenderer();
     setTier (renderer, RenderSettings::TierPreference::full);
@@ -342,7 +342,7 @@ TEST_P (SceneRendererTierTests, AreaLightVariantFollowsTheLightRadius)
 
     Scene scene;
     addPlate (scene, material);
-    scene.setAmbientColor (Colors::black);
+    scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
     auto sun = EntityNode::Ptr (new EntityNode ("sun"));
     auto& light = sun->attach<LightNode>();
@@ -389,9 +389,9 @@ TEST_P (SceneRendererTierTests, EmissiveStrengthScalesEmission)
 
         Scene scene;
         addPlate (scene, material);
-        scene.setUsingDefaultLight (false);
-        scene.setExposure (1.0f);
-        scene.setToneMapping (Scene::ToneMapping::reinhard);
+        scene.getRoot()->attach<DefaultLightNode> (false);
+        scene.getRoot()->attach<ExposureNode> (1.0f);
+        scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
 
         SceneRenderer renderer;
         setTier (renderer, GetParam());
@@ -425,7 +425,7 @@ TEST_P (SceneRendererTierTests, HigherIorBrightensDielectricSpecular)
 
         Scene scene;
         addPlate (scene, material);
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         sun->attach<LightNode>().intensity = 10.0f;
@@ -463,7 +463,7 @@ TEST_P (SceneRendererTierTests, SpecularFactorAndColorShapeTheDielectricHighligh
 
         Scene scene;
         addPlate (scene, material);
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         sun->attach<LightNode>().intensity = 10.0f;
@@ -583,7 +583,7 @@ TEST_P (SceneRendererTierTests, DrawsFindTheirLightsWhenDirectionalLightsArePack
     material->metallicFactor = 0.0f;
 
     Scene scene;
-    scene.setAmbientColor (Colors::black);
+    scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
     auto lamp = EntityNode::Ptr (new EntityNode ("lamp"));
     auto& point = lamp->attach<LightNode> (LightNode::Type::point);
@@ -735,7 +735,7 @@ TEST_P (SceneRendererTierTests, SunDiskSoftensNothingButSpecular)
 
         Scene scene;
         addPlate (scene, material);
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         auto& node = sun->attach<LightNode>();
@@ -791,7 +791,7 @@ TEST_P (SceneRendererTierTests, LargeLowSphereLightDiffuseIsExact)
 
     Scene scene;
     addPlate (scene, material);
-    scene.setAmbientColor (Colors::black);
+    scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
     auto light = EntityNode::Ptr (new EntityNode ("sphere"));
     auto& node = light->attach<LightNode> (LightNode::Type::point);
@@ -827,7 +827,7 @@ TEST_P (SceneRendererTierTests, SphereLightSpecularMatchesGgx)
 
     Scene scene;
     auto* plate = addPlate (scene, material);
-    scene.setAmbientColor (Colors::black);
+    scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
     // Tilted so the normal makes 60 degrees with the direction to the camera
     const auto tilt = Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, -MathConstants<float>::pi / 3.0f);
@@ -867,7 +867,7 @@ TEST_P (SceneRendererTierTests, TinySpotMatchesPunctualOffAxis)
 
         Scene scene;
         addPlate (scene, material);
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
         auto light = EntityNode::Ptr (new EntityNode ("spot"));
         auto& node = light->attach<LightNode> (LightNode::Type::spot);
@@ -902,7 +902,7 @@ TEST_P (SceneRendererTierTests, SunDiskWidensTheHighlight)
 
         Scene scene;
         addPlate (scene, material);
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         sun->attach<LightNode>().radius = radius;
@@ -2079,8 +2079,8 @@ TEST_F (SceneRendererMetalTests, BlendedLayeredItemShadesOnFull)
 
         Scene scene;
         addPlate (scene, material);
-        scene.setAmbientColor (Colors::black);
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& d) { return Vector3<float> (0.2f, 0.2f, 0.2f) * (d.getY() * 0.5f + 0.5f); }, 32, 3));
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& d) { return Vector3<float> (0.2f, 0.2f, 0.2f) * (d.getY() * 0.5f + 0.5f); }, 32, 3));
 
         auto sun = EntityNode::Ptr (new EntityNode ("sun"));
         sun->attach<LightNode>().intensity = 3.0f;
@@ -2125,8 +2125,8 @@ TEST_F (SceneRendererMetalTests, ClearcoatShadesAlikeOnBothTiers)
     {
         Scene scene;
         addSphere (scene, 1.5f, makeLayeredMaterial ({ 0.6f, 0.1f, 0.1f }, clearcoat, 0.3f, {}, 0.0f));
-        scene.setAmbientColor (Colors::black);
-        scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& direction)
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& direction)
         {
             const auto up = jlimit (0.0f, 1.0f, direction.getY() * 0.5f + 0.5f);
             return Vector3<float> (0.1f, 0.1f, 0.1f) + Vector3<float> (1.0f, 1.2f, 1.5f) * up;
@@ -2183,7 +2183,7 @@ TEST_F (SceneRendererMetalTests, LayersAreShadowedWithTheBase)
     {
         Scene scene;
         addPlate (scene, material);
-        scene.setAmbientColor (Colors::black);
+        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
 
         auto camera = EntityNode::Ptr (new EntityNode ("camera"));
         camera->attach<CameraNode>();
@@ -2258,8 +2258,8 @@ TEST_F (SceneRendererMetalTests, ClassifiedLightingMatchesOneVariant)
         renderer.disableLightingClassificationForTesting (! classified);
 
         Scene magenta;
-        magenta.setEnvironment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 4.0f); }, 32, 3));
-        magenta.setEnvironmentVisible (true);
+        magenta.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 4.0f); }, 32, 3));
+        magenta.getRoot()->getNode<EnvironmentNode>()->visible = true;
         EXPECT_TRUE (renderToImage (renderer, magenta, 128).isValid());
 
         Scene scene;

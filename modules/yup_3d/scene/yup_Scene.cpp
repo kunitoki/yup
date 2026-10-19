@@ -77,9 +77,9 @@ Scene::~Scene() = default;
 
 //==============================================================================
 
-void Scene::setActiveCamera (EntityNode* entity, int slot)
+void Scene::setActiveCamera (EntityNode::Ptr entity, int slot)
 {
-    activeCameraEntity = entity;
+    activeCameraEntity = std::move (entity);
     activeCameraSlot = slot;
 }
 

@@ -37,6 +37,12 @@
 
 //==============================================================================
 
+#include "resources/yup_SphericalHarmonics.cpp"
+#include "resources/yup_EnvironmentMap.cpp"
+#include "nodes/yup_ReflectionProbeNode.cpp"
+#include "nodes/yup_IrradianceVolumeNode.cpp"
+#include "nodes/yup_WorldFogNode.cpp"
+#include "scene/yup_SceneSettings.cpp"
 #include "core/yup_RenderCapabilities.cpp"
 #include "scene/yup_SceneDrawList.cpp"
 #include "scene/yup_GpuSceneData.cpp"

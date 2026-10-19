@@ -59,7 +59,7 @@ TEST_F (ViewDataTests, UnjitteredWhenNotRequested)
 {
     Scene scene;
     ViewData view;
-    view.update (scene, 100, 50, false, 16, 7);
+    view.update (scene, SceneSettings::resolve (scene), 100, 50, false, 16, 7);
 
     EXPECT_EQ (view.getBlock().jitter[0], 0.0f);
     EXPECT_EQ (view.getBlock().jitter[1], 0.0f);
@@ -72,10 +72,10 @@ TEST_F (ViewDataTests, JitteredProjectionIsTheRasterizedOne)
     Scene scene;
     ViewData view;
 
-    view.update (scene, 100, 50, false, 16, 3);
+    view.update (scene, SceneSettings::resolve (scene), 100, 50, false, 16, 3);
     EXPECT_TRUE (std::equal (view.getJitteredProjection().getData(), view.getJitteredProjection().getData() + 16, view.getProjection().getData()));
 
-    view.update (scene, 100, 50, true, 16, 3);
+    view.update (scene, SceneSettings::resolve (scene), 100, 50, true, 16, 3);
     EXPECT_TRUE (std::equal (view.getJitteredProjection().getData(), view.getJitteredProjection().getData() + 16, view.getBlock().projection));
     EXPECT_FALSE (std::equal (view.getJitteredProjection().getData(), view.getJitteredProjection().getData() + 16, view.getProjection().getData()));
 }
@@ -84,7 +84,7 @@ TEST_F (ViewDataTests, PreviousIsLastFramesUnjitteredMatrix)
 {
     Scene scene;
     ViewData view;
-    view.update (scene, 100, 100, true, 16, 1);
+    view.update (scene, SceneSettings::resolve (scene), 100, 100, true, 16, 1);
     const auto first = view.getUnjitteredViewProjection();
 
     auto camera = EntityNode::Ptr (new EntityNode ("camera"));
@@ -93,7 +93,7 @@ TEST_F (ViewDataTests, PreviousIsLastFramesUnjitteredMatrix)
     scene.getRoot()->addChild (camera);
     scene.setActiveCamera (camera.get());
 
-    view.update (scene, 100, 100, true, 16, 2);
+    view.update (scene, SceneSettings::resolve (scene), 100, 100, true, 16, 2);
     EXPECT_TRUE (std::equal (first.getData(), first.getData() + 16, view.getBlock().previousViewProjection));
 }
 
@@ -101,24 +101,24 @@ TEST_F (ViewDataTests, ResetMakesPreviousEqualCurrent)
 {
     Scene scene;
     ViewData view;
-    view.update (scene, 100, 100, false, 16, 1);
+    view.update (scene, SceneSettings::resolve (scene), 100, 100, false, 16, 1);
     view.reset();
-    view.update (scene, 100, 100, false, 16, 2);
+    view.update (scene, SceneSettings::resolve (scene), 100, 100, false, 16, 2);
     EXPECT_TRUE (std::equal (std::begin (view.getBlock().previousViewProjection), std::end (view.getBlock().previousViewProjection),
                              std::begin (view.getBlock().unjitteredViewProjection)));
 }
 
 TEST_F (ViewDataTests, ToneMappingOperatorMatchesShaderIndices)
 {
-    EXPECT_EQ (ViewData::getToneMappingOperator (Scene::ToneMapping::reinhard), 0.0f);
-    EXPECT_EQ (ViewData::getToneMappingOperator (Scene::ToneMapping::aces), 1.0f);
-    EXPECT_EQ (ViewData::getToneMappingOperator (Scene::ToneMapping::agx), 2.0f);
+    EXPECT_EQ (ViewData::getToneMappingOperator (ToneMappingOperator::reinhard), 0.0f);
+    EXPECT_EQ (ViewData::getToneMappingOperator (ToneMappingOperator::aces), 1.0f);
+    EXPECT_EQ (ViewData::getToneMappingOperator (ToneMappingOperator::agx), 2.0f);
 
     Scene scene;
-    scene.setToneMapping (Scene::ToneMapping::agx);
+    scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::agx);
 
     ViewData view;
-    view.update (scene, 100, 100, false, 16, 1);
+    view.update (scene, SceneSettings::resolve (scene), 100, 100, false, 16, 1);
     EXPECT_EQ (view.getBlock().clipPlanes[3], 2.0f);
 }
 
@@ -130,7 +130,7 @@ TEST_F (ViewDataTests, ShadowNoiseFrameIndexWrapsOnTheCpu)
     ViewData view;
 
     const auto frameIndex = (uint64 (1) << 30) + 5;
-    view.update (scene, 100, 100, true, 16, frameIndex);
+    view.update (scene, SceneSettings::resolve (scene), 100, 100, true, 16, frameIndex);
     EXPECT_EQ (view.getBlock().clipPlanes[2], 5.0f);
 
     // The jitter still follows the whole index
@@ -138,10 +138,10 @@ TEST_F (ViewDataTests, ShadowNoiseFrameIndexWrapsOnTheCpu)
     EXPECT_FLOAT_EQ (view.getBlock().jitter[0], jitter.getX() * 2.0f / 100.0f);
     EXPECT_FLOAT_EQ (view.getBlock().jitter[1], jitter.getY() * 2.0f / 100.0f);
 
-    view.update (scene, 100, 100, true, 16, 63);
+    view.update (scene, SceneSettings::resolve (scene), 100, 100, true, 16, 63);
     EXPECT_EQ (view.getBlock().clipPlanes[2], 63.0f);
 
-    view.update (scene, 100, 100, true, 16, 64);
+    view.update (scene, SceneSettings::resolve (scene), 100, 100, true, 16, 64);
     EXPECT_EQ (view.getBlock().clipPlanes[2], 0.0f);
 }
 
@@ -212,7 +212,7 @@ protected:
         scene.setActiveCamera (camera.get());
 
         ViewData view;
-        view.update (scene, 100, 50, true, 16, 3);
+        view.update (scene, SceneSettings::resolve (scene), 100, 50, true, 16, 3);
         ASSERT_NE (view.getBlock().jitter[0], 0.0f);
 
         for (const auto viewDepth : viewDepths)

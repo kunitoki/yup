@@ -23,9 +23,11 @@ namespace yup
 {
 
 //==============================================================================
-/** A 3D world: a root entity, the camera that views it and the global lighting settings.
+/** A 3D world: a root entity and the camera that views it.
 
     Build the world under getRoot(), then show it with a SceneComponent of the yup_renderer module.
+    Scene-wide features such as the background, the environment or the fog are nodes of the
+    yup_renderer module attached to the root, see SceneSettings there.
 
     @code
     auto scene = yup::Scene::Ptr (new yup::Scene());
@@ -68,7 +70,7 @@ public:
         @param entity  The entity holding the camera, or nullptr to use the fallback.
         @param slot    The CameraNode slot on the entity.
     */
-    void setActiveCamera (EntityNode* entity, int slot = 0);
+    void setActiveCamera (EntityNode::Ptr entity, int slot = 0);
 
     /** Returns the camera that renders the scene.
 
@@ -78,97 +80,6 @@ public:
         perspective camera at (0, 0, 5) looking at the origin.
     */
     CameraNode* getActiveCamera() const noexcept;
-
-    //==============================================================================
-    /** Returns the color the background is cleared to. */
-    Color getBackgroundColor() const noexcept { return backgroundColor; }
-
-    /** Changes the color the background is cleared to. */
-    void setBackgroundColor (Color newColor) noexcept { backgroundColor = newColor; }
-
-    /** Returns the flat ambient light color added to every surface. */
-    Color getAmbientColor() const noexcept { return ambientColor; }
-
-    /** Changes the flat ambient light color added to every surface. */
-    void setAmbientColor (Color newColor) noexcept { ambientColor = newColor; }
-
-    /** Returns the exposure multiplier applied before tone mapping. */
-    float getExposure() const noexcept { return exposure; }
-
-    /** Changes the exposure multiplier applied before tone mapping. */
-    void setExposure (float newExposure) noexcept { exposure = newExposure; }
-
-    /** Returns true if a default directional light is used when the tree has no LightNode. */
-    bool isUsingDefaultLight() const noexcept { return useDefaultLight; }
-
-    /** Chooses whether a default directional light is used when the tree has no LightNode. */
-    void setUsingDefaultLight (bool shouldUseDefaultLight) noexcept { useDefaultLight = shouldUseDefaultLight; }
-
-    //==============================================================================
-    /** How the lit colors are mapped into the displayable range. */
-    enum class ToneMapping
-    {
-        reinhard, ///< Soft roll-off of the highlights, keeps the colors flat.
-        aces,     ///< The ACES filmic curve: more contrast and saturation, photographic highlights.
-        agx       ///< AgX: the filmic default of modern renderers, keeps saturated highlights from skewing.
-    };
-
-    /** Returns how the lit colors are mapped into the displayable range. */
-    ToneMapping getToneMapping() const noexcept { return toneMapping; }
-
-    /** Changes how the lit colors are mapped into the displayable range. */
-    void setToneMapping (ToneMapping newToneMapping) noexcept { toneMapping = newToneMapping; }
-
-    //==============================================================================
-    /** Returns the environment lighting the scene, or nullptr when there is none. */
-    const EnvironmentMap::Ptr& getEnvironment() const noexcept { return environment; }
-
-    /** Changes the environment lighting the scene.
-
-        Surfaces reflect it, sharply or blurred by their roughness, and receive its diffuse
-        light. It adds to the lights and to the ambient color: lower the ambient color when an
-        environment lights the scene.
-
-        @param newEnvironment The environment, or nullptr for none.
-    */
-    void setEnvironment (EnvironmentMap::Ptr newEnvironment) noexcept { environment = std::move (newEnvironment); }
-
-    /** Returns the multiplier applied to the light of the environment. */
-    float getEnvironmentIntensity() const noexcept { return environmentIntensity; }
-
-    /** Changes the multiplier applied to the light of the environment. */
-    void setEnvironmentIntensity (float newIntensity) noexcept { environmentIntensity = jmax (0.0f, newIntensity); }
-
-    /** Returns true if the environment is drawn behind the scene instead of the background color. */
-    bool isEnvironmentVisible() const noexcept { return environmentVisible; }
-
-    /** Chooses whether the environment is drawn behind the scene instead of the background color. */
-    void setEnvironmentVisible (bool shouldBeVisible) noexcept { environmentVisible = shouldBeVisible; }
-
-    /** Returns how blurred the environment is behind the scene, from 0 (sharp) to 1. */
-    float getEnvironmentBlur() const noexcept { return environmentBlur; }
-
-    /** Changes how blurred the environment is behind the scene, from 0 (sharp) to 1 (as blurred
-        as the reflections of a fully rough surface).
-    */
-    void setEnvironmentBlur (float newBlur) noexcept { environmentBlur = jlimit (0.0f, 1.0f, newBlur); }
-
-    //==============================================================================
-    /** Returns the height fog filling the scene, disabled by default. */
-    const WorldFog& getWorldFog() const noexcept { return worldFog; }
-
-    /** Changes the height fog filling the scene.
-
-        The fog renders only when WorldFog::enabled is true, its density is positive and every field
-        is finite. The yup_renderer module draws it on its full tier, and on its raster tier where
-        the device allows it; elsewhere the frames render without it. A change of the fog that is
-        drawn restarts the full tier's temporal accumulation.
-
-        @param newFog The fog.
-
-        @see WorldFog
-    */
-    void setWorldFog (const WorldFog& newFog) noexcept { worldFog = newFog; }
 
     //==============================================================================
     /** Calls Node::update() on every part of every visible entity, depth-first.
@@ -183,17 +94,6 @@ private:
     EntityNode::Ptr root;
     WeakReference<EntityNode> activeCameraEntity;
     int activeCameraSlot = 0;
-
-    Color backgroundColor { 0xff1a1a2e };
-    Color ambientColor { 0xff595959 };
-    float exposure = 1.0f;
-    bool useDefaultLight = true;
-    ToneMapping toneMapping = ToneMapping::reinhard;
-    EnvironmentMap::Ptr environment;
-    float environmentIntensity = 1.0f;
-    bool environmentVisible = false;
-    float environmentBlur = 0.0f;
-    WorldFog worldFog;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scene)
 };

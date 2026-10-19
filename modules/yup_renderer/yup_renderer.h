@@ -70,6 +70,18 @@
 
 //==============================================================================
 
+#include "resources/yup_SphericalHarmonics.h"
+#include "resources/yup_EnvironmentMap.h"
+#include "nodes/yup_ReflectionProbeNode.h"
+#include "nodes/yup_IrradianceVolumeNode.h"
+#include "nodes/yup_WorldFogNode.h"
+#include "nodes/yup_BackgroundNode.h"
+#include "nodes/yup_AmbientLightNode.h"
+#include "nodes/yup_ExposureNode.h"
+#include "nodes/yup_ToneMappingNode.h"
+#include "nodes/yup_DefaultLightNode.h"
+#include "nodes/yup_EnvironmentNode.h"
+#include "scene/yup_SceneSettings.h"
 #include "core/yup_RenderSettings.h"
 #include "core/yup_RenderCapabilities.h"
 #include "scene/yup_SceneDrawList.h"

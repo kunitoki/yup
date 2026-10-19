@@ -347,7 +347,7 @@ TEST_F (SceneRendererFrameStatsTests, FogIsListedRightAfterTheForwardPass)
     {
         Scene scene;
         buildEveryPassScene (scene);
-        scene.setWorldFog (makeFog (0.08f));
+        scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
 
         SceneRenderer renderer;
         setEveryPass (renderer, tier);
@@ -634,18 +634,18 @@ protected:
                 scene.getRoot()->addChild (entity);
             }
 
-            scene.setEnvironment (new EnvironmentMap ([] (const Vector3<float>& direction)
+            scene.getRoot()->attach<EnvironmentNode> (new EnvironmentMap ([] (const Vector3<float>& direction)
             {
                 const auto up = jlimit (0.0f, 1.0f, direction.getY() * 0.5f + 0.5f);
                 return Vector3<float> (0.05f, 0.05f, 0.05f) + Vector3<float> (2.0f, 1.9f, 1.8f) * (up * up * up);
             }));
 
-            scene.setEnvironmentIntensity (0.35f);
-            scene.setAmbientColor (Colors::black);
-            scene.setExposure (1.1f);
-            scene.setToneMapping (Scene::ToneMapping::agx);
-            scene.setEnvironmentVisible (true);
-            scene.setEnvironmentBlur (0.5f);
+            scene.getRoot()->getNode<EnvironmentNode>()->intensity = 0.35f;
+            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+            scene.getRoot()->attach<ExposureNode> (1.1f);
+            scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::agx);
+            scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
+            scene.getRoot()->getNode<EnvironmentNode>()->blur = 0.5f;
             renderSettings.tier = tier;
             return true;
         }
@@ -1460,7 +1460,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_WorldFogFrameTimes)
                     fog.enabled = true;
                     fog.density = 0.08f;
                     fog.heightFalloff = 0.5f;
-                    show.scene.setWorldFog (fog);
+                    show.scene.getRoot()->attach<WorldFogNode> (fog);
                 }
 
                 SceneRenderer renderer;
