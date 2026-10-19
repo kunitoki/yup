@@ -286,6 +286,7 @@ float irradianceVolumeWeight(GpuIrradianceVolume volume, vec3 worldPosition)
 // @p found whether any probe weighs anything there. The 8 probes around the position, offset along
 // the normal by the volume's normal bias, are weighted by:
 // - their trilinear weight;
+// - the validity the probe was baked with, 0 inside geometry (ProbeBaker::getVolumeProbeValidity());
 // - a smooth backface weight, ((dot (towards the probe, n) + 1) / 2)^2 + 0.2;
 // - the Chebyshev bound of their visibility moments in the direction of the position, cubed to
 //   sharpen it, where the position lies beyond the mean distance; skipped below the float floor,
@@ -361,6 +362,7 @@ vec3 irradianceVolumeIrradiance(GpuIrradianceVolume volume, vec3 worldPosition, 
         vec3 l1z = mix(t2.rgb, (t2.rgb - 0.5) * 4.0 * l0, rgbm);
         vec3 l1x = mix(t3.rgb, (t3.rgb - 0.5) * 4.0 * l0, rgbm);
 
+        weight *= t1.a;
         sum += max(l0 + l1y * direction.y + l1z * direction.z + l1x * direction.x, vec3(0.0)) * weight;
         total += weight;
     }

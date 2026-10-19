@@ -116,7 +116,16 @@ public:
     /** @internal Why the pass gave up, for tests: the message it logged. Empty while it has not given up. */
     const String& getGiveUpReason() const noexcept { return giveUpReason; }
 
-    /** Releases the render targets not drawn into since the previous call: call it every frame the pass runs. */
+    /** Keeps the targets of the last render() through a still frame, so the next moving frame does
+        not create them again. The last outputs are cleared, as nothing is smeared. A @p color of
+        another size than the last smeared one releases the targets instead (releaseTargets()).
+        Call it between FrameResources::beginFrame() and endFrame().
+    */
+    void keepTargets (FrameResources& resources, const GpuTexture::Ptr& color);
+
+    /** Releases the render targets not drawn into since the previous call: call it every frame the
+        pass runs. A frame that called keepTargets() releases nothing.
+    */
     void trimUnusedTargets();
 
     /** Releases every render target and the last outputs, for a frame without the pass, a resize or a failed frame. */
@@ -129,6 +138,15 @@ public:
     void failRendersForTesting (int count = std::numeric_limits<int>::max()) noexcept { failRenders = count; }
 
 private:
+    struct Targets
+    {
+        GpuTexture::Ptr quarterTiles, tiles, neighbors, smeared, amount;
+
+        bool isComplete() const noexcept { return quarterTiles != nullptr && tiles != nullptr && neighbors != nullptr && smeared != nullptr && amount != nullptr; }
+    };
+
+    static Targets acquireTargets (FrameResources& resources, int width, int height);
+
     GpuDevice::Ptr device;
     std::optional<Result> prepared;
     FullscreenPass tileMax;
@@ -138,6 +156,8 @@ private:
     GpuTexture::Ptr blurAmount;
     int consecutiveFailures = 0;
     bool givenUp = false;
+    bool targetsKept = false; // keepTargets() was called since the last trimUnusedTargets()
+    int keptWidth = 0, keptHeight = 0; // The color size of the last smear
     int failRenders = 0; // The renders still to fail, see failRendersForTesting()
     String giveUpReason;
 

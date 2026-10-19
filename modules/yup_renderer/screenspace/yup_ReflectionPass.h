@@ -35,24 +35,35 @@ namespace yup
       accepting a hit only behind a surface by less than its thickness and on a surface facing the
       ray. Output: rgba32float, the hit uv, the depth of the surface hit and the pdf of the ray, 0
       for a miss or a ray leaving the screen.
-    - Resolve, at full resolution: the ratio estimator of the talk over the rays of the 4 nearest
-      trace texels, each weighted by the GGX lobe of the pixel over the pdf of its ray and by the
-      depth and normal similarity of the texel it was traced from, so rays do not leak across
+    - Resolve, at full resolution: the ratio estimator of the talk over the rays of the 3 x 3
+      trace texels around the pixel, each weighted by the GGX lobe of the pixel over the pdf of its
+      ray (at most 1, so a rare ray of a neighbor does not sparkle) and by the depth and normal similarity of the texel it was traced from, so rays do not leak across
       edges. The radiance of a ray is the previous scene color (the history of TemporalAA, exposed)
-      at the hit, reprojected by the motion of the hit and divided by the previous exposure.
-      Output: rgba16float, the reflected radiance in rgb (the prefiltered radiance of the split sum,
-      unexposed) and the confidence in a, 0 where the probes and the environment reflect alone.
+      at the hit, reprojected by the motion of the hit and rescaled from the previous exposure to
+      the current one. The result joins the resolve of the previous frame, reprojected by the
+      motion of the pixel and clipped towards the YCoCg box of the rays' radiance, by an
+      exponential blend. Output: rgba16float, the reflected radiance in rgb (the prefiltered radiance of the split
+      sum, exposed, so a bright scene at a low exposure fits the half floats) and the confidence in
+      a, 0 where the probes and the environment reflect alone. It is also the history of the next
+      frame.
+    - Denoise, at full resolution: a bilateral 3 x 3 over the resolve, its taps spread by one pixel
+      every 0.15 of roughness (at most 3, none below 0.075), weighted by depth, normal and
+      roughness similarity, the radiance averaged reversibly tone mapped. Output: rgba16float,
+      like the resolve.
 
     The confidence fades over the last screenEdgeFade of the screen around the hits, for rays
     turning towards the camera, and above the roughness fadeStart, to 0 at roughnessCut, above which
-    nothing is traced. A hit whose reprojection leaves the screen counts as a miss. There is no
-    temporal pass: the noise turns with the frame and the running mean of TemporalAA accumulates it
-    (preflight R13), so the pass only runs with temporal anti-aliasing, whose history it reads.
+    nothing is traced. A hit whose reprojection leaves the screen counts as a miss. The noise turns
+    with the frame: the resolve's own history keeps the reflections still while the scene changes
+    and TemporalAA restarts its running mean, which then averages what is left (preflight R13), so
+    the pass only runs with temporal anti-aliasing, whose history it reads.
 
     Bindings: set 0 binding 0 the ViewBlock, 1 linearClamp and 3 pointClamp; set 1 binding 0 the
     pass block, 1 the Hi-Z pyramid (its mip 0 is the depth), 2 the normals in the G-buffer RT1
-    encoding; the resolve also binds 3 the trace, 4 the velocity and 5 the previous scene color. Its
-    two targets come from the frame's FrameResources; its pipelines live as long as this object.
+    encoding; the resolve also binds 3 the trace, 4 the velocity, 5 the previous scene color and 6
+    its own history; the denoise binds 3 the resolve and not the pass block. The trace and output
+    targets and the "ssr" history pair come from the frame's
+    FrameResources; its pipelines live as long as this object.
 
     @internal
 */
@@ -118,7 +129,7 @@ public:
     void releaseTargets() noexcept;
 
     /** @internal For tests: the number of render targets kept for the next draws. */
-    size_t getNumCachedTargets() const noexcept { return trace.getNumCachedTargets() + resolve.getNumCachedTargets(); }
+    size_t getNumCachedTargets() const noexcept { return trace.getNumCachedTargets() + resolve.getNumCachedTargets() + denoise.getNumCachedTargets(); }
 
     /** @internal Test hook: every render() from now on fails, as if the device could not record it. */
     void failRendersForTesting() noexcept { failRenders = true; }
@@ -131,6 +142,7 @@ private:
     std::optional<Result> prepared;
     FullscreenPass trace;
     FullscreenPass resolve;
+    FullscreenPass denoise;
     int consecutiveFailures = 0;
     bool givenUp = false;
     bool failRenders = false;

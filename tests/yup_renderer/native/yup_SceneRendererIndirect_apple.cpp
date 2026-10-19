@@ -470,6 +470,33 @@ TEST_F (SceneRendererMetalTests, SsrScalesWithTheExposure)
     EXPECT_GT (ratioOff, 1.5);
     EXPECT_NEAR (ratioOn, ratioOff, 0.02 * ratioOff);
 }
+
+TEST_F (SceneRendererMetalTests, SsrKeepsRadianceBeyondTheHalfFloatRange)
+{
+    const auto reflectedRed = [&] (float emission, float exposure, bool screenSpaceReflections)
+    {
+        Scene scene;
+        buildOnScreenEmitterScene (scene, emission);
+        scene.getRoot().attach<ExposureNode> (exposure);
+
+        SceneRenderer renderer;
+        setFullTierTaa (renderer, 8);
+        setScreenSpaceReflections (renderer, screenSpaceReflections);
+        EXPECT_TRUE (renderConverged (renderer, scene, 64).isValid()) << renderer.getLastError();
+
+        const auto sceneColor = renderer.getPassOutput (SceneRenderer::PassOutput::sceneColor);
+        return sceneColor != nullptr ? meanLinearRed (sceneColor, reflectedEmitterRegion()) : -1.0;
+    };
+
+    const auto dim = reflectedRed (0.3f, 1.0f, true) - reflectedRed (0.3f, 1.0f, false);
+    const auto bright = reflectedRed (0.3f * 1.0e6f, 1.0e-6f, true) - reflectedRed (0.3f * 1.0e6f, 1.0e-6f, false);
+    RecordProperty ("dim", String (dim, 4).toStdString());
+    RecordProperty ("bright", String (bright, 4).toStdString());
+
+    // Measured 0.2995 against 0.2997; clipped, the bright one was 0.065
+    EXPECT_GT (dim, 0.1);
+    EXPECT_NEAR (bright, dim, 0.03 * dim);
+}
 #endif
 
 TEST_F (SceneRendererMetalTests, SsrFallsBackToProbesOffScreen)
@@ -709,6 +736,118 @@ TEST_F (SceneRendererMetalTests, SsrWeighsNeighborRaysByThePixelsLobe)
     EXPECT_GT (reflected, 0.32 * emitter);
 }
 #endif
+
+TEST_F (SceneRendererMetalTests, SsrGlossyReflectionsConvergeWithoutSpeckles)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene, 0.5f, 0.3f);
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 16);
+    const auto image = renderConverged (renderer, scene, 128);
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+    const auto red = [&] (int x, int y) { return static_cast<double> (image.getPixelColor (x, y).getRed()); };
+
+    auto noise = 0.0;
+    auto level = 0.0;
+    auto count = 0;
+    for (int y = 62; y < 82; ++y)
+    {
+        for (int x = 42; x < 86; ++x)
+        {
+            noise += std::abs (red (x, y) - 0.25 * (red (x - 1, y) + red (x + 1, y) + red (x, y - 1) + red (x, y + 1)));
+            level += red (x, y);
+            ++count;
+        }
+    }
+
+    noise /= count;
+    level /= count;
+    RecordProperty ("reflectedRed", String (level, 1).toStdString());
+    RecordProperty ("noise", String (noise, 2).toStdString());
+
+    // Measured 0.49, and 0.80 resolving only the 4 nearest rays with uncapped weights
+    EXPECT_GT (level, 100.0);
+    EXPECT_LT (noise, 0.6);
+}
+
+TEST_F (SceneRendererMetalTests, SsrGlossyReflectionsHoldStillWhileTheSceneChanges)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene, 0.5f, 0.3f);
+    auto& ambient = scene.getRoot().attach<AmbientLightNode> (Colors::black);
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 16);
+    const auto converged = renderConverged (renderer, scene, 128);
+    ASSERT_TRUE (converged.isValid()) << renderer.getLastError();
+
+    auto shimmer = 0.0;
+    for (int frame = 0; frame < 12; ++frame)
+    {
+        ambient.color = (frame % 2) == 0 ? Color (0xff010101) : Colors::black;
+        const auto image = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        ASSERT_FALSE (renderer.isConverged());
+
+        auto difference = 0.0;
+        auto count = 0;
+        for (int y = 62; y < 82; ++y)
+        {
+            for (int x = 42; x < 86; ++x)
+            {
+                difference += std::abs (static_cast<double> (image.getPixelColor (x, y).getRed()) - static_cast<double> (converged.getPixelColor (x, y).getRed()));
+                ++count;
+            }
+        }
+
+        shimmer = jmax (shimmer, difference / count);
+    }
+
+    RecordProperty ("shimmer", String (shimmer, 2).toStdString());
+    // Measured 0.91, and 2.23 without the resolve's history
+    EXPECT_LT (shimmer, 1.4);
+}
+
+TEST_F (SceneRendererMetalTests, SsrGlossyReflectionsStaySmoothWhileLightsAnimate)
+{
+    Scene scene;
+    auto emitter = buildOnScreenEmitterScene (scene, 2.0f, 0.45f);
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 16);
+    ASSERT_TRUE (renderConverged (renderer, scene, 128).isValid()) << renderer.getLastError();
+
+    auto noise = 0.0;
+    for (int frame = 0; frame < 12; ++frame)
+    {
+        const auto emission = 0.5f + 0.1f * std::sin (0.7f * static_cast<float> (frame));
+        emitter->emissiveFactor = { emission, 0.0f, 0.0f };
+
+        const auto image = renderToImage (renderer, scene, 128);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+        const auto red = [&] (int x, int y) { return static_cast<double> (image.getPixelColor (x, y).getRed()); };
+
+        auto sum = 0.0;
+        auto count = 0;
+        for (int y = 50; y < 110; ++y)
+        {
+            for (int x = 25; x < 105; ++x)
+            {
+                sum += std::abs (red (x, y) - 0.25 * (red (x - 1, y) + red (x + 1, y) + red (x, y - 1) + red (x, y + 1)));
+                ++count;
+            }
+        }
+
+        noise = jmax (noise, sum / count);
+    }
+
+    RecordProperty ("noise", String (noise, 2).toStdString());
+    // Measured 0.81, and 1.19 without the spatial denoise.
+    EXPECT_LT (noise, 1.0);
+}
 
 TEST_F (SceneRendererMetalTests, SsrOffReleasesItsTargets)
 {

@@ -218,3 +218,52 @@ TEST_F (MotionBlurMockTests, RendersAgainAfterReleasingItsTargets)
     blur.trimUnusedTargets();
     EXPECT_EQ (countDraws(), 8);
 }
+
+TEST_F (MotionBlurMockTests, StillFramesKeepTheTargetsForTheNextMove)
+{
+    MotionBlur blur (device);
+    const auto inputs = makeInputs (64, 64);
+
+    ASSERT_NE (renderFrame (blur, inputs), nullptr);
+    blur.trimUnusedTargets();
+    const auto numTargets = blur.getNumCachedTargets();
+    const auto texturesAfterMove = numTexturesMade;
+    ASSERT_GT (numTargets, 0u);
+
+    for (int still = 0; still < 3; ++still)
+    {
+        resources->beginFrame (128, 96);
+        blur.keepTargets (*resources, inputs.color);
+        resources->endFrame();
+        blur.trimUnusedTargets();
+
+        EXPECT_EQ (blur.getOutput(), nullptr) << still;
+        EXPECT_EQ (blur.getBlurAmount(), nullptr) << still;
+        EXPECT_EQ (blur.getNumCachedTargets(), numTargets) << still;
+    }
+
+    ASSERT_NE (renderFrame (blur, inputs), nullptr);
+    blur.trimUnusedTargets();
+    EXPECT_EQ (numTexturesMade, texturesAfterMove);
+    EXPECT_EQ (blur.getNumCachedTargets(), numTargets);
+}
+
+TEST_F (MotionBlurMockTests, KeepingTargetsOfAnotherSizeReleasesThem)
+{
+    MotionBlur blur (device);
+    ASSERT_NE (renderFrame (blur, makeInputs (64, 64)), nullptr);
+    blur.trimUnusedTargets();
+    ASSERT_GT (blur.getNumCachedTargets(), 0u);
+
+    resources->beginFrame (128, 96);
+    blur.keepTargets (*resources, makeTarget (32, 32));
+    resources->endFrame();
+    blur.trimUnusedTargets();
+    EXPECT_EQ (blur.getNumCachedTargets(), 0u);
+
+    // Nothing smeared since: there is nothing to keep
+    resources->beginFrame (128, 96);
+    blur.keepTargets (*resources, makeTarget (64, 64));
+    resources->endFrame();
+    EXPECT_EQ (blur.getNumCachedTargets(), 0u);
+}

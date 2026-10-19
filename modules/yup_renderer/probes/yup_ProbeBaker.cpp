@@ -111,6 +111,42 @@ float getVolumeCellDiagonal (const SceneDrawList::IrradianceVolume& volume) noex
     return volume.world.transformVector ({ 2.0f * e.getX() / static_cast<float> (nx), 2.0f * e.getY() / static_cast<float> (ny), 2.0f * e.getZ() / static_cast<float> (nz) }).length();
 }
 
+/** The distance along @p ray to where it enters @p box, or a negative one when it misses it. */
+float getRayBoxEntry (const Ray& ray, const BoundingBox& box) noexcept
+{
+    auto entry = 0.0f;
+    auto exit = std::numeric_limits<float>::max();
+
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        const auto origin = axis == 0 ? ray.getOrigin().getX() : (axis == 1 ? ray.getOrigin().getY() : ray.getOrigin().getZ());
+        const auto direction = axis == 0 ? ray.getDirection().getX() : (axis == 1 ? ray.getDirection().getY() : ray.getDirection().getZ());
+        const auto low = axis == 0 ? box.getMin().getX() : (axis == 1 ? box.getMin().getY() : box.getMin().getZ());
+        const auto high = axis == 0 ? box.getMax().getX() : (axis == 1 ? box.getMax().getY() : box.getMax().getZ());
+
+        if (std::abs (direction) < 1.0e-12f)
+        {
+            if (origin < low || origin > high)
+                return -1.0f;
+
+            continue;
+        }
+
+        auto t0 = (low - origin) / direction;
+        auto t1 = (high - origin) / direction;
+        if (t0 > t1)
+            std::swap (t0, t1);
+
+        entry = jmax (entry, t0);
+        exit = jmin (exit, t1);
+
+        if (entry > exit)
+            return -1.0f;
+    }
+
+    return entry;
+}
+
 } // namespace
 
 //==============================================================================
@@ -122,6 +158,76 @@ ProbeBaker::ProbeBaker (ProbeRenderer& probesToUse)
 ProbeBaker::~ProbeBaker() = default;
 
 //==============================================================================
+float ProbeBaker::getVolumeProbeValidity (Span<const SceneDrawList::DrawItem> items, const Vector3<float>& position, float maxDistance)
+{
+    struct RayHit
+    {
+        Ray ray;
+        float distance;
+        bool backFace = false;
+    };
+
+    // A Fibonacci sphere: evenly spread, and the same every bake
+    std::array<RayHit, numValidityRays> rays;
+    for (int i = 0; i < numValidityRays; ++i)
+    {
+        const auto z = 1.0f - (2.0f * static_cast<float> (i) + 1.0f) / static_cast<float> (numValidityRays);
+        const auto radius = std::sqrt (jmax (0.0f, 1.0f - z * z));
+        const auto phi = 2.39996323f * static_cast<float> (i);
+        rays[static_cast<size_t> (i)] = { Ray (position, { radius * std::cos (phi), radius * std::sin (phi), z }), maxDistance };
+    }
+
+    std::vector<RayHit*> candidates;
+    candidates.reserve (rays.size());
+
+    for (const auto& item : items)
+    {
+        if (item.primitive == nullptr || item.material == nullptr)
+            continue;
+
+        const auto bounds = item.primitive->bounds.transformedBy (item.world);
+        candidates.clear();
+
+        for (auto& hit : rays)
+        {
+            const auto entry = getRayBoxEntry (hit.ray, bounds);
+            if (entry >= 0.0f && entry < hit.distance)
+                candidates.push_back (&hit);
+        }
+
+        if (candidates.empty())
+            continue;
+
+        const auto& vertices = item.primitive->vertices;
+        const auto& indices = item.primitive->indices;
+        const auto numCorners = indices.empty() ? vertices.size() : indices.size();
+        const auto vertexAt = [&] (size_t corner) { return item.world.transformPoint (vertices[indices.empty() ? corner : indices[corner]].position); };
+
+        for (size_t corner = 0; corner + 2 < numCorners; corner += 3)
+        {
+            const auto a = vertexAt (corner);
+            const auto b = vertexAt (corner + 1);
+            const auto c = vertexAt (corner + 2);
+            const auto normal = (b - a).crossProduct (c - a);
+
+            for (auto* hit : candidates)
+            {
+                const auto found = hit->ray.intersectTriangle (a, b, c, false);
+                if (! found.has_value() || found->distance >= hit->distance)
+                    continue;
+
+                // Counter-clockwise faces the ray origin, clockwise for a mirroring transform
+                const auto front = (normal.dotProduct (hit->ray.getDirection()) < 0.0f) != item.mirrored;
+                hit->distance = found->distance;
+                hit->backFace = ! front && ! item.material->doubleSided;
+            }
+        }
+    }
+
+    const auto backFaces = std::count_if (rays.begin(), rays.end(), [] (const RayHit& hit) { return hit.backFace; });
+    return static_cast<float> (backFaces) > maxBackFaceShare * static_cast<float> (numValidityRays) ? 0.0f : 1.0f;
+}
+
 uint64 ProbeBaker::getSignature (const SceneDrawList::ReflectionProbe& probe) noexcept
 {
     const auto& node = *probe.node;
@@ -781,13 +887,15 @@ ProbeBaker::CaptureResult ProbeBaker::capture (GpuFrame& frame, ForwardPass& for
                     const auto j = (entry.nextPosition / nx) % ny;
                     const auto k = entry.nextPosition / (nx * ny);
 
-                    if (! captureCube (targets, getVolumeProbePosition (*volume, i, j, k), volumeClipNear, clipFar, volumeFaceSize, cube, distanceCube, distance))
+                    const auto position = getVolumeProbePosition (*volume, i, j, k);
+                    if (! captureCube (targets, position, volumeClipNear, clipFar, volumeFaceSize, cube, distanceCube, distance))
                         return Result::fail ("Unable to render an irradiance volume capture");
 
                     // Probe (i, j, k) sits at column i + k nx of the blocks, row j
                     const auto column = i + k * nx;
+                    const auto validity = getVolumeProbeValidity (captureList->getOpaqueItems(), position, clipFar);
                     const auto projected = probes.downsampleCube (frame, cube)
-                                        && probes.projectIrradiance (frame, cube, irradianceTexture, entry.shBlock.getPosition() + Point<int> (column, j * 4));
+                                        && probes.projectIrradiance (frame, cube, irradianceTexture, entry.shBlock.getPosition() + Point<int> (column, j * 4), validity);
                     if (! projected)
                         return Result::fail ("Unable to project an irradiance volume probe");
 

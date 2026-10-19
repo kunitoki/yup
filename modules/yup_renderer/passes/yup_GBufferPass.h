@@ -33,7 +33,7 @@ namespace yup
     - RT1 rgba16float: octahedral shading normal (after normal mapping, flipped on back faces), the
       roughness widened by the normal variance within the pixel (sqrt (sqrt (filtered alpha2))),
       metallic;
-    - RT2 rgba16float: emission (unexposed, times the emissive strength), material id in the
+    - RT2 rgba16float: emission (exposed, times the emissive strength), material id in the
       frame's MaterialTable;
     - RT3 rg16float: velocity, current uv minus previous uv, both unjittered;
     - depth32float.

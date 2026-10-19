@@ -382,14 +382,20 @@ TEST_F (MotionBlurMetalTests, MotionBlurOnAStillFrameRecordsNoPass)
     EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
     EXPECT_GT (renderer.getMotionBlur()->getNumCachedTargets(), 0u);
 
-    // The still frames after it release them
+    // The still frames after it smear nothing, but keep the targets for the next move
+    const auto numTargets = renderer.getMotionBlur()->getNumCachedTargets();
     for (int frame = 0; frame < 6; ++frame)
     {
         ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
         EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << frame;
         EXPECT_EQ (renderer.getMotionBlur()->getOutput(), nullptr) << frame;
-        EXPECT_EQ (renderer.getMotionBlur()->getNumCachedTargets(), 0u) << frame;
+        EXPECT_EQ (renderer.getMotionBlur()->getNumCachedTargets(), numTargets) << frame;
     }
+
+    // Turning the blur off releases them
+    setMotionBlur (renderer, false);
+    ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getMotionBlur()->getNumCachedTargets(), 0u);
 
     EXPECT_TRUE (renderer.isConverged());
     EXPECT_TRUE (renderer.waitForGPU().wasOk());

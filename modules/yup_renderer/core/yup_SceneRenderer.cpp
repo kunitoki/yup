@@ -614,12 +614,12 @@ struct SceneRenderer::Impl
     }
 
     /** Full tier: draws RenderSettings::debugView into @p output in place of the final image, from
-        this frame's @p lighting, @p indirectDiffuse and depth of field, or black when the frame has none of them,
+        this frame's @p lighting, @p indirectDiffuse, depth of field and @p gbuffer, or black when the frame has none of them,
         binding @p standIn instead. The pass is created by the first frame with a debug view, then
         kept; the frames without one release its targets. A pass that cannot compile or record is
         logged once and leaves the final image.
     */
-    void renderDebugView (GpuFrame& frame, const RenderSettings& settings, bool full, const LightingInputs& lighting,
+    void renderDebugView (GpuFrame& frame, const RenderSettings& settings, bool full, const LightingInputs& lighting, const GBufferPass::Targets& gbuffer,
                           const GpuTexture::Ptr& indirectDiffuse, const GpuTexture::Ptr& standIn, const GpuTexture::Ptr& output)
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (debugView);
@@ -644,10 +644,25 @@ struct SceneRenderer::Impl
             return;
 
         const auto* depthOfField = postChain.getDepthOfField();
-        const auto source = settings.debugView == DebugView::ambientOcclusion  ? lighting.ambientOcclusion
-                          : settings.debugView == DebugView::reflections       ? lighting.reflections
-                          : settings.debugView == DebugView::circleOfConfusion ? (depthOfField != nullptr ? depthOfField->getCircleOfConfusionTexture() : nullptr)
-                                                                               : indirectDiffuse;
+        const auto source = [&]() -> GpuTexture::Ptr
+        {
+            switch (settings.debugView)
+            {
+                case DebugView::none: return nullptr;
+                case DebugView::ambientOcclusion: return lighting.ambientOcclusion;
+                case DebugView::reflections: return lighting.reflections;
+                case DebugView::indirectDiffuse: return indirectDiffuse;
+                case DebugView::circleOfConfusion: return depthOfField != nullptr ? depthOfField->getCircleOfConfusionTexture() : nullptr;
+                case DebugView::depth: return gbuffer.depth;
+                case DebugView::motionVectors: return gbuffer.velocity;
+                case DebugView::baseColor: return gbuffer.albedoOcclusion;
+                case DebugView::normals:
+                case DebugView::roughness:
+                case DebugView::metallic: return gbuffer.normalRoughness;
+            }
+
+            return nullptr;
+        }();
 
         DebugViewBlock block {};
         block.options[0] = source != nullptr ? static_cast<float> (settings.debugView) : 0.0f;
@@ -666,13 +681,51 @@ struct SceneRenderer::Impl
             renderPass.setUniformBuffer (0, 0, &outputView, sizeof (ViewData::Block));
             renderPass.setSampler (0, 3, lighting.samplers.pointClamp);
             renderPass.setUniformBuffer (1, 0, &block, sizeof (block));
-            renderPass.setTexture (1, 1, source != nullptr ? source : standIn);
+            renderPass.setTexture (1, 1, source != nullptr && source != gbuffer.depth ? source : standIn);
+            renderPass.setTexture (1, 2, gbuffer.depth != nullptr ? gbuffer.depth : standIn);
         });
 
         if (! drawn && ! std::exchange (debugViewFailed, true))
             YUP_DBG ("SceneRenderer: unable to record the debug view, the frames show the final image");
 
         debugViewPass->trimUnusedTargets();
+    }
+
+    /** Draws RenderSettings::wireframe and the bounds of @p boundsEntities over @p target, the
+        final image. The pass is created by the first frame drawing an overlay, then kept. A pass
+        that cannot compile or record is logged once and leaves the final image.
+    */
+    void renderDebugOverlay (GpuFrame& frame, const RenderSettings& settings, const Scene& scene, const std::vector<Entity>& boundsEntities,
+                             Color boundsColor, GpuTarget& target)
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (debugOverlay);
+
+        std::vector<BoundingBox> boxes;
+        for (const auto& entity : boundsEntities)
+        {
+            if (entity.isValid() && entity.getScene() == &scene)
+                boxes.push_back (entity.computeWorldBounds());
+        }
+
+        DebugOverlayPass::Lines lines;
+        lines.wireframe = settings.wireframe ? &drawList : nullptr;
+        lines.wireframeColor = Color (0xc000e5ffu);
+        lines.boxes = boxes;
+        lines.boxColor = boundsColor;
+
+        if (lines.isEmpty())
+            return;
+
+        if (debugOverlayPass == nullptr)
+            debugOverlayPass = std::make_unique<DebugOverlayPass> (device);
+
+        const auto drawn = debugOverlayPass->render (frame, target, viewData, lines, [&]
+        {
+            beginScope (frame, "debugOverlay");
+        });
+
+        if (! drawn && ! std::exchange (debugOverlayFailed, true))
+            YUP_DBG ("SceneRenderer: unable to draw the debug overlays, the frames show the final image");
     }
 
     /** Releases the render targets the passes keep for the next frames. */
@@ -1023,6 +1076,8 @@ struct SceneRenderer::Impl
     std::unique_ptr<FogApply> fogApply;            // Created by the first frame drawing the scene's fog, see renderWorldFog()
     std::unique_ptr<FullscreenPass> debugViewPass; // Created by the first full frame with a debug view, see renderDebugView(), for the format of colorTarget, which never changes
     bool debugViewFailed = false;                  // A debug view draw failed, logged once
+    std::unique_ptr<DebugOverlayPass> debugOverlayPass; // Created by the first frame drawing a wireframe or bounds, see renderDebugOverlay()
+    bool debugOverlayFailed = false;                    // A debug overlay draw failed, logged once
     bool depthOfFieldUnavailableLogged = false;    // Depth of field was asked for where the tier cannot run it, logged once
     bool worldFogUnavailableLogged = false;        // A scene's world fog was asked for where the tier cannot draw it, logged once
     int worldFogFailures = 0;                      // Handed to the fog by the next frame drawing it, see SceneRenderer::failWorldFogForTesting()
@@ -1289,6 +1344,17 @@ const FogApply* SceneRenderer::getFogApply() const noexcept
 const FullscreenPass* SceneRenderer::getDebugViewPass() const noexcept
 {
     return impl != nullptr ? impl->debugViewPass.get() : nullptr;
+}
+
+const DebugOverlayPass* SceneRenderer::getDebugOverlayPass() const noexcept
+{
+    return impl != nullptr ? impl->debugOverlayPass.get() : nullptr;
+}
+
+void SceneRenderer::setBoundsOverlay (std::vector<Entity> entities, Color color)
+{
+    boundsOverlay = std::move (entities);
+    boundsOverlayColor = color;
 }
 
 const LightingPass* SceneRenderer::getLightingPass() const noexcept
@@ -1695,7 +1761,8 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
             return failFrame ("Unable to render the post effects");
     }
 
-    impl->renderDebugView (frame, settings, full, lighting, indirectDiffuse, impl->postChain.getResolvedColor(), impl->colorTarget->asTexture());
+    impl->renderDebugView (frame, settings, full, lighting, gbuffer, indirectDiffuse, impl->postChain.getResolvedColor(), impl->colorTarget->asTexture());
+    impl->renderDebugOverlay (frame, settings, scene, boundsOverlay, boundsOverlayColor, *impl->colorTarget);
 
     // The counts travel with the frame's status, which adds its GPU times once it completed
     if (impl->measuring)

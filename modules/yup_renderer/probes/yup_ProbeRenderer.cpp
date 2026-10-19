@@ -69,7 +69,7 @@ struct ProbePrefilterBlock
 // std140 mirror of ProbeShBlock in yup_ProbeShProjection.frag
 struct ProbeShBlock
 {
-    float params[4]; // x unused, y 1 when the textures hold RGBM, z face size of the mip read
+    float params[4]; // x the probe's validity, y 1 when the textures hold RGBM, z face size of the mip read
 };
 
 // std140 mirror of ProbeVisibilityBlock in yup_ProbeVisibility.frag
@@ -314,7 +314,7 @@ bool ProbeRenderer::prefilterToAtlas (GpuFrame& frame, const GpuTexture::Ptr& so
 }
 
 //==============================================================================
-bool ProbeRenderer::projectIrradiance (GpuFrame& frame, const GpuTexture::Ptr& cube, const GpuTexture::Ptr& atlas, Point<int> texel)
+bool ProbeRenderer::projectIrradiance (GpuFrame& frame, const GpuTexture::Ptr& cube, const GpuTexture::Ptr& atlas, Point<int> texel, float validity)
 {
     if (! isRadianceCube (cube)
         || atlas == nullptr
@@ -338,6 +338,7 @@ bool ProbeRenderer::projectIrradiance (GpuFrame& frame, const GpuTexture::Ptr& c
         ++mip;
 
     ProbeShBlock block {};
+    block.params[0] = jlimit (0.0f, 1.0f, validity);
     block.params[1] = usesRgbm() ? 1.0f : 0.0f;
     block.params[2] = static_cast<float> (jmax (1, cube->getWidth() >> mip));
 

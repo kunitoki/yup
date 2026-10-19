@@ -114,32 +114,14 @@ GpuTexture::Ptr MotionBlur::render (GpuFrame& frame, const ViewData& view, const
             return nullptr;
         }
 
-        const auto acquire = [&] (int width, int height, GpuTextureFormat format, const char* label)
-        {
-            GpuTextureDesc desc (static_cast<uint32_t> (width), static_cast<uint32_t> (height), format, true);
-            desc.label = label;
-            return resources.acquire (desc);
-        };
-
-        // The tiles follow the color: a tile is tileSize x tileSize of its pixels
-        const auto width = inputs.color->getWidth();
-        const auto height = inputs.color->getHeight();
-        const auto quarterWidth = (width + 3) / 4;
-        const auto quarterHeight = (height + 3) / 4;
-        const auto tileWidth = (quarterWidth + 3) / 4;
-        const auto tileHeight = (quarterHeight + 3) / 4;
-
-        const auto quarterTiles = acquire (quarterWidth, quarterHeight, motionTileFormat, "MotionBlur quarter tiles");
-        const auto tiles = acquire (tileWidth, tileHeight, motionTileFormat, "MotionBlur tiles");
-        auto neighbors = acquire (tileWidth, tileHeight, motionTileFormat, "MotionBlur neighbor tiles");
-        auto smeared = acquire (width, height, motionColorFormat, "MotionBlur output");
-        auto amount = acquire (width, height, motionBlurAmountFormat, "MotionBlur blur amount");
-
-        if (quarterTiles == nullptr || tiles == nullptr || neighbors == nullptr || smeared == nullptr || amount == nullptr)
+        const auto targets = acquireTargets (resources, inputs.color->getWidth(), inputs.color->getHeight());
+        if (! targets.isComplete())
         {
             failure = "unable to create the targets";
             return nullptr;
         }
+
+        const auto& [quarterTiles, tiles, neighbors, smeared, amount] = targets;
 
         MotionBlurBlock block {};
         block.options[0] = jmin (settings.motionBlurShutter, 1.0f);
@@ -199,6 +181,8 @@ GpuTexture::Ptr MotionBlur::render (GpuFrame& frame, const ViewData& view, const
         }
 
         blurAmount = amount;
+        keptWidth = inputs.color->getWidth();
+        keptHeight = inputs.color->getHeight();
         return smeared;
     }();
 
@@ -219,8 +203,52 @@ GpuTexture::Ptr MotionBlur::render (GpuFrame& frame, const ViewData& view, const
     return nullptr;
 }
 
+MotionBlur::Targets MotionBlur::acquireTargets (FrameResources& resources, int width, int height)
+{
+    const auto acquire = [&] (int targetWidth, int targetHeight, GpuTextureFormat format, const char* label)
+    {
+        GpuTextureDesc desc (static_cast<uint32_t> (targetWidth), static_cast<uint32_t> (targetHeight), format, true);
+        desc.label = label;
+        return resources.acquire (desc);
+    };
+
+    // The tiles follow the color: a tile is tileSize x tileSize of its pixels. Acquired in the same
+    // order every frame, so FrameResources hands back the same textures
+    const auto quarterWidth = (width + 3) / 4;
+    const auto quarterHeight = (height + 3) / 4;
+    const auto tileWidth = (quarterWidth + 3) / 4;
+    const auto tileHeight = (quarterHeight + 3) / 4;
+
+    Targets targets;
+    targets.quarterTiles = acquire (quarterWidth, quarterHeight, motionTileFormat, "MotionBlur quarter tiles");
+    targets.tiles = acquire (tileWidth, tileHeight, motionTileFormat, "MotionBlur tiles");
+    targets.neighbors = acquire (tileWidth, tileHeight, motionTileFormat, "MotionBlur neighbor tiles");
+    targets.smeared = acquire (width, height, motionColorFormat, "MotionBlur output");
+    targets.amount = acquire (width, height, motionBlurAmountFormat, "MotionBlur blur amount");
+    return targets;
+}
+
+void MotionBlur::keepTargets (FrameResources& resources, const GpuTexture::Ptr& color)
+{
+    output = nullptr;
+    blurAmount = nullptr;
+
+    // A resize leaves nothing worth keeping: the next move creates targets of the new size
+    if (color == nullptr || color->getWidth() != keptWidth || color->getHeight() != keptHeight)
+    {
+        releaseTargets();
+        return;
+    }
+
+    acquireTargets (resources, keptWidth, keptHeight);
+    targetsKept = true;
+}
+
 void MotionBlur::trimUnusedTargets()
 {
+    if (std::exchange (targetsKept, false))
+        return;
+
     tileMax.trimUnusedTargets();
     neighborMaxPass.trimUnusedTargets();
     reconstruct.trimUnusedTargets();
@@ -231,6 +259,8 @@ void MotionBlur::releaseTargets() noexcept
     tileMax.releaseTargets();
     neighborMaxPass.releaseTargets();
     reconstruct.releaseTargets();
+    targetsKept = false;
+    keptWidth = keptHeight = 0;
     output = nullptr;
     blurAmount = nullptr;
 }

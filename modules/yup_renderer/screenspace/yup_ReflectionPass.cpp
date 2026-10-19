@@ -34,6 +34,9 @@ constexpr uint8_t ssrTraceShaderBundle[] = {
 constexpr uint8_t ssrResolveShaderBundle[] = {
 #include "yup_renderer_shaders/yup_SsrResolve.inc"
 };
+constexpr uint8_t ssrDenoiseShaderBundle[] = {
+#include "yup_renderer_shaders/yup_SsrDenoise.inc"
+};
 
 // The hit uv needs more than a half float: near uv 1 its step is a pixel and a half at 3456 wide
 constexpr auto traceFormat = GpuTextureFormat::rgba32float;
@@ -46,7 +49,7 @@ constexpr float hitThickness = 0.05f;
 struct SsrBlock
 {
     float params[4]; // roughness fade start, roughness cut, hit thickness, cells marched at most
-    float frame[4];  // 1 / previous exposure, Hi-Z mip levels, screen edge fade
+    float frame[4];  // 1 / previous exposure, Hi-Z mip levels, screen edge fade, history valid
 };
 
 static_assert (sizeof (SsrBlock) == 32);
@@ -83,6 +86,9 @@ Result ReflectionPass::prepare()
 
         if (auto result = resolve.prepare (device, ssrResolveShaderBundle, sizeof (ssrResolveShaderBundle), reflectionsFormat); result.failed())
             return Result::fail ("Unable to compile the resolve: " + result.getErrorMessage());
+
+        if (auto result = denoise.prepare (device, ssrDenoiseShaderBundle, sizeof (ssrDenoiseShaderBundle), reflectionsFormat); result.failed())
+            return Result::fail ("Unable to compile the denoise: " + result.getErrorMessage());
 
         return Result::ok();
     }();
@@ -132,10 +138,12 @@ GpuTexture::Ptr ReflectionPass::render (GpuFrame& frame, const ViewData& view, c
         const auto traced = resources.acquire (traceDesc);
 
         GpuTextureDesc outputDesc (hiZ->getWidth(), hiZ->getHeight(), reflectionsFormat, true);
+        outputDesc.label = "ReflectionPass history";
+        const auto history = resources.getHistory ("ssr", outputDesc);
         outputDesc.label = "ReflectionPass output";
         auto reflections = resources.acquire (outputDesc);
 
-        if (traced == nullptr || reflections == nullptr)
+        if (traced == nullptr || reflections == nullptr || history.read == nullptr || history.write == nullptr)
         {
             failure = "unable to create the targets";
             return nullptr;
@@ -149,6 +157,7 @@ GpuTexture::Ptr ReflectionPass::render (GpuFrame& frame, const ViewData& view, c
         block.frame[0] = 1.0f / previousExposure;
         block.frame[1] = static_cast<float> (hiZ->getMipLevels());
         block.frame[2] = screenEdgeFade;
+        block.frame[3] = history.valid ? 1.0f : 0.0f;
 
         const auto bindInputs = [&] (GpuRenderPass& pass)
         {
@@ -161,13 +170,19 @@ GpuTexture::Ptr ReflectionPass::render (GpuFrame& frame, const ViewData& view, c
 
         // Every draw writes every texel, so the targets need no clear
         const auto drawn = trace.draw (frame, traced, {}, bindInputs)
-                        && resolve.draw (frame, reflections, {}, [&] (GpuRenderPass& pass)
+                        && resolve.draw (frame, history.write, {}, [&] (GpuRenderPass& pass)
                            {
                                bindInputs (pass);
                                pass.setSampler (0, 1, samplers->linearClamp);
                                pass.setTexture (1, 3, traced);
                                pass.setTexture (1, 4, velocity);
                                pass.setTexture (1, 5, previousSceneColor);
+                               pass.setTexture (1, 6, history.read);
+                           })
+                        && denoise.draw (frame, reflections, {}, [&] (GpuRenderPass& pass)
+                           {
+                               bindInputs (pass);
+                               pass.setTexture (1, 3, history.write);
                            });
 
         if (! drawn)
@@ -201,12 +216,14 @@ void ReflectionPass::trimUnusedTargets()
 {
     trace.trimUnusedTargets();
     resolve.trimUnusedTargets();
+    denoise.trimUnusedTargets();
 }
 
 void ReflectionPass::releaseTargets() noexcept
 {
     trace.releaseTargets();
     resolve.releaseTargets();
+    denoise.releaseTargets();
 }
 
 } // namespace yup

@@ -169,17 +169,31 @@ struct YUP_API RenderSettings
         ambientOcclusion, ///< The ambient occlusion visibility, as gray: white is unoccluded.
         reflections,      ///< The screen-space reflections, exposed and weighted by their confidence.
         indirectDiffuse,  ///< The light the screen-space diffuse GI gathers, exposed, before the surface colors.
-        circleOfConfusion ///< The signed circle of confusion of the depth of field, as the square root of its share of depthOfFieldMaxSize, so blurs of a pixel or two show: orange in front of the focus, blue behind it, black in focus. Black everywhere while the depth of field is off.
+        circleOfConfusion, ///< The signed circle of confusion of the depth of field, as the square root of its share of depthOfFieldMaxSize, so blurs of a pixel or two show: orange in front of the focus, blue behind it, black in focus. Black everywhere while the depth of field is off.
+        depth,             ///< The distance from the camera of the opaque surfaces, on a logarithmic scale between the near and far planes of the camera: white at the near plane, darker away from it, black where nothing was drawn.
+        normals,           ///< The world-space shading normals of the opaque surfaces, after normal mapping, as normal * 0.5 + 0.5: +x red, +y green, +z blue. Black where nothing was drawn.
+        motionVectors,     ///< The screen-space motion of each pixel since the previous frame: the hue tells the direction, the brightness the speed, full at 16 pixels per frame. Black where nothing moves.
+        baseColor,         ///< The base color (albedo) of the opaque surfaces, as sRGB, without lighting.
+        roughness,         ///< The perceptual roughness of the opaque surfaces as gray, widened where the normals vary within a pixel: white is rough.
+        metallic           ///< The metalness of the opaque surfaces as gray: white is metal.
     };
 
     /** Shows an intermediate image instead of the final one, for tuning the screen-space effects
-        and the depth of field. Full tier only: the raster tier ignores it, which is not an error.
-        An image the frame did not produce (its feature off or unavailable, or no history to read
-        it from yet) shows black. It is shown at the size of the frame without filtering, tone
-        mapping, bloom or background. It neither restarts nor discards the temporal accumulation,
-        and none, the default, costs nothing.
+        and the depth of field, or inspecting the surfaces of the G-buffer. Full tier only: the
+        raster tier ignores it, which is not an error. An image the frame did not produce (its
+        feature off or unavailable, or no history to read it from yet) shows black. It is shown at
+        the size of the frame without filtering, tone mapping, bloom or background. Blended
+        surfaces are not in the G-buffer, so the surface views show what lies behind them. It
+        neither restarts nor discards the temporal accumulation, and none, the default, costs nothing.
     */
     DebugView debugView = DebugView::none;
+
+    /** Draws the triangle edges of every drawn mesh over the image, the final one or the debug
+        view, as thin lines of the size of the frame. The lines are not depth tested: hidden
+        edges show too. Both tiers. It neither restarts nor discards the temporal accumulation,
+        and off, the default, costs nothing. See also SceneRenderer::setBoundsOverlay().
+    */
+    bool wireframe = false;
 
     bool operator== (const RenderSettings&) const = default;
 };

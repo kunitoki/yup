@@ -33,9 +33,10 @@ scene->getRoot().attach<yup::ExposureNode> (1.2f);
 | `motionBlur` | off | Full tier: smears what moves on screen, see [Motion blur](post-effects.md#motion-blur). |
 | `motionBlurShutter` | 0.5 | The fraction of the frame time the shutter stays open, from 0 to 1. 0 or less blurs nothing. |
 | `debugView` | `none` | Full tier: shows an intermediate image instead of the final one, see below. |
+| `wireframe` | off | Draws the triangle edges of every mesh over the image, see below. |
 
-**Debug view.** `debugView` shows what one effect computes, in place of the
-final image, to tune it:
+**Debug view.** `debugView` shows what one effect computes, or what the
+surfaces are made of, in place of the final image:
 
 - `ambientOcclusion`: the ambient occlusion as gray, white where nothing is
   occluded;
@@ -46,7 +47,18 @@ final image, to tune it:
 - `circleOfConfusion`: how much the depth of field blurs each pixel, brighter as
   the blur nears `depthOfFieldMaxSize` (the square root of its share, so blurs of
   a pixel or two show): orange in front of the focus, blue behind it, black in
-  focus. It needs `depthOfField` on.
+  focus. It needs `depthOfField` on;
+- `depth`: how far the surfaces are, on a logarithmic scale between the
+  camera's near and far planes: white near, darker away;
+- `normals`: the world-space normals after normal mapping, +x red, +y green,
+  +z blue;
+- `motionVectors`: how each pixel moved since the previous frame, the hue tells
+  the direction and the brightness the speed (full at 16 pixels per frame);
+- `baseColor`, `roughness`, `metallic`: the material of the surfaces, without
+  lighting; roughness and metallic as gray, white is rough or metal.
+
+The surface views (`depth` to `metallic`) show the opaque surfaces only, and
+black where nothing was drawn: blended surfaces are not part of them.
 
 The image is shown pixel for pixel, without tone mapping, bloom or background,
 so the half-resolution effects show their 2 x 2 blocks. It shows the effect of a
@@ -55,6 +67,22 @@ and the reflections look grainy, and stay so once the image has converged. An
 effect that is off, unavailable, or has no history to read yet shows black. The
 raster tier ignores `debugView`. It changes nothing before the accumulation, so
 switching it neither restarts nor discards it, and `none` costs nothing.
+
+**Overlays.** On both tiers, lines can be drawn over the image, or over the
+debug view:
+
+- `wireframe` draws the triangle edges of every drawn mesh;
+- `SceneRenderer::setBoundsOverlay (entities, color)` outlines the world bounds
+  of some entities, children included, following them as they move. Pass an
+  empty list to remove it.
+
+The lines are not hidden by the surfaces in front of them, and neither restarts
+the accumulation. The Scene3D demo outlines the entities selected in its scene
+tree:
+
+```cpp
+sceneComponent.getRenderer().setBoundsOverlay ({ selectedEntity });
+```
 
 Settings a device or tier cannot provide are ignored instead of failing. Ask
 `getRenderer().getCapabilities()` what is in effect after a frame was rendered:

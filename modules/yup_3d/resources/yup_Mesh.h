@@ -120,11 +120,29 @@ public:
     */
     GpuBuffer::Ptr getIndexBuffer (const GpuDevice::Ptr& device, int primitiveIndex);
 
+    /** Returns the 32-bit line list index buffer of the edges of a primitive for a device, as
+        computeEdgeIndices() lists them, for wireframes. It is created the first time it is asked
+        for, so meshes never drawn as wireframes do not hold one.
+
+        @param device          The device that renders the mesh.
+        @param primitiveIndex  The primitive.
+    */
+    GpuBuffer::Ptr getEdgeIndexBuffer (const GpuDevice::Ptr& device, int primitiveIndex);
+
+    //==============================================================================
+    /** Returns the edges of triangles as a line list, two indices per edge. An edge shared by
+        several triangles is listed once, in the order the edges first appear.
+
+        @param triangleIndices  Three indices per triangle; a trailing incomplete triangle is ignored.
+    */
+    static std::vector<uint32> computeEdgeIndices (Span<const uint32> triangleIndices);
+
 private:
     struct GpuBuffers
     {
         GpuBuffer::Ptr vertices;
         GpuBuffer::Ptr indices;
+        GpuBuffer::Ptr edges;
     };
 
     void prepareGpuBuffers (const GpuDevice::Ptr& device);

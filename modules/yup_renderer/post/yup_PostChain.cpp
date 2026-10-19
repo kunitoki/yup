@@ -156,8 +156,14 @@ bool PostChain::render (const GpuDevice::Ptr& device, GpuFrame& frame, const Ren
         }
     }
 
+    // A still frame keeps the targets for the next move; a failure, a disabled blur or giving up releases them
     if (motionBlur != nullptr && ! smeared)
-        motionBlur->releaseTargets();
+    {
+        if (! inputs.moving && willMotionBlur (caps, settings) && ! motionBlur->hasGivenUp())
+            motionBlur->keepTargets (resources, color);
+        else
+            motionBlur->releaseTargets();
+    }
 
     GpuTexture::Ptr glow;
 

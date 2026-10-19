@@ -22,27 +22,42 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 
+#include "lib/color.glsl"
 #include "lib/ssr.glsl"
 
 // The resolve of the screen-space reflections (ReflectionPass), at full resolution: the ratio
 // estimator of Stachowiak 2015 ("Stochastic Screen-Space Reflections", SIGGRAPH Advances in Real-Time
-// Rendering) over the rays of the 4 nearest trace texels. Each ray weighs the GGX lobe of this pixel
-// towards its hit over the pdf it was sampled with, times how close the depth and normal of the texel
-// it was traced from are to this pixel's, so rays do not leak across edges. The sum of the weighted
+// Rendering) over the rays of the 3 x 3 trace texels around the pixel, their center alternating
+// between the two nearest every frame where the pixel lies between them. Each ray weighs the GGX lobe
+// of this pixel towards its hit over the pdf it was sampled with, at most 1, the ratio of a ray
+// sampled from this pixel's own lobe, so a neighbor's ray in the tail of its own lobe does not
+// outweigh the others and sparkle, times how close the depth and normal of the texel it was traced
+// from are to this pixel's, so rays do not leak across edges. The sum of the weighted
 // radiance over the sum of the weights is the prefiltered radiance of the split sum, which the
-// lighting pass shades with its own lookup tables.
+// lighting pass shades with its own lookup tables. The radiance is averaged reversibly tone mapped
+// (Karis 2014), so a rare ray reaching a bright highlight does not sparkle over the ones that did not.
 // The radiance of a ray is the previous scene color (exposed, premultiplied by coverage) where the
-// previous frame saw the hit, divided by that frame's exposure. Its confidence fades towards the
+// previous frame saw the hit, rescaled from that frame's exposure to this one's: stored exposed,
+// the half float target holds the radiance of bright scenes shown at a low exposure. Its confidence fades towards the
 // screen edges and for rays turning towards the camera, whose hits the depth may hide behind what
 // faces it; a ray reprojected off screen counts as a miss. The confidence of the pixel is the mean
 // over the similar texels, a miss counting 0, faded out above the roughness fade start.
-// Output: the radiance in rgb, the confidence in a; exactly 0 without any.
+// The result then joins the resolve of the previous frame, reprojected by the motion of the pixel
+// and rescaled to this exposure, by an exponential blend of ssrHistoryWeight (Karis 2014): the
+// history is first clamped to the range of the rays' radiance, wide where the rough lobes scatter
+// the rays and tight on mirrors, so the reflections hold still while the scene changes and
+// TemporalAA, whose clipping follows the noise of a single frame, restarts its running mean.
+// Output: the exposed radiance in rgb, the confidence in a; exactly 0 without any.
 
 layout(set = 0, binding = 1) uniform sampler linearClamp;
 
 layout(set = 1, binding = 3) uniform texture2D u_trace;
 layout(set = 1, binding = 4) uniform texture2D u_velocity;
 layout(set = 1, binding = 5) uniform texture2D u_previousSceneColor;
+layout(set = 1, binding = 6) uniform texture2D u_history;
+
+// The share of this frame against the history
+const float ssrHistoryWeight = 0.125;
 
 layout(location = 0) in vec2 uv;
 
@@ -68,15 +83,18 @@ void main()
 
     ivec2 viewport = ivec2(view.viewport.xy);
     ivec2 last = textureSize(sampler2D(u_trace, pointClamp), 0) - 1;
+    ivec2 center = (pixel + ivec2(int(mod(view.clipPlanes.z, 2.0)))) / 2;
 
     vec3 radiance = vec3(0.0);
     float radianceWeight = 0.0;
     float confidence = 0.0;
     float similarity = 0.0;
+    vec3 boxMin = vec3(yupMaxHalf);
+    vec3 boxMax = vec3(-yupMaxHalf);
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 9; ++i)
     {
-        ivec2 texel = min(pixel / 2 + ivec2(i & 1, i >> 1), last);
+        ivec2 texel = clamp(center + ivec2(i % 3 - 1, i / 3 - 1), ivec2(0), last);
         ivec2 source = min(texel * 2, viewport - 1);
 
         float sourceDepth = ssrDepth(source);
@@ -125,15 +143,40 @@ void main()
 
         float nDotH = max(dot(n, normalize(v + l)), 0.0);
         float lobe = bsdfDistributionGgx(nDotH, alpha2) * bsdfVisibilitySmithGgxCorrelated(nDotV, nDotL, alpha2) * nDotL / ray.w;
+        lobe = min(lobe, 1.0);
         float weight = lobe * similar * valid;
 
-        radiance += previous.rgb / previous.a * weight;
+        vec3 rayRadiance = yupReversibleToneMap(previous.rgb / previous.a);
+        radiance += rayRadiance * weight;
+        vec3 rayYCoCg = yupToYCoCg(rayRadiance);
+        boxMin = min(boxMin, rayYCoCg);
+        boxMax = max(boxMax, rayYCoCg);
         radianceWeight += weight;
         confidence += similar * valid;
     }
 
-    if (radianceWeight <= 0.0 || confidence <= 0.0)
+    float scale = ssr.frame.x * view.cameraPosition.w;
+    bool traced = radianceWeight > 0.0 && confidence > 0.0;
+    vec3 current = traced ? radiance / radianceWeight : vec3(0.0);
+    float currentConfidence = traced ? confidence / similarity * fade : 0.0;
+
+    // The history, exposed by the previous frame like the rays' radiance, so both share its tone mapping
+    vec2 previousUv = (vec2(pixel) + 0.5) * view.viewport.zw - texelFetch(sampler2D(u_velocity, pointClamp), pixel, 0).xy;
+    vec4 history = vec4(0.0);
+    if (ssr.frame.w > 0.5 && all(greaterThanEqual(previousUv, vec2(0.0))) && all(lessThanEqual(previousUv, vec2(1.0))))
+        history = yupSanitize(textureLod(sampler2D(u_history, linearClamp), previousUv, 0.0));
+
+    vec3 kept = yupReversibleToneMap(history.rgb);
+    if (traced)
+        kept = yupFromYCoCg(yupClipToBox(yupToYCoCg(kept), boxMin, boxMax));
+
+    float historyShare = (1.0 - ssrHistoryWeight) * history.a;
+    float currentShare = ssrHistoryWeight * currentConfidence;
+    float shares = historyShare + currentShare;
+    if (shares <= 0.0)
         return;
 
-    fragColor = vec4(min(radiance / radianceWeight * ssr.frame.x, vec3(65504.0)), confidence / similarity * fade);
+    vec3 blended = (kept * historyShare + current * currentShare) / shares;
+    float blendedConfidence = history.a > 0.0 ? mix(history.a, currentConfidence, ssrHistoryWeight) : currentConfidence;
+    fragColor = vec4(min(yupReversibleToneMapInverse(blended) * scale, vec3(yupMaxHalf)), blendedConfidence);
 }

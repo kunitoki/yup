@@ -3976,12 +3976,12 @@ vec4 encodeLuma(vec3 c)
         return emitter;
     }
 
-    static void buildMirrorFloorScene (Scene& scene, bool withEmitter = true)
+    static void buildMirrorFloorScene (Scene& scene, bool withEmitter = true, float roughness = 0.02f)
     {
         auto mirror = Material::Ptr (new Material());
         mirror->baseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
         mirror->metallicFactor = 1.0f;
-        mirror->roughnessFactor = 0.02f;
+        mirror->roughnessFactor = roughness;
         makeHorizontalQuad (scene, "floor", 0.0f, { -6.0f, -6.0f, 12.0f, 12.0f }, true, mirror);
 
         if (withEmitter)
@@ -4564,11 +4564,12 @@ vec4 encodeLuma(vec3 c)
     /** buildMirrorFloorScene() without its emitter, plus a red emitter standing on the floor in
         front of the camera, 1.2 wide and 0.8 tall at z = -0.5, facing it: the camera sees both the
         emitter (rows 8 to 26 at 64 x 64) and its reflection in the floor (rows 26 to 40), which only
-        screen-space reflections show, since the scene has no environment and no probe.
+        screen-space reflections show, since the scene has no environment and no probe. The floor
+        has @p floorRoughness, a mirror by default. Returns the emitter's material, for tests that animate it.
     */
-    static void buildOnScreenEmitterScene (Scene& scene, float emission = 1.0f)
+    static Material::Ptr buildOnScreenEmitterScene (Scene& scene, float emission = 1.0f, float floorRoughness = 0.02f)
     {
-        buildMirrorFloorScene (scene, false);
+        buildMirrorFloorScene (scene, false, floorRoughness);
 
         std::vector<Mesh::Vertex> vertices (4);
         vertices[0].position = { -0.6f, 0.0f, -0.5f };
@@ -4580,10 +4581,12 @@ vec4 encodeLuma(vec3 c)
             vertex.normal = { 0.0f, 0.0f, 1.0f };
 
         auto mesh = Mesh::Ptr (new Mesh ("emitter"));
-        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, makeEmitterMaterial ({ emission, 0.0f, 0.0f }));
+        auto material = makeEmitterMaterial ({ emission, 0.0f, 0.0f });
+        mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
 
         auto emitter = scene.createEntity ("emitter");
         emitter.attach<MeshNode> (mesh);
+        return material;
     }
 
     /** The floor of buildOnScreenEmitterScene() reflecting the emitter, at 64 x 64: between the
@@ -6908,6 +6911,61 @@ vec4 encodeUnit(float value)
         // Not vacuous: the background shows the fog's partial coverage
         EXPECT_GT (meanLuminance (off, { 0, 0, fogSize, fogSize }), 30.0);
         EXPECT_LE (maxChannelDifference (on, off), 2);
+    }
+
+    /** On @p tier, a highlight the depth of field blurs over a partly fogged background color keeps
+        its brightness: the small emitter of buildGlowScene(), 8 units away and far out of focus,
+        spreads into a faint bokeh whose coverage barely changes the fog's own, and the bokeh must
+        brighten the frame about as much as without fog, its light dimmed only by the fog in front.
+    */
+    void checkBlurredHighlightsOverFogKeepTheirBrightness (RenderSettings::TierPreference tier)
+    {
+        constexpr auto density = 0.03f;
+
+        const auto render = [&] (bool withFog, bool withEmitter)
+        {
+            Scene scene;
+            if (withEmitter)
+                buildGlowScene (scene, 40.0f);
+
+            auto& camera = addFogCamera (scene, {}, { 0.0f, 0.0f, 8.0f });
+            camera.zFar = 10.0f;
+            camera.fStop = 1.4f;
+            camera.focusDistance = 0.2f;
+            scene.getRoot().attach<AmbientLightNode> (fogAmbientColor());
+            scene.getRoot().attach<BackgroundNode> (Color (0xff646464));
+
+            if (withFog)
+                scene.getRoot().attach<WorldFogNode> (makeFog (density));
+
+            SceneRenderer renderer;
+            setFogTier (renderer, tier);
+            setDepthOfField (renderer, true);
+            auto image = renderToImage (renderer, scene, fogSize);
+            EXPECT_TRUE (image.isValid()) << renderer.getLastError();
+            return image;
+        };
+
+        // What the bokeh adds to the frame, summed in display luminance
+        const auto added = [&] (bool withFog)
+        {
+            const auto with = render (withFog, true);
+            const auto without = render (withFog, false);
+            if (! with.isValid() || ! without.isValid())
+                return 0.0;
+
+            return (meanLuminance (with, { 0, 0, fogSize, fogSize }) - meanLuminance (without, { 0, 0, fogSize, fogSize })) * fogSize * fogSize;
+        };
+
+        const auto clear = added (false);
+        const auto foggy = added (true);
+        RecordProperty ("clear", String (clear, 1).toStdString());
+        RecordProperty ("foggy", String (foggy, 1).toStdString());
+
+        // Not vacuous: the bokeh shows
+        EXPECT_GT (clear, 2000.0);
+        EXPECT_GT (foggy, 0.75 * clear);
+        EXPECT_LT (foggy, clear);
     }
 
     /** On @p tier, bloom after the fog reads the fog's linear color, not the reversible one: fog lit by

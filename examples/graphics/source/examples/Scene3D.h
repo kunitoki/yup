@@ -99,6 +99,10 @@ public:
         };
 
         sceneTree.setRootItemVisible (true);
+        sceneTree.onSelectionChanged = [this]
+        {
+            showSelectedBounds();
+        };
         addChildComponent (sceneTree);
 
         addAndMakeVisible (view);
@@ -1359,6 +1363,37 @@ private:
 
                 return enter >= zNear && enter <= leave ? std::optional (enter) : std::nullopt;
             }
+
+            /** Where the ray enters the mesh bounds of @p entity or of its visible descendants. Each box
+                is tested in its mesh's own space, where t is the same: a tilted pad's world box would
+                reach over the pad next to it.
+            */
+            std::optional<float> hit (yup::Entity entity) const
+            {
+                return hit (entity, entity.getWorldMatrix());
+            }
+
+            std::optional<float> hit (yup::Entity entity, const yup::Matrix4& world) const
+            {
+                if (! entity.isVisible())
+                    return std::nullopt;
+
+                std::optional<float> nearest;
+                if (const auto* node = entity.get<yup::MeshNode>(); node != nullptr && node->mesh != nullptr)
+                {
+                    const auto toLocal = world.inverted();
+                    const PickRay local { toArray (toLocal.transformPoint ({ origin[0], origin[1], origin[2] })),
+                                          toArray (toLocal.transformVector ({ direction[0], direction[1], direction[2] })),
+                                          zNear };
+                    nearest = local.hit (node->mesh->getBounds());
+                }
+
+                for (const auto child : entity.getChildren())
+                    if (const auto t = hit (child, child.getLocalMatrix().followedBy (world)); t && (! nearest || *t < *nearest))
+                        nearest = t;
+
+                return nearest;
+            }
         };
 
         std::optional<PickRay> getPickRay (yup::Point<float> position) const
@@ -1391,7 +1426,7 @@ private:
                 if (! entity.isActive())
                     return;
 
-                if (const auto t = ray->hit (entity.computeWorldBounds()); t && (nearest == nullptr || *t < nearestDistance))
+                if (const auto t = ray->hit (entity); t && (nearest == nullptr || *t < nearestDistance))
                 {
                     nearest = &button;
                     nearestDistance = *t;
@@ -1412,18 +1447,14 @@ private:
 
             std::optional<float> nearest;
             for (const auto child : focusEntity.getChildren())
-                if (const auto t = ray->hit (child.computeWorldBounds()); t && (! nearest || *t < *nearest))
+                if (const auto t = ray->hit (child); t && (! nearest || *t < *nearest))
                     nearest = t;
 
             // The body only when no control was hit: its box encloses them all, so it would always win
             if (nearest || ! focusEntity.isVisible())
                 return nearest;
 
-            yup::BoundingBox body;
-            if (const auto* node = focusEntity.get<yup::MeshNode>(); node != nullptr && node->mesh != nullptr)
-                body.expand (node->mesh->getBounds().transformedBy (focusEntity.getWorldMatrix()));
-
-            return ray->hit (body);
+            return ray->hit (focusEntity);
         }
 
         bool hitsScreen (yup::Point<float> position) const
@@ -1774,6 +1805,15 @@ private:
             };
 
             // The shadow toggles show what the last frame ran with: the tier default until clicked, see refresh()
+            wireframeToggle.setButtonText ("Wireframe");
+            wireframeToggle.onClick = [this]
+            {
+                editSettings ([this] (yup::RenderSettings& s)
+                {
+                    s.wireframe = wireframeToggle.getToggleState();
+                });
+            };
+
             softShadowsToggle.setButtonText ("Soft shadows");
             softShadowsToggle.onClick = [this]
             {
@@ -1840,6 +1880,12 @@ private:
             debugViewCombo.addItem ("Reflections", 3);
             debugViewCombo.addItem ("Indirect diffuse (SSGI)", 4);
             debugViewCombo.addItem ("Circle of confusion", 5);
+            debugViewCombo.addItem ("Depth", 6);
+            debugViewCombo.addItem ("Normals", 7);
+            debugViewCombo.addItem ("Motion vectors", 8);
+            debugViewCombo.addItem ("Base color (albedo)", 9);
+            debugViewCombo.addItem ("Roughness", 10);
+            debugViewCombo.addItem ("Metallic", 11);
             debugViewCombo.setSelectedId (static_cast<int> (settings.debugView) + 1, yup::dontSendNotification);
             debugViewCombo.onSelectedItemChanged = [this]
             {
@@ -1978,7 +2024,7 @@ private:
                                                   { &debugViewLabel, &debugViewCombo, nullptr } })
                 qualityPage.addValue (*label, *control, value);
 
-            qualityPage.addSwitches ({ &softShadowsToggle, &contactShadowsToggle });
+            qualityPage.addSwitches ({ &softShadowsToggle, &contactShadowsToggle, &wireframeToggle });
 
             benchmarkButton.onClick = [this]
             {
@@ -2107,6 +2153,7 @@ private:
                 setAvailable (*control, isFull);
 
             refreshToggle (bloomToggle, settings.bloom, canBloom);
+            refreshToggle (wireframeToggle, settings.wireframe, true);
             refreshToggle (softShadowsToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::softShadows, settings), true);
             refreshToggle (contactShadowsToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::contactShadows, settings), canContactShadows);
             refreshToggle (ambientOcclusionToggle, ambientOcclusion, canAmbientOcclusion);
@@ -2398,6 +2445,7 @@ private:
         yup::Label shadowResolutionLabel { "shadowResolutionLabel" };
         yup::ComboBox shadowResolutionCombo { "shadowResolutionCombo" };
         yup::ToggleButton softShadowsToggle { "softShadowsToggle" };
+        yup::ToggleButton wireframeToggle { "wireframeToggle" };
         yup::ToggleButton contactShadowsToggle { "contactShadowsToggle" };
         yup::ToggleButton ambientOcclusionToggle { "ambientOcclusionToggle" };
         yup::Label aoDistanceLabel { "aoDistanceLabel" };
@@ -2496,6 +2544,8 @@ private:
             return entity.getName() + "#" + yup::String (getIndexInParent());
         }
 
+        yup::Entity getEntity() const noexcept { return entity; }
+
     private:
         template <class T>
         void addPart (yup::StringArray& parts, const char* name) const
@@ -2517,7 +2567,25 @@ private:
         }
 
         sceneTree.setVisible (shouldBeVisible);
+        showSelectedBounds();
         resized();
+    }
+
+    /** Outlines the bounds of the entities selected in the scene tree, while it shows. */
+    void showSelectedBounds()
+    {
+        std::vector<yup::Entity> selected;
+        if (sceneTree.isVisible())
+        {
+            for (auto* item : sceneTree.getSelectedItems())
+            {
+                if (auto* entityItem = dynamic_cast<EntityItem*> (item))
+                    selected.push_back (entityItem->getEntity());
+            }
+        }
+
+        view.getRenderer().setBoundsOverlay (std::move (selected));
+        view.repaint();
     }
 
     //==============================================================================

@@ -33,7 +33,7 @@
 //   Representations for Independent Unit Vectors"), the roughness widened by the normal variance
 //   within the pixel (Tokuyoshi and Kaplanyan 2019, "Improved Geometric Specular Antialiasing"),
 //   which needs the derivatives the lighting pass doesn't have, and metallic;
-// - RT2 rgba16f: unexposed emission, the material id in the frame's MaterialTable;
+// - RT2 rgba16f: exposed emission, the material id in the frame's MaterialTable;
 // - RT3 rg16f: the screen-space motion, current uv minus previous uv.
 
 layout(location = 7) flat in float v_materialId;
@@ -49,6 +49,7 @@ void main()
 
     outAlbedoOcclusion = vec4(yupLinearToSrgb(m.baseColor.rgb), m.occlusion);
     outNormalRoughness = gbufferEncodeNormalRoughness(m);
-    outEmissionMaterial = vec4(min(m.emissive, vec3(yupMaxHalf)), v_materialId);
+    // Exposed, so the half floats hold the emission of bright scenes shown at a low exposure
+    outEmissionMaterial = vec4(min(m.emissive * view.cameraPosition.w, vec3(yupMaxHalf)), v_materialId);
     outVelocity = viewVelocity(v_currentClip, v_previousClip);
 }

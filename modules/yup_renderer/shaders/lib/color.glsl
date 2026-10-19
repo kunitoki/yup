@@ -116,6 +116,9 @@ vec3 yupUnpremultiplyInverse(vec4 c)
 
 const float yupMaxHalf = 65504.0;
 
+// The largest of two terms whose blended sum still fits a half float
+const float yupMaxHalfAddend = yupMaxHalf * 0.5;
+
 // Tests the exponent bits, which fast math cannot fold away like isnan and isinf
 bvec4 yupIsNonFinite(vec4 c)
 {
@@ -128,6 +131,51 @@ vec4 yupSanitize(vec4 c)
 {
     vec4 replacement = mix(vec4(0.0), vec4(yupMaxHalf), equal(floatBitsToUint(c), uvec4(0x7f800000u)));
     return clamp(mix(c, replacement, yupIsNonFinite(c)), vec4(0.0), vec4(yupMaxHalf, yupMaxHalf, yupMaxHalf, 1.0));
+}
+
+vec3 yupToYCoCg(vec3 c)
+{
+    return vec3(0.25 * c.r + 0.5 * c.g + 0.25 * c.b, 0.5 * c.r - 0.5 * c.b, -0.25 * c.r + 0.5 * c.g - 0.25 * c.b);
+}
+
+vec3 yupFromYCoCg(vec3 c)
+{
+    return vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z);
+}
+
+// Moves @p history towards the center of the box until it is inside, along the line to the
+// center, so a color clipped in YCoCg keeps its hue rather than drifting channel by channel
+vec3 yupClipToBox(vec3 history, vec3 boxMin, vec3 boxMax)
+{
+    vec3 center = 0.5 * (boxMax + boxMin);
+    vec3 extents = max(0.5 * (boxMax - boxMin), vec3(1.0e-6));
+    vec3 offset = history - center;
+    vec3 units = abs(offset / extents);
+    float largest = max(units.x, max(units.y, units.z));
+
+    return largest > 1.0 ? center + offset / largest : history;
+}
+
+// The share of a premultiplied pixel a blur spread, from its @p sharp and @p blurred colors
+// (preflight R21, R24): the change of coverage or of luma, each relative to the larger of the two
+// and in full from a tenth. A uniform partial coverage the blur leaves as it was (fog over the
+// background color, antialiased edges in focus) stays at 0, its rounding weighing under a tenth,
+// while a faint highlight spread over such a coverage counts through its light, which changes far
+// more than the coverage it adds. Pixels without coverage count as spread
+float yupSpreadShare(vec4 sharp, vec4 blurred)
+{
+    float largest = max(blurred.a, sharp.a);
+    if (largest <= 1.0e-4)
+        return 1.0;
+
+    float share = abs(blurred.a - sharp.a) / (0.1 * largest);
+    float sharpLuma = yupLuma(sharp.rgb);
+    float blurredLuma = yupLuma(blurred.rgb);
+    float brightest = max(blurredLuma, sharpLuma);
+    if (brightest > 1.0e-4)
+        share = max(share, abs(blurredLuma - sharpLuma) / (0.1 * brightest));
+
+    return min(share, 1.0);
 }
 
 #define YUP_3D_RGBM_RANGE 8.0

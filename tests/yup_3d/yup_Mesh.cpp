@@ -137,3 +137,26 @@ TEST_F (MeshTests, BoundsCoverEveryPrimitive)
     expectNear (mesh.getBounds().getMin(), { -2.0f, 0.0f, 0.0f });
     expectNear (mesh.getBounds().getMax(), { 1.0f, 5.0f, 3.0f });
 }
+
+TEST_F (MeshTests, EdgeIndicesListSharedEdgesOnceInOrder)
+{
+    const std::vector<uint32> triangles { 0, 1, 2, 0, 2, 3 };
+
+    const auto edges = Mesh::computeEdgeIndices (triangles);
+
+    EXPECT_EQ (edges, (std::vector<uint32> { 0, 1, 1, 2, 2, 0, 2, 3, 3, 0 }));
+}
+
+TEST_F (MeshTests, EdgeIndicesSkipDegenerateEdgesAndIncompleteTriangles)
+{
+    const std::vector<uint32> triangles { 0, 0, 1, 2, 1 };
+
+    const auto edges = Mesh::computeEdgeIndices (triangles);
+
+    EXPECT_EQ (edges, (std::vector<uint32> { 0, 1 }));
+}
+
+TEST_F (MeshTests, EdgeIndicesOfNoTrianglesAreEmpty)
+{
+    EXPECT_TRUE (Mesh::computeEdgeIndices (std::vector<uint32>()).empty());
+}

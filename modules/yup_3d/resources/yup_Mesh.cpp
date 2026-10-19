@@ -129,6 +129,49 @@ GpuBuffer::Ptr Mesh::getIndexBuffer (const GpuDevice::Ptr& device, int primitive
              : nullptr;
 }
 
+GpuBuffer::Ptr Mesh::getEdgeIndexBuffer (const GpuDevice::Ptr& device, int primitiveIndex)
+{
+    prepareGpuBuffers (device);
+
+    if (! isPositiveAndBelow (primitiveIndex, static_cast<int> (gpuBuffers.size())))
+        return nullptr;
+
+    auto& buffers = gpuBuffers[static_cast<size_t> (primitiveIndex)];
+    if (buffers.edges == nullptr)
+    {
+        const auto edges = computeEdgeIndices (primitives[static_cast<size_t> (primitiveIndex)].indices);
+        buffers.edges = GpuBuffer::create (device, GpuBufferType::index, edges.data(), edges.size() * sizeof (uint32));
+    }
+
+    return buffers.edges;
+}
+
+std::vector<uint32> Mesh::computeEdgeIndices (Span<const uint32> triangleIndices)
+{
+    const auto numTriangles = triangleIndices.size() / 3;
+
+    std::vector<uint32> edges;
+    edges.reserve (numTriangles * 6);
+
+    std::unordered_set<uint64> seen;
+    seen.reserve (numTriangles * 3);
+
+    for (size_t i = 0; i < numTriangles * 3; i += 3)
+    {
+        for (size_t corner = 0; corner < 3; ++corner)
+        {
+            const auto a = triangleIndices[i + corner];
+            const auto b = triangleIndices[i + (corner + 1) % 3];
+            const auto key = (static_cast<uint64> (jmin (a, b)) << 32) | jmax (a, b);
+
+            if (a != b && seen.insert (key).second)
+                edges.insert (edges.end(), { a, b });
+        }
+    }
+
+    return edges;
+}
+
 void Mesh::prepareGpuBuffers (const GpuDevice::Ptr& device)
 {
     if (device == cachedDevice && gpuBuffers.size() == primitives.size())
@@ -143,7 +186,8 @@ void Mesh::prepareGpuBuffers (const GpuDevice::Ptr& device)
     for (const auto& primitive : primitives)
     {
         gpuBuffers.push_back ({ GpuBuffer::create (device, GpuBufferType::vertex, primitive.vertices.data(), primitive.vertices.size() * sizeof (Vertex)),
-                                GpuBuffer::create (device, GpuBufferType::index, primitive.indices.data(), primitive.indices.size() * sizeof (uint32)) });
+                                GpuBuffer::create (device, GpuBufferType::index, primitive.indices.data(), primitive.indices.size() * sizeof (uint32)),
+                                nullptr });
     }
 }
 

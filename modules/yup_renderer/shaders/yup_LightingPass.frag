@@ -193,6 +193,10 @@ void main()
 
     // Read before the lookup, which the reflection needs too. The 1x1 stand-in is read at its texel
     lightsReflection = texelFetch(sampler2D(u_reflections, pointClamp), min(pixel, textureSize(sampler2D(u_reflections, pointClamp), 0) - 1), 0);
+    // Both stored exposed, see yup_GBufferPass.frag and yup_SsrResolve.frag
+    float inverseExposure = 1.0 / max(view.cameraPosition.w, 1.0e-30);
+    emissionMaterial.rgb *= inverseExposure;
+    lightsReflection.rgb *= inverseExposure;
 
     // The environment first, added in the same order as before
     LightsLookup lookup = lightsLookup(surface);
@@ -215,5 +219,6 @@ void main()
     color += emissionMaterial.rgb;
 #endif
 
-    fragColor = vec4(min(color * view.cameraPosition.w, vec3(yupMaxHalf)), 1.0);
+    // Half the half float range: SsgiComposite adds at most as much on top without overflowing
+    fragColor = vec4(min(color * view.cameraPosition.w, vec3(yupMaxHalfAddend)), 1.0);
 }

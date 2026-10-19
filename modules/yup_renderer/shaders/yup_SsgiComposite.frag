@@ -38,7 +38,8 @@
 // irradiance, weighted as lightsIndirect() weighs the environment's diffuse light: by what the
 // dielectric specular leaves (bsdfEnvironmentDiffuseWeight), by the material occlusion and, for a
 // layered material, by the base scale of its clearcoat and sheen, its sheen reflecting the gathered
-// light too as lightsIndirectLayers() does. The result is exposed, and alpha stays as it is.
+// light too as lightsIndirectLayers() does. The gathered light and the result are exposed, and alpha
+// stays as it is. Both this and LightingPass stop at yupMaxHalfAddend, so the blended sum fits a half float.
 
 layout(set = 0, binding = 1) uniform sampler linearClamp;
 layout(set = 0, binding = 3) uniform sampler pointClamp;
@@ -167,5 +168,5 @@ void main()
         color = color * ((1.0 - sheenMax * sheenAlbedo) * clearcoatBase) + sheen.rgb * (sheenAlbedo * clearcoatBase) * irradiance;
     }
 
-    fragColor = vec4(min(color * view.cameraPosition.w, vec3(yupMaxHalf)), 0.0);
+    fragColor = vec4(min(color, vec3(yupMaxHalfAddend)), 0.0);
 }

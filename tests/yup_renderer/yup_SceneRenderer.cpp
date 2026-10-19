@@ -539,6 +539,14 @@ protected:
         return load (data, sizeof (data));
     }
 
+    static ShaderBundle ssrDenoise()
+    {
+        static constexpr uint8 data[] = {
+#include "yup_renderer_shaders/yup_SsrDenoise.inc"
+        };
+        return load (data, sizeof (data));
+    }
+
     static Budget countResources (const ShaderReflection& reflection)
     {
         Budget budget;
@@ -614,7 +622,7 @@ TEST_F (SceneRendererBundleTests, RasterBundlesStayWithinBudget)
                                                                    std::tuple { "ForwardPass_full_area_lights", forwardPassFullAreaLights(), 12, 4, 5 },
                                                                    std::tuple { "ForwardPass_full_soft_shadows", forwardPassFullSoftShadows(), 14, 4, 5 },
                                                                    std::tuple { "ForwardPass_full_area_lights_soft_shadows", forwardPassFullAreaLightsSoftShadows(), 14, 4, 5 },
-                                                                   std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 1, 0 } })
+                                                                   std::tuple { "GBufferPass_full", gbufferPassFull(), 5, 2, 0 } })
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
@@ -781,8 +789,11 @@ TEST_F (SceneRendererBundleTests, ScreenSpaceReflectionsAreReadByTheLightingPass
     }
 
     // The trace reads the Hi-Z pyramid and the normals (set 1 bindings 1 and 2), the resolve the
-    // trace, the velocity and the previous scene color too (3 to 5); both read the pass block (0)
-    for (const auto& [name, bundle, images] : { std::tuple { "SsrTrace", ssrTrace(), 2 }, std::tuple { "SsrResolve", ssrResolve(), 5 } })
+    // trace, the velocity, the previous scene color and its own history too (3 to 6), the denoise the
+    // resolved reflections (3); the trace and the resolve read the pass block (0), the denoise does not
+    for (const auto& [name, bundle, images, block] : { std::tuple { "SsrTrace", ssrTrace(), 2, true },
+                                                       std::tuple { "SsrResolve", ssrResolve(), 6, true },
+                                                       std::tuple { "SsrDenoise", ssrDenoise(), 3, false } })
     {
         const auto* fragment = bundle.findShader (ShaderStage::fragment, ShaderLanguage::spirv);
         ASSERT_NE (fragment, nullptr) << name;
@@ -790,7 +801,7 @@ TEST_F (SceneRendererBundleTests, ScreenSpaceReflectionsAreReadByTheLightingPass
         auto budget = countResources (fragment->reflection);
         EXPECT_EQ (budget.texturesPerSet[1], images) << name;
         EXPECT_TRUE (declares (fragment->reflection.uniformBuffers, 0, 0)) << name;
-        EXPECT_TRUE (declares (fragment->reflection.uniformBuffers, 1, 0)) << name;
+        EXPECT_EQ (declares (fragment->reflection.uniformBuffers, 1, 0), block) << name;
 
         for (uint32_t binding = 1; binding <= static_cast<uint32_t> (images); ++binding)
             EXPECT_TRUE (declares (fragment->reflection.separateImages, 1, binding)) << name << " " << static_cast<int> (binding);

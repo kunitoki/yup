@@ -51,7 +51,7 @@ layout(set = 0, binding = 1) uniform sampler linearClamp;
 layout(set = 1, binding = 4) uniform texture2D u_velocity;
 layout(set = 1, binding = 5) uniform texture2D u_previousSceneColor;
 
-// The gathered irradiance in rgb, the share of the cosine-weighted hemisphere it came from in a
+// The gathered irradiance in rgb, exposed, the share of the cosine-weighted hemisphere it came from in a
 layout(location = 1) out vec4 fragIndirect;
 #endif
 
@@ -152,8 +152,9 @@ float gtaoHorizon(ivec2 pixel, vec3 position, vec3 v, vec2 direction, float side
         if (previous.a <= 1.0e-3)
             continue;
 
-        // gtao.noise.z: 1 / the exposure the history was rendered with
-        gathered += vec4(min(previous.rgb / previous.a * gtao.noise.z, vec3(65504.0)), 1.0) * weight;
+        // gtao.noise.z: 1 / the exposure the history was rendered with. Kept exposed at this frame's
+        // exposure, so the half float target holds the light of bright scenes at a low exposure
+        gathered += vec4(min(previous.rgb / previous.a * (gtao.noise.z * view.cameraPosition.w), vec3(65504.0)), 1.0) * weight;
 #else
         horizon = max(horizon, mix(-1.0, dot(delta, v) / deltaLength, falloff));
 #endif

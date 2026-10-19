@@ -117,6 +117,13 @@ public:
         several calls, and weighs nothing until all of its positions are captured (preflight R28). */
     static constexpr int maxVolumeProbesPerBake = 48;
 
+    /** The share of an irradiance volume probe's rays that may first hit back faces before the
+        probe weighs nothing, see getVolumeProbeValidity() (Majercik et al. 2019, DDGI). */
+    static constexpr float maxBackFaceShare = 0.25f;
+
+    /** The rays getVolumeProbeValidity() casts per probe, evenly spread over the sphere. */
+    static constexpr int numValidityRays = 64;
+
     //==============================================================================
     /** What a bake reads besides the ForwardPass drawing the captures. */
     struct Inputs
@@ -146,6 +153,18 @@ public:
     /** What a bake of @p volume depends on besides its bake id: every field of its part and the
         world matrix of its entity. */
     static uint64 getSignature (const SceneDrawList::IrradianceVolume& volume) noexcept;
+
+    /** The weight an irradiance volume probe at @p position is baked with: 0 when more than
+        maxBackFaceShare of its numValidityRays rays first hit, within @p maxDistance, the back face
+        of a single-sided item of @p items, as for a probe inside a wall or below a floor, whose
+        light would leak onto the surfaces around it; 1 otherwise. Double-sided items show both
+        sides, so they stop rays without counting.
+
+        @param items        The opaque items the probes are captured with, in world space.
+        @param position     The world position of the probe.
+        @param maxDistance  How far the rays reach, the far plane of the capture.
+    */
+    static float getVolumeProbeValidity (Span<const SceneDrawList::DrawItem> items, const Vector3<float>& position, float maxDistance);
 
     /** The number of probes and volumes of @p drawList still to bake, a volume counting until all of
         its positions are captured. A feature the baker gave up counts 0. */

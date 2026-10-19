@@ -63,6 +63,7 @@
 #include "passes/yup_ForwardPass.cpp"
 #include "passes/yup_GBufferPass.cpp"
 #include "passes/yup_DepthNormalPrepass.cpp"
+#include "passes/yup_DebugOverlayPass.cpp"
 #include "screenspace/yup_AmbientOcclusionPass.cpp"
 #include "screenspace/yup_HiZPyramid.cpp"
 #include "screenspace/yup_ReflectionPass.cpp"

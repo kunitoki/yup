@@ -46,12 +46,13 @@
                           LightingClassify TIER_FULL LOCAL_INDIRECT?
                           GBufferPass TIER_FULL
                           ShadowPass MASKED?
+                          DebugOverlay BOXES?
                           TemporalAA UPSCALE?
                           ToneMapping RADIANCE_COMPOSITE?
                           GtaoTrace SCREEN_SPACE_GI?
                           GtaoDenoise SCREEN_SPACE_GI?
                           Background, GBufferBackground, DepthNormalPrepass, LightClusters, DebugView
-                          BloomDownsample, BloomUpsample, SsgiComposite, HiZCopy, HiZDownsample, SsrTrace, SsrResolve
+                          BloomDownsample, BloomUpsample, SsgiComposite, HiZCopy, HiZDownsample, SsrTrace, SsrResolve, SsrDenoise
                           DofSetup, DofTiles, DofGather, DofComposite, FogApply
                           MotionTileMax, MotionNeighborMax, MotionReconstruct
                           ProbeEquirectToCube, ProbeCubeDownsample, ProbePrefilter, ProbeCaptureResolve
@@ -105,6 +106,7 @@
 #include "passes/yup_GBufferPass.h"
 #include "passes/yup_LightingPass.h"
 #include "passes/yup_DepthNormalPrepass.h"
+#include "passes/yup_DebugOverlayPass.h"
 #include "screenspace/yup_AmbientOcclusionPass.h"
 #include "screenspace/yup_HiZPyramid.h"
 #include "screenspace/yup_ReflectionPass.h"

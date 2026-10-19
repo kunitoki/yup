@@ -34,13 +34,14 @@
 // mip whose faces are 8 x 8 texels, 384 samples, which the two bands need no more than.
 // Below the float floor the atlas holds RGBM: coefficient 0 in RGBM, the others as their ratio to
 // it per channel, remapped from [-2, 2] to [0, 1] (SphericalHarmonics::encodeRatio()), since they
-// can be negative and RGBM cannot hold that.
+// can be negative and RGBM cannot hold that. The alpha of coefficients 1 to 3 holds the probe's
+// validity (ProbeBaker::getVolumeProbeValidity()), which multiplies its weight.
 
 layout(set = 0, binding = 1) uniform sampler linearClamp;
 
 layout(set = 1, binding = 0) uniform ProbeShBlock
 {
-    vec4 params; // x unused, y 1 when the textures hold RGBM, z face size of the mip read, in texels
+    vec4 params; // x the probe's validity, 0 to 1, y 1 when the textures hold RGBM, z face size of the mip read, in texels
 } probe;
 
 // The mip read, bound alone so that it is lod 0 here
@@ -90,5 +91,5 @@ void main()
 
     vec3 ratio = vec3(l0.r > 0.0 ? lc.r / (l0.r * 2.0) : 0.0, l0.g > 0.0 ? lc.g / (l0.g * 2.0) : 0.0, l0.b > 0.0 ? lc.b / (l0.b * 2.0) : 0.0);
     // rgba8unorm holds no exact 0.5: a zero ratio comes back as about 0.8% of coefficient 0
-    fragColor = probe.params.y > 0.5 ? vec4(clamp(ratio * 0.5 + 0.5, 0.0, 1.0), 1.0) : vec4(clamp(lc, vec3(-yupMaxHalf), vec3(yupMaxHalf)), 1.0);
+    fragColor = probe.params.y > 0.5 ? vec4(clamp(ratio * 0.5 + 0.5, 0.0, 1.0), probe.params.x) : vec4(clamp(lc, vec3(-yupMaxHalf), vec3(yupMaxHalf)), probe.params.x);
 }

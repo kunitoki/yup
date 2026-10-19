@@ -198,11 +198,13 @@ public:
         @param cube   A cube in getRadianceFormat() with its full mip chain filled, as downsampleCube() leaves it.
         @param atlas  A render-target 2D texture in getRadianceFormat().
         @param texel  The texel of coefficient 0; the column of four must lie inside @p atlas.
+        @param validity  What the probe's weight is multiplied by when shaded, 0 to 1, stored in the
+                         alpha of coefficient 1 (ProbeBaker::getVolumeProbeValidity()).
 
         @returns False on a null or wrong-shaped texture or a texel outside the atlas, recording
                  nothing, or if the pass could not be compiled or recorded.
     */
-    bool projectIrradiance (GpuFrame& frame, const GpuTexture::Ptr& cube, const GpuTexture::Ptr& atlas, Point<int> texel);
+    bool projectIrradiance (GpuFrame& frame, const GpuTexture::Ptr& cube, const GpuTexture::Ptr& atlas, Point<int> texel, float validity = 1.0f);
 
     /** The format of the distance cubes and visibility atlases of the irradiance volumes. */
     static constexpr GpuTextureFormat visibilityFormat = GpuTextureFormat::rg16float;

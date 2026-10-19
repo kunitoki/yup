@@ -36,7 +36,7 @@ layout(set = 0, binding = 3) uniform sampler pointClamp;
 layout(set = 1, binding = 0) uniform SsrBlock
 {
     vec4 params; // x perceptual roughness from which the confidence fades, y the roughness cut, z hit thickness (fraction of the view depth), w cells marched at most
-    vec4 frame;  // x 1 / the exposure of the previous scene color, y Hi-Z mip levels, z width of the screen edge fade (uv)
+    vec4 frame;  // x 1 / the exposure of the previous scene color, y Hi-Z mip levels, z width of the screen edge fade (uv), w 1 when the resolve's history is valid
 } ssr;
 
 layout(set = 1, binding = 1) uniform texture2D u_hiZ;

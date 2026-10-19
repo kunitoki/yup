@@ -113,6 +113,20 @@ public:
     /** Changes the settings that choose how scenes are rendered, from the next render(). */
     void setRenderSettings (const RenderSettings& newSettings) noexcept { renderSettings = newSettings; }
 
+    /** Outlines the world bounds of @p entities over the next frames, in @p color, on both tiers.
+
+        Each entity's box is its Entity::computeWorldBounds(), refreshed every frame, so it covers
+        its children and follows them as they move. The outlines go over the final image, or the
+        debug view, without a depth test, so boxes behind other surfaces stay visible. Entities
+        that are destroyed or have no bounds are skipped. Pass an empty list to stop.
+
+        @see RenderSettings::wireframe
+    */
+    void setBoundsOverlay (std::vector<Entity> entities, Color color = Color (0xffff9a1fu));
+
+    /** The entities outlined by setBoundsOverlay(). */
+    const std::vector<Entity>& getBoundsOverlay() const noexcept { return boundsOverlay; }
+
     /** Bakes every reflection probe and irradiance volume of the scene that was never baked, was
         asked to bake again (ReflectionProbeNode::requestBake(), IrradianceVolumeNode::requestBake()),
         or whose own fields or entity world matrix changed since its bake, and returns how many
@@ -263,8 +277,8 @@ public:
         gbufferNormal, ///< Full: the rgba16float G-buffer RT1, the octahedral shading normal in xy, the filtered roughness in z and metallic in w, 0 where nothing was drawn. Raster: none.
         prepassNormal, ///< Raster with ambient occlusion, a frame the depth of field blurs, or one drawing the world fog: the rgba16float depth and normal prepass target, encoded as the G-buffer RT1, single sampled. Otherwise none.
         ambientOcclusion, ///< With ambient occlusion: the rgba8 AmbientOcclusionPass output, the view-space bent normal * 0.5 + 0.5 in rgb and the visibility in a, at half resolution. Otherwise none.
-        reflections, ///< Full, with screen-space reflections and a history to read them from: the rgba16float ReflectionPass output, the reflected radiance (unexposed) in rgb and its confidence in a. Otherwise none, the first frame included.
-        indirectDiffuse, ///< Full, with screen-space diffuse GI added to the frame: the rgba16float AmbientOcclusionPass::getIndirectDiffuse(), the gathered irradiance (unexposed) in rgb and the share of the hemisphere it came from in a, at half resolution. Otherwise none, the first frame included.
+        reflections, ///< Full, with screen-space reflections and a history to read them from: the rgba16float ReflectionPass output, the reflected radiance (exposed by the frame's exposure) in rgb and its confidence in a. Otherwise none, the first frame included.
+        indirectDiffuse, ///< Full, with screen-space diffuse GI added to the frame: the rgba16float AmbientOcclusionPass::getIndirectDiffuse(), the gathered irradiance (exposed by the frame's exposure) in rgb and the share of the hemisphere it came from in a, at half resolution. Otherwise none, the first frame included.
         circleOfConfusion, ///< With depth of field blurring the frame: the r16float signed circle of confusion radius of DepthOfField, in texels of its half resolution, negative in front of the focus. Otherwise none.
         depthOfField,      ///< With depth of field blurring the frame: the rgba16float DepthOfField result, the scene color after the blur and before bloom. Otherwise none.
         motionBlur         ///< Full, with motion blur smearing the frame: the rgba16float MotionBlur result, the scene color after the depth of field and the smear, before bloom. Otherwise none, still frames included.
@@ -304,6 +318,11 @@ public:
 
     /** @internal The pass drawing RenderSettings::debugView, for tests, or nullptr before the first full tier frame with one. */
     const FullscreenPass* getDebugViewPass() const noexcept;
+
+    /** @internal The pass drawing RenderSettings::wireframe and the bounds overlay, for tests, or
+        nullptr before the first frame drawing one of them.
+    */
+    const DebugOverlayPass* getDebugOverlayPass() const noexcept;
 
     /** @internal The deferred lighting pass of the full tier, for tests, or nullptr before the first render. */
     const LightingPass* getLightingPass() const noexcept;
@@ -460,6 +479,8 @@ private:
     std::unique_ptr<Impl> impl;
     std::function<void (RenderCapabilities::DeviceFacts&)> deviceFactsOverride;
     RenderSettings renderSettings;
+    std::vector<Entity> boundsOverlay;
+    Color boundsOverlayColor;
     String lastError;
     String lastGpuFailure;
     FrameStats lastFrameStats;

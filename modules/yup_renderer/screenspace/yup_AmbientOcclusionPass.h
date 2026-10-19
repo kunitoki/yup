@@ -123,7 +123,7 @@ public:
     GpuTexture::Ptr getOutput() const noexcept { return output; }
 
     /** The rgba16float screen-space diffuse GI of the last render, of the size of getOutput(): the
-        gathered irradiance in rgb, the share of the hemisphere it came from in a. nullptr without it.
+        gathered irradiance in rgb (exposed by the current exposure), the share of the hemisphere it came from in a. nullptr without it.
     */
     GpuTexture::Ptr getIndirectDiffuse() const noexcept { return indirectDiffuse; }
 

@@ -93,6 +93,7 @@ protected:
             if (failTextures)
                 return nullptr;
 
+            ++numTexturesMade;
             return rive::make_rcp<::testing::NiceMock<MockOreTexture>> (desc);
         }));
         ON_CALL (*oreCtx, makeTextureViewImpl (_)).WillByDefault (Invoke ([] (const rive::ore::TextureViewDesc&) -> rive::rcp<rive::ore::TextureView>
@@ -170,5 +171,6 @@ protected:
     std::deque<RecordedPass> passes; // Every backend render pass begun, in order
     int pipelinesMade = 0;
     bool failTextures = false;
+    int numTexturesMade = 0;
     bool failPipelines = false;
 };

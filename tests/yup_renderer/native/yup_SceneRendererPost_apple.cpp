@@ -699,7 +699,7 @@ protected:
 
 #if YUP_ENABLE_SHADER_TRANSPILER
     /** Shows @p view at an exposure of 0.25, which keeps it below saturation, and checks that each
-        pixel shows the texel of @p output covering it as clamp (rgb * @p weight * 0.25). Both the
+        pixel shows the texel of @p output covering it as clamp (rgb * @p weight), the texel being exposed. Both the
         render and the expected image round the same float expression to 8 bits, so they agree
         within one level. At least @p minLit pixels must be lit, and @p minPartial texels must have
         a confidence or share below 0.9 with some light, so a wrong weight shows.
@@ -715,8 +715,8 @@ protected:
         ASSERT_TRUE (image.isValid());
         ASSERT_NE (source, nullptr);
 
-        const auto expected = mapTexels (source, "vec4(clamp(t.rgb * " + weight + " * 0.25, 0.0, 1.0), 1.0)");
-        const auto partial = mapTexels (source, "vec4(t.a < 0.9 && max(t.r, max(t.g, t.b)) * 0.25 > 0.04 ? 1.0 : 0.0, 0.0, 0.0, 1.0)");
+        const auto expected = mapTexels (source, "vec4(clamp(t.rgb * " + weight + ", 0.0, 1.0), 1.0)");
+        const auto partial = mapTexels (source, "vec4(t.a < 0.9 && max(t.r, max(t.g, t.b)) > 0.04 ? 1.0 : 0.0, 0.0, 0.0, 1.0)");
         ASSERT_TRUE (expected.isValid() && partial.isValid());
         const auto scale = image.getWidth() / expected.getWidth();
 
@@ -1072,6 +1072,202 @@ TEST_F (SceneRendererDebugViewTests, CircleOfConfusionShowsBlackWithoutDepthOfFi
     const auto cannotBlur = renderToImage (renderer, scene, 64);
     EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::circleOfConfusion), nullptr);
     EXPECT_EQ (countNonBlackPixels (cannotBlur), 0);
+}
+
+TEST_F (SceneRendererDebugViewTests, SurfaceViewsShowTheOpaqueSurfaces)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 1);
+
+    using DebugView = RenderSettings::DebugView;
+    for (const auto view : { DebugView::depth, DebugView::normals, DebugView::baseColor })
+    {
+        setDebugView (renderer, view);
+        const auto image = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+        EXPECT_GT (countNonBlackPixels (image), 1000) << static_cast<int> (view);
+    }
+}
+
+TEST_F (SceneRendererDebugViewTests, MotionVectorsAreBlackOnStillFrames)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 8);
+    setDebugView (renderer, RenderSettings::DebugView::motionVectors);
+
+    Image image;
+    for (int i = 0; i < 3; ++i)
+        image = renderToImage (renderer, scene, 64);
+
+    ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+    EXPECT_EQ (countNonBlackPixels (image), 0);
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (SceneRendererDebugViewTests, RoughnessAndMetallicShowTheGBuffer)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 1);
+
+    using DebugView = RenderSettings::DebugView;
+    for (const auto& [view, channel] : { std::pair { DebugView::roughness, "z" }, std::pair { DebugView::metallic, "w" } })
+    {
+        setDebugView (renderer, view);
+        const auto image = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (image.isValid()) << renderer.getLastError();
+
+        const auto expected = mapTexels (renderer.getPassOutput (SceneRenderer::PassOutput::gbufferNormal),
+                                         String ("vec4(vec3(clamp(t.") + channel + ", 0.0, 1.0)), 1.0)");
+        ASSERT_TRUE (expected.isValid());
+        ASSERT_EQ (expected.getWidth(), image.getWidth());
+
+        auto differing = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+        {
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto shown = image.getPixelColor (x, y);
+                const auto wanted = expected.getPixelColor (x, y);
+                differing += std::abs (shown.getRed() - wanted.getRed()) > 1 || std::abs (shown.getGreen() - wanted.getGreen()) > 1
+                                     || std::abs (shown.getBlue() - wanted.getBlue()) > 1 ? 1 : 0;
+            }
+        }
+
+        EXPECT_EQ (differing, 0) << channel;
+    }
+}
+#endif
+
+// RenderSettings::wireframe and SceneRenderer::setBoundsOverlay() on 64 x 64 frames
+class SceneRendererDebugOverlayTests : public SceneRendererMetalTests
+{
+protected:
+    static void setWireframe (SceneRenderer& renderer, bool wireframe)
+    {
+        auto settings = renderer.getRenderSettings();
+        settings.wireframe = wireframe;
+        renderer.setRenderSettings (settings);
+    }
+
+    /** The pixels of @p image matching @p color within a few levels. */
+    static int countPixelsOfColor (const Image& image, Color color)
+    {
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+        {
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto pixel = image.getPixelColor (x, y);
+                count += std::abs (pixel.getRed() - color.getRed()) <= 4 && std::abs (pixel.getGreen() - color.getGreen()) <= 4
+                                 && std::abs (pixel.getBlue() - color.getBlue()) <= 4 ? 1 : 0;
+            }
+        }
+
+        return count;
+    }
+
+    /** The pixels that differ between two images of the same size. */
+    static int countDifferingPixels (const Image& a, const Image& b)
+    {
+        int count = 0;
+        for (int y = 0; y < a.getHeight(); ++y)
+            for (int x = 0; x < a.getWidth(); ++x)
+                count += a.getPixelColor (x, y) != b.getPixelColor (x, y) ? 1 : 0;
+
+        return count;
+    }
+
+    static constexpr uint32 boundsColor = 0xff00ff00u;
+};
+
+TEST_F (SceneRendererDebugOverlayTests, NoOverlayCreatesNoPass)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+
+    SceneRenderer renderer;
+    setTier (renderer, RenderSettings::TierPreference::raster);
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getDebugOverlayPass(), nullptr);
+
+    // An overlay of entities that are gone draws nothing
+    auto gone = scene.createEntity ("gone");
+    renderer.setBoundsOverlay ({ gone });
+    gone.destroy();
+    ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
+    EXPECT_EQ (renderer.getDebugOverlayPass(), nullptr);
+    EXPECT_TRUE (renderer.waitForGPU().wasOk());
+}
+
+TEST_F (SceneRendererDebugOverlayTests, WireframeDrawsEveryItemOnBothTiers)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+
+    for (const auto tier : { RenderSettings::TierPreference::raster, RenderSettings::TierPreference::full })
+    {
+        SceneRenderer renderer;
+        setTier (renderer, tier);
+        if (tier == RenderSettings::TierPreference::full)
+            setFullTierTaa (renderer, 1);
+
+        // Without the ambient occlusion's per-frame noise, so frames without the lines match
+        auto settings = renderer.getRenderSettings();
+        settings.ambientOcclusion = false;
+        renderer.setRenderSettings (settings);
+
+        const auto off = renderToImage (renderer, scene, 64);
+
+        setWireframe (renderer, true);
+        const auto on = renderToImage (renderer, scene, 64);
+        ASSERT_TRUE (off.isValid() && on.isValid()) << renderer.getLastError();
+
+        const auto* pass = renderer.getDebugOverlayPass();
+        ASSERT_NE (pass, nullptr);
+        EXPECT_GE (pass->getNumDraws(), 2) << static_cast<int> (tier);
+        EXPECT_GT (countDifferingPixels (off, on), 64) << static_cast<int> (tier);
+
+        // Off again shows the image without the lines
+        setWireframe (renderer, false);
+        const auto offAgain = renderToImage (renderer, scene, 64);
+        EXPECT_EQ (countDifferingPixels (off, offAgain), 0) << static_cast<int> (tier);
+    }
+}
+
+TEST_F (SceneRendererDebugOverlayTests, BoundsOverlayOutlinesTheEntitiesInItsColor)
+{
+    Scene scene;
+    buildOnScreenEmitterScene (scene);
+    auto emitter = scene.getRoot().findChild ("emitter");
+    ASSERT_TRUE (emitter.isValid());
+
+    SceneRenderer renderer;
+    setTier (renderer, RenderSettings::TierPreference::raster);
+    const auto off = renderToImage (renderer, scene, 64);
+    ASSERT_TRUE (off.isValid()) << renderer.getLastError();
+    EXPECT_EQ (countPixelsOfColor (off, Color (boundsColor)), 0);
+
+    renderer.setBoundsOverlay ({ emitter }, Color (boundsColor));
+    ASSERT_EQ (renderer.getBoundsOverlay().size(), 1u);
+
+    const auto on = renderToImage (renderer, scene, 64);
+    ASSERT_NE (renderer.getDebugOverlayPass(), nullptr);
+    EXPECT_EQ (renderer.getDebugOverlayPass()->getNumDraws(), 1);
+    EXPECT_GT (countPixelsOfColor (on, Color (boundsColor)), 40);
+
+    // The outline follows the entity and disappears with it
+    emitter.destroy();
+    const auto destroyed = renderToImage (renderer, scene, 64);
+    EXPECT_EQ (countPixelsOfColor (destroyed, Color (boundsColor)), 0);
 }
 
 TEST_F (SceneRendererMetalTests, SilhouetteEdgesMatchRasterOnBothTiers)
@@ -2188,6 +2384,11 @@ TEST_P (SceneRendererTierTests, FogScattersTheSunPhysically)
 TEST_P (SceneRendererTierTests, FogOverTheBackgroundKeepsItsBlendWithDepthOfField)
 {
     checkFogOverTheBackgroundKeepsItsBlendWithDepthOfField (GetParam());
+}
+
+TEST_P (SceneRendererTierTests, BlurredHighlightsOverFogKeepTheirBrightness)
+{
+    checkBlurredHighlightsOverFogKeepTheirBrightness (GetParam());
 }
 
 TEST_P (SceneRendererTierTests, FogBeforeBloomGlowsLikeADimmerEmitter)

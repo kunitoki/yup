@@ -46,6 +46,45 @@ protected:
 
     ReflectionProbeNode& node() { return *scene.getRoot().findChild ("probe").get<ReflectionProbeNode>(); }
 
+    /** Adds a counter-clockwise quad facing @p normal, centered on @p normal times @p extent. */
+    static void addQuad (std::vector<Mesh::Vertex>& vertices, Vector3<float> normal, Vector3<float> u, Vector3<float> v, float extent)
+    {
+        if (u.crossProduct (v).dotProduct (normal) < 0.0f)
+            std::swap (u, v);
+
+        const auto center = normal * extent;
+        const Vector3<float> corners[] = { center - (u + v) * extent, center + (u - v) * extent, center + (u + v) * extent, center - (u - v) * extent };
+        for (const int corner : { 0, 1, 2, 0, 2, 3 })
+            vertices.push_back ({ corners[corner] });
+    }
+
+    /** A cube from -1 to 1 with its faces pointing outwards. */
+    static Mesh::Ptr makeCube()
+    {
+        const Vector3<float> x { 1.0f, 0.0f, 0.0f }, y { 0.0f, 1.0f, 0.0f }, z { 0.0f, 0.0f, 1.0f };
+        std::vector<Mesh::Vertex> vertices;
+        addQuad (vertices, x, y, z, 1.0f);
+        addQuad (vertices, -x, y, z, 1.0f);
+        addQuad (vertices, y, z, x, 1.0f);
+        addQuad (vertices, -y, z, x, 1.0f);
+        addQuad (vertices, z, x, y, 1.0f);
+        addQuad (vertices, -z, x, y, 1.0f);
+
+        auto mesh = Mesh::Ptr (new Mesh ("cube"));
+        mesh->addPrimitive (std::move (vertices), {});
+        return mesh;
+    }
+
+    static SceneDrawList::DrawItem makeItem (const Mesh& mesh, const Material& material, const Matrix4& world = {}, bool mirrored = false)
+    {
+        SceneDrawList::DrawItem item;
+        item.primitive = &mesh.getPrimitive (0);
+        item.material = &material;
+        item.world = world;
+        item.mirrored = mirrored;
+        return item;
+    }
+
     Scene scene;
     SceneDrawList list;
 };
@@ -165,4 +204,53 @@ TEST_F (ProbeBakerTests, UnbakedVolumesArePendingAndWeighNothing)
 
     // The full tier packs baked volumes only
     EXPECT_TRUE (baker.packIrradianceVolumesByPriority (list).empty());
+}
+
+TEST_F (ProbeBakerTests, ProbesInsideSingleSidedGeometryAreInvalid)
+{
+    const auto cube = makeCube();
+    Material material;
+    const SceneDrawList::DrawItem items[] = { makeItem (*cube, material, Matrix4::translation ({ 10.0f, 0.0f, 0.0f })) };
+
+    EXPECT_EQ (ProbeBaker::getVolumeProbeValidity (items, { 10.0f, 0.2f, -0.3f }, 100.0f), 0.0f);
+    EXPECT_EQ (ProbeBaker::getVolumeProbeValidity (items, { 7.0f, 0.0f, 0.0f }, 100.0f), 1.0f);
+    EXPECT_EQ (ProbeBaker::getVolumeProbeValidity (items, {}, 100.0f), 1.0f);
+}
+
+TEST_F (ProbeBakerTests, ProbeValidityFollowsMirroredItems)
+{
+    const auto cube = makeCube();
+    Material material;
+    const SceneDrawList::DrawItem items[] = { makeItem (*cube, material, Matrix4::scaling ({ -2.0f, 1.0f, 1.0f }), true) };
+
+    EXPECT_EQ (ProbeBaker::getVolumeProbeValidity (items, { 1.5f, 0.0f, 0.0f }, 100.0f), 0.0f);
+    EXPECT_EQ (ProbeBaker::getVolumeProbeValidity (items, { 3.0f, 0.0f, 0.0f }, 100.0f), 1.0f);
+}
+
+TEST_F (ProbeBakerTests, DoubleSidedGeometryKeepsProbesValid)
+{
+    const auto cube = makeCube();
+    Material material;
+    material.doubleSided = true;
+    const SceneDrawList::DrawItem items[] = { makeItem (*cube, material) };
+
+    EXPECT_EQ (ProbeBaker::getVolumeProbeValidity (items, {}, 100.0f), 1.0f);
+}
+
+TEST_F (ProbeBakerTests, ProbesBelowAFloorAreInvalidAndOutOfReachOnesValid)
+{
+    std::vector<Mesh::Vertex> vertices;
+    addQuad (vertices, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, 1.0f);
+    for (auto& vertex : vertices)
+        vertex.position = { vertex.position.getX() * 100.0f, 0.0f, vertex.position.getZ() * 100.0f };
+
+    auto floor = Mesh::Ptr (new Mesh ("floor"));
+    floor->addPrimitive (std::move (vertices), {});
+    Material material;
+    const SceneDrawList::DrawItem items[] = { makeItem (*floor, material) };
+
+    EXPECT_EQ (ProbeBaker::getVolumeProbeValidity (items, { 0.0f, -0.5f, 0.0f }, 50.0f), 0.0f);
+    EXPECT_EQ (ProbeBaker::getVolumeProbeValidity (items, { 0.0f, 0.5f, 0.0f }, 50.0f), 1.0f);
+    EXPECT_EQ (ProbeBaker::getVolumeProbeValidity (items, { 0.0f, -0.5f, 0.0f }, 0.25f), 1.0f);
+    EXPECT_EQ (ProbeBaker::getVolumeProbeValidity ({}, {}, 50.0f), 1.0f);
 }

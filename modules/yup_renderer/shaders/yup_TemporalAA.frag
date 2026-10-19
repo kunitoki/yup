@@ -65,16 +65,6 @@ layout(location = 1) out vec4 outHistory;
 layout(location = 2) out vec4 outWeight;
 #endif
 
-vec3 toYCoCg(vec3 c)
-{
-    return vec3(0.25 * c.r + 0.5 * c.g + 0.25 * c.b, 0.5 * c.r - 0.5 * c.b, -0.25 * c.r + 0.5 * c.g - 0.25 * c.b);
-}
-
-vec3 fromYCoCg(vec3 c)
-{
-    return vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z);
-}
-
 ivec2 clampPixel(ivec2 pixel)
 {
     return clamp(pixel, ivec2(0), ivec2(view.viewport.xy) - 1);
@@ -111,18 +101,6 @@ vec4 sampleHistory(vec2 position)
 
     float weight = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
     return result / weight;
-}
-
-// Moves the history towards the center of the box until it is inside
-vec3 clipToBox(vec3 history, vec3 boxMin, vec3 boxMax)
-{
-    vec3 center = 0.5 * (boxMax + boxMin);
-    vec3 extents = max(0.5 * (boxMax - boxMin), vec3(1.0e-6));
-    vec3 offset = history - center;
-    vec3 units = abs(offset / extents);
-    float largest = max(units.x, max(units.y, units.z));
-
-    return largest > 1.0 ? center + offset / largest : history;
 }
 
 // Each color weighs 1 / (1 + luma) of its un-premultiplied color, so a bright sample can't dominate
@@ -173,7 +151,7 @@ void main()
         {
             ivec2 offset = ivec2(x, y);
             vec4 neighbor = fetchCurrent(pixel + offset);
-            vec3 ycocg = toYCoCg(neighbor.rgb);
+            vec3 ycocg = yupToYCoCg(neighbor.rgb);
 
             mean += ycocg;
             meanSquared += ycocg * ycocg;
@@ -207,7 +185,7 @@ void main()
         if (! any(yupIsNonFinite(history)))
         {
             // Back in RGB the box can reach slightly outside the range of the sanitized samples
-            vec3 clipped = fromYCoCg(clipToBox(toYCoCg(history.rgb), mean - 1.25 * sigma, mean + 1.25 * sigma));
+            vec3 clipped = yupFromYCoCg(yupClipToBox(yupToYCoCg(history.rgb), mean - 1.25 * sigma, mean + 1.25 * sigma));
             vec4 clamped = vec4(clamp(clipped, vec3(0.0), vec3(yupMaxHalf)), clamp(history.a, alphaMin, alphaMax));
             result = blendWeighted(clamped, current, taa.params.x);
         }
@@ -275,7 +253,7 @@ void main()
             sum += neighbor * weight;
             weightSum += weight;
 
-            vec3 ycocg = toYCoCg(neighbor.rgb);
+            vec3 ycocg = yupToYCoCg(neighbor.rgb);
             mean += ycocg;
             meanSquared += ycocg * ycocg;
             alphaMin = min(alphaMin, neighbor.a);
@@ -325,7 +303,7 @@ void main()
             if (changing)
             {
                 float gamma = moving ? 1.25 : 2.5;
-                vec3 clipped = fromYCoCg(clipToBox(toYCoCg(history.rgb), mean - gamma * sigma, mean + gamma * sigma));
+                vec3 clipped = yupFromYCoCg(yupClipToBox(yupToYCoCg(history.rgb), mean - gamma * sigma, mean + gamma * sigma));
                 history = vec4(clamp(clipped, vec3(0.0), vec3(yupMaxHalf)), clamp(history.a, alphaMin, alphaMax));
             }
             else
