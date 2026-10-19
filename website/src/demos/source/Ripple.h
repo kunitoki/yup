@@ -214,6 +214,20 @@ private:
         wasActive = active;
     }
 
+    /** Ripples follow the hand, drags included. */
+    bool holdsStillWhileDragging() const override { return false; }
+
+    /** A press drops a full strength ring where it lands. */
+    void pressed (yup::Point<float> position) override
+    {
+        if (panel.getHeight() <= 0.0f)
+            return;
+
+        const auto uv = (position - panel.getBounds().getTopLeft()) / yup::Point<float> (panel.getWidth(), panel.getHeight());
+        addRing (uv, strongestRing * yup::jmax (0.5f, rippleLift.get()));
+        lastRingAt = uv;
+    }
+
     void addRing (yup::Point<float> center, float amplitude)
     {
         if (amplitude <= 0.0f)

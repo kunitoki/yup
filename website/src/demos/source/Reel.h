@@ -43,6 +43,12 @@ public:
         : Demo ("Reel")
     {
         list.setModel (&presets);
+
+        // Drag it like a finger would: flings keep going and slow down, the ends stretch and bounce back.
+        list.setMouseDragScrollingEnabled (true);
+        list.setScrollOptions (yup::KineticScroller::Options()
+                                   .withOverscrollEnabled (true)
+                                   .withOverscrollResistance (0.55f));
         panel.addAndMakeVisible (list);
 
         addAndMakeVisible (view);
@@ -52,15 +58,19 @@ public:
     void resized() override
     {
         view.setBounds (getLocalBounds());
-        view.setContentScale (contentScale());
+        const auto scale = readableScale (panelWidth, panelHeight);
+        view.setContentScale (scale);
 
-        screenBounds = centeredContent (panelWidth, panelHeight);
+        screenBounds = centeredContent (panelWidth, panelHeight, scale);
         panel.setBounds (screenBounds.getX(), screenBounds.getY(), panelWidth, panelHeight);
         list.setBounds (panel.getLocalBounds().reduced (12.0f));
         meshBend = { -2.0f, -2.0f };
     }
 
     yup::Component* getFocusTarget() override { return &list; }
+
+    /** The list keeps bending with the pointer while it is dragged. */
+    bool holdsStillWhileDragging() const override { return false; }
 
 private:
     //==============================================================================

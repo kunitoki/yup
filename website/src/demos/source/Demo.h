@@ -107,6 +107,7 @@ public:
     {
         trackPointer (event);
         dragging = true;
+        pressed (screenToLocal (event.getScreenPosition()));
     }
 
     void mouseDrag (const yup::MouseEvent& event) override { trackPointer (event); }
@@ -128,6 +129,13 @@ protected:
     /** Steps the demo once per frame while it is visible. */
     virtual void advance (float /*deltaSeconds*/) {}
 
+    /** Called when a button goes down anywhere on the demo, at that point. */
+    virtual void pressed (yup::Point<float> /*position*/) {}
+
+    /** True (the default) to stop following the pointer while a widget is dragged, so the surface
+        under it (a turning solid, a bending list) holds still until the drag ends. */
+    virtual bool holdsStillWhileDragging() const { return true; }
+
     /** How much bigger than its design size the demo's content is drawn, so it fills large
         screens and still fits on phones. Demos are designed for a 900 x 640 area. */
     float contentScale() const
@@ -138,8 +146,24 @@ protected:
     /** A rectangle of the given design size, scaled by contentScale() and centered in the demo. */
     yup::Rectangle<float> centeredContent (float designWidth, float designHeight) const
     {
-        const auto scale = contentScale();
+        return centeredContent (designWidth, designHeight, contentScale());
+    }
+
+    /** A rectangle of the given design size at the given scale, centered in the demo. */
+    yup::Rectangle<float> centeredContent (float designWidth, float designHeight, float scale) const
+    {
         return getLocalBounds().withSizeKeepingCenter (designWidth * scale, designHeight * scale);
+    }
+
+    /** Like contentScale() on large screens, but on small ones content of the given design size is
+        not shrunk below its full size while that still fits the demo, and only as much as needed
+        when it doesn't: phones keep it readable. */
+    float readableScale (float designWidth, float designHeight) const
+    {
+        constexpr float margin = 16.0f;
+        const auto fit = yup::jmin ((getWidth() - 2.0f * margin) / designWidth, (getHeight() - 2.0f * margin) / designHeight);
+
+        return yup::jmax (0.1f, yup::jmin (fit, yup::jmax (contentScale(), 1.0f)));
     }
 
     float time = 0.0f;
@@ -147,13 +171,11 @@ protected:
 
 private:
     //==============================================================================
-    /** While a widget is dragged the demo stops following the pointer, so the surface under it
-        (a turning solid, a bending list) holds still until the drag ends. */
     void trackPointer (const yup::MouseEvent& event)
     {
         framesSinceExit = -1;
 
-        if (! dragging)
+        if (! dragging || ! holdsStillWhileDragging())
             pointer = screenToLocal (event.getScreenPosition());
     }
 

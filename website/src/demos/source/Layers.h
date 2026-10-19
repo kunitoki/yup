@@ -87,12 +87,14 @@ public:
     void resized() override
     {
         view.setBounds (getLocalBounds());
-        view.setContentScale (contentScale());
+        // Fitted on the card alone: the room left around it for the popup may run off the screen.
+        scale = readableScale (cardWidth, cardHeight);
+        view.setContentScale (scale);
 
         const auto layerWidth = cardWidth + 2.0f * popupRoom;
         const auto layerHeight = cardHeight + 2.0f * popupRoom;
-        const auto layerOnScreen = centeredContent (layerWidth, layerHeight);
-        cardInView = layerOnScreen.reduced (popupRoom * contentScale());
+        const auto layerOnScreen = centeredContent (layerWidth, layerHeight, scale);
+        cardInView = layerOnScreen.reduced (popupRoom * scale);
 
         for (auto& layer : layers)
             layer.setBounds (layerOnScreen.getX(), layerOnScreen.getY(), layerWidth, layerHeight);
@@ -196,7 +198,7 @@ private:
 
         for (std::size_t level = 0; level < layers.size(); ++level)
         {
-            const auto rise = yup::Matrix4::translation ({ 0.0f, 0.0f, static_cast<float> (level) * layerDepth * contentScale() * lift });
+            const auto rise = yup::Matrix4::translation ({ 0.0f, 0.0f, static_cast<float> (level) * layerDepth * scale * lift });
             view.setSurfaceTransform (surfaces[level], rise.followedBy (tilt));
         }
     }
@@ -214,6 +216,7 @@ private:
     yup::Label glowLabel, powerLabel, modeLabel, nameLabel;
 
     yup::Rectangle<float> cardInView;
+    float scale = 1.0f;
 
     Lift layersLift;
     yup::Point<float> pointerOffset;
