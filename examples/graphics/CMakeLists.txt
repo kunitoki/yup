@@ -142,7 +142,7 @@ list (REMOVE_DUPLICATES demo_resources)
 list (REMOVE_DUPLICATES demo_shaders)
 
 if (demo_live_shaders)
-    list (APPEND demo_modules glslang spirv_cross spirv_tools)
+    list (APPEND demo_modules glslang spirv_cross)
 endif()
 
 # ==== Prepare Android build
