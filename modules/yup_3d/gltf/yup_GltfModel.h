@@ -26,13 +26,17 @@ namespace yup
 /** A glTF 2.0 asset converted into YUP meshes, materials, textures and entity templates.
 
     Load a .gltf or .glb file once, then instantiate it as many times as needed with
-    createEntity(): every call builds a fresh entity tree, and all the trees share the same
-    meshes, materials and textures. Copies of a GltfModel are cheap and share them too.
+    instantiate(): every call builds a fresh entity tree in a Scene, and all the trees share
+    the same meshes, materials and textures, also across scenes. Copies of a GltfModel are
+    cheap and share them too.
 
     @code
     auto model = yup::GltfModel::loadFromFile (file);
     if (model.wasOk())
-        someEntity->addChild (model.getReference().createEntity());
+    {
+        yup::Entity first = model.getReference().instantiate (*scene);
+        yup::Entity second = model.getReference().instantiate (*scene, first);
+    }
     @endcode
 
     What is converted:
@@ -77,17 +81,19 @@ public:
     static ResultValue<GltfModel> loadFromData (Span<const uint8> data, const File& baseDirectory = {});
 
     //==============================================================================
-    /** Builds a new entity tree for a scene of the asset.
+    /** Builds a new entity tree in a Scene for a scene of the asset.
 
-        The returned root entity is named after the scene and holds its root nodes. Every node
+        The returned entity is named after the glTF scene and holds its root nodes. Every node
         becomes an Entity with a MeshNode, CameraNode or LightNode attached as needed.
 
-        @param sceneIndex The scene to build, or -1 for the default one. An asset without
-                          scenes builds every node that has no parent.
+        @param scene      The scene to create the entities in.
+        @param parent     The entity to add the tree to, or an invalid entity for the root.
+        @param sceneIndex The glTF scene to build, or -1 for the default one. An asset
+                          without scenes builds every node that has no parent.
 
-        @return The root entity, or nullptr if the scene index is out of range.
+        @return The new entity, or an invalid entity if the scene index is out of range.
     */
-    Entity::Ptr createEntity (int sceneIndex = -1) const;
+    Entity instantiate (Scene& scene, Entity parent = {}, int sceneIndex = -1) const;
 
     /** Returns the number of scenes in the asset. */
     int getNumScenes() const noexcept;

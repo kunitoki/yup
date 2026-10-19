@@ -175,12 +175,11 @@ TEST_F (ShadowCascadesTests, NearClampsToSceneDepth)
 TEST_F (ShadowCascadesTests, InfiniteFarCapsAtTheClusterLimit)
 {
     Scene scene;
-    auto entity = Entity::Ptr (new Entity ("camera"));
-    auto& camera = entity->attach<CameraNode>();
+    auto entity = scene.createEntity ("camera");
+    auto& camera = entity.attach<CameraNode>();
     camera.zNear = 0.25f;
     camera.zFar = 0.0f;
-    scene.getRoot()->addChild (entity);
-    scene.setActiveCamera (entity.get());
+    scene.setActiveCamera (entity);
 
     ViewData view;
     view.update (scene, SceneSettings::resolve (scene), 64, 64, true, 16, 3);

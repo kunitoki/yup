@@ -424,10 +424,11 @@ private:
             return { a.position + (b.position - a.position) * t, rotation.normalized() };
         }
 
-        void applyTo (yup::Entity& entity) const
+        void applyTo (yup::Entity entity) const
         {
-            entity.setPosition (position);
-            entity.setRotation (rotation);
+            auto& transform = entity.getOrAttach<yup::TransformNode>();
+            transform.setPosition (position);
+            transform.setRotation (rotation);
         }
     };
 
@@ -438,7 +439,8 @@ private:
     public:
         void animateTo (const CameraPose& target, double durationSeconds)
         {
-            start = { getEntity()->getPosition(), getEntity()->getRotation() };
+            const auto& transform = getEntity().getOrAttach<yup::TransformNode>();
+            start = { transform.getPosition(), transform.getRotation() };
             end = target;
             elapsed = 0.0;
             duration = durationSeconds;
@@ -458,7 +460,7 @@ private:
             const auto t = static_cast<float> (yup::jlimit (0.0, 1.0, elapsed / duration));
             const auto eased = t * t * (3.0f - 2.0f * t);
 
-            CameraPose::interpolate (start, end, eased).applyTo (*getEntity());
+            CameraPose::interpolate (start, end, eased).applyTo (getEntity());
             animating = t < 1.0f;
         }
 
@@ -490,9 +492,9 @@ private:
 
             const auto center = box.getCenter();
             const auto halfSize = box.getSize() * 0.5f;
-            const auto children = getEntity()->getChildren();
+            const auto children = getEntity().getChildren();
 
-            for (size_t i = 0; i < children.size(); ++i)
+            for (int i = 0; i < children.size(); ++i)
             {
                 const auto index = static_cast<float> (i);
                 const auto ring = static_cast<float> (i % 4);
@@ -501,9 +503,9 @@ private:
                 const auto angle = index * 2.39996f + speed * static_cast<float> (time);
                 const auto height = halfSize.getY() * (0.6f + 0.25f * ring);
 
-                children[i]->setPosition ({ center.getX() + std::cos (angle) * halfSize.getX() * scale,
-                                            center.getY() + height,
-                                            center.getZ() + std::sin (angle) * halfSize.getZ() * scale });
+                children[i].getOrAttach<yup::TransformNode>().setPosition ({ center.getX() + std::cos (angle) * halfSize.getX() * scale,
+                                                                            center.getY() + height,
+                                                                            center.getZ() + std::sin (angle) * halfSize.getZ() * scale });
             }
         }
 
@@ -532,29 +534,28 @@ private:
                 for (const auto& warning : model.getReference().getWarnings())
                     yup::Logger::outputDebugString ("Scene3DDemo: " + warning);
 
-                auto gltfRoot = model.getReference().createEntity();
-                scene->getRoot()->addChild (gltfRoot);
-                tuneMaterials (*gltfRoot, coatedMaterials, sheenMaterials);
+                auto gltfRoot = model.getReference().instantiate (*scene);
+                tuneMaterials (gltfRoot, coatedMaterials, sheenMaterials);
 
-                auto* device = gltfRoot->findChild ("Cube");
-                if (device != nullptr)
+                auto device = gltfRoot.findChild ("Cube");
+                if (device.isValid())
                 {
-                    attachScreen (*device);
-                    faceplate.setDevice (*device);
+                    attachScreen (device);
+                    faceplate.setDevice (device);
                 }
 
                 // Center the device on the origin
-                auto* framed = device != nullptr ? device : gltfRoot.get();
-                gltfRoot->setPosition (-framed->computeWorldBounds().getCenter());
+                auto framed = device.isValid() ? device : gltfRoot;
+                gltfRoot.attach<yup::TransformNode> (-framed.computeWorldBounds().getCenter());
 
                 focusEntity = framed;
-                deviceBounds = framed->computeWorldBounds();
+                deviceBounds = framed.computeWorldBounds();
                 radius = yup::jmax (0.001f, deviceBounds.getRadius());
 
-                for (const auto& child : framed->getChildren())
+                for (const auto child : framed.getChildren())
                 {
-                    if (child->getName().startsWith ("Pad."))
-                        padBounds.expand (child->computeWorldBounds());
+                    if (child.getName().startsWith ("Pad."))
+                        padBounds.expand (child.computeWorldBounds());
                 }
             }
             else
@@ -562,32 +563,30 @@ private:
                 status = "Unable to load mpc.glb: " + model.getErrorMessage();
             }
 
-            cameraEntity = new yup::Entity ("camera");
-            cameraNode = &cameraEntity->attach<yup::CameraNode>();
-            animator = &cameraEntity->attach<CameraAnimator>();
+            cameraEntity = scene->createEntity ("camera");
+            cameraNode = &cameraEntity.attach<yup::CameraNode>();
+            animator = &cameraEntity.attach<CameraAnimator>();
             cameraNode->zNear = radius * 0.02f;
             cameraNode->zFar = radius * 40.0f;
 
             auto rootEntity = scene->getRoot();
-            rootEntity->addChild (cameraEntity);
-            scene->setActiveCamera (cameraEntity.get());
+            scene->setActiveCamera (cameraEntity);
 
             // Lit like a product shot: one large, low key light from the back left, its soft box in the
             // studio, rakes across the panel and casts long shadows; the dim studio fills the rest. On the
             // full tier contact shadows tighten them where the knobs and pads meet the panel
-            auto keyLightEntity = yup::Entity::Ptr (new yup::Entity ("keyLight"));
-            auto& keyLight = keyLightEntity->attach<yup::LightNode>();
+            auto keyLightEntity = scene->createEntity ("keyLight");
+            auto& keyLight = keyLightEntity.attach<yup::LightNode>();
             keyLight.castsShadows = true;
             keyLight.contactShadows = true;
             keyLight.intensity = 4.0f;
             keyLight.radius = 0.08f;
             keyLight.color = { 1.0f, 0.96f, 0.9f };
-            CameraPose::lookingAt (directionFromDegrees (studioKeyAzimuthDegrees, studioKeyElevationDegrees) * 10.0f, {}, { 0.0f, 1.0f, 0.0f }).applyTo (*keyLightEntity);
-            rootEntity->addChild (keyLightEntity);
+            CameraPose::lookingAt (directionFromDegrees (studioKeyAzimuthDegrees, studioKeyElevationDegrees) * 10.0f, {}, { 0.0f, 1.0f, 0.0f }).applyTo (keyLightEntity);
 
             // A small spot light from the front right lights the pads and casts their shadows across the next row
-            auto padLightEntity = yup::Entity::Ptr (new yup::Entity ("padLight"));
-            auto& padLight = padLightEntity->attach<yup::LightNode> (yup::LightNode::Type::spot);
+            auto padLightEntity = scene->createEntity ("padLight");
+            auto& padLight = padLightEntity.attach<yup::LightNode> (yup::LightNode::Type::spot);
             padLight.castsShadows = true;
             padLight.intensity = 10.0f;
             padLight.radius = 0.03f;
@@ -596,8 +595,7 @@ private:
             padLight.outerConeAngle = 0.6f;
             padLight.color = { 0.9f, 0.94f, 1.0f };
             const auto padCenter = padBounds.getCenter();
-            CameraPose::lookingAt (padCenter + directionFromDegrees (-45.0f, 45.0f) * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f }).applyTo (*padLightEntity);
-            rootEntity->addChild (padLightEntity);
+            CameraPose::lookingAt (padCenter + directionFromDegrees (-45.0f, 45.0f) * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f }).applyTo (padLightEntity);
 
             // Probed from above the pads, the glossy caps and the screen glass reflect the panel around
             // them instead of the studio floor. Parallax correction places the panel where it lies
@@ -606,16 +604,15 @@ private:
             const auto deviceSize = deviceBounds.getSize();
             const auto probePosition = padBounds.isEmpty() ? deviceCenter + yup::Vector3<float> (0.0f, deviceSize.getY(), 0.0f)
                                                            : padBounds.getCenter() + yup::Vector3<float> (0.0f, padBounds.getSize().getY() * 0.5f + 0.25f, 0.0f);
-            probeEntity = new yup::Entity ("reflectionProbe");
-            probeEntity->setPosition (probePosition);
-            reflectionProbe = &probeEntity->attach<yup::ReflectionProbeNode>();
+            probeEntity = scene->createEntity ("reflectionProbe");
+            probeEntity.attach<yup::TransformNode> (probePosition);
+            reflectionProbe = &probeEntity.attach<yup::ReflectionProbeNode>();
             reflectionProbe->shape = yup::ReflectionProbeNode::Shape::box;
             reflectionProbe->influenceExtents = { std::abs (deviceCenter.getX() - probePosition.getX()) + deviceSize.getX() * 0.5f + 0.3f,
                                                   probePosition.getY() - deviceBounds.getMin().getY() + 0.1f,
                                                   std::abs (deviceCenter.getZ() - probePosition.getZ()) + deviceSize.getZ() * 0.5f + 0.3f };
             reflectionProbe->falloff = 0.2f;
             reflectionProbe->parallaxCorrection = true;
-            rootEntity->addChild (probeEntity);
 
             // Bakes the light the case and the screen bounce onto the panel, from 4 x 2 x 4 probes. The probes
             // sit at the cell centers: both layers stay above the panel, the lower one just over the pads, since
@@ -624,35 +621,32 @@ private:
             const auto layerSpacing = 0.45f;
             const auto volumeBottom = panelTop + 0.05f - layerSpacing * 0.5f;
             const auto volumeTop = volumeBottom + layerSpacing * 2.0f;
-            volumeEntity = new yup::Entity ("irradianceVolume");
-            volumeEntity->setPosition ({ deviceCenter.getX(), (volumeBottom + volumeTop) * 0.5f, deviceCenter.getZ() });
-            irradianceVolume = &volumeEntity->attach<yup::IrradianceVolumeNode>();
+            volumeEntity = scene->createEntity ("irradianceVolume");
+            volumeEntity.attach<yup::TransformNode> (yup::Vector3<float> (deviceCenter.getX(), (volumeBottom + volumeTop) * 0.5f, deviceCenter.getZ()));
+            irradianceVolume = &volumeEntity.attach<yup::IrradianceVolumeNode>();
             irradianceVolume->extents = { deviceSize.getX() * 0.5f + 0.6f, (volumeTop - volumeBottom) * 0.5f, deviceSize.getZ() * 0.5f + 0.6f };
             irradianceVolume->resolutionX = 4;
             irradianceVolume->resolutionY = 2;
             irradianceVolume->resolutionZ = 4;
             irradianceVolume->falloff = 0.15f;
-            rootEntity->addChild (volumeEntity);
 
-            lightShow = new yup::Entity ("lightShow");
-            lightShow->setVisible (false);
-            lightShow->attach<LightShowAnimator> (deviceBounds);
+            lightShow = scene->createEntity ("lightShow");
+            lightShow.setVisible (false);
+            lightShow.attach<LightShowAnimator> (deviceBounds);
             setNumShowLights (numShowLightsFull);
 
-            rootEntity->addChild (lightShow);
-
-            auto& environment = rootEntity->attach<yup::EnvironmentNode> (createStudioEnvironment());
+            auto& environment = rootEntity.attach<yup::EnvironmentNode> (createStudioEnvironment());
             environment.intensity = 0.35f;
             environment.visible = true;
             environment.blur = 0.5f;
-            rootEntity->attach<yup::AmbientLightNode> (yup::Colors::black);
-            rootEntity->attach<yup::ExposureNode> (1.1f);
-            rootEntity->attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
+            rootEntity.attach<yup::AmbientLightNode> (yup::Colors::black);
+            rootEntity.attach<yup::ExposureNode> (1.1f);
+            rootEntity.attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
 
             // Off until the fog toggle switches it on, the sliders shape it meanwhile
             yup::WorldFog fog;
             fog.enabled = false;
-            rootEntity->attach<yup::WorldFogNode> (fog);
+            rootEntity.attach<yup::WorldFogNode> (fog);
 
             // Ambient occlusion on both tiers, at the scale of the knobs: they are about 0.08 tall
             auto settings = getRenderer().getRenderSettings();
@@ -707,12 +701,12 @@ private:
         }
 
         /** The number of lights of the light show, shown or not. */
-        int getNumShowLights() const noexcept { return lightShow->getNumChildren(); }
+        int getNumShowLights() const noexcept { return lightShow.getNumChildren(); }
 
         /** Shows or hides the light show: small colored point lights orbiting the device. */
         void setLightShow (bool shouldShow)
         {
-            lightShow->setVisible (shouldShow);
+            lightShow.setVisible (shouldShow);
 
             if (shouldShow)
                 setContinuousUpdates (true);
@@ -735,14 +729,14 @@ private:
         /** Shows or hides the reflection probe over the pads: without it, the glossy parts reflect the studio. */
         void setReflectionProbe (bool shouldShow)
         {
-            probeEntity->setVisible (shouldShow);
+            probeEntity.setVisible (shouldShow);
             repaint();
         }
 
         /** Shows or hides the irradiance volume over the panel: without it, the panel takes no bounce light. */
         void setIrradianceVolume (bool shouldShow)
         {
-            volumeEntity->setVisible (shouldShow);
+            volumeEntity.setVisible (shouldShow);
             repaint();
         }
 
@@ -769,7 +763,7 @@ private:
         {
             // Both poses depend on the aspect ratio: keep the camera framed while resizing
             if (! animator->isAnimating())
-                getTargetPose().applyTo (*cameraEntity);
+                getTargetPose().applyTo (cameraEntity);
         }
 
         /** Renders the next paint 300 times offscreen at 1920x1080 and reports the average frame time. */
@@ -816,7 +810,7 @@ private:
         {
             const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
             auto area = getLocalBounds().reduced (10.0f).withHeight (24.0f);
-            const auto numLights = countLights (*getScene()->getRoot());
+            const auto numLights = countLights (getScene()->getRoot());
 
             g.setFillColor (yup::Colors::white.withAlpha (0.7f));
             g.fillFittedText (yup::String (numLights) + (numLights == 1 ? " light" : " lights"), font, area.removeFromRight (80.0f), yup::Justification::topRight);
@@ -836,7 +830,7 @@ private:
             }
 
             // Only animate while the camera or the light show moves, the scene is static otherwise
-            if (! animator->isAnimating() && ! lightShow->isVisible())
+            if (! animator->isAnimating() && ! lightShow.isVisible())
                 setContinuousUpdates (false);
         }
 
@@ -904,7 +898,7 @@ private:
                 zoomOrbit (delta.getY() * 0.01f);
             }
 
-            getOrbitPose().applyTo (*cameraEntity);
+            getOrbitPose().applyTo (cameraEntity);
             repaint();
         }
 
@@ -940,7 +934,7 @@ private:
                 return;
 
             zoomOrbit (-wheelData.getDeltaY() * 0.15f);
-            getOrbitPose().applyTo (*cameraEntity);
+            getOrbitPose().applyTo (cameraEntity);
             repaint();
         }
 
@@ -950,7 +944,7 @@ private:
                 return;
 
             zoomOrbit (-std::log (event.getScaleDelta()));
-            getOrbitPose().applyTo (*cameraEntity);
+            getOrbitPose().applyTo (cameraEntity);
             repaint();
         }
 
@@ -960,7 +954,7 @@ private:
                 return;
 
             orbitYaw += event.getRotationDelta();
-            getOrbitPose().applyTo (*cameraEntity);
+            getOrbitPose().applyTo (cameraEntity);
             repaint();
         }
 
@@ -973,7 +967,7 @@ private:
             const auto delta = event.getTranslationDelta();
             orbitPitch = yup::jlimit (minOrbitPitch, maxOrbitPitch, orbitPitch + delta.getY() * 0.008f);
             panOrbit ({ delta.getX(), 0.0f });
-            getOrbitPose().applyTo (*cameraEntity);
+            getOrbitPose().applyTo (cameraEntity);
             repaint();
         }
 
@@ -1009,9 +1003,9 @@ private:
     private:
         //==============================================================================
         /** Replaces the screen glass of the device with the LCD component, and drops the modeled logo. */
-        void attachScreen (yup::Entity& device)
+        void attachScreen (yup::Entity device)
         {
-            auto* meshNode = device.getNode<yup::MeshNode>();
+            auto* meshNode = device.get<yup::MeshNode>();
             if (meshNode == nullptr || meshNode->mesh == nullptr)
                 return;
 
@@ -1093,16 +1087,16 @@ private:
             }
 
             meshNode->mesh = rebuilt;
-            screenEntity = &device;
+            screenEntity = device;
         }
 
         /** Makes the painted panel matte, varnishes the black knobs and trim with a sharp clearcoat over
             a satin base, and gives the rubber pads a soft velvet sheen at their edges. Collects the
             varnished and the velvet materials into @p coated and @p sheened, for setClearcoat() and setSheen().
         */
-        static void tuneMaterials (const yup::Entity& entity, std::vector<yup::Material::Ptr>& coated, std::vector<yup::Material::Ptr>& sheened)
+        static void tuneMaterials (yup::Entity entity, std::vector<yup::Material::Ptr>& coated, std::vector<yup::Material::Ptr>& sheened)
         {
-            if (auto* meshNode = entity.getNode<yup::MeshNode>(); meshNode != nullptr && meshNode->mesh != nullptr)
+            if (auto* meshNode = entity.get<yup::MeshNode>(); meshNode != nullptr && meshNode->mesh != nullptr)
             {
                 for (const auto& primitive : meshNode->mesh->getPrimitives())
                 {
@@ -1131,8 +1125,8 @@ private:
                 }
             }
 
-            for (const auto& child : entity.getChildren())
-                tuneMaterials (*child, coated, sheened);
+            for (const auto child : entity.getChildren())
+                tuneMaterials (child, coated, sheened);
         }
 
         /** Rebuilds the light show with @p count lights, their hues around the color wheel, or
@@ -1140,36 +1134,35 @@ private:
         */
         bool setNumShowLights (int count)
         {
-            if (lightShow->getNumChildren() == count)
+            if (lightShow.getNumChildren() == count)
                 return false;
 
-            while (lightShow->getNumChildren() > 0)
-                lightShow->removeChild (lightShow->getChild (0));
+            while (lightShow.getNumChildren() > 0)
+                lightShow.getChild (0).destroy();
 
             for (int i = 0; i < count; ++i)
             {
-                auto showLightEntity = yup::Entity::Ptr (new yup::Entity ("showLight"));
-                auto& showLight = showLightEntity->attach<yup::LightNode> (yup::LightNode::Type::point);
+                auto showLightEntity = lightShow.createChild ("showLight");
+                auto& showLight = showLightEntity.attach<yup::LightNode> (yup::LightNode::Type::point);
                 const auto color = yup::Color::fromHSV (static_cast<float> (i) / static_cast<float> (count), 0.85f, 1.0f);
                 showLight.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
                 showLight.intensity = 0.5f;
                 showLight.range = 0.5f;
-                lightShow->addChild (showLightEntity);
             }
 
             return true;
         }
 
         /** The number of lights in the visible part of a tree. */
-        static int countLights (const yup::Entity& entity)
+        static int countLights (yup::Entity entity)
         {
             if (! entity.isVisible())
                 return 0;
 
-            auto count = entity.getNumNodes<yup::LightNode>();
+            auto count = entity.has<yup::LightNode>() ? 1 : 0;
 
-            for (const auto& child : entity.getChildren())
-                count += countLights (*child);
+            for (const auto child : entity.getChildren())
+                count += countLights (child);
 
             return count;
         }
@@ -1263,13 +1256,13 @@ private:
         */
         std::optional<float> findFocusDistance (yup::Point<float> position) const
         {
-            if (focusEntity == nullptr || getWidth() <= 0.0f || getHeight() <= 0.0f)
+            if (! focusEntity.isValid() || getWidth() <= 0.0f || getHeight() <= 0.0f)
                 return std::nullopt;
 
             // One unit of t is one unit of view depth (along -Z), the camera being unscaled: the t of a hit is its focus distance
             const auto toArray = [] (const yup::Vector3<float>& v) { return std::array { v.getX(), v.getY(), v.getZ() }; };
             const auto tanHalfFov = std::tan (cameraNode->yFov * 0.5f);
-            const auto world = cameraEntity->getWorldMatrix();
+            const auto world = cameraEntity.getWorldMatrix();
             const auto origin = toArray (world.transformPoint ({}));
             const auto direction = toArray (world.transformVector ({ (2.0f * position.getX() / getWidth() - 1.0f) * tanHalfFov * getAspectRatio(),
                                                                      (1.0f - 2.0f * position.getY() / getHeight()) * tanHalfFov,
@@ -1295,28 +1288,24 @@ private:
             };
 
             std::optional<float> nearest;
-            for (const auto& child : focusEntity->getChildren())
-                if (const auto t = hit (child->computeWorldBounds()); t && (! nearest || *t < *nearest))
+            for (const auto child : focusEntity.getChildren())
+                if (const auto t = hit (child.computeWorldBounds()); t && (! nearest || *t < *nearest))
                     nearest = t;
 
             // The body only when no control was hit: its box encloses them all, so it would always win
-            if (nearest || ! focusEntity->isVisible())
+            if (nearest || ! focusEntity.isVisible())
                 return nearest;
 
             yup::BoundingBox body;
-            const auto deviceWorld = focusEntity->getWorldMatrix();
-            focusEntity->forEachNode<yup::MeshNode> ([&] (yup::MeshNode& node, int)
-            {
-                if (node.mesh != nullptr)
-                    body.expand (node.mesh->getBounds().transformedBy (deviceWorld));
-            });
+            if (const auto* node = focusEntity.get<yup::MeshNode>(); node != nullptr && node->mesh != nullptr)
+                body.expand (node->mesh->getBounds().transformedBy (focusEntity.getWorldMatrix()));
 
             return hit (body);
         }
 
         bool hitsScreen (yup::Point<float> position) const
         {
-            if (screenEntity == nullptr)
+            if (! screenEntity.isValid())
                 return false;
 
             // hitTest() and not viewportToUV(), which extrapolates beyond the screen for drags
@@ -1327,7 +1316,7 @@ private:
         /** Facing the screen along its normal, close enough for it to fill the view. */
         CameraPose getScreenPose() const
         {
-            const auto world = screenEntity->getWorldMatrix();
+            const auto world = screenEntity.getWorldMatrix();
             const auto center = world.transformPoint (screenCenter);
             const auto up = world.transformVector (screenUp);
             const auto right = world.transformVector (screenRight);
@@ -1340,7 +1329,7 @@ private:
 
         CameraPose getTargetPose() const
         {
-            if (zoomedOnScreen && screenEntity != nullptr)
+            if (zoomedOnScreen && screenEntity.isValid())
                 return getScreenPose();
 
             return freeMovement ? getOrbitPose() : getTopPose();
@@ -1387,7 +1376,7 @@ private:
 
         void updateStatus()
         {
-            if (screenEntity == nullptr)
+            if (! screenEntity.isValid())
                 return;
 
             if (zoomedOnScreen)
@@ -1400,18 +1389,18 @@ private:
 
         void updateScreenMapping()
         {
-            if (screenEntity == nullptr)
+            if (! screenEntity.isValid())
                 return;
 
             const auto viewport = getLocalBounds();
             if (viewport.getWidth() <= 0.0f || viewport.getHeight() <= 0.0f)
                 return;
 
-            const auto view = cameraEntity->getWorldMatrix().inverted();
+            const auto view = cameraEntity.getWorldMatrix().inverted();
             const auto projection = cameraNode->getProjectionMatrix (getAspectRatio());
 
             const yup::SpinLock::ScopedLockType sl (mapperLock);
-            screenMapper.setModelViewProjection (screenEntity->getWorldMatrix().followedBy (view).followedBy (projection), viewport);
+            screenMapper.setModelViewProjection (screenEntity.getWorldMatrix().followedBy (view).followedBy (projection), viewport);
         }
 
         //==============================================================================
@@ -1442,20 +1431,20 @@ private:
         mutable yup::SpinLock mapperLock;
         yup::MeshSurfaceMapper screenMapper;
 
-        yup::Entity::Ptr cameraEntity;
+        yup::Entity cameraEntity;
         yup::CameraNode* cameraNode = nullptr;
         CameraAnimator* animator = nullptr;
 
-        yup::Entity::Ptr lightShow;
-        yup::Entity::Ptr probeEntity;
+        yup::Entity lightShow;
+        yup::Entity probeEntity;
         yup::ReflectionProbeNode* reflectionProbe = nullptr;
-        yup::Entity::Ptr volumeEntity;
+        yup::Entity volumeEntity;
         yup::IrradianceVolumeNode* irradianceVolume = nullptr;
         std::vector<yup::Material::Ptr> coatedMaterials;
         std::vector<yup::Material::Ptr> sheenMaterials;
 
-        yup::Entity* screenEntity = nullptr;
-        yup::Entity* focusEntity = nullptr; // The device, whose children, or else its body, a click focuses on
+        yup::Entity screenEntity;
+        yup::Entity focusEntity; // The device, whose children, or else its body, a click focuses on
         yup::Vector3<float> screenCenter;
         yup::Vector3<float> screenUp;
         yup::Vector3<float> screenRight;
@@ -1600,10 +1589,10 @@ private:
             toneMappingCombo.addItem ("Reinhard", 1);
             toneMappingCombo.addItem ("ACES", 2);
             toneMappingCombo.addItem ("AgX", 3);
-            toneMappingCombo.setSelectedId (static_cast<int> (scene->getRoot()->getNode<yup::ToneMappingNode>()->type) + 1, yup::dontSendNotification);
+            toneMappingCombo.setSelectedId (static_cast<int> (scene->getRoot().get<yup::ToneMappingNode>()->type) + 1, yup::dontSendNotification);
             toneMappingCombo.onSelectedItemChanged = [this]
             {
-                view.getScene()->getRoot()->getNode<yup::ToneMappingNode>()->type = static_cast<yup::ToneMappingOperator> (toneMappingCombo.getSelectedId() - 1);
+                view.getScene()->getRoot().get<yup::ToneMappingNode>()->type = static_cast<yup::ToneMappingOperator> (toneMappingCombo.getSelectedId() - 1);
                 view.repaint();
             };
 
@@ -1611,10 +1600,10 @@ private:
             exposureSlider.setRange (0.1, 8.0, 0.0);
             exposureSlider.setSkewFactorFromMidpoint (1.0);
             exposureSlider.setNumDecimalPlacesToDisplay (2);
-            exposureSlider.setValue (scene->getRoot()->getNode<yup::ExposureNode>()->exposure, yup::dontSendNotification);
+            exposureSlider.setValue (scene->getRoot().get<yup::ExposureNode>()->exposure, yup::dontSendNotification);
             exposureSlider.onValueChanged = [this] (double value)
             {
-                view.getScene()->getRoot()->getNode<yup::ExposureNode>()->exposure = static_cast<float> (value);
+                view.getScene()->getRoot().get<yup::ExposureNode>()->exposure = static_cast<float> (value);
                 view.repaint();
             };
 
@@ -1822,7 +1811,7 @@ private:
             // The scene's world fog, in its default white: the device is about 3.6 units long, seen from a few
             // units away, so a density of 0.08 leaves about two thirds of its light
             fogToggle.setButtonText ("Fog");
-            fogToggle.setToggleState (scene->getRoot()->getNode<yup::WorldFogNode>()->fog.enabled, yup::dontSendNotification);
+            fogToggle.setToggleState (scene->getRoot().get<yup::WorldFogNode>()->fog.enabled, yup::dontSendNotification);
             fogToggle.onClick = [this]
             {
                 editFog ([this] (yup::WorldFog& fog)
@@ -1847,7 +1836,7 @@ private:
                 };
             };
 
-            const auto initialFog = scene->getRoot()->getNode<yup::WorldFogNode>()->fog;
+            const auto initialFog = scene->getRoot().get<yup::WorldFogNode>()->fog;
             setupFogSlider (fogDensityLabel, "Fog density", fogDensitySlider, 0.5, 0.08, initialFog.enabled ? initialFog.density : 0.08, &yup::WorldFog::density);
             setupFogSlider (fogFalloffLabel, "Height falloff", fogFalloffSlider, 4.0, 1.0, initialFog.heightFalloff, &yup::WorldFog::heightFalloff);
 
@@ -2000,7 +1989,7 @@ private:
             refreshToggle (screenSpaceGIToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::screenSpaceGI, settings), canGI);
             refreshToggle (depthOfFieldToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::depthOfField, settings), canDepthOfField);
             refreshToggle (motionBlurToggle, capabilities->isEnabled (yup::RenderCapabilities::Feature::motionBlur, settings), canMotionBlur);
-            const auto& fog = view.getScene()->getRoot()->getNode<yup::WorldFogNode>()->fog;
+            const auto& fog = view.getScene()->getRoot().get<yup::WorldFogNode>()->fog;
             refreshToggle (fogToggle, fog.enabled && fog.density > 0.0f && canFog, canFog);
 
             // One line says why the dimmed controls are off, so no label changes its text or size
@@ -2188,8 +2177,7 @@ private:
         /** The light the scene setup names "keyLight". */
         yup::LightNode* findKeyLight() const
         {
-            auto* entity = view.getScene()->getRoot()->findChild ("keyLight");
-            return entity != nullptr ? entity->getNode<yup::LightNode>() : nullptr;
+            return view.getScene()->getRoot().findChild ("keyLight").get<yup::LightNode>();
         }
 
         template <class Callback>
@@ -2205,7 +2193,7 @@ private:
         template <class Callback>
         void editFog (Callback&& edit)
         {
-            auto& fog = view.getScene()->getRoot()->getNode<yup::WorldFogNode>()->fog;
+            auto& fog = view.getScene()->getRoot().get<yup::WorldFogNode>()->fog;
             fog.density = static_cast<float> (fogDensitySlider.getValue());
             fog.heightFalloff = static_cast<float> (fogFalloffSlider.getValue());
             edit (fog);
@@ -2352,27 +2340,27 @@ private:
     class EntityItem final : public yup::TreeViewItem
     {
     public:
-        explicit EntityItem (yup::Entity::Ptr entityToShow)
-            : entity (std::move (entityToShow))
+        explicit EntityItem (yup::Entity entityToShow)
+            : entity (entityToShow)
         {
-            for (const auto& child : entity->getChildren())
+            for (const auto child : entity.getChildren())
                 addSubItem (std::make_unique<EntityItem> (child));
         }
 
         yup::String getItemText() const override
         {
             yup::StringArray parts;
-            addPartCount<yup::MeshNode> (parts, "mesh");
-            addPartCount<yup::MaterialNode> (parts, "material");
-            addPartCount<yup::CameraNode> (parts, "camera");
-            addPartCount<yup::LightNode> (parts, "light");
+            addPart<yup::MeshNode> (parts, "mesh");
+            addPart<yup::MaterialNode> (parts, "material");
+            addPart<yup::CameraNode> (parts, "camera");
+            addPart<yup::LightNode> (parts, "light");
 
-            auto text = entity->getName().isNotEmpty() ? entity->getName() : yup::String ("(unnamed)");
+            auto text = entity.getName().isNotEmpty() ? entity.getName() : yup::String ("(unnamed)");
 
             if (! parts.isEmpty())
                 text << "  [" << parts.joinIntoString (", ") << "]";
 
-            if (! entity->isVisible())
+            if (! entity.isVisible())
                 text << "  (hidden)";
 
             return text;
@@ -2380,18 +2368,18 @@ private:
 
         yup::String getUniqueName() const override
         {
-            return entity->getName() + "#" + yup::String (getIndexInParent());
+            return entity.getName() + "#" + yup::String (getIndexInParent());
         }
 
     private:
         template <class T>
-        void addPartCount (yup::StringArray& parts, const char* name) const
+        void addPart (yup::StringArray& parts, const char* name) const
         {
-            if (const auto count = entity->getNumNodes<T>(); count > 0)
-                parts.add (count == 1 ? yup::String (name) : yup::String (count) + " " + name + "s");
+            if (entity.has<T>())
+                parts.add (name);
         }
 
-        yup::Entity::Ptr entity;
+        yup::Entity entity;
     };
 
     void setSceneTreeVisible (bool shouldBeVisible)

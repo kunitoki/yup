@@ -330,11 +330,10 @@ TEST_F (SceneRendererMetalTests, FullTierBackgroundColorMatchesRaster)
         const auto tierName = tier == RenderSettings::TierPreference::full ? String ("full") : String ("raster");
 
         Scene scene;
-        scene.getRoot()->addChild (makePlates());
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        sun->attach<LightNode>();
-        scene.getRoot()->addChild (sun);
-        scene.getRoot()->attach<BackgroundNode> (background);
+        makePlates (scene);
+        auto sun = scene.createEntity ("sun");
+        sun.attach<LightNode>();
+        scene.getRoot().attach<BackgroundNode> (background);
 
         SceneRenderer renderer;
         setTier (renderer, tier);
@@ -361,7 +360,7 @@ TEST_F (SceneRendererMetalTests, FullTierBackgroundColorSurvivesTaaConvergence)
 
     Scene scene;
     buildEdgesScene (scene);
-    scene.getRoot()->attach<BackgroundNode> (background);
+    scene.getRoot().attach<BackgroundNode> (background);
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 4);
@@ -392,7 +391,7 @@ TEST_F (SceneRendererMetalTests, RasterIsAlwaysConverged)
     EXPECT_TRUE (renderer.isConverged());
 
     // Changing the scene changes nothing on raster
-    scene.getRoot()->attach<ExposureNode> (2.0f);
+    scene.getRoot().attach<ExposureNode> (2.0f);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_TRUE (renderer.isConverged());
 }
@@ -403,17 +402,16 @@ TEST_F (SceneRendererMetalTests, ConvergesThenRestartsOnChange)
     buildEdgesScene (scene);
 
     auto material = Material::Ptr (new Material());
-    auto* plates = scene.getRoot()->findChild ("plates");
-    auto* sun = scene.getRoot()->findChild ("sun");
-    ASSERT_NE (plates, nullptr);
-    ASSERT_NE (sun, nullptr);
-    plates->attach<MaterialNode> (material);
+    auto plates = scene.getRoot().findChild ("plates");
+    auto sun = scene.getRoot().findChild ("sun");
+    ASSERT_TRUE (plates.isValid());
+    ASSERT_TRUE (sun.isValid());
+    plates.attach<MaterialNode> (material);
 
-    auto camera = Entity::Ptr (new Entity ("camera"));
-    camera->attach<CameraNode>();
-    camera->setPosition ({ 0.0f, 0.0f, 5.0f });
-    scene.getRoot()->addChild (camera);
-    scene.setActiveCamera (camera.get());
+    auto camera = scene.createEntity ("camera");
+    camera.attach<CameraNode>();
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.0f, 5.0f });
+    scene.setActiveCamera (camera);
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 4);
@@ -432,16 +430,16 @@ TEST_F (SceneRendererMetalTests, ConvergesThenRestartsOnChange)
 
     expectConvergesAfterFourRenders ("first");
 
-    scene.getRoot()->attach<ExposureNode> (2.0f);
+    scene.getRoot().attach<ExposureNode> (2.0f);
     expectConvergesAfterFourRenders ("exposure");
 
     material->roughnessFactor = 0.5f;
     expectConvergesAfterFourRenders ("material");
 
-    sun->setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 0.4f));
+    sun.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 0.4f));
     expectConvergesAfterFourRenders ("light");
 
-    camera->setPosition ({ 0.1f, 0.0f, 5.0f });
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.1f, 0.0f, 5.0f });
     expectConvergesAfterFourRenders ("camera");
 }
 
@@ -494,7 +492,7 @@ TEST_F (SceneRendererMetalTests, SignedZeroAndNanPayloadsAreNoChange)
     auto material = Material::Ptr (new Material());
     material->metallicFactor = 0.0f;
     material->normalScale = std::bit_cast<float> (0x7fc00000u);
-    scene.getRoot()->findChild ("plates")->attach<MaterialNode> (material);
+    scene.getRoot().findChild ("plates").attach<MaterialNode> (material);
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 2);
@@ -579,17 +577,16 @@ TEST_F (SceneRendererMetalTests, MovingObjectKeepsStillPartsAntialiased)
 
     auto mesh = Mesh::Ptr (new Mesh ("spinner"));
     mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 });
-    auto spinner = Entity::Ptr (new Entity ("spinner"));
-    spinner->attach<MeshNode> (mesh);
-    spinner->setPosition ({ -1.6f, -1.6f, 0.0f });
-    scene.getRoot()->addChild (spinner);
+    auto spinner = scene.createEntity ("spinner");
+    spinner.attach<MeshNode> (mesh);
+    spinner.getOrAttach<TransformNode>().setPosition ({ -1.6f, -1.6f, 0.0f });
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 16);
     Image image;
     for (int i = 0; i < 24; ++i)
     {
-        spinner->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.2f * static_cast<float> (i)));
+        spinner.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.2f * static_cast<float> (i)));
         image = renderToImage (renderer, scene, 128);
         ASSERT_TRUE (image.isValid()) << renderer.getLastError();
     }
@@ -625,7 +622,7 @@ TEST_F (SceneRendererMetalTests, RedrawnTextureRestartsAndShows)
     auto texture = Texture::Ptr (new Texture (gpuTexture));
     auto material = Material::Ptr (new Material());
     material->baseColorTexture = texture;
-    scene.getRoot()->findChild ("plates")->attach<MaterialNode> (material);
+    scene.getRoot().findChild ("plates").attach<MaterialNode> (material);
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 4);
@@ -709,7 +706,7 @@ protected:
     */
     void checkExposedPerTexel (Scene& scene, SceneRenderer& renderer, RenderSettings::DebugView view, SceneRenderer::PassOutput output, const String& weight, int minLit, int minPartial)
     {
-        scene.getRoot()->attach<ExposureNode> (0.25f);
+        scene.getRoot().attach<ExposureNode> (0.25f);
         setDebugView (renderer, view);
 
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
@@ -1191,7 +1188,7 @@ TEST_F (SceneRendererMetalTests, ToneMappingChangeKeepsTheFullTierConverged)
     ASSERT_TRUE (renderer.isConverged());
 
     // Tone mapping runs after the accumulation: the converged history shows through the new operator
-    scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::aces);
+    scene.getRoot().attach<ToneMappingNode> (ToneMappingOperator::aces);
     const auto image = renderToImage (renderer, scene, 128);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
     EXPECT_TRUE (renderer.isConverged());
@@ -1203,8 +1200,8 @@ TEST_F (SceneRendererMetalTests, ExposureAndLightChangesRestartButKeepTheHistory
 {
     // Each change sets a value, applied to the edges scene converged with 8 TAA samples
     const std::pair<const char*, std::function<void (Scene&, float)>> changes[] = {
-        { "exposure", [] (Scene& scene, float value) { scene.getRoot()->attach<ExposureNode> (value); } },
-        { "light", [] (Scene& scene, float value) { scene.getRoot()->findChild ("sun")->setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, value)); } },
+        { "exposure", [] (Scene& scene, float value) { scene.getRoot().attach<ExposureNode> (value); } },
+        { "light", [] (Scene& scene, float value) { scene.getRoot().findChild ("sun").getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, value)); } },
     };
 
     const std::map<String, std::pair<float, float>> values { { "exposure", { 1.0f, 1.5f } }, { "light", { 0.0f, 0.4f } } };
@@ -1289,7 +1286,7 @@ TEST_F (SceneRendererMetalTests, UncoveredPixelsShowTheBackgroundExactly)
 
     Scene scene;
     buildEdgesScene (scene);
-    scene.getRoot()->attach<BackgroundNode> (background);
+    scene.getRoot().attach<BackgroundNode> (background);
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 4);
@@ -1301,7 +1298,7 @@ TEST_F (SceneRendererMetalTests, UncoveredPixelsShowTheBackgroundExactly)
     // Just inside the left silhouette on row 64
     EXPECT_FALSE (isBackground (image.getPixelColor (34, 64)));
 
-    scene.getRoot()->findChild ("plates")->setPosition ({ 0.5f, 0.0f, 0.0f });
+    scene.getRoot().findChild ("plates").getOrAttach<TransformNode>().setPosition ({ 0.5f, 0.0f, 0.0f });
 
     for (int frame = 1; frame <= 6; ++frame)
     {
@@ -1339,17 +1336,15 @@ TEST_F (SceneRendererMetalTests, CameraMotionReorderingBlendedItemsKeepsTheHisto
 
         auto mesh = Mesh::Ptr (new Mesh ("blended"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, blended);
-        auto quad = Entity::Ptr (new Entity ("blended"));
-        quad->attach<MeshNode> (mesh);
-        quad->setPosition ({ x, -0.7f, 0.6f + z });
-        scene.getRoot()->addChild (quad);
+        auto quad = scene.createEntity ("blended");
+        quad.attach<MeshNode> (mesh);
+        quad.getOrAttach<TransformNode>().setPosition ({ x, -0.7f, 0.6f + z });
     }
 
-    auto camera = Entity::Ptr (new Entity ("camera"));
-    camera->attach<CameraNode>();
-    camera->setPosition ({ 0.0f, 0.0f, 5.0f });
-    scene.getRoot()->addChild (camera);
-    scene.setActiveCamera (camera.get());
+    auto camera = scene.createEntity ("camera");
+    camera.attach<CameraNode>();
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.0f, 5.0f });
+    scene.setActiveCamera (camera);
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 16);
@@ -1357,7 +1352,7 @@ TEST_F (SceneRendererMetalTests, CameraMotionReorderingBlendedItemsKeepsTheHisto
         ASSERT_NE (renderer.render (device, scene, 128, 128), nullptr) << renderer.getLastError();
     ASSERT_TRUE (renderer.isConverged());
 
-    camera->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.01f));
+    camera.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.01f));
     const auto image = renderToImage (renderer, scene, 128);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
 
@@ -1371,11 +1366,10 @@ TEST_F (SceneRendererMetalTests, CameraMotionKeepsTheHistory)
     Scene scene;
     buildEdgesScene (scene);
 
-    auto camera = Entity::Ptr (new Entity ("camera"));
-    camera->attach<CameraNode>();
-    camera->setPosition ({ 0.0f, 0.0f, 5.0f });
-    scene.getRoot()->addChild (camera);
-    scene.setActiveCamera (camera.get());
+    auto camera = scene.createEntity ("camera");
+    camera.attach<CameraNode>();
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.0f, 5.0f });
+    scene.setActiveCamera (camera);
 
     SceneRenderer renderer;
     setFullTierTaa (renderer, 16);
@@ -1385,7 +1379,7 @@ TEST_F (SceneRendererMetalTests, CameraMotionKeepsTheHistory)
 
     // The first frame after a small camera move blends into the reprojected history, so the edges
     // stay antialiased; starting over from that frame alone would alias them
-    camera->setPosition ({ 0.01f, 0.0f, 5.0f });
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.01f, 0.0f, 5.0f });
     const auto image = renderToImage (renderer, scene, 128);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
     EXPECT_FALSE (renderer.isConverged());
@@ -1423,11 +1417,10 @@ TEST_F (SceneRendererMetalTests, VelocityIsZeroForAStaticSceneAndCameraMotionOth
     Scene scene;
     buildShadowsScene (scene);
 
-    auto camera = Entity::Ptr (new Entity ("camera"));
-    camera->attach<CameraNode>();
-    camera->setPosition ({ 0.0f, 0.0f, 5.0f });
-    scene.getRoot()->addChild (camera);
-    scene.setActiveCamera (camera.get());
+    auto camera = scene.createEntity ("camera");
+    camera.attach<CameraNode>();
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.0f, 5.0f });
+    scene.setActiveCamera (camera);
 
     SceneRenderer renderer;
     setTier (renderer, RenderSettings::TierPreference::full);
@@ -1440,7 +1433,7 @@ TEST_F (SceneRendererMetalTests, VelocityIsZeroForAStaticSceneAndCameraMotionOth
 
     // Velocity is current uv minus previous uv, with uv from the top-left. Moving the camera right
     // moves the scene left on screen: x decreases, y is unchanged
-    camera->setPosition ({ 0.1f, 0.0f, 5.0f });
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.1f, 0.0f, 5.0f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
     const auto right = readVelocity (renderer.getPassOutput (SceneRenderer::PassOutput::velocity), 1000.0f);
@@ -1449,7 +1442,7 @@ TEST_F (SceneRendererMetalTests, VelocityIsZeroForAStaticSceneAndCameraMotionOth
     EXPECT_EQ (velocityDeviation (right.getPixelColor (32, 32).getGreen()), 0);
 
     // Moving the camera up moves the scene down on screen, towards larger uv.y: a missing y flip fails here
-    camera->setPosition ({ 0.1f, 0.1f, 5.0f });
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.1f, 0.1f, 5.0f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
     const auto up = readVelocity (renderer.getPassOutput (SceneRenderer::PassOutput::velocity), 1000.0f);
@@ -1466,21 +1459,20 @@ TEST_F (SceneRendererMetalTests, InfiniteFarPlaneSkyMovesWithTheCameraRotation)
     {
         Scene scene;
         setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (0.5f, 0.5f, 0.5f); }, 32, 3));
-        scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
+        scene.getRoot().get<EnvironmentNode>()->visible = true;
 
-        auto camera = Entity::Ptr (new Entity ("camera"));
-        auto& node = camera->attach<CameraNode>();
+        auto camera = scene.createEntity ("camera");
+        auto& node = camera.attach<CameraNode>();
         node.zNear = 0.05f;
         node.zFar = zFar;
-        scene.getRoot()->addChild (camera);
-        scene.setActiveCamera (camera.get());
+        scene.setActiveCamera (camera);
 
         SceneRenderer renderer;
         setTier (renderer, RenderSettings::TierPreference::full);
         EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
         EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-        camera->setRotation (Quaternion::fromAxisAngle (Vector3<float> (0.3f, 1.0f, 0.0f).normalized(), 0.05f));
+        camera.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle (Vector3<float> (0.3f, 1.0f, 0.0f).normalized(), 0.05f));
         EXPECT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
         return readVelocity (renderer.getPassOutput (SceneRenderer::PassOutput::velocity), 4.0f);
@@ -1518,22 +1510,20 @@ TEST_F (SceneRendererMetalTests, BlendedItemsKeepTheDeferredVelocityAroundThem)
 
     auto mesh = Mesh::Ptr (new Mesh ("blended"));
     mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
-    auto blended = Entity::Ptr (new Entity ("blended"));
-    blended->attach<MeshNode> (mesh);
-    scene.getRoot()->addChild (blended);
+    auto blended = scene.createEntity ("blended");
+    blended.attach<MeshNode> (mesh);
 
-    auto camera = Entity::Ptr (new Entity ("camera"));
-    camera->attach<CameraNode>();
-    camera->setPosition ({ 0.0f, 0.0f, 5.0f });
-    scene.getRoot()->addChild (camera);
-    scene.setActiveCamera (camera.get());
+    auto camera = scene.createEntity ("camera");
+    camera.attach<CameraNode>();
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.0f, 5.0f });
+    scene.setActiveCamera (camera);
 
     SceneRenderer renderer;
     setTier (renderer, RenderSettings::TierPreference::full);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
     // Moving the camera right moves the scene left on screen: x decreases everywhere
-    camera->setPosition ({ 0.1f, 0.0f, 5.0f });
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.1f, 0.0f, 5.0f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
     const auto moved = readVelocity (renderer.getPassOutput (SceneRenderer::PassOutput::velocity), 1000.0f);
@@ -1549,12 +1539,12 @@ TEST_F (SceneRendererMetalTests, TwoRenderersKeepIndependentHistory)
     Scene scene;
     buildShadowsScene (scene);
 
-    auto* plates = scene.getRoot()->findChild ("plates");
-    ASSERT_NE (plates, nullptr);
+    auto plates = scene.getRoot().findChild ("plates");
+    ASSERT_TRUE (plates.isValid());
 
     const auto velocityAfterMove = [&] (SceneRenderer& renderer, float x)
     {
-        plates->setPosition ({ x, 0.0f, 0.0f });
+        plates.getOrAttach<TransformNode>().setPosition ({ x, 0.0f, 0.0f });
         if (renderer.render (device, scene, 64, 64) == nullptr)
             return -1;
 
@@ -1585,7 +1575,7 @@ TEST_F (SceneRendererMetalTests, FirstFrameHasNoObjectMotion)
     // A transform set before the first render is not motion, whatever the node held before
     Scene scene;
     buildShadowsScene (scene);
-    scene.getRoot()->findChild ("plates")->setPosition ({ 0.3f, 0.2f, 0.0f });
+    scene.getRoot().findChild ("plates").getOrAttach<TransformNode>().setPosition ({ 0.3f, 0.2f, 0.0f });
 
     SceneRenderer renderer;
     setTier (renderer, RenderSettings::TierPreference::full);
@@ -1601,19 +1591,19 @@ TEST_F (SceneRendererMetalTests, NodeReappearingMovedHasNoMotion)
     Scene scene;
     buildShadowsScene (scene);
 
-    auto* plates = scene.getRoot()->findChild ("plates");
-    ASSERT_NE (plates, nullptr);
+    auto plates = scene.getRoot().findChild ("plates");
+    ASSERT_TRUE (plates.isValid());
 
     SceneRenderer renderer;
     setTier (renderer, RenderSettings::TierPreference::full);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
     // Hidden for one frame, then shown somewhere else: its last drawn transform is two frames old
-    plates->setVisible (false);
+    plates.setVisible (false);
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
-    plates->setVisible (true);
-    plates->setPosition ({ 0.1f, 0.0f, 0.0f });
+    plates.setVisible (true);
+    plates.getOrAttach<TransformNode>().setPosition ({ 0.1f, 0.0f, 0.0f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
     const auto velocity = readVelocity (renderer.getPassOutput (SceneRenderer::PassOutput::velocity), 1000.0f);
@@ -1680,10 +1670,9 @@ protected:
             mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
         }
 
-        auto bars = Entity::Ptr (new Entity ("bars"));
-        bars->attach<MeshNode> (mesh);
-        bars->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.12f));
-        scene.getRoot()->addChild (bars);
+        auto bars = scene.createEntity ("bars");
+        bars.attach<MeshNode> (mesh);
+        bars.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.12f));
     }
 
     /** The mean absolute difference of the red channels of two images of the same size, in levels. */
@@ -1955,7 +1944,7 @@ TEST_F (SceneRendererMetalTests, NonFiniteInputDoesNotPoisonHistory)
     // the scene color, through the blending
     const auto buildScene = [] (Scene& scene)
     {
-        scene.getRoot()->addChild (makePlates());
+        makePlates (scene);
 
         std::vector<Mesh::Vertex> vertices (7);
         for (auto& vertex : vertices)
@@ -1976,17 +1965,15 @@ TEST_F (SceneRendererMetalTests, NonFiniteInputDoesNotPoisonHistory)
 
         auto mesh = Mesh::Ptr (new Mesh ("degenerate"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 3, 4, 5, 3, 5, 6 }, material);
-        auto degenerate = Entity::Ptr (new Entity ("degenerate"));
-        degenerate->attach<MeshNode> (mesh);
-        scene.getRoot()->addChild (degenerate);
+        auto degenerate = scene.createEntity ("degenerate");
+        degenerate.attach<MeshNode> (mesh);
 
-        auto light = Entity::Ptr (new Entity ("point"));
-        auto& node = light->attach<LightNode>();
+        auto light = scene.createEntity ("point");
+        auto& node = light.attach<LightNode>();
         node.type = LightNode::Type::point;
         node.range = 0.0f;
         node.intensity = 1.0e8f;
-        light->setPosition ({ 1.0f, 1.0f, 0.01f });
-        scene.getRoot()->addChild (light);
+        light.getOrAttach<TransformNode>().setPosition ({ 1.0f, 1.0f, 0.01f });
     };
 
     // Without temporal anti-aliasing the scene color really holds non-finite values
@@ -2017,15 +2004,14 @@ TEST_F (SceneRendererMetalTests, FullTierWithoutTaaKeepsOverflowingHighlightsFin
     // half floats written above their range, so radiance just past 65504 can't show the overflow
     // here; a light this strong overflows the 32 bit shading math itself to infinity
     Scene scene;
-    scene.getRoot()->addChild (makePlates());
+    makePlates (scene);
 
-    auto light = Entity::Ptr (new Entity ("point"));
-    auto& node = light->attach<LightNode>();
+    auto light = scene.createEntity ("point");
+    auto& node = light.attach<LightNode>();
     node.type = LightNode::Type::point;
     node.range = 0.0f;
     node.intensity = 1.0e38f;
-    light->setPosition ({ 0.5f, 0.5f, 0.05f });
-    scene.getRoot()->addChild (light);
+    light.getOrAttach<TransformNode>().setPosition ({ 0.5f, 0.5f, 0.05f });
 
     auto& renderer = sharedRenderer();
     setFullTierTaa (renderer, 1);

@@ -34,9 +34,8 @@ TEST_F (SceneRendererMetalTests, ShadowCastingLightAfterEightOthersCasts)
         Scene scene;
         for (int i = 0; i < numLamps; ++i)
         {
-            auto lamp = Entity::Ptr (new Entity ("lamp"));
-            lamp->attach<LightNode> (LightNode::Type::point).intensity = 0.0f;
-            scene.getRoot()->addChild (lamp);
+            auto lamp = scene.createEntity ("lamp");
+            lamp.attach<LightNode> (LightNode::Type::point).intensity = 0.0f;
         }
 
         buildShadowsScene (scene);
@@ -64,7 +63,7 @@ TEST_F (SceneRendererMetalTests, LightRadiusChangeRestartsTheFullTier)
     Scene scene;
     buildEdgesScene (scene);
 
-    auto* light = scene.getRoot()->findChild ("sun")->getNode<LightNode>();
+    auto* light = scene.getRoot().findChild ("sun").get<LightNode>();
     ASSERT_NE (light, nullptr);
 
     SceneRenderer renderer;
@@ -86,7 +85,7 @@ TEST_F (SceneRendererMetalTests, AreaLightVariantSwitchRestartsAndConvergesAgain
     Scene scene;
     buildEdgesScene (scene);
 
-    auto* light = scene.getRoot()->findChild ("sun")->getNode<LightNode>();
+    auto* light = scene.getRoot().findChild ("sun").get<LightNode>();
     ASSERT_NE (light, nullptr);
 
     SceneRenderer renderer;
@@ -186,7 +185,7 @@ TEST_F (SceneRendererMetalTests, LightShadowFieldsRestartAccumulation)
         Scene scene;
         buildEdgesScene (scene);
 
-        auto* light = scene.getRoot()->findChild ("sun")->getNode<LightNode>();
+        auto* light = scene.getRoot().findChild ("sun").get<LightNode>();
         ASSERT_NE (light, nullptr);
 
         SceneRenderer renderer;
@@ -231,7 +230,7 @@ TEST_F (SceneRendererMetalTests, RasterLightSelectionDoesNotPopUnderMovingLights
     const auto measureLargestFrameChange = [this] (RenderSettings::TierPreference tier)
     {
         Scene scene;
-        const auto lights = buildOrbitingLightsScene (scene);
+        auto lights = buildOrbitingLightsScene (scene);
 
         SceneRenderer renderer;
         setFullTierTaa (renderer, 1);
@@ -273,7 +272,7 @@ TEST_F (SceneRendererMetalTests, FullTierRendersWithoutAnyLight)
     // fails on it under Metal API validation (MTL_DEBUG_LAYER=1)
     Scene scene;
     buildGlowScene (scene, 0.5f);
-    scene.getRoot()->attach<DefaultLightNode> (false);
+    scene.getRoot().attach<DefaultLightNode> (false);
 
     auto& renderer = sharedRenderer();
     setTier (renderer, RenderSettings::TierPreference::full);
@@ -342,11 +341,10 @@ TEST_P (SceneRendererTierTests, AreaLightVariantFollowsTheLightRadius)
 
     Scene scene;
     addPlate (scene, material);
-    scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+    scene.getRoot().attach<AmbientLightNode> (Colors::black);
 
-    auto sun = Entity::Ptr (new Entity ("sun"));
-    auto& light = sun->attach<LightNode>();
-    scene.getRoot()->addChild (sun);
+    auto sun = scene.createEntity ("sun");
+    auto& light = sun.attach<LightNode>();
 
     // Without temporal anti-aliasing every full tier frame stands on its own
     SceneRenderer renderer;
@@ -389,9 +387,9 @@ TEST_P (SceneRendererTierTests, EmissiveStrengthScalesEmission)
 
         Scene scene;
         addPlate (scene, material);
-        scene.getRoot()->attach<DefaultLightNode> (false);
-        scene.getRoot()->attach<ExposureNode> (1.0f);
-        scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
+        scene.getRoot().attach<DefaultLightNode> (false);
+        scene.getRoot().attach<ExposureNode> (1.0f);
+        scene.getRoot().attach<ToneMappingNode> (ToneMappingOperator::reinhard);
 
         SceneRenderer renderer;
         setTier (renderer, GetParam());
@@ -425,12 +423,11 @@ TEST_P (SceneRendererTierTests, HigherIorBrightensDielectricSpecular)
 
         Scene scene;
         addPlate (scene, material);
-        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot().attach<AmbientLightNode> (Colors::black);
 
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        sun->attach<LightNode>().intensity = 10.0f;
-        sun->setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 1.3f));
-        scene.getRoot()->addChild (sun);
+        auto sun = scene.createEntity ("sun");
+        sun.attach<LightNode>().intensity = 10.0f;
+        sun.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 1.3f));
 
         SceneRenderer renderer;
         setTier (renderer, GetParam());
@@ -463,12 +460,11 @@ TEST_P (SceneRendererTierTests, SpecularFactorAndColorShapeTheDielectricHighligh
 
         Scene scene;
         addPlate (scene, material);
-        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot().attach<AmbientLightNode> (Colors::black);
 
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        sun->attach<LightNode>().intensity = 10.0f;
-        sun->setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 1.3f));
-        scene.getRoot()->addChild (sun);
+        auto sun = scene.createEntity ("sun");
+        sun.attach<LightNode>().intensity = 10.0f;
+        sun.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 1.3f));
 
         SceneRenderer renderer;
         setTier (renderer, GetParam());
@@ -583,21 +579,19 @@ TEST_P (SceneRendererTierTests, DrawsFindTheirLightsWhenDirectionalLightsArePack
     material->metallicFactor = 0.0f;
 
     Scene scene;
-    scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+    scene.getRoot().attach<AmbientLightNode> (Colors::black);
 
-    auto lamp = Entity::Ptr (new Entity ("lamp"));
-    auto& point = lamp->attach<LightNode> (LightNode::Type::point);
+    auto lamp = scene.createEntity ("lamp");
+    auto& point = lamp.attach<LightNode> (LightNode::Type::point);
     point.color = { 1.0f, 0.0f, 0.0f };
     point.intensity = 100.0f;
     point.range = 1.0f;
-    lamp->setPosition ({ 10.0f, 0.0f, 1.0f });
-    scene.getRoot()->addChild (lamp);
+    lamp.getOrAttach<TransformNode>().setPosition ({ 10.0f, 0.0f, 1.0f });
 
-    auto sun = Entity::Ptr (new Entity ("sun"));
-    auto& sunLight = sun->attach<LightNode>();
+    auto sun = scene.createEntity ("sun");
+    auto& sunLight = sun.attach<LightNode>();
     sunLight.color = { 0.0f, 1.0f, 0.0f };
     sunLight.intensity = 2.0f;
-    scene.getRoot()->addChild (sun);
 
     addPlate (scene, material);
 
@@ -735,14 +729,13 @@ TEST_P (SceneRendererTierTests, SunDiskSoftensNothingButSpecular)
 
         Scene scene;
         addPlate (scene, material);
-        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot().attach<AmbientLightNode> (Colors::black);
 
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        auto& node = sun->attach<LightNode>();
+        auto sun = scene.createEntity ("sun");
+        auto& node = sun.attach<LightNode>();
         node.intensity = 2.0f;
         node.radius = radius;
-        sun->setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 0.5f));
-        scene.getRoot()->addChild (sun);
+        sun.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 0.5f));
 
         return meanLuma (renderLuma (scene, 128), 128, { 40, 40, 48, 48 });
     };
@@ -791,14 +784,13 @@ TEST_P (SceneRendererTierTests, LargeLowSphereLightDiffuseIsExact)
 
     Scene scene;
     addPlate (scene, material);
-    scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+    scene.getRoot().attach<AmbientLightNode> (Colors::black);
 
-    auto light = Entity::Ptr (new Entity ("sphere"));
-    auto& node = light->attach<LightNode> (LightNode::Type::point);
+    auto light = scene.createEntity ("sphere");
+    auto& node = light.attach<LightNode> (LightNode::Type::point);
     node.intensity = static_cast<float> (intensity);
     node.radius = static_cast<float> (radius);
-    light->setPosition ({ static_cast<float> (distance * std::cos (elevation)), 0.0f, static_cast<float> (distance * std::sin (elevation)) });
-    scene.getRoot()->addChild (light);
+    light.getOrAttach<TransformNode>().setPosition ({ static_cast<float> (distance * std::cos (elevation)), 0.0f, static_cast<float> (distance * std::sin (elevation)) });
 
     const auto measured = meanLuma (renderLuma (scene, 128), 128, { 63, 63, 2, 2 });
     const auto radiance = intensity / (MathConstants<double>::pi * radius * radius);
@@ -826,23 +818,22 @@ TEST_P (SceneRendererTierTests, SphereLightSpecularMatchesGgx)
     material->roughnessFactor = static_cast<float> (roughness);
 
     Scene scene;
-    auto* plate = addPlate (scene, material);
-    scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+    auto plate = addPlate (scene, material);
+    scene.getRoot().attach<AmbientLightNode> (Colors::black);
 
     // Tilted so the normal makes 60 degrees with the direction to the camera
     const auto tilt = Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, -MathConstants<float>::pi / 3.0f);
-    plate->setRotation (tilt);
+    plate.getOrAttach<TransformNode>().setRotation (tilt);
 
     const auto normal = tilt.rotate ({ 0.0f, 0.0f, 1.0f });
     const Vector3<float> toCamera { 0.0f, 0.0f, 1.0f };
     const auto mirrored = normal * (2.0f * normal.dotProduct (toCamera)) - toCamera;
 
-    auto light = Entity::Ptr (new Entity ("sphere"));
-    auto& node = light->attach<LightNode> (LightNode::Type::point);
+    auto light = scene.createEntity ("sphere");
+    auto& node = light.attach<LightNode> (LightNode::Type::point);
     node.intensity = static_cast<float> (intensity);
     node.radius = static_cast<float> (radius);
-    light->setPosition (mirrored * static_cast<float> (distance));
-    scene.getRoot()->addChild (light);
+    light.getOrAttach<TransformNode>().setPosition (mirrored * static_cast<float> (distance));
 
     const auto measured = meanLuma (renderLuma (scene, 128), 128, { 63, 63, 2, 2 });
     const auto radiance = intensity / (MathConstants<double>::pi * radius * radius);
@@ -867,14 +858,13 @@ TEST_P (SceneRendererTierTests, TinySpotMatchesPunctualOffAxis)
 
         Scene scene;
         addPlate (scene, material);
-        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot().attach<AmbientLightNode> (Colors::black);
 
-        auto light = Entity::Ptr (new Entity ("spot"));
-        auto& node = light->attach<LightNode> (LightNode::Type::spot);
+        auto light = scene.createEntity ("spot");
+        auto& node = light.attach<LightNode> (LightNode::Type::spot);
         node.intensity = 5.0f;
         node.radius = radius;
-        light->setPosition ({ 0.0f, 0.0f, 1.0f });
-        scene.getRoot()->addChild (light);
+        light.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.0f, 1.0f });
 
         // The plate point at tan (35 degrees) = 0.7 along x
         return meanLuma (renderLuma (scene, 128), 128, { 84, 62, 2, 4 });
@@ -902,11 +892,10 @@ TEST_P (SceneRendererTierTests, SunDiskWidensTheHighlight)
 
         Scene scene;
         addPlate (scene, material);
-        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot().attach<AmbientLightNode> (Colors::black);
 
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        sun->attach<LightNode>().radius = radius;
-        scene.getRoot()->addChild (sun);
+        auto sun = scene.createEntity ("sun");
+        sun.attach<LightNode>().radius = radius;
 
         const auto luma = renderLuma (scene, 128);
         return static_cast<int> (std::count_if (luma.begin(), luma.end(), [] (double value) { return value > 2.5; }));
@@ -1086,9 +1075,9 @@ TEST_P (SceneRendererTierTests, ShadowMapsRenderOnlyWhenTheShadowsChange)
 
     EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
-    auto* caster = scene.getRoot()->findChild ("caster");
-    ASSERT_NE (caster, nullptr);
-    caster->setPosition (caster->getPosition() + Vector3<float> (0.05f, 0.0f, 0.0f));
+    auto caster = scene.getRoot().findChild ("caster");
+    ASSERT_TRUE (caster.isValid());
+    caster.getOrAttach<TransformNode>().setPosition (caster.getOrAttach<TransformNode>().getPosition() + Vector3<float> (0.05f, 0.0f, 0.0f));
 
     for (int frame = 0; frame < 2; ++frame)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
@@ -1112,15 +1101,14 @@ TEST_P (SceneRendererTierTests, ShadowMapsSurviveMovingLightsAndRedrawnOpaqueTex
     Scene scene;
     buildLongGroundScene (scene, 2.0f, material);
 
-    auto orbiting = Entity::Ptr (new Entity ("orbiting"));
-    orbiting->attach<LightNode> (LightNode::Type::point);
-    scene.getRoot()->addChild (orbiting);
+    auto orbiting = scene.createEntity ("orbiting");
+    orbiting.attach<LightNode> (LightNode::Type::point);
 
     SceneRenderer renderer;
     setTier (renderer, GetParam());
     for (int frame = 0; frame < 4; ++frame)
     {
-        orbiting->setPosition ({ 0.2f * static_cast<float> (frame), 1.0f, -2.0f });
+        orbiting.getOrAttach<TransformNode>().setPosition ({ 0.2f * static_cast<float> (frame), 1.0f, -2.0f });
         texture->setGpuTexture (GpuTexture::create (device, GpuTextureDesc (2, 2, GpuTextureFormat::rgba8unorm)));
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     }
@@ -1189,33 +1177,33 @@ TEST_P (SceneRendererTierTests, OrbitingACompactSceneDoesNotRedrawTheShadows)
     // A device-sized box on a ground of about its size, seen whole: one map fitted to the scene is
     // finer than the first cascade and ignores the camera, so orbiting around draws it only once
     Scene scene;
-    auto& box = addCompactScene (scene);
+    auto box = addCompactScene (scene);
 
     addCamera (scene, { 5.0f, 4.0f, 0.0f }, {});
-    auto* camera = scene.getRoot()->findChild ("camera");
-    ASSERT_NE (camera, nullptr);
+    auto camera = scene.getRoot().findChild ("camera");
+    ASSERT_TRUE (camera.isValid());
 
     SceneRenderer renderer;
     setTier (renderer, GetParam());
     for (int frame = 0; frame < 8; ++frame)
     {
         const auto yaw = 0.3f * static_cast<float> (frame);
-        aimCamera (*camera, { 5.0f * std::cos (yaw), 4.0f, 5.0f * std::sin (yaw) }, {});
+        aimCamera (camera, { 5.0f * std::cos (yaw), 4.0f, 5.0f * std::sin (yaw) }, {});
 
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
         EXPECT_EQ (shadows (renderer).getNumRecords(), 1) << "frame " << frame;
     }
 
     // Zooming out and panning keep the map too
-    aimCamera (*camera, { 6.5f, 5.2f, 0.0f }, {});
+    aimCamera (camera, { 6.5f, 5.2f, 0.0f }, {});
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
-    aimCamera (*camera, { 6.5f, 5.2f, 0.3f }, { 0.0f, 0.0f, 0.3f });
+    aimCamera (camera, { 6.5f, 5.2f, 0.3f }, { 0.0f, 0.0f, 0.3f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (shadows (renderer).getNumRecords(), 1);
     EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
     // Moving the box draws it again
-    box.setPosition ({ 0.1f, 0.3f, 0.0f });
+    box.getOrAttach<TransformNode>().setPosition ({ 0.1f, 0.3f, 0.0f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
     EXPECT_TRUE (renderer.waitForGPU().wasOk());
@@ -1238,9 +1226,9 @@ TEST_P (SceneRendererTierTests, LargeSceneKeepsViewFittedCascades)
     EXPECT_EQ (shadows (renderer).getNumRecords(), cascades);
     EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
-    auto* camera = scene.getRoot()->findChild ("camera");
-    ASSERT_NE (camera, nullptr);
-    camera->setPosition (camera->getPosition() + Vector3<float> (0.5f, 0.0f, 0.0f));
+    auto camera = scene.getRoot().findChild ("camera");
+    ASSERT_TRUE (camera.isValid());
+    camera.getOrAttach<TransformNode>().setPosition (camera.getOrAttach<TransformNode>().getPosition() + Vector3<float> (0.5f, 0.0f, 0.0f));
 
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (shadows (renderer).getNumRecords(), cascades);
@@ -1254,7 +1242,7 @@ TEST_P (SceneRendererTierTests, CasterMovingInsideTheLastCascadeRedrawsOnlyIt)
     // fit of every cascade, so only the last one holds anything new
     Scene scene;
     buildLongGroundScene (scene, 2.0f);
-    auto& farCaster = addFarCaster (scene);
+    auto farCaster = addFarCaster (scene);
 
     SceneRenderer renderer;
     setTier (renderer, GetParam());
@@ -1267,7 +1255,7 @@ TEST_P (SceneRendererTierTests, CasterMovingInsideTheLastCascadeRedrawsOnlyIt)
     auto expected = getCascadeRenderCounts (renderer, cascades);
     EXPECT_EQ (expected, std::vector<int> (static_cast<size_t> (cascades), 1));
 
-    farCaster.setPosition (farCaster.getPosition() + Vector3<float> (0.5f, 0.0f, 0.0f));
+    farCaster.getOrAttach<TransformNode>().setPosition (farCaster.getOrAttach<TransformNode>().getPosition() + Vector3<float> (0.5f, 0.0f, 0.0f));
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
     ++expected.back();
@@ -1291,9 +1279,9 @@ TEST_P (SceneRendererTierTests, CasterLeavingACascadeRedrawsIt)
     const auto cascades = shadows (renderer).getNumRecords();
     ASSERT_GT (cascades, 1);
 
-    auto* caster = scene.getRoot()->findChild ("caster");
-    ASSERT_NE (caster, nullptr);
-    caster->setPosition ({ 3.0f, caster->getPosition().getY(), -60.0f });
+    auto caster = scene.getRoot().findChild ("caster");
+    ASSERT_TRUE (caster.isValid());
+    caster.getOrAttach<TransformNode>().setPosition ({ 3.0f, caster.getOrAttach<TransformNode>().getPosition().getY(), -60.0f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
     const auto counts = getCascadeRenderCounts (renderer, cascades);
@@ -1316,9 +1304,9 @@ TEST_P (SceneRendererTierTests, ShadowSettingOrSunChangeRedrawsEveryCascade)
     ASSERT_GT (cascades, 1);
 
     // The sun turns a little
-    auto* sun = scene.getRoot()->findChild ("sun");
-    ASSERT_NE (sun, nullptr);
-    aimCamera (*sun, { -10.0f * std::sin (0.62f), 10.0f * std::cos (0.62f), 0.0f }, {});
+    auto sun = scene.getRoot().findChild ("sun");
+    ASSERT_TRUE (sun.isValid());
+    aimCamera (sun, { -10.0f * std::sin (0.62f), 10.0f * std::cos (0.62f), 0.0f }, {});
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (getCascadeRenderCounts (renderer, cascades), std::vector<int> (static_cast<size_t> (cascades), 2));
 
@@ -1337,12 +1325,11 @@ TEST_P (SceneRendererTierTests, MovingAShadowedPointLightKeepsTheSunCascades)
     Scene scene;
     buildLongGroundScene (scene, 2.0f);
 
-    auto lamp = Entity::Ptr (new Entity ("lamp"));
-    auto& light = lamp->attach<LightNode> (LightNode::Type::point);
+    auto lamp = scene.createEntity ("lamp");
+    auto& light = lamp.attach<LightNode> (LightNode::Type::point);
     light.castsShadows = true;
     light.range = 5.0f;
-    lamp->setPosition ({ 1.0f, 1.0f, -2.0f });
-    scene.getRoot()->addChild (lamp);
+    lamp.getOrAttach<TransformNode>().setPosition ({ 1.0f, 1.0f, -2.0f });
 
     SceneRenderer renderer;
     setTier (renderer, GetParam());
@@ -1353,7 +1340,7 @@ TEST_P (SceneRendererTierTests, MovingAShadowedPointLightKeepsTheSunCascades)
     ASSERT_GT (cascades, 1);
     const auto counts = getCascadeRenderCounts (renderer, cascades);
 
-    lamp->setPosition ({ 1.2f, 1.0f, -2.0f });
+    lamp.getOrAttach<TransformNode>().setPosition ({ 1.2f, 1.0f, -2.0f });
     ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
     EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 2);
     EXPECT_EQ (getCascadeRenderCounts (renderer, cascades), counts);
@@ -1368,8 +1355,8 @@ TEST_P (SceneRendererTierTests, OrthographicCameraTakesTheSceneFitThatNeverFades
     addCompactScene (scene);
     addCamera (scene, { 0.0f, 5.0f, 0.0f }, {}, { 0.0f, 0.0f, -1.0f });
 
-    auto* camera = scene.getRoot()->findChild ("camera");
-    ASSERT_NE (camera, nullptr);
+    auto camera = scene.getRoot().findChild ("camera");
+    ASSERT_TRUE (camera.isValid());
     auto& lens = *scene.getActiveCamera();
     lens.projection = CameraNode::Projection::orthographic;
     lens.xMag = 3.0f;
@@ -1380,7 +1367,7 @@ TEST_P (SceneRendererTierTests, OrthographicCameraTakesTheSceneFitThatNeverFades
     setTier (renderer, GetParam());
     for (const auto& offset : { Vector3<float> (0.0f, 0.0f, 0.0f), Vector3<float> (0.5f, 0.0f, 0.0f), Vector3<float> (0.5f, 0.0f, 0.3f) })
     {
-        camera->setPosition (Vector3<float> (0.0f, 5.0f, 0.0f) + offset);
+        camera.getOrAttach<TransformNode>().setPosition (Vector3<float> (0.0f, 5.0f, 0.0f) + offset);
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
 
         const auto data = shadows (renderer).getShadowData();
@@ -1402,8 +1389,8 @@ TEST_P (SceneRendererTierTests, SceneFitHoldsWhileTheFirstCascadeIsNoFiner)
     addCompactScene (scene);
     addCamera (scene, { 5.0f, 4.0f, 0.0f }, {});
 
-    auto* camera = scene.getRoot()->findChild ("camera");
-    ASSERT_NE (camera, nullptr);
+    auto camera = scene.getRoot().findChild ("camera");
+    ASSERT_TRUE (camera.isValid());
 
     const auto full = GetParam() == RenderSettings::TierPreference::full;
     const auto direction = Vector3<float> (5.0f, 4.0f, 0.0f).normalized();
@@ -1413,7 +1400,7 @@ TEST_P (SceneRendererTierTests, SceneFitHoldsWhileTheFirstCascadeIsNoFiner)
     {
         SceneRenderer fresh;
         setTier (fresh, GetParam());
-        aimCamera (*camera, nearEye, {});
+        aimCamera (camera, nearEye, {});
         ASSERT_NE (fresh.render (device, scene, 64, 64), nullptr) << fresh.getLastError();
         EXPECT_GT (shadows (fresh).getShadowData().sunInfo[0], 1.0f);
         EXPECT_TRUE (fresh.waitForGPU().wasOk());
@@ -1423,7 +1410,7 @@ TEST_P (SceneRendererTierTests, SceneFitHoldsWhileTheFirstCascadeIsNoFiner)
     setTier (renderer, GetParam());
     for (int frame = 0; frame < 6; ++frame)
     {
-        aimCamera (*camera, frame % 2 == 0 ? farEye : nearEye, {});
+        aimCamera (camera, frame % 2 == 0 ? farEye : nearEye, {});
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
         EXPECT_EQ (shadows (renderer).getShadowData().sunInfo[0], 1.0f) << "frame " << frame;
     }
@@ -1482,12 +1469,11 @@ TEST_P (SceneRendererTierTests, OrthographicCameraSizesTilesWhateverItsDistance)
         Scene scene;
         addGround (scene, 5.0f);
 
-        auto entity = Entity::Ptr (new Entity ("point"));
-        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        auto entity = scene.createEntity ("point");
+        auto& light = entity.attach<LightNode> (LightNode::Type::point);
         light.range = 2.0f;
         light.castsShadows = true;
-        entity->setPosition ({ 0.0f, 0.5f, 0.0f });
-        scene.getRoot()->addChild (entity);
+        entity.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.5f, 0.0f });
 
         addCamera (scene, { 0.0f, distance, 0.0f }, {}, { 0.0f, 0.0f, -1.0f });
         auto& camera = *scene.getActiveCamera();
@@ -1617,9 +1603,9 @@ TEST_P (SceneRendererTierTests, AtlasShadowMapsRenderOnlyWhenTheShadowsChange)
 
     EXPECT_EQ (shadows (renderer).getNumRenderedFrames(), 1);
 
-    auto* entity = scene.getRoot()->findChild ("spot");
-    ASSERT_NE (entity, nullptr);
-    entity->setPosition (entity->getPosition() + Vector3<float> (0.05f, 0.0f, 0.0f));
+    auto entity = scene.getRoot().findChild ("spot");
+    ASSERT_TRUE (entity.isValid());
+    entity.getOrAttach<TransformNode>().setPosition (entity.getOrAttach<TransformNode>().getPosition() + Vector3<float> (0.05f, 0.0f, 0.0f));
 
     for (int frame = 0; frame < 2; ++frame)
         ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
@@ -1698,14 +1684,13 @@ TEST_P (SceneRendererTierTests, ContactShadowOnlyRecordsHaveNoAtlasTile)
     // views are dropped after its tiles were allocated, and its contact shadows take a record without a map
     for (const auto radius : { 0.0f, 0.5f })
     {
-        auto entity = Entity::Ptr (new Entity ("point"));
-        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        auto entity = scene.createEntity ("point");
+        auto& light = entity.attach<LightNode> (LightNode::Type::point);
         light.castsShadows = true;
         light.contactShadows = true;
         light.radius = radius;
         light.range = 0.3f;
-        entity->setPosition ({ 1.0f + 2.0f * radius, 0.1f, 0.0f });
-        scene.getRoot()->addChild (entity);
+        entity.getOrAttach<TransformNode>().setPosition ({ 1.0f + 2.0f * radius, 0.1f, 0.0f });
     }
 
     SceneRenderer renderer;
@@ -1735,13 +1720,12 @@ TEST_P (SceneRendererTierTests, ContactShadowRecordsGoToTheMostImportantLights)
     // One record more than the budget leaves: 63 small far lights listed first, then a large one
     const auto addPoint = [&] (Vector3<float> position, float range, float distance)
     {
-        auto entity = Entity::Ptr (new Entity ("point"));
-        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        auto entity = scene.createEntity ("point");
+        auto& light = entity.attach<LightNode> (LightNode::Type::point);
         light.contactShadows = true;
         light.contactShadowDistance = distance;
         light.range = range;
-        entity->setPosition (position);
-        scene.getRoot()->addChild (entity);
+        entity.getOrAttach<TransformNode>().setPosition (position);
     };
 
     for (int i = 0; i < GpuShadowData::maxRecords - 1; ++i)
@@ -1776,13 +1760,12 @@ TEST_P (SceneRendererTierTests, ContactShadowsSpareAreaLightsBelowTheHorizon)
         addGround (scene, 5.0f);
         addCamera (scene, { 0.0f, 2.0f, 1.5f }, {});
 
-        auto entity = Entity::Ptr (new Entity ("sphere"));
-        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        auto entity = scene.createEntity ("sphere");
+        auto& light = entity.attach<LightNode> (LightNode::Type::point);
         light.intensity = 5.0f;
         light.radius = 0.4f;
         light.contactShadows = contact;
-        entity->setPosition ({ 0.0f, -0.1f, 0.0f });
-        scene.getRoot()->addChild (entity);
+        entity.getOrAttach<TransformNode>().setPosition ({ 0.0f, -0.1f, 0.0f });
 
         SceneRenderer renderer;
         setTier (renderer, GetParam());
@@ -1944,12 +1927,11 @@ TEST_P (SceneRendererTierTests, ContactOnlyLightWithARadiusLeavesSoftFilteringOf
     Scene scene;
     buildCreaseScene (scene, false);
 
-    auto entity = Entity::Ptr (new Entity ("point"));
-    auto& light = entity->attach<LightNode> (LightNode::Type::point);
+    auto entity = scene.createEntity ("point");
+    auto& light = entity.attach<LightNode> (LightNode::Type::point);
     light.contactShadows = true;
     light.radius = 0.1f;
-    entity->setPosition ({ 0.5f, 0.5f, 0.0f });
-    scene.getRoot()->addChild (entity);
+    entity.getOrAttach<TransformNode>().setPosition ({ 0.5f, 0.5f, 0.0f });
 
     SceneRenderer renderer;
     setCreaseShadowMap (renderer);
@@ -1982,12 +1964,11 @@ TEST_P (SceneRendererTierTests, ContactShadowsOfALightOutOfRangeChangeNothing)
         Scene scene;
         buildCreaseScene (scene, false);
 
-        auto entity = Entity::Ptr (new Entity ("point"));
-        auto& light = entity->attach<LightNode> (LightNode::Type::point);
+        auto entity = scene.createEntity ("point");
+        auto& light = entity.attach<LightNode> (LightNode::Type::point);
         light.contactShadows = contact;
         light.range = range;
-        entity->setPosition ({ -0.5f, 0.15f, 0.0f });
-        scene.getRoot()->addChild (entity);
+        entity.getOrAttach<TransformNode>().setPosition ({ -0.5f, 0.15f, 0.0f });
 
         SceneRenderer renderer;
         setCreaseShadowMap (renderer);
@@ -2079,12 +2060,11 @@ TEST_F (SceneRendererMetalTests, BlendedLayeredItemShadesOnFull)
 
         Scene scene;
         addPlate (scene, material);
-        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot().attach<AmbientLightNode> (Colors::black);
         setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>& d) { return Vector3<float> (0.2f, 0.2f, 0.2f) * (d.getY() * 0.5f + 0.5f); }, 32, 3));
 
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        sun->attach<LightNode>().intensity = 3.0f;
-        scene.getRoot()->addChild (sun);
+        auto sun = scene.createEntity ("sun");
+        sun.attach<LightNode>().intensity = 3.0f;
 
         SceneRenderer renderer;
         setFullTierTaa (renderer, 1);
@@ -2125,16 +2105,15 @@ TEST_F (SceneRendererMetalTests, ClearcoatShadesAlikeOnBothTiers)
     {
         Scene scene;
         addSphere (scene, 1.5f, makeLayeredMaterial ({ 0.6f, 0.1f, 0.1f }, clearcoat, 0.3f, {}, 0.0f));
-        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot().attach<AmbientLightNode> (Colors::black);
         setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>& direction)
         {
             const auto up = jlimit (0.0f, 1.0f, direction.getY() * 0.5f + 0.5f);
             return Vector3<float> (0.1f, 0.1f, 0.1f) + Vector3<float> (1.0f, 1.2f, 1.5f) * up;
         }, 32, 3));
 
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        sun->attach<LightNode>().intensity = 2.0f;
-        scene.getRoot()->addChild (sun);
+        auto sun = scene.createEntity ("sun");
+        sun.attach<LightNode>().intensity = 2.0f;
 
         SceneRenderer renderer;
         setTierForExactFrames (renderer, tier);
@@ -2183,28 +2162,25 @@ TEST_F (SceneRendererMetalTests, LayersAreShadowedWithTheBase)
     {
         Scene scene;
         addPlate (scene, material);
-        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+        scene.getRoot().attach<AmbientLightNode> (Colors::black);
 
-        auto camera = Entity::Ptr (new Entity ("camera"));
-        camera->attach<CameraNode>();
-        aimCamera (*camera, { 0.0f, -4.0f, 4.0f }, {});
-        scene.getRoot()->addChild (camera);
-        scene.setActiveCamera (camera.get());
+        auto camera = scene.createEntity ("camera");
+        camera.attach<CameraNode>();
+        aimCamera (camera, { 0.0f, -4.0f, 4.0f }, {});
+        scene.setActiveCamera (camera);
 
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        auto& light = sun->attach<LightNode>();
+        auto sun = scene.createEntity ("sun");
+        auto& light = sun.attach<LightNode>();
         light.intensity = 3.0f;
         light.castsShadows = true;
-        aimCamera (*sun, { 0.0f, 4.0f, 4.0f }, {});
-        scene.getRoot()->addChild (sun);
+        aimCamera (sun, { 0.0f, 4.0f, 4.0f }, {});
 
         // Spans y 3 to 6 and z 1.5 to 4.5, at least 25 degrees off the camera's axis (0.4 rad above it)
         if (blocked)
         {
-            auto box = Entity::Ptr (new Entity ("blocker"));
-            box->attach<MeshNode> (makeBox (1.5f, makeWallMaterial()));
-            box->setPosition ({ 0.0f, 4.5f, 3.0f });
-            scene.getRoot()->addChild (box);
+            auto box = scene.createEntity ("blocker");
+            box.attach<MeshNode> (makeBox (1.5f, makeWallMaterial()));
+            box.getOrAttach<TransformNode>().setPosition ({ 0.0f, 4.5f, 3.0f });
         }
 
         SceneRenderer renderer;
@@ -2259,18 +2235,17 @@ TEST_F (SceneRendererMetalTests, ClassifiedLightingMatchesOneVariant)
 
         Scene magenta;
         setEnvironmentMap (magenta, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (4.0f, 0.0f, 4.0f); }, 32, 3));
-        magenta.getRoot()->getNode<EnvironmentNode>()->visible = true;
+        magenta.getRoot().get<EnvironmentNode>()->visible = true;
         EXPECT_TRUE (renderToImage (renderer, magenta, 128).isValid());
 
         Scene scene;
         buildMirrorFloorScene (scene);
         addReflectionProbe (scene, { 1.2f, 0.5f, -0.5f }, 1.2f);
-        addSphere (scene, 0.35f, makeLayeredMaterial ({ 0.6f, 0.1f, 0.1f }, 1.0f, 0.1f, {}, 0.0f))->setPosition ({ -0.9f, 0.35f, 0.0f });
+        addSphere (scene, 0.35f, makeLayeredMaterial ({ 0.6f, 0.1f, 0.1f }, 1.0f, 0.1f, {}, 0.0f)).getOrAttach<TransformNode>().setPosition ({ -0.9f, 0.35f, 0.0f });
 
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        sun->attach<LightNode>().intensity = 3.0f;
-        aimCamera (*sun, { 1.0f, 4.0f, 3.0f }, {});
-        scene.getRoot()->addChild (sun);
+        auto sun = scene.createEntity ("sun");
+        sun.attach<LightNode>().intensity = 3.0f;
+        aimCamera (sun, { 1.0f, 4.0f, 3.0f }, {});
 
         const auto image = renderToImage (renderer, scene, 128);
         EXPECT_TRUE (renderer.getLastError().isEmpty()) << renderer.getLastError();

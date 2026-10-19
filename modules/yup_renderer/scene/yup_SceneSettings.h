@@ -36,7 +36,7 @@ namespace yup
 
     @code
     auto scene = yup::Scene::Ptr (new yup::Scene());
-    scene->getRoot()->attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
+    scene->getRoot().attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
 
     const auto settings = yup::SceneSettings::resolve (*scene);
     jassert (settings.toneMapping == yup::ToneMappingOperator::agx);

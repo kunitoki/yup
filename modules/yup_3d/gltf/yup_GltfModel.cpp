@@ -1055,7 +1055,7 @@ ResultValue<GltfModel> GltfModel::loadFromData (Span<const uint8> bytes, const F
 
 //==============================================================================
 
-Entity::Ptr GltfModel::createEntity (int sceneIndex) const
+Entity GltfModel::instantiate (Scene& scene, Entity parent, int sceneIndex) const
 {
     const auto& d = *data;
 
@@ -1065,7 +1065,7 @@ Entity::Ptr GltfModel::createEntity (int sceneIndex) const
     if (d.scenes.empty())
     {
         if (sceneIndex != -1)
-            return nullptr;
+            return {};
 
         roots = d.parentlessNodes;
     }
@@ -1073,21 +1073,21 @@ Entity::Ptr GltfModel::createEntity (int sceneIndex) const
     {
         const auto index = sceneIndex == -1 ? jmax (0, d.defaultScene) : sceneIndex;
         if (! isPositiveAndBelow (index, static_cast<int> (d.scenes.size())))
-            return nullptr;
+            return {};
 
         name = d.scenes[static_cast<size_t> (index)].name;
         roots = d.scenes[static_cast<size_t> (index)].nodes;
     }
 
-    auto root = Entity::Ptr (new Entity (name));
+    const auto root = scene.createEntity (name, parent);
 
     // Iterative depth-first build: deep hierarchies can't overflow the stack, and nodes reached
     // twice (invalid in glTF, but possible in a malformed file) are built once to stop cycles
     std::vector<bool> built (d.nodes.size(), false);
-    std::vector<std::pair<int, Entity*>> pending;
+    std::vector<std::pair<int, Entity>> pending;
 
     for (auto it = roots.rbegin(); it != roots.rend(); ++it)
-        pending.emplace_back (*it, root.get());
+        pending.emplace_back (*it, root);
 
     while (! pending.empty())
     {
@@ -1100,18 +1100,16 @@ Entity::Ptr GltfModel::createEntity (int sceneIndex) const
         built[static_cast<size_t> (nodeIndex)] = true;
 
         const auto& node = d.nodes[static_cast<size_t> (nodeIndex)];
-        auto entity = Entity::Ptr (new Entity (node.name));
-        entity->setPosition (node.position);
-        entity->setRotation (node.rotation);
-        entity->setScale (node.scale);
+        auto entity = scene.createEntity (node.name, parent);
+        entity.attach<TransformNode> (node.position, node.rotation, node.scale);
 
         if (isPositiveAndBelow (node.mesh, static_cast<int> (d.meshes.size())))
-            entity->attach<MeshNode> (d.meshes[static_cast<size_t> (node.mesh)]);
+            entity.attach<MeshNode> (d.meshes[static_cast<size_t> (node.mesh)]);
 
         if (isPositiveAndBelow (node.camera, static_cast<int> (d.cameras.size())))
         {
             const auto& desc = d.cameras[static_cast<size_t> (node.camera)];
-            auto& camera = entity->attach<CameraNode>();
+            auto& camera = entity.attach<CameraNode>();
             camera.projection = desc.projection;
             camera.yFov = desc.yFov;
             camera.zNear = desc.zNear;
@@ -1123,7 +1121,7 @@ Entity::Ptr GltfModel::createEntity (int sceneIndex) const
         if (isPositiveAndBelow (node.light, static_cast<int> (d.lights.size())))
         {
             const auto& desc = d.lights[static_cast<size_t> (node.light)];
-            auto& light = entity->attach<LightNode> (desc.type);
+            auto& light = entity.attach<LightNode> (desc.type);
             light.color = desc.color;
             light.intensity = desc.intensity;
             light.range = desc.range;
@@ -1132,9 +1130,7 @@ Entity::Ptr GltfModel::createEntity (int sceneIndex) const
         }
 
         for (auto it = node.children.rbegin(); it != node.children.rend(); ++it)
-            pending.emplace_back (*it, entity.get());
-
-        parent->addChild (std::move (entity));
+            pending.emplace_back (*it, entity);
     }
 
     return root;

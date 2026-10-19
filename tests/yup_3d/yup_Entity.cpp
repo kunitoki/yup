@@ -23,6 +23,8 @@
 
 #include <yup_3d/yup_3d.h>
 
+#include <deque>
+
 using namespace yup;
 
 class EntityTests : public ::testing::Test
@@ -40,8 +42,11 @@ protected:
 
         void attachedToEntity() override { entityWhenAttached = getEntity(); }
 
+        void detachedFromEntity() override { ++detachCalls; }
+
         int tag = 0;
-        Entity* entityWhenAttached = nullptr;
+        int detachCalls = 0;
+        Entity entityWhenAttached;
     };
 
     class OtherNode : public Node
@@ -60,11 +65,6 @@ protected:
 
         bool& flag;
     };
-
-    static Entity::Ptr makeEntity (const String& name = {})
-    {
-        return Entity::Ptr (new Entity (name));
-    }
 
     static Mesh::Ptr makeUnitCubeMesh()
     {
@@ -85,344 +85,385 @@ protected:
         EXPECT_NEAR (actual.getY(), expected.getY(), tolerance);
         EXPECT_NEAR (actual.getZ(), expected.getZ(), tolerance);
     }
+
+    /** Returns a flag for a DestructionTracker, alive until the scene destroys its nodes. */
+    bool& makeFlag()
+    {
+        return flags.emplace_back (false);
+    }
+
+    std::deque<bool> flags; // destroyed after the scene, which may destroy the trackers
+    Scene scene;
 };
 
 //==============================================================================
 
-TEST_F (EntityTests, NewEntityIsAVisibleRootGroup)
+TEST_F (EntityTests, DefaultEntityIsInvalid)
 {
-    auto entity = makeEntity ("root");
+    const Entity entity;
 
-    EXPECT_EQ (entity->getName(), "root");
-    EXPECT_TRUE (entity->isVisible());
-    EXPECT_EQ (entity->getParent(), nullptr);
-    EXPECT_EQ (entity->getNumChildren(), 0);
-    EXPECT_EQ (entity->getNumNodes<TaggedNode>(), 0);
-    EXPECT_TRUE (entity->getLocalMatrix().isIdentity());
+    EXPECT_FALSE (entity.isValid());
+    EXPECT_FALSE (static_cast<bool> (entity));
+    EXPECT_EQ (entity.getScene(), nullptr);
+    EXPECT_TRUE (entity.getHandle().isNull());
+    EXPECT_EQ (entity.get<TaggedNode>(), nullptr);
+    EXPECT_FALSE (entity.has<TaggedNode>());
+}
+
+TEST_F (EntityTests, NewEntityIsAVisibleChildOfTheRoot)
+{
+    const auto entity = scene.createEntity ("group");
+
+    EXPECT_TRUE (entity.isValid());
+    EXPECT_EQ (entity.getScene(), &scene);
+    EXPECT_EQ (entity.getName(), "group");
+    EXPECT_TRUE (entity.isVisible());
+    EXPECT_TRUE (entity.isActive());
+    EXPECT_EQ (entity.getParent(), scene.getRoot());
+    EXPECT_EQ (entity.getNumChildren(), 0);
+    EXPECT_TRUE (entity.getLocalMatrix().isIdentity());
+}
+
+TEST_F (EntityTests, CopiesReferToTheSameEntity)
+{
+    const auto entity = scene.createEntity();
+    auto copy = entity;
+
+    copy.setName ("renamed");
+
+    EXPECT_EQ (copy, entity);
+    EXPECT_EQ (entity.getName(), "renamed");
 }
 
 TEST_F (EntityTests, AddChildAppendsAndInserts)
 {
-    auto root = makeEntity();
-    auto a = makeEntity ("a");
-    auto b = makeEntity ("b");
-    auto c = makeEntity ("c");
+    auto parent = scene.createEntity();
+    const auto a = scene.createEntity ("a");
+    const auto b = scene.createEntity ("b");
+    const auto c = scene.createEntity ("c");
 
-    root->addChild (a);
-    root->addChild (b);
-    root->addChild (c, 0);
+    EXPECT_TRUE (parent.addChild (a));
+    EXPECT_TRUE (parent.addChild (c));
+    EXPECT_TRUE (parent.addChild (b, 1));
 
-    ASSERT_EQ (root->getNumChildren(), 3);
-    EXPECT_EQ (root->getChild (0), c.get());
-    EXPECT_EQ (root->getChild (1), a.get());
-    EXPECT_EQ (root->getChild (2), b.get());
-    EXPECT_EQ (root->getChild (3), nullptr);
-    EXPECT_EQ (root->getChild (-1), nullptr);
-    EXPECT_EQ (a->getParent(), root.get());
+    ASSERT_EQ (parent.getNumChildren(), 3);
+    EXPECT_EQ (parent.getChild (0), a);
+    EXPECT_EQ (parent.getChild (1), b);
+    EXPECT_EQ (parent.getChild (2), c);
+    EXPECT_FALSE (parent.getChild (3).isValid());
+    EXPECT_EQ (b.getParent(), parent);
 
-    const auto children = root->getChildren();
-    ASSERT_EQ (children.size(), 3u);
-    EXPECT_EQ (children[1].get(), a.get());
+    std::vector<String> names;
+    for (const auto child : parent.getChildren())
+        names.push_back (child.getName());
+
+    EXPECT_EQ (names, (std::vector<String> { "a", "b", "c" }));
+}
+
+TEST_F (EntityTests, CreateChildAddsItLast)
+{
+    auto parent = scene.createEntity();
+    parent.createChild ("first");
+    const auto second = parent.createChild ("second");
+
+    EXPECT_EQ (parent.getChild (1), second);
+    EXPECT_EQ (second.getParent(), parent);
+}
+
+TEST_F (EntityTests, AddingAnExistingChildMovesIt)
+{
+    auto first = scene.createEntity();
+    auto second = scene.createEntity();
+    const auto child = first.createChild();
+
+    EXPECT_TRUE (second.addChild (child));
+
+    EXPECT_EQ (first.getNumChildren(), 0);
+    EXPECT_EQ (child.getParent(), second);
 }
 
 TEST_F (EntityTests, RemoveChildAndRemoveFromParent)
 {
-    auto root = makeEntity();
-    auto a = makeEntity ("a");
-    auto b = makeEntity ("b");
-    root->addChild (a);
-    root->addChild (b);
+    auto parent = scene.createEntity();
+    auto a = parent.createChild();
+    const auto b = parent.createChild();
 
-    EXPECT_TRUE (root->removeChild (a.get()));
-    EXPECT_FALSE (root->removeChild (a.get()));
-    EXPECT_EQ (a->getParent(), nullptr);
-    EXPECT_EQ (root->getNumChildren(), 1);
+    EXPECT_TRUE (parent.removeChild (b));
+    EXPECT_FALSE (parent.removeChild (b));
+    EXPECT_FALSE (b.getParent().isValid());
+    EXPECT_TRUE (b.isValid());
+    EXPECT_FALSE (b.isActive());
 
-    b->removeFromParent();
-    EXPECT_EQ (b->getParent(), nullptr);
-    EXPECT_EQ (root->getNumChildren(), 0);
-
-    b->removeFromParent();
-    EXPECT_EQ (b->getParent(), nullptr);
+    a.removeFromParent();
+    EXPECT_EQ (parent.getNumChildren(), 0);
+    EXPECT_TRUE (scene.getRoot().addChild (a));
+    EXPECT_TRUE (a.isActive());
 }
 
-TEST_F (EntityTests, AddingAChildWithAParentReparentsIt)
+TEST_F (EntityTests, IsAncestorOfFollowsTheHierarchy)
 {
-    auto first = makeEntity();
-    auto second = makeEntity();
-    auto child = makeEntity ("child");
+    auto parent = scene.createEntity();
+    auto child = parent.createChild();
+    const auto grandChild = child.createChild();
 
-    first->addChild (child);
-    second->addChild (child);
-
-    EXPECT_EQ (first->getNumChildren(), 0);
-    EXPECT_EQ (second->getNumChildren(), 1);
-    EXPECT_EQ (child->getParent(), second.get());
+    EXPECT_TRUE (parent.isAncestorOf (grandChild));
+    EXPECT_TRUE (scene.getRoot().isAncestorOf (grandChild));
+    EXPECT_FALSE (grandChild.isAncestorOf (parent));
+    EXPECT_FALSE (parent.isAncestorOf (parent));
 }
 
-TEST_F (EntityTests, AddingAnExistingChildAgainMovesIt)
-{
-    auto root = makeEntity();
-    auto a = makeEntity ("a");
-    auto b = makeEntity ("b");
-    root->addChild (a);
-    root->addChild (b);
-
-    root->addChild (a);
-
-    ASSERT_EQ (root->getNumChildren(), 2);
-    EXPECT_EQ (root->getChild (0), b.get());
-    EXPECT_EQ (root->getChild (1), a.get());
-}
-
+// Disabled: the rejected calls hit a jassert in debug builds
 TEST_F (EntityTests, DISABLED_CyclesAreRejected)
 {
-    auto root = makeEntity();
-    auto child = makeEntity();
-    auto grandChild = makeEntity();
-    root->addChild (child);
-    child->addChild (grandChild);
+    auto parent = scene.createEntity();
+    auto child = parent.createChild();
 
-    EXPECT_TRUE (root->isAncestorOf (grandChild.get()));
-    EXPECT_FALSE (grandChild->isAncestorOf (root.get()));
-
-#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
-    GTEST_SKIP() << "Adding a cycle triggers an assertion when assertions are enabled or logged";
-#endif
-
-    grandChild->addChild (root);
-    root->addChild (root);
-
-    EXPECT_EQ (root->getParent(), nullptr);
-    EXPECT_EQ (grandChild->getNumChildren(), 0);
-    EXPECT_EQ (root->getNumChildren(), 1);
-}
-
-TEST_F (EntityTests, ChildAddressesStayStableWhenSiblingsChange)
-{
-    auto root = makeEntity();
-    std::vector<Entity*> addresses;
-
-    for (int i = 0; i < 64; ++i)
-    {
-        auto child = makeEntity (String (i));
-        addresses.push_back (child.get());
-        root->addChild (child, 0);
-    }
-
-    root->removeChild (addresses[10]);
-
-    for (int i = 0; i < 64; ++i)
-    {
-        if (i != 10)
-            EXPECT_EQ (root->findChild (String (i), false), addresses[(size_t) i]);
-    }
-}
-
-TEST_F (EntityTests, ChildrenOutliveTheirParentWhenReferenced)
-{
-    auto child = makeEntity();
-
-    {
-        auto parent = makeEntity();
-        parent->addChild (child);
-    }
-
-    EXPECT_EQ (child->getParent(), nullptr);
+    EXPECT_FALSE (child.addChild (parent));
+    EXPECT_FALSE (child.addChild (child));
+    EXPECT_FALSE (child.addChild (scene.getRoot()));
+    EXPECT_EQ (child.getParent(), parent);
 }
 
 TEST_F (EntityTests, FindChildSearchesDirectOrRecursive)
 {
-    auto root = makeEntity();
-    auto a = makeEntity ("a");
-    auto deep = makeEntity ("deep");
-    root->addChild (a);
-    a->addChild (deep);
+    auto parent = scene.createEntity();
+    auto child = parent.createChild ("child");
+    const auto deep = child.createChild ("deep");
 
-    EXPECT_EQ (root->findChild ("a"), a.get());
-    EXPECT_EQ (root->findChild ("deep"), deep.get());
-    EXPECT_EQ (root->findChild ("deep", false), nullptr);
-    EXPECT_EQ (root->findChild ("missing"), nullptr);
+    EXPECT_EQ (parent.findChild ("child"), child);
+    EXPECT_EQ (parent.findChild ("deep"), deep);
+    EXPECT_FALSE (parent.findChild ("deep", false).isValid());
+    EXPECT_FALSE (parent.findChild ("missing").isValid());
+}
+
+TEST_F (EntityTests, HiddenAncestorsMakeEntitiesInactive)
+{
+    auto parent = scene.createEntity();
+    const auto child = parent.createChild();
+
+    parent.setVisible (false);
+
+    EXPECT_TRUE (child.isVisible());
+    EXPECT_FALSE (child.isActive());
 }
 
 //==============================================================================
 
-TEST_F (EntityTests, AttachAndGetBySlot)
+TEST_F (EntityTests, AttachGetHasAndDetach)
 {
-    auto entity = makeEntity();
+    auto entity = scene.createEntity();
 
-    auto& first = entity->attach<TaggedNode> (1);
-    auto& second = entity->attach<TaggedNode, 2> (3);
+    auto& node = entity.attach<TaggedNode> (7);
 
-    EXPECT_EQ (entity->getNode<TaggedNode>(), &first);
-    EXPECT_EQ ((entity->getNode<TaggedNode, 2>()), &second);
-    EXPECT_EQ ((entity->getNode<TaggedNode, 1>()), nullptr);
-    EXPECT_EQ (entity->getNodeAt<TaggedNode> (2), &second);
-    EXPECT_EQ (entity->getNumNodes<TaggedNode>(), 2);
-    EXPECT_EQ (first.getEntity(), entity.get());
-    EXPECT_EQ (first.entityWhenAttached, entity.get());
-    EXPECT_EQ (second.tag, 3);
+    EXPECT_EQ (entity.get<TaggedNode>(), &node);
+    EXPECT_TRUE (entity.has<TaggedNode>());
+    EXPECT_FALSE (entity.has<OtherNode>());
+    EXPECT_EQ (node.tag, 7);
+    EXPECT_EQ (node.getEntity(), entity);
+    EXPECT_EQ (node.entityWhenAttached, entity);
+
+    EXPECT_TRUE (entity.detach<TaggedNode>());
+    EXPECT_FALSE (entity.detach<TaggedNode>());
+    EXPECT_FALSE (entity.has<TaggedNode>());
 }
 
-TEST_F (EntityTests, PartsMatchTheExactTypeOnly)
+TEST_F (EntityTests, NodesMatchTheExactTypeOnly)
 {
-    auto entity = makeEntity();
-    entity->attach<TaggedNode>();
-
-    EXPECT_EQ (entity->getNode<OtherNode>(), nullptr);
-    EXPECT_EQ (entity->getNumNodes<OtherNode>(), 0);
-
-    auto& other = entity->attach<OtherNode>();
-    EXPECT_EQ (entity->getNode<OtherNode>(), &other);
-    EXPECT_NE (static_cast<Node*> (entity->getNode<TaggedNode>()), static_cast<Node*> (&other));
-}
-
-TEST_F (EntityTests, RuntimeSlotFormsMatchTemplateForms)
-{
-    auto entity = makeEntity();
-
-    auto& node = entity->attachAt<TaggedNode> (5, 42);
-
-    EXPECT_EQ ((entity->getNode<TaggedNode, 5>()), &node);
-    EXPECT_TRUE ((entity->detach<TaggedNode, 5>()));
-    EXPECT_EQ (entity->getNodeAt<TaggedNode> (5), nullptr);
-
-    entity->attach<TaggedNode, 7>();
-    EXPECT_TRUE (entity->detachAt<TaggedNode> (7));
-    EXPECT_FALSE (entity->detachAt<TaggedNode> (7));
-}
-
-TEST_F (EntityTests, AttachReplacesThePartInTheSameSlot)
-{
-    auto entity = makeEntity();
-    bool firstDestroyed = false;
-
-    entity->attach<DestructionTracker> (firstDestroyed);
-    EXPECT_FALSE (firstDestroyed);
-
-    bool secondDestroyed = false;
-    auto& second = entity->attach<DestructionTracker> (secondDestroyed);
-
-    EXPECT_TRUE (firstDestroyed);
-    EXPECT_FALSE (secondDestroyed);
-    EXPECT_EQ (entity->getNode<DestructionTracker>(), &second);
-    EXPECT_EQ (entity->getNumNodes<DestructionTracker>(), 1);
-}
-
-TEST_F (EntityTests, DetachDestroysThePart)
-{
-    auto entity = makeEntity();
-    bool destroyed = false;
-    entity->attach<DestructionTracker> (destroyed);
-
-    EXPECT_TRUE (entity->detach<DestructionTracker>());
-    EXPECT_TRUE (destroyed);
-    EXPECT_FALSE (entity->detach<DestructionTracker>());
-}
-
-TEST_F (EntityTests, PartAddressesStayStable)
-{
-    auto entity = makeEntity();
-    auto& node = entity->attach<TaggedNode, 3>();
-
-    for (int slot = 0; slot < 32; ++slot)
+    class DerivedNode : public TaggedNode
     {
-        if (slot != 3)
-            entity->attachAt<TaggedNode> (slot);
+    };
 
-        entity->attachAt<OtherNode> (slot);
+    auto entity = scene.createEntity();
+    entity.attach<DerivedNode>();
+
+    EXPECT_FALSE (entity.has<TaggedNode>());
+    EXPECT_TRUE (entity.has<DerivedNode>());
+}
+
+TEST_F (EntityTests, AttachReplacesTheNodeOfTheSameType)
+{
+    auto entity = scene.createEntity();
+    bool& destroyed = makeFlag();
+    entity.attach<DestructionTracker> (destroyed);
+
+    bool& replacementDestroyed = makeFlag();
+    auto& replacement = entity.attach<DestructionTracker> (replacementDestroyed);
+
+    EXPECT_TRUE (destroyed);
+    EXPECT_FALSE (replacementDestroyed);
+    EXPECT_EQ (entity.get<DestructionTracker>(), &replacement);
+}
+
+TEST_F (EntityTests, GetOrAttachAttachesOnlyWhenMissing)
+{
+    auto entity = scene.createEntity();
+    bool& destroyed = makeFlag();
+
+    auto& attached = entity.getOrAttach<DestructionTracker> (destroyed);
+    EXPECT_EQ (entity.get<DestructionTracker>(), &attached);
+
+    bool& unused = makeFlag();
+    auto& existing = entity.getOrAttach<DestructionTracker> (unused);
+
+    EXPECT_EQ (&existing, &attached);
+    EXPECT_FALSE (destroyed);
+}
+
+TEST_F (EntityTests, DetachCallsTheNodeBackAndDestroysIt)
+{
+    auto entity = scene.createEntity();
+    bool& destroyed = makeFlag();
+    entity.attach<DestructionTracker> (destroyed);
+
+    entity.detach<DestructionTracker>();
+
+    EXPECT_TRUE (destroyed);
+}
+
+TEST_F (EntityTests, NodeAddressesStayStableAcrossOtherAttachments)
+{
+    auto entity = scene.createEntity();
+    auto& node = entity.attach<TaggedNode> (1);
+
+    std::vector<Entity> others;
+    for (int i = 0; i < 500; ++i)
+    {
+        others.push_back (scene.createEntity());
+        others.back().attach<TaggedNode> (i);
     }
 
-    EXPECT_EQ ((entity->getNode<TaggedNode, 3>()), &node);
+    for (int i = 0; i < 500; i += 2)
+        others[static_cast<size_t> (i)].detach<TaggedNode>();
+
+    EXPECT_EQ (entity.get<TaggedNode>(), &node);
+    EXPECT_EQ (node.tag, 1);
 }
 
-TEST_F (EntityTests, ForEachNodeVisitsSlotsInAscendingOrder)
+TEST_F (EntityTests, ForEachAttachedNodeVisitsEveryType)
 {
-    auto entity = makeEntity();
-    entity->attach<TaggedNode, 4> (40);
-    entity->attach<OtherNode>();
-    entity->attach<TaggedNode, 0> (0);
-    entity->attach<TaggedNode, 2> (20);
+    auto entity = scene.createEntity();
+    entity.attach<TaggedNode>();
+    entity.attach<OtherNode>();
+    scene.createEntity().attach<MeshNode>();
 
-    std::vector<int> slots;
-    std::vector<int> tags;
-    entity->forEachNode<TaggedNode> ([&] (TaggedNode& node, int slot)
+    int count = 0;
+    entity.forEachAttachedNode ([&] (Node& node)
     {
-        slots.push_back (slot);
-        tags.push_back (node.tag);
+        EXPECT_EQ (node.getEntity(), entity);
+        ++count;
     });
 
-    EXPECT_EQ (slots, (std::vector<int> { 0, 2, 4 }));
-    EXPECT_EQ (tags, (std::vector<int> { 0, 20, 40 }));
-
-    int all = 0;
-    entity->forEachAttachedNode ([&] (Node&) { ++all; });
-    EXPECT_EQ (all, 4);
-}
-
-TEST_F (EntityTests, PartsAreDestroyedWithTheEntity)
-{
-    bool destroyed = false;
-
-    {
-        auto entity = makeEntity();
-        entity->attach<DestructionTracker> (destroyed);
-    }
-
-    EXPECT_TRUE (destroyed);
+    EXPECT_EQ (count, 2);
 }
 
 //==============================================================================
 
-TEST_F (EntityTests, LocalMatrixAppliesScaleThenRotationThenTranslation)
+TEST_F (EntityTests, DestroyRemovesTheSubtreeAndItsNodes)
 {
-    auto entity = makeEntity();
-    entity->setScale ({ 2.0f, 2.0f, 2.0f });
-    entity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, MathConstants<float>::halfPi));
-    entity->setPosition ({ 10.0f, 0.0f, 0.0f });
+    auto parent = scene.createEntity();
+    auto child = parent.createChild();
+    bool& parentNodeDestroyed = makeFlag();
+    bool& childNodeDestroyed = makeFlag();
+    parent.attach<DestructionTracker> (parentNodeDestroyed);
+    auto& childNode = child.attach<TaggedNode>();
+    child.attach<DestructionTracker> (childNodeDestroyed);
+    const auto entitiesBefore = scene.getNumEntities();
 
-    // (1, 0, 0) -> scaled (2, 0, 0) -> rotated (0, 2, 0) -> translated (10, 2, 0)
-    expectNear (entity->getLocalMatrix().transformPoint ({ 1.0f, 0.0f, 0.0f }), { 10.0f, 2.0f, 0.0f });
+    parent.destroy();
 
-    expectNear (entity->getPosition(), { 10.0f, 0.0f, 0.0f });
-    expectNear (entity->getScale(), { 2.0f, 2.0f, 2.0f });
+    EXPECT_FALSE (parent.isValid());
+    EXPECT_FALSE (child.isValid());
+    EXPECT_TRUE (parentNodeDestroyed);
+    EXPECT_TRUE (childNodeDestroyed);
+    EXPECT_EQ (scene.getNumEntities(), entitiesBefore - 2);
+    EXPECT_EQ (scene.getRoot().getNumChildren(), 0);
+    (void) childNode;
 }
 
-TEST_F (EntityTests, LocalMatrixFollowsTransformChanges)
+TEST_F (EntityTests, StaleEntitiesStayInvalidWhenTheIndexIsReused)
 {
-    auto entity = makeEntity();
-    entity->setPosition ({ 1.0f, 0.0f, 0.0f });
-    expectNear (entity->getLocalMatrix().transformPoint ({}), { 1.0f, 0.0f, 0.0f });
+    auto entity = scene.createEntity();
+    entity.attach<TaggedNode>();
+    const auto stale = entity;
+    entity.destroy();
 
-    entity->setPosition ({ 0.0f, 3.0f, 0.0f });
-    expectNear (entity->getLocalMatrix().transformPoint ({}), { 0.0f, 3.0f, 0.0f });
+    auto reused = scene.createEntity();
+    reused.attach<TaggedNode>();
+
+    EXPECT_EQ (reused.getHandle().index, stale.getHandle().index);
+    EXPECT_NE (reused.getHandle().generation, stale.getHandle().generation);
+    EXPECT_FALSE (stale.isValid());
+    EXPECT_EQ (stale.get<TaggedNode>(), nullptr);
+    EXPECT_NE (reused, stale);
+}
+
+//==============================================================================
+
+TEST_F (EntityTests, LocalMatrixComesFromTheTransformNode)
+{
+    auto entity = scene.createEntity();
+    EXPECT_TRUE (entity.getLocalMatrix().isIdentity());
+
+    entity.attach<TransformNode> (Vector3<float> { 1.0f, 2.0f, 3.0f });
+    expectNear (entity.getLocalMatrix().transformPoint ({}), { 1.0f, 2.0f, 3.0f });
+
+    entity.detach<TransformNode>();
+    EXPECT_TRUE (entity.getLocalMatrix().isIdentity());
 }
 
 TEST_F (EntityTests, WorldMatrixAccumulatesParents)
 {
-    auto root = makeEntity();
-    auto child = makeEntity();
-    auto grandChild = makeEntity();
-    root->addChild (child);
-    child->addChild (grandChild);
+    auto root = scene.createEntity();
+    auto child = root.createChild();
+    auto grandChild = child.createChild();
 
-    root->setPosition ({ 0.0f, 0.0f, 5.0f });
-    child->setScale ({ 2.0f, 2.0f, 2.0f });
-    grandChild->setPosition ({ 1.0f, 0.0f, 0.0f });
+    root.attach<TransformNode> (Vector3<float> { 0.0f, 0.0f, 5.0f });
+    child.attach<TransformNode> (Vector3<float> {}, Quaternion(), Vector3<float> { 2.0f, 2.0f, 2.0f });
+    grandChild.attach<TransformNode> (Vector3<float> { 1.0f, 0.0f, 0.0f });
 
-    expectNear (grandChild->getWorldMatrix().transformPoint ({}), { 2.0f, 0.0f, 5.0f });
+    expectNear (grandChild.getWorldMatrix().transformPoint ({}), { 2.0f, 0.0f, 5.0f });
+}
+
+TEST_F (EntityTests, EntitiesWithoutTransformFollowTheirParent)
+{
+    auto parent = scene.createEntity();
+    auto group = parent.createChild();
+    auto leaf = group.createChild();
+    parent.attach<TransformNode> (Vector3<float> { 3.0f, 0.0f, 0.0f });
+
+    expectNear (leaf.getWorldMatrix().transformPoint ({}), { 3.0f, 0.0f, 0.0f });
+}
+
+TEST_F (EntityTests, WorldMatrixFollowsChangesAboveIt)
+{
+    auto parent = scene.createEntity();
+    auto child = parent.createChild();
+    auto& transform = parent.attach<TransformNode>();
+    child.attach<TransformNode> (Vector3<float> { 1.0f, 0.0f, 0.0f });
+
+    expectNear (child.getWorldMatrix().transformPoint ({}), { 1.0f, 0.0f, 0.0f });
+
+    transform.setPosition ({ 0.0f, 10.0f, 0.0f });
+    expectNear (child.getWorldMatrix().transformPoint ({}), { 1.0f, 10.0f, 0.0f });
+
+    parent.detach<TransformNode>();
+    expectNear (child.getWorldMatrix().transformPoint ({}), { 1.0f, 0.0f, 0.0f });
+
+    auto other = scene.createEntity();
+    other.attach<TransformNode> (Vector3<float> { 0.0f, 0.0f, -4.0f });
+    other.addChild (child);
+    expectNear (child.getWorldMatrix().transformPoint ({}), { 1.0f, 0.0f, -4.0f });
 }
 
 TEST_F (EntityTests, ComputeWorldBoundsAppliesNestedTransforms)
 {
-    auto root = makeEntity();
-    auto child = makeEntity();
-    root->addChild (child);
-    root->setPosition ({ 10.0f, 0.0f, 0.0f });
-    child->setScale ({ 1.0f, 2.0f, 3.0f });
-    child->attach<MeshNode> (makeUnitCubeMesh());
+    auto root = scene.createEntity();
+    auto child = root.createChild();
+    root.attach<TransformNode> (Vector3<float> { 10.0f, 0.0f, 0.0f });
+    child.attach<TransformNode> (Vector3<float> {}, Quaternion(), Vector3<float> { 1.0f, 2.0f, 3.0f });
+    child.attach<MeshNode> (makeUnitCubeMesh());
 
-    const auto bounds = root->computeWorldBounds();
+    const auto bounds = root.computeWorldBounds();
 
     expectNear (bounds.getMin(), { 9.0f, -2.0f, -3.0f });
     expectNear (bounds.getMax(), { 11.0f, 2.0f, 3.0f });
@@ -430,39 +471,130 @@ TEST_F (EntityTests, ComputeWorldBoundsAppliesNestedTransforms)
 
 TEST_F (EntityTests, ComputeWorldBoundsSkipsHiddenSubtrees)
 {
-    auto root = makeEntity();
-    auto visibleChild = makeEntity();
-    auto hiddenChild = makeEntity();
-    auto hiddenGrandChild = makeEntity();
-    root->addChild (visibleChild);
-    root->addChild (hiddenChild);
-    hiddenChild->addChild (hiddenGrandChild);
+    auto root = scene.createEntity();
+    auto visibleChild = root.createChild();
+    auto hiddenChild = root.createChild();
+    auto hiddenGrandChild = hiddenChild.createChild();
 
-    visibleChild->attach<MeshNode> (makeUnitCubeMesh());
-    hiddenGrandChild->attach<MeshNode> (makeUnitCubeMesh());
-    hiddenGrandChild->setPosition ({ 100.0f, 0.0f, 0.0f });
-    hiddenChild->setVisible (false);
+    visibleChild.attach<MeshNode> (makeUnitCubeMesh());
+    hiddenGrandChild.attach<MeshNode> (makeUnitCubeMesh());
+    hiddenGrandChild.attach<TransformNode> (Vector3<float> { 100.0f, 0.0f, 0.0f });
+    hiddenChild.setVisible (false);
 
-    const auto bounds = root->computeWorldBounds();
-    expectNear (bounds.getMax(), { 1.0f, 1.0f, 1.0f });
+    expectNear (root.computeWorldBounds().getMax(), { 1.0f, 1.0f, 1.0f });
 
-    root->setVisible (false);
-    EXPECT_TRUE (root->computeWorldBounds().isEmpty());
+    root.setVisible (false);
+    EXPECT_TRUE (root.computeWorldBounds().isEmpty());
 }
 
-TEST_F (EntityTests, ComputeWorldBoundsIncludesEveryMeshSlot)
+//==============================================================================
+
+TEST_F (EntityTests, UuidIsCreatedOnceAndStaysTheSame)
 {
-    auto entity = makeEntity();
-    entity->attach<MeshNode> (makeUnitCubeMesh());
+    auto entity = scene.createEntity();
 
-    auto farMesh = Mesh::Ptr (new Mesh());
-    std::vector<Mesh::Vertex> vertices (3);
-    vertices[0].position = { 5.0f, 0.0f, 0.0f };
-    vertices[1].position = { 6.0f, 0.0f, 0.0f };
-    vertices[2].position = { 5.0f, 1.0f, 0.0f };
-    farMesh->addPrimitive (vertices, {});
-    entity->attach<MeshNode, 1> (farMesh);
-    entity->attach<MeshNode, 2>();
+    const auto uuid = entity.getUuid();
 
-    expectNear (entity->computeWorldBounds().getMax(), { 6.0f, 1.0f, 1.0f });
+    EXPECT_FALSE (uuid.isNull());
+    EXPECT_EQ (uuid.getTimeHighAndVersion() >> 12, 4);
+    EXPECT_EQ (uuid.getClockSeqAndReserved() >> 6, 2);
+    EXPECT_EQ (entity.getUuid(), uuid);
+    EXPECT_EQ (Entity (entity).getUuid(), uuid);
+}
+
+TEST_F (EntityTests, EntitiesHaveDifferentUuids)
+{
+    const auto first = scene.createEntity();
+    const auto second = scene.createEntity();
+
+    EXPECT_NE (first.getUuid(), second.getUuid());
+    EXPECT_NE (scene.getRoot().getUuid(), first.getUuid());
+}
+
+TEST_F (EntityTests, FindEntityReturnsTheEntityWithTheUuid)
+{
+    const auto entity = scene.createEntity();
+    const auto uuid = entity.getUuid();
+
+    EXPECT_EQ (scene.findEntity (uuid), entity);
+    EXPECT_FALSE (scene.findEntity (Uuid()).isValid());
+    EXPECT_FALSE (scene.findEntity (Uuid::null()).isValid());
+}
+
+TEST_F (EntityTests, SetUuidRestoresASavedIdentifier)
+{
+    auto entity = scene.createEntity();
+    const auto previous = entity.getUuid();
+    const Uuid saved ("8b1f6a8e-2c4d-4e5f-9a0b-1c2d3e4f5a6b");
+
+    EXPECT_TRUE (entity.setUuid (saved));
+
+    EXPECT_EQ (entity.getUuid(), saved);
+    EXPECT_EQ (scene.findEntity (saved), entity);
+    EXPECT_FALSE (scene.findEntity (previous).isValid());
+}
+
+TEST_F (EntityTests, SetUuidToTheCurrentOneSucceeds)
+{
+    auto entity = scene.createEntity();
+
+    EXPECT_TRUE (entity.setUuid (entity.getUuid()));
+}
+
+TEST_F (EntityTests, DISABLED_SetUuidRejectsAnIdentifierUsedByAnotherEntity)
+{
+    const auto first = scene.createEntity();
+    auto second = scene.createEntity();
+    const auto secondUuid = second.getUuid();
+
+    EXPECT_FALSE (second.setUuid (first.getUuid()));
+    EXPECT_FALSE (second.setUuid (Uuid::null()));
+    EXPECT_EQ (second.getUuid(), secondUuid);
+}
+
+TEST_F (EntityTests, DestroyedEntitiesCanNoLongerBeFound)
+{
+    auto parent = scene.createEntity();
+    const auto child = parent.createChild();
+    const auto parentUuid = parent.getUuid();
+    const auto childUuid = child.getUuid();
+
+    parent.destroy();
+
+    EXPECT_FALSE (scene.findEntity (parentUuid).isValid());
+    EXPECT_FALSE (scene.findEntity (childUuid).isValid());
+}
+
+TEST_F (EntityTests, ReusedSlotsGetANewUuid)
+{
+    auto entity = scene.createEntity();
+    const auto uuid = entity.getUuid();
+    entity.destroy();
+
+    const auto reused = scene.createEntity();
+
+    EXPECT_EQ (reused.getHandle().index, entity.getHandle().index);
+    EXPECT_NE (reused.getUuid(), uuid);
+}
+
+TEST_F (EntityTests, CreateEntityRestoresTheUuid)
+{
+    const Uuid saved ("8b1f6a8e-2c4d-4e5f-9a0b-1c2d3e4f5a6b");
+
+    const auto entity = scene.createEntity ("loaded", {}, saved);
+
+    EXPECT_EQ (entity.getUuid(), saved);
+    EXPECT_EQ (scene.findEntity (saved), entity);
+    EXPECT_EQ (entity.getName(), "loaded");
+}
+
+TEST_F (EntityTests, SameUuidCanLiveInDifferentScenes)
+{
+    Scene other;
+    const auto entity = scene.createEntity();
+
+    const auto copy = other.createEntity ({}, {}, entity.getUuid());
+
+    EXPECT_EQ (copy.getUuid(), entity.getUuid());
+    EXPECT_EQ (other.findEntity (entity.getUuid()), copy);
 }

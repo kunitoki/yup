@@ -317,30 +317,22 @@ void SceneDrawList::collect (const Entity& entity, const Matrix4& world, const M
     if (! entity.isVisible())
         return;
 
-    // Only the lowest MaterialNode slot is the subtree override
-    bool overrideChecked = false;
-    entity.forEachNode<MaterialNode> ([&] (MaterialNode& node, int)
-    {
-        if (! std::exchange (overrideChecked, true) && node.material != nullptr)
-            overrideMaterial = node.material.get();
-    });
+    if (const auto* node = entity.get<MaterialNode>(); node != nullptr && node->material != nullptr)
+        overrideMaterial = node->material.get();
 
     const auto determinant = getLinearDeterminant (world);
     const auto mirrored = determinant < 0.0f;
 
-    entity.forEachNode<MeshNode> ([&] (MeshNode& node, int)
+    if (auto* node = entity.get<MeshNode>(); node != nullptr && node->mesh != nullptr)
     {
-        if (node.mesh == nullptr)
-            return;
-
-        for (int i = 0; i < node.mesh->getNumPrimitives(); ++i)
+        for (int i = 0; i < node->mesh->getNumPrimitives(); ++i)
         {
-            const auto& primitive = node.mesh->getPrimitive (i);
+            const auto& primitive = node->mesh->getPrimitive (i);
 
             DrawItem item;
             item.world = world;
-            item.mesh = node.mesh.get();
-            item.node = &node;
+            item.mesh = node->mesh.get();
+            item.node = node;
             item.primitiveIndex = i;
             item.primitive = &primitive;
             item.material = overrideMaterial != nullptr     ? overrideMaterial
@@ -354,56 +346,54 @@ void SceneDrawList::collect (const Entity& entity, const Matrix4& world, const M
             else
                 opaqueItems.push_back (item);
         }
-    });
+    }
 
-    entity.forEachNode<LightNode> ([&] (LightNode& node, int)
+    if (auto* node = entity.get<LightNode>())
     {
-        lights.push_back ({ &node,
+        lights.push_back ({ node,
                             world.transformPoint ({}),
                             world.transformVector ({ 0.0f, 0.0f, -1.0f }).normalized() });
-    });
+    }
 
-    entity.forEachNode<ReflectionProbeNode> ([&] (ReflectionProbeNode& node, int)
+    if (auto* node = entity.get<ReflectionProbeNode>())
     {
-        const auto isBox = node.shape == ReflectionProbeNode::Shape::box;
-        const auto& extents = node.influenceExtents;
+        const auto isBox = node->shape == ReflectionProbeNode::Shape::box;
+        const auto& extents = node->influenceExtents;
         const auto hasInfluence = isBox ? jmin (extents.getX(), extents.getY(), extents.getZ()) > 0.0f
-                                        : node.influenceRadius > 0.0f;
+                                        : node->influenceRadius > 0.0f;
 
         // A probe without influence, or flattened by a zero scale, reaches nothing
-        if (! hasInfluence || std::abs (determinant) <= 1.0e-12f)
-            return;
-
-        const auto position = world.transformPoint ({});
-
-        // A sphere is bounded exactly: along each world axis, the radius times the length of that row of the linear part
-        const auto rowLength = [&world] (int row)
+        if (hasInfluence && std::abs (determinant) > 1.0e-12f)
         {
-            return Vector3<float> (world (row, 0), world (row, 1), world (row, 2)).length();
-        };
+            const auto position = world.transformPoint ({});
 
-        const auto sphereExtents = Vector3<float> (rowLength (0), rowLength (1), rowLength (2)) * node.influenceRadius;
+            // A sphere is bounded exactly: along each world axis, the radius times the length of that row of the linear part
+            const auto rowLength = [&world] (int row)
+            {
+                return Vector3<float> (world (row, 0), world (row, 1), world (row, 2)).length();
+            };
 
-        reflectionProbes.push_back ({ &node,
-                                      world,
-                                      position,
-                                      isBox ? BoundingBox (-extents, extents).transformedBy (world)
-                                            : BoundingBox (position - sphereExtents, position + sphereExtents) });
-    });
+            const auto sphereExtents = Vector3<float> (rowLength (0), rowLength (1), rowLength (2)) * node->influenceRadius;
 
-    entity.forEachNode<IrradianceVolumeNode> ([&] (IrradianceVolumeNode& node, int)
+            reflectionProbes.push_back ({ node,
+                                          world,
+                                          position,
+                                          isBox ? BoundingBox (-extents, extents).transformedBy (world)
+                                                : BoundingBox (position - sphereExtents, position + sphereExtents) });
+        }
+    }
+
+    if (auto* node = entity.get<IrradianceVolumeNode>())
     {
-        const auto& extents = node.extents;
+        const auto& extents = node->extents;
 
         // A volume without extent, or flattened by a zero scale, lights nothing
-        if (jmin (extents.getX(), extents.getY(), extents.getZ()) <= 0.0f || std::abs (determinant) <= 1.0e-12f)
-            return;
+        if (jmin (extents.getX(), extents.getY(), extents.getZ()) > 0.0f && std::abs (determinant) > 1.0e-12f)
+            irradianceVolumes.push_back ({ node, world, BoundingBox (-extents, extents).transformedBy (world) });
+    }
 
-        irradianceVolumes.push_back ({ &node, world, BoundingBox (-extents, extents).transformedBy (world) });
-    });
-
-    for (const auto& child : entity.getChildren())
-        collect (*child, child->getLocalMatrix().followedBy (world), overrideMaterial, view);
+    for (const auto child : entity.getChildren())
+        collect (child, child.getLocalMatrix().followedBy (world), overrideMaterial, view);
 }
 
 } // namespace yup

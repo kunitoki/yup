@@ -58,9 +58,8 @@ TEST_F (SceneRendererMetalTests, RendersWithoutMultisamplingIntoTheReturnedTextu
         auto mesh = Mesh::Ptr (new Mesh ("marker"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, emissive);
 
-        auto marker = Entity::Ptr (new Entity ("marker"));
-        marker->attach<MeshNode> (mesh);
-        scene.getRoot()->addChild (marker);
+        auto marker = scene.createEntity ("marker");
+        marker.attach<MeshNode> (mesh);
     };
 
     // Orange marker pixels in the top-left and bottom-left quadrants
@@ -214,10 +213,9 @@ TEST_F (SceneRendererMetalTests, SwappingTransformsOfTwoMeshesIsAChange)
 
         auto mesh = Mesh::Ptr (new Mesh (name));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
-        auto entity = Entity::Ptr (new Entity (name));
-        entity->attach<MeshNode> (mesh);
-        entity->setPosition ({ x, 0.0f, 0.0f });
-        scene.getRoot()->addChild (entity);
+        auto entity = scene.createEntity (name);
+        entity.attach<MeshNode> (mesh);
+        entity.getOrAttach<TransformNode>().setPosition ({ x, 0.0f, 0.0f });
         return entity;
     };
 
@@ -236,8 +234,8 @@ TEST_F (SceneRendererMetalTests, SwappingTransformsOfTwoMeshesIsAChange)
     ASSERT_TRUE (isBlue (image.getPixelColor (44, 32)));
 
     // The same transforms, the same meshes and materials, but paired the other way round
-    orange->setPosition ({ 0.6f, 0.0f, 0.0f });
-    blue->setPosition ({ -0.6f, 0.0f, 0.0f });
+    orange.getOrAttach<TransformNode>().setPosition ({ 0.6f, 0.0f, 0.0f });
+    blue.getOrAttach<TransformNode>().setPosition ({ -0.6f, 0.0f, 0.0f });
 
     image = renderToImage (renderer, scene, 64);
     EXPECT_FALSE (renderer.isConverged());
@@ -432,9 +430,8 @@ TEST_P (SceneRendererTierTests, BlendItemsDrawOverDeferred)
         auto mesh = Mesh::Ptr (new Mesh ("blended"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
 
-        auto entity = Entity::Ptr (new Entity ("blended"));
-        entity->attach<MeshNode> (mesh);
-        scene.getRoot()->addChild (entity);
+        auto entity = scene.createEntity ("blended");
+        entity.attach<MeshNode> (mesh);
     };
 
     auto white = Material::Ptr (new Material());

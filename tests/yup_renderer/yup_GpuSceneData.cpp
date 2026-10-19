@@ -393,20 +393,19 @@ TEST_F (GpuSceneDataTests, GpuReflectionProbeLayoutIsStd430)
 
 TEST_F (GpuSceneDataTests, PacksASphereProbe)
 {
-    auto root = Entity::Ptr (new Entity ("root"));
-    auto entity = Entity::Ptr (new Entity ("probe"));
-    entity->setPosition ({ 1.0f, 2.0f, 3.0f });
-    entity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.7f));
-    entity->setScale ({ 2.0f, 2.0f, 2.0f });
-    auto& node = entity->attach<ReflectionProbeNode>();
+    Scene scene;
+    auto entity = scene.createEntity ("probe");
+    entity.attach<TransformNode> (Vector3<float> (1.0f, 2.0f, 3.0f),
+                                  Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.7f),
+                                  Vector3<float> (2.0f, 2.0f, 2.0f));
+    auto& node = entity.attach<ReflectionProbeNode>();
     node.influenceRadius = 3.0f;
     node.falloff = 0.25f;
     node.intensity = 2.0f;
     node.parallaxCorrection = false;
-    root->addChild (entity);
 
     SceneDrawList drawList;
-    drawList.build (*root, {});
+    drawList.build (scene.getRoot(), {});
     ASSERT_EQ (drawList.getReflectionProbes().size(), 1u);
 
     const auto& probe = drawList.getReflectionProbes()[0];
@@ -443,17 +442,16 @@ TEST_F (GpuSceneDataTests, PacksASphereProbe)
 
 TEST_F (GpuSceneDataTests, PacksABoxProbe)
 {
-    auto root = Entity::Ptr (new Entity ("root"));
-    auto entity = Entity::Ptr (new Entity ("probe"));
-    entity->setPosition ({ -4.0f, 0.0f, 1.0f });
-    auto& node = entity->attach<ReflectionProbeNode>();
+    Scene scene;
+    auto entity = scene.createEntity ("probe");
+    entity.attach<TransformNode> (Vector3<float> (-4.0f, 0.0f, 1.0f));
+    auto& node = entity.attach<ReflectionProbeNode>();
     node.shape = ReflectionProbeNode::Shape::box;
     node.influenceExtents = { 1.0f, 2.0f, 4.0f };
     node.falloff = 0.5f;
-    root->addChild (entity);
 
     SceneDrawList drawList;
-    drawList.build (*root, {});
+    drawList.build (scene.getRoot(), {});
     ASSERT_EQ (drawList.getReflectionProbes().size(), 1u);
 
     const auto& probe = drawList.getReflectionProbes()[0];
@@ -499,11 +497,10 @@ TEST_F (GpuSceneDataTests, GpuIrradianceVolumeLayoutIsStd430)
 
 TEST_F (GpuSceneDataTests, PacksAVolume)
 {
-    auto root = Entity::Ptr (new Entity ("root"));
-    auto entity = Entity::Ptr (new Entity ("volume"));
-    entity->setPosition ({ -4.0f, 1.0f, 2.0f });
-    entity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
-    auto& node = entity->attach<IrradianceVolumeNode>();
+    Scene scene;
+    auto entity = scene.createEntity ("volume");
+    entity.attach<TransformNode> (Vector3<float> (-4.0f, 1.0f, 2.0f), Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
+    auto& node = entity.attach<IrradianceVolumeNode>();
     node.extents = { 1.0f, 2.0f, 4.0f };
     node.resolutionX = 3;
     node.resolutionY = 2;
@@ -511,10 +508,9 @@ TEST_F (GpuSceneDataTests, PacksAVolume)
     node.falloff = 0.25f;
     node.intensity = 1.5f;
     node.normalBias = 0.1f;
-    root->addChild (entity);
 
     SceneDrawList drawList;
-    drawList.build (*root, {});
+    drawList.build (scene.getRoot(), {});
     ASSERT_EQ (drawList.getIrradianceVolumes().size(), 1u);
 
     const auto& volume = drawList.getIrradianceVolumes()[0];
@@ -546,11 +542,11 @@ TEST_F (GpuSceneDataTests, PacksAVolume)
 
 TEST_F (GpuSceneDataTests, PacksAVolumeWithoutVisibilityAndANegativeFalloffAsZero)
 {
-    auto root = Entity::Ptr (new Entity ("root"));
-    root->attach<IrradianceVolumeNode>().falloff = -1.0f;
+    Scene scene;
+    scene.getRoot().attach<IrradianceVolumeNode>().falloff = -1.0f;
 
     SceneDrawList drawList;
-    drawList.build (*root, {});
+    drawList.build (scene.getRoot(), {});
     ASSERT_EQ (drawList.getIrradianceVolumes().size(), 1u);
 
     const auto packed = GpuSceneData::packIrradianceVolume (drawList.getIrradianceVolumes()[0], { 1, 2 }, {}, 0);

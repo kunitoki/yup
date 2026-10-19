@@ -1215,7 +1215,7 @@ int SceneRenderer::bakeProbes (const GpuDevice::Ptr& device, Scene& scene)
         impl = std::make_unique<Impl> (device, getSupportedSampleCount (sampleCount, *device));
 
     SceneDrawList probeList;
-    probeList.build (*scene.getRoot(), Matrix4());
+    probeList.build (scene.getRoot(), Matrix4());
     if (probeList.getReflectionProbes().empty() && probeList.getIrradianceVolumes().empty() && impl->probeBaker == nullptr)
         return 0;
 
@@ -1445,7 +1445,7 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
     auto& drawList = impl->drawList;
     // The raster tier lights each draw with its own selection, the full tier through the clusters
-    drawList.build (*scene.getRoot(), impl->viewData.getView(), { sceneSettings.useDefaultLight, ! full });
+    drawList.build (scene.getRoot(), impl->viewData.getView(), { sceneSettings.useDefaultLight, ! full });
 
     // A light with a radius selects the area light variants of the shading passes. Only a change
     // of the lights switches variants, and the restarting signature hashes every light radius

@@ -33,8 +33,8 @@ TEST_F (GBufferPassMetalTests, MaskedTexelsAreNotWritten)
     const auto kept = makeMasked (0.8f);
 
     Scene scene;
-    scene.getRoot()->addChild (makeQuad (-0.6f, 0.4f, cutOut));
-    scene.getRoot()->addChild (makeQuad (0.6f, 0.4f, kept));
+    makeQuad (scene, -0.6f, 0.4f, cutOut);
+    makeQuad (scene, 0.6f, 0.4f, kept);
 
     const auto targets = render (scene);
 
@@ -55,13 +55,12 @@ TEST_F (GBufferPassMetalTests, MaskedTexelsAreNotWritten)
 TEST_F (GBufferPassMetalTests, BackgroundFillCoversOnlyTheEmptyTexels)
 {
     Scene scene;
-    scene.getRoot()->addChild (makeQuad (0.0f, 0.5f, Material::Ptr (new Material())));
+    makeQuad (scene, 0.0f, 0.5f, Material::Ptr (new Material()));
 
-    auto camera = Entity::Ptr (new Entity ("camera"));
-    camera->attach<CameraNode>();
-    camera->setPosition ({ 0.0f, 0.0f, 5.0f });
-    scene.getRoot()->addChild (camera);
-    scene.setActiveCamera (camera.get());
+    auto camera = scene.createEntity ("camera");
+    camera.attach<CameraNode>();
+    camera.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.0f, 5.0f });
+    scene.setActiveCamera (camera);
 
     // A still camera: the quad, moved right since the previous frame, is the only motion
     const auto moved = readVelocity (render (scene, { 0.2f, 0.0f, 0.0f }).velocity, 1000.0f);
@@ -71,7 +70,7 @@ TEST_F (GBufferPassMetalTests, BackgroundFillCoversOnlyTheEmptyTexels)
     EXPECT_EQ (velocityDeviation (moved.getPixelColor (2, 32).getGreen()), 0);
 
     // A turning camera moves the background
-    camera->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.05f));
+    camera.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.05f));
     const auto turned = readVelocity (render (scene).velocity, 1000.0f);
     ASSERT_TRUE (turned.isValid());
     EXPECT_GT (velocityDeviation (turned.getPixelColor (2, 32).getRed()), 64);

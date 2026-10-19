@@ -25,7 +25,8 @@ namespace yup
 //==============================================================================
 /** A part that draws a Mesh with the transform of its entity.
 
-    Every MeshNode slot of an entity is drawn. The mesh can be shared with other entities.
+    An entity has at most one MeshNode: use child entities to draw several meshes. The mesh
+    can be shared with other entities.
 
     @see Mesh, Entity
 */

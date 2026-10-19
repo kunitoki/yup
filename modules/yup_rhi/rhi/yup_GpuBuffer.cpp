@@ -282,7 +282,8 @@ struct GpuBuffer::Impl
             return webgpuStorageBuffer.Get();
 #endif
 
-        return nullptr;
+        // createStorageForTesting(): the ore buffer stands in for a native one
+        return type == GpuBufferType::storage ? oreBuffer.get() : nullptr;
     }
 };
 
@@ -344,7 +345,6 @@ bool GpuBuffer::isValid() const noexcept
         if (i->vkStorageBuffer.buffer != nullptr)
             return true;
 #endif
-        return false;
     }
 
     return i->oreBuffer != nullptr;
@@ -361,6 +361,25 @@ GpuBuffer::Ptr GpuBuffer::create (GpuDevice::Ptr ctx,
         return nullptr;
 
     return ctx->createBuffer (type, data, byteSize);
+}
+
+GpuBuffer::Ptr GpuBuffer::createStorageForTesting (GpuDevice::Ptr ctx, const void* data, size_t byteSize)
+{
+    auto* oreCtx = ctx != nullptr ? ctx->getGpuContext() : nullptr;
+    if (oreCtx == nullptr || data == nullptr || byteSize == 0)
+        return nullptr;
+
+    rive::ore::BufferDesc desc;
+    desc.usage = rive::ore::BufferUsage::uniform;
+    desc.size = static_cast<uint32_t> (byteSize);
+    desc.data = data;
+    desc.label = "GpuBuffer storage for testing";
+
+    auto buffer = oreCtx->makeBuffer (desc);
+    if (buffer == nullptr)
+        return nullptr;
+
+    return createWithImpl (Impl { GpuBufferType::storage, byteSize, std::move (buffer) });
 }
 
 GpuBuffer::Ptr GpuBuffer::createWithImpl (Impl&& impl)

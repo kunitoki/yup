@@ -26,7 +26,7 @@ namespace yup
 /** A part that lights the scene from the position and orientation of its entity.
 
     Lights follow KHR_lights_punctual: they shine down the -Z axis of their entity, and point
-    and spot lights fall off with the inverse square of the distance. Every LightNode slot of
+    and spot lights fall off with the inverse square of the distance. The LightNode of
     every visible entity contributes. On the raster tier each draw is shaded by the
     SceneDrawList::maxLightsPerDraw lights that influence it most, see SceneDrawList::selectLights().
     On the full tier every light reaching a surface shades it, up to 63 point and spot lights per

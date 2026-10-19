@@ -40,7 +40,7 @@ enum class ToneMappingOperator
     SceneSettings::resolve(). Without one the scene uses ToneMappingOperator::reinhard.
 
     @code
-    scene->getRoot()->attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
+    scene->getRoot().attach<yup::ToneMappingNode> (yup::ToneMappingOperator::agx);
     @endcode
 
     @see ExposureNode, SceneSettings

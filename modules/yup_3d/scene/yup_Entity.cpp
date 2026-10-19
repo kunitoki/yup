@@ -24,205 +24,260 @@ namespace yup
 
 //==============================================================================
 
-Entity::Entity (const String& entityName)
-    : name (entityName)
+Entity::Entity (Scene* owner, EntityHandle entityHandle) noexcept
+    : scene (owner)
+    , handle (entityHandle)
 {
 }
 
-Entity::~Entity()
+EntityStore* Entity::findStore() const noexcept
 {
-    for (auto& child : children)
-        child->parent = nullptr;
+    if (isValid())
+        return scene->store.get();
+
+    jassertfalse; // Using an entity that was destroyed or never created
+    return nullptr;
+}
+
+bool Entity::isValid() const noexcept
+{
+    return scene != nullptr && scene->store->find (handle) != nullptr;
 }
 
 //==============================================================================
 
-void Entity::addChild (Ptr child, int index)
+String Entity::getName() const
 {
-    if (child == nullptr || child->isAncestorOf (this) || child.get() == this)
-    {
-        jassertfalse; // Adding a null entity, or an entity under itself or its own descendant
-        return;
-    }
+    if (auto* store = findStore())
+        return store->get (handle.index).name;
 
-    if (child->parent != nullptr)
-        child->parent->removeChild (child.get());
-
-    const auto insertAt = isPositiveAndNotGreaterThan (index, getNumChildren()) ? index : getNumChildren();
-
-    child->parent = this;
-    children.insert (children.begin() + insertAt, std::move (child));
+    return {};
 }
 
-bool Entity::removeChild (Entity* child)
+void Entity::setName (const String& newName)
 {
-    const auto it = std::find_if (children.begin(), children.end(), [child] (const Ptr& p)
-    {
-        return p.get() == child;
-    });
+    if (auto* store = findStore())
+        store->get (handle.index).name = newName;
+}
 
-    if (it == children.end())
+Uuid Entity::getUuid() const
+{
+    auto* store = findStore();
+    if (store == nullptr)
+        return Uuid::null();
+
+    auto& record = store->get (handle.index);
+    if (record.uuid.isNull())
+    {
+        record.uuid = store->createUuid();
+        scene->entitiesByUuid.emplace (record.uuid, handle);
+    }
+
+    return record.uuid;
+}
+
+bool Entity::setUuid (const Uuid& newUuid)
+{
+    auto* store = findStore();
+    if (store == nullptr)
         return false;
 
-    // Keep the child alive until it is fully detached
-    const Ptr removed = *it;
-    children.erase (it);
-    removed->parent = nullptr;
+    auto& record = store->get (handle.index);
+    if (record.uuid == newUuid)
+        return true;
+
+    if (newUuid.isNull() || scene->entitiesByUuid.count (newUuid) != 0)
+    {
+        jassertfalse; // A null identifier, or one used by another entity of the scene
+        return false;
+    }
+
+    if (! record.uuid.isNull())
+        scene->entitiesByUuid.erase (record.uuid);
+
+    record.uuid = newUuid;
+    scene->entitiesByUuid.emplace (newUuid, handle);
+    return true;
+}
+
+bool Entity::isVisible() const noexcept
+{
+    if (auto* store = findStore())
+        return store->get (handle.index).visible;
+
+    return false;
+}
+
+void Entity::setVisible (bool shouldBeVisible) noexcept
+{
+    if (auto* store = findStore())
+        store->get (handle.index).visible = shouldBeVisible;
+}
+
+bool Entity::isActive() const noexcept
+{
+    return isValid() && scene->store->isActive (handle.index, scene->root.index);
+}
+
+//==============================================================================
+
+Entity Entity::createChild (const String& childName)
+{
+    if (findStore() == nullptr)
+        return {};
+
+    return scene->createEntity (childName, *this);
+}
+
+bool Entity::addChild (Entity child, int index)
+{
+    auto* store = findStore();
+    if (store == nullptr)
+        return false;
+
+    if (child.scene != scene || ! child.isValid() || child.handle == scene->root)
+    {
+        jassertfalse; // Adding an invalid entity, the root, or an entity of another scene
+        return false;
+    }
+
+    if (! store->setParent (child.handle.index, handle.index, index))
+    {
+        jassertfalse; // Adding an entity under itself or under one of its own descendants
+        return false;
+    }
+
+    return true;
+}
+
+bool Entity::removeChild (Entity child)
+{
+    auto* store = findStore();
+    if (store == nullptr || child.scene != scene || ! child.isValid() || store->get (child.handle.index).parent != handle.index)
+        return false;
+
+    store->unlink (child.handle.index);
     return true;
 }
 
 void Entity::removeFromParent()
 {
-    if (parent != nullptr)
-        parent->removeChild (this);
+    if (auto* store = findStore())
+        store->unlink (handle.index);
 }
 
-Entity* Entity::getChild (int index) const noexcept
+Entity Entity::getParent() const noexcept
 {
-    return isPositiveAndBelow (index, getNumChildren()) ? children[static_cast<size_t> (index)].get() : nullptr;
+    auto* store = findStore();
+    if (store == nullptr)
+        return {};
+
+    const auto parent = store->get (handle.index).parent;
+    return parent != EntityHandle::nullIndex ? Entity (scene, store->getHandle (parent)) : Entity();
 }
 
-Entity* Entity::findChild (StringRef childName, bool recursive) const
+int Entity::getNumChildren() const noexcept
 {
-    for (const auto& child : children)
+    if (auto* store = findStore())
+        return static_cast<int> (store->get (handle.index).children.size());
+
+    return 0;
+}
+
+Entity Entity::getChild (int index) const noexcept
+{
+    auto* store = findStore();
+    if (store == nullptr)
+        return {};
+
+    const auto& children = store->get (handle.index).children;
+    if (! isPositiveAndBelow (index, static_cast<int> (children.size())))
+        return {};
+
+    return { scene, store->getHandle (children[static_cast<size_t> (index)]) };
+}
+
+Entity Entity::findChild (StringRef childName, bool recursive) const
+{
+    for (const auto child : getChildren())
     {
-        if (child->getName() == childName)
-            return child.get();
+        if (child.getName() == childName)
+            return child;
 
         if (recursive)
         {
-            if (auto* found = child->findChild (childName, true))
+            if (auto found = child.findChild (childName, true))
                 return found;
         }
     }
 
-    return nullptr;
+    return {};
 }
 
-bool Entity::isAncestorOf (const Entity* other) const noexcept
+bool Entity::isAncestorOf (const Entity& other) const noexcept
 {
-    for (auto* p = other != nullptr ? other->parent : nullptr; p != nullptr; p = p->parent)
-    {
-        if (p == this)
-            return true;
-    }
+    if (other.scene != scene || ! isValid() || ! other.isValid())
+        return false;
 
-    return false;
+    return scene->store->isAncestorOf (handle.index, other.handle.index);
 }
 
 //==============================================================================
 
-void Entity::setPosition (const Vector3<float>& newPosition) noexcept
+Matrix4 Entity::getLocalMatrix() const noexcept
 {
-    position = newPosition;
-    localMatrixDirty = true;
-}
+    if (auto* transform = get<TransformNode>())
+        return transform->getLocalMatrix();
 
-void Entity::setRotation (const Quaternion& newRotation) noexcept
-{
-    rotation = newRotation;
-    localMatrixDirty = true;
-}
-
-void Entity::setScale (const Vector3<float>& newScale) noexcept
-{
-    scale = newScale;
-    localMatrixDirty = true;
-}
-
-const Matrix4& Entity::getLocalMatrix() const noexcept
-{
-    if (localMatrixDirty)
-    {
-        localMatrix = Matrix4::scaling (scale)
-                          .followedBy (rotation.toMatrix4())
-                          .followedBy (Matrix4::translation (position));
-
-        localMatrixDirty = false;
-    }
-
-    return localMatrix;
+    return {};
 }
 
 Matrix4 Entity::getWorldMatrix() const noexcept
 {
-    auto world = getLocalMatrix();
+    auto* store = findStore();
+    if (store == nullptr)
+        return {};
 
-    for (auto* p = parent; p != nullptr; p = p->parent)
-        world = world.followedBy (p->getLocalMatrix());
-
-    return world;
+    return store->getWorldMatrix (handle.index, [this, store] (uint32 index)
+    {
+        return Entity (scene, store->getHandle (index)).getLocalMatrix();
+    });
 }
 
-static void expandEntityWorldBounds (const Entity& entity, const Matrix4& world, BoundingBox& bounds)
+void Entity::invalidateWorldMatrix() const noexcept
+{
+    if (isValid())
+        scene->store->markWorldDirty (handle.index);
+}
+
+static void expandEntityWorldBounds (Entity entity, const Matrix4& world, BoundingBox& bounds)
 {
     if (! entity.isVisible())
         return;
 
-    entity.forEachNode<MeshNode> ([&] (MeshNode& node, int)
-    {
-        if (node.mesh != nullptr)
-            bounds.expand (node.mesh->getBounds().transformedBy (world));
-    });
+    if (auto* node = entity.get<MeshNode>(); node != nullptr && node->mesh != nullptr)
+        bounds.expand (node->mesh->getBounds().transformedBy (world));
 
-    for (const auto& child : entity.getChildren())
-        expandEntityWorldBounds (*child, child->getLocalMatrix().followedBy (world), bounds);
+    for (const auto child : entity.getChildren())
+        expandEntityWorldBounds (child, child.getLocalMatrix().followedBy (world), bounds);
 }
 
 BoundingBox Entity::computeWorldBounds() const
 {
     BoundingBox bounds;
-    expandEntityWorldBounds (*this, getWorldMatrix(), bounds);
+
+    if (isValid())
+        expandEntityWorldBounds (*this, getWorldMatrix(), bounds);
+
     return bounds;
 }
 
 //==============================================================================
 
-Node* Entity::findNode (const void* typeKey, int slot) const noexcept
+void Entity::destroy()
 {
-    for (const auto& entry : nodes)
-    {
-        if (entry.typeKey == typeKey && entry.slot == slot)
-            return entry.node.get();
-    }
-
-    return nullptr;
-}
-
-void Entity::insertNode (const void* typeKey, int slot, std::unique_ptr<Node> node)
-{
-    jassert (slot >= 0);
-
-    node->entity = this;
-    auto* attached = node.get();
-
-    const auto less = std::less<const void*>();
-    const auto it = std::find_if (nodes.begin(), nodes.end(), [&] (const Entry& entry)
-    {
-        return less (typeKey, entry.typeKey) || (entry.typeKey == typeKey && entry.slot >= slot);
-    });
-
-    if (it != nodes.end() && it->typeKey == typeKey && it->slot == slot)
-        it->node = std::move (node);
-    else
-        nodes.insert (it, Entry { typeKey, slot, std::move (node) });
-
-    attached->attachedToEntity();
-}
-
-bool Entity::eraseNode (const void* typeKey, int slot)
-{
-    const auto it = std::find_if (nodes.begin(), nodes.end(), [&] (const Entry& entry)
-    {
-        return entry.typeKey == typeKey && entry.slot == slot;
-    });
-
-    if (it == nodes.end())
-        return false;
-
-    auto removed = std::move (it->node);
-    nodes.erase (it);
-    return true;
+    if (isValid())
+        scene->destroyEntity (handle);
 }
 
 } // namespace yup

@@ -78,12 +78,10 @@ TEST_F (DepthNormalPrepassMetalTests, MatchesTheGBufferTexelForTexel)
     material->metallicFactor = 0.7f;
     material->roughnessFactor = 0.5f;
 
-    auto quad = makeQuad (0.0f, 0.6f, material);
-    // Turned by 0.45 rad, the normal encodes to 169.03 levels in red, away from a rounding boundary
-    quad->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.45f));
-
     Scene scene;
-    scene.getRoot()->addChild (quad);
+    auto quad = makeQuad (scene, 0.0f, 0.6f, material);
+    // Turned by 0.45 rad, the normal encodes to 169.03 levels in red, away from a rounding boundary
+    quad.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.45f));
 
     const auto gbuffer = render (scene);
     ASSERT_TRUE (renderPrepass());
@@ -134,8 +132,8 @@ TEST_F (DepthNormalPrepassMetalTests, MaskedTexelsAreNotWritten)
 {
     // Below and above the default 0.5 cutoff, centered at about x = 23 and x = 41
     Scene scene;
-    scene.getRoot()->addChild (makeQuad (-0.6f, 0.4f, makeMasked (0.2f)));
-    scene.getRoot()->addChild (makeQuad (0.6f, 0.4f, makeMasked (0.8f)));
+    makeQuad (scene, -0.6f, 0.4f, makeMasked (0.2f));
+    makeQuad (scene, 0.6f, 0.4f, makeMasked (0.8f));
 
     render (scene);
     ASSERT_TRUE (renderPrepass());
@@ -155,7 +153,7 @@ TEST_F (DepthNormalPrepassMetalTests, MaskedTexelsAreNotWritten)
 TEST_F (DepthNormalPrepassMetalTests, TargetsThatCannotBeCreatedLeaveTheFrameWithoutIt)
 {
     Scene scene;
-    scene.getRoot()->addChild (makeQuad (0.0f, 0.5f, Material::Ptr (new Material())));
+    makeQuad (scene, 0.0f, 0.5f, Material::Ptr (new Material()));
     render (scene);
 
     // Not an error for the frame: the pass draws nothing and has no targets, as long as they fail

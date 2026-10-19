@@ -81,7 +81,7 @@ protected:
         Scene scene;
         buildShadowsScene (scene);
         setEnvironmentMap (scene, new EnvironmentMap ([radiance] (const Vector3<float>&) { return Vector3<float> (radiance, radiance, radiance); }, 32, 3));
-        scene.getRoot()->attach<ToneMappingNode> (toneMapping);
+        scene.getRoot().attach<ToneMappingNode> (toneMapping);
 
         SceneRenderer renderer;
         const auto image = renderToImage (renderer, scene, 64);
@@ -99,9 +99,9 @@ protected:
     {
         const auto addScaledPlate = [&] (Material::Ptr material, float scale, Vector3<float> position)
         {
-            auto* plate = addPlate (scene, std::move (material));
-            plate->setScale ({ scale, scale, 1.0f });
-            plate->setPosition (position);
+            auto plate = addPlate (scene, std::move (material));
+            plate.getOrAttach<TransformNode>().setScale ({ scale, scale, 1.0f });
+            plate.getOrAttach<TransformNode>().setPosition (position);
         };
 
         auto metal = Material::Ptr (new Material());
@@ -117,14 +117,13 @@ protected:
 
         const auto addLight = [&] (LightNode::Type type, float intensity, float radius, Vector3<float> position, const Quaternion& rotation)
         {
-            auto light = Entity::Ptr (new Entity ("light"));
-            auto& node = light->attach<LightNode> (type);
+            auto light = scene.createEntity ("light");
+            auto& node = light.attach<LightNode> (type);
             node.intensity = intensity;
             node.radius = radius;
             node.castsShadows = type == LightNode::Type::directional;
-            light->setPosition (position);
-            light->setRotation (rotation);
-            scene.getRoot()->addChild (light);
+            light.getOrAttach<TransformNode>().setPosition (position);
+            light.getOrAttach<TransformNode>().setRotation (rotation);
         };
 
         addLight (LightNode::Type::point, 1.0f, 0.25f, { 0.4f, 0.3f, 1.0f }, Quaternion::identity());
@@ -147,15 +146,14 @@ protected:
 
         Scene scene;
         addPlate (scene, std::move (material));
-        scene.getRoot()->attach<AmbientLightNode> (ambient);
-        scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::reinhard);
+        scene.getRoot().attach<AmbientLightNode> (ambient);
+        scene.getRoot().attach<ToneMappingNode> (ToneMappingOperator::reinhard);
 
         if (environmentRadiance > 0.0f)
             setEnvironmentMap (scene, new EnvironmentMap ([environmentRadiance] (const Vector3<float>&) { return Vector3<float> (environmentRadiance, environmentRadiance, environmentRadiance); }, 32, 3));
 
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        sun->attach<LightNode>().intensity = sunIntensity;
-        scene.getRoot()->addChild (sun);
+        auto sun = scene.createEntity ("sun");
+        sun.attach<LightNode>().intensity = sunIntensity;
 
         SceneRenderer renderer;
         setTier (renderer, tier);
@@ -240,16 +238,15 @@ protected:
 
             auto mesh = Mesh::Ptr (new Mesh (name));
             mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
-            auto entity = Entity::Ptr (new Entity (name));
-            entity->attach<MeshNode> (mesh);
-            entity->setPosition ({ x, 0.0f, 0.0f });
-            entity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.3f));
-            scene.getRoot()->addChild (entity);
+            auto entity = scene.createEntity (name);
+            entity.attach<MeshNode> (mesh);
+            entity.getOrAttach<TransformNode>().setPosition ({ x, 0.0f, 0.0f });
+            entity.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, 0.3f));
         };
 
         addQuad ("bright", 10.0f, -0.8f);
         addQuad ("gray", 0.2f, 0.8f);
-        scene.getRoot()->attach<BackgroundNode> (Color (static_cast<uint8> (40), static_cast<uint8> (70), static_cast<uint8> (110)));
+        scene.getRoot().attach<BackgroundNode> (Color (static_cast<uint8> (40), static_cast<uint8> (70), static_cast<uint8> (110)));
     }
 
     /** The mean luma of @p image over the band within 2 px of the silhouettes of @p reference, in
@@ -298,7 +295,7 @@ protected:
         under 32 colored point lights of range 0.5 and intensity 0.5, like the light show of the
         Scene3D demo. Returns the light entities, placed by moveOrbitingLights().
     */
-    static std::vector<Entity*> buildOrbitingLightsScene (Scene& scene)
+    static std::vector<Entity> buildOrbitingLightsScene (Scene& scene)
     {
         auto material = Material::Ptr (new Material());
         material->baseColorFactor = { 0.5f, 0.5f, 0.5f, 1.0f };
@@ -309,38 +306,36 @@ protected:
         {
             for (int column = 0; column < 3; ++column)
             {
-                auto* pad = addPlate (scene, material);
-                pad->setScale ({ 0.2f, 0.2f, 1.0f });
-                pad->setPosition ({ 0.55f * static_cast<float> (column - 1), 0.55f * static_cast<float> (row - 1), 0.0f });
+                auto pad = addPlate (scene, material);
+                pad.getOrAttach<TransformNode>().setScale ({ 0.2f, 0.2f, 1.0f });
+                pad.getOrAttach<TransformNode>().setPosition ({ 0.55f * static_cast<float> (column - 1), 0.55f * static_cast<float> (row - 1), 0.0f });
             }
         }
 
-        std::vector<Entity*> lights;
+        std::vector<Entity> lights;
         for (int i = 0; i < 32; ++i)
         {
-            auto light = Entity::Ptr (new Entity ("showLight"));
-            auto& node = light->attach<LightNode> (LightNode::Type::point);
+            auto light = scene.createEntity ("showLight");
+            auto& node = light.attach<LightNode> (LightNode::Type::point);
             const auto color = Color::fromHSV (static_cast<float> (i) / 32.0f, 0.85f, 1.0f);
             node.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
             node.intensity = 0.5f;
             node.range = 0.5f;
-            scene.getRoot()->addChild (light);
-            lights.push_back (light.get());
+            lights.push_back (light);
         }
 
-        auto camera = Entity::Ptr (new Entity ("camera"));
-        camera->attach<CameraNode>();
-        camera->setPosition ({ 0.0f, 0.0f, 3.0f });
-        scene.getRoot()->addChild (camera);
-        scene.setActiveCamera (camera.get());
+        auto camera = scene.createEntity ("camera");
+        camera.attach<CameraNode>();
+        camera.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.0f, 3.0f });
+        scene.setActiveCamera (camera);
 
-        scene.getRoot()->attach<AmbientLightNode> (Colors::black);
-        scene.getRoot()->attach<BackgroundNode> (Colors::black);
+        scene.getRoot().attach<AmbientLightNode> (Colors::black);
+        scene.getRoot().attach<BackgroundNode> (Colors::black);
         return lights;
     }
 
     /** Places the lights of buildOrbitingLightsScene() at @p time seconds: four rings of orbits, alternating in direction, as in the demo. */
-    static void moveOrbitingLights (const std::vector<Entity*>& lights, double time)
+    static void moveOrbitingLights (std::vector<Entity>& lights, double time)
     {
         for (size_t i = 0; i < lights.size(); ++i)
         {
@@ -349,7 +344,7 @@ protected:
             const auto angle = static_cast<float> (i) * 2.39996f + speed * static_cast<float> (time);
             const auto radius = 0.25f + 0.2f * ring;
 
-            lights[i]->setPosition ({ std::cos (angle) * radius, std::sin (angle) * radius, 0.1f + 0.05f * ring });
+            lights[i].getOrAttach<TransformNode>().setPosition ({ std::cos (angle) * radius, std::sin (angle) * radius, 0.1f + 0.05f * ring });
         }
     }
 
@@ -399,15 +394,13 @@ protected:
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
 
         Scene scene;
-        auto plate = Entity::Ptr (new Entity ("plate"));
-        plate->attach<MeshNode> (mesh);
-        plate->setScale ({ xScale, 1.0f, 1.0f });
-        scene.getRoot()->addChild (plate);
+        auto plate = scene.createEntity ("plate");
+        plate.attach<MeshNode> (mesh);
+        plate.getOrAttach<TransformNode>().setScale ({ xScale, 1.0f, 1.0f });
 
-        auto sun = Entity::Ptr (new Entity ("sun"));
-        sun->attach<LightNode>();
-        sun->setRotation (sunRotation);
-        scene.getRoot()->addChild (sun);
+        auto sun = scene.createEntity ("sun");
+        sun.attach<LightNode>();
+        sun.getOrAttach<TransformNode>().setRotation (sunRotation);
 
         // Scene color must hold raw radiance: no temporal anti-aliasing on full, rgba16float on raster
         SceneRenderer renderer;
@@ -467,8 +460,8 @@ protected:
         return material;
     }
 
-    /** A square of @p halfSize centered at (@p x, 0, 0), facing the default camera. */
-    static Entity::Ptr makeQuad (float x, float halfSize, Material::Ptr material)
+    /** Adds to @p scene a square of @p halfSize centered at (@p x, 0, 0), facing the default camera. */
+    static Entity makeQuad (Scene& scene, float x, float halfSize, Material::Ptr material)
     {
         std::vector<Mesh::Vertex> vertices (4);
         vertices[0].position = { x - halfSize, -halfSize, 0.0f };
@@ -482,8 +475,8 @@ protected:
         auto mesh = Mesh::Ptr (new Mesh ("quad"));
         mesh->addPrimitive (std::move (vertices), { 0, 1, 2, 0, 2, 3 }, material);
 
-        auto entity = Entity::Ptr (new Entity ("quad"));
-        entity->attach<MeshNode> (mesh);
+        auto entity = scene.createEntity ("quad");
+        entity.attach<MeshNode> (mesh);
         return entity;
     }
 
@@ -502,7 +495,7 @@ protected:
         const auto targets = GBufferPass::acquireTargets (*frameResources, acquire (GpuTextureFormat::rg16float), acquire (GpuTextureFormat::depth32float));
 
         view.update (scene, SceneSettings::resolve (scene), size, size, false, 1, 0);
-        drawList.build (*scene.getRoot(), view.getView());
+        drawList.build (scene.getRoot(), view.getView());
 
         for (const auto& item : drawList.getOpaqueItems())
             item.node->previousWorld = item.world.followedBy (Matrix4::translation ({ -motion.getX(), -motion.getY(), -motion.getZ() }));

@@ -57,7 +57,7 @@ void ViewData::update (const Scene& scene, const SceneSettings& settings, int wi
 
     if (camera != nullptr)
     {
-        const auto cameraWorld = camera->getEntity() != nullptr ? camera->getEntity()->getWorldMatrix() : Matrix4();
+        const auto cameraWorld = camera->getEntity() ? camera->getEntity().getWorldMatrix() : Matrix4();
         view = cameraWorld.inverted();
         cameraPosition = cameraWorld.transformPoint ({});
     }

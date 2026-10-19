@@ -28,9 +28,9 @@ using namespace yup;
 class SceneDrawListTests : public ::testing::Test
 {
 protected:
-    static Entity::Ptr makeEntity (const String& name = {})
+    Entity makeEntity (const String& name = {})
     {
-        return Entity::Ptr (new Entity (name));
+        return scene.createEntity (name);
     }
 
     static Material::Ptr makeMaterial (const String& name, Material::AlphaMode alphaMode = Material::AlphaMode::opaque, bool doubleSided = false)
@@ -62,13 +62,14 @@ protected:
         EXPECT_NEAR (actual.getZ(), expected.getZ(), tolerance);
     }
 
-    Entity::Ptr root = makeEntity ("root");
+    Scene scene;
+    Entity root = scene.getRoot();
     SceneDrawList drawList;
 };
 
 TEST_F (SceneDrawListTests, EmptyTreeHasNothingToDraw)
 {
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     EXPECT_TRUE (drawList.getOpaqueItems().empty());
     EXPECT_TRUE (drawList.getBlendItems().empty());
@@ -78,43 +79,38 @@ TEST_F (SceneDrawListTests, EmptyTreeHasNothingToDraw)
 TEST_F (SceneDrawListTests, WorldMatricesAccumulate)
 {
     auto child = makeEntity();
-    auto grandChild = makeEntity();
-    root->addChild (child);
-    child->addChild (grandChild);
+    auto grandChild = child.createChild();
 
-    root->setPosition ({ 1.0f, 0.0f, 0.0f });
-    child->setScale ({ 2.0f, 2.0f, 2.0f });
-    grandChild->setPosition ({ 0.0f, 1.0f, 0.0f });
-    grandChild->attach<MeshNode> (makeTriangle());
+    root.getOrAttach<TransformNode>().setPosition ({ 1.0f, 0.0f, 0.0f });
+    child.getOrAttach<TransformNode>().setScale ({ 2.0f, 2.0f, 2.0f });
+    grandChild.getOrAttach<TransformNode>().setPosition ({ 0.0f, 1.0f, 0.0f });
+    grandChild.attach<MeshNode> (makeTriangle());
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
     expectNear (drawList.getOpaqueItems()[0].world.transformPoint ({}), { 1.0f, 2.0f, 0.0f });
-    EXPECT_TRUE (drawList.getOpaqueItems()[0].world.approximatelyEqualTo (grandChild->getWorldMatrix()));
+    EXPECT_TRUE (drawList.getOpaqueItems()[0].world.approximatelyEqualTo (grandChild.getWorldMatrix()));
 }
 
 TEST_F (SceneDrawListTests, HiddenSubtreesAreSkipped)
 {
     auto hidden = makeEntity();
-    auto hiddenChild = makeEntity();
+    auto hiddenChild = hidden.createChild();
     auto visible = makeEntity();
-    root->addChild (hidden);
-    hidden->addChild (hiddenChild);
-    root->addChild (visible);
 
-    hiddenChild->attach<MeshNode> (makeTriangle());
-    hiddenChild->attach<LightNode>();
-    visible->attach<MeshNode> (makeTriangle());
-    hidden->setVisible (false);
+    hiddenChild.attach<MeshNode> (makeTriangle());
+    hiddenChild.attach<LightNode>();
+    visible.attach<MeshNode> (makeTriangle());
+    hidden.setVisible (false);
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     EXPECT_EQ (drawList.getOpaqueItems().size(), 1u);
     EXPECT_TRUE (drawList.getLights().empty());
 }
 
-TEST_F (SceneDrawListTests, EveryMeshSlotAndPrimitiveIsDrawn)
+TEST_F (SceneDrawListTests, EveryMeshNodeAndPrimitiveIsDrawn)
 {
     auto mesh = makeTriangle();
     std::vector<Mesh::Vertex> vertices (3);
@@ -122,11 +118,11 @@ TEST_F (SceneDrawListTests, EveryMeshSlotAndPrimitiveIsDrawn)
     vertices[2].position = { 0.0f, 0.0f, 1.0f };
     mesh->addPrimitive (vertices, {});
 
-    root->attach<MeshNode> (mesh);
-    root->attach<MeshNode, 3> (makeTriangle());
-    root->attach<MeshNode, 4>();
+    root.attach<MeshNode> (mesh);
+    root.createChild().attach<MeshNode> (makeTriangle());
+    root.createChild().attach<MeshNode>();
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     ASSERT_EQ (drawList.getOpaqueItems().size(), 3u);
 
@@ -147,12 +143,10 @@ TEST_F (SceneDrawListTests, MaterialFallsBackToTheDefault)
     auto own = makeMaterial ("own");
     auto withMaterial = makeEntity();
     auto withoutMaterial = makeEntity();
-    root->addChild (withMaterial);
-    root->addChild (withoutMaterial);
-    withMaterial->attach<MeshNode> (makeTriangle (own));
-    withoutMaterial->attach<MeshNode> (makeTriangle());
+    withMaterial.attach<MeshNode> (makeTriangle (own));
+    withoutMaterial.attach<MeshNode> (makeTriangle());
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     ASSERT_EQ (drawList.getOpaqueItems().size(), 2u);
 
@@ -171,57 +165,37 @@ TEST_F (SceneDrawListTests, NearestMaterialOverrideWins)
     auto own = makeMaterial ("own");
 
     auto group = makeEntity();
-    auto subGroup = makeEntity();
-    auto leafA = makeEntity ("a");
-    auto leafB = makeEntity ("b");
-    root->addChild (group);
-    group->addChild (leafA);
-    group->addChild (subGroup);
-    subGroup->addChild (leafB);
+    auto leafA = group.createChild ("a");
+    auto subGroup = group.createChild();
+    auto leafB = subGroup.createChild ("b");
 
-    group->attach<MaterialNode> (outer);
-    subGroup->attach<MaterialNode> (inner);
-    leafA->attach<MeshNode> (makeTriangle (own));
-    leafB->attach<MeshNode> (makeTriangle (own));
+    group.attach<MaterialNode> (outer);
+    subGroup.attach<MaterialNode> (inner);
+    leafA.attach<MeshNode> (makeTriangle (own));
+    leafB.attach<MeshNode> (makeTriangle (own));
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     ASSERT_EQ (drawList.getOpaqueItems().size(), 2u);
 
     for (const auto& item : drawList.getOpaqueItems())
     {
-        if (item.world.approximatelyEqualTo (leafA->getWorldMatrix()) && item.mesh == leafA->getNode<MeshNode>()->mesh.get())
+        if (item.world.approximatelyEqualTo (leafA.getWorldMatrix()) && item.mesh == leafA.get<MeshNode>()->mesh.get())
             EXPECT_EQ (item.material, outer.get());
         else
             EXPECT_EQ (item.material, inner.get());
     }
 }
 
-TEST_F (SceneDrawListTests, OnlyTheLowestMaterialSlotOverrides)
-{
-    auto lowest = makeMaterial ("lowest");
-    auto spare = makeMaterial ("spare");
-
-    root->attach<MaterialNode, 5> (spare);
-    root->attach<MaterialNode, 2> (lowest);
-    root->attach<MeshNode> (makeTriangle());
-
-    drawList.build (*root, {});
-
-    ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
-    EXPECT_EQ (drawList.getOpaqueItems()[0].material, lowest.get());
-}
-
 TEST_F (SceneDrawListTests, AnOverrideWithoutMaterialInheritsTheParentOne)
 {
     auto outer = makeMaterial ("outer");
     auto child = makeEntity();
-    root->addChild (child);
-    root->attach<MaterialNode> (outer);
-    child->attach<MaterialNode>();
-    child->attach<MeshNode> (makeTriangle (makeMaterial ("own")));
+    root.attach<MaterialNode> (outer);
+    child.attach<MaterialNode>();
+    child.attach<MeshNode> (makeTriangle (makeMaterial ("own")));
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
     EXPECT_EQ (drawList.getOpaqueItems()[0].material, outer.get());
@@ -235,15 +209,14 @@ TEST_F (SceneDrawListTests, BlendItemsAreSortedBackToFront)
     for (auto z : depths)
     {
         auto entity = makeEntity (String (z));
-        entity->setPosition ({ 0.0f, 0.0f, z });
-        entity->attach<MeshNode> (makeTriangle (glass));
-        root->addChild (entity);
+        entity.getOrAttach<TransformNode>().setPosition ({ 0.0f, 0.0f, z });
+        entity.attach<MeshNode> (makeTriangle (glass));
     }
 
-    root->attach<MeshNode> (makeTriangle (makeMaterial ("solid")));
+    root.attach<MeshNode> (makeTriangle (makeMaterial ("solid")));
 
     // Camera at the origin looking down -Z
-    drawList.build (*root, Matrix4());
+    drawList.build (root, Matrix4());
 
     EXPECT_EQ (drawList.getOpaqueItems().size(), 1u);
     ASSERT_EQ (drawList.getBlendItems().size(), 3u);
@@ -264,11 +237,10 @@ TEST_F (SceneDrawListTests, OpaqueItemsAreGroupedByPipelineThenMaterial)
     for (const auto& material : order)
     {
         auto entity = makeEntity();
-        entity->attach<MeshNode> (makeTriangle (material));
-        root->addChild (entity);
+        entity.attach<MeshNode> (makeTriangle (material));
     }
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     const auto items = drawList.getOpaqueItems();
     ASSERT_EQ (items.size(), 6u);
@@ -287,13 +259,12 @@ TEST_F (SceneDrawListTests, OpaqueItemsAreGroupedByPipelineThenMaterial)
 TEST_F (SceneDrawListTests, LightsAreGatheredInWorldSpace)
 {
     auto lamp = makeEntity();
-    root->addChild (lamp);
-    lamp->setPosition ({ 1.0f, 2.0f, 3.0f });
-    lamp->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
-    lamp->attach<LightNode> (LightNode::Type::point);
-    lamp->attach<LightNode, 1> (LightNode::Type::spot);
+    lamp.getOrAttach<TransformNode>().setPosition ({ 1.0f, 2.0f, 3.0f });
+    lamp.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
+    lamp.attach<LightNode> (LightNode::Type::point);
+    lamp.createChild().attach<LightNode> (LightNode::Type::spot);
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     ASSERT_EQ (drawList.getLights().size(), 2u);
     expectNear (drawList.getLights()[0].position, { 1.0f, 2.0f, 3.0f });
@@ -307,17 +278,15 @@ TEST_F (SceneDrawListTests, LightsAreGatheredInWorldSpace)
 TEST_F (SceneDrawListTests, MirroringTransformsAreFlagged)
 {
     auto mirrored = makeEntity();
-    auto doubleMirrored = makeEntity();
-    root->addChild (mirrored);
-    mirrored->addChild (doubleMirrored);
+    auto doubleMirrored = mirrored.createChild();
 
-    mirrored->setScale ({ -1.0f, 1.0f, 1.0f });
-    doubleMirrored->setScale ({ 1.0f, -2.0f, 1.0f });
-    root->attach<MeshNode> (makeTriangle());
-    mirrored->attach<MeshNode> (makeTriangle());
-    doubleMirrored->attach<MeshNode> (makeTriangle());
+    mirrored.getOrAttach<TransformNode>().setScale ({ -1.0f, 1.0f, 1.0f });
+    doubleMirrored.getOrAttach<TransformNode>().setScale ({ 1.0f, -2.0f, 1.0f });
+    root.attach<MeshNode> (makeTriangle());
+    mirrored.attach<MeshNode> (makeTriangle());
+    doubleMirrored.attach<MeshNode> (makeTriangle());
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     ASSERT_EQ (drawList.getOpaqueItems().size(), 3u);
 
@@ -327,7 +296,7 @@ TEST_F (SceneDrawListTests, MirroringTransformsAreFlagged)
         if (item.mirrored)
         {
             ++mirroredCount;
-            EXPECT_TRUE (item.world.approximatelyEqualTo (mirrored->getWorldMatrix()));
+            EXPECT_TRUE (item.world.approximatelyEqualTo (mirrored.getWorldMatrix()));
         }
     }
 
@@ -336,9 +305,9 @@ TEST_F (SceneDrawListTests, MirroringTransformsAreFlagged)
 
 TEST_F (SceneDrawListTests, RebuildingReplacesThePreviousItems)
 {
-    root->attach<MeshNode> (makeTriangle());
-    drawList.build (*root, {});
-    drawList.build (*root, {});
+    root.attach<MeshNode> (makeTriangle());
+    drawList.build (root, {});
+    drawList.build (root, {});
 
     EXPECT_EQ (drawList.getOpaqueItems().size(), 1u);
 
@@ -350,13 +319,11 @@ TEST_F (SceneDrawListTests, ItemsPointToTheirMeshNode)
 {
     auto first = makeEntity();
     auto second = makeEntity();
-    root->addChild (first);
-    root->addChild (second);
 
-    auto& firstNode = first->attach<MeshNode> (makeTriangle());
-    auto& transparentNode = second->attach<MeshNode> (makeTriangle (makeMaterial ("glass", Material::AlphaMode::blend)));
+    auto& firstNode = first.attach<MeshNode> (makeTriangle());
+    auto& transparentNode = second.attach<MeshNode> (makeTriangle (makeMaterial ("glass", Material::AlphaMode::blend)));
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
     ASSERT_EQ (drawList.getBlendItems().size(), 1u);
@@ -375,15 +342,14 @@ TEST_F (SceneDrawListTests, NewMeshNodesHaveNoPreviousStamp)
 TEST_F (SceneDrawListTests, DefaultLightIsAddedOnlyWhenAskedAndTreeHasNone)
 {
     auto entity = makeEntity();
-    entity->attach<MeshNode> (makeTriangle());
-    root->addChild (entity);
+    entity.attach<MeshNode> (makeTriangle());
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
     EXPECT_TRUE (drawList.getLights().empty());
 
-    drawList.build (*root, {}, { true });
+    drawList.build (root, {}, { true });
     ASSERT_EQ (drawList.getLights().size(), 1u);
-    EXPECT_EQ (drawList.getLights()[0].node->getEntity(), nullptr);
+    EXPECT_FALSE (drawList.getLights()[0].node->getEntity().isValid());
     EXPECT_EQ (drawList.getLights()[0].node->type, LightNode::Type::directional);
     EXPECT_EQ (drawList.getLights()[0].node->color, (std::array<float, 3> { 1.0f, 1.0f, 1.0f }));
     EXPECT_FLOAT_EQ (drawList.getLights()[0].node->intensity, 3.0f);
@@ -391,10 +357,9 @@ TEST_F (SceneDrawListTests, DefaultLightIsAddedOnlyWhenAskedAndTreeHasNone)
     expectNear (drawList.getLights()[0].direction, Vector3<float> (-0.35f, -0.75f, -0.55f).normalized());
 
     auto lamp = makeEntity();
-    lamp->attach<LightNode> (LightNode::Type::point);
-    root->addChild (lamp);
+    lamp.attach<LightNode> (LightNode::Type::point);
 
-    drawList.build (*root, {}, { true });
+    drawList.build (root, {}, { true });
     ASSERT_EQ (drawList.getLights().size(), 1u);
     EXPECT_EQ (drawList.getLights()[0].node->type, LightNode::Type::point);
 }
@@ -416,27 +381,25 @@ protected:
     }
 
     /** Adds a point light @p distance away from the triangle of addTriangle(), and returns its entity. */
-    Entity* addPointLight (float distance, float range = 0.0f)
+    Entity addPointLight (float distance, float range = 0.0f)
     {
         auto entity = makeEntity();
-        entity->attach<LightNode> (LightNode::Type::point).range = range;
-        entity->setPosition ({ 0.5f, 0.5f, distance });
-        root->addChild (entity);
-        return entity.get();
+        entity.attach<LightNode> (LightNode::Type::point).range = range;
+        entity.getOrAttach<TransformNode>().setPosition ({ 0.5f, 0.5f, distance });
+        return entity;
     }
 
     /** Adds the triangle of makeTriangle(), in the z = 0 plane. */
     void addTriangle()
     {
         auto entity = makeEntity();
-        entity->attach<MeshNode> (makeTriangle());
-        root->addChild (entity);
+        entity.attach<MeshNode> (makeTriangle());
     }
 
     /** Builds the list and returns the weight of every light on its only item, 0 for a light it does not select. */
     std::vector<float> buildEffectiveWeights()
     {
-        drawList.build (*root, {}, { false, true });
+        drawList.build (root, {}, { false, true });
 
         std::vector<float> weights (drawList.getLights().size(), 0.0f);
         const auto& item = drawList.getOpaqueItems()[0];
@@ -456,13 +419,13 @@ protected:
         for (int i = 0; i < 8; ++i)
             addPointLight (2.0f + 0.2f * static_cast<float> (i));
 
-        auto* sweeping = addPointLight (6.0f, range);
+        auto sweeping = addPointLight (6.0f, range);
 
         std::vector<float> previous;
         auto largestStep = 0.0f;
         for (int step = 0; step <= 450; ++step)
         {
-            sweeping->setPosition ({ 0.5f, 0.5f, 6.0f - 0.01f * static_cast<float> (step) });
+            sweeping.getOrAttach<TransformNode>().setPosition ({ 0.5f, 0.5f, 6.0f - 0.01f * static_cast<float> (step) });
 
             const auto weights = buildEffectiveWeights();
             for (size_t i = 0; i < previous.size(); ++i)
@@ -628,7 +591,7 @@ TEST_F (SceneDrawListSelectionTests, EightLightsOrFewerKeepTheirFullIntensity)
     for (int i = 0; i < 8; ++i)
         addPointLight (2.0f + 0.01f * static_cast<float> (i));
 
-    drawList.build (*root, {}, { false, true });
+    drawList.build (root, {}, { false, true });
 
     const auto& item = drawList.getOpaqueItems()[0];
     ASSERT_EQ (item.numLights, 8);
@@ -668,10 +631,9 @@ TEST_F (SceneDrawListSelectionTests, LightEnteringItsRangeChangesWeightsInSmallS
 TEST_F (SceneDrawListTests, DefaultLightIsSelectedForEveryDraw)
 {
     auto entity = makeEntity();
-    entity->attach<MeshNode> (makeTriangle());
-    root->addChild (entity);
+    entity.attach<MeshNode> (makeTriangle());
 
-    drawList.build (*root, {}, { true, true });
+    drawList.build (root, {}, { true, true });
 
     ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
     EXPECT_EQ (drawList.getOpaqueItems()[0].numLights, 1);
@@ -681,11 +643,10 @@ TEST_F (SceneDrawListTests, DefaultLightIsSelectedForEveryDraw)
 TEST_F (SceneDrawListTests, BlendedItemsSelectLightsToo)
 {
     auto entity = makeEntity();
-    entity->attach<MeshNode> (makeTriangle (makeMaterial ("glass", Material::AlphaMode::blend)));
-    entity->attach<LightNode> (LightNode::Type::point);
-    root->addChild (entity);
+    entity.attach<MeshNode> (makeTriangle (makeMaterial ("glass", Material::AlphaMode::blend)));
+    entity.attach<LightNode> (LightNode::Type::point);
 
-    drawList.build (*root, {}, { false, true });
+    drawList.build (root, {}, { false, true });
 
     ASSERT_EQ (drawList.getBlendItems().size(), 1u);
     EXPECT_EQ (drawList.getBlendItems()[0].numLights, 1);
@@ -695,28 +656,26 @@ TEST_F (SceneDrawListTests, BlendedItemsSelectLightsToo)
 TEST_F (SceneDrawListTests, PerDrawSelectionIsSkippedUnlessAsked)
 {
     auto entity = makeEntity();
-    entity->attach<MeshNode> (makeTriangle());
-    entity->attach<LightNode> (LightNode::Type::point);
-    root->addChild (entity);
+    entity.attach<MeshNode> (makeTriangle());
+    entity.attach<LightNode> (LightNode::Type::point);
 
-    drawList.build (*root, {}, { false, false });
+    drawList.build (root, {}, { false, false });
     EXPECT_EQ (drawList.getOpaqueItems()[0].numLights, 0);
 }
 
 TEST_F (SceneDrawListTests, CollectsReflectionProbes)
 {
     auto probeEntity = makeEntity ("probe");
-    probeEntity->setPosition ({ 2.0f, 0.0f, 0.0f });
-    auto& probe = probeEntity->attach<ReflectionProbeNode>();
+    probeEntity.getOrAttach<TransformNode>().setPosition ({ 2.0f, 0.0f, 0.0f });
+    auto& probe = probeEntity.attach<ReflectionProbeNode>();
     probe.influenceRadius = 3.0f;
-    root->addChild (probeEntity);
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     ASSERT_EQ (drawList.getReflectionProbes().size(), 1u);
     const auto& collected = drawList.getReflectionProbes()[0];
     EXPECT_EQ (collected.node, &probe);
-    EXPECT_TRUE (collected.world.approximatelyEqualTo (probeEntity->getWorldMatrix()));
+    EXPECT_TRUE (collected.world.approximatelyEqualTo (probeEntity.getWorldMatrix()));
     expectNear (collected.position, { 2.0f, 0.0f, 0.0f });
     expectNear (collected.bounds.getMin(), { -1.0f, -3.0f, -3.0f });
     expectNear (collected.bounds.getMax(), { 5.0f, 3.0f, 3.0f });
@@ -725,14 +684,13 @@ TEST_F (SceneDrawListTests, CollectsReflectionProbes)
 TEST_F (SceneDrawListTests, BoxProbeBoundsFollowTheEntityTransform)
 {
     auto probeEntity = makeEntity();
-    probeEntity->setPosition ({ 1.0f, 0.0f, 0.0f });
-    probeEntity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
-    auto& probe = probeEntity->attach<ReflectionProbeNode>();
+    probeEntity.getOrAttach<TransformNode>().setPosition ({ 1.0f, 0.0f, 0.0f });
+    probeEntity.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
+    auto& probe = probeEntity.attach<ReflectionProbeNode>();
     probe.shape = ReflectionProbeNode::Shape::box;
     probe.influenceExtents = { 2.0f, 1.0f, 0.5f };
-    root->addChild (probeEntity);
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     // Turned 90 degrees around +Y, the X extent lies along Z and the Z extent along X
     ASSERT_EQ (drawList.getReflectionProbes().size(), 1u);
@@ -743,17 +701,15 @@ TEST_F (SceneDrawListTests, BoxProbeBoundsFollowTheEntityTransform)
 TEST_F (SceneDrawListTests, SphereProbeBoundsIgnoreRotation)
 {
     auto rotated = makeEntity();
-    rotated->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::pi * 0.25f));
-    rotated->attach<ReflectionProbeNode>().influenceRadius = 2.0f;
-    root->addChild (rotated);
+    rotated.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::pi * 0.25f));
+    rotated.attach<ReflectionProbeNode>().influenceRadius = 2.0f;
 
     auto scaled = makeEntity();
-    scaled->setPosition ({ 10.0f, 0.0f, 0.0f });
-    scaled->setScale ({ 2.0f, 1.0f, 1.0f });
-    scaled->attach<ReflectionProbeNode>().influenceRadius = 2.0f;
-    root->addChild (scaled);
+    scaled.getOrAttach<TransformNode>().setPosition ({ 10.0f, 0.0f, 0.0f });
+    scaled.getOrAttach<TransformNode>().setScale ({ 2.0f, 1.0f, 1.0f });
+    scaled.attach<ReflectionProbeNode>().influenceRadius = 2.0f;
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     ASSERT_EQ (drawList.getReflectionProbes().size(), 2u);
     expectNear (drawList.getReflectionProbes()[0].bounds.getMin(), { -2.0f, -2.0f, -2.0f });
@@ -765,41 +721,37 @@ TEST_F (SceneDrawListTests, SphereProbeBoundsIgnoreRotation)
 TEST_F (SceneDrawListTests, ZeroScaleProbesAreSkipped)
 {
     auto flat = makeEntity();
-    flat->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.3f));
-    flat->setScale ({ 0.0f, 1.0f, 1.0f });
-    flat->attach<ReflectionProbeNode>();
-    root->addChild (flat);
+    flat.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.3f));
+    flat.getOrAttach<TransformNode>().setScale ({ 0.0f, 1.0f, 1.0f });
+    flat.attach<ReflectionProbeNode>();
 
     auto collapsed = makeEntity();
-    collapsed->setScale ({ 0.0f, 0.0f, 0.0f });
-    collapsed->attach<ReflectionProbeNode>().shape = ReflectionProbeNode::Shape::box;
-    root->addChild (collapsed);
+    collapsed.getOrAttach<TransformNode>().setScale ({ 0.0f, 0.0f, 0.0f });
+    collapsed.attach<ReflectionProbeNode>().shape = ReflectionProbeNode::Shape::box;
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
     EXPECT_TRUE (drawList.getReflectionProbes().empty());
 }
 
 TEST_F (SceneDrawListTests, ProbesWithoutInfluenceAreSkipped)
 {
     auto sphere = makeEntity();
-    sphere->attach<ReflectionProbeNode>().influenceRadius = 0.0f;
-    root->addChild (sphere);
+    sphere.attach<ReflectionProbeNode>().influenceRadius = 0.0f;
 
     auto box = makeEntity();
-    auto& boxProbe = box->attach<ReflectionProbeNode>();
+    auto& boxProbe = box.attach<ReflectionProbeNode>();
     boxProbe.shape = ReflectionProbeNode::Shape::box;
     boxProbe.influenceExtents = { 1.0f, -1.0f, 1.0f };
-    root->addChild (box);
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
     EXPECT_TRUE (drawList.getReflectionProbes().empty());
 }
 
 TEST_F (SceneDrawListTests, RebuildingReplacesThePreviousProbes)
 {
-    root->attach<ReflectionProbeNode>();
-    drawList.build (*root, {});
-    drawList.build (*root, {});
+    root.attach<ReflectionProbeNode>();
+    drawList.build (root, {});
+    drawList.build (root, {});
 
     EXPECT_EQ (drawList.getReflectionProbes().size(), 1u);
 
@@ -849,20 +801,17 @@ TEST_F (SceneDrawListTests, SmallerProbesRankFirst)
 TEST_F (SceneDrawListTests, NestedSmallProbeIsPickedFirst)
 {
     auto large = makeEntity ("large");
-    large->attach<ReflectionProbeNode>().influenceRadius = 10.0f;
-    root->addChild (large);
+    large.attach<ReflectionProbeNode>().influenceRadius = 10.0f;
 
     auto small = makeEntity ("small");
-    small->attach<ReflectionProbeNode>().influenceRadius = 1.0f;
-    root->addChild (small);
+    small.attach<ReflectionProbeNode>().influenceRadius = 1.0f;
 
     auto entity = makeEntity();
-    entity->setPosition ({ 0.5f, 0.0f, 0.0f });
-    entity->setScale ({ 0.1f, 0.1f, 0.1f });
-    entity->attach<MeshNode> (makeTriangle());
-    root->addChild (entity);
+    entity.getOrAttach<TransformNode>().setPosition ({ 0.5f, 0.0f, 0.0f });
+    entity.getOrAttach<TransformNode>().setScale ({ 0.1f, 0.1f, 0.1f });
+    entity.attach<MeshNode> (makeTriangle());
 
-    drawList.build (*root, {}, { false, true });
+    drawList.build (root, {}, { false, true });
 
     // Both probes capture from the origin and the draw lies inside both influences
     ASSERT_EQ (drawList.getReflectionProbes().size(), 2u);
@@ -918,15 +867,13 @@ TEST_F (SceneDrawListTests, EmptyItemBoundsSelectNoProbe)
 TEST_F (SceneDrawListTests, PerDrawSelectionPicksReflectionProbes)
 {
     auto entity = makeEntity();
-    entity->attach<MeshNode> (makeTriangle());
-    root->addChild (entity);
+    entity.attach<MeshNode> (makeTriangle());
 
     auto probeEntity = makeEntity();
-    probeEntity->setPosition ({ 0.5f, 0.0f, 0.0f });
-    probeEntity->attach<ReflectionProbeNode>().influenceRadius = 2.0f;
-    root->addChild (probeEntity);
+    probeEntity.getOrAttach<TransformNode>().setPosition ({ 0.5f, 0.0f, 0.0f });
+    probeEntity.attach<ReflectionProbeNode>().influenceRadius = 2.0f;
 
-    drawList.build (*root, {}, { false, true });
+    drawList.build (root, {}, { false, true });
 
     ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
     EXPECT_EQ (drawList.getOpaqueItems()[0].reflectionProbes[0], 0);
@@ -936,11 +883,10 @@ TEST_F (SceneDrawListTests, PerDrawSelectionPicksReflectionProbes)
 TEST_F (SceneDrawListTests, ReflectionProbeSelectionIsSkippedUnlessAsked)
 {
     auto entity = makeEntity();
-    entity->attach<MeshNode> (makeTriangle());
-    entity->attach<ReflectionProbeNode>();
-    root->addChild (entity);
+    entity.attach<MeshNode> (makeTriangle());
+    entity.attach<ReflectionProbeNode>();
 
-    drawList.build (*root, {}, { false, false });
+    drawList.build (root, {}, { false, false });
 
     ASSERT_EQ (drawList.getReflectionProbes().size(), 1u);
     EXPECT_EQ (drawList.getOpaqueItems()[0].reflectionProbes[0], -1);
@@ -950,19 +896,18 @@ TEST_F (SceneDrawListTests, ReflectionProbeSelectionIsSkippedUnlessAsked)
 TEST_F (SceneDrawListTests, CollectsIrradianceVolumes)
 {
     auto volumeEntity = makeEntity ("volume");
-    volumeEntity->setPosition ({ 2.0f, 0.0f, 0.0f });
-    volumeEntity->setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
-    auto& volume = volumeEntity->attach<IrradianceVolumeNode>();
+    volumeEntity.getOrAttach<TransformNode>().setPosition ({ 2.0f, 0.0f, 0.0f });
+    volumeEntity.getOrAttach<TransformNode>().setRotation (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi));
+    auto& volume = volumeEntity.attach<IrradianceVolumeNode>();
     volume.extents = { 2.0f, 1.0f, 0.5f };
-    root->addChild (volumeEntity);
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
 
     // Turned 90 degrees around +Y, the X extent lies along Z and the Z extent along X
     ASSERT_EQ (drawList.getIrradianceVolumes().size(), 1u);
     const auto& collected = drawList.getIrradianceVolumes()[0];
     EXPECT_EQ (collected.node, &volume);
-    EXPECT_TRUE (collected.world.approximatelyEqualTo (volumeEntity->getWorldMatrix()));
+    EXPECT_TRUE (collected.world.approximatelyEqualTo (volumeEntity.getWorldMatrix()));
     expectNear (collected.bounds.getMin(), { 1.5f, -1.0f, -2.0f });
     expectNear (collected.bounds.getMax(), { 2.5f, 1.0f, 2.0f });
 
@@ -973,15 +918,13 @@ TEST_F (SceneDrawListTests, CollectsIrradianceVolumes)
 TEST_F (SceneDrawListTests, EmptyOrFlattenedVolumesAreSkipped)
 {
     auto empty = makeEntity();
-    empty->attach<IrradianceVolumeNode>().extents = { 1.0f, 0.0f, 1.0f };
-    root->addChild (empty);
+    empty.attach<IrradianceVolumeNode>().extents = { 1.0f, 0.0f, 1.0f };
 
     auto flat = makeEntity();
-    flat->setScale ({ 1.0f, 0.0f, 1.0f });
-    flat->attach<IrradianceVolumeNode>();
-    root->addChild (flat);
+    flat.getOrAttach<TransformNode>().setScale ({ 1.0f, 0.0f, 1.0f });
+    flat.attach<IrradianceVolumeNode>();
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
     EXPECT_TRUE (drawList.getIrradianceVolumes().empty());
 }
 
@@ -1011,18 +954,16 @@ TEST_F (SceneDrawListTests, VolumeSelectionTakesTheItemCenterAndKeepsTheLowerInd
 TEST_F (SceneDrawListTests, PerDrawSelectionPicksTheIrradianceVolume)
 {
     auto entity = makeEntity();
-    entity->attach<MeshNode> (makeTriangle());
-    root->addChild (entity);
+    entity.attach<MeshNode> (makeTriangle());
 
     auto volumeEntity = makeEntity();
-    volumeEntity->attach<IrradianceVolumeNode>().extents = { 2.0f, 2.0f, 2.0f };
-    root->addChild (volumeEntity);
+    volumeEntity.attach<IrradianceVolumeNode>().extents = { 2.0f, 2.0f, 2.0f };
 
-    drawList.build (*root, {}, { false, false });
+    drawList.build (root, {}, { false, false });
     ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
     EXPECT_EQ (drawList.getOpaqueItems()[0].irradianceVolume, -1);
 
-    drawList.build (*root, {}, { false, true });
+    drawList.build (root, {}, { false, true });
     ASSERT_EQ (drawList.getOpaqueItems().size(), 1u);
     EXPECT_EQ (drawList.getOpaqueItems()[0].irradianceVolume, 0);
 }
@@ -1030,13 +971,12 @@ TEST_F (SceneDrawListTests, PerDrawSelectionPicksTheIrradianceVolume)
 TEST_F (SceneDrawListTests, VolumeResolutionIsClampedToTwo)
 {
     auto volumeEntity = makeEntity();
-    auto& volume = volumeEntity->attach<IrradianceVolumeNode>();
+    auto& volume = volumeEntity.attach<IrradianceVolumeNode>();
     volume.resolutionX = 0;
     volume.resolutionY = -3;
     volume.resolutionZ = 5;
-    root->addChild (volumeEntity);
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
     ASSERT_EQ (drawList.getIrradianceVolumes().size(), 1u);
 
     const auto packed = GpuSceneData::packIrradianceVolume (drawList.getIrradianceVolumes()[0], {}, {}, 16);
@@ -1049,13 +989,12 @@ TEST_F (SceneDrawListTests, VolumeResolutionIsClampedToTheLargestThatFits)
 {
     // Every volume fits both atlases, and no block arithmetic overflows: each axis is clamped to maxResolution
     auto volumeEntity = makeEntity();
-    auto& volume = volumeEntity->attach<IrradianceVolumeNode>();
+    auto& volume = volumeEntity.attach<IrradianceVolumeNode>();
     volume.resolutionX = 100000;
     volume.resolutionY = IrradianceVolumeNode::maxResolution + 1;
     volume.resolutionZ = IrradianceVolumeNode::maxResolution;
-    root->addChild (volumeEntity);
 
-    drawList.build (*root, {});
+    drawList.build (root, {});
     ASSERT_EQ (drawList.getIrradianceVolumes().size(), 1u);
 
     const auto [nx, ny, nz] = GpuSceneData::getVolumeResolution (volume);

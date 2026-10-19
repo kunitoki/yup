@@ -69,7 +69,7 @@ protected:
     }
 
     /** Renders the bar at @p from then at @p to with @p renderer, and returns the second frame. */
-    Image renderMove (SceneRenderer& renderer, Scene& scene, Entity& bar, float from, float to)
+    Image renderMove (SceneRenderer& renderer, Scene& scene, Entity bar, float from, float to)
     {
         moveBar (bar, from);
         if (! renderToImage (renderer, scene, size).isValid())
@@ -93,7 +93,7 @@ protected:
 TEST_F (MotionBlurMetalTests, MotionBlurSmearsAlongTheMotionOnly)
 {
     Scene scene;
-    auto* bar = buildMovingBarScene (scene);
+    auto bar = buildMovingBarScene (scene);
 
     // 0.1 units at the bar's distance move it 7.6 px: with the shutter open all frame, the smear
     // spans that much, centered on where the bar is now, so its vertical edges ramp and reach about
@@ -104,7 +104,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurSmearsAlongTheMotionOnly)
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer);
-    const auto blurred = renderMove (renderer, scene, *bar, 0.0f, 0.1f);
+    const auto blurred = renderMove (renderer, scene, bar, 0.0f, 0.1f);
     ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
@@ -134,7 +134,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurSmearsAlongTheMotionOnly)
 
     // Not the move alone: the same move without motion blur keeps steps
     setMotionBlur (renderer, false);
-    const auto sharp = renderMove (renderer, scene, *bar, 0.0f, 0.1f);
+    const auto sharp = renderMove (renderer, scene, bar, 0.0f, 0.1f);
     ASSERT_TRUE (sharp.isValid()) << renderer.getLastError();
     EXPECT_LE (edgeWidth (sharp, size / 2, 50, 94), 2);
     EXPECT_LT (meanLuminance (sharp, { 61, 40, 2, 48 }), 1.0);
@@ -146,8 +146,8 @@ TEST_F (MotionBlurMetalTests, FirstFrameIsNotBlurred)
     // A transform set before the first frame is no motion: the frame records no smear and equals
     // the frame without motion blur
     Scene scene;
-    auto* bar = buildMovingBarScene (scene);
-    moveBar (*bar, 0.1f);
+    auto bar = buildMovingBarScene (scene);
+    moveBar (bar, 0.1f);
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer);
@@ -168,12 +168,12 @@ TEST_F (MotionBlurMetalTests, TeleportIsClampedToMaximumRadius)
     // tileSize from where the bar lands, so no pixel is reached farther than 2 * tileSize, the
     // longest smear. A gather blur can only smear what is on screen, so the bar lands in view
     Scene scene;
-    auto* bar = buildMovingBarScene (scene);
+    auto bar = buildMovingBarScene (scene);
     ASSERT_GT (motionPixelsPerUnit (scene), 4.0f * MotionBlur::tileSize);
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer);
-    const auto blurred = renderMove (renderer, scene, *bar, -0.6f, 0.4f);
+    const auto blurred = renderMove (renderer, scene, bar, -0.6f, 0.4f);
     ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
@@ -214,13 +214,13 @@ TEST_F (MotionBlurMetalTests, CameraMotionBlursStaticObjects)
         // Moving the camera 0.1 to the right moves the still bar 7.6 px to the left on screen
         Scene scene;
         buildMovingBarScene (scene);
-        auto* camera = scene.getRoot()->findChild ("camera");
-        ASSERT_NE (camera, nullptr);
+        auto camera = scene.getRoot().findChild ("camera");
+        ASSERT_TRUE (camera.isValid());
 
         SceneRenderer renderer;
         setUpMotionBlur (renderer);
         ASSERT_TRUE (renderToImage (renderer, scene, size).isValid()) << renderer.getLastError();
-        camera->setPosition ({ 0.1f, 0.0f, 0.0f });
+        camera.getOrAttach<TransformNode>().setPosition ({ 0.1f, 0.0f, 0.0f });
         const auto blurred = renderToImage (renderer, scene, size);
         ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
         ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
@@ -235,23 +235,23 @@ TEST_F (MotionBlurMetalTests, CameraMotionBlursStaticObjects)
     // Turning the camera moves the environment, whose motion only GBufferBackground writes: its
     // sharp edge, a white half to the right of the view axis, smears as the geometry does
     Scene scene;
-    scene.getRoot()->attach<BackgroundNode> (Colors::black);
+    scene.getRoot().attach<BackgroundNode> (Colors::black);
     setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>& direction)
     {
         return direction.getX() > 0.0f ? Vector3<float> (1.0f, 1.0f, 1.0f) : Vector3<float>();
     }, 512, 1));
-    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
+    scene.getRoot().get<EnvironmentNode>()->visible = true;
     addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
-    auto* camera = scene.getRoot()->findChild ("camera");
-    ASSERT_NE (camera, nullptr);
+    auto camera = scene.getRoot().findChild ("camera");
+    ASSERT_TRUE (camera.isValid());
 
     const auto turn = [&] (SceneRenderer& renderer)
     {
-        aimCamera (*camera, {}, { 0.0f, 0.0f, -1.0f });
+        aimCamera (camera, {}, { 0.0f, 0.0f, -1.0f });
         if (! renderToImage (renderer, scene, size).isValid())
             return Image();
 
-        aimCamera (*camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
+        aimCamera (camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
         return renderToImage (renderer, scene, size);
     };
 
@@ -278,7 +278,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurSmearsAfterAMoveUnderTemporalAntiAliasin
     // the motion, clipping it to the new frame: the TAA output shows the bar where it moved to,
     // and the motion blur smears that
     Scene scene;
-    auto* bar = buildMovingBarScene (scene);
+    auto bar = buildMovingBarScene (scene);
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer, 8);
@@ -286,7 +286,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurSmearsAfterAMoveUnderTemporalAntiAliasin
     ASSERT_TRUE (renderer.isConverged());
     EXPECT_EQ (renderer.getMotionBlur(), nullptr);
 
-    moveBar (*bar, 0.1f);
+    moveBar (bar, 0.1f);
     const auto blurred = renderToImage (renderer, scene, size);
     ASSERT_TRUE (blurred.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
@@ -315,7 +315,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurSmearsTheWholeFrameWhenUpscaling)
     const auto smear = [this] (bool upscaled, bool motionBlur)
     {
         Scene scene;
-        auto* bar = buildMovingBarScene (scene);
+        auto bar = buildMovingBarScene (scene);
 
         SceneRenderer renderer;
         setUpMotionBlur (renderer, 4);
@@ -326,7 +326,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurSmearsTheWholeFrameWhenUpscaling)
         settings.renderScale = 0.5f;
         renderer.setRenderSettings (settings);
 
-        const auto image = renderMove (renderer, scene, *bar, 0.4f, 0.5f);
+        const auto image = renderMove (renderer, scene, bar, 0.4f, 0.5f);
         EXPECT_TRUE (image.isValid()) << renderer.getLastError();
         EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur) != nullptr, motionBlur);
 
@@ -357,7 +357,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurOnAStillFrameRecordsNoPass)
     // With motion blur on, still frames create, draw and keep nothing: the frames converging, the
     // converged ones, and those after a move
     Scene scene;
-    auto* bar = buildMovingBarScene (scene);
+    auto bar = buildMovingBarScene (scene);
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer, 4);
@@ -376,7 +376,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurOnAStillFrameRecordsNoPass)
     EXPECT_EQ (renderer.getMotionBlur(), nullptr);
 
     // Not vacuous: a move smears and keeps its targets
-    moveBar (*bar, 0.1f);
+    moveBar (bar, 0.1f);
     ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
     ASSERT_NE (renderer.getMotionBlur(), nullptr);
     EXPECT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
@@ -401,8 +401,8 @@ TEST_F (MotionBlurMetalTests, NonFiniteTransformsAreNoMotion)
     // signature hashes it: no motion, so the still frames record no motion blur and converge
     Scene scene;
     buildMovingBarScene (scene);
-    auto* broken = addMotionQuad (scene, { -0.8f, -0.1f, 0.2f, 0.2f }, 2.0f);
-    broken->setPosition ({ std::numeric_limits<float>::quiet_NaN(), 0.0f, -motionBarDistance });
+    auto broken = addMotionQuad (scene, { -0.8f, -0.1f, 0.2f, 0.2f }, 2.0f);
+    broken.getOrAttach<TransformNode>().setPosition ({ std::numeric_limits<float>::quiet_NaN(), 0.0f, -motionBarDistance });
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer, 4);
@@ -427,7 +427,7 @@ TEST_F (MotionBlurMetalTests, NonFiniteTransformsAreNoMotion)
 TEST_F (MotionBlurMetalTests, MotionBlurOffOrAClosedShutterRecordsNothingWhileMoving)
 {
     Scene scene;
-    auto* bar = buildMovingBarScene (scene);
+    auto bar = buildMovingBarScene (scene);
 
     for (const auto [motionBlur, shutter] : { std::pair { false, 1.0f }, std::pair { true, 0.0f }, std::pair { true, -1.0f } })
     {
@@ -435,7 +435,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurOffOrAClosedShutterRecordsNothingWhileMo
         SceneRenderer renderer;
         setUpMotionBlur (renderer);
         setMotionBlur (renderer, motionBlur, shutter);
-        const auto image = renderMove (renderer, scene, *bar, 0.0f, 0.1f);
+        const auto image = renderMove (renderer, scene, bar, 0.0f, 0.1f);
         ASSERT_TRUE (image.isValid()) << renderer.getLastError();
         EXPECT_EQ (renderer.getMotionBlur(), nullptr) << shutter;
         EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << shutter;
@@ -449,17 +449,17 @@ TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessOverTheBackgro
     // same move over a visible black environment: the smear spreads the same light over both, so
     // it is as bright, not capped by its partial coverage (preflight R22)
     Scene scene;
-    auto* bar = buildMovingBarScene (scene, 20.0f);
+    auto bar = buildMovingBarScene (scene, 20.0f);
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer);
-    const auto overBackground = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    const auto overBackground = renderMove (renderer, scene, bar, 0.0f, 0.2f);
     ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
     setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
-    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
-    const auto overEnvironment = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    scene.getRoot().get<EnvironmentNode>()->visible = true;
+    const auto overEnvironment = renderMove (renderer, scene, bar, 0.0f, 0.2f);
     ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
 
     // Not vacuous: the smear reaches out of the bar, which spans x 71.6 to 86.7 at 0.2
@@ -480,16 +480,16 @@ TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessWhileTheCamera
     // path: its smear too keeps its brightness over the background color (preflight R22)
     Scene scene;
     buildMovingBarScene (scene, 20.0f);
-    auto* camera = scene.getRoot()->findChild ("camera");
-    ASSERT_NE (camera, nullptr);
+    auto camera = scene.getRoot().findChild ("camera");
+    ASSERT_TRUE (camera.isValid());
 
     const auto turn = [&] (SceneRenderer& renderer)
     {
-        aimCamera (*camera, {}, { 0.0f, 0.0f, -1.0f });
+        aimCamera (camera, {}, { 0.0f, 0.0f, -1.0f });
         if (! renderToImage (renderer, scene, size).isValid())
             return Image();
 
-        aimCamera (*camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
+        aimCamera (camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
         return renderToImage (renderer, scene, size);
     };
 
@@ -500,7 +500,7 @@ TEST_F (MotionBlurMetalTests, SmearedHighlightsKeepTheirBrightnessWhileTheCamera
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
     setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
-    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
+    scene.getRoot().get<EnvironmentNode>()->visible = true;
     const auto overEnvironment = turn (renderer);
     ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
 
@@ -523,19 +523,19 @@ TEST_F (MotionBlurMetalTests, FogOverTheBackgroundKeepsItsBlendWhileTheCameraTur
     // stays near its input, and its blur amount is at most 0.02
     Scene scene;
     buildMovingBarScene (scene);
-    scene.getRoot()->attach<AmbientLightNode> (fogAmbientColor());
-    scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
+    scene.getRoot().attach<AmbientLightNode> (fogAmbientColor());
+    scene.getRoot().attach<WorldFogNode> (makeFog (0.08f));
     scene.getActiveCamera()->zFar = 10.0f;
 
-    auto* camera = scene.getRoot()->findChild ("camera");
-    ASSERT_NE (camera, nullptr);
+    auto camera = scene.getRoot().findChild ("camera");
+    ASSERT_TRUE (camera.isValid());
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer);
-    aimCamera (*camera, {}, { 0.0f, 0.0f, -1.0f });
+    aimCamera (camera, {}, { 0.0f, 0.0f, -1.0f });
     ASSERT_TRUE (renderToImage (renderer, scene, size).isValid()) << renderer.getLastError();
 
-    aimCamera (*camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
+    aimCamera (camera, {}, { std::sin (0.08f), 0.0f, -std::cos (0.08f) });
     ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << renderer.getLastError();
     ASSERT_TRUE (renderer.waitForGPU().wasOk());
 
@@ -600,7 +600,7 @@ TEST_F (MotionBlurMetalTests, StillPartialCoverageKeepsItsBlendWhileTheBarMoves)
     // 7.6 px, and 1.5 px, a half motion of 0.76 px: slow enough that the tiles around the still
     // quad hold motions of almost the same length
     Scene scene;
-    auto* bar = buildMovingBarScene (scene);
+    auto bar = buildMovingBarScene (scene);
     addMotionQuad (scene, { -0.8f, -0.1f, 0.2f, 0.2f }, 4.0f, 0.5f);
     addMotionQuad (scene, { -0.1f, 0.56f, 0.3f, 0.2f }, 4.0f, 0.5f);
 
@@ -613,12 +613,12 @@ TEST_F (MotionBlurMetalTests, StillPartialCoverageKeepsItsBlendWhileTheBarMoves)
 
         SceneRenderer renderer;
         setUpMotionBlur (renderer);
-        const auto on = renderMove (renderer, scene, *bar, 0.0f, move);
+        const auto on = renderMove (renderer, scene, bar, 0.0f, move);
         ASSERT_TRUE (on.isValid()) << renderer.getLastError();
         ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr) << name;
 
         setMotionBlur (renderer, false);
-        const auto off = renderMove (renderer, scene, *bar, 0.0f, move);
+        const auto off = renderMove (renderer, scene, bar, 0.0f, move);
         ASSERT_TRUE (off.isValid()) << renderer.getLastError();
 
         for (const auto& quad : quads)
@@ -651,11 +651,11 @@ TEST_F (MotionBlurMetalTests, NoSmearWithoutAContinuingHistory)
     // history the motion is measured against: the next frame does not smear, though the bar moved,
     // and the one after it does again (preflight R23)
     Scene scene;
-    auto* bar = buildMovingBarScene (scene);
+    auto bar = buildMovingBarScene (scene);
 
     const auto render = [&] (SceneRenderer& renderer, float x, int width, bool smears, const char* name)
     {
-        moveBar (*bar, x);
+        moveBar (bar, x);
         ASSERT_NE (renderer.render (device, scene, width, size), nullptr) << name << ": " << renderer.getLastError();
         EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur) != nullptr, smears) << name;
     };
@@ -705,11 +705,11 @@ TEST_F (MotionBlurMetalTests, SmearedFrameIsNotFinal)
     // Without TAA, a smeared frame still reports that it is not converged, so a component repaints
     // once more and the still frame after it shows the bar sharp (preflight R23)
     Scene scene;
-    auto* bar = buildMovingBarScene (scene);
+    auto bar = buildMovingBarScene (scene);
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer);
-    ASSERT_TRUE (renderMove (renderer, scene, *bar, 0.0f, 0.1f).isValid()) << renderer.getLastError();
+    ASSERT_TRUE (renderMove (renderer, scene, bar, 0.0f, 0.1f).isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
     EXPECT_FALSE (renderer.isConverged());
 
@@ -727,17 +727,17 @@ TEST_F (MotionBlurMetalTests, SmearBlendsItsCoverageOverAGrayBackground)
     // than the gray: not by the whole gray (no coverage kept), nor by nothing (full coverage). The
     // bar is dim, so the sums stay within the 8 bit range (preflight R22)
     Scene scene;
-    auto* bar = buildMovingBarScene (scene, 0.1f);
+    auto bar = buildMovingBarScene (scene, 0.1f);
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer);
-    const auto overBlack = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    const auto overBlack = renderMove (renderer, scene, bar, 0.0f, 0.2f);
     ASSERT_TRUE (overBlack.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
     constexpr int gray = 100;
-    scene.getRoot()->attach<BackgroundNode> (Color (static_cast<uint8> (gray), static_cast<uint8> (gray), static_cast<uint8> (gray)));
-    const auto overGray = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    scene.getRoot().attach<BackgroundNode> (Color (static_cast<uint8> (gray), static_cast<uint8> (gray), static_cast<uint8> (gray)));
+    const auto overGray = renderMove (renderer, scene, bar, 0.0f, 0.2f);
     ASSERT_TRUE (overGray.isValid()) << renderer.getLastError();
 
     // The strips of 8 px on both sides of the bar, which spans x 71.6 to 86.7, where the smear
@@ -773,10 +773,10 @@ TEST_F (MotionBlurMetalTests, DiagonalMotionSmearsAlongItsDirectionAcrossTiles)
     // corner of the 16 px tiles at (80, 48): the tile beyond it holds none of the square, so only
     // its diagonal neighbor carries the motion there
     Scene scene;
-    scene.getRoot()->attach<BackgroundNode> (Colors::black);
-    scene.getRoot()->attach<AmbientLightNode> (Colors::black);
+    scene.getRoot().attach<BackgroundNode> (Colors::black);
+    scene.getRoot().attach<AmbientLightNode> (Colors::black);
     addCamera (scene, {}, { 0.0f, 0.0f, -1.0f });
-    auto* square = addMotionQuad (scene, { -0.1f, -0.1f, 0.2f, 0.2f }, 20.0f);
+    auto square = addMotionQuad (scene, { -0.1f, -0.1f, 0.2f, 0.2f }, 20.0f);
 
     const auto pixelsPerUnit = motionPixelsPerUnit (scene);
     const auto x = (70.5f - 64.0f) / pixelsPerUnit;
@@ -784,11 +784,11 @@ TEST_F (MotionBlurMetalTests, DiagonalMotionSmearsAlongItsDirectionAcrossTiles)
 
     const auto render = [&] (SceneRenderer& renderer)
     {
-        square->setPosition ({ x - 0.1f, y - 0.1f, -motionBarDistance });
+        square.getOrAttach<TransformNode>().setPosition ({ x - 0.1f, y - 0.1f, -motionBarDistance });
         if (! renderToImage (renderer, scene, size).isValid())
             return Image();
 
-        square->setPosition ({ x, y, -motionBarDistance });
+        square.getOrAttach<TransformNode>().setPosition ({ x, y, -motionBarDistance });
         return renderToImage (renderer, scene, size);
     };
 
@@ -823,7 +823,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurRunsAfterTheDepthOfField)
     // black environment, and the result is finite. A still square far from the bar, blurred by the
     // depth of field only, lies in tiles where nothing moves, which keep the share as it is
     Scene scene;
-    auto* bar = buildMovingBarScene (scene, 20.0f);
+    auto bar = buildMovingBarScene (scene, 20.0f);
     addMotionQuad (scene, { -0.9f, -0.1f, 0.2f, 0.2f }, 20.0f);
     auto& camera = *scene.getActiveCamera();
     camera.fStop = 1.4f;
@@ -833,7 +833,7 @@ TEST_F (MotionBlurMetalTests, MotionBlurRunsAfterTheDepthOfField)
     SceneRenderer renderer;
     setUpMotionBlur (renderer);
     setDepthOfField (renderer, true);
-    const auto overBackground = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    const auto overBackground = renderMove (renderer, scene, bar, 0.0f, 0.2f);
     ASSERT_TRUE (overBackground.isValid()) << renderer.getLastError();
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::depthOfField), nullptr);
     ASSERT_NE (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
@@ -843,8 +843,8 @@ TEST_F (MotionBlurMetalTests, MotionBlurRunsAfterTheDepthOfField)
 #endif
 
     setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float>(); }, 32, 3));
-    scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
-    const auto overEnvironment = renderMove (renderer, scene, *bar, 0.0f, 0.2f);
+    scene.getRoot().get<EnvironmentNode>()->visible = true;
+    const auto overEnvironment = renderMove (renderer, scene, bar, 0.0f, 0.2f);
     ASSERT_TRUE (overEnvironment.isValid()) << renderer.getLastError();
 
     const auto background = meanLuminance (overBackground, { 0, 0, size, size }) * size * size;
@@ -858,7 +858,7 @@ TEST_F (MotionBlurMetalTests, GivingUpMotionBlurRendersUnsmeared)
 {
     // The bar moves on every frame, so each one tries
     Scene scene;
-    auto* bar = buildMovingBarScene (scene);
+    auto bar = buildMovingBarScene (scene);
 
     SceneRenderer renderer;
     setUpMotionBlur (renderer);
@@ -868,7 +868,7 @@ TEST_F (MotionBlurMetalTests, GivingUpMotionBlurRendersUnsmeared)
     const auto render = [&] (bool smears, bool givenUp, const char* name)
     {
         x = x > 0.0f ? 0.0f : 0.1f;
-        moveBar (*bar, x);
+        moveBar (bar, x);
         ASSERT_NE (renderer.render (device, scene, size, size), nullptr) << name << ": " << renderer.getLastError();
         EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur) != nullptr, smears) << name;
         ASSERT_NE (renderer.getMotionBlur(), nullptr) << name;
@@ -895,12 +895,12 @@ TEST_F (MotionBlurMetalTests, GivingUpMotionBlurRendersUnsmeared)
     EXPECT_FALSE (renderer.getMotionBlur()->getGiveUpReason().isEmpty());
 
     // Given up, it no longer tries, and a move renders as without motion blur
-    const auto image = renderMove (renderer, scene, *bar, 0.0f, 0.1f);
+    const auto image = renderMove (renderer, scene, bar, 0.0f, 0.1f);
     ASSERT_TRUE (image.isValid()) << renderer.getLastError();
     EXPECT_EQ (renderer.getPassOutput (SceneRenderer::PassOutput::motionBlur), nullptr);
 
     setMotionBlur (renderer, false);
-    const auto without = renderMove (renderer, scene, *bar, 0.0f, 0.1f);
+    const auto without = renderMove (renderer, scene, bar, 0.0f, 0.1f);
     EXPECT_EQ (countDifferences (image, without), 0);
 }
 

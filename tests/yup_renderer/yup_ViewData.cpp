@@ -87,11 +87,10 @@ TEST_F (ViewDataTests, PreviousIsLastFramesUnjitteredMatrix)
     view.update (scene, SceneSettings::resolve (scene), 100, 100, true, 16, 1);
     const auto first = view.getUnjitteredViewProjection();
 
-    auto camera = Entity::Ptr (new Entity ("camera"));
-    camera->attach<CameraNode>();
-    camera->setPosition ({ 1.0f, 0.0f, 5.0f });
-    scene.getRoot()->addChild (camera);
-    scene.setActiveCamera (camera.get());
+    auto camera = scene.createEntity ("camera");
+    camera.attach<CameraNode>();
+    camera.attach<TransformNode> (Vector3<float> (1.0f, 0.0f, 5.0f));
+    scene.setActiveCamera (camera);
 
     view.update (scene, SceneSettings::resolve (scene), 100, 100, true, 16, 2);
     EXPECT_TRUE (std::equal (first.getData(), first.getData() + 16, view.getBlock().previousViewProjection));
@@ -115,7 +114,7 @@ TEST_F (ViewDataTests, ToneMappingOperatorMatchesShaderIndices)
     EXPECT_EQ (ViewData::getToneMappingOperator (ToneMappingOperator::agx), 2.0f);
 
     Scene scene;
-    scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::agx);
+    scene.getRoot().attach<ToneMappingNode> (ToneMappingOperator::agx);
 
     ViewData view;
     view.update (scene, SceneSettings::resolve (scene), 100, 100, false, 16, 1);
@@ -206,10 +205,9 @@ protected:
     static void checkRecoversViewDepth (Configure&& configure, std::initializer_list<float> viewDepths)
     {
         Scene scene;
-        auto camera = Entity::Ptr (new Entity ("camera"));
-        configure (camera->attach<CameraNode>());
-        scene.getRoot()->addChild (camera);
-        scene.setActiveCamera (camera.get());
+        auto camera = scene.createEntity ("camera");
+        configure (camera.attach<CameraNode>());
+        scene.setActiveCamera (camera);
 
         ViewData view;
         view.update (scene, SceneSettings::resolve (scene), 100, 50, true, 16, 3);

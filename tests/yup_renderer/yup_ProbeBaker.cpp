@@ -31,21 +31,20 @@ protected:
     /** Adds a spherical probe at (1, 2, 3), the entity "probe", the first time, then builds the list. */
     void build()
     {
-        if (scene.getRoot()->findChild ("probe") == nullptr)
+        if (! scene.getRoot().findChild ("probe").isValid())
             addProbe();
 
-        list.build (*scene.getRoot(), Matrix4());
+        list.build (scene.getRoot(), Matrix4());
     }
 
     void addProbe()
     {
-        auto entity = Entity::Ptr (new Entity ("probe"));
-        entity->attach<ReflectionProbeNode>();
-        entity->setPosition ({ 1.0f, 2.0f, 3.0f });
-        scene.getRoot()->addChild (entity);
+        auto entity = scene.createEntity ("probe");
+        entity.attach<ReflectionProbeNode>();
+        entity.attach<TransformNode> (Vector3<float> (1.0f, 2.0f, 3.0f));
     }
 
-    ReflectionProbeNode& node() { return *scene.getRoot()->findChild ("probe")->getNode<ReflectionProbeNode>(); }
+    ReflectionProbeNode& node() { return *scene.getRoot().findChild ("probe").get<ReflectionProbeNode>(); }
 
     Scene scene;
     SceneDrawList list;
@@ -70,7 +69,7 @@ TEST_F (ProbeBakerTests, SignatureFollowsEveryFieldAndTheWorldMatrix)
         { "parallaxCorrection", [this] { node().parallaxCorrection = false; } },
         { "intensity", [this] { node().intensity = 2.0f; } },
         { "clipNear", [this] { node().clipNear = 0.5f; } },
-        { "position", [this] { scene.getRoot()->findChild ("probe")->setPosition ({ 1.0f, 2.0f, 4.0f }); } },
+        { "position", [this] { scene.getRoot().findChild ("probe").get<TransformNode>()->setPosition ({ 1.0f, 2.0f, 4.0f }); } },
     };
 
     auto previous = original;
@@ -107,14 +106,13 @@ TEST_F (ProbeBakerTests, UnbakedProbesArePendingAndWeighNothing)
 
 TEST_F (ProbeBakerTests, VolumeSignatureFollowsEveryFieldAndTheWorldMatrix)
 {
-    auto entity = Entity::Ptr (new Entity ("volume"));
-    auto& volume = entity->attach<IrradianceVolumeNode>();
-    entity->setPosition ({ 1.0f, 2.0f, 3.0f });
-    scene.getRoot()->addChild (entity);
+    auto entity = scene.createEntity ("volume");
+    auto& volume = entity.attach<IrradianceVolumeNode>();
+    auto& transform = entity.attach<TransformNode> (Vector3<float> (1.0f, 2.0f, 3.0f));
 
     const auto signature = [this]
     {
-        list.build (*scene.getRoot(), Matrix4());
+        list.build (scene.getRoot(), Matrix4());
         return list.getIrradianceVolumes().size() == 1 ? ProbeBaker::getSignature (list.getIrradianceVolumes()[0]) : 0;
     };
 
@@ -133,7 +131,7 @@ TEST_F (ProbeBakerTests, VolumeSignatureFollowsEveryFieldAndTheWorldMatrix)
         { "falloff", [&] { volume.falloff = 1.0f; } },
         { "intensity", [&] { volume.intensity = 2.0f; } },
         { "normalBias", [&] { volume.normalBias = 0.2f; } },
-        { "position", [&] { entity->setPosition ({ 1.0f, 2.0f, 4.0f }); } },
+        { "position", [&] { transform.setPosition ({ 1.0f, 2.0f, 4.0f }); } },
     };
 
     auto previous = original;
@@ -148,8 +146,8 @@ TEST_F (ProbeBakerTests, VolumeSignatureFollowsEveryFieldAndTheWorldMatrix)
 
 TEST_F (ProbeBakerTests, UnbakedVolumesArePendingAndWeighNothing)
 {
-    scene.getRoot()->attach<IrradianceVolumeNode>();
-    list.build (*scene.getRoot(), Matrix4());
+    scene.getRoot().attach<IrradianceVolumeNode>();
+    list.build (scene.getRoot(), Matrix4());
     ASSERT_EQ (list.getIrradianceVolumes().size(), 1u);
 
     ProbeRenderer probes (nullptr);

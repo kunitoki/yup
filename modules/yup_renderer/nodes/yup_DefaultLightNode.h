@@ -31,7 +31,7 @@ namespace yup
     depth-first in the visible part of the tree wins, see SceneSettings::resolve().
 
     @code
-    scene->getRoot()->attach<yup::DefaultLightNode> (false);
+    scene->getRoot().attach<yup::DefaultLightNode> (false);
     @endcode
 
     @see SceneSettings

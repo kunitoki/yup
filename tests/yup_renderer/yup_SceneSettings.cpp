@@ -33,11 +33,9 @@ protected:
         return new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (1.0f, 1.0f, 1.0f); }, 16, 2);
     }
 
-    Entity::Ptr addChild()
+    Entity addChild()
     {
-        Entity::Ptr child (new Entity());
-        scene->getRoot()->addChild (child);
-        return child;
+        return scene->createEntity();
     }
 
     Scene::Ptr scene { new Scene() };
@@ -75,7 +73,7 @@ TEST_F (SceneSettingsTests, DefaultConstructedSettingsMatchAnEmptyScene)
 
 TEST_F (SceneSettingsTests, FeatureNodesOnTheRootAreResolved)
 {
-    auto& root = *scene->getRoot();
+    auto root = scene->getRoot();
     root.attach<BackgroundNode> (Colors::red);
     root.attach<AmbientLightNode> (Colors::blue);
     root.attach<ExposureNode> (2.0f);
@@ -94,27 +92,26 @@ TEST_F (SceneSettingsTests, FeatureNodesOnTheRootAreResolved)
 TEST_F (SceneSettingsTests, FirstNodeFoundDepthFirstWins)
 {
     auto first = addChild();
-    auto deep = Entity::Ptr (new Entity());
-    first->addChild (deep);
+    auto deep = first.createChild();
     auto second = addChild();
 
-    deep->attach<ToneMappingNode> (ToneMappingOperator::aces);
-    second->attach<ToneMappingNode> (ToneMappingOperator::agx);
+    deep.attach<ToneMappingNode> (ToneMappingOperator::aces);
+    second.attach<ToneMappingNode> (ToneMappingOperator::agx);
 
     EXPECT_EQ (SceneSettings::resolve (*scene).toneMapping, ToneMappingOperator::aces);
 
-    scene->getRoot()->attach<ToneMappingNode> (ToneMappingOperator::agx);
+    scene->getRoot().attach<ToneMappingNode> (ToneMappingOperator::agx);
     EXPECT_EQ (SceneSettings::resolve (*scene).toneMapping, ToneMappingOperator::agx);
 }
 
 TEST_F (SceneSettingsTests, HiddenEntitiesAreIgnored)
 {
     auto hidden = addChild();
-    hidden->attach<ExposureNode> (4.0f);
-    hidden->setVisible (false);
+    hidden.attach<ExposureNode> (4.0f);
+    hidden.setVisible (false);
 
     auto visible = addChild();
-    visible->attach<ExposureNode> (0.5f);
+    visible.attach<ExposureNode> (0.5f);
 
     EXPECT_FLOAT_EQ (SceneSettings::resolve (*scene).exposure, 0.5f);
 }
@@ -122,7 +119,7 @@ TEST_F (SceneSettingsTests, HiddenEntitiesAreIgnored)
 TEST_F (SceneSettingsTests, EnvironmentIsResolvedAndLimited)
 {
     const auto environment = makeEnvironment();
-    auto& node = scene->getRoot()->attach<EnvironmentNode> (environment);
+    auto& node = scene->getRoot().attach<EnvironmentNode> (environment);
     node.visible = true;
     node.intensity = -1.0f;
     node.blur = 2.0f;
@@ -139,7 +136,7 @@ TEST_F (SceneSettingsTests, EnvironmentIsResolvedAndLimited)
 
 TEST_F (SceneSettingsTests, WorldFogNodeEnablesTheFog)
 {
-    auto& node = scene->getRoot()->attach<WorldFogNode>();
+    auto& node = scene->getRoot().attach<WorldFogNode>();
     node.fog.density = 0.1f;
     node.fog.anisotropy = 0.3f;
 

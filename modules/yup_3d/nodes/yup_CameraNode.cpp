@@ -46,8 +46,8 @@ Matrix4 CameraNode::getProjectionMatrix (float aspectRatio, bool depthZeroToOne)
 
 Matrix4 CameraNode::getViewMatrix() const noexcept
 {
-    if (auto* entity = getEntity())
-        return entity->getWorldMatrix().inverted();
+    if (const auto entity = getEntity())
+        return entity.getWorldMatrix().inverted();
 
     return {};
 }

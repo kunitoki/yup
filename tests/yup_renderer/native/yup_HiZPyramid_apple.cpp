@@ -55,11 +55,10 @@ protected:
         Scene scene;
         addCompactScene (scene);
 
-        auto camera = Entity::Ptr (new Entity ("camera"));
-        camera->attach<CameraNode>();
-        aimCamera (*camera, { 0.0f, 1.2f, 1.8f }, { 0.0f, 0.2f, 0.0f });
-        scene.getRoot()->addChild (camera);
-        scene.setActiveCamera (camera.get());
+        auto camera = scene.createEntity ("camera");
+        camera.attach<CameraNode>();
+        aimCamera (camera, { 0.0f, 1.2f, 1.8f }, { 0.0f, 0.2f, 0.0f });
+        scene.setActiveCamera (camera);
 
         frameResources->beginFrame (width, height);
 
@@ -71,7 +70,7 @@ protected:
         const auto targets = GBufferPass::acquireTargets (*frameResources, acquire (GpuTextureFormat::rg16float), acquire (GpuTextureFormat::depth32float));
 
         view.update (scene, SceneSettings::resolve (scene), width, height, false, 1, 0);
-        drawList.build (*scene.getRoot(), view.getView());
+        drawList.build (scene.getRoot(), view.getView());
         EXPECT_TRUE (gbufferPass.prepare (device).wasOk());
 
         Built built;

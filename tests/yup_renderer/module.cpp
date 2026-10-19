@@ -24,6 +24,7 @@
 #include "../mocks/yup_rhi.h"
 
 #include "yup_SceneRendererFixtures.h"
+#include "yup_RendererMockFixtures.h"
 
 #include "yup_DepthNormalPrepass.cpp"
 #include "yup_DepthOfField.cpp"
@@ -38,6 +39,7 @@
 #include "yup_LookupTables.cpp"
 #include "yup_LtcTables.cpp"
 #include "yup_MaterialTable.cpp"
+#include "yup_MotionBlur.cpp"
 #include "yup_ProbeAtlas.cpp"
 #include "yup_ProbeBaker.cpp"
 #include "yup_ProbeRenderer.cpp"

@@ -35,7 +35,7 @@ namespace yup
     SceneSettings::resolve(). Without one, or with a null map, the scene has no environment.
 
     @code
-    auto& environment = scene->getRoot()->attach<yup::EnvironmentNode> (new yup::EnvironmentMap (sky));
+    auto& environment = scene->getRoot().attach<yup::EnvironmentNode> (new yup::EnvironmentMap (sky));
     environment.visible = true;
     environment.blur = 0.5f;
     @endcode

@@ -55,8 +55,11 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <new>
 #include <numeric>
 #include <optional>
+#include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -64,16 +67,25 @@
 
 //==============================================================================
 
-#include "scene/yup_Node.h"
+#include "scene/yup_EntityHandle.h"
+#include "scene/yup_NodeTypeId.h"
 #include "resources/yup_BoundingBox.h"
 #include "resources/yup_HalfFloat.h"
 #include "resources/yup_Texture.h"
 #include "resources/yup_Material.h"
 #include "resources/yup_Mesh.h"
 #include "scene/yup_Entity.h"
+#include "scene/yup_Node.h"
+#include "scene/yup_NodeHandle.h"
+#include "scene/yup_IterationGuard.h"
+#include "scene/yup_NodePool.h"
+#include "scene/yup_System.h"
+#include "nodes/yup_TransformNode.h"
 #include "nodes/yup_MeshNode.h"
 #include "nodes/yup_MaterialNode.h"
 #include "nodes/yup_CameraNode.h"
 #include "nodes/yup_LightNode.h"
 #include "scene/yup_Scene.h"
+#include "scene/yup_NodeView.h"
+#include "scene/yup_NodeCollection.h"
 #include "gltf/yup_GltfModel.h"

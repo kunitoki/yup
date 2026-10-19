@@ -40,14 +40,8 @@ struct SceneFeatureNodes
 template <class T>
 void takeFirstSceneFeature (const Entity& entity, const T*& found)
 {
-    if (found != nullptr)
-        return;
-
-    entity.forEachNode<T> ([&] (T& node, int)
-    {
-        if (found == nullptr)
-            found = &node;
-    });
+    if (found == nullptr)
+        found = entity.get<T>();
 }
 
 void collectSceneFeatures (const Entity& entity, SceneFeatureNodes& nodes)
@@ -63,8 +57,8 @@ void collectSceneFeatures (const Entity& entity, SceneFeatureNodes& nodes)
     takeFirstSceneFeature (entity, nodes.environment);
     takeFirstSceneFeature (entity, nodes.fog);
 
-    for (const auto& child : entity.getChildren())
-        collectSceneFeatures (*child, nodes);
+    for (const auto child : entity.getChildren())
+        collectSceneFeatures (child, nodes);
 }
 
 } // namespace
@@ -73,7 +67,7 @@ void collectSceneFeatures (const Entity& entity, SceneFeatureNodes& nodes)
 
 SceneSettings SceneSettings::resolve (const Scene& scene)
 {
-    return resolve (*scene.getRoot());
+    return resolve (scene.getRoot());
 }
 
 SceneSettings SceneSettings::resolve (const Entity& root)

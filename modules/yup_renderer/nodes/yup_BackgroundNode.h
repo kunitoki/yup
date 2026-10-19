@@ -32,7 +32,7 @@ namespace yup
     Without a BackgroundNode the scene behaves as if it had a default-constructed one.
 
     @code
-    scene->getRoot()->attach<yup::BackgroundNode> (yup::Colors::black);
+    scene->getRoot().attach<yup::BackgroundNode> (yup::Colors::black);
     @endcode
 
     @see SceneSettings

@@ -39,7 +39,7 @@ namespace yup
         return direction.getY() > 0.0f ? yup::Vector3<float> (0.4f, 0.6f, 1.0f) : yup::Vector3<float> (0.05f, 0.05f, 0.05f);
     };
 
-    scene->getRoot()->attach<yup::EnvironmentNode> (new yup::EnvironmentMap (sky));
+    scene->getRoot().attach<yup::EnvironmentNode> (new yup::EnvironmentMap (sky));
     @endcode
 
     @see EnvironmentNode

@@ -49,9 +49,9 @@ protected:
         auto blended = Material::Ptr (new Material());
         blended->baseColorFactor = { 0.2f, 0.4f, 0.8f, 0.5f };
         blended->alphaMode = Material::AlphaMode::blend;
-        auto* quad = addPlate (scene, blended);
-        quad->setScale ({ 0.2f, 0.2f, 1.0f });
-        quad->setPosition ({ -0.5f, 0.3f, 0.8f });
+        auto quad = addPlate (scene, blended);
+        quad.getOrAttach<TransformNode>().setScale ({ 0.2f, 0.2f, 1.0f });
+        quad.getOrAttach<TransformNode>().setPosition ({ -0.5f, 0.3f, 0.8f });
 
         addReflectionProbe (scene, { 0.0f, 0.0f, 1.0f }, 3.0f);
 
@@ -168,15 +168,15 @@ protected:
     }
 
     /** Adds @p count small opaque plates in front of the scene, hidden, and returns them. */
-    static std::vector<Entity*> addHiddenPlates (Scene& scene, int count)
+    static std::vector<Entity> addHiddenPlates (Scene& scene, int count)
     {
-        std::vector<Entity*> plates;
+        std::vector<Entity> plates;
         for (int i = 0; i < count; ++i)
         {
-            auto* plate = addPlate (scene, makeWallMaterial());
-            plate->setScale ({ 0.05f, 0.05f, 1.0f });
-            plate->setPosition ({ -0.8f + 0.2f * static_cast<float> (i), -0.6f, 0.6f });
-            plate->setVisible (false);
+            auto plate = addPlate (scene, makeWallMaterial());
+            plate.getOrAttach<TransformNode>().setScale ({ 0.05f, 0.05f, 1.0f });
+            plate.getOrAttach<TransformNode>().setPosition ({ -0.8f + 0.2f * static_cast<float> (i), -0.6f, 0.6f });
+            plate.setVisible (false);
             plates.push_back (plate);
         }
 
@@ -190,21 +190,20 @@ protected:
     {
         auto material = Material::Ptr (new Material());
         material->metallicFactor = 0.0f;
-        addPlate (scene, material)->setScale ({ 2.0f, 2.0f, 1.0f });
+        addPlate (scene, material).getOrAttach<TransformNode>().setScale ({ 2.0f, 2.0f, 1.0f });
         addCamera (scene, { 0.0f, 0.0f, 3.0f }, {});
 
         for (int i = 0; i < numLights; ++i)
         {
-            auto entity = Entity::Ptr (new Entity ("showLight"));
-            auto& light = entity->attach<LightNode> (LightNode::Type::point);
+            auto entity = scene.createEntity ("showLight");
+            auto& light = entity.attach<LightNode> (LightNode::Type::point);
             const auto color = Color::fromHSV (static_cast<float> (i) / static_cast<float> (numLights), 0.85f, 1.0f);
             light.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
             light.intensity = 0.05f;
             light.range = 10.0f;
 
             const auto angle = static_cast<float> (i) * 2.39996f;
-            entity->setPosition ({ std::cos (angle) * 1.5f, std::sin (angle) * 1.5f, 0.5f });
-            scene.getRoot()->addChild (entity);
+            entity.getOrAttach<TransformNode>().setPosition ({ std::cos (angle) * 1.5f, std::sin (angle) * 1.5f, 0.5f });
         }
     }
 
@@ -329,9 +328,9 @@ TEST_F (SceneRendererFrameStatsTests, MotionBlurIsListedOnMovingFramesOnly)
     renderAndWait (renderer, scene, 2);
     EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows lightCulling gbuffer ambientOcclusion hiZ screenSpaceReflections lighting indirectDiffuse forward temporalAA depthOfField bloom toneMapping");
 
-    auto* camera = scene.getRoot()->findChild ("camera");
-    ASSERT_NE (camera, nullptr);
-    camera->setPosition (camera->getPosition() + Vector3<float> (0.05f, 0.0f, 0.0f));
+    auto camera = scene.getRoot().findChild ("camera");
+    ASSERT_TRUE (camera.isValid());
+    camera.getOrAttach<TransformNode>().setPosition (camera.getOrAttach<TransformNode>().getPosition() + Vector3<float> (0.05f, 0.0f, 0.0f));
     renderAndWait (renderer, scene, 1);
     EXPECT_EQ (getScopeNames (renderer.getLastFrameStats()), "shadows lightCulling gbuffer ambientOcclusion hiZ screenSpaceReflections lighting indirectDiffuse forward temporalAA depthOfField motionBlur bloom toneMapping");
     expectScopesMeasured (renderer.getLastFrameStats());
@@ -347,7 +346,7 @@ TEST_F (SceneRendererFrameStatsTests, FogIsListedRightAfterTheForwardPass)
     {
         Scene scene;
         buildEveryPassScene (scene);
-        scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
+        scene.getRoot().attach<WorldFogNode> (makeFog (0.08f));
 
         SceneRenderer renderer;
         setEveryPass (renderer, tier);
@@ -388,8 +387,8 @@ TEST_F (SceneRendererFrameStatsTests, FrameStatsBelongToOneFrame)
     // The odd frames of the queue draw 8 more plates and bloom, the even ones neither
     const auto setUp = [&] (bool odd)
     {
-        for (auto* plate : plates)
-            plate->setVisible (odd);
+        for (auto plate : plates)
+            plate.setVisible (odd);
 
         auto settings = renderer.getRenderSettings();
         settings.bloom = odd;
@@ -440,8 +439,8 @@ TEST_F (SceneRendererFrameStatsTests, ResizeDoesNotMixFrames)
     // The odd frames are wider and draw 8 more plates
     const auto setUp = [&] (bool odd)
     {
-        for (auto* plate : plates)
-            plate->setVisible (odd);
+        for (auto plate : plates)
+            plate.setVisible (odd);
 
         return odd ? std::pair { 96, 48 } : std::pair { size, size };
     };
@@ -556,17 +555,17 @@ protected:
     {
         Scene scene;
         RenderSettings renderSettings; // what the renderer timing the scene draws it with
-        std::vector<Entity*> showLights;
+        std::vector<Entity> showLights;
         BoundingBox bounds;
-        Entity* modelRoot = nullptr;
-        Entity* body = nullptr; // the device the camera frames, or the model root without it
-        Entity* cameraEntity = nullptr;
+        Entity modelRoot;
+        Entity body; // the device the camera frames, or the model root without it
+        Entity cameraEntity;
         std::vector<Material::Ptr> materials; // the model's
         Vector3<float> modelPosition;
         float cameraDistance = 0.0f;
         bool moveModel = false;
         float orbitPitch = 0.0f; // the camera orbits at this pitch when not 0
-        Entity* knob = nullptr; // turned a little every frame when set, as by automation
+        Entity knob; // turned a little every frame when set, as by automation
         bool lightingClassification = true; // false shades every pixel of a frame with one LightingPass variant
         Quaternion knobRotation;
         double time = 0.0;
@@ -580,21 +579,20 @@ protected:
             if (model.failed())
                 return false;
 
-            auto root = model.getReference().createEntity();
-            scene.getRoot()->addChild (root);
+            auto root = model.getReference().instantiate (scene);
             materials = model.getReference().getMaterials();
 
-            auto* device = root->findChild ("Cube");
-            auto* framed = device != nullptr ? device : root.get();
-            root->setPosition (-framed->computeWorldBounds().getCenter());
-            bounds = framed->computeWorldBounds();
+            auto device = root.findChild ("Cube");
+            auto framed = device.isValid() ? device : root;
+            root.getOrAttach<TransformNode>().setPosition (-framed.computeWorldBounds().getCenter());
+            bounds = framed.computeWorldBounds();
             body = framed;
-            modelRoot = root.get();
-            modelPosition = root->getPosition();
+            modelRoot = root;
+            modelPosition = root.getOrAttach<TransformNode>().getPosition();
 
             // The top view of the demo, fitted to the aspect ratio
-            auto camera = Entity::Ptr (new Entity ("camera"));
-            auto& cameraNode = camera->attach<CameraNode>();
+            auto camera = scene.createEntity ("camera");
+            auto& cameraNode = camera.attach<CameraNode>();
             const auto radius = jmax (0.001f, bounds.getRadius());
             cameraNode.zNear = radius * 0.02f;
             cameraNode.zFar = radius * 40.0f;
@@ -603,14 +601,13 @@ protected:
             const auto size = bounds.getSize();
             const auto distance = jmax (size.getX() * 0.5f / tanHalfFov, size.getZ() * 0.5f / (tanHalfFov * aspectRatio)) * 1.03f;
             const auto center = bounds.getCenter();
-            aimCamera (*camera, center + Vector3<float> (0.0f, distance, 0.0f), center, { -1.0f, 0.0f, 0.0f });
-            scene.getRoot()->addChild (camera);
-            scene.setActiveCamera (camera.get());
-            cameraEntity = camera.get();
+            aimCamera (camera, center + Vector3<float> (0.0f, distance, 0.0f), center, { -1.0f, 0.0f, 0.0f });
+            scene.setActiveCamera (camera);
+            cameraEntity = camera;
             cameraDistance = distance;
 
-            auto key = Entity::Ptr (new Entity ("keyLight"));
-            auto& keyLight = key->attach<LightNode>();
+            auto key = scene.createEntity ("keyLight");
+            auto& keyLight = key.attach<LightNode>();
             keyLight.castsShadows = true;
             keyLight.intensity = 4.0f;
             keyLight.radius = keyRadius;
@@ -619,19 +616,17 @@ protected:
             const auto azimuth = degreesToRadians (120.0f);
             const auto elevation = degreesToRadians (28.0f);
             const Vector3<float> keyDirection (std::cos (elevation) * std::cos (azimuth), std::sin (elevation), std::cos (elevation) * std::sin (azimuth));
-            aimCamera (*key, keyDirection * 10.0f, {}, { 0.0f, 1.0f, 0.0f });
-            scene.getRoot()->addChild (key);
+            aimCamera (key, keyDirection * 10.0f, {}, { 0.0f, 1.0f, 0.0f });
 
             for (int i = 0; i < numShowLights; ++i)
             {
-                auto entity = Entity::Ptr (new Entity ("showLight"));
-                auto& showLight = entity->attach<LightNode> (LightNode::Type::point);
+                auto entity = scene.createEntity ("showLight");
+                auto& showLight = entity.attach<LightNode> (LightNode::Type::point);
                 const auto color = Color::fromHSV (static_cast<float> (i) / static_cast<float> (numShowLights), 0.85f, 1.0f);
                 showLight.color = { color.getRedFloat(), color.getGreenFloat(), color.getBlueFloat() };
                 showLight.intensity = 0.5f;
                 showLight.range = showRange;
-                showLights.push_back (entity.get());
-                scene.getRoot()->addChild (entity);
+                showLights.push_back (entity);
             }
 
             setEnvironmentMap (scene, new EnvironmentMap ([] (const Vector3<float>& direction)
@@ -640,12 +635,12 @@ protected:
                 return Vector3<float> (0.05f, 0.05f, 0.05f) + Vector3<float> (2.0f, 1.9f, 1.8f) * (up * up * up);
             }));
 
-            scene.getRoot()->getNode<EnvironmentNode>()->intensity = 0.35f;
-            scene.getRoot()->attach<AmbientLightNode> (Colors::black);
-            scene.getRoot()->attach<ExposureNode> (1.1f);
-            scene.getRoot()->attach<ToneMappingNode> (ToneMappingOperator::agx);
-            scene.getRoot()->getNode<EnvironmentNode>()->visible = true;
-            scene.getRoot()->getNode<EnvironmentNode>()->blur = 0.5f;
+            scene.getRoot().get<EnvironmentNode>()->intensity = 0.35f;
+            scene.getRoot().attach<AmbientLightNode> (Colors::black);
+            scene.getRoot().attach<ExposureNode> (1.1f);
+            scene.getRoot().attach<ToneMappingNode> (ToneMappingOperator::agx);
+            scene.getRoot().get<EnvironmentNode>()->visible = true;
+            scene.getRoot().get<EnvironmentNode>()->blur = 0.5f;
             renderSettings.tier = tier;
             return true;
         }
@@ -660,23 +655,23 @@ protected:
         bool matchDemo()
         {
             BoundingBox padBounds;
-            for (const auto& child : body->getChildren())
-                if (child->getName().startsWith ("Pad."))
-                    padBounds.expand (child->computeWorldBounds());
+            for (const auto child : body.getChildren())
+                if (child.getName().startsWith ("Pad."))
+                    padBounds.expand (child.computeWorldBounds());
 
             if (padBounds.isEmpty())
                 return false;
 
-            auto& root = *scene.getRoot();
-            root.findChild ("keyLight")->getNode<LightNode>()->contactShadows = true;
+            auto root = scene.getRoot();
+            root.findChild ("keyLight").get<LightNode>()->contactShadows = true;
 
             const auto padCenter = padBounds.getCenter();
             const auto azimuth = degreesToRadians (-45.0f);
             const auto elevation = degreesToRadians (45.0f);
             const Vector3<float> padDirection (std::cos (elevation) * std::cos (azimuth), std::sin (elevation), std::cos (elevation) * std::sin (azimuth));
 
-            auto padEntity = Entity::Ptr (new Entity ("padLight"));
-            auto& pad = padEntity->attach<LightNode> (LightNode::Type::spot);
+            auto padEntity = root.createChild ("padLight");
+            auto& pad = padEntity.attach<LightNode> (LightNode::Type::spot);
             pad.castsShadows = true;
             pad.intensity = 10.0f;
             pad.radius = 0.03f;
@@ -684,35 +679,32 @@ protected:
             pad.innerConeAngle = 0.3f;
             pad.outerConeAngle = 0.6f;
             pad.color = { 0.9f, 0.94f, 1.0f };
-            aimCamera (*padEntity, padCenter + padDirection * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f });
-            root.addChild (padEntity);
+            aimCamera (padEntity, padCenter + padDirection * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f });
 
             const auto center = bounds.getCenter();
             const auto size = bounds.getSize();
             const auto probePosition = padCenter + Vector3<float> (0.0f, padBounds.getSize().getY() * 0.5f + 0.25f, 0.0f);
-            auto probeEntity = Entity::Ptr (new Entity ("reflectionProbe"));
-            probeEntity->setPosition (probePosition);
-            auto& probe = probeEntity->attach<ReflectionProbeNode>();
+            auto probeEntity = root.createChild ("reflectionProbe");
+            probeEntity.attach<TransformNode> (probePosition);
+            auto& probe = probeEntity.attach<ReflectionProbeNode>();
             probe.shape = ReflectionProbeNode::Shape::box;
             probe.influenceExtents = { std::abs (center.getX() - probePosition.getX()) + size.getX() * 0.5f + 0.3f,
                                        probePosition.getY() - bounds.getMin().getY() + 0.1f,
                                        std::abs (center.getZ() - probePosition.getZ()) + size.getZ() * 0.5f + 0.3f };
             probe.falloff = 0.2f;
             probe.parallaxCorrection = true;
-            root.addChild (probeEntity);
 
             const auto layerSpacing = 0.45f;
             const auto volumeBottom = padBounds.getMax().getY() + 0.05f - layerSpacing * 0.5f;
             const auto volumeTop = volumeBottom + layerSpacing * 2.0f;
-            auto volumeEntity = Entity::Ptr (new Entity ("irradianceVolume"));
-            volumeEntity->setPosition ({ center.getX(), (volumeBottom + volumeTop) * 0.5f, center.getZ() });
-            auto& volume = volumeEntity->attach<IrradianceVolumeNode>();
+            auto volumeEntity = root.createChild ("irradianceVolume");
+            volumeEntity.attach<TransformNode> (Vector3<float> (center.getX(), (volumeBottom + volumeTop) * 0.5f, center.getZ()));
+            auto& volume = volumeEntity.attach<IrradianceVolumeNode>();
             volume.extents = { size.getX() * 0.5f + 0.6f, (volumeTop - volumeBottom) * 0.5f, size.getZ() * 0.5f + 0.6f };
             volume.resolutionX = 4;
             volume.resolutionY = 2;
             volume.resolutionZ = 4;
             volume.falloff = 0.15f;
-            root.addChild (volumeEntity);
 
             for (const auto& material : materials)
             {
@@ -740,7 +732,7 @@ protected:
                 }
             }
 
-            if (auto* meshNode = body->getNode<MeshNode>(); meshNode != nullptr && meshNode->mesh != nullptr)
+            if (auto* meshNode = body.get<MeshNode>(); meshNode != nullptr && meshNode->mesh != nullptr)
             {
                 auto withoutLogo = Mesh::Ptr (new Mesh (meshNode->mesh->getName()));
                 for (const auto& primitive : meshNode->mesh->getPrimitives())
@@ -761,11 +753,11 @@ protected:
         {
             time += 1.0 / 120.0;
 
-            if (knob != nullptr)
-                knob->setRotation (knobRotation * Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.05f * static_cast<float> (++frame % 32)));
+            if (knob.isValid())
+                knob.getOrAttach<TransformNode>().setRotation (knobRotation * Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.05f * static_cast<float> (++frame % 32)));
 
             if (moveModel)
-                modelRoot->setPosition (modelPosition + Vector3<float> (bounds.getSize().getX() * 0.01f * static_cast<float> (++frame % 2), 0.0f, 0.0f));
+                modelRoot.getOrAttach<TransformNode>().setPosition (modelPosition + Vector3<float> (bounds.getSize().getX() * 0.01f * static_cast<float> (++frame % 2), 0.0f, 0.0f));
 
             const auto center = bounds.getCenter();
 
@@ -774,7 +766,7 @@ protected:
             {
                 const auto yaw = 0.008f * static_cast<float> (++frame);
                 const Vector3<float> offset (std::cos (yaw) * std::cos (orbitPitch), std::sin (orbitPitch), -std::sin (yaw) * std::cos (orbitPitch));
-                aimCamera (*cameraEntity, center + offset * cameraDistance, center);
+                aimCamera (cameraEntity, center + offset * cameraDistance, center);
             }
 
             const auto halfSize = bounds.getSize() * 0.5f;
@@ -787,9 +779,9 @@ protected:
                 const auto angle = static_cast<float> (i) * 2.39996f + speed * static_cast<float> (time);
                 const auto height = halfSize.getY() * (0.6f + 0.25f * ring);
 
-                showLights[i]->setPosition ({ center.getX() + std::cos (angle) * halfSize.getX() * scale,
-                                              center.getY() + height,
-                                              center.getZ() + std::sin (angle) * halfSize.getZ() * scale });
+                showLights[i].getOrAttach<TransformNode>().setPosition ({ center.getX() + std::cos (angle) * halfSize.getX() * scale,
+                                                           center.getY() + height,
+                                                           center.getZ() + std::sin (angle) * halfSize.getZ() * scale });
             }
         }
     };
@@ -1033,7 +1025,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
 
                 show.moveModel = config.moveModel;
                 show.orbitPitch = config.orbitPitch;
-                show.scene.getRoot()->findChild ("keyLight")->getNode<LightNode>()->contactShadows = config.keyContactShadows;
+                show.scene.getRoot().findChild ("keyLight").get<LightNode>()->contactShadows = config.keyContactShadows;
 
                 if (! config.softShadows)
                 {
@@ -1059,36 +1051,33 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_LightShowFrameTimes)
                 // Baked by the warm-up frames: the probes stay still
                 if (config.probes)
                 {
-                    const auto bounds = show.modelRoot->computeWorldBounds();
+                    const auto bounds = show.modelRoot.computeWorldBounds();
                     const auto center = bounds.getCenter();
                     const auto size = bounds.getSize();
 
-                    auto room = Entity::Ptr (new Entity ("roomProbe"));
-                    auto& box = room->attach<ReflectionProbeNode>();
+                    auto room = show.scene.createEntity ("roomProbe");
+                    auto& box = room.attach<ReflectionProbeNode>();
                     box.shape = ReflectionProbeNode::Shape::box;
                     box.influenceExtents = size * 0.75f;
-                    room->setPosition (center);
-                    show.scene.getRoot()->addChild (room);
+                    room.getOrAttach<TransformNode>().setPosition (center);
 
-                    auto local = Entity::Ptr (new Entity ("localProbe"));
-                    local->attach<ReflectionProbeNode>().influenceRadius = size.length() * 0.25f;
-                    local->setPosition (center + size * 0.2f);
-                    show.scene.getRoot()->addChild (local);
+                    auto local = show.scene.createEntity ("localProbe");
+                    local.attach<ReflectionProbeNode>().influenceRadius = size.length() * 0.25f;
+                    local.getOrAttach<TransformNode>().setPosition (center + size * 0.2f);
                 }
 
                 // Baked by the warm-up frames too: the volume stays still
                 if (config.volume)
                 {
-                    const auto bounds = show.modelRoot->computeWorldBounds();
+                    const auto bounds = show.modelRoot.computeWorldBounds();
 
-                    auto entity = Entity::Ptr (new Entity ("volume"));
-                    auto& volume = entity->attach<IrradianceVolumeNode>();
+                    auto entity = show.scene.createEntity ("volume");
+                    auto& volume = entity.attach<IrradianceVolumeNode>();
                     volume.extents = bounds.getSize() * 0.75f;
                     volume.resolutionX = 6;
                     volume.resolutionY = 2;
                     volume.resolutionZ = 4;
-                    entity->setPosition (bounds.getCenter());
-                    show.scene.getRoot()->addChild (entity);
+                    entity.getOrAttach<TransformNode>().setPosition (bounds.getCenter());
                 }
 
                 // Shared by every primitive drawn with them, so the knobs and the pads change everywhere
@@ -1460,7 +1449,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_WorldFogFrameTimes)
                     fog.enabled = true;
                     fog.density = 0.08f;
                     fog.heightFalloff = 0.5f;
-                    show.scene.getRoot()->attach<WorldFogNode> (fog);
+                    show.scene.getRoot().attach<WorldFogNode> (fog);
                 }
 
                 SceneRenderer renderer;
@@ -1599,27 +1588,27 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_KnobAutomationFrameTimes)
                 show.renderSettings = settings;
             }
 
-            auto& root = *show.scene.getRoot();
-            auto& key = *root.findChild ("keyLight")->getNode<LightNode>();
+            auto root = show.scene.getRoot();
+            auto& key = *root.findChild ("keyLight").get<LightNode>();
             key.contactShadows = true;
             key.castsShadows = keyShadows;
 
             // The demo's pad spot, from the front right
             BoundingBox padBounds;
-            std::vector<Entity*> knobs;
-            const std::function<void (Entity&)> collect = [&] (Entity& entity)
+            std::vector<Entity> knobs;
+            const std::function<void (Entity)> collect = [&] (Entity entity)
             {
-                for (const auto& child : entity.getChildren())
+                for (const auto child : entity.getChildren())
                 {
-                    if (child->getName().startsWith ("Pad."))
-                        padBounds.expand (child->computeWorldBounds());
-                    else if (child->getName().startsWith ("Knob"))
-                        knobs.push_back (child.get());
+                    if (child.getName().startsWith ("Pad."))
+                        padBounds.expand (child.computeWorldBounds());
+                    else if (child.getName().startsWith ("Knob"))
+                        knobs.push_back (child);
 
-                    collect (*child);
+                    collect (child);
                 }
             };
-            collect (*show.modelRoot);
+            collect (show.modelRoot);
             ASSERT_FALSE (padBounds.isEmpty());
             ASSERT_FALSE (knobs.empty());
 
@@ -1631,57 +1620,55 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_KnobAutomationFrameTimes)
                 return Vector3<float> (std::cos (e) * std::cos (a), std::sin (e), std::cos (e) * std::sin (a));
             };
 
-            auto padEntity = Entity::Ptr (new Entity ("padLight"));
-            auto& pad = padEntity->attach<LightNode> (LightNode::Type::spot);
+            auto padEntity = root.createChild ("padLight");
+            auto& pad = padEntity.attach<LightNode> (LightNode::Type::spot);
             pad.castsShadows = true;
             pad.intensity = 10.0f;
             pad.radius = 0.03f;
             pad.range = 4.0f;
             pad.innerConeAngle = 0.3f;
             pad.outerConeAngle = 0.6f;
-            aimCamera (*padEntity, padCenter + fromDegrees (-45.0f, 45.0f) * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f });
-            root.addChild (padEntity);
+            aimCamera (padEntity, padCenter + fromDegrees (-45.0f, 45.0f) * 1.6f, padCenter, { 0.0f, 1.0f, 0.0f });
 
             // Two small shadowed point lights over the pads
             const auto padSize = padBounds.getSize();
             for (const auto side : { -0.25f, 0.25f })
             {
-                auto entity = Entity::Ptr (new Entity ("padPoint"));
-                auto& point = entity->attach<LightNode> (LightNode::Type::point);
+                auto entity = root.createChild ("padPoint");
+                auto& point = entity.attach<LightNode> (LightNode::Type::point);
                 point.castsShadows = true;
                 point.intensity = 0.5f;
                 point.range = jmax (padSize.getX(), padSize.getZ()) * 0.3f;
-                entity->setPosition (padCenter + Vector3<float> (padSize.getX() * side, padSize.getY() + point.range * 0.5f, 0.0f));
-                root.addChild (entity);
+                entity.getOrAttach<TransformNode>().setPosition (padCenter + Vector3<float> (padSize.getX() * side, padSize.getY() + point.range * 0.5f, 0.0f));
             }
 
             // The knob farthest from the pads, which the spot light does not reach, or the nearest one
-            const auto byDistance = [&] (Entity* a, Entity* b)
+            const auto byDistance = [&] (Entity a, Entity b)
             {
-                return (a->computeWorldBounds().getCenter() - padCenter).length() < (b->computeWorldBounds().getCenter() - padCenter).length();
+                return (a.computeWorldBounds().getCenter() - padCenter).length() < (b.computeWorldBounds().getCenter() - padCenter).length();
             };
-            auto* knob = nearestKnob ? *std::min_element (knobs.begin(), knobs.end(), byDistance) : *std::max_element (knobs.begin(), knobs.end(), byDistance);
+            auto knob = nearestKnob ? *std::min_element (knobs.begin(), knobs.end(), byDistance) : *std::max_element (knobs.begin(), knobs.end(), byDistance);
 
-            const auto knobBounds = knob->computeWorldBounds();
-            const auto padDirection = (padCenter - padEntity->getPosition()).normalized();
+            const auto knobBounds = knob.computeWorldBounds();
+            const auto padDirection = (padCenter - padEntity.getOrAttach<TransformNode>().getPosition()).normalized();
             // The knob's bounding sphere against the spot's cone, widened by a margin over the guard band of its view
             const auto reachesSpot = [&]
             {
-                const auto toKnob = knobBounds.getCenter() - padEntity->getPosition();
+                const auto toKnob = knobBounds.getCenter() - padEntity.getOrAttach<TransformNode>().getPosition();
                 const auto distance = toKnob.length();
                 const auto angle = std::acos (jlimit (-1.0f, 1.0f, toKnob.dotProduct (padDirection) / distance));
                 return angle - std::asin (jmin (1.0f, knobBounds.getRadius() / distance)) <= pad.outerConeAngle + 0.05f;
             };
 
             auto reachesPoint = false;
-            for (const auto& child : root.getChildren())
-                if (child->getName() == "padPoint")
-                    reachesPoint = reachesPoint || GpuSceneData::lightReachesBox (knobBounds, child->getPosition(), {}, child->getNode<LightNode>()->range, false, 0.0f);
+            for (auto child : root.getChildren())
+                if (child.getName() == "padPoint")
+                    reachesPoint = reachesPoint || GpuSceneData::lightReachesBox (knobBounds, child.getOrAttach<TransformNode>().getPosition(), {}, child.get<LightNode>()->range, false, 0.0f);
 
             EXPECT_TRUE (nearestKnob || ! reachesSpot());
             EXPECT_TRUE (nearestKnob || ! reachesPoint);
             show.knob = knob;
-            show.knobRotation = knob->getRotation();
+            show.knobRotation = knob.getOrAttach<TransformNode>().getRotation();
 
             auto shadowRedraws = 0, casterDraws = 0;
             const auto milliseconds = timeFrames (show, 2560, 1600, shadowRedraws, &casterDraws);
@@ -1690,7 +1677,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_KnobAutomationFrameTimes)
             const auto label = String (tier == RenderSettings::TierPreference::full ? "full" : "raster")
                              + (screenSpaceReflections ? "" : ", screen-space reflections off")
                              + (keyShadows ? ", key shadowed" : ", key unshadowed")
-                             + ", knob " + knob->getName() + (reachesSpot() || reachesPoint ? " inside a local light" : " outside every local light");
+                             + ", knob " + knob.getName() + (reachesSpot() || reachesPoint ? " inside a local light" : " outside every local light");
             RecordProperty (label.toStdString(), String (milliseconds, 3).toStdString());
             std::cout << label.toStdString() << ": " << String (milliseconds, 3).toStdString() << " ms, "
                       << shadowRedraws << " of 120 frames drew shadow maps, "
@@ -1731,7 +1718,7 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_FeatureCostFrameTimes)
     const auto removeProbes = [] (LightShow& show)
     {
         for (const auto* name : { "reflectionProbe", "irradianceVolume" })
-            show.scene.getRoot()->findChild (name)->removeFromParent();
+            show.scene.getRoot().findChild (name).destroy();
     };
 
     // Only a clearcoated box a hundredth of the device's size on its top: without classification the
@@ -1743,10 +1730,9 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_FeatureCostFrameTimes)
 
         auto material = makeWallMaterial();
         material->clearcoatFactor = 1.0f;
-        auto speck = Entity::Ptr (new Entity ("speck"));
-        speck->attach<MeshNode> (makeBox (show.bounds.getRadius() * 0.01f, material));
-        speck->setPosition (show.bounds.getCenter() + Vector3<float> (0.0f, show.bounds.getSize().getY() * 0.5f, 0.0f));
-        show.scene.getRoot()->addChild (speck);
+        auto speck = show.scene.createEntity ("speck");
+        speck.attach<MeshNode> (makeBox (show.bounds.getRadius() * 0.01f, material));
+        speck.getOrAttach<TransformNode>().setPosition (show.bounds.getCenter() + Vector3<float> (0.0f, show.bounds.getSize().getY() * 0.5f, 0.0f));
     };
 
     const struct
@@ -1764,13 +1750,13 @@ TEST_F (SceneRendererBenchmarkTests, DISABLED_FeatureCostFrameTimes)
         { "no light radius", 64, [] (LightShow& show)
           {
               for (const auto* name : { "keyLight", "padLight" })
-                  show.scene.getRoot()->findChild (name)->getNode<LightNode>()->radius = 0.0f;
+                  show.scene.getRoot().findChild (name).get<LightNode>()->radius = 0.0f;
           } },
         { "soft shadows off, no light radius", 64, [&] (LightShow& show)
           {
               setSettings (show, [] (RenderSettings& s) { s.softShadows = false; });
               for (const auto* name : { "keyLight", "padLight" })
-                  show.scene.getRoot()->findChild (name)->getNode<LightNode>()->radius = 0.0f;
+                  show.scene.getRoot().findChild (name).get<LightNode>()->radius = 0.0f;
           } },
         { "no layers", 64, removeLayers },
         { "no probes or volume", 64, removeProbes },

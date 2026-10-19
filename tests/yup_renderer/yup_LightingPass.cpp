@@ -313,3 +313,311 @@ TEST_F (LightingPassTests, ClassificationReadsTheLightingBindings)
             EXPECT_TRUE (buffer.readOnly) << variant.name << ": " << buffer.name;
     }
 }
+
+/** LightingPass recording on a mocked device: the variant each frame picks, the fallbacks and the
+    classification. The shaded pixels are tested on Metal, through the scene renderer.
+*/
+class LightingPassMockTests : public RendererMockTests
+{
+protected:
+    void SetUp() override
+    {
+        RendererMockTests::SetUp();
+        resources = std::make_unique<FrameResources> (device);
+        resources->beginFrame (64, 64);
+
+        sceneColor = makeTarget (64, 64);
+        gbuffer.albedoOcclusion = makeTarget (64, 64, GpuTextureFormat::rgba8unorm);
+        gbuffer.normalRoughness = makeTarget (64, 64);
+        gbuffer.emissionMaterial = makeTarget (64, 64);
+        gbuffer.velocity = makeTarget (64, 64, GpuTextureFormat::rg16float);
+        gbuffer.depth = makeTarget (64, 64, GpuTextureFormat::depth32float);
+
+        ASSERT_NE (resources->getSamplers(), nullptr);
+        lighting.samplers = *resources->getSamplers();
+        lighting.lookupTables = makeTarget (4, 4, GpuTextureFormat::rgba8unorm);
+        lighting.shadowCascades = makeTarget (16, 16, GpuTextureFormat::depth32float);
+        lighting.shadowAtlas = makeTarget (16, 16, GpuTextureFormat::depth32float);
+        lighting.lights = makeStorage();
+        lighting.clusterLights = makeStorage();
+        lighting.materials = makeStorage();
+        lighting.reflectionProbeBuffer = makeStorage();
+        lighting.irradianceVolumeBuffer = makeStorage();
+    }
+
+    bool renderFrame (LightingPass& pass)
+    {
+        auto frame = GpuFrame::begin (device);
+        const auto rendered = pass.render (device, frame, view, gbuffer, lighting, sceneColor);
+        frame.submit();
+        return rendered;
+    }
+
+    void setProbes (bool probes) { lighting.block.probeInfo[1] = probes ? 1.0f : 0.0f; }
+
+    std::vector<float> lastViewportDepths() const { return passes.empty() ? std::vector<float> {} : passes.back().viewportDepths; }
+
+    ViewData view;
+    std::unique_ptr<FrameResources> resources;
+    GBufferPass::Targets gbuffer;
+    LightingInputs lighting;
+    GpuTexture::Ptr sceneColor;
+};
+
+TEST_F (LightingPassMockTests, PreparesEveryVariantOnce)
+{
+    LightingPass pass;
+
+    for (const auto layers : { false, true })
+        for (const auto localIndirect : { false, true })
+            for (const auto shadowFilters : { false, true })
+                for (const auto areaLights : { false, true })
+                    EXPECT_TRUE (pass.prepare (device, areaLights, shadowFilters, localIndirect, layers).wasOk());
+
+    // The layers variants are local indirect variants already
+    EXPECT_EQ (pipelinesMade, 12);
+
+    EXPECT_TRUE (pass.prepare (device, true, true, true, true).wasOk());
+    EXPECT_EQ (pipelinesMade, 12);
+}
+
+TEST_F (LightingPassMockTests, RemembersAMissingStandIn)
+{
+    LightingPass pass;
+    failTextures = true;
+
+    auto result = pass.prepare (device, false, false);
+    ASSERT_TRUE (result.failed());
+    EXPECT_EQ (result.getErrorMessage(), "Unable to create the lighting pass textures");
+    EXPECT_EQ (pass.getReflectionsStandIn(), nullptr);
+
+    failTextures = false;
+    EXPECT_TRUE (pass.prepare (device, false, false).failed());
+    EXPECT_EQ (pipelinesMade, 0);
+}
+
+TEST_F (LightingPassMockTests, PrepareCreatesTheReflectionsStandIn)
+{
+    LightingPass pass;
+    ASSERT_TRUE (pass.prepare (device, false, false).wasOk());
+    EXPECT_NE (pass.getReflectionsStandIn(), nullptr);
+}
+
+TEST_F (LightingPassMockTests, RejectsAMissingInput)
+{
+    LightingPass pass;
+
+    for (auto missing : { &GBufferPass::Targets::albedoOcclusion, &GBufferPass::Targets::normalRoughness,
+                          &GBufferPass::Targets::emissionMaterial, &GBufferPass::Targets::depth })
+    {
+        const auto kept = std::exchange (gbuffer.*missing, nullptr);
+        EXPECT_FALSE (renderFrame (pass));
+        gbuffer.*missing = kept;
+    }
+
+    for (auto missing : { &LightingInputs::lookupTables, &LightingInputs::shadowCascades, &LightingInputs::shadowAtlas })
+    {
+        const auto kept = std::exchange (lighting.*missing, nullptr);
+        EXPECT_FALSE (renderFrame (pass));
+        lighting.*missing = kept;
+    }
+
+    for (auto missing : { &LightingInputs::lights, &LightingInputs::clusterLights, &LightingInputs::materials })
+    {
+        const auto kept = std::exchange (lighting.*missing, nullptr);
+        EXPECT_FALSE (renderFrame (pass));
+        lighting.*missing = kept;
+    }
+
+    const auto linearClamp = std::exchange (lighting.samplers.linearClamp, nullptr);
+    EXPECT_FALSE (renderFrame (pass));
+    lighting.samplers.linearClamp = linearClamp;
+
+    const auto kept = std::exchange (sceneColor, nullptr);
+    EXPECT_FALSE (renderFrame (pass));
+    sceneColor = kept;
+
+    // The probe buffers are needed by the local indirect variant only
+    lighting.reflectionProbeBuffer = nullptr;
+    EXPECT_TRUE (renderFrame (pass));
+
+    setProbes (true);
+    EXPECT_FALSE (renderFrame (pass));
+    EXPECT_EQ (passes.size(), 1u);
+}
+
+TEST_F (LightingPassMockTests, ShadesEveryPixelWithOneVariantWithoutProbes)
+{
+    LightingPass pass;
+    lighting.shadowFilters = true;
+    lighting.areaLights = true;
+
+    ASSERT_TRUE (renderFrame (pass));
+    EXPECT_FALSE (pass.usesLocalIndirect());
+    EXPECT_FALSE (pass.usesMaterialLayers());
+    EXPECT_FALSE (pass.usesClassification());
+    EXPECT_FALSE (pass.holdsClassDepth());
+
+    ASSERT_EQ (passes.size(), 1u);
+    EXPECT_EQ (passes[0].colorCount, 1u);
+    EXPECT_FALSE (passes[0].hasDepth);
+    EXPECT_EQ (passes[0].draws, 1);
+}
+
+TEST_F (LightingPassMockTests, ClassifiesTheProbePixels)
+{
+    LightingPass pass;
+    setProbes (true);
+
+    ASSERT_TRUE (renderFrame (pass));
+    EXPECT_TRUE (pass.usesLocalIndirect());
+    EXPECT_TRUE (pass.usesClassification());
+    EXPECT_TRUE (pass.holdsClassDepth());
+
+    // The classification over the whole depth range, then the plain and the local indirect pixels
+    ASSERT_EQ (passes.size(), 1u);
+    EXPECT_TRUE (passes[0].hasDepth);
+    EXPECT_EQ (passes[0].draws, 3);
+    EXPECT_EQ (passes[0].countDistinctPipelines(), 3u);
+    EXPECT_EQ (lastViewportDepths(), (std::vector<float> { 0.0f, 0.25f, 0.5f }));
+}
+
+TEST_F (LightingPassMockTests, ClassifiesTheLayeredPixels)
+{
+    LightingPass pass;
+    lighting.materialLayers = true;
+
+    ASSERT_TRUE (renderFrame (pass));
+    EXPECT_TRUE (pass.usesLocalIndirect());
+    EXPECT_TRUE (pass.usesMaterialLayers());
+    EXPECT_TRUE (pass.usesClassification());
+
+    ASSERT_EQ (passes.size(), 1u);
+    EXPECT_EQ (passes[0].draws, 3);
+    EXPECT_EQ (lastViewportDepths(), (std::vector<float> { 0.0f, 0.25f, 0.75f }));
+}
+
+TEST_F (LightingPassMockTests, ClassifiesTheProbeAndTheLayeredPixels)
+{
+    LightingPass pass;
+    setProbes (true);
+    lighting.materialLayers = true;
+
+    ASSERT_TRUE (renderFrame (pass));
+
+    ASSERT_EQ (passes.size(), 1u);
+    EXPECT_EQ (passes[0].draws, 4);
+    EXPECT_EQ (passes[0].countDistinctPipelines(), 4u);
+    EXPECT_EQ (lastViewportDepths(), (std::vector<float> { 0.0f, 0.25f, 0.5f, 0.75f }));
+}
+
+TEST_F (LightingPassMockTests, ShadesWithOneVariantWithoutTheClassification)
+{
+    for (const auto failing : { false, true })
+    {
+        passes.clear();
+
+        LightingPass pass;
+        if (failing)
+            pass.failClassificationForTesting();
+        else
+            pass.disableClassificationForTesting (true);
+
+        setProbes (true);
+
+        ASSERT_TRUE (renderFrame (pass)) << failing;
+        EXPECT_TRUE (pass.usesLocalIndirect());
+        EXPECT_FALSE (pass.usesClassification());
+        EXPECT_FALSE (pass.holdsClassDepth());
+
+        ASSERT_EQ (passes.size(), 1u);
+        EXPECT_FALSE (passes[0].hasDepth);
+        EXPECT_EQ (passes[0].draws, 1);
+    }
+}
+
+TEST_F (LightingPassMockTests, FallsBackWithoutTheLayersVariant)
+{
+    LightingPass pass;
+    pass.failMaterialLayersForTesting();
+    setProbes (true);
+    lighting.materialLayers = true;
+
+    ASSERT_TRUE (renderFrame (pass));
+    EXPECT_TRUE (pass.usesLocalIndirect());
+    EXPECT_FALSE (pass.usesMaterialLayers());
+
+    // The layered pixels still have their class, shaded by the local indirect variant
+    ASSERT_EQ (passes.size(), 1u);
+    EXPECT_EQ (passes[0].draws, 4);
+    EXPECT_EQ (passes[0].countDistinctPipelines(), 3u);
+}
+
+TEST_F (LightingPassMockTests, FallsBackWithoutTheLocalIndirectVariant)
+{
+    LightingPass pass;
+    pass.failLocalIndirectForTesting();
+    setProbes (true);
+    lighting.materialLayers = true;
+
+    ASSERT_TRUE (renderFrame (pass));
+    EXPECT_FALSE (pass.usesLocalIndirect());
+    EXPECT_FALSE (pass.usesMaterialLayers());
+    EXPECT_FALSE (pass.usesClassification());
+
+    ASSERT_EQ (passes.size(), 1u);
+    EXPECT_EQ (passes[0].draws, 1);
+}
+
+TEST_F (LightingPassMockTests, FailsWhenNoVariantCompiles)
+{
+    LightingPass pass;
+    failPipelines = true;
+    lighting.shadowFilters = true;
+
+    EXPECT_FALSE (renderFrame (pass));
+    EXPECT_TRUE (passes.empty());
+}
+
+TEST_F (LightingPassMockTests, TrimsTheClassDepthOnceUnused)
+{
+    LightingPass pass;
+    setProbes (true);
+
+    ASSERT_TRUE (renderFrame (pass));
+    pass.trimUnusedTargets();
+    EXPECT_TRUE (pass.holdsClassDepth());
+
+    // A frame without probes leaves it unused
+    setProbes (false);
+    ASSERT_TRUE (renderFrame (pass));
+    pass.trimUnusedTargets();
+    EXPECT_FALSE (pass.holdsClassDepth());
+
+    setProbes (true);
+    ASSERT_TRUE (renderFrame (pass));
+    EXPECT_TRUE (pass.holdsClassDepth());
+
+    pass.releaseTargets();
+    EXPECT_FALSE (pass.holdsClassDepth());
+
+    ASSERT_TRUE (renderFrame (pass));
+    EXPECT_TRUE (pass.holdsClassDepth());
+}
+
+TEST_F (LightingPassMockTests, RecreatesTheClassDepthAtANewSize)
+{
+    LightingPass pass;
+    setProbes (true);
+    ASSERT_TRUE (renderFrame (pass));
+
+    sceneColor = makeTarget (32, 32);
+    ASSERT_TRUE (renderFrame (pass));
+    EXPECT_TRUE (pass.holdsClassDepth());
+
+    // The class depth of the new size cannot be created
+    sceneColor = makeTarget (48, 48);
+    failTextures = true;
+    EXPECT_FALSE (renderFrame (pass));
+    EXPECT_FALSE (pass.holdsClassDepth());
+}

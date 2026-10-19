@@ -253,8 +253,10 @@ flowchart LR
 
 ### yup_3d
 
-Entity trees with attached parts (meshes, cameras, lights, material overrides),
-resources and glTF 2.0 loading through `tinygltf`. glTF textures are decoded
+Scenes as a small entity-component system: entity trees with attached nodes
+(transforms, meshes, cameras, lights, material overrides), views, collections,
+signals and ordered systems, plus resources and glTF 2.0 loading through
+`tinygltf`. glTF textures are decoded
 with the image formats `yup_graphics` has: link `libpng`, `libjpeg` and/or
 `libwebp` for the textures your assets use.
 

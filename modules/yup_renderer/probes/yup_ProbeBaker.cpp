@@ -581,7 +581,7 @@ ProbeBaker::CaptureResult ProbeBaker::capture (GpuFrame& frame, ForwardPass& for
 
     // One list for every capture of the call: per-draw light selection only depends on the bounds
     const auto& scene = inputs.scene;
-    captureList->build (*scene.getRoot(), Matrix4::translation (-firstPosition), { inputs.sceneSettings.useDefaultLight, true });
+    captureList->build (scene.getRoot(), Matrix4::translation (-firstPosition), { inputs.sceneSettings.useDefaultLight, true });
 
     // The raster tier with hard shadows: no temporal noise, no contact shadows, no ambient occlusion
     auto settings = inputs.settings;

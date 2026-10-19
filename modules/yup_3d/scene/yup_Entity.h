@@ -22,137 +22,175 @@
 namespace yup
 {
 
+class Scene;
+class Node;
+class EntityStore;
+
 //==============================================================================
-/** An element of a 3D scene tree.
+/** An element of a 3D scene: a lightweight handle to an entity owned by a Scene.
 
     An entity has a name, a local transform (translation, rotation and scale), a visibility
-    flag, child entities and attached parts. The parts give it its behavior: attach a MeshNode
+    flag, child entities and attached nodes. The nodes give it its behavior: attach a MeshNode
     to draw geometry, a CameraNode or a LightNode to place a camera or a light, a MaterialNode
     to override the materials of the whole subtree, or any custom Node subclass. An entity
-    without parts is a plain group.
-
-    Parts are addressed by their exact type and a slot, so an entity can hold several parts of
-    the same type:
+    without nodes is a plain group.
 
     @code
-    auto entity = yup::Entity::Ptr (new yup::Entity ("body"));
-    entity->attach<yup::MeshNode> (bodyMesh);       // slot 0
-    entity->attach<yup::MeshNode, 1> (detailMesh);  // slot 1
+    yup::Entity body = scene->createEntity ("body");
+    body.attach<yup::MeshNode> (bodyMesh);
 
-    if (auto* mesh = entity->getNode<yup::MeshNode, 1>())
+    yup::Entity detail = body.createChild ("detail");
+    detail.attach<yup::MeshNode> (detailMesh);
+
+    if (auto* mesh = body.get<yup::MeshNode>())
         mesh->mesh = otherMesh;
     @endcode
 
-    Entities are reference counted: children are held by their parent, and a subtree stays
-    alive as long as anything references its root. Adding an entity that already has a parent
-    moves it. Entities can be built anywhere, also before they are part of a Scene.
+    Entities only exist inside a Scene, which owns them and their nodes. An Entity value is
+    cheap to copy and does not keep anything alive: once the entity is destroyed, every copy
+    becomes invalid (isValid() returns false), even after the scene reuses its storage for a
+    new entity. Using an invalid entity asserts, getters then return defaults and setters do
+    nothing. attach() requires a valid entity.
+
+    An entity holds at most one node of each type: use child entities for several meshes or
+    lights. Node addresses never change while attached, so references returned by attach()
+    and get() stay valid until the node is detached or its entity destroyed; NodeHandle keeps
+    a checked reference for longer.
 
     Like Component, entities are meant to be used from the message thread only.
 
-    @see Node, Scene, GltfModel
+    @see Node, NodeHandle, Scene, GltfModel
 */
-class YUP_API Entity : public ReferenceCountedObject
+class YUP_API Entity
 {
 public:
     //==============================================================================
-    using Ptr = ReferenceCountedObjectPtr<Entity>;
+    /** Creates an invalid entity. */
+    Entity() noexcept = default;
+
+    /** Creates a handle to an entity of a scene. Use Scene::createEntity() to create entities. */
+    Entity (Scene* owner, EntityHandle entityHandle) noexcept;
 
     //==============================================================================
-    /** Creates an entity.
+    /** Returns the scene the entity belongs to, or nullptr for a default constructed entity. */
+    Scene* getScene() const noexcept { return scene; }
 
-        @param entityName The name of the entity.
-    */
-    explicit Entity (const String& entityName = {});
+    /** Returns the versioned identifier of the entity inside its scene. */
+    EntityHandle getHandle() const noexcept { return handle; }
 
-    /** Destructor. The children lose their parent, the parts are destroyed. */
-    ~Entity() override;
+    /** Returns true if the entity exists: it was created and has not been destroyed. */
+    bool isValid() const noexcept;
+
+    /** Returns true if the entity exists. */
+    explicit operator bool() const noexcept { return isValid(); }
+
+    bool operator== (const Entity& other) const noexcept { return scene == other.scene && handle == other.handle; }
+    bool operator!= (const Entity& other) const noexcept { return ! operator== (other); }
 
     //==============================================================================
     /** Returns the name of the entity. */
-    const String& getName() const noexcept { return name; }
+    String getName() const;
 
     /** Changes the name of the entity. */
-    void setName (const String& newName) { name = newName; }
+    void setName (const String& newName);
+
+    /** Returns the universally unique identifier of the entity, or a null Uuid when the entity
+        is not valid.
+
+        The identifier is created on the first call, so entities that are never asked for one
+        cost nothing. It stays the same until the entity is destroyed, and instantiating a
+        Prefab gives every new entity its own. Use Scene::findEntity() to look an entity up.
+
+        @see setUuid, Scene::findEntity, Node::getUuid
+    */
+    Uuid getUuid() const;
+
+    /** Replaces the identifier of the entity, for example to restore a saved scene.
+
+        @return False if the identifier is null or already used by another entity of the scene.
+    */
+    bool setUuid (const Uuid& newUuid);
 
     /** Returns false if the entity, and so its whole subtree, is hidden. */
-    bool isVisible() const noexcept { return visible; }
+    bool isVisible() const noexcept;
 
     /** Shows or hides the entity and its whole subtree. Hidden entities are neither drawn nor updated. */
-    void setVisible (bool shouldBeVisible) noexcept { visible = shouldBeVisible; }
+    void setVisible (bool shouldBeVisible) noexcept;
+
+    /** Returns true if the entity and all its parents are visible, up to the root of the scene.
+
+        Entities that were removed from the tree are not active: they are neither drawn nor updated.
+    */
+    bool isActive() const noexcept;
 
     //==============================================================================
-    /** Adds a child entity.
+    /** Creates a new entity as the last child of this one.
 
-        If the child already has a parent it is moved here. Adding an entity under itself or
-        under one of its own descendants would create a cycle: it is rejected.
-
-        @param child  The entity to add.
-        @param index  The position among the children, or -1 to add it last.
+        @param childName The name of the new entity.
     */
-    void addChild (Ptr child, int index = -1);
+    Entity createChild (const String& childName = {});
 
-    /** Removes a child entity.
+    /** Moves an entity of the same scene under this one.
 
-        @param child The child to remove.
+        If the child already has a parent it is moved here, even when that parent is this
+        entity. Adding an entity under itself or under one of its own descendants would create
+        a cycle, and adding the root of the scene is not allowed: both are rejected.
+
+        @param child  The entity to move.
+        @param index  The position among the children, or -1 to add it last.
+
+        @return True if the child has been moved.
+    */
+    bool addChild (Entity child, int index = -1);
+
+    /** Removes a child, which stays alive outside of the tree until it is destroyed or added back.
 
         @return True if it was a child of this entity and has been removed.
     */
-    bool removeChild (Entity* child);
+    bool removeChild (Entity child);
 
     /** Removes this entity from its parent, if it has one. */
     void removeFromParent();
 
-    /** Returns the parent entity, or nullptr for a root. */
-    Entity* getParent() const noexcept { return parent; }
+    /** Returns the parent entity, or an invalid entity for the root and for entities outside of the tree. */
+    Entity getParent() const noexcept;
 
     /** Returns the number of children. */
-    int getNumChildren() const noexcept { return static_cast<int> (children.size()); }
+    int getNumChildren() const noexcept;
 
-    /** Returns a child, or nullptr if the index is out of range. */
-    Entity* getChild (int index) const noexcept;
+    /** Returns a child, or an invalid entity if the index is out of range. */
+    Entity getChild (int index) const noexcept;
 
-    /** Returns every child, in order. */
-    Span<const Ptr> getChildren() const noexcept { return children; }
+    //==============================================================================
+    class Children;
 
-    /** Returns the first child with a name, or nullptr.
+    /** Returns the children, in order.
+
+        The range counts the children when it is created: children removed while iterating
+        show up as invalid entities, children added while iterating are not visited.
+    */
+    Children getChildren() const noexcept;
+
+    /** Returns the first child with a name, or an invalid entity.
 
         @param childName  The name to look for.
         @param recursive  True to search the whole subtree depth-first, false for direct children only.
     */
-    Entity* findChild (StringRef childName, bool recursive = true) const;
+    Entity findChild (StringRef childName, bool recursive = true) const;
 
     /** Returns true if this entity is a parent, grandparent, etc. of another entity. */
-    bool isAncestorOf (const Entity* other) const noexcept;
+    bool isAncestorOf (const Entity& other) const noexcept;
 
     //==============================================================================
-    /** Returns the translation relative to the parent. */
-    const Vector3<float>& getPosition() const noexcept { return position; }
-
-    /** Changes the translation relative to the parent. */
-    void setPosition (const Vector3<float>& newPosition) noexcept;
-
-    /** Returns the rotation relative to the parent. */
-    const Quaternion& getRotation() const noexcept { return rotation; }
-
-    /** Changes the rotation relative to the parent. */
-    void setRotation (const Quaternion& newRotation) noexcept;
-
-    /** Returns the scale relative to the parent. */
-    const Vector3<float>& getScale() const noexcept { return scale; }
-
-    /** Changes the scale relative to the parent. */
-    void setScale (const Vector3<float>& newScale) noexcept;
-
-    /** Returns the local transform: scale, then rotation, then translation.
-
-        The matrix is cached and only computed again after the transform changes.
+    /** Returns the transform relative to the parent: the one of the TransformNode, or the
+        identity when the entity has none and so follows its parent.
     */
-    const Matrix4& getLocalMatrix() const noexcept;
+    Matrix4 getLocalMatrix() const noexcept;
 
-    /** Returns the transform from this entity's space to the space of its root.
+    /** Returns the transform from this entity's space to the space of the scene.
 
-        This walks up through every parent; the renderer instead accumulates world matrices
-        top-down while it traverses the tree.
+        World matrices are cached: changing a TransformNode, or moving an entity in the tree,
+        only marks its subtree, which is computed again when asked for.
     */
     Matrix4 getWorldMatrix() const noexcept;
 
@@ -163,149 +201,123 @@ public:
     BoundingBox computeWorldBounds() const;
 
     //==============================================================================
-    /** Attaches a part in a slot, replacing whatever part of the same type was there.
+    /** Destroys the entity, its whole subtree and all their nodes.
 
-        @tparam T     The part type, a Node subclass.
-        @tparam Slot  The slot, 0 or above.
+        Scene::onDestroy() is emitted for each entity before its children are destroyed. While
+        the scene is iterating (a view, a collection, Scene::update()) the entities are gone at
+        once, but the node objects are destroyed when the iteration ends. The root of the scene
+        can't be destroyed.
+    */
+    void destroy();
+
+    //==============================================================================
+    /** Attaches a node, replacing the node of the same type if there is one.
+
+        The entity must be valid. Node::attachedToEntity() is called and Scene::onAttach() is
+        emitted once the node is attached.
+
+        @tparam T     The node type, a Node subclass.
         @param args   The arguments forwarded to the constructor of T.
 
-        @return The new part.
-    */
-    template <class T, int Slot = 0, class... Args>
-    T& attach (Args&&... args)
-    {
-        return attachAt<T> (Slot, std::forward<Args> (args)...);
-    }
-
-    /** Returns the part of type T in a slot, or nullptr. Only the exact type T matches. */
-    template <class T, int Slot = 0>
-    T* getNode() const noexcept
-    {
-        return getNodeAt<T> (Slot);
-    }
-
-    /** Destroys the part of type T in a slot.
-
-        @return True if there was a part to destroy.
-    */
-    template <class T, int Slot = 0>
-    bool detach()
-    {
-        return detachAt<T> (Slot);
-    }
-
-    /** Attaches a part in a slot chosen at runtime, replacing whatever part of the same type was there.
-
-        @param slot  The slot, 0 or above.
-        @param args  The arguments forwarded to the constructor of T.
-
-        @return The new part.
+        @return The new node, its address doesn't change until it is detached.
     */
     template <class T, class... Args>
-    T& attachAt (int slot, Args&&... args)
-    {
-        static_assert (std::is_base_of_v<Node, T>, "Parts must derive from yup::Node");
+    T& attach (Args&&... args);
 
-        auto node = std::make_unique<T> (std::forward<Args> (args)...);
-        auto& result = *node;
-        insertNode (getTypeKey<T>(), slot, std::move (node));
-        return result;
-    }
+    /** Returns the node of type T, attaching one first if the entity has none.
 
-    /** Returns the part of type T in a slot chosen at runtime, or nullptr. */
+        The arguments are forwarded to the constructor of T only when a node is attached, an
+        existing node is returned unchanged.
+
+        @code
+        entity.getOrAttach<yup::TransformNode>().setPosition ({ 0.0f, 1.0f, 0.0f });
+        @endcode
+
+        @tparam T     The node type, a Node subclass.
+        @param args   The arguments forwarded to the constructor of T, if a node is attached.
+
+        @return The node, its address doesn't change until it is detached.
+
+        @see attach, get
+    */
+    template <class T, class... Args>
+    T& getOrAttach (Args&&... args);
+
+    /** Returns the node of type T, or nullptr. Only the exact type T matches. */
     template <class T>
-    T* getNodeAt (int slot) const noexcept
-    {
-        static_assert (std::is_base_of_v<Node, T>, "Parts must derive from yup::Node");
+    T* get() const noexcept;
 
-        return static_cast<T*> (findNode (getTypeKey<T>(), slot));
+    /** Returns true if the entity has a node of type T. */
+    template <class T>
+    bool has() const noexcept
+    {
+        return get<T>() != nullptr;
     }
 
-    /** Destroys the part of type T in a slot chosen at runtime.
+    /** Detaches and destroys the node of type T.
 
-        @return True if there was a part to destroy.
+        @return True if there was a node to detach.
+
+        @see destroy
     */
     template <class T>
-    bool detachAt (int slot)
-    {
-        return eraseNode (getTypeKey<T>(), slot);
-    }
+    bool detach();
 
-    /** Calls a function with every part of type T, by ascending slot.
+    /** Calls a function with every attached node, whatever its type.
 
-        @param fn A callable taking (T& part, int slot).
-    */
-    template <class T, class Fn>
-    void forEachNode (Fn&& fn) const
-    {
-        const auto key = getTypeKey<T>();
-
-        for (const auto& entry : nodes)
-        {
-            if (entry.typeKey == key)
-                fn (static_cast<T&> (*entry.node), entry.slot);
-        }
-    }
-
-    /** Returns the number of parts of type T. */
-    template <class T>
-    int getNumNodes() const noexcept
-    {
-        const auto key = getTypeKey<T>();
-        return static_cast<int> (std::count_if (nodes.begin(), nodes.end(), [key] (const auto& entry)
-        {
-            return entry.typeKey == key;
-        }));
-    }
-
-    /** Calls a function with every attached part, whatever its type.
-
-        @param fn A callable taking (Node& part).
+        @param fn A callable taking (Node& node).
     */
     template <class Fn>
-    void forEachAttachedNode (Fn&& fn) const
-    {
-        for (const auto& entry : nodes)
-            fn (*entry.node);
-    }
+    void forEachAttachedNode (Fn&& fn) const;
 
 private:
-    //==============================================================================
-    struct Entry
+    friend class TransformNode;
+
+    EntityStore* findStore() const noexcept;
+    void invalidateWorldMatrix() const noexcept;
+
+    Scene* scene = nullptr;
+    EntityHandle handle;
+};
+
+//==============================================================================
+/** The children of an entity, in order, as returned by Entity::getChildren(). */
+class Entity::Children
+{
+public:
+    class Iterator
     {
-        const void* typeKey = nullptr;
-        int slot = 0;
-        std::unique_ptr<Node> node;
+    public:
+        Iterator (Entity parentEntity, int childIndex) noexcept : parent (parentEntity), index (childIndex) {}
+
+        Entity operator*() const noexcept { return parent.getChild (index); }
+        Iterator& operator++() noexcept { ++index; return *this; }
+        bool operator!= (const Iterator& other) const noexcept { return index != other.index; }
+
+    private:
+        Entity parent;
+        int index = 0;
     };
 
-    template <class T>
-    static const void* getTypeKey() noexcept
-    {
-        // Not const: identical read-only data may be folded into one address by the linker
-        static char key = 0;
-        return &key;
-    }
+    explicit Children (Entity parentEntity) noexcept : parent (parentEntity), count (parentEntity.getNumChildren()) {}
 
-    Node* findNode (const void* typeKey, int slot) const noexcept;
-    void insertNode (const void* typeKey, int slot, std::unique_ptr<Node> node);
-    bool eraseNode (const void* typeKey, int slot);
+    Iterator begin() const noexcept { return { parent, 0 }; }
+    Iterator end() const noexcept { return { parent, count }; }
 
-    //==============================================================================
-    String name;
-    bool visible = true;
+    /** Returns the number of children when the range was created. */
+    int size() const noexcept { return count; }
 
-    Entity* parent = nullptr;
-    std::vector<Ptr> children;
-    std::vector<Entry> nodes;
+    /** Returns a child, or an invalid entity if the index is out of range. */
+    Entity operator[] (int index) const noexcept { return parent.getChild (index); }
 
-    Vector3<float> position;
-    Quaternion rotation;
-    Vector3<float> scale { 1.0f, 1.0f, 1.0f };
-    mutable Matrix4 localMatrix;
-    mutable bool localMatrixDirty = false;
-
-    YUP_DECLARE_WEAK_REFERENCEABLE (Entity)
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Entity)
+private:
+    Entity parent;
+    int count = 0;
 };
+
+inline Entity::Children Entity::getChildren() const noexcept
+{
+    return Children (*this);
+}
 
 } // namespace yup

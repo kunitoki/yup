@@ -73,10 +73,17 @@ public:
     /** Returns true if this buffer holds a valid GPU resource. */
     bool isValid() const noexcept;
 
+    //==============================================================================
+    /** @internal Test hook, not for production use: a storage buffer backed by an ore buffer of the
+        ore context of @p ctx, which render passes bind in place of a native one. It lets passes
+        reading storage buffers record on a mocked ore context, which has no native buffers.
+
+        @returns nullptr without an ore context, data or size.
+    */
+    static GpuBuffer::Ptr createStorageForTesting (GpuDevice::Ptr ctx, const void* data, size_t byteSize);
+
 private:
     //==============================================================================
-    // The backend seam. Every GpuDevice and GpuComputePass backend reaches into the
-    // native handles a buffer holds; nothing outside yup_rhi has any business doing so.
     friend class GpuDevice;
     friend class GpuDeviceMetal;
     friend class GpuDeviceD3D;
@@ -91,15 +98,14 @@ private:
     friend class GpuComputePassImplWebGPU;
     friend class GpuComputePassImplVulkan;
 
+    GpuBuffer() = default;
+
     struct Impl;
 
     Impl* getImpl() noexcept;
     const Impl* getImpl() const noexcept;
 
-    /** Creates a GpuBuffer from a pre-built Impl. */
     static Ptr createWithImpl (Impl&& impl);
-
-    GpuBuffer() = default;
 
     static constexpr size_t ImplSizeBytes = 128;
     TypeErasedObject<ImplSizeBytes> impl;

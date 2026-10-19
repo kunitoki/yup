@@ -74,7 +74,7 @@ struct YUP_API WorldFog
     tree wins, see SceneSettings::resolve(). Without one the scene has no fog.
 
     @code
-    auto& fogNode = scene->getRoot()->attach<yup::WorldFogNode>();
+    auto& fogNode = scene->getRoot().attach<yup::WorldFogNode>();
     fogNode.fog.density = 0.05f;
     fogNode.fog.heightFalloff = 0.2f;
     @endcode

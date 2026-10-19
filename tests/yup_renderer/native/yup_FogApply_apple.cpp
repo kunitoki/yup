@@ -97,7 +97,7 @@ TEST_F (WorldFogMetalTests, ChangingTheFogRestartsAccumulation)
 
         auto fog = SceneSettings::resolve (scene).fog;
         edit (fog);
-        scene.getRoot()->attach<WorldFogNode> (fog);
+        scene.getRoot().attach<WorldFogNode> (fog);
 
         ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << renderer.getLastError();
         EXPECT_FALSE (renderer.isConverged()) << name;
@@ -108,7 +108,7 @@ TEST_F (WorldFogMetalTests, ChangingTheFogRestartsAccumulation)
     auto fog = SceneSettings::resolve (scene).fog;
     ASSERT_FALSE (fog.enabled);
     fog.density = 0.5f;
-    scene.getRoot()->attach<WorldFogNode> (fog);
+    scene.getRoot().attach<WorldFogNode> (fog);
     ASSERT_NE (renderer.render (device, scene, fogSize, fogSize), nullptr) << renderer.getLastError();
     EXPECT_TRUE (renderer.isConverged());
 }
@@ -122,7 +122,7 @@ TEST_F (WorldFogMetalTests, GivingUpWorldFogRendersWithoutIt)
     setFogTier (reference, RenderSettings::TierPreference::full);
     const auto clear = renderToImage (reference, scene, fogSize);
     ASSERT_TRUE (clear.isValid()) << reference.getLastError();
-    scene.getRoot()->attach<WorldFogNode> (makeFog (0.08f));
+    scene.getRoot().attach<WorldFogNode> (makeFog (0.08f));
 
     const auto isFogged = [&] (const Image& image)
     {
@@ -188,7 +188,7 @@ TEST_F (WorldFogMetalTests, NonFiniteFogDrawsNothing)
     {
         auto fog = makeFog (0.08f, 0.3f);
         edit (fog);
-        scene.getRoot()->attach<WorldFogNode> (fog);
+        scene.getRoot().attach<WorldFogNode> (fog);
 
         SceneRenderer renderer;
         setFogTier (renderer, RenderSettings::TierPreference::full);

@@ -594,6 +594,25 @@ TEST_F (GpuBufferMockTests, CreateFailsWithStorageType)
     EXPECT_EQ (buf, nullptr);
 }
 
+TEST_F (GpuBufferMockTests, StorageForTestingIsBackedByAnOreBuffer)
+{
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .WillOnce (Return (rive::make_rcp<MockOreBuffer>()))
+        .WillOnce (ReturnNull());
+
+    const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    auto buf = GpuBuffer::createStorageForTesting (ctx, data, sizeof (data));
+    ASSERT_NE (buf, nullptr);
+    EXPECT_EQ (buf->getType(), GpuBufferType::storage);
+    EXPECT_EQ (buf->getSizeInBytes(), sizeof (data));
+    EXPECT_TRUE (buf->isValid());
+
+    EXPECT_EQ (GpuBuffer::createStorageForTesting (ctx, data, sizeof (data)), nullptr);
+    EXPECT_EQ (GpuBuffer::createStorageForTesting (ctx, nullptr, sizeof (data)), nullptr);
+    EXPECT_EQ (GpuBuffer::createStorageForTesting (ctx, data, 0), nullptr);
+    EXPECT_EQ (GpuBuffer::createStorageForTesting (nullptr, data, sizeof (data)), nullptr);
+}
+
 // ==============================================================================
 // GpuDevice — mock-based createBuffer / updateBuffer tests
 // ==============================================================================

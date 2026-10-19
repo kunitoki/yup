@@ -136,6 +136,8 @@ protected:
         EXPECT_NEAR (actual.getY(), expected.getY(), tolerance);
         EXPECT_NEAR (actual.getZ(), expected.getZ(), tolerance);
     }
+
+    Scene scene;
 };
 
 //==============================================================================
@@ -161,15 +163,15 @@ TEST_F (GltfModelTests, LoadsMinimalGltfWithDataUriBuffer)
     expectNear (primitive.vertices[0].normal, { 0.0f, 0.0f, 1.0f });
     EXPECT_EQ (primitive.material, nullptr);
 
-    auto root = model.createEntity();
-    ASSERT_NE (root, nullptr);
-    EXPECT_EQ (root->getName(), "Main");
-    ASSERT_EQ (root->getNumChildren(), 1);
+    auto root = model.instantiate (scene);
+    ASSERT_TRUE (root.isValid());
+    EXPECT_EQ (root.getName(), "Main");
+    ASSERT_EQ (root.getNumChildren(), 1);
 
-    auto* triangle = root->getChild (0);
-    EXPECT_EQ (triangle->getName(), "Triangle");
-    ASSERT_NE (triangle->getNode<MeshNode>(), nullptr);
-    EXPECT_EQ (triangle->getNode<MeshNode>()->mesh, model.getMeshes()[0]);
+    auto triangle = root.getChild (0);
+    EXPECT_EQ (triangle.getName(), "Triangle");
+    ASSERT_NE (triangle.get<MeshNode>(), nullptr);
+    EXPECT_EQ (triangle.get<MeshNode>()->mesh, model.getMeshes()[0]);
 }
 
 TEST_F (GltfModelTests, LoadsExternalBufferAndImage)
@@ -254,7 +256,7 @@ TEST_F (GltfModelTests, LoadsGlbWithImageInBufferView)
     EXPECT_EQ (primitive.vertices[2].position, Vector3<float> (0.0f, 0.0f, 0.0f));
 
     // A scene without a default scene index: the first scene is built
-    EXPECT_NE (model.createEntity(), nullptr);
+    EXPECT_TRUE (model.instantiate (scene).isValid());
 
     ASSERT_EQ (model.getMaterials().size(), 1u);
     ASSERT_NE (model.getMaterials()[0]->baseColorTexture, nullptr);
@@ -463,21 +465,23 @@ TEST_F (GltfModelTests, BuildsHierarchyWithTrs)
     })");
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
-    auto root = result.getReference().createEntity();
-    ASSERT_NE (root, nullptr);
-    EXPECT_EQ (root->getName(), "Rig");
+    auto root = result.getReference().instantiate (scene);
+    ASSERT_TRUE (root.isValid());
+    EXPECT_EQ (root.getName(), "Rig");
 
-    auto* parent = root->findChild ("Parent", false);
-    ASSERT_NE (parent, nullptr);
-    auto* child = parent->findChild ("Child", false);
-    ASSERT_NE (child, nullptr);
+    auto parent = root.findChild ("Parent", false);
+    ASSERT_TRUE (parent.isValid());
+    auto child = parent.findChild ("Child", false);
+    ASSERT_TRUE (child.isValid());
 
-    expectNear (parent->getPosition(), { 1.0f, 2.0f, 3.0f });
-    expectNear (parent->getScale(), { 2.0f, 2.0f, 2.0f });
-    EXPECT_TRUE (parent->getRotation().approximatelyEqualTo (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi)));
+    const auto* transform = parent.get<TransformNode>();
+    ASSERT_NE (transform, nullptr);
+    expectNear (transform->getPosition(), { 1.0f, 2.0f, 3.0f });
+    expectNear (transform->getScale(), { 2.0f, 2.0f, 2.0f });
+    EXPECT_TRUE (transform->getRotation().approximatelyEqualTo (Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, MathConstants<float>::halfPi)));
 
     // (0, 0, -1) scaled by 2, turned 90 degrees around Y to (-2, 0, 0), moved by (1, 2, 3)
-    expectNear (child->getWorldMatrix().transformPoint ({}), { -1.0f, 2.0f, 3.0f });
+    expectNear (child.getWorldMatrix().transformPoint ({}), { -1.0f, 2.0f, 3.0f });
 }
 
 TEST_F (GltfModelTests, DecomposesMatrixNodes)
@@ -498,14 +502,16 @@ TEST_F (GltfModelTests, DecomposesMatrixNodes)
                                 .replace ("$MATRIX", values.joinIntoString (", ")));
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
-    auto root = result.getReference().createEntity();
-    auto* node = root->findChild ("Matrix");
-    ASSERT_NE (node, nullptr);
+    auto root = result.getReference().instantiate (scene);
+    auto node = root.findChild ("Matrix");
+    ASSERT_TRUE (node.isValid());
 
-    expectNear (node->getPosition(), { 1.0f, 2.0f, 3.0f });
-    expectNear (node->getScale(), { 2.0f, 3.0f, 4.0f });
-    EXPECT_TRUE (node->getRotation().approximatelyEqualTo (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, MathConstants<float>::halfPi)));
-    EXPECT_TRUE (node->getLocalMatrix().approximatelyEqualTo (expected, 1.0e-4f));
+    const auto* transform = node.get<TransformNode>();
+    ASSERT_NE (transform, nullptr);
+    expectNear (transform->getPosition(), { 1.0f, 2.0f, 3.0f });
+    expectNear (transform->getScale(), { 2.0f, 3.0f, 4.0f });
+    EXPECT_TRUE (transform->getRotation().approximatelyEqualTo (Quaternion::fromAxisAngle ({ 0.0f, 0.0f, 1.0f }, MathConstants<float>::halfPi)));
+    EXPECT_TRUE (node.getLocalMatrix().approximatelyEqualTo (expected, 1.0e-4f));
 }
 
 TEST_F (GltfModelTests, MapsMaterialsAndTextures)
@@ -648,9 +654,9 @@ TEST_F (GltfModelTests, AttachesCamerasAndLights)
     })");
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
-    auto root = result.getReference().createEntity();
+    auto root = result.getReference().instantiate (scene);
 
-    auto* lamp = root->findChild ("Lamp")->getNode<LightNode>();
+    auto* lamp = root.findChild ("Lamp").get<LightNode>();
     ASSERT_NE (lamp, nullptr);
     EXPECT_EQ (lamp->type, LightNode::Type::spot);
     EXPECT_FLOAT_EQ (lamp->color[1], 0.5f);
@@ -659,14 +665,14 @@ TEST_F (GltfModelTests, AttachesCamerasAndLights)
     EXPECT_FLOAT_EQ (lamp->innerConeAngle, 0.1f);
     EXPECT_FLOAT_EQ (lamp->outerConeAngle, 0.5f);
 
-    auto* eye = root->findChild ("Eye")->getNode<CameraNode>();
+    auto* eye = root.findChild ("Eye").get<CameraNode>();
     ASSERT_NE (eye, nullptr);
     EXPECT_EQ (eye->projection, CameraNode::Projection::perspective);
     EXPECT_FLOAT_EQ (eye->yFov, 0.5f);
     EXPECT_FLOAT_EQ (eye->zNear, 0.25f);
     EXPECT_FLOAT_EQ (eye->zFar, 0.0f);
 
-    auto* top = root->findChild ("Top")->getNode<CameraNode>();
+    auto* top = root.findChild ("Top").get<CameraNode>();
     ASSERT_NE (top, nullptr);
     EXPECT_EQ (top->projection, CameraNode::Projection::orthographic);
     EXPECT_FLOAT_EQ (top->xMag, 2.0f);
@@ -1045,14 +1051,14 @@ TEST_F (GltfModelTests, CreateEntityBuildsFreshTreesSharingResources)
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
     const auto& model = result.getReference();
-    auto first = model.createEntity();
-    auto second = model.createEntity();
+    auto first = model.instantiate (scene);
+    auto second = model.instantiate (scene);
 
-    ASSERT_NE (first, nullptr);
-    ASSERT_NE (second, nullptr);
-    EXPECT_NE (first.get(), second.get());
-    EXPECT_NE (first->getChild (0), second->getChild (0));
-    EXPECT_EQ (first->getChild (0)->getNode<MeshNode>()->mesh, second->getChild (0)->getNode<MeshNode>()->mesh);
+    ASSERT_TRUE (first.isValid());
+    ASSERT_TRUE (second.isValid());
+    EXPECT_NE (first, second);
+    EXPECT_NE (first.getChild (0), second.getChild (0));
+    EXPECT_EQ (first.getChild (0).get<MeshNode>()->mesh, second.getChild (0).get<MeshNode>()->mesh);
 
     // Copies of the model share the resources too
     const auto copy = model;
@@ -1071,11 +1077,11 @@ TEST_F (GltfModelTests, CreateEntityHandlesSceneIndices)
 
     const auto& model = result.getReference();
     EXPECT_EQ (model.getNumScenes(), 2);
-    EXPECT_EQ (model.createEntity()->getName(), "Second");
-    EXPECT_EQ (model.createEntity (0)->getName(), "First");
-    EXPECT_EQ (model.createEntity (0)->getChild (0)->getName(), "A");
-    EXPECT_EQ (model.createEntity (2), nullptr);
-    EXPECT_EQ (model.createEntity (-2), nullptr);
+    EXPECT_EQ (model.instantiate (scene).getName(), "Second");
+    EXPECT_EQ (model.instantiate (scene, {}, 0).getName(), "First");
+    EXPECT_EQ (model.instantiate (scene, {}, 0).getChild (0).getName(), "A");
+    EXPECT_FALSE (model.instantiate (scene, {}, 2).isValid());
+    EXPECT_FALSE (model.instantiate (scene, {}, -2).isValid());
 }
 
 TEST_F (GltfModelTests, AssetsWithoutScenesBuildTheirRootNodes)
@@ -1086,12 +1092,12 @@ TEST_F (GltfModelTests, AssetsWithoutScenesBuildTheirRootNodes)
     })");
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
-    auto root = result.getReference().createEntity();
-    ASSERT_NE (root, nullptr);
-    ASSERT_EQ (root->getNumChildren(), 2);
-    EXPECT_EQ (root->getChild (0)->getName(), "A");
-    EXPECT_EQ (root->getChild (1)->getName(), "C");
-    EXPECT_EQ (root->getChild (0)->getChild (0)->getName(), "B");
+    auto root = result.getReference().instantiate (scene);
+    ASSERT_TRUE (root.isValid());
+    ASSERT_EQ (root.getNumChildren(), 2);
+    EXPECT_EQ (root.getChild (0).getName(), "A");
+    EXPECT_EQ (root.getChild (1).getName(), "C");
+    EXPECT_EQ (root.getChild (0).getChild (0).getName(), "B");
 }
 
 TEST_F (GltfModelTests, NodeCyclesDoNotRecurseForever)
@@ -1104,9 +1110,9 @@ TEST_F (GltfModelTests, NodeCyclesDoNotRecurseForever)
 
     if (result.wasOk())
     {
-        auto root = result.getReference().createEntity();
-        ASSERT_NE (root, nullptr);
-        EXPECT_EQ (root->getChild (0)->getChild (0)->getNumChildren(), 0);
+        auto root = result.getReference().instantiate (scene);
+        ASSERT_TRUE (root.isValid());
+        EXPECT_EQ (root.getChild (0).getChild (0).getNumChildren(), 0);
     }
 }
 
@@ -1228,8 +1234,8 @@ TEST_F (GltfModelTests, ZeroScaleMatrixNodesHaveNoRotation)
     })");
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
-    auto root = result.getReference().createEntity();
-    auto* node = root->findChild ("Flat");
+    auto root = result.getReference().instantiate (scene);
+    const auto* node = root.findChild ("Flat").get<TransformNode>();
     ASSERT_NE (node, nullptr);
 
     expectNear (node->getPosition(), { 4.0f, 5.0f, 6.0f });
@@ -1344,8 +1350,8 @@ TEST_F (GltfModelTests, AttachesPointLights)
     })");
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
-    auto root = result.getReference().createEntity();
-    auto* bulb = root->findChild ("Bulb")->getNode<LightNode>();
+    auto root = result.getReference().instantiate (scene);
+    auto* bulb = root.findChild ("Bulb").get<LightNode>();
     ASSERT_NE (bulb, nullptr);
     EXPECT_EQ (bulb->type, LightNode::Type::point);
     EXPECT_FLOAT_EQ (bulb->intensity, 2.0f);
@@ -1360,9 +1366,9 @@ TEST_F (GltfModelTests, SceneIndexWithoutScenesCreatesNothing)
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
 
     const auto& model = result.getReference();
-    EXPECT_EQ (model.createEntity (0), nullptr);
+    EXPECT_FALSE (model.instantiate (scene, {}, 0).isValid());
 
-    auto root = model.createEntity();
-    ASSERT_NE (root, nullptr);
-    EXPECT_NE (root->findChild ("Loose"), nullptr);
+    auto root = model.instantiate (scene);
+    ASSERT_TRUE (root.isValid());
+    EXPECT_TRUE (root.findChild ("Loose").isValid());
 }
