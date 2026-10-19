@@ -107,9 +107,11 @@ protected:
     {
         auto mesh = Mesh::Ptr (new Mesh (name));
 
-        std::vector<Mesh::Vertex> vertices (2);
+        // One triangle whose bounds span the cube
+        std::vector<Mesh::Vertex> vertices (3);
         vertices[0].position = { -1.0f, -1.0f, -1.0f };
         vertices[1].position = { 1.0f, 1.0f, 1.0f };
+        vertices[2].position = { 1.0f, -1.0f, 1.0f };
         mesh->addPrimitive (vertices, {});
 
         auto entity = scene->createEntity (name, parent);
