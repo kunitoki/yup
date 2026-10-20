@@ -113,7 +113,7 @@ public:
             fetchAttr.requestDataSize = postData.getSize();
         }
 
-        fetchAttr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+        fetchAttr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_REPLACE;
         fetchAttr.onsuccess = &onFetchSuccess;
         fetchAttr.onprogress = &onFetchProgress;
         fetchAttr.onerror = &onFetchError;
@@ -130,10 +130,10 @@ public:
         hasBeenCancelled = true;
         finished = true;
 
-        if (fetchHandle)
+        if (auto* fetch = std::exchange (fetchHandle, nullptr))
         {
-            emscripten_fetch_close (fetchHandle);
-            fetchHandle = nullptr;
+            fetch->userData = nullptr;
+            emscripten_fetch_close (fetch);
         }
     }
 
@@ -207,6 +207,8 @@ private:
     static void onFetchSuccess (emscripten_fetch_t* fetch)
     {
         Pimpl* self = static_cast<Pimpl*> (fetch->userData);
+        if (self == nullptr)
+            return;
 
         self->statusCode = fetch->status;
         self->contentLength = fetch->numBytes;
@@ -232,6 +234,8 @@ private:
     static void onFetchError (emscripten_fetch_t* fetch)
     {
         Pimpl* self = static_cast<Pimpl*> (fetch->userData);
+        if (self == nullptr)
+            return;
 
         self->statusCode = fetch->status;
         self->finished = true;

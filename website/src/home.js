@@ -33,7 +33,7 @@ const renderReadout = () => {
     const page = link.hasAttribute("data-page");
     const facts = page ? "a plain page" : failure || moduleNames;
     const action = page ? "read" : running ? "open" : "";
-    const verb = hoverless.matches ? "tap again to" : "click to";
+    const verb = hoverless.matches ? "tap to" : "click to";
 
     readout.replaceChildren(link.dataset.note, line(facts));
     if (action)
@@ -91,14 +91,21 @@ links.forEach((link, index) => {
             pick(index);
     });
 
-    // Only keyboard focus picks: a tap focuses the link too, and must not open it on the first touch.
+    // Only keyboard focus picks: a tap focuses the link too, and picks and opens it on click instead.
     link.addEventListener("focus", () => link.matches(":focus-visible") && pick(index));
 
+    // With a mouse the first click on another work picks it; without hover a single tap opens it.
     link.addEventListener("click", (e) => {
-        if (index !== active) {
+        if (index !== active && !hoverless.matches) {
             e.preventDefault();
             pick(index);
-        } else if (!link.hasAttribute("data-page")) {
+            return;
+        }
+
+        if (index !== active)
+            pick(index);
+
+        if (!link.hasAttribute("data-page")) {
             e.preventDefault();
             open();
         }

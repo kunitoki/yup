@@ -1757,6 +1757,20 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
                          .withTouchIndex (touchFinger->index)
                          .withPressure (touchFinger->pressure);
 
+        // A finger has no hover, so it enters the component under it before pressing it
+        if (touchFinger->index == 0)
+        {
+            const auto previousComponent = touchFinger->componentUnderPointer;
+            const auto currentComponent = updateComponentUnderMouse (event, previousComponent);
+
+            const auto index = findTouchFingerIndex (fingerId);
+            if (index < 0)
+                return;
+
+            touchFinger = &activeTouches.getReference (index);
+            touchFinger->componentUnderPointer = currentComponent;
+        }
+
         if (auto* clickedComponent = touchFinger->clickedComponent.get())
         {
             const auto currentMouseDownTime = yup::Time::getCurrentTime();
@@ -1875,6 +1889,7 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
             }
         }
 
+        // A lifted or canceled finger is over nothing, so it exits without entering anything else
         if (touchIndex == 0)
         {
             const auto index = findTouchFingerIndex (fingerId);
@@ -1882,11 +1897,10 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
             {
                 auto& finger = activeTouches.getReference (index);
                 const auto previousComponent = finger.componentUnderPointer;
-                const auto currentComponent = updateComponentUnderMouse (event, previousComponent);
+                finger.componentUnderPointer = nullptr;
 
-                const auto currentIndex = findTouchFingerIndex (fingerId);
-                if (currentIndex >= 0)
-                    activeTouches.getReference (currentIndex).componentUnderPointer = currentComponent;
+                if (auto* underPointer = previousComponent.get())
+                    underPointer->internalMouseExit (event.withRelativePositionTo (underPointer));
             }
         }
 

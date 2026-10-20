@@ -136,10 +136,13 @@ private:
     {
         yup::Drawable::ParseOptions options;
         options.baseDirectory = svgFile.getParentDirectory();
+
+#if ! YUP_EMSCRIPTEN // A blocking request can never complete on the browser main thread
         options.imageResolver = [this] (yup::StringRef href, const yup::File&) -> std::optional<yup::Image>
         {
             return fetchHttpImage (yup::String (href.text));
         };
+#endif
 
         options.fontResolver = [] (yup::StringRef, float fontSize, int weight, bool italic) -> std::optional<yup::Font>
         {
