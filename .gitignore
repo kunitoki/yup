@@ -53,9 +53,10 @@ __pycache__/
 .opencode/
 .pytest_cache/
 .cache/
-docs/superpowers/
 .worktrees/
+**/*superpowers/
 
 # Website
 website/node_modules/
 website/dist/
+website/src/public/yup/

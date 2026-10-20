@@ -6,112 +6,93 @@
         <meta name="description" content="Install the prerequisites, build the YUP examples and add YUP to your own CMake project." />
     </head>
     <body>
-        <!-- @header -->
+        <!-- @chrome -->
+        <!-- @nav -->
 
-        <main>
-            <section class="pt-16 pb-14 sm:pt-24">
-                <div class="container-site">
-                    <h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">From clone to running app</h1>
-                    <p class="lead mt-5">A C++20 compiler and CMake 3.31 or later are all you need to build the examples. When you are ready, pull YUP into your own project with <code class="font-mono text-ink">FetchContent</code>.</p>
+        <main class="sheet">
+            <h1 class="title">start</h1>
+            <p class="lead">From clone to running app. A C++20 compiler and CMake 3.31 or later are all you need to build the examples; when you are ready, pull YUP into your own project with <code>FetchContent</code>.</p>
+
+            <section class="part">
+                <h2 class="label"><span>01</span>Install the prerequisites</h2>
+                <p>Pick your platform. Every target builds from the same sources.</p>
+                <dl class="rows">
+                    <dt>Windows</dt>
+                    <dd>Visual Studio 2022.</dd>
+                    <dt>macOS and iOS</dt>
+                    <dd>Xcode 15.2 and the command-line tools.</dd>
+                    <dt>Wasm</dt>
+                    <dd>Emscripten SDK 4.0.22 or later. The WebGPU port is fetched automatically.</dd>
+                    <dt>Android</dt>
+                    <dd>JDK 17, Android SDK and NDK r27c or later.</dd>
+                    <dt>Linux</dt>
+                    <dd>The packages below.</dd>
+                </dl>
+                <div class="code-block" data-copy-scope>
+                    <div class="code-bar">
+                        <span>linux packages</span>
+                        <button type="button" data-copy>copy</button>
+                    </div>
+                    <!-- @code snippets/linux-deps.sh -->
                 </div>
             </section>
 
-            <div class="container-site pb-24">
-                <div class="lane lane-steps max-w-4xl">
-                    <!-- 1. Prerequisites -->
-                    <section class="stage pb-16">
-                        <h2 class="text-2xl font-semibold">Install the prerequisites</h2>
-                        <p class="mt-2 text-muted">Pick your platform. Every target builds from the same sources.</p>
-                        <dl class="mt-6 grid gap-x-8 gap-y-3 border-y border-edge py-5 text-sm sm:grid-cols-[9rem_1fr]">
-                            <dt class="font-medium text-ink">Windows</dt>
-                            <dd class="text-muted">Visual Studio 2022.</dd>
-                            <dt class="font-medium text-ink">macOS and iOS</dt>
-                            <dd class="text-muted">Xcode 15.2 and the command-line tools.</dd>
-                            <dt class="font-medium text-ink">Wasm</dt>
-                            <dd class="text-muted">Emscripten SDK 4.0.22 or later. The WebGPU port is fetched automatically.</dd>
-                            <dt class="font-medium text-ink">Android</dt>
-                            <dd class="text-muted">JDK 17, Android SDK and NDK r27c or later.</dd>
-                            <dt class="font-medium text-ink">Linux</dt>
-                            <dd class="text-muted">The packages below.</dd>
-                        </dl>
-                        <div class="frame mt-4" data-copy-scope>
-                            <div class="flex items-center justify-between border-b border-edge px-4 py-2">
-                                <span class="text-xs text-muted">Linux packages</span>
-                                <button class="seg" type="button" data-copy>copy</button>
-                            </div>
-                            <!-- @code snippets/linux-deps.sh -->
+            <section class="part">
+                <h2 class="label"><span>02</span>Clone and build the examples</h2>
+                <p>A standard desktop build with tests and examples enabled.</p>
+                <div class="code-block" data-tabs>
+                    <div class="code-bar">
+                        <div class="tabs" role="tablist" aria-label="Build target">
+                            <button type="button" role="tab" aria-pressed="true" data-tab="desktop">desktop</button>
+                            <button type="button" role="tab" aria-pressed="false" data-tab="wasm">wasm</button>
+                            <button type="button" role="tab" aria-pressed="false" data-tab="just">just</button>
                         </div>
-                    </section>
-
-                    <!-- 2. Build -->
-                    <section class="stage pb-16">
-                        <h2 class="text-2xl font-semibold">Clone and build the examples</h2>
-                        <p class="mt-2 text-muted">A standard desktop build with tests and examples enabled.</p>
-                        <div class="frame mt-6" data-tabs>
-                            <div class="flex items-center justify-between gap-3 border-b border-edge px-4 py-2">
-                                <div class="segmented" role="tablist" aria-label="Build target">
-                                    <button class="seg" type="button" role="tab" aria-pressed="true" data-tab="desktop">Desktop</button>
-                                    <button class="seg" type="button" role="tab" aria-pressed="false" data-tab="wasm">Wasm</button>
-                                    <button class="seg" type="button" role="tab" aria-pressed="false" data-tab="just">just</button>
-                                </div>
-                                <button class="seg" type="button" data-copy>copy</button>
-                            </div>
-                            <div data-panel="desktop"><!-- @code snippets/build-desktop.sh --></div>
-                            <div data-panel="wasm" class="hidden"><!-- @code snippets/build-wasm.sh --></div>
-                            <div data-panel="just" class="hidden"><!-- @code snippets/build-just.sh --></div>
-                        </div>
-                        <p class="mt-4 text-sm text-muted">Then run targets like <code class="font-mono text-ink">example_graphics</code>, <code class="font-mono text-ink">example_app</code> or <code class="font-mono text-ink">example_console</code>, and <code class="font-mono text-ink">yup_tests</code> for the test suite.</p>
-                    </section>
-
-                    <!-- 3. Your project -->
-                    <section class="stage pb-16">
-                        <h2 class="text-2xl font-semibold">Add YUP to your project</h2>
-                        <p class="mt-2 text-muted">Fetch the framework and declare an app or plugin target with the modules you need.</p>
-                        <div class="frame mt-6" data-tabs>
-                            <div class="flex items-center justify-between gap-3 border-b border-edge px-4 py-2">
-                                <div class="segmented" role="tablist" aria-label="Target type">
-                                    <button class="seg" type="button" role="tab" aria-pressed="true" data-tab="app">Application</button>
-                                    <button class="seg" type="button" role="tab" aria-pressed="false" data-tab="plugin">Plugin</button>
-                                </div>
-                                <button class="seg" type="button" data-copy>copy</button>
-                            </div>
-                            <div data-panel="app"><!-- @code snippets/app.cmake --></div>
-                            <div data-panel="plugin" class="hidden"><!-- @code snippets/plugin.cmake --></div>
-                        </div>
-                    </section>
-
-                    <!-- 4. Next -->
-                    <section class="stage">
-                        <h2 class="text-2xl font-semibold">Keep going</h2>
-                        <ul class="mt-6 divide-y divide-edge border-y border-edge">
-                            <li>
-                                <a class="group block py-4" href="https://yup.readthedocs.io/en/latest/build-system/building-standalone.html" target="_blank" rel="noopener">
-                                    <span class="font-medium text-ink group-hover:text-graphics-soft">Building standalone apps</span>
-                                    <span class="mt-1 block text-sm text-muted">Every <code class="font-mono">yup_standalone_app</code> option, resources and platform packaging.</span>
-                                </a>
-                            </li>
-                            <li>
-                                <a class="group block py-4" href="https://yup.readthedocs.io/en/latest/build-system/building-plugins.html" target="_blank" rel="noopener">
-                                    <span class="font-medium text-ink group-hover:text-graphics-soft">Building audio plugins</span>
-                                    <span class="mt-1 block text-sm text-muted">Formats, install locations and the processor and editor classes.</span>
-                                </a>
-                            </li>
-                            <li>
-                                <a class="group block py-4" href="https://yup.readthedocs.io/en/latest/build-system/cmake-api.html" target="_blank" rel="noopener">
-                                    <span class="font-medium text-ink group-hover:text-graphics-soft">CMake API reference</span>
-                                    <span class="mt-1 block text-sm text-muted">Targets, module resolution and build options.</span>
-                                </a>
-                            </li>
-                            <li>
-                                <a class="group block py-4" href="https://github.com/kunitoki/yup/tree/main/examples" target="_blank" rel="noopener">
-                                    <span class="font-medium text-ink group-hover:text-graphics-soft">Example apps</span>
-                                    <span class="mt-1 block text-sm text-muted">Graphics, audio graph, plugin and console examples to learn from.</span>
-                                </a>
-                            </li>
-                        </ul>
-                    </section>
+                        <button type="button" data-copy>copy</button>
+                    </div>
+                    <div data-panel="desktop"><!-- @code snippets/build-desktop.sh --></div>
+                    <div data-panel="wasm" hidden><!-- @code snippets/build-wasm.sh --></div>
+                    <div data-panel="just" hidden><!-- @code snippets/build-just.sh --></div>
                 </div>
-            </div>
+                <p class="note">Then run targets like <code>example_graphics</code>, <code>example_app</code> or <code>example_console</code>, and <code>yup_tests</code> for the test suite.</p>
+            </section>
+
+            <section class="part">
+                <h2 class="label"><span>03</span>Add YUP to your project</h2>
+                <p>Fetch the framework and declare an app or plugin target with the modules you need.</p>
+                <div class="code-block" data-tabs>
+                    <div class="code-bar">
+                        <div class="tabs" role="tablist" aria-label="Target type">
+                            <button type="button" role="tab" aria-pressed="true" data-tab="app">application</button>
+                            <button type="button" role="tab" aria-pressed="false" data-tab="plugin">plugin</button>
+                        </div>
+                        <button type="button" data-copy>copy</button>
+                    </div>
+                    <div data-panel="app"><!-- @code snippets/app.cmake --></div>
+                    <div data-panel="plugin" hidden><!-- @code snippets/plugin.cmake --></div>
+                </div>
+            </section>
+
+            <section class="part">
+                <h2 class="label"><span>04</span>Write the app</h2>
+                <p>A complete application: it starts, logs, and quits a second later. Build it with the target above.</p>
+                <div class="code-block" data-copy-scope>
+                    <div class="code-bar">
+                        <span>main.cpp</span>
+                        <button type="button" data-copy>copy</button>
+                    </div>
+                    <!-- @code snippets/app.cpp -->
+                </div>
+            </section>
+
+            <section class="part">
+                <h2 class="label"><span>05</span>Keep going</h2>
+                <ul class="links">
+                    <li><a href="https://yup.readthedocs.io/en/latest/build-system/building-standalone.html" target="_blank" rel="noopener">Building standalone apps<span>Every <code>yup_standalone_app</code> option, resources and platform packaging.</span></a></li>
+                    <li><a href="https://yup.readthedocs.io/en/latest/build-system/building-plugins.html" target="_blank" rel="noopener">Building audio plugins<span>Formats, install locations and the processor and editor classes.</span></a></li>
+                    <li><a href="https://yup.readthedocs.io/en/latest/build-system/cmake-api.html" target="_blank" rel="noopener">CMake API reference<span>Targets, module resolution and build options.</span></a></li>
+                    <li><a href="https://github.com/kunitoki/yup/tree/main/examples" target="_blank" rel="noopener">Example apps<span>Graphics, audio graph, plugin and console examples to learn from.</span></a></li>
+                </ul>
+            </section>
         </main>
 
         <!-- @footer -->

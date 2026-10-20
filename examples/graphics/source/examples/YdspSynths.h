@@ -491,8 +491,10 @@ public:
 
         paintRail (g, railBounds, true);
 
-        if (logoImage.isValid())
-            g.drawImage (logoImage, logoBounds);
+        // The white logo on dark palettes, the black one on bright palettes
+        const auto& logo = paletteSurfaceColor().getLuminance() > 0.5f ? logoBlackImage : logoImage;
+        if (logo.isValid())
+            g.drawImage (logo, logoBounds);
 
         if (! showingEditorTab)
         {
@@ -1492,13 +1494,19 @@ private:
 
     void loadLogo()
     {
-        yup::MemoryBlock mb;
-        if (! getAssetPath ("data/logo.png").loadFileAsData (mb))
-            return;
+        auto loadImage = [] (const char* path, yup::Image& destination)
+        {
+            yup::MemoryBlock mb;
+            if (! getAssetPath (path).loadFileAsData (mb))
+                return;
 
-        auto loadedImage = yup::Image::loadFromData (mb.asBytes());
-        if (loadedImage.wasOk())
-            logoImage = std::move (loadedImage.getReference());
+            auto loadedImage = yup::Image::loadFromData (mb.asBytes());
+            if (loadedImage.wasOk())
+                destination = std::move (loadedImage.getReference());
+        };
+
+        loadImage ("data/logo.png", logoImage);
+        loadImage ("data/logo_black.png", logoBlackImage);
     }
 
     void loadDrumLoop()
@@ -1749,6 +1757,7 @@ private:
 
     // UI
     yup::Image logoImage;
+    yup::Image logoBlackImage;
     yup::Rectangle<float> logoBounds;
     yup::Rectangle<float> railBounds;
     yup::Rectangle<float> keyboardRailBounds;

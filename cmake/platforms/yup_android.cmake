@@ -94,6 +94,31 @@ function (_yup_android_prepare_gradle)
         else()
             configure_file (${YUP_ANDROID_TARGET_ICON} ${base_icon_path}/mipmap-xxxhdpi/ic_launcher.png COPYONLY)
         endif()
+
+        # Layers next to the icon image, <name>-foreground.png and <name>-background.png (432 x 432, the
+        # foreground inside the middle 288), make it an adaptive icon from Android 8 and a themed one from 13
+        get_filename_component (icon_directory "${YUP_ANDROID_TARGET_ICON}" DIRECTORY)
+        get_filename_component (icon_name "${YUP_ANDROID_TARGET_ICON}" NAME_WLE)
+        set (icon_foreground "${icon_directory}/${icon_name}-foreground.png")
+        set (icon_background "${icon_directory}/${icon_name}-background.png")
+
+        if (EXISTS "${icon_foreground}" AND EXISTS "${icon_background}")
+            configure_file ("${icon_foreground}" "${base_icon_path}/drawable-nodpi/ic_launcher_foreground.png" COPYONLY)
+            configure_file ("${icon_background}" "${base_icon_path}/drawable-nodpi/ic_launcher_background.png" COPYONLY)
+
+            set (icon_monochrome "")
+            if (YUP_ANDROID_COMPILE_SDK_VERSION GREATER_EQUAL 33)
+                set (icon_monochrome "    <monochrome android:drawable=\"@drawable/ic_launcher_foreground\" />\n")
+            endif()
+
+            file (WRITE "${base_icon_path}/mipmap-anydpi-v26/ic_launcher.xml"
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                "<adaptive-icon xmlns:android=\"http://schemas.android.com/apk/res/android\">\n"
+                "    <background android:drawable=\"@drawable/ic_launcher_background\" />\n"
+                "    <foreground android:drawable=\"@drawable/ic_launcher_foreground\" />\n"
+                "${icon_monochrome}"
+                "</adaptive-icon>\n")
+        endif()
     endif()
 
 endfunction()

@@ -24,7 +24,7 @@ function (yup_standalone_app)
     set (options "")
     set (one_value_args
         # Globals
-        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_WHEEL TARGET_CXX_STANDARD
+        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_ICON_COMPOSER TARGET_WHEEL TARGET_CXX_STANDARD
         # Emscripten
         INITIAL_MEMORY MAXIMUM_MEMORY PTHREAD_POOL_SIZE STACK_SIZE CUSTOM_PLIST CUSTOM_SHELL ENABLE_EMSCRIPTEN_WEBGPU ENABLE_EMSCRIPTEN_GL_DEBUGGING ENABLE_EMSCRIPTEN_NODERAWFS)
     set (multi_value_args
@@ -36,6 +36,9 @@ function (yup_standalone_app)
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
+    if (NOT DEFINED YUP_ARG_TARGET_ICON)
+        _yup_set_default (YUP_ARG_TARGET_ICON_COMPOSER "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/AppIcon.icon")
+    endif()
     _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/app-icon.png")
     _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_WEBGPU ON)
     _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_GL_DEBUGGING OFF)
@@ -157,11 +160,18 @@ function (yup_standalone_app)
             _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/ApplicationInfo.plist")
             _yup_valid_identifier_string ("${target_app_identifier}" target_app_identifier)
 
-            _yup_message (STATUS "${target_name} - Converting application input icon to apple .icns format")
             _yup_convert_png_to_icns ("${target_icon}" "${CMAKE_CURRENT_BINARY_DIR}/icons" target_iconset)
             get_filename_component (target_iconset_name "${target_iconset}" NAME)
             target_sources (${target_name} PRIVATE ${target_iconset})
             list (APPEND target_resources "${target_iconset}")
+
+            if (YUP_ARG_TARGET_ICON_COMPOSER)
+                _yup_compile_icon_composer ("${YUP_ARG_TARGET_ICON_COMPOSER}" "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_icon" target_asset_catalog)
+                if (target_asset_catalog)
+                    target_sources (${target_name} PRIVATE ${target_asset_catalog})
+                    list (APPEND target_resources "${target_asset_catalog}")
+                endif()
+            endif()
 
             set_target_properties (${target_name} PROPERTIES
                 BUNDLE                                         ON
@@ -280,6 +290,18 @@ function (yup_standalone_app)
        target_link_options (${target_name} PRIVATE
             "-Wl,-z,max-page-size=16384"
             "-Wl,-z,common-page-size=16384")
+
+    elseif (YUP_PLATFORM_WINDOWS)
+        # An .ico next to the icon image, with the same name, becomes the icon of the executable
+        get_filename_component (target_icon_directory "${target_icon}" DIRECTORY)
+        get_filename_component (target_icon_name "${target_icon}" NAME_WLE)
+        set (target_icon_ico "${target_icon_directory}/${target_icon_name}.ico")
+
+        if (NOT "${target_console}" AND NOT "${target_wheel}" AND EXISTS "${target_icon_ico}")
+            set (target_icon_rc "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_icon.rc")
+            file (WRITE "${target_icon_rc}" "1 ICON \"${target_icon_ico}\"\n")
+            target_sources (${target_name} PRIVATE "${target_icon_rc}")
+        endif()
 
     elseif (YUP_PLATFORM_LINUX)
         set_target_properties (${target_name} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
