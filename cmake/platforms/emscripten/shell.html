@@ -478,6 +478,8 @@
       }
 
       function applyMode(mode) {
+        if (document.body.dataset.mode === 'embedded' && mode !== 'embedded')
+          rememberEmbeddedSize();
         document.body.dataset.mode = mode;
         ejectElement.textContent = mode === 'fullscreen' ? 'Exit fullscreen' : 'Exit full window';
         document.querySelectorAll('.seg[data-mode]').forEach(function (button) {
@@ -515,6 +517,33 @@
 
       document.addEventListener('fullscreenchange', onFullscreenChange);
       document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+      // ---------------------------------------------------------- window size
+
+      // Outside embedded mode the window takes the size the canvas is laid out at, so its pixels are
+      // rendered at that size instead of stretched; back in embedded mode it gets its own size again.
+      var embeddedSize = null;
+
+      function rememberEmbeddedSize() {
+        var canvas = document.getElementById('canvas');
+        if (canvas.clientWidth > 0 && canvas.clientHeight > 0)
+          embeddedSize = [canvas.clientWidth, canvas.clientHeight];
+      }
+
+      function fitWindowToMode() {
+        if (!runtimeReady || typeof Module._yupSetPrimaryWindowSize !== 'function')
+          return;
+
+        if (document.body.dataset.mode !== 'embedded') {
+          var stage = document.querySelector('.stage');
+          Module._yupSetPrimaryWindowSize(Math.round(stage.clientWidth), Math.round(stage.clientHeight));
+        } else if (embeddedSize) {
+          Module._yupSetPrimaryWindowSize(embeddedSize[0], embeddedSize[1]);
+          embeddedSize = null;
+        }
+      }
+
+      window.addEventListener('resize', fitWindowToMode);
 
       // ---------------------------------------------------------- frame pacing
 

@@ -359,6 +359,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Emscripten: the default page shell no longer stretches the canvas in full window and fullscreen modes. It resizes the application window to the space the canvas is given through the new `yupSetPrimaryWindowSize` export, and restores the window size when going back to embedded mode.
+
 - GUI: `Component::hitTest()` is consulted again when routing mouse events. `Component::findComponentAtForMouseEvent()`, which replaced the windowing layer's own traversal, tested only visibility and bounds, so a component that carved out part of its rectangle - a round knob keeping its corners transparent, a control with a padded margin - received moves, enters, exits, clicks and wheel events over the area it rejects, and whatever sits behind it received none.
 
 - Thirdparty (`sleef_library`): the SIMD translation units reference `Sleef_x86CpuID` from their exported dispatch queries (`Sleef_getIntd2`/`Sleef_getIntf4`, the `DORENAME`-renamed `xgetInt`/`xgetIntf`), but the definition in SLEEF's `src/common/common.c` was never compiled into the module, so an x86-64 build failed to link (`LNK2019` for `Sleef_x86CpuID` in `sleef_library_simddp.obj`/`sleef_library_simdsp.obj` on the Windows CI; ARM targets were unaffected because their helper header has no CPUID probe). The module now compiles `upstream/src/common/common.c` as its own translation unit (`sleef_library_common.c`), as SLEEF's own build does.
