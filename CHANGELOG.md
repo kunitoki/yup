@@ -224,6 +224,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Build: `yup_standalone_app` picks up icon variants next to `TARGET_ICON`: a `<name>.ico` is embedded as the Windows executable icon, and `<name>-foreground.png` / `<name>-background.png` make an adaptive (and, from Android 13, themed) Android launcher icon. The built-in YUP icon ships all of them.
+
 - Build: `yup_standalone_app` takes a `TARGET_ICON_COMPOSER` Icon Composer `.icon` bundle and compiles it with `actool` into `Assets.car`, giving apps a Liquid Glass icon on macOS and iOS 26 while the `.icns` from `TARGET_ICON` stays for older systems. YUP ships a default one with the new logo; without Xcode 26 the step is skipped.
 
 - YDSP: `fmsubF` lowers to a single fused `fmsub` on AArch64 instead of an `fmul`/`fsub` pair. `FMSUB d, n, m, a` computes `a - n * m` with one rounding, so this removes an instruction, a virtual register and a link from the loop-carried dependency chain of every contracted `c - a * b` (the ladder filter's `in - fb * z4`, the wave shaper's `1.0 - env * 0.5`). It also settles an inconsistency: `lowerFusedMultiplyAdd` already gives a target *without* the instruction one rounding through its float64 expansion, so the FMA-capable target was the less accurate one. Pinned by a numeric test rather than left implicit.

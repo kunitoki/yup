@@ -293,6 +293,18 @@ function (yup_standalone_app)
             "-Wl,-z,max-page-size=16384"
             "-Wl,-z,common-page-size=16384")
 
+    elseif (YUP_PLATFORM_WINDOWS)
+        # An .ico next to the icon image, with the same name, becomes the icon of the executable
+        get_filename_component (target_icon_directory "${target_icon}" DIRECTORY)
+        get_filename_component (target_icon_name "${target_icon}" NAME_WLE)
+        set (target_icon_ico "${target_icon_directory}/${target_icon_name}.ico")
+
+        if (NOT "${target_console}" AND NOT "${target_wheel}" AND EXISTS "${target_icon_ico}")
+            set (target_icon_rc "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_icon.rc")
+            file (WRITE "${target_icon_rc}" "1 ICON \"${target_icon_ico}\"\n")
+            target_sources (${target_name} PRIVATE "${target_icon_rc}")
+        endif()
+
     elseif (YUP_PLATFORM_LINUX)
         set_target_properties (${target_name} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
