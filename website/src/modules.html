@@ -3,7 +3,7 @@
     <head>
         <!-- @head -->
         <title>Modules - YUP!</title>
-        <meta name="description" content="The YUP module catalog: core, data, audio, graphics, UI, scripting and AI." />
+        <meta name="description" content="The YUP module catalog: core, audio, graphics, UI and tooling." />
     </head>
     <body>
         <!-- @chrome -->
@@ -17,7 +17,7 @@
 
 
             <section class="part wide" data-group>
-                <h2 class="label"><span>01</span>Core<span class="blurb">Foundations used across the whole framework.</span></h2>
+                <h2 class="label"><span>01</span>Core<span class="blurb">Foundations used across the whole framework, and observable application state.</span></h2>
                 <ul class="modules">
                     <li data-module>
                         <h3 class="module-name"><a data-filter-text href="https://yup.readthedocs.io/en/latest/modules.html#yup_core" target="_blank" rel="noopener">yup_core</a><a href="https://github.com/kunitoki/yup/tree/main/modules/yup_core" target="_blank" rel="noopener">source</a></h3>
@@ -34,12 +34,6 @@
                         <p data-filter-text>Vectorized math across SSE, AVX, FMA, NEON and Accelerate, wrapping xsimd behind a YUP-friendly API.</p>
                         <p class="muted">needs yup_core, xsimd</p>
                     </li>
-                </ul>
-            </section>
-
-            <section class="part wide" data-group>
-                <h2 class="label"><span>02</span>Data<span class="blurb">Observable application state.</span></h2>
-                <ul class="modules">
                     <li data-module>
                         <h3 class="module-name"><a data-filter-text href="https://yup.readthedocs.io/en/latest/modules.html#yup_data_model" target="_blank" rel="noopener">yup_data_model</a><a href="https://github.com/kunitoki/yup/tree/main/modules/yup_data_model" target="_blank" rel="noopener">source</a></h3>
                         <p data-filter-text>The DataTree model: hierarchical, observable, transactional and schema-validatable data with an XPath-like query engine.</p>
@@ -49,7 +43,7 @@
             </section>
 
             <section class="part wide" data-group>
-                <h2 class="label"><span>03</span>Audio<span class="blurb">Devices, formats, DSP, processing graphs and plugins.</span></h2>
+                <h2 class="label"><span>02</span>Audio<span class="blurb">Devices, formats, DSP, processing graphs and plugins.</span></h2>
                 <ul class="modules">
                     <li data-module>
                         <h3 class="module-name"><a data-filter-text href="https://yup.readthedocs.io/en/latest/modules.html#yup_audio_basics" target="_blank" rel="noopener">yup_audio_basics</a><a href="https://github.com/kunitoki/yup/tree/main/modules/yup_audio_basics" target="_blank" rel="noopener">source</a></h3>
@@ -100,7 +94,7 @@
             </section>
 
             <section class="part wide" data-group>
-                <h2 class="label"><span>04</span>Graphics<span class="blurb">The rendering stack, from GPU abstraction to 2D drawing and animation.</span></h2>
+                <h2 class="label"><span>03</span>Graphics<span class="blurb">The rendering stack, from GPU abstraction to 2D drawing and animation.</span></h2>
                 <ul class="modules">
                     <li data-module>
                         <h3 class="module-name"><a data-filter-text href="https://yup.readthedocs.io/en/latest/modules.html#yup_rhi" target="_blank" rel="noopener">yup_rhi</a><a href="https://github.com/kunitoki/yup/tree/main/modules/yup_rhi" target="_blank" rel="noopener">source</a></h3>
@@ -126,7 +120,7 @@
             </section>
 
             <section class="part wide" data-group>
-                <h2 class="label"><span>05</span>UI<span class="blurb">Components and widgets painted on the GPU.</span></h2>
+                <h2 class="label"><span>04</span>UI<span class="blurb">Components and widgets painted on the GPU.</span></h2>
                 <ul class="modules">
                     <li data-module>
                         <h3 class="module-name"><a data-filter-text href="https://yup.readthedocs.io/en/latest/modules.html#yup_gui" target="_blank" rel="noopener">yup_gui</a><a href="https://github.com/kunitoki/yup/tree/main/modules/yup_gui" target="_blank" rel="noopener">source</a></h3>
@@ -142,19 +136,13 @@
             </section>
 
             <section class="part wide" data-group>
-                <h2 class="label"><span>06</span>Scripting<span class="blurb">Drive YUP from Python.</span></h2>
+                <h2 class="label"><span>05</span>Tooling<span class="blurb">Drive YUP from Python, and talk to language models.</span></h2>
                 <ul class="modules">
                     <li data-module>
                         <h3 class="module-name"><a data-filter-text href="https://yup.readthedocs.io/en/latest/modules.html#yup_python" target="_blank" rel="noopener">yup_python</a><a href="https://github.com/kunitoki/yup/tree/main/modules/yup_python" target="_blank" rel="noopener">source</a></h3>
                         <p data-filter-text>Python bindings for creating and driving YUP applications, generated for every supported module present in the build.</p>
                         <p class="muted">needs yup_core</p>
                     </li>
-                </ul>
-            </section>
-
-            <section class="part wide" data-group>
-                <h2 class="label"><span>07</span>AI<span class="blurb">LLM clients, embeddings and the Model Context Protocol.</span></h2>
-                <ul class="modules">
                     <li data-module>
                         <h3 class="module-name"><a data-filter-text href="https://yup.readthedocs.io/en/latest/modules.html#yup_ai" target="_blank" rel="noopener">yup_ai</a><a href="https://github.com/kunitoki/yup/tree/main/modules/yup_ai" target="_blank" rel="noopener">source</a></h3>
                         <p data-filter-text>Chat-completion clients for OpenAI, Anthropic and Gemini, function-calling tools, embeddings and an MCP client and server.</p>

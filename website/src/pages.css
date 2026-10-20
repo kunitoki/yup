@@ -78,7 +78,7 @@ button {
 /* ----------------------------------------------------------------- sheet */
 
 .sheet {
-    padding: 24vh var(--edge-x) 18vh;
+    padding: 17vh var(--edge-x) 18vh;
 }
 
 .title {
@@ -96,7 +96,7 @@ button {
 
 .part {
     max-width: 1000px;
-    margin-top: 14vh;
+    margin-top: 8vh;
 }
 
 .part.wide {
@@ -379,10 +379,17 @@ pre.code code {
     overflow-x: auto;
 }
 
+/* The framework columns share the width equally and resize together; the feature names keep theirs. */
 .compare {
+    width: 100%;
     min-width: 920px;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
+}
+
+.compare thead th:first-child {
+    width: 13rem;
 }
 
 .compare th,
@@ -447,6 +454,65 @@ pre.code code {
 .columns li + li,
 .part > ul:not(.links, .sources) li + li {
     margin-top: 10px;
+}
+
+/* -------------------------------------------------------------- releases */
+
+.release + .release {
+    margin-top: 6vh;
+}
+
+.release summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.release summary::-webkit-details-marker {
+    display: none;
+}
+
+.release summary::after {
+    content: "show";
+    margin-left: auto;
+    color: var(--ink);
+    opacity: 0.45;
+}
+
+.release details[open] summary::after {
+    content: "hide";
+}
+
+.release-body h3 {
+    margin-top: 40px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.release-body h4 {
+    margin-top: 24px;
+    color: var(--pale);
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.release-body ul {
+    margin-top: 12px;
+    padding-left: 1.2em;
+}
+
+.release-body li {
+    max-width: 80ch;
+    opacity: 0.8;
+}
+
+.release-body li + li {
+    margin-top: 8px;
+}
+
+.release-body p:not(.note) {
+    max-width: 80ch;
+    margin-top: 16px;
 }
 
 /* ------------------------------------------------------------------- 404 */
@@ -525,7 +591,7 @@ pre.code code {
     }
 
     .sheet {
-        padding-top: 30vh;
+        padding-top: 23vh;
     }
 
     .rows {

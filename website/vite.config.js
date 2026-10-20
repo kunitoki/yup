@@ -6,7 +6,7 @@ import { createHighlighter } from "shiki";
 const repoRoot = resolve(import.meta.dirname, "..");
 const root = resolve(import.meta.dirname, "src");
 const partialsDir = resolve(root, "partials");
-const pages = ["index", "modules", "showcase", "compare", "get-started"];
+const pages = ["index", "modules", "showcase", "compare", "releases", "get-started"];
 
 // Production origin, used for canonical links, social cards, the sitemap and robots.txt.
 const siteUrl = "https://yup.audio";
@@ -22,6 +22,9 @@ const goatCounterCode = "yup";
 
 const docsDir = resolve(repoRoot, "docs");
 const docsUrl = "https://yup.readthedocs.io/en/latest";
+
+const repoUrl = "https://github.com/kunitoki/yup";
+const releasesDir = resolve(partialsDir, "releases");
 
 // Syntax colors in the site palette: blues and greys only.
 const codeTheme = {
@@ -158,9 +161,103 @@ function docsSearchIndex() {
     return entries.map((e) => ({ ...e, k: [...e.k].join(" "), t: e.t.length > 200 ? `${e.t.slice(0, 200)}...` : e.t }));
 }
 
+const escapeHtml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// The inline markdown of the release notes: code spans (taken verbatim), bold, links and #123
+// references to issues and pull requests.
+const inlineMarkdown = (text) => text.split(/(`[^`]+`)/).map((part) => part.startsWith("`") && part.endsWith("`") && part.length > 1
+    ? `<code>${escapeHtml(part.slice(1, -1))}</code>`
+    : escapeHtml(part)
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+        .replace(/(^|[\s(])#(\d+)\b/g, `$1<a href="${repoUrl}/issues/$2" target="_blank" rel="noopener">#$2</a>`)).join("");
+
+// The release notes of partials/releases/<version>.md, newest first, as one collapsible section each
+// with the newest open. Each file starts with "## [<version>] - <date>" (a date of "Unreleased" keeps
+// a draft off the page), then ### and #### groups, bullets (continued on indented lines) and plain or
+// bold paragraphs.
+const versionKey = (file) => basename(file, ".md").split(".").map((part) => part.padStart(6, "0")).join(".");
+
+function releasesHtml() {
+    const out = [];
+    let item = null;
+    let inList = false;
+    let inVersion = false;
+
+    const flushItem = () => {
+        if (item !== null)
+            out.push(`<li>${inlineMarkdown(item)}</li>`);
+        item = null;
+    };
+    const closeList = () => {
+        flushItem();
+        if (inList)
+            out.push("</ul>");
+        inList = false;
+    };
+    const closeVersion = () => {
+        closeList();
+        if (inVersion)
+            out.push("</div></details></section>");
+        inVersion = false;
+    };
+
+    const notes = readdirSync(releasesDir)
+        .filter((file) => file.endsWith(".md"))
+        .sort((a, b) => versionKey(b).localeCompare(versionKey(a)))
+        .map((file) => readFileSync(resolve(releasesDir, file), "utf8"))
+        .join("\n");
+
+    for (const line of notes.split("\n")) {
+        const version = line.match(/^## \[(.+?)\](?:\s*-\s*(.+))?/);
+        if (version) {
+            const [, number, date = ""] = version;
+            const open = out.length === 0 ? " open" : "";
+            closeVersion();
+
+            if (/unreleased/i.test(date))
+                continue;
+
+            out.push(`<section class="part release"><details${open}><summary class="label"><span>${escapeHtml(number)}</span>${escapeHtml(date.trim())}</summary><div class="release-body">`);
+            out.push(`<p class="note"><a href="${repoUrl}/releases/tag/v${escapeHtml(number)}" target="_blank" rel="noopener">github release</a></p>`);
+
+            inVersion = true;
+            continue;
+        }
+
+        if (!inVersion)
+            continue;
+
+        const heading = line.match(/^(#{3,4})\s+(.+)/);
+        const bullet = line.match(/^\s*[-*]\s+(.+)/);
+
+        if (heading) {
+            closeList();
+            const tag = heading[1].length === 3 ? "h3" : "h4";
+            out.push(`<${tag}>${inlineMarkdown(heading[2])}</${tag}>`);
+        } else if (bullet) {
+            flushItem();
+            if (!inList)
+                out.push("<ul>");
+            inList = true;
+            item = bullet[1];
+        } else if (item !== null && /^\s+\S/.test(line)) {
+            item = `${item} ${line.trim()}`;
+        } else if (/^\s*$/.test(line) || /^---\s*$/.test(line)) {
+            closeList();
+        } else {
+            closeList();
+            out.push(`<p>${inlineMarkdown(line.trim())}</p>`);
+        }
+    }
+
+    closeVersion();
+    return out.join("\n");
+}
+
 // Expands <!-- @name --> into partials/<name>.html and <!-- @code path --> into a highlighted
-// <pre> of partials/<path>, then marks the current page's nav link. Also serves the docs search
-// index as the virtual:docs-index module.
+// <pre> of partials/<path> and <!-- @releases --> into the notes of partials/releases/, then marks
+// the current page's nav link. Also serves the docs search index as the virtual:docs-index module.
 function partials() {
     const repo = normalizePath(repoRoot).replace(/^\//, "");
 
@@ -197,6 +294,7 @@ function partials() {
                 const shiki = await highlighter;
 
                 const expanded = html
+                    .replace("<!-- @releases -->", () => releasesHtml())
                     .replace(/<!-- @(\w+) -->/g, (_, name) => readPartial(`${name}.html`))
                     .replace(/<!-- @code (\S+) -->/g, (_, path) =>
                         shiki.codeToHtml(readPartial(path).trimEnd(), {

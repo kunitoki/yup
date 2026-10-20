@@ -14,7 +14,7 @@ npm run preview  # serves dist/
 
 Everything lives in `src/`, which is the Vite root:
 
-- `src/index.html`, `src/modules.html`, `src/showcase.html`, `src/compare.html`, `src/get-started.html` - one file per page, all listed in `pages` in `vite.config.js`.
+- `src/index.html`, `src/modules.html`, `src/showcase.html`, `src/compare.html`, `src/releases.html`, `src/get-started.html` - one file per page, all listed in `pages` in `vite.config.js`.
 - `src/404.html` - served by GitHub Pages for any missing path. It sets `<base href="/">` so its assets resolve at any depth, and it is built but kept out of the sitemap.
 - `src/partials/` - shared markup, inlined where a page contains `<!-- @name -->`: `head` (the pages' meta, stylesheet and script), `chrome` (the corner links and the search dialog, also used by the home page), `nav` (the links between pages, the current one marked) and `footer`.
 - `src/partials/snippets/` - plain code samples (`.cpp`, `.cmake`, `.sh`), inlined and highlighted with Shiki where a page contains `<!-- @code snippets/<file> -->`. Edit them as normal source files; the dev server reloads on save.
@@ -48,6 +48,7 @@ Until it is built, or where the browser lacks WebGPU or cross-origin isolation, 
 
 ## Build-time data
 
+- `<!-- @releases -->` (on `releases.html`) becomes the release notes in `src/partials/releases/<version>.md`, newest first, one collapsible section each with the newest open. The notes are short summaries written for the site, not the changelog: each file starts with `## [<version>] - <date>` (a date of `Unreleased` keeps a draft off the page), followed by `###` groups, bullets and paragraphs, with bold, code, links and `#123` references. Add a file for each new release.
 - Docs search (the `search` corner, `Cmd/Ctrl+K` or `/`) reads `virtual:docs-index`, which the `yup-partials` plugin builds from the h1-h3 sections of `docs/**/*.md` and which loads only when the dialog first opens. Links point to the matching section ids on yup.readthedocs.io. Restart the dev server after editing the docs.
 
 ## Analytics
