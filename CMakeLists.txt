@@ -31,14 +31,18 @@ set (CMAKE_CXX_SCAN_FOR_MODULES 0)
 set (CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (YUP_PLATFORM_MAC)
+    set (CMAKE_XCODE_GENERATE_SCHEME OFF)
+
     execute_process (COMMAND xcodebuild -version OUTPUT_VARIABLE xcode_version_output ERROR_QUIET)
     string (REGEX MATCH "Xcode ([0-9]+)" _ "${xcode_version_output}")
+    _yup_message (STATUS "Detected Xcode version ${CMAKE_MATCH_1}")
     if (CMAKE_MATCH_1 GREATER_EQUAL 27)
         set (CMAKE_OSX_DEPLOYMENT_TARGET 12.0)
-    else()
+    elseif (CMAKE_OSX_DEPLOYMENT_TARGET LESS 11.0)
         set (CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
     endif()
-    set (CMAKE_XCODE_GENERATE_SCHEME OFF)
+
+    _yup_message (STATUS "CMAKE_OSX_DEPLOYMENT_TARGET is set to ${CMAKE_OSX_DEPLOYMENT_TARGET} (minimum 11.0)")
 endif()
 
 set (yup_languages C CXX)
