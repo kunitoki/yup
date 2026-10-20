@@ -73,6 +73,9 @@ jobs:
   cpp-coverage:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
     - name: Checkout repository
       uses: actions/checkout@v6
@@ -80,6 +83,10 @@ jobs:
         fetch-depth: 0
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: linux-coverage
+        max-size: 1G
     - name: Configure CMake with Coverage
       run: |
         cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build \

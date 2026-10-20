@@ -59,8 +59,14 @@ jobs:
       fail-fast: false
       matrix:
         example: ${{ fromJson(inputs.examples) }}
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v6
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: android-example-${{ matrix.example }}
     - name: Setup Java
       uses: actions/setup-java@v5
       with:

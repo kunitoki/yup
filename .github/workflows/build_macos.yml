@@ -30,8 +30,16 @@ env:
 jobs:
   configure:
     runs-on: macos-latest
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJC_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v6
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: macos-configure
     - name: Configure
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
@@ -56,8 +64,17 @@ jobs:
       fail-fast: false
       matrix:
         config: [Debug, Release]
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJC_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v6
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: macos-tests-${{ matrix.config }}
+        max-size: 1G
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
@@ -80,8 +97,16 @@ jobs:
       fail-fast: false
       matrix:
         example: ${{ fromJson(inputs.examples) }}
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJC_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v6
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: macos-example-${{ matrix.example }}
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
