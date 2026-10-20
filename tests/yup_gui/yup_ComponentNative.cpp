@@ -591,14 +591,21 @@ protected:
             g.fillAll();
         }
 
-        void mouseEnter (const MouseEvent&) override
+        // The system pointer can rest over the window (xvfb puts it at the top-left), so only fingers count
+        void mouseEnter (const MouseEvent& event) override
         {
+            if (! event.isTouch())
+                return;
+
             ++mouseEnterCount;
             mouseEnterOrder = ++eventSequence;
         }
 
-        void mouseExit (const MouseEvent&) override
+        void mouseExit (const MouseEvent& event) override
         {
+            if (! event.isTouch())
+                return;
+
             ++mouseExitCount;
             mouseExitOrder = ++eventSequence;
         }
