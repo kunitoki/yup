@@ -217,6 +217,7 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example FluidSimulation fluid-simulation {{DEMOPATH}}
   @just update_emscripten_example Lottie lottie {{DEMOPATH}}
   @just update_emscripten_example Pbr pbr {{DEMOPATH}}
+  @just update_emscripten_example Scene3D scene3d {{DEMOPATH}}
   @just update_emscripten_example Shaders shaders {{DEMOPATH}}
   @just update_emscripten_example SpectrumAnalyzer spectrum-analyzer {{DEMOPATH}}
   @just update_emscripten_example Svg svg {{DEMOPATH}}
