@@ -36,6 +36,10 @@
     flat and folded. As it lifts, every face moves rigidly (its knob never distorts)
     from its place in the panel to its face of the solid, and the solid turns
     toward the pointer. The knobs keep turning by vertical drag on the folded faces.
+
+    While the demo is open it plays an FM loop (see FacetSound). The four knobs on
+    the faces turned toward the viewer when folded set its FM amounts; the other
+    eight do nothing.
 */
 class Facet : public Demo
 {
@@ -46,6 +50,14 @@ public:
     {
         addAndMakeVisible (view);
         surface = view.addSurface (panel);
+
+        for (int i = 0; i < FacetSound::numAmounts; ++i)
+        {
+            auto& knob = panel.getKnob (soundKnobs[(std::size_t) i].face);
+            knob.setValue (soundKnobs[(std::size_t) i].initial, yup::dontSendNotification);
+            knob.onValueChanged = [this, i] (double value) { sound.setAmount (i, static_cast<float> (value)); };
+            sound.setAmount (i, static_cast<float> (knob.getValue()));
+        }
     }
 
     void resized() override
@@ -72,6 +84,8 @@ public:
 
     yup::Component* getFocusTarget() override { return panel.getFirstKnob(); }
 
+    SoundSource* getSoundSource() override { return &sound; }
+
 private:
     //==============================================================================
     static constexpr int numFaces = 12;
@@ -81,6 +95,21 @@ private:
     static constexpr float cellHeight = designEdge * 1.65f;     // and 1.539 edges tall
     static constexpr float margin = 24.0f;
     static constexpr double knobDragSensitivity = 1.0; // a drag as tall as the knob sweeps its whole range
+
+    /** The faces whose normals point at the viewer when folded, (+-1, 0, phi) and (0, +-phi, 1) of
+        dodecahedronFaces(), with the FM amount each plays and its starting value. */
+    struct SoundKnob
+    {
+        int face;
+        double initial;
+    };
+
+    static constexpr std::array<SoundKnob, FacetSound::numAmounts> soundKnobs { {
+        { 3, 0.35 },  // left: operator 1 feedback
+        { 4, 0.45 },  // bottom: 2 into 1
+        { 9, 0.3 },   // right: 3 into 2
+        { 10, 0.2 },  // top: 4 into 3
+    } };
 
     using Pentagon = std::array<yup::Point<float>, 5>;
 
@@ -157,19 +186,30 @@ private:
 
         yup::Slider* getFirstKnob() const { return knobs.front().get(); }
 
+        yup::Slider& getKnob (int index) const { return *knobs[(std::size_t) index]; }
+
+        /** How lit each face is by the sound, from 0 to 1. */
+        void setFaceGlow (const std::array<float, numFaces>& newGlow)
+        {
+            glow = newGlow;
+            repaint();
+        }
+
         void paint (yup::Graphics& g) override
         {
             const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
 
-            for (const auto& pentagon : pentagons)
+            for (std::size_t i = 0; i < pentagons.size(); ++i)
             {
+                const auto& pentagon = pentagons[i];
+
                 yup::Path path;
                 path.moveTo (pentagon[0]);
                 for (std::size_t k = 1; k < pentagon.size(); ++k)
                     path.lineTo (pentagon[k]);
                 path.closeSubPath();
 
-                g.setFillColor (palette.getColor (yup::ThemePalette::Role::surfaceRaised));
+                g.setFillColor (palette.getColor (yup::ThemePalette::Role::surfaceRaised).mixedWith (blueColor, 0.65f * glow[i], yup::ColorSpace::SRGB));
                 g.fillPath (path);
                 g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
                 g.setStrokeWidth (1.5f);
@@ -180,6 +220,7 @@ private:
     private:
         std::vector<std::unique_ptr<yup::Slider>> knobs;
         std::array<Pentagon, numFaces> pentagons {};
+        std::array<float, numFaces> glow {};
         int columns = 4;
     };
 
@@ -369,6 +410,12 @@ private:
             buildMesh (fold);
         }
 
+        // A rim of light on hits, warmer with the bass, both easing out slowly.
+        lightFaces (deltaSeconds);
+        rimGlow = easeToward (rimGlow, hearing.hit, deltaSeconds, 0.01f, 0.5f);
+        warmth = easeToward (warmth, hearing.lowAccent, deltaSeconds, 0.02f, 0.8f);
+        view.setAudio (rimGlow, warmth);
+
         const auto center = screenBounds.getCenter();
         if (pointer.has_value())
         {
@@ -390,6 +437,39 @@ private:
                                                    .followedBy (yup::Matrix4::rotationX (pitch))
                                                    .followedBy (yup::Matrix4::translation (solidCenter)));
         }
+    }
+
+    /** Every hit of the loop lights a face in blue that fades out, the next face each time, so the
+        light travels around the solid with the rhythm while nothing moves under the knobs. Faces light
+        at once and let go slowly, so the light flows rather than flickers. */
+    void lightFaces (float deltaSeconds)
+    {
+        static constexpr std::array<int, numFaces> order { 3, 10, 9, 4, 0, 7, 11, 1, 6, 5, 8, 2 };
+
+        if (hearing.hit > lastHeardHit + 0.5f)
+        {
+            faceTarget[(std::size_t) order[(std::size_t) nextLitFace]] = 1.0f;
+            nextLitFace = (nextLitFace + 1) % numFaces;
+        }
+        lastHeardHit = hearing.hit;
+
+        // Each lit face lights at once and fades out over most of a second.
+        auto anyLit = false;
+        for (std::size_t i = 0; i < faceGlow.size(); ++i)
+        {
+            faceTarget[i] *= std::exp (-deltaSeconds / 0.2f);
+            faceGlow[i] = easeToward (faceGlow[i], faceTarget[i], deltaSeconds, 0.01f, 0.6f);
+
+            if (faceGlow[i] < 0.003f && faceTarget[i] < 0.003f)
+                faceGlow[i] = faceTarget[i] = 0.0f;
+
+            anyLit = anyLit || faceGlow[i] > 0.0f;
+        }
+
+        if (anyLit || wasLit)
+            panel.setFaceGlow (faceGlow);
+
+        wasLit = anyLit;
     }
 
     /** Places every face rigidly between its flat and folded pose. */
@@ -426,6 +506,13 @@ private:
     Lift facetLift;
     yup::Point<float> pointerOffset;
     float meshFold = -1.0f;
+    std::array<float, numFaces> faceGlow {}, faceTarget {};
+    float rimGlow = 0.0f, warmth = 0.0f;
+    float lastHeardHit = 0.0f;
+    int nextLitFace = 0;
+    bool wasLit = false;
     float modelYaw = 0.0f;
     float modelPitch = 0.0f;
+
+    FacetSound sound;
 };

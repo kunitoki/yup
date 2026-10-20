@@ -183,6 +183,18 @@ public:
         repaint();
     }
 
+    /** Lets the sound play on the lit surfaces: glow flashes a rim of blue light on hits, warmth
+        turns the light from the site's pale blue toward amber. Both from 0 to 1. */
+    void setAudio (float newGlow, float newWarmth)
+    {
+        if (std::abs (newGlow - glow) < 0.002f && std::abs (newWarmth - warmth) < 0.002f)
+            return;
+
+        glow = newGlow;
+        warmth = newWarmth;
+        repaint();
+    }
+
     //==============================================================================
     /** A quad at depth zero covering the given pixel bounds of a view of the given size. */
     static std::vector<SurfaceVertex> flatQuad (yup::Rectangle<float> pixelBounds, yup::Size<float> viewport)
@@ -322,6 +334,8 @@ public:
                 std::copy_n (viewProjection.getData(), 16, uniforms.viewProjection);
                 std::copy_n (surface->model.getData(), 16, uniforms.model);
                 uniforms.params[0] = lift;
+                uniforms.params[2] = glow;
+                uniforms.params[3] = warmth;
                 uniforms.eye[2] = pixelCameraDistance (viewport.getSize());
 
                 pass.setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
@@ -665,6 +679,7 @@ private:
     //==============================================================================
     std::vector<std::unique_ptr<Surface>> surfaces;
     float lift = 0.0f;
+    float glow = 0.0f, warmth = 0.0f;
     float contentScale = 1.0f;
     bool buttonDown = false;
     mutable yup::uint32 useCounter = 0;

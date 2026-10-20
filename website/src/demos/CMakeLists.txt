@@ -26,29 +26,34 @@ set (target_version "1.0.0")
 project (${target_name} VERSION ${target_version})
 
 # ==== Embed the shader bundles, exposed as website::<Name>Shader_data / _size by <ShaderBundles/<Name>Shader.h>
+#      Each shader lives with its demo as <folder>/<name>.frag, or in common/shaders when demos share it.
 #      A shader without its own .vert uses the fullscreen triangle of the graphics example.
-set (shaders_dir "${CMAKE_CURRENT_LIST_DIR}/shaders")
+set (source_dir "${CMAKE_CURRENT_LIST_DIR}/source")
+set (common_shaders_dir "${source_dir}/common/shaders")
 set (fullscreen_vertex "${CMAKE_CURRENT_LIST_DIR}/../../../examples/graphics/data/shaders/fullscreen.vert")
-file (GLOB shader_includes "${shaders_dir}/*.glsl")
+file (GLOB shader_includes "${common_shaders_dir}/*.glsl")
 
 set (shader_libraries "")
-foreach (shader IN ITEMS Surface Ripple)
+foreach (shader_entry IN ITEMS "Surface@common/shaders" "Ripple@ripple")
+    string (REPLACE "@" ";" shader_entry "${shader_entry}")
+    list (GET shader_entry 0 shader)
+    list (GET shader_entry 1 shader_folder)
     string (TOLOWER "${shader}" shader_file)
 
     set (vertex_shader "${fullscreen_vertex}")
-    if (EXISTS "${shaders_dir}/${shader_file}.vert")
-        set (vertex_shader "${shaders_dir}/${shader_file}.vert")
+    if (EXISTS "${source_dir}/${shader_folder}/${shader_file}.vert")
+        set (vertex_shader "${source_dir}/${shader_folder}/${shader_file}.vert")
     endif()
 
     yup_add_shader_bundle (${target_name}_${shader_file}_shader
         VERT "${vertex_shader}"
-        FRAG "${shaders_dir}/${shader_file}.frag"
+        FRAG "${source_dir}/${shader_folder}/${shader_file}.frag"
         NAMESPACE website
         OUTPUT_NAME ${shader}Shader
         RESOURCE_NAME ${shader}Shader
         TEMP_FOLDER "${CMAKE_CURRENT_BINARY_DIR}/shaders"
         DEPENDS ${shader_includes}
-        OPTIONS "-I${shaders_dir}")
+        OPTIONS "-I${common_shaders_dir}")
 
     list (APPEND shader_libraries ${target_name}_${shader_file}_shader)
 endforeach()
@@ -82,11 +87,14 @@ yup_standalone_app (
         yup::yup_events
         yup::yup_graphics
         yup::yup_gui
+        yup::yup_audio_basics
+        yup::yup_audio_devices
+        yup::yup_dsp
         ${shader_libraries}
         ${target_name}_snippets)
 
 # ==== Prepare sources
-file (GLOB sources "${CMAKE_CURRENT_LIST_DIR}/source/*.h" "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp" "${shaders_dir}/*")
+file (GLOB_RECURSE sources "${source_dir}/*.h" "${source_dir}/*.cpp" "${source_dir}/*.vert" "${source_dir}/*.frag" "${source_dir}/*.glsl")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 target_sources (${target_name} PRIVATE ${sources})
 

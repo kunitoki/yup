@@ -21,7 +21,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
+#include <functional>
 #include <vector>
 
 //==============================================================================
@@ -34,6 +36,10 @@
     half backward like a slot machine reel, and the same sideways for the left and
     right halves, flat in the middle. It keeps scrolling, highlighting and selecting
     on the curve.
+
+    While the demo is open it sounds like a reel of presets (see ReelSound): rows
+    tick going by and a selected preset plays a phrase. The reel
+    bends a little further on every note, and the selected row glows with the highs.
 */
 class Reel : public Demo
 {
@@ -43,6 +49,11 @@ public:
         : Demo ("Reel")
     {
         list.setModel (&presets);
+        presets.onSelect = [this] (int row)
+        {
+            if (isOpen())
+                sound.playPreset (row);
+        };
 
         // Drag it like a finger would: flings keep going and slow down, the ends stretch and bounce back.
         list.setMouseDragScrollingEnabled (true);
@@ -71,6 +82,8 @@ public:
 
     /** The list keeps bending with the pointer while it is dragged. */
     bool holdsStillWhileDragging() const override { return false; }
+
+    SoundSource* getSoundSource() override { return &sound; }
 
 private:
     //==============================================================================
@@ -114,6 +127,14 @@ private:
             static const char* const names[] = { "glass pad", "deep bell", "soft pluck", "warm drone", "bright lead", "dark keys" };
             return yup::String (names[rowIndex % 6]) + " " + yup::String (rowIndex / 6 + 1).paddedLeft ('0', 2);
         }
+
+        void selectedRowsChanged (const yup::Array<int>& selectedRows) override
+        {
+            if (! selectedRows.isEmpty() && onSelect)
+                onSelect (selectedRows.getFirst());
+        }
+
+        std::function<void (int row)> onSelect;
     };
 
     //==============================================================================
@@ -130,12 +151,60 @@ private:
                           yup::jlimit (-1.0f, 1.0f, (screenBounds.getCenterY() - pointer->getY()) / (0.5f * screenBounds.getHeight())) };
         }
 
-        const auto bend = direction * lift;
+        listenToScroll (deltaSeconds);
+        glowSelectedRow();
+        view.setAudio (0.5f * hearing.hit, 0.0f);
+
+        // Every note bends the reel a little further, drawn only: picking keeps the bend of the
+        // pointer, or the ticks of a drag would bend the list under it into more ticks.
+        const auto restBend = direction * lift;
+        const auto bend = restBend * (1.0f + 0.25f * hearing.hit);
         if (std::abs (bend.getX() - meshBend.getX()) > 0.001f || std::abs (bend.getY() - meshBend.getY()) > 0.001f)
         {
             meshBend = bend;
-            buildMesh (bend);
+            buildMesh (bend, restBend);
         }
+    }
+
+    /** Ticks for every row going by. */
+    void listenToScroll (float deltaSeconds)
+    {
+        const auto position = list.getScrollPosition();
+        const auto pitch = std::max (1.0f, list.getRowSize() + list.getRowSpacing());
+        const auto row = static_cast<int> (std::floor (position / pitch));
+        const auto rowsPerSecond = std::abs (position - lastScrollPosition) / pitch / std::max (deltaSeconds, 0.001f);
+
+        if (isOpen())
+        {
+            for (int i = 0; i < std::min (std::abs (row - lastScrollRow), 4); ++i)
+                sound.tick (rowsPerSecond);
+        }
+
+        lastScrollRow = row;
+        lastScrollPosition = position;
+    }
+
+    /** Lights the selected row toward pale blue with bursts of the high end of the sound: the steady
+        wind does not keep it lit. */
+    void glowSelectedRow()
+    {
+        const auto glow = hearing.highAccent;
+        if (std::abs (glow - rowGlow) < 0.01f)
+            return;
+
+        rowGlow = glow;
+
+        if (glow < 0.01f)
+        {
+            list.setColor (yup::ListBoxItem::Style::backgroundColorSelectedId, std::nullopt);
+        }
+        else
+        {
+            const auto accent = yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::accent);
+            list.setColor (yup::ListBoxItem::Style::backgroundColorSelectedId, accent.mixedWith (paleColor, 0.7f * glow, yup::ColorSpace::SRGB));
+        }
+
+        list.repaint();
     }
 
     /** Where a point at @p t (0..1) along a side of length @p length lands on that side bent by @p bend. */
@@ -159,20 +228,38 @@ private:
         return { radius * std::sin (angle), towardViewer * (radius - radius * std::cos (angle)), towardViewer * std::tan (angle) };
     }
 
-    /** A grid bent around both axes: forward (edges toward the viewer) for a positive bend, backward for a negative one. */
-    void buildMesh (yup::Point<float> bend)
+    /** A grid bent around both axes: forward (edges toward the viewer) for a positive bend, backward for
+        a negative one. It is drawn with one bend and picked with another, on the same grid. */
+    void buildMesh (yup::Point<float> drawnBend, yup::Point<float> pickedBend)
+    {
+        const auto isFlat = [] (yup::Point<float> bend) { return std::abs (bend.getX()) < 0.0005f && std::abs (bend.getY()) < 0.0005f; };
+
+        if (isFlat (drawnBend) && isFlat (pickedBend))
+        {
+            view.setSurfaceMesh (surface, SurfaceView::flatQuad (screenBounds, getLocalBounds().getSize()), SurfaceView::quadIndices());
+            return;
+        }
+
+        std::vector<yup::uint32> indices;
+        const auto stride = static_cast<yup::uint32> (numColumns + 1);
+        for (yup::uint32 row = 0; row < static_cast<yup::uint32> (numRows); ++row)
+        {
+            for (yup::uint32 column = 0; column < static_cast<yup::uint32> (numColumns); ++column)
+            {
+                const auto a = row * stride + column;
+                indices.insert (indices.end(), { a, a + stride, a + stride + 1, a, a + stride + 1, a + 1 });
+            }
+        }
+
+        view.setSurfaceMesh (surface, gridVertices (drawnBend), std::move (indices), gridVertices (pickedBend));
+    }
+
+    std::vector<SurfaceVertex> gridVertices (yup::Point<float> bend) const
     {
         const auto viewport = getLocalBounds().getSize();
         const auto center = pixelToWorld (screenBounds.getCenter(), 0.0f, viewport);
 
-        if (std::abs (bend.getX()) < 0.0005f && std::abs (bend.getY()) < 0.0005f)
-        {
-            view.setSurfaceMesh (surface, SurfaceView::flatQuad (screenBounds, viewport), SurfaceView::quadIndices());
-            return;
-        }
-
         std::vector<SurfaceVertex> vertices;
-        std::vector<yup::uint32> indices;
 
         for (int row = 0; row <= numRows; ++row)
         {
@@ -192,17 +279,7 @@ private:
             }
         }
 
-        const auto stride = static_cast<yup::uint32> (numColumns + 1);
-        for (yup::uint32 row = 0; row < static_cast<yup::uint32> (numRows); ++row)
-        {
-            for (yup::uint32 column = 0; column < static_cast<yup::uint32> (numColumns); ++column)
-            {
-                const auto a = row * stride + column;
-                indices.insert (indices.end(), { a, a + stride, a + stride + 1, a, a + stride + 1, a + 1 });
-            }
-        }
-
-        view.setSurfaceMesh (surface, std::move (vertices), std::move (indices));
+        return vertices;
     }
 
     //==============================================================================
@@ -216,4 +293,9 @@ private:
     Lift reelLift;
     yup::Point<float> direction;
     yup::Point<float> meshBend { -2.0f, -2.0f };
+
+    ReelSound sound;
+    float lastScrollPosition = 0.0f;
+    float rowGlow = 0.0f;
+    int lastScrollRow = 0;
 };

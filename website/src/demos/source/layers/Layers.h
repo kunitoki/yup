@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <initializer_list>
@@ -36,6 +37,9 @@
     fall through the empty parts of a layer to the ones behind, so every widget
     keeps working, and the layers extend past the card so the combo box popup has
     room to open.
+
+    While the demo is open it plays a pad over a pulsing drone (see LayersSound),
+    shaped by where the pointer is over the card.
 */
 class Layers : public Demo
 {
@@ -168,6 +172,8 @@ private:
     //==============================================================================
     yup::Component* getFocusTarget() override { return &tabs; }
 
+    SoundSource* getSoundSource() override { return &sound; }
+
     void advance (float deltaSeconds) override
     {
         const auto lift = layersLift.update (pointer, cardInView, deltaSeconds);
@@ -178,15 +184,34 @@ private:
         {
             pointerOffset = { yup::jlimit (-1.0f, 1.0f, (pointer->getX() - center.getX()) / (0.5f * cardInView.getWidth())),
                               yup::jlimit (-1.0f, 1.0f, (pointer->getY() - center.getY()) / (0.5f * cardInView.getHeight())) };
+
+            sound.setPosition (0.5f + 0.5f * pointerOffset.getX(), 0.5f + 0.5f * pointerOffset.getY());
+        }
+        else
+        {
+            sound.setPosition (0.5f, 0.5f); // settles back to the middle once the pointer has gone
         }
 
         const auto yaw = 0.5f * lift * pointerOffset.getX();
         const auto pitch = 0.35f * lift * pointerOffset.getY();
 
-        if (std::abs (lift - modelLift) < 0.0001f && std::abs (yaw - modelYaw) < 0.0001f && std::abs (pitch - modelPitch) < 0.0001f)
+        // The bass pulses breathe the layers apart, and the brighter the sound the warmer the light.
+        // The layers are picked where they are drawn, so the breath holds still while a widget is
+        // dragged, or the music would move it under the pointer.
+        // Everything follows the sound at once and lets go slowly, so the stack breathes instead of twitching.
+        if (! isDragging())
+            breath = easeToward (breath, hearing.lowAccent, deltaSeconds, 0.02f, 0.9f);
+
+        rimGlow = easeToward (rimGlow, 0.5f * hearing.hit, deltaSeconds, 0.01f, 0.5f);
+        warmth = easeToward (warmth, std::clamp ((hearing.high - 0.3f) * 1.6f, 0.0f, 1.0f), deltaSeconds, 0.03f, 0.8f);
+
+        const auto spread = lift * (1.0f + 0.8f * breath);
+        view.setAudio (rimGlow, warmth);
+
+        if (std::abs (spread - modelLift) < 0.0001f && std::abs (yaw - modelYaw) < 0.0001f && std::abs (pitch - modelPitch) < 0.0001f)
             return;
 
-        modelLift = lift;
+        modelLift = spread;
         modelYaw = yaw;
         modelPitch = pitch;
 
@@ -198,7 +223,7 @@ private:
 
         for (std::size_t level = 0; level < layers.size(); ++level)
         {
-            const auto rise = yup::Matrix4::translation ({ 0.0f, 0.0f, static_cast<float> (level) * layerDepth * scale * lift });
+            const auto rise = yup::Matrix4::translation ({ 0.0f, 0.0f, static_cast<float> (level) * layerDepth * scale * spread });
             view.setSurfaceTransform (surfaces[level], rise.followedBy (tilt));
         }
     }
@@ -221,6 +246,9 @@ private:
     Lift layersLift;
     yup::Point<float> pointerOffset;
     float modelLift = -1.0f;
+    float breath = 0.0f, rimGlow = 0.0f, warmth = 0.0f;
     float modelYaw = 0.0f;
     float modelPitch = 0.0f;
+
+    LayersSound sound;
 };

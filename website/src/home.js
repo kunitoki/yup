@@ -4,7 +4,7 @@ import { setupSearch } from "./search.js";
 
 // Built by the website_demos target in src/demos, which copies it into public/yup.
 const moduleUrl = new URL("yup/website_demos.js", document.baseURI).href;
-const moduleNames = "core events graphics gui";
+const moduleNames = "core events graphics gui audio dsp";
 
 const body = document.body;
 const links = [...document.querySelectorAll("main .works a")];
@@ -54,10 +54,25 @@ const pick = (index) => {
     callYup("yupWebsiteSetDemo", index);
 };
 
+// The demos open their audio output suspended: browsers only let it start from a user gesture, which
+// the click opening a demo is. A few seconds after closing, once the sound has faded out, it sleeps.
+let audioSleep = 0;
+
+const wakeAudio = () => {
+    clearTimeout(audioSleep);
+    window.Module?.yupAudioContext?.resume().catch(() => {});
+};
+
+const sleepAudio = () => {
+    clearTimeout(audioSleep);
+    audioSleep = setTimeout(() => window.Module?.yupAudioContext?.suspend().catch(() => {}), 3000);
+};
+
 const open = () => {
     if (!running)
         return;
 
+    wakeAudio();
     body.classList.add("open");
     body.style.cursor = canvas.style.cursor;
     callYup("yupWebsiteSetOpen", 1);
@@ -67,6 +82,7 @@ const close = () => {
     body.classList.remove("open");
     body.style.cursor = "";
     callYup("yupWebsiteSetOpen", 0);
+    sleepAudio();
 };
 
 links.forEach((link, index) => {

@@ -21,6 +21,10 @@
 
 #pragma once
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
 #include <optional>
 
 //==============================================================================
@@ -67,6 +71,7 @@ public:
         const auto deltaSeconds = static_cast<float> (yup::jlimit (0.0, 0.1, lastFrameTimeSeconds));
         time += deltaSeconds;
 
+        listen (deltaSeconds);
         advance (deltaSeconds);
     }
 
@@ -97,6 +102,17 @@ public:
             target->takeKeyboardFocus();
         }
     }
+
+    /** Whether the page shows the demo open, full screen, which is when it makes sound. */
+    void setOpen (bool shouldBeOpen) { open = shouldBeOpen; }
+
+    bool isOpen() const { return open; }
+
+    /** What the demo plays while it is open, or nullptr for a silent demo. */
+    virtual SoundSource* getSoundSource() { return nullptr; }
+
+    /** Where the demo hears its own sound from, to react to it. */
+    void setAnalysis (const AudioAnalysis* newAnalysis) { analysis = newAnalysis; }
 
     //==============================================================================
     void mouseEnter (const yup::MouseEvent& event) override { trackPointer (event); }
@@ -166,8 +182,30 @@ protected:
         return yup::jmax (0.1f, yup::jmin (fit, yup::jmax (contentScale(), 1.0f)));
     }
 
+    /** What the demo hears of its sound, smoothed for the eye, all from 0 to 1 and all 0 while closed. */
+    struct Hearing
+    {
+        float low = 0.0f, mid = 0.0f, high = 0.0f;
+        float hit = 0.0f;        // jumps to 1 on every hit and dies away in a fraction of a second
+        float lowAccent = 0.0f;  // how far the low level stands above its recent average: 0 for a steady
+        float highAccent = 0.0f; // bass or treble, rising with every pulse or burst
+        std::array<float, AudioAnalysis::numNotes> notes {}; // how loud each note from C3 up sounds
+    };
+
+    /** Moves a value toward a target, quickly on the way up and slowly on the way down, so what it
+        drives eases in and lets go gently instead of flickering. */
+    static float easeToward (float value, float target, float deltaSeconds, float riseSeconds, float fallSeconds)
+    {
+        const auto seconds = target > value ? riseSeconds : fallSeconds;
+        return value + (target - value) * (1.0f - std::exp (-deltaSeconds / seconds));
+    }
+
+    /** True while a button is held down on the demo or one of its widgets. */
+    bool isDragging() const { return dragging; }
+
     float time = 0.0f;
     std::optional<yup::Point<float>> pointer; // in demo coordinates
+    Hearing hearing;
 
 private:
     //==============================================================================
@@ -177,6 +215,38 @@ private:
 
         if (! dragging || ! holdsStillWhileDragging())
             pointer = screenToLocal (event.getScreenPosition());
+    }
+
+    /** Follows the analysis: levels rise at once and fall gently, hits flash and fade. */
+    void listen (float deltaSeconds)
+    {
+        const auto levels = open && analysis != nullptr ? analysis->read() : AudioAnalysis::Levels {};
+        const auto fall = 1.0f - std::exp (-deltaSeconds / 0.15f);
+
+        const auto follow = [fall] (float& value, float target)
+        {
+            value = target > value ? target : value + (target - value) * fall;
+        };
+
+        follow (hearing.low, levels.low);
+        follow (hearing.mid, levels.mid);
+        follow (hearing.high, levels.high);
+        for (std::size_t i = 0; i < hearing.notes.size(); ++i)
+            follow (hearing.notes[i], levels.notes[i]);
+
+        // The hit count runs on while the demo is closed: only count hits heard since it opened.
+        const auto slowFollow = 1.0f - std::exp (-deltaSeconds / 1.0f);
+        averageLow += (hearing.low - averageLow) * slowFollow;
+        averageHigh += (hearing.high - averageHigh) * slowFollow;
+        hearing.lowAccent = std::clamp ((hearing.low - averageLow) * 4.0f, 0.0f, 1.0f);
+        hearing.highAccent = std::clamp ((hearing.high - averageHigh) * 4.0f, 0.0f, 1.0f);
+
+        hearing.hit *= std::exp (-deltaSeconds / 0.18f);
+        if (open && listening && levels.hits != lastHits)
+            hearing.hit = 1.0f;
+
+        listening = open && analysis != nullptr;
+        lastHits = levels.hits;
     }
 
     static void repaintDescendants (yup::Component& parent)
@@ -206,4 +276,9 @@ private:
     static constexpr int exitGraceFrames = 4;
     int framesSinceExit = -1;
     bool dragging = false;
+    bool open = false;
+    const AudioAnalysis* analysis = nullptr;
+    std::uint32_t lastHits = 0;
+    float averageLow = 0.0f, averageHigh = 0.0f;
+    bool listening = false;
 };

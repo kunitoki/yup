@@ -23,6 +23,9 @@
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
+#include <yup_audio_basics/yup_audio_basics.h>
+#include <yup_audio_devices/yup_audio_devices.h>
+#include <yup_dsp/yup_dsp.h>
 
 #include <emscripten/emscripten.h>
 
@@ -33,20 +36,27 @@
 #include <memory>
 #include <optional>
 
-#include "Gpu.h"
-#include "Lift.h"
-#include "Palettes.h"
+#include "common/Gpu.h"
+#include "common/Lift.h"
+#include "common/Palettes.h"
+#include "common/AudioAnalysis.h"
+#include "common/Sound.h"
 
-#include "Demo.h"
-#include "SurfaceView.h"
+#include "common/Demo.h"
+#include "common/SurfaceView.h"
 
-#include "Facet.h"
-#include "Keys.h"
-#include "Layers.h"
-#include "Reel.h"
-#include "RippleEffect.h"
-#include "Ripple.h"
-#include "Start.h"
+#include "facet/FacetSound.h"
+#include "facet/Facet.h"
+#include "keys/KeysSound.h"
+#include "keys/Keys.h"
+#include "layers/LayersSound.h"
+#include "layers/Layers.h"
+#include "reel/ReelSound.h"
+#include "reel/Reel.h"
+#include "ripple/RippleEffect.h"
+#include "ripple/RippleSound.h"
+#include "ripple/Ripple.h"
+#include "start/Start.h"
 
 #include "Stage.h"
 

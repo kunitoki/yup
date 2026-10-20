@@ -21,8 +21,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -33,8 +35,8 @@
     Every key is its own small Component on a box-shaped surface of a SurfaceView:
     flat at rest, a plain 2D keyboard. Near the pointer the board tilts back, the
     keys around the pointer rise in a wave and the one under it dips, lit like
-    glossy keys. Keys light up on hover through the 3D; pressing them does nothing
-    yet, there is no sound.
+    glossy keys. Keys light up on hover through the 3D and, while the demo is open,
+    play their chord on an electric piano (see KeysSound).
 */
 class Keys : public Demo
 {
@@ -56,6 +58,13 @@ public:
                 auto key = std::make_unique<Key> (black);
                 key->surface = view.addSurface (*key);
                 key->note = note;
+                key->onHover = [this, note] (bool entered)
+                {
+                    if (! entered)
+                        sound.releaseChord (note);
+                    else if (isOpen())
+                        sound.playChord (note);
+                };
                 keys.push_back (std::move (key));
             }
         }
@@ -84,6 +93,8 @@ public:
         meshTilt = -1.0f;
     }
 
+    SoundSource* getSoundSource() override { return &sound; }
+
 private:
     //==============================================================================
     static constexpr int numSemitones = 25; // C to C, two octaves
@@ -97,6 +108,7 @@ private:
     static constexpr float blackDip = 8.0f;    // smaller than blackRaise, so a pressed down black key stays above the white ones
     static constexpr float dip = 8.0f;
     static constexpr float maxTiltRadians = 0.5f;
+    static constexpr float heardThreshold = 0.35f; // note level (-39 dB) below which a key shows nothing
 
     static bool isBlack (int note)
     {
@@ -114,6 +126,19 @@ private:
         return count;
     }
 
+    /** The viridis colormap of spectrograms, from dark purple (0) through blue and green to yellow (1):
+        the evenly spaced stops of SpectrogramColorMap::Type::viridis in yup_audio_gui, which the demos
+        do not link. */
+    static yup::Color viridis (float t)
+    {
+        static constexpr std::array<yup::uint32, 6> stops { 0xff440154, 0xff3b528b, 0xff21918c, 0xff5ec962, 0xffb5de2b, 0xfffde725 };
+
+        const auto position = std::clamp (t, 0.0f, 1.0f) * static_cast<float> (stops.size() - 1);
+        const auto index = std::min (static_cast<std::size_t> (position), stops.size() - 2);
+
+        return yup::Color (stops[index]).mixedWith (yup::Color (stops[index + 1]), position - static_cast<float> (index), yup::ColorSpace::SRGB);
+    }
+
     //==============================================================================
     class Key : public yup::Component
     {
@@ -128,9 +153,16 @@ private:
         void paint (yup::Graphics& g) override
         {
             const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+            const auto accent = palette.getColor (yup::ThemePalette::Role::accent);
             auto color = palette.getColor (black ? yup::ThemePalette::Role::surface : yup::ThemePalette::Role::text);
+
+            // Colored like a spectrogram: the louder the key's note, the further up viridis and the
+            // more of the key it covers.
+            if (heardLevel > 0.0f)
+                color = color.mixedWith (viridis (heardLevel), 0.9f * std::min (1.0f, heardLevel / 0.4f), yup::ColorSpace::SRGB);
+
             if (hovered)
-                color = color.mixedWith (palette.getColor (yup::ThemePalette::Role::accent), 0.45f, yup::ColorSpace::SRGB);
+                color = color.mixedWith (accent, 0.45f, yup::ColorSpace::SRGB);
 
             g.setFillColor (color);
             g.fillRoundedRect (getLocalBounds(), 0.0f, 0.0f, 5.0f, 5.0f);
@@ -143,18 +175,23 @@ private:
         {
             hovered = true;
             repaint();
+            onHover (true);
         }
 
         void mouseExit (const yup::MouseEvent&) override
         {
             hovered = false;
             repaint();
+            onHover (false);
         }
 
         const bool black;
+        std::function<void (bool entered)> onHover;
         int note = 0;
         int surface = -1;
         bool hovered = false;
+        float heardEased = 0.0f;            // how loud the key's own note sounds, 0 to 1 above the threshold
+        float heardLevel = 0.0f;            // the same as last painted
         yup::Rectangle<float> screenBounds; // where the key appears, scaled with the demo
         float height = 0.0f;                // current rise toward the viewer as drawn, in design units
         float restHeight = 0.0f;            // the same without the dip under the pointer, for picking
@@ -165,8 +202,11 @@ private:
     void advance (float deltaSeconds) override
     {
         const auto scale = contentScale();
-        const auto lift = keysLift.update (pointer, board, deltaSeconds);
+        // While chords ring the board stays a little lifted, so the keys can show their notes.
+        const auto heard = *std::max_element (hearing.notes.begin(), hearing.notes.end());
+        const auto lift = std::max (keysLift.update (pointer, board, deltaSeconds), 0.5f * heard);
         view.setLift (lift);
+        view.setAudio (0.6f * hearing.hit, 0.0f);
 
         const auto follow = 1.0f - std::exp (-deltaSeconds / 0.08f);
         const auto wave = 2.2f * board.getWidth() / numWhiteKeys;
@@ -177,6 +217,21 @@ private:
 
         for (auto& key : keys)
         {
+            // Every key, black ones too, takes a spectrogram color from how loud its own note sounds;
+            // below the threshold is the faint spill of louder notes nearby, which stays uncolored.
+            // It lights at once and lets go gently.
+            const auto heardNote = hearing.notes[static_cast<std::size_t> (key->note)];
+            const auto target = std::clamp ((heardNote - heardThreshold) / (1.0f - heardThreshold), 0.0f, 1.0f);
+            key->heardEased = easeToward (key->heardEased, target, deltaSeconds, 0.01f, 0.5f);
+            if (key->heardEased < 0.01f && target == 0.0f)
+                key->heardEased = 0.0f;
+
+            if (std::abs (key->heardEased - key->heardLevel) > 0.01f || (key->heardEased == 0.0f && key->heardLevel != 0.0f))
+            {
+                key->heardLevel = key->heardEased;
+                key->repaint();
+            }
+
             const auto dipping = pointer.has_value() && key->hovered;
 
             if (key->black)
@@ -195,12 +250,16 @@ private:
                     rise = maxRise * std::exp (-across * across);
                 }
 
+                // Each key also rises with how loud its own note sounds, drawn only: picking keeps the
+                // rest height, so the music never moves a key out from under the pointer.
+                const auto heardRise = maxRise * key->heardLevel;
+
                 key->restHeight += (rise * lift - key->restHeight) * follow;
-                key->height += ((dipping ? -dip : rise) * lift - key->height) * follow;
+                key->height += ((dipping ? -dip : std::max (rise, heardRise)) * lift - key->height) * follow;
 
                 for (auto* value : { &key->restHeight, &key->height })
                 {
-                    if (std::abs (*value) < 0.01f && rise == 0.0f && ! dipping)
+                    if (std::abs (*value) < 0.01f && rise == 0.0f && heardRise < 0.01f && ! dipping)
                         *value = 0.0f;
                 }
             }
@@ -286,4 +345,6 @@ private:
 
     Lift keysLift;
     float meshTilt = -1.0f;
+
+    KeysSound sound;
 };

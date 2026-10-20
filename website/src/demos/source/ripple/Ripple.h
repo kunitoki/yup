@@ -34,6 +34,9 @@
     near the pointer a lens magnifies them, and moving the pointer leaves rings
     that spread across the panel and fade, lit like water. The widgets keep
     working through the warp.
+
+    While the demo is open every ring is also a water drop, and the panel mixes
+    the sound for real (see RippleSound).
 */
 class Ripple : public Demo
 {
@@ -44,12 +47,15 @@ public:
     {
         static constexpr std::array<const char*, numFaders> faderNames { "low", "mid", "high", "air" };
         static constexpr std::array<const char*, numKnobs> knobNames { "drive", "space" };
+        static constexpr std::array<double, numKnobs> knobValues { 0.2, 0.5 };
 
         for (std::size_t i = 0; i < faders.size(); ++i)
         {
             faders[i] = std::make_unique<yup::Slider> (yup::Slider::LinearVertical, "fader");
             faders[i]->setRange (0.0, 1.0);
             faders[i]->setValue (0.3 + 0.15 * static_cast<double> (i));
+            faders[i]->onValueChanged = [this, i] (double value) { sound.setBand (static_cast<int> (i), static_cast<float> (value)); };
+            sound.setBand (static_cast<int> (i), static_cast<float> (faders[i]->getValue()));
             faderLabels[i].setText (faderNames[i], yup::dontSendNotification);
             panel.addAndMakeVisible (*faders[i]);
             panel.addAndMakeVisible (faderLabels[i]);
@@ -60,11 +66,20 @@ public:
             knobs[i] = std::make_unique<yup::Slider> (yup::Slider::RotaryVerticalDrag, "knob");
             knobs[i]->setRange (0.0, 1.0);
             knobs[i]->setMouseDragSensitivity (knobDragSensitivity);
-            knobs[i]->setValue (0.6 - 0.25 * static_cast<double> (i));
+            knobs[i]->setValue (knobValues[i]);
             knobLabels[i].setText (knobNames[i], yup::dontSendNotification);
             panel.addAndMakeVisible (*knobs[i]);
             panel.addAndMakeVisible (knobLabels[i]);
         }
+
+        knobs[0]->onValueChanged = [this] (double value) { sound.setDrive (static_cast<float> (value)); };
+        knobs[1]->onValueChanged = [this] (double value) { sound.setSpace (static_cast<float> (value)); };
+        sound.setDrive (static_cast<float> (knobs[0]->getValue()));
+        sound.setSpace (static_cast<float> (knobs[1]->getValue()));
+
+        power.setToggleState (true, yup::dontSendNotification);
+        power.onClick = [this] { sound.setPower (power.getToggleState()); };
+        sound.setPower (power.getToggleState());
 
         powerLabel.setText ("power", yup::dontSendNotification);
         panel.addAndMakeVisible (power);
@@ -113,6 +128,8 @@ public:
     }
 
     yup::Component* getFocusTarget() override { return faders.front().get(); }
+
+    SoundSource* getSoundSource() override { return &sound; }
 
 private:
     //==============================================================================
@@ -187,6 +204,12 @@ private:
             lastRingAt.reset();
         }
 
+        // The sound answers back: every hit sends a ring from the middle, silent, or the rings it
+        // makes would drop more drops.
+        if (hearing.hit > lastHeardHit + 0.5f)
+            addRing ({ 0.5f, 0.5f }, strongestRing * 0.6f, false);
+        lastHeardHit = hearing.hit;
+
         for (int i = 0; i < state.numRings; ++i)
         {
             auto& ring = state.rings[static_cast<std::size_t> (i)];
@@ -204,7 +227,7 @@ private:
         state.numRings = kept;
 
         state.lensCenter = lensCenter;
-        state.lensStrength = 0.35f * lift;
+        state.lensStrength = 0.35f * lift * (1.0f + 0.25f * hearing.high * std::sin (time * 40.0f)); // highs shimmer the lens
         effect->setState (state);
 
         const auto active = lift > 0.0f || state.numRings > 0;
@@ -228,7 +251,7 @@ private:
         lastRingAt = uv;
     }
 
-    void addRing (yup::Point<float> center, float amplitude)
+    void addRing (yup::Point<float> center, float amplitude, bool audible = true)
     {
         if (amplitude <= 0.0f)
             return;
@@ -242,6 +265,9 @@ private:
         }
 
         state.rings[static_cast<std::size_t> (state.numRings++)] = { center, 0.0f, amplitude };
+
+        if (audible && isOpen())
+            sound.drop (center.getX(), amplitude / strongestRing);
     }
 
     //==============================================================================
@@ -261,4 +287,7 @@ private:
     yup::Point<float> lensCenter { 0.5f, 0.5f };
     std::optional<yup::Point<float>> lastRingAt;
     bool wasActive = false;
+    float lastHeardHit = 0.0f;
+
+    RippleSound sound;
 };
