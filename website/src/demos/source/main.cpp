@@ -29,7 +29,7 @@
 
 #include <emscripten/emscripten.h>
 
-#include <Snippets/AppSnippet.h>
+#include <Snippets/DemoSnippet.h>
 #include <ShaderBundles/RippleShader.h>
 #include <ShaderBundles/SurfaceShader.h>
 

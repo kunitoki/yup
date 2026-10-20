@@ -58,13 +58,13 @@ foreach (shader_entry IN ITEMS "Surface@common/shaders" "Ripple@ripple")
     list (APPEND shader_libraries ${target_name}_${shader_file}_shader)
 endforeach()
 
-# ==== Embed the app snippet the get-started page shows, for the "start" demo (website::appSnippet_data / _size)
+# ==== Embed the code the "start" demo shows, condensed from these demos (website::demoSnippet_data / _size)
 yup_add_embedded_binary_resources (${target_name}_snippets
     OUT_DIR Snippets
-    HEADER AppSnippet.h
+    HEADER DemoSnippet.h
     NAMESPACE website
-    RESOURCE_NAMES appSnippet
-    RESOURCES "${CMAKE_CURRENT_LIST_DIR}/../partials/snippets/app.cpp")
+    RESOURCE_NAMES demoSnippet
+    RESOURCES "${CMAKE_CURRENT_LIST_DIR}/../partials/snippets/demo.cpp")
 
 # ==== Optimize release builds for size with link time optimization, to keep the page download small
 set (size_options "")

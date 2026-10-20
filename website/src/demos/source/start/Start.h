@@ -23,10 +23,11 @@
 
 //==============================================================================
 /**
-    The picture behind the "start" line: a minimal YUP app in a live code editor.
+    The picture behind the "start" line: code from these demos in a live code editor.
 
-    The code is the same snippet the get-started page shows, embedded from
-    website/src/partials/snippets/app.cpp, in a CodeEditor themed to the site.
+    The code is condensed from the demos (an RHI pass, a yup_dsp voice and the audio
+    callback), embedded from website/src/partials/snippets/demo.cpp, in a CodeEditor
+    themed to the site.
 */
 class Start : public Demo
 {
@@ -54,8 +55,8 @@ public:
         editor.setReadOnly (true);
         editor.setMinimapVisible (false);
         editor.setText (yup::String::fromUTF8 (
-            reinterpret_cast<const char*> (website::appSnippet_data),
-            static_cast<int> (website::appSnippet_size)));
+            reinterpret_cast<const char*> (website::demoSnippet_data),
+            static_cast<int> (website::demoSnippet_size)));
         addAndMakeVisible (editor);
     }
 
