@@ -120,6 +120,7 @@
 #if YUP_MAC
 #import <AppKit/AppKit.h>
 #import <Cocoa/Cocoa.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include "native/yup_FileChooser_mac.mm"
 #include "native/yup_Windowing_mac.mm"
