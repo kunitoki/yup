@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- Fixed a heap corruption on WebAssembly when a `URL` input stream was destroyed before its request completed (the late callback wrote into the freed stream); requests now skip the IndexedDB cache lookup and are aborted on destruction.
+- Fixed touch hover sticking after a tap: a finger now enters the component under it on touch down and exits it on release or cancel, so `mouseExit` always follows.
 - Fixed `Label::setFont` ignoring a font that differs only in height (`Font` equality does not compare heights), so a label set again to the same face at another size kept its old size.
 - Components recognize touch and trackpad gestures: tap and double tap, long press, pinch, rotate, multi-finger pan and swipes with fling velocity. Opt in with `Component::setWantedGestures` and override `gestureTap`, `gestureLongPress`, `gesturePinch`, `gestureRotate`, `gesturePan` and `gestureSwipe` from the new `GestureListener` (also attachable with `Component::addGestureListener`, and bound in Python). Fingers taken by a pinch, rotate or pan get a final `mouseUp`; components that want no gestures behave as before. `GestureRecognizer` is usable on its own. Scene3D free movement pinches, twists, tilts and pans the camera.
 - Fixed `Artboard` animations not reaching the screen unless the window rendered continuously: an artboard now repaints itself while its scene animates or changes, and draws nothing while still. `Artboard::advanceAndApply` returns whether the artboard needs to be drawn again.

@@ -591,14 +591,46 @@ protected:
             g.fillAll();
         }
 
+        // The system pointer can rest over the window (xvfb puts it at the top-left), so only fingers count
+        void mouseEnter (const MouseEvent& event) override
+        {
+            if (! event.isTouch())
+                return;
+
+            ++mouseEnterCount;
+            mouseEnterOrder = ++eventSequence;
+        }
+
+        void mouseExit (const MouseEvent& event) override
+        {
+            if (! event.isTouch())
+                return;
+
+            ++mouseExitCount;
+            mouseExitOrder = ++eventSequence;
+        }
+
         void mouseDown (const MouseEvent&) override
         {
             mouseDownOnMessageThread = MessageManager::getInstance()->isThisTheMessageThread();
             ++mouseDownCount;
+            mouseDownOrder = ++eventSequence;
+        }
+
+        void mouseUp (const MouseEvent&) override
+        {
+            mouseUpOrder = ++eventSequence;
         }
 
         std::atomic<int> mouseDownCount { 0 };
         std::atomic<bool> mouseDownOnMessageThread { false };
+        std::atomic<int> mouseEnterCount { 0 };
+        std::atomic<int> mouseExitCount { 0 };
+        std::atomic<int> eventSequence { 0 };
+        std::atomic<int> mouseEnterOrder { 0 };
+        std::atomic<int> mouseExitOrder { 0 };
+        std::atomic<int> mouseDownOrder { 0 };
+        std::atomic<int> mouseUpOrder { 0 };
     };
 
     void SetUp() override
@@ -690,4 +722,34 @@ TEST_F (ComponentNativeTouchThreadTests, TouchFromAnotherThreadIsHandledOnTheMes
 
     pushFingerEvent (SDL_EVENT_FINGER_UP);
     runDispatchLoopUntil (10);
+}
+
+TEST_F (ComponentNativeTouchThreadTests, TapEntersBeforeDownAndExitsAfterUp)
+{
+    pushFingerEvent (SDL_EVENT_FINGER_DOWN);
+    runDispatchLoopUntil (50);
+
+    EXPECT_EQ (1, recorder.mouseEnterCount.load());
+    EXPECT_EQ (0, recorder.mouseExitCount.load());
+
+    pushFingerEvent (SDL_EVENT_FINGER_UP);
+    runDispatchLoopUntil (50);
+
+    EXPECT_EQ (1, recorder.mouseEnterCount.load());
+    EXPECT_EQ (1, recorder.mouseExitCount.load());
+    EXPECT_LT (recorder.mouseEnterOrder.load(), recorder.mouseDownOrder.load());
+    EXPECT_LT (recorder.mouseDownOrder.load(), recorder.mouseUpOrder.load());
+    EXPECT_LT (recorder.mouseUpOrder.load(), recorder.mouseExitOrder.load());
+}
+
+TEST_F (ComponentNativeTouchThreadTests, CanceledTouchExitsTheComponent)
+{
+    pushFingerEvent (SDL_EVENT_FINGER_DOWN);
+    runDispatchLoopUntil (50);
+
+    pushFingerEvent (SDL_EVENT_FINGER_CANCELED);
+    runDispatchLoopUntil (50);
+
+    EXPECT_EQ (1, recorder.mouseEnterCount.load());
+    EXPECT_EQ (1, recorder.mouseExitCount.load());
 }
