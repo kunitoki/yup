@@ -37,13 +37,20 @@ jobs:
       fail-fast: false
       matrix:
         config: [Debug, Release]
+    env:
+      EM_COMPILER_WRAPPER: ccache
     steps:
     - uses: actions/checkout@v6
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: wasm-tests-${{ matrix.config }}
+        max-size: 1G
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v15
       with:
         version: ${{ env.EM_VERSION }}
+        actions-cache-folder: emsdk-cache
     - name: Configure
       run: |
         emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
@@ -59,13 +66,19 @@ jobs:
       fail-fast: false
       matrix:
         example: ${{ fromJson(inputs.examples) }}
+    env:
+      EM_COMPILER_WRAPPER: ccache
     steps:
     - uses: actions/checkout@v6
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: wasm-example-${{ matrix.example }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v15
       with:
         version: ${{ env.EM_VERSION }}
+        actions-cache-folder: emsdk-cache
     - name: Configure
       run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_BUILD_TESTS=OFF -DYUP_BUILD_EXAMPLES=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}

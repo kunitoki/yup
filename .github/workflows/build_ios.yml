@@ -20,8 +20,16 @@ jobs:
   configure:
     runs-on: macos-latest
     if: inputs.examples != '[]'
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJC_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v6
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ios-configure
     - name: Configure
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
@@ -45,8 +53,16 @@ jobs:
       fail-fast: false
       matrix:
         example: ${{ fromJson(inputs.examples) }}
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJC_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v6
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ios-example-${{ matrix.example }}
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
