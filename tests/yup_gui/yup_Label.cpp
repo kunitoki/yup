@@ -157,6 +157,16 @@ TEST_F (LabelTest, FontReset)
     EXPECT_FALSE (label->getFont().has_value());
 }
 
+TEST_F (LabelTest, FontDifferingOnlyInHeightReplacesTheFont)
+{
+    // Font equality ignores the height, which must not stop a label from resizing its text
+    label->setFont (Font().withHeight (10.0f));
+    label->setFont (Font().withHeight (20.0f));
+
+    ASSERT_TRUE (label->getFont().has_value());
+    EXPECT_EQ (20.0f, label->getFont()->getHeight());
+}
+
 TEST_F (LabelTest, StrokeWidthGetterAndSetter)
 {
     EXPECT_EQ (kZeroStroke, label->getStrokeWidth());

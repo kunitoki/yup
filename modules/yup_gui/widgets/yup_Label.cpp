@@ -67,7 +67,8 @@ std::optional<Font> Label::getFont() const
 
 void Label::setFont (Font newFont)
 {
-    if (font && *font == newFont)
+    // Font equality ignores the height
+    if (font && *font == newFont && approximatelyEqual (font->getHeight(), newFont.getHeight()))
         return;
 
     font = std::move (newFont);

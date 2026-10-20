@@ -1542,6 +1542,13 @@ extern "C"
         auto* native = SDLComponentNative::getPrimaryNativeComponent();
         return native != nullptr ? native->getCurrentFrameRate() : -1.0f;
     }
+
+    // Lets the page give the window the canvas size it lays out, instead of stretching its pixels
+    void EMSCRIPTEN_KEEPALIVE yupSetPrimaryWindowSize (int width, int height)
+    {
+        if (auto* native = SDLComponentNative::getPrimaryNativeComponent(); native != nullptr && width > 0 && height > 0)
+            native->getComponent().setSize (static_cast<float> (width), static_cast<float> (height));
+    }
 }
 #endif
 

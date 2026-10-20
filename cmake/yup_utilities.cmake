@@ -371,7 +371,16 @@ endfunction()
 function (_yup_convert_png_to_icns png_path icons_path output_variable)
     set (temp_iconset_path "${icons_path}.iconset")
     set (output_iconset_path "${icons_path}.icns")
+    set (${output_variable} "${output_iconset_path}" PARENT_SCOPE)
 
+    # Converted again only when the image changes
+    file (SHA256 "${png_path}" inputs_hash)
+    _yup_is_cached_output ("${output_iconset_path}" "${inputs_hash}" is_cached)
+    if (is_cached)
+        return()
+    endif()
+
+    _yup_message (STATUS "Converting ${png_path} to the apple .icns format")
     file (REMOVE_RECURSE "${temp_iconset_path}")
     file (MAKE_DIRECTORY "${temp_iconset_path}")
 
@@ -381,8 +390,107 @@ function (_yup_convert_png_to_icns png_path icons_path output_variable)
     _yup_execute_process_or_fail (/usr/bin/iconutil -c icns -o "${output_iconset_path}" "${temp_iconset_path}")
 
     file (REMOVE_RECURSE "${temp_iconset_path}")
+    file (WRITE "${output_iconset_path}.inputs" "${inputs_hash}")
+endfunction()
 
-    set (${output_variable} "${output_iconset_path}" PARENT_SCOPE)
+#==============================================================================
+
+# True when an output exists and was made from inputs with the given hash, recorded beside it.
+function (_yup_is_cached_output output_path inputs_hash output_variable)
+    set (${output_variable} FALSE PARENT_SCOPE)
+
+    if (EXISTS "${output_path}" AND EXISTS "${output_path}.inputs")
+        file (READ "${output_path}.inputs" cached_hash)
+        if ("${cached_hash}" STREQUAL "${inputs_hash}")
+            set (${output_variable} TRUE PARENT_SCOPE)
+        endif()
+    endif()
+endfunction()
+
+#==============================================================================
+
+function (_yup_compile_icon_composer icon_path output_path output_variable)
+    set (${output_variable} "" PARENT_SCOPE)
+
+    if (YUP_PLATFORM_IOS)
+        set (actool_platform iphoneos)
+        set (actool_devices --target-device iphone --target-device ipad)
+        set (deployment_target 13.0)
+    else()
+        set (actool_platform macosx)
+        set (actool_devices --target-device mac)
+        set (deployment_target 11.0)
+    endif()
+
+    if (CMAKE_OSX_DEPLOYMENT_TARGET)
+        set (deployment_target "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    endif()
+
+    # Compiled again only when a file of the bundle, the platform or the deployment target changes
+    set (asset_catalog "${output_path}/compiled/Assets.car")
+    set (inputs "${actool_platform} ${deployment_target}")
+    file (GLOB_RECURSE icon_files RELATIVE "${icon_path}" "${icon_path}/*")
+    list (SORT icon_files)
+    foreach (icon_file IN LISTS icon_files)
+        file (SHA256 "${icon_path}/${icon_file}" icon_file_hash)
+        string (APPEND inputs " ${icon_file} ${icon_file_hash}")
+    endforeach()
+    string (SHA256 inputs_hash "${inputs}")
+
+    _yup_is_cached_output ("${asset_catalog}" "${inputs_hash}" is_cached)
+    if (is_cached)
+        set (${output_variable} "${asset_catalog}" PARENT_SCOPE)
+        return()
+    endif()
+
+    # actool reads Icon Composer bundles from Xcode 26 on; older toolchains keep the .icns icon only.
+    # Probing Xcode is slow, so its answer is kept in the cache of the build.
+    if (NOT DEFINED YUP_ICON_COMPOSER_SUPPORTED)
+        execute_process (COMMAND xcrun --find actool RESULT_VARIABLE actool_result OUTPUT_QUIET ERROR_QUIET)
+        execute_process (COMMAND xcodebuild -version OUTPUT_VARIABLE xcode_version ERROR_QUIET)
+        string (REGEX MATCH "Xcode ([0-9]+)" xcode_version "${xcode_version}")
+
+        set (supported ON)
+        if (NOT actool_result EQUAL 0 OR NOT xcode_version OR CMAKE_MATCH_1 LESS 26)
+            set (supported OFF)
+        endif()
+
+        set (YUP_ICON_COMPOSER_SUPPORTED ${supported} CACHE INTERNAL "Whether actool compiles Icon Composer bundles (Xcode 26 or later)")
+    endif()
+
+    if (NOT YUP_ICON_COMPOSER_SUPPORTED)
+        _yup_message (STATUS "Icon Composer icons need Xcode 26 or later, skipping ${icon_path}")
+        return()
+    endif()
+
+    _yup_message (STATUS "Compiling Icon Composer icon ${icon_path} for Liquid Glass")
+
+    # The bundle name is the icon name, CFBundleIconName in the Info.plist expects AppIcon
+    file (REMOVE_RECURSE "${output_path}")
+    file (MAKE_DIRECTORY "${output_path}/compiled")
+    file (COPY "${icon_path}/" DESTINATION "${output_path}/AppIcon.icon")
+
+    execute_process (
+        COMMAND xcrun actool "${output_path}/AppIcon.icon"
+            --compile "${output_path}/compiled"
+            --output-format human-readable-text
+            --errors --warnings --notices
+            --output-partial-info-plist "${output_path}/partial.plist"
+            --app-icon AppIcon
+            --platform ${actool_platform}
+            ${actool_devices}
+            --minimum-deployment-target ${deployment_target}
+        RESULT_VARIABLE actool_result
+        OUTPUT_VARIABLE actool_output
+        ERROR_VARIABLE actool_output)
+
+    if (NOT actool_result EQUAL 0 OR NOT EXISTS "${asset_catalog}")
+        _yup_message (WARNING "Failed compiling Icon Composer icon ${icon_path}, keeping the .icns icon only:\n${actool_output}")
+        return()
+    endif()
+
+    file (WRITE "${asset_catalog}.inputs" "${inputs_hash}")
+    set (${output_variable} "${asset_catalog}" PARENT_SCOPE)
 endfunction()
 
 #==============================================================================

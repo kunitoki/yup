@@ -502,21 +502,23 @@ public:
     {
         setTitle ("main");
 
-        // Load the logo image
+        // The logo, white for dark themes and black for bright ones
+        auto loadImage = [] (const char* path, yup::Image& destination)
         {
             yup::MemoryBlock mb;
-            auto imageFile = getAssetPath ("data/logo.png");
-            if (imageFile.loadFileAsData (mb))
+            if (! getAssetPath (path).loadFileAsData (mb))
             {
-                auto loadedImage = yup::Image::loadFromData (mb.asBytes());
-                if (loadedImage.wasOk())
-                    image = std::move (loadedImage.getReference());
+                yup::Logger::outputDebugString ("Unable to load requested image " + yup::String (path));
+                return;
             }
-            else
-            {
-                yup::Logger::outputDebugString ("Unable to load requested image");
-            }
-        }
+
+            auto loadedImage = yup::Image::loadFromData (mb.asBytes());
+            if (loadedImage.wasOk())
+                destination = std::move (loadedImage.getReference());
+        };
+
+        loadImage ("data/logo.png", logo);
+        loadImage ("data/logo_black.png", logoBlack);
 
         // Setup examples
         auto addDemo = [&] (yup::StringRef id, yup::StringRef name, auto factory)
@@ -686,8 +688,23 @@ public:
             listBox = std::make_unique<yup::ListBox>();
             listBox->setModel (listModel.get());
             listBox->setRowSize (30);
+            listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
+            listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
             listBox->selectRow (initialIndex, false, yup::dontSendNotification);
-            addAndMakeVisible (listBox.get());
+            addChildComponent (listBox.get());
+
+            // Takes the list's place when the window is too narrow for it, demos past the end in its menu
+            tabBar = std::make_unique<yup::TabBar> ("demoTabs");
+            tabBar->setVariant (yup::TabBar::Variant::underline);
+            tabBar->setOverflow (yup::TabBar::Overflow::menu);
+            for (int i = 0; i < demoIds.size(); ++i)
+                tabBar->addTab (yup::Identifier (demoIds[i]), demoNames[i]);
+            tabBar->setSelectedTab (yup::Identifier (demoIds[initialIndex]), yup::dontSendNotification);
+            tabBar->onSelectionChanged = [this] (const yup::Identifier& tabId)
+            {
+                selectComponent (tabBar->indexOfTab (tabId));
+            };
+            addChildComponent (tabBar.get());
 
             // The list has no size yet: scroll to the selection on its first layout
             scrollToSelectedDemo = true;
@@ -708,41 +725,37 @@ public:
     {
         constexpr auto margin = 5;
         constexpr auto listBoxWidth = 200;
-        constexpr auto listBoxHeight = 40;
+        constexpr auto tabBarHeight = 40;
+        constexpr auto logoHeight = 64;
+        constexpr auto minimumDemoWidth = 480;
 
         auto bounds = getSafeAreaBounds().reduced (margin);
         auto width = bounds.getWidth();
-        auto height = bounds.getHeight();
 
         if (! singleDemoMode)
         {
-            // Landscape orientation (width > height): vertical ListBox on the left
-            if (width > height)
+            // The list on the left while it leaves the demo enough room, tabs along the top otherwise,
+            // the logo heading either of them
+            const auto useTabs = width - listBoxWidth - margin < minimumDemoWidth;
+            listBox->setVisible (! useTabs);
+            tabBar->setVisible (useTabs);
+
+            if (useTabs)
             {
-                listBox->setOrientation (yup::ListBox::Orientation::vertical);
-                listBox->setRowSize (30);
-                listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
-                listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
+                auto tabRow = bounds.removeFromTop (tabBarHeight);
+                logoBounds = tabRow.removeFromLeft (tabBarHeight).reduced (6);
+                tabRow.removeFromLeft (margin);
+                tabBar->setBounds (tabRow);
 
-                auto listBoxBounds = bounds.removeFromLeft (listBoxWidth);
-                listBox->setBounds (listBoxBounds);
-
-                // Add margin between ListBox and demo components
-                bounds.removeFromLeft (margin);
+                bounds.removeFromTop (margin);
             }
-            // Portrait orientation (width <= height): horizontal ListBox on top
             else
             {
-                listBox->setOrientation (yup::ListBox::Orientation::horizontal);
-                listBox->setRowSize (80);
-                listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
-                listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
+                auto sidebar = bounds.removeFromLeft (listBoxWidth);
+                logoBounds = sidebar.removeFromTop (logoHeight).withSizeKeepingCenter (logoHeight - 12, logoHeight - 12);
+                listBox->setBounds (sidebar);
 
-                auto listBoxBounds = bounds.removeFromTop (listBoxHeight);
-                listBox->setBounds (listBoxBounds);
-
-                // Add margin between ListBox and demo components
-                bounds.removeFromTop (margin);
+                bounds.removeFromLeft (margin);
             }
 
             if (scrollToSelectedDemo && currentDemo >= 0 && ! listBox->getLocalBounds().isEmpty())
@@ -760,6 +773,19 @@ public:
         }
 
         loadingOverlay.setBounds (bounds);
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        yup::DocumentWindow::paint (g);
+
+        if (singleDemoMode)
+            return;
+
+        const auto background = yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background);
+        const auto& image = background.getLuminance() > 0.5f ? logoBlack : logo;
+        if (image.isValid())
+            g.drawImage (image, logoBounds);
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
@@ -819,6 +845,12 @@ public:
         }
 
         currentDemo = index;
+
+        // Whichever of the list and the tabs is hidden follows the one that was used
+        if (listBox != nullptr && listBox->getSelectedRow() != index)
+            listBox->selectRow (index, false, yup::dontSendNotification);
+        if (tabBar != nullptr && tabBar->getSelectedTabIndex() != index)
+            tabBar->setSelectedTab (yup::Identifier (demoIds[index]), yup::dontSendNotification);
 
         resized(); // Ensure the newly created component is sized correctly
 
@@ -910,9 +942,11 @@ private:
     std::vector<std::function<std::unique_ptr<yup::Component>()>> demoFactories;
     std::unique_ptr<DemoListModel> listModel;
     std::unique_ptr<yup::ListBox> listBox;
+    std::unique_ptr<yup::TabBar> tabBar;
     yup::OwnedArray<yup::Component> components;
     LoadingOverlay loadingOverlay;
-    yup::Image image;
+    yup::Image logo, logoBlack;
+    yup::Rectangle<float> logoBounds;
     int currentDemo = -1;
     bool singleDemoMode = false;
     bool scrollToSelectedDemo = false;

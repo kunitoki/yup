@@ -1,4 +1,16 @@
-# After FetchContent_MakeAvailable (yup)
+cmake_minimum_required (VERSION 3.31)
+project (my_app VERSION 1.0.0)
+
+include (FetchContent)
+
+FetchContent_Declare (yup
+    GIT_REPOSITORY https://github.com/kunitoki/yup.git
+    GIT_TAG        main)
+
+set (YUP_BUILD_EXAMPLES OFF)
+set (YUP_BUILD_TESTS OFF)
+FetchContent_MakeAvailable (yup)
+
 yup_audio_plugin (
     TARGET_NAME my_plugin
     TARGET_VERSION 1.0.0

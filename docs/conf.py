@@ -63,6 +63,9 @@ html_theme = "shibuya"
 html_title = "YUP Documentation"
 html_static_path = ["_static"]
 
+# The colored app icon: unlike the white or black logo it reads on light and dark tabs alike.
+html_favicon = "../logos/yup_color_icon.svg"
+
 html_css_files = [
     "shibuya-override.css",
     "rtd-flyout.css",

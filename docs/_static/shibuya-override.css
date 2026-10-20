@@ -1,24 +1,36 @@
+/* Geist, the type of the website; an @import is only honoured as the first rule. */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap");
+
 .sy-head-brand img+strong {
   display: inline !important;
 }
 
-/* Palette shared with the website (website/src/style.css). */
+/* The look of the website (website/src/base.css): Geist type, YUP blue as the only signal color and,
+   in dark mode, one black field with hairline dividers. */
+:root {
+  --sy-f-text: "Geist", "Helvetica Neue", Arial, sans-serif;
+  --sy-f-heading: "Geist", "Helvetica Neue", Arial, sans-serif;
+  --sy-f-mono: "Geist Mono", ui-monospace, Menlo, monospace;
+}
+
 html[data-accent-color="blue"] {
-  --accent-9: #0a84ff;
+  --accent-9: #005aff;
+  --accent-10: #1a6bff;
+  --accent-a11: #0047cc;
 }
 
 html.dark {
-  --sy-c-background: #07090e;
-  --sy-c-background-dropback: #0e121acc;
-  --sy-c-surface: #0e121a;
-  --sy-c-divider: #1b2230;
-  --sy-c-border: #1b2230;
-  --sy-c-text: #e6eaf2;
-  --sy-c-light: #7c8798;
-  --sy-c-foot-background: #0e121a;
-  --sy-c-foot-divider: #1b2230;
+  --sy-c-background: #000000;
+  --sy-c-background-dropback: #000000cc;
+  --sy-c-surface: #050608;
+  --sy-c-divider: #22262c;
+  --sy-c-border: #22262c;
+  --sy-c-text: #d8dde0;
+  --sy-c-light: #8a9097;
+  --sy-c-foot-background: #000000;
+  --sy-c-foot-divider: #22262c;
 }
 
 html.dark[data-accent-color="blue"] {
-  --accent-a11: #6fb6ff;
+  --accent-a11: #9cc2ff;
 }
