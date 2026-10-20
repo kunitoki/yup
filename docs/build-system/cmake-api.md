@@ -294,6 +294,7 @@ also be used independently for non-plugin GUI applications.
 | `TARGET_APP_NAMESPACE` | string | - | App namespace; the bundle id is `<namespace>.<TARGET_NAME>`. |
 | `TARGET_CXX_STANDARD` | integer | `20` | C++ standard version. |
 | `TARGET_ICON` | path | *(built-in)* | Path to an application icon image. |
+| `TARGET_ICON_COMPOSER` | path | *(built-in when `TARGET_ICON` is not set)* | Apple only: an Icon Composer `.icon` bundle, the layered Liquid Glass icon of macOS and iOS 26. Needs Xcode 26; it is compiled into the app as `Assets.car`, while `TARGET_ICON` stays the icon on older systems. A `CUSTOM_PLIST` must set `CFBundleIconName` to `AppIcon`. |
 | `TARGET_WHEEL` | ON\|OFF | OFF | Build as a loadable module (e.g. a Python wheel) instead of an executable. |
 | `DEFINITIONS` | list | - | Additional compile definitions. |
 | `COMPILE_OPTIONS` | list | - | Additional compile options. |

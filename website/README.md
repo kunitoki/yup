@@ -55,7 +55,7 @@ Until it is built, or where the browser lacks WebGPU or cross-origin isolation, 
 
 Set `goatCounterCode` in `vite.config.js` to your GoatCounter site code to add the cookie-free [GoatCounter](https://www.goatcounter.com/) script to every page. Elements with `data-goatcounter-click="<name>"` (the "Run the synth in your browser" and GitHub buttons) are counted as events. While the code is empty, no script is added.
 
-Screenshots and the logo are referenced straight from `../docs/_static/images` and `../logo.svg`, so the site never duplicates them. Vite hashes them into `dist/` on build.
+Screenshots and the logo are referenced straight from `../docs/_static/images` and `../logos/`, so the site never duplicates them. Vite hashes them into `dist/` on build.
 
 ## SEO
 
@@ -63,4 +63,4 @@ Each page only declares its `<title>` and `<meta name="description">`. On top of
 
 ## Deployment
 
-`.github/workflows/deploy_website.yml` builds the home page demos (the `website_demos` target, with Emscripten at the version `build_wasm.yml` uses) and then the site, and publishes it to GitHub Pages on every push to `main` that touches `website/`, `docs/` (screenshots and the search index), `logo.svg`, or what the demos are built from (`CMakeLists.txt`, `cmake/`, `modules/`, `thirdparty/`). It also runs on manual dispatch.
+`.github/workflows/deploy_website.yml` builds the home page demos (the `website_demos` target, with Emscripten at the version `build_wasm.yml` uses) and then the site, and publishes it to GitHub Pages on every push to `main` that touches `website/`, `docs/` (screenshots and the search index), `logos/`, or what the demos are built from (`CMakeLists.txt`, `cmake/`, `modules/`, `thirdparty/`). It also runs on manual dispatch.

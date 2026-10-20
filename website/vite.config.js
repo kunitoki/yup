@@ -264,10 +264,10 @@ function partials() {
     return {
         name: "yup-partials",
         configureServer(server) {
-            // In dev, ../../docs/... and ../../logo.svg resolve to /docs/... and /logo.svg,
+            // In dev, ../../docs/... and ../../logos/... resolve to /docs/... and /logos/...,
             // which live in the repository root outside the Vite root.
             server.middlewares.use((req, _res, next) => {
-                if (req.url?.startsWith("/docs/") || req.url === "/logo.svg")
+                if (req.url?.startsWith("/docs/") || req.url?.startsWith("/logos/"))
                     req.url = `/@fs/${repo}${req.url}`;
                 else if (req.url === "/mini-coi.js")
                     req.url = `/@fs/${normalizePath(miniCoi).replace(/^\//, "")}`;

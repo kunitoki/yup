@@ -387,6 +387,61 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_compile_icon_composer icon_path output_path output_variable)
+    set (${output_variable} "" PARENT_SCOPE)
+
+    # actool reads Icon Composer bundles from Xcode 26 on; older toolchains keep the .icns icon only
+    execute_process (COMMAND xcrun --find actool RESULT_VARIABLE actool_result OUTPUT_QUIET ERROR_QUIET)
+    execute_process (COMMAND xcodebuild -version OUTPUT_VARIABLE xcode_version ERROR_QUIET)
+    string (REGEX MATCH "Xcode ([0-9]+)" xcode_version "${xcode_version}")
+    if (NOT actool_result EQUAL 0 OR NOT xcode_version OR CMAKE_MATCH_1 LESS 26)
+        _yup_message (STATUS "Icon Composer icons need Xcode 26 or later, skipping ${icon_path}")
+        return()
+    endif()
+
+    if (YUP_PLATFORM_IOS)
+        set (actool_platform iphoneos)
+        set (actool_devices --target-device iphone --target-device ipad)
+        set (deployment_target 13.0)
+    else()
+        set (actool_platform macosx)
+        set (actool_devices --target-device mac)
+        set (deployment_target 11.0)
+    endif()
+
+    if (CMAKE_OSX_DEPLOYMENT_TARGET)
+        set (deployment_target "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    endif()
+
+    # The bundle name is the icon name, CFBundleIconName in the Info.plist expects AppIcon
+    file (REMOVE_RECURSE "${output_path}")
+    file (MAKE_DIRECTORY "${output_path}/compiled")
+    file (COPY "${icon_path}/" DESTINATION "${output_path}/AppIcon.icon")
+
+    execute_process (
+        COMMAND xcrun actool "${output_path}/AppIcon.icon"
+            --compile "${output_path}/compiled"
+            --output-format human-readable-text
+            --errors --warnings --notices
+            --output-partial-info-plist "${output_path}/partial.plist"
+            --app-icon AppIcon
+            --platform ${actool_platform}
+            ${actool_devices}
+            --minimum-deployment-target ${deployment_target}
+        RESULT_VARIABLE actool_result
+        OUTPUT_VARIABLE actool_output
+        ERROR_VARIABLE actool_output)
+
+    if (NOT actool_result EQUAL 0 OR NOT EXISTS "${output_path}/compiled/Assets.car")
+        _yup_message (WARNING "Failed compiling Icon Composer icon ${icon_path}, keeping the .icns icon only:\n${actool_output}")
+        return()
+    endif()
+
+    set (${output_variable} "${output_path}/compiled/Assets.car" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_setup_coverage_flags target_name)
     if (YUP_ENABLE_COVERAGE AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
         _yup_message (STATUS "Enabling coverage for target: ${target_name}")

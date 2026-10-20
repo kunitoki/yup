@@ -6,22 +6,23 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
     <title>YUP! On Emscripten</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 21 21 12 16.4 3 21Z' fill='%230A84FF'/%3E%3C/svg%3E">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 192 192%22%3E%3Cstyle%3Eg%7Bfill:%23000%7D%40media %28prefers-color-scheme:dark%29%7Bg%7Bfill:%23fff%7D%7D%3C/style%3E%3Cg transform=%22matrix%280.1,0,0,-0.1,-5.4449128,204.30999%29%22%3E%3Cpath fill=%22%23005aff%22 d=%22m 1508.5851,796.42885 c 111.0887,-39.56584 121.7411,-225.22095 15.2176,-280.00442 -65.4358,-35.00055 -141.524,-28.9135 -191.7422,13.69587 -77.6099,66.95758 -44.1311,214.56861 60.8706,260.22155 36.5926,13.8224 67.014,16.4997 115.654,6.087 z%22/%3E%3Cpath d=%22m 1838.3903,1637.9745 c 3.0435,-19.7829 -30.4352,-178.0463 -74.5664,-350.0055 -94.3493,-365.22317 -103.4799,-380.44077 -231.308,-380.44077 -108.0452,0 -138.4805,22.8264 -129.3499,100.43637 12.1741,105.0016 153.6981,620.8793 178.0463,649.7928 18.2612,22.8265 42.6094,25.87 136.9587,22.8265 109.567,-4.5653 115.654,-6.0871 120.2193,-42.6094 z%22/%3E%3Cpath d=%22m 511.75764,1639.8403 c 108.0955,-135.3641 210.4342,-266.506 316.2871,-406.691 108.9573,157.7292 251.56396,366.5344 311.96146,418.4849 22.8264,15.2176 71.5228,22.8264 158.2633,22.8264 118.6976,0 127.8281,-3.0435 143.0458,-36.5223 12.1741,-25.87 12.1741,-44.1311 0,-68.4794 C 1426.0976,1543.589 1214.5726,1249.8887 1012.1781,975.97126 992.39518,948.57966 955.87286,846.62141 928.48113,737.0545 901.08939,632.05284 866.08884,531.61647 852.39297,516.39884 c -39.56583,-42.60937 -232.82973,-42.60937 -272.39563,1.52177 -27.3917,30.43526 -25.87,36.52231 27.3918,211.52508 31.957,98.91462 56.3052,190.22042 56.3052,202.39452 0,12.1741 -82.1752,132.39339 -182.6116,267.83029 -127.8281,170.4375 -219.6695,298.1813 -267.0134,365.7168 -13.6497,20.2783 -31.9455,45.3922 -19.7501,73.3085 11.3715,26.0304 10.9297,33.5395 161.8512,36.0051 80.2993,1.3117 135.733,-8.6526 155.5872,-34.8606 z%22/%3E%3C/g%3E%3C/svg%3E">
     <style>
+      /* The website's look: one black field, hairlines, small tracked capitals, YUP blue as the
+         only signal color. Self contained, so the fonts are the system fallbacks. */
       :root {
-        --void: #07090E;
-        --surface: #0E121A;
-        --edge: #1B2230;
-        --ink: #E6EAF2;
-        --muted: #7C8798;
-        --glow: #0A84FF;
-        --glow-soft: #6FB6FF;
-        --danger: #FF6B5A;
+        --blue: #005aff;
+        --pale: #9cc2ff;
+        --ink: #d8dde0;
+        --outline: #59606a;
+        --hairline: #22262c;
+        --danger: #ff6b5a;
 
         --rail: 52px;
-        --sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        --sans: "Helvetica Neue", Arial, sans-serif;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
 
       *, *::before, *::after {
@@ -32,34 +33,32 @@
 
       html, body {
         height: 100%;
+        background: #000;
       }
 
       body {
-        background: var(--void);
         color: var(--ink);
-        font-family: var(--sans);
-        font-size: 14px;
-        line-height: 1.5;
+        font: 400 13px/1.5 var(--mono);
         -webkit-font-smoothing: antialiased;
         display: flex;
         flex-direction: column;
         overflow: hidden;
       }
 
-      /* Ambient bloom: the stage appears to light the page from behind. */
-      body::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        background:
-          radial-gradient(58vw 48vh at 50% 46%, rgba(10, 132, 255, 0.22), transparent 70%),
-          radial-gradient(90vw 60vh at 50% 118%, rgba(10, 132, 255, 0.1), transparent 70%);
-        opacity: 0.6;
-        transition: opacity 900ms ease;
+      /* The small tracked capitals used by every label and button. */
+      .caps, .chip, .seg, .fps, .eject, .boot-status, .audio-hint {
+        font: 500 11px/1.3 var(--sans);
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
       }
 
-      body.is-running::before { opacity: 1; }
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        cursor: pointer;
+      }
 
       /* ---------------------------------------------------------------- rails */
 
@@ -72,72 +71,44 @@
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        padding: 0 20px;
-        background: linear-gradient(var(--surface), rgba(14, 18, 26, 0.6));
+        padding: 0 24px;
       }
 
-      .rail--top { border-bottom: 1px solid var(--edge); }
+      .rail--top { border-bottom: 1px solid var(--hairline); }
 
       .rail--bottom {
         justify-content: flex-end;
-        border-top: 1px solid var(--edge);
-        background: linear-gradient(rgba(14, 18, 26, 0.6), var(--surface));
+        border-top: 1px solid var(--hairline);
       }
 
       .brand {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
       }
 
       .brand svg {
-        width: 24px;
-        height: 24px;
-        filter: drop-shadow(0 0 8px rgba(10, 132, 255, 0.55));
-      }
-
-      .brand b {
-        font-size: 15px;
-        font-weight: 650;
-        letter-spacing: -0.02em;
-      }
-
-      .brand b i {
-        font-style: normal;
-        color: var(--glow);
+        width: 22px;
+        height: 22px;
       }
 
       .chips {
         display: flex;
-        gap: 8px;
+        gap: 22px;
       }
 
       .chip {
-        font-family: var(--mono);
         font-size: 10px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--muted);
-        border: 1px solid var(--edge);
-        border-radius: 999px;
-        padding: 4px 10px;
         white-space: nowrap;
+        opacity: 0.45;
       }
 
       .chip[data-state="on"] {
-        color: var(--glow-soft);
-        border-color: rgba(10, 132, 255, 0.35);
-        background: rgba(10, 132, 255, 0.08);
+        color: var(--pale);
+        opacity: 1;
       }
 
-      .chip[data-state="off"] {
-        color: var(--danger);
-        border-color: rgba(255, 107, 90, 0.3);
-      }
-
-      .chip[data-state="pending"] {
-        color: var(--muted);
-      }
+      .chip[data-state="off"] { opacity: 0.25; }
 
       /* --------------------------------------------------------------- stage */
 
@@ -155,43 +126,28 @@
       canvas#canvas {
         display: block;
         border: 0 none;
-        border-radius: 12px;
-        background: #05070B;
+        background: #000;
         outline: none;
         -webkit-tap-highlight-color: transparent;
         -webkit-touch-callout: none;
         -webkit-user-select: none;
         user-select: none;
         opacity: 0;
-        transform: scale(0.985);
-        transition: opacity 700ms ease, transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
-        box-shadow:
-          0 0 0 1px rgba(255, 255, 255, 0.06),
-          0 0 0 6px rgba(10, 132, 255, 0.04),
-          0 40px 90px -30px rgba(10, 132, 255, 0.45);
+        transition: opacity 1.2s ease;
+        box-shadow: 0 0 0 1px var(--hairline);
       }
 
-      body.is-running canvas#canvas {
-        opacity: 1;
-        transform: none;
-      }
+      body.is-running canvas#canvas { opacity: 1; }
 
       .audio-hint {
         position: absolute;
         z-index: 2;
         display: none;
-        padding: 10px 16px;
-        border: 2px solid rgba(10, 132, 255, 0.65);
-        border-radius: 12px;
-        background: rgba(14, 18, 26, 0.86);
-        box-shadow: 0 16px 40px -18px rgba(0, 0, 0, 0.9), 0 0 30px -8px rgba(10, 132, 255, 1);
-        backdrop-filter: blur(10px);
-        color: var(--ink);
-        font-family: var(--mono);
-        font-size: 18px;
-        letter-spacing: 0.06em;
+        padding: 14px 20px;
+        border: 1px solid var(--hairline);
+        background: rgb(0 0 0 / 0.85);
+        color: #fff;
         pointer-events: none;
-        animation: audio-hint-pulse 1.8s ease-in-out infinite;
       }
 
       body.is-running.audio-waiting .audio-hint { display: block; }
@@ -199,18 +155,17 @@
       .audio-hint::before {
         content: "";
         display: inline-block;
-        width: 10px;
-        height: 10px;
-        margin: 0 10px 1px 0;
+        width: 7px;
+        height: 7px;
+        margin: 0 14px 1px 0;
         border-radius: 50%;
-        background: var(--glow-soft);
-        box-shadow: 0 0 12px 3px rgba(10, 132, 255, 0.8);
+        background: var(--blue);
         vertical-align: middle;
+        animation: beat 1.4s ease-in-out infinite;
       }
 
-      @keyframes audio-hint-pulse {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.025); }
+      @keyframes beat {
+        50% { opacity: 0.25; }
       }
 
       /* Full window and fullscreen: the chrome steps aside, the canvas takes over. */
@@ -228,43 +183,25 @@
         inset: 0;
         width: 100% !important;
         height: 100% !important;
-        border-radius: 0;
         box-shadow: none;
-        transform: none;
       }
 
       /* --------------------------------------------------------------- eject */
 
       .eject {
         position: fixed;
-        top: 14px;
-        right: 14px;
+        top: 22px;
+        right: 24px;
         z-index: 3;
         display: none;
-        align-items: center;
-        gap: 8px;
-        height: 28px;
-        padding: 0 12px;
-        border: 1px solid var(--edge);
-        border-radius: 999px;
-        background: rgba(14, 18, 26, 0.72);
-        backdrop-filter: blur(8px);
-        color: var(--muted);
-        font-family: var(--mono);
-        font-size: 11px;
-        letter-spacing: 0.06em;
-        cursor: pointer;
-        opacity: 0.28;
-        transition: opacity 200ms ease, color 200ms ease, border-color 200ms ease;
-      }
-
-      body:not([data-mode="embedded"]) .eject { display: inline-flex; }
-
-      .eject:hover, .eject:focus-visible {
-        opacity: 1;
         color: var(--ink);
-        border-color: rgba(10, 132, 255, 0.5);
+        opacity: 0.35;
+        transition: opacity 0.2s ease;
       }
+
+      body:not([data-mode="embedded"]) .eject { display: block; }
+
+      .eject:hover, .eject:focus-visible { opacity: 1; }
 
       /* ---------------------------------------------------------------- boot */
 
@@ -274,90 +211,79 @@
         display: grid;
         place-content: center;
         justify-items: center;
-        gap: 22px;
+        gap: 28px;
         pointer-events: none;
-        transition: opacity 500ms ease, filter 500ms ease;
+        transition: opacity 0.5s ease;
       }
 
       body.is-running .boot {
         opacity: 0;
-        filter: blur(10px);
         visibility: hidden;
       }
 
-      .orbit { width: 120px; height: 120px; }
-
-      .orbit .track {
-        fill: none;
-        stroke: var(--edge);
-        stroke-width: 1.5;
+      .boot svg {
+        width: 72px;
+        height: 72px;
       }
 
-      .orbit .arc {
-        fill: none;
-        stroke: var(--glow);
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-dasharray: 22 78;
-        stroke-dashoffset: 0;
-        filter: drop-shadow(0 0 5px rgba(10, 132, 255, 0.7));
-        animation: trace 2.8s linear infinite;
+      .boot svg .dot { animation: beat 1.4s ease-in-out infinite; }
+
+      /* A hairline that fills in blue once the download size is known. */
+      .progress {
+        width: 220px;
+        height: 1px;
+        background: var(--hairline);
+        overflow: hidden;
       }
 
-      .orbit .dart {
-        fill: var(--glow);
-        filter: drop-shadow(0 0 10px rgba(10, 132, 255, 0.6));
+      .progress span {
+        display: block;
+        height: 100%;
+        background: var(--blue);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 0.22s ease;
       }
 
-      .orbit .dot {
-        fill: var(--glow-soft);
-        filter: drop-shadow(0 0 7px var(--glow));
+      body:not(.is-determinate) .progress span {
+        width: 30%;
+        transform: none;
+        animation: sweep 1.6s ease-in-out infinite;
       }
 
-      body.is-determinate .orbit .arc {
-        animation: none;
-        stroke-dasharray: 100;
-        stroke-dashoffset: 100;
-        transition: stroke-dashoffset 220ms ease;
-      }
-
-      body.is-determinate .orbit .dot { display: none; }
-
-      @keyframes trace {
-        to { stroke-dashoffset: -100; }
+      @keyframes sweep {
+        from { margin-left: -30%; }
+        to { margin-left: 100%; }
       }
 
       .boot-status {
         display: flex;
         align-items: baseline;
-        gap: 12px;
-        font-family: var(--mono);
-        font-size: 12px;
-        letter-spacing: 0.06em;
-        color: var(--muted);
+        gap: 14px;
+        font-size: 10px;
+        color: var(--ink);
+        opacity: 0.55;
       }
 
-      #status { color: var(--ink); }
-
       #percent {
-        color: var(--glow-soft);
+        color: var(--pale);
         font-variant-numeric: tabular-nums;
       }
 
       #percent:empty { display: none; }
 
+      body.has-error .boot-status { opacity: 1; }
       body.has-error #status { color: var(--danger); }
-      body.has-error .orbit .arc,
-      body.has-error .orbit .dot { display: none; }
-      body.has-error .orbit .dart { fill: var(--danger); filter: none; }
+      body.has-error .progress,
+      body.has-error .boot svg .dot { visibility: hidden; }
 
       /* ------------------------------------------------------------ controls */
 
       .controls {
         display: flex;
         align-items: center;
-        gap: 14px;
-        transition: opacity 300ms ease;
+        gap: 36px;
+        transition: opacity 0.3s ease;
       }
 
       body:not(.is-running) .controls {
@@ -367,90 +293,58 @@
 
       .segmented {
         display: inline-flex;
-        gap: 2px;
-        padding: 2px;
-        border: 1px solid var(--edge);
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.02);
+        gap: 22px;
       }
 
       .seg {
-        appearance: none;
-        border: 0 none;
-        border-radius: 8px;
-        background: transparent;
-        color: var(--muted);
-        font-family: var(--mono);
-        font-size: 11px;
-        letter-spacing: 0.06em;
-        height: 26px;
-        padding: 0 12px;
-        cursor: pointer;
-        transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+        font-size: 10px;
+        color: var(--ink);
+        opacity: 0.45;
+        transition: opacity 0.2s ease;
       }
 
-      .seg[data-mode] {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .seg svg {
-        width: 14px;
-        height: 14px;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.5;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-
-      .seg:hover { color: var(--ink); }
+      .seg:hover { opacity: 1; }
 
       .seg[aria-pressed="true"] {
-        color: var(--ink);
-        background: rgba(10, 132, 255, 0.16);
-        box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.4), 0 0 18px -6px rgba(10, 132, 255, 0.9);
+        color: var(--pale);
+        opacity: 1;
       }
 
       .pacing {
         display: inline-flex;
-        align-items: center;
-        gap: 8px;
+        align-items: baseline;
+        gap: 22px;
       }
 
       .pacing[hidden] { display: none; }
 
       .fps {
         display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        height: 32px;
-        padding: 0 10px 0 4px;
-        border: 1px solid var(--edge);
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.02);
-        color: var(--muted);
-        font-family: var(--mono);
-        font-size: 11px;
-        letter-spacing: 0.06em;
-        transition: opacity 160ms ease;
+        align-items: baseline;
+        gap: 8px;
+        font-size: 10px;
+        transition: opacity 0.2s ease;
       }
+
+      .fps span { opacity: 0.45; }
 
       .fps input {
         width: 5ch;
-        height: 24px;
-        padding: 0 4px;
-        border: 0 none;
-        border-radius: 6px;
+        padding: 2px 0;
+        border: 0;
+        border-bottom: 1px solid var(--outline);
+        border-radius: 0;
         background: transparent;
-        color: var(--ink);
-        font: inherit;
+        color: #fff;
+        font: 13px/1.2 var(--mono);
         font-variant-numeric: tabular-nums;
         text-align: right;
+        outline: none;
         appearance: textfield;
         -moz-appearance: textfield;
       }
+
+      .fps input:focus { border-bottom-color: var(--pale); }
 
       .fps input::-webkit-inner-spin-button,
       .fps input::-webkit-outer-spin-button {
@@ -461,17 +355,16 @@
       .fps:has(input:disabled) { opacity: 0.45; }
 
       :focus-visible {
-        outline: 2px solid var(--glow);
-        outline-offset: 3px;
+        outline: 1px solid var(--pale);
+        outline-offset: 4px;
       }
 
       @media (max-width: 780px) {
-        .rail { padding: 0 12px; gap: 8px; }
-        .chips { gap: 4px; }
+        .rail { padding: 0 14px; gap: 10px; }
+        .chips { gap: 12px; }
         #chip-isolation, #chip-threads { display: none; }
-        .controls { gap: 8px; }
-        .seg[data-mode] { padding: 0 10px; }
-        .seg[data-mode] span { display: none; }
+        .controls, .pacing { gap: 16px; }
+        .segmented { gap: 14px; }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -480,19 +373,14 @@
           animation-iteration-count: 1 !important;
           transition-duration: 0.001ms !important;
         }
-        .orbit .dot { display: none; }
-        .orbit .arc { stroke-dasharray: 100; stroke-dashoffset: 70; }
       }
     </style>
   </head>
   <body data-mode="embedded">
     <header class="rail rail--top">
       <div class="brand">
-        <svg viewBox="0 0 785 788" aria-hidden="true">
-          <path d="m 218,304 c 1.46086,2.14121 2.81679,4.35215 4.063,6.625 6.87,11.894 14.92,22.61 23.735,33.135 6.79935,7.89095 13.88584,15.74304 20.827,23.303 6.9847,7.85044 21.02947,19.89757 32.375,28.937 l 2.883,2.297 C 341.117,429.002 384.922,452.415 431,471 l 3.005,1.22 c 48.133,19.403 99.325,29.104 151.072,30.332 2.11733,0.0527 4.235,0.10833 6.353,0.167 l 3.757,0.092 C 598,503 598,503 599,504 c 0.096,2.008 0.117,4.019 0.113,6.028 v 1.987 c -0.004,2.27067 -0.0117,4.54167 -0.023,6.813 l -0.012,5.014 C 599.0598,529.8947 599.0338,535.94737 599,542 l -0.019,3.602 c -0.1954,37.39226 -0.6881,124.00677 -1.282,149.927 -0.0424,2.00555 -0.0784,4.01122 -0.108,6.017 -0.19,6.749 -1.089,12.17 -3.591,18.454 l -2,2 c -5.387,3.592 -8.524,4.627 -15,4 -8.63517,-4.36284 -12.57238,-9.33244 -19.71034,-16.64483 -7.41688,-7.78631 -10.20335,-11.02435 -16.94257,-18.3573 C 491.1243,634.11061 486,628 486,628 450.45729,587.68879 420.12289,552.17238 384.879,511.328 c -6.807,-8.434 -15.207,-14.76 -24.817,-19.64 -0.63,-0.326 -1.262,-0.651 -1.913,-0.986 -9.27,-4.524 -19.217,-6.205 -29.364,-7.534 l -3.492,-0.476 C 221.50265,469.07295 177.28506,462.05833 119.743,454.8 101.35194,452.44882 82.963199,450.07355 64.598,447.527 l -2.284,-0.287 c -6.542,-0.949 -12.243,-2.956 -16.751,-7.928 -2.64,-5.596 -3.224,-10.107 -1.438,-16.062 3.216,-5.575 7.676,-8.993 12.96,-12.543 l 1.739,-1.174 c 1.847333,-1.244 3.697667,-2.484 5.551,-3.72 l 3.861,-2.6 c 6.625124,-4.46088 13.265831,-8.89858 19.922,-13.313 5.675,-3.77 11.302,-7.607 16.934,-11.438 l 1.783,-1.213 1.78,-1.211 c 11.58,-7.873 23.223,-15.648 34.89,-23.39 9.906,-6.58 19.7,-13.3 29.424,-20.149 6.678,-4.682 13.493,-9.16 20.29,-13.666 1.73733,-1.152 3.474,-2.305 5.21,-3.459 l 1.69,-1.12 c 4.362,-2.902 8.618,-5.933 12.835,-9.04 C 215,304 215,304 218,304" fill="#005aff"/>
-          <path d="m 593,58 c 5.039,2.475 7.886,5.383 10.068,10.51 1.22,4.568 1.162,8.752 1.088,13.459 l -0.024,3.111 C 604.099,88.72 604.05,92.36 604,96 l -0.075,6.578 c -0.11482,9.79152 -0.24449,19.58287 -0.389,29.374 l -0.18,12.915 C 603.23867,153.24433 603.12,161.622 603,170 l 2.386,0.93 c 2.335,0.956 4.076,1.935 6.094,3.418 l 1.838,1.334 1.87,1.38 c 5.91986,3.54867 10.83927,8.23645 16.281,12.407 l 1.963,1.466 2.068,1.565 2.14,1.614 c 30.032,22.798 30.032,22.798 32.36,32.886 0.674,5.952 -0.671,10.144 -4,15 -3.335,3.526 -6.551,5.765 -11.488,6.238 -11.38,0.3 -16.481,-5.892 -24.512,-13.238 -6.23,-5.59 -12.871,-10.694 -19.482,-15.822 -1.25639,-0.97706 -2.5084,-1.95974 -3.756,-2.948 -1.854,-1.419 -1.854,-1.419 -4.762,-2.23 l 0.007,2.647 c 0.182,75.202 0.182,75.202 -0.579,112.75 l -0.139,6.923 -0.071,3.558 c -0.353,18.278 -0.537,36.559 -0.747,54.838 l -0.1,8.708 C 600.24367,414.28133 600.12,425.14 600,436 c 3.935,-0.442 7.868,-0.896 11.8,-1.352 l 3.33,-0.373 c 24.081,-2.816 45.83602,-5.91944 68.268,-26.841 7.17113,-6.90384 6.01539,-6.05577 8.915,-9.559 11.216,-14.364 13.126,-31.394 11.37,-49.059 -2.402,-16.297 -8.34,-31.482 -16.62,-45.628 -3.216,-5.845 -4.393,-10.59 -3.063,-17.188 1.706,-4.822 4.591,-8.412 9,-11 5.953,-2.11 11.077,-2.574 16.98,-0.145 14.044,7.96 22.081,34.825 26.253,49.432 7.97,29.798 6.676,60.462 -8.694,87.647 C 717.06,429.397 700.805,442.63 683,452 l -2.992,1.617 C 667.058,460.39 653.315,465.122 639,468 l -2.614,0.556 c -17.088,3.487 -34.005,3.82 -51.386,3.819 l -3.292,0.005 c -18.783,-0.003 -37.1,-1.234 -55.583,-4.692 l -3.602,-0.663 C 462.015,455.708 402.275,433.78 350,401 l -2.313,-1.438 C 338.635,393.93 329.617,388.285 321,382 l -3.543,-2.55 c -10.968,-7.933 -21.359,-16.443 -31.6,-25.29 -2.454,-2.118 -4.908,-4.2 -7.459,-6.203 C 275.744,345.791 273.394,343.45 271,341 l -2.648,-2.613 C 263.009,333.097 257.87,327.73 253,322 c -0.90133,-1.02667 -1.80367,-2.05267 -2.707,-3.078 C 227.468,292.884 207.84,262.115 200,228 l -0.53,-2.278 c -2.08023,-14.2604 -3.41946,-11.35453 -1.92,-29.122 -0.173,-23.24399 7.132,-39.834 19.45,-56.6 l 1.781,-2.492 C 222.668,132.261 226.921,128.08 232,124 l 2.73,-2.305 C 267.325,95.174 312.071,87.513 353,87.688 l 2.71,0.005 c 14.954,0.051 29.5,1.012 44.29,3.307 l 7.625,1.102 c 23.99,3.537 46.912,9.54 69.996,16.847 l 3.328,1.052 c 1.906,0.624 3.803,1.276 5.684,1.97 4.515,1.662 7.613,2.603 12.367,1.029 2.887,-1.634 2.887,-1.634 5.75,-3.812 15.15487,-11.173383 2.67041,-1.58396 33.438,-22.813 6.87,-4.744 13.797,-9.393 20.754,-14.007 2.312,-1.538 4.622,-3.08 6.93,-4.626 l 2.488,-1.664 c 1.61,-1.076667 3.219,-2.154 4.827,-3.232 l 2.208,-1.475 1.964,-1.315 C 582.153,56.97 587.46,57.471 593,58 m -281,69 -2.08,0.34 c -24.116,4.074 -49.285,14.24 -64.42,34.223 -8.47,12.57 -12.073,24.46 -11.937,39.625 l 0.022,3.6 c 0.175,9.342 1.292,17.396 4.415,26.212 l 1.32,3.77 c 4.547,12.337 11.498,30.775 22.68,38.23 124.78758,-83.49956 164.03866,-108.97569 187.273,-125.631 3.33,-2.163 5.14,-3.752 6.727,-7.369 -25.121,-7.11 -49.998,-12.444 -76,-15 l -2.86,-0.29 c -8.126,-0.759 -16.231,-0.95 -24.39,-0.96 l -2.102,-0.004 C 337.69677,123.7425 324.76831,124.83102 312,127" fill="#005aff"/>
-        </svg>
-        <b>YUP<i>!</i></b>
+        <svg viewBox="0 0 192 192" aria-hidden="true"><g transform="matrix(0.1,0,0,-0.1,-5.4449128,204.30999)" fill="#ffffff"><path class="dot" fill="#005aff" d="m 1508.5851,796.42885 c 111.0887,-39.56584 121.7411,-225.22095 15.2176,-280.00442 -65.4358,-35.00055 -141.524,-28.9135 -191.7422,13.69587 -77.6099,66.95758 -44.1311,214.56861 60.8706,260.22155 36.5926,13.8224 67.014,16.4997 115.654,6.087 z"/><path d="m 1838.3903,1637.9745 c 3.0435,-19.7829 -30.4352,-178.0463 -74.5664,-350.0055 -94.3493,-365.22317 -103.4799,-380.44077 -231.308,-380.44077 -108.0452,0 -138.4805,22.8264 -129.3499,100.43637 12.1741,105.0016 153.6981,620.8793 178.0463,649.7928 18.2612,22.8265 42.6094,25.87 136.9587,22.8265 109.567,-4.5653 115.654,-6.0871 120.2193,-42.6094 z"/><path d="m 511.75764,1639.8403 c 108.0955,-135.3641 210.4342,-266.506 316.2871,-406.691 108.9573,157.7292 251.56396,366.5344 311.96146,418.4849 22.8264,15.2176 71.5228,22.8264 158.2633,22.8264 118.6976,0 127.8281,-3.0435 143.0458,-36.5223 12.1741,-25.87 12.1741,-44.1311 0,-68.4794 C 1426.0976,1543.589 1214.5726,1249.8887 1012.1781,975.97126 992.39518,948.57966 955.87286,846.62141 928.48113,737.0545 901.08939,632.05284 866.08884,531.61647 852.39297,516.39884 c -39.56583,-42.60937 -232.82973,-42.60937 -272.39563,1.52177 -27.3917,30.43526 -25.87,36.52231 27.3918,211.52508 31.957,98.91462 56.3052,190.22042 56.3052,202.39452 0,12.1741 -82.1752,132.39339 -182.6116,267.83029 -127.8281,170.4375 -219.6695,298.1813 -267.0134,365.7168 -13.6497,20.2783 -31.9455,45.3922 -19.7501,73.3085 11.3715,26.0304 10.9297,33.5395 161.8512,36.0051 80.2993,1.3117 135.733,-8.6526 155.5872,-34.8606 z"/></g></svg>
+        <b class="caps">yup!</b>
       </div>
       <div class="chips">
         <span class="chip" id="chip-isolation">checking</span>
@@ -508,22 +396,8 @@
       <div class="audio-hint" role="status">Click the canvas to enable audio</div>
 
       <div class="boot" id="boot">
-        <svg class="orbit" viewBox="0 0 120 120" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">
-          <g transform="rotate(-24 60 60)">
-            <path id="orbitPath" class="track" pathLength="100"
-                  d="M 8 60 a 52 28 0 1 0 104 0 a 52 28 0 1 0 -104 0"/>
-            <path class="arc" id="arc" pathLength="100"
-                  d="M 8 60 a 52 28 0 1 0 104 0 a 52 28 0 1 0 -104 0"/>
-            <circle class="dot" r="3.4">
-              <animateMotion dur="2.8s" repeatCount="indefinite" rotate="auto">
-                <mpath href="#orbitPath" xlink:href="#orbitPath"/>
-              </animateMotion>
-            </circle>
-          </g>
-          <path class="dart" transform="rotate(-12 60 60) translate(36 37) scale(2)"
-                d="M12 2 21 21 12 16.4 3 21Z"/>
-        </svg>
-
+        <svg viewBox="0 0 192 192" aria-hidden="true"><g transform="matrix(0.1,0,0,-0.1,-5.4449128,204.30999)" fill="#ffffff"><path class="dot" fill="#005aff" d="m 1508.5851,796.42885 c 111.0887,-39.56584 121.7411,-225.22095 15.2176,-280.00442 -65.4358,-35.00055 -141.524,-28.9135 -191.7422,13.69587 -77.6099,66.95758 -44.1311,214.56861 60.8706,260.22155 36.5926,13.8224 67.014,16.4997 115.654,6.087 z"/><path d="m 1838.3903,1637.9745 c 3.0435,-19.7829 -30.4352,-178.0463 -74.5664,-350.0055 -94.3493,-365.22317 -103.4799,-380.44077 -231.308,-380.44077 -108.0452,0 -138.4805,22.8264 -129.3499,100.43637 12.1741,105.0016 153.6981,620.8793 178.0463,649.7928 18.2612,22.8265 42.6094,25.87 136.9587,22.8265 109.567,-4.5653 115.654,-6.0871 120.2193,-42.6094 z"/><path d="m 511.75764,1639.8403 c 108.0955,-135.3641 210.4342,-266.506 316.2871,-406.691 108.9573,157.7292 251.56396,366.5344 311.96146,418.4849 22.8264,15.2176 71.5228,22.8264 158.2633,22.8264 118.6976,0 127.8281,-3.0435 143.0458,-36.5223 12.1741,-25.87 12.1741,-44.1311 0,-68.4794 C 1426.0976,1543.589 1214.5726,1249.8887 1012.1781,975.97126 992.39518,948.57966 955.87286,846.62141 928.48113,737.0545 901.08939,632.05284 866.08884,531.61647 852.39297,516.39884 c -39.56583,-42.60937 -232.82973,-42.60937 -272.39563,1.52177 -27.3917,30.43526 -25.87,36.52231 27.3918,211.52508 31.957,98.91462 56.3052,190.22042 56.3052,202.39452 0,12.1741 -82.1752,132.39339 -182.6116,267.83029 -127.8281,170.4375 -219.6695,298.1813 -267.0134,365.7168 -13.6497,20.2783 -31.9455,45.3922 -19.7501,73.3085 11.3715,26.0304 10.9297,33.5395 161.8512,36.0051 80.2993,1.3117 135.733,-8.6526 155.5872,-34.8606 z"/></g></svg>
+        <div class="progress" aria-hidden="true"><span id="progress"></span></div>
         <p class="boot-status">
           <span id="status">Downloading module</span>
           <span id="percent"></span>
@@ -534,37 +408,26 @@
     <footer class="rail rail--bottom">
       <div class="controls">
         <div class="pacing" id="pacing" hidden>
-          <div class="segmented">
-            <button class="seg" type="button" id="vsync" aria-pressed="false">VSync</button>
-          </div>
+          <button class="seg" type="button" id="vsync" aria-pressed="false">vsync</button>
           <label class="fps">
             <input id="fps" type="number" min="1" max="1000" step="1" value="60" aria-label="Frames per second">
             <span>fps</span>
           </label>
         </div>
         <div class="segmented" role="group" aria-label="Canvas display">
-          <button class="seg" type="button" data-mode="embedded" aria-pressed="true" aria-label="Embedded" title="Embedded">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5"/><rect x="5" y="6" width="6" height="4" rx="0.5"/></svg>
-            <span>Embedded</span>
-          </button>
-          <button class="seg" type="button" data-mode="window" aria-pressed="false" aria-label="Full window" title="Full window">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5"/><path d="M1.75 5.75h12.5"/></svg>
-            <span>Full window</span>
-          </button>
-          <button class="seg" type="button" data-mode="fullscreen" aria-pressed="false" aria-label="Fullscreen" title="Fullscreen">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
-            <span>Fullscreen</span>
-          </button>
+          <button class="seg" type="button" data-mode="embedded" aria-pressed="true">embedded</button>
+          <button class="seg" type="button" data-mode="window" aria-pressed="false">full window</button>
+          <button class="seg" type="button" data-mode="fullscreen" aria-pressed="false">fullscreen</button>
         </div>
       </div>
     </footer>
 
-    <button class="eject" type="button" id="eject">Exit full window</button>
+    <button class="eject" type="button" id="eject">exit full window</button>
 
     <script type='text/javascript'>
       var statusElement = document.getElementById('status');
       var percentElement = document.getElementById('percent');
-      var arcElement = document.getElementById('arc');
+      var progressElement = document.getElementById('progress');
       var ejectElement = document.getElementById('eject');
       var audioChipElement = document.getElementById('chip-audio');
       var midiChipElement = document.getElementById('chip-midi');
@@ -722,7 +585,7 @@
         }
         var clamped = Math.max(0, Math.min(1, ratio));
         document.body.classList.add('is-determinate');
-        arcElement.style.strokeDashoffset = (100 - clamped * 100).toFixed(1);
+        progressElement.style.transform = 'scaleX(' + clamped.toFixed(3) + ')';
         percentElement.textContent = Math.round(clamped * 100) + '%';
       }
 

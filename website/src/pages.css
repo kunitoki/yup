@@ -49,7 +49,7 @@ button {
 .nav {
     position: absolute;
     z-index: 2;
-    left: var(--edge-x);
+    left: var(--brand-x);
     top: calc(var(--edge-y) + 26px);
     display: flex;
     flex-wrap: wrap;
@@ -86,7 +86,7 @@ button {
     color: transparent;
     font: 900 min(15vw, 200px) / 0.86 var(--sans);
     letter-spacing: -0.045em;
-    -webkit-text-stroke: 1px var(--outline);
+    -webkit-text-stroke: var(--stroke) var(--outline);
 }
 
 .lead {

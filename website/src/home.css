@@ -102,7 +102,7 @@ main {
 main .works a {
     pointer-events: auto;
     outline: none;
-    -webkit-text-stroke: 1px var(--outline);
+    -webkit-text-stroke: var(--stroke) var(--outline);
     transition: -webkit-text-stroke-color 0.2s ease;
 }
 
@@ -152,7 +152,7 @@ main .works a[aria-current="true"] {
 .what {
     position: fixed;
     z-index: 2;
-    left: var(--edge-x);
+    left: var(--brand-x);
     top: calc(var(--edge-y) + 22px);
     max-width: 60%;
     font-size: clamp(11px, 1.1vw, 14px);

@@ -6,7 +6,7 @@ on:
       - "**/workflows/deploy_website.yml"
       - "website/**"
       - "docs/**"
-      - "logo.svg"
+      - "logos/**"
       # The home page demos are a YUP app built from these
       - "CMakeLists.txt"
       - "cmake/**"

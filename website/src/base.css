@@ -7,11 +7,21 @@
     --ink: #d8dde0;
     --outline: #59606a;
     --hairline: #22262c;
+    --stroke: 1px;
     --sans: "Geist Variable", "Helvetica Neue", Arial, sans-serif;
     --mono: "Geist Mono Variable", ui-monospace, Menlo, monospace;
     --edge-x: 5vw;
     --edge-y: 4.5vh;
+    --logo: 56px;
+    --brand-x: calc(var(--edge-x) + var(--logo) * 0.86 + 8px);
     color-scheme: dark;
+}
+
+/* A 1px outline is a single aliased pixel on standard density screens: thicken it there. */
+@media (max-resolution: 1.5dppx) {
+    :root {
+        --stroke: 1.5px;
+    }
 }
 
 *,
@@ -58,9 +68,20 @@ body {
     transition: opacity 0.4s ease;
 }
 
+/* The logo stands at the edge, beside the name and the line under it, which step right to make room. */
 .top-left {
-    left: var(--edge-x);
+    left: var(--brand-x);
     top: var(--edge-y);
+}
+
+/* The white letters fill 7%-93% of the logo's width and 19%-81% of its height: they line up with
+   the page edge, the cap height of the name and the baseline of the line below it. */
+.top-left .logo {
+    position: absolute;
+    left: calc(var(--edge-x) - var(--brand-x) - var(--logo) * 0.07);
+    top: calc(2.5px - var(--logo) * 0.1875);
+    width: var(--logo);
+    height: var(--logo);
 }
 
 .top-right {

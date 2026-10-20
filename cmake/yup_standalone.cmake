@@ -24,7 +24,7 @@ function (yup_standalone_app)
     set (options "")
     set (one_value_args
         # Globals
-        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_WHEEL TARGET_CXX_STANDARD
+        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_ICON_COMPOSER TARGET_WHEEL TARGET_CXX_STANDARD
         # Emscripten
         INITIAL_MEMORY MAXIMUM_MEMORY PTHREAD_POOL_SIZE STACK_SIZE CUSTOM_PLIST CUSTOM_SHELL ENABLE_EMSCRIPTEN_WEBGPU ENABLE_EMSCRIPTEN_GL_DEBUGGING ENABLE_EMSCRIPTEN_NODERAWFS)
     set (multi_value_args
@@ -36,6 +36,9 @@ function (yup_standalone_app)
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
+    if (NOT DEFINED YUP_ARG_TARGET_ICON)
+        _yup_set_default (YUP_ARG_TARGET_ICON_COMPOSER "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/AppIcon.icon")
+    endif()
     _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/app-icon.png")
     _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_WEBGPU ON)
     _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_GL_DEBUGGING OFF)
@@ -162,6 +165,15 @@ function (yup_standalone_app)
             get_filename_component (target_iconset_name "${target_iconset}" NAME)
             target_sources (${target_name} PRIVATE ${target_iconset})
             list (APPEND target_resources "${target_iconset}")
+
+            if (YUP_ARG_TARGET_ICON_COMPOSER)
+                _yup_message (STATUS "${target_name} - Compiling Icon Composer icon for Liquid Glass")
+                _yup_compile_icon_composer ("${YUP_ARG_TARGET_ICON_COMPOSER}" "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_icon" target_asset_catalog)
+                if (target_asset_catalog)
+                    target_sources (${target_name} PRIVATE ${target_asset_catalog})
+                    list (APPEND target_resources "${target_asset_catalog}")
+                endif()
+            endif()
 
             set_target_properties (${target_name} PROPERTIES
                 BUNDLE                                         ON
