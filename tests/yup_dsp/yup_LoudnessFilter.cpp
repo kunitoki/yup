@@ -240,7 +240,7 @@ TEST_F (LoudnessFilterTests, FilterEmphasizesHighFrequencies)
     {
         double sum = 0.0;
         for (float s : samples)
-            sum += s * s;
+            sum += static_cast<double> (s) * static_cast<double> (s);
         return std::sqrt (sum / samples.size());
     };
 

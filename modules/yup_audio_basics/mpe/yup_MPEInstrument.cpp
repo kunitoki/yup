@@ -624,7 +624,7 @@ void MPEInstrument::updateNoteTotalPitchbend (MPENote& note)
 {
     if (legacyMode.isEnabled)
     {
-        note.totalPitchbendInSemitones = note.pitchbend.asSignedFloat() * (float) legacyMode.pitchbendRange;
+        note.totalPitchbendInSemitones = note.pitchbend.asSignedFloat() * (double) legacyMode.pitchbendRange;
     }
     else
     {
