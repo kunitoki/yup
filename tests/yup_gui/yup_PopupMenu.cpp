@@ -819,6 +819,127 @@ TEST_F (PopupMenuTest, ScrollingKeepsRowsAdjacentToScrollIndicators)
     EXPECT_LE (downIndicatorTop - lastVisibleItemBottom, 4.0f);
 }
 
+TEST_F (PopupMenuTest, TappingScrollIndicatorsScrollsTheMenu)
+{
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 220, 130);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (smallParent.get()).withPosition (Point<int> (10, 10)));
+    for (int i = 1; i <= 40; ++i)
+        menu->addItem (String ("Item ") + String (i), i);
+
+    menu->show();
+    ASSERT_TRUE (menu->needsScrolling());
+    EXPECT_FALSE (menu->canScrollUp());
+
+    const auto tap = [&] (Point<float> position)
+    {
+        const auto event = MouseEvent (MouseEvent::leftButton, KeyModifiers(), position).withTouchIndex (0).withLastMouseDownPosition (position);
+        menu->mouseDown (event);
+        menu->mouseUp (event);
+    };
+
+    tap (menu->getScrollDownIndicatorBounds().getCenter());
+    EXPECT_TRUE (menu->canScrollUp());
+    EXPECT_TRUE (menu->isBeingShown());
+
+    tap (menu->getScrollUpIndicatorBounds().getCenter());
+    EXPECT_FALSE (menu->canScrollUp());
+    EXPECT_TRUE (menu->isBeingShown());
+}
+
+TEST_F (PopupMenuTest, TouchDragScrollsWithoutSelectingOrDismissing)
+{
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 220, 130);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (smallParent.get()).withPosition (Point<int> (10, 10)));
+    for (int i = 1; i <= 40; ++i)
+        menu->addItem (String ("Item ") + String (i), i);
+
+    int selectedId = -1;
+    menu->show ([&] (int id)
+    {
+        selectedId = id;
+    });
+
+    const auto start = Point<float> (50.0f, menu->getHeight() * 0.5f);
+    const auto touch = [&] (Point<float> position)
+    {
+        return MouseEvent (MouseEvent::leftButton, KeyModifiers(), position).withTouchIndex (0).withLastMouseDownPosition (start);
+    };
+
+    menu->mouseDown (touch (start));
+    menu->mouseDrag (touch (start.translated (0.0f, -60.0f)));
+    EXPECT_TRUE (menu->canScrollUp());
+
+    // Released past the menu edge: a drag neither picks an item nor dismisses
+    menu->mouseUp (touch (start.translated (0.0f, -200.0f)));
+    EXPECT_TRUE (menu->isBeingShown());
+    EXPECT_EQ (selectedId, -1);
+
+    menu->mouseDown (touch (start));
+    menu->mouseDrag (touch (start.translated (0.0f, 200.0f)));
+    menu->mouseUp (touch (start.translated (0.0f, 200.0f)));
+    EXPECT_FALSE (menu->canScrollUp());
+    EXPECT_TRUE (menu->isBeingShown());
+    EXPECT_EQ (selectedId, -1);
+}
+
+TEST_F (PopupMenuTest, PressDoesNothingUntilRelease)
+{
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (parentComponent.get()).withPosition (Point<int> (10, 10)));
+
+    auto submenu = PopupMenu::create();
+    submenu->addItem ("Sub 1", 10);
+    menu->addSubMenu ("More", submenu);
+    menu->addItem ("Item 1", 1);
+
+    int selectedId = -1;
+    menu->show ([&] (int id)
+    {
+        selectedId = id;
+    });
+
+    std::vector<Point<float>> itemCenters;
+    for (const auto& item : *menu)
+        itemCenters.push_back (item->area.getCenter());
+
+    const auto touch = [] (Point<float> position)
+    {
+        return MouseEvent (MouseEvent::leftButton, KeyModifiers(), position).withTouchIndex (0).withLastMouseDownPosition (position);
+    };
+
+    // A finger may be starting a drag: the press neither opens the submenu nor picks the item
+    menu->mouseDown (touch (itemCenters[0]));
+    EXPECT_FALSE (menu->isItemShowingSubmenu (0));
+    menu->mouseUp (touch (itemCenters[0]));
+    EXPECT_TRUE (menu->isItemShowingSubmenu (0));
+
+    menu->mouseDown (touch (itemCenters[1]));
+    EXPECT_EQ (selectedId, -1);
+    menu->mouseUp (touch (itemCenters[1]));
+    EXPECT_EQ (selectedId, 1);
+}
+
+TEST_F (PopupMenuTest, MouseDragDoesNotScroll)
+{
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 220, 130);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (smallParent.get()).withPosition (Point<int> (10, 10)));
+    for (int i = 1; i <= 40; ++i)
+        menu->addItem (String ("Item ") + String (i), i);
+
+    menu->show();
+
+    const auto start = Point<float> (50.0f, menu->getHeight() * 0.5f);
+    menu->mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), start).withLastMouseDownPosition (start));
+    menu->mouseDrag (MouseEvent (MouseEvent::leftButton, KeyModifiers(), start.translated (0.0f, -60.0f)).withLastMouseDownPosition (start));
+
+    EXPECT_FALSE (menu->canScrollUp());
+}
+
 TEST_F (PopupMenuTest, ScrollingWithCustomComponents)
 {
     // Use small parent to trigger scrolling behavior

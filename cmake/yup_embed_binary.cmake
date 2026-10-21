@@ -22,9 +22,15 @@
 function (yup_add_embedded_binary_resources library_name)
     set (options "")
     set (one_value_args OUT_DIR HEADER NAMESPACE)
-    set (multi_value_args RESOURCE_NAMES RESOURCES)
+    set (multi_value_args RESOURCE_NAMES RESOURCES INCLUDES)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    # ==== INCLUDES are byte arrays generated at build time, in place of the RESOURCES files
+    set (resource_inputs ${YUP_ARG_RESOURCES})
+    if (YUP_ARG_INCLUDES)
+        set (resource_inputs ${YUP_ARG_INCLUDES})
+    endif()
 
     set (binary_output_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}")
     set (binary_scratch_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}/scratch")
@@ -56,9 +62,14 @@ function (yup_add_embedded_binary_resources library_name)
             "\n")
     endif()
 
-    foreach (resource_name resource IN ZIP_LISTS YUP_ARG_RESOURCE_NAMES YUP_ARG_RESOURCES)
+    foreach (resource_name resource IN ZIP_LISTS YUP_ARG_RESOURCE_NAMES resource_inputs)
         set (full_resource_unit_path "${binary_output_path}/${resource_name}.cpp")
         set (full_resource_hex_path "${binary_output_path}/${resource_name}.inc")
+        set (resource_include "${resource_name}.inc")
+        if (YUP_ARG_INCLUDES)
+            set (full_resource_hex_path "${resource}")
+            set (resource_include "${resource}")
+        endif()
         set (scratch_resource_unit_path "${binary_scratch_path}/${resource_name}.cpp")
         set (scratch_resource_hex_path "${binary_scratch_path}/${resource_name}.inc")
 
@@ -85,7 +96,7 @@ function (yup_add_embedded_binary_resources library_name)
         file (APPEND "${scratch_resource_unit_path}"
             "const uint8_t ${resource_name}_data[] = \n"
             "{\n"
-            "    #include \"${resource_name}.inc\"\n"
+            "    #include \"${resource_include}\"\n"
             "};\n"
             "\n"
             "const std::size_t ${resource_name}_size = sizeof (${resource_name}_data);\n"
@@ -98,24 +109,26 @@ function (yup_add_embedded_binary_resources library_name)
         endif()
 
         # Regenerate the byte array only when the input changed since the last run
-        set (resource_hash_path "${full_resource_hex_path}.md5")
-        file (MD5 "${resource}" resource_hash)
+        if (NOT YUP_ARG_INCLUDES)
+            set (resource_hash_path "${full_resource_hex_path}.md5")
+            file (MD5 "${resource}" resource_hash)
 
-        set (resource_needs_update TRUE)
-        if (EXISTS "${full_resource_hex_path}" AND EXISTS "${resource_hash_path}")
-            file (READ "${resource_hash_path}" previous_resource_hash)
-            string (STRIP "${previous_resource_hash}" previous_resource_hash)
+            set (resource_needs_update TRUE)
+            if (EXISTS "${full_resource_hex_path}" AND EXISTS "${resource_hash_path}")
+                file (READ "${resource_hash_path}" previous_resource_hash)
+                string (STRIP "${previous_resource_hash}" previous_resource_hash)
 
-            if (resource_hash STREQUAL previous_resource_hash)
-                set (resource_needs_update FALSE)
+                if (resource_hash STREQUAL previous_resource_hash)
+                    set (resource_needs_update FALSE)
+                endif()
             endif()
-        endif()
 
-        if (resource_needs_update)
-            _yup_file_to_byte_array (${resource} resource_byte_array)
-            file (WRITE "${scratch_resource_hex_path}" "${resource_byte_array}")
-            configure_file ("${scratch_resource_hex_path}" "${full_resource_hex_path}" COPYONLY)
-            file (WRITE "${resource_hash_path}" "${resource_hash}")
+            if (resource_needs_update)
+                _yup_file_to_byte_array (${resource} resource_byte_array)
+                file (WRITE "${scratch_resource_hex_path}" "${resource_byte_array}")
+                configure_file ("${scratch_resource_hex_path}" "${full_resource_hex_path}" COPYONLY)
+                file (WRITE "${resource_hash_path}" "${resource_hash}")
+            endif()
         endif()
 
         # Copy only if content differs, to avoid recompilation

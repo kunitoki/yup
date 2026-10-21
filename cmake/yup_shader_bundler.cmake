@@ -18,71 +18,10 @@
 # ==============================================================================
 
 #==============================================================================
-# Builds the yup_shader_bundler console tool for the host once and caches the
-# resulting executable path in the global property YUP_SHADER_BUNDLER_EXECUTABLE.
-#
-# The tool is built in its own binary tree using the host compiler (no toolchain
-# file is forwarded), so it is runnable at configure time even when the outer
-# build is cross-compiling (Android, iOS, WebAssembly).
-
-function (_yup_build_shader_bundler_tool output_variable)
-    get_property (cached_exe GLOBAL PROPERTY YUP_SHADER_BUNDLER_EXECUTABLE)
-    if (cached_exe AND EXISTS "${cached_exe}")
-        set (${output_variable} "${cached_exe}" PARENT_SCOPE)
-        return()
-    endif()
-
-    get_filename_component (tool_source_dir "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/tools/shader_bundler" ABSOLUTE)
-    set (tool_build_dir "${CMAKE_BINARY_DIR}/_yup_host_tools/shader_bundler")
-
-    # ==== Configure the host build (no toolchain file -> host compiler)
-    _yup_message (STATUS "Configuring host shader bundler tool")
-    _yup_message (STATUS " * tool_source_dir: ${tool_source_dir}")
-    _yup_message (STATUS " * tool_build_dir: ${tool_build_dir}")
-    _yup_execute_process_or_fail (
-        "${CMAKE_COMMAND}"
-            -S "${tool_source_dir}"
-            -B "${tool_build_dir}"
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_TOOLCHAIN_FILE=)
-
-    # ==== Build it
-    _yup_message (STATUS "Building host shader bundler tool")
-    _yup_execute_process_or_fail (
-        "${CMAKE_COMMAND}"
-            --build "${tool_build_dir}"
-            --config Release
-            --parallel 4)
-
-    # ==== Locate the produced executable
-    set (exe_name "yup_shader_bundler")
-    if (CMAKE_HOST_WIN32)
-        set (exe_name "yup_shader_bundler.exe")
-    endif()
-
-    file (GLOB_RECURSE candidate_exes "${tool_build_dir}/${exe_name}")
-    list (FILTER candidate_exes EXCLUDE REGEX "\\.dSYM/")
-    list (LENGTH candidate_exes num_candidates)
-
-    if (num_candidates EQUAL 0)
-        _yup_message (FATAL_ERROR "Failed to locate built shader bundler tool in ${tool_build_dir}")
-    endif()
-
-    list (GET candidate_exes 0 tool_exe)
-
-    file (SHA256 "${tool_exe}" tool_hash)
-    set_property (GLOBAL PROPERTY YUP_SHADER_BUNDLER_EXECUTABLE "${tool_exe}")
-    set_property (GLOBAL PROPERTY YUP_SHADER_BUNDLER_SHA256 "${tool_hash}")
-    _yup_message (STATUS " * shader bundler executable: ${tool_exe}")
-
-    set (${output_variable} "${tool_exe}" PARENT_SCOPE)
-endfunction()
-
-#==============================================================================
 # Compiles a vertex/fragment GLSL shader pair, or a compute shader, into a .ysl
-# bundle (at configure time) and embeds it into an OBJECT library that can be
-# linked into a target. The bundle is only regenerated when the tool, the
-# arguments or the content of a stage or DEPENDS file changed.
+# bundle (at build time) and embeds it into an OBJECT library that can be
+# linked into a target. The bundle is only regenerated when the tool or a stage
+# or DEPENDS file changed.
 #
 # Usage:
 #   yup_add_shader_bundle (<library_name>
@@ -96,7 +35,7 @@ endfunction()
 #       [GLSL_VERSION  <version>]       # default: 450
 #       [BUNDLE_RESOURCE <variable>]    # don't embed, see below
 #       [BUNDLE_DESTINATION <path>]     # default: <OUTPUT_NAME>.ysl
-#       [TEMP_FOLDER   <path>]          # default: CMAKE_CURRENT_BINARY_DIR
+#       [TEMP_FOLDER   <path>]          # BUNDLE_RESOURCE only, default: CMAKE_CURRENT_BINARY_DIR
 #       [DEPENDS       <file>...]       # extra inputs, e.g. #included files
 #       [OPTIONS       <flag>...])      # extra flags forwarded to yup_shader_bundler
 #
@@ -109,9 +48,10 @@ endfunction()
 #     extern const size_t   <RESOURCE_NAME>_size;
 # The bytes can be loaded at runtime with ShaderBundle::loadFromData().
 #
-# With BUNDLE_RESOURCE no library is created: the .ysl is left in
+# With BUNDLE_RESOURCE no library is created: the .ysl is generated in
 # TEMP_FOLDER and <variable> is set to "<ysl path>@<BUNDLE_DESTINATION>",
-# ready to be passed to the BUNDLE_RESOURCES of yup_standalone_app. Load it at
+# ready to be passed to the BUNDLE_RESOURCES of yup_standalone_app, which builds
+# it. Call it from the directory that creates the consuming target. Load it at
 # runtime with ShaderBundle::loadFromFile().
 
 function (yup_add_shader_bundle library_name)
@@ -164,54 +104,41 @@ function (yup_add_shader_bundle library_name)
         list (APPEND depend_paths "${depend_path}")
     endforeach()
 
-    # ==== Re-run the configure step when an input changes
-    set_property (DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${stage_paths} ${depend_paths})
+    _yup_add_shader_bundler_host_target (bundler_executable bundler_target)
 
-    # ==== Ensure the host tool is available (built and cached once)
-    _yup_build_shader_bundler_tool (shader_bundler_exe)
+    set (bundler_args
+        ${stage_args}
+        --entry "${YUP_ARG_ENTRY}"
+        --glsl-version "${YUP_ARG_GLSL_VERSION}"
+        ${YUP_ARG_OPTIONS})
 
-    # ==== Generate the .ysl bundle at configure time, unless tool, arguments and inputs are unchanged
-    set (bundle_path "${YUP_ARG_TEMP_FOLDER}/${YUP_ARG_OUTPUT_NAME}.ysl")
-    set (bundle_key_path "${bundle_path}.sha256")
-
-    set (bundler_command
-        "${shader_bundler_exe}"
-            ${stage_args}
-            --output "${bundle_path}"
-            --entry "${YUP_ARG_ENTRY}"
-            --glsl-version "${YUP_ARG_GLSL_VERSION}"
-            ${YUP_ARG_OPTIONS})
-
-    get_property (bundle_key GLOBAL PROPERTY YUP_SHADER_BUNDLER_SHA256)
-    string (APPEND bundle_key "${bundler_command}")
-    foreach (input_path IN LISTS stage_paths depend_paths)
-        file (SHA256 "${input_path}" input_hash)
-        string (APPEND bundle_key "${input_path}=${input_hash}")
-    endforeach()
-    string (SHA256 bundle_key "${bundle_key}")
-
-    set (previous_bundle_key "")
-    if (EXISTS "${bundle_path}" AND EXISTS "${bundle_key_path}")
-        file (READ "${bundle_key_path}" previous_bundle_key)
-    endif()
-
-    if (bundle_key STREQUAL previous_bundle_key)
-        _yup_message (STATUS "Shader bundle ${bundle_path} is up to date")
-    else()
-        _yup_message (STATUS "Generating shader bundle ${bundle_path}")
-        file (REMOVE "${bundle_key_path}")
-        _yup_execute_process_or_fail ("${CMAKE_COMMAND}" "-E" "make_directory" "${YUP_ARG_TEMP_FOLDER}")
-        _yup_execute_process_or_fail (${bundler_command})
-        file (WRITE "${bundle_key_path}" "${bundle_key}")
-    endif()
-
-    # ==== Hand the bundle over to BUNDLE_RESOURCES instead of embedding it
+    # ==== Hand the bundle over to BUNDLE_RESOURCES, whose target attaches the command
     if (YUP_ARG_BUNDLE_RESOURCE)
+        set (bundle_path "${YUP_ARG_TEMP_FOLDER}/${YUP_ARG_OUTPUT_NAME}.ysl")
+        file (MAKE_DIRECTORY "${YUP_ARG_TEMP_FOLDER}")
+
+        add_custom_command (
+            OUTPUT "${bundle_path}"
+            COMMAND "${bundler_executable}" ${bundler_args} --output "${bundle_path}"
+            DEPENDS ${bundler_target} "${bundler_executable}" ${stage_paths} ${depend_paths}
+            COMMENT "Building shader bundle ${YUP_ARG_OUTPUT_NAME}.ysl"
+            VERBATIM)
+
         set (${YUP_ARG_BUNDLE_RESOURCE} "${bundle_path}@${YUP_ARG_BUNDLE_DESTINATION}" PARENT_SCOPE)
         return()
     endif()
 
     # ==== Embed the generated bundle into an object library
+    set (bundle_include "${CMAKE_CURRENT_BINARY_DIR}/ShaderBundles/${YUP_ARG_RESOURCE_NAME}.inc")
+    file (MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ShaderBundles")
+
+    add_custom_command (
+        OUTPUT "${bundle_include}"
+        COMMAND "${bundler_executable}" ${bundler_args} --output-inc "${bundle_include}"
+        DEPENDS ${bundler_target} "${bundler_executable}" ${stage_paths} ${depend_paths}
+        COMMENT "Building shader bundle ${YUP_ARG_RESOURCE_NAME}.inc"
+        VERBATIM)
+
     yup_add_embedded_binary_resources (
         ${library_name}
         OUT_DIR ShaderBundles
@@ -219,16 +146,16 @@ function (yup_add_shader_bundle library_name)
         NAMESPACE ${YUP_ARG_NAMESPACE}
         RESOURCE_NAMES
             ${YUP_ARG_RESOURCE_NAME}
-        RESOURCES
-            "${bundle_path}")
+        INCLUDES
+            "${bundle_include}")
 endfunction()
 
 #==============================================================================
 # Adds the target that builds the host yup_shader_bundler at build time, once
 # per build tree, and returns the path of the executable it produces.
 #
-# Unlike _yup_build_shader_bundler_tool, configuring a project never builds the
-# tool: only building a target that needs a shader bundle does.
+# Configuring a project never builds the tool: only building a target that
+# needs a shader bundle does.
 
 function (_yup_add_shader_bundler_host_target output_executable output_target)
     set (tool_target yup_shader_bundler_host)

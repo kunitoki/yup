@@ -92,8 +92,17 @@ public:
     Pimpl (const File& directory, const String& wc)
         : parentDir (File::addTrailingSeparator (directory.getFullPathName()))
         , wildCard (wc)
-        , dir (opendir (directory.getFullPathName().toUTF8()))
     {
+#if YUP_ANDROID
+        if (isAndroidAssetPath (directory.getFullPathName()))
+        {
+            listsAssets = true;
+            assetEntries = getAndroidAssetFolderEntries (getAndroidAssetRelativePath (directory.getFullPathName()));
+            return;
+        }
+#endif
+
+        dir = opendir (directory.getFullPathName().toUTF8());
     }
 
     ~Pimpl()
@@ -110,6 +119,11 @@ public:
                Time* const creationTime,
                bool* const isReadOnly)
     {
+#if YUP_ANDROID
+        if (listsAssets)
+            return nextAsset (filenameFound, isDir, isHidden, fileSize, modTime, creationTime, isReadOnly);
+#endif
+
         if (dir != nullptr)
         {
             const char* wildcardUTF8 = nullptr;
@@ -142,8 +156,50 @@ public:
     }
 
 private:
+#if YUP_ANDROID
+    bool nextAsset (String& filenameFound, bool* isDir, bool* isHidden, int64* fileSize, Time* modTime, Time* creationTime, bool* isReadOnly)
+    {
+        const char* wildcardUTF8 = wildCard.toUTF8();
+
+        while (nextAssetEntry < assetEntries.size())
+        {
+            const auto& name = assetEntries[nextAssetEntry++];
+
+            if (fnmatch (wildcardUTF8, name.toRawUTF8(), FNM_CASEFOLD) != 0)
+                continue;
+
+            filenameFound = name;
+
+            // Only files open as assets, anything else listed is a folder
+            const File entry (parentDir + name);
+            const auto isFile = entry.existsAsFile();
+
+            if (isDir != nullptr)
+                *isDir = ! isFile;
+            if (isHidden != nullptr)
+                *isHidden = filenameFound.startsWithChar ('.');
+            if (fileSize != nullptr)
+                *fileSize = isFile ? entry.getSize() : 0;
+            if (modTime != nullptr)
+                *modTime = Time();
+            if (creationTime != nullptr)
+                *creationTime = Time();
+            if (isReadOnly != nullptr)
+                *isReadOnly = true;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    bool listsAssets = false;
+    StringArray assetEntries;
+    int nextAssetEntry = 0;
+#endif
+
     String parentDir, wildCard;
-    DIR* dir;
+    DIR* dir = nullptr;
 
     YUP_DECLARE_NON_COPYABLE (Pimpl)
 };

@@ -54,7 +54,7 @@ result as `#include "<module>_shaders/yup_<Name>[_<define>...].inc"`. See
 ## The `yup_add_shader_bundle` CMake helper
 
 The easiest path is the `yup_add_shader_bundle()` function. It builds the
-`yup_shader_bundler` host tool once, runs it **at configure time** to produce the
+`yup_shader_bundler` host tool once, runs it **at build time** to produce the
 `.ysl`, and embeds the result into a linkable `OBJECT` library via
 [`yup_add_embedded_binary_resources`](../../build-system/cmake-api.md#yup_add_embedded_binary_resources).
 Because the tool is built in its own host binary tree, this works even when the
@@ -72,7 +72,7 @@ yup_add_shader_bundle(<library_name>
     [GLSL_VERSION  <version>]       # default: 450
     [BUNDLE_RESOURCE <variable>]    # ship the .ysl as a file instead of embedding it
     [BUNDLE_DESTINATION <path>]     # default: <OUTPUT_NAME>.ysl
-    [TEMP_FOLDER   <path>]          # default: CMAKE_CURRENT_BINARY_DIR
+    [TEMP_FOLDER   <path>]          # BUNDLE_RESOURCE only, default: CMAKE_CURRENT_BINARY_DIR
     [DEPENDS       <file>...]       # extra inputs, e.g. #included files
     [OPTIONS       <flag>...])      # extra flags forwarded to yup_shader_bundler
 ```
@@ -90,14 +90,13 @@ yup_add_shader_bundle(<library_name>
 | `GLSL_VERSION` | `450` | GLSL version passed to the compiler. |
 | `BUNDLE_RESOURCE` | - | Don't embed: set this variable to `<ysl path>@<BUNDLE_DESTINATION>` for `BUNDLE_RESOURCES` (see [below](#shipping-the-bundle-as-a-file)). |
 | `BUNDLE_DESTINATION` | `<OUTPUT_NAME>.ysl` | Path of the bundle inside the application bundle. |
-| `TEMP_FOLDER` | `CMAKE_CURRENT_BINARY_DIR` | Folder where the `.ysl` is generated, created if missing. |
+| `TEMP_FOLDER` | `CMAKE_CURRENT_BINARY_DIR` | With `BUNDLE_RESOURCE`, folder where the `.ysl` is generated, created if missing. |
 | `DEPENDS` | - | Extra input files, such as the ones pulled in with `#include`. |
 | `OPTIONS` | - | Extra flags forwarded verbatim to `yup_shader_bundler` (see [below](#the-yup_shader_bundler-tool)). |
 
-Editing a stage or `DEPENDS` file re-runs the configure step. The bundle is only
-regenerated when the content of those files, the arguments or the
-`yup_shader_bundler` binary changed: a key of all three is stored next to the
-`.ysl` as `<OUTPUT_NAME>.ysl.sha256`.
+Configuring never builds the tool nor the bundle: building a target that uses the
+bundle does. Editing a stage or `DEPENDS` file, or rebuilding `yup_shader_bundler`,
+only regenerates the bundles depending on it, with no reconfigure.
 
 Stages can share code with `#include "file.glsl"`: enable
 `#extension GL_GOOGLE_include_directive : require` after `#version`, pass the
@@ -132,9 +131,10 @@ extern const std::size_t ShaderBundleFile_size;
 ### Shipping the bundle as a file
 
 Embedding keeps every bundle in the binary. With `BUNDLE_RESOURCE` no library is
-created: the `.ysl` stays in `TEMP_FOLDER`, and the variable receives
+created: the `.ysl` is generated in `TEMP_FOLDER`, and the variable receives
 a `source@destination` pair ready for the `BUNDLE_RESOURCES` of
-`yup_standalone_app`:
+`yup_standalone_app`, whose target builds it. Call `yup_add_shader_bundle` in the
+same `CMakeLists.txt` as `yup_standalone_app`:
 
 ```cmake
 yup_add_shader_bundle(particles
@@ -149,7 +149,7 @@ yup_standalone_app(
 ```
 
 Load it with `ShaderBundle::loadFromFile`. Bundled resources aren't copied on
-Windows and Linux, so there read the `.ysl` from the build tree.
+Windows and Linux, so there read the `.ysl` from `TEMP_FOLDER` in the build tree.
 
 ## Loading and compiling at runtime
 

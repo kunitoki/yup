@@ -1771,6 +1771,16 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
             touchFinger->componentUnderPointer = currentComponent;
         }
 
+        // Global listeners see the press before the component, as with a mouse button: popups close on a tap outside them
+        Desktop::getInstance()->handleGlobalMouseDown (MouseEvent (touchFinger->buttons, currentKeyModifiers, component.localToScreen (position))
+                                                           .withTouchIndex (touchFinger->index));
+
+        // The listeners above may have reentered the event loop and reallocated activeTouches
+        if (const auto index = findTouchFingerIndex (fingerId); index >= 0)
+            touchFinger = &activeTouches.getReference (index);
+        else
+            return;
+
         if (auto* clickedComponent = touchFinger->clickedComponent.get())
         {
             const auto currentMouseDownTime = yup::Time::getCurrentTime();

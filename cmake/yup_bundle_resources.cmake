@@ -18,6 +18,10 @@
 # ==============================================================================
 
 #==============================================================================
+# Bundles files with a target, where File::bundleDirectory finds them at
+# runtime. Takes "<source>@<relative destination>" pairs. A source can be the
+# output of a custom command in the same directory: it's built before the
+# target. Directory sources are expanded at configure time, so they must exist.
 
 function (yup_add_bundled_resources target_name)
     set (options "")
@@ -47,17 +51,20 @@ function (yup_add_bundled_resources target_name)
         list (GET resource_pair_parts 0 source_file)
         list (GET resource_pair_parts 1 dest_path)
 
-        get_filename_component (source_name "${source_file}" NAME)
-        get_filename_component (dest_name "${dest_path}" NAME)
-
-        if (NOT source_name STREQUAL dest_name)
-            set (staged_file "${CMAKE_CURRENT_BINARY_DIR}/bundled_resources/${dest_path}")
-            configure_file ("${source_file}" "${staged_file}" COPYONLY)
-            set (source_file "${staged_file}")
-        endif()
-
         if (YUP_PLATFORM_APPLE)
+            get_filename_component (source_name "${source_file}" NAME)
+            get_filename_component (dest_name "${dest_path}" NAME)
             get_filename_component (dest_dir "${dest_path}" DIRECTORY)
+
+            if (NOT source_name STREQUAL dest_name)
+                set (staged_file "${CMAKE_CURRENT_BINARY_DIR}/bundled_resources/${dest_path}")
+                add_custom_command (
+                    OUTPUT "${staged_file}"
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${source_file}" "${staged_file}"
+                    DEPENDS "${source_file}"
+                    VERBATIM)
+                set (source_file "${staged_file}")
+            endif()
 
             if (YUP_PLATFORM_IOS)
                 if (dest_dir)
@@ -76,11 +83,31 @@ function (yup_add_bundled_resources target_name)
 
             target_sources (${target_name} PRIVATE "${source_file}")
 
-        elseif (YUP_TARGET_ANDROID)
-            configure_file ("${source_file}" "${CMAKE_CURRENT_BINARY_DIR}/app/src/main/assets/${dest_path}" COPYONLY)
+        elseif (YUP_PLATFORM_ANDROID)
+            if (NOT YUP_ANDROID_ASSETS_DIR)
+                _yup_message (FATAL_ERROR "yup_add_bundled_resources: YUP_ANDROID_ASSETS_DIR is not set, build through the generated gradle project")
+            endif()
+
+            set (asset_file "${YUP_ANDROID_ASSETS_DIR}/${dest_path}")
+            add_custom_command (
+                OUTPUT "${asset_file}"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${source_file}" "${asset_file}"
+                DEPENDS "${source_file}"
+                VERBATIM)
+
+            set_source_files_properties ("${asset_file}" PROPERTIES HEADER_FILE_ONLY ON)
+            target_sources (${target_name} PRIVATE "${asset_file}")
 
         elseif (YUP_PLATFORM_EMSCRIPTEN)
             target_link_options (${target_name} PRIVATE "--preload-file=${source_file}@${dest_path}")
+            set_property (TARGET ${target_name} APPEND PROPERTY LINK_DEPENDS "${source_file}")
+            set_source_files_properties ("${source_file}" PROPERTIES HEADER_FILE_ONLY ON)
+            target_sources (${target_name} PRIVATE "${source_file}")
+
+        else()
+            # Read in place at runtime: only make sure generated resources are built
+            set_source_files_properties ("${source_file}" PROPERTIES HEADER_FILE_ONLY ON)
+            target_sources (${target_name} PRIVATE "${source_file}")
         endif()
     endforeach()
 endfunction()

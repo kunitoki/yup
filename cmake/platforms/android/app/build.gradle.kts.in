@@ -2,6 +2,9 @@ plugins {
     alias(libs.plugins.androidApplication)
 }
 
+// Bundled resources, copied here by the native build
+val yupAssetsDir = layout.buildDirectory.dir("generated/yup/assets").get().asFile
+
 android {
     namespace = "@YUP_ANDROID_APPLICATION_NAMESPACE@"
     compileSdk = @YUP_ANDROID_COMPILE_SDK_VERSION@
@@ -29,6 +32,7 @@ android {
                 arguments += "-DANDROID_ALLOW_UNDEFINED_SYMBOLS=FALSE"
                 arguments += "-DANDROID_PIE=ON"
                 arguments += "-DYUP_ENABLE_VULKAN=@YUP_ENABLE_VULKAN@"
+                arguments += "-DYUP_ANDROID_ASSETS_DIR=" + yupAssetsDir.invariantSeparatorsPath
             }
         }
     }
@@ -59,6 +63,17 @@ android {
         }
     }
 
+    sourceSets {
+        getByName("main") {
+            assets.srcDir(yupAssetsDir)
+        }
+    }
+
+    // Audio read in pieces stays uncompressed, a compressed asset inflates again from its start on every seek back
+    androidResources {
+        noCompress += listOf("flac", "aif", "aiff")
+    }
+
     externalNativeBuild {
         cmake {
             path = file("@YUP_ANDROID_APPLICATION_PATH@/CMakeLists.txt")
@@ -86,6 +101,12 @@ android {
     buildFeatures {
         viewBinding = true
     }
+}
+
+// The native build produces the bundled resources, merge them after it
+tasks.configureEach {
+    val variant = Regex("^merge(\\w+)Assets$").matchEntire(name)?.groupValues?.get(1) ?: return@configureEach
+    dependsOn(tasks.matching { it.name == "externalNativeBuild$variant" })
 }
 
 dependencies {

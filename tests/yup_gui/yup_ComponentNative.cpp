@@ -742,6 +742,51 @@ TEST_F (ComponentNativeTouchThreadTests, TapEntersBeforeDownAndExitsAfterUp)
     EXPECT_LT (recorder.mouseUpOrder.load(), recorder.mouseExitOrder.load());
 }
 
+TEST_F (ComponentNativeTouchThreadTests, TouchDownReachesGlobalMouseListenersBeforeTheComponent)
+{
+    struct GlobalRecorder final : MouseListener
+    {
+        explicit GlobalRecorder (TouchRecorder& touchRecorder)
+            : recorder (touchRecorder)
+        {
+        }
+
+        void mouseDown (const MouseEvent& event) override
+        {
+            if (! event.isTouch())
+                return;
+
+            ++mouseDownCount;
+            mouseDownOrder = ++recorder.eventSequence;
+            screenPosition = event.getScreenPosition();
+        }
+
+        TouchRecorder& recorder;
+        int mouseDownCount = 0;
+        int mouseDownOrder = 0;
+        Point<float> screenPosition;
+    };
+
+    GlobalRecorder globalRecorder (recorder);
+    Desktop::getInstance()->addGlobalMouseListener (&globalRecorder);
+
+    pushFingerEvent (SDL_EVENT_FINGER_DOWN);
+    runDispatchLoopUntil (50);
+
+    Desktop::getInstance()->removeGlobalMouseListener (&globalRecorder);
+
+    EXPECT_EQ (1, globalRecorder.mouseDownCount);
+    EXPECT_LT (globalRecorder.mouseDownOrder, recorder.mouseDownOrder.load());
+
+    // The finger is at the center of the window, and listeners locate popups by screen position
+    const auto expectedScreenPosition = recorder.localToScreen (recorder.getLocalBounds().getCenter());
+    EXPECT_NEAR (expectedScreenPosition.getX(), globalRecorder.screenPosition.getX(), 1.0f);
+    EXPECT_NEAR (expectedScreenPosition.getY(), globalRecorder.screenPosition.getY(), 1.0f);
+
+    pushFingerEvent (SDL_EVENT_FINGER_UP);
+    runDispatchLoopUntil (50);
+}
+
 TEST_F (ComponentNativeTouchThreadTests, CanceledTouchExitsTheComponent)
 {
     pushFingerEvent (SDL_EVENT_FINGER_DOWN);
