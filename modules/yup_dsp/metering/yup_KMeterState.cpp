@@ -65,7 +65,7 @@ void KMeterState::prepare (double newSampleRate, int maxChannels)
 
     // Initialize lock-free FIFO
     fifoSize = static_cast<int> (sampleRate * 2.0); // 2 seconds buffer
-    sampleBuffer.resize (fifoSize * numChannels);   // Interleaved
+    sampleBuffer.resize (static_cast<size_t> (fifoSize) * numChannels);
     audioFifo = std::make_unique<AbstractFifo> (fifoSize);
 
     // Initialize per-channel state
