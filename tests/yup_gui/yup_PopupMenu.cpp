@@ -884,6 +884,10 @@ TEST_F (PopupMenuTest, TouchDragScrollsWithoutSelectingOrDismissing)
     EXPECT_FALSE (menu->canScrollUp());
     EXPECT_TRUE (menu->isBeingShown());
     EXPECT_EQ (selectedId, -1);
+
+    // The callback writes to this stack frame: dismiss before leaving it, not in TearDown
+    PopupMenu::dismissAllPopups();
+    EXPECT_EQ (selectedId, 0);
 }
 
 TEST_F (PopupMenuTest, PressDoesNothingUntilRelease)
