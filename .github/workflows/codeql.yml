@@ -1,0 +1,94 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'modules/**/*.h'
+      - 'modules/**/*.c'
+      - 'modules/**/*.cpp'
+      - 'modules/**/*.mm'
+      - 'website/**/*.h'
+      - 'website/**/*.c'
+      - 'website/**/*.cpp'
+      - 'website/**/*.mm'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'modules/**/*.h'
+      - 'modules/**/*.c'
+      - 'modules/**/*.cpp'
+      - 'modules/**/*.mm'
+      - 'website/**/*.h'
+      - 'website/**/*.c'
+      - 'website/**/*.cpp'
+      - 'website/**/*.mm'
+  schedule:
+    - cron: '37 23 * * 2'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - language: actions
+          build-mode: none
+        - language: c-cpp
+          build-mode: none
+        - language: java-kotlin
+          build-mode: none
+        - language: javascript-typescript
+          build-mode: none
+        - language: python
+          build-mode: none
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        config-file: ./.github/codeql/codeql-config.yml
+        languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:${{matrix.language}}"
+        output: sarif-results
+        upload: failure-only
+
+    - name: filter-sarif
+      uses: advanced-security/filter-sarif@v1
+      with:
+        patterns: |
+          +modules/**
+          +python/**
+          +website/**
+          -**/node_modules/**
+          -**/tests/**
+          -thirdparty/**
+          -examples/**
+          -cmake/**
+          -docs/**
+        input: sarif-results/${{ matrix.language }}.sarif
+        output: sarif-results/${{ matrix.language }}.sarif
+
+    - name: Upload SARIF
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: sarif-results/${{ matrix.language }}.sarif
