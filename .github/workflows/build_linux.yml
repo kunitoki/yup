@@ -37,10 +37,16 @@ env:
 jobs:
   configure:
     runs-on: ubuntu-latest
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v6
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: linux-configure
     - name: Test OpenGL Version
       run: xvfb-run glxinfo | grep "OpenGL version"
     - name: Configure
@@ -67,9 +73,16 @@ jobs:
       fail-fast: false
       matrix:
         config: [Debug, Release]
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v6
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: linux-tests-${{ matrix.config }}
+        max-size: 1G
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:
@@ -92,9 +105,15 @@ jobs:
       fail-fast: false
       matrix:
         example: ${{ fromJson(inputs.examples) }}
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
     - uses: actions/checkout@v6
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: linux-example-${{ matrix.example }}
     - uses: actions/cache/restore@v5
       id: cache-restore
       with:

@@ -565,6 +565,8 @@ Notes:
   (0.0 for mouse events).
 - A finger cancelled by the system (e.g. a palm resting on the screen) is
   delivered as a regular `mouseUp`.
+- Fingers have no hover: the first finger gets `mouseEnter` just before its
+  `mouseDown` and `mouseExit` right after its `mouseUp` (or cancel).
 
 For a two-finger pinch, remember the position of every finger in `mouseDown`
 and compare the distance between them in `mouseDrag`:

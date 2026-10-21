@@ -18,6 +18,13 @@ body {
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* The browser picks touch-action from the element under the finger, not the canvas, so an open work
+   claims the whole page: otherwise a drag turns into a pan and the browser cancels the pointer. */
+.open {
+    touch-action: none;
 }
 
 input {
