@@ -12,13 +12,6 @@ on:
       - 'website/**/*.c'
       - 'website/**/*.cpp'
       - 'website/**/*.mm'
-    paths-ignore:
-      - '**/node_modules/**'
-      - '**/tests/**'
-      - 'thirdparty/**'
-      - 'examples/**'
-      - 'cmake/**'
-      - 'docs/**'
   pull_request:
     branches: [ "main" ]
     paths:
@@ -30,13 +23,6 @@ on:
       - 'website/**/*.c'
       - 'website/**/*.cpp'
       - 'website/**/*.mm'
-    paths-ignore:
-      - '**/node_modules/**'
-      - '**/tests/**'
-      - 'thirdparty/**'
-      - 'examples/**'
-      - 'cmake/**'
-      - 'docs/**'
   schedule:
     - cron: '37 23 * * 2'
 
