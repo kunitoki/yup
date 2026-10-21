@@ -1,0 +1,11 @@
+paths:
+  - 'modules'
+  - 'python'
+  - 'website'
+paths-ignore:
+  - '**/node_modules/**'
+  - '**/tests/**'
+  - 'thirdparty/**'
+  - 'examples/**'
+  - 'cmake/**'
+  - 'docs/**'
