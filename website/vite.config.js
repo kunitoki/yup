@@ -109,8 +109,14 @@ function analyticsTag() {
 const sectionId = (text) => text.toLowerCase().normalize("NFKD").replace(/[^\x00-\x7f]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/^[-0-9]+|-+$/g, "");
 
-// Links keep their text; code marks, emphasis, HTML tags and {{ substitutions }} go.
-const plainText = (markdown) => markdown.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\{\{\s*[\w-]+\s*(:[^}]*)?\}\}/g, "").replace(/[`*]|<[^>]+>/g, "").trim();
+// Links keep their text; code marks, emphasis, HTML tags and {{ substitutions }} go. Tags are
+// stripped until none are left, so a nested one like "<scr<b>ipt>" can't reassemble.
+const stripTags = (text) => {
+    for (let previous; previous !== text;)
+        [previous, text] = [text, text.replace(/<[^>]+>/g, "")];
+    return text;
+};
+const plainText = (markdown) => stripTags(markdown.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\{\{\s*[\w-]+\s*(:[^}]*)?\}\}/g, "").replace(/[`*]/g, "")).trim();
 
 // One entry per h1-h3 section of the Sphinx docs: page title, heading, link, inline code
 // identifiers and the start of the section text. Loaded lazily by the search dialog.
