@@ -3,10 +3,46 @@ name: "CodeQL"
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'modules/**/*.h'
+      - 'modules/**/*.c'
+      - 'modules/**/*.cpp'
+      - 'modules/**/*.mm'
+      - 'website/**/*.h'
+      - 'website/**/*.c'
+      - 'website/**/*.cpp'
+      - 'website/**/*.mm'
+    paths-ignore:
+      - '**/node_modules/**'
+      - '**/tests/**'
+      - 'thirdparty/**'
+      - 'examples/**'
+      - 'cmake/**'
+      - 'docs/**'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - 'modules/**/*.h'
+      - 'modules/**/*.c'
+      - 'modules/**/*.cpp'
+      - 'modules/**/*.mm'
+      - 'website/**/*.h'
+      - 'website/**/*.c'
+      - 'website/**/*.cpp'
+      - 'website/**/*.mm'
+    paths-ignore:
+      - '**/node_modules/**'
+      - '**/tests/**'
+      - 'thirdparty/**'
+      - 'examples/**'
+      - 'cmake/**'
+      - 'docs/**'
   schedule:
     - cron: '37 23 * * 2'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:
@@ -26,7 +62,7 @@ jobs:
         - language: c-cpp
           build-mode: none
         - language: java-kotlin
-          build-mode: none # This mode only analyzes Java. Set this to 'autobuild' or 'manual' to analyze Kotlin too.
+          build-mode: none
         - language: javascript-typescript
           build-mode: none
         - language: python
@@ -39,24 +75,13 @@ jobs:
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
       with:
+        config-file: ./.github/codeql/codeql-config.yml
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
-
-    - name: Run manual build steps
-      if: matrix.build-mode == 'manual'
-      shell: bash
-      run: |
-        echo 'If you are using a "manual" build mode for one or more of the' \
-          'languages you are analyzing, replace this with the commands to build' \
-          'your code, for example:'
-        echo '  make bootstrap'
-        echo '  make release'
-        exit 1
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
       with:
-        config-file: ./.github/codeql/codeql-config.yml
         category: "/language:${{matrix.language}}"
         output: sarif-results
         upload: failure-only
