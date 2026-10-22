@@ -1889,6 +1889,8 @@ private:
 //==============================================================================
 extern RTL_OSVERSIONINFOW getWindowsVersionInfo();
 
+static void markMissingMidiDevicesAsDisconnected();
+
 struct MidiService final : public DeletedAtShutdown
 {
     MidiService()
@@ -1930,11 +1932,43 @@ private:
     std::unique_ptr<MidiServiceType> internal;
     DeviceChangeDetector detector { L"YupMidiDeviceDetector_", []
     {
+        markMissingMidiDevicesAsDisconnected();
         MidiDeviceListConnectionBroadcaster::get().notify();
     } };
 };
 
 YUP_IMPLEMENT_SINGLETON (MidiService)
+
+//==============================================================================
+// Windows doesn't say which device went away, but identifiers are driver interface paths that stay
+// the same while a device is present: an open device missing from the list has been disconnected.
+static CriticalSection windowsOpenMidiDevicesLock;
+static Array<MidiInput*> windowsOpenMidiInputs;
+static Array<MidiOutput*> windowsOpenMidiOutputs;
+
+static void markMissingMidiDevicesAsDisconnected()
+{
+    const auto isListed = [] (const Array<MidiDeviceInfo>& devices, const String& identifier)
+    {
+        return std::any_of (devices.begin(), devices.end(), [&] (const MidiDeviceInfo& device)
+        {
+            return device.identifier == identifier;
+        });
+    };
+
+    const auto availableInputs = MidiService::getService().getAvailableDevices (true);
+    const auto availableOutputs = MidiService::getService().getAvailableDevices (false);
+
+    const ScopedLock sl (windowsOpenMidiDevicesLock);
+
+    for (auto* input : windowsOpenMidiInputs)
+        if (! isListed (availableInputs, input->getIdentifier()))
+            input->markDisconnected();
+
+    for (auto* output : windowsOpenMidiOutputs)
+        if (! isListed (availableOutputs, output->getIdentifier()))
+            output->markDisconnected();
+}
 
 //==============================================================================
 static int findDefaultDeviceIndex (const Array<MidiDeviceInfo>& available, const MidiDeviceInfo& defaultDevice)
@@ -1976,6 +2010,11 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
     in->setName (wrapper->getDeviceName());
     in->internal = std::move (wrapper);
 
+    {
+        const ScopedLock sl (windowsOpenMidiDevicesLock);
+        windowsOpenMidiInputs.add (in.get());
+    }
+
     return in;
 }
 
@@ -1994,7 +2033,11 @@ MidiInput::MidiInput (const String& deviceName,
 {
 }
 
-MidiInput::~MidiInput() = default;
+MidiInput::~MidiInput()
+{
+    const ScopedLock sl (windowsOpenMidiDevicesLock);
+    windowsOpenMidiInputs.removeFirstMatchingValue (this);
+}
 
 void MidiInput::start() { internal->start(); }
 
@@ -2032,6 +2075,11 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
 
     out->internal = std::move (wrapper);
 
+    {
+        const ScopedLock sl (windowsOpenMidiDevicesLock);
+        windowsOpenMidiOutputs.add (out.get());
+    }
+
     return out;
 }
 
@@ -2046,6 +2094,11 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
 
 MidiOutput::~MidiOutput()
 {
+    {
+        const ScopedLock sl (windowsOpenMidiDevicesLock);
+        windowsOpenMidiOutputs.removeFirstMatchingValue (this);
+    }
+
     stopBackgroundThread();
 }
 
