@@ -21,67 +21,184 @@
 
 #include "SynthFilterStage.h"
 
-void SynthFilterStage::prepare (double sampleRate)
+void SynthFilterStage::prepare (double newSampleRate)
 {
-    for (auto& filter : filters)
-        filter.prepare (sampleRate, SynthExample::maxBlockSize);
+    sampleRate = newSampleRate > 0.0 ? newSampleRate : 44100.0;
 
-    cutoff.reset (sampleRate, 0.005);
-    resonance.reset (sampleRate, 0.005);
-    drive.reset (sampleRate, 0.005);
+    for (auto& stage : stateVariable)
+        for (auto& filter : stage)
+            filter.prepare (sampleRate, SynthExample::maxBlockSize);
 
-    cutoff.setCurrentAndTargetValue (8000.0f);
-    resonance.setCurrentAndTargetValue (0.2f);
-    drive.setCurrentAndTargetValue (0.0f);
+    for (int channel = 0; channel < 2; ++channel)
+    {
+        const auto index = static_cast<std::size_t> (channel);
+        moog[index].prepare (sampleRate, SynthExample::maxBlockSize);
+        korg[index].prepare (sampleRate, SynthExample::maxBlockSize);
+        diode[index].prepare (sampleRate, SynthExample::maxBlockSize);
+        vowel[index].prepare (sampleRate, SynthExample::maxBlockSize);
+        comb[index].prepare (sampleRate, SynthExample::maxBlockSize);
+        // The second order kernel (AA-IIR-1) costs one complex pole per sample; the
+        // default tenth order one costs five, which made the drive the hottest stage.
+        drivers[index].configure (Antialiaser::makeButterworthOrder2());
+        drivers[index].prepare (sampleRate, SynthExample::maxBlockSize);
+    }
+
+    reset();
 }
 
 void SynthFilterStage::reset() noexcept
 {
-    for (auto& filter : filters)
-        filter.reset();
+    for (auto& stage : stateVariable)
+        for (auto& filter : stage)
+            filter.reset();
+
+    for (int channel = 0; channel < 2; ++channel)
+    {
+        const auto index = static_cast<std::size_t> (channel);
+        moog[index].reset();
+        korg[index].reset();
+        diode[index].reset();
+        vowel[index].reset();
+        comb[index].reset();
+        drivers[index].reset();
+    }
+
+    hasState = false;
 }
 
 void SynthFilterStage::process (float* left, float* right, int numSamples, const SynthFilterValues& values, double midiNote) noexcept
 {
-    if (values.type == SynthFilterType::off)
+    if (values.type == SynthFilterType::off || numSamples <= 0)
         return;
 
-    const auto tracked = values.cutoff * std::exp2 (values.keytrack * static_cast<float> (midiNote - 60.0) / 12.0f);
-
-    cutoff.setTargetValue (yup::jlimit (20.0f, 20000.0f, tracked));
-    resonance.setTargetValue (values.resonance);
-    drive.setTargetValue (values.drive);
-
-    const auto mode = toFilterMode (values.type);
-
-    for (auto& filter : filters)
+    if (values.type != activeType)
     {
-        filter.setMode (mode);
-        filter.setShelfGain (12.0f);
+        reset();
+        activeType = values.type;
     }
+
+    const auto tracked = values.cutoff * std::exp2 (values.keytrack * static_cast<float> (midiNote - 60.0) / 12.0f);
+    const auto targetCutoff = yup::jlimit (20.0f, 20000.0f, tracked);
+
+    if (! hasState)
+    {
+        cutoff = targetCutoff;
+        resonance = values.resonance;
+        drive = values.drive;
+        mix = values.mix;
+        hasState = true;
+    }
+
+    // Cutoff ramps in octaves, the rest linearly, all from the last chunk's values.
+    const auto inverse = 1.0f / static_cast<float> (numSamples);
+    const auto cutoffStep = std::exp2 (std::log2 (targetCutoff / cutoff) * inverse);
+    const auto resonanceStep = (values.resonance - resonance) * inverse;
+    const auto driveStep = (values.drive - drive) * inverse;
+    const auto mixStep = (values.mix - mix) * inverse;
+    const auto driving = drive > 0.0f || values.drive > 0.0f;
 
     float* channels[] = { left, right };
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        const auto frequency = cutoff.getNextValue();
-        const auto q = yup::VAStateVariableFilter<float>::resonanceToQ (resonance.getNextValue());
-        const auto amount = drive.getNextValue();
-        const auto gain = 1.0f + 9.0f * amount;
-        const auto makeup = amount > 0.0f ? 1.0f / std::tanh (gain) : 1.0f;
+        if (sample % coefficientInterval == 0)
+            updateCoefficients (activeType, cutoff, resonance, 0.25f * drive);
 
-        for (std::size_t channel = 0; channel < filters.size(); ++channel)
+        const auto gain = 1.0f + 9.0f * drive;
+        const auto makeup = 1.0f / std::tanh (gain);
+
+        for (int channel = 0; channel < 2; ++channel)
         {
-            auto& filter = filters[channel];
-            filter.setCutoffFrequency (frequency);
-            filter.setQ (q);
+            const auto dry = channels[channel][sample];
+            auto x = dry;
 
-            auto x = channels[channel][sample];
+            if (driving)
+                x = drivers[static_cast<std::size_t> (channel)].processSample (x * gain) * makeup;
 
-            if (amount > 0.0f)
-                x = std::tanh (x * gain) * makeup;
+            const auto wet = filterSample (channel, activeType, x);
+            channels[channel][sample] = dry + mix * (wet - dry);
+        }
 
-            channels[channel][sample] = filter.processSample (x);
+        cutoff *= cutoffStep;
+        resonance += resonanceStep;
+        drive += driveStep;
+        mix += mixStep;
+    }
+
+    cutoff = targetCutoff;
+    resonance = values.resonance;
+    drive = values.drive;
+    mix = values.mix;
+}
+
+void SynthFilterStage::updateCoefficients (SynthFilterType type, float frequency, float normalizedResonance, float saturation) noexcept
+{
+    const auto q = yup::VAStateVariableFilter<float>::resonanceToQ (normalizedResonance);
+
+    for (int channel = 0; channel < 2; ++channel)
+    {
+        const auto index = static_cast<std::size_t> (channel);
+
+        if (isStateVariableFilter (type))
+        {
+            for (auto& stage : stateVariable)
+                stage[index].setParameters (toFilterMode (type), frequency, q, 12.0f, sampleRate);
+
+            continue;
+        }
+
+        switch (type)
+        {
+            case SynthFilterType::moogLadder:
+                moog[index].setParameters (yup::AnalogMoogLadderMode::lowpass24, frequency, normalizedResonance, saturation, sampleRate);
+                break;
+
+            case SynthFilterType::korg35:
+                korg[index].setParameters (yup::FilterMode::lowpass, frequency, normalizedResonance, saturation, sampleRate);
+                break;
+
+            case SynthFilterType::diode:
+                diode[index].setParameters (frequency, normalizedResonance, saturation, sampleRate);
+                break;
+
+            case SynthFilterType::vowel:
+                // The cutoff's position across 20 Hz to 20 kHz sweeps the vowels.
+                vowel[index].setParameters (std::log2 (frequency / 20.0f) / std::log2 (1000.0f), normalizedResonance, saturation, sampleRate);
+                break;
+
+            case SynthFilterType::comb:
+                comb[index].setParameters (frequency, 0.95f * normalizedResonance, saturation, sampleRate);
+                break;
+
+            default:
+                break;
         }
     }
+}
+
+float SynthFilterStage::filterSample (int channel, SynthFilterType type, float input) noexcept
+{
+    const auto index = static_cast<std::size_t> (channel);
+
+    if (isStateVariableFilter (type))
+    {
+        auto output = stateVariable[0][index].processSample (input);
+
+        if (isCascadedFilter (type))
+            output = stateVariable[1][index].processSample (output);
+
+        return output;
+    }
+
+    switch (type)
+    {
+        case SynthFilterType::moogLadder: return moog[index].processSample (input);
+        case SynthFilterType::korg35: return korg[index].processSample (input);
+        case SynthFilterType::diode: return diode[index].processSample (input);
+        case SynthFilterType::vowel: return vowel[index].processSample (input);
+        case SynthFilterType::comb: return comb[index].processSample (input);
+        default: break;
+    }
+
+    return input;
 }

@@ -21,27 +21,58 @@
 
 #pragma once
 
-#include "../dsp/SynthModulationParameters.h"
-#include "ParameterChoice.h"
+#include "../dsp/SynthRoutes.h"
 #include "ParameterKnob.h"
 
+#include <vector>
+
 //==============================================================================
-/** One routing: which source drives which destination, and how much. */
+/** A parameter a route can reach, as the route list offers it. */
+struct SynthRouteDestination
+{
+    yup::String id;
+    yup::String name;
+    int index = -1;
+};
+
+//==============================================================================
+/** One modulation route: which source drives which destination, how much, and a remove button.
+
+    Picking a source and a destination writes the route; the depth is the slot's
+    automatable depth parameter.
+
+    @see SynthRoutes, SynthModulationPage
+*/
 class SynthModulationRow : public yup::Component
 {
 public:
-    SynthModulationRow (const SynthModulationParameters::Slot& slotToEdit, const yup::Font& font);
+    SynthModulationRow (int slotToEdit,
+                        SynthRoutes& routesToEdit,
+                        const std::vector<SynthRouteDestination>& destinationsToOffer,
+                        yup::AudioParameter::Ptr depthParameter,
+                        const yup::Font& font);
 
-    /** Shows changes made by the host, a preset or a state load. */
-    void syncFromParameters();
+    /** Shows the slot's route and depth, wherever they were changed. */
+    void syncFromRoutes();
+
+    /** True when the slot holds a route. */
+    bool isUsed() const noexcept { return routes.getRoute (slot).isActive(); }
 
     void resized() override;
 
 private:
     static constexpr float knobWidth = 58.0f;
+    static constexpr float buttonWidth = 24.0f;
     static constexpr float spacing = 6.0f;
 
-    ParameterChoice sourceChoice;
-    ParameterChoice destinationChoice;
+    void writeRoute();
+
+    int slot = 0;
+    SynthRoutes& routes;
+    const std::vector<SynthRouteDestination>& destinations;
+
+    yup::ComboBox sourceBox;
+    yup::ComboBox destinationBox;
     ParameterKnob depthKnob;
+    yup::TextButton removeButton { "X" };
 };

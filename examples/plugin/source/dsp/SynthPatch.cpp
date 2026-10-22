@@ -30,7 +30,7 @@ namespace
 const yup::Identifier stateType ("PrismState");
 const yup::Identifier versionProperty ("version");
 const yup::Identifier presetProperty ("preset");
-constexpr int stateVersion = 1;
+constexpr int stateVersion = 2;
 
 yup::Identifier getPartialsType (std::size_t oscillator)
 {
@@ -55,78 +55,83 @@ struct PresetValue
     float value;
 };
 
+struct PresetRoute
+{
+    SynthModulationSource source;
+    const char* destination;
+    float depth;
+};
+
+struct PresetEnvelope
+{
+    int index;
+    float attack;
+    float decay;
+    float sustain;
+    float release;
+    float curve;
+};
+
 struct FactoryPreset
 {
     const char* name;
     std::vector<PresetValue> values;
+    std::vector<PresetRoute> routes;
+    std::vector<PresetEnvelope> envelopes;
     std::vector<float> osc1Partials; /**< Sine magnitudes from the fundamental up; empty plays the waveform. */
 };
 
-constexpr float toValue (SynthModulationSource source) noexcept { return static_cast<float> (source); }
-constexpr float toValue (SynthModulationDestination destination) noexcept { return static_cast<float> (destination); }
+constexpr float sine = static_cast<float> (yup::Waveform::sine);
+constexpr float sawtooth = static_cast<float> (yup::Waveform::sawtooth);
+constexpr float square = static_cast<float> (yup::Waveform::square);
 
 const std::vector<FactoryPreset>& getFactoryPresets()
 {
     using Source = SynthModulationSource;
-    using Destination = SynthModulationDestination;
 
     static const std::vector<FactoryPreset> presets {
-        { "Init", {}, {} },
+        { "Init", {}, {}, {}, {} },
 
-        { "Glass Pad",
-          { { "osc1.waveform", 0.0f }, { "osc1.ridges", 2.5f }, { "osc1.color", 0.6f }, { "osc1.dispersion", 0.3f },
-            { "osc1.scatter", 0.2f }, { "osc1.unison", 3.0f }, { "osc1.unisonDetune", 0.25f }, { "osc1.unisonSpread", 0.8f },
-            { "osc2.waveform", 0.0f }, { "osc2.syncMode", 0.0f }, { "osc2.octave", 1.0f }, { "osc2.level", 0.25f },
-            { "osc2.ridges", 3.0f }, { "osc2.color", 0.4f },
-            { "filter.cutoff", 3500.0f }, { "filter.resonance", 0.3f },
-            { "env1.attack", 0.8f }, { "env1.decay", 1.2f }, { "env1.sustain", 0.8f }, { "env1.release", 2.0f },
-            { "lfo1.rate", 0.3f },
-            { "mod1.source", toValue (Source::lfo1) }, { "mod1.destination", toValue (Destination::osc1Color) }, { "mod1.depth", 0.3f },
-            { "mod2.source", toValue (Source::env2) }, { "mod2.destination", toValue (Destination::filterCutoff) }, { "mod2.depth", 0.2f } },
+        { "FM Bell",
+          { { "osc1.waveform", sine }, { "osc1.level", 0.7f }, { "osc1.color", 0.0f },
+            { "osc2.ratio", 3.5f }, { "fm.12", 0.6f },
+            { "flt1.type", static_cast<float> (SynthFilterType::off) } },
+          { { Source::env2, "fm.12", 0.3f } },
+          { { 0, 0.002f, 2.5f, 0.0f, 2.5f, -0.7f }, { 1, 0.001f, 1.2f, 0.0f, 1.2f, -0.6f } },
           {} },
 
-        { "Sync Lead",
-          { { "voice.mode", static_cast<float> (SynthPlayMode::legato) }, { "voice.glide", 80.0f },
-            { "osc1.syncMode", 1.0f }, { "osc1.syncRatio", 2.0f }, { "osc1.level", 0.6f },
-            { "osc2.waveform", 3.0f }, { "osc2.octave", 0.0f }, { "osc2.syncMode", 0.0f }, { "osc2.detune", 7.0f },
-            { "filter.cutoff", 2500.0f }, { "filter.resonance", 0.45f }, { "filter.drive", 0.3f }, { "filter.keytrack", 0.5f },
-            { "env1.attack", 0.003f }, { "env1.decay", 0.4f }, { "env1.sustain", 0.6f }, { "env1.release", 0.25f },
-            { "env2.attack", 0.001f }, { "env2.decay", 0.6f }, { "env2.sustain", 0.0f }, { "env2.release", 0.3f },
-            { "lfo1.rate", 5.5f }, { "lfo1.retrigger", 0.0f },
-            { "mod1.source", toValue (Source::env2) }, { "mod1.destination", toValue (Destination::osc1SyncRatio) }, { "mod1.depth", 0.4f },
-            { "mod2.source", toValue (Source::modWheel) }, { "mod2.destination", toValue (Destination::filterCutoff) }, { "mod2.depth", 0.4f },
-            { "mod3.source", toValue (Source::lfo1) }, { "mod3.destination", toValue (Destination::osc1Cents) }, { "mod3.depth", 0.05f } },
+        { "FM Bass",
+          { { "global.mode", static_cast<float> (SynthPlayMode::mono) }, { "global.glide", 0.0f },
+            { "osc1.waveform", sine }, { "osc1.level", 0.8f }, { "osc1.color", 0.0f }, { "osc1.ratio", 0.5f },
+            { "osc2.ratio", 0.5f }, { "fm.12", 0.5f }, { "fm.22", 0.7f },
+            { "flt1.type", static_cast<float> (SynthFilterType::lowpass24) }, { "flt1.cutoff", 1800.0f }, { "flt1.resonance", 0.25f },
+            { "flt1.drive", 0.3f } },
+          { { Source::env2, "fm.12", 0.35f } },
+          { { 0, 0.002f, 0.4f, 0.6f, 0.12f, -0.5f }, { 1, 0.001f, 0.25f, 0.0f, 0.1f, -0.6f } },
           {} },
 
-        { "Formant Choir",
-          { { "osc1.formant", 2.0f }, { "osc1.formantPosition", 3.0f }, { "osc1.oddEven", 0.4f }, { "osc1.tilt", -1.0f },
-            { "osc1.unison", 5.0f }, { "osc1.unisonDetune", 0.35f }, { "osc1.unisonSpread", 1.0f },
-            { "osc2.waveform", 2.0f }, { "osc2.syncMode", 0.0f }, { "osc2.octave", 0.0f }, { "osc2.level", 0.15f },
-            { "osc2.formant", 1.5f }, { "osc2.formantPosition", 4.0f },
-            { "filter.cutoff", 5000.0f },
-            { "env1.attack", 0.4f }, { "env1.decay", 1.0f }, { "env1.sustain", 0.85f }, { "env1.release", 1.5f },
-            { "lfo1.rate", 0.25f }, { "lfo2.shape", 1.0f }, { "lfo2.rate", 0.15f },
-            { "mod1.source", toValue (Source::lfo1) }, { "mod1.destination", toValue (Destination::osc1FormantPosition) }, { "mod1.depth", 0.1f },
-            { "mod2.source", toValue (Source::lfo2) }, { "mod2.destination", toValue (Destination::osc2FormantPosition) }, { "mod2.depth", 0.1f } },
-          {} },
-
-        { "Pluck Bass",
-          { { "voice.mode", static_cast<float> (SynthPlayMode::mono) }, { "voice.glide", 0.0f },
-            { "osc1.waveform", 3.0f }, { "osc1.octave", -1.0f }, { "osc1.level", 0.6f }, { "osc1.squeeze", 0.1f },
-            { "osc2.waveform", 2.0f }, { "osc2.syncMode", 0.0f }, { "osc2.octave", -1.0f }, { "osc2.level", 0.4f }, { "osc2.detune", -8.0f },
-            { "filter.cutoff", 400.0f }, { "filter.resonance", 0.35f }, { "filter.drive", 0.4f }, { "filter.keytrack", 0.3f },
-            { "env1.attack", 0.002f }, { "env1.decay", 0.35f }, { "env1.sustain", 0.2f }, { "env1.release", 0.15f },
-            { "env2.attack", 0.001f }, { "env2.decay", 0.25f }, { "env2.sustain", 0.0f }, { "env2.release", 0.15f },
-            { "mod1.source", toValue (Source::env2) }, { "mod1.destination", toValue (Destination::filterCutoff) }, { "mod1.depth", 0.45f } },
+        { "Spectral Pad",
+          { { "global.unisonVoices", 4.0f }, { "global.unisonDetune", 0.25f }, { "global.unisonSpread", 0.8f },
+            { "osc1.ridges", 2.5f }, { "osc1.color", 0.6f }, { "osc1.dispersion", 0.3f }, { "osc1.scatter", 0.2f },
+            { "osc2.waveform", sawtooth }, { "osc2.ratio", 0.5f }, { "osc2.level", 0.25f }, { "osc2.ridges", 3.0f },
+            { "flt1.cutoff", 3500.0f }, { "flt1.resonance", 0.3f }, { "lfo1.rate", 0.3f } },
+          { { Source::lfo1, "osc1.color", 0.3f }, { Source::env2, "flt1.cutoff", 0.2f } },
+          { { 0, 0.8f, 1.2f, 0.8f, 2.0f, -0.4f } },
           {} },
 
         { "Drawn Organ",
-          { { "osc2.level", 0.0f },
-            { "filter.type", static_cast<float> (SynthFilterType::off) },
-            { "env1.attack", 0.005f }, { "env1.decay", 0.1f }, { "env1.sustain", 1.0f }, { "env1.release", 0.08f },
-            { "lfo1.rate", 6.0f },
-            { "mod1.source", toValue (Source::lfo1) }, { "mod1.destination", toValue (Destination::osc1Cents) }, { "mod1.depth", 0.02f } },
-          { 0.8f, 0.6f, 0.5f, 0.4f, 0.0f, 0.3f, 0.0f, 0.25f } }
+          { { "flt1.type", static_cast<float> (SynthFilterType::off) }, { "lfo1.rate", 6.0f } },
+          { { Source::lfo1, "osc1.fine", 0.02f } },
+          { { 0, 0.005f, 0.1f, 1.0f, 0.08f, 0.0f } },
+          { 0.8f, 0.6f, 0.5f, 0.4f, 0.0f, 0.3f, 0.0f, 0.25f } },
+
+        { "Pluck Square",
+          { { "osc1.waveform", square }, { "osc1.squeeze", 0.1f },
+            { "flt1.type", static_cast<float> (SynthFilterType::moogLadder) }, { "flt1.cutoff", 400.0f },
+            { "flt1.resonance", 0.35f }, { "flt1.keytrack", 0.3f } },
+          { { Source::env2, "flt1.cutoff", 0.45f } },
+          { { 0, 0.002f, 0.35f, 0.2f, 0.15f, -0.5f }, { 1, 0.001f, 0.25f, 0.0f, 0.15f, -0.6f } },
+          {} }
     };
 
     return presets;
@@ -152,55 +157,91 @@ public:
         set (parameter, parameter->getValue());
     }
 
-private:
-    yup::DataTree::Transaction transaction;
-};
-} // namespace
-
-//==============================================================================
-yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters, const Partials& partials, int presetIndex)
-{
-    auto state = createEmptyState (presetIndex);
-
+    void addChild (const yup::DataTree& child)
     {
-        StateBuilder builder (state);
-
-        for (const auto& parameter : parameters)
-            builder.keep (parameter);
-    }
-
-    auto transaction = state.beginTransaction();
-
-    for (std::size_t index = 0; index < partials.size(); ++index)
-    {
-        yup::DataTree child (getPartialsType (index));
-        partials[index].writeTo (child);
         transaction.addChild (child);
     }
 
-    return state;
+private:
+    yup::DataTree::Transaction transaction;
+};
+
+/** Builds a "Routes" tree like SynthRoutes writes, from sources and destination IDs. */
+yup::DataTree createRoutesTree (const std::vector<std::pair<SynthModulationSource, yup::String>>& routes)
+{
+    yup::DataTree tree (SynthRoutes::treeType);
+    auto transaction = tree.beginTransaction();
+    const auto sourceNames = getSynthModulationSourceNames();
+
+    for (std::size_t slot = 0; slot < routes.size(); ++slot)
+    {
+        yup::DataTree child ("Route");
+
+        {
+            auto childTransaction = child.beginTransaction();
+            childTransaction.setProperty ("slot", static_cast<int> (slot));
+            childTransaction.setProperty ("source", sourceNames[static_cast<int> (routes[slot].first)]);
+            childTransaction.setProperty ("destination", routes[slot].second);
+        }
+
+        transaction.addChild (child);
+    }
+
+    return tree;
+}
+} // namespace
+
+//==============================================================================
+yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state, int presetIndex)
+{
+    auto tree = createEmptyState (presetIndex);
+    StateBuilder builder (tree);
+
+    for (const auto& parameter : parameters)
+        builder.keep (parameter);
+
+    for (std::size_t index = 0; index < state.partials.size(); ++index)
+    {
+        yup::DataTree child (getPartialsType (index));
+        state.partials[index].writeTo (child);
+        builder.addChild (child);
+    }
+
+    builder.addChild (state.curves.createTree());
+    builder.addChild (state.routes.createTree());
+
+    return tree;
 }
 
-yup::Result loadState (const yup::DataTree& state, yup::Span<const yup::AudioParameter::Ptr> parameters, Partials& partials)
+yup::Result loadState (const yup::DataTree& tree, yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state)
 {
-    if (! state.isValid() || state.getType() != stateType)
+    if (! tree.isValid() || tree.getType() != stateType)
         return yup::Result::fail ("Not a Prism patch");
 
-    if (static_cast<int> (state.getProperty (versionProperty, 0)) > stateVersion)
+    const auto version = static_cast<int> (tree.getProperty (versionProperty, 0));
+
+    if (version > stateVersion)
         return yup::Result::fail ("The patch was saved by a newer version of Prism");
+
+    if (version < stateVersion)
+        return yup::Result::fail ("The patch was saved by the two oscillator Prism, which this version cannot load");
 
     for (const auto& parameter : parameters)
     {
         const yup::Identifier id (parameter->getID());
 
-        parameter->setValue (state.hasProperty (id) ? static_cast<float> (static_cast<double> (state.getProperty (id)))
-                                                    : parameter->getDefaultValue());
+        parameter->setValue (tree.hasProperty (id) ? static_cast<float> (static_cast<double> (tree.getProperty (id)))
+                                                   : parameter->getDefaultValue());
     }
 
-    for (std::size_t index = 0; index < partials.size(); ++index)
-        partials[index].readFrom (state.getChildWithName (getPartialsType (index)));
+    for (std::size_t index = 0; index < state.partials.size(); ++index)
+        state.partials[index].readFrom (tree.getChildWithName (getPartialsType (index)));
 
-    for (auto& oscillator : partials)
+    state.curves.readFrom (tree.getChildWithName (SynthCurveState::treeType));
+    state.routes.readFrom (tree.getChildWithName (SynthRoutes::treeType),
+                           [parameters] (const yup::String& id) { return findRouteDestination (parameters, id); });
+
+    for (auto& oscillator : state.partials)
         oscillator.bumpGeneration();
 
     return yup::Result::ok();
@@ -211,86 +252,108 @@ int getPresetIndex (const yup::DataTree& state)
     return static_cast<int> (state.getProperty (presetProperty, -1));
 }
 
+int findRouteDestination (yup::Span<const yup::AudioParameter::Ptr> parameters, const yup::String& parameterID)
+{
+    for (const auto& parameter : parameters)
+    {
+        if (parameter->getID() != parameterID)
+            continue;
+
+        // Volume and glide act outside the voices, and route depths are read before any
+        // route applies, so modulating them would do nothing.
+        if (parameter->isStepped() || ! parameter->isAutomatable()
+            || parameterID == "global.volume" || parameterID == "global.glide" || parameterID.startsWith ("route."))
+            return -1;
+
+        return parameter->getIndexInContainer();
+    }
+
+    return -1;
+}
+
 yup::DataTree createRandomState (const SynthParameters& parameters, yup::Random& random)
 {
     auto state = createEmptyState (-1);
     StateBuilder builder (state);
 
-    builder.keep (parameters.volume);
-    builder.keep (parameters.playMode);
-    builder.keep (parameters.glide);
+    for (const auto& parameter : { parameters.volume, parameters.playMode, parameters.glide, parameters.quality })
+        builder.keep (parameter);
 
-    for (const auto& oscillator : parameters.oscillators)
+    builder.set (parameters.unisonVoices, static_cast<float> (random.nextInt (3) == 0 ? 1 + random.nextInt (SynthExample::maxUnisonVoices) : 1));
+    builder.set (parameters.unisonDetune, random.nextFloat() * 0.5f);
+    builder.set (parameters.unisonSpread, random.nextFloat());
+    builder.set (parameters.filterRouting, static_cast<float> (random.nextInt (2)));
+
+    // Musical FM lives on small integer ratios and moderate depths, so most of the draws do.
+    const float ratios[] = { 0.5f, 1.0f, 1.0f, 2.0f, 2.0f, 3.0f, 4.0f, 5.0f, 7.0f };
+
+    for (std::size_t index = 0; index < parameters.oscillators.size(); ++index)
     {
-        builder.set (oscillator.waveform, static_cast<float> (random.nextInt (6)));
-        builder.set (oscillator.syncMode, static_cast<float> (random.nextInt (4)));
+        const auto& oscillator = parameters.oscillators[index];
+        const auto carrier = index == 0 || random.nextInt (3) == 0;
+
+        builder.set (oscillator.waveform, static_cast<float> (random.nextInt (3) == 0 ? random.nextInt (6) : 0));
+        builder.set (oscillator.syncMode, static_cast<float> (random.nextInt (4) == 0 ? random.nextInt (4) : 0));
         builder.set (oscillator.syncRatio, 1.0f + random.nextFloat() * 3.0f);
-        builder.set (oscillator.level, 0.2f + random.nextFloat() * 0.8f);
-        builder.set (oscillator.octave, static_cast<float> (random.nextInt (3) - 1));
-        builder.set (oscillator.detune, (random.nextFloat() - 0.5f) * 30.0f);
+        builder.set (oscillator.ratio, ratios[random.nextInt (static_cast<int> (std::size (ratios)))]);
+        builder.set (oscillator.fine, random.nextInt (4) == 0 ? (random.nextFloat() - 0.5f) * 20.0f : 0.0f);
+        builder.set (oscillator.level, carrier ? 0.4f + random.nextFloat() * 0.5f : 0.0f);
+        builder.set (oscillator.pan, (random.nextFloat() - 0.5f) * 0.6f);
+        builder.set (oscillator.toFilter1, random.nextInt (4) == 0 ? 0.0f : 1.0f);
+        builder.set (oscillator.toFilter2, random.nextBool() ? random.nextFloat() : 0.0f);
+        builder.set (oscillator.direct, random.nextInt (4) == 0 ? random.nextFloat() * 0.5f : 0.0f);
         builder.set (oscillator.ridgeSpacing, 0.5f + random.nextFloat() * 3.0f);
-        builder.set (oscillator.color, random.nextFloat());
+        builder.set (oscillator.color, random.nextFloat() * 0.6f);
         builder.set (oscillator.dispersion, 0.1f + random.nextFloat() * 0.8f);
-        builder.set (oscillator.squeeze, random.nextBool() ? 0.0f : random.nextFloat() * 0.5f);
-        builder.set (oscillator.squash, 0.4f + random.nextFloat() * 1.6f);
-        builder.set (oscillator.tilt, (random.nextFloat() - 0.5f) * 3.0f);
-        builder.set (oscillator.oddEven, 0.2f + random.nextFloat() * 0.6f);
-        builder.set (oscillator.formant, (random.nextFloat() - 0.4f) * 5.0f);
-        builder.set (oscillator.formantPosition, random.nextFloat() * 6.0f);
-        builder.set (oscillator.scatter, random.nextBool() ? 0.0f : random.nextFloat() * 0.6f);
-        builder.set (oscillator.unisonVoices, static_cast<float> (1 + random.nextInt (SynthExample::maxUnisonVoices)));
-        builder.set (oscillator.unisonDetune, random.nextFloat() * 0.5f);
-        builder.set (oscillator.unisonSpread, random.nextFloat());
+        builder.set (oscillator.tilt, (random.nextFloat() - 0.5f) * 2.0f);
+        builder.set (oscillator.oddEven, 0.3f + random.nextFloat() * 0.4f);
+        builder.set (oscillator.scatter, random.nextBool() ? 0.0f : random.nextFloat() * 0.4f);
     }
 
-    const auto& filter = parameters.filter;
-    builder.set (filter.type, static_cast<float> (1 + random.nextInt (6)));
-    builder.set (filter.cutoff, 200.0f * std::exp2 (random.nextFloat() * 6.0f));
-    builder.set (filter.resonance, random.nextFloat() * 0.8f);
-    builder.set (filter.drive, random.nextBool() ? 0.0f : random.nextFloat() * 0.6f);
-    builder.set (filter.keytrack, random.nextBool() ? 0.0f : 1.0f);
-
-    // The amplitude envelope keeps a short attack more often than not, so the patch
-    // still speaks when played; the modulation envelope is free to be slow.
-    for (std::size_t index = 0; index < parameters.envelopes.size(); ++index)
+    for (int carrier = 0; carrier < SynthExample::oscillatorCount; ++carrier)
     {
-        const auto& envelope = parameters.envelopes[index];
-        const auto slow = index > 0 || random.nextInt (4) == 0;
+        for (int modulator = 0; modulator < SynthExample::oscillatorCount; ++modulator)
+        {
+            const auto& parameter = parameters.fm.get (carrier, modulator);
 
-        builder.set (envelope.delay, random.nextInt (4) == 0 ? random.nextFloat() * 0.3f : 0.0f);
-        builder.set (envelope.attack, 0.003f + random.nextFloat() * (slow ? 1.5f : 0.15f));
-        builder.set (envelope.hold, random.nextBool() ? 0.0f : random.nextFloat() * 0.3f);
-        builder.set (envelope.decay, 0.05f + random.nextFloat() * 1.5f);
-        builder.set (envelope.sustain, random.nextFloat());
-        builder.set (envelope.release, 0.05f + random.nextFloat() * 1.5f);
+            if (carrier == modulator)
+                builder.set (parameter, random.nextInt (5) == 0 ? random.nextFloat() : 0.0f);
+            else
+                builder.set (parameter, random.nextInt (4) == 0 ? random.nextFloat() * random.nextFloat() * 2.0f : 0.0f);
+        }
+    }
+
+    for (std::size_t index = 0; index < parameters.filters.size(); ++index)
+    {
+        const auto& filter = parameters.filters[index];
+        builder.set (filter.type, static_cast<float> (index == 0 || random.nextBool() ? 1 + random.nextInt (14) : 0));
+        builder.set (filter.cutoff, 200.0f * std::exp2 (random.nextFloat() * 6.0f));
+        builder.set (filter.resonance, random.nextFloat() * 0.7f);
+        builder.set (filter.drive, random.nextBool() ? 0.0f : random.nextFloat() * 0.5f);
+        builder.set (filter.keytrack, random.nextBool() ? 0.0f : 1.0f);
     }
 
     for (const auto& lfo : parameters.lfos)
     {
-        builder.set (lfo.shape, static_cast<float> (random.nextInt (5)));
+        builder.set (lfo.shape, static_cast<float> (random.nextInt (7)));
         builder.set (lfo.rate, 0.1f * std::exp2 (random.nextFloat() * 6.0f));
         builder.set (lfo.phase, random.nextBool() ? 0.0f : random.nextFloat());
-        builder.set (lfo.retrigger, random.nextBool() ? 1.0f : 0.0f);
     }
 
-    // A few live routes, never to the oscillator levels, so a random patch cannot
-    // fall silent; the remaining slots load their unrouted defaults.
+    // A few live routes, never to the operator levels, so a random patch cannot fall silent.
+    const char* destinations[] = { "osc1.color", "osc1.tilt", "osc1.fine", "osc2.ratio", "fm.12", "fm.21", "fm.13",
+                                   "flt1.cutoff", "flt1.resonance", "flt2.cutoff", "osc1.pan", "osc1.formantPosition" };
+    std::vector<std::pair<SynthModulationSource, yup::String>> routes;
     const auto liveRoutes = 1 + random.nextInt (4);
 
     for (int index = 0; index < liveRoutes; ++index)
     {
-        const auto& slot = parameters.modulation.slots[static_cast<std::size_t> (index)];
-        auto destination = SynthModulationDestination::none;
-
-        do
-        {
-            destination = static_cast<SynthModulationDestination> (1 + random.nextInt (static_cast<int> (SynthModulationDestination::count) - 1));
-        } while (destination == SynthModulationDestination::osc1Level || destination == SynthModulationDestination::osc2Level);
-
-        builder.set (slot.source, static_cast<float> (random.nextInt (4)));
-        builder.set (slot.destination, static_cast<float> (destination));
-        builder.set (slot.depth, (random.nextFloat() - 0.5f) * (random.nextBool() ? 2.0f : 1.0f));
+        const auto source = static_cast<SynthModulationSource> (random.nextInt (static_cast<int> (SynthModulationSource::lfo4) + 1));
+        routes.emplace_back (source, destinations[random.nextInt (static_cast<int> (std::size (destinations)))]);
+        builder.set (parameters.modulation.depths[static_cast<std::size_t> (index)], (random.nextFloat() - 0.5f) * 0.6f);
     }
+
+    builder.addChild (createRoutesTree (routes));
 
     return state;
 }
@@ -316,12 +379,29 @@ yup::DataTree createFactoryState (int index)
 
     const auto& preset = getFactoryPresets()[static_cast<std::size_t> (index)];
     auto state = createEmptyState (index);
+    auto transaction = state.beginTransaction();
 
+    for (const auto& value : preset.values)
+        transaction.setProperty (value.id, value.value);
+
+    std::vector<std::pair<SynthModulationSource, yup::String>> routes;
+
+    for (std::size_t slot = 0; slot < preset.routes.size(); ++slot)
     {
-        auto transaction = state.beginTransaction();
+        routes.emplace_back (preset.routes[slot].source, preset.routes[slot].destination);
+        transaction.setProperty (yup::Identifier ("route." + yup::String (static_cast<int> (slot) + 1) + ".depth"), preset.routes[slot].depth);
+    }
 
-        for (const auto& value : preset.values)
-            transaction.setProperty (value.id, value.value);
+    transaction.addChild (createRoutesTree (routes));
+
+    if (! preset.envelopes.empty())
+    {
+        SynthCurveState curves;
+
+        for (const auto& envelope : preset.envelopes)
+            curves.setEnvelope (envelope.index, SynthCurveState::makeAdsr (envelope.attack, envelope.decay, envelope.sustain, envelope.release, envelope.curve));
+
+        transaction.addChild (curves.createTree());
     }
 
     if (! preset.osc1Partials.empty())
@@ -335,8 +415,6 @@ yup::DataTree createFactoryState (int index)
 
         yup::DataTree child (getPartialsType (0));
         seed.writeTo (child);
-
-        auto transaction = state.beginTransaction();
         transaction.addChild (child);
     }
 

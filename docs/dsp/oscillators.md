@@ -112,6 +112,7 @@ void processBlock (double* output, int numSamples)
 | `WavetableOscillator::render` | One inverse FFT of the oversampled table. |
 | `WavetableOscillator::renderFrom` | One table copy instead of an FFT, so unison voices can share a single render. |
 | `WavetableOscillator::processSample` | One Hermite table read (two while crossfading). |
+| `WavetableOscillator::processSampleAtPhase` | The same read at a caller-owned phase, for phase modulation; it advances the render crossfade like `processSample`, and `advanceCrossfade` keeps the fade timing while an oscillator is skipped. |
 
 ## Choosing a synthesis backend
 
@@ -380,11 +381,88 @@ Additional algorithm references:
 - [Practical Linear and Exponential Frequency Modulation for Digital Music Synthesis](https://www.dafx.de/paper-archive/2020/proceedings/papers/DAFx2020_paper_61.pdf)
   discusses FM semantics, sideband bandwidth and oversampling.
 
+## Phase modulation matrix
+
+`PhaseModulationMatrix<SampleType, NumOperators = 4>` turns `WavetableOscillator`
+tables into phase modulation operators wired through a full matrix, in the spirit
+of the TX81Z but with any operator able to modulate any other. Each operator reads
+its caller-owned table at its own phase plus the operators' previous outputs:
+
+```
+pm_i  = sum_j (M_ij * (y_j[n-1] + y_j[n-2]) / 2)
+y_i   = table_i (phase_i + pm_i)
+```
+
+Every link is delayed, so the evaluation order never matters and cycles are well
+defined, and averaged over two samples as the DX7 does for its feedback, which keeps
+feedback and cycles from hunting. Off-diagonal amounts are in periods per unit
+of the modulator's output (a sine modulator at amount `M` gives an index of
+`2 pi M` radians; the TX81Z's full scale is 4 periods). The diagonal is a feedback
+amount in `[0, 1]`, scaled by the table's peak slope, so 1 always means a loop gain
+of 2, just below the chaotic onset at about 2.15, whatever the table holds. Cycles
+between operators are feedback loops as well: two sines modulating each other at
+the same pitch stay clean up to about 0.3 periods each way and turn noisy beyond,
+and bright tables reach that point sooner.
+
+Frequencies, amounts and gains are ramped linearly over each control step, so a
+modulation index never zippers. The matrix also picks every table's bandwidth once
+per step, setting its frequency to
+
+```
+max (factor * |f_i|, |f_i| + sum_j |M_ij| |f_j| peakSlope_j)
+```
+
+The second term bounds how fast the read phase can move, using each modulator's
+peak slope (`WavetableOscillator::getPeakSlope`, measured at render time). The
+first caps an unmodulated operator at the base rate's Nyquist, so it renders the
+same table with or without oversampling.
+
+Oversampling, decimation and voice stacking stay with the caller: run the matrix at
+the oversampled rate and decimate with `HalfbandOversampler`. Operators with zero
+gain and no outgoing links are skipped and only advance their phase and crossfade.
+
+```cpp
+yup::PhaseModulationMatrix<float> matrix;
+std::array<yup::WavetableOscillator<float>, 4> tables;
+
+matrix.prepare (sampleRate, 4);
+for (int i = 0; i < 4; ++i)
+{
+    tables[i].prepare (sampleRate * 4, 512);
+    matrix.setTable (i, &tables[i]);
+}
+
+yup::PhaseModulationMatrix<float>::Controls controls;
+controls.frequencies = { 220.0, 440.0, 0.0, 0.0 };
+controls.gains = { 1.0, 0.0, 0.0, 0.0 };
+controls.amounts[0][1] = 0.3;   // operator 2 modulates operator 1
+controls.amounts[1][1] = 0.5;   // operator 2 feeds back on itself
+
+// once per control step
+matrix.setTargets (controls, numSamples * 4);
+for (auto& table : tables)
+    if (table.needsRender())
+        table.render();
+matrix.process (operatorBuffers, numSamples * 4);
+```
+
+Peak slopes are read in `setTargets()`, so a table rendered for the first time only
+counts from the next step: when a note starts, call `setTargets()` with a zero
+length and render twice before processing.
+
+In a numerical model of the matrix (a sawtooth carrier, a sine modulator at a 1:1
+ratio and indexes from 0.25 to 4 periods), the energy that does not fall on a
+harmonic stays below -69 dB at 4x and -63 dB at 2x, and reaches -3 dB without the
+bandwidth rule. The tests hold the 4x case below -60 dB. A sawtooth
+modulator's steep edge has a large peak slope, so a carrier it modulates keeps
+fewer harmonics: that is the price of keeping it alias free.
+
 ## LFO
 
 `LFO<FloatType>` is a control-rate oscillator: a plain phase accumulator read as a
-sine, triangle, rising sawtooth, square or sample-and-hold, bipolar in `[-1, 1]`.
-It is deliberately not bandlimited and never allocates.
+sine, triangle, rising or falling sawtooth, square, sample-and-hold, smooth random
+or one cycle of a drawn `BreakpointCurve`, bipolar in `[-1, 1]`. It is deliberately
+not bandlimited and never allocates.
 
 ```cpp
 yup::LFO<float> lfo;
@@ -399,4 +477,31 @@ lfo.processBlock (out, numSamples);  // or audio-rate
 ```
 
 Sample-and-hold draws from a seeded linear congruential generator every time the
-phase wraps, so `setSeed()` plus `reset()` makes a modulation reproducible.
+phase wraps, so `setSeed()` plus `reset()` makes a modulation reproducible. Smooth
+random runs a Catmull-Rom spline through draws from a second seeded stream, scaled
+to `[-0.8, 0.8]` so the spline's overshoot stays inside `[-1, 1]`.
+
+The `custom` shape plays a caller-owned curve whose times span one normalized cycle,
+from 0 to 1, mapping its `[0, 1]` levels to `[-1, 1]`. The LFO keeps a pointer, so
+the curve has to outlive it and must not change while it is read; see
+[Envelopes](envelopes.md) for the curve itself.
+
+```cpp
+yup::BreakpointCurve<float> cycle;
+cycle.addPoint (0.0f, 0.0f);
+cycle.addPoint (0.2f, 1.0f, -0.6f);
+cycle.addPoint (1.0f, 0.0f, 0.4f);
+
+lfo.setShape (yup::LFO<float>::Shape::custom);
+lfo.setCustomCurve (&cycle);
+```
+
+`setSmoothing (seconds)` puts a one-pole smoother on the output, so the square,
+sample-and-hold and drawn shapes can drive pitch or FM depth without clicks. With
+`skip()` the smoother treats the waveform as constant over the skipped samples, at
+its value at the end of the skip, which is what a control-rate consumer wants.
+
+`setRetriggerMode()` decides what `noteOn()` does: `free` keeps running,
+`retrigger` restarts at `setStartPhase()`, and `oneShot` restarts and then holds
+the end of the first cycle. Retriggering keeps the random sequence going, so a
+random LFO differs from note to note.

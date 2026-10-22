@@ -103,6 +103,8 @@ public:
         renderedHarmonics = 0;
         seriesChanged = true;
         crossfadePosition = CoeffType (1);
+        currentPeak = {};
+        nextPeak = {};
 
         reset();
     }
@@ -237,6 +239,7 @@ public:
         else
             FloatVectorOperations::convertFloatToDouble (next.data(), renderBuffer.data(), tableSize);
 
+        nextPeak.dirty = true;
         renderedHarmonics = limit;
         seriesChanged = false;
 
@@ -272,8 +275,10 @@ public:
 
         bakeCrossfade();
 
-        const auto& latest = source.crossfadePosition < CoeffType (1) ? source.next : source.current;
+        const auto sourceIsFading = source.crossfadePosition < CoeffType (1);
+        const auto& latest = sourceIsFading ? source.next : source.current;
         FloatVectorOperations::copy (next.data(), latest.data(), tableSize);
+        nextPeak = sourceIsFading ? source.nextPeak : source.currentPeak;
 
         renderedHarmonics = source.renderedHarmonics;
         seriesChanged = false;
@@ -317,6 +322,21 @@ public:
         return { current.data(), current.size() };
     }
 
+    /** Returns the steepest slope of the audible table, in units per period.
+
+        Measured from the rendered samples on the first call after a render, so
+        callers that never ask pay nothing. While a crossfade is in progress it covers
+        both tables. A phase modulator's peak slope times its modulation depth and
+        frequency bounds the frequency deviation it causes, which is what a phase
+        modulation matrix needs to pick a carrier's bandwidth. Zero before the first
+        render.
+    */
+    SampleType getPeakSlope() const noexcept
+    {
+        const auto currentSlope = peakSlopeOf (current, currentPeak);
+        return crossfadePosition < CoeffType (1) ? jmax (currentSlope, peakSlopeOf (next, nextPeak)) : currentSlope;
+    }
+
     /** Returns the number of harmonics present in the rendered table. */
     int getNumRenderedHarmonics() const noexcept { return renderedHarmonics; }
 
@@ -332,22 +352,7 @@ public:
     */
     SampleType processSample() noexcept
     {
-        auto value = readTable (current, phase, false);
-
-        if (crossfadePosition < CoeffType (1))
-        {
-            const auto target = readTable (next, phase, false);
-
-            value += (target - value) * static_cast<SampleType> (crossfadePosition);
-
-            crossfadePosition += crossfadeStep;
-
-            if (crossfadePosition >= CoeffType (1))
-            {
-                crossfadePosition = CoeffType (1);
-                std::swap (current, next);
-            }
-        }
+        const auto value = tick (phase);
 
         const auto increment = static_cast<double> (frequency) / sampleRate;
 
@@ -355,6 +360,47 @@ public:
         phase -= std::floor (phase);
 
         return value;
+    }
+
+    /** Produces one sample read at an externally driven phase.
+
+        Use this when the caller owns the phase, as a phase modulation operator does.
+        Like processSample(), it advances the render crossfade by one sample, so a
+        fade lasts the same number of calls whichever method drives the table. The
+        oscillator's own phase is left untouched. Negative phases wrap periodically,
+        and a non-finite phase reads silence while still advancing the crossfade.
+
+        As with getValueAtPhase(), the caller is responsible for bandwidth.
+    */
+    SampleType processSampleAtPhase (double normalizedPhase) noexcept
+    {
+        if (tableSize <= 0 || ! std::isfinite (normalizedPhase))
+        {
+            advanceCrossfade (1);
+            return SampleType (0);
+        }
+
+        return tick (normalizedPhase - std::floor (normalizedPhase));
+    }
+
+    /** Advances the render crossfade as if numSamples samples had been produced.
+
+        Lets a caller that skips an oscillator for a while keep its fade timing.
+        Does nothing when no crossfade is in progress.
+    */
+    void advanceCrossfade (int numSamples) noexcept
+    {
+        if (crossfadePosition >= CoeffType (1) || numSamples <= 0)
+            return;
+
+        crossfadePosition += crossfadeStep * static_cast<CoeffType> (numSamples);
+
+        if (crossfadePosition >= CoeffType (1))
+        {
+            crossfadePosition = CoeffType (1);
+            std::swap (current, next);
+            currentPeak = nextPeak;
+        }
     }
 
     /** Produces a block of samples. */
@@ -369,6 +415,19 @@ public:
 
 private:
     //==============================================================================
+    SampleType tick (double wrappedPhase) noexcept
+    {
+        auto value = readTable (current, wrappedPhase, false);
+
+        if (crossfadePosition < CoeffType (1))
+        {
+            value += (readTable (next, wrappedPhase, false) - value) * static_cast<SampleType> (crossfadePosition);
+            advanceCrossfade (1);
+        }
+
+        return value;
+    }
+
     void bakeCrossfade() noexcept
     {
         if (crossfadePosition >= CoeffType (1))
@@ -376,6 +435,8 @@ private:
 
         FloatVectorOperations::subtract (next.data(), current.data(), tableSize);
         FloatVectorOperations::addWithMultiply (current.data(), next.data(), static_cast<SampleType> (crossfadePosition), tableSize);
+
+        currentPeak.dirty = true;
     }
 
     void startCrossfade (bool crossfade) noexcept
@@ -386,7 +447,29 @@ private:
             return;
 
         std::swap (current, next);
+        currentPeak = nextPeak;
         crossfadePosition = CoeffType (1);
+    }
+
+    struct PeakSlope
+    {
+        SampleType value = SampleType (0);
+        bool dirty = false;
+    };
+
+    SampleType peakSlopeOf (const std::vector<SampleType>& table, PeakSlope& peak) const noexcept
+    {
+        if (! peak.dirty)
+            return peak.value;
+
+        auto largest = SampleType (0);
+
+        for (int i = 0; i < tableSize; ++i)
+            largest = jmax (largest, std::abs (table[static_cast<std::size_t> ((i + 1) & tableMask)] - table[static_cast<std::size_t> (i)]));
+
+        peak.value = largest * static_cast<SampleType> (tableSize);
+        peak.dirty = false;
+        return peak.value;
     }
 
     SampleType readAtPhase (double normalizedPhase, bool derivative) const noexcept
@@ -437,6 +520,8 @@ private:
     CoeffType frequency = static_cast<CoeffType> (440);
     CoeffType crossfadeStep = CoeffType (0);
     CoeffType crossfadePosition = CoeffType (1);
+    mutable PeakSlope currentPeak;
+    mutable PeakSlope nextPeak;
     int tableSize = 0;
     int tableMask = 0;
     int crossfadeLength = 64;

@@ -21,29 +21,25 @@
 
 #pragma once
 
-#include "SynthModulationMatrix.h"
+#include "SynthParameterFactory.h"
+#include "SynthTypes.h"
 
 //==============================================================================
-/** The sixteen routings of the modulation matrix, IDs "mod1.source" to "mod16.depth". */
+/** The depth of every modulation route, IDs "route.1.depth" to "route.32.depth".
+
+    Sources and destinations are patch state in SynthRoutes, so any parameter can be a
+    destination; only the depths are parameters, so the host can automate them.
+
+    @see SynthRoutes
+*/
 class SynthModulationParameters
 {
 public:
-    /** The three parameters of one routing. */
-    struct Slot
-    {
-        yup::AudioParameter::Ptr source;
-        yup::AudioParameter::Ptr destination;
-        yup::AudioParameter::Ptr depth;
-    };
-
-    /** Creates every slot unrouted. */
+    /** Creates every depth at zero. */
     SynthModulationParameters();
 
     /** Registers every parameter with the processor. */
     void addTo (yup::AudioProcessor& processor) const;
 
-    /** Takes a snapshot of every routing. */
-    SynthModulationValues read (SynthParameterReader reader = {}) const noexcept;
-
-    std::array<Slot, SynthExample::modulationSlots> slots;
+    std::array<yup::AudioParameter::Ptr, SynthExample::modulationSlots> depths;
 };

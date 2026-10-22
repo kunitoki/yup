@@ -22,30 +22,32 @@
 #include "SynthFilterParameters.h"
 #include "SynthFormat.h"
 
-SynthFilterParameters::SynthFilterParameters()
+SynthFilterParameters::SynthFilterParameters (int filterIndex, const SynthFilterValues& defaults)
 {
     using namespace SynthParameterFactory;
 
-    const SynthFilterValues defaults;
-    const yup::String module ("Filter");
+    const auto prefix = "flt" + yup::String (filterIndex + 1) + ".";
+    const auto module = "Filter " + yup::String (filterIndex + 1);
+    const auto hostBase = static_cast<yup::uint32> (5000 + 100 * filterIndex);
 
     yup::NormalisableRange<float> cutoffRange (20.0f, 20000.0f);
     cutoffRange.setSkewForCentre (1000.0f);
 
-    type = createChoice ("filter.type", "Filter Type", 300, module, getSynthFilterTypeNames(), static_cast<int> (defaults.type));
-    cutoff = createContinuous ("filter.cutoff", "Filter Cutoff", 301, module, cutoffRange, defaults.cutoff, SynthFormat::hertz);
-    resonance = createContinuous ("filter.resonance", "Filter Resonance", 302, module, { 0.0f, 1.0f }, defaults.resonance, SynthFormat::percent);
-    drive = createContinuous ("filter.drive", "Filter Drive", 303, module, { 0.0f, 1.0f }, defaults.drive, SynthFormat::percent);
-    keytrack = createContinuous ("filter.keytrack", "Filter Keytrack", 304, module, { 0.0f, 1.0f }, defaults.keytrack, SynthFormat::percent);
+    type = createChoice (prefix + "type", module + " Type", hostBase + 0, module, getSynthFilterTypeNames(), static_cast<int> (defaults.type));
+    cutoff = createContinuous (prefix + "cutoff", module + " Cutoff", hostBase + 1, module, cutoffRange, defaults.cutoff, SynthFormat::hertz);
+    resonance = createContinuous (prefix + "resonance", module + " Resonance", hostBase + 2, module, { 0.0f, 1.0f }, defaults.resonance, SynthFormat::percent);
+    drive = createContinuous (prefix + "drive", module + " Drive", hostBase + 3, module, { 0.0f, 1.0f }, defaults.drive, SynthFormat::percent);
+    keytrack = createContinuous (prefix + "keytrack", module + " Keytrack", hostBase + 4, module, { 0.0f, 1.0f }, defaults.keytrack, SynthFormat::percent);
+    mix = createContinuous (prefix + "mix", module + " Mix", hostBase + 5, module, { 0.0f, 1.0f }, defaults.mix, SynthFormat::percent);
 }
 
 void SynthFilterParameters::addTo (yup::AudioProcessor& processor) const
 {
-    for (const auto& parameter : { type, cutoff, resonance, drive, keytrack })
+    for (const auto& parameter : { type, cutoff, resonance, drive, keytrack, mix })
         processor.addParameter (parameter);
 }
 
 SynthFilterValues SynthFilterParameters::read (SynthParameterReader reader) const noexcept
 {
-    return { static_cast<SynthFilterType> (reader.asInt (type)), reader (cutoff), reader (resonance), reader (drive), reader (keytrack) };
+    return { static_cast<SynthFilterType> (reader.asInt (type)), reader (cutoff), reader (resonance), reader (drive), reader (keytrack), reader (mix) };
 }

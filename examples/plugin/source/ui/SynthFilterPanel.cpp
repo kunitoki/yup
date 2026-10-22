@@ -22,19 +22,20 @@
 #include "SynthFilterPanel.h"
 #include "SynthTheme.h"
 
-SynthFilterPanel::SynthFilterPanel (const SynthFilterParameters& parametersToEdit, const yup::Font& font)
+SynthFilterPanel::SynthFilterPanel (const yup::String& panelTitle, const SynthFilterParameters& parametersToEdit, const yup::Font& font)
     : typeChoice ("TYPE", parametersToEdit.type, font)
     , cutoffKnob ("CUTOFF", parametersToEdit.cutoff, font)
     , resonanceKnob ("RESO", parametersToEdit.resonance, font)
     , driveKnob ("DRIVE", parametersToEdit.drive, font)
     , keytrackKnob ("KEYTRACK", parametersToEdit.keytrack, font)
+    , mixKnob ("MIX", parametersToEdit.mix, font)
 {
-    setupPanelTitle (titleLabel, "FILTER", font);
+    setupPanelTitle (titleLabel, panelTitle, font);
     addAndMakeVisible (titleLabel);
 
     addAndMakeVisible (typeChoice);
 
-    for (auto* knob : { &cutoffKnob, &resonanceKnob, &driveKnob, &keytrackKnob })
+    for (auto* knob : { &cutoffKnob, &resonanceKnob, &driveKnob, &keytrackKnob, &mixKnob })
         addAndMakeVisible (*knob);
 }
 
@@ -42,7 +43,7 @@ void SynthFilterPanel::syncFromParameters()
 {
     typeChoice.syncFromParameter();
 
-    for (auto* knob : { &cutoffKnob, &resonanceKnob, &driveKnob, &keytrackKnob })
+    for (auto* knob : { &cutoffKnob, &resonanceKnob, &driveKnob, &keytrackKnob, &mixKnob })
         knob->syncFromParameter();
 }
 
@@ -56,7 +57,7 @@ void SynthFilterPanel::resized()
     typeChoice.setBounds (bounds.removeFromTop (choiceHeight));
     bounds.removeFromTop (spacing);
 
-    layoutControlsInRow (bounds, { &cutoffKnob, &resonanceKnob, &driveKnob, &keytrackKnob });
+    layoutControlsInRow (bounds, { &cutoffKnob, &resonanceKnob, &driveKnob, &keytrackKnob, &mixKnob });
 }
 
 void SynthFilterPanel::paint (yup::Graphics& g)

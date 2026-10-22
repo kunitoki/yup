@@ -24,25 +24,36 @@
 #include "SynthParameters.h"
 #include "SynthVoice.h"
 
+#include <vector>
+
 #include <atomic>
 
 //==============================================================================
-/** Polyphonic synthesiser rendering the two oscillators of every voice.
+/** Polyphonic synthesiser rendering the operator network of every voice.
 
     MIDI and rendering methods belong to the audio thread. The parameters are read from
-    the per-chunk value table the processor passes in, and the drawn partials from
-    SynthPartials, whose generation tells the oscillator slots when to rebuild.
+    the per-chunk value table the processor passes in, the drawn partials from
+    SynthPartials, whose generation tells the oscillator slots when to rebuild, and the
+    routes and curves from their patch state objects, once per block.
 
-    @see SynthParameters, SynthPartials, PrismProcessor
+    @see SynthParameters, SynthPartials, SynthRoutes, SynthCurveState, PrismProcessor
 */
 class HarmonicSynthEngine : public yup::Synthesiser
 {
 public:
     HarmonicSynthEngine (const SynthParameters& parameters,
-                         const std::array<SynthPartials, SynthExample::oscillatorCount>& partials);
+                         const std::array<SynthPartials, SynthExample::oscillatorCount>& partials,
+                         const SynthRoutes& routes,
+                         const SynthCurveState& curves);
 
-    /** Prepares every voice. Must run outside the audio callback. */
-    void prepare (double sampleRate, int maxBlockSize);
+    /** Prepares every voice at a quality. Must run outside the audio callback.
+
+        @param processorParameters  Every parameter of the processor, by index.
+    */
+    void prepare (double sampleRate, int maxBlockSize, SynthQuality quality, yup::Span<const yup::AudioParameter::Ptr> processorParameters);
+
+    /** Returns how late the output is, in samples. Valid after prepare(). */
+    int getLatencyInSamples() const noexcept { return latency; }
 
     /** Requests a release of all keys without taking the synthesiser lock on the UI thread. */
     void requestAllNotesOff() noexcept { releaseRequested.store (true); }
@@ -57,17 +68,20 @@ public:
         @param startSample      The first sample of the range
         @param numSamples       The length of the range
         @param parameterValues  One real value per parameter index, for this range
+        @param bpm              The host tempo, or zero when unknown
     */
     void renderRange (yup::AudioBuffer<float>& output,
                       const yup::MidiBuffer& midi,
                       int startSample,
                       int numSamples,
-                      yup::Span<const float> parameterValues);
+                      yup::Span<const float> parameterValues,
+                      double bpm);
 
     void noteOn (int channel, int note, float velocity) override;
     void noteOff (int channel, int note, float velocity, bool tailOff) override;
     void allNotesOff (int channel, bool tailOff) override;
     void handleController (int channel, int controller, int value) override;
+    void handleChannelPressure (int channel, int channelPressureValue) override;
 
     /** Returns the phase of an LFO in the most recently started voice, for its display. */
     float getLFOPhase (int lfoIndex) const noexcept
@@ -85,7 +99,8 @@ public:
     int getNumActiveVoices() const noexcept { return activeVoices.load(); }
 
 private:
-    void updateContext (yup::Span<const float> parameterValues) noexcept;
+    void updateContext (yup::Span<const float> parameterValues, double bpm) noexcept;
+    void updateRoutes (const SynthParameterReader& reader) noexcept;
     void publishVoiceState() noexcept;
     void playMonoNote (int channel, int note, float velocity);
     void selectMonoNote (bool tailOff);
@@ -99,6 +114,13 @@ private:
 
     const SynthParameters& parameters;
     const std::array<SynthPartials, SynthExample::oscillatorCount>& partials;
+    const SynthRoutes& routes;
+    const SynthCurveState& curves;
+
+    /** Per parameter index, the oscillator whose spectrum it shapes, or -1. */
+    std::vector<int> spectralOwner;
+    int latency = 0;
+    int samplesSinceSpectra = SynthExample::spectralChunk;
 
     std::array<HeldNote, 16 * 128> heldNotes {};
     std::array<bool, 16> sustain {};

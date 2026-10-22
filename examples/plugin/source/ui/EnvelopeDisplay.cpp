@@ -22,9 +22,12 @@
 #include "EnvelopeDisplay.h"
 #include "SynthTheme.h"
 
-void EnvelopeDisplay::setValues (const SynthEnvelopeValues& newValues)
+void EnvelopeDisplay::setCurve (const SynthCurveState::Curve& newCurve)
 {
-    values = newValues;
+    if (newCurve == curve)
+        return;
+
+    curve = newCurve;
     repaint();
 }
 
@@ -41,49 +44,51 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
 
     const auto area = bounds.reduced (8.0f);
 
-    if (area.getWidth() <= 0.0f || area.getHeight() <= 0.0f)
+    if (area.getWidth() <= 0.0f || area.getHeight() <= 0.0f || curve.getNumPoints() < 2)
         return;
 
-    // The sustain stage has no duration of its own, so it is given a fixed share of
-    // the width and the timed stages share what is left.
-    const auto totalSeconds = yup::jmax (1.0e-4f, values.delay + values.attack + values.hold + values.decay + values.release);
-    const auto timedWidth = area.getWidth() * (1.0f - sustainShare);
-    const auto secondsToPixels = timedWidth / totalSeconds;
+    const auto length = yup::jmax (1.0e-4f, curve.getLength());
+    const auto sustain = curve.getSustainIndex();
+    const auto sustainTime = sustain >= 0 ? curve.getPoint (sustain).time : length;
+    const auto holdWidth = sustain >= 0 ? area.getWidth() * sustainShare : 0.0f;
+    const auto timedWidth = area.getWidth() - holdWidth;
 
-    const auto levelToY = [area] (float level)
+    const auto toPoint = [&] (float time, float level)
     {
-        return area.getBottom() - yup::jlimit (0.0f, 1.0f, level) * area.getHeight();
-    };
-
-    constexpr int numPoints = 7;
-
-    const yup::Point<float> points[numPoints] = {
-        { area.getX(), levelToY (0.0f) },
-        { area.getX() + values.delay * secondsToPixels, levelToY (0.0f) },
-        { area.getX() + (values.delay + values.attack) * secondsToPixels, levelToY (1.0f) },
-        { area.getX() + (values.delay + values.attack + values.hold) * secondsToPixels, levelToY (1.0f) },
-        { area.getX() + (values.delay + values.attack + values.hold + values.decay) * secondsToPixels, levelToY (values.sustain) },
-        { area.getX() + (values.delay + values.attack + values.hold + values.decay) * secondsToPixels + area.getWidth() * sustainShare, levelToY (values.sustain) },
-        { area.getRight(), levelToY (0.0f) }
+        const auto x = area.getX() + time / length * timedWidth + (sustain >= 0 && time > sustainTime ? holdWidth : 0.0f);
+        return yup::Point<float> { x, area.getBottom() - yup::jlimit (0.0f, 1.0f, level) * area.getHeight() };
     };
 
     path.clear();
-    path.reserveSpace (numPoints + 2);
-    path.moveTo (points[0]);
+    path.moveTo (toPoint (0.0f, curve.getPoint (0).level));
 
-    for (int index = 1; index < numPoints; ++index)
-        path.lineTo (points[index]);
+    for (int index = 1; index < curve.getNumPoints(); ++index)
+    {
+        const auto& from = curve.getPoint (index - 1);
+        const auto& to = curve.getPoint (index);
+
+        for (int step = 1; step <= stepsPerSegment; ++step)
+        {
+            const auto t = static_cast<float> (step) / static_cast<float> (stepsPerSegment);
+            const auto time = from.time + (to.time - from.time) * t;
+            path.lineTo (toPoint (time, SynthCurveState::Curve::segmentValue (from.level, to.level, to.curve, t)));
+        }
+
+        if (index == sustain)
+            path.lineTo (toPoint (to.time, to.level).translated (holdWidth, 0.0f));
+    }
 
     g.setStrokeColor (SynthTheme::accent());
     g.setStrokeWidth (1.5f);
     g.strokePath (path);
 
-    for (int index = 1; index < numPoints - 1; ++index)
+    g.setFillColor (SynthTheme::accent());
+
+    for (int index = 0; index < curve.getNumPoints(); ++index)
     {
-        g.setFillColor (SynthTheme::accent());
-        g.fillEllipse (yup::Rectangle<float> (points[index].getX() - pointRadius,
-                                              points[index].getY() - pointRadius,
-                                              pointRadius * 2.0f,
-                                              pointRadius * 2.0f));
+        const auto& point = curve.getPoint (index);
+        const auto centre = toPoint (point.time, point.level);
+
+        g.fillEllipse (yup::Rectangle<float> (centre.getX() - pointRadius, centre.getY() - pointRadius, pointRadius * 2.0f, pointRadius * 2.0f));
     }
 }

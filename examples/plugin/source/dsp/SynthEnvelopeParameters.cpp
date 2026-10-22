@@ -24,31 +24,27 @@
 
 SynthEnvelopeParameters::SynthEnvelopeParameters (int envelopeIndex, const SynthEnvelopeValues& defaults)
 {
+    using namespace SynthParameterFactory;
+
     const auto prefix = "env" + yup::String (envelopeIndex + 1) + ".";
     const auto module = "Env " + yup::String (envelopeIndex + 1);
-    const auto hostBase = static_cast<yup::uint32> (400 + 100 * envelopeIndex);
+    const auto hostBase = static_cast<yup::uint32> (3000 + 100 * envelopeIndex);
 
-    const auto create = [&] (const char* id, const char* name, yup::uint32 offset, float minimum, float maximum, float defaultValue, SynthParameterFactory::Formatter format)
-    {
-        return SynthParameterFactory::createContinuous (prefix + id, module + " " + name, hostBase + offset, module,
-                                                        yup::NormalisableRange<float> (minimum, maximum), defaultValue, std::move (format));
-    };
+    yup::NormalisableRange<float> scaleRange (0.05f, 20.0f);
+    scaleRange.setSkewForCentre (1.0f);
 
-    delay = create ("delay", "Delay", 0, 0.0f, 2.0f, defaults.delay, SynthFormat::milliseconds);
-    attack = create ("attack", "Attack", 1, 0.001f, 4.0f, defaults.attack, SynthFormat::milliseconds);
-    hold = create ("hold", "Hold", 2, 0.0f, 2.0f, defaults.hold, SynthFormat::milliseconds);
-    decay = create ("decay", "Decay", 3, 0.001f, 4.0f, defaults.decay, SynthFormat::milliseconds);
-    sustain = create ("sustain", "Sustain", 4, 0.0f, 1.0f, defaults.sustain, SynthFormat::percent);
-    release = create ("release", "Release", 5, 0.001f, 8.0f, defaults.release, SynthFormat::milliseconds);
+    timeScale = createContinuous (prefix + "timeScale", module + " Time Scale", hostBase + 0, module, scaleRange, defaults.timeScale, SynthFormat::ratio);
+    velocity = createContinuous (prefix + "velocity", module + " Velocity", hostBase + 1, module, { 0.0f, 1.0f }, defaults.velocity, SynthFormat::percent);
+    depth = createContinuous (prefix + "depth", module + " Depth", hostBase + 2, module, { 0.0f, 1.0f }, defaults.depth, SynthFormat::percent);
 }
 
 void SynthEnvelopeParameters::addTo (yup::AudioProcessor& processor) const
 {
-    for (const auto& parameter : { delay, attack, hold, decay, sustain, release })
+    for (const auto& parameter : { timeScale, velocity, depth })
         processor.addParameter (parameter);
 }
 
 SynthEnvelopeValues SynthEnvelopeParameters::read (SynthParameterReader reader) const noexcept
 {
-    return { reader (delay), reader (attack), reader (hold), reader (decay), reader (sustain), reader (release) };
+    return { reader (timeScale), reader (velocity), reader (depth) };
 }

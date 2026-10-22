@@ -23,6 +23,7 @@
 
 #include "ParameterChoice.h"
 #include "ParameterKnob.h"
+#include "ParameterToggle.h"
 #include "WaveformEditor.h"
 
 //==============================================================================
@@ -69,10 +70,18 @@ private:
 
     ParameterChoice waveformChoice;
     ParameterChoice syncModeChoice;
+    ParameterChoice frequencyModeChoice;
+    ParameterToggle freeRunningButton;
 
     ParameterKnob levelKnob;
-    ParameterKnob octaveKnob;
-    ParameterKnob detuneKnob;
+    ParameterKnob ratioKnob;
+    ParameterKnob fineKnob;
+    ParameterKnob fixedKnob;
+    ParameterKnob panKnob;
+    ParameterKnob phaseKnob;
+    ParameterKnob toFilter1Knob;
+    ParameterKnob toFilter2Knob;
+    ParameterKnob directKnob;
     ParameterKnob ridgesKnob;
     ParameterKnob colorKnob;
     ParameterKnob dispersionKnob;
@@ -84,7 +93,4 @@ private:
     ParameterKnob formantPositionKnob;
     ParameterKnob scatterKnob;
     ParameterKnob syncRatioKnob;
-    ParameterKnob unisonKnob;
-    ParameterKnob unisonDetuneKnob;
-    ParameterKnob spreadKnob;
 };

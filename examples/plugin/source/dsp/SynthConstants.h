@@ -26,18 +26,23 @@
 namespace SynthExample
 {
 constexpr int voiceCount = 8;
-constexpr int oscillatorCount = 2;
+constexpr int oscillatorCount = 4;
 constexpr int maxHarmonics = 128;
 constexpr int maxBlockSize = 2048;
-constexpr int envelopeCount = 2;
-constexpr int lfoCount = 2;
-constexpr int modulationSlots = 16;
+constexpr int envelopeCount = 4;
+constexpr int lfoCount = 4;
+constexpr int filterCount = 2;
+constexpr int modulationSlots = 32;
 
-/** Samples between control updates: modulation, filter targets, local spectra and host parameter changes. */
-constexpr int controlChunk = 128;
+/** Samples between control updates: modulation, filter targets, FM ramps and host parameter changes. */
+constexpr int controlChunk = 32;
 
-/** Unison slots per oscillator, counting the one running the selected algorithm. */
-constexpr int maxUnisonVoices = 5;
+/** Samples between per-voice spectrum derivations while a route reaches a spectral parameter.
+    Each one costs inverse FFTs, so it runs slower than the control chunk. A multiple of it. */
+constexpr int spectralChunk = 128;
+
+/** Copies of the whole operator network a voice stacks for unison. */
+constexpr int maxUnisonVoices = 8;
 
 /** Harmonics the partial editor exposes, a subset of the maxHarmonics the engine renders. */
 constexpr int editableHarmonics = 64;

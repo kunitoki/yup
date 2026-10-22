@@ -22,35 +22,37 @@
 #include "SynthEnvelopePanel.h"
 #include "SynthTheme.h"
 
-SynthEnvelopePanel::SynthEnvelopePanel (const yup::String& panelTitle, const SynthEnvelopeParameters& parametersToEdit, const yup::Font& font)
-    : parameters (parametersToEdit)
-    , shownValues (parametersToEdit.read())
-    , delayKnob ("DELAY", parametersToEdit.delay, font)
-    , attackKnob ("ATTACK", parametersToEdit.attack, font)
-    , holdKnob ("HOLD", parametersToEdit.hold, font)
-    , decayKnob ("DECAY", parametersToEdit.decay, font)
-    , sustainKnob ("SUSTAIN", parametersToEdit.sustain, font)
-    , releaseKnob ("RELEASE", parametersToEdit.release, font)
+SynthEnvelopePanel::SynthEnvelopePanel (const yup::String& panelTitle,
+                                        const SynthEnvelopeParameters& parametersToEdit,
+                                        const SynthCurveState& curvesToShow,
+                                        int envelopeIndex,
+                                        const yup::Font& font)
+    : curves (curvesToShow)
+    , index (envelopeIndex)
+    , timeScaleKnob ("TIME", parametersToEdit.timeScale, font)
+    , velocityKnob ("VELOCITY", parametersToEdit.velocity, font)
+    , depthKnob ("DEPTH", parametersToEdit.depth, font)
 {
     setupPanelTitle (titleLabel, panelTitle, font);
     addAndMakeVisible (titleLabel);
 
-    display.setValues (shownValues);
     addAndMakeVisible (display);
 
-    for (auto* knob : { &delayKnob, &attackKnob, &holdKnob, &decayKnob, &sustainKnob, &releaseKnob })
+    for (auto* knob : { &timeScaleKnob, &velocityKnob, &depthKnob })
         addAndMakeVisible (*knob);
+
+    syncFromParameters();
 }
 
 void SynthEnvelopePanel::syncFromParameters()
 {
-    for (auto* knob : { &delayKnob, &attackKnob, &holdKnob, &decayKnob, &sustainKnob, &releaseKnob })
+    for (auto* knob : { &timeScaleKnob, &velocityKnob, &depthKnob })
         knob->syncFromParameter();
 
-    if (const auto values = parameters.read(); values != shownValues)
+    if (const auto generation = curves.getGeneration(); generation != shownGeneration)
     {
-        shownValues = values;
-        display.setValues (values);
+        shownGeneration = generation;
+        display.setCurve (curves.getEnvelope (index));
     }
 }
 
@@ -61,12 +63,11 @@ void SynthEnvelopePanel::resized()
     titleLabel.setBounds (bounds.removeFromTop (headerHeight));
     bounds.removeFromTop (spacing);
 
-    auto knobArea = bounds.removeFromBottom (knobRowHeight);
-    bounds.removeFromBottom (spacing);
-
+    auto knobs = bounds.removeFromRight (knobWidth * 3.0f);
+    bounds.removeFromRight (spacing);
     display.setBounds (bounds);
 
-    layoutControlsInRow (knobArea, { &delayKnob, &attackKnob, &holdKnob, &decayKnob, &sustainKnob, &releaseKnob });
+    layoutControlsInRow (knobs, { &timeScaleKnob, &velocityKnob, &depthKnob });
 }
 
 void SynthEnvelopePanel::paint (yup::Graphics& g)

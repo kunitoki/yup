@@ -23,22 +23,27 @@
 
 #include <yup_gui/yup_gui.h>
 
-#include "../dsp/SynthEnvelopeParameters.h"
+#include "../dsp/SynthCurveState.h"
 
 //==============================================================================
-/** Draws the shape an envelope traces, with a point at every breakpoint. */
+/** Draws the curve an envelope traces, with a point at every breakpoint.
+
+    The sustain hold has no duration of its own, so it is drawn with a fixed share of
+    the width after the sustain point.
+*/
 class EnvelopeDisplay : public yup::Component
 {
 public:
-    /** Updates the drawn shape. Called from the message thread. */
-    void setValues (const SynthEnvelopeValues& newValues);
+    /** Updates the drawn curve. Called from the message thread. */
+    void setCurve (const SynthCurveState::Curve& newCurve);
 
     void paint (yup::Graphics& g) override;
 
 private:
     static constexpr float sustainShare = 0.22f;
     static constexpr float pointRadius = 3.0f;
+    static constexpr int stepsPerSegment = 24;
 
-    SynthEnvelopeValues values;
+    SynthCurveState::Curve curve;
     yup::Path path;
 };

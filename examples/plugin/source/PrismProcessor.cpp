@@ -26,11 +26,12 @@
 PrismProcessor::PrismProcessor()
     : yup::AudioProcessor ("Prism",
                            yup::AudioBusLayout ({}, { yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
-    , engine (synthParameters, partials)
+    , engine (synthParameters, partials, routes, curves)
 {
     PluginLogger::initialise();
 
     synthParameters.addTo (*this);
+    synthParameters.quality->addListener (this);
 
     for (const auto& parameter : getParameters())
         parameterValues.push_back (parameter->getValue());
@@ -43,12 +44,20 @@ PrismProcessor::PrismProcessor()
         presetNames.push_back (SynthPatch::getFactoryPresetName (index));
 }
 
-PrismProcessor::~PrismProcessor() = default;
+PrismProcessor::~PrismProcessor()
+{
+    synthParameters.quality->removeListener (this);
+}
 
 //==============================================================================
 void PrismProcessor::prepareToPlay (const yup::AudioSpec& spec)
 {
-    engine.prepare (spec.sampleRate, yup::jmax (spec.maxBlockSize, SynthExample::maxBlockSize));
+    preparedSampleRate = spec.sampleRate;
+    preparedBlockSize = yup::jmax (spec.maxBlockSize, SynthExample::maxBlockSize);
+    prepareEngine (synthParameters.getQuality());
+
+    for (auto& clipper : masterClippers)
+        clipper.prepare (spec.sampleRate, spec.maxBlockSize);
 
     const auto parameters = getParameters();
     for (std::size_t index = 0; index < parameters.size(); ++index)
@@ -58,6 +67,30 @@ void PrismProcessor::prepareToPlay (const yup::AudioSpec& spec)
     outputGain.setCurrentAndTargetValue (playedValues[static_cast<std::size_t> (volumeIndex)]);
 
     loadMeasurer.reset (spec.sampleRate, spec.maxBlockSize);
+}
+
+void PrismProcessor::prepareEngine (SynthQuality quality)
+{
+    preparedQuality = quality;
+    engine.prepare (preparedSampleRate, preparedBlockSize, quality, getParameters());
+    setLatencySamples (engine.getLatencyInSamples());
+}
+
+void PrismProcessor::parameterValueChanged (const yup::AudioParameter::Ptr&, int)
+{
+    const auto quality = synthParameters.getQuality();
+
+    if (preparedSampleRate <= 0.0 || quality == preparedQuality)
+        return;
+
+    // The engine reallocates for the new rate, so the audio callback must be out of the way.
+    {
+        const ScopedProcessSuspension suspension (*this);
+        const yup::CriticalSection::ScopedLockType lock (getProcessLock());
+        prepareEngine (quality);
+    }
+
+    updateHostDisplay (ChangeDetails {}.withLatencyChanged (true));
 }
 
 void PrismProcessor::releaseResources()
@@ -91,6 +124,12 @@ void PrismProcessor::processBlock (yup::AudioProcessContext<float>& context)
     // engine applies its own modulation and its smoothers ramp to the new value.
     auto change = context.params.begin();
 
+    double bpm = 0.0;
+
+    if (context.playHead != nullptr)
+        if (const auto position = context.playHead->getPosition())
+            bpm = position->getBpm().value_or (0.0);
+
     for (int start = 0; start < numSamples; start += SynthExample::controlChunk)
     {
         const auto count = yup::jmin (SynthExample::controlChunk, numSamples - start);
@@ -98,7 +137,7 @@ void PrismProcessor::processBlock (yup::AudioProcessContext<float>& context)
         for (; change != context.params.end() && change->sampleOffset <= start; ++change)
             applyParameterChange (*change);
 
-        engine.renderRange (audio, context.midi, start, count, playedValues);
+        engine.renderRange (audio, context.midi, start, count, playedValues, bpm);
 
         outputGain.setTargetValue (playedValues[static_cast<std::size_t> (volumeIndex)]);
 
@@ -107,7 +146,10 @@ void PrismProcessor::processBlock (yup::AudioProcessContext<float>& context)
             const auto gain = outputGain.getNextValue();
 
             for (int channel = 0; channel < audio.getNumChannels(); ++channel)
-                audio.getWritePointer (channel)[sample] *= gain;
+            {
+                auto& value = audio.getWritePointer (channel)[sample];
+                value = masterClippers[static_cast<std::size_t> (yup::jmin (channel, 1))].processSample (value * gain);
+            }
         }
     }
 
@@ -116,13 +158,6 @@ void PrismProcessor::processBlock (yup::AudioProcessContext<float>& context)
 
     // Whatever is left in the buffer goes back to the host as output events.
     context.midi.clear();
-
-    if (numSamples > 0 && audio.getNumChannels() > 0 && ! scopeReady.load (std::memory_order_acquire))
-    {
-        scopeCount = yup::jmin (numSamples, SynthExample::maxBlockSize);
-        std::copy_n (audio.getReadPointer (0), scopeCount, scopeSamples.begin());
-        scopeReady.store (true, std::memory_order_release);
-    }
 }
 
 void PrismProcessor::followParameters (const yup::ParameterChangeBuffer& changes) noexcept
@@ -164,16 +199,6 @@ void PrismProcessor::applyParameterChange (const yup::ParameterChange& change) n
 
     const auto index = static_cast<std::size_t> (change.parameterIndex);
     playedValues[index] = parameters[index]->convertToDenormalizedValue (change.normalizedValue);
-}
-
-bool PrismProcessor::readScope (std::vector<float>& destination)
-{
-    if (! scopeReady.load (std::memory_order_acquire))
-        return false;
-
-    destination.assign (scopeSamples.begin(), scopeSamples.begin() + scopeCount);
-    scopeReady.store (false, std::memory_order_release);
-    return true;
 }
 
 //==============================================================================
@@ -222,13 +247,13 @@ yup::Result PrismProcessor::loadStateFromDataTree (const yup::DataTree& state)
 
 yup::Result PrismProcessor::saveStateIntoDataTree (yup::DataTree& state)
 {
-    state = SynthPatch::createState (getParameters(), partials, currentPreset.load());
+    state = SynthPatch::createState (getParameters(), getPatchState(), currentPreset.load());
     return yup::Result::ok();
 }
 
 yup::Result PrismProcessor::savePresetFile (const yup::File& file)
 {
-    const auto xml = SynthPatch::createState (getParameters(), partials, -1).createXml();
+    const auto xml = SynthPatch::createState (getParameters(), getPatchState(), -1).createXml();
 
     if (xml == nullptr || ! xml->writeTo (file))
         return yup::Result::fail ("Cannot write " + file.getFullPathName());
@@ -248,7 +273,7 @@ yup::Result PrismProcessor::loadPresetFile (const yup::File& file)
 
 yup::Result PrismProcessor::applyState (const yup::DataTree& state, ChangeDetails details)
 {
-    if (auto result = SynthPatch::loadState (state, getParameters(), partials); result.failed())
+    if (auto result = SynthPatch::loadState (state, getParameters(), getPatchState()); result.failed())
         return result;
 
     currentPreset.store (SynthPatch::getPresetIndex (state));

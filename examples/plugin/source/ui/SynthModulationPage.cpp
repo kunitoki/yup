@@ -22,22 +22,45 @@
 #include "SynthModulationPage.h"
 #include "SynthTheme.h"
 
-SynthModulationPage::SynthModulationPage (const SynthModulationParameters& parametersToEdit, const yup::Font& font)
+#include "../dsp/SynthPatch.h"
+
+SynthModulationPage::SynthModulationPage (const SynthParameters& parametersToEdit,
+                                          SynthRoutes& routesToEdit,
+                                          yup::Span<const yup::AudioParameter::Ptr> processorParameters,
+                                          const yup::Font& font)
+    : routes (routesToEdit)
 {
-    setupPanelTitle (titleLabel, "MODULATION MATRIX", font);
+    for (const auto& parameter : processorParameters)
+    {
+        const auto index = SynthPatch::findRouteDestination (processorParameters, parameter->getID());
+
+        if (index >= 0)
+            destinations.push_back ({ parameter->getID(), parameter->getName(), index });
+    }
+
+    setupPanelTitle (titleLabel, "MODULATION  /  SOURCE > DESTINATION, DEPTH", font);
     addAndMakeVisible (titleLabel);
 
-    for (std::size_t index = 0; index < rows.size(); ++index)
+    for (std::size_t slot = 0; slot < rows.size(); ++slot)
     {
-        rows[index] = std::make_unique<SynthModulationRow> (parametersToEdit.slots[index], font);
-        addAndMakeVisible (*rows[index]);
+        rows[slot] = std::make_unique<SynthModulationRow> (static_cast<int> (slot), routesToEdit, destinations,
+                                                           parametersToEdit.modulation.depths[slot], font);
+        addChildComponent (*rows[slot]);
     }
+
+    syncFromParameters();
 }
 
 void SynthModulationPage::syncFromParameters()
 {
     for (auto& row : rows)
-        row->syncFromParameters();
+        row->syncFromRoutes();
+
+    if (const auto generation = routes.getGeneration(); generation != shownGeneration)
+    {
+        shownGeneration = generation;
+        resized();
+    }
 }
 
 void SynthModulationPage::resized()
@@ -47,12 +70,23 @@ void SynthModulationPage::resized()
     titleLabel.setBounds (bounds.removeFromTop (headerHeight));
     bounds.removeFromTop (spacing);
 
-    const auto rowHeight = (bounds.getHeight() - spacing * static_cast<float> (rows.size() - 1)) / static_cast<float> (rows.size());
+    // Every used route, then the first free slot to add the next one, as many as fit.
+    auto offeredEmpty = false;
 
     for (auto& row : rows)
     {
-        row->setBounds (bounds.removeFromTop (rowHeight));
-        bounds.removeFromTop (spacing);
+        const auto show = (row->isUsed() || ! offeredEmpty) && bounds.getHeight() >= rowHeight;
+
+        if (! row->isUsed() && show)
+            offeredEmpty = true;
+
+        row->setVisible (show);
+
+        if (show)
+        {
+            row->setBounds (bounds.removeFromTop (rowHeight));
+            bounds.removeFromTop (spacing);
+        }
     }
 }
 

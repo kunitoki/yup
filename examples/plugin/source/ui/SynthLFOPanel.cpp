@@ -22,39 +22,65 @@
 #include "SynthLFOPanel.h"
 #include "SynthTheme.h"
 
-SynthLFOPanel::SynthLFOPanel (const yup::String& panelTitle, const SynthLFOParameters& parametersToEdit, const yup::Font& font)
+SynthLFOPanel::SynthLFOPanel (const yup::String& panelTitle,
+                              const SynthLFOParameters& parametersToEdit,
+                              const SynthCurveState& curvesToShow,
+                              int lfoIndex,
+                              const yup::Font& font)
     : parameters (parametersToEdit)
+    , curves (curvesToShow)
+    , index (lfoIndex)
     , shownValues (parametersToEdit.read())
-    , retriggerButton ("RETRIG", parametersToEdit.retrigger)
+    , syncButton ("SYNC", parametersToEdit.tempoSync)
     , shapeChoice ("SHAPE", parametersToEdit.shape, font)
+    , divisionChoice ("DIVISION", parametersToEdit.division, font)
+    , retriggerChoice ("TRIGGER", parametersToEdit.retrigger, font)
     , rateKnob ("RATE", parametersToEdit.rate, font)
     , phaseKnob ("PHASE", parametersToEdit.phase, font)
+    , smoothKnob ("SMOOTH", parametersToEdit.smoothing, font)
+    , depthKnob ("DEPTH", parametersToEdit.depth, font)
 {
     setupPanelTitle (titleLabel, panelTitle, font);
     addAndMakeVisible (titleLabel);
 
-    addAndMakeVisible (retriggerButton);
+    addAndMakeVisible (syncButton);
 
     display.setValues (shownValues);
     addAndMakeVisible (display);
 
-    addAndMakeVisible (shapeChoice);
-    addAndMakeVisible (rateKnob);
-    addAndMakeVisible (phaseKnob);
+    for (auto* choice : { &shapeChoice, &divisionChoice, &retriggerChoice })
+        addAndMakeVisible (*choice);
+
+    for (auto* knob : { &rateKnob, &phaseKnob, &smoothKnob, &depthKnob })
+        addAndMakeVisible (*knob);
+
+    syncFromParameters();
 }
 
 void SynthLFOPanel::syncFromParameters()
 {
-    retriggerButton.syncFromParameter();
-    shapeChoice.syncFromParameter();
-    rateKnob.syncFromParameter();
-    phaseKnob.syncFromParameter();
+    syncButton.syncFromParameter();
+
+    for (auto* choice : { &shapeChoice, &divisionChoice, &retriggerChoice })
+        choice->syncFromParameter();
+
+    for (auto* knob : { &rateKnob, &phaseKnob, &smoothKnob, &depthKnob })
+        knob->syncFromParameter();
 
     if (const auto values = parameters.read(); values != shownValues)
     {
         shownValues = values;
         display.setValues (values);
     }
+
+    if (const auto generation = curves.getGeneration(); generation != shownGeneration)
+    {
+        shownGeneration = generation;
+        display.setCurve (curves.getLFO (index));
+    }
+
+    rateKnob.setEnabled (! shownValues.tempoSync);
+    divisionChoice.setEnabled (shownValues.tempoSync);
 }
 
 void SynthLFOPanel::resized()
@@ -62,19 +88,23 @@ void SynthLFOPanel::resized()
     auto bounds = getLocalBounds().reduced (panelInset);
 
     auto header = bounds.removeFromTop (headerHeight);
-    retriggerButton.setBounds (header.removeFromRight (buttonWidth));
+    syncButton.setBounds (header.removeFromRight (buttonWidth));
     titleLabel.setBounds (header);
     bounds.removeFromTop (spacing);
 
-    // Everything sits in one row so the panel stays short: display, shape, rate, phase.
-    auto knobs = bounds.removeFromRight (knobWidth * 2.0f);
-    bounds.removeFromRight (spacing);
-    auto choice = bounds.removeFromRight (choiceWidth);
+    auto knobs = bounds.removeFromBottom (yup::jmin (58.0f, bounds.getHeight() * 0.5f));
+    bounds.removeFromBottom (spacing);
+
+    auto choices = bounds.removeFromRight (choiceWidth);
     bounds.removeFromRight (spacing);
     display.setBounds (bounds);
 
-    shapeChoice.setBounds (choice.withSizeKeepingCenter (choice.getWidth(), yup::jmin (choice.getHeight(), choiceHeight)));
-    layoutControlsInRow (knobs, { &rateKnob, &phaseKnob });
+    const auto choiceRow = choices.getHeight() / 3.0f;
+
+    for (auto* choice : { &shapeChoice, &divisionChoice, &retriggerChoice })
+        choice->setBounds (choices.removeFromTop (choiceRow));
+
+    layoutControlsInRow (knobs, { &rateKnob, &phaseKnob, &smoothKnob, &depthKnob });
 }
 
 void SynthLFOPanel::paint (yup::Graphics& g)

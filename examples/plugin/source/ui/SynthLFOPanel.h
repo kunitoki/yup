@@ -27,14 +27,18 @@
 #include "ParameterToggle.h"
 
 //==============================================================================
-/** Shape, rate, phase and retrigger of one LFO, with its display.
+/** Shape, rate or tempo division, phase, smoothing, retrigger and depth of one LFO, with its display.
 
     @see SynthLFOParameters
 */
 class SynthLFOPanel : public yup::Component
 {
 public:
-    SynthLFOPanel (const yup::String& panelTitle, const SynthLFOParameters& parametersToEdit, const yup::Font& font);
+    SynthLFOPanel (const yup::String& panelTitle,
+                   const SynthLFOParameters& parametersToEdit,
+                   const SynthCurveState& curvesToShow,
+                   int lfoIndex,
+                   const yup::Font& font);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
@@ -55,12 +59,19 @@ private:
     static constexpr float spacing = 6.0f;
 
     const SynthLFOParameters& parameters;
+    const SynthCurveState& curves;
+    int index = 0;
+    int shownGeneration = -1;
     SynthLFOValues shownValues;
 
     yup::Label titleLabel;
-    ParameterToggle retriggerButton;
+    ParameterToggle syncButton;
     LFODisplay display;
     ParameterChoice shapeChoice;
+    ParameterChoice divisionChoice;
+    ParameterChoice retriggerChoice;
     ParameterKnob rateKnob;
     ParameterKnob phaseKnob;
+    ParameterKnob smoothKnob;
+    ParameterKnob depthKnob;
 };

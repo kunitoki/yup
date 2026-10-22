@@ -26,28 +26,53 @@
 #include <array>
 
 //==============================================================================
-/** The per-voice filter: a drive stage into one VAStateVariableFilter per channel.
+/** One voice filter: an antialiased drive into the selected filter, per channel.
 
-    Cutoff, resonance and drive are smoothed across a control chunk so modulation
-    cannot zipper. Off skips everything, leaving the filter state where it was.
+    The state variable types run one VAStateVariableFilter per channel, or two cascaded
+    for the 24 dB slopes. The analog models and the comb come from yup_dsp's filters;
+    their own saturation is not antialiased, so it is kept mild and follows the drive.
+
+    Drive is a tanh through yup::AaIirAntialiaser, so it does not alias at the host rate.
+    Cutoff, resonance, drive and mix are ramped across each control chunk and the
+    coefficients are refreshed every few samples, not on every sample.
 
     @see SynthFilterParameters
 */
 class SynthFilterStage
 {
 public:
-    /** Prepares both channels and the parameter smoothers. */
+    /** Prepares every filter and the parameter ramps. */
     void prepare (double sampleRate);
 
     /** Clears the filter memory, for a fresh note. */
     void reset() noexcept;
 
-    /** Filters a stereo chunk in place at the note's keytracked cutoff. */
+    /** Filters a stereo chunk in place at the note's keytracked cutoff. Off leaves it untouched. */
     void process (float* left, float* right, int numSamples, const SynthFilterValues& values, double midiNote) noexcept;
 
 private:
-    std::array<yup::VAStateVariableFilter<float>, 2> filters;
-    yup::SmoothedValue<float, yup::ValueSmoothingTypes::Multiplicative> cutoff;
-    yup::SmoothedValue<float> resonance;
-    yup::SmoothedValue<float> drive;
+    //==============================================================================
+    static constexpr int coefficientInterval = 8;
+
+    using Antialiaser = yup::AaIirAntialiaser<float, yup::TanhClipperTraits>;
+
+    void updateCoefficients (SynthFilterType type, float frequency, float resonance, float saturation) noexcept;
+    float filterSample (int channel, SynthFilterType type, float input) noexcept;
+
+    //==============================================================================
+    std::array<std::array<yup::VAStateVariableFilter<float>, 2>, 2> stateVariable; // [stage][channel]
+    std::array<yup::AnalogMoogLadderFilter<float>, 2> moog;
+    std::array<yup::AnalogKorg35Filter<float>, 2> korg;
+    std::array<yup::AnalogRolandDiodeFilter<float>, 2> diode;
+    std::array<yup::AnalogVowelFilter<float>, 2> vowel;
+    std::array<yup::CombFilter<float>, 2> comb;
+    std::array<Antialiaser, 2> drivers;
+
+    double sampleRate = 44100.0;
+    SynthFilterType activeType = SynthFilterType::off;
+    float cutoff = 8000.0f;
+    float resonance = 0.2f;
+    float drive = 0.0f;
+    float mix = 1.0f;
+    bool hasState = false;
 };

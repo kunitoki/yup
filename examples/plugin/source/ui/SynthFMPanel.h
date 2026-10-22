@@ -21,23 +21,35 @@
 
 #pragma once
 
-#include <yup_gui/yup_gui.h>
+#include "../dsp/SynthFMParameters.h"
+#include "ParameterKnob.h"
 
-#include <vector>
+#include <array>
+#include <memory>
 
 //==============================================================================
-/** Draws the most recent block of rendered audio as a waveform. */
-class Oscilloscope : public yup::Component
+/** The FM matrix as a grid of knobs: each row is an operator, each column what modulates it.
+
+    An interim view until the graphical matrix replaces it.
+
+    @see SynthFMParameters
+*/
+class SynthFMPanel : public yup::Component
 {
 public:
-    Oscilloscope();
+    SynthFMPanel (const SynthFMParameters& parametersToEdit, const yup::Font& font);
 
-    /** Returns the buffer the samples to display are copied into. Message thread. */
-    std::vector<float>& getRenderData() noexcept { return renderData; }
+    /** Shows changes made by the host, a preset or a state load. */
+    void syncFromParameters();
 
+    void resized() override;
     void paint (yup::Graphics& g) override;
 
 private:
-    std::vector<float> renderData;
-    yup::Path path;
+    static constexpr float panelInset = 8.0f;
+    static constexpr float headerHeight = 18.0f;
+    static constexpr float spacing = 6.0f;
+
+    yup::Label titleLabel;
+    std::array<std::array<std::unique_ptr<ParameterKnob>, SynthExample::oscillatorCount>, SynthExample::oscillatorCount> knobs;
 };

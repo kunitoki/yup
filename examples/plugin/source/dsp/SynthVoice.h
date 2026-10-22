@@ -22,30 +22,49 @@
 #pragma once
 
 #include "SynthBlockContext.h"
-#include "SynthEnvelope.h"
 #include "SynthFilterStage.h"
-#include "SynthOscillator.h"
 #include "SynthSound.h"
 
 #include <vector>
 
 //==============================================================================
-/** A polyphonic voice: two oscillators into a filter, with its own envelopes and LFOs. */
+/** A polyphonic voice: the operator network into two filters and the amplitude envelope.
+
+    Modulation is applied once per control chunk: the voice copies the block's value
+    table, adds every route in normalized parameter space and reads its controls from
+    the copy, so a route can reach any continuous parameter.
+
+    The network's buses come out a fixed latency late, so everything after it lives on
+    that delayed timeline: the amplitude envelope's note events and the filter controls
+    are delayed by the same amount. Envelope 1 is both a modulation source, on the
+    network's timeline, and the amplitude, on the delayed one; the voice ends when the
+    delayed copy finishes.
+
+    @see SynthOperatorNetwork, SynthFilterStage
+*/
 class SynthVoice : public yup::SynthesiserVoice
 {
 public:
-    SynthVoice (const std::array<SynthPartials, SynthExample::oscillatorCount>& oscillatorPartials,
+    SynthVoice (const SynthParameters& synthParameters,
+                const std::array<SynthPartials, SynthExample::oscillatorCount>& oscillatorPartials,
                 const SynthOscillatorResources& oscillatorResources,
                 const std::array<SynthOscillatorSlot, SynthExample::oscillatorCount>& sharedSlots,
                 const SynthBlockContext& blockContext);
 
-    /** Allocates every oscillator backend. Must run outside the audio callback. */
-    void prepare (double sampleRate, int maxBlockSize);
+    /** Allocates the network and every buffer. Must run outside the audio callback.
+
+        @param processorParameters  Every parameter of the processor, by index, which the
+                                    routes use to map values into normalized space.
+    */
+    void prepare (double sampleRate, int maxBlockSize, SynthQuality quality, yup::Span<const yup::AudioParameter::Ptr> processorParameters);
+
+    /** Returns how late the voice output is, in samples. */
+    int getLatencyInSamples() const noexcept { return network.getLatencyInSamples(); }
 
     //==============================================================================
     bool canPlaySound (yup::SynthesiserSound* sound) override;
 
-    /** Configures the next mono transition. Legato retains the envelope and phases.
+    /** Configures the next mono transition. Legato retains the envelopes and phases.
         Glide is measured in seconds and interpolates pitch in semitones. */
     void setTransition (double seconds, bool legato) noexcept;
 
@@ -65,7 +84,24 @@ public:
 
 private:
     //==============================================================================
+    /** The post-network controls of one chunk, replayed a latency later. */
+    struct DelayedControls
+    {
+        std::array<SynthFilterValues, SynthExample::filterCount> filters;
+        SynthFilterRouting routing = SynthFilterRouting::serial;
+        float ampVelocityGain = 1.0f;
+        double note = 60.0;
+    };
+
+    static constexpr int delayedChunks = 16;
+
     void renderChunk (yup::AudioBuffer<float>& outputBuffer, int startSample, int numSamples) noexcept;
+    void prepareControls (SynthNetworkControls& controls, DelayedControls& delayed) noexcept;
+    void configureLFOs() noexcept;
+    float getSourceValue (SynthModulationSource source) const noexcept;
+    void advanceSources (int numSamples) noexcept;
+    void applyCurves() noexcept;
+    void renderAmplitude (float* gains, int numSamples) noexcept;
 
     static double midiNoteToFrequency (double midiNoteNumber) noexcept
     {
@@ -75,33 +111,46 @@ private:
     //==============================================================================
     static constexpr double pitchWheelRangeSemitones = 2.0;
 
+    const SynthParameters& parameters;
     const std::array<SynthPartials, SynthExample::oscillatorCount>& partials;
     const SynthOscillatorResources& resources;
     const std::array<SynthOscillatorSlot, SynthExample::oscillatorCount>& slots;
     const SynthBlockContext& context;
+    yup::Span<const yup::AudioParameter::Ptr> processorParameters;
 
-    std::array<SynthOscillator, SynthExample::oscillatorCount> oscillators;
-    std::array<yup::SmoothedValue<float>, SynthExample::oscillatorCount> levels;
-
-    SynthEnvelope envelope;
-    SynthEnvelope modulationEnvelope;
+    SynthOperatorNetwork network;
+    std::array<SynthFilterStage, SynthExample::filterCount> filters;
+    std::array<yup::CurveEnvelope<float>, SynthExample::envelopeCount> envelopes;
+    yup::CurveEnvelope<float> amplitude;
     std::array<yup::LFO<float>, SynthExample::lfoCount> lfos;
-    SynthFilterStage filter;
 
-    std::vector<float> oscLeft;
-    std::vector<float> oscRight;
-    std::vector<float> mixLeft;
-    std::vector<float> mixRight;
+    std::array<SynthEnvelopeValues, SynthExample::envelopeCount> envelopeValues;
+    std::array<SynthLFOValues, SynthExample::lfoCount> lfoValues;
+    std::vector<float> modulatedValues;
+    std::array<std::array<std::vector<float>, 2>, SynthOperatorNetwork::numBuses> buses;
+    std::vector<float> gains;
+    std::vector<float> scratch;
+
+    std::array<DelayedControls, delayedChunks> delayedControls;
+    int delayedWrite = 0;
+    int delayChunks = 1;
+    int gateOnCountdown = -1;
+    int gateOffCountdown = -1;
+    int samplesSinceSpectra = 0;
+    int appliedCurveGeneration = -1;
 
     yup::SmoothedValue<double> pitch;
     yup::SmoothedValue<double> bend;
     yup::AudioBuffer<float> tailBuffer;
     yup::AudioBuffer<float> tailScratch;
+    yup::Random random;
     double playbackRate = 44100.0;
     double glideSeconds = 0.0;
     int tailLength = 0;
     int tailPosition = 0;
     bool preserveNote = false;
     bool hasPlayed = false;
-    float velocityGain = 1.0f;
+    double currentNote = 60.0;
+    float noteVelocity = 1.0f;
+    float noteRandom = 0.0f;
 };

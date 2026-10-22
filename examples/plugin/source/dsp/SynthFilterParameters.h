@@ -25,25 +25,30 @@
 #include "SynthTypes.h"
 
 //==============================================================================
-/** A plain snapshot of the filter section's controls. */
+/** A plain snapshot of one voice filter's controls. */
 struct SynthFilterValues
 {
-    SynthFilterType type = SynthFilterType::lowpass;
+    SynthFilterType type = SynthFilterType::lowpass12;
     float cutoff = 8000.0f;
     float resonance = 0.2f;
     float drive = 0.0f;
     float keytrack = 0.0f;
+    float mix = 1.0f;
 
     bool operator== (const SynthFilterValues&) const = default;
 };
 
 //==============================================================================
-/** The parameters of the per-voice filter, IDs prefixed "filter.". */
+/** The parameters of one voice filter, IDs prefixed "flt1." or "flt2.". */
 class SynthFilterParameters
 {
 public:
-    /** Creates the parameters with the SynthFilterValues defaults. */
-    SynthFilterParameters();
+    /** Creates the parameters of one filter.
+
+        @param filterIndex  The zero based filter, which picks the ID prefix and host IDs
+        @param defaults     The values the parameters start from and reset to
+    */
+    SynthFilterParameters (int filterIndex, const SynthFilterValues& defaults);
 
     /** Registers every parameter with the processor. */
     void addTo (yup::AudioProcessor& processor) const;
@@ -56,4 +61,5 @@ public:
     yup::AudioParameter::Ptr resonance;
     yup::AudioParameter::Ptr drive;
     yup::AudioParameter::Ptr keytrack;
+    yup::AudioParameter::Ptr mix;
 };

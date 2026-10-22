@@ -22,36 +22,54 @@
 #include "HarmonicSynthEngine.h"
 
 HarmonicSynthEngine::HarmonicSynthEngine (const SynthParameters& synthParameters,
-                                          const std::array<SynthPartials, SynthExample::oscillatorCount>& oscillatorPartials)
+                                          const std::array<SynthPartials, SynthExample::oscillatorCount>& oscillatorPartials,
+                                          const SynthRoutes& synthRoutes,
+                                          const SynthCurveState& synthCurves)
     : parameters (synthParameters)
     , partials (oscillatorPartials)
+    , routes (synthRoutes)
+    , curves (synthCurves)
 {
     addSound (new SynthSound());
 
     for (int index = 0; index < SynthExample::voiceCount; ++index)
     {
-        auto voice = yup::ReferenceCountedObjectPtr<SynthVoice> (new SynthVoice (partials, resources, oscillatorSlots, context));
+        auto voice = yup::ReferenceCountedObjectPtr<SynthVoice> (new SynthVoice (parameters, partials, resources, oscillatorSlots, context));
 
         addVoice (voice);
         ownedVoices.add (voice);
     }
 }
 
-void HarmonicSynthEngine::prepare (double sampleRate, int maxBlockSize)
+void HarmonicSynthEngine::prepare (double sampleRate, int maxBlockSize, SynthQuality quality, yup::Span<const yup::AudioParameter::Ptr> processorParameters)
 {
     allNotesOff (0, false);
     setCurrentPlaybackSampleRate (sampleRate);
     activeVoices.store (0);
 
     for (int index = 0; index < ownedVoices.size(); ++index)
-        ownedVoices[index]->prepare (sampleRate, maxBlockSize);
+        ownedVoices[index]->prepare (sampleRate, maxBlockSize, quality, processorParameters);
+
+    latency = ownedVoices.isEmpty() ? 0 : ownedVoices[0]->getLatencyInSamples();
+
+    spectralOwner.assign (processorParameters.size(), -1);
+
+    for (std::size_t oscillator = 0; oscillator < parameters.oscillators.size(); ++oscillator)
+        for (const auto& parameter : parameters.oscillators[oscillator].getSpectralParameters())
+            if (yup::isPositiveAndBelow (parameter->getIndexInContainer(), static_cast<int> (spectralOwner.size())))
+                spectralOwner[static_cast<std::size_t> (parameter->getIndexInContainer())] = static_cast<int> (oscillator);
+
+    // Whatever the curves are, the first block copies them.
+    context.curveGeneration = -1;
+    curves.copyIfChanged (context.envelopeCurves, context.lfoCurves, context.curveGeneration);
 }
 
 void HarmonicSynthEngine::renderRange (yup::AudioBuffer<float>& output,
                                        const yup::MidiBuffer& midi,
                                        int startSample,
                                        int numSamples,
-                                       yup::Span<const float> parameterValues)
+                                       yup::Span<const float> parameterValues,
+                                       double bpm)
 {
     const auto requestedMode = static_cast<SynthPlayMode> (yup::jlimit (0, 2, yup::roundToInt (parameterValues[static_cast<std::size_t> (parameters.playMode->getIndexInContainer())])));
     const auto release = releaseRequested.exchange (false);
@@ -61,7 +79,8 @@ void HarmonicSynthEngine::renderRange (yup::AudioBuffer<float>& output,
         mode = requestedMode;
     }
 
-    updateContext (parameterValues);
+    updateContext (parameterValues, bpm);
+    samplesSinceSpectra += numSamples;
 
     // yup::Synthesiser::renderNextBlock() handles every event left in the buffer once it
     // reaches the end of its range, so the range is walked here instead.
@@ -89,21 +108,27 @@ void HarmonicSynthEngine::renderRange (yup::AudioBuffer<float>& output,
     publishVoiceState();
 }
 
-void HarmonicSynthEngine::updateContext (yup::Span<const float> parameterValues) noexcept
+void HarmonicSynthEngine::updateContext (yup::Span<const float> parameterValues, double bpm) noexcept
 {
     const SynthParameterReader reader { parameterValues };
 
-    portamentoSeconds = static_cast<double> (reader (parameters.glide)) * 0.001;
+    context.played = parameterValues;
+    context.bpm = bpm;
+
+    context.network.globals = parameters.readGlobals (reader);
+    portamentoSeconds = static_cast<double> (context.network.globals.glideSeconds);
 
     for (std::size_t slot = 0; slot < oscillatorSlots.size(); ++slot)
     {
-        auto& values = context.patch.oscillators[slot];
+        auto& values = context.network.oscillators[slot];
         values = parameters.oscillators[slot].read (reader);
         partials[slot].fillValues (values);
     }
 
-    context.patch.filter = parameters.filter.read (reader);
-    context.modulation = parameters.modulation.read (reader);
+    context.network.fm = parameters.fm.read (reader);
+
+    for (std::size_t index = 0; index < context.filters.size(); ++index)
+        context.filters[index] = parameters.filters[index].read (reader);
 
     for (std::size_t index = 0; index < context.envelopes.size(); ++index)
         context.envelopes[index] = parameters.envelopes[index].read (reader);
@@ -111,10 +136,50 @@ void HarmonicSynthEngine::updateContext (yup::Span<const float> parameterValues)
     for (std::size_t index = 0; index < context.lfos.size(); ++index)
         context.lfos[index] = parameters.lfos[index].read (reader);
 
+    updateRoutes (reader);
+
+    curves.copyIfChanged (context.envelopeCurves, context.lfoCurves, context.curveGeneration);
+
     // Every voice of a slot plays the same spectrum unless a modulation is routed
-    // into it, so it is derived once here rather than once per voice.
-    for (std::size_t slot = 0; slot < oscillatorSlots.size(); ++slot)
-        oscillatorSlots[slot].update (context.patch.oscillators[slot], partials[slot], resources);
+    // into it, so it is derived once here rather than once per voice, and no more
+    // often than the spectral interval, since each derivation costs inverse FFTs.
+    if (samplesSinceSpectra >= SynthExample::spectralChunk)
+    {
+        samplesSinceSpectra = 0;
+
+        for (std::size_t slot = 0; slot < oscillatorSlots.size(); ++slot)
+            oscillatorSlots[slot].update (context.network.oscillators[slot], partials[slot], resources);
+    }
+}
+
+void HarmonicSynthEngine::updateRoutes (const SynthParameterReader& reader) noexcept
+{
+    context.numRoutes = 0;
+    context.spectralRouted.fill (false);
+    context.envelopeRouted.fill (false);
+    context.lfoRouted.fill (false);
+
+    for (int slot = 0; slot < SynthExample::modulationSlots; ++slot)
+    {
+        const auto route = routes.getRoute (slot);
+        const auto depth = reader (parameters.modulation.depths[static_cast<std::size_t> (slot)]);
+
+        if (! route.isActive() || depth == 0.0f || ! yup::isPositiveAndBelow (route.destination, static_cast<int> (spectralOwner.size())))
+            continue;
+
+        const auto index = static_cast<std::size_t> (context.numRoutes++);
+        context.routes[index] = route;
+        context.depths[index] = depth;
+
+        if (const auto owner = spectralOwner[static_cast<std::size_t> (route.destination)]; owner >= 0)
+            context.spectralRouted[static_cast<std::size_t> (owner)] = true;
+
+        if (const auto envelope = getSourceEnvelope (route.source); envelope >= 0)
+            context.envelopeRouted[static_cast<std::size_t> (envelope)] = true;
+
+        if (const auto lfo = getSourceLFO (route.source); lfo >= 0)
+            context.lfoRouted[static_cast<std::size_t> (lfo)] = true;
+    }
 }
 
 void HarmonicSynthEngine::publishVoiceState() noexcept
@@ -176,6 +241,12 @@ void HarmonicSynthEngine::allNotesOff (int channel, bool tailOff)
     yup::Synthesiser::allNotesOff (channel, tailOff);
     if (mode != SynthPlayMode::poly)
         selectMonoNote (tailOff);
+}
+
+void HarmonicSynthEngine::handleChannelPressure (int channel, int channelPressureValue)
+{
+    context.aftertouch = static_cast<float> (channelPressureValue) / 127.0f;
+    yup::Synthesiser::handleChannelPressure (channel, channelPressureValue);
 }
 
 void HarmonicSynthEngine::handleController (int channel, int controller, int value)

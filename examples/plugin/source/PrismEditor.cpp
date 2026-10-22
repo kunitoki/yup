@@ -145,48 +145,64 @@ PrismEditor::PrismEditor (PrismProcessor& processorToEdit)
                                                         processor.getResources(),
                                                         waveformShader,
                                                         controlFont);
-        mainPage.addAndMakeVisible (*panel);
     }
 
-    filterPanel = std::make_unique<SynthFilterPanel> (parameters.filter, controlFont);
-    mainPage.addAndMakeVisible (*filterPanel);
+    for (int index = 0; index < SynthExample::filterCount; ++index)
+    {
+        filterPanels[static_cast<std::size_t> (index)] = std::make_unique<SynthFilterPanel> (yup::String ("FILTER ") + yup::String (index + 1),
+                                                                                             parameters.filters[static_cast<std::size_t> (index)],
+                                                                                             controlFont);
+    }
 
     for (int index = 0; index < SynthExample::envelopeCount; ++index)
     {
-        auto& panel = envelopePanels[static_cast<std::size_t> (index)];
-        panel = std::make_unique<SynthEnvelopePanel> (yup::String ("ENV ") + yup::String (index + 1),
-                                                      parameters.envelopes[static_cast<std::size_t> (index)],
-                                                      controlFont);
-        mainPage.addAndMakeVisible (*panel);
+        envelopePanels[static_cast<std::size_t> (index)] = std::make_unique<SynthEnvelopePanel> (yup::String ("ENV ") + yup::String (index + 1) + (index == 0 ? " / AMP" : ""),
+                                                                                                 parameters.envelopes[static_cast<std::size_t> (index)],
+                                                                                                 processor.getCurves(),
+                                                                                                 index,
+                                                                                                 controlFont);
     }
 
     for (int index = 0; index < SynthExample::lfoCount; ++index)
     {
-        auto& panel = lfoPanels[static_cast<std::size_t> (index)];
-        panel = std::make_unique<SynthLFOPanel> (yup::String ("LFO ") + yup::String (index + 1),
-                                                 parameters.lfos[static_cast<std::size_t> (index)],
-                                                 controlFont);
-        mainPage.addAndMakeVisible (*panel);
+        lfoPanels[static_cast<std::size_t> (index)] = std::make_unique<SynthLFOPanel> (yup::String ("LFO ") + yup::String (index + 1),
+                                                                                       parameters.lfos[static_cast<std::size_t> (index)],
+                                                                                       processor.getCurves(),
+                                                                                       index,
+                                                                                       controlFont);
     }
 
-    modulationPage = std::make_unique<SynthModulationPage> (parameters.modulation, controlFont);
-    addChildComponent (*modulationPage);
+    const auto panelsOf = [] (auto& array)
+    {
+        std::vector<yup::Component*> result;
+
+        for (auto& panel : array)
+            result.push_back (panel.get());
+
+        return result;
+    };
+
+    const auto numbered = [] (const yup::String& prefix, int count)
+    {
+        yup::StringArray names;
+
+        for (int index = 1; index <= count; ++index)
+            names.add (prefix + yup::String (index));
+
+        return names;
+    };
+
+    setupTabs (oscillatorTabs, numbered ("OSC ", SynthExample::oscillatorCount), panelsOf (oscillatorPanels));
+    setupTabs (filterTabs, numbered ("F", SynthExample::filterCount), panelsOf (filterPanels));
+    setupTabs (envelopeTabs, numbered ("ENV ", SynthExample::envelopeCount), panelsOf (envelopePanels));
+    setupTabs (lfoTabs, numbered ("LFO ", SynthExample::lfoCount), panelsOf (lfoPanels));
+
+    fmPanel = std::make_unique<SynthFMPanel> (parameters.fm, controlFont);
+    modulationPage = std::make_unique<SynthModulationPage> (parameters, processor.getRoutes(), processor.getParameters(), controlFont);
+    setupTabs (matrixTabs, { "FM", "MODS" }, { fmPanel.get(), modulationPage.get() });
 
     mainPage.onMouseDown = [this] { keyboardComponent.takeKeyboardFocus(); };
     addAndMakeVisible (mainPage);
-
-    for (auto* button : { &mainPageButton, &modulationPageButton })
-    {
-        SynthTheme::styleToggle (*button);
-        button->setColor (yup::ToggleButton::Style::backgroundColorId, SynthTheme::panelBackground());
-        addAndMakeVisible (*button);
-    }
-
-    mainPageButton.setButtonText ("MAIN");
-    modulationPageButton.setButtonText ("MOD");
-    mainPageButton.onClick = [this] { showModulationPage (false); };
-    modulationPageButton.onClick = [this] { showModulationPage (true); };
-    showModulationPage (false);
 
     SynthTheme::styleButton (randomizeButton, SynthTheme::panelBackground());
     randomizeButton.onClick = [this]
@@ -213,10 +229,22 @@ PrismEditor::PrismEditor (PrismProcessor& processorToEdit)
     glideKnob = std::make_unique<ParameterKnob> ("GLIDE", parameters.glide, controlFont);
     mainPage.addAndMakeVisible (*glideKnob);
 
+    qualityChoice = std::make_unique<ParameterChoice> ("QUALITY", parameters.quality, controlFont);
+    mainPage.addAndMakeVisible (*qualityChoice);
+
+    routingChoice = std::make_unique<ParameterChoice> ("FILTERS", parameters.filterRouting, controlFont);
+    mainPage.addAndMakeVisible (*routingChoice);
+
+    unisonKnob = std::make_unique<ParameterKnob> ("UNISON", parameters.unisonVoices, controlFont);
+    unisonDetuneKnob = std::make_unique<ParameterKnob> ("DETUNE", parameters.unisonDetune, controlFont);
+    unisonSpreadKnob = std::make_unique<ParameterKnob> ("SPREAD", parameters.unisonSpread, controlFont);
+
+    for (auto* knob : { unisonKnob.get(), unisonDetuneKnob.get(), unisonSpreadKnob.get() })
+        mainPage.addAndMakeVisible (*knob);
+
     presetBar = std::make_unique<SynthPresetBar> (processor);
     mainPage.addAndMakeVisible (*presetBar);
 
-    mainPage.addAndMakeVisible (oscilloscope);
 
     keepFocusOnKeyboard (*this, keyboardComponent);
     syncFromProcessor();
@@ -244,10 +272,6 @@ void PrismEditor::resized()
     randomizeButton.setBounds (header.removeFromRight (actionButtonWidth).reduced (0.0f, buttonInset));
     header.removeFromRight (spacing * 2.0f);
     voiceLabel.setBounds (header.removeFromRight (110.0f));
-    header.removeFromRight (spacing);
-    modulationPageButton.setBounds (header.removeFromRight (pageButtonWidth).reduced (0.0f, buttonInset));
-    header.removeFromRight (spacing);
-    mainPageButton.setBounds (header.removeFromRight (pageButtonWidth).reduced (0.0f, buttonInset));
 
     const auto logoHeight = header.getHeight() - 8.0f;
     logoArea = header.removeFromLeft (logoHeight * logoAspect).withSizeKeepingCenter (logoHeight * logoAspect, logoHeight);
@@ -260,12 +284,11 @@ void PrismEditor::resized()
     bounds.removeFromTop (spacing);
 
     mainPage.setBounds (bounds);
-    modulationPage->setBounds (bounds);
 
     layoutMainPage();
 }
 
-/** Lays the main page out from the bottom up: keyboard, performance row, LFOs, shaping, oscillators. */
+/** Lays the main page out from the bottom up: keyboard, performance row, shaping, operators. */
 void PrismEditor::layoutMainPage()
 {
     auto bounds = mainPage.getLocalBounds();
@@ -279,49 +302,81 @@ void PrismEditor::layoutMainPage()
     bounds.removeFromBottom (spacing);
 
     auto performance = bounds.removeFromBottom (58.0f);
-    modeChoice->setBounds (performance.removeFromLeft (190.0f).reduced (4.0f, 9.0f));
-    glideKnob->setBounds (performance.removeFromLeft (78.0f));
+    modeChoice->setBounds (performance.removeFromLeft (170.0f).reduced (4.0f, 9.0f));
+    glideKnob->setBounds (performance.removeFromLeft (64.0f));
+    qualityChoice->setBounds (performance.removeFromLeft (80.0f).reduced (4.0f, 9.0f));
+    routingChoice->setBounds (performance.removeFromLeft (100.0f).reduced (4.0f, 9.0f));
+
+    for (auto* knob : { unisonKnob.get(), unisonDetuneKnob.get(), unisonSpreadKnob.get() })
+        knob->setBounds (performance.removeFromLeft (64.0f));
+
     performance.removeFromLeft (spacing);
-    presetBar->setBounds (performance.removeFromLeft (400.0f).reduced (4.0f, 15.0f));
+    presetBar->setBounds (performance.removeFromLeft (360.0f).reduced (4.0f, 15.0f));
     performance.removeFromLeft (spacing);
     loadLabel.setBounds (performance);
     bounds.removeFromBottom (spacing);
 
-    // The oscillator panels take whatever the fixed-height rows below leave, and
-    // their waveform editors need most of it. The LFO and shaping rows share columns.
     const auto columnWidth = (bounds.getWidth() - spacing * 2.0f) / 3.0f;
 
-    auto lfoRow = bounds.removeFromBottom (lfoRowHeight);
-    lfoPanels[0]->setBounds (lfoRow.removeFromLeft (columnWidth));
-    lfoRow.removeFromLeft (spacing);
-    lfoPanels[1]->setBounds (lfoRow.removeFromLeft (columnWidth));
-    lfoRow.removeFromLeft (spacing);
-    oscilloscope.setBounds (lfoRow);
+    auto shapingRow = bounds.removeFromBottom (shapingRowHeight + tabHeight);
+    layoutTabbedSection (filterTabs, shapingRow.removeFromLeft (columnWidth));
+    shapingRow.removeFromLeft (spacing);
+    layoutTabbedSection (envelopeTabs, shapingRow.removeFromLeft (columnWidth));
+    shapingRow.removeFromLeft (spacing);
+    layoutTabbedSection (lfoTabs, shapingRow);
     bounds.removeFromBottom (spacing);
 
-    auto shapingRow = bounds.removeFromBottom (yup::jmin (shapingRowHeight, bounds.getHeight() * 0.3f));
-    filterPanel->setBounds (shapingRow.removeFromLeft (columnWidth));
-    shapingRow.removeFromLeft (spacing);
-    envelopePanels[0]->setBounds (shapingRow.removeFromLeft (columnWidth));
-    shapingRow.removeFromLeft (spacing);
-    envelopePanels[1]->setBounds (shapingRow);
-    bounds.removeFromBottom (spacing);
+    // The FM and modulation tabs share the oscillators' tab row, so the panels line up.
+    layoutTabbedSection (matrixTabs, bounds.removeFromRight (columnWidth));
+    bounds.removeFromRight (spacing);
+    layoutTabbedSection (oscillatorTabs, bounds);
+}
 
-    const auto panelWidth = (bounds.getWidth() - spacing) / static_cast<float> (SynthExample::oscillatorCount);
-    for (auto& panel : oscillatorPanels)
+void PrismEditor::setupTabs (TabGroup& group, const yup::StringArray& names, std::vector<yup::Component*> panels)
+{
+    group.panels = std::move (panels);
+
+    for (int index = 0; index < static_cast<int> (group.panels.size()); ++index)
     {
-        panel->setBounds (bounds.removeFromLeft (panelWidth));
-        bounds.removeFromLeft (spacing);
+        auto button = std::make_unique<yup::ToggleButton>();
+        button->setButtonText (names[index]);
+        SynthTheme::styleToggle (*button);
+        button->onClick = [this, &group, index] { selectTab (group, index); };
+        mainPage.addAndMakeVisible (*button);
+        group.buttons.push_back (std::move (button));
+
+        mainPage.addChildComponent (*group.panels[static_cast<std::size_t> (index)]);
+    }
+
+    selectTab (group, 0);
+}
+
+void PrismEditor::selectTab (TabGroup& group, int index)
+{
+    group.selected = index;
+
+    for (std::size_t tab = 0; tab < group.panels.size(); ++tab)
+    {
+        const auto shown = static_cast<int> (tab) == index;
+        group.buttons[tab]->setToggleState (shown, yup::dontSendNotification);
+        group.panels[tab]->setVisible (shown);
     }
 }
 
-/** Switches between the main page and the modulation matrix. */
-void PrismEditor::showModulationPage (bool show)
+void PrismEditor::layoutTabbedSection (TabGroup& group, yup::Rectangle<float> area)
 {
-    mainPageButton.setToggleState (! show, yup::dontSendNotification);
-    modulationPageButton.setToggleState (show, yup::dontSendNotification);
-    mainPage.setVisible (! show);
-    modulationPage->setVisible (show);
+    auto tabs = area.removeFromTop (tabHeight);
+    const auto tabWidth = yup::jmin (72.0f, tabs.getWidth() / static_cast<float> (group.buttons.size()));
+
+    for (auto& button : group.buttons)
+    {
+        button->setBounds (tabs.removeFromLeft (tabWidth).reduced (2.0f, 0.0f));
+    }
+
+    area.removeFromTop (2.0f);
+
+    for (auto* panel : group.panels)
+        panel->setBounds (area);
 }
 
 void PrismEditor::paint (yup::Graphics& g)
@@ -342,8 +397,6 @@ void PrismEditor::timerCallback()
 {
     syncFromProcessor();
 
-    if (processor.readScope (oscilloscope.getRenderData()) && oscilloscope.isVisible())
-        oscilloscope.repaint();
 
     for (int index = 0; index < SynthExample::lfoCount; ++index)
         lfoPanels[static_cast<std::size_t> (index)]->setPhase (processor.getLFOPhase (index));
@@ -361,7 +414,8 @@ void PrismEditor::syncFromProcessor()
     for (auto& panel : oscillatorPanels)
         panel->syncFromParameters();
 
-    filterPanel->syncFromParameters();
+    for (auto& panel : filterPanels)
+        panel->syncFromParameters();
 
     for (auto& panel : envelopePanels)
         panel->syncFromParameters();
@@ -369,11 +423,17 @@ void PrismEditor::syncFromProcessor()
     for (auto& panel : lfoPanels)
         panel->syncFromParameters();
 
+    fmPanel->syncFromParameters();
     modulationPage->syncFromParameters();
 
     volumeKnob->syncFromParameter();
     modeChoice->syncFromParameter();
     glideKnob->syncFromParameter();
+    qualityChoice->syncFromParameter();
+    routingChoice->syncFromParameter();
+
+    for (auto* knob : { unisonKnob.get(), unisonDetuneKnob.get(), unisonSpreadKnob.get() })
+        knob->syncFromParameter();
     glideKnob->setEnabled (yup::roundToInt (processor.getSynthParameters().playMode->getValue()) != static_cast<int> (SynthPlayMode::poly));
 
     presetBar->syncFromProcessor();

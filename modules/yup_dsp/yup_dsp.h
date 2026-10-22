@@ -141,11 +141,16 @@
 #include "frequency/yup_FFTProcessor.h"
 #include "frequency/yup_SpectrumAnalyzerState.h"
 
+// Envelopes (before the LFO, which plays a BreakpointCurve)
+#include "envelopes/yup_BreakpointCurve.h"
+#include "envelopes/yup_CurveEnvelope.h"
+
 // Oscillators (need FFTProcessor for the wavetable renderer)
 #include "oscillators/yup_FourierSeries.h"
 #include "oscillators/yup_SyncSpectralResampler.h"
 #include "oscillators/yup_AdditiveOscillator.h"
 #include "oscillators/yup_WavetableOscillator.h"
+#include "oscillators/yup_PhaseModulationMatrix.h"
 #include "oscillators/yup_SyncOscillator.h"
 #include "oscillators/yup_WaveformBank.h"
 #include "oscillators/yup_PrismSpectrum.h"

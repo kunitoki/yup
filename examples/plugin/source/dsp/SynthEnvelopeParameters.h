@@ -24,21 +24,24 @@
 #include "SynthParameterFactory.h"
 
 //==============================================================================
-/** A plain snapshot of one envelope's controls, in seconds apart from the sustain level. */
+/** The host automatable macros of one envelope. Its shape is a curve in the patch state. */
 struct SynthEnvelopeValues
 {
-    float delay = 0.0f;
-    float attack = 0.005f;
-    float hold = 0.0f;
-    float decay = 0.35f;
-    float sustain = 0.7f;
-    float release = 0.35f;
+    float timeScale = 1.0f; /**< Multiplies every segment duration. */
+    float velocity = 0.0f;  /**< How much the note velocity scales the output, 0 to 1. */
+    float depth = 1.0f;     /**< Output scale as a modulation source. */
 
     bool operator== (const SynthEnvelopeValues&) const = default;
+
+    /** Returns the output scale for a note velocity. */
+    float getVelocityGain (float noteVelocity) const noexcept
+    {
+        return 1.0f - velocity + velocity * noteVelocity;
+    }
 };
 
 //==============================================================================
-/** The parameters of one envelope, IDs prefixed "env1." or "env2.". */
+/** The macros of one envelope, IDs prefixed "env1." to "env4.". */
 class SynthEnvelopeParameters
 {
 public:
@@ -55,10 +58,7 @@ public:
     /** Takes a snapshot. */
     SynthEnvelopeValues read (SynthParameterReader reader = {}) const noexcept;
 
-    yup::AudioParameter::Ptr delay;
-    yup::AudioParameter::Ptr attack;
-    yup::AudioParameter::Ptr hold;
-    yup::AudioParameter::Ptr decay;
-    yup::AudioParameter::Ptr sustain;
-    yup::AudioParameter::Ptr release;
+    yup::AudioParameter::Ptr timeScale;
+    yup::AudioParameter::Ptr velocity;
+    yup::AudioParameter::Ptr depth;
 };

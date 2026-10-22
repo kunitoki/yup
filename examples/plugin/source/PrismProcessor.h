@@ -32,11 +32,16 @@
 #include <vector>
 
 //==============================================================================
-/** PRISM, a two oscillator spectral synthesiser, as an audio plugin.
+/** PRISM, a four operator spectral FM synthesiser, as an audio plugin.
 
     Every control is an AudioParameter with a stable host ID; the drawn partials of
-    each oscillator are state saved alongside them. Session state, factory presets and
-    user preset files share one DataTree format and one apply path, SynthPatch.
+    each oscillator, the envelope and LFO curves and the modulation routes are state
+    saved alongside them. Session state, factory presets and user preset files share
+    one DataTree format and one apply path, SynthPatch.
+
+    The operator network runs oversampled, which delays the output by a constant that
+    depends on the quality setting and is reported to the host. Changing the quality
+    re-prepares the engine with processing suspended and reports the new latency.
 
     Host modulation (CLAP parameter modulation) never reaches the parameters'
     own values, so the processor keeps a table of the values it actually plays. The
@@ -45,7 +50,9 @@
 
     @see PrismEditor, SynthParameters, SynthPatch, HarmonicSynthEngine
 */
-class PrismProcessor : public yup::AudioProcessor
+class PrismProcessor
+    : public yup::AudioProcessor
+    , private yup::AudioParameter::Listener
 {
 public:
     PrismProcessor();
@@ -81,6 +88,12 @@ public:
 
     /** Returns the drawn partials of one oscillator, which the waveform editor edits. */
     SynthPartials& getPartials (int oscillatorIndex) noexcept { return partials[static_cast<std::size_t> (oscillatorIndex)]; }
+
+    /** Returns the envelope and LFO curves. */
+    SynthCurveState& getCurves() noexcept { return curves; }
+
+    /** Returns the modulation routes. */
+    SynthRoutes& getRoutes() noexcept { return routes; }
 
     /** Returns the waveform presets the oscillators play. */
     const SynthOscillatorResources& getResources() const noexcept { return engine.getResources(); }
@@ -121,19 +134,29 @@ public:
     /** Returns how many blocks took longer than their duration. */
     int getXRunCount() const { return loadMeasurer.getXRunCount(); }
 
-    /** Copies the latest rendered block for the oscilloscope. Returns false when there is none new. */
-    bool readScope (std::vector<float>& destination);
 
 private:
     //==============================================================================
     yup::Result applyState (const yup::DataTree& state, ChangeDetails details);
+    SynthPatch::State getPatchState() noexcept { return { partials, curves, routes }; }
+    void prepareEngine (SynthQuality quality);
+
+    void parameterValueChanged (const yup::AudioParameter::Ptr& parameter, int indexInContainer) override;
+    void parameterGestureBegin (const yup::AudioParameter::Ptr&, int) override {}
+    void parameterGestureEnd (const yup::AudioParameter::Ptr&, int) override {}
     void followParameters (const yup::ParameterChangeBuffer& changes) noexcept;
     void applyParameterChange (const yup::ParameterChange& change) noexcept;
 
     //==============================================================================
     SynthParameters synthParameters;
     SynthPatch::Partials partials;
+    SynthCurveState curves;
+    SynthRoutes routes;
     HarmonicSynthEngine engine;
+    std::array<yup::SoftClipper<float>, 2> masterClippers;
+    SynthQuality preparedQuality = SynthQuality::x4;
+    double preparedSampleRate = 0.0;
+    int preparedBlockSize = 0;
 
     std::vector<float> playedValues;     // what the engine plays, host modulation included
     std::vector<float> parameterValues;  // the parameter values playedValues last followed
@@ -145,9 +168,6 @@ private:
     MidiMessageFifo editorMidi { 1024 };
 
     yup::AudioProcessLoadMeasurer loadMeasurer;
-    std::array<float, SynthExample::maxBlockSize> scopeSamples {};
-    std::atomic<bool> scopeReady { false };
-    int scopeCount = 0;
 
     std::vector<yup::String> presetNames;
     std::atomic<int> currentPreset { 0 };

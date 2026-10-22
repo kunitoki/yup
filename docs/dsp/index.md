@@ -48,8 +48,12 @@ available in the build.
 - [Oscillators](oscillators.md) - `FourierSeries`, the alias-free
   `SyncSpectralResampler`, the `AdditiveOscillator` / `WavetableOscillator`
   synthesis backends, the `SyncOscillator` facade, shared `WaveformBank` frames,
-  `ModulatedOscillator` for morphing, FM, PM and sync, and
-  `PrismSpectrum` for modulatable ridge, dispersion and exact-PWM shaping.
+  `ModulatedOscillator` for morphing, FM, PM and sync,
+  `PrismSpectrum` for modulatable ridge, dispersion and exact-PWM shaping,
+  `PhaseModulationMatrix` for multi-operator phase modulation, and the `LFO`.
+- [Envelopes](envelopes.md) - `BreakpointCurve`, a fixed capacity multistage
+  curve with shaped segments, sustain and loop markers, and `CurveEnvelope`,
+  which plays it per sample.
 - [YDSP language reference](yup-dsp-language.md) - the `yup_dsp_jit` module's
   JIT-compiled DSP language: syntax, intrinsics, the graph algebra, the
   realtime contract, and the public C++ API.
@@ -113,6 +117,7 @@ convolution-and-delay
 resampling
 time-stretching
 oscillators
+envelopes
 yup-dsp-language
 ydsp-bundle-format
 ```

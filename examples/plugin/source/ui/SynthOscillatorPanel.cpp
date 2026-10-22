@@ -33,9 +33,17 @@ SynthOscillatorPanel::SynthOscillatorPanel (const yup::String& panelTitle,
     , editor (parametersToEdit, partialsToEdit, resources, std::move (waveformShader))
     , waveformChoice ("WAVEFORM", parametersToEdit.waveform, font)
     , syncModeChoice ("SYNC", parametersToEdit.syncMode, font)
+    , frequencyModeChoice ("FREQUENCY", parametersToEdit.frequencyMode, font)
+    , freeRunningButton ("FREE", parametersToEdit.freeRunning)
     , levelKnob ("LEVEL", parametersToEdit.level, font)
-    , octaveKnob ("OCTAVE", parametersToEdit.octave, font)
-    , detuneKnob ("CENTS", parametersToEdit.detune, font)
+    , ratioKnob ("RATIO", parametersToEdit.ratio, font)
+    , fineKnob ("FINE", parametersToEdit.fine, font)
+    , fixedKnob ("FIXED", parametersToEdit.fixedHz, font)
+    , panKnob ("PAN", parametersToEdit.pan, font)
+    , phaseKnob ("PHASE", parametersToEdit.phase, font)
+    , toFilter1Knob ("TO F1", parametersToEdit.toFilter1, font)
+    , toFilter2Knob ("TO F2", parametersToEdit.toFilter2, font)
+    , directKnob ("DIRECT", parametersToEdit.direct, font)
     , ridgesKnob ("RIDGES", parametersToEdit.ridgeSpacing, font)
     , colorKnob ("COLOR", parametersToEdit.color, font)
     , dispersionKnob ("DISPERSION", parametersToEdit.dispersion, font)
@@ -47,9 +55,6 @@ SynthOscillatorPanel::SynthOscillatorPanel (const yup::String& panelTitle,
     , formantPositionKnob ("F.POS", parametersToEdit.formantPosition, font)
     , scatterKnob ("SCATTER", parametersToEdit.scatter, font)
     , syncRatioKnob ("SYNC RATIO", parametersToEdit.syncRatio, font)
-    , unisonKnob ("UNISON", parametersToEdit.unisonVoices, font)
-    , unisonDetuneKnob ("U.DETUNE", parametersToEdit.unisonDetune, font)
-    , spreadKnob ("SPREAD", parametersToEdit.unisonSpread, font)
 {
     setupPanelTitle (titleLabel, panelTitle, font);
     addAndMakeVisible (titleLabel);
@@ -71,8 +76,10 @@ SynthOscillatorPanel::SynthOscillatorPanel (const yup::String& panelTitle,
     // playing the edited shape while the combo box claims something else.
     waveformChoice.onChange = [this] { editor.revertToPreset(); };
 
-    for (auto* choice : { &waveformChoice, &syncModeChoice })
+    for (auto* choice : { &waveformChoice, &syncModeChoice, &frequencyModeChoice })
         addAndMakeVisible (*choice);
+
+    addAndMakeVisible (freeRunningButton);
 
     for (auto* knob : getKnobs())
         addAndMakeVisible (*knob);
@@ -80,12 +87,16 @@ SynthOscillatorPanel::SynthOscillatorPanel (const yup::String& panelTitle,
     shownValues = parameters.read();
     partials.fillValues (shownValues);
     syncRatioKnob.setEnabled (shownValues.syncMode != yup::SyncMode::none);
+    ratioKnob.setEnabled (shownValues.frequencyMode == SynthFrequencyMode::ratio);
+    fixedKnob.setEnabled (shownValues.frequencyMode == SynthFrequencyMode::fixed);
 }
 
 void SynthOscillatorPanel::syncFromParameters()
 {
     waveformChoice.syncFromParameter();
     syncModeChoice.syncFromParameter();
+    frequencyModeChoice.syncFromParameter();
+    freeRunningButton.syncFromParameter();
 
     for (auto* knob : getKnobs())
         knob->syncFromParameter();
@@ -102,8 +113,10 @@ void SynthOscillatorPanel::syncFromParameters()
     shownValues = values;
     editor.refresh();
 
-    // Greys out the ratio knob while no sync mode reads it.
+    // Greys out the knobs nothing reads in the current modes.
     syncRatioKnob.setEnabled (values.syncMode != yup::SyncMode::none);
+    ratioKnob.setEnabled (values.frequencyMode == SynthFrequencyMode::ratio);
+    fixedKnob.setEnabled (values.frequencyMode == SynthFrequencyMode::fixed);
 }
 
 void SynthOscillatorPanel::resized()
@@ -114,6 +127,8 @@ void SynthOscillatorPanel::resized()
     resetButton.setBounds (header.removeFromRight (buttonWidth));
     header.removeFromRight (spacing);
     partialsButton.setBounds (header.removeFromRight (buttonWidth));
+    header.removeFromRight (spacing);
+    freeRunningButton.setBounds (header.removeFromRight (buttonWidth));
     titleLabel.setBounds (header);
 
     bounds.removeFromTop (spacing);
@@ -126,20 +141,20 @@ void SynthOscillatorPanel::resized()
 
     editor.setBounds (bounds);
 
-    layoutControlsInRow (choiceArea, { &waveformChoice, &syncModeChoice });
+    layoutControlsInRow (choiceArea, { &waveformChoice, &syncModeChoice, &frequencyModeChoice });
 
     layoutControlsInRow (knobArea.removeFromTop (knobRowHeight),
-                         { &levelKnob, &octaveKnob, &detuneKnob, &ridgesKnob, &colorKnob, &dispersionKnob });
+                         { &levelKnob, &ratioKnob, &fineKnob, &fixedKnob, &panKnob, &phaseKnob, &toFilter1Knob, &toFilter2Knob, &directKnob });
 
     knobArea.removeFromTop (spacing);
 
     layoutControlsInRow (knobArea.removeFromTop (knobRowHeight),
-                         { &squeezeKnob, &squashKnob, &tiltKnob, &oddEvenKnob, &formantKnob, &formantPositionKnob });
+                         { &ridgesKnob, &colorKnob, &dispersionKnob, &squeezeKnob, &squashKnob, &tiltKnob });
 
     knobArea.removeFromTop (spacing);
 
     layoutControlsInRow (knobArea,
-                         { &scatterKnob, &syncRatioKnob, &unisonKnob, &unisonDetuneKnob, &spreadKnob });
+                         { &oddEvenKnob, &formantKnob, &formantPositionKnob, &scatterKnob, &syncRatioKnob });
 }
 
 void SynthOscillatorPanel::paint (yup::Graphics& g)
@@ -149,8 +164,7 @@ void SynthOscillatorPanel::paint (yup::Graphics& g)
 
 std::vector<ParameterKnob*> SynthOscillatorPanel::getKnobs()
 {
-    return { &levelKnob, &octaveKnob, &detuneKnob, &ridgesKnob, &colorKnob, &dispersionKnob,
-             &squeezeKnob, &squashKnob, &tiltKnob, &oddEvenKnob, &formantKnob,
-             &formantPositionKnob, &scatterKnob, &syncRatioKnob,
-             &unisonKnob, &unisonDetuneKnob, &spreadKnob };
+    return { &levelKnob, &ratioKnob, &fineKnob, &fixedKnob, &panKnob, &phaseKnob, &toFilter1Knob, &toFilter2Knob, &directKnob,
+             &ridgesKnob, &colorKnob, &dispersionKnob, &squeezeKnob, &squashKnob, &tiltKnob, &oddEvenKnob, &formantKnob,
+             &formantPositionKnob, &scatterKnob, &syncRatioKnob };
 }

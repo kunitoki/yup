@@ -23,6 +23,7 @@
 
 #include <yup_gui/yup_gui.h>
 
+#include "../dsp/SynthCurveState.h"
 #include "../dsp/SynthLFOParameters.h"
 
 //==============================================================================
@@ -33,6 +34,9 @@ public:
     /** Updates the drawn shape. Called from the message thread. */
     void setValues (const SynthLFOValues& newValues);
 
+    /** Updates the curve the custom shape draws. Called from the message thread. */
+    void setCurve (const SynthCurveState::Curve& newCurve);
+
     /** Moves the marker. Called every frame from the message thread. */
     void setPhase (float newPhase);
 
@@ -42,6 +46,7 @@ private:
     static constexpr int points = 128;
 
     SynthLFOValues values;
+    SynthCurveState::Curve curve;
     float phase = 0.0f;
     yup::Path path;
 };

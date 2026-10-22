@@ -20,33 +20,95 @@
 */
 
 #include "SynthModulationRow.h"
+#include "SynthTheme.h"
 
-SynthModulationRow::SynthModulationRow (const SynthModulationParameters::Slot& slotToEdit, const yup::Font& font)
-    : sourceChoice ({}, slotToEdit.source, font)
-    , destinationChoice ({}, slotToEdit.destination, font)
-    , depthKnob ("DEPTH", slotToEdit.depth, font)
+SynthModulationRow::SynthModulationRow (int slotToEdit,
+                                        SynthRoutes& routesToEdit,
+                                        const std::vector<SynthRouteDestination>& destinationsToOffer,
+                                        yup::AudioParameter::Ptr depthParameter,
+                                        const yup::Font& font)
+    : slot (slotToEdit)
+    , routes (routesToEdit)
+    , destinations (destinationsToOffer)
+    , depthKnob ({}, std::move (depthParameter), font)
 {
     setOpaque (false);
 
-    addAndMakeVisible (sourceChoice);
-    addAndMakeVisible (destinationChoice);
+    const auto sourceNames = getSynthModulationSourceNames();
+
+    for (int index = 0; index < sourceNames.size(); ++index)
+        sourceBox.addItem (sourceNames[index], index + 1);
+
+    for (std::size_t index = 0; index < destinations.size(); ++index)
+        destinationBox.addItem (destinations[index].name, static_cast<int> (index) + 1);
+
+    for (auto* box : { &sourceBox, &destinationBox })
+    {
+        box->setTextWhenNothingSelected ("-");
+        SynthTheme::styleComboBox (*box);
+        box->onSelectedItemChanged = [this] { writeRoute(); };
+        addAndMakeVisible (*box);
+    }
+
+    SynthTheme::styleButton (removeButton, SynthTheme::panelBackground());
+    removeButton.onClick = [this]
+    {
+        routes.clearRoute (slot);
+        syncFromRoutes();
+    };
+    addAndMakeVisible (removeButton);
+
     addAndMakeVisible (depthKnob);
+
+    syncFromRoutes();
 }
 
-void SynthModulationRow::syncFromParameters()
+void SynthModulationRow::syncFromRoutes()
 {
-    sourceChoice.syncFromParameter();
-    destinationChoice.syncFromParameter();
     depthKnob.syncFromParameter();
+
+    const auto route = routes.getRoute (slot);
+
+    if (! route.isActive())
+    {
+        // A half picked row keeps its source while the destination is being chosen.
+        if (destinationBox.getSelectedId() > 0)
+            destinationBox.setSelectedId (0, yup::dontSendNotification);
+
+        return;
+    }
+
+    auto destinationId = 0;
+
+    for (std::size_t index = 0; index < destinations.size(); ++index)
+        if (destinations[index].index == route.destination)
+            destinationId = static_cast<int> (index) + 1;
+
+    sourceBox.setSelectedId (static_cast<int> (route.source) + 1, yup::dontSendNotification);
+    destinationBox.setSelectedId (destinationId, yup::dontSendNotification);
+}
+
+void SynthModulationRow::writeRoute()
+{
+    const auto source = sourceBox.getSelectedId() - 1;
+    const auto destination = destinationBox.getSelectedId() - 1;
+
+    if (source < 0 || ! yup::isPositiveAndBelow (destination, static_cast<int> (destinations.size())))
+        return;
+
+    const auto& target = destinations[static_cast<std::size_t> (destination)];
+    routes.setRoute (slot, static_cast<SynthModulationSource> (source), target.id, target.index);
 }
 
 void SynthModulationRow::resized()
 {
     auto bounds = getLocalBounds();
 
+    removeButton.setBounds (bounds.removeFromRight (buttonWidth).withSizeKeepingCenter (buttonWidth, buttonWidth));
+    bounds.removeFromRight (spacing);
     depthKnob.setBounds (bounds.removeFromRight (knobWidth));
     bounds.removeFromRight (spacing);
-    sourceChoice.setBounds (bounds.removeFromLeft (bounds.getWidth() * 0.35f).reduced (0.0f, 4.0f));
+    sourceBox.setBounds (bounds.removeFromLeft (bounds.getWidth() * 0.35f).reduced (0.0f, 6.0f));
     bounds.removeFromLeft (spacing);
-    destinationChoice.setBounds (bounds.reduced (0.0f, 4.0f));
+    destinationBox.setBounds (bounds.reduced (0.0f, 6.0f));
 }

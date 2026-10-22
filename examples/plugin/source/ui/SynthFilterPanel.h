@@ -26,14 +26,14 @@
 #include "ParameterKnob.h"
 
 //==============================================================================
-/** Type, cutoff, resonance, drive and keytracking of the per-voice filter.
+/** Type, cutoff, resonance, drive, keytracking and mix of one voice filter.
 
     @see SynthFilterParameters
 */
 class SynthFilterPanel : public yup::Component
 {
 public:
-    SynthFilterPanel (const SynthFilterParameters& parametersToEdit, const yup::Font& font);
+    SynthFilterPanel (const yup::String& panelTitle, const SynthFilterParameters& parametersToEdit, const yup::Font& font);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
@@ -53,4 +53,5 @@ private:
     ParameterKnob resonanceKnob;
     ParameterKnob driveKnob;
     ParameterKnob keytrackKnob;
+    ParameterKnob mixKnob;
 };

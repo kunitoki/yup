@@ -24,6 +24,8 @@
 #include "SynthParameterFactory.h"
 #include "SynthTypes.h"
 
+#include <vector>
+
 //==============================================================================
 /** A plain snapshot of one oscillator's controls.
 
@@ -39,9 +41,20 @@ struct SynthOscillatorValues
     yup::Waveform waveform = yup::Waveform::sawtooth;
     yup::SyncMode syncMode = yup::SyncMode::none;
     float syncRatio = 1.5f;
-    float level = 0.5f;
-    int octave = 0;
-    float detuneSemitones = 0.0f;
+
+    SynthFrequencyMode frequencyMode = SynthFrequencyMode::ratio;
+    float ratio = 1.0f;
+    float fineCents = 0.0f;
+    float fixedHz = 440.0f;
+
+    float level = 0.0f;
+    float pan = 0.0f;
+    float phase = 0.0f;
+    bool freeRunning = false;
+    float toFilter1 = 1.0f;
+    float toFilter2 = 0.0f;
+    float direct = 0.0f;
+
     float ridgeSpacing = 1.5f;
     float color = 0.0f;
     float dispersion = 0.5f;
@@ -52,18 +65,33 @@ struct SynthOscillatorValues
     float formant = 0.0f;
     float formantPosition = 2.0f;
     float scatter = 0.0f;
-    int unisonVoices = 1;
-    float unisonDetune = 0.2f;
-    float unisonSpread = 0.6f;
+
     float harmonicScale = 1.0f;
     bool usesCustomSeries = false;
     int harmonicGeneration = 0;
 
     bool operator== (const SynthOscillatorValues&) const = default;
+
+    /** Returns the operator's frequency for a played note frequency. */
+    double getFrequency (double noteFrequency) const noexcept
+    {
+        const auto fine = std::exp2 (static_cast<double> (fineCents) / 1200.0);
+
+        if (frequencyMode == SynthFrequencyMode::fixed)
+            return static_cast<double> (fixedHz) * fine;
+
+        return noteFrequency * static_cast<double> (ratio) * fine;
+    }
+
+    /** Returns the total of the three output sends, so a silent operator can be skipped. */
+    float getTotalSend() const noexcept { return toFilter1 + toFilter2 + direct; }
 };
 
 //==============================================================================
-/** The parameters of one oscillator, IDs prefixed "osc1." or "osc2.".
+/** The parameters of one oscillator, IDs prefixed "osc1." to "osc4.".
+
+    Each oscillator is an operator of the phase modulation network: its own pitch,
+    level, pan and sends, plus the spectral shaping of the waveform it plays.
 
     @see SynthOscillatorValues, SynthPartials
 */
@@ -83,12 +111,23 @@ public:
     /** Takes a snapshot; the partial fields keep their defaults, SynthPartials fills them. */
     SynthOscillatorValues read (SynthParameterReader reader = {}) const noexcept;
 
+    /** Returns the parameters that change the derived spectrum rather than how it is played. */
+    std::vector<yup::AudioParameter::Ptr> getSpectralParameters() const;
+
     yup::AudioParameter::Ptr waveform;
     yup::AudioParameter::Ptr syncMode;
     yup::AudioParameter::Ptr syncRatio;
+    yup::AudioParameter::Ptr frequencyMode;
+    yup::AudioParameter::Ptr ratio;
+    yup::AudioParameter::Ptr fine; /**< In cents. */
+    yup::AudioParameter::Ptr fixedHz;
     yup::AudioParameter::Ptr level;
-    yup::AudioParameter::Ptr octave;
-    yup::AudioParameter::Ptr detune; /**< In cents; read() hands out semitones. */
+    yup::AudioParameter::Ptr pan;
+    yup::AudioParameter::Ptr phase;
+    yup::AudioParameter::Ptr freeRunning; /**< Stepped, 0 or 1. */
+    yup::AudioParameter::Ptr toFilter1;
+    yup::AudioParameter::Ptr toFilter2;
+    yup::AudioParameter::Ptr direct;
     yup::AudioParameter::Ptr ridgeSpacing;
     yup::AudioParameter::Ptr color;
     yup::AudioParameter::Ptr dispersion;
@@ -99,7 +138,4 @@ public:
     yup::AudioParameter::Ptr formant;
     yup::AudioParameter::Ptr formantPosition;
     yup::AudioParameter::Ptr scatter;
-    yup::AudioParameter::Ptr unisonVoices;
-    yup::AudioParameter::Ptr unisonDetune;
-    yup::AudioParameter::Ptr unisonSpread;
 };

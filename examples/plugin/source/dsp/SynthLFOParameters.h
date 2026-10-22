@@ -25,19 +25,38 @@
 #include "SynthTypes.h"
 
 //==============================================================================
-/** A plain snapshot of one LFO's controls. */
+/** A plain snapshot of one LFO's controls. The custom shape's curve is patch state. */
 struct SynthLFOValues
 {
-    yup::LFO<float>::Shape shape = yup::LFO<float>::Shape::sine;
+    using Shape = yup::LFO<float>::Shape;
+    using RetriggerMode = yup::LFO<float>::RetriggerMode;
+
+    Shape shape = Shape::sine;
     float rate = 1.0f;
+    bool tempoSync = false;
+    int division = 5;
     float phase = 0.0f;
-    bool retrigger = true; /**< Restart from the phase offset on every note, or run freely. */
+    float smoothing = 0.0f; /**< In seconds. */
+    RetriggerMode retrigger = RetriggerMode::retrigger;
+    float depth = 1.0f;
 
     bool operator== (const SynthLFOValues&) const = default;
+
+    /** Returns the rate in Hz, following the tempo when synced and one is known. */
+    float getFrequency (double bpm) const noexcept
+    {
+        if (! tempoSync || bpm <= 0.0)
+            return rate;
+
+        const auto& divisions = getSynthLFODivisions();
+        const auto beats = divisions[static_cast<std::size_t> (yup::jlimit (0, static_cast<int> (divisions.size()) - 1, division))].beats;
+
+        return static_cast<float> (bpm / (60.0 * beats));
+    }
 };
 
 //==============================================================================
-/** The parameters of one LFO, IDs prefixed "lfo1." or "lfo2.". */
+/** The parameters of one LFO, IDs prefixed "lfo1." to "lfo4.". */
 class SynthLFOParameters
 {
 public:
@@ -55,6 +74,10 @@ public:
 
     yup::AudioParameter::Ptr shape;
     yup::AudioParameter::Ptr rate;
+    yup::AudioParameter::Ptr tempoSync; /**< Stepped, 0 or 1. */
+    yup::AudioParameter::Ptr division;
     yup::AudioParameter::Ptr phase;
-    yup::AudioParameter::Ptr retrigger; /**< Stepped, 0 or 1. */
+    yup::AudioParameter::Ptr smoothing;
+    yup::AudioParameter::Ptr retrigger;
+    yup::AudioParameter::Ptr depth;
 };

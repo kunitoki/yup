@@ -21,43 +21,64 @@
 
 #pragma once
 
+#include "SynthCurveState.h"
 #include "SynthParameters.h"
 #include "SynthPartials.h"
+#include "SynthRoutes.h"
 
 //==============================================================================
 /** Saving, loading and generating whole patches.
 
     A patch is one DataTree: every parameter value as a property keyed by its ID, plus
-    one child per oscillator holding its drawn partials. Session state, user preset
-    files, factory presets and randomized patches all use this format, and all of them
-    are applied through loadState(), so there is a single path that changes a patch.
+    one child per oscillator holding its drawn partials, one child with the envelope and
+    LFO curves and one with the modulation routes. Session state, user preset files,
+    factory presets and randomized patches all use this format, and all of them are
+    applied through loadState(), so there is a single path that changes a patch.
 
-    A property that is missing from the tree loads the parameter's default, which lets
-    a factory preset list only what it changes.
+    A property that is missing from the tree loads the parameter's default, and missing
+    curves or routes load theirs, which lets a factory preset list only what it changes.
+    Patches from before the four operator engine (version 1) are rejected.
 */
 namespace SynthPatch
 {
 /** The partials of every oscillator. */
 using Partials = std::array<SynthPartials, SynthExample::oscillatorCount>;
 
+/** The patch state that is not a parameter. */
+struct State
+{
+    Partials& partials;
+    SynthCurveState& curves;
+    SynthRoutes& routes;
+};
+
 /** Captures the current patch.
 
     @param parameters   The processor's parameters
-    @param partials     The drawn partials of every oscillator
+    @param state        The partials, curves and routes
     @param presetIndex  The factory preset the patch started from, or -1
 */
-yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters, const Partials& partials, int presetIndex);
+yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state, int presetIndex);
 
-/** Applies a patch: parameters by ID, then partials, then one generation bump per oscillator.
+/** Applies a patch: parameters by ID, then partials, curves and routes, then one
+    generation bump per oscillator.
 
     Message thread only; the caller notifies the host afterwards.
 */
-yup::Result loadState (const yup::DataTree& state, yup::Span<const yup::AudioParameter::Ptr> parameters, Partials& partials);
+yup::Result loadState (const yup::DataTree& tree, yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state);
 
 /** Returns the factory preset index stored in a patch, or -1. */
 int getPresetIndex (const yup::DataTree& state);
 
-/** Creates a random patch that keeps the current volume, voice mode and glide. */
+/** Returns the index of the parameter a route may reach, or -1.
+
+    Only continuous parameters the voices play are destinations: modulating a choice or
+    a count would jump between steps, the quality would change the latency, and volume,
+    glide and the route depths are not applied per voice.
+*/
+int findRouteDestination (yup::Span<const yup::AudioParameter::Ptr> parameters, const yup::String& parameterID);
+
+/** Creates a random patch that keeps the current volume, voice mode, glide and quality. */
 yup::DataTree createRandomState (const SynthParameters& parameters, yup::Random& random);
 
 //==============================================================================

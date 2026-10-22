@@ -28,6 +28,15 @@ void LFODisplay::setValues (const SynthLFOValues& newValues)
     repaint();
 }
 
+void LFODisplay::setCurve (const SynthCurveState::Curve& newCurve)
+{
+    if (newCurve == curve)
+        return;
+
+    curve = newCurve;
+    repaint();
+}
+
 void LFODisplay::setPhase (float newPhase)
 {
     if (std::abs (newPhase - phase) < 1.0e-3f)
@@ -61,6 +70,7 @@ void LFODisplay::paint (yup::Graphics& g)
     shape.setFrequency (1.0f);
     shape.setShape (values.shape);
     shape.setPhaseOffset (values.phase);
+    shape.setCustomCurve (&curve);
 
     path.clear();
     path.reserveSpace (points + 1);

@@ -250,10 +250,13 @@ void AudioDeviceManagerPanel::resized()
         bounds.removeFromBottom (itemGap);
     }
 
-    const auto place = [&bounds] (Component& component, float height)
+    // Sections keep their height when the card is too short and overflow it, rather
+    // than being squashed to nothing.
+    auto top = bounds.getY();
+    const auto place = [&bounds, &top] (Component& component, float height)
     {
-        component.setBounds (bounds.removeFromTop (height));
-        bounds.removeFromTop (itemGap);
+        component.setBounds (bounds.getX(), top, bounds.getWidth(), height);
+        top += height + itemGap;
     };
 
     place (deviceTypeSelector, itemHeight);

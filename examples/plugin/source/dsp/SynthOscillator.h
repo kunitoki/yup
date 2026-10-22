@@ -23,76 +23,63 @@
 
 #include "SynthOscillatorSlot.h"
 
-#include <vector>
-
 //==============================================================================
-/** One of a voice's oscillators: a wavetable playing a derived series, plus unison.
+/** One operator of a voice: the tables every unison layer reads, and their series.
 
-    prepare() allocates the backends; renderBlock() is allocation-free and only
-    re-renders a table when its series moved. The series normally comes from the
-    shared slot; while a modulation is routed into this oscillator's spectrum it is
-    derived here instead, from the voice's own values.
+    The series normally comes from the shared slot; while a modulation is routed into
+    this oscillator's spectrum it is derived here instead, from the voice's own values.
 
-    Unison is built from bare yup::WavetableOscillator satellites playing the same
-    series as the center, detuned and panned around it. Only the highest slot renders
-    a table; the others copy it with renderFrom() instead of running their own FFT.
+    Each layer owns its table, because a table's render crossfade advances on every
+    read. Only the leader, the layer playing highest, runs the inverse FFT: the matrices
+    set every table's bandwidth, the leader renders when it needs to, and the followers
+    copy it with renderFrom(), so none of them aliases and none of them renders.
 
-    @see SynthOscillatorSlot, SynthSpectrumDerivation
+    prepare() allocates; everything else is allocation-free.
+
+    @see SynthOperatorNetwork, SynthOscillatorSlot, SynthSpectrumDerivation
 */
 class SynthOscillator
 {
 public:
-    /** Allocates every backend and attaches the shared slot, partials and resources. */
-    void prepare (double newSampleRate,
-                  int maxBlockSize,
+    using Table = yup::WavetableOscillator<float>;
+
+    /** Allocates every table at the network's internal rate and attaches the shared state. */
+    void prepare (double internalSampleRate,
+                  int crossfadeLength,
                   const SynthOscillatorSlot& sharedSlot,
                   const SynthPartials& oscillatorPartials,
                   const SynthOscillatorResources& oscillatorResources);
 
-    /** Restarts every backend, spreading the satellites so they do not stack in phase. */
-    void reset (double initialPhase) noexcept;
+    /** Hands the right series to every table when it moved.
 
-    /** Applies the pending changes and writes one stereo block.
-
-        The buffers are overwritten rather than added to, so the caller does not have to
-        clear them first.
-
-        @param deriveLocally  True while a modulation reaches this oscillator's spectrum,
-                              in which case the series is derived here from these values
-                              rather than taken from the slot.
+        @param deriveLocally      True while a modulation reaches this oscillator's spectrum.
+        @param refreshLocal       True when a locally derived series may be rebuilt now; the
+                                  derivation costs inverse FFTs, so the voice rate-limits it.
+        @param numLocalHarmonics  Synced harmonics a local derivation needs.
     */
-    void renderBlock (float* left,
-                      float* right,
-                      int numSamples,
-                      const SynthOscillatorValues& values,
-                      double frequency,
-                      bool deriveLocally) noexcept;
+    void updateSeries (const SynthOscillatorValues& values, bool deriveLocally, bool refreshLocal, int numLocalHarmonics) noexcept;
+
+    /** Renders the leader's table if it needs it and copies it into the followers.
+
+        Call after the layers' matrices have set the tables' bandwidths for this step.
+
+        @param numLayers  Layers in use; the last one is the leader.
+    */
+    void renderTables (int numLayers) noexcept;
+
+    /** Returns a layer's table. */
+    Table& getTable (int layer) noexcept { return tables[static_cast<std::size_t> (layer)]; }
 
 private:
-    //==============================================================================
-    static float slotOffset (int slotIndex, int slotCount) noexcept;
-    static double detunedFrequency (double frequency, const SynthOscillatorValues& values, int slotIndex, int slotCount) noexcept;
-
-    void accumulateSlot (float* left, float* right, int numSamples, float pan, float gain) noexcept;
-    void renderTable (yup::WavetableOscillator<float>& table,
-                      const yup::WavetableOscillator<float>& lead,
-                      bool share,
-                      int numSamples,
-                      double frequency) noexcept;
-    void applySeries (const SynthOscillatorValues& values, bool deriveLocally, int numLocalHarmonics) noexcept;
     void setSeries (const yup::FourierSeries<double>& series) noexcept;
 
-    //==============================================================================
-    yup::WavetableOscillator<float> wavetable;
-    std::array<yup::WavetableOscillator<float>, SynthExample::maxUnisonVoices - 1> satellites;
+    std::array<Table, SynthExample::maxUnisonVoices> tables;
     SynthSpectrumDerivation localDerivation;
 
     const SynthOscillatorSlot* slot = nullptr;
     const SynthPartials* partials = nullptr;
     const SynthOscillatorResources* resources = nullptr;
-    std::vector<float> slotBuffer;
-    double sampleRate = 44100.0;
     int appliedSeriesGeneration = -1;
-    int sharedSlotCount = 0;
+    int sharedLayerCount = 0;
     bool usingLocalSeries = false;
 };

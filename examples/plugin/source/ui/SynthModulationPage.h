@@ -21,20 +21,27 @@
 
 #pragma once
 
+#include "../dsp/SynthParameters.h"
 #include "SynthModulationRow.h"
 
 #include <array>
 #include <memory>
 
 //==============================================================================
-/** The modulation matrix: sixteen routings in a panel.
+/** The modulation routes as an editable list.
 
-    @see SynthModulationParameters
+    Shows every used route and one empty row to add the next. An interim list until
+    drag-to-assign modulation and the route drawer replace it.
+
+    @see SynthRoutes, SynthModulationRow
 */
 class SynthModulationPage : public yup::Component
 {
 public:
-    SynthModulationPage (const SynthModulationParameters& parametersToEdit, const yup::Font& font);
+    SynthModulationPage (const SynthParameters& parametersToEdit,
+                         SynthRoutes& routesToEdit,
+                         yup::Span<const yup::AudioParameter::Ptr> processorParameters,
+                         const yup::Font& font);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
@@ -45,7 +52,12 @@ public:
 private:
     static constexpr float panelInset = 8.0f;
     static constexpr float headerHeight = 18.0f;
-    static constexpr float spacing = 6.0f;
+    static constexpr float rowHeight = 44.0f;
+    static constexpr float spacing = 4.0f;
+
+    std::vector<SynthRouteDestination> destinations;
+    const SynthRoutes& routes;
+    int shownGeneration = -1;
 
     yup::Label titleLabel;
     std::array<std::unique_ptr<SynthModulationRow>, SynthExample::modulationSlots> rows;

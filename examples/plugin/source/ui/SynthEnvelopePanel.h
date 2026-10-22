@@ -21,18 +21,23 @@
 
 #pragma once
 
+#include "../dsp/SynthEnvelopeParameters.h"
 #include "EnvelopeDisplay.h"
 #include "ParameterKnob.h"
 
 //==============================================================================
-/** The editing surface of one envelope.
+/** The macros of one envelope and a view of its curve.
 
-    @see SynthEnvelopeParameters
+    @see SynthEnvelopeParameters, SynthCurveState
 */
 class SynthEnvelopePanel : public yup::Component
 {
 public:
-    SynthEnvelopePanel (const yup::String& panelTitle, const SynthEnvelopeParameters& parametersToEdit, const yup::Font& font);
+    SynthEnvelopePanel (const yup::String& panelTitle,
+                        const SynthEnvelopeParameters& parametersToEdit,
+                        const SynthCurveState& curvesToShow,
+                        int envelopeIndex,
+                        const yup::Font& font);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
@@ -43,19 +48,17 @@ public:
 private:
     static constexpr float panelInset = 8.0f;
     static constexpr float headerHeight = 16.0f;
-    static constexpr float knobRowHeight = 58.0f;
+    static constexpr float knobWidth = 58.0f;
     static constexpr float spacing = 6.0f;
 
-    const SynthEnvelopeParameters& parameters;
-    SynthEnvelopeValues shownValues;
+    const SynthCurveState& curves;
+    int index = 0;
+    int shownGeneration = -1;
 
     yup::Label titleLabel;
     EnvelopeDisplay display;
 
-    ParameterKnob delayKnob;
-    ParameterKnob attackKnob;
-    ParameterKnob holdKnob;
-    ParameterKnob decayKnob;
-    ParameterKnob sustainKnob;
-    ParameterKnob releaseKnob;
+    ParameterKnob timeScaleKnob;
+    ParameterKnob velocityKnob;
+    ParameterKnob depthKnob;
 };

@@ -364,3 +364,132 @@ TEST_F (WavetableOscillatorTests, RenderFromIgnoresMismatchedTableSize)
     for (int i = 0; i < 256; ++i)
         EXPECT_EQ (reference.processSample(), follower.processSample()) << i;
 }
+
+TEST_F (WavetableOscillatorTests, ProcessSampleAtPhaseMatchesProcessSample)
+{
+    constexpr double frequency = 331.7;
+
+    WavetableOscillator<double> reference;
+    WavetableOscillator<double> follower;
+
+    for (auto* oscillator : { &reference, &follower })
+    {
+        oscillator->prepare (testSampleRate, 64, 64);
+        oscillator->setFrequency (frequency);
+        oscillator->setWaveform (Waveform::sawtooth);
+        oscillator->render (false);
+        oscillator->setWaveform (Waveform::square);
+        oscillator->render();
+    }
+
+    double phase = 0.0;
+
+    for (int i = 0; i < 512; ++i)
+    {
+        EXPECT_EQ (reference.processSample(), follower.processSampleAtPhase (phase)) << i;
+
+        phase += frequency / testSampleRate;
+        phase -= std::floor (phase);
+    }
+}
+
+TEST_F (WavetableOscillatorTests, ProcessSampleAtPhaseCompletesTheCrossfade)
+{
+    constexpr int crossfadeLength = 64;
+
+    WavetableOscillator<double> oscillator;
+    oscillator.prepare (testSampleRate, 16, crossfadeLength);
+    oscillator.setWaveform (Waveform::sine);
+    oscillator.render (false);
+    oscillator.setWaveform (Waveform::sawtooth);
+    oscillator.render();
+
+    for (int i = 0; i < crossfadeLength - 1; ++i)
+        oscillator.processSampleAtPhase (0.1 * i);
+
+    // Still fading: the table being played is the previous rendition.
+    EXPECT_NEAR (1.0, oscillator.getRenderedTable()[static_cast<std::size_t> (oscillator.getTableSize() / 4)], 1e-6);
+
+    oscillator.processSampleAtPhase (0.0);
+
+    EXPECT_NEAR (oscillator.getValueAtPhase (0.25), oscillator.getRenderedTable()[static_cast<std::size_t> (oscillator.getTableSize() / 4)], 1e-12);
+    EXPECT_GT (std::abs (oscillator.getValueAtPhase (0.25) - 1.0), 0.01);
+    EXPECT_EQ (0.0, oscillator.getPhase());
+}
+
+TEST_F (WavetableOscillatorTests, AdvanceCrossfadeSkipsSamples)
+{
+    constexpr int crossfadeLength = 64;
+
+    WavetableOscillator<double> skipped;
+    WavetableOscillator<double> played;
+
+    for (auto* oscillator : { &skipped, &played })
+    {
+        oscillator->prepare (testSampleRate, 16, crossfadeLength);
+        oscillator->setWaveform (Waveform::sine);
+        oscillator->render (false);
+        oscillator->setWaveform (Waveform::square);
+        oscillator->render();
+    }
+
+    skipped.advanceCrossfade (crossfadeLength / 2);
+
+    for (int i = 0; i < crossfadeLength / 2; ++i)
+        played.processSampleAtPhase (0.0);
+
+    EXPECT_NEAR (played.getValueAtPhase (0.3), skipped.getValueAtPhase (0.3), 1e-12);
+
+    skipped.advanceCrossfade (crossfadeLength);
+
+    for (int i = 0; i < crossfadeLength / 2; ++i)
+        played.processSampleAtPhase (0.0);
+
+    for (const auto phase : { 0.1, 0.3, 0.7 })
+        EXPECT_NEAR (played.getValueAtPhase (phase), skipped.getValueAtPhase (phase), 1e-12);
+
+    EXPECT_EQ (0.0, skipped.getPhase());
+}
+
+TEST_F (WavetableOscillatorTests, PeakSlopeIsMeasuredAtRenderTime)
+{
+    WavetableOscillator<double> oscillator;
+    oscillator.prepare (testSampleRate, 64, 64);
+    oscillator.setFrequency (100.0);
+
+    EXPECT_EQ (0.0, oscillator.getPeakSlope());
+
+    oscillator.setWaveform (Waveform::sine);
+    oscillator.render (false);
+
+    EXPECT_NEAR (MathConstants<double>::twoPi, oscillator.getPeakSlope(), 0.01 * MathConstants<double>::twoPi);
+
+    WavetableOscillator<double> follower;
+    follower.prepare (testSampleRate, 64, 64);
+    follower.renderFrom (oscillator, false);
+
+    EXPECT_EQ (oscillator.getPeakSlope(), follower.getPeakSlope());
+}
+
+TEST_F (WavetableOscillatorTests, PeakSlopeCoversBothTablesWhileCrossfading)
+{
+    constexpr int crossfadeLength = 64;
+
+    WavetableOscillator<double> oscillator;
+    oscillator.prepare (testSampleRate, 64, crossfadeLength);
+    oscillator.setFrequency (100.0);
+    oscillator.setWaveform (Waveform::sawtooth);
+    oscillator.render (false);
+
+    const auto sawSlope = oscillator.getPeakSlope();
+    EXPECT_GT (sawSlope, 10.0 * MathConstants<double>::twoPi);
+
+    oscillator.setWaveform (Waveform::sine);
+    oscillator.render();
+
+    EXPECT_EQ (sawSlope, oscillator.getPeakSlope());
+
+    oscillator.advanceCrossfade (crossfadeLength);
+
+    EXPECT_NEAR (MathConstants<double>::twoPi, oscillator.getPeakSlope(), 0.01 * MathConstants<double>::twoPi);
+}
