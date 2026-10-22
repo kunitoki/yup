@@ -29,9 +29,9 @@
 //==============================================================================
 /** A lock-free single producer, single consumer queue of short MIDI messages.
 
-    Carries notes, controllers and pitch bends between the editor and the audio thread
-    in either direction. Messages longer than three bytes, such as SysEx, are refused,
-    and so is anything pushed while the queue is full: neither side ever waits.
+    Carries the pitch bends and controllers the editor's wheels send to the audio thread.
+    Messages longer than three bytes, such as SysEx, are refused, and so is anything pushed
+    while the queue is full: neither side ever waits.
 */
 class MidiMessageFifo
 {
@@ -41,9 +41,6 @@ public:
 
     /** Queues a message. Returns false when it was dropped. Producer thread only. */
     bool push (const yup::MidiMessage& message) noexcept;
-
-    /** Takes the oldest message. Returns false when the queue is empty. Consumer thread only. */
-    bool pop (yup::MidiMessage& message) noexcept;
 
     /** Moves every queued message into a buffer at one sample position. Consumer thread only. */
     void drainInto (yup::MidiBuffer& buffer, int samplePosition) noexcept;

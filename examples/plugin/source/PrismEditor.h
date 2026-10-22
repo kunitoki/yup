@@ -41,15 +41,13 @@
 
     Every control is bound to a parameter of the processor. A timer shows whatever the
     host, a preset or a state load changed, publishes the waveform editors' pending
-    edits once per frame, and exchanges MIDI with the processor in both directions: the
-    on-screen keyboard and wheels play the synthesiser, and the host's notes light the
-    keys.
+    edits once per frame. The keyboard and wheels show and play the processor's keyboard
+    state, so the host's notes light the keys.
 
     @see PrismProcessor
 */
 class PrismEditor
     : public yup::AudioProcessorEditor
-    , private yup::MidiKeyboardState::Listener
     , private yup::Timer
 {
 public:
@@ -67,13 +65,10 @@ public:
 
 private:
     //==============================================================================
-    void handleNoteOn (yup::MidiKeyboardState*, int midiChannel, int midiNoteNumber, float velocity) override;
-    void handleNoteOff (yup::MidiKeyboardState*, int midiChannel, int midiNoteNumber, float velocity) override;
     void timerCallback() override;
 
     void layoutMainPage();
     void showModulationPage (bool show);
-    void reflectHostMidi();
     void syncFromProcessor();
 
     //==============================================================================
@@ -92,11 +87,9 @@ private:
     //==============================================================================
     PrismProcessor& processor;
 
-    yup::MidiKeyboardState keyboardState;
     yup::MidiKeyboardComponent keyboardComponent;
     yup::PitchWheelComponent pitchWheelComponent;
     yup::ModWheelComponent modWheelComponent;
-    bool reflectingHostMidi = false;
 
     yup::Drawable logo;
     yup::Rectangle<float> logoArea;

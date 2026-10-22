@@ -71,17 +71,12 @@ void keepFocusOnKeyboard (yup::Component& component, const yup::Component& keybo
 //==============================================================================
 PrismEditor::PrismEditor (PrismProcessor& processorToEdit)
     : processor (processorToEdit)
-    , keyboardComponent (keyboardState, yup::MidiKeyboardComponent::horizontalKeyboard)
-    , pitchWheelComponent (keyboardState, "PitchWheel")
-    , modWheelComponent (keyboardState, "ModWheel")
+    , keyboardComponent (processor.getKeyboardState(), yup::MidiKeyboardComponent::horizontalKeyboard)
+    , pitchWheelComponent (processor.getKeyboardState(), "PitchWheel")
+    , modWheelComponent (processor.getKeyboardState(), "ModWheel")
 {
     const auto& parameters = processor.getSynthParameters();
     const auto controlFont = getSynthFont (10.0f);
-
-    // The keyboard plays the processor through its MIDI queue; the host's notes come back
-    // through the other queue and only light the keys.
-    keyboardState.addListener (this);
-    processor.setEditorAttached (true);
 
     keyboardComponent.setAvailableRange (36, 84); // C2 to C6
     keyboardComponent.setLowestVisibleKey (48);   // Start from C3
@@ -92,8 +87,8 @@ PrismEditor::PrismEditor (PrismProcessor& processorToEdit)
     keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::keyOutlineColorId, SynthTheme::panelBorder());
     mainPage.addAndMakeVisible (keyboardComponent);
 
-    // The wheels follow keyboardState, which reflects the host's MIDI too; their own moves
-    // go straight to the processor.
+    // The wheels follow the processor's keyboard state, host MIDI included; the keyboard state
+    // only plays notes, so their own moves go to the processor through its MIDI queue.
     pitchWheelComponent.onValueChanged = [this] (double value)
     {
         processor.sendMidiFromEditor (yup::MidiMessage::pitchWheel (1, 8192 + static_cast<int> (value * 8191.0)));
@@ -201,7 +196,7 @@ PrismEditor::PrismEditor (PrismProcessor& processorToEdit)
     SynthTheme::styleButton (clearButton, SynthTheme::panelBackground());
     clearButton.onClick = [this]
     {
-        keyboardState.allNotesOff (0); // Turn off all notes on all channels
+        processor.getKeyboardState().allNotesOff (0); // Turn off all notes on all channels
         processor.requestAllNotesOff();
     };
     addAndMakeVisible (clearButton);
@@ -230,8 +225,6 @@ PrismEditor::PrismEditor (PrismProcessor& processorToEdit)
 PrismEditor::~PrismEditor()
 {
     stopTimer();
-    processor.setEditorAttached (false);
-    keyboardState.removeListener (this);
 }
 
 //==============================================================================
@@ -342,21 +335,8 @@ void PrismEditor::mouseDown (const yup::MouseEvent&)
 }
 
 //==============================================================================
-void PrismEditor::handleNoteOn (yup::MidiKeyboardState*, int midiChannel, int midiNoteNumber, float velocity)
-{
-    if (! reflectingHostMidi)
-        processor.sendMidiFromEditor (yup::MidiMessage::noteOn (midiChannel, midiNoteNumber, velocity));
-}
-
-void PrismEditor::handleNoteOff (yup::MidiKeyboardState*, int midiChannel, int midiNoteNumber, float velocity)
-{
-    if (! reflectingHostMidi)
-        processor.sendMidiFromEditor (yup::MidiMessage::noteOff (midiChannel, midiNoteNumber, velocity));
-}
-
 void PrismEditor::timerCallback()
 {
-    reflectHostMidi();
     syncFromProcessor();
 
     if (processor.readScope (oscilloscope.getRenderData()) && oscilloscope.isVisible())
@@ -370,19 +350,6 @@ void PrismEditor::timerCallback()
                        yup::dontSendNotification);
     voiceLabel.setText (yup::String (processor.getNumActiveVoices()) + " / " + yup::String (SynthExample::voiceCount) + " VOICES",
                         yup::dontSendNotification);
-}
-
-/** Lights the keys and moves the wheels for what the host played, without sending it back. */
-void PrismEditor::reflectHostMidi()
-{
-    yup::MidiMessage message;
-
-    reflectingHostMidi = true;
-
-    while (processor.receiveHostMidi (message))
-        keyboardState.processNextMidiEvent (message);
-
-    reflectingHostMidi = false;
 }
 
 /** Shows every parameter and partial change, wherever it came from. */

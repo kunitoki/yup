@@ -98,14 +98,15 @@ public:
     void requestAllNotesOff() noexcept { engine.requestAllNotesOff(); }
 
     //==============================================================================
-    /** Queues a message from the on-screen keyboard or wheels for the next block. Message thread. */
+    /** Returns the keys and wheels the host and the on-screen keyboard hold.
+
+        Every block feeds the host's MIDI into it and plays the notes the editor's keyboard
+        added, so any number of editors can show and play it at once.
+    */
+    yup::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
+
+    /** Queues a pitch bend or controller from the editor's wheels for the next block. Message thread. */
     bool sendMidiFromEditor (const yup::MidiMessage& message) noexcept { return editorMidi.push (message); }
-
-    /** Takes the next note, pitch bend or controller the host played, to light the keyboard. Message thread. */
-    bool receiveHostMidi (yup::MidiMessage& message) noexcept { return hostMidi.pop (message); }
-
-    /** Tells the processor whether an editor is collecting the host's MIDI. */
-    void setEditorAttached (bool isAttached) noexcept { editorAttached.store (isAttached); }
 
     //==============================================================================
     /** Returns the phase of an LFO in the most recently started voice. */
@@ -140,9 +141,8 @@ private:
     int volumeIndex = 0;
     yup::SmoothedValue<float> outputGain;
 
+    yup::MidiKeyboardState keyboardState;
     MidiMessageFifo editorMidi { 1024 };
-    MidiMessageFifo hostMidi { 1024 };
-    std::atomic<bool> editorAttached { false };
 
     yup::AudioProcessLoadMeasurer loadMeasurer;
     std::array<float, SynthExample::maxBlockSize> scopeSamples {};

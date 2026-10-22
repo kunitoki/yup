@@ -46,19 +46,6 @@ bool MidiMessageFifo::push (const yup::MidiMessage& message) noexcept
     return true;
 }
 
-bool MidiMessageFifo::pop (yup::MidiMessage& message) noexcept
-{
-    const auto scope = fifo.read (1);
-
-    if (scope.blockSize1 + scope.blockSize2 == 0)
-        return false;
-
-    const auto& slot = slots[static_cast<std::size_t> (scope.blockSize1 > 0 ? scope.startIndex1 : scope.startIndex2)];
-    message = yup::MidiMessage (slot.bytes.data(), slot.size);
-
-    return true;
-}
-
 void MidiMessageFifo::drainInto (yup::MidiBuffer& buffer, int samplePosition) noexcept
 {
     const auto scope = fifo.read (fifo.getNumReady());

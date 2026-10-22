@@ -82,21 +82,10 @@ void PrismProcessor::processBlock (yup::AudioProcessContext<float>& context)
 
     followParameters (context.params);
 
-    if (editorAttached.load (std::memory_order_relaxed))
-    {
-        for (const auto metadata : context.midi)
-        {
-            if (metadata.numBytes > 3)
-                continue;
-
-            const auto message = metadata.getMessage();
-
-            if (message.isNoteOnOrOff() || message.isPitchWheel() || message.isController())
-                hostMidi.push (message);
-        }
-    }
-
     editorMidi.drainInto (context.midi, 0);
+
+    if (numSamples > 0)
+        keyboardState.processNextMidiBuffer (context.midi, 0, numSamples, true);
 
     // Parameter events land at the start of the control chunk they fall in, where the
     // engine applies its own modulation and its smoothers ramp to the new value.

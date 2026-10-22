@@ -181,8 +181,8 @@ public:
 
         midiBuffer.ensureSize (4096);
         midiBuffer.clear();
-        emptyMidiBuffer.ensureSize (4096);
-        emptyMidiBuffer.clear();
+        renderMidiBuffer.ensureSize (4096);
+        renderMidiBuffer.clear();
         paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*processor));
         emptyParamChangeBuffer.reserve (getDefaultParameterChangeCapacity (*processor));
         audioChannels.reserve (static_cast<size_t> (getTotalAudioOutputChannels (*processor)));
@@ -484,18 +484,23 @@ public:
 
         {
             AudioPluginPlayHeadAU playHead (*this, &inTimeStamp);
-            std::unique_lock<std::mutex> lock (midiMutex, std::try_to_lock);
-            auto& processMidiBuffer = lock.owns_lock() ? midiBuffer : emptyMidiBuffer;
+
+            {
+                std::unique_lock<std::mutex> lock (midiMutex, std::try_to_lock);
+                if (lock.owns_lock())
+                    renderMidiBuffer.swapWith (midiBuffer);
+            }
+
             std::unique_lock<std::mutex> parameterLock (parameterChangeMutex, std::try_to_lock);
             auto& processParamChangeBuffer = parameterLock.owns_lock() ? paramChangeBuffer : emptyParamChangeBuffer;
 
             AudioProcessContext<float> context { audioBuffer,
-                                                 processMidiBuffer,
+                                                 renderMidiBuffer,
                                                  processParamChangeBuffer,
                                                  &playHead };
             processAudioBlock (*processor, context, isBypassed);
 
-            processMidiBuffer.clear();
+            renderMidiBuffer.clear();
             processParamChangeBuffer.clear();
         }
 
@@ -506,9 +511,7 @@ public:
 
     OSStatus HandleMIDIEvent (UInt8 status, UInt8 channel, UInt8 data1, UInt8 data2, UInt32 offsetSampleFrame) override
     {
-        std::unique_lock<std::mutex> lock (midiMutex, std::try_to_lock);
-        if (! lock.owns_lock())
-            return noErr;
+        const std::lock_guard<std::mutex> lock (midiMutex);
 
         const uint8_t rawData[3] = {
             static_cast<uint8_t> (status | channel),
@@ -534,9 +537,7 @@ public:
 
     OSStatus HandleSysEx (const UInt8* inData, UInt32 inLength) override
     {
-        std::unique_lock<std::mutex> lock (midiMutex, std::try_to_lock);
-        if (! lock.owns_lock())
-            return noErr;
+        const std::lock_guard<std::mutex> lock (midiMutex);
 
         if (inData != nullptr && inLength > 0)
             midiBuffer.addEvent (inData, static_cast<int> (inLength), 0);
@@ -1118,7 +1119,7 @@ private:
     std::unique_ptr<AudioProcessor> processor;
 
     MidiBuffer midiBuffer;
-    MidiBuffer emptyMidiBuffer;
+    MidiBuffer renderMidiBuffer;
     ParameterChangeBuffer paramChangeBuffer;
     ParameterChangeBuffer emptyParamChangeBuffer;
     std::mutex midiMutex;

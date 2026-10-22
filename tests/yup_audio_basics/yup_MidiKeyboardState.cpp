@@ -594,6 +594,23 @@ TEST_F (MidiKeyboardStateTests, ProcessNextMidiEventAllNotesOff)
     EXPECT_FALSE (state->isNoteOn (1, 67));
 }
 
+TEST_F (MidiKeyboardStateTests, ProcessNextMidiEventAllSoundOffReleasesChannelNotes)
+{
+    state->addListener (listener.get());
+
+    state->noteOn (1, 60, 0.5f);
+    state->noteOn (1, 64, 0.6f);
+    state->noteOn (2, 67, 0.7f);
+    listener->reset();
+
+    state->processNextMidiEvent (MidiMessage::allSoundOff (1));
+
+    EXPECT_FALSE (state->isNoteOn (1, 60));
+    EXPECT_FALSE (state->isNoteOn (1, 64));
+    EXPECT_TRUE (state->isNoteOn (2, 67));
+    EXPECT_EQ (listener->noteOffCalls.size(), 2);
+}
+
 TEST_F (MidiKeyboardStateTests, ProcessNextMidiEventNonNoteMessage)
 {
     // Tests lines 141-156 (no matching case)
