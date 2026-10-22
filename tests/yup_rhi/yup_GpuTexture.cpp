@@ -103,6 +103,15 @@ protected:
         return GpuTexture::create (ctx, desc);
     }
 
+    /** A mocked device reporting storage textures. */
+    class StorageTextureGpuDevice : public OreInjectedGpuDevice
+    {
+    public:
+        using OreInjectedGpuDevice::OreInjectedGpuDevice;
+
+        bool isStorageTextureAvailable() const noexcept override { return true; }
+    };
+
     std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
     GpuDevice::Ptr ctx;
 };
@@ -178,6 +187,27 @@ TEST_F (GpuTextureMockTests, CreateWithoutGpuContextReturnsNull)
     ASSERT_NE (headless, nullptr);
 
     EXPECT_EQ (GpuTexture::create (headless, makeRenderTargetDesc()), nullptr);
+}
+
+TEST_F (GpuTextureMockTests, CreateStorageTextureNeedsStorageTextureSupport)
+{
+    auto desc = makeRenderTargetDesc();
+    desc.storage = true;
+
+    ASSERT_FALSE (ctx->isStorageTextureAvailable());
+    EXPECT_CALL (*mockOreCtx, makeTexture (_)).Times (0);
+    EXPECT_EQ (GpuTexture::create (ctx, desc), nullptr);
+    ::testing::Mock::VerifyAndClearExpectations (mockOreCtx.get());
+
+    ctx = new StorageTextureGpuDevice (mockOreCtx.get());
+
+    rive::ore::TextureDesc captured {};
+    auto oreTexture = expectTextureCreation (&captured);
+
+    auto texture = GpuTexture::create (ctx, desc);
+    ASSERT_NE (texture, nullptr);
+    EXPECT_TRUE (texture->isStorage());
+    EXPECT_TRUE (captured.storage);
 }
 
 TEST_F (GpuTextureMockTests, CreateReturnsNullWhenBackendCannotAllocate)
@@ -413,6 +443,41 @@ TEST_F (GpuTextureMockTests, UploadOfCompressedDataWithARowStrideSucceeds)
     EXPECT_TRUE (texture->upload (data));
 
     EXPECT_EQ (captured.bytesPerRow, 64u);
+}
+
+TEST_F (GpuTextureMockTests, UploadFailsWhenTheBackendReportsAnError)
+{
+    rive::ore::TextureDesc ignored {};
+    auto oreTexture = expectTextureCreation (&ignored);
+    EXPECT_CALL (*oreTexture, uploadImpl (_)).WillOnce (Invoke ([this] (const rive::ore::TextureDataDesc&)
+    {
+        mockOreCtx->setLastError ("upload: rejected");
+    }));
+
+    auto texture = GpuTexture::create (ctx, makeRenderTargetDesc (16, 16));
+    ASSERT_NE (texture, nullptr);
+
+    std::vector<uint8_t> pixels (16 * 16 * 4, 0);
+    GpuTextureDataDesc data;
+    data.data = pixels.data();
+    EXPECT_FALSE (texture->upload (data));
+}
+
+TEST_F (GpuTextureMockTests, UploadIgnoresAnErrorLeftByEarlierWork)
+{
+    rive::ore::TextureDesc ignored {};
+    auto oreTexture = expectTextureCreation (&ignored);
+    EXPECT_CALL (*oreTexture, uploadImpl (_));
+
+    auto texture = GpuTexture::create (ctx, makeRenderTargetDesc (16, 16));
+    ASSERT_NE (texture, nullptr);
+
+    mockOreCtx->setLastError ("stale");
+
+    std::vector<uint8_t> pixels (16 * 16 * 4, 0);
+    GpuTextureDataDesc data;
+    data.data = pixels.data();
+    EXPECT_TRUE (texture->upload (data));
 }
 
 // ==============================================================================
@@ -962,6 +1027,130 @@ TEST_F (GpuAttachmentMockTests, DepthAttachmentIsBoundWithItsLoadAndClearState)
     EXPECT_FLOAT_EQ (passDescs[0].depthStencil.depthClearValue, 0.5f);
 }
 
+TEST_F (GpuAttachmentMockTests, DepthTargetOpensAPassWithOnlyADepthAttachment)
+{
+    expectAttachmentCapture();
+
+    auto desc = depthDesc();
+    desc.type = GpuTextureType::array2D;
+    desc.depthOrArrayLayers = 2;
+    auto depth = createTexture (desc);
+    ASSERT_NE (depth, nullptr);
+
+    auto target = GpuTarget::createFromTexture (ctx, depth, GpuTextureViewDesc (0, 1));
+    ASSERT_NE (target, nullptr);
+    EXPECT_EQ (target->getWidth(), 32);
+    EXPECT_EQ (target->getHeight(), 32);
+
+    auto frame = beginFrame();
+    auto pass = target->beginRenderPass (frame, GpuDepthStencilOptions (0.25f));
+    EXPECT_TRUE (pass.isValid());
+    pass.finish();
+    frame.submit();
+
+    ASSERT_EQ (passDescs.size(), 1u);
+    EXPECT_EQ (passDescs[0].colorCount, 0u);
+    EXPECT_NE (passDescs[0].depthStencil.view, nullptr);
+    EXPECT_EQ (passDescs[0].depthStencil.depthLoadOp, rive::ore::LoadOp::clear);
+    EXPECT_EQ (passDescs[0].depthStencil.depthStoreOp, rive::ore::StoreOp::store);
+    EXPECT_FLOAT_EQ (passDescs[0].depthStencil.depthClearValue, 0.25f);
+
+    ASSERT_EQ (viewDescs.size(), 1u);
+    EXPECT_EQ (viewDescs[0].baseLayer, 1u);
+    EXPECT_EQ (viewDescs[0].layerCount, 1u);
+}
+
+TEST_F (GpuAttachmentMockTests, DepthTargetWithColorOptionsClearsToTheFarPlane)
+{
+    expectAttachmentCapture();
+
+    auto depth = createTexture (depthDesc());
+    ASSERT_NE (depth, nullptr);
+
+    auto target = GpuTarget::createFromTexture (ctx, depth);
+    ASSERT_NE (target, nullptr);
+
+    auto frame = beginFrame();
+    auto pass = target->beginRenderPass (frame, { true, GpuColor (0.5f, 0.5f, 0.5f, 1.0f) });
+    pass.finish();
+    frame.submit();
+
+    ASSERT_EQ (passDescs.size(), 1u);
+    EXPECT_EQ (passDescs[0].colorCount, 0u);
+    EXPECT_EQ (passDescs[0].depthStencil.depthLoadOp, rive::ore::LoadOp::clear);
+    EXPECT_FLOAT_EQ (passDescs[0].depthStencil.depthClearValue, 1.0f);
+}
+
+TEST_F (GpuAttachmentMockTests, DepthOnlyPassThatLoadsEncodesNoPassWhenNothingIsDrawn)
+{
+    expectAttachmentCapture();
+
+    auto depth = createTexture (depthDesc());
+    ASSERT_NE (depth, nullptr);
+
+    auto target = GpuTarget::createFromTexture (ctx, depth);
+    ASSERT_NE (target, nullptr);
+
+    GpuDepthStencilOptions options;
+    options.depthLoadOp = GpuLoadOp::load;
+
+    auto frame = beginFrame();
+    auto pass = target->beginRenderPass (frame, options);
+    pass.finish();
+    frame.submit();
+
+    EXPECT_TRUE (passDescs.empty());
+}
+
+TEST_F (GpuAttachmentMockTests, DepthOnlyPassDrawsWithoutAColorAttachment)
+{
+    expectAttachmentCapture();
+
+    auto depth = createTexture (depthDesc());
+    ASSERT_NE (depth, nullptr);
+
+    auto pipeline = makeMockedPipeline();
+    ASSERT_NE (pipeline, nullptr);
+
+    auto target = GpuTarget::createFromTexture (ctx, depth);
+    ASSERT_NE (target, nullptr);
+
+    auto frame = beginFrame();
+    auto pass = target->beginRenderPass (frame, GpuDepthStencilOptions (1.0f));
+    pass.setPipeline (pipeline);
+    EXPECT_TRUE (pass.draw (3));
+    EXPECT_TRUE (pass.draw (3));
+    pass.finish();
+    frame.submit();
+
+    ASSERT_EQ (passDescs.size(), 1u);
+    EXPECT_EQ (passDescs[0].colorCount, 0u);
+    EXPECT_NE (passDescs[0].depthStencil.view, nullptr);
+}
+
+TEST_F (GpuAttachmentMockTests, DepthOptionsOnAColorTargetGiveAnInvalidPass)
+{
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "Depth options on a color target trigger an assertion in assertion-enabled builds";
+#endif
+
+    expectAttachmentCapture();
+
+    auto color = createTexture (makeRenderTargetDesc (32, 32));
+    ASSERT_NE (color, nullptr);
+
+    auto target = GpuTarget::createFromTexture (ctx, color);
+    ASSERT_NE (target, nullptr);
+
+    auto frame = beginFrame();
+    auto pass = target->beginRenderPass (frame, GpuDepthStencilOptions (0.5f));
+    EXPECT_FALSE (pass.isValid());
+    pass.finish();
+    frame.submit();
+
+    EXPECT_TRUE (passDescs.empty());
+}
+
 TEST_F (GpuAttachmentMockTests, ClearOnlyPassCreatesTheAttachmentViewOnly)
 {
     expectAttachmentCapture();
@@ -986,3 +1175,240 @@ TEST_F (GpuAttachmentMockTests, ClearOnlyPassCreatesTheAttachmentViewOnly)
     EXPECT_EQ (viewDescs[0].baseMipLevel, 0u);
     EXPECT_EQ (viewDescs[0].layerCount, 1u);
 }
+
+//==============================================================================
+// Shared base for fixtures that render through a real device and read the result back.
+// module.cpp includes this file ahead of yup_GpuComputePass.cpp and the
+// native tests, whose fixtures derive from it.
+//==============================================================================
+
+class GpuReadbackFixture : public ::testing::Test
+{
+protected:
+#if YUP_ENABLE_SHADER_TRANSPILER
+    /** A fullscreen triangle with uv covering [0, 1] over the viewport. */
+    static constexpr const char* fullscreenVertex = R"(#version 450
+layout(location = 0) out vec2 uv;
+void main()
+{
+    uv = vec2 ((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
+    gl_Position = vec4 (uv * 2.0 - 1.0, 0.0, 1.0);
+})";
+
+    /** Samples lod 0 of the texture at binding 0, so a narrowed view decides which mip is read. */
+    static constexpr const char* sampleLodZeroFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D source;
+layout(set = 0, binding = 1) uniform sampler sourceSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main() { color = textureLod (sampler2D (source, sourceSampler), uv, 0.0); })";
+
+    /** Compares references 0.2 (into red) and 0.3 (into green) against the depth at binding 0. */
+    static constexpr const char* compareFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D shadowMap;
+layout(set = 0, binding = 1) uniform samplerShadow shadowSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    float lit = texture (sampler2DShadow (shadowMap, shadowSampler), vec3 (uv, 0.2));
+    float shadowed = texture (sampler2DShadow (shadowMap, shadowSampler), vec3 (uv, 0.3));
+    color = vec4 (lit, shadowed, 0.0, 1.0);
+})";
+
+    /** Compares reference 0.2 (into red) against the depth at binding 0 through the comparison
+        sampler at binding 2, and reads the same depth raw (into green) at binding 1 through the
+        point sampler at binding 3. */
+    static constexpr const char* dualBindingFragment = R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D shadowCompareMap;
+layout(set = 0, binding = 1) uniform texture2D shadowDepthMap;
+layout(set = 0, binding = 2) uniform samplerShadow compareSampler;
+layout(set = 0, binding = 3) uniform sampler pointSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    float lit = texture (sampler2DShadow (shadowCompareMap, compareSampler), vec3 (uv, 0.2));
+    float raw = textureLod (sampler2D (shadowDepthMap, pointSampler), uv, 0.0).r;
+    color = vec4 (lit, raw, 0.0, 1.0);
+})";
+
+    /** Compiles @p fragment behind fullscreenVertex for a single rgba8 color target. */
+    GpuPipeline::Ptr compileRenderPipeline (const String& fragment)
+    {
+        GpuPipelineOptions options;
+        options.colorTargets.emplace_back().format = GpuTextureFormat::rgba8unorm;
+
+        auto compiled = GpuPipeline::compileFromGlsl (device, fullscreenVertex, fragment, options);
+        EXPECT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+        return compiled.wasOk() ? compiled.getValue() : nullptr;
+    }
+
+    /** Runs a fullscreen fragment shader into a canvas-backed size x size target and returns
+        its RGBA8 pixels, or nothing when the readback fails. @p bind sets the pass's textures,
+        samplers, buffers and uniforms. */
+    std::vector<uint8_t> drawIntoReadback (const String& fragment, int size, const std::function<void (GpuRenderPass&)>& bind)
+    {
+        auto target = GpuTarget::create (device, size, size);
+        EXPECT_NE (target, nullptr);
+        if (target == nullptr)
+            return {};
+
+        auto pipeline = compileRenderPipeline (fragment);
+        if (pipeline == nullptr)
+            return {};
+
+        auto frame = GpuFrame::begin (device);
+        auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+        pass.setPipeline (pipeline);
+        bind (pass);
+        EXPECT_TRUE (pass.draw (3));
+        pass.finish();
+        EXPECT_TRUE (frame.submit());
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+
+        std::vector<uint8_t> pixels (static_cast<size_t> (size * size * 4));
+        if (! target->readPixels (pixels.data(), pixels.size()))
+            return {};
+
+        return pixels;
+    }
+
+    /** Clears one mip level of a render-target texture. */
+    void clearMip (GpuTexture::Ptr texture, uint32_t mip, GpuColor color)
+    {
+        auto target = GpuTarget::createFromTexture (device, texture, GpuTextureViewDesc (mip, 0));
+        ASSERT_NE (target, nullptr);
+
+        auto frame = GpuFrame::begin (device);
+        auto pass = target->beginRenderPass (frame, { true, color });
+        pass.finish();
+        EXPECT_TRUE (frame.submit());
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+    }
+
+    /** Clears one layer of a depth render target to @p depth. */
+    bool clearDepth (const GpuTexture::Ptr& depthTexture, float depth, uint32_t layer = 0)
+    {
+        auto color = GpuTexture::create (device, GpuTextureDesc ((uint32_t) depthTexture->getWidth(), (uint32_t) depthTexture->getHeight(), GpuTextureFormat::rgba8unorm, true));
+        auto target = GpuTarget::createFromTexture (device, color);
+        if (target == nullptr)
+            return false;
+
+        GpuDepthStencilOptions depthOptions;
+        depthOptions.depthClearValue = depth;
+
+        auto frame = GpuFrame::begin (device);
+        auto pass = target->beginRenderPass (frame, { true, GpuColor::transparentBlack() });
+        pass.setDepthStencilAttachment (depthTexture, depthOptions, GpuTextureViewDesc (0, layer));
+        pass.finish();
+        frame.submit();
+        EXPECT_TRUE (frame.waitForGPU().wasOk());
+        return true;
+    }
+
+    /** Allocates a depth render target and clears it to @p depth. */
+    GpuTexture::Ptr makeClearedDepth (GpuTextureFormat format, float depth, int size)
+    {
+        auto depthTexture = GpuTexture::create (device, GpuTextureDesc ((uint32_t) size, (uint32_t) size, format, true));
+        if (depthTexture == nullptr || ! clearDepth (depthTexture, depth))
+            return nullptr;
+
+        return depthTexture;
+    }
+
+    /** Allocates a two-layer depth32float array render target. */
+    GpuTexture::Ptr makeDepthArray (int size)
+    {
+        GpuTextureDesc desc ((uint32_t) size, (uint32_t) size, GpuTextureFormat::depth32float, true);
+        desc.type = GpuTextureType::array2D;
+        desc.depthOrArrayLayers = 2;
+        return GpuTexture::create (device, desc);
+    }
+
+    /** Compiles a pipeline with no color targets that writes a fullscreen triangle at clip-space
+        depth @p clipZ into a depth32float attachment, with @p depthBias constant bias. */
+    GpuPipeline::Ptr compileDepthOnlyPipeline (float clipZ, int32_t depthBias = 0)
+    {
+        GpuPipelineOptions options;
+        options.depthStencil.enabled = true;
+        options.depthStencil.format = GpuTextureFormat::depth32float;
+        options.depthStencil.depthCompare = GpuCompareFunction::always;
+        options.depthStencil.depthWriteEnabled = true;
+        options.depthStencil.depthBias = depthBias;
+
+        const auto vertex = String (R"(#version 450
+void main()
+{
+    vec2 uv = vec2 ((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
+    gl_Position = vec4 (uv * 2.0 - 1.0, CLIP_Z, 1.0);
+})")
+                                .replace ("CLIP_Z", String (clipZ, 6));
+
+        auto compiled = GpuPipeline::compileFromGlsl (device, vertex, "#version 450\nvoid main() {}", options);
+        EXPECT_TRUE (compiled.wasOk()) << compiled.getErrorMessage();
+        return compiled.wasOk() ? compiled.getValue() : nullptr;
+    }
+
+    /** Runs a depth-only pass over one layer of a depth32float texture: it clears the layer to
+        @p clearDepthValue, then draws every pipeline of @p pipelines in turn. */
+    bool renderDepthOnly (const GpuTexture::Ptr& depthTexture, uint32_t layer, float clearDepthValue, std::initializer_list<GpuPipeline::Ptr> pipelines = {})
+    {
+        auto target = GpuTarget::createFromTexture (device, depthTexture, GpuTextureViewDesc (0, layer));
+        EXPECT_NE (target, nullptr);
+        if (target == nullptr)
+            return false;
+
+        auto frame = GpuFrame::begin (device);
+        auto pass = target->beginRenderPass (frame, GpuDepthStencilOptions (clearDepthValue));
+        bool drawn = true;
+
+        for (const auto& pipeline : pipelines)
+        {
+            if (pipeline == nullptr)
+                return false;
+
+            pass.setPipeline (pipeline);
+            drawn = pass.draw (3) && drawn;
+        }
+
+        pass.finish();
+        const bool submitted = frame.submit();
+        return drawn && submitted && frame.waitForGPU().wasOk();
+    }
+
+    /** Compares @p redReference and @p greenReference against layer @p layer of a depth array
+        through a nearest sampler using @p compare; the red and green bytes of every readback
+        pixel hold the two results. */
+    std::vector<uint8_t> compareDepthLayer (const GpuTexture::Ptr& depthTexture, uint32_t layer, GpuCompareFunction compare, float redReference, float greenReference)
+    {
+        GpuSamplerDesc compareDesc (GpuFilter::nearest, GpuWrapMode::clampToEdge);
+        compareDesc.compare = compare;
+        auto sampler = GpuSampler::create (device, compareDesc);
+        EXPECT_NE (sampler, nullptr);
+
+        const auto fragment = String (R"(#version 450
+layout(set = 0, binding = 0) uniform texture2DArray depthLayers;
+layout(set = 0, binding = 1) uniform samplerShadow compareSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    float red = texture (sampler2DArrayShadow (depthLayers, compareSampler), vec4 (uv, LAYER, RED_REFERENCE));
+    float green = texture (sampler2DArrayShadow (depthLayers, compareSampler), vec4 (uv, LAYER, GREEN_REFERENCE));
+    color = vec4 (red, green, 0.0, 1.0);
+})")
+                                  .replace ("LAYER", String ((float) layer, 1))
+                                  .replace ("RED_REFERENCE", String (redReference, 6))
+                                  .replace ("GREEN_REFERENCE", String (greenReference, 6));
+
+        return drawIntoReadback (fragment, 4, [&] (GpuRenderPass& pass)
+        {
+            pass.setTexture (0, 0, depthTexture);
+            pass.setSampler (0, 1, sampler);
+        });
+    }
+#endif // YUP_ENABLE_SHADER_TRANSPILER
+
+    GpuDevice::Ptr device;
+};

@@ -1,0 +1,86 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#include "../mocks/rive_gpu.h"
+#include "../mocks/rive_ore.h"
+#include "../mocks/yup_rhi.h"
+
+#include "yup_SceneRendererFixtures.h"
+#include "yup_RendererMockFixtures.h"
+
+#include "yup_DepthNormalPrepass.cpp"
+#include "yup_DepthOfField.cpp"
+#include "yup_EnvironmentMap.cpp"
+#include "yup_FrameResources.cpp"
+#include "yup_FullscreenPass.cpp"
+#include "yup_GBufferPass.cpp"
+#include "yup_GeometryBindings.cpp"
+#include "yup_GpuSceneData.cpp"
+#include "yup_LightClusters.cpp"
+#include "yup_LightingPass.cpp"
+#include "yup_LookupTables.cpp"
+#include "yup_LtcTables.cpp"
+#include "yup_MaterialTable.cpp"
+#include "yup_MotionBlur.cpp"
+#include "yup_ProbeAtlas.cpp"
+#include "yup_ProbeBaker.cpp"
+#include "yup_ProbeRenderer.cpp"
+#include "yup_ReflectionProbeNode.cpp"
+#include "yup_RenderCapabilities.cpp"
+#include "yup_SceneComponent.cpp"
+#include "yup_SceneDrawList.cpp"
+#include "yup_SceneRenderer.cpp"
+#include "yup_SceneSettings.cpp"
+#include "yup_ShadowAtlas.cpp"
+#include "yup_ShadowCascades.cpp"
+#include "yup_SphericalHarmonics.cpp"
+#include "yup_TemporalAA.cpp"
+#include "yup_ViewData.cpp"
+#include "yup_WorldFogNode.cpp"
+
+#if YUP_APPLE
+#include "native/yup_SceneRendererFixtures_apple.h"
+#include "native/yup_DepthNormalPrepass_apple.cpp"
+#include "native/yup_DepthOfField_apple.cpp"
+#include "native/yup_FogApply_apple.cpp"
+#include "native/yup_FrameResources_apple.cpp"
+#include "native/yup_FullscreenPass_apple.cpp"
+#include "native/yup_GBufferPass_apple.cpp"
+#include "native/yup_HiZPyramid_apple.cpp"
+#include "native/yup_LightClusters_apple.cpp"
+#include "native/yup_LookupTables_apple.cpp"
+#include "native/yup_MotionBlur_apple.cpp"
+#include "native/yup_PostChain_apple.cpp"
+#include "native/yup_ProbeRenderer_apple.cpp"
+#include "native/yup_ReflectionPass_apple.cpp"
+#include "native/yup_SceneComponent_apple.cpp"
+#include "native/yup_SceneRenderer_apple.cpp"
+#include "native/yup_SceneRendererBenchmark_apple.cpp"
+#include "native/yup_SceneRendererIndirect_apple.cpp"
+#include "native/yup_SceneRendererLighting_apple.cpp"
+#include "native/yup_SceneRendererPost_apple.cpp"
+#include "native/yup_TemporalAA_apple.cpp"
+#endif
+
+#if YUP_LINUX
+#include "native/yup_ProbeRenderer_linux.cpp"
+#include "native/yup_SceneRendererGL_linux.cpp"
+#endif

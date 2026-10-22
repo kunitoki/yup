@@ -498,6 +498,14 @@ void main()
 // ShaderTranspiler tests
 //==============================================================================
 
+struct ShaderToolchainCase
+{
+    const char* name;
+    ShaderStage stage;
+    const char* source;
+    bool rasterTier; // also compiled to ESSL 300
+};
+
 class ShaderTranspilerTests : public ::testing::Test
 {
 protected:
@@ -882,6 +890,104 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToESSL_FragmentUsesVersion300)
     EXPECT_TRUE (result.getValue().contains ("#version 300 es"));
 }
 
+TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToESSL_KeepsShadowSampler)
+{
+    auto spirv = transpiler->compileToSPIRV (R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D shadowMap;
+layout(set = 0, binding = 1) uniform samplerShadow shadowSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    float lit = texture (sampler2DShadow (shadowMap, shadowSampler), vec3 (uv, 0.2));
+    float shadowed = texture (sampler2DShadow (shadowMap, shadowSampler), vec3 (uv, 0.3));
+    color = vec4 (lit, shadowed, 0.0, 1.0);
+})",
+                                             ShaderStage::fragment,
+                                             ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk()) << spirv.getErrorMessage();
+
+    auto result = transpiler->decompileFromSPIRV (spirv.getValue(), ShaderLanguage::essl, TranspileOptions {});
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("#version 300 es")) << output;
+    EXPECT_TRUE (output.contains ("sampler2DShadow")) << output;
+
+    // ESSL 3.00 has no default precision for sampler2DShadow, so the declaration needs one
+    EXPECT_TRUE (output.contains ("highp sampler2DShadow")) << output;
+}
+
+TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToESSL_KeepsArrayShadowSampler)
+{
+    auto spirv = transpiler->compileToSPIRV (R"(#version 450
+layout(set = 0, binding = 0) uniform texture2DArray shadowMaps;
+layout(set = 0, binding = 1) uniform samplerShadow shadowSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    float layer0 = texture (sampler2DArrayShadow (shadowMaps, shadowSampler), vec4 (uv, 0.0, 0.5));
+    float layer1 = texture (sampler2DArrayShadow (shadowMaps, shadowSampler), vec4 (uv, 1.0, 0.5));
+    color = vec4 (layer0, layer1, 0.0, 1.0);
+})",
+                                             ShaderStage::fragment,
+                                             ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk()) << spirv.getErrorMessage();
+
+    auto result = transpiler->decompileFromSPIRV (spirv.getValue(), ShaderLanguage::essl, TranspileOptions {});
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    const auto& output = result.getValue();
+    EXPECT_TRUE (output.contains ("#version 300 es")) << output;
+
+    // ESSL 3.00 has no default precision for sampler2DArrayShadow, so the declaration needs one
+    EXPECT_TRUE (output.contains ("highp sampler2DArrayShadow")) << output;
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_MarksShadowSamplerAndItsTextureAsDepth)
+{
+    auto spirv = transpiler->compileToSPIRV (R"(#version 450
+layout(set = 0, binding = 0) uniform texture2D shadowMap;
+layout(set = 0, binding = 1) uniform samplerShadow shadowSampler;
+layout(set = 0, binding = 2) uniform texture2D albedo;
+layout(set = 0, binding = 3) uniform sampler albedoSampler;
+layout(location = 0) in vec2 uv;
+layout(location = 0) out vec4 color;
+void main()
+{
+    float lit = texture (sampler2DShadow (shadowMap, shadowSampler), vec3 (uv, 0.2));
+    color = texture (sampler2D (albedo, albedoSampler), uv) * lit;
+})",
+                                             ShaderStage::fragment,
+                                             ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk()) << spirv.getErrorMessage();
+
+    for (auto language : { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::msl, ShaderLanguage::hlsl, ShaderLanguage::wgsl })
+    {
+        auto result = transpiler->reflectFromSPIRV (spirv.getValue(), language);
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+        const auto isDepth = [] (const std::vector<ShaderReflection::ResourceBinding>& bindings, uint32_t binding)
+        {
+            for (const auto& b : bindings)
+            {
+                if (b.binding == binding)
+                    return b.imageIsDepth;
+            }
+
+            ADD_FAILURE() << "binding " << binding << " not reflected";
+            return false;
+        };
+
+        const auto& ref = result.getValue();
+        EXPECT_TRUE (isDepth (ref.separateImages, 0)) << "language " << (int) language;
+        EXPECT_TRUE (isDepth (ref.separateSamplers, 1)) << "language " << (int) language;
+        EXPECT_FALSE (isDepth (ref.separateImages, 2)) << "language " << (int) language;
+        EXPECT_FALSE (isDepth (ref.separateSamplers, 3)) << "language " << (int) language;
+    }
+}
+
 TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_ToESSL_ComputeDoesNotFail)
 {
     auto spirv = transpiler->compileToSPIRV (
@@ -891,6 +997,106 @@ TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_ToESSL_ComputeDoesNotFail)
     auto result = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::essl);
 
     ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_MarksReadOnlyStorageBuffers)
+{
+    const auto reflectStorageBuffers = [] (const char* qualifier)
+    {
+        const auto source = String ("#version 450\n"
+                                    "layout(std430, set = 0, binding = 0) ")
+                          + qualifier
+                          + " buffer Lights { vec4 colors[]; };\n"
+                            "layout(location = 0) out vec4 color;\n"
+                            "void main() { color = colors[0]; }\n";
+
+        std::vector<ShaderReflection::ResourceBinding> storageBuffers;
+
+        auto spirv = transpiler->compileToSPIRV (source, ShaderStage::fragment, ShaderLanguage::glsl);
+        EXPECT_TRUE (spirv.wasOk()) << spirv.getErrorMessage();
+        if (spirv.failed())
+            return storageBuffers;
+
+        for (auto language : { ShaderLanguage::msl, ShaderLanguage::hlsl, ShaderLanguage::wgsl })
+        {
+            auto result = transpiler->reflectFromSPIRV (spirv.getValue(), language);
+            EXPECT_TRUE (result.wasOk()) << result.getErrorMessage();
+            if (result.failed())
+                continue;
+
+            const auto reflection = result.getValue();
+            storageBuffers.insert (storageBuffers.end(), reflection.storageBuffers.begin(), reflection.storageBuffers.end());
+        }
+
+        return storageBuffers;
+    };
+
+    const auto readOnly = reflectStorageBuffers ("readonly");
+    ASSERT_EQ (readOnly.size(), 3u);
+    for (const auto& sb : readOnly)
+        EXPECT_TRUE (sb.readOnly);
+
+    const auto writable = reflectStorageBuffers ("");
+    ASSERT_EQ (writable.size(), 3u);
+    for (const auto& sb : writable)
+        EXPECT_FALSE (sb.readOnly);
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_HlslStorageBufferSlotsFollowTheirRegisters)
+{
+    // A block without an instance name, one with an instance name differing from the block
+    // name, and a writable block
+    const auto spirv = transpiler->compileToSPIRV ("#version 450\n"
+                                                   "layout(std430, set = 0, binding = 2) readonly buffer Colors { vec4 colors[]; };\n"
+                                                   "layout(std430, set = 0, binding = 3) readonly buffer Lights { vec4 values[]; } lights;\n"
+                                                   "layout(std430, set = 0, binding = 4) buffer Counters { uint hits; };\n"
+                                                   "layout(location = 0) out vec4 color;\n"
+                                                   "void main() { hits = 1u; color = colors[0] + lights.values[0]; }\n",
+                                                   ShaderStage::fragment,
+                                                   ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk()) << spirv.getErrorMessage();
+
+    const auto hlsl = transpiler->decompileFromSPIRV (spirv.getValue(), ShaderLanguage::hlsl);
+    ASSERT_TRUE (hlsl.wasOk()) << hlsl.getErrorMessage();
+    EXPECT_TRUE (hlsl.getValue().contains ("register(t2)"));
+    EXPECT_TRUE (hlsl.getValue().contains ("register(t3)"));
+    EXPECT_TRUE (hlsl.getValue().contains ("RWByteAddressBuffer"));
+    EXPECT_TRUE (hlsl.getValue().contains ("register(u4)"));
+
+    const auto result = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::hlsl);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& storageBuffers = result.getValue().storageBuffers;
+    ASSERT_EQ (storageBuffers.size(), 3u);
+    for (const auto& sb : storageBuffers)
+        EXPECT_EQ (sb.backendSlot, sb.binding) << sb.name;
+}
+
+TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_HlslComputeStorageBuffersAreAlwaysUavs)
+{
+    // GpuComputePass binds storage buffers as UAVs only, so a readonly one must not become a t register
+    const auto spirv = transpiler->compileToSPIRV ("#version 450\n"
+                                                   "layout(local_size_x = 1) in;\n"
+                                                   "layout(std430, set = 0, binding = 0) readonly buffer Source { vec4 source[]; };\n"
+                                                   "layout(std430, set = 0, binding = 1) buffer Destination { vec4 destination[]; };\n"
+                                                   "void main() { destination[0] = source[0]; }\n",
+                                                   ShaderStage::compute,
+                                                   ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk()) << spirv.getErrorMessage();
+
+    const auto hlsl = transpiler->decompileFromSPIRV (spirv.getValue(), ShaderLanguage::hlsl);
+    ASSERT_TRUE (hlsl.wasOk()) << hlsl.getErrorMessage();
+    EXPECT_TRUE (hlsl.getValue().contains ("register(u0)")) << hlsl.getValue();
+    EXPECT_TRUE (hlsl.getValue().contains ("register(u1)")) << hlsl.getValue();
+    EXPECT_FALSE (hlsl.getValue().contains ("register(t0)")) << hlsl.getValue();
+
+    const auto result = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::hlsl);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& storageBuffers = result.getValue().storageBuffers;
+    ASSERT_EQ (storageBuffers.size(), 2u);
+    for (const auto& sb : storageBuffers)
+        EXPECT_EQ (sb.backendSlot, sb.binding) << sb.name;
 }
 
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToHLSL)
@@ -2947,4 +3153,296 @@ TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_CorruptBinaryWithTargetLanguageF
 
     EXPECT_TRUE (result.failed());
     EXPECT_TRUE (result.getErrorMessage().contains ("SPIR-V reflection error"));
+}
+
+//==============================================================================
+// Toolchain coverage: GLSL features needed by yup_3d, on every bundler target
+//==============================================================================
+
+class ShaderToolchainCoverageTests : public ::testing::TestWithParam<ShaderToolchainCase>
+{
+protected:
+    static ShaderTranspiler::Ptr getTranspiler()
+    {
+        static ShaderTranspiler::Ptr transpiler = new ShaderTranspiler();
+        return transpiler;
+    }
+};
+
+TEST_P (ShaderToolchainCoverageTests, CompilesToEveryTarget)
+{
+    const auto& c = GetParam();
+    auto transpiler = getTranspiler();
+
+    auto spirv = transpiler->compileToSPIRV (c.source, c.stage, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk()) << "spirv: " << spirv.getErrorMessage();
+
+    std::vector<ShaderLanguage> targets { ShaderLanguage::msl, ShaderLanguage::hlsl, ShaderLanguage::glsl, ShaderLanguage::wgsl };
+    if (c.rasterTier)
+        targets.push_back (ShaderLanguage::essl);
+
+    for (auto target : targets)
+    {
+        auto result = transpiler->transpile (c.source, c.stage, ShaderLanguage::glsl, target);
+        EXPECT_TRUE (result.wasOk()) << c.name << " -> " << toString (target) << ": " << result.getErrorMessage();
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P (Toolchain,
+                          ShaderToolchainCoverageTests,
+                          ::testing::Values (
+                              ShaderToolchainCase { "Sampler2DArray", ShaderStage::fragment, R"glsl(
+#version 450
+layout(binding = 0) uniform sampler2DArray tex;
+layout(location = 0) in vec3 uvw;
+layout(location = 0) out vec4 outColor;
+void main() { outColor = texture (tex, uvw); }
+)glsl", true },
+                              ShaderToolchainCase { "Sampler3D", ShaderStage::fragment, R"glsl(
+#version 450
+layout(binding = 0) uniform sampler3D tex;
+layout(location = 0) in vec3 uvw;
+layout(location = 0) out vec4 outColor;
+void main() { outColor = texture (tex, uvw); }
+)glsl", true },
+                              ShaderToolchainCase { "TexelFetchArray", ShaderStage::fragment, R"glsl(
+#version 450
+layout(binding = 0) uniform texture2DArray tex;
+layout(binding = 1) uniform sampler smp;
+layout(location = 0) flat in ivec3 coord;
+layout(location = 0) out vec4 outColor;
+void main() { outColor = texelFetch (sampler2DArray (tex, smp), coord, 0); }
+)glsl", true },
+                              ShaderToolchainCase { "Sampler2DShadow", ShaderStage::fragment, R"glsl(
+#version 450
+layout(binding = 0) uniform sampler2DShadow shadowMap;
+layout(location = 0) in vec3 uvz;
+layout(location = 0) out vec4 outColor;
+void main() { outColor = vec4 (texture (shadowMap, uvz)); }
+)glsl", true },
+                              ShaderToolchainCase { "Sampler2DArrayShadow", ShaderStage::fragment, R"glsl(
+#version 450
+layout(binding = 0) uniform sampler2DArrayShadow shadowMap;
+layout(location = 0) in vec4 uvlz;
+layout(location = 0) out vec4 outColor;
+void main() { outColor = vec4 (texture (shadowMap, uvlz)); }
+)glsl", true },
+                              ShaderToolchainCase { "FragmentReadonlySSBO", ShaderStage::fragment, R"glsl(
+#version 450
+layout(std430, binding = 0) readonly buffer Lights { vec4 lights[]; };
+layout(location = 0) flat in int index;
+layout(location = 0) out vec4 outColor;
+void main() { outColor = lights[index]; }
+)glsl", false },
+                              ShaderToolchainCase { "ComputeImageStoreRgba16f", ShaderStage::compute, R"glsl(
+#version 450
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0, rgba16f) uniform writeonly image2D dst;
+void main() { imageStore (dst, ivec2 (gl_GlobalInvocationID.xy), vec4 (1.0)); }
+)glsl", false },
+                              ShaderToolchainCase { "ComputeSharedBarrier", ShaderStage::compute, R"glsl(
+#version 450
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) buffer Data { float values[]; };
+shared float tile[64];
+void main()
+{
+    tile[gl_LocalInvocationID.x] = values[gl_GlobalInvocationID.x];
+    barrier();
+    values[gl_GlobalInvocationID.x] = tile[63u - gl_LocalInvocationID.x];
+}
+)glsl", false }),
+                          [] (const ::testing::TestParamInfo<ShaderToolchainCase>& info) { return std::string (info.param.name); });
+
+//==============================================================================
+// assignGraphicsNativeSlots
+//==============================================================================
+
+class ShaderNativeSlotsTests : public ::testing::Test
+{
+protected:
+    static ShaderReflection::ResourceBinding resource (uint32_t set, uint32_t binding, uint32_t count = 1)
+    {
+        ShaderReflection::ResourceBinding r;
+        r.set = set;
+        r.binding = binding;
+        r.descriptorCount = count;
+        return r;
+    }
+
+    /** The vertex stage of the contract layout: ViewBlock (0, 0) and DrawBlock (2, 0). */
+    static ShaderReflection vertexStage()
+    {
+        ShaderReflection vertex;
+        vertex.uniformBuffers = { resource (2, 0), resource (0, 0) };
+        return vertex;
+    }
+
+    /** The fragment stage: three blocks at binding 0 of sets 0 to 2, textures at binding 3 of
+        sets 1 and 2, and samplers at (0, 3) and (2, 7). */
+    static ShaderReflection fragmentStage()
+    {
+        ShaderReflection fragment;
+        fragment.uniformBuffers = { resource (0, 0), resource (1, 0), resource (2, 0) };
+        fragment.separateImages = { resource (2, 3), resource (1, 3) };
+        fragment.separateSamplers = { resource (0, 3), resource (2, 7) };
+        return fragment;
+    }
+
+    static uint32_t slotOf (const ShaderNativeSlots& slots, uint32_t set, uint32_t binding)
+    {
+        const auto* entry = slots.find (set, binding);
+        return entry != nullptr ? entry->slot : ~0u;
+    }
+};
+
+TEST_F (ShaderNativeSlotsTests, MslNumbersEachClassOverTheUnionBySetAndBinding)
+{
+    const auto slots = ShaderTranspiler::assignGraphicsNativeSlots (vertexStage(), fragmentStage(), ShaderLanguage::msl);
+
+    EXPECT_EQ (slots.entries.size(), 7u);
+
+    EXPECT_EQ (slotOf (slots, 0, 0), 0u);
+    EXPECT_EQ (slotOf (slots, 1, 0), 1u);
+    EXPECT_EQ (slotOf (slots, 2, 0), 2u);
+
+    EXPECT_EQ (slotOf (slots, 1, 3), 0u);
+    EXPECT_EQ (slotOf (slots, 2, 3), 1u);
+
+    EXPECT_EQ (slotOf (slots, 0, 3), 0u);
+    EXPECT_EQ (slotOf (slots, 2, 7), 1u);
+}
+
+TEST_F (ShaderNativeSlotsTests, HlslSplitsStorageBuffersAndImagesByAccess)
+{
+    auto fragment = fragmentStage();
+    fragment.storageBuffers = { resource (1, 1), resource (1, 2) };
+    fragment.storageBuffers[0].readOnly = true;
+    fragment.storageImages = { resource (1, 4) };
+
+    const auto slots = ShaderTranspiler::assignGraphicsNativeSlots (vertexStage(), fragment, ShaderLanguage::hlsl);
+
+    EXPECT_EQ (slotOf (slots, 2, 0), 2u);  // b2
+    EXPECT_EQ (slotOf (slots, 1, 1), 0u);  // t0, read-only storage buffer
+    EXPECT_EQ (slotOf (slots, 1, 3), 1u);  // t1
+    EXPECT_EQ (slotOf (slots, 2, 3), 2u);  // t2
+    EXPECT_EQ (slotOf (slots, 1, 2), 0u);  // u0, read-write storage buffer
+    EXPECT_EQ (slotOf (slots, 1, 4), 1u);  // u1
+    EXPECT_EQ (slotOf (slots, 2, 7), 1u);  // s1
+}
+
+TEST_F (ShaderNativeSlotsTests, GlAssignsBlocksTextureUnitsAndStorageBlocks)
+{
+    auto fragment = fragmentStage();
+    fragment.storageBuffers = { resource (1, 1), resource (0, 1) };
+    fragment.storageBuffers[0].readOnly = true;
+
+    const auto slots = ShaderTranspiler::assignGraphicsNativeSlots (vertexStage(), fragment, ShaderLanguage::essl);
+
+    EXPECT_EQ (slots.entries.size(), 7u);
+    EXPECT_EQ (slotOf (slots, 2, 0), 2u);
+    EXPECT_EQ (slotOf (slots, 2, 3), 1u);
+    EXPECT_EQ (slots.find (0, 3), nullptr);
+
+    // Storage blocks are numbered apart from uniform blocks, read-only or not
+    EXPECT_EQ (slotOf (slots, 0, 1), 0u);
+    EXPECT_EQ (slotOf (slots, 1, 1), 1u);
+}
+
+TEST_F (ShaderNativeSlotsTests, CombinedSamplersTakeATextureAndASamplerSlot)
+{
+    ShaderReflection fragment;
+    fragment.separateSamplers = { resource (0, 1) };
+    fragment.sampledImages = { resource (1, 0) };
+
+    const auto msl = ShaderTranspiler::assignGraphicsNativeSlots ({}, fragment, ShaderLanguage::msl);
+    ASSERT_NE (msl.find (1, 0), nullptr);
+    EXPECT_EQ (msl.find (1, 0)->slot, 0u);
+    EXPECT_EQ (msl.find (1, 0)->samplerSlot, 1u);
+
+    const auto gl = ShaderTranspiler::assignGraphicsNativeSlots ({}, fragment, ShaderLanguage::glsl);
+    ASSERT_NE (gl.find (1, 0), nullptr);
+    EXPECT_EQ (gl.find (1, 0)->slot, 0u);
+    EXPECT_EQ (gl.find (1, 0)->samplerSlot, ~0u);
+}
+
+TEST_F (ShaderNativeSlotsTests, ArraysTakeOneSlotPerElement)
+{
+    ShaderReflection fragment;
+    fragment.separateImages = { resource (0, 0, 4), resource (1, 0) };
+
+    const auto slots = ShaderTranspiler::assignGraphicsNativeSlots ({}, fragment, ShaderLanguage::msl);
+
+    EXPECT_EQ (slotOf (slots, 0, 0), 0u);
+    EXPECT_EQ (slotOf (slots, 1, 0), 4u);
+}
+
+TEST_F (ShaderNativeSlotsTests, VulkanAndWebGpuKeepTheirBindings)
+{
+    EXPECT_TRUE (ShaderTranspiler::assignGraphicsNativeSlots (vertexStage(), fragmentStage(), ShaderLanguage::spirv).entries.empty());
+    EXPECT_TRUE (ShaderTranspiler::assignGraphicsNativeSlots (vertexStage(), fragmentStage(), ShaderLanguage::wgsl).entries.empty());
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_ExtensionBuiltinsAreRecognized)
+{
+    using B = ShaderReflection::BuiltInType;
+
+    struct Case
+    {
+        const char* source;
+        ShaderStage stage;
+        std::vector<B> expected;
+    };
+
+    const std::vector<Case> cases = {
+        { "#version 450\n#extension GL_AMD_shader_explicit_vertex_parameter : require\n"
+          "layout(location = 0) out vec4 c;\n"
+          "void main() { c = vec4(gl_BaryCoordNoPerspAMD, gl_BaryCoordNoPerspCentroidAMD) + vec4(gl_BaryCoordPullModelAMD, 0.0); }\n",
+          ShaderStage::fragment,
+          { B::baryCoordNoPerspAMD, B::baryCoordNoPerspCentroidAMD, B::baryCoordPullModel } },
+        { "#version 450\n#extension GL_EXT_fragment_shader_barycentric : require\n"
+          "layout(location = 0) out vec4 c;\n"
+          "void main() { c = vec4(gl_BaryCoordEXT + gl_BaryCoordNoPerspEXT, 1.0); }\n",
+          ShaderStage::fragment,
+          { B::baryCoordKHR, B::baryCoordNoPerspKHR } },
+        { "#version 450\n#extension GL_EXT_fragment_invocation_density : require\n"
+          "layout(location = 0) out vec4 c;\n"
+          "void main() { c = vec4(vec2(gl_FragSizeEXT), float(gl_FragInvocationCountEXT), 1.0); }\n",
+          ShaderStage::fragment,
+          { B::fragSizeEXT, B::fragInvocationCountEXT } },
+        { "#version 450\n#extension GL_EXT_device_group : require\n"
+          "layout(location = 0) out vec4 c;\n"
+          "void main() { c = vec4(float(gl_DeviceIndex)); }\n",
+          ShaderStage::fragment,
+          { B::deviceIndex } },
+        { "#version 450\n#extension GL_ARB_shader_stencil_export : require\n"
+          "void main() { gl_FragStencilRefARB = 1; }\n",
+          ShaderStage::fragment,
+          { B::fragStencilRefEXT } },
+        { "#version 450\n#extension GL_NV_conservative_raster_underestimation : require\n"
+          "layout(location = 0) out vec4 c;\n"
+          "void main() { c = vec4(gl_FragFullyCoveredNV ? 1.0 : 0.0); }\n",
+          ShaderStage::fragment,
+          { B::fullyCoveredEXT } },
+        { "#version 450\n#extension GL_NV_viewport_array2 : require\n#extension GL_NV_stereo_view_rendering : require\n"
+          "layout(secondary_view_offset = 1) out highp int gl_Layer;\n"
+          "void main() { gl_Position = vec4(0.0); gl_SecondaryPositionNV = vec4(1.0); gl_ViewportMask[0] = 1; gl_SecondaryViewportMaskNV[0] = 2; }\n",
+          ShaderStage::vertex,
+          { B::secondaryPositionNV, B::viewportMaskNV, B::secondaryViewportMaskNV } },
+    };
+
+    for (const auto& c : cases)
+    {
+        auto result = transpiler->reflect (c.source, c.stage, ShaderLanguage::glsl);
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage() << "\n" << c.source;
+
+        const auto& ref = result.getValue();
+        for (auto expected : c.expected)
+        {
+            const auto isExpected = [expected] (const ShaderReflection::BuiltInBinding& b) { return b.builtin == expected; };
+            const auto found = std::any_of (ref.builtinInputs.begin(), ref.builtinInputs.end(), isExpected)
+                            || std::any_of (ref.builtinOutputs.begin(), ref.builtinOutputs.end(), isExpected);
+            EXPECT_TRUE (found) << "builtin " << (int) expected << " missing in\n" << c.source;
+        }
+    }
 }

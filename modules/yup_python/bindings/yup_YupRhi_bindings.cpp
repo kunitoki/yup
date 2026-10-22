@@ -317,6 +317,7 @@ void registerYupRhiBindings (py::module_& m)
         .def_readwrite ("renderTarget", &GpuTextureDesc::renderTarget)
         .def_readwrite ("mipLevels", &GpuTextureDesc::mipLevels)
         .def_readwrite ("sampleCount", &GpuTextureDesc::sampleCount)
+        .def_readwrite ("storage", &GpuTextureDesc::storage)
         .def_readwrite ("label", &GpuTextureDesc::label)
         .def ("__repr__", [] (const GpuTextureDesc& self)
         {
@@ -417,7 +418,20 @@ void registerYupRhiBindings (py::module_& m)
         .def_readwrite ("enabled", &GpuDepthStencilState::enabled)
         .def_readwrite ("format", &GpuDepthStencilState::format)
         .def_readwrite ("depthCompare", &GpuDepthStencilState::depthCompare)
-        .def_readwrite ("depthWriteEnabled", &GpuDepthStencilState::depthWriteEnabled);
+        .def_readwrite ("depthWriteEnabled", &GpuDepthStencilState::depthWriteEnabled)
+        .def_readwrite ("depthBias", &GpuDepthStencilState::depthBias)
+        .def_readwrite ("depthBiasSlopeScale", &GpuDepthStencilState::depthBiasSlopeScale)
+        .def_readwrite ("depthBiasClamp", &GpuDepthStencilState::depthBiasClamp);
+
+    py::class_<GpuUniformSlot> (m, "GpuUniformSlot")
+        .def (py::init<>())
+        .def (py::init<uint32_t, uint32_t>(), "group"_a, "binding"_a)
+        .def_readwrite ("group", &GpuUniformSlot::group)
+        .def_readwrite ("binding", &GpuUniformSlot::binding)
+        .def ("__eq__", [] (const GpuUniformSlot& self, const GpuUniformSlot& other)
+        {
+            return self == other;
+        });
 
     py::class_<GpuPipelineOptions> (m, "GpuPipelineOptions")
         .def (py::init<>())
@@ -432,7 +446,8 @@ void registerYupRhiBindings (py::module_& m)
         .def_readwrite ("stencilBack", &GpuPipelineOptions::stencilBack)
         .def_readwrite ("stencilReadMask", &GpuPipelineOptions::stencilReadMask)
         .def_readwrite ("stencilWriteMask", &GpuPipelineOptions::stencilWriteMask)
-        .def_readwrite ("sampleCount", &GpuPipelineOptions::sampleCount);
+        .def_readwrite ("sampleCount", &GpuPipelineOptions::sampleCount)
+        .def_readwrite ("dynamicUniformBuffers", &GpuPipelineOptions::dynamicUniformBuffers);
 
     py::class_<GpuDepthStencilOptions> (m, "GpuDepthStencilOptions")
         .def (py::init<>())
@@ -564,7 +579,12 @@ void registerYupRhiBindings (py::module_& m)
         .def ("isFormatSupported", &GpuDevice::isFormatSupported, "format"_a)
         .def ("isFormatRenderable", &GpuDevice::isFormatRenderable, "format"_a)
         .def ("isAnisotropicFilteringAvailable", &GpuDevice::isAnisotropicFilteringAvailable)
-        .def ("getMaximumSampleCount", &GpuDevice::getMaximumSampleCount)
+        .def ("isFragmentStorageBufferAvailable", &GpuDevice::isFragmentStorageBufferAvailable)
+        .def ("isDynamicUniformOffsetAvailable", &GpuDevice::isDynamicUniformOffsetAvailable)
+        .def ("isStorageTextureAvailable", &GpuDevice::isStorageTextureAvailable)
+        .def ("getMaximumSampleCount", py::overload_cast<> (&GpuDevice::getMaximumSampleCount, py::const_))
+        .def ("getMaximumSampleCount", py::overload_cast<GpuTextureFormat> (&GpuDevice::getMaximumSampleCount, py::const_), "format"_a)
+        .def ("getMaximumColorAttachments", &GpuDevice::getMaximumColorAttachments)
         .def ("createBuffer", [] (GpuDevice& self, GpuBufferType type, py::buffer data)
         {
             auto info = data.request();
@@ -606,6 +626,7 @@ void registerYupRhiBindings (py::module_& m)
         .def ("getSampleCount", &GpuTexture::getSampleCount)
         .def ("isValid", &GpuTexture::isValid)
         .def ("isRenderTarget", &GpuTexture::isRenderTarget)
+        .def ("isStorage", &GpuTexture::isStorage)
         .def ("__repr__", [] (const GpuTexture& self)
         {
             String result;
@@ -702,8 +723,10 @@ void registerYupRhiBindings (py::module_& m)
         .def ("getHeight", &GpuTarget::getHeight)
         // A pass borrows both the target it draws into and the frame it records into,
         // so both have to outlive it.
-        .def ("beginRenderPass", &GpuTarget::beginRenderPass, "frame"_a, "options"_a = GpuRenderOptions {},
-              py::keep_alive<0, 1>(), py::keep_alive<0, 2>())
+        .def ("beginRenderPass", py::overload_cast<GpuFrame&, const GpuRenderOptions&> (&GpuTarget::beginRenderPass),
+              "frame"_a, "options"_a = GpuRenderOptions {}, py::keep_alive<0, 1>(), py::keep_alive<0, 2>())
+        .def ("beginRenderPass", py::overload_cast<GpuFrame&, const GpuDepthStencilOptions&> (&GpuTarget::beginRenderPass),
+              "frame"_a, "options"_a, py::keep_alive<0, 1>(), py::keep_alive<0, 2>())
         .def ("asTexture", &GpuTarget::asTexture)
         .def ("readPixels", [] (GpuTarget& self) -> py::object
         {
@@ -744,8 +767,11 @@ void registerYupRhiBindings (py::module_& m)
     py::class_<GpuRenderPass> (m, "GpuRenderPass")
         .def ("isValid", &GpuRenderPass::isValid)
         .def ("setPipeline", &GpuRenderPass::setPipeline, "pipeline"_a)
-        .def ("setTexture", &GpuRenderPass::setTexture, "group"_a, "binding"_a, "texture"_a)
+        .def ("setTexture", py::overload_cast<int, int, GpuTexture::Ptr> (&GpuRenderPass::setTexture), "group"_a, "binding"_a, "texture"_a)
+        .def ("setTexture", py::overload_cast<int, int, GpuTexture::Ptr, const GpuTextureViewDesc&> (&GpuRenderPass::setTexture),
+              "group"_a, "binding"_a, "texture"_a, "view"_a)
         .def ("setSampler", &GpuRenderPass::setSampler, "group"_a, "binding"_a, "sampler"_a)
+        .def ("setStorageBuffer", &GpuRenderPass::setStorageBuffer, "group"_a, "binding"_a, "buffer"_a)
         .def ("setUniformBuffer", [] (GpuRenderPass& self, int group, int binding, py::buffer data)
         {
             auto info = data.request();
@@ -783,6 +809,8 @@ void registerYupRhiBindings (py::module_& m)
         .def ("setPipeline", &GpuComputePass::setPipeline, "pipeline"_a)
         .def ("setStorageBuffer", &GpuComputePass::setStorageBuffer, "group"_a, "binding"_a, "buffer"_a)
         .def ("setTexture", &GpuComputePass::setTexture, "group"_a, "binding"_a, "texture"_a)
+        .def ("setStorageTexture", &GpuComputePass::setStorageTexture, "group"_a, "binding"_a, "texture"_a, "view"_a = GpuTextureViewDesc {})
+        .def ("setSampler", &GpuComputePass::setSampler, "group"_a, "binding"_a, "sampler"_a)
         .def ("setUniformBuffer", [] (GpuComputePass& self, int group, int binding, py::buffer data)
         {
             auto info = data.request();

@@ -2243,60 +2243,6 @@ TEST_F (ArtboardTests, SetFileWithNullUnloadsSafely)
 // Artboard state machine inputs round-trip (game-animation.riv)
 //==============================================================================
 
-TEST_F (ArtboardGameAnimationTests, GetAllInputsDescribesEveryInput)
-{
-    const auto inputs = artboard->getAllInputs();
-
-    if (! inputs.isArray() || inputs.getArray()->isEmpty())
-    {
-        GTEST_SKIP() << "Test asset exposes no state machine inputs";
-        return;
-    }
-
-    for (const auto& input : *inputs.getArray())
-    {
-        auto* object = input.getDynamicObject();
-        ASSERT_NE (nullptr, object);
-
-        EXPECT_TRUE (object->hasProperty ("id"));
-        EXPECT_TRUE (object->hasProperty ("type"));
-
-        const auto type = object->getProperty ("type").toString();
-        EXPECT_TRUE (type == "number" || type == "boolean" || type == "trigger");
-
-        // Triggers are stateless and deliberately carry no "value".
-        EXPECT_EQ (type != "trigger", object->hasProperty ("value"));
-    }
-}
-
-TEST_F (ArtboardGameAnimationTests, SetAllInputsRoundTripsASnapshot)
-{
-    const auto snapshot = artboard->getAllInputs();
-
-    if (! snapshot.isArray() || snapshot.getArray()->isEmpty())
-    {
-        GTEST_SKIP() << "Test asset exposes no state machine inputs";
-        return;
-    }
-
-    EXPECT_NO_THROW (artboard->setAllInputs (snapshot));
-
-    const auto restored = artboard->getAllInputs();
-    ASSERT_TRUE (restored.isArray());
-    ASSERT_EQ (snapshot.getArray()->size(), restored.getArray()->size());
-
-    for (int i = 0; i < snapshot.getArray()->size(); ++i)
-    {
-        auto* before = snapshot.getArray()->getReference (i).getDynamicObject();
-        auto* after = restored.getArray()->getReference (i).getDynamicObject();
-        ASSERT_NE (nullptr, before);
-        ASSERT_NE (nullptr, after);
-
-        EXPECT_EQ (before->getProperty ("id"), after->getProperty ("id"));
-        EXPECT_EQ (before->getProperty ("value"), after->getProperty ("value"));
-    }
-}
-
 TEST_F (ArtboardGameAnimationTests, SetAllInputsIgnoresUnknownAndMalformedEntries)
 {
     Array<var> inputs;
@@ -2425,45 +2371,6 @@ TEST_F (ArtboardGameAnimationTests, AttachingIsRejectedForUnknownNodes)
 // The shipped fixtures are not guaranteed to report events with custom
 // properties, so these skip rather than fail when nothing is reported.
 //==============================================================================
-
-TEST_F (ArtboardGameAnimationTests, AdvancingAndPressingDoNotLoseReportedEvents)
-{
-    // NOTE: neither shipped fixture is known to report state machine events with
-    // custom properties, so this cannot positively prove the drain fires; it pins
-    // that the widened drain does not crash, recurse or double-report. The
-    // end-to-end check is ArtboardDemo's onPropertyChanged handler firing without
-    // a drag. See docs/ui/artboard.md.
-    Array<String> reported;
-
-    artboard->onPropertyChanged = [&] (Artboard&, const String& eventName, const String& propertyName, const var&, const var& newValue)
-    {
-        reported.add (eventName + "." + propertyName + "=" + newValue.toString());
-    };
-
-    for (int i = 0; i < 30; ++i)
-    {
-        artboard->advanceAndApply (0.016f);
-
-        // A resize advances the scene too, and used to swallow the frame's events.
-        if (i == 10)
-            artboard->setBounds (0.0f, 0.0f, 640.0f, 480.0f);
-    }
-
-    const MouseEvent press (MouseEvent::leftButton, KeyModifiers(), Point<float> (250.0f, 250.0f));
-    artboard->mouseDown (press);
-    artboard->mouseUp (press);
-
-    for (int i = 0; i < 30; ++i)
-        artboard->advanceAndApply (0.016f);
-
-    // Whatever was reported, the dedup cache means no value is reported twice in
-    // a row for the same event, and draining more often must not change that.
-    for (int i = 1; i < reported.size(); ++i)
-        EXPECT_NE (reported[i], reported[i - 1]);
-
-    if (reported.isEmpty())
-        GTEST_SKIP() << "Test asset reports no state machine events with custom properties";
-}
 
 TEST_F (ArtboardGameAnimationTests, EveryPointerHandlerDrainsWithoutCrashing)
 {
@@ -3631,6 +3538,38 @@ TEST_F (ArtboardLabTests, SetAllInputsAppliesASnapshotToAnotherArtboard)
     EXPECT_EQ (var (3.0), inputValue (other, "level"));
 }
 
+TEST_F (ArtboardLabTests, SetAllInputsRoundTripsASnapshot)
+{
+    artboard->setBoolInput ("toggle", true);
+    artboard->setNumberInput ("level", 3.0);
+
+    const auto snapshot = artboard->getAllInputs();
+    ASSERT_TRUE (snapshot.isArray());
+
+    artboard->setBoolInput ("toggle", false);
+    artboard->setNumberInput ("level", 0.0);
+
+    EXPECT_NO_THROW (artboard->setAllInputs (snapshot));
+
+    const auto restored = artboard->getAllInputs();
+    ASSERT_TRUE (restored.isArray());
+    ASSERT_EQ (snapshot.getArray()->size(), restored.getArray()->size());
+
+    for (int i = 0; i < snapshot.getArray()->size(); ++i)
+    {
+        auto* before = snapshot.getArray()->getReference (i).getDynamicObject();
+        auto* after = restored.getArray()->getReference (i).getDynamicObject();
+        ASSERT_NE (nullptr, before);
+        ASSERT_NE (nullptr, after);
+
+        EXPECT_EQ (before->getProperty ("id"), after->getProperty ("id"));
+        EXPECT_EQ (before->getProperty ("value"), after->getProperty ("value"));
+    }
+
+    EXPECT_EQ (var (true), inputValue (*artboard, "toggle"));
+    EXPECT_EQ (var (3.0), inputValue (*artboard, "level"));
+}
+
 TEST_F (ArtboardLabTests, FiredEventsReportTheirCustomProperties)
 {
     EXPECT_TRUE (reports.empty());
@@ -3673,6 +3612,30 @@ TEST_F (ArtboardLabTests, AnEventReportedAgainUnchangedIsNotReportedTwice)
     fire ("fire");
 
     EXPECT_EQ (1, countReports ("single"));
+}
+
+TEST_F (ArtboardLabTests, AdvancingAndPressingDoNotLoseReportedEvents)
+{
+    for (int i = 0; i < 10; ++i)
+        artboard->advanceAndApply (0.016f);
+
+    // A resize advances the scene too, and used to swallow the frame's events.
+    artboard->triggerInput ("fire");
+    artboard->setBounds (0.0f, 0.0f, 640.0f, 480.0f);
+
+    EXPECT_EQ (1, countReports ("single"));
+    EXPECT_EQ (3, countReports ("payload"));
+
+    const MouseEvent press (MouseEvent::leftButton, KeyModifiers(), Point<float> (320.0f, 240.0f));
+    artboard->mouseDown (press);
+    artboard->mouseUp (press);
+
+    for (int i = 0; i < 30; ++i)
+        artboard->advanceAndApply (0.016f);
+
+    // Draining more often must not report an unchanged value again.
+    EXPECT_EQ (1, countReports ("single"));
+    EXPECT_EQ (3, countReports ("payload"));
 }
 
 TEST_F (ArtboardLabTests, EachCustomPropertyOfAnEventIsTrackedOnItsOwn)

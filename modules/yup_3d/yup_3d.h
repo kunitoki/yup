@@ -28,13 +28,11 @@
     vendor:               yup
     version:              2.0.0
     name:                 YUP 3D
-    description:          3D scenes made of entities and attached parts, glTF loading and PBR rendering through the RHI.
+    description:          3D scenes made of entities and attached parts, their meshes, materials and lights, and glTF loading.
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_rhi yup_gui tinygltf
-    testDeps:             libpng
-    searchpaths:          native
+    dependencies:         yup_rhi yup_graphics tinygltf
 
   END_YUP_MODULE_DECLARATION
 
@@ -45,37 +43,51 @@
 #define YUP_3D_H_INCLUDED
 
 #include <yup_rhi/yup_rhi.h>
-#include <yup_gui/yup_gui.h>
+#include <yup_graphics/yup_graphics.h>
 
 //==============================================================================
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <concepts>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <map>
 #include <memory>
+#include <new>
 #include <numeric>
 #include <optional>
+#include <string_view>
+#include <tuple>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 //==============================================================================
 
-#include "scene/yup_Node.h"
-#include "resources/yup_BoundingBox.h"
+#include "scene/yup_EntityHandle.h"
+#include "scene/yup_NodeTypeId.h"
+#include "resources/yup_HalfFloat.h"
 #include "resources/yup_Texture.h"
-#include "resources/yup_EnvironmentMap.h"
 #include "resources/yup_Material.h"
 #include "resources/yup_Mesh.h"
-#include "scene/yup_EntityNode.h"
+#include "scene/yup_Entity.h"
+#include "scene/yup_Node.h"
+#include "scene/yup_NodeHandle.h"
+#include "scene/yup_IterationGuard.h"
+#include "scene/yup_NodePool.h"
+#include "scene/yup_System.h"
+#include "nodes/yup_TransformNode.h"
 #include "nodes/yup_MeshNode.h"
 #include "nodes/yup_MaterialNode.h"
 #include "nodes/yup_CameraNode.h"
 #include "nodes/yup_LightNode.h"
 #include "scene/yup_Scene.h"
+#include "scene/yup_NodeView.h"
+#include "scene/yup_NodeCollection.h"
+#include "scene/yup_Prefab.h"
 #include "gltf/yup_GltfModel.h"
-#include "rendering/yup_SceneDrawList.h"
-#include "rendering/yup_SceneRenderer.h"
-#include "rendering/yup_SceneComponent.h"

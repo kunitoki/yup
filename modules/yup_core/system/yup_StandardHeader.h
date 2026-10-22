@@ -93,6 +93,7 @@
 #include <sstream>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <type_traits>
 #include <typeinfo>
 #include <typeindex>

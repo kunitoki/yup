@@ -27,6 +27,7 @@ class GpuTexture;
 class GpuFrame;
 class GpuRenderPass;
 struct GpuRenderOptions;
+struct GpuDepthStencilOptions;
 class Image;
 
 //==============================================================================
@@ -107,6 +108,10 @@ public:
         @p view at a mip level and a layer (a cube face is a layer), and every
         draw in a pass begun on this target lands there.
 
+        A texture with a depth/stencil format makes a depth-only target: its
+        passes have no color attachment and render depth into the view. Begin
+        them with the GpuDepthStencilOptions overload of beginRenderPass().
+
         @param ctx      The GPU device that owns the texture.
         @param texture  A render-target texture allocated with GpuTexture::create().
         @param view     Selects the mip level and layer to render into.
@@ -114,12 +119,11 @@ public:
         @returns A GpuTarget, or nullptr if the texture is not a render target or
                  the view is out of range.
 
-        @warning A narrowed view is honoured for attachments on every backend, but
-                 **not for sampling** on OpenGL / OpenGL ES, which has no GLES3
-                 glTextureView and silently falls back to the base texture. Never
-                 read one mip level by binding a narrowed view - bind the whole
-                 texture and use an explicit @c textureLod() with a GpuSampler
-                 whose minLod / maxLod clamp to that level.
+        @warning A narrowed view is honored for attachments on every backend. To
+                 sample one, bind it with GpuRenderPass::setTexture (group, binding,
+                 texture, view). On OpenGL / OpenGL ES, which has no GLES3
+                 glTextureView, sampling honors the view's mip range but **not a
+                 layer range**: every layer of the texture stays visible.
     */
     static GpuTarget::Ptr createFromTexture (GpuDevice::Ptr ctx,
                                              GpuTexture::Ptr texture,
@@ -142,12 +146,35 @@ public:
         given frame. The pass must be finished (explicitly or by destruction)
         before the frame is submitted.
 
+        On a depth-only target (see createFromTexture()) the color fields of
+        @p options are ignored, and the depth is cleared to 1.0 and stored; a
+        load op other than clear asserts. Use the GpuDepthStencilOptions
+        overload to load or keep the depth.
+
         @param frame    The active GpuFrame the pass records into.
         @param options  Attachment load behaviour (clear flag + clear color).
 
         @returns A GpuRenderPass. Check isValid() before drawing into it.
     */
     GpuRenderPass beginRenderPass (GpuFrame& frame, const GpuRenderOptions& options = {});
+
+    /** Begins a depth-only render pass on a target backed by a depth-format texture.
+
+        The pass has no color attachment: the target's texture view is its depth
+        attachment, loaded, stored and cleared as @p depthOptions says. Its extent
+        is the view's, and draws need a depth-only pipeline (GpuPipelineOptions
+        with no color targets and depthStencil enabled). The pass takes no further
+        attachments.
+
+        Calling this on a color target is a programming error: it asserts and
+        returns an invalid pass.
+
+        @param frame         The active GpuFrame the pass records into.
+        @param depthOptions  Depth and stencil load / store behaviour and clear values.
+
+        @returns A GpuRenderPass. Check isValid() before drawing into it.
+    */
+    GpuRenderPass beginRenderPass (GpuFrame& frame, const GpuDepthStencilOptions& depthOptions);
 
     //==============================================================================
     /** Returns a GPU-texture view of the rendered result.
@@ -187,6 +214,10 @@ private:
     RenderableTarget* getRenderableTarget() const noexcept { return renderableTarget; }
 
     void invalidateCachedTexture() noexcept { cachedTexture = nullptr; }
+
+    bool isDepthOnly() const noexcept;
+
+    GpuRenderPass beginPass (GpuFrame& frame, const GpuRenderOptions& options, const GpuDepthStencilOptions& depthOptions);
 
     GpuDevice::Ptr ctx;
     std::unique_ptr<OffscreenTarget> offscreenTarget;

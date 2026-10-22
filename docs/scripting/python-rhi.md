@@ -204,4 +204,20 @@ available. Probe before creating:
 if device.isFormatRenderable(yup.GpuTextureFormat.rgba16float):
     ...
 print(device.getMaximumSampleCount(), device.isAnisotropicFilteringAvailable())
+
+# Per-format MSAA limit (0 when the format cannot render) and attachment count
+print(device.getMaximumSampleCount(yup.GpuTextureFormat.rgba16float))
+print(device.getMaximumColorAttachments())  # 1 to 4, 0 without a GPU
+
+# Compute storage textures and read-only storage buffers in render passes
+if device.isStorageTextureAvailable():
+    desc = yup.GpuTextureDesc(64, 64, yup.GpuTextureFormat.rgba8unorm)
+    desc.storage = True  # texture.isStorage() is then True
+if device.isFragmentStorageBufferAvailable():
+    ...  # render_pass.setStorageBuffer(0, 0, buffer)
 ```
+
+On desktop OpenGL, OpenGL ES and WebGL2 both storage queries return `False`.
+`GpuComputePass.setStorageTexture`, `setTexture` and `setSampler` bind textures
+for compute shaders. `r11g11b10float` is renderable on OpenGL ES and WebGL2 only
+with full float render target support.

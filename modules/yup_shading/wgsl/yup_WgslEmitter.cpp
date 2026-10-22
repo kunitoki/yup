@@ -29,7 +29,11 @@ namespace
 {
 
 //==============================================================================
-/** Shortest decimal text that reads back as the same 32-bit float, always marked as a float literal. */
+/** Shortest decimal text that reads back as the same 32-bit float, always marked as a float literal.
+
+    WGSL rejects literals whose decimal value lies past the largest float even when they would round to it,
+    so the text must also read back within range.
+*/
 std::string formatFloat (double value, const SourceLocation& loc)
 {
     const auto f = static_cast<float> (value);
@@ -39,7 +43,7 @@ std::string formatFloat (double value, const SourceLocation& loc)
 
     std::string text;
 
-    for (int precision = 1; precision <= std::numeric_limits<float>::max_digits10; ++precision)
+    for (int precision = 1; precision <= std::numeric_limits<double>::max_digits10; ++precision)
     {
         std::ostringstream out;
         out.imbue (std::locale::classic());
@@ -49,10 +53,10 @@ std::string formatFloat (double value, const SourceLocation& loc)
         std::istringstream in (text);
         in.imbue (std::locale::classic());
 
-        float parsed = 0.0f;
+        double parsed = 0.0;
         in >> parsed;
 
-        if (! in.fail() && parsed == f)
+        if (! in.fail() && static_cast<float> (parsed) == f && std::fabs (parsed) <= std::numeric_limits<float>::max())
             break;
     }
 

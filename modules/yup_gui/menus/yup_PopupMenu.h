@@ -335,6 +335,8 @@ public:
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
     /** @internal */
+    void mouseDrag (const MouseEvent& event) override;
+    /** @internal */
     void mouseMove (const MouseEvent& event) override;
     /** @internal */
     void mouseEnter (const MouseEvent& event) override;
@@ -383,6 +385,7 @@ private:
     float getVisibleItemsHeight() const;
     void scrollUp();
     void scrollDown();
+    void dragScroll (float y);
     int getVisibleItemCount() const;
 
     // Keyboard navigation
@@ -422,6 +425,8 @@ private:
     float availableContentHeight = 0.0f;
     float totalContentHeight = 0.0f;
     bool showScrollIndicators = false;
+    bool isDragScrolling = false;
+    float dragAnchorY = 0.0f;
 
     static constexpr float scrollIndicatorHeight = 12.0f;
     static constexpr int scrollSpeed = 1; // Number of items to scroll per wheel event

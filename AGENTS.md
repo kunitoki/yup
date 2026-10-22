@@ -27,9 +27,10 @@ Copyright line for new files: `Copyright (c) 2026 - kunitoki@gmail.com`.
 9. Don't pollute implementation files with obvious comments.
 10. Extensive Doxygen docs on public APIs and public build-system methods.
 11. Test-first where practical - a bug fix starts with a failing test. New code is always tested; refactors keep tests passing, API contracts intact, platform-specific layout preserved and performance in mind.
-12. Update `docs/` with effective and user targeted documentation (no extensive internal details if not needed) and add a **brief** `CHANGELOG.md` entry when the change warrants it.
-13. Surgical edits: every changed line traces to the request. Don't reformat or refactor adjacent code; do clean up orphans your own change created.
-14. Avoid the use of em-dashes, just use `-`.
+12. Update `docs/` with effective and user targeted documentation (no extensive internal details if not needed).
+13. Add a **brief** `CHANGELOG.md` entry when the change warrants it. Changes for unreleased features should not get a new entry. Keep order and structure.
+14. Surgical edits: every changed line traces to the request. Don't reformat or refactor adjacent code; do clean up orphans your own change created.
+15. Avoid the use of em-dashes, just use `-`.
 
 ## Style
 

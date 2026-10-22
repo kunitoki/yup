@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core
+    dependencies:       yup_core lzav_library
     optionalDeps:       glslang spirv_cross
 
   END_YUP_MODULE_DECLARATION
@@ -69,6 +69,7 @@
 //==============================================================================
 #include "shading/yup_ShaderTypes.h"
 #include "shading/yup_ShaderBundle.h"
+#include "shading/yup_WgslBindingLayout.h"
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 #include "wgsl/yup_GlslAst.h"

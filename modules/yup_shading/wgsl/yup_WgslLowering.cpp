@@ -397,6 +397,7 @@ public:
         sanitizeNames (unit);
         nameUnnamedParameters (unit);
         renameOverloads (unit);
+        removeUnreachableFunctions (unit);
         normalizeBlocks (unit);
         hoistLocalStructs (unit);
         runDiagnostics (unit);
@@ -665,6 +666,62 @@ private:
         for (auto& external : ast.declarations)
             if (auto* fd = std::get_if<FunctionDefinition> (&external); fd != nullptr && seen[fd->prototype.name] > 1)
                 fd->prototype.originalName = fd->prototype.name;
+    }
+
+    /** Removes the functions main() never calls, directly or not, as the SPIR-V backends do. Calls
+        name a GLSL function, which matches each of its overloads. */
+    void removeUnreachableFunctions (TranslationUnit& ast)
+    {
+        std::map<std::string, FunctionDefinition*> byName;
+        for (auto& external : ast.declarations)
+            if (auto* fd = std::get_if<FunctionDefinition> (&external); fd != nullptr)
+                byName.emplace (fd->prototype.originalName.empty() ? fd->prototype.name : fd->prototype.originalName + "/" + fd->prototype.name, fd);
+
+        std::set<std::string> called;
+        std::vector<std::string> pending;
+
+        const auto collectCalls = [&] (Expr& root)
+        {
+            walkExpr (root, [&] (Expr& e)
+            {
+                if (! e.is<ExprFunCall>())
+                    return;
+
+                const auto& callee = e.as<ExprFunCall>().callee;
+                if (callee != nullptr && callee->is<ExprVariable>() && called.insert (callee->as<ExprVariable>().name).second)
+                    pending.push_back (callee->as<ExprVariable>().name);
+            });
+        };
+
+        std::function<void (Statement&)> collectStatement = [&] (Statement& statement)
+        {
+            forEachOwnExpr (statement, collectCalls);
+            forEachChildStatement (statement, collectStatement);
+        };
+
+        called.insert ("main");
+        pending.push_back ("main");
+
+        for (auto& external : ast.declarations)
+            if (auto* d = std::get_if<Declaration> (&external); d != nullptr)
+                forEachDeclarationExpr (*d, collectCalls);
+
+        while (! pending.empty())
+        {
+            const auto name = pending.back();
+            pending.pop_back();
+
+            for (auto& [key, fd] : byName)
+                if ((key == name || key.rfind (name + "/", 0) == 0) && fd->body != nullptr)
+                    collectStatement (*fd->body);
+        }
+
+        ast.declarations.erase (std::remove_if (ast.declarations.begin(), ast.declarations.end(), [&] (ExternalDeclaration& external)
+        {
+            const auto* fd = std::get_if<FunctionDefinition> (&external);
+            return fd != nullptr && called.count (fd->prototype.originalName.empty() ? fd->prototype.name : fd->prototype.originalName) == 0;
+        }),
+                                ast.declarations.end());
     }
 
     /** Names every uniform/buffer block and flattens stage IO blocks into plain in/out variables. */

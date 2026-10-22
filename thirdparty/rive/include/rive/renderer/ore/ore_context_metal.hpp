@@ -68,6 +68,12 @@ public:
     // The command buffer of the frame being recorded, nil outside a frame.
     id<MTLCommandBuffer> commandBuffer() const { return m_mtlCommandBuffer; }
 
+    void setRenderPassSampleBuffer(id sampleBuffer, NSUInteger firstSampleIndex)
+    {
+        m_renderPassSampleBuffer = sampleBuffer;
+        m_renderPassSampleIndex = firstSampleIndex;
+    }
+
     ContextMetal(const ContextMetal&) = delete;
     ContextMetal& operator=(const ContextMetal&) = delete;
 
@@ -96,8 +102,12 @@ private:
     id<MTLDevice> m_mtlDevice = nil;
     id<MTLCommandQueue> m_mtlQueue = nil;
     id<MTLCommandBuffer> m_mtlCommandBuffer = nil;
+    bool m_ownsCommandBuffer = true;
 
     std::vector<rcp<BindGroup>> m_deferredBindGroups;
+
+    id m_renderPassSampleBuffer = nil;
+    NSUInteger m_renderPassSampleIndex = 0;
 
     // Serial of the command buffer being recorded, bumped each frame.
     uint64_t m_currentSerial = 0;

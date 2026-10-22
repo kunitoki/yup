@@ -531,6 +531,8 @@ rcp<Texture> ContextD3D11::d3d11MakeTexture(const TextureDesc& desc)
         bindFlags |= D3D11_BIND_DEPTH_STENCIL;
     else if (desc.renderTarget)
         bindFlags |= D3D11_BIND_RENDER_TARGET;
+    if (desc.storage)
+        bindFlags |= D3D11_BIND_UNORDERED_ACCESS;
 
     if (desc.type == TextureType::texture3D)
     {
@@ -1193,6 +1195,22 @@ rcp<BindGroup> ContextD3D11::d3d11MakeBindGroup(const BindGroupDesc& desc)
             continue;
         bg->m_d3d11Samplers.push_back(binding);
         bg->m_retainedSamplers.push_back(ref_rcp(entry.sampler));
+    }
+
+    bg->m_d3d11StorageBuffers.reserve(desc.storageBufferCount);
+    for (uint32_t i = 0; i < desc.storageBufferCount; ++i)
+    {
+        const auto& entry = desc.storageBuffers[i];
+        BindGroupD3D11::D3D11TexBinding binding{};
+        binding.srv =
+            static_cast<ID3D11ShaderResourceView*>(entry.nativeBuffer);
+        if (binding.srv == nullptr ||
+            !lookupStages(entry.slot,
+                          BindingKind::storageBufferRO,
+                          &binding.vsSlot,
+                          &binding.psSlot))
+            continue;
+        bg->m_d3d11StorageBuffers.push_back(binding);
     }
 
     return bg;

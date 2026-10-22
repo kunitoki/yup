@@ -16,6 +16,10 @@ public:
     {}
     ~BufferD3D11() override = default; // ComPtr released automatically
     void update(const void* data, uint32_t size, uint32_t offset) override;
+    void writeUnsynchronized(const void* data,
+                             uint32_t size,
+                             uint32_t offset,
+                             bool discard) override;
 
 private:
     friend class ContextD3D11;

@@ -301,6 +301,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "misc/yup_ScopeGuard.h"
 #include "threads/yup_ThreadValueInitialiser.h"
 #include "containers/yup_ListenerList.h"
+#include "containers/yup_Signal.h"
 #include "containers/yup_OwnedArray.h"
 #include "containers/yup_ReferenceCountedArray.h"
 #include "containers/yup_SortedSet.h"

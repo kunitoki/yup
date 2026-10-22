@@ -12,6 +12,8 @@ public:
     SamplerWGPU() = default;
     ~SamplerWGPU() override = default; // wgpu::Sampler RAII destructor releases
 
+    const wgpu::Sampler& wgpuSampler() const { return m_wgpuSampler; }
+
 private:
     friend class ContextWGPU;
     wgpu::Sampler m_wgpuSampler;

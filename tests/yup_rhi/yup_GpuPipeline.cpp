@@ -23,6 +23,8 @@
 
 #include <yup_rhi/yup_rhi.h>
 
+#include <set>
+
 using namespace yup;
 
 namespace
@@ -101,6 +103,41 @@ TEST (ShaderBindingMapTests, TextureAndSamplerAreEncoded)
     EXPECT_FALSE (blob.empty());
 }
 
+TEST (ShaderBindingMapTests, DepthSamplerIsEncodedAsComparisonSampler)
+{
+    ShaderReflection refl;
+
+    ShaderReflection::ResourceBinding img;
+    img.binding = 0;
+    img.imageIsDepth = true;
+    refl.separateImages.push_back (img);
+
+    ShaderReflection::ResourceBinding shadowSampler;
+    shadowSampler.binding = 1;
+    shadowSampler.imageIsDepth = true;
+    refl.separateSamplers.push_back (shadowSampler);
+
+    ShaderReflection::ResourceBinding plainSampler;
+    plainSampler.binding = 2;
+    refl.separateSamplers.push_back (plainSampler);
+
+    const auto blob = makeShaderBindingMapBlob (refl, ShaderStage::fragment);
+
+    rive::ore::BindingMap map;
+    ASSERT_TRUE (rive::ore::BindingMap::fromBlob (blob.data(), blob.size(), &map));
+
+    const auto* texture = map.lookupEntry (0, 0);
+    const auto* comparison = map.lookupEntry (0, 1);
+    const auto* filtering = map.lookupEntry (0, 2);
+    ASSERT_NE (texture, nullptr);
+    ASSERT_NE (comparison, nullptr);
+    ASSERT_NE (filtering, nullptr);
+
+    EXPECT_EQ (texture->textureSampleType, rive::ore::TextureSampleType::Depth);
+    EXPECT_EQ (comparison->kind, rive::ore::ResourceKind::ComparisonSampler);
+    EXPECT_EQ (filtering->kind, rive::ore::ResourceKind::Sampler);
+}
+
 TEST (ShaderBindingMapTests, StorageBufferIsEncoded)
 {
     ShaderReflection refl;
@@ -114,6 +151,35 @@ TEST (ShaderBindingMapTests, StorageBufferIsEncoded)
 
     auto blob = makeShaderBindingMapBlob (refl, ShaderStage::vertex);
     EXPECT_FALSE (blob.empty());
+}
+
+TEST (ShaderBindingMapTests, StorageBufferKindFollowsReadOnly)
+{
+    ShaderReflection refl;
+
+    ShaderReflection::ResourceBinding readOnly;
+    readOnly.binding = 0;
+    readOnly.backendSlot = 0;
+    readOnly.readOnly = true;
+    refl.storageBuffers.push_back (readOnly);
+
+    ShaderReflection::ResourceBinding writable;
+    writable.binding = 1;
+    writable.backendSlot = 1;
+    refl.storageBuffers.push_back (writable);
+
+    const auto blob = makeShaderBindingMapBlob (refl, ShaderStage::fragment);
+
+    rive::ore::BindingMap map;
+    ASSERT_TRUE (rive::ore::BindingMap::fromBlob (blob.data(), blob.size(), &map));
+
+    const auto* readOnlyEntry = map.lookupEntry (0, 0);
+    const auto* writableEntry = map.lookupEntry (0, 1);
+    ASSERT_NE (readOnlyEntry, nullptr);
+    ASSERT_NE (writableEntry, nullptr);
+
+    EXPECT_EQ (readOnlyEntry->kind, rive::ore::ResourceKind::StorageBufferRO);
+    EXPECT_EQ (writableEntry->kind, rive::ore::ResourceKind::StorageBufferRW);
 }
 
 TEST (ShaderBindingMapTests, StorageImageIsEncoded)
@@ -220,6 +286,209 @@ TEST (ShaderBindingMapTests, GLFixupBlobEncodesBothUniformBuffersAndSamplers)
     EXPECT_EQ (blob[1], 2u);
     EXPECT_EQ (blob[2], 0u);
 }
+
+TEST (ShaderBindingMapTests, GLTextureSamplerPairsBlobIsEmptyWithoutCombinedSamplers)
+{
+    EXPECT_TRUE (makeGLTextureSamplerPairsBlob ({}).empty());
+}
+
+TEST (ShaderBindingMapTests, GLTextureSamplerPairsBlobListsEveryTextureOfASharedSampler)
+{
+    ShaderReflection refl;
+
+    ShaderReflection::ResourceBinding shadow;
+    shadow.name = "u_shadow";
+    shadow.set = 1;
+    shadow.binding = 3;
+    refl.separateImages.push_back (shadow);
+
+    ShaderReflection::ResourceBinding material = shadow;
+    material.name = "u_material";
+    material.set = 2;
+    refl.separateImages.push_back (material);
+
+    ShaderReflection::ResourceBinding pointClamp;
+    pointClamp.name = "pointClamp";
+    pointClamp.set = 0;
+    pointClamp.binding = 3;
+    refl.separateSamplers.push_back (pointClamp);
+
+    refl.glCombinedSamplers = { { "yup_combined_u_shadow_pointClamp", 0 }, { "yup_combined_u_material_pointClamp", 1 } };
+
+    const std::vector<uint8_t> expected { 1, 3, 0, 3, 2, 3, 0, 3 };
+    EXPECT_EQ (makeGLTextureSamplerPairsBlob (refl), expected);
+}
+
+TEST (ShaderBindingMapTests, GLTextureSamplerPairsBlobMatchesUnnamedResourcesByTheirId)
+{
+    ShaderReflection refl;
+
+    ShaderReflection::ResourceBinding image;
+    image.resourceId = 12;
+    image.set = 0;
+    image.binding = 1;
+    refl.separateImages.push_back (image);
+
+    ShaderReflection::ResourceBinding sampler;
+    sampler.resourceId = 13;
+    sampler.set = 0;
+    sampler.binding = 2;
+    refl.separateSamplers.push_back (sampler);
+
+    refl.glCombinedSamplers = { { "yup_combined_img12_samp13", 0 } };
+
+    const std::vector<uint8_t> expected { 0, 1, 0, 2 };
+    EXPECT_EQ (makeGLTextureSamplerPairsBlob (refl), expected);
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+
+//==============================================================================
+// GL - samplers of a graphics pipeline with several bind groups
+//==============================================================================
+
+class GpuPipelineGLSamplerTests : public ::testing::Test
+{
+protected:
+    /** Declares a sampler it never uses. */
+    static constexpr const char* vertexSource = R"(#version 450
+layout(set = 0, binding = 0) uniform ViewBlock { vec4 value; } view;
+layout(set = 0, binding = 4) uniform sampler unusedVertexSampler;
+void main() { gl_Position = view.value; })";
+
+    /** pointClamp serves the textures of sets 1 and 2; s_unused is never used. */
+    static constexpr const char* fragmentSource = R"(#version 450
+layout(set = 0, binding = 3) uniform sampler pointClamp;
+layout(set = 1, binding = 3) uniform texture2D u_shadow;
+layout(set = 2, binding = 3) uniform texture2D u_material;
+layout(set = 2, binding = 7) uniform sampler s_unused;
+layout(location = 0) out vec4 color;
+void main()
+{
+    color = texture (sampler2D (u_shadow, pointClamp), vec2 (0.5))
+          + texture (sampler2D (u_material, pointClamp), vec2 (0.5));
+})";
+
+    /** Names whose combined uniform holds "__", which spirv-cross collapses when it compiles. */
+    static constexpr const char* underscoreFragmentSource = R"(#version 450
+layout(set = 0, binding = 3) uniform sampler _pointClamp;
+layout(set = 1, binding = 3) uniform texture2D u_shadow_;
+layout(set = 2, binding = 3) uniform texture2D u_material;
+layout(location = 0) out vec4 color;
+void main()
+{
+    color = texture (sampler2D (u_shadow_, _pointClamp), vec2 (0.5))
+          + texture (sampler2D (u_material, _pointClamp), vec2 (0.5));
+})";
+
+    static ResultValue<ShaderBundle> compileEssl (const char* fragment = fragmentSource)
+    {
+        ShaderBundleCompileRequest request;
+
+        for (const auto& [stage, source] : { std::pair (ShaderStage::vertex, vertexSource), std::pair (ShaderStage::fragment, fragment) })
+        {
+            ShaderBundleEntry entry;
+            entry.stage = stage;
+            entry.source = source;
+            entry.targetLanguages = { ShaderLanguage::essl };
+            request.entries.push_back (entry);
+        }
+
+        return ShaderBundleCompiler().compile (request);
+    }
+
+    static const ShaderReflection::ResourceBinding* find (const std::vector<ShaderReflection::ResourceBinding>& resources, const char* name)
+    {
+        for (const auto& r : resources)
+        {
+            if (r.name == name)
+                return &r;
+        }
+
+        return nullptr;
+    }
+};
+
+TEST_F (GpuPipelineGLSamplerTests, ASharedSamplerIsPairedWithEachOfItsTextures)
+{
+    const auto result = compileEssl();
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& bundle = result.getReference();
+    const auto* fs = bundle.findShader (ShaderStage::fragment, ShaderLanguage::essl);
+    ASSERT_NE (fs, nullptr);
+
+    const auto* shadow = find (fs->reflection.separateImages, "u_shadow");
+    const auto* material = find (fs->reflection.separateImages, "u_material");
+    const auto* pointClamp = find (fs->reflection.separateSamplers, "pointClamp");
+    ASSERT_NE (shadow, nullptr);
+    ASSERT_NE (material, nullptr);
+    ASSERT_NE (pointClamp, nullptr);
+    EXPECT_NE (shadow->backendSlot, material->backendSlot);
+
+    std::set<uint32_t> combinedUnits;
+    for (const auto& cs : fs->reflection.glCombinedSamplers)
+        combinedUnits.insert (cs.textureSlot);
+
+    EXPECT_EQ (combinedUnits, (std::set<uint32_t> { shadow->backendSlot, material->backendSlot }));
+    EXPECT_EQ (combinedUnits.count (pointClamp->backendSlot), 1u);
+
+    const auto pairs = makeGLTextureSamplerPairsBlob (fs->reflection);
+    ASSERT_EQ (pairs.size(), 8u);
+
+    std::set<std::vector<uint8_t>> pairSet { { pairs.begin(), pairs.begin() + 4 }, { pairs.begin() + 4, pairs.end() } };
+    EXPECT_EQ (pairSet, (std::set<std::vector<uint8_t>> { { 1, 3, 0, 3 }, { 2, 3, 0, 3 } }));
+}
+
+TEST_F (GpuPipelineGLSamplerTests, PairsMatchCombinedNamesSpirvCrossSanitized)
+{
+    const auto result = compileEssl (underscoreFragmentSource);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* fs = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::essl);
+    ASSERT_NE (fs, nullptr);
+    ASSERT_EQ (fs->reflection.glCombinedSamplers.size(), 2u);
+
+    const auto pairs = makeGLTextureSamplerPairsBlob (fs->reflection);
+    EXPECT_EQ (pairs.size(), 4u * fs->reflection.glCombinedSamplers.size());
+}
+
+TEST_F (GpuPipelineGLSamplerTests, UnpairedSamplersHaveNoSlot)
+{
+    const auto result = compileEssl();
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& bundle = result.getReference();
+    const auto* vs = bundle.findShader (ShaderStage::vertex, ShaderLanguage::essl);
+    const auto* fs = bundle.findShader (ShaderStage::fragment, ShaderLanguage::essl);
+    ASSERT_NE (vs, nullptr);
+    ASSERT_NE (fs, nullptr);
+
+    const auto* unusedVertex = find (vs->reflection.separateSamplers, "unusedVertexSampler");
+    const auto* unusedFragment = find (fs->reflection.separateSamplers, "s_unused");
+    ASSERT_NE (unusedVertex, nullptr);
+    ASSERT_NE (unusedFragment, nullptr);
+    EXPECT_EQ (unusedVertex->backendSlot, ~0u);
+    EXPECT_EQ (unusedFragment->backendSlot, ~0u);
+    EXPECT_TRUE (makeGLTextureSamplerPairsBlob (vs->reflection).empty());
+
+    // Both stages' binding maps report the unpaired samplers absent, so ore never binds them on a texture's unit
+    const auto vsBlob = makeShaderBindingMapBlob (vs->reflection, ShaderStage::vertex);
+    const auto fsBlob = makeShaderBindingMapBlob (fs->reflection, ShaderStage::fragment);
+
+    rive::ore::BindingMap vsMap, fsMap;
+    ASSERT_TRUE (rive::ore::BindingMap::fromBlob (vsBlob.data(), vsBlob.size(), &vsMap));
+    ASSERT_TRUE (rive::ore::BindingMap::fromBlob (fsBlob.data(), fsBlob.size(), &fsMap));
+
+    const auto* vertexEntry = vsMap.lookupEntry (0, 4);
+    const auto* fragmentEntry = fsMap.lookupEntry (2, 7);
+    ASSERT_NE (vertexEntry, nullptr);
+    ASSERT_NE (fragmentEntry, nullptr);
+    EXPECT_EQ (vertexEntry->backendSlot[0], rive::ore::BindingMap::kAbsent);
+    EXPECT_EQ (fragmentEntry->backendSlot[1], rive::ore::BindingMap::kAbsent);
+}
+
+#endif
 
 // ---------------------------------------------------------------------------
 // GpuBuffer::create — validation and null paths
@@ -387,6 +656,51 @@ TEST_F (GpuPipelineCacheTests, DifferentOptionsProduceDifferentKey)
     const auto keyA = GpuPipelineCache::generateCacheKey (bundle, a, GpuPlatform::Metal);
     const auto keyB = GpuPipelineCache::generateCacheKey (bundle, b, GpuPlatform::Metal);
     EXPECT_NE (keyA, keyB);
+}
+
+TEST_F (GpuPipelineCacheTests, DepthBiasProducesDifferentKeys)
+{
+    ShaderBundle bundle;
+
+    GpuPipelineOptions base;
+    base.depthStencil.enabled = true;
+
+    auto withBias = base;
+    withBias.depthStencil.depthBias = 2;
+
+    auto withSlope = base;
+    withSlope.depthStencil.depthBiasSlopeScale = 1.0f;
+
+    auto withClamp = base;
+    withClamp.depthStencil.depthBiasClamp = 0.01f;
+
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, base, GpuPlatform::Metal);
+    EXPECT_NE (key, GpuPipelineCache::generateCacheKey (bundle, withBias, GpuPlatform::Metal));
+    EXPECT_NE (key, GpuPipelineCache::generateCacheKey (bundle, withSlope, GpuPlatform::Metal));
+    EXPECT_NE (key, GpuPipelineCache::generateCacheKey (bundle, withClamp, GpuPlatform::Metal));
+}
+
+TEST_F (GpuPipelineCacheTests, PipelineCacheKeyIncludesDynamicSlots)
+{
+    ShaderBundle bundle;
+
+    GpuPipelineOptions base;
+
+    auto withDrawBlock = base;
+    withDrawBlock.dynamicUniformBuffers = { { 2, 0 } };
+
+    auto withMaterialBlock = base;
+    withMaterialBlock.dynamicUniformBuffers = { { 2, 1 } };
+
+    auto withBoth = base;
+    withBoth.dynamicUniformBuffers = { { 2, 0 }, { 2, 1 } };
+
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, base, GpuPlatform::Metal);
+    const auto drawKey = GpuPipelineCache::generateCacheKey (bundle, withDrawBlock, GpuPlatform::Metal);
+    EXPECT_NE (key, drawKey);
+    EXPECT_NE (drawKey, GpuPipelineCache::generateCacheKey (bundle, withMaterialBlock, GpuPlatform::Metal));
+    EXPECT_NE (drawKey, GpuPipelineCache::generateCacheKey (bundle, withBoth, GpuPlatform::Metal));
+    EXPECT_EQ (drawKey, GpuPipelineCache::generateCacheKey (bundle, withDrawBlock, GpuPlatform::Metal));
 }
 
 TEST_F (GpuPipelineCacheTests, StoreAndContainsAndCount)

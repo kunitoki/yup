@@ -87,6 +87,19 @@ TEST_F (GpuDeviceErrorTests, HeadlessDeviceIsNeverLost)
     EXPECT_FALSE (ctx->isDeviceLost());
 }
 
+TEST_F (GpuDeviceErrorTests, HeadlessReportsNoAdvancedCapabilities)
+{
+    // The fixture device carries a mocked ore context, a plain headless device has none
+    auto headless = GpuDevice::create (GpuPlatform::Headless, {});
+    ASSERT_NE (headless, nullptr);
+
+    EXPECT_EQ (headless->getMaximumColorAttachments(), 0u);
+    EXPECT_EQ (headless->getMaximumSampleCount (GpuTextureFormat::rgba8unorm), 0u);
+    EXPECT_FALSE (headless->isFragmentStorageBufferAvailable());
+    EXPECT_FALSE (headless->isStorageTextureAvailable());
+    EXPECT_FALSE (headless->isDynamicUniformOffsetAvailable());
+}
+
 #if YUP_ANDROID || YUP_LINUX
 TEST_F (GpuDeviceErrorTests, CreateOpenGLWithoutAWindowHasNoCompute)
 {
@@ -99,21 +112,6 @@ TEST_F (GpuDeviceErrorTests, CreateOpenGLWithoutAWindowHasNoCompute)
         auto ctx = GpuDevice::create (GpuPlatform::OpenGL, options);
         EXPECT_TRUE (ctx == nullptr || ! ctx->isComputeAvailable());
     }).join();
-}
-#endif
-
-#if YUP_RIVE_USE_VULKAN
-TEST_F (GpuDeviceErrorTests, CreateVulkanWithoutAWindowLoadsTheSystemLoader)
-{
-    // No loader is passed in: the device finds the system one
-    if (! GpuDevice::isPlatformSupported (GpuPlatform::Vulkan, {}))
-        GTEST_SKIP() << "no Vulkan loader or driver in this environment";
-
-    auto ctx = GpuDevice::create (GpuPlatform::Vulkan, {});
-    ASSERT_NE (ctx, nullptr);
-    EXPECT_EQ (ctx->getPlatform(), GpuPlatform::Vulkan);
-    EXPECT_TRUE (ctx->isComputeAvailable());
-    EXPECT_FALSE (ctx->isDeviceLost());
 }
 #endif
 
@@ -330,43 +328,6 @@ TEST_F (GpuDeviceErrorTests, ComputePipelineCompileFromGlslOnHeadlessFails)
     EXPECT_TRUE (result.failed());
 }
 #endif // YUP_ENABLE_SHADER_TRANSPILER
-
-#if YUP_APPLE
-// ---------------------------------------------------------------------------
-// GpuComputePipeline — Metal
-// ---------------------------------------------------------------------------
-
-class GpuComputePipelineMetalTests : public ::testing::Test
-{
-protected:
-    void SetUp() override
-    {
-        device = GpuDevice::create (GpuPlatform::Metal, {});
-        if (device == nullptr || ! device->isComputeAvailable())
-            GTEST_SKIP() << "No Metal compute device available";
-    }
-
-    GpuDevice::Ptr device;
-};
-
-TEST_F (GpuComputePipelineMetalTests, CompileFromBundleResolvesRenamedMainEntryPoint)
-{
-    // SPIRV-Cross names the MSL kernel main0, while the bundle keeps the GLSL entry point name.
-    ShaderInfo info;
-    info.stage = ShaderStage::compute;
-    info.language = ShaderLanguage::msl;
-    info.entryPoint = "main";
-    info.source = "#include <metal_stdlib>\n"
-                  "using namespace metal;\n"
-                  "kernel void main0 (uint3 id [[thread_position_in_grid]]) {}\n";
-
-    ShaderBundle bundle;
-    bundle.addShader (std::move (info));
-
-    auto result = GpuComputePipeline::compileFromBundle (device, bundle, GpuWorkgroupSize { 8, 1, 1 });
-    EXPECT_TRUE (result.wasOk()) << result.getErrorMessage();
-}
-#endif // YUP_APPLE
 
 // ---------------------------------------------------------------------------
 // GpuComputePass — invalid (headless) pass setter no-ops

@@ -128,6 +128,51 @@ TEST_F (Matrix4Tests, InverseRoundTrips)
     expectNear (m.inverted().transformPoint (m.transformPoint (p)), p, 1.0e-4f);
 }
 
+TEST_F (Matrix4Tests, ProjectiveInverseRoundTrips)
+{
+    const auto m = Matrix4::lookAt ({ 1.0f, 2.0f, 5.0f }, {}, { 0.0f, 1.0f, 0.0f })
+                       .followedBy (Matrix4::perspective (1.0f, 1.5f, 0.1f, 100.0f));
+
+    EXPECT_FALSE (m.isAffine());
+    EXPECT_TRUE (m.followedBy (m.inverted()).approximatelyEqualTo (Matrix4::identity(), 1.0e-4f));
+}
+
+TEST_F (Matrix4Tests, IsAffineDetectsProjections)
+{
+    EXPECT_TRUE (Matrix4().isAffine());
+    EXPECT_TRUE (Matrix4::rotationX (0.5f).followedBy (Matrix4::translation ({ 1.0f, 2.0f, 3.0f })).isAffine());
+    EXPECT_FALSE (Matrix4::perspective (1.0f, 1.0f, 0.1f, 10.0f).isAffine());
+}
+
+TEST_F (Matrix4Tests, ComposeMatchesScaleRotateTranslate)
+{
+    const Vector3<float> offset (4.0f, -5.0f, 6.0f);
+    const auto rotation = Quaternion::fromAxisAngle ({ 1.0f, 2.0f, 3.0f }, 0.8f);
+    const Vector3<float> scale (2.0f, 3.0f, 0.5f);
+
+    const auto expected = Matrix4::scaling (scale)
+                              .followedBy (rotation.toMatrix4())
+                              .followedBy (Matrix4::translation (offset));
+
+    EXPECT_TRUE (Matrix4::compose (offset, rotation, scale).approximatelyEqualTo (expected));
+}
+
+TEST_F (Matrix4Tests, ConstantExpressionsMatchRuntime)
+{
+    constexpr auto a = Matrix4 (std::array<float, 16> { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f });
+    constexpr auto b = Matrix4 (std::array<float, 16> { 2.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 3.0f, 1.0f, 0.0f, 2.0f, 0.0f, 0.0f, 4.0f, 0.0f, 1.0f });
+    constexpr auto product = a.followedBy (b);
+    constexpr auto point = a.transformPoint4 (1.0f, 2.0f, 3.0f, 1.0f);
+
+    static_assert (product (0, 0) == 5.0f);
+    static_assert (point[0] == 51.0f);
+
+    // Small integers are exact, so both paths must agree to the bit
+    auto runtimeA = a;
+    EXPECT_EQ (runtimeA.followedBy (b), product);
+    EXPECT_EQ (runtimeA.transformPoint4 (1.0f, 2.0f, 3.0f, 1.0f), point);
+}
+
 TEST_F (Matrix4Tests, SingularInverseIsIdentity)
 {
     EXPECT_TRUE (Matrix4::scaling ({ 1.0f, 0.0f, 1.0f }).inverted().isIdentity());

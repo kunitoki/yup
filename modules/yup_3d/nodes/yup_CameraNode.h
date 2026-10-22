@@ -28,7 +28,7 @@ namespace yup
     Cameras look down the -Z axis of their entity with +Y up, like glTF cameras. Choose which
     camera renders a scene with Scene::setActiveCamera().
 
-    @see Scene, EntityNode
+    @see Scene, Entity
 */
 class YUP_API CameraNode : public Node
 {
@@ -47,12 +47,41 @@ public:
     /** Returns the projection matrix for a viewport.
 
         @param aspectRatio     The viewport width divided by its height.
-        @param depthZeroToOne  True for a [0, 1] depth range, false for [-1, 1].
+        @param depthZeroToOne  True for a [0, 1] clip depth range, as every backend expects from shaders
+                               compiled by YUP's shader transpiler, OpenGL included. False for [-1, 1],
+                               only for shaders that reach OpenGL without the transpiler.
     */
     Matrix4 getProjectionMatrix (float aspectRatio, bool depthZeroToOne = true) const noexcept;
 
     /** Returns the view matrix: the inverse of the world matrix of the entity, or identity if unattached. */
     Matrix4 getViewMatrix() const noexcept;
+
+    /** Returns the world space ray through a point of a viewport, for picking what is under the mouse.
+
+        A distance along the ray is a view depth along -Z for a camera without scale, so zNear is
+        where it reaches the near plane: pass it as the minimum distance of the hit tests. The rays
+        of an orthographic camera are parallel and start on the plane of the camera.
+
+        @param position  The point, in the same coordinates as the viewport.
+        @param viewport  The area the camera renders into, a component's local bounds for example.
+
+        @return The ray, or nothing for an empty viewport.
+
+        @see Ray, Entity::intersectRay, Scene::raycast
+    */
+    std::optional<Ray> getRay (Point<float> position, Rectangle<float> viewport) const noexcept;
+
+    /** Returns the signed circle of confusion diameter, in pixels, of a point at a view distance.
+
+        Uses the thin lens model with the focal length implied by yFov and sensorHeight. Negative in
+        front of the focus distance, positive behind it, and 0 for orthographic cameras, for fStop <= 0,
+        for yFov <= 0, for distances <= 0 and for a viewportHeight <= 0. Tends to a finite value as the
+        distance grows. A focusDistance at or below the focal length is treated as just past it.
+
+        @param distance        View-space distance along -Z, in world units (read as meters, like sensorHeight).
+        @param viewportHeight  The height of the rendered image in pixels, 0 or less gives 0.
+    */
+    float getCircleOfConfusion (float distance, float viewportHeight) const noexcept;
 
     //==============================================================================
     Projection projection = Projection::perspective; ///< The kind of projection.
@@ -61,6 +90,15 @@ public:
     float zFar = 1000.0f;                            ///< Distance of the far clipping plane, 0 for infinite (perspective only).
     float xMag = 1.0f;                               ///< Orthographic half width.
     float yMag = 1.0f;                               ///< Orthographic half height.
+
+    /** The height of the virtual sensor in world units, read as meters: 24 mm, a full-frame sensor held
+        in landscape. Together with yFov it defines the focal length the depth of field uses.
+    */
+    static constexpr float sensorHeight = 0.024f;
+
+    float fStop = 2.8f;          ///< Aperture f-number for depth of field; smaller blurs more, 0 or less disables it.
+    float focusDistance = 10.0f; ///< Distance along -Z, in world units read as meters, that stays perfectly sharp.
+    int apertureBlades = 0;      ///< Diaphragm blades shaping the bokeh: below 3 is round, otherwise a regular polygon.
 };
 
 } // namespace yup

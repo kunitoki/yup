@@ -80,8 +80,7 @@ yup_standalone_app (
         libgif
         libtiff
         glslang
-        spirv_cross
-        spirv_tools)
+        spirv_cross)
 
 set_target_properties (${target_name} PROPERTIES
     CXX_EXTENSIONS OFF

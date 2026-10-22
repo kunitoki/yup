@@ -21,6 +21,10 @@
 
 #include <gtest/gtest.h>
 
+#include <map>
+#include <regex>
+#include <set>
+
 #include <yup_shading/yup_shading.h>
 
 using namespace yup;
@@ -529,6 +533,55 @@ TEST_F (ShaderBundleTests, RoundtripStorageBuffersInReflection)
     EXPECT_EQ (loadedInfo->reflection.storageBuffers[0].blockSize, 256u);
 }
 
+TEST_F (ShaderBundleTests, RoundtripReadOnlyStorageBuffersInReflection)
+{
+    ShaderInfo info;
+    info.stage = ShaderStage::fragment;
+    info.language = ShaderLanguage::msl;
+    info.entryPoint = "main";
+    info.source = "void main() {}";
+
+    ShaderReflection::ResourceBinding readOnly;
+    readOnly.name = "Lights";
+    readOnly.type = ShaderReflection::ResourceType::storageBuffer;
+    readOnly.binding = 0;
+    readOnly.readOnly = true;
+
+    ShaderReflection::ResourceBinding writable;
+    writable.name = "Counters";
+    writable.type = ShaderReflection::ResourceType::storageBuffer;
+    writable.binding = 1;
+
+    info.reflection.storageBuffers = { readOnly, writable };
+
+    ShaderReflection::ResourceBinding ub;
+    ub.name = "Params";
+    ub.binding = 2;
+    ub.blockSize = 16;
+    info.reflection.uniformBuffers = { ub };
+
+    ShaderBundle original;
+    original.addShader (info);
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+
+    auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
+    ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+    const auto* loadedInfo = loaded.getReference().findShader (ShaderStage::fragment, ShaderLanguage::msl);
+    ASSERT_NE (loadedInfo, nullptr);
+    ASSERT_EQ (loadedInfo->reflection.storageBuffers.size(), 2u);
+    EXPECT_EQ (loadedInfo->reflection.storageBuffers[0].name, String ("Lights"));
+    EXPECT_TRUE (loadedInfo->reflection.storageBuffers[0].readOnly);
+    EXPECT_EQ (loadedInfo->reflection.storageBuffers[1].name, String ("Counters"));
+    EXPECT_FALSE (loadedInfo->reflection.storageBuffers[1].readOnly);
+
+    ASSERT_EQ (loadedInfo->reflection.uniformBuffers.size(), 1u);
+    EXPECT_EQ (loadedInfo->reflection.uniformBuffers[0].name, String ("Params"));
+    EXPECT_EQ (loadedInfo->reflection.uniformBuffers[0].blockSize, 16u);
+}
+
 TEST_F (ShaderBundleTests, RoundtripSpecializationConstantsInReflection)
 {
     ShaderInfo info;
@@ -673,7 +726,7 @@ TEST_F (ShaderBundleTests, VersionTooHighRejected)
     ShaderBundle original;
 
     MemoryBlock mem;
-    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+    ASSERT_TRUE (original.saveToMemoryBlock (mem, ShaderBundle::Compression::none).wasOk());
     ASSERT_GE (mem.getSize(), 24u);
 
     // Version field is at bytes 20-23 (big-endian uint32 written by writeInt).
@@ -762,6 +815,114 @@ TEST_F (ShaderBundleTests, SaveAndLoadViaStreamDirectly)
         EXPECT_EQ (loaded.getReference().getShaders()[0].stage, ShaderStage::vertex);
         EXPECT_EQ (loaded.getReference().getShaders()[0].language, ShaderLanguage::hlsl);
     }
+}
+
+TEST_F (ShaderBundleTests, RoundtripEveryCompressionLevel)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::msl));
+
+    for (const auto compression : { ShaderBundle::Compression::none, ShaderBundle::Compression::fast, ShaderBundle::Compression::high })
+    {
+        MemoryBlock mem;
+        ASSERT_TRUE (original.saveToMemoryBlock (mem, compression).wasOk());
+
+        auto loaded = ShaderBundle::loadFromMemoryBlock (mem);
+        ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+
+        const auto& shaders = loaded.getReference().getShaders();
+        ASSERT_EQ (shaders.size(), 2u);
+        EXPECT_EQ (shaders[0].source, original.getShaders()[0].source);
+        EXPECT_EQ (shaders[1].source, original.getShaders()[1].source);
+    }
+}
+
+TEST_F (ShaderBundleTests, DefaultSaveIsCompressed)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+    ASSERT_GE (mem.getSize(), 16u);
+
+    const auto* bytes = static_cast<const char*> (mem.getData());
+    EXPECT_EQ (memcmp (bytes, "RIFF", 4), 0);
+    EXPECT_EQ (memcmp (bytes + 8, "YSLZ", 4), 0);
+}
+
+TEST_F (ShaderBundleTests, UncompressedSaveIsPlainBundle)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem, ShaderBundle::Compression::none).wasOk());
+    ASSERT_GE (mem.getSize(), 16u);
+
+    EXPECT_EQ (memcmp (static_cast<const char*> (mem.getData()) + 8, "YSLB", 4), 0);
+}
+
+TEST_F (ShaderBundleTests, CompressedBundleIsSmaller)
+{
+    ShaderInfo info = makeSyntheticShaderInfo (ShaderStage::fragment, ShaderLanguage::glsl);
+    for (int i = 0; i < 200; ++i)
+        info.source << "float value" << i << " = texture (tex, uv).r * 0.5;\n";
+
+    ShaderBundle original;
+    original.addShader (info);
+
+    MemoryBlock raw, fast, high;
+    ASSERT_TRUE (original.saveToMemoryBlock (raw, ShaderBundle::Compression::none).wasOk());
+    ASSERT_TRUE (original.saveToMemoryBlock (fast, ShaderBundle::Compression::fast).wasOk());
+    ASSERT_TRUE (original.saveToMemoryBlock (high, ShaderBundle::Compression::high).wasOk());
+
+    EXPECT_LT (fast.getSize(), raw.getSize() / 2);
+    EXPECT_LE (high.getSize(), fast.getSize());
+}
+
+TEST_F (ShaderBundleTests, CorruptedCompressedPayloadFails)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+    ASSERT_GT (mem.getSize(), 16u);
+
+    // Everything after the YSLZ raw size
+    for (size_t i = 16; i < mem.getSize(); ++i)
+        mem[i] = static_cast<char> (0xff);
+
+    EXPECT_FALSE (ShaderBundle::loadFromMemoryBlock (mem).wasOk());
+}
+
+TEST_F (ShaderBundleTests, CompressedRawSizeMismatchFails)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock mem;
+    ASSERT_TRUE (original.saveToMemoryBlock (mem).wasOk());
+    ASSERT_GT (mem.getSize(), 16u);
+
+    // The YSLZ raw size at bytes 12-15 no longer matches the payload
+    mem[12] = static_cast<char> (mem[12] + 1);
+
+    EXPECT_FALSE (ShaderBundle::loadFromMemoryBlock (mem).wasOk());
+}
+
+TEST_F (ShaderBundleTests, TruncatedCompressedBundleFails)
+{
+    ShaderBundle original;
+    original.addShader (makeSyntheticShaderInfo (ShaderStage::vertex, ShaderLanguage::glsl));
+
+    MemoryBlock full;
+    ASSERT_TRUE (original.saveToMemoryBlock (full).wasOk());
+
+    for (size_t truncLen = 4; truncLen < full.getSize(); truncLen += 7)
+        EXPECT_FALSE (ShaderBundle::loadFromData (full.getData(), truncLen).wasOk()) << "truncLen=" << truncLen;
 }
 
 //==============================================================================
@@ -1175,6 +1336,353 @@ TEST_F (ShaderBundleCompilerTests, CompiledSpirvSurvivesRoundtrip)
     ASSERT_NE (recovered, nullptr);
     EXPECT_EQ (recovered->binary, original->binary);
     EXPECT_EQ (recovered->entryPoint, original->entryPoint);
+}
+
+//==============================================================================
+// Graphics pipelines whose bind groups reuse binding numbers
+//==============================================================================
+
+class ShaderBundleCompilerMultiSetTests : public ShaderBundleCompilerTests
+{
+protected:
+    /** ViewBlock (0, 0) and DrawBlock (2, 0). */
+    static constexpr const char* vertexSource = R"glsl(
+#version 450
+layout(set = 0, binding = 0) uniform ViewBlock { mat4 viewProjection; } view;
+layout(set = 2, binding = 0) uniform DrawBlock { mat4 model; } draw;
+layout(location = 0) in vec3 position;
+void main() { gl_Position = view.viewProjection * draw.model * vec4 (position, 1.0); }
+)glsl";
+
+    /** Blocks at binding 0 of sets 0 to 2, textures at binding 3 of sets 1 and 2, samplers at (0, 3) and (2, 7). */
+    static constexpr const char* fragmentSource = R"glsl(
+#version 450
+layout(set = 0, binding = 0) uniform ViewBlock { mat4 viewProjection; } view;
+layout(set = 0, binding = 3) uniform sampler pointClamp;
+layout(set = 1, binding = 0) uniform LightingBlock { vec4 ambient; } lighting;
+layout(set = 1, binding = 3) uniform texture2D u_shadow;
+layout(set = 2, binding = 0) uniform DrawBlock { mat4 model; } draw;
+layout(set = 2, binding = 3) uniform texture2D u_metallicRoughness;
+layout(set = 2, binding = 7) uniform sampler s_metallicRoughness;
+layout(location = 0) out vec4 color;
+void main()
+{
+    color = view.viewProjection[0] + lighting.ambient + draw.model[0]
+          + texture (sampler2D (u_shadow, pointClamp), vec2 (0.5))
+          + texture (sampler2D (u_metallicRoughness, s_metallicRoughness), vec2 (0.5));
+}
+)glsl";
+
+    /** Compute passes bind at their declared bindings, here 2 and 1. */
+    static constexpr const char* computeSource = R"glsl(
+#version 450
+layout(local_size_x = 1) in;
+layout(set = 0, binding = 2) uniform Params { vec4 scale; } params;
+layout(std430, set = 0, binding = 1) buffer Data { vec4 values[]; } data;
+void main() { data.values[gl_GlobalInvocationID.x] *= params.scale; }
+)glsl";
+
+    static ShaderBundleEntry makeEntry (ShaderStage stage, const char* source, ShaderLanguage targetLang)
+    {
+        ShaderBundleEntry entry;
+        entry.stage = stage;
+        entry.source = source;
+        entry.targetLanguages = { targetLang };
+        return entry;
+    }
+
+    static ResultValue<ShaderBundle> compilePipeline (ShaderLanguage targetLang)
+    {
+        ShaderBundleCompileRequest request;
+        request.entries.push_back (makeEntry (ShaderStage::vertex, vertexSource, targetLang));
+        request.entries.push_back (makeEntry (ShaderStage::fragment, fragmentSource, targetLang));
+
+        ShaderBundleCompiler compiler (transpiler);
+        return compiler.compile (request);
+    }
+
+    /** Maps "kind:name" to every index the source declares with @p pattern, whose groups are name, kind and index. */
+    static std::map<std::string, std::vector<int>> emittedSlots (const String& source, const char* pattern)
+    {
+        std::map<std::string, std::vector<int>> slots;
+
+        const auto text = source.toStdString();
+        const std::regex expression (pattern);
+
+        for (auto it = std::sregex_iterator (text.begin(), text.end(), expression); it != std::sregex_iterator(); ++it)
+            slots[(*it)[2].str() + ":" + (*it)[1].str()].push_back (std::stoi ((*it)[3].str()));
+
+        return slots;
+    }
+
+    /** Every name declares one index, and no two names of a kind share one. */
+    static void expectDistinctPerKind (const std::map<std::string, std::vector<int>>& slots, const char* stage)
+    {
+        std::map<std::string, std::set<int>> usedPerKind;
+
+        for (const auto& [name, indices] : slots)
+        {
+            ASSERT_EQ (indices.size(), 1u) << stage << " " << name;
+
+            const auto kind = name.substr (0, name.find (':'));
+            EXPECT_TRUE (usedPerKind[kind].insert (indices[0]).second) << stage << " " << name << " shares index " << indices[0];
+        }
+    }
+
+    static int emittedSlot (const std::map<std::string, std::vector<int>>& slots, const std::string& key)
+    {
+        const auto it = slots.find (key);
+        return it != slots.end() && ! it->second.empty() ? it->second[0] : -1;
+    }
+
+    static const ShaderReflection::ResourceBinding* findResource (const std::vector<ShaderReflection::ResourceBinding>& resources, const char* name)
+    {
+        for (const auto& r : resources)
+        {
+            if (r.name == name)
+                return &r;
+        }
+
+        return nullptr;
+    }
+
+    static int reflectedSlot (const std::vector<ShaderReflection::ResourceBinding>& resources, const char* name)
+    {
+        const auto* r = findResource (resources, name);
+        return r != nullptr ? (int) r->backendSlot : -1;
+    }
+};
+
+TEST_F (ShaderBundleCompilerMultiSetTests, MslGivesEveryResourceItsOwnIndex)
+{
+    auto result = compilePipeline (ShaderLanguage::msl);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* vs = result.getReference().findShader (ShaderStage::vertex, ShaderLanguage::msl);
+    const auto* fs = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::msl);
+    ASSERT_NE (vs, nullptr);
+    ASSERT_NE (fs, nullptr);
+
+    constexpr const char* pattern = R"((\w+) \[\[(buffer|texture|sampler)\((\d+)\)\]\])";
+    const auto vsSlots = emittedSlots (vs->source, pattern);
+    const auto fsSlots = emittedSlots (fs->source, pattern);
+
+    EXPECT_EQ (vsSlots.size(), 2u);
+    EXPECT_EQ (fsSlots.size(), 7u);
+    expectDistinctPerKind (vsSlots, "vertex");
+    expectDistinctPerKind (fsSlots, "fragment");
+
+    EXPECT_EQ (emittedSlot (vsSlots, "buffer:view"), emittedSlot (fsSlots, "buffer:view"));
+    EXPECT_EQ (emittedSlot (vsSlots, "buffer:draw"), emittedSlot (fsSlots, "buffer:draw"));
+
+    EXPECT_EQ (reflectedSlot (vs->reflection.uniformBuffers, "ViewBlock"), emittedSlot (vsSlots, "buffer:view"));
+    EXPECT_EQ (reflectedSlot (vs->reflection.uniformBuffers, "DrawBlock"), emittedSlot (vsSlots, "buffer:draw"));
+    EXPECT_EQ (reflectedSlot (fs->reflection.uniformBuffers, "ViewBlock"), emittedSlot (fsSlots, "buffer:view"));
+    EXPECT_EQ (reflectedSlot (fs->reflection.uniformBuffers, "LightingBlock"), emittedSlot (fsSlots, "buffer:lighting"));
+    EXPECT_EQ (reflectedSlot (fs->reflection.uniformBuffers, "DrawBlock"), emittedSlot (fsSlots, "buffer:draw"));
+    EXPECT_EQ (reflectedSlot (fs->reflection.separateImages, "u_shadow"), emittedSlot (fsSlots, "texture:u_shadow"));
+    EXPECT_EQ (reflectedSlot (fs->reflection.separateImages, "u_metallicRoughness"), emittedSlot (fsSlots, "texture:u_metallicRoughness"));
+    EXPECT_EQ (reflectedSlot (fs->reflection.separateSamplers, "pointClamp"), emittedSlot (fsSlots, "sampler:pointClamp"));
+    EXPECT_EQ (reflectedSlot (fs->reflection.separateSamplers, "s_metallicRoughness"), emittedSlot (fsSlots, "sampler:s_metallicRoughness"));
+}
+
+TEST_F (ShaderBundleCompilerMultiSetTests, HlslGivesEveryResourceItsOwnRegister)
+{
+    auto result = compilePipeline (ShaderLanguage::hlsl);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* vs = result.getReference().findShader (ShaderStage::vertex, ShaderLanguage::hlsl);
+    const auto* fs = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::hlsl);
+    ASSERT_NE (vs, nullptr);
+    ASSERT_NE (fs, nullptr);
+
+    constexpr const char* pattern = R"((\w+) : register\(([btsu])(\d+)\))";
+    const auto vsSlots = emittedSlots (vs->source, pattern);
+    const auto fsSlots = emittedSlots (fs->source, pattern);
+
+    EXPECT_EQ (vsSlots.size(), 2u);
+    EXPECT_EQ (fsSlots.size(), 7u);
+    expectDistinctPerKind (vsSlots, "vertex");
+    expectDistinctPerKind (fsSlots, "fragment");
+
+    EXPECT_EQ (emittedSlot (vsSlots, "b:ViewBlock"), emittedSlot (fsSlots, "b:ViewBlock"));
+    EXPECT_EQ (emittedSlot (vsSlots, "b:DrawBlock"), emittedSlot (fsSlots, "b:DrawBlock"));
+
+    EXPECT_EQ (reflectedSlot (fs->reflection.uniformBuffers, "LightingBlock"), emittedSlot (fsSlots, "b:LightingBlock"));
+    EXPECT_EQ (reflectedSlot (fs->reflection.separateImages, "u_shadow"), emittedSlot (fsSlots, "t:u_shadow"));
+    EXPECT_EQ (reflectedSlot (fs->reflection.separateImages, "u_metallicRoughness"), emittedSlot (fsSlots, "t:u_metallicRoughness"));
+    EXPECT_EQ (reflectedSlot (fs->reflection.separateSamplers, "s_metallicRoughness"), emittedSlot (fsSlots, "s:s_metallicRoughness"));
+}
+
+TEST_F (ShaderBundleCompilerMultiSetTests, EsslSharesDistinctSlotsAcrossStages)
+{
+    auto result = compilePipeline (ShaderLanguage::essl);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* vs = result.getReference().findShader (ShaderStage::vertex, ShaderLanguage::essl);
+    const auto* fs = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::essl);
+    ASSERT_NE (vs, nullptr);
+    ASSERT_NE (fs, nullptr);
+
+    const auto& vsBlocks = vs->reflection.uniformBuffers;
+    const auto& fsBlocks = fs->reflection.uniformBuffers;
+
+    std::set<int> blockSlots;
+    for (const auto* name : { "ViewBlock", "LightingBlock", "DrawBlock" })
+        EXPECT_TRUE (blockSlots.insert (reflectedSlot (fsBlocks, name)).second) << name;
+
+    EXPECT_EQ (reflectedSlot (vsBlocks, "ViewBlock"), reflectedSlot (fsBlocks, "ViewBlock"));
+    EXPECT_EQ (reflectedSlot (vsBlocks, "DrawBlock"), reflectedSlot (fsBlocks, "DrawBlock"));
+
+    const auto& combined = fs->reflection.glCombinedSamplers;
+    ASSERT_EQ (combined.size(), 2u);
+    EXPECT_NE (combined[0].textureSlot, combined[1].textureSlot);
+
+    for (const auto& cs : combined)
+    {
+        const auto* image = cs.name.contains ("u_shadow") ? "u_shadow" : "u_metallicRoughness";
+        const auto* sampler = cs.name.contains ("u_shadow") ? "pointClamp" : "s_metallicRoughness";
+
+        EXPECT_EQ ((int) cs.textureSlot, reflectedSlot (fs->reflection.separateImages, image)) << cs.name;
+        EXPECT_EQ ((int) cs.textureSlot, reflectedSlot (fs->reflection.separateSamplers, sampler)) << cs.name;
+    }
+}
+
+TEST_F (ShaderBundleCompilerMultiSetTests, GlslStorageBlocksOfDifferentSetsGetDistinctBindings)
+{
+    constexpr const char* storageFragment = R"glsl(
+#version 450
+layout(set = 0, binding = 1) readonly buffer Lights { vec4 lights[]; };
+layout(set = 1, binding = 1) readonly buffer Clusters { uint clusters[]; };
+layout(location = 0) out vec4 color;
+void main() { color = lights[0] * float (clusters[0]); }
+)glsl";
+
+    ShaderBundleCompileRequest request;
+    request.entries.push_back (makeEntry (ShaderStage::vertex, vertexSource, ShaderLanguage::glsl));
+    request.entries.push_back (makeEntry (ShaderStage::fragment, storageFragment, ShaderLanguage::glsl));
+
+    ShaderBundleCompiler compiler (transpiler);
+    auto result = compiler.compile (request);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* fs = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::glsl);
+    ASSERT_NE (fs, nullptr);
+
+    std::map<std::string, int> bindings;
+
+    const auto text = fs->source.toStdString();
+    const std::regex expression (R"(layout\([^)]*binding = (\d+)[^)]*\)\s*readonly buffer (\w+))");
+
+    for (auto it = std::sregex_iterator (text.begin(), text.end(), expression); it != std::sregex_iterator(); ++it)
+        bindings[(*it)[2].str()] = std::stoi ((*it)[1].str());
+
+    ASSERT_EQ (bindings.size(), 2u) << fs->source;
+    EXPECT_NE (bindings["Lights"], bindings["Clusters"]);
+
+    // The reflected slots, which the binding map hands to the GL backend, match the emitted bindings
+    EXPECT_EQ (reflectedSlot (fs->reflection.storageBuffers, "Lights"), bindings["Lights"]);
+    EXPECT_EQ (reflectedSlot (fs->reflection.storageBuffers, "Clusters"), bindings["Clusters"]);
+}
+
+TEST_F (ShaderBundleCompilerMultiSetTests, StagesOutsideAPipelineKeepTheirBindings)
+{
+    ShaderBundleCompileRequest fragmentOnly;
+    fragmentOnly.entries.push_back (makeEntry (ShaderStage::fragment, fragmentSource, ShaderLanguage::msl));
+
+    fragmentOnly.entries.push_back (makeEntry (ShaderStage::compute, computeSource, ShaderLanguage::msl));
+
+    ShaderBundleCompiler compiler (transpiler);
+    auto result = compiler.compile (fragmentOnly);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* fs = result.getReference().findShader (ShaderStage::fragment, ShaderLanguage::msl);
+    const auto* cs = result.getReference().findShader (ShaderStage::compute, ShaderLanguage::msl);
+    ASSERT_NE (fs, nullptr);
+    ASSERT_NE (cs, nullptr);
+
+    EXPECT_EQ (reflectedSlot (fs->reflection.separateImages, "u_metallicRoughness"), 3);
+    EXPECT_EQ (reflectedSlot (fs->reflection.separateSamplers, "s_metallicRoughness"), 7);
+    EXPECT_EQ (reflectedSlot (cs->reflection.uniformBuffers, "Params"), 2);
+    EXPECT_EQ (reflectedSlot (cs->reflection.storageBuffers, "Data"), 1);
+}
+
+TEST_F (ShaderBundleCompilerMultiSetTests, ComputeBesideAPipelineKeepsItsBindings)
+{
+    ShaderBundleCompileRequest request;
+    request.entries.push_back (makeEntry (ShaderStage::vertex, vertexSource, ShaderLanguage::msl));
+    request.entries.push_back (makeEntry (ShaderStage::fragment, fragmentSource, ShaderLanguage::msl));
+    request.entries.push_back (makeEntry (ShaderStage::compute, computeSource, ShaderLanguage::msl));
+
+    ShaderBundleCompiler compiler (transpiler);
+    auto result = compiler.compile (request);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* cs = result.getReference().findShader (ShaderStage::compute, ShaderLanguage::msl);
+    ASSERT_NE (cs, nullptr);
+    EXPECT_EQ (reflectedSlot (cs->reflection.uniformBuffers, "Params"), 2);
+    EXPECT_EQ (reflectedSlot (cs->reflection.storageBuffers, "Data"), 1);
+}
+
+TEST_F (ShaderBundleCompilerMultiSetTests, EntrySourceOverridesTheRequestSource)
+{
+    ShaderBundleCompileRequest request;
+    request.source = "this is not a shader";
+    request.entries.push_back (makeEntry (ShaderStage::vertex, kShaderBundleMinimalVertexGLSL, ShaderLanguage::glsl));
+
+    ShaderBundleCompiler compiler (transpiler);
+    auto result = compiler.compile (request);
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto* info = result.getReference().findShader (ShaderStage::vertex, ShaderLanguage::glsl);
+    ASSERT_NE (info, nullptr);
+    EXPECT_EQ (info->inputSource, String (kShaderBundleMinimalVertexGLSL));
+}
+
+TEST_F (ShaderBundleCompilerMultiSetTests, RejectsTwoEntriesOfOnePipelineStage)
+{
+    for (const auto stage : { ShaderStage::vertex, ShaderStage::fragment })
+    {
+        ShaderBundleCompileRequest request;
+        request.entries.push_back (makeEntry (ShaderStage::vertex, vertexSource, ShaderLanguage::msl));
+        request.entries.push_back (makeEntry (ShaderStage::fragment, fragmentSource, ShaderLanguage::msl));
+        request.entries.push_back (makeEntry (stage, stage == ShaderStage::vertex ? vertexSource : fragmentSource, ShaderLanguage::msl));
+
+        ShaderBundleCompiler compiler (transpiler);
+        auto result = compiler.compile (request);
+        ASSERT_TRUE (result.failed()) << toString (stage);
+        EXPECT_TRUE (result.getErrorMessage().contains (toString (stage))) << result.getErrorMessage();
+    }
+}
+
+TEST_F (ShaderBundleCompilerMultiSetTests, RejectsMslBuffersThatReachTheVertexBufferSlots)
+{
+    // 17 blocks, one per binding of sets 0 and 1: the last needs Metal buffer slot 16
+    String fragment = "#version 450\nlayout(location = 0) out vec4 color;\n";
+    String sum = "vec4 (0.0)";
+
+    for (int i = 0; i < 17; ++i)
+    {
+        fragment << "layout(set = " << (i / 9) << ", binding = " << (i % 9) << ") uniform Block" << i << " { vec4 value; } block" << i << ";\n";
+        sum << " + block" << i << ".value";
+    }
+
+    fragment << "void main() { color = " << sum << "; }\n";
+
+    ShaderBundleCompileRequest request;
+    request.entries.push_back (makeEntry (ShaderStage::vertex, kShaderBundleMinimalVertexGLSL, ShaderLanguage::msl));
+    request.entries.push_back (makeEntry (ShaderStage::fragment, fragment.toRawUTF8(), ShaderLanguage::msl));
+
+    ShaderBundleCompiler compiler (transpiler);
+    auto result = compiler.compile (request);
+    ASSERT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("Block16")) << result.getErrorMessage();
+
+    // Without MSL in the request nothing is limited
+    for (auto& entry : request.entries)
+        entry.targetLanguages = { ShaderLanguage::hlsl };
+
+    EXPECT_TRUE (compiler.compile (request).wasOk());
 }
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER

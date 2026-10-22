@@ -251,6 +251,22 @@ public:
     }
 
     //==============================================================================
+    /** Allows only HTTP and HTTPS, for the request and its redirects. */
+    bool restrictProtocolsToHttp()
+    {
+#if LIBCURL_VERSION_NUM >= 0x075500
+        // The libcurl loaded at runtime may predate the string options (7.85.0)
+        const auto result = symbols->curl_easy_setopt (curl, CURLOPT_PROTOCOLS_STR, "http,https");
+        if (result != CURLE_UNKNOWN_OPTION)
+            return result == CURLE_OK && symbols->curl_easy_setopt (curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https") == CURLE_OK;
+#endif
+
+        YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
+        return symbols->curl_easy_setopt (curl, CURLOPT_PROTOCOLS, static_cast<long> (CURLPROTO_HTTP | CURLPROTO_HTTPS)) == CURLE_OK
+            && symbols->curl_easy_setopt (curl, CURLOPT_REDIR_PROTOCOLS, static_cast<long> (CURLPROTO_HTTP | CURLPROTO_HTTPS)) == CURLE_OK;
+        YUP_END_IGNORE_DEPRECATION_WARNINGS
+    }
+
     bool setOptions()
     {
         auto address = url.toString (! addParametersToRequestBody);
@@ -279,8 +295,7 @@ public:
             && symbols->curl_easy_setopt (curl, CURLOPT_MAXREDIRS, static_cast<long> (maxRedirects)) == CURLE_OK
             && symbols->curl_easy_setopt (curl, CURLOPT_USERAGENT, userAgent.toRawUTF8()) == CURLE_OK
             && symbols->curl_easy_setopt (curl, CURLOPT_FOLLOWLOCATION, (maxRedirects > 0 ? 1 : 0)) == CURLE_OK
-            && symbols->curl_easy_setopt (curl, CURLOPT_PROTOCOLS, static_cast<long> (CURLPROTO_HTTP | CURLPROTO_HTTPS)) == CURLE_OK
-            && symbols->curl_easy_setopt (curl, CURLOPT_REDIR_PROTOCOLS, static_cast<long> (CURLPROTO_HTTP | CURLPROTO_HTTPS)) == CURLE_OK)
+            && restrictProtocolsToHttp())
         {
             if (hasBodyDataToSend)
             {

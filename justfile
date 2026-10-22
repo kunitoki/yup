@@ -129,6 +129,18 @@ shader_bundler *COMPILE_ARGS:
   cmake --build build --config Release -j4
   build/yup_shader_bundler {{COMPILE_ARGS}}
 
+[doc("time the Scene3D demo target frames on the GPU: ACTION is run, record (the baseline) or compare (with it)")]
+[macos]
+perf ACTION="run" CONFIG="Release" FILTER="SceneRendererBenchmarkTests.DISABLED_DemoTargetFrameTimes":
+  uv run python tools/perf.py --just "{{just_executable()}}" {{ACTION}} {{CONFIG}} "{{FILTER}}"
+
+[doc("fit the yup_renderer GGX area light tables into modules/yup_renderer/core/yup_LtcTables.inc")]
+[working-directory: 'cmake/tools/ltc_fitter']
+ltc_tables:
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
+  cmake --build build --config Release -j4
+  build/yup_ltc_fitter --output "{{justfile_directory()}}/modules/yup_renderer/core/yup_LtcTables.inc"
+
 [doc("compile and invoke yup_dsp_compiler tool")]
 [working-directory: 'cmake/tools/ydsp_compiler']
 dsp_compiler *COMPILE_ARGS:
@@ -159,6 +171,10 @@ sample SECONDS="5" NAME="example_graphics" PID="":
 [doc("update rive runtime")]
 rive_update REF="runtime-v0.1.512":
   uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir
+
+[doc("check that every rive manifest patch is present in thirdparty/rive")]
+rive_check_patches:
+  uv run python tools/rive_check_patches.py
 
 [doc("update rive shaders")]
 rive_shaders_update:
@@ -201,6 +217,7 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example FluidSimulation fluid-simulation {{DEMOPATH}}
   @just update_emscripten_example Lottie lottie {{DEMOPATH}}
   @just update_emscripten_example Pbr pbr {{DEMOPATH}}
+  @just update_emscripten_example Scene3D scene3d {{DEMOPATH}}
   @just update_emscripten_example Shaders shaders {{DEMOPATH}}
   @just update_emscripten_example SpectrumAnalyzer spectrum-analyzer {{DEMOPATH}}
   @just update_emscripten_example Svg svg {{DEMOPATH}}

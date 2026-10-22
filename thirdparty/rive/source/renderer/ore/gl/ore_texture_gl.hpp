@@ -5,6 +5,7 @@
 namespace rive::ore
 {
 class ContextGL;
+class RenderPassGL;
 
 class TextureGL : public LITE_RTTI_OVERRIDE(Texture, TextureGL)
 {
@@ -15,10 +16,13 @@ public:
 
 private:
     friend class ContextGL;
+    friend class RenderPassGL;
     unsigned int m_glTexture = 0;
     unsigned int m_glRenderbuffer = 0;
     unsigned int m_glTarget = 0; // GLenum
     bool m_glOwnsTexture = false;
+    int m_boundBaseLevel = 0;
+    int m_boundMaxLevel = 1000;
 };
 
 class TextureViewGL : public LITE_RTTI_OVERRIDE(TextureView, TextureViewGL)

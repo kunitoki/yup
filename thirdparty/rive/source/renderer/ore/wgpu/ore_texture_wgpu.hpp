@@ -28,6 +28,11 @@ public:
     ~TextureViewWGPU() override =
         default; // wgpu::TextureView RAII destructor releases
 
+    const wgpu::TextureView& wgpuTextureView() const
+    {
+        return m_wgpuTextureView;
+    }
+
 private:
     friend class ContextWGPU;
     wgpu::TextureView m_wgpuTextureView;

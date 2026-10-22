@@ -80,11 +80,6 @@ function (yup_standalone_app)
         _yup_fetch_sdl()
         _yup_android_copy_sdl_activity() # TODO - this should be ported to sdl3
 
-        if (YUP_ARG_BUNDLE_RESOURCES)
-            _yup_message (STATUS "${target_name} - Copying bundled resources into app assets")
-            yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
-        endif()
-
         return()
     endif()
 
@@ -291,6 +286,10 @@ function (yup_standalone_app)
             "-Wl,-z,max-page-size=16384"
             "-Wl,-z,common-page-size=16384")
 
+        if (YUP_ARG_BUNDLE_RESOURCES)
+            yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
+        endif()
+
     elseif (YUP_PLATFORM_WINDOWS)
         # An .ico next to the icon image, with the same name, becomes the icon of the executable
         get_filename_component (target_icon_directory "${target_icon}" DIRECTORY)
@@ -303,8 +302,16 @@ function (yup_standalone_app)
             target_sources (${target_name} PRIVATE "${target_icon_rc}")
         endif()
 
+        if (YUP_ARG_BUNDLE_RESOURCES)
+            yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
+        endif()
+
     elseif (YUP_PLATFORM_LINUX)
         set_target_properties (${target_name} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
+        if (YUP_ARG_BUNDLE_RESOURCES)
+            yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
+        endif()
 
     endif()
 

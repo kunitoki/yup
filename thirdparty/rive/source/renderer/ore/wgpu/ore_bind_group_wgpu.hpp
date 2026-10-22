@@ -48,9 +48,17 @@ private:
         uint32_t binding;
         wgpu::Sampler sampler;
     };
+    struct StorageEntry
+    {
+        uint32_t binding;
+        wgpu::Buffer buffer;
+        uint64_t offset;
+        uint64_t size;
+    };
     std::vector<UBOEntry> m_uboEntries;
     std::vector<TexEntry> m_texEntries;
     std::vector<SampEntry> m_sampEntries;
+    std::vector<StorageEntry> m_storageEntries;
     wgpu::BindGroupLayout m_wgpuBGL;
     std::string m_label; // propagated to rebuilt bind groups for GPU captures
 

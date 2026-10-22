@@ -183,6 +183,7 @@ extern char** environ;
 #include "containers/yup_AbstractFifo.cpp"
 #include "containers/yup_NamedValueSet.cpp"
 #include "containers/yup_PropertySet.cpp"
+#include "containers/yup_Signal.cpp"
 #include "files/yup_DirectoryIterator.cpp"
 #include "files/yup_RangedDirectoryIterator.cpp"
 #include "files/yup_File.cpp"

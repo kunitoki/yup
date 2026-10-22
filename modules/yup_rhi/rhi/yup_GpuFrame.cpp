@@ -35,6 +35,15 @@ struct GpuFrame::Impl
     bool submitted = false;
     bool released = false;
 
+    /** What waitForGPU() reported, returned again by later calls. */
+    Result gpuResult = Result::ok();
+
+    /** The GPU outcome of the frame, completed by the device. */
+    GpuFrameStatus status;
+
+    /** Marks the outcome as read by its own owner, so the device does not report it. */
+    void claimStatus();
+
     /** The ore pass currently open in this frame. Ore no longer finishes a previous pass by
         itself, and Metal and D3D12 allow one open encoder at a time. */
     rive::ore::RenderPass* openPass = nullptr;
@@ -43,11 +52,80 @@ struct GpuFrame::Impl
         pass, so beginning one finishes it, and so does submitting the frame. */
     GpuComputePass::Impl* openComputePass = nullptr;
 
+    /** Set by GpuFrame::setTimingEnabled() with the status, read without its lock when passes begin. */
+    bool timingEnabled = false;
+
+    /** The scopes opened so far, in order, and the index of the open one, or -1. A scope stays
+        available while every pass begun in it can be sampled. */
+    std::vector<GpuScopeTiming> scopes;
+    int openScope = -1;
+
+    /** Samples every pass of a measuring frame, created by its first pass. */
+    std::shared_ptr<GpuDevice::ScopeSampler> scopeSampler;
+    bool scopeSamplerFailed = false;
+
+    /** Returns the sampler the pass about to begin is sampled with, or nullptr when it is not
+        sampled, which makes the open scope unavailable. @p scopeIndex receives the scope the
+        pass is attributed to, or -1 for none. */
+    GpuDevice::ScopeSampler* samplerForNextPass (int& scopeIndex);
+
     std::vector<rive::rcp<rive::ore::Buffer>> liveBuffers;
     std::vector<rive::rcp<rive::ore::TextureView>> liveViews;
     std::vector<rive::rcp<rive::ore::Sampler>> liveSamplers;
 
+    /** Storage buffers bound by render passes. Ore only holds their native handles. */
+    std::vector<GpuBuffer::Ptr> liveStorageBuffers;
+
+    /** Pipelines encoded by render passes. Ore only holds a raw pointer, and Vulkan destroys a
+        pipeline the moment its last reference goes, even while submitted commands use it. */
+    std::vector<GpuPipeline::Ptr> livePipelines;
+
+    /** Holds @p pipeline until the GPU finished the frame. */
+    void retainPipeline (const GpuPipeline::Ptr& pipeline)
+    {
+        if (pipeline != nullptr && std::find (livePipelines.begin(), livePipelines.end(), pipeline) == livePipelines.end())
+            livePipelines.push_back (pipeline);
+    }
+
     rive::rcp<rive::ore::Buffer> acquireUniformBuffer (const void* data, size_t byteSize);
+
+    /** The uniform blocks of pipelines that declare them dynamic, packed one after the other into
+        pooled chunks shared by every pass of the frame. Each range is written once, before the
+        commands reading it are recorded, so a write never touches what a recorded draw reads.
+    */
+    struct UniformRing
+    {
+        static constexpr uint32_t chunkSize = 64 * 1024;
+
+        rive::rcp<rive::ore::Buffer> chunk;
+        uint32_t cursor = 0;
+        uint32_t alignment = 256;
+
+        /** Counts the chunks taken, so 0 never names one. */
+        uint32_t chunkId = 0;
+
+        /** The next write starts a chunk, whose previous content the GPU may still be reading. */
+        bool firstWrite = true;
+
+        /** The room a block of @p byteSize bytes takes: offsets are multiples of the alignment. */
+        uint32_t slotSize (size_t byteSize) const noexcept
+        {
+            return (uint32_t) ((byteSize + alignment - 1) / alignment * alignment);
+        }
+
+        bool fits (uint32_t bytes) const noexcept
+        {
+            return chunk != nullptr && (uint64_t) cursor + bytes <= chunk->size();
+        }
+    };
+
+    UniformRing uniformRing;
+
+    /** Moves the ring to a pooled chunk with room for @p bytes, 64 KB at least. */
+    bool startUniformChunk (uint32_t bytes);
+
+    /** Writes a block at the ring's cursor, which must have room for it, and returns its offset. */
+    uint32_t writeUniforms (const void* data, uint32_t byteSize);
 
     /** Hands the transient resources to the device, to be freed once enough later
         frames have begun that the GPU cannot still be reading them. */
@@ -56,6 +134,9 @@ struct GpuFrame::Impl
     /** Frees the transient resources immediately. Only valid once the GPU is
         known to be idle. */
     void releaseNow();
+
+    /** Hands the frame's command buffer back to the device. */
+    void releaseCommands();
 };
 
 //==============================================================================
@@ -75,24 +156,60 @@ rive::rcp<rive::ore::Buffer> GpuFrame::Impl::acquireUniformBuffer (const void* d
     return buffer;
 }
 
+bool GpuFrame::Impl::startUniformChunk (uint32_t bytes)
+{
+    if (device == nullptr || oreCtx == nullptr)
+        return false;
+
+    auto chunk = device->uniformBufferPool.acquire (*oreCtx, jmax (bytes, UniformRing::chunkSize));
+    if (chunk == nullptr)
+        return false;
+
+    liveBuffers.push_back (chunk);
+
+    uniformRing.chunk = std::move (chunk);
+    uniformRing.cursor = 0;
+    uniformRing.firstWrite = true;
+    ++uniformRing.chunkId;
+    return true;
+}
+
+uint32_t GpuFrame::Impl::writeUniforms (const void* data, uint32_t byteSize)
+{
+    // WebGPU writes buffers in multiples of 4 bytes, which std140 blocks always are
+    jassert (byteSize % 4 == 0);
+    jassert (uniformRing.fits (byteSize));
+
+    const auto offset = uniformRing.cursor;
+    uniformRing.chunk->writeUnsynchronized (data, byteSize, offset, std::exchange (uniformRing.firstWrite, false));
+    uniformRing.cursor += uniformRing.slotSize (byteSize);
+    return offset;
+}
+
 void GpuFrame::Impl::retire()
 {
     if (released)
         return;
 
     released = true;
+    releaseCommands();
+    uniformRing.chunk = nullptr;
 
     if (device != nullptr)
     {
         device->retireFrameResources (generation,
                                       std::move (liveBuffers),
                                       std::move (liveViews),
-                                      std::move (liveSamplers));
+                                      std::move (liveSamplers),
+                                      std::move (liveStorageBuffers),
+                                      std::move (livePipelines));
     }
 
     liveBuffers.clear();
     liveViews.clear();
     liveSamplers.clear();
+    liveStorageBuffers.clear();
+    livePipelines.clear();
 }
 
 void GpuFrame::Impl::releaseNow()
@@ -101,6 +218,8 @@ void GpuFrame::Impl::releaseNow()
         return;
 
     released = true;
+    releaseCommands();
+    uniformRing.chunk = nullptr;
 
     if (device != nullptr)
         for (auto& buffer : liveBuffers)
@@ -109,6 +228,51 @@ void GpuFrame::Impl::releaseNow()
     liveBuffers.clear();
     liveViews.clear();
     liveSamplers.clear();
+    liveStorageBuffers.clear();
+    livePipelines.clear();
+}
+
+void GpuFrame::Impl::claimStatus()
+{
+    if (auto& block = status.block)
+    {
+        const ScopedLock sl (*block->lock);
+        block->claimed = true;
+    }
+}
+
+void GpuFrame::Impl::releaseCommands()
+{
+    if (device != nullptr && commandBuffer != nullptr)
+        device->releaseFrameCommands (std::exchange (commandBuffer, nullptr));
+}
+
+GpuDevice::ScopeSampler* GpuFrame::Impl::samplerForNextPass (int& scopeIndex)
+{
+    scopeIndex = -1;
+    auto* scope = openScope >= 0 ? &scopes[static_cast<size_t> (openScope)] : nullptr;
+
+    if (timingEnabled && scopeSampler == nullptr && ! scopeSamplerFailed && device->isScopeTimingAvailable())
+    {
+        scopeSampler = device->createScopeSampler (*oreCtx, commandBuffer);
+        scopeSamplerFailed = scopeSampler == nullptr;
+    }
+
+    // A scope is measured only when all of its passes are
+    if (! timingEnabled || scopeSampler == nullptr)
+    {
+        if (scope != nullptr)
+            scope->available = false;
+
+        return nullptr;
+    }
+
+    // Passes outside a measured scope are sampled too, so a later pass is not credited the time it
+    // waited behind them
+    if (scope != nullptr && scope->available)
+        scopeIndex = openScope;
+
+    return scopeSampler.get();
 }
 
 //==============================================================================
@@ -142,14 +306,37 @@ GpuFrame GpuFrame::begin (GpuDevice::Ptr ctx)
     i->device = ctx;
     i->oreCtx = oreCtx;
     i->generation = ctx->beginFrameGeneration();
+    i->uniformRing.alignment = jmax (1u, oreCtx->features().minUniformBufferOffsetAlignment);
     i->commandBuffer = ctx->beginFrameCommands (i->generation);
+
+    // A Metal frame records into the device's command buffer, so it has nothing to record into
+    if (i->commandBuffer == nullptr && ctx->getPlatform() == GpuPlatform::Metal)
+    {
+        YUP_DBG ("GpuFrame: no command buffer for the frame");
+        i->submitted = true;
+        return {};
+    }
 
     rive::ore::Context::FrameDescriptor frameDesc;
     frameDesc.externalCommandBuffer = i->commandBuffer;
     frameDesc.safeFrameNumber = ctx->getSafeFrameGeneration();
     frameDesc.currentFrameNumber = i->generation;
 
-    oreCtx->beginFrame (frameDesc);
+    oreCtx->clearLastError();
+
+    YUP_AUTORELEASEPOOL
+    {
+        oreCtx->beginFrame (frameDesc);
+    }
+
+    if (! oreCtx->lastError().empty())
+    {
+        YUP_DBG ("GpuFrame: " << String (oreCtx->lastError()));
+        i->submitted = true;
+        return {};
+    }
+
+    i->status = ctx->beginFrameStatus (i->generation);
     return frame;
 }
 
@@ -194,29 +381,99 @@ bool GpuFrame::submit()
     if (i == nullptr || i->oreCtx == nullptr || i->submitted)
         return false;
 
-    if (i->openPass != nullptr)
-        i->openPass->finish();
+    const auto measuresScopes = i->timingEnabled && i->device->isScopeTimingAvailable();
+    i->openScope = -1;
 
-    if (i->openComputePass != nullptr)
-        yup_finishComputePass (*i->openComputePass);
+    if (auto& block = i->status.block)
+    {
+        const ScopedLock sl (*block->lock);
+        block->submitted = true;
 
-    i->oreCtx->endFrame();
-    i->device->submitFrameCommands (i->commandBuffer);
+        if (measuresScopes)
+            block->scopes = std::move (i->scopes);
+    }
+
+    auto submitted = Result::ok();
+
+    // Encoders and command buffers are autoreleased, and would otherwise keep their
+    // queue and every resource they reference alive until the caller's pool drains
+    YUP_AUTORELEASEPOOL
+    {
+        if (i->openPass != nullptr)
+            i->openPass->finish();
+
+        if (i->openComputePass != nullptr)
+            yup_finishComputePass (*i->openComputePass);
+
+        i->oreCtx->endFrame();
+        submitted = i->device->submitFrame (i->commandBuffer, i->generation, i->scopeSampler, i->timingEnabled);
+    }
+
     i->submitted = true;
+
+    if (submitted.failed() || ! i->device->reportsFrameCompletion())
+        i->device->completeFrameStatus (i->generation, submitted);
 
     return true;
 }
 
-void GpuFrame::waitForGPU()
+Result GpuFrame::waitForGPU()
 {
     auto* i = getImpl();
-    if (i == nullptr || i->oreCtx == nullptr || i->released)
-        return;
+    if (i == nullptr || i->oreCtx == nullptr)
+        return Result::fail ("The frame is not valid");
+
+    if (i->released)
+        return i->gpuResult;
+
+    i->claimStatus();
+    submit();
 
     i->oreCtx->waitForGPU();
-    i->device->waitFrameCommands (i->commandBuffer);
+    const auto waited = i->device->waitFrameCommands (i->commandBuffer);
+    const auto completed = i->status.wait();
+    i->gpuResult = waited.failed() ? waited : completed;
 
     i->releaseNow();
+    return i->gpuResult;
+}
+
+GpuFrameStatus GpuFrame::getStatus()
+{
+    auto* i = getImpl();
+    if (i == nullptr)
+        return {};
+
+    i->claimStatus();
+    return i->status;
+}
+
+void GpuFrame::setTimingEnabled (bool shouldMeasure)
+{
+    auto* i = getImpl();
+    if (i == nullptr || i->submitted || i->status.block == nullptr)
+        return;
+
+    i->timingEnabled = shouldMeasure;
+
+    const ScopedLock sl (*i->status.block->lock);
+    i->status.block->timingEnabled = shouldMeasure;
+}
+
+void GpuFrame::beginScope (StringRef name)
+{
+    auto* i = getImpl();
+    if (i == nullptr || i->submitted)
+        return;
+
+    i->openScope = static_cast<int> (i->scopes.size());
+    i->scopes.push_back ({ String (name), 0.0, true });
+}
+
+void GpuFrame::endScope()
+{
+    if (auto* i = getImpl())
+        i->openScope = -1;
 }
 
 } // namespace yup

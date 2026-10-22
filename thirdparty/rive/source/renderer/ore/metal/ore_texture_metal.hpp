@@ -17,6 +17,7 @@ public:
 private:
     friend class ContextMetal;
     id<MTLTexture> m_mtlTexture = nil;
+    ContextMetal* m_ctx = nullptr;
 };
 
 class TextureViewMetal

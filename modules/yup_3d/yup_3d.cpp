@@ -39,13 +39,20 @@
 
 //==============================================================================
 
+#include "scene/yup_EntityStore.h"
+
+//==============================================================================
+
 #include "resources/yup_Texture.cpp"
-#include "resources/yup_EnvironmentMap.cpp"
 #include "resources/yup_Mesh.cpp"
-#include "scene/yup_EntityNode.cpp"
+#include "scene/yup_EntityStore.cpp"
+#include "scene/yup_Entity.cpp"
+#include "scene/yup_Node.cpp"
+#include "scene/yup_NodePool.cpp"
+#include "scene/yup_IterationGuard.cpp"
+#include "nodes/yup_TransformNode.cpp"
 #include "nodes/yup_CameraNode.cpp"
+#include "nodes/yup_MeshNode.cpp"
 #include "scene/yup_Scene.cpp"
+#include "scene/yup_Prefab.cpp"
 #include "gltf/yup_GltfModel.cpp"
-#include "rendering/yup_SceneDrawList.cpp"
-#include "rendering/yup_SceneRenderer.cpp"
-#include "rendering/yup_SceneComponent.cpp"

@@ -454,10 +454,37 @@ void RenderPassGL::setBindGroup(uint32_t groupIndex,
                           ubo.size);
     }
 
+#ifdef GL_SHADER_STORAGE_BUFFER
+    for (const auto& ssbo : glBg->m_glStorageBuffers)
+    {
+        glBindBufferRange(GL_SHADER_STORAGE_BUFFER,
+                          ssbo.slot,
+                          ssbo.buffer,
+                          static_cast<GLintptr>(ssbo.offset),
+                          static_cast<GLsizeiptr>(ssbo.size));
+    }
+#endif
+
     for (const auto& tex : glBg->m_glTextures)
     {
         glActiveTexture(GL_TEXTURE0 + tex.slot);
         glBindTexture(tex.target, tex.texture);
+
+        auto* texGL = tex.textureGL;
+        if (texGL != nullptr && (texGL->m_boundBaseLevel != tex.baseLevel ||
+                                 texGL->m_boundMaxLevel != tex.maxLevel))
+        {
+            glTexParameteri(tex.target, GL_TEXTURE_BASE_LEVEL, tex.baseLevel);
+            glTexParameteri(tex.target, GL_TEXTURE_MAX_LEVEL, tex.maxLevel);
+            texGL->m_boundBaseLevel = tex.baseLevel;
+            texGL->m_boundMaxLevel = tex.maxLevel;
+
+            bool remembered = false;
+            for (const auto& narrowed : m_narrowedTextures)
+                remembered = remembered || narrowed.get() == texGL;
+            if (!remembered)
+                m_narrowedTextures.push_back(ref_rcp(texGL));
+        }
 
         if (!m_usedSamplers || tex.slot > m_maxSamplerSlot)
             m_maxSamplerSlot = tex.slot;
@@ -639,6 +666,21 @@ void RenderPassGL::finish()
 
     m_currentPipeline = nullptr;
     releaseBoundResources();
+
+    if (!m_narrowedTextures.empty())
+    {
+        glActiveTexture(GL_TEXTURE0);
+        for (const auto& texGL : m_narrowedTextures)
+        {
+            glBindTexture(texGL->m_glTarget, texGL->m_glTexture);
+            glTexParameteri(texGL->m_glTarget, GL_TEXTURE_BASE_LEVEL, 0);
+            glTexParameteri(texGL->m_glTarget, GL_TEXTURE_MAX_LEVEL, 1000);
+            glBindTexture(texGL->m_glTarget, 0);
+            texGL->m_boundBaseLevel = 0;
+            texGL->m_boundMaxLevel = 1000;
+        }
+        m_narrowedTextures.clear();
+    }
 
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);

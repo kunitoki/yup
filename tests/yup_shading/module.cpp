@@ -22,4 +22,6 @@
 #include "yup_ShaderCache.cpp"
 #include "yup_ShaderTranspiler.cpp"
 #include "yup_ShaderBundle.cpp"
+#include "yup_ShaderTypes.cpp"
+#include "yup_WgslBindingLayout.cpp"
 #include "yup_WgslTranspiler.cpp"

@@ -44,6 +44,29 @@ static StringArray getPrefixedValues (const ArgumentList& args, const String& pr
     return values;
 }
 
+// Formats bytes as the body of a C array initializer, 16 per line, for embedding with #include.
+static String toByteList (const MemoryBlock& data)
+{
+    constexpr const char* hexDigits = "0123456789abcdef";
+    const auto* bytes = static_cast<const uint8*> (data.getData());
+
+    std::string out;
+    out.reserve (data.getSize() * 6 + data.getSize() / 16 * 2 + 2);
+
+    for (size_t i = 0; i < data.getSize(); ++i)
+    {
+        out += (i % 16) == 0 ? "  0x" : " 0x";
+        out += hexDigits[bytes[i] >> 4];
+        out += hexDigits[bytes[i] & 0x0f];
+        out += ',';
+
+        if ((i % 16) == 15 || i + 1 == data.getSize())
+            out += '\n';
+    }
+
+    return String (out);
+}
+
 //==============================================================================
 static String languageToString (ShaderLanguage lang)
 {
@@ -159,6 +182,8 @@ static void printUsage()
         "  --vert <path>           Shorthand for --stage vertex <path>\n"
         "  --frag <path>           Shorthand for --stage fragment <path>\n"
         "  --output <path>         Output .ysl bundle file path\n"
+        "  --output-inc <path>     Output the bundle bytes as a C array initializer list\n"
+        "  --compress <level>      LZAV compression: none, fast, high (default: high)\n"
         "\n"
         "Source options:\n"
         "  --source-lang <lang>    Source language: glsl, hlsl, essl (default: glsl)\n"
@@ -208,8 +233,6 @@ static std::optional<SpvOptimizationMode> spirvOptFromString (const String& str)
 //==============================================================================
 static int runCompileMode (const ArgumentList& args)
 {
-    args.failIfOptionIsMissing ("--output");
-
     const auto resolveFile = [] (const String& path) -> File
     {
         if (path.isEmpty())
@@ -253,6 +276,28 @@ static int runCompileMode (const ArgumentList& args)
     }
 
     const auto outputPath = resolveFile (getOptionValue (args, "--output"));
+    const auto outputIncPath = resolveFile (getOptionValue (args, "--output-inc"));
+
+    if (outputPath == File() && outputIncPath == File())
+    {
+        log->writeToLog ("No output specified. Use --output, --output-inc, or both.");
+        return 1;
+    }
+
+    auto compression = ShaderBundle::Compression::high;
+    if (args.containsOption ("--compress"))
+    {
+        const String level = getOptionValue (args, "--compress");
+        if (level == "none")
+            compression = ShaderBundle::Compression::none;
+        else if (level == "fast")
+            compression = ShaderBundle::Compression::fast;
+        else if (level != "high")
+        {
+            log->writeToLog ("Unknown compression level: " + level);
+            return 1;
+        }
+    }
 
     // -- Source language
     ShaderLanguage sourceLanguage = ShaderLanguage::glsl;
@@ -327,9 +372,9 @@ static int runCompileMode (const ArgumentList& args)
     for (const auto& inc : getPrefixedValues (args, "-I"))
         options.includePaths.push_back (resolveFile (inc).getFullPathName());
 
-    // -- Compile every stage and merge into a single bundle
-    ShaderBundleCompiler compiler;
-    ShaderBundle bundle;
+    // -- Compile every stage in one request, so a vertex + fragment pair gets its native slots assigned together
+    ShaderBundleCompileRequest request;
+    request.sourceLanguage = sourceLanguage;
 
     for (const auto& [stage, path] : stages)
     {
@@ -339,46 +384,60 @@ static int runCompileMode (const ArgumentList& args)
             return 1;
         }
 
-        const String source = path.loadFileAsString();
-        if (source.isEmpty())
+        ShaderBundleEntry entry;
+        entry.stage = stage;
+        entry.targetLanguages = targetLanguages;
+        entry.options = options;
+        entry.source = path.loadFileAsString();
+
+        if (entry.source.isEmpty())
         {
             log->writeToLog (stageToString (stage) + " shader file is empty: " + path.getFullPathName());
             return 1;
         }
 
-        ShaderBundleEntry entry;
-        entry.stage = stage;
-        entry.targetLanguages = targetLanguages;
-        entry.options = options;
-
-        ShaderBundleCompileRequest request;
-        request.source = source;
-        request.sourceLanguage = sourceLanguage;
-        request.entries.push_back (entry);
-
-        auto result = compiler.compile (request);
-        if (result.failed())
-        {
-            log->writeToLog (stageToString (stage) + " shader compilation failed: " + result.getErrorMessage());
-            return 1;
-        }
-
-        for (const auto& info : result.getReference().getShaders())
-            bundle.addShader (info);
-
-        if (const auto* spirv = result.getReference().getSPIRV (stage))
-            bundle.setSPIRV (stage, sourceLanguage, *spirv);
+        request.entries.push_back (std::move (entry));
     }
 
-    // Persist to file
-    const auto saveResult = bundle.saveToFile (outputPath);
-    if (saveResult.failed())
+    ShaderBundleCompiler compiler;
+    auto result = compiler.compile (request);
+    if (result.failed())
+    {
+        log->writeToLog ("Shader compilation failed: " + result.getErrorMessage());
+        return 1;
+    }
+
+    const ShaderBundle& bundle = result.getReference();
+
+    MemoryBlock bundleData;
+    if (const auto saveResult = bundle.saveToMemoryBlock (bundleData, compression); saveResult.failed())
     {
         log->writeToLog ("Failed to save bundle: " + saveResult.getErrorMessage());
         return 1;
     }
 
-    log->writeToLog ("Shader bundle written to: " + outputPath.getFullPathName());
+    if (outputPath != File())
+    {
+        if (! outputPath.replaceWithData (bundleData.getData(), bundleData.getSize()))
+        {
+            log->writeToLog ("Failed to write bundle: " + outputPath.getFullPathName());
+            return 1;
+        }
+
+        log->writeToLog ("Shader bundle written to: " + outputPath.getFullPathName());
+    }
+
+    if (outputIncPath != File())
+    {
+        if (! outputIncPath.replaceWithText (toByteList (bundleData), false, false, "\n"))
+        {
+            log->writeToLog ("Failed to write bundle: " + outputIncPath.getFullPathName());
+            return 1;
+        }
+
+        log->writeToLog ("Shader bundle written to: " + outputIncPath.getFullPathName());
+    }
+
     return 0;
 }
 
@@ -555,7 +614,13 @@ int main (int argc, char* argv[])
 {
     ArgumentList args (argc, argv);
 
-    if (args.containsOption ("--help|-h"))
+    // Matched exactly: as a short option, -h would also match any -I or -D argument containing an h
+    const auto wantsHelp = std::any_of (args.arguments.begin(), args.arguments.end(), [] (const auto& arg)
+    {
+        return arg.text == "--help" || arg.text == "-h";
+    });
+
+    if (wantsHelp)
     {
         printUsage();
         return 0;
@@ -565,7 +630,7 @@ int main (int argc, char* argv[])
         return runInspectMode (args);
 
     if (args.containsOption ("--vert") || args.containsOption ("--frag")
-        || args.containsOption ("--stage") || args.containsOption ("--output"))
+        || args.containsOption ("--stage") || args.containsOption ("--output") || args.containsOption ("--output-inc"))
         return runCompileMode (args);
 
     printUsage();

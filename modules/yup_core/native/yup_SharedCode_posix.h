@@ -313,22 +313,14 @@ bool File::isDirectory() const
         auto relativePath = getAndroidAssetRelativePath (fullPath);
 
         // A single-file open never succeeds for a directory, so try that first as the common
-        // case. AAssetManager_openDir doesn't validate that the path exists, so a directory is
-        // only confirmed once it yields at least one entry.
+        // case. Folders aren't stored in the APK, so a directory is one with at least one entry.
         if (auto* asset = AAssetManager_open (assetManager, relativePath.toRawUTF8(), AASSET_MODE_UNKNOWN))
         {
             AAsset_close (asset);
             return false;
         }
 
-        if (auto* dir = AAssetManager_openDir (assetManager, relativePath.toRawUTF8()))
-        {
-            auto isNonEmpty = AAssetDir_getNextFileName (dir) != nullptr;
-            AAssetDir_close (dir);
-            return isNonEmpty;
-        }
-
-        return false;
+        return ! getAndroidAssetFolderEntries (relativePath).isEmpty();
     }
 #endif
 

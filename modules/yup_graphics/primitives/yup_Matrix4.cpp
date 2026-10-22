@@ -161,31 +161,48 @@ Matrix4 Matrix4::fromAffineTransform (const AffineTransform& transform) noexcept
                                             transform.getTranslateX(), transform.getTranslateY(), 0.0f, 1.0f });
 }
 
-//==============================================================================
-
-Matrix4 Matrix4::followedBy (const Matrix4& other) const noexcept
+Matrix4 Matrix4::compose (const Vector3<float>& offset, const Quaternion& rotation, const Vector3<float>& scale) noexcept
 {
-    // With column vectors, applying this first and then other is other * this
-    std::array<float, 16> result {};
+    auto values = rotation.toMatrix4().m;
+    const float factors[] { scale.getX(), scale.getY(), scale.getZ() };
 
-    for (std::size_t column = 0; column < 4; ++column)
-    {
-        for (std::size_t row = 0; row < 4; ++row)
-        {
-            float sum = 0.0f;
+    for (std::size_t i = 0; i < 12; ++i)
+        values[i] *= factors[i / 4];
 
-            for (std::size_t k = 0; k < 4; ++k)
-                sum += other.m[k * 4 + row] * m[column * 4 + k];
-
-            result[column * 4 + row] = sum;
-        }
-    }
-
-    return Matrix4 (result);
+    values[12] = offset.getX();
+    values[13] = offset.getY();
+    values[14] = offset.getZ();
+    return Matrix4 (values);
 }
+
+//==============================================================================
 
 Matrix4 Matrix4::inverted() const noexcept
 {
+    if (isAffine()) [[likely]]
+    {
+        // The rows of the inverse linear part are the cross products of its columns, over the determinant
+        const Vector3<float> a (m[0], m[1], m[2]);
+        const Vector3<float> b (m[4], m[5], m[6]);
+        const Vector3<float> c (m[8], m[9], m[10]);
+        const Vector3<float> t (m[12], m[13], m[14]);
+
+        const auto r0 = b.crossProduct (c);
+        const auto determinant = a.dotProduct (r0);
+        if (determinant == 0.0f)
+            return identity();
+
+        const auto d = 1.0f / determinant;
+        const auto r1 = c.crossProduct (a) * d;
+        const auto r2 = a.crossProduct (b) * d;
+        const auto r0d = r0 * d;
+
+        return Matrix4 (std::array<float, 16> { r0d.getX(), r1.getX(), r2.getX(), 0.0f,
+                                                r0d.getY(), r1.getY(), r2.getY(), 0.0f,
+                                                r0d.getZ(), r1.getZ(), r2.getZ(), 0.0f,
+                                                -r0d.dotProduct (t), -r1.dotProduct (t), -r2.dotProduct (t), 1.0f });
+    }
+
     // Laplace expansion over 2x2 sub-determinants. Inverting commutes with transposing, so the
     // textbook row-major formula can be applied as it is to the column-major storage.
     const auto s0 = m[0] * m[5] - m[4] * m[1];
@@ -239,33 +256,6 @@ Matrix4 Matrix4::transposed() const noexcept
             result[row * 4 + column] = m[column * 4 + row];
 
     return Matrix4 (result);
-}
-
-//==============================================================================
-
-Vector3<float> Matrix4::transformPoint (const Vector3<float>& point) const noexcept
-{
-    const auto [x, y, z, w] = transformPoint4 (point.getX(), point.getY(), point.getZ(), 1.0f);
-
-    if (w == 0.0f)
-        return { x, y, z };
-
-    return { x / w, y / w, z / w };
-}
-
-Vector3<float> Matrix4::transformVector (const Vector3<float>& vector) const noexcept
-{
-    const auto result = transformPoint4 (vector.getX(), vector.getY(), vector.getZ(), 0.0f);
-
-    return { result[0], result[1], result[2] };
-}
-
-std::array<float, 4> Matrix4::transformPoint4 (float x, float y, float z, float w) const noexcept
-{
-    return { m[0] * x + m[4] * y + m[8] * z + m[12] * w,
-             m[1] * x + m[5] * y + m[9] * z + m[13] * w,
-             m[2] * x + m[6] * y + m[10] * z + m[14] * w,
-             m[3] * x + m[7] * y + m[11] * z + m[15] * w };
 }
 
 //==============================================================================

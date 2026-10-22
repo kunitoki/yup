@@ -103,6 +103,12 @@ DECLARE_JNI_CLASS (AndroidInputStream, "java/io/InputStream")
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
+    METHOD (list, "list", "(Ljava/lang/String;)[Ljava/lang/String;")
+
+DECLARE_JNI_CLASS (AndroidAssetManager, "android/content/res/AssetManager")
+#undef JNI_CLASS_MEMBERS
+
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
     FIELD (publicSourceDir, "publicSourceDir", "Ljava/lang/String;")          \
     FIELD (dataDir, "dataDir", "Ljava/lang/String;")                          \
     FIELD (targetSdkVersion, "targetSdkVersion", "I")
@@ -810,6 +816,27 @@ AAssetManager* getAndroidAssetManager() noexcept
     }();
 
     return manager;
+}
+
+StringArray getAndroidAssetFolderEntries (const String& relativePath)
+{
+    // AAssetDir lists the files of a folder only, AssetManager.list() its subfolders too
+    auto* env = getEnv();
+    auto context = getAppContext();
+
+    if (env == nullptr || context == nullptr)
+        return {};
+
+    LocalRef<jobject> assetManager (env->CallObjectMethod (context.get(), AndroidContext.getAssets));
+    if (assetManager == nullptr)
+        return {};
+
+    LocalRef<jobjectArray> entries ((jobjectArray) env->CallObjectMethod (assetManager.get(), AndroidAssetManager.list, javaString (relativePath).get()));
+
+    if (jniCheckHasExceptionOccurredAndClear())
+        return {};
+
+    return javaStringArrayToYup (entries);
 }
 
 File File::getSpecialLocation (const SpecialLocationType type)

@@ -244,79 +244,6 @@ TEST_F (ComponentEffectTest, IdempotentWhenSameValue)
     EXPECT_TRUE (comp.isCachedToTexture());
 }
 
-TEST_F (ComponentEffectTest, ClearsCachedCanvasWhenEnabled)
-{
-    Component comp ("test");
-
-    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
-    ASSERT_NE (ctx, nullptr);
-    auto canvas = GpuCanvas::create (*ctx, 64, 64);
-    if (canvas == nullptr)
-        GTEST_SKIP() << "Headless context cannot create GpuCanvas";
-
-    ComponentHelper::setCachedTextureCanvas (comp, canvas);
-    EXPECT_NE (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
-
-    comp.setCachedToTexture (true);
-    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
-}
-
-// =============================================================================
-// Cache invalidation on repaint / setBounds
-// =============================================================================
-
-TEST_F (ComponentEffectTest, RepaintInvalidatesCache)
-{
-    Component comp ("test");
-
-    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
-    ASSERT_NE (ctx, nullptr);
-    auto canvas = GpuCanvas::create (*ctx, 64, 64);
-    if (canvas == nullptr)
-        GTEST_SKIP() << "Headless context cannot create GpuCanvas";
-
-    ComponentHelper::setCachedTextureCanvas (comp, canvas);
-    EXPECT_NE (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
-
-    comp.repaint();
-    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
-}
-
-TEST_F (ComponentEffectTest, RepaintWithRectInvalidatesCache)
-{
-    Component comp ("test");
-
-    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
-    ASSERT_NE (ctx, nullptr);
-    auto canvas = GpuCanvas::create (*ctx, 64, 64);
-    if (canvas == nullptr)
-        GTEST_SKIP() << "Headless context cannot create GpuCanvas";
-
-    ComponentHelper::setCachedTextureCanvas (comp, canvas);
-    EXPECT_NE (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
-
-    comp.repaint (Rectangle<float> (0, 0, 10, 10));
-    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
-}
-
-TEST_F (ComponentEffectTest, SetBoundsInvalidatesCache)
-{
-    Component comp ("test");
-    comp.setBounds (0, 0, 200, 200);
-
-    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
-    ASSERT_NE (ctx, nullptr);
-    auto canvas = GpuCanvas::create (*ctx, 64, 64);
-    if (canvas == nullptr)
-        GTEST_SKIP() << "Headless context cannot create GpuCanvas";
-
-    ComponentHelper::setCachedTextureCanvas (comp, canvas);
-    EXPECT_NE (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
-
-    comp.setBounds (10, 20, 300, 400);
-    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
-}
-
 // =============================================================================
 // paintAsOffscreenRoot flag
 // =============================================================================
@@ -735,6 +662,49 @@ TEST_F (ComponentEffectGpuTest, RepaintInvalidatesAndRecreatesCache)
     auto secondCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
     ASSERT_NE (secondCanvas, nullptr);
     EXPECT_NE (firstCanvas.get(), secondCanvas.get());
+}
+
+TEST_F (ComponentEffectGpuTest, ClearsCachedCanvasWhenEnabled)
+{
+    Component comp ("test");
+
+    auto canvas = GpuCanvas::create (*gpuContext, 64, 64);
+    ASSERT_NE (canvas, nullptr);
+
+    ComponentHelper::setCachedTextureCanvas (comp, canvas);
+    EXPECT_NE (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
+
+    comp.setCachedToTexture (true);
+    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
+}
+
+TEST_F (ComponentEffectGpuTest, RepaintWithRectInvalidatesCache)
+{
+    Component comp ("test");
+
+    auto canvas = GpuCanvas::create (*gpuContext, 64, 64);
+    ASSERT_NE (canvas, nullptr);
+
+    ComponentHelper::setCachedTextureCanvas (comp, canvas);
+    EXPECT_NE (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
+
+    comp.repaint (Rectangle<float> (0, 0, 10, 10));
+    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
+}
+
+TEST_F (ComponentEffectGpuTest, SetBoundsInvalidatesCache)
+{
+    Component comp ("test");
+    comp.setBounds (0, 0, 200, 200);
+
+    auto canvas = GpuCanvas::create (*gpuContext, 64, 64);
+    ASSERT_NE (canvas, nullptr);
+
+    ComponentHelper::setCachedTextureCanvas (comp, canvas);
+    EXPECT_NE (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
+
+    comp.setBounds (10, 20, 300, 400);
+    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
 }
 
 TEST_F (ComponentEffectGpuTest, DisablingCacheClearsStoredCanvas)

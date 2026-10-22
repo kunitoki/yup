@@ -123,6 +123,12 @@ public:
             advanceResourceManagers (generation, safeGeneration);
         });
 
+        // Frames complete as their fences are polled, which a waiter on their status does itself
+        setFrameWaiter ([device = vulkanDevice.get()] (uint64_t generation)
+                        {
+            device->waitForGeneration (generation);
+        });
+
         const ScopedLock sl (vulkanDevice->getLock());
 
         renderContext = makeRenderContext();
@@ -133,13 +139,22 @@ public:
         // lets Rive and ore advance one frame number
         vulkanContext = rive::ref_rcp (renderContext->static_impl_cast<rive::gpu::RenderContextVulkanImpl>()->vulkanContext());
         oreContext = rive::ore::ContextVulkan::Make (vulkanContext);
+
+        if (vulkanDevice->getTimestampPeriod() > 0.0)
+            timestampPools = std::make_shared<TimestampQueryPools> (*vulkanDevice);
     }
 
     ~GpuDeviceVulkan() override
     {
+        setFrameWaiter (nullptr);
+
         const ScopedLock sl (vulkanDevice->getLock());
 
         vulkanDevice->waitIdle();
+
+        // Every submitted frame completed, so its queries went back to the pools
+        recordingFrames.clear();
+        timestampPools.reset();
 
         releasePooledResources();
 
@@ -174,7 +189,19 @@ public:
 
     bool isComputeAvailable() const noexcept override { return true; }
 
+    bool isFragmentStorageBufferAvailable() const noexcept override { return true; }
+
+    bool isDynamicUniformOffsetAvailable() const noexcept override { return true; }
+
+    bool isStorageTextureAvailable() const noexcept override { return true; }
+
     bool isDeviceLost() const noexcept override { return vulkanDevice->isDeviceLost(); }
+
+    bool isFrameTimingAvailable() const noexcept override { return timestampPools != nullptr; }
+
+    bool isScopeTimingAvailable() const noexcept override { return timestampPools != nullptr; }
+
+    void setScopeSampleCapacityForTesting (int samples) override { scopeSampleCapacity = samples; }
 
     void runOnGraphicsContext (const std::function<void()>& fn) const override
     {
@@ -488,22 +515,376 @@ protected:
 
     void* beginFrameCommands (uint64_t generation) override
     {
-        return vulkanDevice->beginCommands (generation);
+        const ScopedLock sl (vulkanDevice->getLock());
+
+        auto commandBuffer = vulkanDevice->beginCommands (generation);
+        if (commandBuffer == VK_NULL_HANDLE)
+            return nullptr;
+
+        // A frame that never submitted left its command buffer recording: its queries are dropped
+        recordingFrames.erase (commandBuffer);
+
+        // Every frame stamps its start, as whether it measures is only known once it is recorded
+        if (timestampPools != nullptr)
+        {
+            if (const auto queryPool = timestampPools->acquire(); queryPool != VK_NULL_HANDLE)
+            {
+                auto queries = std::make_shared<FrameQueriesVulkan> (*vulkanDevice, timestampPools, queryPool, commandBuffer);
+                queries->begin();
+                recordingFrames.emplace (commandBuffer, std::move (queries));
+            }
+        }
+
+        return commandBuffer;
     }
 
-    void submitFrameCommands (void* commandBuffer) override
+    Result submitFrameCommands (void* commandBuffer) override
     {
-        if (commandBuffer != nullptr)
-            vulkanDevice->submitCommands (static_cast<VkCommandBuffer> (commandBuffer));
+        if (commandBuffer != nullptr && ! vulkanDevice->submitCommands (static_cast<VkCommandBuffer> (commandBuffer)))
+            return Result::fail (vulkanDevice->isDeviceLost() ? "The Vulkan device was lost" : "The frame could not be submitted");
+
+        return Result::ok();
     }
 
-    void waitFrameCommands (void* commandBuffer) override
+    bool reportsFrameCompletion() const noexcept override { return true; }
+
+    Result submitFrame (void* commandBuffer, uint64_t generation, std::shared_ptr<ScopeSampler>, bool measuresScopes) override
+    {
+        const auto completeFrame = getFrameCompletion();
+
+        if (commandBuffer == nullptr)
+        {
+            completeFrame (generation, Result::ok());
+            return Result::ok();
+        }
+
+        const auto frameCommands = static_cast<VkCommandBuffer> (commandBuffer);
+        const auto timeline = getScopeTimeline();
+        const auto sequence = timeline->commit();
+
+        // Held across the submission and the handler, so the ring cannot reuse the command
+        // buffer for another frame in between
+        const ScopedLock sl (vulkanDevice->getLock());
+
+        std::shared_ptr<FrameQueriesVulkan> queries;
+        if (const auto found = recordingFrames.find (frameCommands); found != recordingFrames.end())
+        {
+            queries = std::move (found->second);
+            recordingFrames.erase (found);
+            queries->finish();
+        }
+
+        if (auto submitted = submitFrameCommands (commandBuffer); submitted.failed())
+            return submitted;
+
+        // Runs once the fence signalled, or at once for a lost device whose fences never will
+        vulkanDevice->runWhenComplete (frameCommands, [completeFrame, generation, queries, measuresScopes, timeline, sequence, device = vulkanDevice.get()]
+        {
+            if (device->isDeviceLost())
+            {
+                completeFrame (generation, Result::fail ("The Vulkan device was lost"));
+                return;
+            }
+
+            completeFrame (generation, Result::ok(), queries != nullptr ? queries->resolve (*timeline, sequence, measuresScopes) : GpuFrameTimings {});
+        });
+
+        return Result::ok();
+    }
+
+    std::shared_ptr<ScopeSampler> createScopeSampler (rive::ore::Context&, void* commandBuffer) override
+    {
+        const ScopedLock sl (vulkanDevice->getLock());
+
+        const auto found = recordingFrames.find (static_cast<VkCommandBuffer> (commandBuffer));
+        if (found == recordingFrames.end())
+            return nullptr;
+
+        found->second->startSampling (scopeSampleCapacity);
+        getScopeTimeline()->activate();
+        return found->second;
+    }
+
+    Result waitFrameCommands (void* commandBuffer) override
     {
         if (commandBuffer != nullptr)
             vulkanDevice->waitForCommands (static_cast<VkCommandBuffer> (commandBuffer));
+
+        if (vulkanDevice->isDeviceLost())
+            return Result::fail ("The Vulkan device was lost");
+
+        return Result::ok();
     }
 
 private:
+    //==============================================================================
+    /** Recycles the timestamp query pools of the frames in flight, creating at most maxPools. */
+    class TimestampQueryPools
+    {
+    public:
+        /** Two queries for the frame, then two for each pass. */
+        static constexpr uint32_t queriesPerPool = 512;
+        static constexpr size_t maxPools = 16;
+
+        explicit TimestampQueryPools (VulkanDevice& deviceToUse)
+            : vulkanDevice (deviceToUse)
+        {
+        }
+
+        ~TimestampQueryPools()
+        {
+            jassert (spare.size() == created);
+
+            for (const auto queryPool : spare)
+                vulkanDevice.getFunctions().DestroyQueryPool (vulkanDevice.getDevice(), queryPool, nullptr);
+        }
+
+        /** Returns a pool of queriesPerPool timestamp queries, or VK_NULL_HANDLE when maxPools are in flight. */
+        VkQueryPool acquire()
+        {
+            const ScopedLock sl (lock);
+
+            if (! spare.empty())
+            {
+                const auto queryPool = spare.back();
+                spare.pop_back();
+                return queryPool;
+            }
+
+            if (created >= maxPools)
+                return VK_NULL_HANDLE;
+
+            VkQueryPoolCreateInfo info {};
+            info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+            info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+            info.queryCount = queriesPerPool;
+
+            VkQueryPool queryPool = VK_NULL_HANDLE;
+            if (vulkanDevice.getFunctions().CreateQueryPool (vulkanDevice.getDevice(), &info, nullptr, &queryPool) != VK_SUCCESS)
+                return VK_NULL_HANDLE;
+
+            ++created;
+            return queryPool;
+        }
+
+        /** Hands back a pool whose frame completed. */
+        void release (VkQueryPool queryPool)
+        {
+            const ScopedLock sl (lock);
+            spare.push_back (queryPool);
+        }
+
+    private:
+        VulkanDevice& vulkanDevice;
+        CriticalSection lock;
+        std::vector<VkQueryPool> spare;
+        size_t created = 0;
+    };
+
+    //==============================================================================
+    /** Stamps the GPU timestamps of one frame into its command buffer, and attributes them to its
+        scopes once it completed.
+
+        The frame takes a stamp when it begins and when it is submitted. Once it measures its
+        scopes, every pass takes one right before it opens and one at the next pass boundary,
+        or at submission. Each stamp waits for every command before it (bottom of pipe), so a
+        pass spans the GPU time from the end of the work before it to the end of its own.
+    */
+    class FrameQueriesVulkan final : public ScopeSampler
+    {
+    public:
+        FrameQueriesVulkan (VulkanDevice& deviceToUse, std::shared_ptr<TimestampQueryPools> poolsToUse, VkQueryPool queryPoolToUse, VkCommandBuffer commandBufferToUse)
+            : vulkanDevice (deviceToUse)
+            , pools (std::move (poolsToUse))
+            , queryPool (queryPoolToUse)
+            , commandBuffer (commandBufferToUse)
+        {
+        }
+
+        ~FrameQueriesVulkan() override
+        {
+            pools->release (queryPool);
+        }
+
+        /** Resets the queries and stamps the start of the frame. */
+        void begin()
+        {
+            vulkanDevice.getFunctions().CmdResetQueryPool (commandBuffer, queryPool, 0, TimestampQueryPools::queriesPerPool);
+            stamp (frameStartQuery);
+        }
+
+        /** Starts sampling the passes, at most @p maxQueries queries of them, or as many as fit when 0. */
+        void startSampling (int maxQueries)
+        {
+            if (sampling)
+                return;
+
+            sampling = true;
+            passCapacity = maxQueries > 0 ? jmin (static_cast<uint32_t> (maxQueries), maxPassQueries) : maxPassQueries;
+            passes.reserve (64);
+        }
+
+        /** Stamps the end of the last pass and of the frame, right before it is submitted. */
+        void finish()
+        {
+            closeOpenPass();
+            stamp (frameEndQuery);
+        }
+
+        void beginRenderPass (int scopeIndex) override { beginPass (scopeIndex); }
+
+        void endRenderPass() override {}
+
+        void* beginComputePass (int scopeIndex) override
+        {
+            beginPass (scopeIndex);
+            return nullptr;
+        }
+
+        void endComputePass (bool sampled) override
+        {
+            if (! sampled && ! passes.empty())
+                passes.back().sampled = false;
+        }
+
+        std::vector<GpuScopeTiming> resolveScopes (ScopeTimeline& timeline, uint64 sequence) const override
+        {
+            return resolve (timeline, sequence, true).scopes;
+        }
+
+        /** Reads the stamps of the completed frame without waiting: its fence signalled, so they are
+            all written. Lists the scopes only when @p measuresScopes, and moves @p timeline to where
+            the frame's work ended. */
+        GpuFrameTimings resolve (ScopeTimeline& timeline, uint64 sequence, bool measuresScopes) const
+        {
+            GpuFrameTimings timings;
+
+            const auto queryCount = firstPassQuery + usedPassQueries;
+            std::vector<uint64_t> stamps (queryCount);
+
+            if (vulkanDevice.getFunctions().GetQueryPoolResults (vulkanDevice.getDevice(),
+                                                                 queryPool,
+                                                                 0,
+                                                                 queryCount,
+                                                                 stamps.size() * sizeof (uint64_t),
+                                                                 stamps.data(),
+                                                                 sizeof (uint64_t),
+                                                                 VK_QUERY_RESULT_64_BIT)
+                != VK_SUCCESS)
+            {
+                return timings;
+            }
+
+            // Counted from the frame's start, so a counter of fewer than 64 bits that wrapped stays in order
+            const auto mask = vulkanDevice.getTimestampMask();
+            const auto origin = stamps[frameStartQuery];
+            for (auto& value : stamps)
+                value = origin + ((value - origin) & mask);
+
+            const auto nanosecondsPerTick = vulkanDevice.getTimestampPeriod();
+            const auto end = stamps[frameEndQuery];
+
+            timings.available = true;
+            timings.frameMilliseconds = static_cast<double> (end - origin) * nanosecondsPerTick * 1.0e-6;
+
+            const auto scoped = std::any_of (passes.begin(), passes.end(), [] (const auto& pass)
+            {
+                return pass.scopeIndex >= 0;
+            });
+
+            if (! measuresScopes || ! scoped)
+            {
+                if (timeline.isActive())
+                    timeline.advance (sequence, end);
+
+                return timings;
+            }
+
+            std::vector<ScopeTimeline::Pass> spans;
+            spans.reserve (passes.size());
+
+            for (const auto& pass : passes)
+            {
+                auto& span = spans.emplace_back();
+                span.scopeIndex = pass.scopeIndex;
+                span.sampled = pass.sampled;
+
+                if (pass.sampled)
+                {
+                    span.start = stamps[pass.firstQuery];
+                    span.end = stamps[pass.firstQuery + 1];
+                }
+            }
+
+            timings.scopes = timeline.attribute (sequence, spans, end, nanosecondsPerTick);
+            return timings;
+        }
+
+    private:
+        static constexpr uint32_t frameStartQuery = 0;
+        static constexpr uint32_t frameEndQuery = 1;
+        static constexpr uint32_t firstPassQuery = 2;
+        static constexpr uint32_t maxPassQueries = TimestampQueryPools::queriesPerPool - firstPassQuery;
+
+        struct SampledPass
+        {
+            int scopeIndex = -1;
+            uint32_t firstQuery = 0;
+            bool sampled = false;
+        };
+
+        void stamp (uint32_t query)
+        {
+            vulkanDevice.getFunctions().CmdWriteTimestamp (commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, query);
+        }
+
+        void closeOpenPass()
+        {
+            if (! passOpen)
+                return;
+
+            passOpen = false;
+            stamp (passes.back().firstQuery + 1);
+        }
+
+        /** Records a pass of the scope of @p scopeIndex and stamps its start. Once a pass could not
+            be sampled no later one is, as it could not tell how long they waited behind it. */
+        void beginPass (int scopeIndex)
+        {
+            closeOpenPass();
+
+            if (outOfQueries || usedPassQueries + 2 > passCapacity)
+            {
+                outOfQueries = true;
+
+                static std::atomic<bool> logged = false;
+                if (! logged.exchange (true))
+                    YUP_DBG ("GpuDevice: a frame ran out of GPU timestamp queries, its later scopes are unavailable");
+
+                passes.push_back ({ scopeIndex, 0, false });
+                return;
+            }
+
+            const auto first = firstPassQuery + usedPassQueries;
+            usedPassQueries += 2;
+
+            passes.push_back ({ scopeIndex, first, true });
+            passOpen = true;
+            stamp (first);
+        }
+
+        VulkanDevice& vulkanDevice;
+        std::shared_ptr<TimestampQueryPools> pools;
+        const VkQueryPool queryPool;
+        const VkCommandBuffer commandBuffer;
+        std::vector<SampledPass> passes;
+        uint32_t passCapacity = 0;
+        uint32_t usedPassQueries = 0;
+        bool sampling = false;
+        bool passOpen = false;
+        bool outOfQueries = false;
+    };
+
     //==============================================================================
 
     struct OffscreenContextSlot
@@ -655,6 +1036,9 @@ private:
 
     const Options options;
     std::unique_ptr<VulkanDevice> vulkanDevice;
+    std::shared_ptr<TimestampQueryPools> timestampPools;
+    std::unordered_map<VkCommandBuffer, std::shared_ptr<FrameQueriesVulkan>> recordingFrames;
+    int scopeSampleCapacity = 0;
     std::unique_ptr<rive::gpu::RenderContext> renderContext;
     rive::rcp<rive::gpu::VulkanContext> vulkanContext;
     std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;

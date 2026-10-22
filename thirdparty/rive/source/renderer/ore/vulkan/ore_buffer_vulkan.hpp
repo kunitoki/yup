@@ -22,6 +22,10 @@ public:
     {}
     ~BufferVulkan() override;
     void update(const void* data, uint32_t size, uint32_t offset) override;
+    void writeUnsynchronized(const void* data,
+                             uint32_t size,
+                             uint32_t offset,
+                             bool discard) override;
 
     // Backing to bind right now.
     VkBuffer current() const { return m_vkBuffer; }

@@ -58,7 +58,8 @@ public:
     /** Begins a GPU frame on the given context.
 
         Returns an invalid frame (isValid() == false) if the context has no
-        GPU context available on this backend.
+        GPU context available on this backend, or the backend could not create
+        the frame's command buffer.
 
         @param ctx  A GpuDevice with GPU context available.
 
@@ -92,10 +93,11 @@ public:
     */
     bool submit();
 
-    /** Blocks the calling thread until all submitted GPU work has completed,
-        then releases the transient resources held for this frame.
+    /** Submits the frame if it was not yet, blocks the calling thread until its
+        GPU work has completed, then releases the transient resources held for it.
 
-        Idempotent: a second call is a no-op, so the stall is only ever paid once.
+        Idempotent: a second call does not wait again and returns the same result,
+        so the stall is only ever paid once.
 
         **Call this only when the CPU genuinely needs the results** - before a
         pixel or buffer readback, or before tearing down resources the frame
@@ -104,8 +106,74 @@ public:
         then hands the frame's texture views, uniform buffers and samplers to the
         device, which frees them once enough later frames have begun that the GPU
         cannot still be reading them.
+
+        @returns Result::ok() once the frame's work completed, or why it failed:
+                 it could not be submitted, or the GPU failed to execute it (only
+                 Metal reports that). The failure is not reported again by
+                 GpuDevice::takeGpuFailure(). Fails for an invalid frame.
     */
-    void waitForGPU();
+    Result waitForGPU();
+
+    /** Returns the GPU outcome of this frame, to check later without blocking.
+
+        Taking it makes this frame's failure reported through the returned status
+        (and waitForGPU()) only, never through GpuDevice::takeGpuFailure(): a
+        renderer that owns its frames checks them itself and is not confused by
+        the failures of anybody else's.
+
+        @returns The status, or an invalid one for an invalid frame.
+    */
+    GpuFrameStatus getStatus();
+
+    /** Measures the GPU time of this frame, reported by GpuFrameStatus::getTimings()
+        once the frame completed.
+
+        Off by default, so frames that do not measure pay nothing. Only devices where
+        GpuDevice::isFrameTimingAvailable() is true measure; on the others the timings
+        stay unavailable. Call it before submit(): a frame already submitted keeps the
+        setting it was submitted with.
+
+        To measure scopes too, call it before the first pass of the frame: a scope is
+        measured only when timing was on before its first pass began. A scope whose
+        passes began earlier reports 0 milliseconds, unavailable.
+
+        @param shouldMeasure  True to measure this frame.
+
+        @see beginScope
+    */
+    void setTimingEnabled (bool shouldMeasure);
+
+    /** Opens a named scope: the GPU time of the passes begun until it ends is reported
+        as one GpuScopeTiming of the frame's timings.
+
+        Scopes do not nest: opening one ends the scope already open. The same name may be
+        opened several times, and is then reported once for each. Passes begun outside
+        any scope are not attributed to one. A pass is attributed to the scope open when
+        it began, so begin each scope's passes after opening it.
+
+        Only measured on devices where GpuDevice::isScopeTimingAvailable() is true, in a
+        frame that turned timing on before the scope's first pass (see setTimingEnabled()).
+        A frame that does not measure only records the name.
+
+        @code
+            frame.setTimingEnabled (true);
+
+            frame.beginScope ("shadows");
+            renderShadows (frame);
+
+            frame.beginScope ("lighting");
+            renderLighting (frame);
+            frame.endScope();
+        @endcode
+
+        @param name  The name the scope is reported with.
+
+        @see GpuFrameTimings::scopes
+    */
+    void beginScope (StringRef name);
+
+    /** Ends the open scope, if any: later passes are not attributed to a scope. */
+    void endScope();
 
 private:
     friend class GpuCanvas;
@@ -119,7 +187,7 @@ private:
     Impl* getImpl() noexcept;
     const Impl* getImpl() const noexcept;
 
-    static constexpr size_t ImplSizeBytes = 160;
+    static constexpr size_t ImplSizeBytes = 384;
     TypeErasedObject<ImplSizeBytes> impl;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuFrame)

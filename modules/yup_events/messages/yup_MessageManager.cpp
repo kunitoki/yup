@@ -47,10 +47,17 @@ MessageManager::MessageManager() noexcept
 
     if (YUPApplicationBase::isStandaloneApp())
         Thread::setCurrentThreadName ("YUP Message Thread");
+
+    SignalDispatcher::setAsyncDispatcher ([] (std::function<void()> function)
+    {
+        return callAsync (std::move (function));
+    });
 }
 
 MessageManager::~MessageManager() noexcept
 {
+    SignalDispatcher::setAsyncDispatcher (nullptr);
+
     broadcaster.reset();
 
     doPlatformSpecificShutdown();

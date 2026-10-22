@@ -26,10 +26,9 @@ namespace yup
 /** A part that overrides the material of every mesh in the subtree of its entity.
 
     The override applies to the entity's own meshes and to all of its descendants, and the
-    nearest MaterialNode up the tree wins. Only the lowest slot is the override: other slots
-    are free for application use, for example to keep alternative materials at hand.
+    nearest MaterialNode up the tree wins.
 
-    @see Material, EntityNode
+    @see Material, Entity
 */
 class YUP_API MaterialNode : public Node
 {

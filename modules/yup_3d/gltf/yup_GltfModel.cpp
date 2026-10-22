@@ -74,6 +74,80 @@ struct GltfModel::Data
     std::vector<int> parentlessNodes;
     int defaultScene = -1;
     StringArray warnings;
+
+    /** One per glTF scene, or a single one holding the parentless nodes when there are no scenes. */
+    std::vector<Prefab::Ptr> prefabs;
+
+    void buildPrefabs()
+    {
+        if (scenes.empty())
+            prefabs.push_back (buildPrefab ({}, parentlessNodes));
+
+        for (const auto& scene : scenes)
+            prefabs.push_back (buildPrefab (scene.name, scene.nodes));
+    }
+
+    Prefab::Ptr buildPrefab (const String& name, const std::vector<int>& roots) const
+    {
+        auto prefab = Prefab::Ptr (new Prefab (name));
+
+        // Iterative depth-first build: deep hierarchies can't overflow the stack, and nodes reached
+        // twice (invalid in glTF, but possible in a malformed file) are built once to stop cycles
+        std::vector<bool> built (nodes.size(), false);
+        std::vector<std::pair<int, Prefab::Part*>> pending;
+
+        for (auto it = roots.rbegin(); it != roots.rend(); ++it)
+            pending.emplace_back (*it, &prefab->getRoot());
+
+        while (! pending.empty())
+        {
+            const auto [nodeIndex, parent] = pending.back();
+            pending.pop_back();
+
+            if (! isPositiveAndBelow (nodeIndex, static_cast<int> (nodes.size())) || built[static_cast<size_t> (nodeIndex)])
+                continue;
+
+            built[static_cast<size_t> (nodeIndex)] = true;
+
+            const auto& node = nodes[static_cast<size_t> (nodeIndex)];
+            auto& part = parent->addChild (node.name);
+            part.attach<TransformNode> (node.position, node.rotation, node.scale);
+
+            if (isPositiveAndBelow (node.mesh, static_cast<int> (meshes.size())))
+                part.attach<MeshNode> (meshes[static_cast<size_t> (node.mesh)]);
+
+            if (isPositiveAndBelow (node.camera, static_cast<int> (cameras.size())))
+            {
+                part.attachWith<CameraNode> ([desc = cameras[static_cast<size_t> (node.camera)]] (CameraNode& camera)
+                {
+                    camera.projection = desc.projection;
+                    camera.yFov = desc.yFov;
+                    camera.zNear = desc.zNear;
+                    camera.zFar = desc.zFar;
+                    camera.xMag = desc.xMag;
+                    camera.yMag = desc.yMag;
+                });
+            }
+
+            if (isPositiveAndBelow (node.light, static_cast<int> (lights.size())))
+            {
+                part.attachWith<LightNode> ([desc = lights[static_cast<size_t> (node.light)]] (LightNode& light)
+                {
+                    light.type = desc.type;
+                    light.color = desc.color;
+                    light.intensity = desc.intensity;
+                    light.range = desc.range;
+                    light.innerConeAngle = desc.innerConeAngle;
+                    light.outerConeAngle = desc.outerConeAngle;
+                });
+            }
+
+            for (auto it = node.children.rbegin(); it != node.children.rend(); ++it)
+                pending.emplace_back (*it, &part);
+        }
+
+        return prefab;
+    }
 };
 
 //==============================================================================
@@ -312,7 +386,9 @@ public:
 
     Result load()
     {
-        static const char* supportedExtensions[] = { "KHR_lights_punctual", "EXT_texture_webp", "KHR_mesh_quantization" };
+        static const char* supportedExtensions[] = { "KHR_lights_punctual", "EXT_texture_webp", "KHR_mesh_quantization",
+                                                     "KHR_materials_emissive_strength", "KHR_materials_ior", "KHR_materials_specular",
+                                                     "KHR_materials_clearcoat", "KHR_materials_sheen" };
 
         for (uint32_t i = 0; i < model.extensions_required_count; ++i)
         {
@@ -327,7 +403,7 @@ public:
         }
 
         for (uint32_t i = 0; i < model.materials_count; ++i)
-            data.materials.push_back (convertMaterial (model.materials[i]));
+            data.materials.push_back (convertMaterial (model.materials[i], static_cast<int> (i)));
 
         for (uint32_t i = 0; i < model.meshes_count; ++i)
             data.meshes.push_back (convertMesh (model.meshes[i], static_cast<int> (i)));
@@ -562,6 +638,65 @@ private:
         return -1;
     }
 
+    /** The object value of the material extension called @p name, or nullptr. */
+    static const tg3_value* findExtension (const tg3_extras_ext& ext, const char* name)
+    {
+        for (uint32_t i = 0; i < ext.extensions_count; ++i)
+        {
+            const auto& extension = ext.extensions[i];
+            if (tg3_str_equals_cstr (extension.name, name) && extension.value.type == TG3_VALUE_OBJECT)
+                return &extension.value;
+        }
+
+        return nullptr;
+    }
+
+    /** The member called @p key of an object value, or nullptr. */
+    static const tg3_value* findMember (const tg3_value* object, const char* key)
+    {
+        if (object == nullptr)
+            return nullptr;
+
+        for (uint32_t i = 0; i < object->object_count; ++i)
+        {
+            if (tg3_str_equals_cstr (object->object_data[i].key, key))
+                return &object->object_data[i].value;
+        }
+
+        return nullptr;
+    }
+
+    /** A JSON number, which arrives as a real or as an integer, or @p fallback for other values. */
+    static double toNumber (const tg3_value& value, double fallback)
+    {
+        if (value.type == TG3_VALUE_REAL)
+            return value.real_val;
+
+        if (value.type == TG3_VALUE_INT)
+            return static_cast<double> (value.int_val);
+
+        return fallback;
+    }
+
+    /** A number member of an object value, or @p fallback when absent or not a number. */
+    static double readNumber (const tg3_value* object, const char* key, double fallback)
+    {
+        const auto* member = findMember (object, key);
+        return member != nullptr ? toNumber (*member, fallback) : fallback;
+    }
+
+    /** Fills @p destination from a number array member, leaving it untouched when absent or too short. */
+    template <size_t N>
+    static void readNumbers (const tg3_value* object, const char* key, std::array<float, N>& destination)
+    {
+        const auto* member = findMember (object, key);
+        if (member == nullptr || member->type != TG3_VALUE_ARRAY || member->array_count < N)
+            return;
+
+        for (size_t i = 0; i < N; ++i)
+            destination[i] = static_cast<float> (toNumber (member->array_data[i], destination[i]));
+    }
+
     Texture::Ptr getTexture (int index, int texCoord, bool srgb)
     {
         if (! isPositiveAndBelow (index, static_cast<int> (model.textures_count)))
@@ -600,7 +735,7 @@ private:
     }
 
     //==============================================================================
-    Material::Ptr convertMaterial (const tg3_material& source)
+    Material::Ptr convertMaterial (const tg3_material& source, int materialIndex)
     {
         auto material = Material::Ptr (new Material());
         const auto& pbr = source.pbr_metallic_roughness;
@@ -634,6 +769,52 @@ private:
         material->alphaCutoff = static_cast<float> (source.alpha_cutoff);
         material->doubleSided = source.double_sided != 0;
 
+        // Values outside the ranges of the extension schemas are limited to them
+        const auto* emissiveStrength = findExtension (source.ext, "KHR_materials_emissive_strength");
+        material->emissiveStrength = jmax (0.0f, static_cast<float> (readNumber (emissiveStrength, "emissiveStrength", material->emissiveStrength)));
+
+        // 0 stands for an infinite index, values between 0 and 1 are undefined
+        const auto* ior = findExtension (source.ext, "KHR_materials_ior");
+        const auto iorValue = static_cast<float> (readNumber (ior, "ior", material->ior));
+        if (iorValue >= 1.0f || iorValue == 0.0f)
+            material->ior = iorValue;
+
+        const auto* specular = findExtension (source.ext, "KHR_materials_specular");
+        material->specularFactor = jlimit (0.0f, 1.0f, static_cast<float> (readNumber (specular, "specularFactor", material->specularFactor)));
+        readNumbers (specular, "specularColorFactor", material->specularColorFactor);
+
+        for (auto& component : material->specularColorFactor)
+            component = jmax (0.0f, component);
+
+        for (const auto* textureName : { "specularTexture", "specularColorTexture" })
+        {
+            if (findMember (specular, textureName) != nullptr)
+                warn ("Material " + String (materialIndex) + ": the KHR_materials_specular " + textureName + " is not supported and is ignored");
+        }
+
+        const auto* clearcoat = findExtension (source.ext, "KHR_materials_clearcoat");
+        material->clearcoatFactor = jlimit (0.0f, 1.0f, static_cast<float> (readNumber (clearcoat, "clearcoatFactor", material->clearcoatFactor)));
+        material->clearcoatRoughnessFactor = jlimit (0.0f, 1.0f, static_cast<float> (readNumber (clearcoat, "clearcoatRoughnessFactor", material->clearcoatRoughnessFactor)));
+
+        for (const auto* textureName : { "clearcoatTexture", "clearcoatRoughnessTexture", "clearcoatNormalTexture" })
+        {
+            if (findMember (clearcoat, textureName) != nullptr)
+                warn ("Material " + String (materialIndex) + ": the KHR_materials_clearcoat " + textureName + " is not supported and is ignored");
+        }
+
+        const auto* sheen = findExtension (source.ext, "KHR_materials_sheen");
+        readNumbers (sheen, "sheenColorFactor", material->sheenColorFactor);
+        material->sheenRoughnessFactor = jlimit (0.0f, 1.0f, static_cast<float> (readNumber (sheen, "sheenRoughnessFactor", material->sheenRoughnessFactor)));
+
+        for (auto& component : material->sheenColorFactor)
+            component = jlimit (0.0f, 1.0f, component);
+
+        for (const auto* textureName : { "sheenColorTexture", "sheenRoughnessTexture" })
+        {
+            if (findMember (sheen, textureName) != nullptr)
+                warn ("Material " + String (materialIndex) + ": the KHR_materials_sheen " + textureName + " is not supported and is ignored");
+        }
+
         return material;
     }
 
@@ -653,7 +834,7 @@ private:
                 continue;
             }
 
-            int positionAccessor = -1, normalAccessor = -1, uvAccessor = -1, colorAccessor = -1;
+            int positionAccessor = -1, normalAccessor = -1, tangentAccessor = -1, uvAccessor = -1, colorAccessor = -1;
             for (uint32_t a = 0; a < primitive.attributes_count; ++a)
             {
                 const auto& attribute = primitive.attributes[a];
@@ -662,6 +843,8 @@ private:
                     positionAccessor = attribute.value;
                 else if (tg3_str_equals_cstr (attribute.key, "NORMAL"))
                     normalAccessor = attribute.value;
+                else if (tg3_str_equals_cstr (attribute.key, "TANGENT"))
+                    tangentAccessor = attribute.value;
                 else if (tg3_str_equals_cstr (attribute.key, "TEXCOORD_0"))
                     uvAccessor = attribute.value;
                 else if (tg3_str_equals_cstr (attribute.key, "COLOR_0"))
@@ -703,6 +886,20 @@ private:
             {
                 vertex.normal = { static_cast<float> (x[0]), static_cast<float> (x[1]), static_cast<float> (x[2]) };
             });
+
+            // glTF: when normals are not specified, tangents shall be ignored
+            if (normalAccessor >= 0)
+            {
+                readAttribute (tangentAccessor, "TANGENT", 4, 4, [] (Mesh::Vertex& vertex, const double* x)
+                {
+                    // A zero or non-finite direction leaves the tangent cleared, for the derivative frame
+                    const auto length = std::sqrt (x[0] * x[0] + x[1] * x[1] + x[2] * x[2]);
+                    if (! std::isfinite (length) || length <= 0.0)
+                        return;
+
+                    vertex.tangent = { static_cast<float> (x[0] / length), static_cast<float> (x[1] / length), static_cast<float> (x[2] / length), x[3] < 0.0 ? -1.0f : 1.0f };
+                });
+            }
 
             readAttribute (uvAccessor, "TEXCOORD_0", 2, 2, [] (Mesh::Vertex& vertex, const double* x)
             {
@@ -854,8 +1051,10 @@ private:
 //==============================================================================
 
 GltfModel::GltfModel()
-    : data (std::make_shared<const Data>())
 {
+    auto empty = std::make_shared<Data>();
+    empty->buildPrefabs();
+    data = std::move (empty);
 }
 
 ResultValue<GltfModel> GltfModel::loadFromFile (const File& file)
@@ -925,6 +1124,8 @@ ResultValue<GltfModel> GltfModel::loadFromData (Span<const uint8> bytes, const F
     if (auto result = Loader (state.model, baseDirectory, *loaded).load(); result.failed())
         return makeResultValueFail (result.getErrorMessage());
 
+    loaded->buildPrefabs();
+
     GltfModel gltfModel;
     gltfModel.data = std::move (loaded);
     return makeResultValueOk (std::move (gltfModel));
@@ -932,89 +1133,26 @@ ResultValue<GltfModel> GltfModel::loadFromData (Span<const uint8> bytes, const F
 
 //==============================================================================
 
-EntityNode::Ptr GltfModel::createEntity (int sceneIndex) const
+Entity GltfModel::instantiate (Scene& scene, Entity parent, int sceneIndex) const
+{
+    if (const auto* prefab = getPrefab (sceneIndex))
+        return prefab->instantiate (scene, parent);
+
+    return {};
+}
+
+const Prefab* GltfModel::getPrefab (int sceneIndex) const noexcept
 {
     const auto& d = *data;
 
-    String name;
-    std::vector<int> roots;
-
     if (d.scenes.empty())
-    {
-        if (sceneIndex != -1)
-            return nullptr;
+        return sceneIndex == -1 ? d.prefabs.front().get() : nullptr;
 
-        roots = d.parentlessNodes;
-    }
-    else
-    {
-        const auto index = sceneIndex == -1 ? jmax (0, d.defaultScene) : sceneIndex;
-        if (! isPositiveAndBelow (index, static_cast<int> (d.scenes.size())))
-            return nullptr;
+    const auto index = sceneIndex == -1 ? jmax (0, d.defaultScene) : sceneIndex;
+    if (! isPositiveAndBelow (index, static_cast<int> (d.prefabs.size())))
+        return nullptr;
 
-        name = d.scenes[static_cast<size_t> (index)].name;
-        roots = d.scenes[static_cast<size_t> (index)].nodes;
-    }
-
-    auto root = EntityNode::Ptr (new EntityNode (name));
-
-    // Iterative depth-first build: deep hierarchies can't overflow the stack, and nodes reached
-    // twice (invalid in glTF, but possible in a malformed file) are built once to stop cycles
-    std::vector<bool> built (d.nodes.size(), false);
-    std::vector<std::pair<int, EntityNode*>> pending;
-
-    for (auto it = roots.rbegin(); it != roots.rend(); ++it)
-        pending.emplace_back (*it, root.get());
-
-    while (! pending.empty())
-    {
-        const auto [nodeIndex, parent] = pending.back();
-        pending.pop_back();
-
-        if (! isPositiveAndBelow (nodeIndex, static_cast<int> (d.nodes.size())) || built[static_cast<size_t> (nodeIndex)])
-            continue;
-
-        built[static_cast<size_t> (nodeIndex)] = true;
-
-        const auto& node = d.nodes[static_cast<size_t> (nodeIndex)];
-        auto entity = EntityNode::Ptr (new EntityNode (node.name));
-        entity->setPosition (node.position);
-        entity->setRotation (node.rotation);
-        entity->setScale (node.scale);
-
-        if (isPositiveAndBelow (node.mesh, static_cast<int> (d.meshes.size())))
-            entity->attach<MeshNode> (d.meshes[static_cast<size_t> (node.mesh)]);
-
-        if (isPositiveAndBelow (node.camera, static_cast<int> (d.cameras.size())))
-        {
-            const auto& desc = d.cameras[static_cast<size_t> (node.camera)];
-            auto& camera = entity->attach<CameraNode>();
-            camera.projection = desc.projection;
-            camera.yFov = desc.yFov;
-            camera.zNear = desc.zNear;
-            camera.zFar = desc.zFar;
-            camera.xMag = desc.xMag;
-            camera.yMag = desc.yMag;
-        }
-
-        if (isPositiveAndBelow (node.light, static_cast<int> (d.lights.size())))
-        {
-            const auto& desc = d.lights[static_cast<size_t> (node.light)];
-            auto& light = entity->attach<LightNode> (desc.type);
-            light.color = desc.color;
-            light.intensity = desc.intensity;
-            light.range = desc.range;
-            light.innerConeAngle = desc.innerConeAngle;
-            light.outerConeAngle = desc.outerConeAngle;
-        }
-
-        for (auto it = node.children.rbegin(); it != node.children.rend(); ++it)
-            pending.emplace_back (*it, entity.get());
-
-        parent->addChild (std::move (entity));
-    }
-
-    return root;
+    return d.prefabs[static_cast<size_t> (index)].get();
 }
 
 int GltfModel::getNumScenes() const noexcept

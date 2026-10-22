@@ -281,8 +281,9 @@ public:
 
         if (computePipeline != nullptr && computeDevice != nullptr)
         {
-            // Write fresh data into the preallocated ring buffers in place —
-            // no GPU allocation happens on the audio thread.
+            // Write fresh data into the preallocated ring buffers. The ring leaves the GPU done
+            // with a slot before it is rewritten, so the update writes in place without allocating
+            // (on Metal, rewriting a buffer still in flight may allocate a backing on a pool miss).
             computeDevice->updateBuffer (gpuInputBuf[slot], inputBuf.data(), inputBuf.size() * sizeof (float));
 
             Params params { gain.load(), mix.load(), 0.0f, 0.0f };

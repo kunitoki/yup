@@ -14,6 +14,8 @@ public:
     {}
     ~SamplerVulkan() override;
 
+    VkSampler vkSampler() const { return m_vkSampler; }
+
 private:
     friend class ContextVulkan;
     friend class RenderPassVulkan;

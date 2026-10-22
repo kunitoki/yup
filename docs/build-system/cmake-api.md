@@ -364,9 +364,15 @@ it may rename the file relative to its source name.
 |---|---|
 | macOS | `MACOSX_PACKAGE_LOCATION` is set to `Resources/<relative-dest-dir>`, so the file lands in the app/plugin bundle's `Contents/Resources` folder, preserving the destination's subdirectory structure. |
 | iOS | `MACOSX_PACKAGE_LOCATION` is set to `<relative-dest-dir>` (no `Resources/` prefix) - iOS app bundles are flat and `[NSBundle resourcePath]` resolves to the bundle root itself, not a `Resources` subfolder. |
-| Android | Copied into `${CMAKE_CURRENT_BINARY_DIR}/app/src/main/assets/<relative-dest>`, which the Android Gradle Plugin packages into the APK automatically - no manifest or `build.gradle` changes needed. |
-| Emscripten | Bridged to `--preload-file=<source>@<relative-dest>`, the same mechanism `PRELOAD_FILES` uses. |
-| Other desktop platforms | No-op - `bundleDirectory` there is the directory next to the executable, and desktop code typically reads assets straight from the source tree instead. |
+| Android | Copied at build time by the native build into `YUP_ANDROID_ASSETS_DIR/<relative-dest>`. The generated Gradle project sets it to `app/build/generated/yup/assets`, adds it to the APK assets and merges them after the native build. Building outside Gradle fails at configure time. FLAC and AIFF files stay uncompressed in the APK, so seeking in them stays fast. |
+| Emscripten | Bridged to `--preload-file=<source>@<relative-dest>`, the same mechanism `PRELOAD_FILES` uses. A changed file relinks the target. |
+| Other desktop platforms | Not copied - `bundleDirectory` there is the directory next to the executable, and desktop code typically reads assets straight from the source tree instead. Generated files are still built with the target. |
+
+A source can be the output of a custom command (for example a shader bundle from
+`yup_add_shader_bundle`), declared in the same directory as the target: it is built before the
+target, and rebuilt when its inputs change, with no reconfigure. On Apple platforms a file whose
+destination name differs from its source name is copied under a new name at build time. Directory
+sources are expanded when configuring, so they must already exist in the source tree.
 
 Normally called through `yup_standalone_app`'s `BUNDLE_RESOURCES` argument rather than directly;
 call it directly only when bundling resources with a target `yup_standalone_app` doesn't own.
@@ -396,7 +402,7 @@ yup_add_embedded_binary_resources(<library_name>
     HEADER         <header_file_name>
     [NAMESPACE     <namespace>]
     RESOURCE_NAMES <symbol>...
-    RESOURCES      <path>...)
+    RESOURCES      <path>... | INCLUDES <path>...)
 ```
 
 Embeds one or more arbitrary binary files directly into the executable, with no
@@ -422,7 +428,8 @@ extern const std::size_t <RESOURCE_NAME>_size;
 | `HEADER` | string | *(required)* | File name of the generated header declaring the symbols. |
 | `NAMESPACE` | string | - | C++ namespace wrapping the declarations. Omit for the global namespace. |
 | `RESOURCE_NAMES` | list | *(required)* | Symbol base names, one per resource. Paired positionally with `RESOURCES`. |
-| `RESOURCES` | list | *(required)* | Source file paths to embed. Paired positionally with `RESOURCE_NAMES`. |
+| `RESOURCES` | list | *(required without `INCLUDES`)* | Source file paths to embed. Paired positionally with `RESOURCE_NAMES`. |
+| `INCLUDES` | list | - | Used instead of `RESOURCES`: byte array initializers (`.inc`) generated at build time by a custom command in the same directory, paired positionally with `RESOURCE_NAMES`. The library is built after them. |
 
 `RESOURCE_NAMES` and `RESOURCES` are parallel lists: the *n*-th name is bound to
 the *n*-th file. The library is regenerated only when a resource's bytes change,
@@ -466,7 +473,7 @@ auto result = yup::Image::loadFromData (
 
 ```{tip}
 To compile and embed GPU shaders offline, use the higher-level
-`yup_add_shader_bundle()` helper, which builds a `.ysl` bundle at configure time
+`yup_add_shader_bundle()` helper, which builds a `.ysl` bundle at build time
 and embeds it through this function. See
 [Offline shader compilation](../graphics/rhi/offline-shaders.md).
 ```

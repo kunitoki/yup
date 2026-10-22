@@ -46,6 +46,32 @@ void BufferD3D11::update(const void* data, uint32_t size, uint32_t offset)
         memcpy(mapped.pData, m_shadow.data(), m_size);
     m_d3d11Context->Unmap(m_d3d11Buffer.Get(), 0);
 }
+
+void BufferD3D11::writeUnsynchronized(const void* data,
+                                      uint32_t size,
+                                      uint32_t offset,
+                                      bool discard)
+{
+    assert(offset + size <= m_size);
+    assert(m_d3d11Context != nullptr);
+    assert(m_d3d11Buffer != nullptr);
+
+    if (m_shadow.empty())
+        m_shadow.resize(m_size, 0);
+    memcpy(m_shadow.data() + offset, data, size);
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    HRESULT hr = m_d3d11Context->Map(
+        m_d3d11Buffer.Get(),
+        0,
+        discard ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE,
+        0,
+        &mapped);
+    assert(SUCCEEDED(hr));
+    if (FAILED(hr))
+        return;
+    memcpy(static_cast<uint8_t*>(mapped.pData) + offset, data, size);
+    m_d3d11Context->Unmap(m_d3d11Buffer.Get(), 0);
+}
 #endif // ORE_BACKEND_D3D11 && !ORE_BACKEND_D3D12
 
 } // namespace rive::ore

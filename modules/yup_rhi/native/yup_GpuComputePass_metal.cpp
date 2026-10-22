@@ -21,6 +21,9 @@
 
 #if YUP_RIVE_USE_METAL && YUP_APPLE
 
+#include "ore/metal/ore_sampler_metal.hpp"
+#include "ore/metal/ore_texture_metal.hpp"
+
 namespace yup
 {
 
@@ -30,16 +33,34 @@ class GpuComputePassImplMetal final : public GpuComputePass::Impl
 {
 public:
     /** Encodes into @p commandBufferToEncode, and commits it on finish() when
-        @p commitOnFinish is set: a frame commits its own command buffer. */
-    GpuComputePassImplMetal (id<MTLDevice> device, id<MTLCommandBuffer> commandBufferToEncode, bool commitOnFinish)
+        @p commitOnFinish is set: a frame commits its own command buffer. A pass of a
+        frame measuring its scopes is created with @p passDescriptor, which samples it. */
+    GpuComputePassImplMetal (id<MTLDevice> device,
+                             rive::ore::Context* oreCtx,
+                             id<MTLCommandBuffer> commandBufferToEncode,
+                             bool commitOnFinish,
+                             MTLComputePassDescriptor* passDescriptor = nil)
         : device (device)
+        , oreCtx (oreCtx)
     {
         if (device == nil || commandBufferToEncode == nil)
             return;
 
         YUP_AUTORELEASEPOOL
         {
-            encoder = [commandBufferToEncode computeCommandEncoder];
+            if (passDescriptor != nil)
+            {
+                if (@available (macOS 11.0, iOS 14.0, *))
+                {
+                    encoder = [commandBufferToEncode computeCommandEncoderWithDescriptor:passDescriptor];
+                    sampled = encoder != nil;
+                }
+            }
+
+            if (encoder == nil)
+                encoder = [commandBufferToEncode computeCommandEncoder];
+
+            encodedInto = commandBufferToEncode;
             if (encoder != nil && commitOnFinish)
                 commandBuffer = commandBufferToEncode;
         }
@@ -84,7 +105,8 @@ public:
 
                 [encoder setBuffer:bufImpl->mtlStorageBuffer
                             offset:0
-                           atIndex:static_cast<NSUInteger> (sb.group * 16 + sb.binding)];
+                           atIndex:slotIndex (sb.group, sb.binding)];
+                bufImpl->mtlUses.add (encodedInto);
             }
 
             for (auto& ub : uboBindings)
@@ -92,7 +114,7 @@ public:
                 if (ub.data.empty())
                     continue;
 
-                NSUInteger idx = static_cast<NSUInteger> (ub.group * 16 + ub.binding);
+                NSUInteger idx = slotIndex (ub.group, ub.binding);
 
                 id<MTLBuffer> tmp = [device newBufferWithBytes:ub.data.data()
                                                         length:ub.data.size()
@@ -102,6 +124,35 @@ public:
                     [encoder setBuffer:tmp offset:0 atIndex:idx];
                     tempBuffers.push_back (tmp);
                 }
+            }
+
+            for (auto& tb : texBindings)
+            {
+                if (tb.texture == nullptr || oreCtx == nullptr)
+                    continue;
+
+                bindTexture (tb.texture->getOrCreateSamplingView (*oreCtx), tb.group, tb.binding);
+            }
+
+            for (auto& sb : storageTexBindings)
+            {
+                if (sb.texture == nullptr || oreCtx == nullptr)
+                    continue;
+
+                bindTexture (sb.texture->getOrCreateView (*oreCtx, false, sb.view), sb.group, sb.binding);
+            }
+
+            for (auto& sb : samplerBindings)
+            {
+                if (sb.sampler == nullptr)
+                    continue;
+
+                auto* samplerMetal = rive::lite_rtti_cast<rive::ore::SamplerMetal*> (sb.sampler->getOreSampler().get());
+                if (samplerMetal == nullptr || samplerMetal->mtlSampler() == nil)
+                    continue;
+
+                [encoder setSamplerState:samplerMetal->mtlSampler()
+                                 atIndex:slotIndex (sb.group, sb.binding)];
             }
 
             auto wgs = pipe->getWorkgroupSize();
@@ -132,15 +183,39 @@ public:
                 commandBuffer = nil;
             }
 
+            encodedInto = nil;
             tempBuffers.clear();
+            boundViews.clear();
         }
     }
 
 private:
+    /** The argument index of a (group, binding) slot, the same for buffers, textures and samplers.
+        The transpiled MSL indexes every resource by its binding alone, ignoring the set, so only
+        group 0 lines up with it. */
+    static NSUInteger slotIndex (int group, int binding)
+    {
+        jassert (group == 0);
+        return static_cast<NSUInteger> (group * 16 + binding);
+    }
+
+    void bindTexture (rive::rcp<rive::ore::TextureView> view, int group, int binding)
+    {
+        auto* viewMetal = rive::lite_rtti_cast<rive::ore::TextureViewMetal*> (view.get());
+        if (viewMetal == nullptr || viewMetal->mtlTexture() == nil)
+            return;
+
+        [encoder setTexture:viewMetal->mtlTexture() atIndex:slotIndex (group, binding)];
+        boundViews.push_back (std::move (view));
+    }
+
     id<MTLDevice> device = nil;
+    rive::ore::Context* oreCtx = nullptr;
     id<MTLCommandBuffer> commandBuffer = nil;
+    id<MTLCommandBuffer> encodedInto = nil;
     id<MTLComputeCommandEncoder> encoder = nil;
     std::vector<id<MTLBuffer>> tempBuffers;
+    std::vector<rive::rcp<rive::ore::TextureView>> boundViews;
 };
 
 //==============================================================================
@@ -155,23 +230,24 @@ std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&
         commandBuffer = [metalCtx.getCommandQueue() commandBuffer];
     }
 
-    auto impl = std::make_unique<GpuComputePassImplMetal> (metalCtx.getDevice(), commandBuffer, true);
+    auto impl = std::make_unique<GpuComputePassImplMetal> (metalCtx.getDevice(), metalCtx.getGpuContext(), commandBuffer, true);
     if (! impl->isValid())
         return nullptr;
 
     return impl;
 }
 
-std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice& ctx, rive::ore::Context& frameContext)
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice& ctx, rive::ore::Context& frameContext, void* passDescriptor)
 {
     auto& metalCtx = static_cast<GpuDeviceMetal&> (ctx);
+    MTLComputePassDescriptor* descriptor = (__bridge_transfer MTLComputePassDescriptor*) passDescriptor;
 
     id<MTLCommandBuffer> frameCommandBuffer = static_cast<rive::ore::ContextMetal&> (frameContext).commandBuffer();
     jassert (frameCommandBuffer != nil); // Only set between the frame's begin and its submission
     if (frameCommandBuffer == nil)
         return nullptr;
 
-    auto impl = std::make_unique<GpuComputePassImplMetal> (metalCtx.getDevice(), frameCommandBuffer, false);
+    auto impl = std::make_unique<GpuComputePassImplMetal> (metalCtx.getDevice(), &frameContext, frameCommandBuffer, false, descriptor);
     if (! impl->isValid())
         return nullptr;
 

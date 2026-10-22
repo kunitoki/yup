@@ -162,11 +162,69 @@ struct GpuBuffer::Impl
 
 #if YUP_RIVE_USE_METAL && YUP_APPLE
     id<MTLBuffer> mtlStorageBuffer = nil;
+
+    /** The command buffers that bound a backing, in any order: frames and standalone compute
+        passes commit independently. Weak, as a released command buffer has completed. */
+    struct MetalUses
+    {
+        std::vector<__weak id<MTLCommandBuffer>> commandBuffers;
+
+        void add (id<MTLCommandBuffer> commandBuffer)
+        {
+            if (commandBuffer == nil)
+                return;
+
+            prune();
+
+            for (id<MTLCommandBuffer> use : commandBuffers)
+                if (use == commandBuffer)
+                    return;
+
+            commandBuffers.push_back (commandBuffer);
+        }
+
+        bool isInFlight() const
+        {
+            for (id<MTLCommandBuffer> use : commandBuffers)
+                if (isPending (use))
+                    return true;
+
+            return false;
+        }
+
+        void prune()
+        {
+            commandBuffers.erase (std::remove_if (commandBuffers.begin(), commandBuffers.end(), [] (const auto& weakUse)
+            {
+                id<MTLCommandBuffer> use = weakUse;
+                return ! isPending (use);
+            }),
+                                  commandBuffers.end());
+        }
+
+        static bool isPending (id<MTLCommandBuffer> use)
+        {
+            return use != nil && use.status < MTLCommandBufferStatusCompleted;
+        }
+    };
+
+    /** The uses of mtlStorageBuffer, which an update must not overwrite while any is in flight. */
+    MetalUses mtlUses;
+
+    /** Backings an update swapped out while the GPU could still read them, reused once idle. */
+    struct MetalBacking
+    {
+        id<MTLBuffer> buffer = nil;
+        MetalUses uses;
+    };
+
+    std::vector<MetalBacking> mtlSpareBackings;
 #endif
 
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
     ComPtr<ID3D11Buffer> d3dStorageBuffer;
     ComPtr<ID3D11UnorderedAccessView> d3dUav;
+    ComPtr<ID3D11ShaderResourceView> d3dSrv;
     ComPtr<ID3D11Buffer> d3dReadbackStaging;
 #endif
 
@@ -199,6 +257,34 @@ struct GpuBuffer::Impl
 #if YUP_RIVE_USE_VULKAN
     VulkanStorageBuffer vkStorageBuffer;
 #endif
+
+    /** The native handle a render pass binds for read-only storage access, or nullptr. */
+    void* getNativeStorageHandleForRead() const noexcept
+    {
+#if YUP_RIVE_USE_METAL && YUP_APPLE
+        if (mtlStorageBuffer != nil)
+            return (__bridge void*) mtlStorageBuffer;
+#endif
+
+#if YUP_RIVE_USE_D3D && YUP_WINDOWS
+        if (d3dSrv != nullptr)
+            return d3dSrv.Get();
+#endif
+
+#if YUP_RIVE_USE_VULKAN
+        // A pointer to the VkBuffer, which is a 64-bit handle even on 32-bit ABIs
+        if (vkStorageBuffer.buffer != nullptr)
+            return const_cast<VkBuffer*> (vkStorageBuffer.buffer->vkBufferAddressOf());
+#endif
+
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
+        if (webgpuStorageBuffer != nullptr)
+            return webgpuStorageBuffer.Get();
+#endif
+
+        // createStorageForTesting(): the ore buffer stands in for a native one
+        return type == GpuBufferType::storage ? oreBuffer.get() : nullptr;
+    }
 };
 
 //==============================================================================
@@ -259,7 +345,6 @@ bool GpuBuffer::isValid() const noexcept
         if (i->vkStorageBuffer.buffer != nullptr)
             return true;
 #endif
-        return false;
     }
 
     return i->oreBuffer != nullptr;
@@ -276,6 +361,25 @@ GpuBuffer::Ptr GpuBuffer::create (GpuDevice::Ptr ctx,
         return nullptr;
 
     return ctx->createBuffer (type, data, byteSize);
+}
+
+GpuBuffer::Ptr GpuBuffer::createStorageForTesting (GpuDevice::Ptr ctx, const void* data, size_t byteSize)
+{
+    auto* oreCtx = ctx != nullptr ? ctx->getGpuContext() : nullptr;
+    if (oreCtx == nullptr || data == nullptr || byteSize == 0)
+        return nullptr;
+
+    rive::ore::BufferDesc desc;
+    desc.usage = rive::ore::BufferUsage::uniform;
+    desc.size = static_cast<uint32_t> (byteSize);
+    desc.data = data;
+    desc.label = "GpuBuffer storage for testing";
+
+    auto buffer = oreCtx->makeBuffer (desc);
+    if (buffer == nullptr)
+        return nullptr;
+
+    return createWithImpl (Impl { GpuBufferType::storage, byteSize, std::move (buffer) });
 }
 
 GpuBuffer::Ptr GpuBuffer::createWithImpl (Impl&& impl)

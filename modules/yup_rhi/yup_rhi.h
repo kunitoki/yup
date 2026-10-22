@@ -36,6 +36,9 @@
     testDeps:           yup_graphics
     appleFrameworks:    Metal
 
+    shaderDirectory:    shaders
+    shaderBundles:      GpuMipDownsample
+
   END_YUP_MODULE_DECLARATION
 
   ==============================================================================
@@ -73,12 +76,15 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 
 //==============================================================================
+#include <bit>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
 
 //==============================================================================
 #include "rhi/yup_GpuTypes.h"
+#include "rhi/yup_GpuFrameStatus.h"
 #include "context/yup_OffscreenTarget.h"
 #include "context/yup_RenderableTarget.h"
 #include "context/yup_GpuDevice.h"
