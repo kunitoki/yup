@@ -30,6 +30,7 @@
 #include <array>
 #include <cmath>
 #include <functional>
+#include <memory>
 
 //==============================================================================
 
@@ -55,6 +56,7 @@
     their three most expensive passes, where the device measures them (Metal).
 */
 class Scene3DDemo : public yup::Component
+    , public LoadingDemo
 {
 public:
     Scene3DDemo()
@@ -70,7 +72,7 @@ public:
         // The switch notifies on toggling and on release, so apply its state rather than flipping
         freeMovementSwitch.onClick = [this]
         {
-            view.setFreeMovement (freeMovementSwitch.getToggleState());
+            view->setFreeMovement (freeMovementSwitch.getToggleState());
         };
         addAndMakeVisible (freeMovementSwitch);
 
@@ -80,23 +82,10 @@ public:
         settingsToggle.setTitle ("Render settings");
         settingsToggle.onClick = [this]
         {
-            settingsPanel.setVisible (settingsToggle.getToggleState());
+            settingsPanel->setVisible (settingsToggle.getToggleState());
             resized();
         };
         addAndMakeVisible (settingsToggle);
-
-        view.onFramePainted = [this]
-        {
-            settingsPanel.refresh();
-        };
-        addChildComponent (settingsPanel);
-
-        // The camera can't move freely while it frames the screen
-        view.onScreenZoomChanged = [this] (bool isZoomedOnScreen)
-        {
-            freeMovementSwitch.setEnabled (! isZoomedOnScreen);
-            freeMovementLabel.setEnabled (! isZoomedOnScreen);
-        };
 
         sceneTree.setRootItemVisible (true);
         sceneTree.onSelectionChanged = [this]
@@ -105,11 +94,74 @@ public:
         };
         addChildComponent (sceneTree);
 
-        addAndMakeVisible (view);
+        addLoadingStep ([this]
+        {
+            view = std::make_unique<MpcView>(); // Loads the model and builds the scene
+
+            // The camera can't move freely while it frames the screen
+            view->onScreenZoomChanged = [this] (bool isZoomedOnScreen)
+            {
+                freeMovementSwitch.setEnabled (! isZoomedOnScreen);
+                freeMovementLabel.setEnabled (! isZoomedOnScreen);
+            };
+            addChildComponent (*view); // Shown once its first frame is cheap
+        });
+
+        addLoadingStep ([this]
+        {
+            settingsPanel = std::make_unique<RenderSettingsPanel> (*view);
+            addChildComponent (*settingsPanel);
+
+            view->onFramePainted = [this]
+            {
+                settingsPanel->refresh();
+            };
+
+            resized();
+        });
+
+        // The work of the first frame, one frame each: the probes capture the textured panel
+        addLoadingStep ([this]
+        {
+            if (auto& context = loadingGraphics->getGraphicsContext(); context.isGpuAvailable())
+                view->updateTextures (context);
+        }, StepThread::render);
+
+        addLoadingStep ([this]
+        {
+            if (auto& context = loadingGraphics->getGraphicsContext(); context.isGpuAvailable())
+                view->getRenderer().bakeProbes (context.getGpuDevice(), *view->getScene());
+        }, StepThread::render);
+
+        addLoadingStep ([this]
+        {
+            // At the size the view renders at, compiling the pipelines and drawing the shadow maps
+            const auto scale = loadingGraphics->getContextScale();
+            const auto width = yup::roundToInt (view->getWidth() * scale);
+            const auto height = yup::roundToInt (view->getHeight() * scale);
+
+            if (auto& context = loadingGraphics->getGraphicsContext(); context.isGpuAvailable() && width > 0 && height > 0)
+                view->getRenderer().render (context.getGpuDevice(), *view->getScene(), width, height);
+        }, StepThread::render);
+
+        addLoadingStep ([this]
+        {
+            view->setVisible (true);
+        });
+    }
+
+    void refreshDisplay (double) override
+    {
+        if (isLoading())
+            repaint();
     }
 
     void paint (yup::Graphics& g) override
     {
+        loadingGraphics = &g;
+        pumpLoading();
+        loadingGraphics = nullptr;
+
         g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
@@ -136,13 +188,16 @@ public:
             bounds.removeFromLeft (6.0f);
         }
 
-        if (settingsPanel.isVisible())
+        if (view == nullptr)
+            return;
+
+        if (settingsPanel != nullptr && settingsPanel->isVisible())
         {
-            settingsPanel.setBounds (bounds.removeFromRight (320.0f));
+            settingsPanel->setBounds (bounds.removeFromRight (320.0f));
             bounds.removeFromRight (6.0f);
         }
 
-        view.setBounds (bounds);
+        view->setBounds (bounds);
     }
 
 private:
@@ -815,6 +870,20 @@ private:
                 getTargetPose().applyTo (cameraEntity);
         }
 
+        /** Paints the faceplate and the LCD into their textures, where they changed. Needs a GPU context. */
+        void updateTextures (yup::GraphicsContext& context)
+        {
+            faceplate.updateTexture (context);
+
+            // Every new texture restarts the TAA accumulation, so only hand over actual changes
+            if (lcdTexture != nullptr)
+            {
+                auto texture = lcd.renderToTexture (context, lcdTextureScale);
+                if (lcd.consumeRedrawn())
+                    lcdTexture->setGpuTexture (std::move (texture));
+            }
+        }
+
         /** Renders the next paint 300 times offscreen at 1920x1080 and reports the average frame time. */
         void requestBenchmark()
         {
@@ -828,15 +897,7 @@ private:
             if (context.isGpuAvailable())
             {
                 platform = context.getGpuDevice()->getPlatform();
-                faceplate.updateTexture (context);
-
-                // Every new texture restarts the TAA accumulation, so only hand over actual changes
-                if (lcdTexture != nullptr)
-                {
-                    auto texture = lcd.renderToTexture (context, lcdTextureScale);
-                    if (lcd.consumeRedrawn())
-                        lcdTexture->setGpuTexture (std::move (texture));
-                }
+                updateTextures (context);
             }
 
             if (benchmarkPending && context.isGpuAvailable() && getScene() != nullptr)
@@ -2479,9 +2540,9 @@ private:
     void setSceneTreeVisible (bool shouldBeVisible)
     {
         // Rebuilt when shown, so it reflects the current tree
-        if (shouldBeVisible && view.getScene() != nullptr)
+        if (shouldBeVisible && view->getScene() != nullptr)
         {
-            sceneTree.setRootItem (std::make_unique<EntityItem> (view.getScene()->getRoot()));
+            sceneTree.setRootItem (std::make_unique<EntityItem> (view->getScene()->getRoot()));
             sceneTree.getRootItem()->setOpenRecursively (true);
         }
 
@@ -2503,8 +2564,8 @@ private:
             }
         }
 
-        view.getRenderer().setBoundsOverlay (std::move (selected));
-        view.repaint();
+        view->getRenderer().setBoundsOverlay (std::move (selected));
+        view->repaint();
     }
 
     //==============================================================================
@@ -2513,8 +2574,9 @@ private:
     yup::Label freeMovementLabel { "freeMovementLabel" };
     SettingsIconButton settingsToggle { "settingsToggle" };
     yup::TreeView sceneTree { "sceneTree" };
-    MpcView view;
-    RenderSettingsPanel settingsPanel { view };
+    std::unique_ptr<MpcView> view;
+    std::unique_ptr<RenderSettingsPanel> settingsPanel;
+    yup::Graphics* loadingGraphics = nullptr; // Only set while paint() runs the render steps
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scene3DDemo)
 };
