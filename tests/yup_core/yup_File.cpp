@@ -129,6 +129,39 @@ TEST_F (FileTests, BundleDirectory)
     EXPECT_EQ (bundleDir.getFullPathName(), hostBundleDir.getFullPathName());
 }
 
+#if YUP_ANDROID
+TEST_F (FileTests, FindChildFilesListsBundledAssets)
+{
+    File soundsDir = File::getSpecialLocation (File::bundleDirectory).getChildFile ("data/sounds");
+    auto files = soundsDir.findChildFiles (File::findFiles, false, "*.wav");
+    EXPECT_FALSE (files.isEmpty());
+
+    for (const auto& file : files)
+    {
+        EXPECT_TRUE (file.existsAsFile());
+        EXPECT_GT (file.getSize(), 0);
+    }
+
+    EXPECT_TRUE (soundsDir.findChildFiles (File::findDirectories, false).isEmpty());
+}
+
+TEST_F (FileTests, BundledAssetFoldersHoldingOnlyFoldersAreDirectories)
+{
+    File bundleDir = File::getSpecialLocation (File::bundleDirectory);
+    File dataDir = bundleDir.getChildFile ("data");
+
+    EXPECT_TRUE (bundleDir.isDirectory());
+    EXPECT_TRUE (dataDir.isDirectory());
+    EXPECT_TRUE (dataDir.exists());
+    EXPECT_FALSE (dataDir.getChildFile ("missing").isDirectory());
+
+    auto folders = dataDir.findChildFiles (File::findDirectories, false);
+    EXPECT_TRUE (folders.contains (dataDir.getChildFile ("sounds")));
+
+    EXPECT_FALSE (dataDir.findChildFiles (File::findFiles, true, "*.wav").isEmpty());
+}
+#endif
+
 TEST_F (FileTests, RootDirectory)
 {
 #if ! YUP_WINDOWS

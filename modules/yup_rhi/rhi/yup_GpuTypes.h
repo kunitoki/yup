@@ -101,6 +101,14 @@ struct GpuShaderSource
         backend. Produced by makeGLFixupBlob(). */
     std::vector<uint8> glFixup;
 
+    /** Optional GL texture-sampler pair table (GLSL/ESSL only).
+
+        Lists which texture each sampler is combined with, so the OpenGL
+        backend binds a sampler used with several textures on each of their
+        texture units. Ignored by every non-GL backend. Produced by
+        makeGLTextureSamplerPairsBlob(). */
+    std::vector<uint8> glTextureSamplerPairs;
+
     /** Override the stage entry-point name. Empty → "vs_main" / "fs_main". */
     String entryPoint;
 };
@@ -408,6 +416,15 @@ struct GpuTextureDesc
     /** Whether the texture may be used as a render pass attachment. */
     bool renderTarget = false;
 
+    /** Whether compute shaders may write the texture as a storage image, bound
+        with GpuComputePass::setStorageTexture(). Storage textures can still be
+        sampled by later passes.
+
+        @warning Requires GpuDevice::isStorageTextureAvailable(), and cannot be
+                 combined with a sampleCount above 1 or a depth / stencil
+                 format; GpuTexture::create() returns nullptr otherwise. */
+    bool storage = false;
+
     /** Number of mip levels to allocate. Storage is allocated for all of them;
         nothing generates their contents - render or upload each level. */
     uint32_t mipLevels = 1;
@@ -611,6 +628,13 @@ struct GpuStencilFaceState
     Leave @c enabled false (the default) for post-process passes that don't
     need a depth/stencil buffer. Setting it true attaches a depth/stencil
     target using @c format.
+
+    The depth bias fields offset the depth each fragment writes and tests,
+    pushing it away from the viewer (the stored depth grows). Shadow map passes
+    use them to avoid self-shadowing acne. The total bias is
+    @c depthBias * r + @c depthBiasSlopeScale * m, where r is the smallest
+    resolvable difference of the depth format and m the polygon's maximum depth
+    slope, optionally limited by @c depthBiasClamp.
 */
 struct GpuDepthStencilState
 {
@@ -620,6 +644,49 @@ struct GpuDepthStencilState
     GpuTextureFormat format = GpuTextureFormat::depth24plusStencil8; ///< Depth/stencil format.
     GpuCompareFunction depthCompare = GpuCompareFunction::less;      ///< Depth comparison function.
     bool depthWriteEnabled = true;                                   ///< Enable depth writes.
+
+    /** Constant depth bias, in units of the depth format's smallest resolvable difference.
+
+        On unorm formats the unit is fixed (2^-16 for depth16unorm, 2^-24 for 24-bit
+        depth). On float formats it scales with depth: it is 2^(e - 23), where e is the
+        exponent of the polygon's largest depth, so the same bias moves far depths
+        more than near ones. depth24plusStencil8 maps to Depth32Float_Stencil8 on
+        Apple silicon, so there it follows the float rule.
+    */
+    int32_t depthBias = 0;
+
+    /** Depth bias scaled by the polygon's maximum depth slope. */
+    float depthBiasSlopeScale = 0.0f;
+
+    /** The largest total depth bias applied, or 0 for no limit.
+
+        Ignored where the backend has no bias clamp: OpenGL / OpenGL ES
+        (glPolygonOffset has no clamp parameter) and Vulkan devices without the
+        depthBiasClamp feature.
+    */
+    float depthBiasClamp = 0.0f;
+};
+
+//==============================================================================
+/** A uniform buffer slot of a pipeline: the set (group) and the binding number a
+    shader declares the block at.
+
+    @see GpuPipelineOptions::dynamicUniformBuffers
+*/
+struct GpuUniformSlot
+{
+    constexpr GpuUniformSlot() = default;
+
+    constexpr GpuUniformSlot (uint32_t groupIndex, uint32_t bindingIndex)
+        : group (groupIndex)
+        , binding (bindingIndex)
+    {
+    }
+
+    constexpr bool operator== (const GpuUniformSlot&) const = default;
+
+    uint32_t group = 0;   ///< The set the block is declared in.
+    uint32_t binding = 0; ///< The binding number within the set.
 };
 
 //==============================================================================
@@ -647,8 +714,13 @@ struct GpuPipelineOptions
     GpuCullMode cullMode = GpuCullMode::none;
     GpuFaceWinding winding = GpuFaceWinding::counterClockwise;
 
-    /** Color targets. When empty, a single default alpha-blended rgba8unorm
-        target is used. At most four are supported; extra entries are ignored. */
+    /** Color targets. At most four are supported; extra entries are ignored.
+
+        When empty and @c depthStencil is enabled, the pipeline is depth-only: it
+        has no color output and draws into a pass begun on a depth-format
+        GpuTarget. When empty without depth, a single default alpha-blended
+        rgba8unorm target is used.
+    */
     std::vector<GpuColorTarget> colorTargets;
 
     GpuDepthStencilState depthStencil;
@@ -658,6 +730,25 @@ struct GpuPipelineOptions
     uint8_t stencilWriteMask = 0xFF;
 
     uint32_t sampleCount = 1; ///< MSAA sample count.
+
+    /** Uniform buffers whose data changes from draw to draw, such as per-object transforms.
+
+        GpuRenderPass::setUniformBuffer() on one of these copies the block into a buffer
+        the frame shares between its passes and moves the block's offset in it, instead
+        of building a new bind group for the set. A set whose other resources do not
+        change is then built once and reused by the following draws.
+
+        Slots the shaders do not declare are ignored, so pipelines can share one list
+        while each declares only some of its blocks. Every listed slot the shaders do
+        declare must be a uniform buffer: another kind asserts in Debug and stays
+        static. At most 8 slots are honored, the limit every backend supports; a longer
+        list asserts in Debug and only its first 8 slots count. The whole list is ignored on devices
+        where GpuDevice::isDynamicUniformOffsetAvailable() returns false, which keeps
+        every block on the per-draw path.
+
+        @see GpuDevice::isDynamicUniformOffsetAvailable
+    */
+    std::vector<GpuUniformSlot> dynamicUniformBuffers;
 };
 
 //==============================================================================
@@ -815,7 +906,7 @@ struct GpuRenderOptions
 //==============================================================================
 /** Per-depth/stencil-attachment options controlling load and store behaviour.
 
-    @see GpuRenderPass::setDepthStencilAttachment
+    @see GpuRenderPass::setDepthStencilAttachment, GpuTarget::beginRenderPass
 */
 struct GpuDepthStencilOptions
 {
@@ -850,6 +941,70 @@ struct GpuWorkgroupSize
     uint32_t x = 1;
     uint32_t y = 1;
     uint32_t z = 1;
+};
+
+//==============================================================================
+/** The GPU time of one scope of a frame, opened with GpuFrame::beginScope().
+
+    @see GpuFrameTimings
+*/
+struct GpuScopeTiming
+{
+    /** The name given to GpuFrame::beginScope(). */
+    String name;
+
+    /** How far the native encoders opened while the scope was open pushed the GPU's work
+        forward, in milliseconds: each encoder counts from its first to its last timestamp,
+        less the part that overlapped earlier work, and the scope sums its encoders. 0 for a
+        scope that opened none.
+
+        This ranks what lengthens the frame, not what a pass costs on its own: work that ran
+        entirely under an earlier pass reads 0, and its time counts for that earlier pass.
+        To learn a pass's own cost, compare the frame total with and without it.
+    */
+    double milliseconds = 0;
+
+    /** False when some encoder of the scope could not be measured: it opened before the
+        frame turned timing on, or the frame ran out of timestamp samples. The scope then
+        reports 0 milliseconds. */
+    bool available = false;
+};
+
+//==============================================================================
+/** The GPU time of one frame, once it completed.
+
+    Measured only for frames that asked for it with GpuFrame::setTimingEnabled(), on
+    devices where GpuDevice::isFrameTimingAvailable() is true.
+
+    @see GpuFrameStatus::getTimings
+*/
+struct GpuFrameTimings
+{
+    /** False when the device, or this frame, could not measure: timing was off, the
+        frame is still pending, or it failed. */
+    bool available = false;
+
+    /** The time from the GPU's start of the frame's command buffer to its end, in
+        milliseconds. It excludes work submitted outside the frame and the time before the
+        GPU started it. With several frames in flight it includes the time the frame ran
+        alongside, or waited behind, the frames before it, even with two in flight: wait
+        for each measured frame to read its own cost. */
+    double frameMilliseconds = 0;
+
+    /** The scopes of the frame (see GpuFrame::beginScope()), in the order they were first
+        opened: a name opened twice appears twice. Empty when the device (see
+        GpuDevice::isScopeTimingAvailable()) or the frame could not measure scopes.
+
+        A tile-based GPU overlaps passes: one starts while the passes before it still
+        shade. Each pass is credited only the time past the end of the passes encoded
+        before it and of the device's earlier frames, so overlapped work counts for the
+        earlier pass and a light pass after a heavy one stays light (see
+        GpuScopeTiming::milliseconds). The first scope of a frame may still include time it
+        overlapped GPU work of the device that is not a GpuFrame, such as window drawing
+        and uploads. The scopes attribute the frame's time; they need not add up to
+        frameMilliseconds, which is measured with another clock.
+    */
+    std::vector<GpuScopeTiming> scopes;
 };
 
 } // namespace yup

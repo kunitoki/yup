@@ -37,6 +37,8 @@ class GpuDevice;
     The pass is move-only and follows RAII: the destructor calls finish() if
     you haven't already, so the GPU work is never silently dropped.
 
+    On Metal and Direct3D 11, compute resources must be declared in group (set) 0.
+
     @code
         auto pass = GpuComputePass::begin (device);
         pass.setPipeline (pipeline);
@@ -78,7 +80,10 @@ public:
         returns false.
 
         OpenGL and WebGPU begin a standalone pass, exactly like
-        begin (GpuDevice::Ptr), and submit it on finish().
+        begin (GpuDevice::Ptr), and submit it on finish(). On WebGPU it then runs
+        before every render pass of the frame: they see what the dispatches write
+        as long as the compute pass finishes first, but the dispatches never see
+        what the frame's render passes draw.
 
         @param frame  A valid frame that was not submitted yet.
         @returns      A GpuComputePass ready for binding and dispatch, or an invalid
@@ -112,7 +117,8 @@ public:
         The buffer must have been created with GpuBufferType::storage. The
         (group, binding) indices must match the shader's layout declarations.
 
-        @param group    Binding group index declared in the shader (set).
+        @param group    Binding group index declared in the shader (set). Must
+                        be 0 on Metal and Direct3D 11.
         @param binding  Binding index within the group.
         @param buffer   The storage buffer to bind.
     */
@@ -123,7 +129,8 @@ public:
         The data is copied immediately and does not need to outlive this call.
         The (group, binding) indices must match the shader's layout declarations.
 
-        @param group     Binding group index declared in the shader (set).
+        @param group     Binding group index declared in the shader (set). Must
+                         be 0 on Metal and Direct3D 11.
         @param binding   Binding index within the group.
         @param data      Pointer to the uniform data.
         @param byteSize  Size of the data in bytes.
@@ -132,11 +139,64 @@ public:
 
     /** Binds a read-only texture to the given slot.
 
-        @param group    Binding group index declared in the shader (set).
+        The whole texture is bound, every mip level and layer, and the shader
+        reads it with texelFetch() or through a sampler bound with setSampler().
+        On a GpuFrame, writes made by earlier passes of the frame are visible on
+        Metal, Direct3D 11 and Vulkan. On WebGPU the dispatches run before every
+        render pass of the frame, so they do not see what those passes draw.
+
+        @note The texture is bound on Metal, Direct3D 11, Vulkan and WebGPU; OpenGL
+              compute ignores textures.
+              On Vulkan, a pass begun on a device can only sample a texture a
+              submitted frame has rendered into, or one uploaded before a
+              frame began, and never a texture backed by a Rive image or
+              canvas; otherwise the dispatch fails with a jassert.
+
+        @param group    Binding group index declared in the shader (set). Must
+                        be 0 on Metal and Direct3D 11.
         @param binding  Binding index within the group.
         @param texture  The texture to bind for sampling.
     */
     void setTexture (int group, int binding, GpuTexture::Ptr texture);
+
+    /** Binds a texture the compute shader writes as a storage image.
+
+        The view selects one mip level; for a 2D-array or 3D texture the whole
+        level is bound, every layer or slice, and the view's layer range is
+        ignored. Render and compute passes begun later on the same GpuFrame see
+        the writes; on WebGPU only once this pass has finished.
+
+        Cube textures cannot be bound as storage textures: the call asserts and
+        is ignored. Write cube faces with render passes instead.
+
+        @param group    Binding group index declared in the shader (set). Must
+                        be 0 on Metal and Direct3D 11.
+        @param binding  Binding index within the group.
+        @param texture  A texture created with GpuTextureDesc::storage set.
+        @param view     The mip level to write, from baseMipLevel. For a 2D
+                        texture baseLayer must be 0; for a 2D-array or 3D texture
+                        it is ignored. The other fields are ignored.
+
+        @warning Requires GpuDevice::isStorageTextureAvailable(). On Vulkan the
+                 pass must be begun on a GpuFrame: a dispatch of a pass begun
+                 on a device fails with a jassert.
+    */
+    void setStorageTexture (int group, int binding, GpuTexture::Ptr texture, const GpuTextureViewDesc& view = {});
+
+    /** Binds a sampler to the given slot, for shaders that sample a texture
+        bound with setTexture() through a separate sampler.
+
+        Unlike render pipelines, compute passes bind no default sampler, so
+        every sampler the shader declares must be set, even one only used with
+        texelFetch(). On WebGPU, dispatch() returns false while any resource the
+        shader declares is unbound.
+
+        @param group    Binding group index declared in the shader (set). Must
+                        be 0 on Metal and Direct3D 11.
+        @param binding  Binding index within the group.
+        @param sampler  The sampler to bind.
+    */
+    void setSampler (int group, int binding, GpuSampler::Ptr sampler);
 
     //==============================================================================
     /** Dispatches compute workgroups.
@@ -149,7 +209,9 @@ public:
         @param groupsY  Number of workgroups in Y.
         @param groupsZ  Number of workgroups in Z.
 
-        @returns true on success, false if the pass is invalid.
+        @returns true on success, false if the pass is invalid. On WebGPU it is also
+                 false, with an assertion, while any resource the shader declares is
+                 unbound.
     */
     bool dispatch (uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ);
 

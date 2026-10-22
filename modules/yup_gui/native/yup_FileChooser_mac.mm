@@ -49,20 +49,23 @@ static Array<String> parseFileExtensions(const String& pattern)
 }
 
 //==============================================================================
-static NSArray* createAllowedFileTypes(const String& filters)
+static NSArray<UTType*>* createAllowedContentTypes(const String& filters)
 {
     auto extensions = parseFileExtensions(filters);
 
     if (extensions.isEmpty())
         return nil;
 
-    NSMutableArray* types = [NSMutableArray array];
+    NSMutableArray<UTType*>* types = [NSMutableArray array];
 
     for (const auto& ext : extensions)
     {
         NSString* nsExt = [NSString stringWithUTF8String:ext.toUTF8()];
-        if (nsExt != nil)
-            [types addObject:nsExt];
+        if (nsExt == nil)
+            continue;
+
+        if (UTType* type = [UTType typeWithFilenameExtension:nsExt])
+            [types addObject:type];
     }
 
     return types.count > 0 ? [NSArray arrayWithArray:types] : nil;
@@ -88,10 +91,10 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
         if (warnAboutOverwrite)
             [panel setExtensionHidden:NO];
 
-        NSArray* allowedTypes = createAllowedFileTypes(filters);
+        NSArray<UTType*>* allowedTypes = createAllowedContentTypes(filters);
         if (allowedTypes != nil)
         {
-            [panel setAllowedFileTypes:allowedTypes];
+            [panel setAllowedContentTypes:allowedTypes];
             [panel setAllowsOtherFileTypes:NO];
         }
 
@@ -137,10 +140,10 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
         [panel setShowsHiddenFiles:NO];
         [panel setTreatsFilePackagesAsDirectories:packageDirsAsFiles];
 
-        NSArray* allowedTypes = createAllowedFileTypes(filters);
+        NSArray<UTType*>* allowedTypes = createAllowedContentTypes(filters);
         if (allowedTypes != nil && canChooseFiles)
         {
-            [panel setAllowedFileTypes:allowedTypes];
+            [panel setAllowedContentTypes:allowedTypes];
             [panel setAllowsOtherFileTypes:NO];
         }
 

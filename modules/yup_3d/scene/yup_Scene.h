@@ -22,25 +22,57 @@
 namespace yup
 {
 
-//==============================================================================
-/** A 3D world: a root entity, the camera that views it and the global lighting settings.
+class EntityStore;
 
-    Build the world under getRoot(), then show it with a SceneComponent.
+template <class Filter, class... Ts>
+class BasicNodeView;
+
+/** A view without predicate, see BasicNodeView and Scene::view(). */
+template <class... Ts>
+using NodeView = BasicNodeView<void, Ts...>;
+
+template <class... Ts>
+class NodeCollection;
+
+//==============================================================================
+/** A 3D world: the entities, their nodes, the systems and the camera that views it.
+
+    The scene owns everything in it. Entities are created with createEntity(), under the
+    root by default, and live until they are destroyed or the scene is. Build the world, then
+    show it with a SceneComponent of the yup_renderer module. Scene-wide features such as the
+    background, the environment or the fog are nodes of the yup_renderer module attached to
+    the root, see SceneSettings there.
 
     @code
     auto scene = yup::Scene::Ptr (new yup::Scene());
-    scene->getRoot()->addChild (yup::GltfModel::loadFromFile (file).getReference().createEntity());
 
-    auto camera = yup::EntityNode::Ptr (new yup::EntityNode ("camera"));
-    camera->attach<yup::CameraNode>();
-    camera->setPosition ({ 0.0f, 0.0f, 3.0f });
-    scene->getRoot()->addChild (camera);
-    scene->setActiveCamera (camera.get());
+    auto model = yup::GltfModel::loadFromFile (file);
+    if (model.wasOk())
+        model.getReference().instantiate (*scene);
+
+    yup::Entity camera = scene->createEntity ("camera");
+    camera.attach<yup::TransformNode> (yup::Vector3<float> { 0.0f, 0.0f, 3.0f });
+    camera.attach<yup::CameraNode>();
+    scene->setActiveCamera (camera);
     @endcode
+
+    Nodes of each type are stored together, so iterating them is fast:
+
+    @code
+    for (auto [entity, light] : scene->view<yup::LightNode>())
+        light.intensity *= 0.5f;
+
+    scene->view<yup::MeshNode, yup::MaterialNode>()
+         .where ([] (const yup::MeshNode& mesh, const yup::MaterialNode&) { return mesh.mesh != nullptr; })
+         .forEach ([] (yup::Entity entity, yup::MeshNode& mesh, yup::MaterialNode& material) { ... });
+    @endcode
+
+    Detaching nodes and destroying entities while iterating is allowed: they disappear at once,
+    and the node objects are destroyed when the outermost iteration ends.
 
     Like Component, scenes are meant to be used from the message thread only.
 
-    @see EntityNode, SceneComponent, SceneRenderer
+    @see Entity, Node, NodeView, NodeCollection, System
 */
 class YUP_API Scene : public ReferenceCountedObject
 {
@@ -49,134 +81,402 @@ public:
     using Ptr = ReferenceCountedObjectPtr<Scene>;
 
     //==============================================================================
-    /** Creates a scene with an empty root entity. */
+    /** Creates a scene with an empty root entity named "root". */
     Scene();
 
-    /** Destructor. */
+    /** Destructor. Systems, collections, nodes and entities are destroyed without signals. */
     ~Scene() override;
 
     //==============================================================================
     /** Returns the root entity, which always exists. */
-    const EntityNode::Ptr& getRoot() const noexcept { return root; }
+    Entity getRoot() const noexcept;
+
+    /** Creates a new entity.
+
+        @param name    The name of the entity.
+        @param parent  The entity to add it to as the last child, or an invalid entity for the root.
+        @param uuid    The identifier to restore, for example when loading a saved scene, or a null
+                       Uuid to create one when Entity::getUuid() is first called. An identifier
+                       already used by another entity of the scene is rejected and the entity gets
+                       a new one instead.
+    */
+    Entity createEntity (const String& name = {}, Entity parent = {}, const Uuid& uuid = Uuid::null());
+
+    /** Returns the entity with this identifier, or an invalid entity if there is none.
+
+        Only entities whose identifier has been asked for or set can be found, see Entity::getUuid().
+    */
+    Entity findEntity (const Uuid& uuid) const;
+
+    /** Returns the number of entities, the root and entities outside of the tree included. */
+    int getNumEntities() const noexcept;
+
+    //==============================================================================
+    /** What Scene::raycast() hit. */
+    struct RaycastHit
+    {
+        Entity entity;         ///< The entity of the MeshNode that was hit.
+        float distance = 0.0f; ///< The distance along the ray, see Ray.
+    };
+
+    /** Returns the nearest active entity whose mesh bounds a world space ray hits.
+
+        Every MeshNode of an active entity is tested in its own space with MeshNode::intersectRay().
+        Bounds are boxes: a large mesh enclosing smaller ones, a room or a device body, hits first
+        when the ray enters it in front of them. Pass a filter, or test candidate subtrees with
+        Entity::intersectRay(), to pick among parts.
+
+        @param ray          The ray, from CameraNode::getRay() for example.
+        @param minDistance  The smallest distance to consider, the near plane of the camera for example.
+        @param filter       A callable taking (const Entity& entity) and returning false to skip it.
+
+        @code
+        if (const auto ray = camera->getRay (event.getPosition(), getLocalBounds()))
+            if (const auto hit = scene->raycast (*ray, camera->zNear))
+                select (hit->entity);
+        @endcode
+    */
+    template <class Filter>
+        requires std::predicate<Filter&, const Entity&>
+    std::optional<RaycastHit> raycast (const Ray& ray, float minDistance, Filter&& filter);
+
+    /** Returns the nearest active entity whose mesh bounds a world space ray hits, see the filtered version. */
+    std::optional<RaycastHit> raycast (const Ray& ray, float minDistance = 0.0f)
+    {
+        return raycast (ray, minDistance, [] (const Entity&) { return true; });
+    }
+
+    //==============================================================================
+    /** Returns a view over the entities that have a node of every type in Ts.
+
+        The view iterates the smallest of the pools and ignores visibility. See NodeView.
+    */
+    template <class... Ts>
+    NodeView<Ts...> view()
+    {
+        static_assert (sizeof... (Ts) > 0, "A view needs at least one node type");
+        return NodeView<Ts...> (*this, getPool<Ts>()...);
+    }
+
+    /** Returns the collection of the entities that have a node of every type in Ts.
+
+        The collection is created on the first call and kept up to date as nodes are attached
+        and detached, so the following calls return it at no cost. See NodeCollection.
+    */
+    template <class... Ts>
+    NodeCollection<Ts...>& collect()
+    {
+        static_assert (sizeof... (Ts) > 0, "A collection needs at least one node type");
+
+        auto& collection = collections[std::vector<uint64> { NodeTypeId::get<Ts>()... }];
+        if (collection == nullptr)
+            collection = std::make_shared<NodeCollection<Ts...>> (*this);
+
+        return *std::static_pointer_cast<NodeCollection<Ts...>> (collection);
+    }
+
+    //==============================================================================
+    /** Emitted once a node of type T has been attached, with its entity and the node. */
+    template <class T>
+    Signal<Entity, T&>& onAttach()
+    {
+        return getPool<T>().attachSignal;
+    }
+
+    /** Emitted once a node of type T has been detached, before it is destroyed. Destroying an
+        entity detaches its nodes, so this is also emitted then.
+    */
+    template <class T>
+    Signal<Entity, T&>& onDetach()
+    {
+        return getPool<T>().detachSignal;
+    }
+
+    /** Emitted when an entity is about to be destroyed, before its children and its nodes. */
+    Signal<Entity>& onDestroy() noexcept { return destroySignal; }
+
+    //==============================================================================
+    /** Adds a system, run by update() where the order says.
+
+        The order gives the phase and any SystemOrder::before() and SystemOrder::after()
+        constraints against System or Node types. A constraint is the same as the matching
+        addSystemRule() call, so it holds for every system of the type being added.
+
+        @code
+        scene->addSystem<Gravity> (yup::SystemOrder()
+                                       .beforeNodes()
+                                       .before<Physics>()
+                                       .after<Wind>(),
+                                   9.81f); // Gravity (float)
+        @endcode
+
+        Within a phase, systems run in the order required by the rules, and otherwise in the
+        order they were added. Systems added while updating run from the next update.
+
+        @param order  The phase and constraints of the system.
+        @param args   The arguments forwarded to the constructor of T.
+
+        @return The new system, owned by the scene.
+    */
+    template <class T, class... Args>
+    T& addSystem (const SystemOrder& order, Args&&... args)
+    {
+        static_assert (std::is_base_of_v<System, T>, "Systems must derive from yup::System");
+
+        constexpr auto typeId = NodeTypeId::get<T>();
+
+        for (const auto& constraint : order.getConstraints())
+            addSystemConstraint (typeId, constraint);
+
+        auto system = std::make_unique<T> (std::forward<Args> (args)...);
+        auto& result = *system;
+        systems.push_back (std::make_unique<SystemEntry> (SystemEntry { order.getPhase(), typeId, std::move (system) }));
+        scheduleDirty = true;
+        return result;
+    }
+
+    /** Removes and destroys a system.
+
+        While updating, a removed system doesn't run anymore and is destroyed once the update
+        ends, so a system may remove itself or others.
+
+        @return True if the system belonged to the scene.
+    */
+    bool removeSystem (const System& system);
+
+    /** Requires the updates of type First to run before the updates of type Then.
+
+        Both types are System or Node types: a System type stands for its systems, a Node type
+        for the Node::update() calls of its nodes, so rules also order the node types.
+
+        Rules are about types: they hold for every system and node of those types, also for ones
+        added later, and are transitive, so "A before B" and "B before C" put A before C even
+        without a B. They order within a phase (beforeNodes systems, node updates, afterNodes
+        systems): a rule can't move a system to another phase, and a rule contradicting the
+        phases asserts when update() schedules them.
+
+        @code
+        scene->addSystem<Physics> (yup::SystemOrder().beforeNodes());
+        scene->addSystem<Animation> (yup::SystemOrder().beforeNodes());
+
+        scene->addSystemRule<Animation, Physics>();   // Animation, then Physics
+        scene->addSystemRule<SpinnerNode, MeshNode>(); // spinners update before meshes
+        @endcode
+
+        @return False, asserting, if the rule would make a cycle with the existing ones.
+    */
+    template <class First, class Then>
+    bool addSystemRule()
+    {
+        static_assert (isOrderable<First> && isOrderable<Then>, "Rules order yup::System or yup::Node types");
+        return addSystemRule (NodeTypeId::get<First>(), NodeTypeId::get<Then>());
+    }
 
     //==============================================================================
     /** Chooses the camera that renders the scene.
 
-        The entity is referenced weakly, and the camera is looked up again every frame, so
-        replacing the CameraNode in that slot is picked up automatically.
+        The camera is looked up again every frame, so replacing the CameraNode of the entity
+        is picked up automatically.
 
-        @param entity  The entity holding the camera, or nullptr to use the fallback.
-        @param slot    The CameraNode slot on the entity.
+        @param entity The entity holding the camera, or an invalid entity to use the fallback.
     */
-    void setActiveCamera (EntityNode* entity, int slot = 0);
+    void setActiveCamera (Entity entity) noexcept;
 
     /** Returns the camera that renders the scene.
 
-        This is the camera chosen with setActiveCamera(). When its entity was deleted or has no
-        camera in that slot, it is the first CameraNode found depth-first in the visible part of
-        the tree. When there is no camera at all it is nullptr, and the renderer uses a default
-        perspective camera at (0, 0, 5) looking at the origin.
+        This is the camera of the entity chosen with setActiveCamera(). When that entity was
+        destroyed or has no CameraNode, it is the first CameraNode found depth-first in the
+        visible part of the tree. When there is no camera at all it is nullptr, and the
+        renderer uses a default perspective camera at (0, 0, 5) looking at the origin.
     */
     CameraNode* getActiveCamera() const noexcept;
 
     //==============================================================================
-    /** Returns the color the background is cleared to. */
-    Color getBackgroundColor() const noexcept { return backgroundColor; }
+    /** Runs the systems and updates the nodes.
 
-    /** Changes the color the background is cleared to. */
-    void setBackgroundColor (Color newColor) noexcept { backgroundColor = newColor; }
+        First the systems added with SystemOrder::beforeNodes(), ordered as described in
+        addSystem(), then Node::update() for every node of every active entity, one node type
+        after the other (ordered by addSystemRule(), otherwise by first use) and only for the
+        types that override it, then the systems added with SystemOrder::afterNodes().
 
-    /** Returns the flat ambient light color added to every surface. */
-    Color getAmbientColor() const noexcept { return ambientColor; }
-
-    /** Changes the flat ambient light color added to every surface. */
-    void setAmbientColor (Color newColor) noexcept { ambientColor = newColor; }
-
-    /** Returns the exposure multiplier applied before tone mapping. */
-    float getExposure() const noexcept { return exposure; }
-
-    /** Changes the exposure multiplier applied before tone mapping. */
-    void setExposure (float newExposure) noexcept { exposure = newExposure; }
-
-    /** Returns true if a default directional light is used when the tree has no LightNode. */
-    bool isUsingDefaultLight() const noexcept { return useDefaultLight; }
-
-    /** Chooses whether a default directional light is used when the tree has no LightNode. */
-    void setUsingDefaultLight (bool shouldUseDefaultLight) noexcept { useDefaultLight = shouldUseDefaultLight; }
-
-    //==============================================================================
-    /** How the lit colors are mapped into the displayable range. */
-    enum class ToneMapping
-    {
-        reinhard, ///< Soft roll-off of the highlights, keeps the colors flat.
-        aces      ///< The ACES filmic curve: more contrast and saturation, photographic highlights.
-    };
-
-    /** Returns how the lit colors are mapped into the displayable range. */
-    ToneMapping getToneMapping() const noexcept { return toneMapping; }
-
-    /** Changes how the lit colors are mapped into the displayable range. */
-    void setToneMapping (ToneMapping newToneMapping) noexcept { toneMapping = newToneMapping; }
-
-    //==============================================================================
-    /** Returns the environment lighting the scene, or nullptr when there is none. */
-    const EnvironmentMap::Ptr& getEnvironment() const noexcept { return environment; }
-
-    /** Changes the environment lighting the scene.
-
-        Surfaces reflect it, sharply or blurred by their roughness, and receive its diffuse
-        light. It adds to the lights and to the ambient color: lower the ambient color when an
-        environment lights the scene.
-
-        @param newEnvironment The environment, or nullptr for none.
-    */
-    void setEnvironment (EnvironmentMap::Ptr newEnvironment) noexcept { environment = std::move (newEnvironment); }
-
-    /** Returns the multiplier applied to the light of the environment. */
-    float getEnvironmentIntensity() const noexcept { return environmentIntensity; }
-
-    /** Changes the multiplier applied to the light of the environment. */
-    void setEnvironmentIntensity (float newIntensity) noexcept { environmentIntensity = jmax (0.0f, newIntensity); }
-
-    /** Returns true if the environment is drawn behind the scene instead of the background color. */
-    bool isEnvironmentVisible() const noexcept { return environmentVisible; }
-
-    /** Chooses whether the environment is drawn behind the scene instead of the background color. */
-    void setEnvironmentVisible (bool shouldBeVisible) noexcept { environmentVisible = shouldBeVisible; }
-
-    /** Returns how blurred the environment is behind the scene, from 0 (sharp) to 1. */
-    float getEnvironmentBlur() const noexcept { return environmentBlur; }
-
-    /** Changes how blurred the environment is behind the scene, from 0 (sharp) to 1 (as blurred
-        as the reflections of a fully rough surface).
-    */
-    void setEnvironmentBlur (float newBlur) noexcept { environmentBlur = jlimit (0.0f, 1.0f, newBlur); }
-
-    //==============================================================================
-    /** Calls Node::update() on every part of every visible entity, depth-first.
-
-        Parts must not attach or detach parts of their own entity from update().
+        Nodes attached while updating are updated from the next call.
 
         @param deltaSeconds The time elapsed since the previous update.
     */
     void update (double deltaSeconds);
 
-private:
-    EntityNode::Ptr root;
-    WeakReference<EntityNode> activeCameraEntity;
-    int activeCameraSlot = 0;
+    /** Returns true while a view, a collection, update() or an IterationGuard iterates the scene. */
+    bool isIterating() const noexcept { return iterationDepth > 0; }
 
-    Color backgroundColor { 0xff1a1a2e };
-    Color ambientColor { 0xff595959 };
-    float exposure = 1.0f;
-    bool useDefaultLight = true;
-    ToneMapping toneMapping = ToneMapping::reinhard;
-    EnvironmentMap::Ptr environment;
-    float environmentIntensity = 1.0f;
-    bool environmentVisible = false;
-    float environmentBlur = 0.0f;
+    //==============================================================================
+    /** Returns the pool storing the nodes of type T, creating it if needed. */
+    template <class T>
+    NodePool<T>& getPool()
+    {
+        if (auto* pool = findPool<T>())
+            return *pool;
+
+        constexpr auto id = NodeTypeId::get<T>();
+        jassert (findPool (id) == nullptr); // Two node types have the same id: give one a nodeTypeName
+
+        auto& pool = pools.emplace_back (std::make_unique<NodePool<T>> (*this));
+        poolsByType.emplace (id, pool.get());
+
+        const auto index = NodeTypeId::getIndex<T>();
+        if (index >= poolsByIndex.size())
+            poolsByIndex.resize (index + 1, nullptr);
+
+        poolsByIndex[index] = pool.get();
+        scheduleDirty = scheduleDirty || pool->updatesNodes();
+        return static_cast<NodePool<T>&> (*pool);
+    }
+
+    /** Returns the pool storing the nodes of type T, or nullptr if no node of that type was ever attached. */
+    template <class T>
+    NodePool<T>* findPool() const noexcept
+    {
+        const auto index = NodeTypeId::getIndex<T>();
+        return index < poolsByIndex.size() ? static_cast<NodePool<T>*> (poolsByIndex[index]) : nullptr;
+    }
+
+    /** Returns the pool of a NodeTypeId, or nullptr if no node of that type was ever attached. */
+    NodePoolBase* findPool (uint64 typeId) const noexcept
+    {
+        const auto it = poolsByType.find (typeId);
+        return it != poolsByType.end() ? it->second : nullptr;
+    }
+
+private:
+    //==============================================================================
+    friend class Entity;
+    friend class IterationGuard;
+
+    struct SystemEntry
+    {
+        SystemOrder::Phase phase;
+        uint64 typeId;
+        std::unique_ptr<System> system;
+        bool removed = false;
+    };
+
+    struct UpdateStep
+    {
+        uint64 typeId = 0;
+        SystemEntry* system = nullptr;
+        NodePoolBase* pool = nullptr;
+    };
+
+    template <class T>
+    static constexpr bool isOrderable = std::is_base_of_v<System, T> || std::is_base_of_v<Node, T>;
+
+    void destroyEntity (EntityHandle entity);
+    void addSystemConstraint (uint64 systemType, const SystemOrder::Constraint& constraint);
+    bool addSystemRule (uint64 first, uint64 then);
+    bool isOrderedBefore (uint64 first, uint64 then) const;
+    void scheduleUpdates();
+    void endIteration();
+
+    std::unique_ptr<EntityStore> store;
+    EntityHandle root;
+    std::vector<std::unique_ptr<NodePoolBase>> pools;
+    std::unordered_map<uint64, NodePoolBase*> poolsByType;
+    std::vector<NodePoolBase*> poolsByIndex;
+    std::unordered_map<Uuid, EntityHandle> entitiesByUuid;
+    std::map<std::vector<uint64>, std::shared_ptr<void>> collections;
+    std::vector<std::unique_ptr<SystemEntry>> systems;
+    std::vector<std::pair<uint64, uint64>> systemRules;
+    std::vector<UpdateStep> schedule;
+    bool scheduleDirty = false;
+    bool updatingSystems = false;
+    Signal<Entity> destroySignal;
+    Entity activeCamera;
+    int iterationDepth = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scene)
 };
+
+//==============================================================================
+
+template <class T, class... Args>
+T& Entity::attach (Args&&... args)
+{
+    static_assert (std::is_base_of_v<Node, T>, "Nodes must derive from yup::Node");
+    jassert (isValid()); // Attaching to an entity that was destroyed or never created
+
+    return scene->getPool<T>().attach (handle, std::forward<Args> (args)...);
+}
+
+template <class T, class... Args>
+T& Entity::getOrAttach (Args&&... args)
+{
+    if (auto* node = get<T>())
+        return *node;
+
+    return attach<T> (std::forward<Args> (args)...);
+}
+
+template <class T>
+T* Entity::get() const noexcept
+{
+    static_assert (std::is_base_of_v<Node, T>, "Nodes must derive from yup::Node");
+
+    if (scene == nullptr)
+        return nullptr;
+
+    auto* pool = scene->findPool<T>();
+    return pool != nullptr ? pool->get (handle) : nullptr;
+}
+
+template <class T>
+bool Entity::detach()
+{
+    if (scene == nullptr)
+        return false;
+
+    auto* pool = scene->findPool<T>();
+    return pool != nullptr && pool->remove (handle);
+}
+
+template <class Fn>
+void Entity::forEachAttachedNode (Fn&& fn) const
+{
+    if (scene == nullptr)
+        return;
+
+    // By index: fn may attach nodes of a new type, which adds a pool
+    for (size_t i = 0; i < scene->pools.size(); ++i)
+    {
+        if (auto* node = scene->pools[i] != nullptr ? scene->pools[i]->find (handle) : nullptr)
+            fn (*node);
+    }
+}
+
+template <class Filter>
+    requires std::predicate<Filter&, const Entity&>
+std::optional<Scene::RaycastHit> Scene::raycast (const Ray& ray, float minDistance, Filter&& filter)
+{
+    std::optional<RaycastHit> nearest;
+
+    const IterationGuard guard (*this);
+    const auto& pool = getPool<MeshNode>();
+
+    for (uint32 slot = 0, numSlots = pool.getNumSlots(); slot < numSlots; ++slot)
+    {
+        const auto* node = pool.getAt (slot);
+        const auto handle = pool.getEntityAt (slot);
+        if (node == nullptr || handle.isNull())
+            continue;
+
+        const Entity entity (this, handle);
+        if (! entity.isActive() || ! filter (entity))
+            continue;
+
+        const auto maxDistance = nearest ? nearest->distance : std::numeric_limits<float>::max();
+        if (const auto distance = node->intersectRay (ray, minDistance, maxDistance); distance && (! nearest || *distance < nearest->distance))
+            nearest = RaycastHit { entity, *distance };
+    }
+
+    return nearest;
+}
 
 } // namespace yup

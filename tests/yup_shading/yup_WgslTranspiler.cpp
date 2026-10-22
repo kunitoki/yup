@@ -3961,6 +3961,14 @@ TEST_F (WgslHardeningTests, FloatLiteralsRoundTrip)
     EXPECT_TRUE (wgsl.contains ("var g: f32 = 2.0;")) << wgsl;
 }
 
+TEST_F (WgslHardeningTests, LargestFloatLiteralStaysWithinRange)
+{
+    // The shortest round trip text of FLT_MAX (3.4028235e+38) is above it, which WGSL rejects
+    const auto wgsl = transpileOk ("void main() { float a = 3.402823466e38; float b = -3.402823466e38; }");
+    EXPECT_TRUE (wgsl.contains ("var a: f32 = 3.402823466e+38;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("-3.402823466e+38")) << wgsl;
+}
+
 TEST_F (WgslHardeningTests, IntegerLiteralForms)
 {
     const auto wgsl = transpileOk ("void main() { int m = -2147483648; int h = 0xFFFFFFFF; int o = 017; uint u = 0x1Fu; float x = 1.0; float n = - -x; }");
@@ -4019,6 +4027,22 @@ TEST_F (WgslHardeningTests, OverloadsGetDistinctNames)
     EXPECT_TRUE (wgsl.contains ("fn f_1(a: vec2<f32>) -> f32")) << wgsl;
     EXPECT_TRUE (wgsl.contains ("fn f_2(a: i32) -> f32")) << wgsl;
     EXPECT_TRUE (wgsl.contains ("((f(1.0f) + f_1(vec2<f32>(2.0))) + f_2(3i))")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, FunctionsMainNeverCallsAreRemoved)
+{
+    const auto wgsl = transpileOk ("float leaf() { return 1.0; } float used() { return leaf(); } float unused() { return used(); } "
+                                   "float g(float a) { return a; } float g(int a) { return 2.0; } float dead(int a) { return float(a); } "
+                                   "void main() { float x = used() + g(1.0); }");
+    EXPECT_TRUE (wgsl.contains ("fn leaf()")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn used()")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn g(a: f32) -> f32")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn g_1(a: i32) -> f32")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("unused")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("dead")) << wgsl;
+
+    // What WGSL cannot express fails only where main() reaches it
+    transpileOk ("layout(rgba8, binding = 0) uniform image2D img; void f(image2D i) { } void main() { }");
 }
 
 TEST_F (WgslHardeningTests, BindingsKeepExplicitValuesAndSplitCombinedSamplers)
@@ -4413,6 +4437,16 @@ TEST_F (WgslHardeningTests, VectorScalarBitwiseOperationsAreSplatted)
     EXPECT_TRUE (wgsl.contains ("(i ^ vec2<i32>(1))")) << wgsl;
 }
 
+TEST_F (WgslHardeningTests, MatrixDividedByAScalarMultipliesByItsReciprocal)
+{
+    // WGSL has no matrix division: GLSL's component-wise division by a scalar becomes a product
+    const auto wgsl = transpileOk ("void main() { float d = 2.0; mat3 m = mat3(1.0) / d; mat2 n = mat2(1.0) / 4; m /= d; }");
+    EXPECT_TRUE (wgsl.contains ("vec3<f32>(0.0, 0.0, 1.0)) * (1.0 / d))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("vec2<f32>(0.0, 1.0)) * (1.0 / 4))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("m *= (1.0 / d);")) << wgsl;
+    EXPECT_FALSE (wgsl.contains (")) / ")) << wgsl;
+}
+
 TEST_F (WgslHardeningTests, Std140AtomicArraysFail)
 {
     expectFailure ("layout(local_size_x = 1) in; layout(std140, binding = 0) buffer B { uint c[4]; } b; void main() { atomicAdd(b.c[1], 1u); }", "std140 arrays can't hold atomics", ShaderStage::compute);
@@ -4710,8 +4744,8 @@ TEST_F (WgslHardeningTests, UnsupportedDeclarationsFail)
     expectFailure ("layout(binding = 0) uniform U { float x[]; }; void main() { }", "1:33: Unsized arrays are only supported as the last member of a buffer block");
     expectFailure ("void main() { float a[]; }", "1:15: Unsized arrays are only supported as the last member of a buffer block");
     expectFailure ("void main() { float a[] = 1.0; }", "1:21: Cannot determine the size of array 'a'");
-    expectFailure ("layout(rgba8, binding = 0) uniform image2D img; void f(image2D i) { } void main() { }", "1:56: Storage images can't be passed to functions in WGSL");
-    expectFailure ("void main() { struct S { float x; }; } void f() { struct S { float y; }; }", "1:51: Struct 'S' is declared more than once; WGSL needs unique struct names");
+    expectFailure ("layout(rgba8, binding = 0) uniform image2D img; void f(image2D i) { } void main() { f(img); }", "1:56: Storage images can't be passed to functions in WGSL");
+    expectFailure ("void f() { struct S { float y; }; } void main() { struct S { float x; }; f(); }", "1:51: Struct 'S' is declared more than once; WGSL needs unique struct names");
     expectFailure ("layout(binding = 0) uniform U { float x; } u; layout(binding = 0) uniform V { float y; } v; layout(location = 0) out vec4 c; void main() { c = vec4(u.x + v.y); }",
                    "1:90: 'v' and 'u' share @group(0) @binding(0)");
 }

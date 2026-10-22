@@ -82,6 +82,8 @@ struct VulkanDeviceCandidate
     uint32_t queueFamilyIndex = 0;
     uint32_t apiVersion = 0;
     std::vector<VkExtensionProperties> extensions;
+    uint32_t timestampValidBits = 0;
+    float timestampPeriod = 0.0f;
 };
 
 } // namespace
@@ -325,7 +327,12 @@ std::unique_ptr<VulkanDevice> VulkanDevice::createDevice (const Options& options
         if (score > chosenScore)
         {
             chosenScore = score;
-            chosen = VulkanDeviceCandidate { physicalDevice, *family, jmin (properties.apiVersion, instanceApiVersion), std::move (deviceExtensions) };
+            chosen = VulkanDeviceCandidate { physicalDevice,
+                                             *family,
+                                             jmin (properties.apiVersion, instanceApiVersion),
+                                             std::move (deviceExtensions),
+                                             families[*family].timestampValidBits,
+                                             properties.limits.timestampPeriod };
         }
     }
 
@@ -337,6 +344,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::createDevice (const Options& options
 
     result->physicalDevice = chosen->physicalDevice;
     result->queueFamilyIndex = chosen->queueFamilyIndex;
+    result->timestampValidBits = chosen->timestampValidBits;
+    result->timestampPeriod = static_cast<double> (chosen->timestampPeriod);
 
     if (physicalDeviceOnly)
         return result;
@@ -669,6 +678,22 @@ void VulkanDevice::waitForCommands (VkCommandBuffer commandBuffer, uint64_t gene
         checkResult (functions.WaitForFences (device, 1, &slot->fence, VK_TRUE, UINT64_MAX));
 
     completeSlot (*slot);
+}
+
+void VulkanDevice::waitForGeneration (uint64_t generation)
+{
+    const ScopedLock sl (lock);
+
+    for (const auto& slot : commandSlots)
+    {
+        if (slot->state != CommandSlot::State::submitted || slot->generation != generation)
+            continue;
+
+        if (! isDeviceLost())
+            checkResult (functions.WaitForFences (device, 1, &slot->fence, VK_TRUE, UINT64_MAX));
+
+        completeSlot (*slot);
+    }
 }
 
 bool VulkanDevice::isRecording (VkCommandBuffer commandBuffer, uint64_t generation) const

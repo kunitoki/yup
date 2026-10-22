@@ -40,6 +40,9 @@ struct ShaderBundleEntry
 
     /** Options applied when compiling and transpiling this stage. */
     TranspileOptions options;
+
+    /** Source code of this stage. When empty, the request's source is used. */
+    String source;
 };
 
 //==============================================================================
@@ -47,11 +50,15 @@ struct ShaderBundleEntry
     Describes a full shader bundle compile request: source code, source language,
     and one entry per stage to compile.
 
+    A request holding a vertex and a fragment entry describes one graphics pipeline: the
+    compiler assigns both stages' native slots together (see ShaderNativeSlots), so put both
+    stages of a pipeline in the same request.
+
     @see ShaderBundleCompiler
 */
 struct ShaderBundleCompileRequest
 {
-    /** The shader source code to compile. */
+    /** The shader source code to compile, unless an entry carries its own. */
     String source;
 
     /** Language of @c source (glsl, essl, or hlsl). */
@@ -105,6 +112,12 @@ public:
         - Compiles the source to SPIR-V using the entry's TranspileOptions.
         - For each target language, decompiles the SPIR-V and extracts reflection.
         - Adds a ShaderInfo to the bundle for each (stage, target language) pair.
+
+        When the request holds a vertex and a fragment entry, the MSL, HLSL, GLSL and ESSL
+        variants of both get the slots of ShaderTranspiler::assignGraphicsNativeSlots(), so
+        several bind groups can reuse binding numbers. Other stages keep their bindings.
+        A request with more than one vertex or fragment entry fails, as does a pipeline
+        whose MSL buffers need a slot at or above 16, where Metal binds vertex buffers.
 
         @returns A ResultValue containing the compiled ShaderBundle on success,
                  or an error message on the first compilation failure.

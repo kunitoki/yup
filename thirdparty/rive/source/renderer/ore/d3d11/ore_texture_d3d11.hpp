@@ -30,6 +30,8 @@ public:
     {}
     ~TextureViewD3D11() override = default; // ComPtrs released automatically
 
+    ID3D11ShaderResourceView* d3dSRV() const { return m_d3dSRV.Get(); }
+
 private:
     friend class ContextD3D11;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_d3dSRV;

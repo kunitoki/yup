@@ -182,13 +182,16 @@ bool GpuDevice::isFormatRenderable (GpuTextureFormat format) const noexcept
         case GpuTextureFormat::rgba32float:
         case GpuTextureFormat::rg32float:
         case GpuTextureFormat::r32float:
+        // EXT_color_buffer_float lists R11F_G11F_B10F, EXT_color_buffer_half_float does not
+        // (https://registry.khronos.org/OpenGL/extensions/EXT/EXT_color_buffer_float.txt,
+        //  https://registry.khronos.org/OpenGL/extensions/EXT/EXT_color_buffer_half_float.txt).
+        case GpuTextureFormat::r11g11b10float:
             return features.colorBufferFloat;
 
         // WebGL2 can expose half-float attachments without the full-float ones.
         case GpuTextureFormat::rgba16float:
         case GpuTextureFormat::rg16float:
         case GpuTextureFormat::r16float:
-        case GpuTextureFormat::r11g11b10float:
             return features.colorBufferFloat || features.colorBufferHalfFloat;
 
         // Block-compressed formats are never renderable.
@@ -216,7 +219,18 @@ bool GpuDevice::isAnisotropicFilteringAvailable() const noexcept
 uint32_t GpuDevice::getMaximumSampleCount() const noexcept
 {
     auto* oreCtx = getGpuContext();
-    return oreCtx != nullptr ? oreCtx->features().maxSamples : 1u;
+    return oreCtx != nullptr ? std::bit_floor (oreCtx->features().maxSamples) : 1u;
+}
+
+uint32_t GpuDevice::getMaximumSampleCount (GpuTextureFormat format) const noexcept
+{
+    return isFormatRenderable (format) ? getMaximumSampleCount() : 0u;
+}
+
+uint32_t GpuDevice::getMaximumColorAttachments() const noexcept
+{
+    auto* oreCtx = getGpuContext();
+    return oreCtx != nullptr ? jlimit (1u, 4u, oreCtx->features().maxColorAttachments) : 0u;
 }
 
 //==============================================================================
@@ -296,13 +310,33 @@ GpuDevice::~GpuDevice()
     // A backend that forgets releasePooledResources() would let pooled ore buffers
     // be destroyed after the ore context that created them.
     jassert (uniformBufferPool.isEmpty());
+    jassert (shaderModuleCache.size() == 0);
     jassert (retiredFrames.empty());
+
+    // A frame that never completed would leave its waiters blocked forever
+    std::map<uint64_t, std::shared_ptr<GpuFrameStatus::Block>> abandoned;
+
+    {
+        const ScopedLock sl (*frameStatuses->lock);
+        abandoned.swap (frameStatuses->pending);
+        frameStatuses->unclaimedFailures.clear();
+
+        for (auto& [generation, block] : abandoned)
+        {
+            block->completed = true;
+            block->result = Result::fail ("The device was destroyed before the frame completed");
+        }
+    }
+
+    for (auto& [generation, block] : abandoned)
+        block->done.signal();
 }
 
 void GpuDevice::releasePooledResources() noexcept
 {
     retiredFrames.clear();
     uniformBufferPool.clear();
+    shaderModuleCache.clear();
 }
 
 //==============================================================================
@@ -326,23 +360,287 @@ void* GpuDevice::beginFrameCommands (uint64_t)
     return nullptr;
 }
 
-void GpuDevice::submitFrameCommands (void*)
+Result GpuDevice::submitFrameCommands (void*)
+{
+    return Result::ok();
+}
+
+Result GpuDevice::submitFrame (void* commandBuffer, uint64_t, std::shared_ptr<ScopeSampler>, bool)
+{
+    return submitFrameCommands (commandBuffer);
+}
+
+std::shared_ptr<GpuDevice::ScopeSampler> GpuDevice::createScopeSampler (rive::ore::Context&, void*)
+{
+    return nullptr;
+}
+
+Result GpuDevice::waitFrameCommands (void*)
+{
+    return Result::ok();
+}
+
+void GpuDevice::releaseFrameCommands (void*)
 {
 }
 
-void GpuDevice::waitFrameCommands (void*)
+//==============================================================================
+
+Result GpuDevice::takeGpuFailure()
 {
+    const ScopedLock sl (*frameStatuses->lock);
+
+    auto result = Result::ok();
+    for (auto& block : frameStatuses->unclaimedFailures)
+    {
+        if (block->claimed)
+            continue;
+
+        block->claimed = true;
+        result = block->result;
+        break;
+    }
+
+    frameStatuses->unclaimedFailures.clear();
+    return result;
+}
+
+void GpuDevice::failNextFrameForTesting (const String& error)
+{
+    const ScopedLock sl (*frameStatuses->lock);
+    frameStatuses->nextFrameFailure = error;
+}
+
+GpuFrameStatus GpuDevice::beginFrameStatus (uint64_t generation)
+{
+    auto block = std::make_shared<GpuFrameStatus::Block>();
+    block->lock = frameStatuses->lock;
+
+    const ScopedLock sl (*frameStatuses->lock);
+    block->injectedFailure = std::exchange (frameStatuses->nextFrameFailure, {});
+    frameStatuses->pending[generation] = block;
+
+    // The status may outlive the device, which clears its waiter before it goes
+    if (frameStatuses->waiter != nullptr)
+    {
+        block->waitForGpu = [statuses = std::weak_ptr<FrameStatuses> (frameStatuses), generation]
+        {
+            std::function<void (uint64_t)> waiter;
+
+            if (const auto locked = statuses.lock())
+            {
+                const ScopedLock waiterLock (*locked->lock);
+                waiter = locked->waiter;
+            }
+
+            if (waiter != nullptr)
+                waiter (generation);
+        };
+    }
+
+    return GpuFrameStatus (std::move (block));
+}
+
+void GpuDevice::setFrameWaiter (std::function<void (uint64_t)> waiter)
+{
+    const ScopedLock sl (*frameStatuses->lock);
+    frameStatuses->waiter = std::move (waiter);
+}
+
+void GpuDevice::completeFrameStatus (uint64_t generation, const Result& result, GpuFrameTimings timings)
+{
+    frameStatuses->complete (generation, result, std::move (timings));
+}
+
+//==============================================================================
+
+uint64 GpuDevice::ScopeTimeline::commit() noexcept
+{
+    const ScopedLock sl (lock);
+    return ++nextSequence;
+}
+
+void GpuDevice::ScopeTimeline::activate() noexcept
+{
+    active = true;
+}
+
+bool GpuDevice::ScopeTimeline::isActive() const noexcept
+{
+    return active;
+}
+
+void GpuDevice::ScopeTimeline::advance (uint64 sequence, uint64 end)
+{
+    const ScopedLock sl (lock);
+
+    if (sequence > latestSequence)
+    {
+        latestSequence = sequence;
+        latestEnd = end;
+    }
+    else if (sequence == latestSequence)
+    {
+        latestEnd = jmax (latestEnd, end);
+    }
+}
+
+std::vector<GpuScopeTiming> GpuDevice::ScopeTimeline::attribute (uint64 sequence, const std::vector<Pass>& passes, uint64 now, double nanosecondsPerTick)
+{
+    std::vector<GpuScopeTiming> scopes;
+
+    for (const auto& pass : passes)
+    {
+        if (pass.scopeIndex >= static_cast<int> (scopes.size()))
+            scopes.resize (static_cast<size_t> (pass.scopeIndex) + 1, { {}, 0.0, true });
+    }
+
+    // The work of an earlier frame bounds this one's only when it was committed before it, and
+    // ended before now: otherwise the frame completed out of order or the GPU clock went back
+    uint64 frontier = 0;
+    {
+        const ScopedLock sl (lock);
+        if (latestSequence < sequence && latestEnd <= now)
+            frontier = latestEnd;
+    }
+
+    for (const auto& pass : passes)
+    {
+        auto* scope = pass.scopeIndex >= 0 ? &scopes[static_cast<size_t> (pass.scopeIndex)] : nullptr;
+
+        if (! pass.sampled || nanosecondsPerTick <= 0.0)
+        {
+            if (scope != nullptr)
+                scope->available = false;
+
+            continue;
+        }
+
+        if (pass.start == 0 || pass.end < pass.start)
+            continue;
+
+        const auto from = jmax (pass.start, frontier);
+        if (scope != nullptr && pass.end > from)
+            scope->milliseconds += static_cast<double> (pass.end - from) * nanosecondsPerTick * 1.0e-6;
+
+        frontier = jmax (frontier, pass.end);
+    }
+
+    if (frontier > 0)
+        advance (sequence, frontier);
+
+    for (auto& scope : scopes)
+    {
+        if (! scope.available)
+            scope.milliseconds = 0.0;
+    }
+
+    return scopes;
+}
+
+std::optional<uint64> GpuDevice::ScopeTimeline::getEndTicks (uint64 cpuNow, uint64 gpuNow, double hostEnd, double nanosecondsPerTick) noexcept
+{
+    if (! (nanosecondsPerTick > 0.0))
+        return std::nullopt;
+
+    const auto sinceEnd = static_cast<double> (cpuNow) - hostEnd;
+    if (sinceEnd < -1.0e3)
+        return std::nullopt;
+
+    const auto ticksSinceEnd = static_cast<uint64> (jmax (0.0, sinceEnd) / nanosecondsPerTick);
+    if (gpuNow <= ticksSinceEnd)
+        return std::nullopt;
+
+    return gpuNow - ticksSinceEnd;
+}
+
+//==============================================================================
+
+GpuDevice::FrameCompletion GpuDevice::getFrameCompletion() const
+{
+    FrameCompletion completion;
+    completion.statuses = frameStatuses;
+    return completion;
+}
+
+void GpuDevice::FrameCompletion::operator() (uint64_t generation, const Result& result, GpuFrameTimings timings) const
+{
+    statuses->complete (generation, result, std::move (timings));
+}
+
+void GpuDevice::FrameStatuses::complete (uint64_t generation, const Result& result, GpuFrameTimings timings)
+{
+    std::shared_ptr<GpuFrameStatus::Block> block;
+
+    {
+        const ScopedLock sl (*lock);
+
+        const auto found = pending.find (generation);
+        if (found == pending.end())
+            return;
+
+        block = std::move (found->second);
+        pending.erase (found);
+
+        block->completed = true;
+        block->result = block->injectedFailure.isNotEmpty() ? Result::fail (block->injectedFailure) : result;
+
+        if (block->timingEnabled && block->result.wasOk())
+        {
+            block->timings.available = timings.available;
+            block->timings.frameMilliseconds = timings.frameMilliseconds;
+
+            // The frame's own list names the scopes: only numbers are copied, nothing allocates
+            if (timings.available)
+            {
+                for (size_t index = 0; index < block->scopes.size(); ++index)
+                {
+                    auto& scope = block->scopes[index];
+
+                    if (index < timings.scopes.size())
+                    {
+                        scope.available = scope.available && timings.scopes[index].available;
+                        scope.milliseconds = timings.scopes[index].milliseconds;
+                    }
+
+                    if (! scope.available)
+                        scope.milliseconds = 0.0;
+                }
+
+                block->timings.scopes = std::move (block->scopes);
+            }
+        }
+
+        if (block->result.failed())
+        {
+            YUP_DBG ("GpuDevice: frame " << (int64) generation << " failed: " << block->result.getErrorMessage());
+
+            // Only the first unclaimed failure is reported, so the list never grows
+            unclaimedFailures.erase (std::remove_if (unclaimedFailures.begin(), unclaimedFailures.end(), [] (const auto& unclaimed)
+            {
+                return unclaimed->claimed;
+            }),
+                                     unclaimedFailures.end());
+
+            if (! block->claimed && unclaimedFailures.empty())
+                unclaimedFailures.push_back (block);
+        }
+    }
+
+    block->done.signal();
 }
 
 void GpuDevice::retireFrameResources (uint64_t generation,
                                       std::vector<rive::rcp<rive::ore::Buffer>> buffers,
                                       std::vector<rive::rcp<rive::ore::TextureView>> views,
-                                      std::vector<rive::rcp<rive::ore::Sampler>> samplers)
+                                      std::vector<rive::rcp<rive::ore::Sampler>> samplers,
+                                      std::vector<ReferenceCountedObjectPtr<GpuBuffer>> storageBuffers,
+                                      std::vector<ReferenceCountedObjectPtr<GpuPipeline>> pipelines)
 {
-    if (buffers.empty() && views.empty() && samplers.empty())
+    if (buffers.empty() && views.empty() && samplers.empty() && storageBuffers.empty() && pipelines.empty())
         return;
 
-    retiredFrames.push_back ({ generation, std::move (buffers), std::move (views), std::move (samplers) });
+    retiredFrames.push_back ({ generation, std::move (buffers), std::move (views), std::move (samplers), std::move (storageBuffers), std::move (pipelines) });
 }
 
 void GpuDevice::releaseRetiredFrames (uint64_t generation)
@@ -366,6 +664,67 @@ void GpuDevice::releaseRetiredFrames (uint64_t generation)
 
     retiredFrames.erase (std::remove_if (retiredFrames.begin(), retiredFrames.end(), isSafe),
                          retiredFrames.end());
+}
+
+//==============================================================================
+
+rive::rcp<rive::ore::ShaderModule> GpuDevice::ShaderModuleCache::getOrMake (rive::ore::Context& oreCtx, const rive::ore::ShaderModuleDesc& desc)
+{
+    // Each field is prefixed by its size, so two descriptions never digest the same bytes
+    MemoryOutputStream description;
+
+    const auto append = [&description] (const void* data, size_t size)
+    {
+        description.writeInt64 ((int64) size);
+        if (data != nullptr && size > 0)
+            description.write (data, size);
+    };
+
+    const auto appendString = [&append] (const char* text)
+    {
+        append (text, text != nullptr ? std::strlen (text) : 0);
+    };
+
+    description.writeInt ((int) desc.language);
+    description.writeInt ((int) desc.stage);
+    description.writeInt ((int) desc.shaderAssetId);
+    append (desc.code, desc.codeSize);
+    append (desc.hlslSource, desc.hlslSourceSize);
+    appendString (desc.hlslEntryPoint);
+    append (desc.bindingMapBytes, desc.bindingMapSize);
+    append (desc.texSamplerPairBytes, desc.texSamplerPairSize);
+    append (desc.glFixupBytes, desc.glFixupSize);
+
+    const auto digest = SHA1 (description.getData(), description.getDataSize()).getRawData();
+    std::string key (reinterpret_cast<const char*> (digest.data()), digest.size());
+
+    const ScopedLock sl (lock);
+
+    if (auto it = modules.find (key); it != modules.end())
+        return it->second;
+
+    auto module = oreCtx.makeShaderModule (desc);
+    if (module != nullptr)
+        modules.emplace (std::move (key), module);
+
+    return module;
+}
+
+void GpuDevice::ShaderModuleCache::clear() noexcept
+{
+    const ScopedLock sl (lock);
+    modules.clear();
+}
+
+int GpuDevice::ShaderModuleCache::size() const
+{
+    const ScopedLock sl (lock);
+    return (int) modules.size();
+}
+
+int GpuDevice::getShaderModuleCountForTesting() const
+{
+    return shaderModuleCache.size();
 }
 
 //==============================================================================
@@ -433,6 +792,35 @@ bool GpuDevice::UniformBufferPool::isEmpty() const noexcept
             return false;
 
     return true;
+}
+
+void GpuDevice::UniformBufferPool::addSize (std::pair<int, size_t>& size) const noexcept
+{
+    for (const auto& bucket : buckets)
+    {
+        for (const auto& buffer : bucket)
+        {
+            ++size.first;
+            size.second += buffer->size();
+        }
+    }
+}
+
+std::pair<int, size_t> GpuDevice::getUniformBufferPoolSizeForTesting() const noexcept
+{
+    std::pair<int, size_t> size;
+    uniformBufferPool.addSize (size);
+
+    for (const auto& frame : retiredFrames)
+    {
+        for (const auto& buffer : frame.buffers)
+        {
+            ++size.first;
+            size.second += buffer->size();
+        }
+    }
+
+    return size;
 }
 
 } // namespace yup

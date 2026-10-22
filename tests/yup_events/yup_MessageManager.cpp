@@ -148,6 +148,21 @@ TEST_F (MessageManagerTests, CallAsync)
     EXPECT_TRUE (called);
 }
 
+TEST_F (MessageManagerTests, DeliversSignalEmitAsync)
+{
+    Signal<int> signal;
+    int received = 0;
+
+    auto connection = signal.connect ([&] (int value) { received = value; });
+
+    EXPECT_TRUE (signal.emitAsync (42));
+    EXPECT_EQ (received, 0);
+
+    runDispatchLoopUntil();
+
+    EXPECT_EQ (received, 42);
+}
+
 #if ! YUP_EMSCRIPTEN
 TEST_F (MessageManagerTests, DISABLED_CallFunctionOnMessageThread)
 {

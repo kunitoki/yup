@@ -41,7 +41,7 @@ void ShaderModuleD3D11::ensureD3DShadersImpl(ID3D11Device* device,
                             entry,
                             target,
                             D3DCOMPILE_ENABLE_STRICTNESS |
-                                D3DCOMPILE_OPTIMIZATION_LEVEL3,
+                                D3DCOMPILE_OPTIMIZATION_LEVEL1,
                             0,
                             compiledBlob.GetAddressOf(),
                             errors.GetAddressOf());

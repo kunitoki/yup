@@ -238,6 +238,9 @@ def test_gpu_depth_stencil_state_defaults():
     assert dss.enabled is False
     assert dss.depthWriteEnabled is True
     assert dss.depthCompare == yup.GpuCompareFunction.less
+    assert dss.depthBias == 0
+    assert dss.depthBiasSlopeScale == 0.0
+    assert dss.depthBiasClamp == 0.0
 
 
 def test_gpu_pipeline_options_defaults():
@@ -248,6 +251,7 @@ def test_gpu_pipeline_options_defaults():
     assert len(opts.colorTargets) == 0
     assert len(opts.vertexBuffers) == 0
     assert opts.sampleCount == 1
+    assert len(opts.dynamicUniformBuffers) == 0
 
 
 def test_gpu_render_options_defaults():
@@ -446,6 +450,27 @@ def test_pipeline_options_owns_its_color_targets():
     assert opts.colorTargets[0].blendEnabled is False
 
 
+def test_gpu_uniform_slot_construction():
+    slot = yup.GpuUniformSlot()
+    assert slot.group == 0
+    assert slot.binding == 0
+
+    slot = yup.GpuUniformSlot(2, 12)
+    assert slot.group == 2
+    assert slot.binding == 12
+    assert slot == yup.GpuUniformSlot(2, 12)
+    assert slot != yup.GpuUniformSlot(2, 1)
+
+
+def test_pipeline_options_owns_its_dynamic_uniform_buffers():
+    opts = yup.GpuPipelineOptions()
+    opts.dynamicUniformBuffers = [yup.GpuUniformSlot(2, 0), yup.GpuUniformSlot(2, 1)]
+
+    assert len(opts.dynamicUniformBuffers) == 2
+    assert opts.dynamicUniformBuffers[1].group == 2
+    assert opts.dynamicUniformBuffers[1].binding == 1
+
+
 # ==============================================================================
 # GPU device — everything below needs a real device and is skipped without one
 # ==============================================================================
@@ -478,6 +503,11 @@ def test_gpu_device_capability_probes_are_bound(headless_device):
         headless_device.isFormatRenderable(yup.GpuTextureFormat.rgba8unorm), bool
     )
     assert headless_device.getMaximumSampleCount() >= 1
+    assert headless_device.getMaximumSampleCount(yup.GpuTextureFormat.rgba8unorm) == 0
+    assert headless_device.getMaximumColorAttachments() == 0
+    assert headless_device.isFragmentStorageBufferAvailable() is False
+    assert headless_device.isStorageTextureAvailable() is False
+    assert headless_device.isDynamicUniformOffsetAvailable() is False
     assert headless_device.getPlatform() == yup.GpuPlatform.Headless
 
 
@@ -488,6 +518,57 @@ def test_gpu_device_capability_probes_are_bound(headless_device):
 def test_gpu_target_begin_render_pass_is_bound():
     # Was entirely unbound, so both python/demos GPU scripts died on this call.
     assert hasattr(yup.GpuTarget, "beginRenderPass")
+
+
+def test_gpu_target_begin_render_pass_binds_the_depth_overload():
+    # Both overloads take (frame, options): GpuRenderOptions for color targets,
+    # GpuDepthStencilOptions for depth-only targets.
+    doc = yup.GpuTarget.beginRenderPass.__doc__
+    assert "Overloaded function" in doc
+    assert "GpuRenderOptions" in doc
+    assert "GpuDepthStencilOptions" in doc
+    assert "depthOptions" not in doc
+
+
+def test_gpu_target_depth_overload_opens_a_depth_only_pass():
+    device = yup.GpuDevice.create(yup.GpuPlatform.Metal, yup.GpuDevice.Options())
+    if device is None or not device.isGpuAvailable():
+        pytest.skip("no Metal device available")
+
+    desc = yup.GpuTextureDesc(8, 8, yup.GpuTextureFormat.depth32float, True)
+    depth = yup.GpuTexture.create(device, desc)
+    assert depth is not None
+
+    target = yup.GpuTarget.createFromTexture(device, depth)
+    assert target is not None
+
+    frame = yup.GpuFrame.begin(device)
+    pass_ = target.beginRenderPass(frame, options=yup.GpuDepthStencilOptions(0.5))
+    assert pass_.isValid()
+    assert pass_.finish()
+    assert frame.submit()
+
+
+def test_gpu_render_pass_set_texture_binds_both_overloads():
+    # A pass cannot be begun without a GPU, so check the bound signatures instead:
+    # the whole-texture overload and the one taking a sampling view.
+    doc = yup.GpuRenderPass.setTexture.__doc__
+    assert "Overloaded function" in doc
+    assert "view" in doc
+    assert "GpuTextureViewDesc" in doc
+
+
+def test_gpu_storage_apis_are_bound():
+    # Passes cannot be begun without a GPU, so check the bound signatures.
+    desc = yup.GpuTextureDesc()
+    assert desc.storage is False
+    desc.storage = True
+    assert desc.storage is True
+    assert hasattr(yup.GpuTexture, "isStorage")
+    assert "GpuTexture" in yup.GpuComputePass.setStorageTexture.__doc__
+    assert "view" in yup.GpuComputePass.setStorageTexture.__doc__
+    assert "GpuSampler" in yup.GpuComputePass.setSampler.__doc__
+    assert "GpuBuffer" in yup.GpuRenderPass.setStorageBuffer.__doc__
 
 
 def test_gpu_pipeline_compile_from_glsl_raises_on_bad_source(headless_device):
@@ -676,7 +757,7 @@ def test_gpu_target_reads_back_and_records_render_passes(gpu_device):
         renderPass.finish()
         del renderPass
     frame.submit()
-    frame.waitForGPU()
+    assert frame.waitForGPU().wasOk()
 
     pixels = target.readPixels()
     assert pixels is None or len(pixels) == 8 * 4 * 4

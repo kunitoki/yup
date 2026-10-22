@@ -81,6 +81,30 @@ Quaternion Quaternion::fromRotationMatrix (const Matrix4& matrix) noexcept
         .normalized();
 }
 
+Quaternion Quaternion::fromLookDirection (const Vector3<float>& direction, const Vector3<float>& up) noexcept
+{
+    if (direction.lengthSquared() == 0.0f)
+        return identity();
+
+    const auto forward = direction.normalized();
+    auto side = forward.crossProduct (up);
+
+    if (side.lengthSquared() <= 1.0e-12f * up.lengthSquared())
+    {
+        // Looking along the up vector: any perpendicular up works, take the axis furthest from forward
+        const auto fallbackUp = std::abs (forward.getX()) < 0.9f ? Vector3<float> { 1.0f, 0.0f, 0.0f } : Vector3<float> { 0.0f, 0.0f, 1.0f };
+        side = forward.crossProduct (fallbackUp);
+    }
+
+    side = side.normalized();
+    const auto trueUp = side.crossProduct (forward);
+
+    return fromRotationMatrix (Matrix4 (std::array<float, 16> { side.getX(), side.getY(), side.getZ(), 0.0f,
+                                                                trueUp.getX(), trueUp.getY(), trueUp.getZ(), 0.0f,
+                                                                -forward.getX(), -forward.getY(), -forward.getZ(), 0.0f,
+                                                                0.0f, 0.0f, 0.0f, 1.0f }));
+}
+
 //==============================================================================
 
 float Quaternion::length() const noexcept
@@ -123,6 +147,42 @@ Matrix4 Quaternion::toMatrix4() const noexcept
                                             2.0f * (xy - wz), 1.0f - 2.0f * (xx + zz), 2.0f * (yz + wx), 0.0f,
                                             2.0f * (xz + wy), 2.0f * (yz - wx), 1.0f - 2.0f * (xx + yy), 0.0f,
                                             0.0f, 0.0f, 0.0f, 1.0f });
+}
+
+//==============================================================================
+
+Quaternion Quaternion::nlerp (const Quaternion& other, float t) const noexcept
+{
+    // q and -q are the same rotation: flip the target to take the shorter way round
+    const auto sign = dotProduct (other) < 0.0f ? -1.0f : 1.0f;
+
+    return Quaternion (x + (sign * other.x - x) * t,
+                       y + (sign * other.y - y) * t,
+                       z + (sign * other.z - z) * t,
+                       w + (sign * other.w - w) * t)
+        .normalized();
+}
+
+Quaternion Quaternion::slerp (const Quaternion& other, float t) const noexcept
+{
+    const auto cosine = dotProduct (other);
+    const auto sign = cosine < 0.0f ? -1.0f : 1.0f;
+    const auto cosHalfAngle = jmin (1.0f, cosine * sign);
+
+    // Nearly the same rotation: the sine vanishes, and the linear path is as good
+    if (cosHalfAngle > 0.9995f)
+        return nlerp (other, t);
+
+    const auto halfAngle = std::acos (cosHalfAngle);
+    const auto sinHalfAngle = std::sin (halfAngle);
+    const auto a = std::sin ((1.0f - t) * halfAngle) / sinHalfAngle;
+    const auto b = sign * std::sin (t * halfAngle) / sinHalfAngle;
+
+    return Quaternion (a * x + b * other.x,
+                       a * y + b * other.y,
+                       a * z + b * other.z,
+                       a * w + b * other.w)
+        .normalized();
 }
 
 //==============================================================================

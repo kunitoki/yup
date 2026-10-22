@@ -34,10 +34,18 @@ ResultValue<ShaderBundle> ShaderBundleCompiler::compile (const ShaderBundleCompi
 {
     ShaderBundle bundle;
 
+    const auto sourceOf = [&request] (const ShaderBundleEntry& entry) -> const String&
+    {
+        return entry.source.isNotEmpty() ? entry.source : request.source;
+    };
+
+    // Compile source → SPIR-V
+    std::vector<MemoryBlock> spirvs;
+    spirvs.reserve (request.entries.size());
+
     for (const auto& entry : request.entries)
     {
-        // Compile source → SPIR-V
-        auto spirvResult = transpiler->compileToSPIRV (request.source,
+        auto spirvResult = transpiler->compileToSPIRV (sourceOf (entry),
                                                        entry.stage,
                                                        request.sourceLanguage,
                                                        entry.options);
@@ -46,7 +54,56 @@ ResultValue<ShaderBundle> ShaderBundleCompiler::compile (const ShaderBundleCompi
                                         + toString (entry.stage)
                                         + ": " + spirvResult.getErrorMessage());
 
-        const auto& spirv = spirvResult.getValue();
+        spirvs.push_back (std::move (spirvResult.getValue()));
+    }
+
+    // A vertex and a fragment stage form one graphics pipeline, whose native slots are assigned together
+    const auto stageIndex = [&request] (ShaderStage stage)
+    {
+        const auto it = std::find_if (request.entries.begin(), request.entries.end(), [stage] (const ShaderBundleEntry& e)
+        {
+            return e.stage == stage;
+        });
+
+        return static_cast<size_t> (std::distance (request.entries.begin(), it));
+    };
+
+    for (const auto stage : { ShaderStage::vertex, ShaderStage::fragment })
+    {
+        const auto count = std::count_if (request.entries.begin(), request.entries.end(), [stage] (const ShaderBundleEntry& e)
+        {
+            return e.stage == stage;
+        });
+
+        if (count > 1)
+            return makeResultValueFail (String ("ShaderBundleCompiler: a request holds one pipeline, but it has more than one ")
+                                        + toString (stage) + " entry");
+    }
+
+    const auto vertexIndex = stageIndex (ShaderStage::vertex);
+    const auto fragmentIndex = stageIndex (ShaderStage::fragment);
+    const bool isGraphicsPipeline = vertexIndex < request.entries.size() && fragmentIndex < request.entries.size();
+
+    ShaderReflection vertexReflection;
+    ShaderReflection fragmentReflection;
+
+    if (isGraphicsPipeline)
+    {
+        auto vertexResult = transpiler->reflectFromSPIRV (spirvs[vertexIndex]);
+        auto fragmentResult = transpiler->reflectFromSPIRV (spirvs[fragmentIndex]);
+
+        if (vertexResult.failed() || fragmentResult.failed())
+            return makeResultValueFail (String ("ShaderBundleCompiler: pipeline reflection failed: ")
+                                        + (vertexResult.failed() ? vertexResult : fragmentResult).getErrorMessage());
+
+        vertexReflection = std::move (vertexResult.getValue());
+        fragmentReflection = std::move (fragmentResult.getValue());
+    }
+
+    for (size_t entryIndex = 0; entryIndex < request.entries.size(); ++entryIndex)
+    {
+        const auto& entry = request.entries[entryIndex];
+        const auto& spirv = spirvs[entryIndex];
         bundle.setSPIRV (entry.stage, request.sourceLanguage, spirv);
 
         // Decompile + reflect for each target language
@@ -56,7 +113,7 @@ ResultValue<ShaderBundle> ShaderBundleCompiler::compile (const ShaderBundleCompi
             info.stage = entry.stage;
             info.language = targetLang;
             info.entryPoint = entry.options.entryPoint;
-            info.inputSource = request.source;
+            info.inputSource = sourceOf (entry);
 
             if (targetLang == ShaderLanguage::spirv)
             {
@@ -64,7 +121,7 @@ ResultValue<ShaderBundle> ShaderBundleCompiler::compile (const ShaderBundleCompi
                 auto vulkanOptions = entry.options;
                 vulkanOptions.spirvInvertY = true;
 
-                auto vulkanResult = transpiler->compileToSPIRV (request.source, entry.stage, request.sourceLanguage, vulkanOptions);
+                auto vulkanResult = transpiler->compileToSPIRV (sourceOf (entry), entry.stage, request.sourceLanguage, vulkanOptions);
                 if (vulkanResult.failed())
                     return makeResultValueFail (String ("ShaderBundleCompiler: SPIR-V compilation for Vulkan failed for stage ")
                                                 + toString (entry.stage)
@@ -81,12 +138,20 @@ ResultValue<ShaderBundle> ShaderBundleCompiler::compile (const ShaderBundleCompi
                 continue;
             }
 
+            const bool isPipelineStage = entry.stage == ShaderStage::vertex || entry.stage == ShaderStage::fragment;
+
+            const auto nativeSlots = isGraphicsPipeline && isPipelineStage
+                                       ? ShaderTranspiler::assignGraphicsNativeSlots (vertexReflection, fragmentReflection, targetLang)
+                                       : ShaderNativeSlots {};
+
+            const auto* slots = nativeSlots.entries.empty() ? nullptr : &nativeSlots;
+
             auto srcValue = [&]() -> ResultValue<String>
             {
                 if (targetLang == ShaderLanguage::wgsl)
-                    return transpiler->transpile (request.source, entry.stage, request.sourceLanguage, targetLang, entry.options);
+                    return transpiler->transpile (sourceOf (entry), entry.stage, request.sourceLanguage, targetLang, entry.options);
 
-                return transpiler->decompileFromSPIRV (spirv, targetLang, entry.options);
+                return transpiler->decompileFromSPIRV (spirv, targetLang, entry.options, slots);
             }();
 
             if (srcValue.failed())
@@ -94,11 +159,30 @@ ResultValue<ShaderBundle> ShaderBundleCompiler::compile (const ShaderBundleCompi
                                             + toString (targetLang)
                                             + " failed: " + srcValue.getErrorMessage());
 
-            auto reflResult = transpiler->reflectFromSPIRV (spirv, targetLang, entry.options);
+            auto reflResult = transpiler->reflectFromSPIRV (spirv, targetLang, entry.options, slots);
             if (reflResult.failed())
                 return makeResultValueFail (String ("ShaderBundleCompiler: reflection for ")
                                             + toString (targetLang)
                                             + " failed: " + reflResult.getErrorMessage());
+
+            // Metal binds vertex buffers from index 16 up (ore's kMetalVertexBufferBase), so the
+            // pipeline's buffers must stay below it
+            constexpr uint32_t metalVertexBufferBase = 16;
+
+            if (slots != nullptr && targetLang == ShaderLanguage::msl)
+            {
+                for (const auto* buffers : { &reflResult.getReference().uniformBuffers, &reflResult.getReference().storageBuffers })
+                {
+                    for (const auto& b : *buffers)
+                    {
+                        if (b.backendSlot != ~0u && b.backendSlot + jmax (1u, b.descriptorCount) > metalVertexBufferBase)
+                            return makeResultValueFail (String ("ShaderBundleCompiler: buffer ") + b.name + " of the "
+                                                        + toString (entry.stage) + " stage needs Metal buffer slot "
+                                                        + String (b.backendSlot) + ", but a pipeline has only "
+                                                        + String (metalVertexBufferBase) + " buffer slots below its vertex buffers");
+                    }
+                }
+            }
 
             info.source = srcValue.getValue();
             info.reflection = std::move (reflResult.getValue());

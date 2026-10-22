@@ -42,13 +42,19 @@ public:
     //==============================================================================
     using Ptr = ReferenceCountedObjectPtr<Mesh>;
 
-    /** A vertex, laid out as the renderer uploads it: 48 bytes, tightly packed. */
+    /** A vertex, laid out as the renderer uploads it: 64 bytes, tightly packed. */
     struct Vertex
     {
         Vector3<float> position;                         ///< Position in model space.
         Vector3<float> normal;                           ///< Unit normal, or zero to have one generated.
         Point<float> uv;                                 ///< Texture coordinates, v pointing down.
         std::array<float, 4> color { 1.0f, 1.0f, 1.0f, 1.0f }; ///< Linear RGBA multiplied with the base color.
+
+        /** The tangent frame for normal maps, as in glTF: xyz the unit tangent along increasing u, and
+            w the handedness (+1 or -1), with the bitangent B = cross (N, T) * w. It is used only when w
+            is not zero; all zero, the default, derives the frame from the texture coordinates.
+        */
+        std::array<float, 4> tangent { 0.0f, 0.0f, 0.0f, 0.0f };
     };
 
     /** A set of triangles drawn with one material. */
@@ -79,7 +85,7 @@ public:
 
         When @a indices is empty the vertices are drawn in order, three per triangle. When every
         normal is zero, flat normals are generated: each triangle gets its own three vertices,
-        facing the side its counter-clockwise winding faces.
+        facing the side its counter-clockwise winding faces, and their tangents are cleared.
 
         @param vertices  The vertices, at least three.
         @param indices   The triangle indices, a multiple of three, or empty.
@@ -114,11 +120,29 @@ public:
     */
     GpuBuffer::Ptr getIndexBuffer (const GpuDevice::Ptr& device, int primitiveIndex);
 
+    /** Returns the 32-bit line list index buffer of the edges of a primitive for a device, as
+        computeEdgeIndices() lists them, for wireframes. It is created the first time it is asked
+        for, so meshes never drawn as wireframes do not hold one.
+
+        @param device          The device that renders the mesh.
+        @param primitiveIndex  The primitive.
+    */
+    GpuBuffer::Ptr getEdgeIndexBuffer (const GpuDevice::Ptr& device, int primitiveIndex);
+
+    //==============================================================================
+    /** Returns the edges of triangles as a line list, two indices per edge. An edge shared by
+        several triangles is listed once, in the order the edges first appear.
+
+        @param triangleIndices  Three indices per triangle; a trailing incomplete triangle is ignored.
+    */
+    static std::vector<uint32> computeEdgeIndices (Span<const uint32> triangleIndices);
+
 private:
     struct GpuBuffers
     {
         GpuBuffer::Ptr vertices;
         GpuBuffer::Ptr indices;
+        GpuBuffer::Ptr edges;
     };
 
     void prepareGpuBuffers (const GpuDevice::Ptr& device);

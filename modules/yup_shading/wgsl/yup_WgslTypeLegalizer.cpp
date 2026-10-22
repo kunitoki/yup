@@ -168,6 +168,27 @@ private:
         expr = std::move (wrapped);
     }
 
+    /** Replaces the float scalar @p expr with (1.0 / expr): WGSL divides no matrix, so a matrix
+        divided by a scalar is multiplied by its reciprocal instead.
+    */
+    static void reciprocal (Expr& expr)
+    {
+        const auto loc = expr.loc;
+
+        Expr one;
+        one.loc = loc;
+        one.value = ExprFloatConst { loc, 1.0, false };
+        one.type = TypeSpecifier::make (loc, TypeKind::floatType);
+
+        ExprBinary division { loc, BinaryOp::div, std::make_unique<Expr> (std::move (one)), std::make_unique<Expr> (std::move (expr)) };
+
+        Expr result;
+        result.loc = loc;
+        result.value = std::move (division);
+        result.type = TypeSpecifier::make (loc, TypeKind::floatType);
+        expr = std::move (result);
+    }
+
     /** Converts a scalar or vector expression to another scalar type, splatting scalars to vector targets. */
     static void coerce (Expr& expr, const ExprType& from, TypeKind to, bool allowBool = false)
     {
@@ -685,6 +706,12 @@ private:
         if (binary.op == BinaryOp::mul)
             return matrixProduct (*leftType, *rightType);
 
+        if (binary.op == BinaryOp::div && leftIsMatrix && ! rightIsMatrix && componentCount (rightType->kind) == 1)
+        {
+            binary.op = BinaryOp::mul;
+            reciprocal (*binary.right);
+        }
+
         return leftIsMatrix ? leftType : rightType;
     }
 
@@ -711,6 +738,16 @@ private:
 
         const auto targetType = visit (*assignment.lhs);
         const auto valueType = visit (*assignment.rhs);
+
+        // As for a binary division: a matrix divided by a scalar is multiplied by its reciprocal
+        if (assignment.op == AssignmentOp::divAssign && targetType.has_value() && isMatrixType (targetType->kind)
+            && isNumeric (valueType) && componentCount (valueType->kind) == 1)
+        {
+            coerce (*assignment.rhs, valueType, TypeKind::floatType);
+            assignment.op = AssignmentOp::mulAssign;
+            reciprocal (*assignment.rhs);
+            return targetType;
+        }
 
         if (! isNumeric (targetType) || ! isNumeric (valueType))
             return targetType;

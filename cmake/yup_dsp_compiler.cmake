@@ -27,7 +27,7 @@ function (_yup_build_dsp_compiler_tool output_variable)
     endif()
 
     set (tool_source_dir "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/tools/ydsp_compiler")
-    set (tool_build_dir "${CMAKE_BINARY_DIR}/_host_tools/ydsp_compiler")
+    set (tool_build_dir "${CMAKE_BINARY_DIR}/_yup_host_tools/ydsp_compiler")
     _yup_execute_process_or_fail ("${CMAKE_COMMAND}" -S "${tool_source_dir}" -B "${tool_build_dir}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=)
     _yup_execute_process_or_fail ("${CMAKE_COMMAND}" --build "${tool_build_dir}" --config Release --parallel 4)
 

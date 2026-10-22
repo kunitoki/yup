@@ -4,7 +4,7 @@ codecov:
 coverage:
   precision: 2
   round: down
-  range: "70...100"
+  range: "80...100"
 
   status:
     project:
@@ -34,6 +34,7 @@ coverage:
           - yup_graphics
           - yup_gui
           - yup_python
+          - yup_renderer
           - yup_rhi
           - yup_shading
           - yup_simd
@@ -45,6 +46,7 @@ coverage:
         threshold: 5%
 
 flags:
+  yup_3d:                    { paths: [modules/yup_3d/], carryforward: true }
   yup_animation:             { paths: [modules/yup_animation/], carryforward: true }
   yup_audio_basics:          { paths: [modules/yup_audio_basics/], carryforward: true }
   yup_audio_devices:         { paths: [modules/yup_audio_devices/], carryforward: true }
@@ -62,6 +64,7 @@ flags:
   yup_graphics:              { paths: [modules/yup_graphics/], carryforward: true }
   yup_gui:                   { paths: [modules/yup_gui/], carryforward: true }
   yup_python:                { paths: [modules/yup_python/], carryforward: true }
+  yup_renderer:              { paths: [modules/yup_renderer/], carryforward: true }
   yup_rhi:                   { paths: [modules/yup_rhi/], carryforward: true }
   yup_shading:               { paths: [modules/yup_shading/], carryforward: true }
   yup_simd:                  { paths: [modules/yup_simd/], carryforward: true }

@@ -34,6 +34,18 @@
 namespace yup
 {
 
+/** The command encoder a GpuFrame records into: its render passes through ore, its compute passes
+    directly, so the GPU runs them in recording order and the frame is submitted once. */
+struct FrameCommandsWebGPU
+{
+    /** Handed to ore, whose beginFrame() moves it out. Must stay the first member. */
+    wgpu::CommandEncoder oreEncoder;
+
+    wgpu::CommandEncoder encoder;
+};
+
+static_assert (std::is_standard_layout_v<FrameCommandsWebGPU>);
+
 class GpuDeviceWebGPU : public GpuDevice
 {
 public:
@@ -51,6 +63,15 @@ public:
 
         // Set by the page shell when it had to fall back to a compatibility mode adapter
         contextOptions.compatibilityMode = EM_ASM_INT ({ return Module.webGPUCompatibilityMode ? 1 : 0; }) != 0;
+
+        // emdawn's GetLimits() leaves the compatibility mode limits unfilled, so read the browser's device
+        // limits directly. Browsers predating the limit fall back to the per-stage one, or none in compatibility mode
+        maxFragmentStorageBuffers = EM_ASM_INT ({
+            const limits = Module.preinitializedWebGPUDevice.limits;
+            if (limits.maxStorageBuffersInFragmentStage !== undefined)
+                return limits.maxStorageBuffersInFragmentStage;
+            return $0 ? 0 : limits.maxStorageBuffersPerShaderStage;
+        }, contextOptions.compatibilityMode ? 1 : 0);
 
         renderContext = rive::gpu::RenderContextWebGPUImpl::MakeContext (
             {}, device, queue, contextOptions);
@@ -76,6 +97,12 @@ public:
 
     bool isComputeAvailable() const noexcept override { return true; }
 
+    bool isFragmentStorageBufferAvailable() const noexcept override { return maxFragmentStorageBuffers > 0; }
+
+    bool isDynamicUniformOffsetAvailable() const noexcept override { return true; }
+
+    bool isStorageTextureAvailable() const noexcept override { return true; }
+
     /** Returns the native wgpu::Device for compute operations. */
     wgpu::Device getWgpuDevice() const noexcept { return device; }
 
@@ -90,6 +117,11 @@ public:
         {
             jassert (data != nullptr && byteSize > 0);
             if (data == nullptr || byteSize == 0)
+                return nullptr;
+
+            // WebGPU writes and binds storage buffers in multiples of 4 bytes
+            jassert (byteSize % 4 == 0);
+            if (byteSize % 4 != 0)
                 return nullptr;
 
             wgpu::BufferDescriptor bufDesc {};
@@ -350,6 +382,41 @@ public:
         return false; // GPU-to-CPU buffer mapping is async-only on the web.
     }
 
+    //==============================================================================
+
+    void* beginFrameCommands (uint64_t) override
+    {
+        wgpu::CommandEncoderDescriptor encoderDesc {};
+        encoderDesc.label = "GpuFrame";
+
+        auto frameCommands = std::make_unique<FrameCommandsWebGPU>();
+        frameCommands->encoder = device.CreateCommandEncoder (&encoderDesc);
+        if (frameCommands->encoder == nullptr)
+            return nullptr;
+
+        frameCommands->oreEncoder = frameCommands->encoder;
+        return frameCommands.release();
+    }
+
+    Result submitFrameCommands (void* commandBuffer) override
+    {
+        auto* frameCommands = static_cast<FrameCommandsWebGPU*> (commandBuffer);
+        if (frameCommands == nullptr || frameCommands->encoder == nullptr)
+            return Result::ok();
+
+        auto commands = std::exchange (frameCommands->encoder, nullptr).Finish();
+        if (commands == nullptr)
+            return Result::fail ("WebGPU: the frame commands could not be finished");
+
+        queue.Submit (1, std::addressof (commands));
+        return Result::ok();
+    }
+
+    void releaseFrameCommands (void* commandBuffer) override
+    {
+        delete static_cast<FrameCommandsWebGPU*> (commandBuffer);
+    }
+
 private:
     /** Allocates the ring of staging buffers used by readBuffer(). */
     bool createReadbackSlots (GpuBuffer::Impl& impl, size_t byteSize)
@@ -464,6 +531,7 @@ private:
     wgpu::Device device;
     wgpu::Queue queue;
     rive::gpu::RenderContextWebGPUImpl::ContextOptions contextOptions;
+    int maxFragmentStorageBuffers = 0;
     std::unique_ptr<rive::gpu::RenderContext> renderContext;
     std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;
     std::unique_ptr<rive::ore::Context> oreContext;

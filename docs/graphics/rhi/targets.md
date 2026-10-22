@@ -43,6 +43,7 @@ if (target != nullptr)
 | ----------------------------------- | ------------------------------------------------------ |
 | `getWidth()` / `getHeight()`        | Target dimensions, at the mip level it renders into.   |
 | `beginRenderPass (frame, options)`  | Begins a render pass targeting the backing texture.    |
+| `beginRenderPass (frame, depthOptions)` | Begins a depth-only pass on a depth-format target. |
 | `asTexture()`                       | GPU-texture view of the rendered result.               |
 | `asImage()`                         | An `Image` with GPU texture + CPU pixels populated.    |
 | `readPixels (dst, byteSize)`        | Reads pixels back to CPU memory.                       |
@@ -64,16 +65,55 @@ auto mip  = GpuTarget::createFromTexture (device, texture, { /* mip */ 2, /* lay
 
 `createFromTexture()` is what makes **render-to-mip** and **render-to-cube-face**
 possible: point the view at a mip level and a layer (a cube face *is* a layer),
-and every draw in a pass begun on that target lands there. Since nothing
-generates mip contents automatically, a mip chain is built by rendering each
-level in turn - which is also what a roughness-varying IBL prefilter wants.
+and every draw in a pass begun on that target lands there. Mip contents are not
+generated automatically (`GpuTexture::generateMips` covers plain 2D textures), so
+a cube or array mip chain is built by rendering each level in turn - which is also what a roughness-varying IBL prefilter wants.
 
-> **Narrowed views are for attachments only, never for sampling.** OpenGL ES 3
-> has no `glTextureView`, so a mip- or layer-narrowed view silently falls back to
-> the base texture when *read* - binding one to sample mip 2 quietly samples mip 0
-> instead, with no error. Attachment targeting is unaffected. To read one level
-> of a chain, bind the whole texture and use an explicit `textureLod()` together
-> with a `GpuSampler` whose `minLod`/`maxLod` clamp to that level.
+> **To read one level of a chain, bind a narrowed view with
+> `GpuRenderPass::setTexture (group, binding, texture, view)`.** The shader then
+> sees only the selected levels, and lod 0 is `view.baseMipLevel`. This is what
+> lets a pass sample level N while it renders into level N + 1 of the same
+> texture. Do not bind the whole texture and clamp it with a sampler's
+> `minLod`/`maxLod` instead: WebGL2 still reports that as a feedback loop and
+> drops the draw.
+>
+> On OpenGL and OpenGL ES, which have no texture views, only the **mip range** of
+> a sampled view is honored. A layer range is not: every layer of an array or cube
+> texture stays visible to the shader. Attachments honor both on every backend.
+
+### Depth-only targets
+
+A target over a depth-format render texture renders depth only - the building
+block of shadow maps. Its passes have no color attachment: the texture view is
+the depth attachment, and the pass takes its depth load, store and clear value
+from a `GpuDepthStencilOptions` overload of `beginRenderPass`:
+
+```cpp
+GpuTextureDesc desc (2048, 2048, GpuTextureFormat::depth32float, true);
+desc.type = GpuTextureType::array2D;
+desc.depthOrArrayLayers = 4;
+auto cascades = GpuTexture::create (device, desc);
+
+// Render into layer 2, cleared to the far plane.
+auto target = GpuTarget::createFromTexture (device, cascades, { /* mip */ 0, /* layer */ 2 });
+auto pass = target->beginRenderPass (frame, GpuDepthStencilOptions (1.0f));
+pass.setPipeline (depthOnlyPipeline); // no color targets, depthStencil.enabled
+```
+
+- Width and height come from the depth view. `setViewport` and
+  `setScissorRect` work as usual, so one pass can fill several tiles of an atlas.
+- The `GpuRenderOptions` overload also works on a depth target: its color fields
+  are ignored, and depth is cleared to 1.0 and stored. Its load op must be
+  `clear`; use the `GpuDepthStencilOptions` overload to load existing depth.
+- Passing `GpuDepthStencilOptions` to a color target is a programming error: it
+  asserts and returns an invalid pass.
+- A depth-only pass takes no further attachments: `setColorAttachment`,
+  `setDepthStencilAttachment` and `setResolveTarget` assert and do nothing.
+- Every backend stores clip-space z directly (z in [0, 1]). On OpenGL and
+  OpenGL ES the shader transpiler remaps the vertex output to GL's [-1, 1]
+  clip range (spirv-cross `fixup_clipspace`), so the stored depth matches
+  Metal, D3D, Vulkan and WebGPU.
+- Pair it with a depth-only pipeline - see [Pipelines](pipelines.md#depth-only-pipelines-and-depth-bias).
 
 `readPixels()` is only supported for canvas-backed targets; targets over a
 directly allocated texture return false, because there is no texture readback

@@ -45,5 +45,6 @@ private:
     std::vector<D3D11UBOBinding> m_d3d11UBOs;
     std::vector<D3D11TexBinding> m_d3d11Textures;
     std::vector<D3D11SamplerBinding> m_d3d11Samplers;
+    std::vector<D3D11TexBinding> m_d3d11StorageBuffers;
 };
 } // namespace rive::ore

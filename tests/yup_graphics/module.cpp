@@ -30,6 +30,7 @@
 #endif
 
 #include "yup_AffineTransform.cpp"
+#include "yup_BoundingBox.cpp"
 #include "yup_Color.cpp"
 #include "yup_ColorGradient.cpp"
 #include "yup_CubicBezier.cpp"
@@ -65,6 +66,10 @@
 #include "yup_SVGDocument.cpp"
 #include "yup_SVGParser.cpp"
 #include "yup_Vector3.cpp"
+
+#if YUP_MAC
+#include "native/yup_GpuCanvas_mac.cpp"
+#endif
 
 #if YUP_IMAGE_FORMAT_BMP
 #include "yup_BmpImageFormat.cpp"

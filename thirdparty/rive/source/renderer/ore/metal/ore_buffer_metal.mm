@@ -73,4 +73,19 @@ void BufferMetal::update(const void* data, uint32_t size, uint32_t offset)
            size);
 }
 
+void BufferMetal::writeUnsynchronized(const void* data,
+                                      uint32_t size,
+                                      uint32_t offset,
+                                      bool discard)
+{
+    assert(offset + size <= m_size);
+    if (discard &&
+        m_pool[m_currentIndex].serial > m_ctx->completedSerial())
+        acquireFreshBacking(0, m_size);
+    memcpy(static_cast<uint8_t*>([m_pool[m_currentIndex].mtl contents]) +
+               offset,
+           data,
+           size);
+}
+
 } // namespace rive::ore

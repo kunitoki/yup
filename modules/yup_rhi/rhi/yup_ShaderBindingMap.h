@@ -74,4 +74,24 @@ std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflectio
 */
 std::vector<uint8_t> makeGLFixupBlob (const ShaderReflection& reflection);
 
+//==============================================================================
+/** Builds the texture-sampler pair table of a GL shader stage.
+
+    GLSL folds each texture and sampler used together into one combined sampler
+    uniform on the texture's unit, so a sampler used with several textures has
+    to be bound on every one of their units. This table lists, for each combined
+    sampler in ShaderReflection::glCombinedSamplers, the (set, binding) of its
+    texture and of its sampler, in the format consumed by
+    @c ShaderModuleDesc::texSamplerPairBytes: 4 bytes per pair, texture set,
+    texture binding, sampler set, sampler binding.
+
+    @param reflection  The reflection data for a single shader stage (glsl/essl).
+
+    @returns A binary blob suitable for GpuShaderSource::glTextureSamplerPairs.
+             Empty when the stage has no combined samplers.
+
+    @see GpuShaderSource, makeGLFixupBlob
+*/
+std::vector<uint8_t> makeGLTextureSamplerPairsBlob (const ShaderReflection& reflection);
+
 } // namespace yup

@@ -105,3 +105,141 @@ TEST_F (TextureResourceTests, GpuOnlyTextureHasNoImage)
     texture.setGpuTexture (nullptr);
     EXPECT_FALSE (Texture (Image (1, 1, PixelFormat::RGBA)).isGpuOnly());
 }
+
+TEST_F (TextureResourceTests, CountsEverySetGpuTexture)
+{
+    Texture texture (GpuTexture::Ptr {});
+    EXPECT_EQ (texture.getChangeCount(), 0u);
+
+    // Content redrawn into the same GpuTexture is a change too
+    texture.setGpuTexture (nullptr);
+    texture.setGpuTexture (nullptr);
+    EXPECT_EQ (texture.getChangeCount(), 2u);
+}
+
+class TextureGpuResourceTests : public ::testing::Test
+{
+protected:
+    struct AnisotropicOreContext : public ::testing::NiceMock<MockOreContext>
+    {
+        explicit AnisotropicOreContext (bool anisotropic) { m_features.anisotropicFiltering = anisotropic; }
+    };
+
+    /** Makes @p oreCtx create mocked textures, counting the textures and their uploads. */
+    void countTexturesAndUploads (MockOreContext& oreCtx)
+    {
+        ON_CALL (oreCtx, makeTexture (::testing::_))
+            .WillByDefault (::testing::Invoke ([this] (const rive::ore::TextureDesc& desc)
+        {
+            ++texturesMade;
+            lastMipCount = desc.numMipmaps;
+
+            auto texture = rive::make_rcp<::testing::NiceMock<MockOreTexture>> (desc);
+            ON_CALL (*texture, uploadImpl (::testing::_))
+                .WillByDefault (::testing::Invoke ([this] (const rive::ore::TextureDataDesc&)
+            {
+                ++uploads;
+            }));
+            return rive::rcp<rive::ore::Texture> (texture);
+        }));
+    }
+
+    static GpuSamplerDesc linearSampler (uint32_t anisotropy)
+    {
+        GpuSamplerDesc desc (GpuFilter::linear, GpuWrapMode::repeat);
+        desc.mipmapFilter = GpuFilter::linear;
+        desc.maxAnisotropy = anisotropy;
+        return desc;
+    }
+
+    int texturesMade = 0;
+    int uploads = 0;
+    uint32_t lastMipCount = 0;
+};
+
+TEST_F (TextureGpuResourceTests, UploadsEveryMipLevelOncePerDevice)
+{
+    ::testing::NiceMock<MockOreContext> oreCtx;
+    countTexturesAndUploads (oreCtx);
+
+    GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
+    Texture texture (Image (4, 4, PixelFormat::RGBA));
+
+    const auto first = texture.getGpuTexture (device);
+    ASSERT_NE (first, nullptr);
+    EXPECT_EQ (texturesMade, 1);
+    EXPECT_EQ (lastMipCount, 3u);
+    EXPECT_EQ (uploads, 3);
+
+    EXPECT_EQ (texture.getGpuTexture (device), first);
+    EXPECT_EQ (texturesMade, 1);
+
+    GpuDevice::Ptr otherDevice = new OreInjectedGpuDevice (&oreCtx);
+    const auto second = texture.getGpuTexture (otherDevice);
+    ASSERT_NE (second, nullptr);
+    EXPECT_NE (second, first);
+    EXPECT_EQ (texturesMade, 2);
+    EXPECT_EQ (uploads, 6);
+}
+
+TEST_F (TextureGpuResourceTests, FailedCreationReturnsNull)
+{
+    ::testing::NiceMock<MockOreContext> oreCtx;
+    GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
+
+    Texture invalid { Image() };
+    EXPECT_EQ (invalid.getGpuTexture (device), nullptr);
+
+    ON_CALL (oreCtx, makeTexture (::testing::_)).WillByDefault (::testing::Return (nullptr));
+    Texture rejected (Image (2, 2, PixelFormat::RGBA));
+    EXPECT_EQ (rejected.getGpuTexture (device), nullptr);
+}
+
+TEST_F (TextureGpuResourceTests, GpuOnlyTextureKeepsItsTextureAcrossDevices)
+{
+    ::testing::NiceMock<MockOreContext> oreCtx;
+    countTexturesAndUploads (oreCtx);
+
+    GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
+    const auto gpuTexture = GpuTexture::create (device, GpuTextureDesc (2, 2, GpuTextureFormat::rgba8unorm));
+    ASSERT_NE (gpuTexture, nullptr);
+
+    Texture texture (gpuTexture);
+    GpuDevice::Ptr otherDevice = new OreInjectedGpuDevice (&oreCtx);
+    EXPECT_EQ (texture.getGpuTexture (device), gpuTexture);
+    EXPECT_EQ (texture.getGpuTexture (otherDevice), gpuTexture);
+    EXPECT_EQ (uploads, 0);
+}
+
+TEST_F (TextureGpuResourceTests, AnisotropyNeedsDeviceSupportAndLinearFiltering)
+{
+    const auto samplerAnisotropy = [] (bool deviceSupport, const GpuSamplerDesc& desc)
+    {
+        AnisotropicOreContext oreCtx (deviceSupport);
+        uint32_t anisotropy = 0;
+        EXPECT_CALL (oreCtx, makeSampler (::testing::_))
+            .WillOnce (::testing::Invoke ([&anisotropy] (const rive::ore::SamplerDesc& d)
+        {
+            anisotropy = d.maxAnisotropy;
+            return rive::rcp<rive::ore::Sampler> (rive::make_rcp<TestOreSampler>());
+        }));
+
+        GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
+        Texture texture (Image (1, 1, PixelFormat::RGBA), desc);
+
+        const auto sampler = texture.getGpuSampler (device);
+        EXPECT_NE (sampler, nullptr);
+        EXPECT_EQ (texture.getGpuSampler (device), sampler);
+        return anisotropy;
+    };
+
+    EXPECT_EQ (samplerAnisotropy (true, linearSampler (8)), 8u);
+    EXPECT_EQ (samplerAnisotropy (false, linearSampler (8)), 1u);
+
+    auto nearestMips = linearSampler (8);
+    nearestMips.mipmapFilter = GpuFilter::nearest;
+    EXPECT_EQ (samplerAnisotropy (true, nearestMips), 1u);
+
+    Texture texture (Image (1, 1, PixelFormat::RGBA));
+    EXPECT_EQ (texture.getGpuSampler (nullptr), nullptr);
+}

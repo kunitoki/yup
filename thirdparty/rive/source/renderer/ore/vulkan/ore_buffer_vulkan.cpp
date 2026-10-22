@@ -116,4 +116,21 @@ void BufferVulkan::update(const void* data, uint32_t size, uint32_t offset)
     memcpy(static_cast<uint8_t*>(m_vkMappedPtr) + offset, data, size);
 }
 
+void BufferVulkan::writeUnsynchronized(const void* data,
+                                       uint32_t size,
+                                       uint32_t offset,
+                                       bool discard)
+{
+    assert(offset + size <= m_size);
+    if (discard && !m_pool.empty())
+    {
+        const uint64_t stamp = m_pool[m_currentIndex].frameStamp;
+        if (!(stamp <= m_manager->safeFrameNumber() &&
+              stamp < m_manager->currentFrameNumber()))
+            acquireFreshBacking(0, m_size);
+    }
+    assert(m_vkMappedPtr != nullptr);
+    memcpy(static_cast<uint8_t*>(m_vkMappedPtr) + offset, data, size);
+}
+
 } // namespace rive::ore

@@ -21,14 +21,22 @@
 
 #pragma once
 
-#include <yup_3d/yup_3d.h>
+#include <yup_renderer/yup_renderer.h>
 
 #include <array>
 #include <cmath>
 
 //==============================================================================
-/** A photographic studio to light the device: three large soft boxes, in front on both sides
-    and behind, over a dark floor, with dim walls and ceiling.
+/** Where the key soft box of the studio hangs: its azimuth from +X towards +Z, and its elevation
+    above the horizon. The key LightNode of the scene shines from the same direction.
+*/
+inline constexpr float studioKeyAzimuthDegrees = 120.0f;
+inline constexpr float studioKeyElevationDegrees = 28.0f;
+
+//==============================================================================
+/** A photographic studio to light the device: a large, low key soft box behind on the left, a
+    dim fill in front on the right, a low fill on the right side, which the key light never
+    reaches, and a rim strip behind, over a dark floor, with dim walls and ceiling.
 
     The ceiling stays dim on purpose: seen from the top, the flat panel reflects it, and a bright
     overhead light would wash the print out.
@@ -46,10 +54,11 @@ inline yup::EnvironmentMap::Ptr createStudioEnvironment()
         yup::Vector3<float> radiance;
     };
 
-    static constexpr std::array<SoftBox, 3> boxes { {
-        { 35.0f, 50.0f, 28.0f, 18.0f, { 5.0f, 4.9f, 4.7f } },   // Key, front left
-        { -40.0f, 40.0f, 22.0f, 14.0f, { 1.8f, 1.85f, 1.9f } }, // Fill, front right
-        { 180.0f, 32.0f, 45.0f, 6.0f, { 2.6f, 2.6f, 2.6f } },   // Rim strip, behind
+    static constexpr std::array<SoftBox, 4> boxes { {
+        { studioKeyAzimuthDegrees, studioKeyElevationDegrees, 28.0f, 14.0f, { 8.0f, 7.7f, 7.2f } }, // Key, behind left
+        { -40.0f, 40.0f, 22.0f, 14.0f, { 1.8f, 1.85f, 1.9f } },                                     // Fill, front right
+        { 180.0f, 32.0f, 45.0f, 6.0f, { 2.6f, 2.6f, 2.6f } },                                       // Rim strip, behind
+        { -100.0f, 15.0f, 20.0f, 12.0f, { 4.0f, 4.0f, 4.0f } },                                     // Low fill, right side
     } };
 
     return new yup::EnvironmentMap ([] (const yup::Vector3<float>& direction)

@@ -83,7 +83,7 @@ graphics_demo (Pbr SHADERS
     pbr_background:pbr_scene pbr_brdf:pbr_fullscreen pbr_irradiance:pbr_fullscreen
     pbr_prefilter:pbr_fullscreen pbr_scene pbr_sky:pbr_fullscreen)
 graphics_demo (PopupMenu)
-graphics_demo (Scene3D MODULES yup::yup_3d tinygltf libjpeg libwebp RESOURCES gltf)
+graphics_demo (Scene3D MODULES yup::yup_renderer tinygltf libjpeg libwebp RESOURCES gltf)
 graphics_demo (ScrollBar)
 graphics_demo (Shaders RESOURCES shaders/live LIVE_SHADERS)
 graphics_demo (Sliders)
@@ -142,7 +142,7 @@ list (REMOVE_DUPLICATES demo_resources)
 list (REMOVE_DUPLICATES demo_shaders)
 
 if (demo_live_shaders)
-    list (APPEND demo_modules glslang spirv_cross spirv_tools)
+    list (APPEND demo_modules glslang spirv_cross)
 endif()
 
 # ==== Prepare Android build
@@ -163,8 +163,9 @@ if (YUP_PLATFORM_MOBILE OR YUP_PLATFORM_EMSCRIPTEN)
     endforeach()
 endif()
 
-# ==== Precompile shaders, bundled like the data files and read from the build tree on desktop
-#      - see loadShaderBundle()
+# ==== Precompile shaders at build time, bundled like the data files and read from the build tree
+#      on desktop - see loadShaderBundle(). They are bundle resources on every platform, so the
+#      application target builds them
 set (shaders_dir "${CMAKE_CURRENT_LIST_DIR}/data/shaders")
 set (shaders_output_dir "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 file (GLOB shader_includes "${shaders_dir}/*.glsl")
@@ -187,9 +188,7 @@ foreach (shader IN LISTS demo_shaders)
         DEPENDS ${shader_includes}
         OPTIONS "-I${shaders_dir}")
 
-    if (YUP_PLATFORM_MOBILE OR YUP_PLATFORM_EMSCRIPTEN)
-        list (APPEND bundle_resources "${shader_resource}")
-    endif()
+    list (APPEND bundle_resources "${shader_resource}")
 endforeach()
 
 # ==== Embed shaders

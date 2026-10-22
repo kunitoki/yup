@@ -34,6 +34,7 @@ protected:
     const Vector3<float> c { 0.0f, 1.0f, 0.0f };
 
     const Ray downZ { { 0.0f, 0.0f, 5.0f }, { 0.0f, 0.0f, -1.0f } };
+    const BoundingBox unitBox { { -1.0f, -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f } };
 };
 
 TEST_F (RayTests, GetPointAtMovesAlongTheDirection)
@@ -137,4 +138,40 @@ TEST_F (RayTests, FromViewportPointHasYPointingDown)
     const auto topLeft = Ray::fromViewportPoint ({ 0.0f, 0.0f }, viewport, viewProjection.inverted());
     EXPECT_LT (topLeft.getDirection().getX(), 0.0f);
     EXPECT_GT (topLeft.getDirection().getY(), 0.0f);
+}
+
+TEST_F (RayTests, IntersectBoxReturnsWhereTheRayEntersIt)
+{
+    EXPECT_FLOAT_EQ (downZ.intersectBox (unitBox).value_or (-1.0f), 4.0f);
+    EXPECT_FLOAT_EQ (Ray ({ 0.0f, 0.0f, 5.0f }, { 0.0f, 0.0f, -2.0f }).intersectBox (unitBox).value_or (-1.0f), 2.0f);
+}
+
+TEST_F (RayTests, IntersectBoxMissesBoxesBesideBehindAndEmpty)
+{
+    EXPECT_FALSE (Ray ({ 3.0f, 0.0f, 5.0f }, { 0.0f, 0.0f, -1.0f }).intersectBox (unitBox).has_value());
+    EXPECT_FALSE (Ray ({ 0.0f, 0.0f, 5.0f }, { 0.0f, 0.0f, 1.0f }).intersectBox (unitBox).has_value());
+    EXPECT_FALSE (Ray ({ 0.0f, 0.0f, 5.0f }, { 1.0f, 0.0f, -1.0f }).intersectBox (unitBox).has_value());
+    EXPECT_FALSE (downZ.intersectBox (BoundingBox()).has_value());
+}
+
+TEST_F (RayTests, IntersectBoxKeepsToTheDistanceRange)
+{
+    const Ray inside ({}, { 0.0f, 0.0f, -1.0f });
+
+    EXPECT_FLOAT_EQ (inside.intersectBox (unitBox).value_or (-1.0f), 0.0f);
+    EXPECT_FLOAT_EQ (inside.intersectBox (unitBox, 0.5f).value_or (-1.0f), 0.5f);
+    EXPECT_FALSE (inside.intersectBox (unitBox, 2.0f).has_value());
+    EXPECT_FALSE (downZ.intersectBox (unitBox, 0.0f, 3.0f).has_value());
+    EXPECT_FLOAT_EQ (downZ.intersectBox (unitBox, 0.0f, 4.0f).value_or (-1.0f), 4.0f);
+}
+
+TEST_F (RayTests, TransformedRaysKeepTheirDistances)
+{
+    const Ray ray ({ 10.0f, 0.0f, 5.0f }, { 0.0f, 0.0f, -1.0f });
+    const auto world = Matrix4::compose ({ 10.0f, 0.0f, 0.0f }, {}, { 2.0f, 2.0f, 2.0f });
+
+    // The box spans z in [-2, 2] in world space, the ray enters it at z = 2
+    const auto local = ray.transformedBy (world.inverted());
+    EXPECT_NEAR (local.intersectBox (unitBox).value_or (-1.0f), 3.0f, 1.0e-5f);
+    EXPECT_NEAR (local.getDirection().getZ(), -0.5f, 1.0e-6f);
 }

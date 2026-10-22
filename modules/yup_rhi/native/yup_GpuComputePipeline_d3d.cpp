@@ -67,7 +67,7 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineD3D11 (GpuDevic
     ComPtr<ID3DBlob> errorBlob;
     HRESULT hr = D3DCompile (hlsl.data(), hlsl.size(), nullptr, nullptr, nullptr,
                              entryPoint, "cs_5_0",
-                             D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3,
+                             D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL1,
                              0, compiledBlob.ReleaseAndGetAddressOf(), errorBlob.ReleaseAndGetAddressOf());
     if (FAILED (hr) || compiledBlob == nullptr)
     {

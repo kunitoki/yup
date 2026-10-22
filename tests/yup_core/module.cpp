@@ -89,6 +89,7 @@
 #include "yup_ScopeGuard.cpp"
 #include "yup_SHA1.cpp"
 #include "yup_SharedResourcePointer.cpp"
+#include "yup_Signal.cpp"
 #include "yup_Singleton.cpp"
 #include "yup_Socket.cpp"
 #include "yup_SortedSet.cpp"

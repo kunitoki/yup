@@ -19,13 +19,21 @@
   ==============================================================================
 */
 
-#include "yup_BoundingBox.cpp"
-#include "yup_EntityNode.cpp"
-#include "yup_EnvironmentMap.cpp"
+#include "../mocks/rive_gpu.h"
+#include "../mocks/rive_ore.h"
+#include "../mocks/yup_rhi.h"
+
+#include "yup_CameraNode.cpp"
+#include "yup_Entity.cpp"
 #include "yup_GltfModel.cpp"
+#include "yup_HalfFloat.cpp"
 #include "yup_Mesh.cpp"
+#include "yup_Node.cpp"
+#include "yup_NodeCollection.cpp"
+#include "yup_NodeHandle.cpp"
+#include "yup_NodeTypeId.cpp"
+#include "yup_NodeView.cpp"
+#include "yup_Prefab.cpp"
 #include "yup_Scene.cpp"
-#include "yup_SceneComponent.cpp"
-#include "yup_SceneDrawList.cpp"
-#include "yup_SceneRenderer.cpp"
 #include "yup_Texture.cpp"
+#include "yup_TransformNode.cpp"

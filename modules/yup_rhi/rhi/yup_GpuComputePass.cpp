@@ -26,13 +26,14 @@ namespace yup
 
 #if YUP_RIVE_USE_METAL && YUP_APPLE
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&);
-std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&, rive::ore::Context& frameContext);
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&, rive::ore::Context& frameContext, void* passDescriptor);
 #endif
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplD3D11 (GpuDevice&);
 #endif
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplWebGPU (GpuDevice&);
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplWebGPU (GpuDevice&, void* commandBuffer);
 #endif
 #if YUP_RHI_USE_GL_COMPUTE
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplGL (GpuDevice&);
@@ -48,6 +49,9 @@ struct GpuComputePass::Impl
 {
     GpuComputePipeline::Ptr pipelineRef;
     bool finished = false;
+
+    /** True when the native pass was created with the descriptor that samples its GPU time. */
+    bool sampled = false;
 
     /** The frame this pass records into, until either of them finishes it. */
     GpuFrame::Impl* frame = nullptr;
@@ -73,9 +77,26 @@ struct GpuComputePass::Impl
         GpuTexture::Ptr texture;
     };
 
+    struct StorageTexBinding
+    {
+        int group;
+        int binding;
+        GpuTexture::Ptr texture;
+        GpuTextureViewDesc view;
+    };
+
+    struct SamplerBinding
+    {
+        int group;
+        int binding;
+        GpuSampler::Ptr sampler;
+    };
+
     std::vector<StorageBinding> storageBindings;
     std::vector<UboBinding> uboBindings;
     std::vector<TexBinding> texBindings;
+    std::vector<StorageTexBinding> storageTexBindings;
+    std::vector<SamplerBinding> samplerBindings;
 
     virtual ~Impl() = default;
 
@@ -159,20 +180,23 @@ GpuComputePass GpuComputePass::begin (GpuFrame& frame)
     const bool joinsFrame = device.isComputeAvailable()
                          && (platform == GpuPlatform::Metal
                              || platform == GpuPlatform::Direct3D
-                             || (platform == GpuPlatform::Vulkan && frameImpl->commandBuffer != nullptr));
+                             || ((platform == GpuPlatform::Vulkan || platform == GpuPlatform::WebGPU) && frameImpl->commandBuffer != nullptr));
 
     if (! joinsFrame)
         return begin (frameImpl->device);
 
     // Dispatches cannot run inside a render pass, and Metal allows one open encoder at a time
-    if (frameImpl->openPass != nullptr)
+    YUP_AUTORELEASEPOOL
     {
-        frameImpl->openPass->finish();
-        frameImpl->openPass = nullptr;
-    }
+        if (frameImpl->openPass != nullptr)
+        {
+            frameImpl->openPass->finish();
+            frameImpl->openPass = nullptr;
+        }
 
-    if (frameImpl->openComputePass != nullptr)
-        yup_finishComputePass (*frameImpl->openComputePass);
+        if (frameImpl->openComputePass != nullptr)
+            yup_finishComputePass (*frameImpl->openComputePass);
+    }
 
     GpuComputePass pass;
 
@@ -180,8 +204,18 @@ GpuComputePass GpuComputePass::begin (GpuFrame& frame)
     {
 #if YUP_RIVE_USE_METAL && YUP_APPLE
         case GpuPlatform::Metal:
-            pass.impl = yup_createComputePassImplMetal (device, *frameImpl->oreCtx);
+        {
+            YUP_AUTORELEASEPOOL
+            {
+                auto scopeIndex = -1;
+                auto* sampler = frameImpl->samplerForNextPass (scopeIndex);
+                pass.impl = yup_createComputePassImplMetal (device, *frameImpl->oreCtx, sampler != nullptr ? sampler->beginComputePass (scopeIndex) : nullptr);
+
+                if (sampler != nullptr)
+                    sampler->endComputePass (pass.impl != nullptr && pass.impl->sampled);
+            }
             break;
+        }
 #endif
 
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
@@ -190,10 +224,26 @@ GpuComputePass GpuComputePass::begin (GpuFrame& frame)
             break;
 #endif
 
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
+        case GpuPlatform::WebGPU:
+            pass.impl = yup_createComputePassImplWebGPU (device, frameImpl->commandBuffer);
+            break;
+#endif
+
 #if YUP_RIVE_USE_VULKAN
         case GpuPlatform::Vulkan:
+        {
+            auto scopeIndex = -1;
+            auto* sampler = frameImpl->samplerForNextPass (scopeIndex);
+            if (sampler != nullptr)
+                sampler->beginComputePass (scopeIndex);
+
             pass.impl = yup_createComputePassImplVulkan (device, frameImpl->commandBuffer, frameImpl->generation);
+
+            if (sampler != nullptr)
+                sampler->endComputePass (pass.impl != nullptr);
             break;
+        }
 #endif
 
         default:
@@ -300,6 +350,68 @@ void GpuComputePass::setTexture (int group, int binding, GpuTexture::Ptr texture
     }
 
     impl->texBindings.push_back ({ group, binding, std::move (texture) });
+}
+
+void GpuComputePass::setStorageTexture (int group, int binding, GpuTexture::Ptr texture, const GpuTextureViewDesc& view)
+{
+    if (! impl)
+        return;
+
+    jassert (texture == nullptr || texture->isStorage());
+    if (texture != nullptr && ! texture->isStorage())
+        return;
+
+    // Cube faces have no storage view common to every backend
+    jassert (texture == nullptr || texture->getType() != GpuTextureType::cube);
+    if (texture != nullptr && texture->getType() == GpuTextureType::cube)
+        return;
+
+    // A storage view is a single level; array and 3D textures bind every layer of it
+    GpuTextureViewDesc levelView;
+    if (texture != nullptr)
+    {
+        const auto type = texture->getType();
+        const bool wholeLevel = type == GpuTextureType::array2D || type == GpuTextureType::texture3D;
+
+        jassert (view.baseMipLevel < texture->getMipLevels());
+        jassert (wholeLevel || view.baseLayer < texture->getDepthOrArrayLayers());
+        if (view.baseMipLevel >= texture->getMipLevels() || (! wholeLevel && view.baseLayer >= texture->getDepthOrArrayLayers()))
+            return;
+
+        levelView.dimension = wholeLevel ? GpuPipelineHelpers::defaultViewDimension (type) : GpuTextureViewDimension::texture2D;
+        levelView.baseMipLevel = view.baseMipLevel;
+        levelView.baseLayer = wholeLevel ? 0 : view.baseLayer;
+        levelView.layerCount = type == GpuTextureType::array2D ? texture->getDepthOrArrayLayers() : 1;
+    }
+
+    for (auto& sb : impl->storageTexBindings)
+    {
+        if (sb.group == group && sb.binding == binding)
+        {
+            sb.texture = std::move (texture);
+            sb.view = levelView;
+            return;
+        }
+    }
+
+    impl->storageTexBindings.push_back ({ group, binding, std::move (texture), levelView });
+}
+
+void GpuComputePass::setSampler (int group, int binding, GpuSampler::Ptr sampler)
+{
+    if (! impl)
+        return;
+
+    for (auto& sb : impl->samplerBindings)
+    {
+        if (sb.group == group && sb.binding == binding)
+        {
+            sb.sampler = std::move (sampler);
+            return;
+        }
+    }
+
+    impl->samplerBindings.push_back ({ group, binding, std::move (sampler) });
 }
 
 //==============================================================================

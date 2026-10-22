@@ -84,6 +84,16 @@ public:
     */
     [[nodiscard]] static Quaternion fromRotationMatrix (const Matrix4& matrix) noexcept;
 
+    /** Returns the rotation that turns -Z towards a direction and +Y as close to an up vector as possible.
+
+        This is how cameras and lights look, so it orients them towards a target. When the direction is
+        parallel to the up vector, another up vector perpendicular to it is used instead.
+
+        @param direction The direction to look along. It doesn't need to be normalized; a zero direction gives the identity.
+        @param up        The direction that should appear upwards, usually +Y.
+    */
+    [[nodiscard]] static Quaternion fromLookDirection (const Vector3<float>& direction, const Vector3<float>& up = { 0.0f, 1.0f, 0.0f }) noexcept;
+
     //==============================================================================
     /** Returns the x component of the vector part. */
     [[nodiscard]] constexpr float getX() const noexcept { return x; }
@@ -107,6 +117,12 @@ public:
                  w * other.w - x * other.x - y * other.y - z * other.z };
     }
 
+    /** Returns the 4D dot product, the cosine of half the angle between two unit quaternions. */
+    [[nodiscard]] constexpr float dotProduct (const Quaternion& other) const noexcept
+    {
+        return x * other.x + y * other.y + z * other.z + w * other.w;
+    }
+
     /** Returns the conjugate, which is the inverse rotation for a unit quaternion. */
     [[nodiscard]] constexpr Quaternion conjugate() const noexcept { return { -x, -y, -z, w }; }
 
@@ -127,6 +143,30 @@ public:
 
     /** Returns the rotation as a matrix. */
     [[nodiscard]] Matrix4 toMatrix4() const noexcept;
+
+    //==============================================================================
+    /** Interpolates towards another rotation at a constant angular speed, the shorter way round.
+
+        @param other The rotation reached at t = 1. Both quaternions must be unit quaternions.
+        @param t     The interpolation amount, 0 gives this rotation and 1 gives @a other.
+
+        @return A unit quaternion.
+
+        @see nlerp
+    */
+    [[nodiscard]] Quaternion slerp (const Quaternion& other, float t) const noexcept;
+
+    /** Interpolates towards another rotation linearly then normalizes, the shorter way round.
+
+        Cheaper than slerp() and with the same path, but the angular speed is not constant: faster in
+        the middle for large angles. Good for small steps and eased animations.
+
+        @param other The rotation reached at t = 1. Both quaternions must be unit quaternions.
+        @param t     The interpolation amount, 0 gives this rotation and 1 gives @a other.
+
+        @return A unit quaternion.
+    */
+    [[nodiscard]] Quaternion nlerp (const Quaternion& other, float t) const noexcept;
 
     //==============================================================================
     constexpr bool operator== (const Quaternion& other) const noexcept

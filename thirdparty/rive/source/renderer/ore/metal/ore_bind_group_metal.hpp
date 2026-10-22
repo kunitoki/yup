@@ -36,6 +36,13 @@ public:
         uint16_t vsSlot = BindingMap::kAbsent;
         uint16_t fsSlot = BindingMap::kAbsent;
     };
+    struct MTLStorageBinding
+    {
+        id<MTLBuffer> buffer = nil;
+        uint64_t offset = 0;
+        uint16_t vsSlot = BindingMap::kAbsent;
+        uint16_t fsSlot = BindingMap::kAbsent;
+    };
 
     BindGroupMetal() = default;
     ~BindGroupMetal() override = default; // ARC releases Metal objects
@@ -46,5 +53,6 @@ private:
     std::vector<MTLBufferBinding> m_mtlBuffers;
     std::vector<MTLTextureBinding> m_mtlTextures;
     std::vector<MTLSamplerBinding> m_mtlSamplers;
+    std::vector<MTLStorageBinding> m_mtlStorageBuffers;
 };
 } // namespace rive::ore

@@ -99,6 +99,7 @@ public:
     }
 
     MOCK_METHOD (void, update, (const void*, uint32_t, uint32_t), (override));
+    MOCK_METHOD (void, writeUnsynchronized, (const void*, uint32_t, uint32_t, bool), (override));
 };
 
 // ==============================================================================
@@ -140,11 +141,39 @@ struct TestOrePipeline : public rive::ore::Pipeline
 struct TestOreBindGroup : public rive::ore::BindGroup
 {
     TestOreBindGroup() = default;
+
+    /** Records the dynamic uniform buffers of @p desc, as a backend's makeBindGroup() does.
+
+        Vulkan and WebGPU expect one dynamic offset per dynamic entry of the layout
+        (@p countsLayoutEntries), Metal, OpenGL and Direct3D 11 one per dynamic buffer bound.
+    */
+    explicit TestOreBindGroup (const rive::ore::BindGroupDesc& desc, bool countsLayoutEntries = true)
+    {
+        m_layoutRef = rive::ref_rcp (desc.layout);
+        recordDynamicRanges (desc);
+
+        if (! countsLayoutEntries || desc.layout == nullptr)
+        {
+            m_dynamicOffsetCount = (uint32_t) m_dynamicRanges.size();
+            return;
+        }
+
+        for (const auto& entry : desc.layout->entries())
+            if (entry.kind == rive::ore::BindingKind::uniformBuffer && entry.hasDynamicOffset)
+                ++m_dynamicOffsetCount;
+    }
 };
 
 struct TestOreBindGroupLayout : public rive::ore::BindGroupLayout
 {
     TestOreBindGroupLayout() = default;
+
+    /** Mirrors a layout description, as a backend's makeBindGroupLayout() does. */
+    explicit TestOreBindGroupLayout (const rive::ore::BindGroupLayoutDesc& desc)
+    {
+        m_groupIndex = desc.groupIndex;
+        m_entries.assign (desc.entries, desc.entries + desc.entryCount);
+    }
 
     /** Declares a binding, so tests can exercise layout-driven code paths. */
     void addEntry (uint32_t binding, rive::ore::BindingKind kind)

@@ -56,22 +56,22 @@ public:
 
     //==============================================================================
     /** Finds the parts of the device and the materials that show the faceplate. */
-    void setDevice (const yup::EntityNode& device)
+    void setDevice (yup::Entity device)
     {
         parts.clear();
         materials.clear();
 
         collectMaterials (device);
 
-        for (const auto& child : device.getChildren())
+        for (const auto child : device.getChildren())
         {
-            collectMaterials (*child);
+            collectMaterials (child);
 
-            auto* meshNode = child->getNode<yup::MeshNode>();
+            auto* meshNode = child.get<yup::MeshNode>();
             if (meshNode == nullptr || meshNode->mesh == nullptr)
                 continue;
 
-            Part part { child->getName(), {}, yup::Colors::black };
+            Part part { child.getName(), {}, yup::Colors::black };
             auto minUv = yup::Point<float> (1.0f, 1.0f);
             auto maxUv = yup::Point<float> (0.0f, 0.0f);
 
@@ -121,6 +121,10 @@ public:
         if (gpuTexture == nullptr)
             return;
 
+        // Every new texture restarts the TAA accumulation, so only hand over actual changes
+        if (! std::exchange (redrawn, false))
+            return;
+
         if (texture != nullptr)
         {
             texture->setGpuTexture (std::move (gpuTexture));
@@ -139,6 +143,8 @@ public:
     //==============================================================================
     void paint (yup::Graphics& g) override
     {
+        redrawn = true;
+
         g.addTransform (yup::AffineTransform::scaling (getWidth() / designWidth));
 
         paintBody (g);
@@ -184,9 +190,9 @@ private:
         return { encode (linear[0]), encode (linear[1]), encode (linear[2]) };
     }
 
-    void collectMaterials (const yup::EntityNode& entity)
+    void collectMaterials (yup::Entity entity)
     {
-        auto* meshNode = entity.getNode<yup::MeshNode>();
+        auto* meshNode = entity.get<yup::MeshNode>();
         if (meshNode == nullptr || meshNode->mesh == nullptr)
             return;
 
@@ -774,6 +780,7 @@ private:
     std::vector<Part> parts;
     std::vector<yup::Material::Ptr> materials;
     yup::Texture::Ptr texture;
+    bool redrawn = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MpcFaceplate)
 };

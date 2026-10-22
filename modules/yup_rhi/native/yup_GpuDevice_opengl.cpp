@@ -167,6 +167,10 @@ public:
 
     //==============================================================================
 
+    // The uniform ring writes with glBufferSubData: return false to fall back to per-draw uniform
+    // buffers, should a driver stall on writes to a buffer that queued draws still read
+    bool isDynamicUniformOffsetAvailable() const noexcept override { return true; }
+
     bool isComputeAvailable() const noexcept override
     {
         if (renderContext == nullptr)
@@ -199,6 +203,27 @@ public:
             return false;
         });
 #endif
+    }
+
+    using GpuDevice::getMaximumSampleCount;
+
+    uint32_t getMaximumSampleCount (GpuTextureFormat format) const noexcept override
+    {
+        if (! isFormatRenderable (format))
+            return 0;
+
+        const auto internalFormat = toGLInternalFormat (format);
+        if (internalFormat == 0)
+            return GpuDevice::getMaximumSampleCount (format);
+
+        // GL_SAMPLES lists the supported counts in descending order, so the first is the highest
+        GLint samples = 0;
+        withGLContext ([&]
+        {
+            glGetInternalformativ (GL_RENDERBUFFER, internalFormat, GL_SAMPLES, 1, &samples);
+        });
+
+        return std::bit_floor (jlimit (1u, GpuDevice::getMaximumSampleCount(), static_cast<uint32_t> (jmax (1, samples))));
     }
 
     //==============================================================================
@@ -573,6 +598,49 @@ private:
             return withActivator (options.computeContextActivator, std::forward<Fn> (fn));
 
         return withActivator (options.contextActivator, std::forward<Fn> (fn));
+    }
+
+    /** The sized GL internal format ore allocates for a renderable format, or 0
+        when the format is not renderable on every GL flavor (rgba8snorm is
+        texture-only on OpenGL ES 3.0). */
+    static GLenum toGLInternalFormat (GpuTextureFormat format) noexcept
+    {
+        switch (format)
+        {
+            case GpuTextureFormat::r8unorm:
+                return GL_R8;
+            case GpuTextureFormat::rg8unorm:
+                return GL_RG8;
+            case GpuTextureFormat::rgba8unorm:
+            case GpuTextureFormat::bgra8unorm:
+                return GL_RGBA8;
+            case GpuTextureFormat::rgba16float:
+                return GL_RGBA16F;
+            case GpuTextureFormat::rg16float:
+                return GL_RG16F;
+            case GpuTextureFormat::r16float:
+                return GL_R16F;
+            case GpuTextureFormat::rgba32float:
+                return GL_RGBA32F;
+            case GpuTextureFormat::rg32float:
+                return GL_RG32F;
+            case GpuTextureFormat::r32float:
+                return GL_R32F;
+            case GpuTextureFormat::rgb10a2unorm:
+                return GL_RGB10_A2;
+            case GpuTextureFormat::r11g11b10float:
+                return GL_R11F_G11F_B10F;
+            case GpuTextureFormat::depth16unorm:
+                return GL_DEPTH_COMPONENT16;
+            case GpuTextureFormat::depth24plusStencil8:
+                return GL_DEPTH24_STENCIL8;
+            case GpuTextureFormat::depth32float:
+                return GL_DEPTH_COMPONENT32F;
+            case GpuTextureFormat::depth32floatStencil8:
+                return GL_DEPTH32F_STENCIL8;
+            default:
+                return 0;
+        }
     }
 
     OffscreenContextSlot* acquireOffscreenContext()

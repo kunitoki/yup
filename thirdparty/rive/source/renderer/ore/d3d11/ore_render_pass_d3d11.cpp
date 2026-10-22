@@ -309,6 +309,18 @@ void RenderPassD3D11::setBindGroup(uint32_t groupIndex,
             m_d3d11Context->PSSetShaderResources(tex.psSlot, 1, &tex.srv);
     }
 
+    for (const auto& storage : bg->m_d3d11StorageBuffers)
+    {
+        if (storage.vsSlot != BindingMap::kAbsent)
+            m_d3d11Context->VSSetShaderResources(storage.vsSlot,
+                                                 1,
+                                                 &storage.srv);
+        if (storage.psSlot != BindingMap::kAbsent)
+            m_d3d11Context->PSSetShaderResources(storage.psSlot,
+                                                 1,
+                                                 &storage.srv);
+    }
+
     for (const auto& samp : bg->m_d3d11Samplers)
     {
         if (samp.vsSlot != BindingMap::kAbsent)

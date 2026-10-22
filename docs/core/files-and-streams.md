@@ -68,9 +68,9 @@ auto stream = asset.createInputStream();   // works on every platform, incl. And
   same location as `bundleDirectory` when the current binary is the standalone application.
 - On Android, files under `bundleDirectory`/`hostBundleDirectory` are read directly out of the
   APK via `AAssetManager` - there is no first-run copy to disk - and the location is read-only:
-  `createOutputStream()`, `deleteFile()` and `createDirectory()` all fail cleanly. A directory
-  containing only subdirectories (no files of its own) reports `isDirectory() == false`, and
-  `findChildFiles()` / `DirectoryIterator` do not enumerate asset paths.
+  `createOutputStream()`, `deleteFile()` and `createDirectory()` all fail cleanly.
+  `findChildFiles()` and `DirectoryIterator` list bundled files and folders, though the APK
+  stores no modification times, and `MemoryMappedFile` can't map a bundled file.
 
 ## Directory iteration
 

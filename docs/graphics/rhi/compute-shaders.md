@@ -112,6 +112,12 @@ the compute pass, and beginning a compute pass closes the open render pass,
 which reopens on its next draw. OpenGL and WebGPU begin a standalone pass, as
 above.
 
+On WebGPU the standalone pass is submitted to the queue when it finishes, and
+the frame's render passes when the frame is submitted, so render passes still
+see what the dispatch wrote as long as the compute pass finishes first (end its
+scope or call `finish()`). The reverse does not hold: a dispatch that reads what
+an earlier render pass of the same frame drew runs before that render pass.
+
 ## Storage buffers
 
 Storage buffers (`GpuBufferType::storage`) are read-write GPU buffers for compute
@@ -126,8 +132,8 @@ auto buf = GpuBuffer::create (device,
 ```
 
 Unlike vertex/index/uniform buffers that go through ore, storage buffers are
-allocated directly on the native API (Metal `MTLBuffer`, D3D11 structured
-buffer + UAV, WebGPU `Storage` buffer, GL `GL_SHADER_STORAGE_BUFFER`).
+allocated directly on the native API (Metal `MTLBuffer`, D3D11 raw buffer
+with a UAV and an SRV, WebGPU `Storage` buffer, GL `GL_SHADER_STORAGE_BUFFER`).
 
 ### Updating a storage buffer in place
 
@@ -139,32 +145,141 @@ a real-time thread such as an audio callback, unsafe: buffer allocation has
 unbounded, driver-dependent latency and can cause audible dropouts.
 
 `GpuDevice::updateBuffer()` writes new data into an *existing* storage buffer
-without reallocating it:
+instead of creating a new one:
 
 ```cpp
 // Once, outside the hot loop:
 auto buf = GpuBuffer::create (device, GpuBufferType::storage, initialData, byteSize);
 
-// Every frame / audio callback — no allocation:
+// Every frame / audio callback:
 device->updateBuffer (buf, newData, byteSize);
 ```
 
 `byteSize` must not exceed the buffer's original size. Supported on all
 compute-capable backends (Metal, D3D11, WebGPU, OpenGL).
 
-### Buffer binding indices on Metal
+On Metal the update never waits for the GPU. While a submitted or still recording
+frame may read the buffer, the new contents go to another backing: work encoded
+earlier keeps what it bound, later draws and dispatches see the update, even
+within one frame or render pass. That allocates a backing on a pool miss; a few
+spares per buffer are recycled once idle, so a per-frame update stops allocating
+after its first frames. Data a compute pass is still writing to the old backing
+is not carried over, so read such a buffer back before updating it. Update a
+buffer and record the passes that bind it from the same thread.
 
-`GpuComputePass`'s native dispatch binds Metal buffer arguments directly as
-`group*16 + binding` (see `native/yup_GpuComputePass_metal.cpp`) — there is no
-reflection layer translating GLSL `(set, binding)` pairs to the compiled
-function's actual `[[buffer(N)]]` indices, unlike the render pipeline path.
-This requires the transpiled MSL's argument indices to exactly match the
-GLSL/SPIR-V declared `binding=N` values. The transpiler enforces this by
-setting `CompilerMSL::Options::enable_decoration_binding = true`; without it,
-spirv-cross assigns MSL buffer indices via its own auto-incrementing scheme,
-which can silently diverge from the declared bindings for any shader with
-more than one buffer resource, producing a pipeline that compiles and
-dispatches without error but never actually reads/writes the intended data.
+### Binding indices on Metal and Direct3D 11
+
+On Metal and Direct3D 11, compute resources must be declared in group (set) 0.
+The transpiled MSL and HLSL (shader model 5.0, which has no register spaces)
+index every resource by its GLSL `binding` alone, ignoring the set:
+`binding = N` becomes `[[buffer(N)]]`, `[[texture(N)]]` or `[[sampler(N)]]` in
+MSL, and `register(uN)` (storage buffers and storage textures), `register(tN)`
+(textures), `register(sN)` (samplers) or `register(bN)` (uniform buffers) in
+HLSL. `GpuComputePass` binds each resource kind at that index, with no
+reflection layer translating `(set, binding)` pairs as the render pipeline
+path has. A resource in any other set lands on the wrong slot (debug builds
+assert).
+
+On Metal, buffers, textures and samplers each have their own index space, so
+a storage buffer, a texture and a sampler may share a binding number, but a
+combined `sampler2D` takes both the texture and the sampler slot of its
+binding.
+
+On Direct3D 11 the index spaces are the HLSL register letters instead. In
+compute shaders every storage buffer, `readonly` or not, and every storage
+texture shares the `u` registers, so they need distinct bindings. Textures use
+`t`, samplers `s` and uniform buffers `b`; a combined `sampler2D` takes both
+`tN` and `sN`. Vertex and fragment shaders are not bound this way: their
+slots are assigned automatically, see
+[Several bind groups](pipelines.md#several-bind-groups).
+
+The transpiler keeps the declared bindings by setting
+`CompilerMSL::Options::enable_decoration_binding = true`; without it,
+spirv-cross assigns indices with its own auto-incrementing scheme, producing a
+pipeline that compiles and dispatches without error but never reads or writes
+the intended resources.
+
+## Textures and storage textures
+
+A compute shader can read textures and write storage textures, and render
+passes later in the same `GpuFrame` sample what it wrote:
+
+```cpp
+GpuTextureDesc desc (256, 256, GpuTextureFormat::rgba16float);
+desc.storage = true; // compute shaders may write it
+auto image = GpuTexture::create (device, desc);
+
+auto frame = GpuFrame::begin (device);
+
+auto pass = GpuComputePass::begin (frame);
+pass.setPipeline (generate);              // layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D target;
+pass.setStorageTexture (0, 0, image);     // mip 0 by default, or pass a GpuTextureViewDesc
+pass.dispatch (256 / 8, 256 / 8, 1);
+
+auto renderPass = target->beginRenderPass (frame);
+renderPass.setTexture (0, 0, image);      // the draws see the dispatch
+// ...
+frame.submit();
+```
+
+- `GpuTextureDesc::storage` allocates a texture compute shaders can write. It
+  requires `GpuDevice::isStorageTextureAvailable()`, and cannot be combined
+  with multisampling or a depth / stencil format: `GpuTexture::create` returns
+  `nullptr` in those cases.
+- `GpuComputePass::setStorageTexture` binds one mip level for writing, chosen
+  by the view's `baseMipLevel`. For a 2D texture it binds that level, declared
+  as `image2D`; for a 2D-array or 3D texture it binds every layer or slice of
+  the level, declared as `image2DArray` / `image3D` in the shader. Cube
+  textures cannot be bound as storage textures on any backend: the call
+  asserts and is ignored, so write cube faces with render passes.
+- `GpuComputePass::setTexture` binds a whole texture for reading, with
+  `texelFetch` or through a sampler. Compute passes bind no default samplers,
+  so set every sampler the shader declares with `GpuComputePass::setSampler`,
+  even one only used to build a `sampler2D` for `texelFetch`.
+
+Storage textures are implemented on Metal, Direct3D 11, Vulkan and
+WebGPU. Desktop OpenGL,
+OpenGL ES and WebGL2 are raster-only and have no storage textures:
+`isStorageTextureAvailable()` returns false there.
+
+On Direct3D 11 a storage texture needs a format with typed UAV support:
+`GpuTexture::create` returns `nullptr` for block-compressed formats, and for
+`bgra8unorm` on hardware that lacks it. Writing with `imageStore` works for the
+other color formats, but reading a storage image with `imageLoad` is only
+guaranteed for single-channel 32-bit formats such as `r32float`.
+
+On Vulkan:
+
+- A pass writing a storage texture must be begun on a `GpuFrame`. A pass begun
+  on a device submits its own command buffer, and its dispatch fails with an
+  assertion.
+- A pass begun on a device can only sample a texture that a submitted frame
+  has rendered into, or one uploaded before a frame began. Textures backed by
+  a Rive image or canvas can only be sampled by a pass begun on a `GpuFrame`.
+  Otherwise the dispatch fails with an assertion.
+- The storage format must support storage images on the device. `rgba8unorm`,
+  `rgba16float` and `rgba32float` always do.
+- Declare the image format in the shader (`rgba16f`, `rgba8`, ...). Writing a
+  storage image without a format qualifier needs an optional device feature.
+- A texture uploaded in the middle of a frame receives its data at the next
+  render pass of that frame. A compute pass recorded before that render pass
+  does not see the upload.
+
+### Bindings on WebGPU
+
+WebGPU compute pipelines lay out every resource the shader declares, whether
+it uses it or not, and a dispatch must bind all of them: when one is missing,
+`dispatch()` asserts and returns false. A combined `sampler2D` also gets a
+companion sampler binding, which the transpiler places after the set's declared
+bindings, so compute shaders meant for WebGPU should declare a separate
+`texture2D` and `sampler` instead.
+
+Each GLSL `set` becomes its own bind group, so on WebGPU resources may live in
+any group. Storage textures must use a format WebGPU can write: `rgba8unorm`,
+`rgba8snorm`, `rgba16float`, `rgba32float`, `r32float` or `rg32float` (not in
+compatibility mode), with the matching image format qualifier in the shader
+(`rgba8`, `rgba8_snorm`, `rgba16f`, `rgba32f`, `r32f`, `rg32f`). Other formats
+produce an invalid texture and a validation error in the browser console.
 
 ## Example: GPU audio effect
 
@@ -172,8 +287,9 @@ The `GpuAudioProcessingDemo` example demonstrates real-time audio processing on
 the GPU:
 
 1. `AudioIODeviceCallback` captures live audio input
-2. Audio samples are written into a preallocated `GpuBuffer` storage buffer via
-   `updateBuffer()` — no GPU allocation happens on the audio thread
+2. Audio samples are written into a ring of preallocated `GpuBuffer` storage
+   buffers via `updateBuffer()`; the GPU is done with a slot before it is
+   rewritten, so no GPU allocation happens on the audio thread
 3. A compute shader applies gain + soft clipping
 4. Processed samples are read back from the GPU
 5. Results are routed to the audio output

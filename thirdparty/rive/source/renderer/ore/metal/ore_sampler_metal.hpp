@@ -11,6 +11,7 @@ class SamplerMetal : public LITE_RTTI_OVERRIDE(Sampler, SamplerMetal)
 public:
     SamplerMetal() = default;
     ~SamplerMetal() override = default; // ARC releases m_mtlSampler
+    id<MTLSamplerState> mtlSampler() const { return m_mtlSampler; }
 
 private:
     friend class ContextMetal;

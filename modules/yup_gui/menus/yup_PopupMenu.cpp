@@ -38,6 +38,7 @@ constexpr float tickedTextIndent = 8.0f;
 constexpr float submenuArrowWidth = 24.0f;
 constexpr float shortcutTextWidth = 80.0f;
 constexpr float screenEdgePadding = 5.0f;
+constexpr float dragScrollThreshold = 8.0f;
 
 void removeActivePopup (PopupMenu* popupMenu)
 {
@@ -862,10 +863,39 @@ void PopupMenu::paint (Graphics& g)
 
 void PopupMenu::mouseDown (const MouseEvent& event)
 {
+    isDragScrolling = false;
+
+    // Items act on release: a finger may be starting a drag, which must not flash the row under it
+    if (! getLocalBounds().contains (event.getPosition()))
+        dismiss();
+}
+
+void PopupMenu::mouseUp (const MouseEvent& event)
+{
+    // A release ending a drag picks nothing and keeps the menu, wherever the finger is
+    if (std::exchange (isDragScrolling, false))
+        return;
+
     if (! getLocalBounds().contains (event.getPosition()))
     {
         dismiss();
         return;
+    }
+
+    // Scrolls on release: the press can reach the menu twice, through the global listener too
+    if (showScrollIndicators)
+    {
+        if (getScrollUpIndicatorBounds().contains (event.getPosition()))
+        {
+            scrollUp();
+            return;
+        }
+
+        if (getScrollDownIndicatorBounds().contains (event.getPosition()))
+        {
+            scrollDown();
+            return;
+        }
     }
 
     auto itemIndex = getItemIndexAt (event.getPosition());
@@ -876,33 +906,34 @@ void PopupMenu::mouseDown (const MouseEvent& event)
     if (item.isSeparator() || ! item.isEnabled)
         return;
 
-    setSelectedItemIndex (itemIndex, true);
-
     if (item.isSubMenu())
     {
-        // For submenus, we show them on hover, not on click
+        setSelectedItemIndex (itemIndex, true);
         showSubmenu (itemIndex);
-    }
-}
-
-void PopupMenu::mouseUp (const MouseEvent& event)
-{
-    if (! getLocalBounds().contains (event.getPosition()))
-    {
-        dismiss();
         return;
     }
-
-    auto itemIndex = getItemIndexAt (event.getPosition());
-    if (! isPositiveAndBelow (itemIndex, getNumItems()))
-        return;
-
-    auto& item = *items[itemIndex];
-    if (item.isSeparator() || ! item.isEnabled || item.isSubMenu())
-        return;
 
     hideSubmenus();
     dismiss (item.itemID);
+}
+
+void PopupMenu::mouseDrag (const MouseEvent& event)
+{
+    // Only a finger drags the list, a mouse scrolls with the wheel and the arrows
+    if (! event.isTouch() || ! needsScrolling())
+        return;
+
+    if (! isDragScrolling)
+    {
+        if (std::abs (event.getPosition().getY() - event.getLastMouseDownPosition().getY()) < dragScrollThreshold)
+            return;
+
+        isDragScrolling = true;
+        dragAnchorY = event.getLastMouseDownPosition().getY();
+        setSelectedItemIndex (-1, true);
+    }
+
+    dragScroll (event.getPosition().getY());
 }
 
 void PopupMenu::mouseMove (const MouseEvent& event)
@@ -941,6 +972,10 @@ void PopupMenu::mouseMove (const MouseEvent& event)
 
 void PopupMenu::mouseEnter (const MouseEvent& event)
 {
+    // A finger enters right before pressing, it has no hover to show
+    if (event.isTouch())
+        return;
+
     int itemIndex = getItemIndexAt (event.getPosition());
     YUP_MODULE_DBG (GUI_POPUPMENU, "mouseEnter: itemIndex=" << itemIndex << " hasVisibleSubmenu=" << (hasVisibleSubmenu() ? 1 : 0) << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
 
@@ -1630,6 +1665,40 @@ void PopupMenu::scrollDown()
 
         // Repaint to update the display
         repaint();
+    }
+}
+
+void PopupMenu::dragScroll (float y)
+{
+    // Scrolls a row each time the finger travels its height, the anchor follows the scrolled rows
+    for (;;)
+    {
+        const auto delta = y - dragAnchorY;
+
+        if (delta > 0.0f && canScrollUp())
+        {
+            const auto rowHeight = jmax (1.0f, getItemHeight (*items[static_cast<size_t> (visibleItemRange.getStart() - 1)]));
+            if (delta < rowHeight)
+                return;
+
+            scrollUp();
+            dragAnchorY += rowHeight;
+        }
+        else if (delta < 0.0f && canScrollDown())
+        {
+            const auto rowHeight = jmax (1.0f, getItemHeight (*items[static_cast<size_t> (visibleItemRange.getStart())]));
+            if (-delta < rowHeight)
+                return;
+
+            scrollDown();
+            dragAnchorY -= rowHeight;
+        }
+        else
+        {
+            // Past either end, scrolling back starts as soon as the finger turns around
+            dragAnchorY = y;
+            return;
+        }
     }
 }
 

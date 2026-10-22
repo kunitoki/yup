@@ -350,6 +350,7 @@ struct TextureDesc
     TextureFormat format = TextureFormat::rgba8unorm;
     TextureType type = TextureType::texture2D;
     bool renderTarget = false;
+    bool storage = false;
     uint32_t numMipmaps = 1;
     uint32_t sampleCount = 1;
     const char* label = nullptr;
@@ -727,6 +728,15 @@ struct BindGroupDesc
     uint32_t textureCount = 0;
     const SampEntry* samplers = nullptr;
     uint32_t samplerCount = 0;
+    struct StorageEntry
+    {
+        uint32_t slot = 0;
+        void* nativeBuffer = nullptr;
+        uint64_t offset = 0;
+        uint64_t size = 0;
+    };
+    const StorageEntry* storageBuffers = nullptr;
+    uint32_t storageBufferCount = 0;
     const char* label = nullptr;
 };
 

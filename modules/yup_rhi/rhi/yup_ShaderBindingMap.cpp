@@ -114,7 +114,7 @@ std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflectio
         pushEntry (ub, ResourceKind::UniformBuffer, false);
 
     for (const auto& sb : reflection.storageBuffers)
-        pushEntry (sb, ResourceKind::StorageBufferRW, false);
+        pushEntry (sb, sb.readOnly ? ResourceKind::StorageBufferRO : ResourceKind::StorageBufferRW, false);
 
     for (const auto& img : reflection.separateImages)
         pushEntry (img, ResourceKind::SampledTexture, true);
@@ -123,7 +123,7 @@ std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflectio
         pushEntry (img, ResourceKind::StorageTexture, true);
 
     for (const auto& samp : reflection.separateSamplers)
-        pushEntry (samp, ResourceKind::Sampler, false);
+        pushEntry (samp, samp.imageIsDepth ? ResourceKind::ComparisonSampler : ResourceKind::Sampler, false);
 
     bm.finalize();
     return bm.toBlob();
@@ -178,6 +178,47 @@ std::vector<uint8_t> makeGLFixupBlob (const ShaderReflection& reflection)
         blob.push_back ((uint8_t) (nameLen & 0xff));
         blob.push_back ((uint8_t) ((nameLen >> 8) & 0xff));
         blob.insert (blob.end(), nameBytes, nameBytes + nameLen);
+    }
+
+    return blob;
+}
+
+//==============================================================================
+
+std::vector<uint8_t> makeGLTextureSamplerPairsBlob (const ShaderReflection& reflection)
+{
+    // The combined uniform is named by setupGLCombinedSamplers() in yup_shading, which falls
+    // back to "img<id>" / "samp<id>" for an unnamed texture or sampler
+    auto nameOf = [] (const ShaderReflection::ResourceBinding& r, const char* fallbackPrefix)
+    {
+        return r.name.isNotEmpty() ? r.name : String (fallbackPrefix) + String (r.resourceId);
+    };
+
+    // spirv-cross treats "__" as invalid and collapses each run of underscores when it compiles
+    auto combinedName = [&nameOf] (const ShaderReflection::ResourceBinding& image, const ShaderReflection::ResourceBinding& sampler)
+    {
+        auto name = "yup_combined_" + nameOf (image, "img") + "_" + nameOf (sampler, "samp");
+
+        while (name.contains ("__"))
+            name = name.replace ("__", "_");
+
+        return name;
+    };
+
+    std::vector<uint8_t> blob;
+
+    for (const auto& cs : reflection.glCombinedSamplers)
+    {
+        for (const auto& image : reflection.separateImages)
+        {
+            for (const auto& sampler : reflection.separateSamplers)
+            {
+                if (cs.name != combinedName (image, sampler))
+                    continue;
+
+                blob.insert (blob.end(), { (uint8_t) image.set, (uint8_t) image.binding, (uint8_t) sampler.set, (uint8_t) sampler.binding });
+            }
+        }
     }
 
     return blob;

@@ -38,7 +38,14 @@ function (_yup_module_parse_config module_header output_module_configs output_mo
             if ("${stripped_line}" STREQUAL "")
                 continue()
             endif()
-            list (APPEND module_configs ${stripped_line})
+
+            # A line without a key continues the value of the previous one, as a new comma separated item
+            if (module_configs AND NOT stripped_line MATCHES "^[A-Za-z_][A-Za-z0-9_]*:([ \t]|$)")
+                list (POP_BACK module_configs previous_config)
+                set (stripped_line "${previous_config}, ${stripped_line}")
+            endif()
+
+            list (APPEND module_configs "${stripped_line}")
         elseif (line MATCHES "^.*Config:.*")
             string (STRIP "${line}" stripped_line)
             string (REGEX REPLACE "^.*Config:(.*)$" "\\1" user_config_name ${stripped_line})
@@ -788,6 +795,14 @@ function (yup_add_module module_path modules_definitions module_group)
             _yup_boolean_property ("${value}" module_submodules)
         elseif (${key} MATCHES "^vsToolOverrides$")
             _yup_comma_or_space_separated_list ("${value}" module_vs_tool_overrides)
+        elseif (${key} MATCHES "^shaderDirectory$")
+            set (module_shader_directory "${value}")
+        elseif (${key} MATCHES "^shaderIncludes$")
+            _yup_comma_or_space_separated_list ("${value}" module_shader_includes)
+        elseif (${key} MATCHES "^shaderDefinePrefix$")
+            set (module_shader_define_prefix "${value}")
+        elseif (${key} MATCHES "^shaderBundles$")
+            set (module_shader_bundles "${value}")
         endif()
     endforeach()
 
@@ -1019,6 +1034,15 @@ function (yup_add_module module_path modules_definitions module_group)
 
     if (module_upstream_target)
         add_dependencies (${module_name} "${module_upstream_target}")
+    endif()
+
+    if (module_shader_bundles)
+        _yup_module_add_shader_bundles ("${module_name}"
+                                        "${module_path}"
+                                        "${module_shader_directory}"
+                                        "${module_shader_includes}"
+                                        "${module_shader_define_prefix}"
+                                        "${module_shader_bundles}")
     endif()
 
     #set (${module_name}_Configs "${module_user_configs}")
