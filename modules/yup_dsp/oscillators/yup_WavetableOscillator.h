@@ -208,11 +208,7 @@ public:
         if (fft == nullptr || tableSize <= 0)
             return;
 
-        if (crossfadePosition < CoeffType (1))
-        {
-            FloatVectorOperations::subtract (next.data(), current.data(), tableSize);
-            FloatVectorOperations::addWithMultiply (current.data(), next.data(), static_cast<SampleType> (crossfadePosition), tableSize);
-        }
+        bakeCrossfade();
 
         FloatVectorOperations::clear (spectrum.data(), tableSize * 2);
 
@@ -243,13 +239,46 @@ public:
 
         renderedHarmonics = limit;
         seriesChanged = false;
-        crossfadePosition = CoeffType (0);
 
-        if (! crossfade)
-        {
-            std::swap (current, next);
-            crossfadePosition = CoeffType (1);
-        }
+        startCrossfade (crossfade);
+    }
+
+    /**
+        Starts crossfading into the table another oscillator rendered last, instead
+        of running an inverse FFT.
+
+        This lets oscillators playing the same series at close pitches, like unison
+        voices, share one render: render the source, then call renderFrom() on the
+        others. The copied table holds the harmonics the source rendered for its own
+        frequency, so render the source at the highest pitch any of the sharing
+        oscillators plays, or the higher ones will alias. Lower ones simply lack the
+        few top harmonics they could have played.
+
+        The source's latest rendition is taken, even while it is still crossfading
+        into it. An in-progress crossfade of this oscillator is baked first, as in
+        render(). The source's rendered harmonic count is taken over and the series
+        is marked as rendered, so needsRender() on this oscillator no longer reflects
+        its own series and pitch until the next render().
+
+        @param source     The oscillator to copy from. Must have the same table size.
+        @param crossfade  When false, installs the table immediately, as in render().
+    */
+    void renderFrom (const WavetableOscillator& source, bool crossfade = true) noexcept
+    {
+        jassert (source.getTableSize() == tableSize);
+
+        if (&source == this || source.getTableSize() != tableSize || tableSize <= 0)
+            return;
+
+        bakeCrossfade();
+
+        const auto& latest = source.crossfadePosition < CoeffType (1) ? source.next : source.current;
+        FloatVectorOperations::copy (next.data(), latest.data(), tableSize);
+
+        renderedHarmonics = source.renderedHarmonics;
+        seriesChanged = false;
+
+        startCrossfade (crossfade);
     }
 
     /** Reads the rendered waveform at a phase in periods without advancing state.
@@ -277,6 +306,16 @@ public:
     //==============================================================================
     /** Returns the rendered table size in samples. */
     int getTableSize() const noexcept { return tableSize; }
+
+    /** Returns the table being played, one period long.
+
+        While a crossfade is in progress this is the table being faded out, not the
+        mix being heard. Empty before prepare().
+    */
+    Span<const SampleType> getRenderedTable() const noexcept
+    {
+        return { current.data(), current.size() };
+    }
 
     /** Returns the number of harmonics present in the rendered table. */
     int getNumRenderedHarmonics() const noexcept { return renderedHarmonics; }
@@ -330,6 +369,26 @@ public:
 
 private:
     //==============================================================================
+    void bakeCrossfade() noexcept
+    {
+        if (crossfadePosition >= CoeffType (1))
+            return;
+
+        FloatVectorOperations::subtract (next.data(), current.data(), tableSize);
+        FloatVectorOperations::addWithMultiply (current.data(), next.data(), static_cast<SampleType> (crossfadePosition), tableSize);
+    }
+
+    void startCrossfade (bool crossfade) noexcept
+    {
+        crossfadePosition = CoeffType (0);
+
+        if (crossfade)
+            return;
+
+        std::swap (current, next);
+        crossfadePosition = CoeffType (1);
+    }
+
     SampleType readAtPhase (double normalizedPhase, bool derivative) const noexcept
     {
         if (tableSize <= 0 || ! std::isfinite (normalizedPhase))

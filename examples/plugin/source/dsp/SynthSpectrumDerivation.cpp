@@ -128,16 +128,9 @@ double SynthSpectrumDerivation::measurePeak (const yup::FourierSeries<double>& s
     peakMeter.setSeries (series);
     peakMeter.render (false);
 
-    auto peak = 0.0;
+    const auto table = peakMeter.getRenderedTable();
 
-    for (int index = 0; index < peakResolution; ++index)
-    {
-        const auto phase = static_cast<double> (index) / static_cast<double> (peakResolution);
-
-        peak = yup::jmax (peak, std::abs (static_cast<double> (peakMeter.getValueAtPhase (phase))));
-    }
-
-    return peak;
+    return static_cast<double> (yup::FloatVectorOperations::maxAbs (table.data(), static_cast<int> (table.size())));
 }
 
 void SynthSpectrumDerivation::matchSourcePeak (yup::FourierSeries<double>& series) noexcept

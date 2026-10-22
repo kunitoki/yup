@@ -42,6 +42,7 @@ void SynthOscillator::prepare (double newSampleRate,
     slotBuffer.assign (static_cast<std::size_t> (yup::jmax (1, maxBlockSize)), 0.0f);
 
     appliedSeriesGeneration = -1;
+    sharedSlotCount = 0;
     usingLocalSeries = false;
 }
 
@@ -83,7 +84,20 @@ void SynthOscillator::renderBlock (float* left,
 
     applySeries (values, deriveLocally, yup::getNyquistHarmonicLimit (lowest, sampleRate, SynthExample::maxHarmonics));
 
-    renderTable (wavetable, numSamples, detunedFrequency (played, values, centreIndex, slotCount));
+    // The highest slot renders the one table every slot plays, so none of them aliases.
+    // Satellites are assigned in slot order around the center, so it is the last one.
+    auto& lead = slotCount == 1 ? wavetable : satellites[static_cast<std::size_t> (slotCount - 2)];
+    lead.setFrequency (detunedFrequency (played, values, slotCount - 1, slotCount));
+
+    const auto rendered = lead.needsRender();
+
+    if (rendered)
+        lead.render();
+
+    const auto share = rendered || slotCount != sharedSlotCount;
+    sharedSlotCount = slotCount;
+
+    renderTable (wavetable, lead, share, numSamples, detunedFrequency (played, values, centreIndex, slotCount));
     accumulateSlot (left, right, numSamples, slotOffset (centreIndex, slotCount) * values.unisonSpread, slotGain);
 
     for (int index = 0, satellite = 0; index < slotCount; ++index)
@@ -92,6 +106,8 @@ void SynthOscillator::renderBlock (float* left,
             continue;
 
         renderTable (satellites[static_cast<std::size_t> (satellite++)],
+                     lead,
+                     share,
                      numSamples,
                      detunedFrequency (played, values, index, slotCount));
 
@@ -133,14 +149,18 @@ void SynthOscillator::accumulateSlot (float* left, float* right, int numSamples,
     }
 }
 
-/** Renders one table into the slot buffer; render() crossfades into a new table,
-    which is what keeps a modulated shape from stepping. */
-void SynthOscillator::renderTable (yup::WavetableOscillator<float>& table, int numSamples, double frequency) noexcept
+/** Plays one slot into the slot buffer; renderFrom() crossfades into the lead's new
+    table, which is what keeps a modulated shape from stepping. */
+void SynthOscillator::renderTable (yup::WavetableOscillator<float>& table,
+                                   const yup::WavetableOscillator<float>& lead,
+                                   bool share,
+                                   int numSamples,
+                                   double frequency) noexcept
 {
     table.setFrequency (frequency);
 
-    if (table.needsRender())
-        table.render();
+    if (share && &table != &lead)
+        table.renderFrom (lead);
 
     table.processBlock (slotBuffer.data(), numSamples);
 }

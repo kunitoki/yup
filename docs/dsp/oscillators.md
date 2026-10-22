@@ -110,6 +110,7 @@ void processBlock (double* output, int numSamples)
 | `SyncSpectralResampler::transform` | `O (N_in * N_out)` vectorized multiply-accumulates (`FloatVectorOperations`), `O (N_in)` transcendental calls. |
 | `AdditiveOscillator::processSample` | SIMD harmonic accumulation; two fundamental-phasor trig calls every 64 samples and two rotation trig calls per frequency change. |
 | `WavetableOscillator::render` | One inverse FFT of the oversampled table. |
+| `WavetableOscillator::renderFrom` | One table copy instead of an FFT, so unison voices can share a single render. |
 | `WavetableOscillator::processSample` | One Hermite table read (two while crossfading). |
 
 ## Choosing a synthesis backend

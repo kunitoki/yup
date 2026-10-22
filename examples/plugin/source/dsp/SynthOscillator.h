@@ -34,7 +34,8 @@
     derived here instead, from the voice's own values.
 
     Unison is built from bare yup::WavetableOscillator satellites playing the same
-    series as the center, detuned and panned around it.
+    series as the center, detuned and panned around it. Only the highest slot renders
+    a table; the others copy it with renderFrom() instead of running their own FFT.
 
     @see SynthOscillatorSlot, SynthSpectrumDerivation
 */
@@ -73,7 +74,11 @@ private:
     static double detunedFrequency (double frequency, const SynthOscillatorValues& values, int slotIndex, int slotCount) noexcept;
 
     void accumulateSlot (float* left, float* right, int numSamples, float pan, float gain) noexcept;
-    void renderTable (yup::WavetableOscillator<float>& table, int numSamples, double frequency) noexcept;
+    void renderTable (yup::WavetableOscillator<float>& table,
+                      const yup::WavetableOscillator<float>& lead,
+                      bool share,
+                      int numSamples,
+                      double frequency) noexcept;
     void applySeries (const SynthOscillatorValues& values, bool deriveLocally, int numLocalHarmonics) noexcept;
     void setSeries (const yup::FourierSeries<double>& series) noexcept;
 
@@ -88,5 +93,6 @@ private:
     std::vector<float> slotBuffer;
     double sampleRate = 44100.0;
     int appliedSeriesGeneration = -1;
+    int sharedSlotCount = 0;
     bool usingLocalSeries = false;
 };

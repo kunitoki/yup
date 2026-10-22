@@ -66,10 +66,6 @@ public:
     void invalidate() noexcept { hasApplied = false; }
 
 private:
-    /** Points the display samples the peak search walks. Twice the harmonic count
-        resolves the highest harmonic; this is four times it, for a little margin. */
-    static constexpr int peakResolution = 512;
-
     double measurePeak (const yup::FourierSeries<double>& series) noexcept;
     void matchSourcePeak (yup::FourierSeries<double>& series) noexcept;
 

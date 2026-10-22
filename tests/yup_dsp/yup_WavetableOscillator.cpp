@@ -231,3 +231,136 @@ TEST_F (WavetableOscillatorTests, DirectPhaseReadsAndDerivativesDoNotAdvancePlay
     EXPECT_NEAR (MathConstants<double>::twoPi, oscillator.getSlopeAtPhase (0.0), 0.005);
     EXPECT_EQ (0.0, oscillator.getPhase());
 }
+
+TEST_F (WavetableOscillatorTests, RenderedTableMatchesSeriesAfterImmediateRender)
+{
+    WavetableOscillator<double> oscillator;
+    EXPECT_TRUE (oscillator.getRenderedTable().empty());
+
+    FourierSeries<double> series (16);
+    series.setHarmonic (1, 1.0, 0.0);
+
+    oscillator.prepare (testSampleRate, 16);
+    oscillator.setSeries (series);
+    oscillator.render (false);
+
+    const auto table = oscillator.getRenderedTable();
+
+    ASSERT_EQ (static_cast<std::size_t> (oscillator.getTableSize()), table.size());
+    EXPECT_NEAR (1.0, table[0], 1e-6);
+}
+
+TEST_F (WavetableOscillatorTests, RenderFromPlaysTheSourceTable)
+{
+    WavetableOscillator<double> source;
+    WavetableOscillator<double> follower;
+
+    source.prepare (testSampleRate, 32);
+    follower.prepare (testSampleRate, 32);
+
+    source.setSeries (FourierSeries<double>::create (Waveform::sawtooth, 32));
+    source.setFrequency (440.0);
+    follower.setFrequency (440.0);
+
+    source.render (false);
+    follower.renderFrom (source, false);
+
+    EXPECT_EQ (source.getNumRenderedHarmonics(), follower.getNumRenderedHarmonics());
+
+    for (int i = 0; i < 256; ++i)
+        EXPECT_EQ (source.processSample(), follower.processSample()) << i;
+}
+
+TEST_F (WavetableOscillatorTests, RenderFromCrossfadesLikeRender)
+{
+    constexpr int crossfadeLength = 64;
+
+    WavetableOscillator<double> source;
+    WavetableOscillator<double> previous;
+    WavetableOscillator<double> follower;
+
+    source.prepare (testSampleRate, 32, crossfadeLength);
+    previous.prepare (testSampleRate, 32, crossfadeLength);
+    follower.prepare (testSampleRate, 32, crossfadeLength);
+
+    source.setSeries (FourierSeries<double>::create (Waveform::square, 32));
+    previous.setSeries (FourierSeries<double>::create (Waveform::sawtooth, 32));
+    follower.setSeries (FourierSeries<double>::create (Waveform::sawtooth, 32));
+
+    for (auto* oscillator : { &source, &previous, &follower })
+    {
+        oscillator->setFrequency (440.0);
+        oscillator->setPhase (0.25);
+        oscillator->render (false);
+    }
+
+    follower.renderFrom (source);
+
+    // The crossfade starts from the table that was playing.
+    EXPECT_EQ (previous.processSample(), follower.processSample());
+    source.processSample();
+
+    for (int i = 1; i < crossfadeLength; ++i)
+    {
+        follower.processSample();
+        source.processSample();
+    }
+
+    for (int i = 0; i < 256; ++i)
+        EXPECT_EQ (source.processSample(), follower.processSample()) << i;
+}
+
+TEST_F (WavetableOscillatorTests, RenderFromTakesTheLatestRendition)
+{
+    WavetableOscillator<double> source;
+    WavetableOscillator<double> reference;
+    WavetableOscillator<double> follower;
+
+    source.prepare (testSampleRate, 32);
+    reference.prepare (testSampleRate, 32);
+    follower.prepare (testSampleRate, 32);
+
+    source.setSeries (FourierSeries<double>::create (Waveform::sawtooth, 32));
+    source.render (false);
+
+    // The source is left mid-crossfade towards the square.
+    source.setSeries (FourierSeries<double>::create (Waveform::square, 32));
+    source.render();
+    source.processSample();
+
+    reference.setSeries (FourierSeries<double>::create (Waveform::square, 32));
+    reference.render (false);
+
+    follower.renderFrom (source, false);
+
+    for (int i = 0; i < 256; ++i)
+        EXPECT_EQ (reference.processSample(), follower.processSample()) << i;
+}
+
+TEST_F (WavetableOscillatorTests, RenderFromIgnoresMismatchedTableSize)
+{
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
+    GTEST_SKIP() << "Copying a table of a different size triggers an assertion when assertions are enabled or logged";
+#endif
+
+    WavetableOscillator<double> source;
+    WavetableOscillator<double> reference;
+    WavetableOscillator<double> follower;
+
+    source.prepare (testSampleRate, 128);
+    reference.prepare (testSampleRate, 16);
+    follower.prepare (testSampleRate, 16);
+
+    source.setWaveform (Waveform::sawtooth);
+    source.render (false);
+
+    reference.setWaveform (Waveform::sine);
+    follower.setWaveform (Waveform::sine);
+    reference.render (false);
+    follower.render (false);
+
+    follower.renderFrom (source, false);
+
+    for (int i = 0; i < 256; ++i)
+        EXPECT_EQ (reference.processSample(), follower.processSample()) << i;
+}

@@ -75,6 +75,9 @@ PrismEditor::PrismEditor (PrismProcessor& processorToEdit)
     , pitchWheelComponent (processor.getKeyboardState(), "PitchWheel")
     , modWheelComponent (processor.getKeyboardState(), "ModWheel")
 {
+    if (auto palette = yup::ThemePalette::fromString ("https://coolors.co/011627-f71735-41ead4-fdfffc-ff9f1c"); palette.wasOk())
+        yup::ApplicationTheme::getGlobalTheme()->setPalette (palette.getReference());
+
     const auto& parameters = processor.getSynthParameters();
     const auto controlFont = getSynthFont (10.0f);
 
