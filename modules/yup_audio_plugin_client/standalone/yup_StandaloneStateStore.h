@@ -23,7 +23,8 @@
 
 #if YUP_EMSCRIPTEN
 // clang-format off
-EM_JS (int, yupStandaloneStateLength, (const char* key), {
+EM_JS (int, yupStandaloneStateLength, (const char* key),
+{
     if (typeof localStorage === 'undefined')
         return -1;
 
@@ -31,12 +32,14 @@ EM_JS (int, yupStandaloneStateLength, (const char* key), {
     return value === null ? -1 : lengthBytesUTF8 (value);
 });
 
-EM_JS (void, yupStandaloneStateRead, (const char* key, char* buffer, int size), {
+EM_JS (void, yupStandaloneStateRead, (const char* key, char* buffer, int size),
+{
     var value = localStorage.getItem (UTF8ToString (key));
     stringToUTF8 (value === null ? "" : value, buffer, size);
 });
 
-EM_JS (int, yupStandaloneStateWrite, (const char* key, const char* value), {
+EM_JS (int, yupStandaloneStateWrite, (const char* key, const char* value),
+{
     if (typeof localStorage === 'undefined')
         return 0;
 
