@@ -72,7 +72,7 @@ bool ExampleEditor::shouldPreserveAspectRatio() const
 
 yup::Size<int> ExampleEditor::getPreferredSize() const
 {
-    return { 600, 400 };
+    return { 800, 600 };
 }
 
 void ExampleEditor::resized()

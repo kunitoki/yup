@@ -29,8 +29,6 @@ ChannelSection::ChannelRowComponent::ChannelRowComponent()
     setWantsMouseEvents (false, true);
 
     addAndMakeVisible (toggle);
-
-    nameLabel.setColor (Label::Style::textFillColorId, Colors::black);
     addAndMakeVisible (nameLabel);
 }
 
@@ -100,6 +98,7 @@ ChannelSection::ChannelSection()
     setOpaque (false);
 
     listBox.setModel (&model);
+    listBox.setRowSize (AudioDeviceManagerPanel::itemHeight);
     addAndMakeVisible (sectionLabel);
     addAndMakeVisible (listBox);
 }
@@ -128,11 +127,16 @@ BigInteger ChannelSection::getActiveChannels() const
     return model.getActiveChannels();
 }
 
+int ChannelSection::getNumChannels() const noexcept
+{
+    return model.getNumChannels();
+}
+
 void ChannelSection::resized()
 {
     auto bounds = getLocalBounds();
-    sectionLabel.setBounds (bounds.removeFromTop (20));
-    listBox.setBounds (bounds.reduced (2, 2));
+    sectionLabel.setBounds (bounds.removeFromTop (AudioDeviceManagerPanel::itemHeight));
+    listBox.setBounds (bounds);
 }
 
 } // namespace yup

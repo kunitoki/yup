@@ -66,6 +66,15 @@ top-right `audio` and `midi` indicators show the current browser permission and
 runtime state. This activation is provided by the shell and audio-device
 backend, so individual examples do not need their own browser-specific button.
 
+## Microphone input (Emscripten)
+
+Opening the audio worklet device with input channels asks the browser for
+microphone access and feeds the microphone to those inputs, with echo
+cancellation, noise suppression and automatic gain turned off. Access needs a
+secure context (HTTPS or `localhost`). Until the user allows it, or if they
+deny it, the inputs are silent. A mono microphone feeds both channels of a
+stereo input.
+
 ## Audio thread rules on the web
 
 The audio callback runs on the browser's audio worklet, which cannot block.

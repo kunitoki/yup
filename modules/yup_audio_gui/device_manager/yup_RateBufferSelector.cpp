@@ -91,15 +91,16 @@ void RateBufferSelector::fireChanged()
 void RateBufferSelector::resized()
 {
     auto bounds = getLocalBounds();
-    const int rowH = bounds.getHeight() / 2;
+    const auto rowH = AudioDeviceManagerPanel::itemHeight;
     const int labelW = 170; // matches shared column split used by other selectors
 
     auto rateRow = bounds.removeFromTop (rowH);
-    rateLabel.setBounds (rateRow.removeFromLeft (labelW).reduced (0, 10));
-    rateCombo.setBounds (rateRow.reduced (2, 4));
+    bounds = bounds.removeFromBottom (rowH);
+    rateLabel.setBounds (rateRow.removeFromLeft (labelW));
+    rateCombo.setBounds (rateRow.reduced (2, 0));
 
-    bufferLabel.setBounds (bounds.removeFromLeft (labelW).reduced (0, 10));
-    bufferCombo.setBounds (bounds.reduced (2, 4));
+    bufferLabel.setBounds (bounds.removeFromLeft (labelW));
+    bufferCombo.setBounds (bounds.reduced (2, 0));
 }
 
 } // namespace yup

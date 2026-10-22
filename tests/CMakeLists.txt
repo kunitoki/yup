@@ -258,6 +258,12 @@ if (YUP_PLATFORM_DESKTOP AND "yup_audio_plugin_client" IN_LIST target_test_modul
             "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_clap.cpp")
     endif()
 
+    target_sources (${target_name} PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_standalone.cpp")
+    set_source_files_properties (
+        "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_standalone.cpp"
+        PROPERTIES HEADER_FILE_ONLY FALSE)
+
     if (TARGET sdk)
         target_link_libraries (${target_name} PRIVATE sdk)
         target_sources (${target_name} PRIVATE

@@ -44,6 +44,9 @@ public:
     */
     void populateOutput (const Array<MidiDeviceInfo>& devices, const String& selectedId);
 
+    /** Returns the number of MIDI inputs listed. */
+    int getNumInputDevices() const noexcept;
+
     //==============================================================================
     /** Called when the user toggles any MIDI input. Receives the full set of enabled IDs. */
     std::function<void (const StringArray& enabledIds)> onInputsChanged;
@@ -78,6 +81,7 @@ private:
 
         void setDevices (const Array<MidiDeviceInfo>& devices, const StringArray& enabledIds);
         StringArray getEnabledIds() const;
+        int getNumDevices() const noexcept { return midiDevices.size(); }
         std::function<void (const StringArray&)> onInputsChanged;
 
         int getNumRows() override;

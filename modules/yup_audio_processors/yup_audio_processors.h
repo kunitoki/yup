@@ -66,6 +66,7 @@
 #include "processors/yup_AudioSpec.h"
 #include "processors/yup_AudioProcessContext.h"
 #include "processors/yup_AudioProcessor.h"
+#include "processors/yup_StandalonePluginHost.h"
 #include "spectral/yup_SpectralSpec.h"
 #include "spectral/yup_SpectralProcessContext.h"
 #include "spectral/yup_SpectralProcessor.h"

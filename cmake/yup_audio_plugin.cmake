@@ -50,8 +50,18 @@ function (yup_audio_plugin)
     string (REGEX REPLACE "[^A-Za-z0-9.-]" "-" target_bundle_id "${target_bundle_id}")
 
     # ==== Validation stage
-    if (NOT YUP_PLATFORM_DESKTOP)
-        _yup_message (FATAL_ERROR "Audio plugins are not supported on emscripten or mobile (yet).")
+    if (YUP_PLATFORM_EMSCRIPTEN)
+        if (NOT YUP_ARG_PLUGIN_CREATE_STANDALONE)
+            _yup_message (FATAL_ERROR "Only the standalone plugin format is supported on emscripten.")
+            return()
+        endif()
+
+        _yup_message (STATUS "Building only the standalone plugin format on emscripten")
+        foreach (plugin_format CLAP VST3 AU AUv3 AAX LV2)
+            set (YUP_ARG_PLUGIN_CREATE_${plugin_format} OFF)
+        endforeach()
+    elseif (NOT YUP_PLATFORM_DESKTOP)
+        _yup_message (FATAL_ERROR "Audio plugins are not supported on mobile (yet).")
         return()
     endif()
 

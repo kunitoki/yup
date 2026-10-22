@@ -168,6 +168,66 @@ cmake -G "Ninja" . -B build -DYUP_ENABLE_TESTS=OFF -DYUP_ENABLE_EXAMPLES=OFF
 cmake --build build --config Release
 ```
 
+## Standalone Application
+
+`PLUGIN_CREATE_STANDALONE ON` builds the plugin as an application. The window
+shows a slim toolbar above the editor:
+
+- **Settings** opens the audio and MIDI device settings inside the window. Close
+  it with the Close button, Escape or a click outside the panel.
+- **Keyboard** (only for synths and plugins that accept MIDI) shows an on-screen
+  keyboard that plays the plugin.
+
+Enabled MIDI inputs play the plugin, and MIDI the plugin produces goes to the
+selected MIDI output (desktop only). The device setup and the plugin state are
+saved when the settings close and when the application quits, then restored on
+the next launch. On desktop they live in
+`<user application data>/<PLUGIN_VENDOR>/<PLUGIN_NAME>/standalone.xml`.
+
+An editor that prefers its own settings button can hide the toolbar. Only the
+standalone application has a host, so this code does nothing when the plugin is
+loaded as CLAP, VST3 or AU:
+
+```cpp
+MyEditor::MyEditor()
+{
+    if (auto* host = yup::StandalonePluginHost::getInstance())
+    {
+        host->setToolbarVisible (false);
+
+        settingsButton.onClick = []
+        {
+            if (auto* host = yup::StandalonePluginHost::getInstance())
+                host->showAudioSettings();
+        };
+        addAndMakeVisible (settingsButton);
+    }
+}
+```
+
+### Standalone in the browser
+
+With Emscripten only the standalone format is built, so the same
+`yup_audio_plugin` call works unchanged. For the example plugin:
+
+```bash
+just emscripten Debug example_plugin_standalone_plugin
+just emscripten_serve
+```
+
+Then open the generated `.html` page under `build/emscripten/examples/plugin/Debug/`.
+
+- Click the canvas once to start audio, as browsers require.
+- Settings opens inside the canvas. Web MIDI devices can be enabled there
+  (Chrome and Edge support Web MIDI).
+- Plugins with audio inputs ask for microphone access. The browser only allows
+  it on `https` or `localhost`. If permission is denied the input stays silent.
+- The device setup and plugin state are kept in the browser `localStorage`
+  under `yup.standalone.<PLUGIN_ID>`, saved whenever the page is hidden.
+- MIDI output is not sent from the browser standalone.
+- `CUSTOM_SHELL`, `PRELOAD_FILES`, `INITIAL_MEMORY`, `PTHREAD_POOL_SIZE` and
+  `STACK_SIZE` given to `yup_audio_plugin` are passed to the standalone target.
+
 ## Plugin Installation
 
 ### macOS

@@ -33,6 +33,7 @@
     license:            ISC
 
     dependencies:       yup_audio_processors yup_gui
+    testDeps:           yup_audio_devices yup_audio_gui
 
   END_YUP_MODULE_DECLARATION
 
