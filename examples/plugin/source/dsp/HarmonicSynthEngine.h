@@ -1,0 +1,119 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#pragma once
+
+#include "SynthParameters.h"
+#include "SynthVoice.h"
+
+#include <atomic>
+
+//==============================================================================
+/** Polyphonic synthesiser rendering the two oscillators of every voice.
+
+    MIDI and rendering methods belong to the audio thread. The parameters are read from
+    the per-chunk value table the processor passes in, and the drawn partials from
+    SynthPartials, whose generation tells the oscillator slots when to rebuild.
+
+    @see SynthParameters, SynthPartials, PrismProcessor
+*/
+class HarmonicSynthEngine : public yup::Synthesiser
+{
+public:
+    HarmonicSynthEngine (const SynthParameters& parameters,
+                         const std::array<SynthPartials, SynthExample::oscillatorCount>& partials);
+
+    /** Prepares every voice. Must run outside the audio callback. */
+    void prepare (double sampleRate, int maxBlockSize);
+
+    /** Requests a release of all keys without taking the synthesiser lock on the UI thread. */
+    void requestAllNotesOff() noexcept { releaseRequested.store (true); }
+
+    /** Renders one range of the buffer with sample-accurate note boundaries.
+
+        Only the MIDI events inside the range are handled, so a block can be rendered as
+        a sequence of control chunks, each with its own parameter values.
+
+        @param output           The buffer the voices add into
+        @param midi             The whole block's MIDI; events outside the range are left alone
+        @param startSample      The first sample of the range
+        @param numSamples       The length of the range
+        @param parameterValues  One real value per parameter index, for this range
+    */
+    void renderRange (yup::AudioBuffer<float>& output,
+                      const yup::MidiBuffer& midi,
+                      int startSample,
+                      int numSamples,
+                      yup::Span<const float> parameterValues);
+
+    void noteOn (int channel, int note, float velocity) override;
+    void noteOff (int channel, int note, float velocity, bool tailOff) override;
+    void allNotesOff (int channel, bool tailOff) override;
+    void handleController (int channel, int controller, int value) override;
+
+    /** Returns the phase of an LFO in the most recently started voice, for its display. */
+    float getLFOPhase (int lfoIndex) const noexcept
+    {
+        return lfoPhases[static_cast<std::size_t> (lfoIndex)].load();
+    }
+
+    /** Returns the shared waveform presets, which the waveform displays also read. */
+    const SynthOscillatorResources& getResources() const noexcept { return resources; }
+
+    /** Returns the note of a sounding voice, or -1 when the synthesiser is silent. */
+    int getCurrentlyPlayingNote() const noexcept;
+
+    /** Returns how many voices are currently sounding. */
+    int getNumActiveVoices() const noexcept { return activeVoices.load(); }
+
+private:
+    void updateContext (yup::Span<const float> parameterValues) noexcept;
+    void publishVoiceState() noexcept;
+    void playMonoNote (int channel, int note, float velocity);
+    void selectMonoNote (bool tailOff);
+
+    struct HeldNote
+    {
+        yup::uint64 order = 0;
+        float velocity = 0.0f;
+        bool down = false;
+    };
+
+    const SynthParameters& parameters;
+    const std::array<SynthPartials, SynthExample::oscillatorCount>& partials;
+
+    std::array<HeldNote, 16 * 128> heldNotes {};
+    std::array<bool, 16> sustain {};
+    yup::uint64 noteOrder = 0;
+    SynthPlayMode mode = SynthPlayMode::poly;
+    double portamentoSeconds = 0.0;
+    bool monoKeyActive = false;
+    std::atomic<bool> releaseRequested { false };
+    std::atomic<int> activeVoices { 0 };
+
+    SynthOscillatorResources resources;
+    std::array<SynthOscillatorSlot, SynthExample::oscillatorCount> oscillatorSlots;
+    std::array<std::atomic<float>, SynthExample::lfoCount> lfoPhases {};
+    SynthBlockContext context;
+    yup::ReferenceCountedArray<SynthVoice> ownedVoices;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HarmonicSynthEngine)
+};

@@ -262,9 +262,6 @@ private:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ArtboardLayout
 #include "examples/ArtboardLayout.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
-#include "examples/Audio.h"
-#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_AudioFile
 #include "examples/AudioFile.h"
 #endif
@@ -538,9 +535,6 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ArtboardLayout
         addDemo ("ArtboardLayout", "Artboard Layout", [] { return std::make_unique<ArtboardLayoutDemo>(); });
-#endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
-        addDemo ("Audio", "Audio", [] { return std::make_unique<AudioExample>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_AudioFile
         addDemo ("AudioFile", "Audio File", [] { return std::make_unique<AudioFileDemo>(); });

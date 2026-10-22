@@ -172,9 +172,16 @@ function (yup_validate_pluginval target_name plugin_path)
         return()
     endif()
 
+    # pluginval scans the user LV2 folder, and lilv fails on the .DS_Store Finder leaves there
+    set (lv2_cleanup_command "")
+    if (YUP_PLATFORM_MAC)
+        set (lv2_cleanup_command COMMAND ${CMAKE_COMMAND} -E rm -f "$ENV{HOME}/Library/Audio/Plug-Ins/LV2/.DS_Store")
+    endif()
+
     add_custom_command(
         TARGET ${target_name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "[PLUGINVAL] Starting validation of ${target_name}..."
+        ${lv2_cleanup_command}
         COMMAND
             "${PLUGINVAL_EXECUTABLE}"
             --strictness-level 5

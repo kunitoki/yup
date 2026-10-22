@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -21,34 +21,29 @@
 
 #pragma once
 
-#include <yup_gui/yup_gui.h>
-
-#include "ExamplePlugin.h"
+#include "SynthModulationMatrix.h"
 
 //==============================================================================
-
-class ExampleEditor
-    : public yup::AudioProcessorEditor
-    , public yup::Timer
+/** The sixteen routings of the modulation matrix, IDs "mod1.source" to "mod16.depth". */
+class SynthModulationParameters
 {
 public:
-    ExampleEditor (ExamplePlugin& processor);
+    /** The three parameters of one routing. */
+    struct Slot
+    {
+        yup::AudioParameter::Ptr source;
+        yup::AudioParameter::Ptr destination;
+        yup::AudioParameter::Ptr depth;
+    };
 
-    // yup::AudioProcessorEditor
-    bool isResizable() const override;
-    bool shouldPreserveAspectRatio() const override;
-    yup::Size<int> getPreferredSize() const override;
+    /** Creates every slot unrouted. */
+    SynthModulationParameters();
 
-    // yup::Component
-    void paint (yup::Graphics& g) override;
-    void resized() override;
+    /** Registers every parameter with the processor. */
+    void addTo (yup::AudioProcessor& processor) const;
 
-    // yup::Timer
-    void timerCallback() override;
+    /** Takes a snapshot of every routing. */
+    SynthModulationValues read (SynthParameterReader reader = {}) const noexcept;
 
-private:
-    ExamplePlugin& audioProcessor;
-
-    yup::AudioParameter::Ptr gainParameter;
-    std::unique_ptr<yup::Slider> x;
+    std::array<Slot, SynthExample::modulationSlots> slots;
 };
