@@ -156,6 +156,13 @@ void PrismProcessor::processBlock (yup::AudioProcessContext<float>& context)
     for (; change != context.params.end(); ++change)
         applyParameterChange (*change);
 
+    for (int channel = 0; channel < static_cast<int> (outputPeaks.size()); ++channel)
+    {
+        const auto source = yup::jmin (channel, audio.getNumChannels() - 1);
+        const auto peak = source >= 0 && numSamples > 0 ? audio.getMagnitude (source, 0, numSamples) : 0.0f;
+        outputPeaks[static_cast<std::size_t> (channel)].store (peak, std::memory_order_relaxed);
+    }
+
     // Whatever is left in the buffer goes back to the host as output events.
     context.midi.clear();
 }
@@ -247,17 +254,22 @@ yup::Result PrismProcessor::loadStateFromDataTree (const yup::DataTree& state)
 
 yup::Result PrismProcessor::saveStateIntoDataTree (yup::DataTree& state)
 {
-    state = SynthPatch::createState (getParameters(), getPatchState(), currentPreset.load());
+    state = SynthPatch::createState (getParameters(), getPatchState(), currentPreset.load(), getPresetInfo());
     return yup::Result::ok();
 }
 
 yup::Result PrismProcessor::savePresetFile (const yup::File& file)
 {
-    const auto xml = SynthPatch::createState (getParameters(), getPatchState(), -1).createXml();
+    auto info = getPresetInfo();
+    info.name = file.getFileNameWithoutExtension();
+
+    const auto xml = SynthPatch::createState (getParameters(), getPatchState(), -1, info).createXml();
 
     if (xml == nullptr || ! xml->writeTo (file))
         return yup::Result::fail ("Cannot write " + file.getFullPathName());
 
+    currentPreset.store (-1);
+    setPresetInfo (std::move (info));
     return yup::Result::ok();
 }
 
@@ -268,7 +280,28 @@ yup::Result PrismProcessor::loadPresetFile (const yup::File& file)
     if (xml == nullptr)
         return yup::Result::fail ("Cannot read " + file.getFullPathName());
 
-    return applyState (yup::DataTree::fromXml (*xml), ChangeDetails {}.withProgramChanged (true));
+    if (auto result = applyState (yup::DataTree::fromXml (*xml), ChangeDetails {}.withProgramChanged (true)); result.failed())
+        return result;
+
+    if (auto info = getPresetInfo(); info.name.isEmpty())
+    {
+        info.name = file.getFileNameWithoutExtension();
+        setPresetInfo (std::move (info));
+    }
+
+    return yup::Result::ok();
+}
+
+SynthPatch::PresetInfo PrismProcessor::getPresetInfo() const
+{
+    const yup::SpinLock::ScopedLockType lock (presetInfoLock);
+    return presetInfo;
+}
+
+void PrismProcessor::setPresetInfo (SynthPatch::PresetInfo newInfo)
+{
+    const yup::SpinLock::ScopedLockType lock (presetInfoLock);
+    presetInfo = std::move (newInfo);
 }
 
 yup::Result PrismProcessor::applyState (const yup::DataTree& state, ChangeDetails details)
@@ -277,6 +310,7 @@ yup::Result PrismProcessor::applyState (const yup::DataTree& state, ChangeDetail
         return result;
 
     currentPreset.store (SynthPatch::getPresetIndex (state));
+    setPresetInfo (SynthPatch::readInfo (state));
 
     updateHostDisplay (details.withParameterValuesChanged (true).withNonParameterStateChanged (true));
     return yup::Result::ok();

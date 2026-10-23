@@ -37,6 +37,28 @@ struct SynthNetworkControls
     double noteFrequency = 440.0;
     std::array<bool, SynthExample::oscillatorCount> deriveLocally {};
     bool refreshSpectra = false; /**< True when local spectra may be rebuilt in this chunk. */
+
+    /** Silences every disabled operator and removes the phase modulation it gives or takes.
+
+        The matrix ramps gains and amounts across the chunk, so switching an operator
+        does not click, and an operator left without gain or modulation stops rendering.
+    */
+    void applyEnables() noexcept
+    {
+        for (std::size_t op = 0; op < oscillators.size(); ++op)
+        {
+            if (oscillators[op].enabled)
+                continue;
+
+            oscillators[op].level = 0.0f;
+
+            for (std::size_t other = 0; other < oscillators.size(); ++other)
+            {
+                fm.amounts[other][op] = 0.0f;
+                fm.amounts[op][other] = 0.0f;
+            }
+        }
+    }
 };
 
 //==============================================================================

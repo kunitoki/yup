@@ -26,10 +26,11 @@
 
 SynthModulationPage::SynthModulationPage (const SynthParameters& parametersToEdit,
                                           SynthRoutes& routesToEdit,
-                                          yup::Span<const yup::AudioParameter::Ptr> processorParameters,
-                                          const yup::Font& font)
+                                          yup::Span<const yup::AudioParameter::Ptr> processorParameters)
     : routes (routesToEdit)
 {
+    setOpaque (false);
+
     for (const auto& parameter : processorParameters)
     {
         const auto index = SynthPatch::findRouteDestination (processorParameters, parameter->getID());
@@ -38,13 +39,10 @@ SynthModulationPage::SynthModulationPage (const SynthParameters& parametersToEdi
             destinations.push_back ({ parameter->getID(), parameter->getName(), index });
     }
 
-    setupPanelTitle (titleLabel, "MODULATION  /  SOURCE > DESTINATION, DEPTH", font);
-    addAndMakeVisible (titleLabel);
-
     for (std::size_t slot = 0; slot < rows.size(); ++slot)
     {
         rows[slot] = std::make_unique<SynthModulationRow> (static_cast<int> (slot), routesToEdit, destinations,
-                                                           parametersToEdit.modulation.depths[slot], font);
+                                                           parametersToEdit.modulation.depths[slot]);
         addChildComponent (*rows[slot]);
     }
 
@@ -65,10 +63,7 @@ void SynthModulationPage::syncFromParameters()
 
 void SynthModulationPage::resized()
 {
-    auto bounds = getLocalBounds().reduced (panelInset);
-
-    titleLabel.setBounds (bounds.removeFromTop (headerHeight));
-    bounds.removeFromTop (spacing);
+    auto bounds = getLocalBounds();
 
     // Every used route, then the first free slot to add the next one, as many as fit.
     auto offeredEmpty = false;
@@ -88,9 +83,4 @@ void SynthModulationPage::resized()
             bounds.removeFromTop (spacing);
         }
     }
-}
-
-void SynthModulationPage::paint (yup::Graphics& g)
-{
-    paintSynthPanel (g, getLocalBounds());
 }

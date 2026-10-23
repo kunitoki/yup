@@ -22,50 +22,87 @@
 #include "SynthLFOPanel.h"
 #include "SynthTheme.h"
 
-SynthLFOPanel::SynthLFOPanel (const yup::String& panelTitle,
-                              const SynthLFOParameters& parametersToEdit,
-                              const SynthCurveState& curvesToShow,
-                              int lfoIndex,
-                              const yup::Font& font)
+SynthLFOPanel::SynthLFOPanel (const SynthLFOParameters& parametersToEdit, const SynthCurveState& curvesToShow, int lfoIndex)
     : parameters (parametersToEdit)
     , curves (curvesToShow)
     , index (lfoIndex)
     , shownValues (parametersToEdit.read())
-    , syncButton ("SYNC", parametersToEdit.tempoSync)
-    , shapeChoice ("SHAPE", parametersToEdit.shape, font)
-    , divisionChoice ("DIVISION", parametersToEdit.division, font)
-    , retriggerChoice ("TRIGGER", parametersToEdit.retrigger, font)
-    , rateKnob ("RATE", parametersToEdit.rate, font)
-    , phaseKnob ("PHASE", parametersToEdit.phase, font)
-    , smoothKnob ("SMOOTH", parametersToEdit.smoothing, font)
-    , depthKnob ("DEPTH", parametersToEdit.depth, font)
+    , shapeSelector (parametersToEdit.shape, makeShapeSegments())
+    , retriggerChoice ({}, parametersToEdit.retrigger, SynthTheme::valueFont (13.5f))
+    , rateKnob ("RATE", parametersToEdit.rate, SynthTheme::captionFont (12.0f))
+    , phaseKnob ("PHASE", parametersToEdit.phase, SynthTheme::captionFont (12.0f))
+    , smoothKnob ("SMOOTH", parametersToEdit.smoothing, SynthTheme::captionFont (12.0f))
+    , depthKnob ("DEPTH", parametersToEdit.depth, SynthTheme::captionFont (12.0f))
 {
-    setupPanelTitle (titleLabel, panelTitle, font);
-    addAndMakeVisible (titleLabel);
-
-    addAndMakeVisible (syncButton);
+    setOpaque (false);
 
     display.setValues (shownValues);
-    addAndMakeVisible (display);
 
-    for (auto* choice : { &shapeChoice, &divisionChoice, &retriggerChoice })
-        addAndMakeVisible (*choice);
+    for (auto* control : std::initializer_list<yup::Component*> { &shapeSelector, &retriggerChoice, &display })
+        addAndMakeVisible (*control);
 
     for (auto* knob : { &rateKnob, &phaseKnob, &smoothKnob, &depthKnob })
+    {
+        knob->getKnob().setAccent (SynthTheme::lfoAccent());
         addAndMakeVisible (*knob);
+    }
 
+    rateKnob.setCaptionShowsValue (true);
     syncFromParameters();
+}
+
+std::vector<ParameterSegmented::Segment> SynthLFOPanel::makeShapeSegments()
+{
+    const auto polyline = [] (std::initializer_list<yup::Point<float>> points)
+    {
+        yup::Path path;
+        auto first = true;
+
+        for (const auto& point : points)
+        {
+            if (first)
+                path.moveTo (point.getX(), point.getY());
+            else
+                path.lineTo (point.getX(), point.getY());
+
+            first = false;
+        }
+
+        return path;
+    };
+
+    yup::Path sine;
+    sine.moveTo (0.0f, 0.5f);
+    sine.cubicTo (0.2f, -0.15f, 0.3f, -0.15f, 0.5f, 0.5f);
+    sine.cubicTo (0.7f, 1.15f, 0.8f, 1.15f, 1.0f, 0.5f);
+
+    yup::Path smoothRandom;
+    smoothRandom.moveTo (0.0f, 0.6f);
+    smoothRandom.cubicTo (0.15f, 0.1f, 0.3f, 0.2f, 0.42f, 0.55f);
+    smoothRandom.cubicTo (0.55f, 0.95f, 0.75f, 0.9f, 0.82f, 0.4f);
+    smoothRandom.cubicTo (0.88f, 0.1f, 0.95f, 0.2f, 1.0f, 0.3f);
+
+    yup::Path custom;
+    custom.moveTo (0.0f, 1.0f);
+    custom.lineTo (0.25f, 0.0f);
+    custom.cubicTo (0.4f, 0.6f, 0.55f, 0.7f, 0.7f, 0.45f);
+    custom.lineTo (1.0f, 1.0f);
+
+    // In the order of getSynthLFOShapeNames().
+    return { { "Sine", sine },
+             { "Triangle", polyline ({ { 0.0f, 0.5f }, { 0.25f, 0.0f }, { 0.75f, 1.0f }, { 1.0f, 0.5f } }) },
+             { "Saw Up", polyline ({ { 0.0f, 1.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f } }) },
+             { "Square", polyline ({ { 0.0f, 1.0f }, { 0.0f, 0.0f }, { 0.5f, 0.0f }, { 0.5f, 1.0f }, { 1.0f, 1.0f } }) },
+             { "S&H", polyline ({ { 0.0f, 0.7f }, { 0.25f, 0.7f }, { 0.25f, 0.1f }, { 0.5f, 0.1f }, { 0.5f, 0.9f }, { 0.75f, 0.9f }, { 0.75f, 0.4f }, { 1.0f, 0.4f } }) },
+             { "Saw Down", polyline ({ { 0.0f, 1.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f } }) },
+             { "Smooth Random", smoothRandom },
+             { "Custom", custom } };
 }
 
 void SynthLFOPanel::syncFromParameters()
 {
-    syncButton.syncFromParameter();
-
-    for (auto* choice : { &shapeChoice, &divisionChoice, &retriggerChoice })
-        choice->syncFromParameter();
-
-    for (auto* knob : { &rateKnob, &phaseKnob, &smoothKnob, &depthKnob })
-        knob->syncFromParameter();
+    shapeSelector.syncFromParameter();
+    retriggerChoice.syncFromParameter();
 
     if (const auto values = parameters.read(); values != shownValues)
     {
@@ -73,41 +110,36 @@ void SynthLFOPanel::syncFromParameters()
         display.setValues (values);
     }
 
+    rateKnob.setParameter (shownValues.tempoSync ? parameters.division : parameters.rate);
+
+    for (auto* knob : { &rateKnob, &phaseKnob, &smoothKnob, &depthKnob })
+        knob->syncFromParameter();
+
     if (const auto generation = curves.getGeneration(); generation != shownGeneration)
     {
         shownGeneration = generation;
         display.setCurve (curves.getLFO (index));
     }
-
-    rateKnob.setEnabled (! shownValues.tempoSync);
-    divisionChoice.setEnabled (shownValues.tempoSync);
 }
 
 void SynthLFOPanel::resized()
 {
-    auto bounds = getLocalBounds().reduced (panelInset);
+    const auto gap = SynthTheme::controlGap;
+    auto bounds = getLocalBounds();
 
-    auto header = bounds.removeFromTop (headerHeight);
-    syncButton.setBounds (header.removeFromRight (buttonWidth));
-    titleLabel.setBounds (header);
-    bounds.removeFromTop (spacing);
+    auto line = bounds.removeFromTop (lineHeight);
+    retriggerChoice.setBounds (line.removeFromRight (retriggerWidth));
+    line.removeFromRight (gap);
+    shapeSelector.setBounds (line.withWidth (yup::jmin (line.getWidth(), 8.0f * 26.0f)));
+    bounds.removeFromTop (gap);
 
-    auto knobs = bounds.removeFromBottom (yup::jmin (58.0f, bounds.getHeight() * 0.5f));
-    bounds.removeFromBottom (spacing);
-
-    auto choices = bounds.removeFromRight (choiceWidth);
-    bounds.removeFromRight (spacing);
+    auto knobs = bounds.removeFromBottom (knobRowHeight);
+    bounds.removeFromBottom (gap);
     display.setBounds (bounds);
 
-    const auto choiceRow = choices.getHeight() / 3.0f;
+    rateKnob.setBounds (knobs.removeFromLeft (knobs.getWidth() * 0.31f));
+    const auto width = knobs.getWidth() / 3.0f;
 
-    for (auto* choice : { &shapeChoice, &divisionChoice, &retriggerChoice })
-        choice->setBounds (choices.removeFromTop (choiceRow));
-
-    layoutControlsInRow (knobs, { &rateKnob, &phaseKnob, &smoothKnob, &depthKnob });
-}
-
-void SynthLFOPanel::paint (yup::Graphics& g)
-{
-    paintSynthPanel (g, getLocalBounds());
+    for (auto* knob : { &phaseKnob, &smoothKnob, &depthKnob })
+        knob->setBounds (knobs.removeFromLeft (width).reduced (0.0f, 6.0f));
 }

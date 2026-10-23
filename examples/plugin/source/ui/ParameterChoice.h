@@ -32,7 +32,7 @@
     The items are the parameter's own value texts, one per step. An empty caption
     leaves the whole height to the box. A pick is one host gesture.
 
-    @see ParameterKnob, ParameterToggle
+    @see ParameterKnob, ParameterSegmented
 */
 class ParameterChoice : public yup::Component
 {

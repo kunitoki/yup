@@ -47,7 +47,7 @@ SynthFilterValues makeFilterDefaults (int index)
     SynthFilterValues values;
 
     if (index > 0)
-        values.type = SynthFilterType::off;
+        values.enabled = false;
 
     return values;
 }
@@ -115,6 +115,26 @@ void SynthParameters::addTo (yup::AudioProcessor& processor) const
     for (const auto& parameter : processor.getParameters())
         jassert (hostIDs.insert (parameter->getHostParameterID()).second);
 #endif
+}
+
+std::vector<yup::AudioParameter::Ptr> SynthParameters::getEnableParameters() const
+{
+    std::vector<yup::AudioParameter::Ptr> result;
+
+    for (const auto& oscillator : oscillators)
+        result.push_back (oscillator.enabled);
+
+    for (const auto& filter : filters)
+        result.push_back (filter.enabled);
+
+    for (const auto& envelope : envelopes)
+        if (envelope.enabled != nullptr)
+            result.push_back (envelope.enabled);
+
+    for (const auto& lfo : lfos)
+        result.push_back (lfo.enabled);
+
+    return result;
 }
 
 SynthGlobalValues SynthParameters::readGlobals (SynthParameterReader reader) const noexcept

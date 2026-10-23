@@ -30,6 +30,7 @@ struct SynthEnvelopeValues
     float timeScale = 1.0f; /**< Multiplies every segment duration. */
     float velocity = 0.0f;  /**< How much the note velocity scales the output, 0 to 1. */
     float depth = 1.0f;     /**< Output scale as a modulation source. */
+    bool enabled = true;    /**< Off is not computed and sources 0; the amplitude envelope is always on. */
 
     bool operator== (const SynthEnvelopeValues&) const = default;
 
@@ -61,4 +62,5 @@ public:
     yup::AudioParameter::Ptr timeScale;
     yup::AudioParameter::Ptr velocity;
     yup::AudioParameter::Ptr depth;
+    yup::AudioParameter::Ptr enabled; /**< Stepped, 0 or 1; null for the amplitude envelope, which is always on. */
 };

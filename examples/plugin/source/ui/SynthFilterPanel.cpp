@@ -22,45 +22,50 @@
 #include "SynthFilterPanel.h"
 #include "SynthTheme.h"
 
-SynthFilterPanel::SynthFilterPanel (const yup::String& panelTitle, const SynthFilterParameters& parametersToEdit, const yup::Font& font)
-    : typeChoice ("TYPE", parametersToEdit.type, font)
-    , cutoffKnob ("CUTOFF", parametersToEdit.cutoff, font)
-    , resonanceKnob ("RESO", parametersToEdit.resonance, font)
-    , driveKnob ("DRIVE", parametersToEdit.drive, font)
-    , keytrackKnob ("KEYTRACK", parametersToEdit.keytrack, font)
-    , mixKnob ("MIX", parametersToEdit.mix, font)
+SynthFilterPanel::SynthFilterPanel (const SynthFilterParameters& parametersToEdit)
+    : typeChoice ({}, parametersToEdit.type, SynthTheme::valueFont (13.5f))
+    , cutoffField ("Cut", parametersToEdit.cutoff)
+    , resonanceField ("Q", parametersToEdit.resonance)
+    , response (parametersToEdit)
+    , driveKnob ("DRIVE", parametersToEdit.drive, SynthTheme::captionFont (12.0f))
+    , keytrackKnob ("KEYTRACK", parametersToEdit.keytrack, SynthTheme::captionFont (12.0f))
+    , mixKnob ("MIX", parametersToEdit.mix, SynthTheme::captionFont (12.0f))
 {
-    setupPanelTitle (titleLabel, panelTitle, font);
-    addAndMakeVisible (titleLabel);
+    setOpaque (false);
 
-    addAndMakeVisible (typeChoice);
-
-    for (auto* knob : { &cutoffKnob, &resonanceKnob, &driveKnob, &keytrackKnob, &mixKnob })
-        addAndMakeVisible (*knob);
+    for (auto* control : std::initializer_list<yup::Component*> { &typeChoice, &cutoffField, &resonanceField, &response, &driveKnob, &keytrackKnob, &mixKnob })
+        addAndMakeVisible (*control);
 }
 
 void SynthFilterPanel::syncFromParameters()
 {
     typeChoice.syncFromParameter();
+    cutoffField.syncFromParameter();
+    resonanceField.syncFromParameter();
+    response.syncFromParameters();
 
-    for (auto* knob : { &cutoffKnob, &resonanceKnob, &driveKnob, &keytrackKnob, &mixKnob })
+    for (auto* knob : { &driveKnob, &keytrackKnob, &mixKnob })
         knob->syncFromParameter();
 }
 
 void SynthFilterPanel::resized()
 {
-    auto bounds = getLocalBounds().reduced (panelInset);
+    const auto gap = SynthTheme::controlGap;
+    auto bounds = getLocalBounds();
 
-    titleLabel.setBounds (bounds.removeFromTop (headerHeight));
-    bounds.removeFromTop (spacing);
+    auto line = bounds.removeFromTop (lineHeight);
+    typeChoice.setBounds (line.removeFromLeft (yup::jmin (140.0f, line.getWidth() * 0.4f)));
+    resonanceField.setBounds (line.removeFromRight (70.0f));
+    line.removeFromRight (gap);
+    cutoffField.setBounds (line.removeFromRight (104.0f));
+    bounds.removeFromTop (gap);
 
-    typeChoice.setBounds (bounds.removeFromTop (choiceHeight));
-    bounds.removeFromTop (spacing);
+    auto knobs = bounds.removeFromBottom (knobRowHeight);
+    bounds.removeFromBottom (gap);
+    response.setBounds (bounds);
 
-    layoutControlsInRow (bounds, { &cutoffKnob, &resonanceKnob, &driveKnob, &keytrackKnob, &mixKnob });
-}
+    const auto width = knobs.getWidth() / 3.0f;
 
-void SynthFilterPanel::paint (yup::Graphics& g)
-{
-    paintSynthPanel (g, getLocalBounds());
+    for (auto* knob : { &driveKnob, &keytrackKnob, &mixKnob })
+        knob->setBounds (knobs.removeFromLeft (width));
 }

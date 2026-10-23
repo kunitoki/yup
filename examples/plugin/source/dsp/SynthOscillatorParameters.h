@@ -47,6 +47,7 @@ struct SynthOscillatorValues
     float fineCents = 0.0f;
     float fixedHz = 440.0f;
 
+    bool enabled = true;
     float level = 0.0f;
     float pan = 0.0f;
     float phase = 0.0f;
@@ -138,4 +139,5 @@ public:
     yup::AudioParameter::Ptr formant;
     yup::AudioParameter::Ptr formantPosition;
     yup::AudioParameter::Ptr scatter;
+    yup::AudioParameter::Ptr enabled; /**< Stepped, 0 or 1; off neither sounds nor modulates. */
 };

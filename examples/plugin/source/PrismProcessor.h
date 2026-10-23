@@ -107,6 +107,12 @@ public:
     /** Loads a user preset file written by savePresetFile(). Message thread. */
     yup::Result loadPresetFile (const yup::File& file);
 
+    /** Returns the description of the current patch: its name, bank, author and tags. */
+    SynthPatch::PresetInfo getPresetInfo() const;
+
+    /** Replaces the description of the current patch, saved with it from now on. Message thread. */
+    void setPresetInfo (SynthPatch::PresetInfo newInfo);
+
     /** Releases every sounding note at the start of the next block. */
     void requestAllNotesOff() noexcept { engine.requestAllNotesOff(); }
 
@@ -139,6 +145,12 @@ public:
 
     /** Returns how many blocks took longer than their duration. */
     int getXRunCount() const { return loadMeasurer.getXRunCount(); }
+
+    /** Returns the absolute peak of the last block on an output channel, 0 or 1, linear. */
+    float getOutputPeak (int channel) const noexcept
+    {
+        return yup::isPositiveAndBelow (channel, static_cast<int> (outputPeaks.size())) ? outputPeaks[static_cast<std::size_t> (channel)].load (std::memory_order_relaxed) : 0.0f;
+    }
 
 
 private:
@@ -174,9 +186,12 @@ private:
     MidiMessageFifo editorMidi { 1024 };
 
     yup::AudioProcessLoadMeasurer loadMeasurer;
+    std::array<std::atomic<float>, 2> outputPeaks {};
 
     std::vector<yup::String> presetNames;
     std::atomic<int> currentPreset { 0 };
+    SynthPatch::PresetInfo presetInfo;
+    mutable yup::SpinLock presetInfoLock;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrismProcessor)
 };

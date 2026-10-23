@@ -33,7 +33,7 @@
     one host gesture; any other change, such as a double-click reset or the mouse wheel,
     is wrapped in a gesture of its own.
 
-    @see ParameterChoice, ParameterToggle
+    @see ParameterChoice, SynthNumberField
 */
 class ParameterKnob : public yup::Component
 {
@@ -47,6 +47,15 @@ public:
     */
     bool syncFromParameter();
 
+    /** Binds another parameter, for a knob that follows a mode such as an LFO's sync. */
+    void setParameter (yup::AudioParameter::Ptr newParameter);
+
+    /** Shows the parameter's value text as the caption instead of the caption text. */
+    void setCaptionShowsValue (bool shouldShowValue);
+
+    /** Returns the knob, for its look options. */
+    SynthKnob& getKnob() noexcept { return slider; }
+
     void resized() override;
 
 private:
@@ -55,8 +64,13 @@ private:
     void setParameterValue (double normalizedValue);
     void endGesture();
 
+    void bindSlider();
+    float getCaptionHeight() const noexcept;
+
     yup::AudioParameter::Ptr parameter;
     SynthKnob slider;
     yup::Label label;
+    yup::String captionText;
     bool dragging = false;
+    bool captionShowsValue = false;
 };

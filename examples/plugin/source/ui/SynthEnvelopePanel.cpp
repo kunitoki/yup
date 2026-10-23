@@ -22,24 +22,23 @@
 #include "SynthEnvelopePanel.h"
 #include "SynthTheme.h"
 
-SynthEnvelopePanel::SynthEnvelopePanel (const yup::String& panelTitle,
-                                        const SynthEnvelopeParameters& parametersToEdit,
-                                        const SynthCurveState& curvesToShow,
-                                        int envelopeIndex,
-                                        const yup::Font& font)
-    : curves (curvesToShow)
+SynthEnvelopePanel::SynthEnvelopePanel (const SynthEnvelopeParameters& parametersToEdit, SynthCurveState& curvesToEdit, int envelopeIndex)
+    : curves (curvesToEdit)
     , index (envelopeIndex)
-    , timeScaleKnob ("TIME", parametersToEdit.timeScale, font)
-    , velocityKnob ("VELOCITY", parametersToEdit.velocity, font)
-    , depthKnob ("DEPTH", parametersToEdit.depth, font)
+    , timeScaleKnob ("TIME", parametersToEdit.timeScale, SynthTheme::captionFont (12.0f))
+    , velocityKnob ("VELOCITY", parametersToEdit.velocity, SynthTheme::captionFont (12.0f))
+    , depthKnob ("DEPTH", parametersToEdit.depth, SynthTheme::captionFont (12.0f))
 {
-    setupPanelTitle (titleLabel, panelTitle, font);
-    addAndMakeVisible (titleLabel);
+    setOpaque (false);
 
+    display.onCurveEdited = [this] (const SynthCurveState::Curve& curve) { curves.setEnvelope (index, curve); };
     addAndMakeVisible (display);
 
     for (auto* knob : { &timeScaleKnob, &velocityKnob, &depthKnob })
+    {
+        knob->getKnob().setAccent (SynthTheme::envelopeAccent());
         addAndMakeVisible (*knob);
+    }
 
     syncFromParameters();
 }
@@ -58,19 +57,13 @@ void SynthEnvelopePanel::syncFromParameters()
 
 void SynthEnvelopePanel::resized()
 {
-    auto bounds = getLocalBounds().reduced (panelInset);
-
-    titleLabel.setBounds (bounds.removeFromTop (headerHeight));
-    bounds.removeFromTop (spacing);
-
-    auto knobs = bounds.removeFromRight (knobWidth * 3.0f);
-    bounds.removeFromRight (spacing);
+    auto bounds = getLocalBounds();
+    auto knobs = bounds.removeFromBottom (knobRowHeight);
+    bounds.removeFromBottom (SynthTheme::controlGap);
     display.setBounds (bounds);
 
-    layoutControlsInRow (knobs, { &timeScaleKnob, &velocityKnob, &depthKnob });
-}
+    const auto width = knobs.getWidth() / 3.0f;
 
-void SynthEnvelopePanel::paint (yup::Graphics& g)
-{
-    paintSynthPanel (g, getLocalBounds());
+    for (auto* knob : { &timeScaleKnob, &velocityKnob, &depthKnob })
+        knob->setBounds (knobs.removeFromLeft (width).reduced (0.0f, 6.0f));
 }

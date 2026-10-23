@@ -22,53 +22,38 @@
 #include "SynthOscillatorPanel.h"
 #include "SynthTheme.h"
 
-SynthOscillatorPanel::SynthOscillatorPanel (const yup::String& panelTitle,
-                                            const SynthOscillatorParameters& parametersToEdit,
+SynthOscillatorPanel::SynthOscillatorPanel (const SynthOscillatorParameters& parametersToEdit,
                                             SynthPartials& partialsToEdit,
                                             const SynthOscillatorResources& resources,
-                                            std::shared_ptr<SynthWaveformShader> waveformShader,
-                                            const yup::Font& font)
+                                            std::shared_ptr<SynthWaveformShader> waveformShader)
     : parameters (parametersToEdit)
     , partials (partialsToEdit)
     , editor (parametersToEdit, partialsToEdit, resources, std::move (waveformShader))
-    , waveformChoice ("WAVEFORM", parametersToEdit.waveform, font)
-    , syncModeChoice ("SYNC", parametersToEdit.syncMode, font)
-    , frequencyModeChoice ("FREQUENCY", parametersToEdit.frequencyMode, font)
-    , freeRunningButton ("FREE", parametersToEdit.freeRunning)
-    , levelKnob ("LEVEL", parametersToEdit.level, font)
-    , ratioKnob ("RATIO", parametersToEdit.ratio, font)
-    , fineKnob ("FINE", parametersToEdit.fine, font)
-    , fixedKnob ("FIXED", parametersToEdit.fixedHz, font)
-    , panKnob ("PAN", parametersToEdit.pan, font)
-    , phaseKnob ("PHASE", parametersToEdit.phase, font)
-    , toFilter1Knob ("TO F1", parametersToEdit.toFilter1, font)
-    , toFilter2Knob ("TO F2", parametersToEdit.toFilter2, font)
-    , directKnob ("DIRECT", parametersToEdit.direct, font)
-    , ridgesKnob ("RIDGES", parametersToEdit.ridgeSpacing, font)
-    , colorKnob ("COLOR", parametersToEdit.color, font)
-    , dispersionKnob ("DISPERSION", parametersToEdit.dispersion, font)
-    , squeezeKnob ("SQUEEZE", parametersToEdit.squeeze, font)
-    , squashKnob ("SQUASH", parametersToEdit.squash, font)
-    , tiltKnob ("TILT", parametersToEdit.tilt, font)
-    , oddEvenKnob ("ODD/EVEN", parametersToEdit.oddEven, font)
-    , formantKnob ("FORMANT", parametersToEdit.formant, font)
-    , formantPositionKnob ("F.POS", parametersToEdit.formantPosition, font)
-    , scatterKnob ("SCATTER", parametersToEdit.scatter, font)
-    , syncRatioKnob ("SYNC RATIO", parametersToEdit.syncRatio, font)
+    , waveformChoice ({}, parametersToEdit.waveform, SynthTheme::valueFont (13.5f))
+    , frequencyModeSelector (parametersToEdit.frequencyMode, { { "Ratio" }, { "Fixed" } })
+    , pitchField ({}, parametersToEdit.ratio)
+    , fineField ("Fine", parametersToEdit.fine)
+    , freeRunningLed (parametersToEdit.freeRunning, "Free")
+    , syncModeChoice ({}, parametersToEdit.syncMode, SynthTheme::valueFont (13.5f))
+    , syncRatioField ({}, parametersToEdit.syncRatio)
+    , levelKnob ("LEVEL", parametersToEdit.level, SynthTheme::captionFont (12.0f))
+    , panKnob ("PAN", parametersToEdit.pan, SynthTheme::captionFont (12.0f))
+    , phaseKnob ("PHASE", parametersToEdit.phase, SynthTheme::captionFont (12.0f))
+    , sends { SynthSliderField ("To F1", parametersToEdit.toFilter1, SynthSliderField::Look::bar),
+              SynthSliderField ("To F2", parametersToEdit.toFilter2, SynthSliderField::Look::bar),
+              SynthSliderField ("Direct", parametersToEdit.direct, SynthSliderField::Look::bar) }
+    , spectrum { SynthSliderField ("Ridges", parametersToEdit.ridgeSpacing, SynthSliderField::Look::boxed),
+                 SynthSliderField ("Color", parametersToEdit.color, SynthSliderField::Look::boxed),
+                 SynthSliderField ("Dispersion", parametersToEdit.dispersion, SynthSliderField::Look::boxed),
+                 SynthSliderField ("Squeeze", parametersToEdit.squeeze, SynthSliderField::Look::boxed),
+                 SynthSliderField ("Squash", parametersToEdit.squash, SynthSliderField::Look::boxed),
+                 SynthSliderField ("Tilt", parametersToEdit.tilt, SynthSliderField::Look::boxed, true),
+                 SynthSliderField ("Odd / Even", parametersToEdit.oddEven, SynthSliderField::Look::boxed, true),
+                 SynthSliderField ("Formant", parametersToEdit.formant, SynthSliderField::Look::boxed),
+                 SynthSliderField ("F. Pos", parametersToEdit.formantPosition, SynthSliderField::Look::boxed),
+                 SynthSliderField ("Scatter", parametersToEdit.scatter, SynthSliderField::Look::boxed) }
 {
-    setupPanelTitle (titleLabel, panelTitle, font);
-    addAndMakeVisible (titleLabel);
-
-    partialsButton.setButtonText ("PARTIALS");
-    SynthTheme::styleToggle (partialsButton);
-    partialsButton.onClick = [this] { editor.setEditingPartials (partialsButton.getToggleState()); };
-    addAndMakeVisible (partialsButton);
-
-    resetButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::displayBackground());
-    resetButton.setColor (yup::TextButton::Style::textColorId, SynthTheme::textSecondary());
-    resetButton.setColor (yup::TextButton::Style::outlineColorId, SynthTheme::panelBorder());
-    resetButton.onClick = [this] { editor.revertToPreset(); };
-    addAndMakeVisible (resetButton);
+    setOpaque (false);
 
     addAndMakeVisible (editor);
 
@@ -76,30 +61,52 @@ SynthOscillatorPanel::SynthOscillatorPanel (const yup::String& panelTitle,
     // playing the edited shape while the combo box claims something else.
     waveformChoice.onChange = [this] { editor.revertToPreset(); };
 
-    for (auto* choice : { &waveformChoice, &syncModeChoice, &frequencyModeChoice })
-        addAndMakeVisible (*choice);
+    partialsButton.setButtonText ("Partials");
+    SynthTheme::styleRaisedToggle (partialsButton);
+    partialsButton.onClick = [this] { editor.setEditingPartials (partialsButton.getToggleState()); };
 
-    addAndMakeVisible (freeRunningButton);
+    SynthTheme::styleRaisedButton (resetButton);
+    resetButton.onClick = [this] { editor.revertToPreset(); };
 
-    for (auto* knob : getKnobs())
-        addAndMakeVisible (*knob);
+    for (auto* control : std::initializer_list<yup::Component*> { &waveformChoice, &frequencyModeSelector, &pitchField, &fineField, &freeRunningLed,
+                                                                  &syncModeChoice, &syncRatioField, &partialsButton, &resetButton, &levelKnob, &panKnob, &phaseKnob })
+        addAndMakeVisible (*control);
+
+    for (auto& field : sends)
+        addAndMakeVisible (field);
+
+    for (auto& field : spectrum)
+        addAndMakeVisible (field);
 
     shownValues = parameters.read();
     partials.fillValues (shownValues);
-    syncRatioKnob.setEnabled (shownValues.syncMode != yup::SyncMode::none);
-    ratioKnob.setEnabled (shownValues.frequencyMode == SynthFrequencyMode::ratio);
-    fixedKnob.setEnabled (shownValues.frequencyMode == SynthFrequencyMode::fixed);
+    showModes (shownValues);
+}
+
+void SynthOscillatorPanel::showModes (const SynthOscillatorValues& values)
+{
+    pitchField.setParameter (values.frequencyMode == SynthFrequencyMode::fixed ? parameters.fixedHz : parameters.ratio);
+    syncRatioField.setEnabled (values.syncMode != yup::SyncMode::none);
 }
 
 void SynthOscillatorPanel::syncFromParameters()
 {
     waveformChoice.syncFromParameter();
+    frequencyModeSelector.syncFromParameter();
+    pitchField.syncFromParameter();
+    fineField.syncFromParameter();
+    freeRunningLed.syncFromParameter();
     syncModeChoice.syncFromParameter();
-    frequencyModeChoice.syncFromParameter();
-    freeRunningButton.syncFromParameter();
+    syncRatioField.syncFromParameter();
 
-    for (auto* knob : getKnobs())
+    for (auto* knob : { &levelKnob, &panKnob, &phaseKnob })
         knob->syncFromParameter();
+
+    for (auto& field : sends)
+        field.syncFromParameter();
+
+    for (auto& field : spectrum)
+        field.syncFromParameter();
 
     // One generation bump per frame, however many mouse events the drag produced.
     editor.commitPendingEdits();
@@ -112,59 +119,93 @@ void SynthOscillatorPanel::syncFromParameters()
 
     shownValues = values;
     editor.refresh();
-
-    // Greys out the knobs nothing reads in the current modes.
-    syncRatioKnob.setEnabled (values.syncMode != yup::SyncMode::none);
-    ratioKnob.setEnabled (values.frequencyMode == SynthFrequencyMode::ratio);
-    fixedKnob.setEnabled (values.frequencyMode == SynthFrequencyMode::fixed);
+    showModes (values);
 }
 
 void SynthOscillatorPanel::resized()
 {
-    auto bounds = getLocalBounds().reduced (panelInset);
+    const auto gap = SynthTheme::controlGap;
+    auto bounds = getLocalBounds();
 
-    auto header = bounds.removeFromTop (headerHeight);
-    resetButton.setBounds (header.removeFromRight (buttonWidth));
-    header.removeFromRight (spacing);
-    partialsButton.setBounds (header.removeFromRight (buttonWidth));
-    header.removeFromRight (spacing);
-    freeRunningButton.setBounds (header.removeFromRight (buttonWidth));
-    titleLabel.setBounds (header);
+    auto spectrumArea = bounds.removeFromRight (std::round (bounds.getWidth() * spectrumShare));
+    bounds.removeFromRight (SynthTheme::panelPadding);
 
-    bounds.removeFromTop (spacing);
+    const auto rows = 5;
+    const auto columnWidth = (spectrumArea.getWidth() - gap) * 0.5f;
+    const auto rowHeight = (spectrumArea.getHeight() - gap * static_cast<float> (rows - 1)) / static_cast<float> (rows);
 
-    auto knobArea = bounds.removeFromBottom (knobRowHeight * 3.0f + spacing * 2.0f);
-    bounds.removeFromBottom (spacing);
+    for (int index = 0; index < static_cast<int> (spectrum.size()); ++index)
+    {
+        const auto column = static_cast<float> (index % 2);
+        const auto row = static_cast<float> (index / 2);
+        spectrum[static_cast<std::size_t> (index)].setBounds ({ spectrumArea.getX() + column * (columnWidth + gap),
+                                                                spectrumArea.getY() + row * (rowHeight + gap),
+                                                                columnWidth,
+                                                                rowHeight });
+    }
 
-    auto choiceArea = bounds.removeFromBottom (choiceRowHeight);
-    bounds.removeFromBottom (spacing);
+    auto controls = bounds.removeFromBottom (controlsHeight);
+    bounds.removeFromBottom (gap);
 
-    editor.setBounds (bounds);
+    displayArea = bounds;
+    auto display = bounds;
+    topBar = display.removeFromTop (barHeight);
+    bottomBar = display.removeFromBottom (barHeight);
+    editor.setBounds (display.reduced (1.0f, 0.0f));
 
-    layoutControlsInRow (choiceArea, { &waveformChoice, &syncModeChoice, &frequencyModeChoice });
+    auto top = topBar.reduced (5.0f, 4.0f);
+    waveformChoice.setBounds (top.removeFromLeft (130.0f));
+    top.removeFromLeft (gap);
+    frequencyModeSelector.setBounds (top.removeFromLeft (110.0f));
+    top.removeFromLeft (gap);
+    pitchField.setBounds (top.removeFromLeft (84.0f));
+    top.removeFromLeft (gap);
+    fineField.setBounds (top.removeFromLeft (96.0f));
 
-    layoutControlsInRow (knobArea.removeFromTop (knobRowHeight),
-                         { &levelKnob, &ratioKnob, &fineKnob, &fixedKnob, &panKnob, &phaseKnob, &toFilter1Knob, &toFilter2Knob, &directKnob });
+    auto bottom = bottomBar.reduced (8.0f, 4.0f);
+    freeRunningLed.setBounds (bottom.removeFromLeft (52.0f));
+    bottom.removeFromLeft (gap * 2.0f);
+    syncCaptionArea = bottom.removeFromLeft (34.0f);
+    syncModeChoice.setBounds (bottom.removeFromLeft (84.0f));
+    bottom.removeFromLeft (gap);
+    syncRatioField.setBounds (bottom.removeFromLeft (64.0f));
+    resetButton.setBounds (bottom.removeFromRight (64.0f));
+    bottom.removeFromRight (gap);
+    partialsButton.setBounds (bottom.removeFromRight (78.0f));
 
-    knobArea.removeFromTop (spacing);
+    auto knobs = controls.removeFromLeft (190.0f);
+    levelKnob.setBounds (knobs.removeFromLeft (72.0f));
+    panKnob.setBounds (knobs.removeFromLeft (59.0f).reduced (0.0f, 8.0f));
+    phaseKnob.setBounds (knobs.reduced (0.0f, 8.0f));
 
-    layoutControlsInRow (knobArea.removeFromTop (knobRowHeight),
-                         { &ridgesKnob, &colorKnob, &dispersionKnob, &squeezeKnob, &squashKnob, &tiltKnob });
+    controls.removeFromLeft (gap * 2.0f);
+    seamX = controls.getX();
+    controls.removeFromLeft (gap * 2.0f);
 
-    knobArea.removeFromTop (spacing);
+    auto sendArea = controls.reduced (0.0f, 12.0f);
+    const auto sendHeight = sendArea.getHeight() / static_cast<float> (sends.size());
 
-    layoutControlsInRow (knobArea,
-                         { &oddEvenKnob, &formantKnob, &formantPositionKnob, &scatterKnob, &syncRatioKnob });
+    for (auto& field : sends)
+        field.setBounds (sendArea.removeFromTop (sendHeight));
 }
 
 void SynthOscillatorPanel::paint (yup::Graphics& g)
 {
-    paintSynthPanel (g, getLocalBounds());
-}
+    SynthTheme::paintWell (g, displayArea, SynthTheme::wellCorner + 1.0f);
 
-std::vector<ParameterKnob*> SynthOscillatorPanel::getKnobs()
-{
-    return { &levelKnob, &ratioKnob, &fineKnob, &fixedKnob, &panKnob, &phaseKnob, &toFilter1Knob, &toFilter2Knob, &directKnob,
-             &ridgesKnob, &colorKnob, &dispersionKnob, &squeezeKnob, &squashKnob, &tiltKnob, &oddEvenKnob, &formantKnob,
-             &formantPositionKnob, &scatterKnob, &syncRatioKnob };
+    for (const auto& bar : { topBar, bottomBar })
+    {
+        g.setFillColor (SynthTheme::stripColor().withAlpha (0.6f));
+        g.fillRect (bar.reduced (1.0f, 0.0f));
+    }
+
+    g.setFillColor (yup::Colors::black.withAlpha (0.7f));
+    g.fillRect (topBar.getX() + 1.0f, topBar.getBottom() - 1.0f, topBar.getWidth() - 2.0f, 1.0f);
+    g.fillRect (bottomBar.getX() + 1.0f, bottomBar.getY(), bottomBar.getWidth() - 2.0f, 1.0f);
+
+    g.setFillColor (SynthTheme::textSecondary());
+    g.fillFittedText ("SYNC", SynthTheme::captionFont (11.5f), syncCaptionArea, yup::Justification::centerLeft);
+
+    const auto controlsTop = displayArea.getBottom() + SynthTheme::controlGap + 10.0f;
+    SynthTheme::paintSeam (g, { seamX, controlsTop }, { seamX, getHeight() - 10.0f });
 }

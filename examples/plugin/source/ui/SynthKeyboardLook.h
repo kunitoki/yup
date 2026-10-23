@@ -18,30 +18,23 @@
 
   ==============================================================================
 */
+#pragma once
 
-#include "ParameterToggle.h"
-#include "SynthTheme.h"
+#include <yup_audio_gui/yup_audio_gui.h>
 
-ParameterToggle::ParameterToggle (const yup::String& buttonText, yup::AudioParameter::Ptr parameterToControl)
-    : parameter (std::move (parameterToControl))
+//==============================================================================
+/** The physical look of the playing surface: plastic keys and rubber wheels sunk in
+    their slots. The keys keep their white and black on every palette, pressed keys take
+    the accent.
+*/
+namespace SynthKeyboardLook
 {
-    setButtonText (buttonText);
-    setToggleState (isParameterOn(), yup::dontSendNotification);
-    SynthTheme::styleToggle (*this);
+/** Draws a horizontal keyboard with plastic keys. */
+void apply (yup::MidiKeyboardComponent& keyboard);
 
-    onClick = [this]
-    {
-        parameter->beginChangeGesture();
-        parameter->setValueNotifyingHost (getToggleState() ? parameter->getMaximumValue() : parameter->getMinimumValue());
-        parameter->endChangeGesture();
-    };
-}
+/** Draws a pitch wheel as a rubber wheel in a slot, centered at rest. */
+void apply (yup::PitchWheelComponent& wheel);
 
-bool ParameterToggle::syncFromParameter()
-{
-    if (getToggleState() == isParameterOn())
-        return false;
-
-    setToggleState (isParameterOn(), yup::dontSendNotification);
-    return true;
-}
+/** Draws a modulation wheel as a rubber wheel in a slot. */
+void apply (yup::ModWheelComponent& wheel);
+} // namespace SynthKeyboardLook

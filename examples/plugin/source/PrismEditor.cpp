@@ -20,6 +20,7 @@
 */
 
 #include "PrismEditor.h"
+#include "ui/SynthTheme.h"
 #include "ui/SynthThemes.h"
 
 PrismEditor::PrismEditor (PrismProcessor& processorToEdit)
@@ -40,6 +41,12 @@ void PrismEditor::resized()
 {
     if (interface != nullptr)
         interface->setBounds (getLocalBounds());
+}
+
+void PrismEditor::paint (yup::Graphics& g)
+{
+    g.setFillColor (SynthTheme::frameColor());
+    g.fillAll();
 }
 
 void PrismEditor::buildInterface()

@@ -23,23 +23,31 @@
 
 #include "ParameterChoice.h"
 #include "ParameterKnob.h"
-#include "ParameterToggle.h"
+#include "ParameterLed.h"
+#include "ParameterSegmented.h"
+#include "SynthNumberField.h"
+#include "SynthSliderField.h"
 #include "WaveformEditor.h"
 
+#include <array>
+
 //==============================================================================
-/** The editing surface of one oscillator: its waveform editor and every control.
+/** The editing surface of one oscillator.
+
+    The waveform editor sits in a sunken display whose top bar picks the waveform and
+    the pitch, and whose bottom bar holds free running, sync and the partials tools.
+    Level, pan, phase and the three sends sit under it; the spectral shaping fields fill
+    the column on the right.
 
     @see SynthOscillatorParameters, WaveformEditor
 */
 class SynthOscillatorPanel : public yup::Component
 {
 public:
-    SynthOscillatorPanel (const yup::String& panelTitle,
-                          const SynthOscillatorParameters& parametersToEdit,
+    SynthOscillatorPanel (const SynthOscillatorParameters& parametersToEdit,
                           SynthPartials& partials,
                           const SynthOscillatorResources& resources,
-                          std::shared_ptr<SynthWaveformShader> waveformShader,
-                          const yup::Font& font);
+                          std::shared_ptr<SynthWaveformShader> waveformShader);
 
     /** Publishes a frame's worth of partial edits and shows changes made anywhere else. */
     void syncFromParameters();
@@ -49,48 +57,38 @@ public:
 
 private:
     //==============================================================================
-    std::vector<ParameterKnob*> getKnobs();
+    void showModes (const SynthOscillatorValues& values);
 
     //==============================================================================
-    static constexpr float panelInset = 8.0f;
-    static constexpr float headerHeight = 18.0f;
-    static constexpr float choiceRowHeight = 36.0f;
-    static constexpr float knobRowHeight = 58.0f;
-    static constexpr float buttonWidth = 68.0f;
-    static constexpr float spacing = 6.0f;
+    static constexpr float spectrumShare = 262.0f / 774.0f;
+    static constexpr float barHeight = 30.0f;
+    static constexpr float controlsHeight = 78.0f;
 
     const SynthOscillatorParameters& parameters;
     const SynthPartials& partials;
     SynthOscillatorValues shownValues;
 
-    yup::Label titleLabel;
-    yup::ToggleButton partialsButton;
-    yup::TextButton resetButton { "RESET" };
     WaveformEditor editor;
+    yup::Rectangle<float> displayArea;
+    yup::Rectangle<float> topBar;
+    yup::Rectangle<float> bottomBar;
+    yup::Rectangle<float> syncCaptionArea;
+    float seamX = 0.0f;
 
     ParameterChoice waveformChoice;
+    ParameterSegmented frequencyModeSelector;
+    SynthNumberField pitchField;
+    SynthNumberField fineField;
+
+    ParameterLed freeRunningLed;
     ParameterChoice syncModeChoice;
-    ParameterChoice frequencyModeChoice;
-    ParameterToggle freeRunningButton;
+    SynthNumberField syncRatioField;
+    yup::ToggleButton partialsButton;
+    yup::TextButton resetButton { "Reset" };
 
     ParameterKnob levelKnob;
-    ParameterKnob ratioKnob;
-    ParameterKnob fineKnob;
-    ParameterKnob fixedKnob;
     ParameterKnob panKnob;
     ParameterKnob phaseKnob;
-    ParameterKnob toFilter1Knob;
-    ParameterKnob toFilter2Knob;
-    ParameterKnob directKnob;
-    ParameterKnob ridgesKnob;
-    ParameterKnob colorKnob;
-    ParameterKnob dispersionKnob;
-    ParameterKnob squeezeKnob;
-    ParameterKnob squashKnob;
-    ParameterKnob tiltKnob;
-    ParameterKnob oddEvenKnob;
-    ParameterKnob formantKnob;
-    ParameterKnob formantPositionKnob;
-    ParameterKnob scatterKnob;
-    ParameterKnob syncRatioKnob;
+    std::array<SynthSliderField, 3> sends;
+    std::array<SynthSliderField, 10> spectrum;
 };

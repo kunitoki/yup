@@ -40,8 +40,7 @@ const std::vector<Theme>& getThemes()
         { "Deep Sea", "https://coolors.co/0b132b-1c2541-3a506b-5bc0be-6fffe9", yup::ThemePalette::Mode::dark },
         { "Moss", "https://coolors.co/1f2421-216869-49a078-9cc5a1-dce1de", yup::ThemePalette::Mode::dark },
         { "Ember", "https://coolors.co/1a1423-372549-774c60-b75d69-eacdc2", yup::ThemePalette::Mode::dark },
-        { "Slate Mint", "https://coolors.co/2b2d42-8d99ae-edf2f4-06d6a0-ff9f1c", yup::ThemePalette::Mode::dark },
-        { "Paper", "https://coolors.co/f4f1de-e07a5f-3d405b-81b29a-f2cc8f", yup::ThemePalette::Mode::light }
+        { "Slate Mint", "https://coolors.co/2b2d42-8d99ae-edf2f4-06d6a0-ff9f1c", yup::ThemePalette::Mode::dark }
     };
 
     return themes;

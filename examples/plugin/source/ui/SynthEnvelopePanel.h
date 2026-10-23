@@ -26,36 +26,27 @@
 #include "ParameterKnob.h"
 
 //==============================================================================
-/** The macros of one envelope and a view of its curve.
+/** One envelope: its editable curve over its time, velocity and depth macros.
 
     @see SynthEnvelopeParameters, SynthCurveState
 */
 class SynthEnvelopePanel : public yup::Component
 {
 public:
-    SynthEnvelopePanel (const yup::String& panelTitle,
-                        const SynthEnvelopeParameters& parametersToEdit,
-                        const SynthCurveState& curvesToShow,
-                        int envelopeIndex,
-                        const yup::Font& font);
+    SynthEnvelopePanel (const SynthEnvelopeParameters& parametersToEdit, SynthCurveState& curvesToEdit, int envelopeIndex);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
 
     void resized() override;
-    void paint (yup::Graphics& g) override;
 
 private:
-    static constexpr float panelInset = 8.0f;
-    static constexpr float headerHeight = 16.0f;
-    static constexpr float knobWidth = 58.0f;
-    static constexpr float spacing = 6.0f;
+    static constexpr float knobRowHeight = 62.0f;
 
-    const SynthCurveState& curves;
+    SynthCurveState& curves;
     int index = 0;
     int shownGeneration = -1;
 
-    yup::Label titleLabel;
     EnvelopeDisplay display;
 
     ParameterKnob timeScaleKnob;

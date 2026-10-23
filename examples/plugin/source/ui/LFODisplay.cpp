@@ -50,19 +50,15 @@ void LFODisplay::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
 
-    g.setFillColor (SynthTheme::displayBackground());
-    g.fillRoundedRect (bounds, 4.0f);
-
-    g.setStrokeColor (SynthTheme::panelBorder());
-    g.setStrokeWidth (1.0f);
-    g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
+    SynthTheme::paintWell (g, bounds);
 
     const auto area = bounds.reduced (8.0f);
 
     if (area.getWidth() <= 0.0f || area.getHeight() <= 0.0f)
         return;
 
-    g.strokeLine (area.getX(), area.getCenterY(), area.getRight(), area.getCenterY());
+    g.setFillColor (SynthTheme::textPrimary().withAlpha (0.08f));
+    g.fillRect (area.getX(), area.getCenterY(), area.getWidth(), 1.0f);
 
     // One period at one sample per point: the shape is read the way the engine reads it.
     yup::LFO<float> shape;
@@ -86,8 +82,8 @@ void LFODisplay::paint (yup::Graphics& g)
             path.lineTo (x, y);
     }
 
-    g.setStrokeColor (SynthTheme::accent());
-    g.setStrokeWidth (1.5f);
+    g.setStrokeColor (SynthTheme::lfoAccent());
+    g.setStrokeWidth (2.0f);
     g.strokePath (path);
 
     shape.reset (phase);

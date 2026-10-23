@@ -24,33 +24,33 @@
 #include "../dsp/SynthFilterParameters.h"
 #include "ParameterChoice.h"
 #include "ParameterKnob.h"
+#include "SynthFilterResponse.h"
+#include "SynthNumberField.h"
 
 //==============================================================================
-/** Type, cutoff, resonance, drive, keytracking and mix of one voice filter.
+/** One voice filter: its type, cutoff and resonance over its response, then drive,
+    keytracking and mix.
 
-    @see SynthFilterParameters
+    @see SynthFilterParameters, SynthFilterResponse
 */
 class SynthFilterPanel : public yup::Component
 {
 public:
-    SynthFilterPanel (const yup::String& panelTitle, const SynthFilterParameters& parametersToEdit, const yup::Font& font);
+    explicit SynthFilterPanel (const SynthFilterParameters& parametersToEdit);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
 
     void resized() override;
-    void paint (yup::Graphics& g) override;
 
 private:
-    static constexpr float panelInset = 8.0f;
-    static constexpr float headerHeight = 16.0f;
-    static constexpr float choiceHeight = 36.0f;
-    static constexpr float spacing = 6.0f;
+    static constexpr float lineHeight = 24.0f;
+    static constexpr float knobRowHeight = 62.0f;
 
-    yup::Label titleLabel;
     ParameterChoice typeChoice;
-    ParameterKnob cutoffKnob;
-    ParameterKnob resonanceKnob;
+    SynthNumberField cutoffField;
+    SynthNumberField resonanceField;
+    SynthFilterResponse response;
     ParameterKnob driveKnob;
     ParameterKnob keytrackKnob;
     ParameterKnob mixKnob;

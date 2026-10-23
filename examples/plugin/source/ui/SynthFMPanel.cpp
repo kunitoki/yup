@@ -22,20 +22,25 @@
 #include "SynthFMPanel.h"
 #include "SynthTheme.h"
 
-SynthFMPanel::SynthFMPanel (const SynthFMParameters& parametersToEdit, const yup::Font& font)
+SynthFMPanel::SynthFMPanel (const SynthFMParameters& parametersToEdit)
 {
-    setupPanelTitle (titleLabel, "FM MATRIX  /  ROW MODULATED BY COLUMN", font);
-    addAndMakeVisible (titleLabel);
+    setOpaque (false);
 
     for (int carrier = 0; carrier < SynthExample::oscillatorCount; ++carrier)
     {
         for (int modulator = 0; modulator < SynthExample::oscillatorCount; ++modulator)
         {
-            const auto caption = carrier == modulator ? "FB " + yup::String (carrier + 1)
-                                                      : yup::String (modulator + 1) + " > " + yup::String (carrier + 1);
-
             auto& knob = knobs[static_cast<std::size_t> (carrier)][static_cast<std::size_t> (modulator)];
-            knob = std::make_unique<ParameterKnob> (caption, parametersToEdit.get (carrier, modulator), font);
+            knob = std::make_unique<ParameterKnob> (yup::String(), parametersToEdit.get (carrier, modulator), SynthTheme::captionFont (11.0f));
+            knob->getKnob().setShowsValueInWell (true);
+            knob->getKnob().getValueText = [parameter = parametersToEdit.get (carrier, modulator)]
+            {
+                return yup::String (yup::roundToInt (parameter->getNormalizedValue() * 100.0f));
+            };
+
+            if (carrier == modulator)
+                knob->getKnob().setAccent (SynthTheme::lfoAccent());
+
             addAndMakeVisible (*knob);
         }
     }
@@ -50,25 +55,48 @@ void SynthFMPanel::syncFromParameters()
 
 void SynthFMPanel::resized()
 {
-    auto bounds = getLocalBounds().reduced (panelInset);
+    auto bounds = getLocalBounds();
+    bounds.removeFromBottom (hintHeight);
+    bounds.removeFromTop (labelSize);
+    bounds.removeFromLeft (labelSize);
+    grid = bounds;
 
-    titleLabel.setBounds (bounds.removeFromTop (headerHeight));
-    bounds.removeFromTop (spacing);
+    const auto count = static_cast<float> (SynthExample::oscillatorCount);
+    const auto cellWidth = grid.getWidth() / count;
+    const auto cellHeight = grid.getHeight() / count;
+    const auto size = yup::jmin (cellWidth, cellHeight) - SynthTheme::controlGap;
 
-    const auto rowHeight = bounds.getHeight() / static_cast<float> (SynthExample::oscillatorCount);
-
-    for (auto& row : knobs)
+    for (int carrier = 0; carrier < SynthExample::oscillatorCount; ++carrier)
     {
-        std::vector<yup::Component*> controls;
+        for (int modulator = 0; modulator < SynthExample::oscillatorCount; ++modulator)
+        {
+            const yup::Rectangle<float> cell { grid.getX() + cellWidth * static_cast<float> (modulator),
+                                               grid.getY() + cellHeight * static_cast<float> (carrier),
+                                               cellWidth,
+                                               cellHeight };
 
-        for (auto& knob : row)
-            controls.push_back (knob.get());
-
-        layoutControlsInRow (bounds.removeFromTop (rowHeight), controls);
+            knobs[static_cast<std::size_t> (carrier)][static_cast<std::size_t> (modulator)]->setBounds (cell.withSizeKeepingCenter (size, size));
+        }
     }
 }
 
 void SynthFMPanel::paint (yup::Graphics& g)
 {
-    paintSynthPanel (g, getLocalBounds());
+    const auto count = static_cast<float> (SynthExample::oscillatorCount);
+    const auto cellWidth = grid.getWidth() / count;
+    const auto cellHeight = grid.getHeight() / count;
+    const auto font = SynthTheme::captionFont (11.5f);
+
+    g.setFillColor (SynthTheme::textSecondary());
+
+    for (int index = 0; index < SynthExample::oscillatorCount; ++index)
+    {
+        const auto offset = static_cast<float> (index);
+        g.fillFittedText ("OP " + yup::String (index + 1), font, { grid.getX() + cellWidth * offset, 0.0f, cellWidth, labelSize }, yup::Justification::center);
+        g.fillFittedText (yup::String (index + 1), font, { 0.0f, grid.getY() + cellHeight * offset, labelSize, cellHeight }, yup::Justification::centerLeft);
+    }
+
+    const yup::Rectangle<float> hint { 0.0f, getHeight() - hintHeight, getWidth(), hintHeight };
+    g.fillFittedText ("Each cell is how much the column operator modulates the row. Diagonal = feedback.",
+                      SynthTheme::valueFont (12.0f), hint, yup::Justification::centerLeft);
 }

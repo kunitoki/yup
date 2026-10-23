@@ -24,21 +24,18 @@
 #include "LFODisplay.h"
 #include "ParameterChoice.h"
 #include "ParameterKnob.h"
-#include "ParameterToggle.h"
+#include "ParameterSegmented.h"
 
 //==============================================================================
-/** Shape, rate or tempo division, phase, smoothing, retrigger and depth of one LFO, with its display.
+/** One LFO: its shape and retrigger mode, its display, and rate, phase, smoothing and
+    depth. The rate knob turns into the tempo division while the LFO is synced.
 
     @see SynthLFOParameters
 */
 class SynthLFOPanel : public yup::Component
 {
 public:
-    SynthLFOPanel (const yup::String& panelTitle,
-                   const SynthLFOParameters& parametersToEdit,
-                   const SynthCurveState& curvesToShow,
-                   int lfoIndex,
-                   const yup::Font& font);
+    SynthLFOPanel (const SynthLFOParameters& parametersToEdit, const SynthCurveState& curvesToShow, int lfoIndex);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
@@ -47,16 +44,13 @@ public:
     void setPhase (float phase) { display.setPhase (phase); }
 
     void resized() override;
-    void paint (yup::Graphics& g) override;
 
 private:
-    static constexpr float panelInset = 8.0f;
-    static constexpr float headerHeight = 18.0f;
-    static constexpr float choiceHeight = 36.0f;
-    static constexpr float choiceWidth = 90.0f;
-    static constexpr float knobWidth = 58.0f;
-    static constexpr float buttonWidth = 68.0f;
-    static constexpr float spacing = 6.0f;
+    static constexpr float lineHeight = 24.0f;
+    static constexpr float knobRowHeight = 62.0f;
+    static constexpr float retriggerWidth = 96.0f;
+
+    static std::vector<ParameterSegmented::Segment> makeShapeSegments();
 
     const SynthLFOParameters& parameters;
     const SynthCurveState& curves;
@@ -64,12 +58,9 @@ private:
     int shownGeneration = -1;
     SynthLFOValues shownValues;
 
-    yup::Label titleLabel;
-    ParameterToggle syncButton;
-    LFODisplay display;
-    ParameterChoice shapeChoice;
-    ParameterChoice divisionChoice;
+    ParameterSegmented shapeSelector;
     ParameterChoice retriggerChoice;
+    LFODisplay display;
     ParameterKnob rateKnob;
     ParameterKnob phaseKnob;
     ParameterKnob smoothKnob;

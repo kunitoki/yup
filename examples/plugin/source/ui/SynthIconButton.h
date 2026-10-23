@@ -18,30 +18,25 @@
 
   ==============================================================================
 */
-
 #pragma once
 
-#include <yup_audio_processors/yup_audio_processors.h>
 #include <yup_gui/yup_gui.h>
 
 //==============================================================================
-/** A toggle button bound to an on/off AudioParameter. A click is one host gesture.
+/** A button drawn as a header tile with a glyph of the theme's icon font.
 
-    @see ParameterKnob, ParameterChoice
+    @see SynthHeader
 */
-class ParameterToggle : public yup::ToggleButton
+class SynthIconButton : public yup::Button
 {
 public:
-    ParameterToggle (const yup::String& buttonText, yup::AudioParameter::Ptr parameterToControl);
+    /** Creates the button; a button without a tile draws only its glyph, for use inside a tile. */
+    SynthIconButton (yup::StringRef componentID, const char* iconGlyph, float iconHeight = 15.0f, bool drawsTile = true);
 
-    /** Shows the parameter's current value.
-
-        @returns true when the shown value changed.
-    */
-    bool syncFromParameter();
+    void paintButton (yup::Graphics& g) override;
 
 private:
-    bool isParameterOn() const { return parameter->getValue() >= 0.5f; }
-
-    yup::AudioParameter::Ptr parameter;
+    yup::String glyph;
+    float height;
+    bool tile;
 };

@@ -25,12 +25,11 @@
 SynthModulationRow::SynthModulationRow (int slotToEdit,
                                         SynthRoutes& routesToEdit,
                                         const std::vector<SynthRouteDestination>& destinationsToOffer,
-                                        yup::AudioParameter::Ptr depthParameter,
-                                        const yup::Font& font)
+                                        yup::AudioParameter::Ptr depthParameter)
     : slot (slotToEdit)
     , routes (routesToEdit)
     , destinations (destinationsToOffer)
-    , depthKnob ({}, std::move (depthParameter), font)
+    , depthField ("Depth", std::move (depthParameter), SynthSliderField::Look::bar, true)
 {
     setOpaque (false);
 
@@ -50,7 +49,6 @@ SynthModulationRow::SynthModulationRow (int slotToEdit,
         addAndMakeVisible (*box);
     }
 
-    SynthTheme::styleButton (removeButton, SynthTheme::panelBackground());
     removeButton.onClick = [this]
     {
         routes.clearRoute (slot);
@@ -58,16 +56,17 @@ SynthModulationRow::SynthModulationRow (int slotToEdit,
     };
     addAndMakeVisible (removeButton);
 
-    addAndMakeVisible (depthKnob);
+    addAndMakeVisible (depthField);
 
     syncFromRoutes();
 }
 
 void SynthModulationRow::syncFromRoutes()
 {
-    depthKnob.syncFromParameter();
+    depthField.syncFromParameter();
 
     const auto route = routes.getRoute (slot);
+    repaint();
 
     if (! route.isActive())
     {
@@ -102,13 +101,27 @@ void SynthModulationRow::writeRoute()
 
 void SynthModulationRow::resized()
 {
-    auto bounds = getLocalBounds();
+    auto bounds = getLocalBounds().reduced (spacing, 0.0f);
 
     removeButton.setBounds (bounds.removeFromRight (buttonWidth).withSizeKeepingCenter (buttonWidth, buttonWidth));
     bounds.removeFromRight (spacing);
-    depthKnob.setBounds (bounds.removeFromRight (knobWidth));
+    depthField.setBounds (bounds.removeFromRight (depthWidth));
     bounds.removeFromRight (spacing);
-    sourceBox.setBounds (bounds.removeFromLeft (bounds.getWidth() * 0.35f).reduced (0.0f, 6.0f));
+    bounds.removeFromLeft (dotSize + spacing);
+    sourceBox.setBounds (bounds.removeFromLeft (bounds.getWidth() * 0.4f).reduced (0.0f, 6.0f));
     bounds.removeFromLeft (spacing);
     destinationBox.setBounds (bounds.reduced (0.0f, 6.0f));
+}
+
+void SynthModulationRow::paint (yup::Graphics& g)
+{
+    SynthTheme::paintWell (g, getLocalBounds());
+
+    const auto selected = sourceBox.getSelectedId() - 1;
+    const auto source = static_cast<SynthModulationSource> (yup::jmax (0, selected));
+    const auto family = getSourceEnvelope (source) >= 0 ? 0 : getSourceLFO (source) >= 0 ? 1 : source == SynthModulationSource::random ? 3 : 2;
+    const auto dot = yup::Rectangle<float> (spacing, (getHeight() - dotSize) * 0.5f, dotSize, dotSize);
+
+    g.setFillColor (selected >= 0 ? SynthTheme::sourceAccent (family) : SynthTheme::textSecondary().withAlpha (0.4f));
+    g.fillRoundedRect (dot, 2.0f);
 }

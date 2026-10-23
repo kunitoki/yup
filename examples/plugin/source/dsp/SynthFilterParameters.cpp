@@ -39,15 +39,16 @@ SynthFilterParameters::SynthFilterParameters (int filterIndex, const SynthFilter
     drive = createContinuous (prefix + "drive", module + " Drive", hostBase + 3, module, { 0.0f, 1.0f }, defaults.drive, SynthFormat::percent);
     keytrack = createContinuous (prefix + "keytrack", module + " Keytrack", hostBase + 4, module, { 0.0f, 1.0f }, defaults.keytrack, SynthFormat::percent);
     mix = createContinuous (prefix + "mix", module + " Mix", hostBase + 5, module, { 0.0f, 1.0f }, defaults.mix, SynthFormat::percent);
+    enabled = createChoice (prefix + "enabled", module + " Enabled", hostBase + 6, module, { "Off", "On" }, defaults.enabled ? 1 : 0);
 }
 
 void SynthFilterParameters::addTo (yup::AudioProcessor& processor) const
 {
-    for (const auto& parameter : { type, cutoff, resonance, drive, keytrack, mix })
+    for (const auto& parameter : { type, cutoff, resonance, drive, keytrack, mix, enabled })
         processor.addParameter (parameter);
 }
 
 SynthFilterValues SynthFilterParameters::read (SynthParameterReader reader) const noexcept
 {
-    return { static_cast<SynthFilterType> (reader.asInt (type)), reader (cutoff), reader (resonance), reader (drive), reader (keytrack), reader (mix) };
+    return { static_cast<SynthFilterType> (reader.asInt (type)), reader (cutoff), reader (resonance), reader (drive), reader (keytrack), reader (mix), reader.asInt (enabled) != 0 };
 }

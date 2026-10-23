@@ -68,7 +68,7 @@ void SynthFilterStage::reset() noexcept
 
 void SynthFilterStage::process (float* left, float* right, int numSamples, const SynthFilterValues& values, double midiNote) noexcept
 {
-    if (values.type == SynthFilterType::off || numSamples <= 0)
+    if (numSamples <= 0 || (! values.enabled && (! hasState || mix <= 0.0f)))
         return;
 
     if (values.type != activeType)
@@ -85,7 +85,7 @@ void SynthFilterStage::process (float* left, float* right, int numSamples, const
         cutoff = targetCutoff;
         resonance = values.resonance;
         drive = values.drive;
-        mix = values.mix;
+        mix = values.enabled ? values.mix : 0.0f;
         hasState = true;
     }
 
@@ -94,7 +94,8 @@ void SynthFilterStage::process (float* left, float* right, int numSamples, const
     const auto cutoffStep = std::exp2 (std::log2 (targetCutoff / cutoff) * inverse);
     const auto resonanceStep = (values.resonance - resonance) * inverse;
     const auto driveStep = (values.drive - drive) * inverse;
-    const auto mixStep = (values.mix - mix) * inverse;
+    const auto targetMix = values.enabled ? values.mix : 0.0f;
+    const auto mixStep = (targetMix - mix) * inverse;
     const auto driving = drive > 0.0f || values.drive > 0.0f;
 
     float* channels[] = { left, right };
@@ -128,7 +129,7 @@ void SynthFilterStage::process (float* left, float* right, int numSamples, const
     cutoff = targetCutoff;
     resonance = values.resonance;
     drive = values.drive;
-    mix = values.mix;
+    mix = targetMix;
 }
 
 void SynthFilterStage::updateCoefficients (SynthFilterType type, float frequency, float normalizedResonance, float saturation) noexcept
@@ -174,6 +175,33 @@ void SynthFilterStage::updateCoefficients (SynthFilterType type, float frequency
                 break;
         }
     }
+}
+
+void SynthFilterStage::configureForDisplay (const SynthFilterValues& values) noexcept
+{
+    activeType = values.type;
+    updateCoefficients (values.type, yup::jlimit (20.0f, 20000.0f, values.cutoff), values.resonance, 0.0f);
+}
+
+float SynthFilterStage::getMagnitudeResponse (float frequency) const noexcept
+{
+    if (isStateVariableFilter (activeType))
+    {
+        const auto magnitude = stateVariable[0][0].getMagnitudeResponse (frequency);
+        return isCascadedFilter (activeType) ? magnitude * stateVariable[1][0].getMagnitudeResponse (frequency) : magnitude;
+    }
+
+    switch (activeType)
+    {
+        case SynthFilterType::moogLadder: return moog[0].getMagnitudeResponse (frequency);
+        case SynthFilterType::korg35: return korg[0].getMagnitudeResponse (frequency);
+        case SynthFilterType::diode: return diode[0].getMagnitudeResponse (frequency);
+        case SynthFilterType::vowel: return vowel[0].getMagnitudeResponse (frequency);
+        case SynthFilterType::comb: return comb[0].getMagnitudeResponse (frequency);
+        default: break;
+    }
+
+    return 1.0f;
 }
 
 float SynthFilterStage::filterSample (int channel, SynthFilterType type, float input) noexcept

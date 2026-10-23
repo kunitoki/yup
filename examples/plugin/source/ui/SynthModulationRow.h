@@ -22,7 +22,8 @@
 #pragma once
 
 #include "../dsp/SynthRoutes.h"
-#include "ParameterKnob.h"
+#include "SynthIconButton.h"
+#include "SynthSliderField.h"
 
 #include <vector>
 
@@ -36,7 +37,8 @@ struct SynthRouteDestination
 };
 
 //==============================================================================
-/** One modulation route: which source drives which destination, how much, and a remove button.
+/** One modulation route in a sunken strip: a dot in the source's color, which source
+    drives which destination, how much, and a remove button.
 
     Picking a source and a destination writes the route; the depth is the slot's
     automatable depth parameter.
@@ -49,8 +51,7 @@ public:
     SynthModulationRow (int slotToEdit,
                         SynthRoutes& routesToEdit,
                         const std::vector<SynthRouteDestination>& destinationsToOffer,
-                        yup::AudioParameter::Ptr depthParameter,
-                        const yup::Font& font);
+                        yup::AudioParameter::Ptr depthParameter);
 
     /** Shows the slot's route and depth, wherever they were changed. */
     void syncFromRoutes();
@@ -59,10 +60,12 @@ public:
     bool isUsed() const noexcept { return routes.getRoute (slot).isActive(); }
 
     void resized() override;
+    void paint (yup::Graphics& g) override;
 
 private:
-    static constexpr float knobWidth = 58.0f;
-    static constexpr float buttonWidth = 24.0f;
+    static constexpr float depthWidth = 140.0f;
+    static constexpr float buttonWidth = 22.0f;
+    static constexpr float dotSize = 8.0f;
     static constexpr float spacing = 6.0f;
 
     void writeRoute();
@@ -73,6 +76,6 @@ private:
 
     yup::ComboBox sourceBox;
     yup::ComboBox destinationBox;
-    ParameterKnob depthKnob;
-    yup::TextButton removeButton { "X" };
+    SynthSliderField depthField;
+    SynthIconButton removeButton { "RemoveRoute", YUP_ICON_XMARK, 11.0f };
 };

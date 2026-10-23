@@ -137,6 +137,7 @@ void SynthVoice::startNote (int midiNoteNumber, float velocity, yup::Synthesiser
         controls.noteFrequency = midiNoteToFrequency (currentNote);
         controls.deriveLocally = context.spectralRouted;
         controls.refreshSpectra = true;
+        controls.applyEnables();
         network.startNote (controls);
 
         for (auto& filter : filters)
@@ -239,6 +240,7 @@ void SynthVoice::renderChunk (yup::AudioBuffer<float>& outputBuffer, int startSa
         SynthNetworkControls controls = context.network;
         DelayedControls delayed;
         prepareControls (controls, delayed);
+        controls.applyEnables();
 
         controls.noteFrequency = midiNoteToFrequency (currentNote);
         controls.refreshSpectra = samplesSinceSpectra >= SynthExample::spectralChunk;
@@ -387,11 +389,18 @@ float SynthVoice::getSourceValue (SynthModulationSource source) const noexcept
     if (const auto envelope = getSourceEnvelope (source); envelope >= 0)
     {
         const auto& values = envelopeValues[static_cast<std::size_t> (envelope)];
+
+        if (! values.enabled)
+            return 0.0f;
+
         return envelopes[static_cast<std::size_t> (envelope)].getLevel() * values.depth * values.getVelocityGain (noteVelocity);
     }
 
     if (const auto lfo = getSourceLFO (source); lfo >= 0)
-        return lfos[static_cast<std::size_t> (lfo)].getValue() * lfoValues[static_cast<std::size_t> (lfo)].depth;
+    {
+        const auto& values = lfoValues[static_cast<std::size_t> (lfo)];
+        return values.enabled ? lfos[static_cast<std::size_t> (lfo)].getValue() * values.depth : 0.0f;
+    }
 
     switch (source)
     {
@@ -408,12 +417,12 @@ float SynthVoice::getSourceValue (SynthModulationSource source) const noexcept
 
 void SynthVoice::advanceSources (int numSamples) noexcept
 {
-    // Envelopes and LFOs nothing reads are not advanced; they still follow the notes.
+    // Envelopes and LFOs nothing reads, or that are disabled, are not advanced; they still follow the notes.
     for (std::size_t index = 0; index < envelopes.size(); ++index)
     {
         envelopes[index].setTimeScale (envelopeValues[index].timeScale);
 
-        if (context.envelopeRouted[index])
+        if (context.envelopeRouted[index] && envelopeValues[index].enabled)
             envelopes[index].processBlock (scratch.data(), numSamples);
     }
 
@@ -422,7 +431,7 @@ void SynthVoice::advanceSources (int numSamples) noexcept
     configureLFOs();
 
     for (std::size_t index = 0; index < lfos.size(); ++index)
-        if (context.lfoRouted[index])
+        if (context.lfoRouted[index] && lfoValues[index].enabled)
             lfos[index].skip (numSamples);
 }
 

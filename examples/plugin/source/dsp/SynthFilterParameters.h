@@ -34,6 +34,7 @@ struct SynthFilterValues
     float drive = 0.0f;
     float keytrack = 0.0f;
     float mix = 1.0f;
+    bool enabled = true;
 
     bool operator== (const SynthFilterValues&) const = default;
 };
@@ -62,4 +63,5 @@ public:
     yup::AudioParameter::Ptr drive;
     yup::AudioParameter::Ptr keytrack;
     yup::AudioParameter::Ptr mix;
+    yup::AudioParameter::Ptr enabled; /**< Stepped, 0 or 1; off bypasses the filter. */
 };

@@ -76,10 +76,9 @@ constexpr int getOversamplingFactor (SynthQuality quality) noexcept
 }
 
 //==============================================================================
-/** The responses a voice filter can select, Off skipping the stage entirely. */
+/** The responses a voice filter can select. */
 enum class SynthFilterType
 {
-    off,
     lowpass12,
     lowpass24,
     highpass12,
@@ -99,7 +98,7 @@ enum class SynthFilterType
 /** @internal Item names for SynthFilterType, index aligned with the enumeration. */
 inline yup::StringArray getSynthFilterTypeNames()
 {
-    return { "Off", "LP 12", "LP 24", "HP 12", "HP 24", "BP 12", "BP 24", "Notch", "Peak", "Allpass",
+    return { "LP 12", "LP 24", "HP 12", "HP 24", "BP 12", "BP 24", "Notch", "Peak", "Allpass",
              "Moog", "Korg 35", "Diode", "Vowel", "Comb" };
 }
 
@@ -112,7 +111,7 @@ constexpr bool isCascadedFilter (SynthFilterType type) noexcept
 /** True for the state variable filter types, as opposed to the analog models and the comb. */
 constexpr bool isStateVariableFilter (SynthFilterType type) noexcept
 {
-    return type != SynthFilterType::off && type < SynthFilterType::moogLadder;
+    return type < SynthFilterType::moogLadder;
 }
 
 /** Maps a state variable type onto the yup::FilterMode the VAStateVariableFilter reads. */

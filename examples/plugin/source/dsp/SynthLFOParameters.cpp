@@ -45,11 +45,12 @@ SynthLFOParameters::SynthLFOParameters (int lfoIndex)
     smoothing = createContinuous (prefix + "smooth", module + " Smooth", hostBase + 5, module, smoothingRange, defaults.smoothing, SynthFormat::milliseconds);
     retrigger = createChoice (prefix + "retrigger", module + " Retrigger", hostBase + 6, module, getSynthLFORetriggerNames(), static_cast<int> (defaults.retrigger));
     depth = createContinuous (prefix + "depth", module + " Depth", hostBase + 7, module, { 0.0f, 1.0f }, defaults.depth, SynthFormat::percent);
+    enabled = createChoice (prefix + "enabled", module + " Enabled", hostBase + 8, module, { "Off", "On" }, defaults.enabled ? 1 : 0);
 }
 
 void SynthLFOParameters::addTo (yup::AudioProcessor& processor) const
 {
-    for (const auto& parameter : { shape, rate, tempoSync, division, phase, smoothing, retrigger, depth })
+    for (const auto& parameter : { shape, rate, tempoSync, division, phase, smoothing, retrigger, depth, enabled })
         processor.addParameter (parameter);
 }
 
@@ -65,6 +66,7 @@ SynthLFOValues SynthLFOParameters::read (SynthParameterReader reader) const noex
     values.smoothing = reader (smoothing);
     values.retrigger = static_cast<SynthLFOValues::RetriggerMode> (reader.asInt (retrigger));
     values.depth = reader (depth);
+    values.enabled = reader.asInt (enabled) != 0;
 
     return values;
 }

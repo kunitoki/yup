@@ -47,8 +47,20 @@ public:
     /** Clears the filter memory, for a fresh note. */
     void reset() noexcept;
 
-    /** Filters a stereo chunk in place at the note's keytracked cutoff. Off leaves it untouched. */
+    /** Filters a stereo chunk in place at the note's keytracked cutoff.
+
+        A disabled filter fades its mix to dry across the chunk, then leaves the audio
+        untouched and does no work until it is enabled again.
+    */
     void process (float* left, float* right, int numSamples, const SynthFilterValues& values, double midiNote) noexcept;
+
+    /** Sets the stage to a filter's controls without processing, for a response display.
+        Use a stage of its own, never one that plays.
+    */
+    void configureForDisplay (const SynthFilterValues& values) noexcept;
+
+    /** Returns the configured filter's linear magnitude at a frequency, drive aside. */
+    float getMagnitudeResponse (float frequency) const noexcept;
 
 private:
     //==============================================================================
@@ -69,7 +81,7 @@ private:
     std::array<Antialiaser, 2> drivers;
 
     double sampleRate = 44100.0;
-    SynthFilterType activeType = SynthFilterType::off;
+    SynthFilterType activeType = SynthFilterType::lowpass12;
     float cutoff = 8000.0f;
     float resonance = 0.2f;
     float drive = 0.0f;

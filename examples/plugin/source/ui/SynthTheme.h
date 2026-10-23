@@ -23,8 +23,6 @@
 
 #include <yup_gui/yup_gui.h>
 
-#include <vector>
-
 //==============================================================================
 /** The palette the synthesiser panels share.
 
@@ -37,10 +35,8 @@ namespace SynthTheme
 inline yup::Color role (yup::ThemePalette::Role paletteRole) { return yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (paletteRole); }
 
 inline yup::Color windowBackground() { return role (yup::ThemePalette::Role::background); }
-inline yup::Color panelBackground() { return role (yup::ThemePalette::Role::surface); }
 inline yup::Color panelBorder() { return role (yup::ThemePalette::Role::outline); }
 inline yup::Color accent() { return role (yup::ThemePalette::Role::accent); }
-inline yup::Color accentDim() { return accent().mixedWith (windowBackground(), 0.45f, yup::ColorSpace::SRGB); }
 inline yup::Color textPrimary() { return role (yup::ThemePalette::Role::text); }
 inline yup::Color textSecondary() { return role (yup::ThemePalette::Role::textMuted); }
 
@@ -62,85 +58,73 @@ inline yup::Color sourceAccent (int index)
     return yup::Color::fromHSL (std::fmod (hue + turn, 1.0f), saturation, lightness);
 }
 
-constexpr float panelCorner = 6.0f;
+//==============================================================================
+/** True when the palette is dark. */
+inline bool isDark() { return yup::ApplicationTheme::getGlobalTheme()->getPalette().getMode() == yup::ThemePalette::Mode::dark; }
 
-/** Paints a toggle as a pill: an outline when off, filled with the accent when on. */
-inline void paintPillToggle (yup::Graphics& g, const yup::ApplicationTheme& theme, const yup::ToggleButton& button)
-{
-    const auto bounds = button.getLocalBounds().reduced (1.0f);
-    const auto radius = bounds.getHeight() * 0.5f;
-    const auto on = button.getToggleState();
-    const auto hot = button.isButtonOver() || button.isButtonDown();
+/** The levels of the instrument, back to front: the frame between panels, the strips
+    of tabs, tiles and display bars, the panels, the sunken wells and the raised buttons.
+    They keep that order on dark and light palettes alike.
+*/
+yup::Color frameColor();
+yup::Color stripColor();
+yup::Color panelColor();
+yup::Color raisedColor();
+inline yup::Color wellColor() { return displayBackground(); }
 
-    g.setFillColor (on ? accent().withAlpha (hot ? 1.0f : 0.85f) : displayBackground());
-    g.fillRoundedRect (bounds, radius);
+/** The colors the envelopes and the LFOs draw in, the same their modulation arcs use. */
+inline yup::Color envelopeAccent() { return sourceAccent (0); }
+inline yup::Color lfoAccent() { return sourceAccent (1); }
 
-    g.setStrokeWidth (1.0f);
-    g.setStrokeColor (on ? accent() : (hot ? accentDim() : panelBorder()));
-    g.strokeRoundedRect (bounds.reduced (0.5f), radius);
+constexpr float frameGap = 3.0f;
+constexpr float panelPadding = 8.0f;
+constexpr float controlGap = 6.0f;
+constexpr float panelCorner = 4.0f;
+constexpr float wellCorner = 3.0f;
+constexpr float stripHeight = 30.0f;
+constexpr float headerHeight = 66.0f;
+constexpr float bottomRowHeight = 126.0f;
+constexpr float rightColumnShare = 381.0f / 1174.0f;
 
-    g.setFillColor (on ? role (yup::ThemePalette::Role::onAccent) : (button.isEnabled() ? textPrimary() : textSecondary()));
-    g.fillFittedText (button.getButtonText(), theme.getDefaultFont().withHeight (yup::jmin (11.0f, bounds.getHeight() * 0.6f)),
-                      bounds.reduced (radius * 0.5f, 0.0f), yup::Justification::center);
-}
+/** Paints a one pixel highlight along the top edge and a shade along the bottom one. */
+void paintBevel (yup::Graphics& g, yup::Rectangle<float> bounds, float corner);
 
-/** Colors a toggle button like the rest of the instrument's chrome, drawn as a pill. */
-inline void styleToggle (yup::ToggleButton& button)
-{
-    button.setStyle (yup::ComponentStyle::createStyle<yup::ToggleButton> (paintPillToggle));
-    button.setColor (yup::ToggleButton::Style::backgroundColorId, displayBackground());
-    button.setColor (yup::ToggleButton::Style::backgroundToggledColorId, accentDim());
-    button.setColor (yup::ToggleButton::Style::textColorId, textSecondary());
-    button.setColor (yup::ToggleButton::Style::textToggledColorId, textPrimary());
-    button.setColor (yup::ToggleButton::Style::borderColorId, panelBorder());
-    button.setColor (yup::ToggleButton::Style::borderToggledColorId, accent());
-}
+/** Paints a panel body with its bevel. */
+void paintPanel (yup::Graphics& g, yup::Rectangle<float> bounds);
 
-/** Colors a text button like the rest of the instrument's chrome. */
-inline void styleButton (yup::TextButton& button, yup::Color background)
-{
-    button.setColor (yup::TextButton::Style::backgroundColorId, background);
-    button.setColor (yup::TextButton::Style::textColorId, textPrimary());
-    button.setColor (yup::TextButton::Style::outlineColorId, panelBorder());
-}
+/** Paints a tile, a strip colored box with a bevel. */
+void paintTile (yup::Graphics& g, yup::Rectangle<float> bounds);
 
-/** Colors a combo box like the rest of the instrument's chrome. */
+/** Paints a sunken well: shaded under its top edge, lit under its bottom one. */
+void paintWell (yup::Graphics& g, yup::Rectangle<float> bounds, float corner = wellCorner);
+
+/** Paints a raised box: a lit top edge and a one pixel drop shadow. */
+void paintRaised (yup::Graphics& g, yup::Rectangle<float> bounds, float corner);
+
+/** Paints an engraved line between two areas of a panel. */
+void paintSeam (yup::Graphics& g, yup::Point<float> from, yup::Point<float> to);
+
+/** The narrow, semibold face of captions and tab names. */
+yup::Font captionFont (float height);
+
+/** The narrow face of values. */
+yup::Font valueFont (float height);
+
+/** Returns the width a single line of text takes in a font. */
+float textWidth (const yup::String& text, const yup::Font& font);
+
+/** Draws a text button as a raised key with its text in caps. */
+void styleRaisedButton (yup::TextButton& button);
+
+/** Draws a toggle button as a raised key whose text lights in the accent while on. */
+void styleRaisedToggle (yup::ToggleButton& button);
+
+/** Colors a combo box as a well. */
 inline void styleComboBox (yup::ComboBox& comboBox)
 {
-    comboBox.setColor (yup::ComboBox::Style::backgroundColorId, displayBackground());
+    comboBox.setColor (yup::ComboBox::Style::backgroundColorId, wellColor());
     comboBox.setColor (yup::ComboBox::Style::textColorId, textPrimary());
-    comboBox.setColor (yup::ComboBox::Style::borderColorId, panelBorder());
-    comboBox.setColor (yup::ComboBox::Style::arrowColorId, accent());
+    comboBox.setColor (yup::ComboBox::Style::borderColorId, wellColor());
+    comboBox.setColor (yup::ComboBox::Style::arrowColorId, textSecondary());
 }
 } // namespace SynthTheme
-
-/** @internal Paints the rounded frame every panel of the instrument sits in. */
-inline void paintSynthPanel (yup::Graphics& g, yup::Rectangle<float> bounds)
-{
-    g.setFillColor (SynthTheme::panelBackground());
-    g.fillRoundedRect (bounds, SynthTheme::panelCorner);
-
-    g.setStrokeColor (SynthTheme::panelBorder());
-    g.setStrokeWidth (1.0f);
-    g.strokeRoundedRect (bounds.reduced (0.5f), SynthTheme::panelCorner);
-}
-
-/** @internal Spreads controls evenly across a row. */
-inline void layoutControlsInRow (yup::Rectangle<float> area, const std::vector<yup::Component*>& controls)
-{
-    if (controls.empty())
-        return;
-
-    const auto width = area.getWidth() / static_cast<float> (controls.size());
-
-    for (auto* control : controls)
-        control->setBounds (area.removeFromLeft (width).reduced (3.0f, 0.0f));
-}
-
-/** @internal Styles a panel's title label. */
-inline void setupPanelTitle (yup::Label& label, const yup::String& title, const yup::Font& font)
-{
-    label.setText (title, yup::dontSendNotification);
-    label.setFont (font.withHeight (12.0f));
-    label.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary());
-}

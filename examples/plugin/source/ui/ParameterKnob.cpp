@@ -27,10 +27,7 @@ ParameterKnob::ParameterKnob (const yup::String& caption, yup::AudioParameter::P
 {
     setOpaque (false); // the knob and its caption paint themselves, the row draws nothing
 
-    const auto steps = parameter->getNumSteps();
-    slider.setRange (0.0, 1.0, steps > 0 ? 1.0 / steps : 0.0);
-    slider.setDefaultValue (parameter->convertToNormalizedValue (parameter->getDefaultValue()));
-    slider.setValue (parameter->getNormalizedValue(), yup::dontSendNotification);
+    bindSlider();
     slider.getValueText = [this] { return parameter->toString(); };
     slider.onValueChanged = [this] (double value) { setParameterValue (value); };
     slider.onDragStart = [this] (const yup::MouseEvent&)
@@ -42,6 +39,7 @@ ParameterKnob::ParameterKnob (const yup::String& caption, yup::AudioParameter::P
     slider.onDragEnd = [this] (const yup::MouseEvent&) { endGesture(); };
     addAndMakeVisible (slider);
 
+    captionText = caption;
     label.setText (caption, yup::dontSendNotification);
     label.setFont (font);
     label.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary());
@@ -54,10 +52,45 @@ ParameterKnob::~ParameterKnob()
     endGesture();
 }
 
+void ParameterKnob::bindSlider()
+{
+    const auto steps = parameter->getNumSteps();
+    slider.setRange (0.0, 1.0, steps > 0 ? 1.0 / steps : 0.0);
+    slider.setDefaultValue (parameter->convertToNormalizedValue (parameter->getDefaultValue()));
+    slider.setValue (parameter->getNormalizedValue(), yup::dontSendNotification);
+}
+
+void ParameterKnob::setParameter (yup::AudioParameter::Ptr newParameter)
+{
+    if (newParameter == parameter)
+        return;
+
+    endGesture();
+    parameter = std::move (newParameter);
+    bindSlider();
+
+    if (captionShowsValue)
+        label.setText (parameter->toString(), yup::dontSendNotification);
+}
+
+void ParameterKnob::setCaptionShowsValue (bool shouldShowValue)
+{
+    captionShowsValue = shouldShowValue;
+    label.setText (captionShowsValue ? parameter->toString() : captionText, yup::dontSendNotification);
+    resized();
+}
+
+float ParameterKnob::getCaptionHeight() const noexcept
+{
+    return captionText.isEmpty() && ! captionShowsValue ? 0.0f : captionHeight;
+}
+
 bool ParameterKnob::syncFromParameter()
 {
     const auto normalized = static_cast<double> (parameter->getNormalizedValue());
 
+    if (captionShowsValue && label.getText() != parameter->toString())
+        label.setText (parameter->toString(), yup::dontSendNotification);
     if (dragging || std::abs (slider.getValue() - normalized) < 1.0e-6)
         return false;
 
@@ -68,10 +101,11 @@ bool ParameterKnob::syncFromParameter()
 void ParameterKnob::resized()
 {
     const auto bounds = getLocalBounds();
-    const auto size = yup::jmax (0.0f, yup::jmin (bounds.getWidth(), bounds.getHeight() - captionHeight));
+    const auto caption = getCaptionHeight();
+    const auto size = yup::jmax (0.0f, yup::jmin (bounds.getWidth(), bounds.getHeight() - caption));
 
     // The knob and its caption are centered as one block, so the caption sits right under the knob.
-    auto block = bounds.withSizeKeepingCenter (bounds.getWidth(), size + captionHeight);
+    auto block = bounds.withSizeKeepingCenter (bounds.getWidth(), size + caption);
     slider.setBounds (block.removeFromTop (size).withSizeKeepingCenter (size, size));
     label.setBounds (block);
 }

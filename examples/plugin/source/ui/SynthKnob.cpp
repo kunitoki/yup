@@ -43,6 +43,18 @@ void SynthKnob::setShowingValue (bool shouldShowValue)
     repaint();
 }
 
+void SynthKnob::setShowsValueInWell (bool shouldShowValueInWell)
+{
+    showsValueInWell = shouldShowValueInWell;
+    repaint();
+}
+
+void SynthKnob::setAccent (yup::Color newAccent)
+{
+    accentOverride = newAccent;
+    repaint();
+}
+
 void SynthKnob::setModulationArcs (std::vector<ModulationArc> newArcs)
 {
     modulationArcs = std::move (newArcs);
@@ -65,7 +77,9 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
     const auto value = static_cast<float> (slider.getValueNormalised());
     const auto valueAngle = startAngle + sweepAngle * value;
     const auto enabled = slider.isEnabled();
-    const auto accent = enabled ? SynthTheme::accent() : SynthTheme::textSecondary();
+    const auto accent = ! enabled                                         ? SynthTheme::textSecondary()
+                        : knob != nullptr && knob->accentOverride.has_value() ? *knob->accentOverride
+                                                                              : SynthTheme::accent();
 
     const auto strokeArc = [&] (float radius, float from, float to, float width, yup::Color color)
     {
@@ -100,6 +114,19 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
 
             radius -= ringWidth * 0.8f;
         }
+    }
+
+    if (knob != nullptr && knob->showsValueInWell)
+    {
+        if (knob->getValueText != nullptr)
+        {
+            g.setFillColor (value > 0.0f ? SynthTheme::textPrimary() : SynthTheme::textSecondary());
+            g.fillFittedText (knob->getValueText(), SynthTheme::valueFont (wellRadius * 0.62f),
+                              yup::Rectangle<float> (center.getX() - wellRadius, center.getY() - wellRadius, wellRadius * 2.0f, wellRadius * 2.0f),
+                              yup::Justification::center);
+        }
+
+        return;
     }
 
     // The pointer, a dot on the well's edge.

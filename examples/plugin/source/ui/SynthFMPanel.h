@@ -28,16 +28,15 @@
 #include <memory>
 
 //==============================================================================
-/** The FM matrix as a grid of knobs: each row is an operator, each column what modulates it.
-
-    An interim view until the graphical matrix replaces it.
+/** The FM matrix as a grid of cells: each row is an operator, each column the operator
+    modulating it, the diagonal its feedback. A cell shows its amount inside its well.
 
     @see SynthFMParameters
 */
 class SynthFMPanel : public yup::Component
 {
 public:
-    SynthFMPanel (const SynthFMParameters& parametersToEdit, const yup::Font& font);
+    explicit SynthFMPanel (const SynthFMParameters& parametersToEdit);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
@@ -46,10 +45,9 @@ public:
     void paint (yup::Graphics& g) override;
 
 private:
-    static constexpr float panelInset = 8.0f;
-    static constexpr float headerHeight = 18.0f;
-    static constexpr float spacing = 6.0f;
+    static constexpr float labelSize = 18.0f;
+    static constexpr float hintHeight = 30.0f;
 
-    yup::Label titleLabel;
+    yup::Rectangle<float> grid;
     std::array<std::array<std::unique_ptr<ParameterKnob>, SynthExample::oscillatorCount>, SynthExample::oscillatorCount> knobs;
 };

@@ -24,6 +24,7 @@
 #include <yup_gui/yup_gui.h>
 
 #include <functional>
+#include <optional>
 #include <vector>
 
 //==============================================================================
@@ -62,9 +63,17 @@ public:
     /** Returns the modulation arcs. */
     const std::vector<ModulationArc>& getModulationArcs() const noexcept { return modulationArcs; }
 
+    /** Draws the value inside the well at all times, without the dot pointer or the pill. */
+    void setShowsValueInWell (bool shouldShowValueInWell);
+
+    /** Draws the value arc and pill in this color rather than the theme accent. */
+    void setAccent (yup::Color newAccent);
+
 private:
     static void paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme, const yup::Slider& slider);
 
     std::vector<ModulationArc> modulationArcs;
+    std::optional<yup::Color> accentOverride;
     bool showingValue = false;
+    bool showsValueInWell = false;
 };

@@ -51,6 +51,7 @@ public:
 
     //==============================================================================
     void resized() override;
+    void paint (yup::Graphics& g) override;
 
 private:
     void timerCallback() override;

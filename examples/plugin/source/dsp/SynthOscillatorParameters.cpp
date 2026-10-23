@@ -69,13 +69,14 @@ SynthOscillatorParameters::SynthOscillatorParameters (int oscillatorIndex, const
     formant = continuous ("formant", "Formant", 21, linear (-4.0f, 4.0f), defaults.formant, unitless);
     formantPosition = continuous ("formantPosition", "Formant Position", 22, linear (0.0f, 7.0f), defaults.formantPosition, unitless);
     scatter = continuous ("scatter", "Scatter", 23, linear (0.0f, 1.0f), defaults.scatter, SynthFormat::percent);
+    enabled = createChoice (prefix + "enabled", module + " Enabled", hostBase + 24, module, { "Off", "On" }, defaults.enabled ? 1 : 0);
 }
 
 void SynthOscillatorParameters::addTo (yup::AudioProcessor& processor) const
 {
     for (const auto& parameter : { waveform, syncMode, syncRatio, frequencyMode, ratio, fine, fixedHz, level, pan, phase, freeRunning,
                                    toFilter1, toFilter2, direct, ridgeSpacing, color, dispersion, squeeze, squash, tilt, oddEven,
-                                   formant, formantPosition, scatter })
+                                   formant, formantPosition, scatter, enabled })
         processor.addParameter (parameter);
 }
 
@@ -90,6 +91,7 @@ SynthOscillatorValues SynthOscillatorParameters::read (SynthParameterReader read
     values.ratio = reader (ratio);
     values.fineCents = reader (fine);
     values.fixedHz = reader (fixedHz);
+    values.enabled = reader.asInt (enabled) != 0;
     values.level = reader (level);
     values.pan = reader (pan);
     values.phase = reader (phase);

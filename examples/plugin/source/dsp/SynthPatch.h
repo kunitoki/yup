@@ -52,13 +52,28 @@ struct State
     SynthRoutes& routes;
 };
 
+/** What a patch says about itself, stored with it. Missing fields read as empty. */
+struct PresetInfo
+{
+    yup::String name;
+    yup::String bank;
+    yup::String author;
+    yup::String tags; /**< Comma separated. */
+
+    bool operator== (const PresetInfo&) const = default;
+};
+
+/** Returns the description stored in a patch. */
+PresetInfo readInfo (const yup::DataTree& state);
+
 /** Captures the current patch.
 
     @param parameters   The processor's parameters
     @param state        The partials, curves and routes
     @param presetIndex  The factory preset the patch started from, or -1
+    @param info         The description stored with the patch
 */
-yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state, int presetIndex);
+yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state, int presetIndex, const PresetInfo& info);
 
 /** Applies a patch: parameters by ID, then partials, curves and routes, then one
     generation bump per oscillator.
@@ -87,6 +102,9 @@ int getNumFactoryPresets();
 
 /** Returns the name of a factory preset. */
 yup::String getFactoryPresetName (int index);
+
+/** Returns the description of a factory preset, empty for an index out of range. */
+PresetInfo getFactoryPresetInfo (int index);
 
 /** Returns a factory preset as a patch, or an invalid tree for an index out of range. */
 yup::DataTree createFactoryState (int index);

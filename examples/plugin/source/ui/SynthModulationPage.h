@@ -40,25 +40,20 @@ class SynthModulationPage : public yup::Component
 public:
     SynthModulationPage (const SynthParameters& parametersToEdit,
                          SynthRoutes& routesToEdit,
-                         yup::Span<const yup::AudioParameter::Ptr> processorParameters,
-                         const yup::Font& font);
+                         yup::Span<const yup::AudioParameter::Ptr> processorParameters);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
 
     void resized() override;
-    void paint (yup::Graphics& g) override;
 
 private:
-    static constexpr float panelInset = 8.0f;
-    static constexpr float headerHeight = 18.0f;
-    static constexpr float rowHeight = 44.0f;
+    static constexpr float rowHeight = 34.0f;
     static constexpr float spacing = 4.0f;
 
     std::vector<SynthRouteDestination> destinations;
     const SynthRoutes& routes;
     int shownGeneration = -1;
 
-    yup::Label titleLabel;
     std::array<std::unique_ptr<SynthModulationRow>, SynthExample::modulationSlots> rows;
 };
