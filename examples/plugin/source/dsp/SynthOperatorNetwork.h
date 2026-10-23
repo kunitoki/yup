@@ -148,18 +148,22 @@ private:
     };
 
     static constexpr int fadeLength = 64;
+    static constexpr double panSendSmoothingSeconds = 0.005;
+    static constexpr float panSendSilence = 1.0e-5f;
 
     using Buses = std::array<std::array<std::vector<float>, 2>, numBuses>;
+    using PanSends = std::array<std::array<std::array<std::array<float, 2>, numBuses>, SynthExample::oscillatorCount>, SynthExample::maxUnisonVoices>;
 
     LayerShape getLayerShape (int layer, const SynthGlobalValues& globals) const noexcept;
     void updateSeries (const SynthNetworkControls& controls, bool refreshLocal) noexcept;
     void setTargets (const SynthNetworkControls& controls, int numInternalSamples) noexcept;
     void renderTables (int numLayers) noexcept;
+    void updatePanSends (const SynthNetworkControls& controls, int numSamples) noexcept;
     void updateBusActivity (const SynthNetworkControls& controls, int numSamples) noexcept;
     void updatePath (const SynthNetworkControls& controls, int numSamples) noexcept;
     void beginPath (Path path) noexcept;
     void renderPath (Path path, const Outputs& outputs, int numSamples, const SynthNetworkControls& controls) noexcept;
-    void renderOversampled (const Outputs& outputs, int numSamples, const SynthNetworkControls& controls) noexcept;
+    void renderOversampled (const Outputs& outputs, int numSamples) noexcept;
     void renderDirect (const Outputs& outputs, int numSamples, const SynthNetworkControls& controls) noexcept;
     double getPlayedFrequency (const SynthNetworkControls& controls, int op, const LayerShape& shape) const noexcept;
     static std::array<float, 2> getPanGains (float pan, float gain) noexcept;
@@ -173,16 +177,22 @@ private:
     std::array<bool, numBuses> busActive {};
     std::array<int, numBuses> busHold {};
 
-    // The direct path: phases and last gains per layer and operator, the delay that
+    // Each operator's pan and sends per layer, smoothed across chunks so that an abrupt
+    // change glides: where the current chunk starts and ends, for both paths alike.
+    PanSends panSendStart {};
+    PanSends panSendEnd {};
+    int smoothedLayers = 0;
+
+    // The direct path: phases and last levels per layer and operator, the delay that
     // aligns it with the decimators, and the second path's output during a switch.
     std::array<std::array<double, SynthExample::oscillatorCount>, SynthExample::maxUnisonVoices> directPhases {};
-    std::array<std::array<std::array<std::array<float, 2>, numBuses>, SynthExample::oscillatorCount>, SynthExample::maxUnisonVoices> directGains {};
+    std::array<std::array<float, SynthExample::oscillatorCount>, SynthExample::maxUnisonVoices> directLevels {};
     std::vector<float> directScratch;
     Buses directBuses;
     Buses delayLines;
     Buses switchBuses;
     int delayWrite = 0;
-    bool directGainsValid = false;
+    bool directLevelsValid = false;
 
     Path activePath = Path::oversampled;
     Path targetPath = Path::oversampled;

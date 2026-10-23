@@ -28,6 +28,21 @@ std::array<float, SynthOperatorNetwork::numBuses> getSends (const SynthOscillato
 {
     return { values.toFilter1, values.toFilter2, values.direct };
 }
+
+/** Adds a signal scaled by a gain moving linearly across the block, reaching the end gain on its last sample. */
+void addWithRamp (float* destination, const float* source, float from, float to, int numSamples) noexcept
+{
+    if (from == to)
+    {
+        yup::FloatVectorOperations::addWithMultiply (destination, source, from, numSamples);
+        return;
+    }
+
+    const auto step = (to - from) / static_cast<float> (numSamples);
+
+    for (int sample = 0; sample < numSamples; ++sample)
+        destination[sample] += source[sample] * (from + step * static_cast<float> (sample + 1));
+}
 } // namespace
 
 void SynthOperatorNetwork::prepare (double newSampleRate,
@@ -87,6 +102,7 @@ void SynthOperatorNetwork::prepare (double newSampleRate,
 
     busActive.fill (false);
     busHold.fill (0);
+    smoothedLayers = 0;
     numLayers = 1;
 }
 
@@ -132,6 +148,7 @@ void SynthOperatorNetwork::startNote (const SynthNetworkControls& controls) noex
 
     busActive.fill (false);
     busHold.fill (0);
+    smoothedLayers = 0;
 
     // A note picks its path straight away; only later changes go through a switch.
     const auto modulated = forceOversampled || ! controls.fm.isZero();
@@ -170,6 +187,7 @@ void SynthOperatorNetwork::render (const Outputs& outputs, int numSamples, const
     const auto playingOversampled = activePath == Path::oversampled || targetPath == Path::oversampled;
     setTargets (controls, playingOversampled ? internalSamples : 0);
     renderTables (numLayers);
+    updatePanSends (controls, numSamples);
     updateBusActivity (controls, numSamples);
     updatePath (controls, numSamples);
 
@@ -273,18 +291,18 @@ void SynthOperatorNetwork::beginPath (Path path) noexcept
             std::fill (channel.begin(), channel.end(), 0.0f);
 
     delayWrite = 0;
-    directGainsValid = false;
+    directLevelsValid = false;
 }
 
 void SynthOperatorNetwork::renderPath (Path path, const Outputs& outputs, int numSamples, const SynthNetworkControls& controls) noexcept
 {
     if (path == Path::oversampled)
-        renderOversampled (outputs, numSamples, controls);
+        renderOversampled (outputs, numSamples);
     else
         renderDirect (outputs, numSamples, controls);
 }
 
-void SynthOperatorNetwork::renderOversampled (const Outputs& outputs, int numSamples, const SynthNetworkControls& controls) noexcept
+void SynthOperatorNetwork::renderOversampled (const Outputs& outputs, int numSamples) noexcept
 {
     const auto internalSamples = numSamples * factor;
 
@@ -322,25 +340,28 @@ void SynthOperatorNetwork::renderOversampled (const Outputs& outputs, int numSam
                         auto& matrix = matrices[static_cast<std::size_t> (layer)];
                         matrix.process (operatorPointers, internalSamples);
 
-                        const auto shape = getLayerShape (layer, controls.globals);
-
                         for (int op = 0; op < SynthExample::oscillatorCount; ++op)
                         {
                             if (! matrix.isOperatorAudible (op))
                                 continue;
 
-                            const auto& values = controls.oscillators[static_cast<std::size_t> (op)];
-                            const auto panGains = getPanGains (values.pan + shape.panOffset, layerGain);
-                            const auto sends = getSends (values);
+                            const auto& starts = panSendStart[static_cast<std::size_t> (layer)][static_cast<std::size_t> (op)];
+                            const auto& ends = panSendEnd[static_cast<std::size_t> (layer)][static_cast<std::size_t> (op)];
                             const auto* source = operatorPointers[op];
 
                             for (std::size_t bus = 0; bus < static_cast<std::size_t> (numBuses); ++bus)
                             {
-                                if (! generating[bus] || sends[bus] <= 0.0f)
+                                if (! generating[bus])
                                     continue;
 
                                 for (std::size_t channel = 0; channel < 2; ++channel)
-                                    yup::FloatVectorOperations::addWithMultiply (internal[bus][channel], source, sends[bus] * panGains[channel], internalSamples);
+                                {
+                                    const auto from = starts[bus][channel] * layerGain;
+                                    const auto to = ends[bus][channel] * layerGain;
+
+                                    if (from != 0.0f || to != 0.0f)
+                                        addWithRamp (internal[bus][channel], source, from, to, internalSamples);
+                                }
                             }
                         }
                     }
@@ -369,7 +390,6 @@ void SynthOperatorNetwork::renderDirect (const Outputs& outputs, int numSamples,
             yup::FloatVectorOperations::clear (channel.data(), numSamples);
 
     const auto layerGain = 1.0f / static_cast<float> (numLayers);
-    const auto inverseLength = 1.0f / static_cast<float> (numSamples);
 
     for (int layer = 0; layer < numLayers; ++layer)
     {
@@ -382,7 +402,7 @@ void SynthOperatorNetwork::renderDirect (const Outputs& outputs, int numSamples,
             const auto opIndex = static_cast<std::size_t> (op);
             auto& table = oscillators[opIndex].getTable (layer);
             auto& phase = directPhases[layerIndex][opIndex];
-            auto& gains = directGains[layerIndex][opIndex];
+            auto& level = directLevels[layerIndex][opIndex];
             const auto increment = getPlayedFrequency (controls, op, shape) / sampleRate;
 
             // Operators nobody hears still advance, so they are in phase when they return.
@@ -391,10 +411,7 @@ void SynthOperatorNetwork::renderDirect (const Outputs& outputs, int numSamples,
                 phase += increment * numSamples;
                 phase -= std::floor (phase);
                 table.advanceCrossfade (numSamples);
-
-                for (auto& bus : gains)
-                    bus = { 0.0f, 0.0f };
-
+                level = 0.0f;
                 continue;
             }
 
@@ -405,33 +422,33 @@ void SynthOperatorNetwork::renderDirect (const Outputs& outputs, int numSamples,
                 phase -= std::floor (phase);
             }
 
-            const auto& values = controls.oscillators[opIndex];
-            const auto panGains = getPanGains (values.pan + shape.panOffset, layerGain * values.level);
-            const auto sends = getSends (values);
+            const auto& starts = panSendStart[layerIndex][opIndex];
+            const auto& ends = panSendEnd[layerIndex][opIndex];
+            const auto levelTarget = layerGain * controls.oscillators[opIndex].level;
+            const auto levelStart = directLevelsValid ? level : levelTarget;
 
-            // Level, pan and sends ramp across the chunk, as the matrix ramps them.
+            level = levelTarget;
+
+            // The level ramps across the chunk as the matrix ramps it, and pan and sends
+            // glide as they do on the oversampled path.
             for (std::size_t bus = 0; bus < static_cast<std::size_t> (numBuses); ++bus)
             {
+                if (! busActive[bus])
+                    continue;
+
                 for (std::size_t channel = 0; channel < 2; ++channel)
                 {
-                    const auto target = busActive[bus] ? sends[bus] * panGains[channel] : 0.0f;
-                    const auto start = directGainsValid ? gains[bus][channel] : target;
-                    const auto step = (target - start) * inverseLength;
-                    auto* out = directBuses[bus][channel].data();
+                    const auto from = starts[bus][channel] * levelStart;
+                    const auto to = ends[bus][channel] * levelTarget;
 
-                    gains[bus][channel] = target;
-
-                    if (start == 0.0f && target == 0.0f)
-                        continue;
-
-                    for (int sample = 0; sample < numSamples; ++sample)
-                        out[sample] += directScratch[static_cast<std::size_t> (sample)] * (start + step * static_cast<float> (sample + 1));
+                    if (from != 0.0f || to != 0.0f)
+                        addWithRamp (directBuses[bus][channel].data(), directScratch.data(), from, to, numSamples);
                 }
             }
         }
     }
 
-    directGainsValid = true;
+    directLevelsValid = true;
 
     // The delay matches the decimators, so both paths come out on the same timeline.
     const auto delayLength = static_cast<int> (delayLines[0][0].size());
@@ -528,6 +545,47 @@ void SynthOperatorNetwork::renderTables (int layers) noexcept
             oscillators[static_cast<std::size_t> (op)].renderTables (layers);
 }
 
+/** Moves every layer's pan and sends a chunk's step towards their targets, as a one-pole
+    smoother stepped once per chunk, so an abrupt change glides over a few milliseconds.
+    A layer that was not playing starts on its target. */
+void SynthOperatorNetwork::updatePanSends (const SynthNetworkControls& controls, int numSamples) noexcept
+{
+    const auto amount = static_cast<float> (1.0 - std::exp (-static_cast<double> (numSamples) / (panSendSmoothingSeconds * sampleRate)));
+
+    for (int layer = 0; layer < numLayers; ++layer)
+    {
+        const auto layerIndex = static_cast<std::size_t> (layer);
+        const auto shape = getLayerShape (layer, controls.globals);
+        const auto continues = layer < smoothedLayers;
+
+        for (int op = 0; op < SynthExample::oscillatorCount; ++op)
+        {
+            const auto opIndex = static_cast<std::size_t> (op);
+            const auto& values = controls.oscillators[opIndex];
+            const auto panGains = getPanGains (values.pan + shape.panOffset, 1.0f);
+            const auto sends = getSends (values);
+
+            for (std::size_t bus = 0; bus < static_cast<std::size_t> (numBuses); ++bus)
+            {
+                for (std::size_t channel = 0; channel < 2; ++channel)
+                {
+                    const auto target = sends[bus] * panGains[channel];
+                    auto& start = panSendStart[layerIndex][opIndex][bus][channel];
+                    auto& end = panSendEnd[layerIndex][opIndex][bus][channel];
+
+                    start = continues ? end : target;
+                    end = start + (target - start) * amount;
+
+                    if (std::abs (end - target) < panSendSilence)
+                        end = target;
+                }
+            }
+        }
+    }
+
+    smoothedLayers = numLayers;
+}
+
 void SynthOperatorNetwork::updateBusActivity (const SynthNetworkControls& controls, int numSamples) noexcept
 {
     std::array<bool, numBuses> sending {};
@@ -541,8 +599,17 @@ void SynthOperatorNetwork::updateBusActivity (const SynthNetworkControls& contro
 
         const auto sends = getSends (values);
 
+        // A send that was just turned off is still gliding out, so it keeps its bus going.
         for (std::size_t bus = 0; bus < sending.size(); ++bus)
+        {
             sending[bus] = sending[bus] || sends[bus] > 0.0f;
+
+            for (int layer = 0; layer < numLayers && ! sending[bus]; ++layer)
+            {
+                const auto& end = panSendEnd[static_cast<std::size_t> (layer)][static_cast<std::size_t> (op)][bus];
+                sending[bus] = end[0] != 0.0f || end[1] != 0.0f;
+            }
+        }
     }
 
     for (std::size_t bus = 0; bus < sending.size(); ++bus)
