@@ -20,12 +20,26 @@
 */
 
 #include "SynthInterface.h"
-#include "SynthBloomEffect.h"
+#include "SynthNeonEffect.h"
 #include "SynthKeyboardLook.h"
 #include "SynthTheme.h"
+#include "SynthThemes.h"
 
 namespace
 {
+/** Global and debug switches, kept for the process so a theme change does not reset them. */
+struct Settings
+{
+    bool postEffect = true;
+    SynthNeonEffect::Options neon;
+};
+
+Settings& getSettings()
+{
+    static Settings settings;
+    return settings;
+}
+
 /** Keeps every control under a component out of the keyboard focus, so the computer
     keyboard keeps playing the on-screen keyboard while the mouse tweaks them. Sliders,
     combo boxes and buttons all take the focus on click whenever they want it. */
@@ -81,12 +95,8 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     mainPage.addAndMakeVisible (modWheelComponent);
 
     header = std::make_unique<SynthHeader> (processor);
-    header->onThemeChosen = [this] (int index)
-    {
-        if (onThemeChosen != nullptr)
-            onThemeChosen (index);
-    };
     header->onEditingFinished = [this] { keyboardComponent.takeKeyboardFocus(); };
+    header->onSettingsRequested = [this] { showSettingsMenu(); };
     addAndMakeVisible (*header);
 
     for (int index = 0; index < SynthExample::oscillatorCount; ++index)
@@ -188,7 +198,10 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
 
 
     keepFocusOnKeyboard (*this, keyboardComponent);
-    setComponentEffect (yup::ComponentEffect::Ptr (new SynthBloomEffect()));
+
+    // Menus and combo box lists open inside the interface, so the post effect draws them too.
+    setPopupContainer (true);
+    applySettings();
     syncFromProcessor();
 
 
@@ -267,6 +280,83 @@ void SynthInterface::paint (yup::Graphics& g)
     g.setFillColor (SynthTheme::textSecondary (keyboardComponent));
     g.fillFittedText ("PITCH", SynthTheme::captionFont (10.5f), captions.withWidth (wheelWidth).withSizeKeepingCenter (wheelWidth + 12.0f, captions.getHeight()), yup::Justification::center);
     g.fillFittedText ("MOD", SynthTheme::captionFont (10.5f), captions.withTrimmedLeft (captions.getWidth() - wheelWidth).withSizeKeepingCenter (wheelWidth + 12.0f, captions.getHeight()), yup::Justification::center);
+}
+
+void SynthInterface::showSettingsMenu()
+{
+    auto& settings = getSettings();
+    auto& neon = settings.neon;
+
+    // Switch IDs are 1 based, a switch reached through its index in this table; theme IDs
+    // start at themeBase, a theme reached through its index in SynthThemes.
+    constexpr int themeBase = 1000;
+
+    const std::pair<const char*, bool*> switches[] { { "Post Effect", &settings.postEffect },
+                                                     { "Neon Glow", &neon.glow },
+                                                     { "Chromatic Aberration", &neon.aberration },
+                                                     { "Color Grade", &neon.grade },
+                                                     { "Scanlines", &neon.scanlines },
+                                                     { "Vignette", &neon.vignette },
+                                                     { "Grain", &neon.grain },
+                                                     { "Tube Curvature", &neon.curvature },
+                                                     { "Phosphor Mask", &neon.phosphor } };
+
+    auto menu = yup::PopupMenu::create (yup::PopupMenu::Options {}
+                                            .withParentComponent (this)
+                                            .withPosition (screenToLocal (yup::Desktop::getInstance()->getCurrentMouseLocation())));
+
+    auto themeMenu = yup::PopupMenu::create();
+    const auto& themes = SynthThemes::getThemes();
+    const auto selectedTheme = SynthThemes::loadSelectedTheme();
+
+    for (int index = 0; index < static_cast<int> (themes.size()); ++index)
+        themeMenu->addItem (themes[static_cast<std::size_t> (index)].name, themeBase + index, true, index == selectedTheme);
+
+    menu->addSubMenu ("Theme", themeMenu);
+    menu->addSeparator();
+
+    for (int index = 0; index < static_cast<int> (std::size (switches)); ++index)
+    {
+        const auto& [name, value] = switches[index];
+        menu->addItem (name, index + 1, index == 0 || settings.postEffect, *value);
+
+        if (index == 0)
+            menu->addSeparator();
+    }
+
+    std::vector<bool*> values;
+
+    for (const auto& entry : switches)
+        values.push_back (entry.second);
+
+    menu->show ([safeThis = yup::WeakReference<yup::Component> (this), values] (int selectedId)
+    {
+        auto* interface = dynamic_cast<SynthInterface*> (safeThis.get());
+
+        if (interface == nullptr)
+            return;
+
+        if (selectedId >= themeBase)
+        {
+            if (interface->onThemeChosen != nullptr)
+                interface->onThemeChosen (selectedId - themeBase);
+
+            return;
+        }
+
+        if (! yup::isPositiveAndBelow (selectedId - 1, static_cast<int> (values.size())))
+            return;
+
+        auto* value = values[static_cast<std::size_t> (selectedId - 1)];
+        *value = ! *value;
+        interface->applySettings();
+    });
+}
+
+void SynthInterface::applySettings()
+{
+    const auto& settings = getSettings();
+    setComponentEffect (settings.postEffect ? yup::ComponentEffect::Ptr (new SynthNeonEffect (settings.neon)) : nullptr);
 }
 
 void SynthInterface::mouseDown (const yup::MouseEvent&)

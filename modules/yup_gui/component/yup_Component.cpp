@@ -1144,7 +1144,7 @@ Component* Component::getPopupParentComponent()
     {
         popupParent = ancestor;
 
-        if (ancestor->isTransformed() || ancestor->flags.manuallyComposited)
+        if (ancestor->isTransformed() || ancestor->flags.manuallyComposited || ancestor->flags.popupContainer)
             break;
     }
 
@@ -1520,6 +1520,16 @@ void Component::setManuallyComposited (bool shouldBeManuallyComposited)
 bool Component::isManuallyComposited() const
 {
     return flags.manuallyComposited;
+}
+
+void Component::setPopupContainer (bool shouldBePopupContainer)
+{
+    flags.popupContainer = shouldBePopupContainer;
+}
+
+bool Component::isPopupContainer() const
+{
+    return flags.popupContainer;
 }
 
 GpuTexture::Ptr Component::renderToTexture (GraphicsContext& ctx, float scale)

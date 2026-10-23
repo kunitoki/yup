@@ -108,12 +108,6 @@ void SynthPresetBar::syncFromProcessor()
     repaint();
 }
 
-yup::Rectangle<float> SynthPresetBar::getTrailingArea() const
-{
-    auto line = getLocalBounds().withTrimmedTop (getHeight() * 0.5f);
-    return line.removeFromRight (trailingWidth).reduced (8.0f, 6.0f);
-}
-
 void SynthPresetBar::resized()
 {
     auto bounds = getLocalBounds();
@@ -128,7 +122,6 @@ void SynthPresetBar::resized()
     menuButton.setBounds (first.removeFromRight (arrowWidth));
     nameArea = first;
 
-    second.removeFromRight (trailingWidth - padding);
     const auto fieldWidth = second.getWidth() / 3.0f;
     const auto captionFont = SynthTheme::captionFont (11.5f);
 

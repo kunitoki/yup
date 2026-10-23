@@ -32,7 +32,7 @@
 
 //==============================================================================
 /** The header of the instrument, a row of tiles: the logo, the preset with its
-    description and the theme, the file, random and panic buttons, the voice and load
+    description, the file, random and panic buttons, the voice and load
     readouts, and the master volume with its meter.
 
     @see SynthPresetBar, SynthInterface
@@ -42,11 +42,11 @@ class SynthHeader : public yup::Component
 public:
     explicit SynthHeader (PrismProcessor& processorToControl);
 
-    /** Called with the index of a theme picked in the header. */
-    std::function<void (int)> onThemeChosen;
-
     /** Called when the preset description stops being edited. */
     std::function<void()> onEditingFinished;
+
+    /** Called when the logo is right clicked, to show the global settings. */
+    std::function<void()> onSettingsRequested;
 
     /** Shows the processor's preset, voices, load and output level. Call at the display rate. */
     void syncFromProcessor();
@@ -56,6 +56,7 @@ public:
 
     void resized() override;
     void paint (yup::Graphics& g) override;
+    void mouseDown (const yup::MouseEvent& event) override;
 
 private:
     static constexpr float logoWidth = 214.0f;
@@ -69,7 +70,6 @@ private:
     yup::Rectangle<float> statsTile;
     yup::Rectangle<float> volumeTile;
     SynthPresetBar presetBar;
-    yup::ComboBox themeBox;
     SynthIconButton saveButton { "SavePreset", YUP_ICON_FLOPPY_DISK };
     SynthIconButton loadButton { "LoadPreset", YUP_ICON_FOLDER_OPEN };
     SynthIconButton randomButton { "Randomize", YUP_ICON_DICE };

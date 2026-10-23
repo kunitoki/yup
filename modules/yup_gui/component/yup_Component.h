@@ -1220,12 +1220,12 @@ public:
     /**
         Returns the component that popups opened by this component should be added to.
 
-        This is the closest ancestor that changes how its subtree is presented, because it is
-        transformed or manually composited (for example onto a 3D surface), so the popup is
-        presented the same way as the component that opened it. Without such an ancestor this
-        is the top level component.
+        This is the closest ancestor that is a popup container, or that changes how its subtree
+        is presented because it is transformed or manually composited (for example onto a 3D
+        surface), so the popup is presented the same way as the component that opened it.
+        Without such an ancestor this is the top level component.
 
-        @see setTransform, setManuallyComposited, PopupMenu::Options::withParentComponent
+        @see setPopupContainer, setTransform, setManuallyComposited, PopupMenu::Options::withParentComponent
     */
     Component* getPopupParentComponent();
 
@@ -1647,6 +1647,25 @@ public:
      */
     bool isManuallyComposited() const;
 
+    /** Makes this component hold the popups opened by the components inside it.
+
+        Popups, such as menus and combo box lists, are normally added to the top level
+        component. Inside a popup container they are added to the container instead, so they
+        are presented like the rest of its subtree: through its component effect, for example
+        a post-processing pass over a whole interface, and with its input mapping.
+
+        @param shouldBePopupContainer True to hold the popups of this component's subtree.
+
+        @see getPopupParentComponent
+     */
+    void setPopupContainer (bool shouldBePopupContainer);
+
+    /** Returns true if this component holds the popups opened inside it.
+
+        @see setPopupContainer
+     */
+    bool isPopupContainer() const;
+
     /** Renders this component's subtree, including its effect, into a texture.
 
         The texture is owned by the component and reused across calls: it is rendered again
@@ -1829,6 +1848,7 @@ private:
         bool cachedToTexture : 1;
         bool paintAsOffscreenRoot : 1;
         bool manuallyComposited : 1;
+        bool popupContainer : 1;
     };
 
     union

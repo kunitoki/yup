@@ -449,6 +449,16 @@ Popups should be added to `getPopupParentComponent()`, the closest transformed
 (or manually composited) ancestor, so they are presented with the same transform
 as the component that opened them; `ComboBox` does this.
 
+A component marked with `setPopupContainer (true)` holds the popups opened inside
+it, even untransformed. Use it when a component effect is the look of a whole
+interface, such as a color grade or a CRT pass, so its menus and combo box lists
+are drawn through the effect and follow its input mapping too:
+
+```cpp
+interface.setComponentEffect (new InterfaceLookEffect());
+interface.setPopupContainer (true);
+```
+
 To get the cumulative transform between two components:
 
 ```cpp

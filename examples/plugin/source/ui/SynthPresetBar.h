@@ -57,15 +57,11 @@ public:
     /** Called when the description stops being edited, so the keyboard can take the focus back. */
     std::function<void()> onEditingFinished;
 
-    /** Returns the area left free at the right end of the second line, for the header. */
-    yup::Rectangle<float> getTrailingArea() const;
-
     void resized() override;
     void paint (yup::Graphics& g) override;
 
 private:
     static constexpr float arrowWidth = 22.0f;
-    static constexpr float trailingWidth = 128.0f;
     static constexpr float padding = 12.0f;
 
     enum Field

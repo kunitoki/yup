@@ -20,7 +20,6 @@
 */
 #include "SynthHeader.h"
 #include "SynthTheme.h"
-#include "SynthThemes.h"
 
 namespace
 {
@@ -71,19 +70,6 @@ SynthHeader::SynthHeader (PrismProcessor& processorToControl)
             onEditingFinished();
     };
     addAndMakeVisible (presetBar);
-
-    const auto& themes = SynthThemes::getThemes();
-
-    for (std::size_t index = 0; index < themes.size(); ++index)
-        themeBox.addItem (themes[index].name, static_cast<int> (index) + 1);
-
-    themeBox.setSelectedId (SynthThemes::loadSelectedTheme() + 1, yup::dontSendNotification);
-    themeBox.onSelectedItemChanged = [this]
-    {
-        if (onThemeChosen != nullptr && themeBox.getSelectedId() > 0)
-            onThemeChosen (themeBox.getSelectedId() - 1);
-    };
-    addAndMakeVisible (themeBox);
 
     saveButton.onClick = [this] { presetBar.savePreset(); };
     loadButton.onClick = [this] { presetBar.loadPreset(); };
@@ -141,8 +127,6 @@ void SynthHeader::resized()
     auto right = bounds.removeFromRight (rightGroupWidth);
     bounds.removeFromRight (gap);
     presetBar.setBounds (bounds);
-    const auto trailing = presetBar.getTrailingArea();
-    themeBox.setBounds (trailing.withPosition (trailing.getX() + presetBar.getX(), trailing.getY() + presetBar.getY()));
 
     auto icons = right.removeFromLeft (iconTileSize * 2.0f + gap);
     right.removeFromLeft (gap);
@@ -166,6 +150,12 @@ void SynthHeader::resized()
 
     const auto logoHeight = logoTile.getHeight() - 22.0f;
     logoArea = logoTile.withTrimmedLeft (14.0f).withWidth (logoHeight * logoAspect).withSizeKeepingCenter (logoHeight * logoAspect, logoHeight);
+}
+
+void SynthHeader::mouseDown (const yup::MouseEvent& event)
+{
+    if (event.isRightButtonDown() && logoTile.contains (event.getPosition()) && onSettingsRequested != nullptr)
+        onSettingsRequested();
 }
 
 void SynthHeader::paint (yup::Graphics& g)

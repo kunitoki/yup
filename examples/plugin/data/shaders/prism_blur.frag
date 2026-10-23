@@ -1,6 +1,6 @@
 #version 450
 
-// One direction of a separable Gaussian blur, run twice for the bloom.
+// One direction of a separable Gaussian blur, run once each way.
 layout(set = 0, binding = 0) uniform texture2D u_tex;
 layout(set = 0, binding = 1) uniform sampler u_samp;
 layout(set = 0, binding = 2) uniform Params

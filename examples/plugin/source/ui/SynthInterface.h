@@ -62,7 +62,7 @@ public:
     explicit SynthInterface (PrismProcessor& processorToEdit);
     ~SynthInterface() override;
 
-    /** Called with the index of a theme picked in the header. */
+    /** Called with the index of a theme picked in the settings menu. */
     std::function<void (int)> onThemeChosen;
 
     //==============================================================================
@@ -74,6 +74,9 @@ public:
 
 private:
     void timerCallback() override;
+
+    void showSettingsMenu();
+    void applySettings();
 
     void layoutMainPage();
     void syncFromProcessor();

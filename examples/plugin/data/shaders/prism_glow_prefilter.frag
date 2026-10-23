@@ -1,9 +1,9 @@
 #version 450
 
-// Bloom prefilter: averages four texels of the full size interface into one of the
-// smaller target and keeps only what is brighter than the threshold, with a soft knee.
+// Neon glow prefilter: averages four texels of the full size interface into one of the
+// smaller target and keeps what is brighter than the threshold, with a soft knee.
 // Colored light glows fully, white and grey surfaces only by whiteGlow, so the accents
-// shine without large pale areas such as the keys flooding their surroundings.
+// shine like neon without large pale areas flooding their surroundings.
 layout(set = 0, binding = 0) uniform texture2D u_tex;
 layout(set = 0, binding = 1) uniform sampler u_samp;
 layout(set = 0, binding = 2) uniform Params
@@ -39,7 +39,6 @@ void main()
     soft = soft * soft / (4.0 * p.knee + 1.0e-4);
 
     float contribution = max(soft, brightness - p.threshold) / max(brightness, 1.0e-4);
-
     float saturation = (brightness - min(color.r, min(color.g, color.b))) / max(brightness, 1.0e-4);
     contribution *= mix(p.whiteGlow, 1.0, smoothstep(0.1, 0.5, saturation));
 

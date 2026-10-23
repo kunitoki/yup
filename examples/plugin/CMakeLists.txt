@@ -53,20 +53,27 @@ yup_add_shader_bundle (${target_name}_shaders
     OUTPUT_NAME SynthWaveformShaderBundle
     RESOURCE_NAME synthWaveformShader)
 
-# ==== Embed the bloom shaders, one bundle per fragment stage
-yup_add_shader_bundle (${target_name}_bloom_prefilter_shaders
+# ==== Embed the post effect shaders, one bundle per fragment stage
+yup_add_shader_bundle (${target_name}_glow_prefilter_shaders
     VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
-    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/prism_bloom_prefilter.frag"
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/prism_glow_prefilter.frag"
     NAMESPACE prism
-    OUTPUT_NAME SynthBloomPrefilterShaderBundle
-    RESOURCE_NAME synthBloomPrefilterShader)
+    OUTPUT_NAME SynthGlowPrefilterShaderBundle
+    RESOURCE_NAME synthGlowPrefilterShader)
 
-yup_add_shader_bundle (${target_name}_bloom_blur_shaders
+yup_add_shader_bundle (${target_name}_blur_shaders
     VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
-    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/prism_bloom_blur.frag"
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/prism_blur.frag"
     NAMESPACE prism
-    OUTPUT_NAME SynthBloomBlurShaderBundle
-    RESOURCE_NAME synthBloomBlurShader)
+    OUTPUT_NAME SynthBlurShaderBundle
+    RESOURCE_NAME synthBlurShader)
+
+yup_add_shader_bundle (${target_name}_neon_composite_shaders
+    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/prism_neon_composite.frag"
+    NAMESPACE prism
+    OUTPUT_NAME SynthNeonCompositeShaderBundle
+    RESOURCE_NAME synthNeonCompositeShader)
 
 yup_audio_plugin (
     TARGET_NAME ${target_name}
@@ -103,8 +110,9 @@ yup_audio_plugin (
         yup::yup_audio_gui
         pffft_library
         ${target_name}_shaders
-        ${target_name}_bloom_prefilter_shaders
-        ${target_name}_bloom_blur_shaders)
+        ${target_name}_glow_prefilter_shaders
+        ${target_name}_blur_shaders
+        ${target_name}_neon_composite_shaders)
 
 # ==== Prepare sources
 file (GLOB_RECURSE sources
@@ -114,5 +122,6 @@ source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 # The shader bundles are OBJECT libraries, whose objects only reach targets linking them directly
 target_sources (${target_name}_shared PUBLIC ${sources}
     $<TARGET_OBJECTS:${target_name}_shaders>
-    $<TARGET_OBJECTS:${target_name}_bloom_prefilter_shaders>
-    $<TARGET_OBJECTS:${target_name}_bloom_blur_shaders>)
+    $<TARGET_OBJECTS:${target_name}_glow_prefilter_shaders>
+    $<TARGET_OBJECTS:${target_name}_blur_shaders>
+    $<TARGET_OBJECTS:${target_name}_neon_composite_shaders>)
