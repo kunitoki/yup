@@ -30,7 +30,7 @@
 namespace SynthFormat
 {
 inline yup::String plain (double value, int decimals) { return yup::String (value, decimals); }
-inline yup::String hertz (double value) { return std::round (value) >= 1000.0 ? yup::String (value / 1000.0, 2) + " kHz" : yup::String (value, std::round (value * 100.0) < 10000.0 ? 2 : 0) + " Hz"; }
+inline yup::String hertz (double value) { return std::round (value) >= 1000.0 ? yup::String (value / 1000.0, 2) + " kHz" : (std::round (value * 100.0) < 10000.0 ? yup::String (value, 2) : yup::String (static_cast<int> (std::round (value)))) + " Hz"; }
 inline yup::String percent (double value) { return yup::String (static_cast<int> (std::round (value * 100.0))) + " %"; }
 inline yup::String cents (double value) { return yup::String (static_cast<int> (std::round (value))) + " ct"; }
 inline yup::String octaves (double value) { return yup::String (static_cast<int> (std::round (value))) + " oct"; }
