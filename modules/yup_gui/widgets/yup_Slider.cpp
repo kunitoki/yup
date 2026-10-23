@@ -484,12 +484,12 @@ void Slider::mouseDoubleClick (const MouseEvent& event)
 
 //==============================================================================
 
-void Slider::keyDown (const KeyPress& key, const Point<float>& position)
+bool Slider::keyDown (const KeyPress& key, const Point<float>& position)
 {
     if (! isEnabled())
-        return;
+        return false;
 
-    updateValueFromKeypress (key);
+    return updateValueFromKeypress (key);
 }
 
 void Slider::focusGained()
@@ -625,7 +625,7 @@ void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragM
     }
 }
 
-void Slider::updateValueFromKeypress (const KeyPress& key)
+bool Slider::updateValueFromKeypress (const KeyPress& key)
 {
     const bool isUpKey = key.getKey() == KeyPress::upKey || key.getKey() == KeyPress::rightKey;
     const bool isDownKey = key.getKey() == KeyPress::downKey || key.getKey() == KeyPress::leftKey;
@@ -635,7 +635,7 @@ void Slider::updateValueFromKeypress (const KeyPress& key)
     const bool isEnd = key.getKey() == KeyPress::endKey;
 
     if (! (isUpKey || isDownKey || isPageUp || isPageDown || isHome || isEnd))
-        return;
+        return false;
 
     const double currentNormalisedValue = getValueNormalised();
     double newNormalisedValue = currentNormalisedValue;
@@ -652,6 +652,7 @@ void Slider::updateValueFromKeypress (const KeyPress& key)
     }
 
     setValueNormalised (newNormalisedValue);
+    return true;
 }
 
 void Slider::resetToDefaultValue()

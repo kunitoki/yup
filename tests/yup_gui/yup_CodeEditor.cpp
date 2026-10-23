@@ -147,6 +147,19 @@ TEST (CodeEditorTest, KeyDownInsertsCharacters)
     EXPECT_EQ (String ("a\nb"), editor.getText());
 }
 
+TEST (CodeEditorTest, KeyDownClaimsEditingKeysButNotEscapeOrUnknownShortcuts)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    EXPECT_TRUE (editor.keyDown (KeyPress ('a'), {}));
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::enterKey), {}));
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::textZKey, KeyModifiers::commandMask), {}));
+
+    EXPECT_FALSE (editor.keyDown (KeyPress (KeyPress::escapeKey), {}));
+    EXPECT_FALSE (editor.keyDown (KeyPress (KeyPress::textQKey, KeyModifiers::commandMask), {}));
+}
+
 TEST (CodeEditorTest, TabInsertsSpaces)
 {
     CodeDocument document;

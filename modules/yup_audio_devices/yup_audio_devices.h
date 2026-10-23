@@ -181,6 +181,7 @@
 #endif
 
 //==============================================================================
+#include "midi_io/ump/yup_UMPDisconnectionListener.h"
 #include "midi_io/yup_MidiDevices.h"
 #include "midi_io/yup_MidiMessageCollector.h"
 #include "midi_io/ump/yup_UMPPacketCollector.h"

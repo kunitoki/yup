@@ -464,6 +464,20 @@ TEST_F (TextEditorTests, TabKeyIgnoredInSingleLineMode)
     EXPECT_EQ (String ("Hello"), editor->getText());
 }
 
+TEST_F (TextEditorTests, KeyDownClaimsTypingButLeavesOtherKeysToTheComponentsAround)
+{
+    editor->setText ("Hello");
+
+    EXPECT_TRUE (editor->keyDown (KeyPress ('a'), {}));
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::leftKey), {}));
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::textAKey, KeyModifiers::commandMask), {}));
+
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::escapeKey), {}));
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::enterKey), {}));
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::textZKey, KeyModifiers::commandMask), {}));
+}
+
 TEST_F (TextEditorTests, TabKeyInsertsInMultiLineMode)
 {
     editor->setMultiLine (true);

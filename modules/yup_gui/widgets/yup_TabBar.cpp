@@ -435,7 +435,7 @@ void TabBar::refreshDisplay (double lastFrameTimeSeconds)
         repaint();
 }
 
-void TabBar::keyDown (const KeyPress& key, const Point<float>& position)
+bool TabBar::keyDown (const KeyPress& key, const Point<float>& position)
 {
     ignoreUnused (position);
 
@@ -455,13 +455,15 @@ void TabBar::keyDown (const KeyPress& key, const Point<float>& position)
     else if (keyCode == KeyPress::endKey)
         target = findEnabledTab (getNumTabs(), -1);
     else
-        return;
+        return false;
 
     keyboardNavigated = true;
     repaint();
 
     if (target >= 0)
         setSelectedTab (getTabId (target));
+
+    return true;
 }
 
 void TabBar::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)

@@ -30,6 +30,23 @@ building blocks now have their own dedicated
 - **Plugins** - hosting third-party plugins (`yup_audio_plugin_host`) and
   wrapping your own as CLAP / VST3 (`yup_audio_plugin_client`).
 
+## MIDI device disconnection
+
+`MidiInput` and `MidiOutput` report when the device behind them goes away, for
+example when a USB controller is unplugged. Add a `ump::DisconnectionListener`
+with `addDisconnectionListener`; its `disconnected()` is called once, on the
+message thread, and `isDisconnected()` returns true from then on. A disconnected
+device never delivers or sends again, so open a new one when the device returns.
+Don't destroy the device from inside `disconnected()`.
+
+Disconnections are reported by CoreMIDI (macOS, iOS), Windows, ALSA (Linux) and
+Web MIDI. On Windows they arrive with the system's device-change notification,
+about half a second after the device goes away. Android doesn't report them yet,
+so listeners are never called there.
+
+`AudioDeviceManager` uses this for its enabled MIDI inputs: an input whose device
+disappears is closed, and it is opened again when the device comes back.
+
 ## Web MIDI (WASM)
 
 On Emscripten builds, MIDI I/O is backed by the browser's
@@ -65,6 +82,15 @@ startup; click the canvas once to resume the shared audio worklet. The shell's
 top-right `audio` and `midi` indicators show the current browser permission and
 runtime state. This activation is provided by the shell and audio-device
 backend, so individual examples do not need their own browser-specific button.
+
+## Microphone input (Emscripten)
+
+Opening the audio worklet device with input channels asks the browser for
+microphone access and feeds the microphone to those inputs, with echo
+cancellation, noise suppression and automatic gain turned off. Access needs a
+secure context (HTTPS or `localhost`). Until the user allows it, or if they
+deny it, the inputs are silent. A mono microphone feeds both channels of a
+stereo input.
 
 ## Audio thread rules on the web
 

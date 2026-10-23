@@ -107,6 +107,7 @@ MidiSection::MidiSection()
     outputLabel.setText ("MIDI Output:", dontSendNotification);
 
     inputsListBox.setModel (&inputsModel);
+    inputsListBox.setRowSize (AudioDeviceManagerPanel::itemHeight);
 
     addAndMakeVisible (inputsLabel);
     addAndMakeVisible (inputsListBox);
@@ -165,15 +166,22 @@ void MidiSection::populateOutput (const Array<MidiDeviceInfo>& devices, const St
     };
 }
 
+int MidiSection::getNumInputDevices() const noexcept
+{
+    return inputsModel.getNumDevices();
+}
+
 void MidiSection::resized()
 {
     auto bounds = getLocalBounds();
-    inputsLabel.setBounds (bounds.removeFromTop (20));
-    inputsListBox.setBounds (bounds.removeFromTop (100).reduced (2, 2));
+    inputsLabel.setBounds (bounds.removeFromTop (AudioDeviceManagerPanel::itemHeight));
 
-    auto outRow = bounds.removeFromTop (44);
-    outputLabel.setBounds (outRow.removeFromLeft (170).reduced (0, 10));
-    outputCombo.setBounds (outRow.reduced (2, 4));
+    auto outRow = bounds.removeFromBottom (AudioDeviceManagerPanel::itemHeight);
+    outputLabel.setBounds (outRow.removeFromLeft (170));
+    outputCombo.setBounds (outRow.reduced (2, 0));
+
+    bounds.removeFromBottom (AudioDeviceManagerPanel::itemGap);
+    inputsListBox.setBounds (bounds);
 }
 
 } // namespace yup

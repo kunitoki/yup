@@ -845,6 +845,8 @@ File File::getSpecialLocation (const SpecialLocationType type)
     {
         case userHomeDirectory:
         case userApplicationDataDirectory:
+        case userPreferencesDirectory:
+        case userAudioPresetsDirectory:
         case userDesktopDirectory:
         case commonApplicationDataDirectory:
         {

@@ -262,9 +262,6 @@ private:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ArtboardLayout
 #include "examples/ArtboardLayout.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
-#include "examples/Audio.h"
-#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_AudioFile
 #include "examples/AudioFile.h"
 #endif
@@ -539,9 +536,6 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ArtboardLayout
         addDemo ("ArtboardLayout", "Artboard Layout", [] { return std::make_unique<ArtboardLayoutDemo>(); });
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
-        addDemo ("Audio", "Audio", [] { return std::make_unique<AudioExample>(); });
-#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_AudioFile
         addDemo ("AudioFile", "Audio File", [] { return std::make_unique<AudioFileDemo>(); });
 #endif
@@ -788,7 +782,7 @@ public:
             g.drawImage (image, logoBounds);
     }
 
-    void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
+    bool keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
     {
         switch (keys.getKey())
         {
@@ -807,7 +801,12 @@ public:
             case yup::KeyPress::textZKey:
                 setFullScreen (! isFullScreen());
                 break;
+
+            default:
+                return false;
         }
+
+        return true;
     }
 
     void timerCallback() override

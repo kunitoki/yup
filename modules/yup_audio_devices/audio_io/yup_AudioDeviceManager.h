@@ -547,6 +547,7 @@ private:
     void handleIncomingMidiMessageInt (MidiInput*, const MidiMessage&);
     void audioDeviceListChanged();
     void midiDeviceListChanged();
+    void closeDisconnectedMidiInputs();
 
     String restartDevice (int blockSizeToUse, double sampleRateToUse, const BigInteger& ins, const BigInteger& outs);
     void stopDevice();

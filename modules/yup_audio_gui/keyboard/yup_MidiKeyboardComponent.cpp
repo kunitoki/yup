@@ -414,33 +414,42 @@ void MidiKeyboardComponent::resized()
     updateScrollButtons();
 }
 
-void MidiKeyboardComponent::keyDown (const KeyPress& key, const Point<float>&)
+bool MidiKeyboardComponent::keyDown (const KeyPress& key, const Point<float>&)
 {
+    return handleNoteKey (key, true);
+}
+
+bool MidiKeyboardComponent::keyUp (const KeyPress& key, const Point<float>&)
+{
+    return handleNoteKey (key, false);
+}
+
+bool MidiKeyboardComponent::handleNoteKey (const KeyPress& key, bool isDown)
+{
+    if (const auto modifiers = key.getModifiers(); isDown && (modifiers.isCommandDown() || modifiers.isControlDown()))
+        return false;
+
     auto midiNote = getMidiNoteForKey (key);
 
-    if (midiNote >= 0)
-    {
-        midiNote += 12 * keyPressBaseOctave;
+    if (midiNote < 0)
+        return false;
 
+    midiNote += 12 * keyPressBaseOctave;
+
+    if (isDown)
+    {
         if (midiNote >= 0 && midiNote < 128 && ! keyDownNotes.contains (midiNote))
         {
             state.noteOn (midiChannel, midiNote, velocity);
             keyDownNotes.add (midiNote);
         }
     }
-}
-
-void MidiKeyboardComponent::keyUp (const KeyPress& key, const Point<float>&)
-{
-    auto midiNote = getMidiNoteForKey (key);
-
-    if (midiNote >= 0)
+    else if (keyDownNotes.removeFirstMatchingValue (midiNote) >= 0)
     {
-        midiNote += 12 * keyPressBaseOctave;
-
-        if (keyDownNotes.removeFirstMatchingValue (midiNote) >= 0)
-            state.noteOff (midiChannel, midiNote, 0.0f);
+        state.noteOff (midiChannel, midiNote, 0.0f);
     }
+
+    return true;
 }
 
 void MidiKeyboardComponent::focusLost()

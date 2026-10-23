@@ -64,7 +64,7 @@ struct SliderColors
 
 SliderColors getSliderColors (const ApplicationTheme& theme, const Slider& slider)
 {
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (slider);
 
     SliderColors colors;
     colors.background = theme.findColor (slider, Slider::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface));
@@ -335,7 +335,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     auto textBounds = t.getTextBounds();
     auto scrollOffset = t.getScrollOffset();
     constexpr auto cornerRadius = widgetCornerRadius;
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (t);
 
     // Draw background
     auto backgroundColor = theme.findColor (t, TextEditor::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface));
@@ -505,7 +505,7 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 {
     auto bounds = b.getLocalBounds();
     constexpr auto cornerRadius = widgetCornerRadius;
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (b);
 
     Color backgroundColor, textColor;
 
@@ -549,7 +549,7 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
 {
     auto bounds = b.getLocalBounds();
     constexpr auto cornerRadius = widgetCornerRadius;
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (b);
 
     // Get colors based on toggle state
     auto bgColor = b.getToggleState()
@@ -605,7 +605,7 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
     g.strokeRoundedRect (bounds, cornerSize);
 
     // Fill background based on switch state
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (s);
     auto bgColor = s.getToggleState()
                      ? theme.findColor (s, SwitchButton::Style::switchOnBackgroundColorId).value_or (palette.getColor (PaletteRole::accent))
                      : theme.findColor (s, SwitchButton::Style::switchOffBackgroundColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
@@ -632,7 +632,7 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
 {
     auto& styledText = c.getStyledText();
     const auto bounds = c.getLocalBounds();
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (c);
 
     // Draw background
     auto bgColor = theme.findColor (c, ComboBox::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface));
@@ -710,7 +710,7 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 
     if (! styledText.isEmpty())
     {
-        const auto fillColor = theme.findColor (l, Label::Style::textFillColorId).value_or (theme.getPalette().getColor (PaletteRole::text));
+        const auto fillColor = theme.findColor (l, Label::Style::textFillColorId).value_or (theme.getPalette (l).getColor (PaletteRole::text));
         g.setFillColor (fillColor);
         g.fillFittedText (styledText, bounds);
     }
@@ -734,7 +734,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         g.setFeather (0.0f);
     }
 
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (p);
     const auto borderColor = theme.findColor (p, PopupMenu::Style::menuBorder).value_or (palette.getColor (PaletteRole::outline));
 
     // Draw menu background
@@ -950,7 +950,7 @@ void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar
     }
 
     // Draw thumb with rounded caps
-    const auto mutedColor = theme.getPalette().getColor (PaletteRole::textMuted);
+    const auto mutedColor = theme.getPalette (scrollBar).getColor (PaletteRole::textMuted);
 
     Color thumbColor;
     if (scrollBar.isDragging())
@@ -973,9 +973,9 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
 
     // Get colors
     const auto backgroundColor = theme.findColor (progressBar, ProgressBar::Style::backgroundColorId)
-                                     .value_or (theme.getPalette().getColor (PaletteRole::surfaceRaised));
+                                     .value_or (theme.getPalette (progressBar).getColor (PaletteRole::surfaceRaised));
     const auto foregroundColor = theme.findColor (progressBar, ProgressBar::Style::foregroundColorId)
-                                     .value_or (theme.getPalette().getColor (PaletteRole::accent));
+                                     .value_or (theme.getPalette (progressBar).getColor (PaletteRole::accent));
 
     // Draw background track
     g.setFillColor (backgroundColor);
@@ -1047,7 +1047,7 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
 void paintListBox (Graphics& g, const ApplicationTheme& theme, const ListBox& listBox)
 {
     const auto bounds = listBox.getLocalBounds();
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (listBox);
 
     g.setFillColor (theme.findColor (listBox, ListBox::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface)));
     g.fillRect (bounds);
@@ -1087,7 +1087,7 @@ void paintListBox (Graphics& g, const ApplicationTheme& theme, const ListBox& li
 
 void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
 {
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (item);
 
     // Determine background color
     Color backgroundColor;
@@ -1155,7 +1155,7 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
     if (view == nullptr || row.getItem() == nullptr)
         return;
 
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (row);
 
     const auto indentSize = view->getIndentSize();
 
@@ -1238,7 +1238,7 @@ constexpr float tabBarPillCornerRadius = 5.0f;
 
 void paintTabBar (Graphics& g, const ApplicationTheme& theme, const TabBar& bar)
 {
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (bar);
     auto bounds = bar.getLocalBounds();
     const auto indicator = bar.getIndicatorBounds();
     const auto trackColor = theme.findColor (bar, TabBar::Style::trackColorId).value_or (palette.getColor (PaletteRole::surface));
@@ -1298,7 +1298,7 @@ void paintTabBar (Graphics& g, const ApplicationTheme& theme, const TabBar& bar)
 
 void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton& button)
 {
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (button);
     const auto selected = button.isSelected();
     const auto alpha = button.isEnabled() ? 1.0f : 0.4f;
     const auto hoveredColor = theme.findColor (button, TabButton::Style::hoveredBackgroundColorId).value_or (palette.getColor (PaletteRole::text).withAlpha (0.06f));
@@ -1478,7 +1478,7 @@ void paintAudioGraphComponent (Graphics& g, const ApplicationTheme& theme, const
 {
     const auto zoom = graph.getZoom();
     const auto canvasOffset = graph.getCanvasOffset();
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (graph);
     const auto backgroundColor = theme.findColor (graph, AudioGraphComponent::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::background));
     const auto gridColor = theme.findColor (graph, AudioGraphComponent::Style::gridColorId).value_or (palette.getColor (PaletteRole::text).withAlpha (0.05f));
 
@@ -1536,8 +1536,8 @@ void paintAudioGraphPort (Graphics& g,
                           bool isInput)
 {
     const auto portRadius = node.getPortRadius();
-    const auto portHoleColor = theme.findColor (node, AudioGraphNodeView::Style::portHoleColorId).value_or (theme.getPalette().getColor (PaletteRole::background));
-    const auto textColor = theme.findColor (node, AudioGraphNodeView::Style::textColorId).value_or (theme.getPalette().getColor (PaletteRole::text));
+    const auto portHoleColor = theme.findColor (node, AudioGraphNodeView::Style::portHoleColorId).value_or (theme.getPalette (node).getColor (PaletteRole::background));
+    const auto textColor = theme.findColor (node, AudioGraphNodeView::Style::textColorId).value_or (theme.getPalette (node).getColor (PaletteRole::text));
 
     g.setFillColor (info.color.withAlpha (0.24f));
     g.fillEllipse (audioGraphEllipseBounds (center, portRadius * 1.8f));
@@ -1563,7 +1563,7 @@ void paintAudioGraphNodeView (Graphics& g, const ApplicationTheme& theme, const 
     const auto accent = node.getNodeColor();
     const auto headerHeight = audioGraphNodeBaseHeaderHeight * viewScale;
 
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (node);
 
     const auto shadowColor = theme.findColor (node, AudioGraphNodeView::Style::shadowColorId).value_or (Colors::black);
     const auto accentBackgroundColor = theme.findColor (node, AudioGraphNodeView::Style::accentBackgroundColorId).value_or (accent);
@@ -1936,7 +1936,7 @@ void paintVectorWheel (Graphics& g, Rectangle<float> bounds, float normalizedVal
 
 void paintPitchWheel (Graphics& g, const ApplicationTheme& theme, const PitchWheelComponent& wheel)
 {
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (wheel);
     const auto topColor = theme.findColor (wheel, PitchWheelComponent::Style::bodyTopColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
     const auto bottomColor = theme.findColor (wheel, PitchWheelComponent::Style::bodyBottomColorId).value_or (palette.getColor (PaletteRole::background));
     const auto outlineColor = theme.findColor (wheel, PitchWheelComponent::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
@@ -1952,7 +1952,7 @@ void paintPitchWheel (Graphics& g, const ApplicationTheme& theme, const PitchWhe
 
 void paintModWheel (Graphics& g, const ApplicationTheme& theme, const ModWheelComponent& wheel)
 {
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (wheel);
     const auto topColor = theme.findColor (wheel, ModWheelComponent::Style::bodyTopColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
     const auto bottomColor = theme.findColor (wheel, ModWheelComponent::Style::bodyBottomColorId).value_or (palette.getColor (PaletteRole::background));
     const auto outlineColor = theme.findColor (wheel, ModWheelComponent::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
@@ -1976,7 +1976,7 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
         return;
 
     // Get colors from theme
-    const auto& palette = theme.getPalette();
+    const auto& palette = theme.getPalette (meter);
     const auto backgroundColor = theme.findColor (meter, KMeterComponent::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface));
     const auto greenColor = theme.findColor (meter, KMeterComponent::Style::greenZoneColorId).value_or (Color (0xff00cc00));
     const auto amberColor = theme.findColor (meter, KMeterComponent::Style::amberZoneColorId).value_or (Color (0xffffaa00));

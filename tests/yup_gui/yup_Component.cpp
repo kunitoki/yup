@@ -100,11 +100,16 @@ public:
 
     void enableWireframe (bool) override {}
 
+    void setAspectRatio (std::optional<float> newAspectRatio) override { aspectRatio = newAspectRatio; }
+
+    std::optional<float> getAspectRatio() const override { return aspectRatio; }
+
     GpuTriangulationThresholds getTriangulationThresholds() const override { return thresholds; }
 
     void setTriangulationThresholds (const GpuTriangulationThresholds& newThresholds) override { thresholds = newThresholds; }
 
     GpuTriangulationThresholds thresholds;
+    std::optional<float> aspectRatio;
 
     void repaint() override {}
 
@@ -262,14 +267,14 @@ public:
         comp.internalRefreshDisplay (lastFrameTimeSeconds);
     }
 
-    static void triggerKeyDown (Component& comp, const KeyPress& keys, const Point<float>& position)
+    static bool triggerKeyDown (Component& comp, const KeyPress& keys, const Point<float>& position)
     {
-        comp.internalKeyDown (keys, position);
+        return comp.internalKeyDown (keys, position);
     }
 
-    static void triggerKeyUp (Component& comp, const KeyPress& keys, const Point<float>& position)
+    static bool triggerKeyUp (Component& comp, const KeyPress& keys, const Point<float>& position)
     {
-        comp.internalKeyUp (keys, position);
+        return comp.internalKeyUp (keys, position);
     }
 
     static void triggerTextInput (Component& comp, const String& text)
@@ -2554,6 +2559,27 @@ TEST_F (ComponentTest, DesktopNativeDelegationSetters)
     EXPECT_EQ (constRoot.getNativeComponent(), root->getNativeComponent());
 }
 
+TEST_F (ComponentTest, WindowAspectRatioIsKeptAndForwardedToTheNative)
+{
+    EXPECT_FALSE (root->getWindowAspectRatio().has_value());
+
+    // Without a window the ratio is only kept, to be applied when one is created.
+    root->setWindowAspectRatio (2.0f);
+    EXPECT_EQ (root->getWindowAspectRatio(), 2.0f);
+
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    ComponentHelper::setOnDesktop (*root, true);
+
+    root->setWindowAspectRatio (1.5f);
+    EXPECT_EQ (root->getWindowAspectRatio(), 1.5f);
+    EXPECT_EQ (native->getAspectRatio(), 1.5f);
+
+    root->setWindowAspectRatio (std::nullopt);
+    EXPECT_FALSE (root->getWindowAspectRatio().has_value());
+    EXPECT_FALSE (native->getAspectRatio().has_value());
+}
+
 TEST_F (ComponentTest, TransformToScreenMatchesLocalToScreenOnDesktop)
 {
     // The mock native sits at the screen origin, so the root bounds position must not be added again.
@@ -2660,6 +2686,27 @@ TEST_F (ComponentTest, FindColorWalksUpTheHierarchy)
     EXPECT_FALSE (child->findColor ("unknown-id").has_value());
 }
 
+TEST_F (ComponentTest, FindPaletteReturnsClosestPaletteUpTheHierarchy)
+{
+    const ThemePalette rootPalette (std::vector<Color> { Color (0xff101010), Color (0xffff8000) });
+    const ThemePalette parentPalette (std::vector<Color> { Color (0xff101010), Color (0xff0080ff) });
+
+    EXPECT_EQ (nullptr, child->findPalette());
+
+    root->setPalette (rootPalette);
+    ASSERT_NE (nullptr, child->findPalette());
+    EXPECT_EQ (rootPalette, *child->findPalette());
+    EXPECT_EQ (nullptr, child->getPalette());
+
+    parent->setPalette (parentPalette);
+    EXPECT_EQ (parentPalette, *child->findPalette());
+    EXPECT_EQ (rootPalette, *root->findPalette());
+
+    parent->setPalette (std::nullopt);
+    EXPECT_EQ (nullptr, parent->getPalette());
+    EXPECT_EQ (rootPalette, *child->findPalette());
+}
+
 TEST_F (ComponentTest, InternalDisplayAndCloseDispatch)
 {
     ComponentHelper::triggerDisplayChanged (*root);
@@ -2695,6 +2742,113 @@ TEST_F (ComponentTest, InternalKeyboardDispatch)
     ComponentHelper::triggerTextInput (*root, "a");
     root->setWantsKeyboardFocus (true);
     ComponentHelper::triggerTextInput (*root, "a");
+}
+
+//==============================================================================
+class ComponentKeyDispatchTest : public ::testing::Test
+{
+protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    /** Logs the keys it receives and handles them when told to. */
+    class KeyRecorder : public Component
+    {
+    public:
+        KeyRecorder (const String& recorderName, std::vector<String>& sharedLog)
+            : name (recorderName)
+            , log (sharedLog)
+        {
+            setVisible (true);
+        }
+
+        bool keyDown (const KeyPress&, const Point<float>&) override
+        {
+            log.push_back (name + " down");
+
+            // The callback may delete this recorder, so nothing of it is read afterwards.
+            const auto handled = handles;
+            const auto callback = onKey;
+
+            if (callback != nullptr)
+                callback();
+
+            return handled;
+        }
+
+        bool keyUp (const KeyPress&, const Point<float>&) override
+        {
+            log.push_back (name + " up");
+            return handles;
+        }
+
+        bool handles = false;
+        std::function<void()> onKey;
+
+    private:
+        String name;
+        std::vector<String>& log;
+    };
+
+    void SetUp() override
+    {
+        root.addChildComponent (parent);
+        parent.addChildComponent (child);
+    }
+
+    const KeyPress key { KeyPress::textAKey };
+    std::vector<String> log;
+    KeyRecorder root { "root", log };
+    KeyRecorder parent { "parent", log };
+    KeyRecorder child { "child", log };
+};
+
+TEST_F (ComponentKeyDispatchTest, UnhandledKeyClimbsToEveryParent)
+{
+    EXPECT_FALSE (ComponentHelper::triggerKeyDown (child, key, {}));
+    EXPECT_EQ ((std::vector<String> { "child down", "parent down", "root down" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, HandledKeyStopsClimbing)
+{
+    parent.handles = true;
+
+    EXPECT_TRUE (ComponentHelper::triggerKeyDown (child, key, {}));
+    EXPECT_EQ ((std::vector<String> { "child down", "parent down" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, KeyUpClimbsLikeKeyDown)
+{
+    root.handles = true;
+
+    EXPECT_TRUE (ComponentHelper::triggerKeyUp (child, key, {}));
+    EXPECT_EQ ((std::vector<String> { "child up", "parent up", "root up" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, DisabledComponentIsSkippedButTheKeyStillClimbs)
+{
+    child.setEnabled (false);
+
+    ComponentHelper::triggerKeyDown (child, key, {});
+    EXPECT_EQ ((std::vector<String> { "parent down", "root down" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, ComponentsInsideADisabledParentReceiveNoKeys)
+{
+    parent.setEnabled (false);
+
+    ComponentHelper::triggerKeyDown (child, key, {});
+    ComponentHelper::triggerKeyUp (child, key, {});
+    EXPECT_EQ ((std::vector<String> { "root down", "root up" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, ComponentDeletedByItsHandlerEndsTheClimb)
+{
+    auto doomed = std::make_unique<KeyRecorder> ("doomed", log);
+    child.addChildComponent (*doomed);
+    doomed->onKey = [&doomed] { doomed.reset(); };
+
+    EXPECT_TRUE (ComponentHelper::triggerKeyDown (*doomed, key, {}));
+    EXPECT_EQ ((std::vector<String> { "doomed down" }), log);
 }
 
 TEST_F (ComponentTest, InternalMouseDispatch)

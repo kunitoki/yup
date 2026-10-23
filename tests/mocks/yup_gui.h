@@ -101,8 +101,8 @@ public:
     MOCK_METHOD (void, mouseUp, (const yup::MouseEvent&), (override));
     MOCK_METHOD (void, mouseDoubleClick, (const yup::MouseEvent&), (override));
     MOCK_METHOD (void, mouseWheel, (const yup::MouseEvent&, const yup::MouseWheelData&), (override));
-    MOCK_METHOD (void, keyDown, (const yup::KeyPress&, const yup::Point<float>&), (override));
-    MOCK_METHOD (void, keyUp, (const yup::KeyPress&, const yup::Point<float>&), (override));
+    MOCK_METHOD (bool, keyDown, (const yup::KeyPress&, const yup::Point<float>&), (override));
+    MOCK_METHOD (bool, keyUp, (const yup::KeyPress&, const yup::Point<float>&), (override));
     MOCK_METHOD (void, textInput, (const yup::String&), (override));
     MOCK_METHOD (void, keyStateChanged, (const yup::KeyPress&, bool), (override));
     MOCK_METHOD (void, modifierKeysChanged, (const yup::KeyModifiers&), (override));

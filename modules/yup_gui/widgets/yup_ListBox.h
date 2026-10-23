@@ -802,7 +802,7 @@ public:
     /** @internal */
     void mouseDoubleClick (const MouseEvent& event) override;
     /** @internal */
-    void keyDown (const KeyPress& key, const Point<float>& position) override;
+    bool keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void focusGained() override;
     /** @internal */

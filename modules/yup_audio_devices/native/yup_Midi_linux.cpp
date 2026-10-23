@@ -108,12 +108,27 @@ public:
             }
         }
 
-        void connectWith (int sourceClient, int sourcePort) const noexcept
+        void connectWith (int sourceClient, int sourcePort) noexcept
         {
+            remoteClient = sourceClient;
+            remotePort = sourcePort;
+
             if (isInput)
                 snd_seq_connect_from (client->get(), portId, sourceClient, sourcePort);
             else
                 snd_seq_connect_to (client->get(), portId, sourceClient, sourcePort);
+        }
+
+        void setDisconnectionHandler (std::function<void()> handler)
+        {
+            onRemoteGone = std::move (handler);
+        }
+
+        /** Reports the disconnection when the remote port, or the whole remote client (portId -1), went away. */
+        void handleRemoteGone (int goneClient, int gonePort) const
+        {
+            if (remoteClient >= 0 && remoteClient == goneClient && (gonePort < 0 || gonePort == remotePort) && onRemoteGone != nullptr)
+                onRemoteGone();
         }
 
         bool isValid() const noexcept
@@ -225,8 +240,10 @@ public:
         MidiInputCallback* callback = nullptr;
         snd_midi_event_t* midiParser = nullptr;
         MidiInput* midiInput = nullptr;
+        std::function<void()> onRemoteGone;
 
         String portName;
+        int remoteClient = -1, remotePort = -1;
 
         int maxEventSize = 4096, portId = -1;
         std::atomic<bool> callbackEnabled { false };
@@ -285,6 +302,20 @@ public:
 
         if (const auto iter = findPortIterator (port->getPortId()); iter != ports.end())
             ports.erase (iter);
+    }
+
+    void setDisconnectionHandler (Port& port, std::function<void()> handler)
+    {
+        const ScopedLock sl (callbackLock);
+        port.setDisconnectionHandler (std::move (handler));
+    }
+
+    void handleRemoteGone (int goneClient, int gonePort)
+    {
+        const ScopedLock sl (callbackLock);
+
+        for (const auto& port : ports)
+            port->handleRemoteGone (goneClient, gonePort);
     }
 
 private:
@@ -428,6 +459,11 @@ private:
 
                                 if (foundEvent != std::end (systemEvents))
                                 {
+                                    if (inputEvent->type == SND_SEQ_EVENT_PORT_EXIT)
+                                        client.handleRemoteGone (inputEvent->data.addr.client, inputEvent->data.addr.port);
+                                    else if (inputEvent->type == SND_SEQ_EVENT_CLIENT_EXIT)
+                                        client.handleRemoteGone (inputEvent->data.addr.client, -1);
+
                                     notifier.triggerAsyncUpdate();
                                     continue;
                                 }
@@ -600,6 +636,11 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
     port->setupInput (midiInput.get(), callback);
     midiInput->internal = std::make_unique<Pimpl> (port);
 
+    AlsaClient::getInstance()->setDisconnectionHandler (*port, [input = midiInput.get()]
+    {
+        input->markDisconnected();
+    });
+
     return midiInput;
 }
 
@@ -696,6 +737,11 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
 
     port->setupOutput();
     midiOutput->internal = std::make_unique<Pimpl> (port);
+
+    AlsaClient::getInstance()->setDisconnectionHandler (*port, [output = midiOutput.get()]
+    {
+        output->markDisconnected();
+    });
 
     return midiOutput;
 }

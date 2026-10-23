@@ -63,7 +63,34 @@ std::optional<Color> ApplicationTheme::findColor (const Component& component, co
     if (auto it = defaultColors.find (colorId); it != defaultColors.end())
         return it->second;
 
+    if (const auto* componentPalette = component.findPalette())
+        return findPaletteColor (*componentPalette, colorId);
+
     if (auto it = paletteColors.find (colorId); it != paletteColors.end())
+        return it->second;
+
+    return std::nullopt;
+}
+
+std::optional<Color> ApplicationTheme::findPaletteColor (const ThemePalette& componentPalette, const Identifier& colorId) const
+{
+    const SpinLock::ScopedLockType lock (componentPaletteColorsLock);
+
+    auto entry = std::find_if (componentPaletteColors.begin(), componentPaletteColors.end(), [&] (const auto& candidate)
+    {
+        return candidate.first == componentPalette;
+    });
+
+    // Mapped once per distinct palette, by running the palette mapping on a theme of its own.
+    if (entry == componentPaletteColors.end())
+    {
+        ApplicationTheme mapped;
+        mapped.paletteMapping = paletteMapping;
+        mapped.setPalette (componentPalette);
+        entry = componentPaletteColors.emplace (componentPaletteColors.end(), componentPalette, std::move (mapped.paletteColors));
+    }
+
+    if (auto it = entry->second.find (colorId); it != entry->second.end())
         return it->second;
 
     return std::nullopt;
@@ -96,10 +123,21 @@ const ThemePalette& ApplicationTheme::getPalette() const
     return palette;
 }
 
+const ThemePalette& ApplicationTheme::getPalette (const Component& component) const
+{
+    if (const auto* componentPalette = component.findPalette())
+        return *componentPalette;
+
+    return palette;
+}
+
 void ApplicationTheme::setPaletteMapping (PaletteMapping mapping)
 {
     paletteMapping = std::move (mapping);
     setPalette (palette);
+
+    const SpinLock::ScopedLockType lock (componentPaletteColorsLock);
+    componentPaletteColors.clear();
 }
 
 void ApplicationTheme::setPaletteColor (const Identifier& colorId, const Color& color)

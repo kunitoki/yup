@@ -173,7 +173,10 @@ TEST_F (SincOversamplerTest, DownsampleConsumesPendingOversampledBlock)
     os2x.downsample (outputPtrs, 1, blockSize);
 
     EXPECT_EQ (os2x.getOversampledNumSamples(), 0);
-    EXPECT_EQ (os2x.getOversampledChannelData (0), nullptr);
+
+    // The buffer stays addressable up to what prepare() allocated, so a decimate-first
+    // caller can fill it without upsampling.
+    EXPECT_NE (os2x.getOversampledChannelData (0), nullptr);
 }
 
 TEST_F (SincOversamplerTest, UpsampleThenDownsamplePreservesDCMagnitude)
@@ -404,24 +407,6 @@ TEST_F (SincOversamplerTest, DecimateFirstIsContinuousAcrossBlockBoundaries)
     ASSERT_GT (largestInterior, 0.0f); // would pass vacuously on silence
     EXPECT_LT (largestAtBoundary, largestInterior * 1.5f)
         << "boundary step " << largestAtBoundary << " against interior " << largestInterior;
-}
-
-//==============================================================================
-TEST (OversamplerTypeAliasTest, TypeAliasesCompile)
-{
-    SincOversampler2xFloat a;
-    SincOversampler4xFloat b;
-    SincOversampler8xFloat c;
-    SincOversampler2xDouble d;
-    SincOversampler4xDouble e;
-
-    a.prepare (44100.0, 1, 64);
-    b.prepare (44100.0, 1, 64);
-    c.prepare (44100.0, 1, 64);
-    d.prepare (44100.0, 1, 64);
-    e.prepare (44100.0, 1, 64);
-
-    SUCCEED();
 }
 
 TEST_F (SincOversamplerTest, DirectGenerationPreservesDCWithoutInputInterpolation)

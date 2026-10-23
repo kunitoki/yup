@@ -791,10 +791,8 @@ TEST_F (ComponentEffectGpuTest, EffectPlusCacheRendersEffectEveryFrame)
     auto firstCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
     ASSERT_NE (firstCanvas, nullptr);
 
-    // The effect path always re-renders the full subtree, because a child repaint
-    // doesn't invalidate the parent's cache and the effect must track live child
-    // content. Caching is therefore ineffective here, which is what applyCount
-    // rising on every paint shows.
+    // The effect runs on every paint, over the subtree's last rendering, whether or not
+    // any of its content was dirty.
     triggerPaintOnCanvas (*comp, 128, 128);
     EXPECT_GT (effect->applyCount, applyCountAfterFirst);
 
@@ -1114,6 +1112,146 @@ TEST_F (ComponentEffectGpuTest, RenderToTextureHonorsScale)
     ASSERT_NE (texture, nullptr);
     EXPECT_EQ (64, texture->getWidth());
     EXPECT_EQ (48, texture->getHeight());
+}
+
+// =============================================================================
+// Partial repaint under an effect
+// =============================================================================
+
+class ComponentEffectPartialRepaintTest : public ComponentEffectGpuTest
+{
+protected:
+    /** A child that fills itself with a color and counts its paints. */
+    class CountingChild : public Component
+    {
+    public:
+        explicit CountingChild (Color colorToFill)
+            : fill (colorToFill)
+        {
+        }
+
+        void paint (Graphics& g) override
+        {
+            ++paints;
+            g.setFillColor (fill);
+            g.fillAll();
+        }
+
+        Color fill;
+        int paints = 0;
+    };
+
+    void SetUp() override
+    {
+        ComponentEffectGpuTest::SetUp();
+
+        if (gpuContext == nullptr)
+            return;
+
+        // An opaque, clipped root: the conditions under which only dirty content repaints.
+        root = makeComp ("root", 128, 128);
+        root->enableRenderingUnclipped (false);
+        root->setVisible (true);
+        root->addAndMakeVisible (left);
+        root->addAndMakeVisible (right);
+        left.setBounds (0, 0, 64, 128);
+        right.setBounds (64, 0, 64, 128);
+
+        effect = new CountingEffect();
+        root->setComponentEffect (effect);
+
+        paintRoot();
+        left.paints = 0;
+        right.paints = 0;
+    }
+
+    void paintRoot() { triggerPaintOnCanvas (*root, roundToInt (root->getWidth()), roundToInt (root->getHeight())); }
+
+    static bool isNear (Color a, Color b)
+    {
+        return std::abs (a.getRed() - b.getRed()) <= 2 && std::abs (a.getGreen() - b.getGreen()) <= 2 && std::abs (a.getBlue() - b.getBlue()) <= 2;
+    }
+
+    std::unique_ptr<FillComponent> root;
+    CountingChild left { Color (0xffff0000) };
+    CountingChild right { Color (0xff0000ff) };
+    ReferenceCountedObjectPtr<CountingEffect> effect;
+};
+
+TEST_F (ComponentEffectPartialRepaintTest, RepaintsOnlyTheDirtyChild)
+{
+    const auto applied = effect->applyCount;
+
+    left.repaint();
+    paintRoot();
+
+    EXPECT_EQ (1, left.paints);
+    EXPECT_EQ (0, right.paints);
+    EXPECT_GT (effect->applyCount, applied);
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, KeepsTheUndirtiedPixels)
+{
+    left.fill = Color (0xff00ff00);
+    left.repaint();
+    paintRoot();
+
+    const auto image = ComponentHelper::getEffectOffscreenCanvas (*root)->asImage();
+    ASSERT_TRUE (image.isValid());
+
+    EXPECT_TRUE (isNear (Color (0xff00ff00), image.getPixelColor (32, 64)));
+    EXPECT_TRUE (isNear (Color (0xff0000ff), image.getPixelColor (96, 64)));
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, NothingDirtyPaintsNoChildButAppliesTheEffect)
+{
+    const auto applied = effect->applyCount;
+
+    paintRoot();
+
+    EXPECT_EQ (0, left.paints);
+    EXPECT_EQ (0, right.paints);
+    EXPECT_GT (effect->applyCount, applied);
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, TransparentRootRepaintsEverything)
+{
+    root->setOpaque (false);
+
+    left.repaint();
+    paintRoot();
+
+    EXPECT_EQ (1, left.paints);
+    EXPECT_EQ (1, right.paints);
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, UnclippedRootRepaintsEverything)
+{
+    root->enableRenderingUnclipped (true);
+
+    left.repaint();
+    paintRoot();
+
+    EXPECT_EQ (1, right.paints);
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, ResizingRepaintsEverything)
+{
+    root->setBounds (0, 0, 160, 128);
+    paintRoot();
+
+    EXPECT_EQ (1, left.paints);
+    EXPECT_EQ (1, right.paints);
+}
+
+TEST_F (ComponentEffectPartialRepaintTest, TransformChangeDirtiesTheOldAndNewArea)
+{
+    // Moving the left half over the right one must repaint where it was and where it is.
+    left.setTransform (AffineTransform::translation (10.0f, 0.0f));
+    paintRoot();
+
+    EXPECT_EQ (1, left.paints);
+    EXPECT_EQ (1, right.paints);
 }
 
 #endif // YUP_MAC

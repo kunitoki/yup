@@ -735,6 +735,9 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
     this->options = options;
     menuCallback = std::move (callback);
 
+    if (auto* source = isSubmenu ? parentMenu.get() : options.targetComponent)
+        inheritColors (*source);
+
     if (! isSubmenu)
         focusComponentToRestore = getFocusComponentForDismissal();
 
@@ -778,6 +781,28 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
     toFront (true);
 
     YUP_MODULE_DBG (GUI_POPUPMENU, "showCustom EXIT: visible=" << (isVisible() ? 1 : 0) << " size=" << getWidth() << "x" << getHeight() << " screenBounds=" << getScreenBounds().toString() << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
+}
+
+void PopupMenu::inheritColors (const Component& source)
+{
+    if (getPalette() == nullptr)
+        if (const auto* sourcePalette = source.findPalette())
+            setPalette (*sourcePalette);
+
+    for (const auto* colorId : { &Style::menuBackground,
+                                 &Style::menuBorder,
+                                 &Style::menuItemText,
+                                 &Style::menuItemTextDisabled,
+                                 &Style::menuItemBackground,
+                                 &Style::menuItemBackgroundHighlighted,
+                                 &Style::menuItemBackgroundActiveSubmenu })
+    {
+        if (getColor (*colorId).has_value())
+            continue;
+
+        if (const auto color = source.findColor (*colorId))
+            setColor (*colorId, *color);
+    }
 }
 
 //==============================================================================
@@ -1011,7 +1036,7 @@ void PopupMenu::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel
         scrollDown();
 }
 
-void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
+bool PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
 {
     auto keyCode = key.getKey();
 
@@ -1032,6 +1057,8 @@ void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
 
     else if (keyCode == KeyPress::enterKey)
         selectCurrentItem();
+
+    return true;
 }
 
 //==============================================================================

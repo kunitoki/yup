@@ -87,18 +87,19 @@ void DeviceIOSelector::fireDeviceChanged()
 void DeviceIOSelector::resized()
 {
     auto bounds = getLocalBounds();
-    const int rowH = bounds.getHeight() / 2;
+    const auto rowH = AudioDeviceManagerPanel::itemHeight;
     const int labelW = 170;
     const int testW = 60;
 
     auto outRow = bounds.removeFromTop (rowH);
-    outputLabel.setBounds (outRow.removeFromLeft (labelW).reduced (0, 10));
-    testButton.setBounds (outRow.removeFromRight (testW).reduced (2, 4));
-    outputCombo.setBounds (outRow.reduced (2, 4));
+    bounds = bounds.removeFromBottom (rowH);
+    outputLabel.setBounds (outRow.removeFromLeft (labelW));
+    testButton.setBounds (outRow.removeFromRight (testW).reduced (2, 0));
+    outputCombo.setBounds (outRow.reduced (2, 0));
 
-    inputLabel.setBounds (bounds.removeFromLeft (labelW).reduced (0, 10));
+    inputLabel.setBounds (bounds.removeFromLeft (labelW));
     bounds.removeFromRight (testW);
-    inputCombo.setBounds (bounds.reduced (2, 4));
+    inputCombo.setBounds (bounds.reduced (2, 0));
 }
 
 } // namespace yup

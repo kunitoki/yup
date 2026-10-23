@@ -99,6 +99,29 @@ TEST (ThemeVersion1Tests, UsesPalettePassedAtCreation)
     EXPECT_EQ (palette.getColor (ThemePalette::Role::text), theme->findColor (label, Label::Style::textFillColorId));
 }
 
+TEST (ThemeVersion1Tests, ComponentPaletteColorsWidgetsInsideIt)
+{
+    const ThemePalette globalPalette (std::vector<Color> { Color (0xff100b00), Color (0xff85cb33), Color (0xffefffc8) });
+    const ThemePalette ownPalette (std::vector<Color> { Color (0xff0b132b), Color (0xff5bc0be), Color (0xffe0fbfc) }, ThemePalette::Mode::light);
+    auto theme = createThemeVersion1 (globalPalette);
+    ASSERT_NE (nullptr, theme.get());
+
+    Component panel ("panel");
+    Label label;
+    ComboBox comboBox;
+    panel.addChildComponent (label);
+    panel.addChildComponent (comboBox);
+    panel.setPalette (ownPalette);
+
+    EXPECT_EQ (ownPalette, theme->getPalette (label));
+    EXPECT_EQ (ownPalette.getColor (ThemePalette::Role::text), theme->findColor (label, Label::Style::textFillColorId));
+    EXPECT_EQ (ownPalette.getColor (ThemePalette::Role::surface), theme->findColor (comboBox, ComboBox::Style::backgroundColorId));
+    EXPECT_EQ (ownPalette.getColor (ThemePalette::Role::surfaceRaised), theme->findColor (comboBox, PopupMenu::Style::menuBackground));
+
+    Label outside;
+    EXPECT_EQ (globalPalette.getColor (ThemePalette::Role::text), theme->findColor (outside, Label::Style::textFillColorId));
+}
+
 TEST (ThemeVersion1Tests, SetPaletteChangesWidgetColors)
 {
     auto theme = createThemeVersion1();

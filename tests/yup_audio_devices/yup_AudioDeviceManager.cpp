@@ -41,6 +41,8 @@
 
 #include <yup_audio_devices/yup_audio_devices.h>
 
+#include <optional>
+
 using namespace yup;
 
 namespace
@@ -1209,3 +1211,68 @@ TEST_F (AudioDeviceManagerTests, GetMidiCallbackLock)
     lock.enter();
     lock.exit();
 }
+
+//==============================================================================
+class AudioDeviceManagerMidiReconnectTests : public ::testing::Test
+{
+protected:
+    static void pumpMessages (int milliseconds)
+    {
+#if YUP_MODAL_LOOPS_PERMITTED
+        MessageManager::getInstance()->runDispatchLoopUntil (milliseconds);
+#else
+        Thread::sleep (milliseconds);
+#endif
+    }
+
+    template <typename Condition>
+    static bool waitFor (Condition&& condition)
+    {
+        for (int attempt = 0; attempt < 100 && ! condition(); ++attempt)
+            pumpMessages (20);
+
+        return condition();
+    }
+
+    static std::optional<MidiDeviceInfo> findInput (const String& name)
+    {
+        for (const auto& device : MidiInput::getAvailableDevices())
+            if (device.name == name)
+                return device;
+
+        return std::nullopt;
+    }
+};
+
+#if YUP_MAC || YUP_LINUX
+TEST_F (AudioDeviceManagerMidiReconnectTests, ReopensAnInputWhenItsSourceReturns)
+{
+    const auto name = "YUP Reconnect Test " + String (Time::currentTimeMillis());
+
+    auto source = MidiOutput::createNewDevice (name);
+    if (source == nullptr)
+        GTEST_SKIP() << "Virtual MIDI devices are not available";
+
+    std::optional<MidiDeviceInfo> info;
+    if (! waitFor ([&] { return (info = findInput (name)).has_value(); }))
+        GTEST_SKIP() << "The virtual MIDI source was not listed";
+
+    AudioDeviceManager manager;
+    manager.setMidiInputDeviceEnabled (info->identifier, true);
+    ASSERT_TRUE (manager.isMidiInputDeviceEnabled (info->identifier));
+
+    source.reset();
+    EXPECT_TRUE (waitFor ([&] { return ! manager.isMidiInputDeviceEnabled (info->identifier); }));
+
+    source = MidiOutput::createNewDevice (name);
+    if (source == nullptr)
+        GTEST_SKIP() << "The virtual MIDI source could not be created again";
+
+    std::optional<MidiDeviceInfo> returned;
+    EXPECT_TRUE (waitFor ([&]
+    {
+        returned = findInput (name);
+        return returned.has_value() && manager.isMidiInputDeviceEnabled (returned->identifier);
+    }));
+}
+#endif

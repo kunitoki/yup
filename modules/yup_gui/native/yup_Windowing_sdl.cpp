@@ -201,6 +201,11 @@ SDLComponentNative::SDLComponentNative (Component& component,
     }
 #endif
 
+#if YUP_MAC
+    if (! YUPApplicationBase::isStandaloneApp())
+        installHostKeyEventForwarding (window);
+#endif
+
     if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
     {
         windowContext = SDL_GL_CreateContext (window);
@@ -604,6 +609,25 @@ Rectangle<int> SDLComponentNative::getSafeAreaBounds() const
     }
 
     return { 0, 0, getSize() };
+}
+
+//==============================================================================
+
+void SDLComponentNative::setAspectRatio (std::optional<float> newAspectRatio)
+{
+    aspectRatio = newAspectRatio;
+
+    if (window == nullptr)
+        return;
+
+    // Zero for both bounds lets the window resize freely again.
+    const auto ratio = aspectRatio.value_or (0.0f);
+    SDL_SetWindowAspectRatio (window, ratio, ratio);
+}
+
+std::optional<float> SDLComponentNative::getAspectRatio() const
+{
+    return aspectRatio;
 }
 
 //==============================================================================

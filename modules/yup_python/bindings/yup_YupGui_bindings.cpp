@@ -522,6 +522,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setFullScreen", &ComponentNative::setFullScreen)
         .def ("isFullScreen", &ComponentNative::isFullScreen)
         .def ("isDecorated", &ComponentNative::isDecorated)
+        .def ("setAspectRatio", &ComponentNative::setAspectRatio, "aspectRatio"_a)
+        .def ("getAspectRatio", &ComponentNative::getAspectRatio)
         .def ("setOpacity", &ComponentNative::setOpacity)
         .def ("getOpacity", &ComponentNative::getOpacity)
         .def ("setFocusedComponent", &ComponentNative::setFocusedComponent, "comp"_a, "cause"_a = FocusChangeType::focusChangedDirectly)
@@ -767,6 +769,11 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setFullScreen", &Component::setFullScreen)
         .def ("isFullScreen", &Component::isFullScreen)
 
+        // Window aspect ratio
+        .def ("setWindowAspectRatio", &Component::setWindowAspectRatio, "aspectRatio"_a,
+              "Keeps the window of a desktop component at a width over height while it is resized; None resizes freely.")
+        .def ("getWindowAspectRatio", &Component::getWindowAspectRatio)
+
         // Scale and display
         .def ("getScaleDpi", &Component::getScaleDpi)
 
@@ -877,6 +884,9 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setManuallyComposited", &Component::setManuallyComposited, "shouldBeManuallyComposited"_a,
               "When enabled the normal child painting skips this component and its renderToTexture() is composited manually.")
         .def ("isManuallyComposited", &Component::isManuallyComposited)
+        .def ("setPopupContainer", &Component::setPopupContainer, "shouldBePopupContainer"_a,
+              "When enabled the popups opened inside this component are added to it instead of the top level.")
+        .def ("isPopupContainer", &Component::isPopupContainer)
         .def ("renderToTexture", &Component::renderToTexture, "ctx"_a, "scale"_a = 1.0f,
               "Renders the subtree (with its effect) into a reused texture, only when it changed.")
 

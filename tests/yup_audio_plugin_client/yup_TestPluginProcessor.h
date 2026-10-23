@@ -23,6 +23,8 @@
 
 #include <yup_audio_processors/yup_audio_processors.h>
 
+#include <functional>
+#include <optional>
 #include <vector>
 
 //==============================================================================
@@ -81,7 +83,11 @@ public:
         addParameter (new yup::AudioParameter ("internal", nonAutoMeta));
     }
 
-    void prepareToPlay (const yup::AudioSpec&) override { prepared = true; }
+    void prepareToPlay (const yup::AudioSpec& spec) override
+    {
+        prepared = true;
+        lastSpec = spec;
+    }
 
     void releaseResources() override { prepared = false; }
 
@@ -89,6 +95,7 @@ public:
     {
         ++processCallCount;
         captureInputBusChannels (context);
+        captureBlock (context);
     }
 
     void processBlockBypassed (yup::AudioProcessContext<float>& context) override
@@ -119,6 +126,31 @@ public:
         }
     }
 
+    /** Records block size, MIDI positions and the incoming audio, then optionally writes outputFillValue. */
+    void captureBlock (yup::AudioProcessContext<float>& context)
+    {
+        auto& audio = context.audio;
+
+        processedBlockSizes.push_back (audio.getNumSamples());
+
+        std::vector<int> midiPositions;
+        for (const auto metadata : context.midi)
+            midiPositions.push_back (metadata.samplePosition);
+        midiSamplePositionsPerBlock.push_back (std::move (midiPositions));
+
+        lastFirstSamplesIn.clear();
+        for (int ch = 0; ch < audio.getNumChannels(); ++ch)
+        {
+            const auto* channel = audio.getReadPointer (ch);
+            lastFirstSamplesIn.push_back (channel != nullptr && audio.getNumSamples() > 0 ? channel[0] : 0.0f);
+        }
+
+        if (outputFillValue.has_value())
+            for (int ch = 0; ch < audio.getNumChannels(); ++ch)
+                for (int i = 0; i < audio.getNumSamples(); ++i)
+                    audio.setSample (ch, i, *outputFillValue);
+    }
+
     int getCurrentPreset() const noexcept override { return 0; }
 
     void setCurrentPreset (int) noexcept override {}
@@ -141,7 +173,9 @@ public:
         return yup::Result::ok();
     }
 
-    bool hasEditor() const override { return false; }
+    bool hasEditor() const override { return editorFactory != nullptr; }
+
+    yup::AudioProcessorEditor* createEditor() override { return editorFactory != nullptr ? editorFactory() : nullptr; }
 
     bool supportsDoublePrecisionProcessing() const override { return supportsDouble; }
 
@@ -149,11 +183,27 @@ public:
     bool supportsDouble = false;
     int processCallCount = 0;
     int bypassCallCount = 0;
+    std::function<yup::AudioProcessorEditor*()> editorFactory;
     yup::MemoryBlock lastLoadedState;
     yup::MemoryBlock lastSavedState;
 
     /** Per input bus, the channel pointers seen by the last processed block. */
     std::vector<std::vector<const float*>> lastInputBusChannels;
+
+    /** The spec passed to the last prepareToPlay call. */
+    std::optional<yup::AudioSpec> lastSpec;
+
+    /** The number of samples of every processed block, in order. */
+    std::vector<int> processedBlockSizes;
+
+    /** The MIDI sample positions of every processed block, in order. */
+    std::vector<std::vector<int>> midiSamplePositionsPerBlock;
+
+    /** The first sample of each audio channel as the last block entered processBlock. */
+    std::vector<float> lastFirstSamplesIn;
+
+    /** When set, processBlock fills every audio channel with this value. */
+    std::optional<float> outputFillValue;
 };
 
 //==============================================================================

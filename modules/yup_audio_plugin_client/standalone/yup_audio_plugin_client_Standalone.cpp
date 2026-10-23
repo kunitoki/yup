@@ -24,6 +24,16 @@
 #include "../common/yup_AudioPluginUtilities.h"
 
 #include <yup_audio_devices/yup_audio_devices.h>
+#include <yup_audio_gui/yup_audio_gui.h>
+
+#if YUP_EMSCRIPTEN
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#endif
+
+#include "yup_StandaloneProcessorPlayer.h"
+#include "yup_StandaloneStateStore.h"
+#include "yup_StandaloneContent.h"
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_STANDALONE)
 #error "YUP_AUDIO_PLUGIN_ENABLE_STANDALONE must be defined"
@@ -36,24 +46,24 @@ namespace yup
 
 //==============================================================================
 
-class AudioProcessorEditorWindow
+class StandaloneWindow
     : public DocumentWindow
 {
 public:
-    AudioProcessorEditorWindow (StringRef windowTitle, AudioProcessorEditor* editor)
+    StandaloneWindow (StringRef windowTitle, std::unique_ptr<StandaloneContent> windowContent)
         : yup::DocumentWindow (ComponentNative::Options(), {})
-        , editor (editor)
+        , content (std::move (windowContent))
     {
         setTitle (windowTitle);
 
-        addAndMakeVisible (*editor);
+        addAndMakeVisible (*content);
 
         takeKeyboardFocus();
     }
 
     void resized() override
     {
-        editor->setBounds (getLocalBounds());
+        content->setBounds (getLocalBounds());
     }
 
     void userTriedToCloseWindow() override
@@ -62,18 +72,20 @@ public:
     }
 
 private:
-    std::unique_ptr<AudioProcessorEditor> editor;
+    std::unique_ptr<StandaloneContent> content;
 };
 
 //==============================================================================
 
 class AudioProcessorApplication
     : public YUPApplication
-    , public AudioIODeviceCallback
+    , public StandalonePluginHost
 {
 public:
     AudioProcessorApplication()
         : processor (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION())
+        , player (*processor, &deviceManager)
+        , stateStore (StandaloneStateStore::createDefault (YupPlugin_Vendor, YupPlugin_Name, YupPlugin_Id))
     {
     }
 
@@ -84,7 +96,7 @@ public:
 
     String getApplicationVersion() override
     {
-        return "1.0"; // processor->getVersion();
+        return YupPlugin_Version;
     }
 
     void initialise (const String& commandLineParameters) override
@@ -93,78 +105,121 @@ public:
 
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
-        deviceManager.initialiseWithDefaultDevices (0, 2);
-        deviceManager.addAudioCallback (this);
+        const auto state = stateStore.load();
 
-        auto* editor = processor->createEditor();
-        window = std::make_unique<AudioProcessorEditorWindow> (getApplicationName(), editor);
-        window->centreWithSize (editor->getPreferredSize());
+        if (const auto result = StandaloneStateStore::restoreProcessorState (*processor, state.processorState); result.failed())
+            yup::Logger::outputDebugString ("Unable to restore the plugin state: " + result.getErrorMessage());
+
+        const auto deviceError = deviceManager.initialise (getTotalAudioInputChannels (*processor),
+                                                           getTotalAudioOutputChannels (*processor),
+                                                           state.deviceState.get(),
+                                                           true);
+        if (deviceError.isNotEmpty())
+            yup::Logger::outputDebugString ("Unable to open the audio device: " + deviceError);
+
+        deviceManager.addAudioCallback (&player);
+        deviceManager.addMidiInputDeviceCallback ({}, &player.getMidiMessageCollector());
+
+        auto windowContent = std::make_unique<StandaloneContent> (*processor,
+                                                                  deviceManager,
+                                                                  player.getMidiMessageCollector(),
+                                                                  processor->acceptsMidi() || YupPlugin_IsSynth);
+        content = windowContent.get();
+        content->setToolbarVisible (toolbarVisible);
+        content->onSettingsClosed = [this]
+        {
+            saveState();
+        };
+        content->onPreferredSizeChanged = [this]
+        {
+            if (window == nullptr)
+                return;
+
+            window->setWindowAspectRatio (content->getPreferredAspectRatio());
+            window->setSize (content->getPreferredSize().to<float>());
+        };
+
+        window = std::make_unique<StandaloneWindow> (getApplicationName(), std::move (windowContent));
+        window->setWindowAspectRatio (content->getPreferredAspectRatio());
+        window->centreWithSize (content->getPreferredSize());
         window->setVisible (true);
         window->toFront (true);
+
+        if (settingsRequested)
+            content->showSettings();
+
+#if YUP_EMSCRIPTEN
+        // Closing a browser tab never reaches shutdown(), so the state is also saved whenever the page is hidden.
+        emscripten_set_visibilitychange_callback (this, false, visibilityChangeCallback);
+#endif
     }
 
     void shutdown() override
     {
         yup::Logger::outputDebugString ("Shutting down");
 
+#if YUP_EMSCRIPTEN
+        emscripten_set_visibilitychange_callback (nullptr, false, nullptr);
+#endif
+
+        saveState();
+
+        content = nullptr;
         window.reset();
 
-        deviceManager.removeAudioCallback (this);
+        deviceManager.removeMidiInputDeviceCallback ({}, &player.getMidiMessageCollector());
+        deviceManager.removeAudioCallback (&player);
         deviceManager.closeAudioDevice();
 
         YUP_PROFILE_STOP();
     }
 
-    void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
-                                           int numInputChannels,
-                                           float* const* outputChannelData,
-                                           int numOutputChannels,
-                                           int numSamples,
-                                           const AudioIODeviceCallbackContext& context) override
+    //==============================================================================
+    void showAudioSettings() override
     {
-        if (numInputChannels > 0)
-        {
-            for (int inputIndex = 0; inputIndex < numInputChannels; ++inputIndex)
-                audioBuffer.copyFrom (inputIndex, 0, inputChannelData[inputIndex], numSamples);
-        }
-        else
-        {
-            audioBuffer.clear();
-        }
+        settingsRequested = content == nullptr;
 
-        MidiBuffer midiBuffer;
-        ParameterChangeBuffer emptyParams;
-        AudioProcessContext<float> ctx { audioBuffer, midiBuffer, emptyParams };
-        processor->processBlock (ctx);
-
-        AudioBuffer<float> outputBuffer { outputChannelData, numOutputChannels, numSamples };
-        for (int outputIndex = 0; outputIndex < numOutputChannels; ++outputIndex)
-            outputBuffer.copyFrom (outputIndex, 0, audioBuffer, outputIndex, 0, numSamples);
+        if (content != nullptr)
+            content->showSettings();
     }
 
-    void audioDeviceAboutToStart (AudioIODevice* device) override
+    void setToolbarVisible (bool shouldBeVisible) override
     {
-        processor->prepareToPlay (AudioSpec (device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples()));
+        toolbarVisible = shouldBeVisible;
 
-        audioBuffer.setSize (
-            jmax (
-                processor->getNumAudioInputs(),
-                processor->getNumAudioOutputs(),
-                device->getActiveInputChannels().countNumberOfSetBits(),
-                device->getActiveOutputChannels().countNumberOfSetBits()),
-            device->getCurrentBufferSizeSamples());
-    }
-
-    void audioDeviceStopped() override
-    {
-        processor->releaseResources();
+        if (content != nullptr)
+            content->setToolbarVisible (shouldBeVisible);
     }
 
 private:
-    AudioDeviceManager deviceManager;
-    AudioBuffer<float> audioBuffer;
+    void saveState()
+    {
+        const auto deviceState = deviceManager.createStateXml();
+
+        if (const auto result = stateStore.save (deviceState.get(), *processor); result.failed())
+            yup::Logger::outputDebugString ("Unable to save the standalone state: " + result.getErrorMessage());
+    }
+
+#if YUP_EMSCRIPTEN
+    static EM_BOOL visibilityChangeCallback (int, const EmscriptenVisibilityChangeEvent* event, void* userData)
+    {
+        if (event != nullptr && event->hidden)
+            static_cast<AudioProcessorApplication*> (userData)->saveState();
+
+        return EM_FALSE;
+    }
+#endif
+
     std::unique_ptr<AudioProcessor> processor;
-    std::unique_ptr<AudioProcessorEditorWindow> window;
+    AudioDeviceManager deviceManager;
+    StandaloneProcessorPlayer player;
+    StandaloneStateStore stateStore;
+
+    std::unique_ptr<StandaloneWindow> window;
+    StandaloneContent* content = nullptr;
+
+    bool toolbarVisible = true;
+    bool settingsRequested = false;
 };
 
 } // namespace yup

@@ -163,6 +163,7 @@ class DeferredReplayer;
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
 #include "effects/yup_ComponentEffect.h"
+#include "themes/yup_ThemePalette.h"
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_ComponentPaintMetrics.h"
 #include "component/yup_ComponentListener.h"
@@ -225,7 +226,6 @@ class DeferredReplayer;
 
 //==============================================================================
 
-#include "themes/yup_ThemePalette.h"
 #include "themes/yup_ApplicationTheme.h"
 #include "themes/theme_v1/yup_ThemeVersion1.h"
 #include "themes/theme_v1/yup_ThemeVersion1_Icons.h"

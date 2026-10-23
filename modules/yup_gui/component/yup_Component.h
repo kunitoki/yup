@@ -705,6 +705,22 @@ public:
      */
     bool isFullScreen() const;
 
+    /**
+        Keeps the window of a desktop component at a width over height while it is resized.
+
+        The ratio is kept for a component that is not on the desktop yet and applied to its
+        window when it gets one. It constrains the whole window, so content that should keep
+        its own proportions inside decorations or toolbars still has to fit itself.
+
+        @param aspectRatio The width over height to keep, or std::nullopt to resize freely.
+     */
+    void setWindowAspectRatio (std::optional<float> aspectRatio);
+
+    /**
+        Returns the width over height the window keeps, or std::nullopt when it resizes freely.
+     */
+    std::optional<float> getWindowAspectRatio() const;
+
     //==============================================================================
     /**
         Called when the component changes display.
@@ -1220,12 +1236,12 @@ public:
     /**
         Returns the component that popups opened by this component should be added to.
 
-        This is the closest ancestor that changes how its subtree is presented, because it is
-        transformed or manually composited (for example onto a 3D surface), so the popup is
-        presented the same way as the component that opened it. Without such an ancestor this
-        is the top level component.
+        This is the closest ancestor that is a popup container, or that changes how its subtree
+        is presented because it is transformed or manually composited (for example onto a 3D
+        surface), so the popup is presented the same way as the component that opened it.
+        Without such an ancestor this is the top level component.
 
-        @see setTransform, setManuallyComposited, PopupMenu::Options::withParentComponent
+        @see setPopupContainer, setTransform, setManuallyComposited, PopupMenu::Options::withParentComponent
     */
     Component* getPopupParentComponent();
 
@@ -1438,18 +1454,31 @@ public:
     /**
         Called when a key is pressed.
 
+        The key goes to the component with the keyboard focus first. When that one does not
+        handle it, it goes to its parent, and so on up to the top-level component, so a
+        focused control never swallows the keys meant for what is around it, such as
+        shortcuts or an on-screen keyboard. Invisible components are skipped, and so are
+        disabled ones and everything inside a disabled parent (see isEnabled()).
+
         @param keys The key press.
         @param position The position of the key press.
+
+        @returns true when the component handled the key, which stops it going further up.
      */
-    virtual void keyDown (const KeyPress& keys, const Point<float>& position);
+    virtual bool keyDown (const KeyPress& keys, const Point<float>& position);
 
     /**
         Called when a key is released.
 
+        It goes up the parents like keyDown(), so a component that acted on a key press
+        receives its release even after the focus moved to one of its children.
+
         @param keys The key press.
         @param position The position of the key press.
+
+        @returns true when the component handled the key, which stops it going further up.
      */
-    virtual void keyUp (const KeyPress& keys, const Point<float>& position);
+    virtual bool keyUp (const KeyPress& keys, const Point<float>& position);
 
     /**
         Called when text is input.
@@ -1485,6 +1514,26 @@ public:
         @see keyStateChanged
      */
     virtual void modifierKeysChanged (const KeyModifiers& modifiers);
+
+    //==============================================================================
+    /** Makes this component hold the popups opened by the components inside it.
+
+        Popups, such as menus and combo box lists, are normally added to the top level
+        component. Inside a popup container they are added to the container instead, so they
+        are presented like the rest of its subtree: through its component effect, for example
+        a post-processing pass over a whole interface, and with its input mapping.
+
+        @param shouldBePopupContainer True to hold the popups of this component's subtree.
+
+        @see getPopupParentComponent
+     */
+    void setPopupContainer (bool shouldBePopupContainer);
+
+    /** Returns true if this component holds the popups opened inside it.
+
+        @see setPopupContainer
+     */
+    bool isPopupContainer() const;
 
     //==============================================================================
 
@@ -1527,6 +1576,30 @@ public:
         @return The color of the component.
      */
     std::optional<Color> findColor (const Identifier& colorId) const;
+
+    //==============================================================================
+    /** Gives this component and everything inside it a palette of its own.
+
+        The theme draws the component and its children from the closest palette up the
+        parent chain instead of the theme's own: ApplicationTheme::findColor() resolves the
+        palette derived colors from it, and ApplicationTheme::getPalette (const Component&)
+        returns it. Colors set with setColor() still take precedence. Popup menus opened
+        relative to a component take its palette too.
+
+        This lets windows, or several plugin editors in one process, wear different palettes
+        with a single global theme.
+
+        @param newPalette The palette, or std::nullopt to follow the parent's again.
+
+        @see findPalette, ApplicationTheme::setPalette
+     */
+    void setPalette (std::optional<ThemePalette> newPalette);
+
+    /** Returns the palette set on this component with setPalette(), or nullptr. */
+    const ThemePalette* getPalette() const;
+
+    /** Returns the closest palette set with setPalette() on this component or a parent, or nullptr. */
+    const ThemePalette* findPalette() const;
 
     //==============================================================================
 
@@ -1737,8 +1810,8 @@ private:
     void internalMouseDoubleClick (const MouseEvent& event);
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
     void internalGesture (const GestureEvent& event);
-    void internalKeyDown (const KeyPress& keys, const Point<float>& position);
-    void internalKeyUp (const KeyPress& keys, const Point<float>& position);
+    bool internalKeyDown (const KeyPress& keys, const Point<float>& position);
+    bool internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);
     void internalKeyStateChanged (const KeyPress& keys, bool isDown);
     void internalModifierKeysChanged (const KeyModifiers& modifiers);
@@ -1758,6 +1831,9 @@ private:
     void takeKeyboardFocus (FocusChangeType cause);
     void handleKeyboardFocusFromClick();
 
+    using KeyHandler = bool (Component::*) (const KeyPress&, const Point<float>&);
+    bool dispatchKey (const KeyPress& keys, const Point<float>& position, KeyHandler handler);
+
     void updateMouseCursor();
 
     void sendMoved();
@@ -1770,7 +1846,8 @@ private:
     void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const;
     void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous);
-    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
+    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt);
+    std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
@@ -1799,12 +1876,16 @@ private:
     GestureListenerList gestureListeners;
     ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;
+    std::unique_ptr<ThemePalette> palette;
     NamedValueSet properties;
     MouseCursor mouseCursor;
     GestureType wantedGestures = GestureType::none;
     ComponentEffect::Ptr componentEffect;
+    std::optional<float> windowAspectRatio;
     GpuCanvas::Ptr cachedTextureCanvas;
     GpuCanvas::Ptr effectOffscreenCanvas;
+    RectangleList<float> effectDirtyRegion;
+    static constexpr int maximumDirtyRectangles = 8;
     GpuCanvas::Ptr presentedCanvas;
     float contentScale = 1.0f;
     uint8 opacity = 255;
@@ -1829,6 +1910,7 @@ private:
         bool cachedToTexture : 1;
         bool paintAsOffscreenRoot : 1;
         bool manuallyComposited : 1;
+        bool popupContainer : 1;
     };
 
     union

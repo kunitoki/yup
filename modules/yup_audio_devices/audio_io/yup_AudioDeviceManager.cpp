@@ -92,11 +92,18 @@ bool AudioDeviceManager::AudioDeviceSetup::operator!= (const AudioDeviceManager:
 class AudioDeviceManager::CallbackHandler final : public AudioIODeviceCallback
     , public MidiInputCallback
     , public AudioIODeviceType::Listener
+    , public ump::DisconnectionListener
+    , private AsyncUpdater
 {
 public:
     CallbackHandler (AudioDeviceManager& adm) noexcept
         : owner (adm)
     {
+    }
+
+    ~CallbackHandler() override
+    {
+        cancelPendingUpdate();
     }
 
 private:
@@ -133,6 +140,17 @@ private:
     void audioDeviceListChanged() override
     {
         owner.audioDeviceListChanged();
+    }
+
+    // The input that reported this is still mid-notification, so it is closed afterwards.
+    void disconnected() override
+    {
+        triggerAsyncUpdate();
+    }
+
+    void handleAsyncUpdate() override
+    {
+        owner.closeDisconnectedMidiInputs();
     }
 
     AudioDeviceManager& owner;
@@ -269,8 +287,40 @@ void AudioDeviceManager::audioDeviceListChanged()
 
 void AudioDeviceManager::midiDeviceListChanged()
 {
+    // Dead inputs go first, otherwise a device that is already back would look enabled.
+    closeDisconnectedMidiInputs();
+
     openLastRequestedMidiDevices (midiDeviceInfosFromXml, defaultMidiOutputDeviceInfo);
     sendChangeMessage();
+}
+
+void AudioDeviceManager::closeDisconnectedMidiInputs()
+{
+    // A disconnected input never delivers again. It stays wanted, so it is opened afresh when its device returns.
+    const auto numEnabledBefore = enabledMidiInputs.size();
+
+    for (auto it = enabledMidiInputs.begin(); it != enabledMidiInputs.end();)
+    {
+        if (! (*it)->isDisconnected())
+        {
+            ++it;
+            continue;
+        }
+
+        const auto info = (*it)->getDeviceInfo();
+        const auto isWanted = std::any_of (midiDeviceInfosFromXml.begin(), midiDeviceInfosFromXml.end(), [&] (const auto& wanted)
+        {
+            return wanted.identifier == info.identifier;
+        });
+
+        if (! isWanted)
+            midiDeviceInfosFromXml.add (info);
+
+        it = enabledMidiInputs.erase (it);
+    }
+
+    if (enabledMidiInputs.size() != numEnabledBefore)
+        sendChangeMessage();
 }
 
 //==============================================================================
@@ -1187,12 +1237,21 @@ double AudioDeviceManager::getCpuUsage() const
 //==============================================================================
 void AudioDeviceManager::setMidiInputDeviceEnabled (const String& identifier, bool enabled)
 {
+    if (! enabled)
+    {
+        midiDeviceInfosFromXml.removeIf ([&] (const MidiDeviceInfo& info)
+        {
+            return info.identifier == identifier;
+        });
+    }
+
     if (enabled != isMidiInputDeviceEnabled (identifier))
     {
         if (enabled)
         {
             if (auto midiIn = MidiInput::openDevice (identifier, callbackHandler.get()))
             {
+                midiIn->addDisconnectionListener (*callbackHandler);
                 enabledMidiInputs.push_back (std::move (midiIn));
                 enabledMidiInputs.back()->start();
             }

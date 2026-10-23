@@ -68,10 +68,13 @@ public:
         panel->setBounds (bounds);
     }
 
-    void keyDown (const yup::KeyPress& keys, const yup::Point<float>&) override
+    bool keyDown (const yup::KeyPress& keys, const yup::Point<float>&) override
     {
-        if (keys.getKey() == yup::KeyPress::escapeKey)
-            userTriedToCloseWindow();
+        if (keys.getKey() != yup::KeyPress::escapeKey)
+            return false;
+
+        userTriedToCloseWindow();
+        return true;
     }
 
     void userTriedToCloseWindow() override

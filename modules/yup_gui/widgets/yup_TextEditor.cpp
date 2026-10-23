@@ -446,10 +446,10 @@ void TextEditor::mouseDoubleClick (const MouseEvent& event)
 
 //==============================================================================
 
-void TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
+bool TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
 {
     if (! isEnabled())
-        return;
+        return false;
 
     bool shiftDown = key.getModifiers().isShiftDown();
     bool ctrlDown = key.getModifiers().isControlDown() || key.getModifiers().isCommandDown();
@@ -512,18 +512,15 @@ void TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
     }
     else if (key.getKey() == KeyPress::enterKey || key.getKey() == KeyPress::tabKey)
     {
-        if (multiLine && key.getKey() == KeyPress::enterKey)
-        {
-            insertText ("\n");
-        }
-        else if (multiLine && key.getKey() == KeyPress::tabKey)
-        {
-            insertText ("\t");
-        }
+        // A single line editor has no use for them, so they go to the components around.
+        if (! multiLine)
+            return false;
+
+        insertText (key.getKey() == KeyPress::enterKey ? "\n" : "\t");
     }
     else if (ctrlDown)
     {
-        // Handle Ctrl shortcuts
+        // Handle Ctrl shortcuts; the others, undo included, go to the components around
         if (key.getKey() == KeyPress::textAKey)
         {
             selectAll();
@@ -540,10 +537,20 @@ void TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
         {
             paste();
         }
+        else
+        {
+            return false;
+        }
+    }
+    else if (key.getKey() == KeyPress::escapeKey)
+    {
+        return false;
     }
 
+    // Typed characters arrive through textInput(), so their presses belong here too.
     updateCaretPosition();
     repaint();
+    return true;
 }
 
 void TextEditor::textInput (const String& inputText)

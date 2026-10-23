@@ -133,11 +133,11 @@ public:
         document.endGesture();
     }
 
-    void keyDown (const yup::KeyPress& keys, const yup::Point<float>&) override
+    bool keyDown (const yup::KeyPress& keys, const yup::Point<float>&) override
     {
         // Every key is consumed here, so Escape and Z never reach the demo window (quit / fullscreen)
         if (document.isGestureActive())
-            return;
+            return true;
 
         const auto modifiers = keys.getModifiers();
         const bool command = modifiers.isCommandDown() || modifiers.isControlDown();
@@ -162,6 +162,8 @@ public:
             setTool (Tool::select);
         else if (! command && key == yup::KeyPress::textPKey)
             setTool (Tool::pen);
+
+        return true;
     }
 
     void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData) override

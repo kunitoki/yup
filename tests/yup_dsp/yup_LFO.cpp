@@ -184,3 +184,185 @@ TEST_F (LFOTests, NegativeFrequencyIsClampedToZero)
 
     EXPECT_DOUBLE_EQ (0.0, lfo.getFrequency());
 }
+
+TEST_F (LFOTests, SawDownFallsFromOneToMinusOne)
+{
+    lfo.setShape (LFO<double>::Shape::sawDown);
+
+    EXPECT_NEAR (1.0, lfo.getValue(), 1e-12);
+    EXPECT_NEAR (0.0, lfo.skip (period / 2), 1e-12);
+    EXPECT_NEAR (-0.75, lfo.skip (period / 2 - 2), 1e-12);
+}
+
+TEST_F (LFOTests, SmoothRandomIsContinuousAndBounded)
+{
+    lfo.setShape (LFO<double>::Shape::smoothRandom);
+    lfo.setFrequency (100.0);
+
+    auto previous = lfo.getValue();
+    auto maxJump = 0.0;
+    auto minimum = previous;
+    auto maximum = previous;
+
+    for (int i = 0; i < 48000; ++i)
+    {
+        const auto value = lfo.processSample();
+
+        maxJump = jmax (maxJump, std::abs (value - previous));
+        minimum = jmin (minimum, value);
+        maximum = jmax (maximum, value);
+        previous = value;
+    }
+
+    EXPECT_GE (minimum, -1.0);
+    EXPECT_LE (maximum, 1.0);
+    EXPECT_GT (maximum - minimum, 0.5);
+
+    // A full swing of 1.6 spread over a 480 sample cycle, with the spline's overshoot.
+    EXPECT_LT (maxJump, 0.02);
+}
+
+TEST_F (LFOTests, SmoothRandomIsDeterministicPerSeed)
+{
+    LFO<double> a, b;
+
+    for (auto* l : { &a, &b })
+    {
+        l->prepare (sampleRate);
+        l->setFrequency (frequency);
+        l->setShape (LFO<double>::Shape::smoothRandom);
+        l->setSeed (11u);
+    }
+
+    for (int i = 0; i < 100; ++i)
+        EXPECT_DOUBLE_EQ (a.processSample(), b.processSample());
+}
+
+TEST_F (LFOTests, CustomShapePlaysTheCurveAsOneBipolarCycle)
+{
+    BreakpointCurve<double> curve;
+    curve.addPoint (0.0, 0.0);
+    curve.addPoint (0.5, 1.0);
+    curve.addPoint (1.0, 0.0);
+
+    lfo.setShape (LFO<double>::Shape::custom);
+    lfo.setCustomCurve (&curve);
+
+    EXPECT_NEAR (-1.0, lfo.getValue(), 1e-12);
+    EXPECT_NEAR (0.0, lfo.skip (period / 4), 1e-12);
+    EXPECT_NEAR (1.0, lfo.skip (period / 4), 1e-12);
+    EXPECT_NEAR (0.0, lfo.skip (period / 4), 1e-12);
+}
+
+TEST_F (LFOTests, CustomShapeWithoutCurveIsSilent)
+{
+    lfo.setShape (LFO<double>::Shape::custom);
+
+    EXPECT_EQ (0.0, lfo.getValue());
+    EXPECT_EQ (0.0, lfo.skip (3));
+}
+
+TEST_F (LFOTests, SmoothingSlewsASquare)
+{
+    constexpr double smoothingSeconds = 0.001;
+
+    lfo.setFrequency (10.0);
+    lfo.setShape (LFO<double>::Shape::square);
+    lfo.setSmoothing (smoothingSeconds);
+    lfo.reset();
+
+    EXPECT_NEAR (1.0, lfo.getValue(), 1e-12);
+
+    // Half a 10 Hz period is 2400 samples; the edge happens on the last of them.
+    for (int i = 0; i < 2400; ++i)
+        lfo.processSample();
+
+    const auto tau = static_cast<int> (smoothingSeconds * sampleRate);
+    auto previous = lfo.getValue();
+    auto maxJump = 0.0;
+
+    for (int i = 0; i < tau; ++i)
+    {
+        const auto value = lfo.processSample();
+        maxJump = jmax (maxJump, std::abs (value - previous));
+        previous = value;
+    }
+
+    // About one time constant after the edge, 63% of the swing of 2 has been covered.
+    EXPECT_NEAR (1.0 - 2.0 * 0.632, lfo.getValue(), 0.03);
+    EXPECT_LT (maxJump, 2.0 / tau);
+}
+
+TEST_F (LFOTests, SkipWithSmoothingFollowsTheSameTimeConstant)
+{
+    LFO<double> stepped;
+    stepped.prepare (sampleRate);
+
+    for (auto* l : { &lfo, &stepped })
+    {
+        l->setFrequency (5.0);
+        l->setShape (LFO<double>::Shape::sine);
+        l->setSmoothing (0.002);
+        l->reset();
+    }
+
+    for (int block = 0; block < 100; ++block)
+    {
+        for (int i = 0; i < 32; ++i)
+            stepped.processSample();
+
+        // skip() holds the waveform over the block, so it leads by about half a block.
+        EXPECT_NEAR (stepped.getValue(), lfo.skip (32), 0.02) << block;
+    }
+}
+
+TEST_F (LFOTests, SmoothingOffLeavesTheRawWaveform)
+{
+    lfo.setShape (LFO<double>::Shape::square);
+    lfo.setSmoothing (0.0);
+
+    EXPECT_DOUBLE_EQ (1.0, lfo.getValue());
+    EXPECT_DOUBLE_EQ (-1.0, lfo.skip (period / 2));
+}
+
+TEST_F (LFOTests, FreeRunningIgnoresNoteOn)
+{
+    lfo.setShape (LFO<double>::Shape::sawtooth);
+    lfo.setRetriggerMode (LFO<double>::RetriggerMode::free);
+    lfo.setStartPhase (0.5);
+    lfo.skip (3);
+
+    lfo.noteOn();
+
+    EXPECT_NEAR (3.0 / period, lfo.getPhase(), 1e-12);
+}
+
+TEST_F (LFOTests, RetriggerRestartsAtTheStartPhase)
+{
+    lfo.setShape (LFO<double>::Shape::sawtooth);
+    lfo.setRetriggerMode (LFO<double>::RetriggerMode::retrigger);
+    lfo.setStartPhase (0.25);
+    lfo.skip (5);
+
+    lfo.noteOn();
+
+    EXPECT_NEAR (0.25, lfo.getPhase(), 1e-12);
+    EXPECT_NEAR (-0.5, lfo.getValue(), 1e-12);
+
+    // Retriggering keeps going after the first cycle.
+    EXPECT_NEAR (-0.5, lfo.skip (period), 1e-9);
+}
+
+TEST_F (LFOTests, OneShotHoldsTheEndOfTheCycle)
+{
+    lfo.setShape (LFO<double>::Shape::sawtooth);
+    lfo.setRetriggerMode (LFO<double>::RetriggerMode::oneShot);
+    lfo.noteOn();
+
+    EXPECT_NEAR (0.0, lfo.skip (period / 2), 1e-12);
+    EXPECT_NEAR (1.0, lfo.skip (period), 1e-9);
+    EXPECT_NEAR (1.0, lfo.skip (period * 3), 1e-9);
+
+    lfo.noteOn();
+    EXPECT_NEAR (-1.0, lfo.getValue(), 1e-12);
+}

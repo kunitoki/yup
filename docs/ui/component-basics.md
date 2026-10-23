@@ -449,6 +449,16 @@ Popups should be added to `getPopupParentComponent()`, the closest transformed
 (or manually composited) ancestor, so they are presented with the same transform
 as the component that opened them; `ComboBox` does this.
 
+A component marked with `setPopupContainer (true)` holds the popups opened inside
+it, even untransformed. Use it when a component effect is the look of a whole
+interface, such as a color grade or a CRT pass, so its menus and combo box lists
+are drawn through the effect and follow its input mapping too:
+
+```cpp
+interface.setComponentEffect (new InterfaceLookEffect());
+interface.setPopupContainer (true);
+```
+
 To get the cumulative transform between two components:
 
 ```cpp
@@ -655,10 +665,34 @@ once with the one that gained it.
 ### Keyboard input
 
 ```cpp
-virtual void keyDown   (const KeyPress& keys, const Point<float>& pos) override;
-virtual void keyUp     (const KeyPress& keys, const Point<float>& pos) override;
+virtual bool keyDown   (const KeyPress& keys, const Point<float>& pos) override;
+virtual bool keyUp     (const KeyPress& keys, const Point<float>& pos) override;
 virtual void textInput (const String& text) override;
 ```
+
+A key goes to the component with the keyboard focus first. Return `true` from
+`keyDown()` or `keyUp()` when the component used the key; otherwise the key goes
+to its parent, and so on up to the top-level component. Invisible components are
+skipped, and so are disabled ones and every component inside a disabled parent. So a focused control only keeps the keys it uses, and a
+container can handle what its children leave: shortcuts, or playing a
+`MidiKeyboardComponent` from the computer keyboard while a knob has the focus.
+
+```cpp
+bool MyPanel::keyDown (const KeyPress& key, const Point<float>&) override
+{
+    if (key.getKey() == KeyPress::textZKey && key.getModifiers().isCommandDown())
+    {
+        undoManager.undo();
+        return true;
+    }
+
+    return false; // let the components around have it
+}
+```
+
+Text editors return `true` for every key that types, edits or moves the caret,
+since typed characters also arrive through `textInput()`, and leave Escape and
+the shortcuts they don't implement to the components around them.
 
 Two lower-level callbacks report input that `keyDown()` may never see:
 
@@ -812,6 +846,22 @@ comp.setFullScreen (true);
 comp.setFullScreen (false);
 bool isFS = comp.isFullScreen();
 ```
+
+## Window aspect ratio
+
+A desktop window can keep its proportions while the user resizes it. The ratio is
+width over height, kept for a component that is not on the desktop yet and applied
+when its window is created:
+
+```cpp
+window.setWindowAspectRatio (16.0f / 9.0f);
+window.setWindowAspectRatio (std::nullopt); // resize freely again
+```
+
+The ratio constrains the whole window. Content that should keep its own
+proportions inside decorations or toolbars still has to fit itself, for example by
+scaling to the largest size that fits and centering. Standalone plugin windows set
+it from editors whose `shouldPreserveAspectRatio()` returns true.
 
 ---
 

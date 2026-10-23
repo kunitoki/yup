@@ -593,7 +593,10 @@ void Component::setTransform (const AffineTransform& newTransform)
     if (transform == newTransform)
         return;
 
+    // The pixels move, so both what the component covered and what it covers now repaint
+    repaint();
     transform = newTransform;
+    repaint();
 
     transformChanged();
 }
@@ -628,6 +631,19 @@ void Component::setFullScreen (bool shouldBeFullScreen)
 
     if (flags.onDesktop && native != nullptr)
         native->setFullScreen (shouldBeFullScreen);
+}
+
+void Component::setWindowAspectRatio (std::optional<float> aspectRatio)
+{
+    windowAspectRatio = aspectRatio;
+
+    if (flags.onDesktop && native != nullptr)
+        native->setAspectRatio (aspectRatio);
+}
+
+std::optional<float> Component::getWindowAspectRatio() const
+{
+    return windowAspectRatio;
 }
 
 //==============================================================================
@@ -789,6 +805,9 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
     flags.onDesktop = true;
 
     native = ComponentNative::createFor (*this, nativeOptions, parent);
+
+    if (windowAspectRatio.has_value() && native != nullptr)
+        native->setAspectRatio (windowAspectRatio);
 
     internalAttachedToNative();
 
@@ -1144,7 +1163,7 @@ Component* Component::getPopupParentComponent()
     {
         popupParent = ancestor;
 
-        if (ancestor->isTransformed() || ancestor->flags.manuallyComposited)
+        if (ancestor->isTransformed() || ancestor->flags.manuallyComposited || ancestor->flags.popupContainer)
             break;
     }
 
@@ -1338,9 +1357,9 @@ void Component::gesturePan ([[maybe_unused]] const GestureEvent& event) {}
 
 void Component::gestureSwipe ([[maybe_unused]] const GestureEvent& event) {}
 
-void Component::keyDown ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) {}
+bool Component::keyDown ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) { return false; }
 
-void Component::keyUp ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) {}
+bool Component::keyUp ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) { return false; }
 
 void Component::textInput ([[maybe_unused]] const String& text) {}
 
@@ -1441,6 +1460,30 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
 
 //==============================================================================
 
+void Component::setPalette (std::optional<ThemePalette> newPalette)
+{
+    palette = newPalette.has_value() ? std::make_unique<ThemePalette> (std::move (*newPalette)) : nullptr;
+
+    styleChanged();
+    repaint();
+}
+
+const ThemePalette* Component::getPalette() const
+{
+    return palette.get();
+}
+
+const ThemePalette* Component::findPalette() const
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+        if (component->palette != nullptr)
+            return component->palette.get();
+
+    return nullptr;
+}
+
+//==============================================================================
+
 void Component::setMetric (const Identifier& metricId, const std::optional<float>& metric)
 {
     if (metric)
@@ -1520,6 +1563,16 @@ void Component::setManuallyComposited (bool shouldBeManuallyComposited)
 bool Component::isManuallyComposited() const
 {
     return flags.manuallyComposited;
+}
+
+void Component::setPopupContainer (bool shouldBePopupContainer)
+{
+    flags.popupContainer = shouldBePopupContainer;
+}
+
+bool Component::isPopupContainer() const
+{
+    return flags.popupContainer;
 }
 
 GpuTexture::Ptr Component::renderToTexture (GraphicsContext& ctx, float scale)
@@ -1672,9 +1725,13 @@ void Component::internalRepaint (const Rectangle<float>& rect)
     {
         component->subtreeDirty = true;
 
-        // A warp can move pixels anywhere inside the component
+        // A warp can move pixels anywhere inside the component, so the whole of it is
+        // presented again; what changed underneath is kept, so only that is repainted
         if (component->componentEffect != nullptr)
+        {
+            component->effectDirtyRegion.add (dirtyArea);
             dirtyArea = component->getLocalBounds();
+        }
 
         auto* parent = component->parentComponent;
 
@@ -1703,7 +1760,7 @@ void Component::paintChildrenAndOverChildren (Graphics& g, const RectangleList<f
     paintOverChildren (g);
 }
 
-GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas)
+GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas, const std::optional<RectangleList<float>>& dirtyRegion)
 {
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
@@ -1711,9 +1768,10 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     const auto renderOffscreen = [&] () -> GpuCanvas::Ptr
     {
         const auto pixelSize = getCanvasPixelSize (getSize(), scale);
+        const auto reused = hasPixelSize (reuseCanvas, pixelSize);
 
         GpuCanvas::Ptr canvas;
-        if (hasPixelSize (reuseCanvas, pixelSize))
+        if (reused)
         {
             canvas = std::move (reuseCanvas);
         }
@@ -1726,11 +1784,21 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
         if (canvas == nullptr)
             return nullptr;
 
-        auto& offscreenG = canvas->beginDraw ({}, scale);
+        const auto partial = reused && dirtyRegion.has_value();
+
+        if (partial && dirtyRegion->isEmpty())
+            return canvas;
+
+        GpuFrameDescriptor frame;
+
+        if (partial)
+            frame.loadOp = GpuLoadOp::load;
+
+        auto& offscreenG = canvas->beginDraw (frame, scale);
 
         flags.paintAsOffscreenRoot = true;
 
-        paintSubtree (offscreenG, RectangleList<float> { getLocalBounds() }, opacity, renderContinuous);
+        paintSubtree (offscreenG, partial ? *dirtyRegion : RectangleList<float> { getLocalBounds() }, opacity, renderContinuous);
 
         flags.paintAsOffscreenRoot = false;
 
@@ -1746,6 +1814,35 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     }
 
     return renderOffscreen();
+}
+
+std::optional<RectangleList<float>> Component::takeEffectDirtyRegion (bool renderContinuous)
+{
+    RectangleList<float> region;
+    std::swap (region, effectDirtyRegion);
+
+    if (renderContinuous || ! isOpaque() || flags.unclippedRendering)
+        return std::nullopt;
+
+    const auto bounds = getLocalBounds();
+    RectangleList<float> clipped;
+
+    for (const auto& rect : region.getRectangles())
+    {
+        const auto inside = rect.intersection (bounds).smallestIntContainer();
+
+        if (! inside.isEmpty())
+            clipped.add (inside);
+    }
+
+    if (clipped.getNumRectangles() > maximumDirtyRectangles)
+    {
+        const auto box = clipped.getBoundingBox();
+        clipped.clearQuick();
+        clipped.add (box);
+    }
+
+    return clipped;
 }
 
 //==============================================================================
@@ -1883,7 +1980,12 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
     if (componentEffect != nullptr)
     {
-        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), 1.0f, renderContinuous, g.getContextScale(), std::move (effectOffscreenCanvas));
+        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(),
+                                              1.0f,
+                                              renderContinuous,
+                                              g.getContextScale(),
+                                              std::move (effectOffscreenCanvas),
+                                              takeEffectDirtyRegion (renderContinuous));
         if (canvas == nullptr)
             return;
 
@@ -2170,22 +2272,16 @@ void Component::internalGesture (const GestureEvent& event)
 
 //==============================================================================
 
-void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
+bool Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible() || ! isEnabled())
-        return;
-
-    keyDown (keys, position);
+    return dispatchKey (keys, position, &Component::keyDown);
 }
 
 //==============================================================================
 
-void Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
+bool Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible() || ! isEnabled())
-        return;
-
-    keyUp (keys, position);
+    return dispatchKey (keys, position, &Component::keyUp);
 }
 
 //==============================================================================
@@ -2593,6 +2689,24 @@ AffineTransform Component::getTransformToScreen() const
     }
 
     return transform.translated (getTopLevelScreenOrigin());
+}
+
+//==============================================================================
+
+bool Component::dispatchKey (const KeyPress& keys, const Point<float>& position, KeyHandler handler)
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (! component->isVisible() || ! component->isEnabled())
+            continue;
+
+        auto bailOutChecker = BailOutChecker (component);
+
+        if ((component->*handler) (keys, position) || bailOutChecker.shouldBailOut())
+            return true;
+    }
+
+    return false;
 }
 
 } // namespace yup

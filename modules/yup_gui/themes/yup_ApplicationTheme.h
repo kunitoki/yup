@@ -136,8 +136,9 @@ public:
     /** Returns a color from this theme.
 
         This method looks for the color in the component's properties first (walking up its parents), then in
-        the colors set explicitly with setColor(), then in the colors derived from the palette. If no color is
-        found, it returns std::nullopt.
+        the colors set explicitly with setColor(), then in the colors derived from the palette. The palette is
+        the closest one set with Component::setPalette() on the component or a parent, mapped with this theme's
+        palette mapping, or else the palette of this theme. If no color is found, it returns std::nullopt.
 
         @param component     The component for which to find the color.
         @param colorId       The identifier for the color to retrieve.
@@ -178,12 +179,20 @@ public:
     /** Returns the palette of this theme. */
     const ThemePalette& getPalette() const;
 
+    /** Returns the palette a component is drawn with: the closest one set with Component::setPalette()
+        on the component or a parent, or else the palette of this theme.
+
+        @param component     The component being drawn.
+    */
+    const ThemePalette& getPalette (const Component& component) const;
+
     /** A function that assigns theme colors from the roles of a palette, by calling setPaletteColor(). */
     using PaletteMapping = std::function<void (const ThemePalette&, ApplicationTheme&)>;
 
     /** Sets the function that turns the palette into theme colors, and runs it on the current palette.
 
-        Themes set this up when they are created, so that a new palette recolors all their components.
+        Themes set this up when they are created, so that a new palette recolors all their components. The
+        same mapping derives the colors of the palettes set on components.
 
         @param mapping       The mapping function.
     */
@@ -284,6 +293,7 @@ public:
 
 private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
+    std::optional<Color> findPaletteColor (const ThemePalette& componentPalette, const Identifier& colorId) const;
 
     //==============================================================================
     std::unordered_map<std::type_index, ComponentStyle::Ptr> componentStyles;
@@ -291,6 +301,8 @@ private:
     std::unordered_map<Identifier, Color> paletteColors;
     ThemePalette palette;
     PaletteMapping paletteMapping;
+    mutable std::vector<std::pair<ThemePalette, std::unordered_map<Identifier, Color>>> componentPaletteColors;
+    mutable SpinLock componentPaletteColorsLock;
     std::unordered_map<Identifier, float> defaultMetrics;
     Font defaultFont;
     Font defaultIconFont;

@@ -140,12 +140,11 @@ public:
     {
     }
 
-    void keyDown (const KeyPress& key, const Point<float>& position) override
+    bool keyDown (const KeyPress& key, const Point<float>& position) override
     {
         owner.finishAnimation();
 
-        if (! owner.handleKeyPress (key))
-            ListBox::keyDown (key, position);
+        return owner.handleKeyPress (key) || ListBox::keyDown (key, position);
     }
 
     void mouseMove (const MouseEvent& event) override
@@ -633,7 +632,7 @@ void TreeView::paintOverChildren (Graphics& g)
         return;
 
     const auto color = ApplicationTheme::findComponentColor (*this, Style::dropIndicatorColorId)
-                           .value_or (ApplicationTheme::getGlobalTheme()->getPalette().getColor (ThemePalette::Role::accent));
+                           .value_or (ApplicationTheme::getGlobalTheme()->getPalette (*this).getColor (ThemePalette::Role::accent));
 
     if (dropTarget->into)
     {
@@ -690,9 +689,13 @@ void TreeView::refreshDisplay (double lastFrameTimeSeconds)
     }
 }
 
-void TreeView::keyDown (const KeyPress& key, const Point<float>& position)
+bool TreeView::keyDown (const KeyPress& key, const Point<float>& position)
 {
-    list->keyDown (key, position);
+    // A key the focused list left unhandled climbs to here, and must not go back down to it.
+    if (list->hasKeyboardFocus())
+        return false;
+
+    return list->keyDown (key, position);
 }
 
 //==============================================================================

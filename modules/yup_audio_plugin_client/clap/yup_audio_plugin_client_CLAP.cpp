@@ -573,7 +573,6 @@ private:
 
     MidiBuffer midiEvents;
     ParameterChangeBuffer paramChangeBuffer;
-    ParameterChangeBuffer hostParameterChangeBuffer;
     std::vector<AudioParameter::Ptr> listenedParameters;
     std::vector<float*> outputChannelsFloat;
     std::vector<double*> outputChannelsDouble;
@@ -689,7 +688,6 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         // Process incoming parameter and MIDI events (CLAP guarantees time-sorted order)
         midiBuffer.clear();
         wrapper->paramChangeBuffer.clear();
-        wrapper->hostParameterChangeBuffer.clear();
 
         bool bypassed = wrapper->isBypassed;
         const auto bypassParameterID = getBypassHostParameterID (audioProcessor);
@@ -719,11 +717,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                                                static_cast<float> (paramEvent->value),
                                                static_cast<int> (event->time));
 
-                addParameterChangeByCLAPValue (audioProcessor,
-                                               wrapper->hostParameterChangeBuffer,
-                                               paramEvent->param_id,
-                                               static_cast<float> (paramEvent->value),
-                                               static_cast<int> (event->time));
+                clapEventToParameterChange (event, audioProcessor);
             }
             else if (event->type == CLAP_EVENT_PARAM_MOD)
             {
@@ -735,9 +729,6 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                 midiBuffer.addEvent (*convertedEvent, static_cast<int> (event->time));
             }
         }
-
-        // CLAP events arrive sorted - no sort needed; apply final values for backward compat
-        applyParameterChangesToProcessor (audioProcessor, wrapper->hostParameterChangeBuffer);
 
         AudioPluginPlayHeadCLAP playHead (audioProcessor.getSampleRate(), process);
         auto* const playHeadPtr = process->transport != nullptr ? &playHead : nullptr;
@@ -1630,7 +1621,6 @@ bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
 
     midiEvents.ensureSize (4096);
     paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*audioProcessor));
-    hostParameterChangeBuffer.reserve (getDefaultParameterChangeCapacity (*audioProcessor));
 
     const int totalOutputChannels = getTotalAudioOutputChannels (*audioProcessor);
     outputChannelsFloat.reserve (static_cast<size_t> (totalOutputChannels));

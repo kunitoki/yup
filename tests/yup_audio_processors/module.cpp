@@ -28,3 +28,4 @@
 #include "yup_AudioProcessContext.cpp"
 #include "yup_ParameterChangeBuffer.cpp"
 #include "yup_SpectralBridge.cpp"
+#include "yup_StandalonePluginHost.cpp"

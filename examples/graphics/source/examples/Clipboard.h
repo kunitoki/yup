@@ -280,10 +280,13 @@ public:
         statusLabel->setBounds (getLocalBounds().reduced (10).removeFromBottom (20));
     }
 
-    void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
+    bool keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
     {
-        if (keys.getKey() == 'v' && keys.getModifiers().isCommandDown())
-            pasteImageButton->onClick();
+        if (keys.getKey() != 'v' || ! keys.getModifiers().isCommandDown())
+            return false;
+
+        pasteImageButton->onClick();
+        return true;
     }
 
 private:

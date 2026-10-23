@@ -93,6 +93,8 @@ public:
 
     //==============================================================================
     bool isDecorated() const override;
+    void setAspectRatio (std::optional<float> newAspectRatio) override;
+    std::optional<float> getAspectRatio() const override;
 
     //==============================================================================
     bool isContinuousRepaintingEnabled() const override;
@@ -274,6 +276,7 @@ private:
     WeakReference<SDLComponentNative>::Master masterReference;
 
     SDL_Window* window = nullptr;
+    std::optional<float> aspectRatio;
     SDL_GLContext windowContext = nullptr;
     SDL_GLContext computeContext = nullptr;
     bool computeContextLost = false;
