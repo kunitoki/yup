@@ -22,7 +22,7 @@
 #include "SynthTheme.h"
 
 ParameterLed::ParameterLed (yup::AudioParameter::Ptr toggleParameter, const yup::String& captionText)
-    : gesture (std::move (toggleParameter))
+    : gesture (*this, std::move (toggleParameter))
     , caption (captionText)
 {
     setOpaque (false);

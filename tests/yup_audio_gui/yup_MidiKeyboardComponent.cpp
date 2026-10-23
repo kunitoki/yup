@@ -188,6 +188,15 @@ TEST_F (MidiKeyboardComponentTests, KeyDownSendsNoteOnForMappedKey)
     EXPECT_TRUE (keyboard->isNoteOn (kDefaultOctaveOffset));
 }
 
+TEST_F (MidiKeyboardComponentTests, KeyDownWithCommandOrControlSendsNoNoteOn)
+{
+    keyboard->keyDown (KeyPress ('z', KeyModifiers::commandMask), {});
+    keyboard->keyDown (KeyPress ('z', KeyModifiers::controlMask), {});
+
+    EXPECT_TRUE (listener->noteOnCalls.empty());
+    EXPECT_FALSE (keyboard->isNoteOn (kDefaultOctaveOffset));
+}
+
 TEST_F (MidiKeyboardComponentTests, KeyUpSendsNoteOffForTrackedNote)
 {
     keyboard->keyDown (KeyPress ('z'), {});

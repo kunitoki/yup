@@ -27,16 +27,18 @@
 
 #include <array>
 #include <functional>
+#include <vector>
 
 //==============================================================================
-/** The preset tile of the header: the patch name with the factory preset list and the
-    steps through it, and below it the patch's bank, author and tags.
+/** The preset tile of the header: the patch name with the preset list and the steps
+    through the factory presets, and below it the patch's bank, author and tags.
 
     The description is the processor's, so it follows whatever loaded the patch. A user
     patch's bank, author and tags are edited in place and saved with it; a factory
     preset's are read only. User presets are files holding the same patch the host saves
-    with the session, kept by default in the user's application data folder under
-    YUP/Prism/Presets.
+    with the session, kept by default in the user's audio presets folder under the
+    plugin's vendor and name. The list offers every preset file found there, gathered in
+    the background when the bar opens and after each save.
 
     @see PrismProcessor, SynthPatch, SynthHeader
 */
@@ -88,6 +90,7 @@ private:
 
     void stepPreset (int delta);
     void showPresetMenu();
+    void scanUserPresets();
     void writeField (Field field, const yup::String& text);
     void finishEditingWhenIdle();
     static yup::File getPresetFolder();
@@ -101,4 +104,5 @@ private:
     std::array<yup::Rectangle<float>, 3> captionAreas;
     yup::Rectangle<float> nameArea;
     SynthPatch::PresetInfo shownInfo;
+    std::vector<yup::File> userPresets;
 };

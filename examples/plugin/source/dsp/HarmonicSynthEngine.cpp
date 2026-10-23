@@ -170,6 +170,7 @@ void HarmonicSynthEngine::updateRoutes (const SynthParameterReader& reader) noex
         const auto index = static_cast<std::size_t> (context.numRoutes++);
         context.routes[index] = route;
         context.depths[index] = depth;
+        context.slots[index] = slot;
 
         if (const auto owner = spectralOwner[static_cast<std::size_t> (route.destination)]; owner >= 0)
             context.spectralRouted[static_cast<std::size_t> (owner)] = true;
@@ -200,10 +201,15 @@ void HarmonicSynthEngine::publishVoiceState() noexcept
     activeVoices.store (active);
     oversamplingVoices.store (oversampling);
 
-    // The displays follow the LFOs of the most recent note.
-    if (newest != nullptr)
-        for (int index = 0; index < SynthExample::lfoCount; ++index)
-            lfoPhases[static_cast<std::size_t> (index)].store (newest->getLFOPhase (index));
+    // The displays follow the LFOs and envelopes of the most recent note; without one they rest.
+    for (int index = 0; index < SynthExample::lfoCount; ++index)
+        lfoPhases[static_cast<std::size_t> (index)].store (newest != nullptr ? newest->getLFOPhase (index) : -1.0f);
+
+    for (int index = 0; index < SynthExample::envelopeCount; ++index)
+        envelopePositions[static_cast<std::size_t> (index)].store (newest != nullptr ? newest->getEnvelopePosition (index) : -1.0f);
+
+    for (int slot = 0; slot < SynthExample::modulationSlots; ++slot)
+        routeAmounts[static_cast<std::size_t> (slot)].store (newest != nullptr ? newest->getRouteAmount (slot) : 0.0f);
 }
 
 //==============================================================================

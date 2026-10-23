@@ -225,6 +225,19 @@ void paintRaised (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<
     paintBevel (g, bounds, corner);
 }
 
+void paintTrail (yup::Graphics& g, const yup::Path& area, float x, float width, yup::Color color)
+{
+    const auto start = x - width;
+
+    yup::ColorGradient gradient;
+    gradient.addColorStop (color.withAlpha (0.0f), start, 0.0f, 0.0f);
+    gradient.addColorStop (color.withAlpha (0.5f), x, 0.0f, width / (width + 1.0f));
+    gradient.addColorStop (color.withAlpha (0.0f), x + 1.0f, 0.0f, 1.0f);
+
+    g.setFillColorGradient (gradient);
+    g.fillPath (area);
+}
+
 void paintSeam (yup::Graphics& g, yup::Point<float> from, yup::Point<float> to)
 {
     const auto vertical = std::abs (to.getX() - from.getX()) < std::abs (to.getY() - from.getY());

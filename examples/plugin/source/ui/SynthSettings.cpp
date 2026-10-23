@@ -25,11 +25,14 @@ namespace SynthSettings
 {
 namespace
 {
+constexpr const char* rootTag = "SETTINGS";
+
 yup::File getFile()
 {
-    return yup::File::getSpecialLocation (yup::File::userApplicationDataDirectory)
-        .getChildFile ("Prism")
-        .getChildFile ("Settings.txt");
+    return yup::File::getSpecialLocation (yup::File::userPreferencesDirectory)
+        .getChildFile (yup::File::createLegalFileName (YupPlugin_Vendor))
+        .getChildFile (yup::File::createLegalFileName (YupPlugin_Name))
+        .getChildFile ("settings.xml");
 }
 
 /** The switches by name, so the file stays readable and survives new switches. */
@@ -37,37 +40,25 @@ std::vector<std::pair<const char*, bool*>> getSwitches (Values& values)
 {
     auto& neon = values.neon;
 
-    return { { "postEffect", &values.postEffect }, { "glow", &neon.glow }, { "aberration", &neon.aberration },
+    return { { "undo", &values.undo }, { "postEffect", &values.postEffect }, { "glow", &neon.glow }, { "aberration", &neon.aberration },
              { "grade", &neon.grade }, { "scanlines", &neon.scanlines }, { "vignette", &neon.vignette },
              { "grain", &neon.grain }, { "curvature", &neon.curvature }, { "phosphor", &neon.phosphor } };
 }
 
+/** Reads the settings, keeping the default of anything the file does not hold. */
 Values load()
 {
     Values values;
-    const auto switches = getSwitches (values);
+    const auto xml = yup::XmlDocument::parse (getFile());
 
-    for (const auto& line : yup::StringArray::fromLines (getFile().loadFileAsString()))
-    {
-        const auto key = line.upToFirstOccurrenceOf ("=", false, false).trim();
-        const auto value = line.fromFirstOccurrenceOf ("=", false, false).trim();
+    if (xml == nullptr || ! xml->hasTagName (rootTag))
+        return values;
 
-        if (key == "theme")
-        {
-            values.theme = value;
-            continue;
-        }
+    values.theme = xml->getStringAttribute ("theme", values.theme);
+    values.frameRate = xml->getIntAttribute ("frameRate", values.frameRate);
 
-        if (key == "frameRate")
-        {
-            values.frameRate = value.getIntValue();
-            continue;
-        }
-
-        for (const auto& [name, flag] : switches)
-            if (key == name)
-                *flag = value.getIntValue() != 0;
-    }
+    for (const auto& [name, flag] : getSwitches (values))
+        *flag = xml->getBoolAttribute (name, *flag);
 
     return values;
 }
@@ -82,15 +73,15 @@ Values& get()
 void save()
 {
     auto& values = get();
-    yup::StringArray lines;
-    lines.add ("theme=" + values.theme);
-    lines.add ("frameRate=" + yup::String (values.frameRate));
+    yup::XmlElement xml (rootTag);
+    xml.setAttribute ("theme", values.theme);
+    xml.setAttribute ("frameRate", values.frameRate);
 
     for (const auto& [name, flag] : getSwitches (values))
-        lines.add (yup::String (name) + "=" + (*flag ? "1" : "0"));
+        xml.setAttribute (name, *flag ? 1 : 0);
 
     const auto file = getFile();
     file.getParentDirectory().createDirectory();
-    file.replaceWithText (lines.joinIntoString ("\n"));
+    xml.writeTo (file);
 }
 } // namespace SynthSettings

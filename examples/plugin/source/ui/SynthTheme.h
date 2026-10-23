@@ -119,6 +119,10 @@ void paintWell (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<fl
 /** Paints a raised box: a lit top edge and a one pixel drop shadow. */
 void paintRaised (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner);
 
+/** Fills a path with a band of light that ends at x and fades out over width to its left,
+    the trail of a playhead moving to the right. */
+void paintTrail (yup::Graphics& g, const yup::Path& area, float x, float width, yup::Color color);
+
 /** Paints an engraved line between two areas of a panel. */
 void paintSeam (yup::Graphics& g, yup::Point<float> from, yup::Point<float> to);
 

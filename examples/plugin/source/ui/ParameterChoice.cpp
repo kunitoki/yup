@@ -24,6 +24,7 @@
 
 ParameterChoice::ParameterChoice (const yup::String& caption, yup::AudioParameter::Ptr parameterToControl, const yup::Font& font)
     : parameter (std::move (parameterToControl))
+    , gesture (*this, parameter)
 {
     setOpaque (false); // the caption and combo box paint themselves, the row draws nothing
 
@@ -45,9 +46,7 @@ ParameterChoice::ParameterChoice (const yup::String& caption, yup::AudioParamete
         if (id <= 0 || id == getParameterItemId())
             return;
 
-        parameter->beginChangeGesture();
-        parameter->setValueNotifyingHost (parameter->getMinimumValue() + static_cast<float> (id - 1));
-        parameter->endChangeGesture();
+        gesture.setNormalized (parameter->convertToNormalizedValue (parameter->getMinimumValue() + static_cast<float> (id - 1)));
 
         if (onChange != nullptr)
             onChange();

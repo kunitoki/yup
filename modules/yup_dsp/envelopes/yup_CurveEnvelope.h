@@ -203,6 +203,25 @@ public:
         return start + static_cast<FloatType> (t) * (end - start);
     }
 
+    /** Returns where the envelope is along the points of its curve: k on point k, and
+        k + f a fraction f of the time from point k to point k + 1. A held sustain reads
+        exactly its point.
+
+        Unlike getPosition() it does not depend on the points' times, so a display can place
+        it on its own copy of a curve that is being edited.
+    */
+    FloatType getPointPosition() const noexcept
+    {
+        if (segment <= 0)
+            return FloatType (0);
+
+        if (stage != Stage::running)
+            return static_cast<FloatType> (jmin (segment, curve.getNumPoints() - 1));
+
+        const auto t = segmentLength > 0.0 ? jlimit (0.0, 1.0, position / segmentLength) : 1.0;
+        return static_cast<FloatType> (segment - 1) + static_cast<FloatType> (t);
+    }
+
     //==============================================================================
     /** Advances one sample and returns the new level. */
     FloatType getNextValue() noexcept

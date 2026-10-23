@@ -23,7 +23,7 @@
 
 SynthVoicingPanel::SynthVoicingPanel (const SynthParameters& parametersToEdit)
     : parameters (parametersToEdit)
-    , modeGesture (parametersToEdit.playMode)
+    , modeGesture (*this, parametersToEdit.playMode)
     , qualitySpinner (parametersToEdit.quality)
     , unisonSpinner (parametersToEdit.unisonVoices)
     , glideKnob ("GLIDE", parametersToEdit.glide, SynthTheme::captionFont (12.0f))

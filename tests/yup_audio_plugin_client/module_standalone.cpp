@@ -311,6 +311,18 @@ TEST_F (StandaloneStateStoreTests, EmptyProcessorStateIsNotRestored)
     EXPECT_EQ (makeProcessorState(), processor.lastLoadedState);
 }
 
+#if ! YUP_EMSCRIPTEN
+TEST_F (StandaloneStateStoreTests, DefaultStoreLivesInTheUserPreferencesFolder)
+{
+    const auto expected = File::getSpecialLocation (File::userPreferencesDirectory)
+                              .getChildFile ("Vendor")
+                              .getChildFile ("Product")
+                              .getChildFile ("standalone.xml");
+
+    EXPECT_EQ (expected, StandaloneStateStore::createDefault ("Vendor", "Product", "vendor.product").getFile());
+}
+#endif
+
 TEST_F (StandaloneStateStoreTests, MissingFileLoadsEmptyState)
 {
     const auto state = StandaloneStateStore (stateFile).load();

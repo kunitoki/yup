@@ -21,30 +21,18 @@
 #pragma once
 
 #include "ParameterGesture.h"
-
-#include <yup_gui/yup_gui.h>
-
-#include <vector>
+#include "SynthSegmented.h"
 
 //==============================================================================
-/** A row of segments choosing one value of a choice parameter, the chosen one raised
-    out of a sunken track.
+/** A row of segments choosing one value of a choice parameter.
 
-    Segment n picks the parameter's value n. A segment shows its icon, a path drawn in a
-    unit square, when it has one, and its text otherwise.
+    Segment n picks the parameter's value n.
 
-    @see ParameterLed, ParameterChoice
+    @see SynthSegmented, ParameterLed, ParameterChoice
 */
-class ParameterSegmented : public yup::Component
+class ParameterSegmented : public SynthSegmented
 {
 public:
-    /** One choice. */
-    struct Segment
-    {
-        yup::String text;
-        yup::Path icon; /**< In the unit square; drawn instead of the text when not empty. */
-    };
-
     ParameterSegmented (yup::AudioParameter::Ptr choiceParameter, std::vector<Segment> segmentsToShow);
 
     /** Shows the parameter's current choice.
@@ -52,14 +40,6 @@ public:
     */
     bool syncFromParameter();
 
-    void paint (yup::Graphics& g) override;
-    void mouseDown (const yup::MouseEvent& event) override;
-
 private:
-    int getSelectedIndex() const;
-    yup::Rectangle<float> getSegmentBounds (int index) const;
-
     ParameterGesture gesture;
-    std::vector<Segment> segments;
-    int shownIndex = -1;
 };

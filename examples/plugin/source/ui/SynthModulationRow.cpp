@@ -21,6 +21,7 @@
 
 #include "SynthModulationRow.h"
 #include "SynthTheme.h"
+#include "SynthUndoHistory.h"
 
 SynthModulationRow::SynthModulationRow (int slotToEdit,
                                         SynthRoutes& routesToEdit,
@@ -50,8 +51,10 @@ SynthModulationRow::SynthModulationRow (int slotToEdit,
 
     removeButton.onClick = [this]
     {
+        const auto before = readRoute();
         routes.clearRoute (slot);
         syncFromRoutes();
+        recordRoute (before);
     };
     addAndMakeVisible (removeButton);
 
@@ -94,8 +97,32 @@ void SynthModulationRow::writeRoute()
     if (source < 0 || ! yup::isPositiveAndBelow (destination, static_cast<int> (destinations.size())))
         return;
 
+    const auto before = readRoute();
     const auto& target = destinations[static_cast<std::size_t> (destination)];
     routes.setRoute (slot, static_cast<SynthModulationSource> (source), target.id, target.index);
+    recordRoute (before);
+}
+
+SynthModulationRow::RouteState SynthModulationRow::readRoute() const
+{
+    const auto route = routes.getRoute (slot);
+    return { static_cast<int> (route.source), route.destination, routes.getDestinationID (slot) };
+}
+
+void SynthModulationRow::recordRoute (const RouteState& before)
+{
+    const auto after = readRoute();
+
+    if (after == before)
+        return;
+
+    SynthUndoHistory::record<RouteState> (*this, before, after, [&routes = routes, slot = slot] (const RouteState& state)
+    {
+        if (state.destination < 0)
+            routes.clearRoute (slot);
+        else
+            routes.setRoute (slot, static_cast<SynthModulationSource> (state.source), state.destinationID, state.destination);
+    });
 }
 
 void SynthModulationRow::resized()
@@ -118,9 +145,8 @@ void SynthModulationRow::paint (yup::Graphics& g)
 
     const auto selected = sourceBox.getSelectedId() - 1;
     const auto source = static_cast<SynthModulationSource> (yup::jmax (0, selected));
-    const auto family = getSourceEnvelope (source) >= 0 ? 0 : getSourceLFO (source) >= 0 ? 1 : source == SynthModulationSource::random ? 3 : 2;
     const auto dot = yup::Rectangle<float> (spacing, (getHeight() - dotSize) * 0.5f, dotSize, dotSize);
 
-    g.setFillColor (selected >= 0 ? SynthTheme::sourceAccent (family) : SynthTheme::textSecondary (*this).withAlpha (0.4f));
+    g.setFillColor (selected >= 0 ? getSourceColor (source) : SynthTheme::textSecondary (*this).withAlpha (0.4f));
     g.fillRoundedRect (dot, 2.0f);
 }

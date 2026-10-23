@@ -20,6 +20,7 @@
 */
 
 #include "SynthOscillatorPanel.h"
+#include "SynthUndoHistory.h"
 #include "SynthTheme.h"
 
 SynthOscillatorPanel::SynthOscillatorPanel (const SynthOscillatorParameters& parametersToEdit,
@@ -52,6 +53,8 @@ SynthOscillatorPanel::SynthOscillatorPanel (const SynthOscillatorParameters& par
                  SynthSliderField ("Formant", parametersToEdit.formant, SynthSliderField::Look::boxed),
                  SynthSliderField ("F. Pos", parametersToEdit.formantPosition, SynthSliderField::Look::boxed),
                  SynthSliderField ("Scatter", parametersToEdit.scatter, SynthSliderField::Look::boxed) }
+    , drawTools (makeDrawToolSegments(), true)
+    , partialsTools (makePartialsToolSegments(), true)
 {
     setCachedToTexture (true);
 
@@ -61,18 +64,30 @@ SynthOscillatorPanel::SynthOscillatorPanel (const SynthOscillatorParameters& par
 
     // Picking a preset drops any edited partials, otherwise the oscillator would keep
     // playing the edited shape while the combo box claims something else.
-    waveformChoice.onChange = [this] { editor.revertToPreset(); };
+    waveformChoice.onChange = [this] { editor.revertToPreset (true); };
 
     partialsButton.setButtonText ("Partials");
     SynthTheme::styleRaisedToggle (partialsButton);
-    partialsButton.onClick = [this] { editor.setEditingPartials (partialsButton.getToggleState()); };
+    partialsButton.onClick = [this] { showEditingPartials (partialsButton.getToggleState()); };
+
+    // In the order of WaveformDrawTool and PartialsTool.
+    drawTools.setSelectedIndex (0);
+    drawTools.onSelect = [this] (int index) { editor.setDrawTool (static_cast<WaveformDrawTool> (index)); };
+
+    partialsTools.setSelectedIndex (0);
+    partialsTools.onSelect = [this] (int index) { editor.setPartialsTool (static_cast<PartialsTool> (index)); };
+
+    toolsMenuButton.onClick = [this] { showToolsMenu(); };
 
     SynthTheme::styleRaisedButton (resetButton);
     resetButton.onClick = [this] { editor.revertToPreset(); };
 
     for (auto* control : std::initializer_list<yup::Component*> { &waveformChoice, &frequencyModeSelector, &pitchField, &fineField, &freeRunningLed,
-                                                                  &syncModeChoice, &syncRatioField, &partialsButton, &resetButton, &levelKnob, &panKnob, &phaseKnob })
+                                                                  &syncModeChoice, &syncRatioField, &partialsButton, &resetButton, &levelKnob, &panKnob, &phaseKnob,
+                                                                  &drawTools, &toolsMenuButton })
         addAndMakeVisible (*control);
+
+    addChildComponent (partialsTools);
 
     for (auto& field : sends)
         addAndMakeVisible (field);
@@ -91,7 +106,109 @@ void SynthOscillatorPanel::showModes (const SynthOscillatorValues& values)
     syncRatioField.setEnabled (values.syncMode != yup::SyncMode::none);
 }
 
-void SynthOscillatorPanel::syncFromParameters()
+void SynthOscillatorPanel::showEditingPartials (bool shouldEdit)
+{
+    editor.setEditingPartials (shouldEdit);
+    drawTools.setVisible (! shouldEdit);
+    partialsTools.setVisible (shouldEdit);
+}
+
+/** Opens the operations on the whole cycle, the grid and the undo history. */
+void SynthOscillatorPanel::showToolsMenu()
+{
+    // Operation IDs are 1 based in the order of PartialsOperation; grid IDs are gridBase
+    // plus the divisions, 0 standing for none.
+    constexpr int gridBase = 100;
+    constexpr int undoId = 200;
+    constexpr int redoId = 201;
+
+    auto menu = yup::PopupMenu::create (yup::PopupMenu::Options {}
+                                            .withParentComponent (getPopupParentComponent())
+                                            .withRelativePosition (&toolsMenuButton, yup::PopupMenu::Placement::toRight()));
+
+    const char* const operations[] { "Invert", "Reverse", "Mirror", "Odd Harmonics Only", "Even Harmonics Only", "Randomize Phases" };
+
+    for (int index = 0; index < static_cast<int> (std::size (operations)); ++index)
+    {
+        menu->addItem (operations[index], index + 1);
+
+        if (index == 2)
+            menu->addSeparator();
+    }
+
+    menu->addSeparator();
+
+    auto gridMenu = yup::PopupMenu::create();
+
+    for (const auto divisions : { 0, 4, 8, 16, 32 })
+        gridMenu->addItem (divisions == 0 ? yup::String ("Off") : yup::String (divisions), gridBase + divisions, true, editor.getGridDivisions() == divisions);
+
+    menu->addSubMenu ("Grid", gridMenu, ! editor.isEditingPartials());
+    menu->addSeparator();
+    auto* history = SynthUndoHistory::find (*this);
+    menu->addItem ("Undo", undoId, history != nullptr && history->canUndo());
+    menu->addItem ("Redo", redoId, history != nullptr && history->canRedo());
+
+    menu->show ([safeThis = yup::WeakReference<yup::Component> (this)] (int selectedId)
+    {
+        auto* panel = dynamic_cast<SynthOscillatorPanel*> (safeThis.get());
+
+        if (panel == nullptr || selectedId <= 0)
+            return;
+
+        auto& editor = panel->editor;
+
+        auto* history = SynthUndoHistory::find (*panel);
+
+        if (selectedId == undoId && history != nullptr)
+            history->undo();
+        else if (selectedId == redoId && history != nullptr)
+            history->redo();
+        else if (selectedId >= gridBase)
+            editor.setGridDivisions (selectedId - gridBase);
+        else
+            editor.applyOperation (static_cast<PartialsOperation> (selectedId - 1));
+    });
+}
+
+std::vector<SynthSegmented::Segment> SynthOscillatorPanel::makeDrawToolSegments()
+{
+    const auto polyline = &SynthSegmented::makePolyline;
+
+    yup::Path brush;
+    brush.moveTo (0.0f, 0.7f);
+    brush.cubicTo (0.2f, -0.1f, 0.45f, 1.1f, 0.65f, 0.45f);
+    brush.cubicTo (0.75f, 0.15f, 0.9f, 0.2f, 1.0f, 0.35f);
+
+    yup::Path arc;
+    arc.moveTo (0.0f, 1.0f);
+    arc.cubicTo (0.05f, -0.3f, 0.95f, -0.3f, 1.0f, 1.0f);
+
+    // In the order of WaveformDrawTool.
+    return { { "Brush", brush },
+             { "Line", polyline ({ { 0.0f, 1.0f }, { 1.0f, 0.0f } }) },
+             { "Arc", arc },
+             { "Zigzag", polyline ({ { 0.0f, 1.0f }, { 0.25f, 0.0f }, { 0.5f, 1.0f }, { 0.75f, 0.0f }, { 1.0f, 1.0f } }) },
+             { "Steps", polyline ({ { 0.0f, 1.0f }, { 0.33f, 1.0f }, { 0.33f, 0.5f }, { 0.67f, 0.5f }, { 0.67f, 0.0f }, { 1.0f, 0.0f } }) },
+             { "Noise", polyline ({ { 0.0f, 0.5f }, { 0.12f, 0.1f }, { 0.25f, 0.8f }, { 0.37f, 0.3f }, { 0.5f, 1.0f }, { 0.62f, 0.0f }, { 0.75f, 0.7f }, { 0.87f, 0.2f }, { 1.0f, 0.6f } }) } };
+}
+
+std::vector<SynthSegmented::Segment> SynthOscillatorPanel::makePartialsToolSegments()
+{
+    yup::Path magnitude;
+    yup::Path phase;
+
+    for (const auto& [x, top] : { std::pair { 0.1f, 0.0f }, { 0.37f, 0.4f }, { 0.63f, 0.6f }, { 0.9f, 0.75f } })
+        magnitude.addLine ({ x, 1.0f }, { x, top });
+
+    for (const auto& [x, end] : { std::pair { 0.1f, 0.0f }, { 0.37f, 0.8f }, { 0.63f, 0.25f }, { 0.9f, 1.0f } })
+        phase.addLine ({ x, 0.5f }, { x, end });
+
+    // In the order of PartialsTool.
+    return { { "Magnitude", magnitude }, { "Phase", phase } };
+}
+
+void SynthOscillatorPanel::syncFromParameters (SynthParameterReader modulated)
 {
     waveformChoice.syncFromParameter();
     frequencyModeSelector.syncFromParameter();
@@ -113,14 +230,18 @@ void SynthOscillatorPanel::syncFromParameters()
     // One generation bump per frame, however many mouse events the drag produced.
     editor.commitPendingEdits();
 
-    auto values = parameters.read();
+    // While the partials are drawn by hand the wave follows the hand, not the modulation.
+    if (editor.isEditingPartials())
+        modulated = {};
+
+    auto values = parameters.read (modulated);
     partials.fillValues (values);
 
     if (values == shownValues)
         return;
 
     shownValues = values;
-    editor.refresh();
+    editor.refresh (modulated);
     showModes (values);
 }
 
@@ -153,7 +274,14 @@ void SynthOscillatorPanel::resized()
     auto display = bounds;
     topBar = display.removeFromTop (barHeight);
     bottomBar = display.removeFromBottom (barHeight);
-    editor.setBounds (display.reduced (1.0f, 0.0f));
+    toolRail = display.removeFromLeft (railWidth).withTrimmedLeft (1.0f);
+    editor.setBounds (display.withTrimmedRight (1.0f));
+
+    auto rail = toolRail.reduced (2.0f, 4.0f);
+    toolsMenuButton.setBounds (rail.removeFromBottom (toolHeight));
+    rail.removeFromBottom (4.0f);
+    drawTools.setBounds (rail.withHeight (yup::jmin (rail.getHeight(), toolHeight * 6.0f)));
+    partialsTools.setBounds (rail.withHeight (yup::jmin (rail.getHeight(), toolHeight * 2.0f)));
 
     auto top = topBar.reduced (5.0f, 4.0f);
     waveformChoice.setBounds (top.removeFromLeft (130.0f));
@@ -201,7 +329,11 @@ void SynthOscillatorPanel::paint (yup::Graphics& g)
         g.fillRect (bar.reduced (1.0f, 0.0f));
     }
 
+    g.setFillColor (SynthTheme::stripColor (*this).withAlpha (0.6f));
+    g.fillRect (toolRail);
+
     g.setFillColor (yup::Colors::black.withAlpha (0.7f));
+    g.fillRect (toolRail.getRight() - 1.0f, toolRail.getY(), 1.0f, toolRail.getHeight());
     g.fillRect (topBar.getX() + 1.0f, topBar.getBottom() - 1.0f, topBar.getWidth() - 2.0f, 1.0f);
     g.fillRect (bottomBar.getX() + 1.0f, bottomBar.getY(), bottomBar.getWidth() - 2.0f, 1.0f);
 

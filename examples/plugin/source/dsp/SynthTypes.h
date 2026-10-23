@@ -146,10 +146,10 @@ inline yup::StringArray getSynthFilterRoutingNames()
 }
 
 //==============================================================================
-/** @internal Item names for yup::LFO::Shape, index aligned with the enumeration. */
+/** @internal Item names of the yup::LFO::Shape values offered, index aligned with the enumeration; the custom shape is not offered yet. */
 inline yup::StringArray getSynthLFOShapeNames()
 {
-    return { "Sine", "Triangle", "Saw Up", "Square", "S&H", "Saw Down", "Smooth Random", "Custom" };
+    return { "Sine", "Triangle", "Saw Up", "Square", "S&H", "Saw Down", "Smooth Random" };
 }
 
 /** @internal Item names for yup::LFO::RetriggerMode, index aligned with the enumeration. */
@@ -228,6 +228,14 @@ inline yup::StringArray getSynthModulationSourceNames()
 {
     return { "ENV 1", "ENV 2", "ENV 3", "ENV 4", "LFO 1", "LFO 2", "LFO 3", "LFO 4",
              "VELOCITY", "NOTE", "MOD WHEEL", "AFTERTOUCH", "RANDOM" };
+}
+
+/** True for the sources that swing both ways, so a route from them reaches depth either side. */
+constexpr bool isBipolarSource (SynthModulationSource source) noexcept
+{
+    return (source >= SynthModulationSource::lfo1 && source <= SynthModulationSource::lfo4)
+        || source == SynthModulationSource::note
+        || source == SynthModulationSource::random;
 }
 
 /** Returns the envelope a source reads, or -1. */

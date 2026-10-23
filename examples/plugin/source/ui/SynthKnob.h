@@ -44,6 +44,9 @@ public:
     {
         float depth = 0.0f; /**< Normalized, -1 to 1, one full knob sweep per unit. */
         yup::Color color;
+        bool bipolar = false; /**< Reaches depth either side of the value rather than one way. */
+
+        bool operator== (const ModulationArc&) const = default;
     };
 
     SynthKnob();
@@ -60,6 +63,9 @@ public:
     /** Replaces the modulation arcs. */
     void setModulationArcs (std::vector<ModulationArc> newArcs);
 
+    /** Marks the value the modulation currently plays, normalized, or hides the mark. */
+    void setModulatedValue (std::optional<float> newModulatedValue);
+
     /** Returns the modulation arcs. */
     const std::vector<ModulationArc>& getModulationArcs() const noexcept { return modulationArcs; }
 
@@ -74,6 +80,7 @@ private:
 
     std::vector<ModulationArc> modulationArcs;
     std::optional<yup::Color> accentOverride;
+    std::optional<float> modulatedValue;
     bool showingValue = false;
     bool showsValueInWell = false;
 };

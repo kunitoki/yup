@@ -83,10 +83,31 @@ public:
     void handleController (int channel, int controller, int value) override;
     void handleChannelPressure (int channel, int channelPressureValue) override;
 
-    /** Returns the phase of an LFO in the most recently started voice, for its display. */
+    /** Returns the phase of an LFO in the most recently started voice, for its display,
+        or -1 when no note plays. */
     float getLFOPhase (int lfoIndex) const noexcept
     {
         return lfoPhases[static_cast<std::size_t> (lfoIndex)].load();
+    }
+
+    /** Returns how far a route slot moves its destination in the most recent note, in the
+        destination's normalized range, or 0 when no note plays. */
+    float getRouteAmount (int slot) const noexcept
+    {
+        if (! yup::isPositiveAndBelow (slot, SynthExample::modulationSlots))
+            return 0.0f;
+
+        return routeAmounts[static_cast<std::size_t> (slot)].load();
+    }
+
+    /** Returns where an envelope of the most recent note is along its curve, in seconds,
+        or -1 when no note plays it. */
+    float getEnvelopePosition (int envelopeIndex) const noexcept
+    {
+        if (! yup::isPositiveAndBelow (envelopeIndex, SynthExample::envelopeCount))
+            return -1.0f;
+
+        return envelopePositions[static_cast<std::size_t> (envelopeIndex)].load();
     }
 
     /** Returns the shared waveform presets, which the waveform displays also read. */
@@ -138,6 +159,8 @@ private:
     SynthOscillatorResources resources;
     std::array<SynthOscillatorSlot, SynthExample::oscillatorCount> oscillatorSlots;
     std::array<std::atomic<float>, SynthExample::lfoCount> lfoPhases {};
+    std::array<std::atomic<float>, SynthExample::envelopeCount> envelopePositions {};
+    std::array<std::atomic<float>, SynthExample::modulationSlots> routeAmounts {};
     SynthBlockContext context;
     yup::ReferenceCountedArray<SynthVoice> ownedVoices;
 

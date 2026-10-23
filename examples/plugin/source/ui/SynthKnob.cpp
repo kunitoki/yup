@@ -57,7 +57,20 @@ void SynthKnob::setAccent (yup::Color newAccent)
 
 void SynthKnob::setModulationArcs (std::vector<ModulationArc> newArcs)
 {
+    if (newArcs == modulationArcs)
+        return;
+
     modulationArcs = std::move (newArcs);
+    repaint();
+}
+
+void SynthKnob::setModulatedValue (std::optional<float> newModulatedValue)
+{
+    if (newModulatedValue.has_value() == modulatedValue.has_value()
+        && (! newModulatedValue.has_value() || std::abs (*newModulatedValue - *modulatedValue) < 1.0e-4f))
+        return;
+
+    modulatedValue = newModulatedValue;
     repaint();
 }
 
@@ -107,12 +120,21 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
 
         for (const auto& arc : knob->getModulationArcs())
         {
-            const auto to = startAngle + sweepAngle * yup::jlimit (0.0f, 1.0f, value + arc.depth);
+            const auto angleOf = [&] (float normalized) { return startAngle + sweepAngle * yup::jlimit (0.0f, 1.0f, normalized); };
+            const auto from = arc.bipolar ? angleOf (value - arc.depth) : valueAngle;
+            const auto to = angleOf (value + arc.depth);
 
-            if (std::abs (to - valueAngle) > 1.0e-3f)
-                strokeArc (radius, yup::jmin (valueAngle, to), yup::jmax (valueAngle, to), ringWidth * 0.6f, arc.color);
+            if (std::abs (to - from) > 1.0e-3f)
+                strokeArc (radius, yup::jmin (from, to), yup::jmax (from, to), ringWidth * 0.6f, arc.color);
 
             radius -= ringWidth * 0.8f;
+        }
+
+        // The value the modulation plays now, a bright tick across the ring.
+        if (knob->modulatedValue.has_value())
+        {
+            const auto angle = startAngle + sweepAngle * yup::jlimit (0.0f, 1.0f, *knob->modulatedValue);
+            strokeArc (ringRadius, angle - 0.06f, angle + 0.06f, ringWidth * 1.6f, SynthTheme::textPrimary (slider));
         }
     }
 

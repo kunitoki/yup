@@ -87,6 +87,30 @@ public:
     */
     void setHarmonicMagnitude (int index, float magnitude) noexcept;
 
+    /** Sets the phase of one partial while keeping its magnitude.
+
+        @param index The zero based partial, 0 being the fundamental
+        @param phase The phase in radians, 0 being a sine and pi / 2 a cosine
+    */
+    void setHarmonicPhase (int index, float phase) noexcept;
+
+    //==============================================================================
+    /** Every coefficient and whether they are played, as the editor's undo keeps them. */
+    struct Snapshot
+    {
+        std::array<float, SynthExample::editableHarmonics> cosines {};
+        std::array<float, SynthExample::editableHarmonics> sines {};
+        bool custom = false;
+
+        bool operator== (const Snapshot&) const = default;
+    };
+
+    /** Returns a copy of the partials. */
+    Snapshot getSnapshot() const noexcept;
+
+    /** Puts back partials returned by getSnapshot(); the caller bumps the generation. */
+    void restore (const Snapshot& snapshot) noexcept;
+
     //==============================================================================
     /** True while the oscillator plays these partials instead of its waveform preset. */
     bool usesCustomSeries() const noexcept { return customSeries.load(); }

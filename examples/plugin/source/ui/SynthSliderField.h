@@ -22,6 +22,7 @@
 
 #include "ParameterGesture.h"
 #include "SynthKnob.h"
+#include "SynthModulationTarget.h"
 
 #include <yup_gui/yup_gui.h>
 
@@ -38,7 +39,9 @@
 
     @see SynthNumberField, ParameterKnob
 */
-class SynthSliderField : public yup::Component
+class SynthSliderField
+    : public yup::Component
+    , public SynthModulationTarget
 {
 public:
     /** How the field is drawn. */
@@ -50,8 +53,14 @@ public:
 
     SynthSliderField (const yup::String& caption, yup::AudioParameter::Ptr parameterToControl, Look look, bool bipolar = false);
 
+    yup::AudioParameter::Ptr getModulationParameter() const override { return gesture.getParameter(); }
+    void showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> modulatedValue) override;
+
     /** Replaces the route ranges drawn under the track. */
     void setModulationArcs (std::vector<SynthKnob::ModulationArc> newArcs);
+
+    /** Marks the value the modulation currently plays, normalized, or hides the mark. */
+    void setModulatedValue (std::optional<float> newModulatedValue);
 
     /** Shows the parameter's current value unless it is being dragged.
         @returns true when the shown value changed.
@@ -76,4 +85,5 @@ private:
     bool bipolar;
     float shownValue = -1.0f;
     std::vector<SynthKnob::ModulationArc> modulationArcs;
+    std::optional<float> modulatedValue;
 };

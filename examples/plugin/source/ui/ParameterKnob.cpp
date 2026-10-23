@@ -24,16 +24,16 @@
 
 ParameterKnob::ParameterKnob (const yup::String& caption, yup::AudioParameter::Ptr parameterToControl, const yup::Font& font)
     : parameter (std::move (parameterToControl))
+    , gesture (*this, parameter)
 {
     setOpaque (false); // the knob and its caption paint themselves, the row draws nothing
 
     bindSlider();
     slider.getValueText = [this] { return parameter->toString(); };
-    slider.onValueChanged = [this] (double value) { setParameterValue (value); };
+    slider.onValueChanged = [this] (double value) { gesture.setNormalized (static_cast<float> (value)); };
     slider.onDragStart = [this] (const yup::MouseEvent&)
     {
-        parameter->beginChangeGesture();
-        dragging = true;
+        gesture.begin();
         slider.setShowingValue (true);
     };
     slider.onDragEnd = [this] (const yup::MouseEvent&) { endGesture(); };
@@ -66,10 +66,17 @@ void ParameterKnob::setParameter (yup::AudioParameter::Ptr newParameter)
 
     endGesture();
     parameter = std::move (newParameter);
+    gesture.setParameter (parameter);
     bindSlider();
 
     if (captionShowsValue)
         label.setText (parameter->toString(), yup::dontSendNotification);
+}
+
+void ParameterKnob::showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> modulatedValue)
+{
+    slider.setModulationArcs (std::move (arcs));
+    slider.setModulatedValue (modulatedValue);
 }
 
 void ParameterKnob::setCaptionShowsValue (bool shouldShowValue)
@@ -90,7 +97,7 @@ bool ParameterKnob::syncFromParameter()
 
     if (captionShowsValue && label.getText() != parameter->toString())
         label.setText (parameter->toString(), yup::dontSendNotification);
-    if (dragging || std::abs (slider.getValue() - normalized) < 1.0e-6)
+    if (gesture.isActive() || std::abs (slider.getValue() - normalized) < 1.0e-6)
         return false;
 
     slider.setValue (normalized, yup::dontSendNotification);
@@ -109,27 +116,11 @@ void ParameterKnob::resized()
     label.setBounds (block);
 }
 
-void ParameterKnob::setParameterValue (double normalizedValue)
-{
-    const auto value = parameter->convertToDenormalizedValue (static_cast<float> (normalizedValue));
-
-    if (! dragging)
-    {
-        parameter->beginChangeGesture();
-        parameter->setValueNotifyingHost (value);
-        parameter->endChangeGesture();
-        return;
-    }
-
-    parameter->setValueNotifyingHost (value);
-}
-
 void ParameterKnob::endGesture()
 {
-    if (! dragging)
+    if (! gesture.isActive())
         return;
 
-    dragging = false;
-    parameter->endChangeGesture();
+    gesture.end();
     slider.setShowingValue (false);
 }

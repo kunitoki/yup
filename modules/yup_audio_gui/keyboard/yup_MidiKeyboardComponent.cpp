@@ -416,6 +416,10 @@ void MidiKeyboardComponent::resized()
 
 void MidiKeyboardComponent::keyDown (const KeyPress& key, const Point<float>&)
 {
+    // A key held with command or control is a shortcut, not a note
+    if (const auto modifiers = key.getModifiers(); modifiers.isCommandDown() || modifiers.isControlDown())
+        return;
+
     auto midiNote = getMidiNoteForKey (key);
 
     if (midiNote >= 0)

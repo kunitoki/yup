@@ -19,86 +19,20 @@
   ==============================================================================
 */
 #include "ParameterSegmented.h"
-#include "SynthTheme.h"
 
 ParameterSegmented::ParameterSegmented (yup::AudioParameter::Ptr choiceParameter, std::vector<Segment> segmentsToShow)
-    : gesture (std::move (choiceParameter))
-    , segments (std::move (segmentsToShow))
+    : SynthSegmented (std::move (segmentsToShow))
+    , gesture (*this, std::move (choiceParameter))
 {
-    setOpaque (false);
-    syncFromParameter();
-}
+    onSelect = [this] (int index)
+    {
+        gesture.setNormalized (gesture.getParameter()->convertToNormalizedValue (static_cast<float> (index)));
+    };
 
-int ParameterSegmented::getSelectedIndex() const
-{
-    return yup::roundToInt (gesture.getParameter()->getValue());
+    syncFromParameter();
 }
 
 bool ParameterSegmented::syncFromParameter()
 {
-    const auto index = getSelectedIndex();
-
-    if (index == shownIndex)
-        return false;
-
-    shownIndex = index;
-    repaint();
-    return true;
-}
-
-yup::Rectangle<float> ParameterSegmented::getSegmentBounds (int index) const
-{
-    const auto inner = getLocalBounds().reduced (2.0f);
-    const auto width = inner.getWidth() / static_cast<float> (yup::jmax (1, static_cast<int> (segments.size())));
-
-    return inner.withX (inner.getX() + width * static_cast<float> (index)).withWidth (width);
-}
-
-void ParameterSegmented::paint (yup::Graphics& g)
-{
-    SynthTheme::paintWell (g, *this, getLocalBounds());
-
-    const auto selected = getSelectedIndex();
-
-    for (int index = 0; index < static_cast<int> (segments.size()); ++index)
-    {
-        const auto& segment = segments[static_cast<std::size_t> (index)];
-        const auto bounds = getSegmentBounds (index);
-        const auto isSelected = index == selected;
-
-        if (isSelected)
-            SynthTheme::paintRaised (g, *this, bounds, 2.0f);
-
-        const auto color = ! isEnabled() ? SynthTheme::textSecondary (*this).withAlpha (0.5f)
-                                         : (isSelected ? SynthTheme::textPrimary (*this) : SynthTheme::textSecondary (*this));
-
-        if (! segment.icon.isEmpty())
-        {
-            const auto box = bounds.withSizeKeepingCenter (yup::jmin (bounds.getWidth(), bounds.getHeight()) * 0.6f, bounds.getHeight() * 0.6f);
-            const auto transform = yup::AffineTransform::scaling (box.getWidth(), box.getHeight()).translated (box.getX(), box.getY());
-
-            g.setStrokeColor (color);
-            g.setStrokeWidth (1.4f);
-            g.setStrokeCap (yup::StrokeCap::Round);
-            g.strokePath (segment.icon.transformed (transform));
-            continue;
-        }
-
-        g.setFillColor (color);
-        g.fillFittedText (segment.text.toUpperCase(), SynthTheme::captionFont (yup::jmin (12.0f, bounds.getHeight() * 0.7f)), bounds, yup::Justification::center);
-    }
-}
-
-void ParameterSegmented::mouseDown (const yup::MouseEvent& event)
-{
-    for (int index = 0; index < static_cast<int> (segments.size()); ++index)
-    {
-        if (! getSegmentBounds (index).contains (event.getPosition()))
-            continue;
-
-        const auto& parameter = gesture.getParameter();
-        gesture.setNormalized (parameter->convertToNormalizedValue (static_cast<float> (index)));
-        syncFromParameter();
-        return;
-    }
+    return setSelectedIndex (yup::roundToInt (gesture.getParameter()->getValue()));
 }

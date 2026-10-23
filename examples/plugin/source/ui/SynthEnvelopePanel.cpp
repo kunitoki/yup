@@ -21,6 +21,7 @@
 
 #include "SynthEnvelopePanel.h"
 #include "SynthTheme.h"
+#include "SynthUndoHistory.h"
 
 SynthEnvelopePanel::SynthEnvelopePanel (const SynthEnvelopeParameters& parametersToEdit, SynthCurveState& curvesToEdit, int envelopeIndex)
     : curves (curvesToEdit)
@@ -33,7 +34,21 @@ SynthEnvelopePanel::SynthEnvelopePanel (const SynthEnvelopeParameters& parameter
 
     setOpaque (false);
 
+    display.setAmplitude (index == 0);
     display.onCurveEdited = [this] (const SynthCurveState::Curve& curve) { curves.setEnvelope (index, curve); };
+    display.onEditFinished = [this] (const SynthCurveState::Curve& before)
+    {
+        // Read back from the state, which may have adjusted the curve, so undo restores what played.
+        const auto after = curves.getEnvelope (index);
+
+        if (after == before)
+            return;
+
+        SynthUndoHistory::record<SynthCurveState::Curve> (*this, before, after, [&curves = curves, envelope = index] (const SynthCurveState::Curve& curve)
+        {
+            curves.setEnvelope (envelope, curve);
+        });
+    };
     addAndMakeVisible (display);
 
     for (auto* knob : { &timeScaleKnob, &velocityKnob, &depthKnob })

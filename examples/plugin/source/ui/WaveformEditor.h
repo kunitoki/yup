@@ -23,6 +23,7 @@
 
 #include "../dsp/SynthSpectrumDerivation.h"
 #include "SynthWaveformShader.h"
+#include "WaveformTools.h"
 
 #include <memory>
 #include <optional>
@@ -32,9 +33,12 @@
 /** The waveform of one oscillator, either drawn or edited a partial at a time.
 
     In drawing mode the component shows one period of the reconstructed series, and a
-    drag draws that period freehand: the stroke is analyzed back into partials, phase
-    included, which become the oscillator's custom series. In editing mode it shows the
-    magnitude of each harmonic as a bar that can be dragged.
+    drag draws into that period with the chosen tool: the stroke is analyzed back into
+    partials, phase included, which become the oscillator's custom series. A drag with
+    shift held rotates the period instead. In editing mode it shows each harmonic as a
+    bar whose magnitude, or phase, can be dragged.
+
+    Every stroke and operation is one step of the undo history the editor sits in.
 
     Dragging writes straight into the partials, but the generation counter the audio
     thread watches is only bumped by commitPendingEdits(), once per user interface
@@ -56,24 +60,46 @@ public:
 
     bool isEditingPartials() const noexcept { return editingPartials; }
 
-    /** Rereads the series from the parameters and partials, after anything changed them. */
-    void refresh();
+    /** Rereads the series from the parameters and partials, after anything changed them.
+
+        @param reader  Where the parameter values come from: the parameters themselves, or a
+                       table with the modulation of the most recent note applied, so the
+                       drawn wave follows a modulated spectrum.
+    */
+    void refresh (SynthParameterReader reader = {});
 
     /** Publishes a pending drag to the audio thread, coalescing a frame's worth of edits. */
     void commitPendingEdits();
 
-    /** Drops the edited partials and returns to the selected waveform preset. */
-    void revertToPreset();
+    /** Drops the edited partials and returns to the selected waveform preset.
 
-    /** Lets the landscape move while something plays; it also moves while hovered. */
+        @param joinsLastStep True to undo it together with the step recorded just before,
+                             such as picking the preset that it reverts to
+    */
+    void revertToPreset (bool joinsLastStep = false);
+
+    /** Lets the landscape move while something plays; it holds still while drawing. */
     void setAnimating (bool shouldAnimate) noexcept { animating = shouldAnimate; }
+
+    //==============================================================================
+    /** Chooses what a stroke draws in drawing mode. */
+    void setDrawTool (WaveformDrawTool tool) noexcept { drawTool = tool; }
+
+    /** Chooses what a drag changes in editing mode. */
+    void setPartialsTool (PartialsTool tool);
+
+    /** Sets the cells per period the span tools snap to, 0 for none. */
+    void setGridDivisions (int divisions);
+
+    int getGridDivisions() const noexcept { return gridDivisions; }
+
+    /** Changes every partial at once, as one step of the undo history. */
+    void applyOperation (PartialsOperation operation);
 
     //==============================================================================
     void paint (yup::Graphics& g) override;
     void refreshDisplay (double lastFrameTimeSeconds) override;
     void resized() override;
-    void mouseEnter (const yup::MouseEvent& event) override;
-    void mouseExit (const yup::MouseEvent& event) override;
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseDrag (const yup::MouseEvent& event) override;
     void mouseUp (const yup::MouseEvent& event) override;
@@ -85,6 +111,7 @@ private:
     static float measurePeak (const std::vector<float>& samples) noexcept;
 
     void paintDrawnCycle (yup::Graphics& g, yup::Rectangle<float> bounds);
+    void paintGrid (yup::Graphics& g, yup::Rectangle<float> bounds);
     void paintWaveform (yup::Graphics& g, yup::Rectangle<float> bounds);
     void paintPartials (yup::Graphics& g, yup::Rectangle<float> bounds);
 
@@ -92,7 +119,14 @@ private:
     void publishEdit();
     void seedDrawnCycle();
     void applyDraw (const yup::MouseEvent& event);
+    void applyRotation (const yup::MouseEvent& event);
     void applyEdit (const yup::MouseEvent& event);
+    void recordEdit (const SynthPartials::Snapshot& before, bool joinsLastStep = false);
+
+    void strokeGlowing (yup::Graphics& g, const yup::Path& pathToStroke);
+    bool isDrawing() const noexcept;
+    int cycleIndexAt (float x) const noexcept;
+    float cycleValueAt (float y) const noexcept;
 
     //==============================================================================
     static constexpr int displayResolution = 256;
@@ -108,7 +142,7 @@ private:
     std::shared_ptr<SynthWaveformShader> shader;
     // Every repaint of the interface repaints this display, so the landscape is only
     // rendered again when it moved or its waveform changed, and moves at most 30 times
-    // a second, only while something plays or the pointer is over it.
+    // a second, only while something plays and nothing is being drawn.
     static constexpr double animationInterval = 1.0 / 30.0;
 
     yup::GpuTexture::Ptr getLandscape (yup::Graphics& g);
@@ -119,7 +153,6 @@ private:
     double sinceLastFrame = 0.0;
     bool landscapeDirty = true;
     bool animating = false;
-    bool hovered = false;
 
     SynthSpectrumDerivation preview;
     yup::FourierSeries<double> displaySeries;
@@ -130,6 +163,21 @@ private:
     yup::Path drawnPath;
     yup::FourierSeries<double> drawnSeries;
     std::optional<int> lastDrawnIndex;
+
+    WaveformDrawTool drawTool = WaveformDrawTool::brush;
+    PartialsTool partialsTool = PartialsTool::magnitude;
+    int gridDivisions = 0;
+    std::vector<float> strokeBase;
+    int pressIndex = 0;
+    float pressValue = 0.0f;
+    yup::int64 strokeSeed = 0;
+    yup::Random random;
+
+    std::optional<float> rotationStartX;
+    yup::FourierSeries<double> rotationBase;
+    yup::FourierSeries<double> rotated;
+
+    SynthPartials::Snapshot gestureStart;
 
     bool editingPartials = false;
     bool pendingEdit = false;

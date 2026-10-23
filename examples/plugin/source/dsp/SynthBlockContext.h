@@ -45,6 +45,7 @@ struct SynthBlockContext
     /** The active routes, compacted, with their depths. */
     std::array<SynthRoute, SynthExample::modulationSlots> routes;
     std::array<float, SynthExample::modulationSlots> depths {};
+    std::array<int, SynthExample::modulationSlots> slots {}; /**< The route slot each compacted route came from. */
     int numRoutes = 0;
 
     std::array<bool, SynthExample::oscillatorCount> spectralRouted {}; /**< A route reaches the oscillator's spectrum. */

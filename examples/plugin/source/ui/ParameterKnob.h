@@ -21,7 +21,9 @@
 
 #pragma once
 
+#include "ParameterGesture.h"
 #include "SynthKnob.h"
+#include "SynthModulationTarget.h"
 #include <yup_audio_processors/yup_audio_processors.h>
 #include <yup_gui/yup_gui.h>
 
@@ -30,12 +32,14 @@
 
     The knob works in the parameter's normalized range, so any skew lives only in the
     parameter, and shows the parameter's own value text while it is dragged. A drag is
-    one host gesture; any other change, such as a double-click reset or the mouse wheel,
-    is wrapped in a gesture of its own.
+    one host gesture and one undo step; any other change, such as a double-click reset or
+    the mouse wheel, is wrapped in a gesture of its own.
 
     @see ParameterChoice, SynthNumberField
 */
-class ParameterKnob : public yup::Component
+class ParameterKnob
+    : public yup::Component
+    , public SynthModulationTarget
 {
 public:
     ParameterKnob (const yup::String& caption, yup::AudioParameter::Ptr parameterToControl, const yup::Font& font);
@@ -53,6 +57,9 @@ public:
     /** Shows the parameter's value text as the caption instead of the caption text. */
     void setCaptionShowsValue (bool shouldShowValue);
 
+    yup::AudioParameter::Ptr getModulationParameter() const override { return parameter; }
+    void showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> modulatedValue) override;
+
     /** Returns the knob, for its look options. */
     SynthKnob& getKnob() noexcept { return slider; }
 
@@ -61,16 +68,15 @@ public:
 private:
     static constexpr float captionHeight = 13.0f;
 
-    void setParameterValue (double normalizedValue);
     void endGesture();
 
     void bindSlider();
     float getCaptionHeight() const noexcept;
 
     yup::AudioParameter::Ptr parameter;
+    ParameterGesture gesture;
     SynthKnob slider;
     yup::Label label;
     yup::String captionText;
-    bool dragging = false;
     bool captionShowsValue = false;
 };

@@ -23,6 +23,8 @@
 
 #include "SynthTypes.h"
 
+#include <algorithm>
+#include <array>
 #include <vector>
 
 //==============================================================================
@@ -61,4 +63,48 @@ inline const std::vector<SynthAlgorithm>& getSynthAlgorithms()
     };
 
     return algorithms;
+}
+
+/** Returns the index of the algorithm a matrix is wired as, or -1 when it is wired as none.
+
+    Only which links are on counts, not their amounts, and feedback is ignored; an
+    operator is heard when its level is above zero.
+
+    @param amounts amounts[carrier][modulator], both indexed from 0
+    @param levels  The output level of every operator
+*/
+inline int findSynthAlgorithm (const std::array<std::array<float, SynthExample::oscillatorCount>, SynthExample::oscillatorCount>& amounts,
+                               const std::array<float, SynthExample::oscillatorCount>& levels)
+{
+    const auto& algorithms = getSynthAlgorithms();
+
+    for (std::size_t index = 0; index < algorithms.size(); ++index)
+    {
+        const auto& algorithm = algorithms[index];
+        auto matches = true;
+
+        for (int carrier = 0; carrier < SynthExample::oscillatorCount && matches; ++carrier)
+        {
+            const auto isOutput = std::find (algorithm.outputs.begin(), algorithm.outputs.end(), carrier + 1) != algorithm.outputs.end();
+            matches = isOutput == (levels[static_cast<std::size_t> (carrier)] > 0.0f);
+
+            for (int modulator = 0; modulator < SynthExample::oscillatorCount && matches; ++modulator)
+            {
+                if (modulator == carrier)
+                    continue;
+
+                const auto isLink = std::any_of (algorithm.links.begin(), algorithm.links.end(), [&] (const SynthAlgorithm::Link& link)
+                {
+                    return link.modulator == modulator + 1 && link.carrier == carrier + 1;
+                });
+
+                matches = isLink == (amounts[static_cast<std::size_t> (carrier)][static_cast<std::size_t> (modulator)] > 0.0f);
+            }
+        }
+
+        if (matches)
+            return static_cast<int> (index);
+    }
+
+    return -1;
 }

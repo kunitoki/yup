@@ -52,23 +52,7 @@ SynthLFOPanel::SynthLFOPanel (const SynthLFOParameters& parametersToEdit, const 
 
 std::vector<ParameterSegmented::Segment> SynthLFOPanel::makeShapeSegments()
 {
-    const auto polyline = [] (std::initializer_list<yup::Point<float>> points)
-    {
-        yup::Path path;
-        auto first = true;
-
-        for (const auto& point : points)
-        {
-            if (first)
-                path.moveTo (point.getX(), point.getY());
-            else
-                path.lineTo (point.getX(), point.getY());
-
-            first = false;
-        }
-
-        return path;
-    };
+    const auto polyline = &SynthSegmented::makePolyline;
 
     yup::Path sine;
     sine.moveTo (0.0f, 0.5f);
@@ -81,12 +65,6 @@ std::vector<ParameterSegmented::Segment> SynthLFOPanel::makeShapeSegments()
     smoothRandom.cubicTo (0.55f, 0.95f, 0.75f, 0.9f, 0.82f, 0.4f);
     smoothRandom.cubicTo (0.88f, 0.1f, 0.95f, 0.2f, 1.0f, 0.3f);
 
-    yup::Path custom;
-    custom.moveTo (0.0f, 1.0f);
-    custom.lineTo (0.25f, 0.0f);
-    custom.cubicTo (0.4f, 0.6f, 0.55f, 0.7f, 0.7f, 0.45f);
-    custom.lineTo (1.0f, 1.0f);
-
     // In the order of getSynthLFOShapeNames().
     return { { "Sine", sine },
              { "Triangle", polyline ({ { 0.0f, 0.5f }, { 0.25f, 0.0f }, { 0.75f, 1.0f }, { 1.0f, 0.5f } }) },
@@ -94,8 +72,7 @@ std::vector<ParameterSegmented::Segment> SynthLFOPanel::makeShapeSegments()
              { "Square", polyline ({ { 0.0f, 1.0f }, { 0.0f, 0.0f }, { 0.5f, 0.0f }, { 0.5f, 1.0f }, { 1.0f, 1.0f } }) },
              { "S&H", polyline ({ { 0.0f, 0.7f }, { 0.25f, 0.7f }, { 0.25f, 0.1f }, { 0.5f, 0.1f }, { 0.5f, 0.9f }, { 0.75f, 0.9f }, { 0.75f, 0.4f }, { 1.0f, 0.4f } }) },
              { "Saw Down", polyline ({ { 0.0f, 1.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f } }) },
-             { "Smooth Random", smoothRandom },
-             { "Custom", custom } };
+             { "Smooth Random", smoothRandom } };
 }
 
 void SynthLFOPanel::syncFromParameters()
@@ -129,7 +106,7 @@ void SynthLFOPanel::resized()
     auto line = bounds.removeFromTop (lineHeight);
     retriggerChoice.setBounds (line.removeFromRight (retriggerWidth));
     line.removeFromRight (gap);
-    shapeSelector.setBounds (line.withWidth (yup::jmin (line.getWidth(), 8.0f * 26.0f)));
+    shapeSelector.setBounds (line.withWidth (yup::jmin (line.getWidth(), 7.0f * 26.0f)));
     bounds.removeFromTop (gap);
 
     auto knobs = bounds.removeFromBottom (knobRowHeight);

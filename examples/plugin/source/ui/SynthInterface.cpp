@@ -28,6 +28,20 @@
 
 namespace
 {
+/** Collects every control under a component that shows the modulation of its parameter. */
+void collectModulationTargets (yup::Component& component, std::vector<SynthModulationTarget*>& targets)
+{
+    for (int index = 0; index < component.getNumChildComponents(); ++index)
+    {
+        auto* child = component.getChildComponent (index);
+
+        if (auto* target = dynamic_cast<SynthModulationTarget*> (child))
+            targets.push_back (target);
+
+        collectModulationTargets (*child, targets);
+    }
+}
+
 /** Keeps every control under a component out of the keyboard focus, so the computer
     keyboard keeps playing the on-screen keyboard while the mouse tweaks them. Sliders,
     combo boxes and buttons all take the focus on click whenever they want it. */
@@ -62,6 +76,22 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     SynthKeyboardLook::apply (keyboardComponent);
     SynthTheme::applySection (keyboardComponent, SynthTheme::Section::keys);
     mainPage.addAndMakeVisible (keyboardComponent);
+
+    // The keyboard keeps the focus, so the shortcuts reach the interface through it.
+    keyboardComponent.onShortcut = [this] (const yup::KeyPress& key)
+    {
+        if (key.getKey() != yup::KeyPress::textZKey)
+            return;
+
+        auto& undoManager = processor.getUndoManager();
+
+        if (key.getModifiers().isShiftDown())
+            undoManager.redo();
+        else
+            undoManager.undo();
+    };
+
+    applyUndoSetting();
 
     // The wheels follow the processor's keyboard state, host MIDI included; the keyboard state
     // only plays notes, so their own moves go to the processor through its MIDI queue.
@@ -131,10 +161,11 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
 
     oscillatorSection = std::make_unique<SynthSection> (std::move (oscillatorTabs), SynthTheme::Section::oscillators);
 
-    fmPanel = std::make_unique<SynthFMPanel> (parameters.fm);
+    fmPanel = std::make_unique<SynthFMPanel> (parameters);
     modulationPage = std::make_unique<SynthModulationPage> (parameters, processor.getRoutes(), processor.getParameters());
     matrixCaption = makeCaption (yup::String::fromUTF8 ("ROW \xe2\x86\x90 COLUMN"), std::nullopt);
-    matrixSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "FM", fmPanel.get() }, { "Mods", modulationPage.get() } },
+    matrixSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "FM", fmPanel.get(), nullptr, false, { { &fmPanel->getResetButton(), 60.0f }, { &fmPanel->getAlgorithmButton(), 88.0f } } },
+                                                                                     { "Mods", modulationPage.get() } },
                                                     SynthTheme::Section::matrix,
                                                     std::vector<SynthSection::StripControl> { { matrixCaption.get(), 110.0f } });
 
@@ -186,6 +217,7 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
 
 
     keepFocusOnKeyboard (*this, keyboardComponent);
+    collectModulationTargets (*this, modulationTargets);
 
     // Menus and combo box lists open inside the interface, so the post effect draws them too.
     setPopupContainer (true);
@@ -281,6 +313,7 @@ void SynthInterface::showSettingsMenu()
     // are frameRateBase plus the rate, 0 standing for vsync.
     constexpr int themeBase = 1000;
     constexpr int frameRateBase = 2000;
+    constexpr int undoId = 3000;
 
     const std::pair<const char*, bool*> switches[] { { "Post Effect", &settings.postEffect },
                                                      { "Neon Glow", &neon.glow },
@@ -311,6 +344,7 @@ void SynthInterface::showSettingsMenu()
         frameRateMenu->addItem (name, frameRateBase + rate, true, settings.frameRate == rate);
 
     menu->addSubMenu ("Frame Rate", frameRateMenu);
+    menu->addItem ("Undo History", undoId, true, settings.undo);
     menu->addSeparator();
 
     for (int index = 0; index < static_cast<int> (std::size (switches)); ++index)
@@ -333,6 +367,15 @@ void SynthInterface::showSettingsMenu()
 
         if (interface == nullptr)
             return;
+
+        if (selectedId == undoId)
+        {
+            auto& undo = SynthSettings::get().undo;
+            undo = ! undo;
+            SynthSettings::save();
+            interface->applyUndoSetting();
+            return;
+        }
 
         if (selectedId >= frameRateBase)
         {
@@ -374,6 +417,19 @@ void SynthInterface::mouseDown (const yup::MouseEvent&)
 }
 
 //==============================================================================
+/** Turning undo off in the settings forgets the history. */
+void SynthInterface::applyUndoSetting()
+{
+    auto& undoManager = processor.getUndoManager();
+    const auto enabled = SynthSettings::get().undo;
+
+    if (enabled == undoManager.isEnabled())
+        return;
+
+    undoManager.clear();
+    undoManager.setEnabled (enabled);
+}
+
 void SynthInterface::applyFrameRate()
 {
     auto* native = getNativeComponent();
@@ -396,6 +452,7 @@ void SynthInterface::timerCallback()
     if (appliedFrameRate != SynthSettings::get().frameRate)
         applyFrameRate();
 
+    updateModulation();
     syncFromProcessor();
 
     const auto playing = processor.getNumActiveVoices() > 0;
@@ -407,14 +464,80 @@ void SynthInterface::timerCallback()
     for (int index = 0; index < SynthExample::lfoCount; ++index)
         lfoPanels[static_cast<std::size_t> (index)]->setPhase (processor.getLFOPhase (index));
 
+    for (int index = 0; index < SynthExample::envelopeCount; ++index)
+        envelopePanels[static_cast<std::size_t> (index)]->setPlayhead (processor.getEnvelopePosition (index));
+
     header->syncFromProcessor();
 }
 
 /** Shows every parameter and partial change, wherever it came from. */
+/** Shows every route on the controls of its destination, and works out the values the
+    most recent note plays, so the oscillators can draw their modulated spectra. */
+void SynthInterface::updateModulation()
+{
+    const auto parameters = processor.getParameters();
+    const auto& routes = processor.getRoutes();
+    const auto& depths = processor.getSynthParameters().modulation.depths;
+    const auto playing = processor.getNumActiveVoices() > 0;
+    const auto count = static_cast<std::size_t> (parameters.size());
+
+    modulatedValues.resize (count);
+    arcsByParameter.resize (count);
+
+    for (std::size_t index = 0; index < count; ++index)
+    {
+        modulatedValues[index] = parameters[index]->getValue();
+        arcsByParameter[index].clear();
+    }
+
+    modulationLive = false;
+
+    // Applied in slot order, each clamped to the range, as the voice applies them.
+    for (int slot = 0; slot < SynthExample::modulationSlots; ++slot)
+    {
+        const auto route = routes.getRoute (slot);
+        const auto depth = depths[static_cast<std::size_t> (slot)]->getValue();
+
+        if (! route.isActive() || ! yup::isPositiveAndBelow (route.destination, static_cast<int> (count)) || depth == 0.0f)
+            continue;
+
+        const auto destination = static_cast<std::size_t> (route.destination);
+        arcsByParameter[destination].push_back ({ depth, getSourceColor (route.source), isBipolarSource (route.source) });
+
+        const auto amount = playing ? processor.getRouteAmount (slot) : 0.0f;
+
+        if (amount == 0.0f)
+            continue;
+
+        const auto& parameter = parameters[destination];
+        const auto normalized = yup::jlimit (0.0f, 1.0f, parameter->convertToNormalizedValue (modulatedValues[destination]) + amount);
+        modulatedValues[destination] = parameter->convertToDenormalizedValue (normalized);
+        modulationLive = true;
+    }
+
+    for (auto* target : modulationTargets)
+    {
+        const auto index = target->getModulationParameter()->getIndexInContainer();
+
+        if (! yup::isPositiveAndBelow (index, static_cast<int> (count)))
+            continue;
+
+        const auto& arcs = arcsByParameter[static_cast<std::size_t> (index)];
+        const auto& parameter = parameters[static_cast<std::size_t> (index)];
+        const auto modulated = playing && ! arcs.empty() ? std::optional<float> (parameter->convertToNormalizedValue (modulatedValues[static_cast<std::size_t> (index)]))
+                                                         : std::nullopt;
+
+        target->showModulation (arcs, modulated);
+    }
+}
+
 void SynthInterface::syncFromProcessor()
 {
+    const auto modulated = modulationLive ? SynthParameterReader { yup::Span<const float> (modulatedValues.data(), modulatedValues.size()) }
+                                          : SynthParameterReader {};
+
     for (auto& panel : oscillatorPanels)
-        panel->syncFromParameters();
+        panel->syncFromParameters (modulated);
 
     for (auto& panel : filterPanels)
         panel->syncFromParameters();

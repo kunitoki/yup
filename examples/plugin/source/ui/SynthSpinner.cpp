@@ -22,7 +22,7 @@
 #include "SynthTheme.h"
 
 SynthSpinner::SynthSpinner (yup::AudioParameter::Ptr steppedParameter)
-    : gesture (std::move (steppedParameter))
+    : gesture (*this, std::move (steppedParameter))
 {
     setOpaque (false);
     syncFromParameter();

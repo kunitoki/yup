@@ -196,6 +196,8 @@ File File::getSpecialLocation (const SpecialLocationType type)
         case userDesktopDirectory:
             return resolveXDGFolder ("XDG_DESKTOP_DIR", "~/Desktop");
         case userApplicationDataDirectory:
+        case userPreferencesDirectory:
+        case userAudioPresetsDirectory:
             return resolveXDGFolder ("XDG_CONFIG_HOME", "~/.config");
         case commonDocumentsDirectory:
         case commonApplicationDataDirectory:

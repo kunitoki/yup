@@ -453,3 +453,28 @@ TEST_F (CurveEnvelopeTests, GetPositionTracksCurveTime)
 
     EXPECT_NEAR (seconds (150), envelope.getPosition(), 1e-6f);
 }
+
+TEST_F (CurveEnvelopeTests, GetPointPositionFollowsThePoints)
+{
+    envelope.setCurve (makeAdsr (seconds (100), seconds (100), 0.5f, seconds (100)));
+    EXPECT_EQ (0.0f, envelope.getPointPosition());
+
+    envelope.noteOn();
+
+    for (int i = 0; i < 150; ++i)
+        envelope.getNextValue();
+
+    EXPECT_NEAR (1.5f, envelope.getPointPosition(), 1e-4f);
+
+    for (int i = 0; i < 100; ++i)
+        envelope.getNextValue();
+
+    EXPECT_EQ (2.0f, envelope.getPointPosition());
+
+    envelope.noteOff();
+
+    for (int i = 0; i < 25; ++i)
+        envelope.getNextValue();
+
+    EXPECT_NEAR (2.25f, envelope.getPointPosition(), 1e-4f);
+}

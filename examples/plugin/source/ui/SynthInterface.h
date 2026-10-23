@@ -33,7 +33,9 @@
 #include "SynthOscillatorPanel.h"
 #include "SynthPage.h"
 #include "SynthHeader.h"
+#include "SynthKeyboard.h"
 #include "SynthSection.h"
+#include "SynthUndoHistory.h"
 #include "SynthVoicingPanel.h"
 
 #include <array>
@@ -56,15 +58,18 @@
 */
 class SynthInterface
     : public yup::Component
+    , public UndoHistoryOwner
     , private yup::Timer
 {
 public:
     explicit SynthInterface (PrismProcessor& processorToEdit);
     ~SynthInterface() override;
 
+    //==============================================================================
     /** Called with the index of a theme picked in the settings menu. */
     std::function<void (int)> onThemeChosen;
 
+    //==============================================================================
     /** Called when the post effect settings change; createPostEffect() builds the new one. */
     std::function<void()> onPostEffectChanged;
 
@@ -76,6 +81,8 @@ public:
     static yup::ComponentEffect::Ptr createPostEffect();
 
     //==============================================================================
+    /** Returns the processor's undo history, which every control in the interface records into. */
+    yup::UndoManager& getUndoHistory() override { return processor.getUndoManager(); }
 
     //==============================================================================
     void resized() override;
@@ -87,9 +94,11 @@ private:
 
     void showSettingsMenu();
     void applyFrameRate();
+    void applyUndoSetting();
 
     void layoutMainPage();
     void syncFromProcessor();
+    void updateModulation();
 
     //==============================================================================
     static constexpr float wheelWidth = 30.0f;
@@ -103,7 +112,7 @@ private:
 
     std::unique_ptr<SynthHeader> header;
 
-    yup::MidiKeyboardComponent keyboardComponent;
+    SynthKeyboard keyboardComponent;
     yup::PitchWheelComponent pitchWheelComponent;
     yup::ModWheelComponent modWheelComponent;
 
@@ -127,6 +136,11 @@ private:
     std::unique_ptr<SynthSection> lfoSection;
 
     std::unique_ptr<SynthVoicingPanel> voicingPanel;
+
+    std::vector<SynthModulationTarget*> modulationTargets;
+    std::vector<std::vector<SynthKnob::ModulationArc>> arcsByParameter;
+    std::vector<float> modulatedValues;
+    bool modulationLive = false;
     int appliedFrameRate = -1;
     yup::Rectangle<float> wheelsTile;
     yup::Rectangle<float> keyboardTile;

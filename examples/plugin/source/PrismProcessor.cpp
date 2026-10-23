@@ -312,6 +312,9 @@ yup::Result PrismProcessor::applyState (const yup::DataTree& state, ChangeDetail
     currentPreset.store (SynthPatch::getPresetIndex (state));
     setPresetInfo (SynthPatch::readInfo (state));
 
+    // A patch replaced by a preset, a file or the host leaves nothing to undo into.
+    undoManager.clear();
+
     updateHostDisplay (details.withParameterValuesChanged (true).withNonParameterStateChanged (true));
     return yup::Result::ok();
 }

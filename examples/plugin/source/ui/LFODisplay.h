@@ -27,7 +27,8 @@
 #include "../dsp/SynthLFOParameters.h"
 
 //==============================================================================
-/** Draws one cycle of an LFO shape with a marker at the engine's current phase. */
+/** Draws an LFO shape at its own rate and smoothing: one period with a marker at the
+    engine's current phase, or several periods of the random shapes. */
 class LFODisplay : public yup::Component
 {
 public:
@@ -37,16 +38,20 @@ public:
     /** Updates the curve the custom shape draws. Called from the message thread. */
     void setCurve (const SynthCurveState::Curve& newCurve);
 
-    /** Moves the marker. Called every frame from the message thread. */
+    /** Moves the marker; a negative phase, with no note playing, hides it.
+        Called every frame from the message thread. */
     void setPhase (float newPhase);
 
     void paint (yup::Graphics& g) override;
 
 private:
     static constexpr int points = 128;
+    static constexpr int randomPeriods = 4;
+    static constexpr double displayTempo = 120.0;
+    static constexpr yup::uint32 displaySeed = 1;
 
     SynthLFOValues values;
     SynthCurveState::Curve curve;
-    float phase = 0.0f;
+    float phase = -1.0f;
     yup::Path path;
 };

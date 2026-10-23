@@ -90,7 +90,7 @@ public:
 
     /** Creates the store a standalone plugin uses by default.
 
-        On desktop this is <userApplicationDataDirectory>/<vendor>/<name>/standalone.xml,
+        On desktop this is <userPreferencesDirectory>/<vendor>/<name>/standalone.xml,
         in the browser it is the localStorage key "yup.standalone.<pluginId>".
     */
     static StandaloneStateStore createDefault ([[maybe_unused]] StringRef vendor,
@@ -102,7 +102,7 @@ public:
         store.storageKey = "yup.standalone." + String (pluginId);
         return store;
 #else
-        return StandaloneStateStore (File::getSpecialLocation (File::userApplicationDataDirectory)
+        return StandaloneStateStore (File::getSpecialLocation (File::userPreferencesDirectory)
                                          .getChildFile (File::createLegalFileName (String (vendor)))
                                          .getChildFile (File::createLegalFileName (String (name)))
                                          .getChildFile ("standalone.xml"));
@@ -160,6 +160,9 @@ public:
         AudioProcessorBase::ScopedProcessSuspension suspension (processor);
         return processor.loadStateFromMemory (processorState);
     }
+
+    /** Returns the file the state is kept in, which is empty when it lives in the browser. */
+    const File& getFile() const noexcept { return file; }
 
 private:
     //==============================================================================

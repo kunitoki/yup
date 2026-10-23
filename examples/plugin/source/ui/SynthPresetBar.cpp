@@ -21,6 +21,8 @@
 #include "SynthPresetBar.h"
 #include "SynthTheme.h"
 
+#include <algorithm>
+
 namespace
 {
 constexpr const char* presetExtension = ".prism";
@@ -84,6 +86,7 @@ SynthPresetBar::SynthPresetBar (PrismProcessor& processorToControl)
     }
 
     syncFromProcessor();
+    scanUserPresets();
 }
 
 void SynthPresetBar::syncFromProcessor()
@@ -186,8 +189,23 @@ void SynthPresetBar::showPresetMenu()
                                             .withMinimumWidth (static_cast<int> (nameArea.getWidth()))
                                             .withRelativePosition (this));
 
+    // Factory preset IDs are 1 based; user preset IDs are userBase plus their index.
+    constexpr int userBase = 10000;
+
     for (int index = 0; index < processor.getNumPresets(); ++index)
         menu->addItem (processor.getPresetName (index), index + 1, true, index == processor.getCurrentPreset());
+
+    if (! userPresets.empty())
+    {
+        menu->addSeparator();
+        menu->addItem ("User", -1, false);
+
+        for (std::size_t index = 0; index < userPresets.size(); ++index)
+        {
+            const auto name = userPresets[index].getFileNameWithoutExtension();
+            menu->addItem (name, userBase + static_cast<int> (index), true, processor.getCurrentPreset() < 0 && name == shownInfo.name);
+        }
+    }
 
     menu->show ([safeThis = yup::WeakReference<yup::Component> (this)] (int selectedId)
     {
@@ -196,8 +214,41 @@ void SynthPresetBar::showPresetMenu()
         if (bar == nullptr || selectedId <= 0)
             return;
 
-        bar->processor.setCurrentPreset (selectedId - 1);
+        if (selectedId < userBase)
+        {
+            bar->processor.setCurrentPreset (selectedId - 1);
+        }
+        else if (const auto index = static_cast<std::size_t> (selectedId - userBase); index < bar->userPresets.size())
+        {
+            if (const auto result = bar->processor.loadPresetFile (bar->userPresets[index]); result.failed())
+                yup::Logger::writeToLog ("Prism: " + result.getErrorMessage());
+        }
+
         bar->syncFromProcessor();
+    });
+}
+
+/** Gathers the preset files of the preset folder on a background thread, so a large
+    folder never stalls the interface, and hands the list to the bar when done. */
+void SynthPresetBar::scanUserPresets()
+{
+    yup::Thread::launch ([folder = getPresetFolder(), safeThis = yup::WeakReference<yup::Component> (this)]
+    {
+        std::vector<yup::File> found;
+
+        for (const auto& file : folder.findChildFiles (yup::File::findFiles, true, yup::String ("*") + presetExtension))
+            found.push_back (file);
+
+        std::sort (found.begin(), found.end(), [] (const yup::File& a, const yup::File& b)
+        {
+            return a.getFileNameWithoutExtension().compareNatural (b.getFileNameWithoutExtension()) < 0;
+        });
+
+        yup::MessageManager::callAsync ([safeThis, found = std::move (found)]() mutable
+        {
+            if (auto* bar = dynamic_cast<SynthPresetBar*> (safeThis.get()))
+                bar->userPresets = std::move (found);
+        });
     });
 }
 
@@ -230,6 +281,7 @@ void SynthPresetBar::savePreset()
             yup::Logger::writeToLog ("Prism: " + result.getErrorMessage());
 
         bar->syncFromProcessor();
+        bar->scanUserPresets();
     }, true);
 }
 
@@ -253,7 +305,9 @@ void SynthPresetBar::loadPreset()
 
 yup::File SynthPresetBar::getPresetFolder()
 {
-    auto folder = yup::File::getSpecialLocation (yup::File::userApplicationDataDirectory).getChildFile ("YUP/Prism/Presets");
+    auto folder = yup::File::getSpecialLocation (yup::File::userAudioPresetsDirectory)
+                      .getChildFile (yup::File::createLegalFileName (YupPlugin_Vendor))
+                      .getChildFile (yup::File::createLegalFileName (YupPlugin_Name));
     folder.createDirectory();
     return folder;
 }

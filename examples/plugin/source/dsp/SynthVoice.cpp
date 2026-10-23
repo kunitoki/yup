@@ -326,6 +326,7 @@ void SynthVoice::prepareControls (SynthNetworkControls& controls, DelayedControl
 
     delayed.filters = context.filters;
     delayed.note = currentNote;
+    routeAmounts.fill (0.0f);
 
     if (context.numRoutes == 0 || modulatedValues.empty())
     {
@@ -343,6 +344,7 @@ void SynthVoice::prepareControls (SynthNetworkControls& controls, DelayedControl
         {
             const auto& route = context.routes[static_cast<std::size_t> (index)];
             const auto amount = context.depths[static_cast<std::size_t> (index)] * getSourceValue (route.source);
+            routeAmounts[static_cast<std::size_t> (context.slots[static_cast<std::size_t> (index)])] = amount;
 
             if (amount == 0.0f || ! yup::isPositiveAndBelow (route.destination, static_cast<int> (modulatedValues.size())))
                 continue;
@@ -382,6 +384,20 @@ void SynthVoice::prepareControls (SynthNetworkControls& controls, DelayedControl
 
     delayed.routing = controls.globals.filterRouting;
     delayed.ampVelocityGain = envelopeValues[0].getVelocityGain (noteVelocity);
+}
+
+float SynthVoice::getEnvelopePosition (int envelopeIndex) const noexcept
+{
+    if (envelopeIndex == 0)
+        return amplitude.isActive() ? amplitude.getPosition() : -1.0f;
+
+    const auto index = static_cast<std::size_t> (envelopeIndex);
+
+    if (! yup::isPositiveAndBelow (envelopeIndex, SynthExample::envelopeCount) || ! context.envelopeRouted[index]
+        || ! envelopeValues[index].enabled || ! envelopes[index].isActive())
+        return -1.0f;
+
+    return envelopes[index].getPosition();
 }
 
 float SynthVoice::getSourceValue (SynthModulationSource source) const noexcept

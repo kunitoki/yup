@@ -113,6 +113,11 @@ public:
     /** Replaces the description of the current patch, saved with it from now on. Message thread. */
     void setPresetInfo (SynthPatch::PresetInfo newInfo);
 
+    /** Returns the history of the edits made in the editor, kept here so it outlives the
+        editor. Replacing the patch clears it. Message thread.
+    */
+    yup::UndoManager& getUndoManager() noexcept { return undoManager; }
+
     /** Releases every sounding note at the start of the next block. */
     void requestAllNotesOff() noexcept { engine.requestAllNotesOff(); }
 
@@ -128,8 +133,15 @@ public:
     bool sendMidiFromEditor (const yup::MidiMessage& message) noexcept { return editorMidi.push (message); }
 
     //==============================================================================
-    /** Returns the phase of an LFO in the most recently started voice. */
+    /** Returns the phase of an LFO in the most recently started voice, or -1 when no note plays. */
     float getLFOPhase (int lfoIndex) const noexcept { return engine.getLFOPhase (lfoIndex); }
+
+    /** Returns how far a route slot moves its destination in the most recent note, in the
+        destination's normalized range, or 0 when no note plays. */
+    float getRouteAmount (int slot) const noexcept { return engine.getRouteAmount (slot); }
+
+    /** Returns where an envelope of the most recent note is along its curve, in seconds, or -1. */
+    float getEnvelopePosition (int envelopeIndex) const noexcept { return engine.getEnvelopePosition (envelopeIndex); }
 
     /** Returns how many voices are sounding. */
     int getNumActiveVoices() const noexcept { return engine.getNumActiveVoices(); }
@@ -192,6 +204,9 @@ private:
     std::atomic<int> currentPreset { 0 };
     SynthPatch::PresetInfo presetInfo;
     mutable yup::SpinLock presetInfoLock;
+
+    // Grouped by gesture rather than by time: every edit is its own step.
+    yup::UndoManager undoManager { yup::RelativeTime() };
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrismProcessor)
 };

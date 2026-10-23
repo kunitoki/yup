@@ -22,7 +22,7 @@
 #include "SynthTheme.h"
 
 SynthSliderField::SynthSliderField (const yup::String& captionText, yup::AudioParameter::Ptr parameterToControl, Look lookToUse, bool isBipolar)
-    : gesture (std::move (parameterToControl))
+    : gesture (*this, std::move (parameterToControl))
     , caption (captionText)
     , look (lookToUse)
     , bipolar (isBipolar)
@@ -33,7 +33,26 @@ SynthSliderField::SynthSliderField (const yup::String& captionText, yup::AudioPa
 
 void SynthSliderField::setModulationArcs (std::vector<SynthKnob::ModulationArc> newArcs)
 {
+    if (newArcs == modulationArcs)
+        return;
+
     modulationArcs = std::move (newArcs);
+    repaint();
+}
+
+void SynthSliderField::showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> modulatedValue)
+{
+    setModulationArcs (std::move (arcs));
+    setModulatedValue (modulatedValue);
+}
+
+void SynthSliderField::setModulatedValue (std::optional<float> newModulatedValue)
+{
+    if (newModulatedValue.has_value() == modulatedValue.has_value()
+        && (! newModulatedValue.has_value() || std::abs (*newModulatedValue - *modulatedValue) < 1.0e-4f))
+        return;
+
+    modulatedValue = newModulatedValue;
     repaint();
 }
 
@@ -106,10 +125,17 @@ void SynthSliderField::paint (yup::Graphics& g)
 
     for (const auto& arc : modulationArcs)
     {
+        const auto from = arc.bipolar ? positionOf (value - arc.depth) : current;
         const auto to = positionOf (value + arc.depth);
         g.setFillColor (arc.color);
-        g.fillRect (yup::jmin (current, to), lane, std::abs (to - current), 1.5f);
+        g.fillRect (yup::jmin (from, to), lane, std::abs (to - from), 1.5f);
         lane += 2.5f;
+    }
+
+    if (modulatedValue.has_value())
+    {
+        g.setFillColor (SynthTheme::textPrimary (*this));
+        g.fillRoundedRect (positionOf (*modulatedValue) - 1.5f, track.getY() - 3.0f, 3.0f, track.getHeight() + 6.0f, 1.5f);
     }
 }
 

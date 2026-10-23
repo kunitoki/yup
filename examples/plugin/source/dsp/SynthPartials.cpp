@@ -136,6 +136,45 @@ void SynthPartials::setHarmonicMagnitude (int index, float magnitude) noexcept
     sine.store (currentSine * scale);
 }
 
+void SynthPartials::setHarmonicPhase (int index, float phase) noexcept
+{
+    jassert (yup::isPositiveAndBelow (index, SynthExample::editableHarmonics));
+
+    auto& cosine = harmonicCosines[static_cast<std::size_t> (index)];
+    auto& sine = harmonicSines[static_cast<std::size_t> (index)];
+
+    const auto magnitude = std::hypot (cosine.load(), sine.load());
+
+    cosine.store (magnitude * std::sin (phase));
+    sine.store (magnitude * std::cos (phase));
+}
+
+//==============================================================================
+SynthPartials::Snapshot SynthPartials::getSnapshot() const noexcept
+{
+    Snapshot snapshot;
+
+    for (std::size_t index = 0; index < snapshot.cosines.size(); ++index)
+    {
+        snapshot.cosines[index] = harmonicCosines[index].load();
+        snapshot.sines[index] = harmonicSines[index].load();
+    }
+
+    snapshot.custom = customSeries.load();
+    return snapshot;
+}
+
+void SynthPartials::restore (const Snapshot& snapshot) noexcept
+{
+    for (std::size_t index = 0; index < snapshot.cosines.size(); ++index)
+    {
+        harmonicCosines[index].store (snapshot.cosines[index]);
+        harmonicSines[index].store (snapshot.sines[index]);
+    }
+
+    customSeries.store (snapshot.custom);
+}
+
 //==============================================================================
 void SynthPartials::updateHarmonicScale()
 {

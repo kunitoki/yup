@@ -98,7 +98,9 @@ File File::getSpecialLocation (const SpecialLocationType type)
         case userMoviesDirectory:             return resolveXDGFolder ("XDG_VIDEOS_DIR",    "~/Videos");
         case userPicturesDirectory:           return resolveXDGFolder ("XDG_PICTURES_DIR",  "~/Pictures");
         case userDesktopDirectory:            return resolveXDGFolder ("XDG_DESKTOP_DIR",   "~/Desktop");
-        case userApplicationDataDirectory:    return resolveXDGFolder ("XDG_CONFIG_HOME",   "~/.config");
+        case userApplicationDataDirectory:
+        case userPreferencesDirectory:
+        case userAudioPresetsDirectory:       return resolveXDGFolder ("XDG_CONFIG_HOME",   "~/.config");
         case commonDocumentsDirectory:
         case commonApplicationDataDirectory:  return File ("/opt");
         case globalApplicationsDirectory:     return File ("/usr");

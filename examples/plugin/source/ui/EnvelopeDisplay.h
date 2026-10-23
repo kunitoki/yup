@@ -35,7 +35,9 @@
     the right, so the last segment can be lengthened.
 
     The sustain hold has no duration of its own, so it is drawn with a fixed share of
-    the width after the sustain point.
+    the width after the sustain point; what comes after the sustain point by order, not
+    by time, is drawn after the hold, so a point dragged onto the sustain time stays on
+    its side of it.
 */
 class EnvelopeDisplay : public yup::Component
 {
@@ -44,6 +46,17 @@ public:
 
     /** Called with the curve after every edit. */
     std::function<void (const SynthCurveState::Curve&)> onCurveEdited;
+
+    /** Called once a drag or a double click finished editing, with the curve it started from. */
+    std::function<void (const SynthCurveState::Curve&)> onEditFinished;
+
+    /** Locks the start of an amplitude envelope, which begins silent, at time and level 0.
+        Every envelope ends at level 0: its last point only moves in time. */
+    void setAmplitude (bool isAmplitudeEnvelope);
+
+    /** Shows where the most recent note is along the curve, in seconds, with a band of
+        light trailing it; a negative position hides it. Called every frame. */
+    void setPlayhead (float position);
 
     /** Updates the drawn curve. Called from the message thread. */
     void setCurve (const SynthCurveState::Curve& newCurve);
@@ -67,13 +80,15 @@ private:
     static constexpr float handleRadius = 3.5f;
     static constexpr float hitRadius = 8.0f;
     static constexpr float headroom = 1.2f;
+    static constexpr float trailWidth = 90.0f;
     static constexpr int stepsPerSegment = 24;
 
     yup::Rectangle<float> getArea() const;
     float getShownLength() const;
     float getHoldWidth() const;
-    yup::Point<float> toScreen (float time, float level) const;
-    float toTime (float x) const;
+    yup::Point<float> toScreen (float time, float level, bool afterHold) const;
+    float toTime (float x, bool afterHold) const;
+    bool isAfterHold (int index) const;
     float toLevel (float y) const;
     yup::Point<float> getHandle (int segment) const;
     int findPoint (yup::Point<float> position) const;
@@ -82,8 +97,11 @@ private:
 
     SynthCurveState::Curve curve;
     yup::Path path;
+    bool amplitude = false;
+    float playhead = -1.0f;
     DragKind dragKind = DragKind::none;
     int dragIndex = -1;
     float frozenLength = 0.0f;
+    SynthCurveState::Curve editStart;
     yup::Point<float> dragPosition;
 };

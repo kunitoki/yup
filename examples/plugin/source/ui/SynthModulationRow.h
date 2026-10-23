@@ -41,7 +41,8 @@ struct SynthRouteDestination
     drives which destination, how much, and a remove button.
 
     Picking a source and a destination writes the route; the depth is the slot's
-    automatable depth parameter.
+    automatable depth parameter. Every change to the route is one step of the undo
+    history.
 
     @see SynthRoutes, SynthModulationPage
 */
@@ -68,7 +69,19 @@ private:
     static constexpr float dotSize = 8.0f;
     static constexpr float spacing = 6.0f;
 
+    /** What the slot holds, as an undo step keeps it. */
+    struct RouteState
+    {
+        int source = 0;
+        int destination = -1;
+        yup::String destinationID;
+
+        bool operator== (const RouteState&) const = default;
+    };
+
     void writeRoute();
+    RouteState readRoute() const;
+    void recordRoute (const RouteState& before);
 
     int slot = 0;
     SynthRoutes& routes;

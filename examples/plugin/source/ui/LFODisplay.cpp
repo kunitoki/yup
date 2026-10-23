@@ -60,13 +60,25 @@ void LFODisplay::paint (yup::Graphics& g)
     g.setFillColor (SynthTheme::textPrimary (*this).withAlpha (0.08f));
     g.fillRect (area.getX(), area.getCenterY(), area.getWidth(), 1.0f);
 
-    // One period at one sample per point: the shape is read the way the engine reads it.
+    // The shape is read the way the engine reads it, at the LFO's own rate and smoothing,
+    // from a fixed seed so the random shapes hold still. Random shapes draw a new value per
+    // period, so they show several periods; one period is run first to settle the smoother.
+    const auto random = values.shape == yup::LFO<float>::Shape::sampleAndHold || values.shape == yup::LFO<float>::Shape::smoothRandom;
+    const auto periods = random ? randomPeriods : 1;
+    const auto frequency = yup::jmax (0.01f, values.getFrequency (displayTempo));
+
     yup::LFO<float> shape;
-    shape.prepare (static_cast<double> (points));
-    shape.setFrequency (1.0f);
+    shape.prepare (static_cast<double> (points) * frequency / static_cast<double> (periods));
+    shape.setFrequency (frequency);
     shape.setShape (values.shape);
     shape.setPhaseOffset (values.phase);
+    shape.setSmoothing (values.smoothing);
     shape.setCustomCurve (&curve);
+    shape.setSeed (displaySeed);
+    shape.reset (0.0f);
+
+    for (int index = 0; index < points / periods; ++index)
+        shape.processSample();
 
     path.clear();
     path.reserveSpace (points + 1);
@@ -82,15 +94,22 @@ void LFODisplay::paint (yup::Graphics& g)
             path.lineTo (x, y);
     }
 
-    g.setStrokeColor (SynthTheme::lfoAccent());
+    const auto color = SynthTheme::lfoAccent();
+    const auto playing = ! random && phase >= 0.0f;
+    const auto markerX = area.getX() + area.getWidth() * phase;
+
+    g.setStrokeColor (color);
     g.setStrokeWidth (2.0f);
     g.strokePath (path);
 
-    shape.reset (phase);
+    if (! playing)
+        return;
 
-    const auto markerX = area.getX() + area.getWidth() * phase;
+    shape.reset (phase);
     const auto markerY = area.getCenterY() - shape.getValue() * area.getHeight() * 0.45f;
 
+    g.setFillColor (color.withAlpha (0.35f));
+    g.fillEllipse (markerX - 7.0f, markerY - 7.0f, 14.0f, 14.0f);
     g.setFillColor (SynthTheme::textPrimary (*this));
-    g.fillEllipse (yup::Rectangle<float> (markerX - 3.0f, markerY - 3.0f, 6.0f, 6.0f));
+    g.fillEllipse (markerX - 3.5f, markerY - 3.5f, 7.0f, 7.0f);
 }

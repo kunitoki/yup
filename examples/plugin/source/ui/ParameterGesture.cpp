@@ -19,9 +19,12 @@
   ==============================================================================
 */
 #include "ParameterGesture.h"
+#include "SynthUndoHistory.h"
 
-ParameterGesture::ParameterGesture (yup::AudioParameter::Ptr parameterToMove)
-    : parameter (std::move (parameterToMove))
+//==============================================================================
+ParameterGesture::ParameterGesture (yup::Component& owningControl, yup::AudioParameter::Ptr parameterToMove)
+    : owner (owningControl)
+    , parameter (std::move (parameterToMove))
 {
 }
 
@@ -53,9 +56,10 @@ void ParameterGesture::end()
 
     active = false;
     parameter->endChangeGesture();
+    record (startValue);
 }
 
-void ParameterGesture::setNormalized (float normalizedValue)
+void ParameterGesture::setNormalized (float normalizedValue, bool joinsLastStep)
 {
     if (parameter == nullptr)
         return;
@@ -68,9 +72,12 @@ void ParameterGesture::setNormalized (float normalizedValue)
         return;
     }
 
+    const auto valueBefore = parameter->getNormalizedValue();
+
     parameter->beginChangeGesture();
     parameter->setValueNotifyingHost (value);
     parameter->endChangeGesture();
+    record (valueBefore, joinsLastStep);
 }
 
 void ParameterGesture::resetToDefault()
@@ -80,4 +87,20 @@ void ParameterGesture::resetToDefault()
 
     end();
     setNormalized (parameter->convertToNormalizedValue (parameter->getDefaultValue()));
+}
+
+/** Keeps a gesture that changed the value as one step of the undo history. */
+void ParameterGesture::record (float valueBefore, bool joinsLastStep)
+{
+    const auto valueAfter = parameter->getNormalizedValue();
+
+    if (yup::approximatelyEqual (valueBefore, valueAfter))
+        return;
+
+    SynthUndoHistory::record<float> (owner, valueBefore, valueAfter, [parameter = parameter] (float value)
+    {
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost (parameter->convertToDenormalizedValue (value));
+        parameter->endChangeGesture();
+    }, joinsLastStep);
 }

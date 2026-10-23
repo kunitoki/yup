@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include "ParameterGesture.h"
+
 #include <yup_audio_processors/yup_audio_processors.h>
 #include <yup_gui/yup_gui.h>
 
@@ -56,6 +58,7 @@ private:
     int getParameterItemId() const;
 
     yup::AudioParameter::Ptr parameter;
+    ParameterGesture gesture;
     yup::Label label;
     yup::ComboBox comboBox;
 };

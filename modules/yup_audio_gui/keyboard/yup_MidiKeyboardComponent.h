@@ -48,7 +48,8 @@ namespace yup
     keyboard, using a configurable set of keys (see setKeyboardKeys()) mapped to
     consecutive semitones starting at the octave set by setKeyPressBaseOctave().
     The default layout is "zsxdcvgbhnjmq2w3er5t6y7ui9o0p"; releasing a key sends
-    the matching note-off.
+    the matching note-off. Keys pressed with command or control held are shortcuts
+    and play nothing.
 
     The actual drawing is delegated to the ApplicationTheme system.
 

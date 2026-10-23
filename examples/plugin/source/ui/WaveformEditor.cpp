@@ -21,7 +21,9 @@
 
 #include "WaveformEditor.h"
 #include "SynthTheme.h"
+#include "SynthUndoHistory.h"
 
+//==============================================================================
 WaveformEditor::WaveformEditor (const SynthOscillatorParameters& parametersToShow,
                                 SynthPartials& partialsToEdit,
                                 const SynthOscillatorResources& sharedResources,
@@ -36,7 +38,8 @@ WaveformEditor::WaveformEditor (const SynthOscillatorParameters& parametersToSho
     displaySamples.assign (displayResolution, 0.0f);
     drawnCycle.assign (displayResolution, 0.0f);
     drawnSeries.resize (SynthExample::editableHarmonics);
-
+    rotationBase.resize (SynthExample::editableHarmonics);
+    rotated.resize (SynthExample::editableHarmonics);
     refresh();
 }
 
@@ -47,9 +50,35 @@ void WaveformEditor::setEditingPartials (bool shouldEdit)
     repaint();
 }
 
-void WaveformEditor::refresh()
+void WaveformEditor::setPartialsTool (PartialsTool tool)
 {
-    auto values = parameters.read();
+    partialsTool = tool;
+    repaint();
+}
+
+void WaveformEditor::setGridDivisions (int divisions)
+{
+    gridDivisions = yup::jmax (0, divisions);
+    repaint();
+}
+
+void WaveformEditor::applyOperation (PartialsOperation operation)
+{
+    const auto before = partials.getSnapshot();
+
+    beginCustomEdit();
+
+    auto edited = partials.getSnapshot();
+    applyPartialsOperation (edited, operation, random);
+    partials.restore (edited);
+
+    publishEdit();
+    recordEdit (before);
+}
+
+void WaveformEditor::refresh (SynthParameterReader reader)
+{
+    auto values = parameters.read (reader);
 
     if (partials.usesCustomSeries())
     {
@@ -110,11 +139,14 @@ void WaveformEditor::commitPendingEdits()
     partials.bumpGeneration();
 }
 
-void WaveformEditor::revertToPreset()
+void WaveformEditor::revertToPreset (bool joinsLastStep)
 {
+    const auto before = partials.getSnapshot();
+
     partials.setUsesCustomSeries (false);
 
     publishEdit();
+    recordEdit (before, joinsLastStep);
 }
 
 //==============================================================================
@@ -144,16 +176,24 @@ void WaveformEditor::paint (yup::Graphics& g)
     g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
     if (editingPartials)
+    {
         paintPartials (g, bounds.reduced (contentInset));
+    }
     else if (landscape == nullptr)
+    {
         paintWaveform (g, bounds.reduced (contentInset));
+    }
     else
+    {
+        // The landscape already shows the played waveform, following the stroke as it goes.
+        paintGrid (g, bounds.reduced (contentInset));
         paintDrawnCycle (g, bounds.reduced (contentInset));
+    }
 }
 
 void WaveformEditor::refreshDisplay (double lastFrameTimeSeconds)
 {
-    if (editingPartials || ! isShowing() || ! (animating || hovered))
+    if (editingPartials || ! isShowing() || ! animating || isDrawing())
     {
         sinceLastFrame = 0.0;
         return;
@@ -175,25 +215,29 @@ void WaveformEditor::resized()
     landscapeDirty = true;
 }
 
-void WaveformEditor::mouseEnter (const yup::MouseEvent&)
-{
-    hovered = true;
-}
-
-void WaveformEditor::mouseExit (const yup::MouseEvent&)
-{
-    hovered = false;
-}
-
 void WaveformEditor::mouseDown (const yup::MouseEvent& event)
 {
+    gestureStart = partials.getSnapshot();
+
     if (editingPartials)
     {
         applyEdit (event);
         return;
     }
 
+    if (event.getModifiers().isShiftDown())
+    {
+        beginCustomEdit();
+        partials.copyHarmonicsInto (rotationBase, 1.0f);
+        rotationStartX = event.getPosition().getX();
+        return;
+    }
+
     seedDrawnCycle();
+    strokeBase = drawnCycle;
+    pressIndex = cycleIndexAt (event.getPosition().getX());
+    pressValue = cycleValueAt (event.getPosition().getY());
+    strokeSeed = random.nextInt64();
     lastDrawnIndex.reset();
     applyDraw (event);
 }
@@ -202,17 +246,23 @@ void WaveformEditor::mouseDrag (const yup::MouseEvent& event)
 {
     if (editingPartials)
         applyEdit (event);
+    else if (rotationStartX.has_value())
+        applyRotation (event);
     else
         applyDraw (event);
 }
 
 void WaveformEditor::mouseUp (const yup::MouseEvent&)
 {
-    if (! lastDrawnIndex.has_value())
-        return;
+    rotationStartX.reset();
 
-    lastDrawnIndex.reset();
-    refresh();
+    if (lastDrawnIndex.has_value())
+    {
+        lastDrawnIndex.reset();
+        refresh();
+    }
+
+    recordEdit (gestureStart);
 }
 
 //==============================================================================
@@ -239,6 +289,34 @@ yup::GpuTexture::Ptr WaveformEditor::renderLandscape (yup::Graphics& g)
                            animationTime,
                            SynthTheme::accent (*this),
                            SynthTheme::wellColor (*this));
+}
+
+/** True while a stroke or a rotation is in progress. */
+bool WaveformEditor::isDrawing() const noexcept
+{
+    return lastDrawnIndex.has_value() || rotationStartX.has_value();
+}
+
+/** Returns the sample of the drawn cycle under a horizontal position. */
+int WaveformEditor::cycleIndexAt (float x) const noexcept
+{
+    const auto bounds = getLocalBounds().reduced (contentInset);
+
+    if (bounds.getWidth() <= 0.0f)
+        return 0;
+
+    return yup::jlimit (0, displayResolution - 1, static_cast<int> (std::floor ((x - bounds.getX()) / bounds.getWidth() * static_cast<float> (displayResolution))));
+}
+
+/** Returns the level of the drawn cycle at a vertical position. */
+float WaveformEditor::cycleValueAt (float y) const noexcept
+{
+    const auto bounds = getLocalBounds().reduced (contentInset);
+
+    if (bounds.getHeight() <= 0.0f)
+        return 0.0f;
+
+    return yup::jlimit (-1.0f, 1.0f, (bounds.getCenterY() - y) / (bounds.getHeight() * 0.45f));
 }
 
 /** Returns the largest magnitude in a buffer of samples. */
@@ -274,9 +352,37 @@ void WaveformEditor::paintDrawnCycle (yup::Graphics& g, yup::Rectangle<float> bo
             drawnPath.lineTo (x, y);
     }
 
-    g.setStrokeColor (SynthTheme::accent (*this).withAlpha (0.25f));
+    strokeGlowing (g, drawnPath);
+}
+
+/** Strokes a curve in the accent color over a soft glow of itself. */
+void WaveformEditor::strokeGlowing (yup::Graphics& g, const yup::Path& pathToStroke)
+{
+    g.setStrokeColor (SynthTheme::accent (*this).withAlpha (0.35f));
+    g.setStrokeWidth (4.0f);
+    g.setFeather (6.0f);
+    g.strokePath (pathToStroke);
+
+    g.setFeather (0.0f);
+    g.setStrokeColor (SynthTheme::accent (*this));
+    g.setStrokeWidth (1.5f);
+    g.strokePath (pathToStroke);
+}
+
+/** Marks the cells the span tools snap to. */
+void WaveformEditor::paintGrid (yup::Graphics& g, yup::Rectangle<float> bounds)
+{
+    if (gridDivisions <= 0)
+        return;
+
+    g.setStrokeColor (SynthTheme::panelBorder (*this).withAlpha (0.6f));
     g.setStrokeWidth (1.0f);
-    g.strokePath (drawnPath);
+
+    for (int cell = 1; cell < gridDivisions; ++cell)
+    {
+        const auto x = bounds.getX() + bounds.getWidth() * static_cast<float> (cell) / static_cast<float> (gridDivisions);
+        g.strokeLine (x, bounds.getY(), x, bounds.getBottom());
+    }
 }
 
 /** Draws one period of the reconstructed series. */
@@ -286,7 +392,13 @@ void WaveformEditor::paintWaveform (yup::Graphics& g, yup::Rectangle<float> boun
     g.setStrokeWidth (1.0f);
     g.strokeLine (bounds.getX(), bounds.getCenterY(), bounds.getRight(), bounds.getCenterY());
 
-    paintDrawnCycle (g, bounds);
+    paintGrid (g, bounds);
+
+    if (lastDrawnIndex.has_value())
+    {
+        paintDrawnCycle (g, bounds);
+        return;
+    }
 
     path.clear();
     path.reserveSpace (displayResolution);
@@ -304,32 +416,43 @@ void WaveformEditor::paintWaveform (yup::Graphics& g, yup::Rectangle<float> boun
             path.lineTo (x, y);
     }
 
-    g.setStrokeColor (SynthTheme::accent (*this).withAlpha (0.35f));
-    g.setStrokeWidth (4.0f);
-    g.setFeather (6.0f);
-    g.strokePath (path);
-
-    g.setFeather (0.0f);
-    g.setStrokeColor (SynthTheme::accent (*this));
-    g.setStrokeWidth (1.5f);
-    g.strokePath (path);
+    strokeGlowing (g, path);
 }
 
 /** Draws the editable magnitude of every harmonic. */
 void WaveformEditor::paintPartials (yup::Graphics& g, yup::Rectangle<float> bounds)
 {
     const auto barWidth = bounds.getWidth() / static_cast<float> (SynthExample::editableHarmonics);
+    const auto showsPhase = partialsTool == PartialsTool::phase;
+
+    if (showsPhase)
+    {
+        g.setStrokeColor (SynthTheme::panelBorder (*this));
+        g.setStrokeWidth (1.0f);
+        g.strokeLine (bounds.getX(), bounds.getCenterY(), bounds.getRight(), bounds.getCenterY());
+    }
 
     for (int index = 0; index < SynthExample::editableHarmonics; ++index)
     {
         const auto magnitude = yup::jlimit (0.0f, 1.0f, static_cast<float> (displaySeries.getMagnitude (index + 1)));
         const auto height = yup::jmax (1.0f, magnitude * bounds.getHeight());
-        const auto x = bounds.getX() + barWidth * static_cast<float> (index);
+        const auto x = bounds.getX() + barWidth * static_cast<float> (index) + barGap;
+        const auto width = yup::jmax (1.0f, barWidth - barGap * 2.0f);
 
-        const yup::Rectangle<float> bar { x + barGap, bounds.getBottom() - height, yup::jmax (1.0f, barWidth - barGap * 2.0f), height };
+        const yup::Rectangle<float> bar { x, bounds.getBottom() - height, width, height };
 
-        g.setFillColor (magnitude > 0.0f ? SynthTheme::accent (*this) : SynthTheme::panelBorder (*this));
+        g.setFillColor (magnitude > 0.0f ? SynthTheme::accent (*this).withAlpha (showsPhase ? 0.25f : 1.0f) : SynthTheme::panelBorder (*this));
         g.fillRect (bar);
+
+        if (! showsPhase || magnitude <= 0.0f)
+            continue;
+
+        // The phase from -pi to pi, drawn up or down from the middle; a sine sits at zero.
+        const auto phase = std::atan2 (displaySeries.getCosine (index + 1), displaySeries.getSine (index + 1));
+        const auto offset = static_cast<float> (phase / yup::MathConstants<double>::pi) * bounds.getHeight() * 0.5f;
+
+        g.setFillColor (SynthTheme::accent (*this));
+        g.fillRect (yup::Rectangle<float> { x, bounds.getCenterY() - yup::jmax (0.0f, offset), width, yup::jmax (1.0f, std::abs (offset)) });
     }
 }
 
@@ -382,28 +505,33 @@ void WaveformEditor::applyDraw (const yup::MouseEvent& event)
 
     beginCustomEdit();
 
-    const auto position = event.getPosition();
-    const auto index = yup::jlimit (0,
-                                    displayResolution - 1,
-                                    static_cast<int> (std::floor ((position.getX() - bounds.getX()) / bounds.getWidth()
-                                                                  * static_cast<float> (displayResolution))));
+    const auto index = cycleIndexAt (event.getPosition().getX());
+    const auto value = cycleValueAt (event.getPosition().getY());
 
-    const auto value = yup::jlimit (-1.0f, 1.0f, (bounds.getCenterY() - position.getY()) / (bounds.getHeight() * 0.45f));
-
-    // Fills every sample the pointer skipped since the last event, so a fast drag leaves no gaps.
-    const auto first = lastDrawnIndex.value_or (index);
-    const auto firstValue = drawnCycle[static_cast<std::size_t> (first)];
-    const auto steps = std::abs (index - first);
-    const auto direction = index >= first ? 1 : -1;
-
-    for (int step = 1; step < steps; ++step)
+    if (drawTool == WaveformDrawTool::brush)
     {
-        const auto amount = static_cast<float> (step) / static_cast<float> (steps);
+        // Fills every sample the pointer skipped since the last event, so a fast drag leaves no gaps.
+        const auto first = lastDrawnIndex.value_or (index);
+        const auto firstValue = drawnCycle[static_cast<std::size_t> (first)];
+        const auto steps = std::abs (index - first);
+        const auto direction = index >= first ? 1 : -1;
 
-        drawnCycle[static_cast<std::size_t> (first + step * direction)] = firstValue + (value - firstValue) * amount;
+        for (int step = 1; step < steps; ++step)
+        {
+            const auto amount = static_cast<float> (step) / static_cast<float> (steps);
+
+            drawnCycle[static_cast<std::size_t> (first + step * direction)] = firstValue + (value - firstValue) * amount;
+        }
+
+        drawnCycle[static_cast<std::size_t> (index)] = value;
+    }
+    else
+    {
+        // A span tool redraws the whole span from the cycle the stroke started on.
+        drawnCycle = strokeBase;
+        stampWaveformShape (yup::Span<float> (drawnCycle), drawTool, pressIndex, pressValue, index, value, gridDivisions, strokeSeed);
     }
 
-    drawnCycle[static_cast<std::size_t> (index)] = value;
     lastDrawnIndex = index;
 
     // The custom series has no DC term, so the drawn cycle's offset is simply dropped.
@@ -413,7 +541,40 @@ void WaveformEditor::applyDraw (const yup::MouseEvent& event)
     publishEdit();
 }
 
-/** Turns a mouse position into the magnitude of one harmonic. */
+/** Rotates the period by the horizontal distance dragged, from where the drag started. */
+void WaveformEditor::applyRotation (const yup::MouseEvent& event)
+{
+    const auto width = getLocalBounds().reduced (contentInset).getWidth();
+
+    if (width <= 0.0f || ! rotationStartX.has_value())
+        return;
+
+    rotated.copyFrom (rotationBase);
+    rotated.timeShift ((event.getPosition().getX() - *rotationStartX) / width);
+    partials.seedHarmonicsFrom (rotated);
+
+    publishEdit();
+}
+
+/** Keeps a finished stroke or operation as one step of the undo history. */
+void WaveformEditor::recordEdit (const SynthPartials::Snapshot& before, bool joinsLastStep)
+{
+    const auto after = partials.getSnapshot();
+
+    if (after == before)
+        return;
+
+    // The history outlives the editor, so undoing works on the partials alone; the editor
+    // shows the result once it sees the generation move.
+    SynthUndoHistory::record<SynthPartials::Snapshot> (*this, before, after, [&partials = partials] (const SynthPartials::Snapshot& snapshot)
+    {
+        partials.restore (snapshot);
+        partials.updateHarmonicScale();
+        partials.bumpGeneration();
+    }, joinsLastStep);
+}
+
+/** Turns a mouse position into the magnitude, or the phase, of one harmonic. */
 void WaveformEditor::applyEdit (const yup::MouseEvent& event)
 {
     const auto bounds = getLocalBounds().reduced (contentInset);
@@ -429,9 +590,15 @@ void WaveformEditor::applyEdit (const yup::MouseEvent& event)
                                     SynthExample::editableHarmonics - 1,
                                     static_cast<int> ((position.getX() - bounds.getX()) / barWidth));
 
-    const auto magnitude = yup::jlimit (0.0f, 1.0f, (bounds.getBottom() - position.getY()) / bounds.getHeight());
-
-    partials.setHarmonicMagnitude (index, magnitude);
+    if (partialsTool == PartialsTool::phase)
+    {
+        const auto phase = yup::jlimit (-1.0f, 1.0f, (bounds.getCenterY() - position.getY()) / (bounds.getHeight() * 0.5f));
+        partials.setHarmonicPhase (index, phase * yup::MathConstants<float>::pi);
+    }
+    else
+    {
+        partials.setHarmonicMagnitude (index, yup::jlimit (0.0f, 1.0f, (bounds.getBottom() - position.getY()) / bounds.getHeight()));
+    }
 
     publishEdit();
 }

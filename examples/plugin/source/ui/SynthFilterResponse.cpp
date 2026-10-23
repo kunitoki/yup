@@ -23,8 +23,8 @@
 
 SynthFilterResponse::SynthFilterResponse (const SynthFilterParameters& parametersToShow)
     : parameters (parametersToShow)
-    , cutoffGesture (parametersToShow.cutoff)
-    , resonanceGesture (parametersToShow.resonance)
+    , cutoffGesture (*this, parametersToShow.cutoff)
+    , resonanceGesture (*this, parametersToShow.resonance)
 {
     setOpaque (false);
     stage.prepare (48000.0);

@@ -22,7 +22,7 @@
 #include "SynthTheme.h"
 
 SynthNumberField::SynthNumberField (const yup::String& captionText, yup::AudioParameter::Ptr parameterToControl)
-    : gesture (std::move (parameterToControl))
+    : gesture (*this, std::move (parameterToControl))
     , caption (captionText)
 {
     setOpaque (false);

@@ -24,20 +24,21 @@
 #include "SynthNeonEffect.h"
 
 //==============================================================================
-/** The user's display settings: the theme, the frame rate and the post effect switches.
+/** The user's settings: the theme, the frame rate, the post effect switches and undo.
 
-    They belong to the user rather than to a patch, so they are kept in a small file in
-    the user's application data folder, read once per process and written on every
-    change.
+    They belong to the user rather than to a patch, so they are kept in a small XML file in
+    the user's preferences folder, next to the standalone's state, read once per process
+    and written on every change.
 */
 namespace SynthSettings
 {
-/** Every display setting. */
+/** Every setting. */
 struct Values
 {
     yup::String theme;
     int frameRate = 60; /**< Frames per second, or 0 to follow the display refresh. */
     bool postEffect = true;
+    bool undo = true; /**< Keeps an undo history of edits; off forgets it. */
     SynthNeonEffect::Options neon;
 };
 
