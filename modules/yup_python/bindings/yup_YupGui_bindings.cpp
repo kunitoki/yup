@@ -522,6 +522,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setFullScreen", &ComponentNative::setFullScreen)
         .def ("isFullScreen", &ComponentNative::isFullScreen)
         .def ("isDecorated", &ComponentNative::isDecorated)
+        .def ("setAspectRatio", &ComponentNative::setAspectRatio, "aspectRatio"_a)
+        .def ("getAspectRatio", &ComponentNative::getAspectRatio)
         .def ("setOpacity", &ComponentNative::setOpacity)
         .def ("getOpacity", &ComponentNative::getOpacity)
         .def ("setFocusedComponent", &ComponentNative::setFocusedComponent, "comp"_a, "cause"_a = FocusChangeType::focusChangedDirectly)
@@ -766,6 +768,11 @@ void registerYupGuiBindings (py::module_& m)
         // Full screen
         .def ("setFullScreen", &Component::setFullScreen)
         .def ("isFullScreen", &Component::isFullScreen)
+
+        // Window aspect ratio
+        .def ("setWindowAspectRatio", &Component::setWindowAspectRatio, "aspectRatio"_a,
+              "Keeps the window of a desktop component at a width over height while it is resized; None resizes freely.")
+        .def ("getWindowAspectRatio", &Component::getWindowAspectRatio)
 
         // Scale and display
         .def ("getScaleDpi", &Component::getScaleDpi)

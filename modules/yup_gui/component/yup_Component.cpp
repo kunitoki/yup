@@ -630,6 +630,19 @@ void Component::setFullScreen (bool shouldBeFullScreen)
         native->setFullScreen (shouldBeFullScreen);
 }
 
+void Component::setWindowAspectRatio (std::optional<float> aspectRatio)
+{
+    windowAspectRatio = aspectRatio;
+
+    if (flags.onDesktop && native != nullptr)
+        native->setAspectRatio (aspectRatio);
+}
+
+std::optional<float> Component::getWindowAspectRatio() const
+{
+    return windowAspectRatio;
+}
+
 //==============================================================================
 
 void Component::displayChanged() {}
@@ -789,6 +802,9 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
     flags.onDesktop = true;
 
     native = ComponentNative::createFor (*this, nativeOptions, parent);
+
+    if (windowAspectRatio.has_value() && native != nullptr)
+        native->setAspectRatio (windowAspectRatio);
 
     internalAttachedToNative();
 

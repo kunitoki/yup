@@ -31,6 +31,10 @@
 //==============================================================================
 /** The PRISM editor: hosts the interface and rebuilds it when the theme changes.
 
+    The interface is laid out at the preferred size and scaled to fit the editor, keeping
+    its aspect ratio, so resizing zooms the whole instrument. The post effect sits on the
+    editor rather than on the interface, so it renders at the size shown.
+
     The interface reads its colors from the theme while it is built, so switching the
     palette builds a new one. The switch is deferred to the editor's timer, because it is
     requested from inside the interface being replaced.
@@ -48,6 +52,7 @@ public:
     //==============================================================================
     bool isResizable() const override { return true; }
     yup::Size<int> getPreferredSize() const override { return { 1280, 900 }; }
+    bool shouldPreserveAspectRatio() const override { return true; }
 
     //==============================================================================
     void resized() override;

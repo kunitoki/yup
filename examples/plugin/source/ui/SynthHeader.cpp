@@ -169,7 +169,7 @@ void SynthHeader::paint (yup::Graphics& g)
     g.setFillColor (SynthTheme::textPrimary (*this));
     g.fillFittedText ("PRISM", SynthTheme::valueFont (24.0f).withAxisValue ("wdth", 100.0f), words.removeFromTop (words.getHeight() * 0.62f), yup::Justification::bottomLeft);
     g.setFillColor (SynthTheme::textSecondary (*this));
-    g.fillFittedText ("SPECTRAL SYNTH", SynthTheme::captionFont (9.5f), words, yup::Justification::topLeft);
+    g.fillFittedText ("SPECTRAL FMOD", SynthTheme::captionFont (9.5f), words, yup::Justification::topLeft);
 
     auto stats = statsTile.reduced (12.0f, 9.0f);
     const auto rowHeight = stats.getHeight() / 3.0f;

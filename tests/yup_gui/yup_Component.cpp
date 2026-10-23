@@ -100,11 +100,16 @@ public:
 
     void enableWireframe (bool) override {}
 
+    void setAspectRatio (std::optional<float> newAspectRatio) override { aspectRatio = newAspectRatio; }
+
+    std::optional<float> getAspectRatio() const override { return aspectRatio; }
+
     GpuTriangulationThresholds getTriangulationThresholds() const override { return thresholds; }
 
     void setTriangulationThresholds (const GpuTriangulationThresholds& newThresholds) override { thresholds = newThresholds; }
 
     GpuTriangulationThresholds thresholds;
+    std::optional<float> aspectRatio;
 
     void repaint() override {}
 
@@ -2552,6 +2557,27 @@ TEST_F (ComponentTest, DesktopNativeDelegationSetters)
     // Const getNativeComponent with an attached native.
     const Component& constRoot = *root;
     EXPECT_EQ (constRoot.getNativeComponent(), root->getNativeComponent());
+}
+
+TEST_F (ComponentTest, WindowAspectRatioIsKeptAndForwardedToTheNative)
+{
+    EXPECT_FALSE (root->getWindowAspectRatio().has_value());
+
+    // Without a window the ratio is only kept, to be applied when one is created.
+    root->setWindowAspectRatio (2.0f);
+    EXPECT_EQ (root->getWindowAspectRatio(), 2.0f);
+
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    ComponentHelper::setOnDesktop (*root, true);
+
+    root->setWindowAspectRatio (1.5f);
+    EXPECT_EQ (root->getWindowAspectRatio(), 1.5f);
+    EXPECT_EQ (native->getAspectRatio(), 1.5f);
+
+    root->setWindowAspectRatio (std::nullopt);
+    EXPECT_FALSE (root->getWindowAspectRatio().has_value());
+    EXPECT_FALSE (native->getAspectRatio().has_value());
 }
 
 TEST_F (ComponentTest, TransformToScreenMatchesLocalToScreenOnDesktop)

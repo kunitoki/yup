@@ -179,6 +179,25 @@ public:
                      + (isKeyboardVisible() ? keyboardHeight : 0) };
     }
 
+    /** Returns the width over height the window should keep, when the editor keeps its
+        aspect ratio: the preferred size, toolbar and keyboard included. The toolbar and
+        keyboard keep their heights as the window scales, so the editor fits itself into
+        what is left.
+    */
+    std::optional<float> getPreferredAspectRatio() const
+    {
+        if (editor == nullptr || ! editor->shouldPreserveAspectRatio())
+            return std::nullopt;
+
+        const auto editorSize = editor->getPreferredAspectRatioSize();
+        const auto height = editorSize.getHeight() + (toolbarVisible ? toolbarHeight : 0) + (isKeyboardVisible() ? keyboardHeight : 0);
+
+        if (editorSize.getWidth() <= 0 || height <= 0)
+            return std::nullopt;
+
+        return static_cast<float> (editorSize.getWidth()) / static_cast<float> (height);
+    }
+
     //==============================================================================
     /** Called when getPreferredSize() changes, so the window can follow. */
     std::function<void()> onPreferredSizeChanged;

@@ -823,6 +823,22 @@ comp.setFullScreen (false);
 bool isFS = comp.isFullScreen();
 ```
 
+## Window aspect ratio
+
+A desktop window can keep its proportions while the user resizes it. The ratio is
+width over height, kept for a component that is not on the desktop yet and applied
+when its window is created:
+
+```cpp
+window.setWindowAspectRatio (16.0f / 9.0f);
+window.setWindowAspectRatio (std::nullopt); // resize freely again
+```
+
+The ratio constrains the whole window. Content that should keep its own
+proportions inside decorations or toolbars still has to fit itself, for example by
+scaling to the largest size that fits and centering. Standalone plugin windows set
+it from editors whose `shouldPreserveAspectRatio()` returns true.
+
 ---
 
 ## Properties

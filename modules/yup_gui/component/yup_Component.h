@@ -705,6 +705,22 @@ public:
      */
     bool isFullScreen() const;
 
+    /**
+        Keeps the window of a desktop component at a width over height while it is resized.
+
+        The ratio is kept for a component that is not on the desktop yet and applied to its
+        window when it gets one. It constrains the whole window, so content that should keep
+        its own proportions inside decorations or toolbars still has to fit itself.
+
+        @param aspectRatio The width over height to keep, or std::nullopt to resize freely.
+     */
+    void setWindowAspectRatio (std::optional<float> aspectRatio);
+
+    /**
+        Returns the width over height the window keeps, or std::nullopt when it resizes freely.
+     */
+    std::optional<float> getWindowAspectRatio() const;
+
     //==============================================================================
     /**
         Called when the component changes display.
@@ -1822,6 +1838,7 @@ private:
     MouseCursor mouseCursor;
     GestureType wantedGestures = GestureType::none;
     ComponentEffect::Ptr componentEffect;
+    std::optional<float> windowAspectRatio;
     GpuCanvas::Ptr cachedTextureCanvas;
     GpuCanvas::Ptr effectOffscreenCanvas;
     GpuCanvas::Ptr presentedCanvas;

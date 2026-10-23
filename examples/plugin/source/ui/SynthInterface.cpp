@@ -201,7 +201,6 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
 
     // Menus and combo box lists open inside the interface, so the post effect draws them too.
     setPopupContainer (true);
-    applySettings();
     syncFromProcessor();
 
 
@@ -349,14 +348,16 @@ void SynthInterface::showSettingsMenu()
 
         auto* value = values[static_cast<std::size_t> (selectedId - 1)];
         *value = ! *value;
-        interface->applySettings();
+
+        if (interface->onPostEffectChanged != nullptr)
+            interface->onPostEffectChanged();
     });
 }
 
-void SynthInterface::applySettings()
+yup::ComponentEffect::Ptr SynthInterface::createPostEffect()
 {
     const auto& settings = getSettings();
-    setComponentEffect (settings.postEffect ? yup::ComponentEffect::Ptr (new SynthNeonEffect (settings.neon)) : nullptr);
+    return settings.postEffect ? yup::ComponentEffect::Ptr (new SynthNeonEffect (settings.neon)) : nullptr;
 }
 
 void SynthInterface::mouseDown (const yup::MouseEvent&)

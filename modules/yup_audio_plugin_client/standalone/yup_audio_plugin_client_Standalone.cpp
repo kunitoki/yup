@@ -132,11 +132,15 @@ public:
         };
         content->onPreferredSizeChanged = [this]
         {
-            if (window != nullptr)
-                window->setSize (content->getPreferredSize().to<float>());
+            if (window == nullptr)
+                return;
+
+            window->setWindowAspectRatio (content->getPreferredAspectRatio());
+            window->setSize (content->getPreferredSize().to<float>());
         };
 
         window = std::make_unique<StandaloneWindow> (getApplicationName(), std::move (windowContent));
+        window->setWindowAspectRatio (content->getPreferredAspectRatio());
         window->centreWithSize (content->getPreferredSize());
         window->setVisible (true);
         window->toFront (true);

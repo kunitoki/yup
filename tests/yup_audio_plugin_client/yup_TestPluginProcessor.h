@@ -23,6 +23,7 @@
 
 #include <yup_audio_processors/yup_audio_processors.h>
 
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -172,7 +173,9 @@ public:
         return yup::Result::ok();
     }
 
-    bool hasEditor() const override { return false; }
+    bool hasEditor() const override { return editorFactory != nullptr; }
+
+    yup::AudioProcessorEditor* createEditor() override { return editorFactory != nullptr ? editorFactory() : nullptr; }
 
     bool supportsDoublePrecisionProcessing() const override { return supportsDouble; }
 
@@ -180,6 +183,7 @@ public:
     bool supportsDouble = false;
     int processCallCount = 0;
     int bypassCallCount = 0;
+    std::function<yup::AudioProcessorEditor*()> editorFactory;
     yup::MemoryBlock lastLoadedState;
     yup::MemoryBlock lastSavedState;
 

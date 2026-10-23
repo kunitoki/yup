@@ -39,8 +39,17 @@ PrismEditor::~PrismEditor()
 
 void PrismEditor::resized()
 {
-    if (interface != nullptr)
-        interface->setBounds (getLocalBounds());
+    if (interface == nullptr)
+        return;
+
+    const auto design = getPreferredSize().to<float>();
+    const auto scale = yup::jmin (getWidth() / design.getWidth(), getHeight() / design.getHeight());
+
+    interface->setBounds ({ (getWidth() - design.getWidth() * scale) * 0.5f,
+                            (getHeight() - design.getHeight() * scale) * 0.5f,
+                            design.getWidth(),
+                            design.getHeight() });
+    interface->setTransform (yup::AffineTransform::scaling (scale));
 }
 
 void PrismEditor::paint (yup::Graphics& g)
@@ -57,6 +66,8 @@ void PrismEditor::buildInterface()
         pendingTheme = index;
         startTimerHz (30);
     };
+    interface->onPostEffectChanged = [this] { setComponentEffect (SynthInterface::createPostEffect()); };
+    setComponentEffect (SynthInterface::createPostEffect());
 
     addAndMakeVisible (*interface);
     resized();

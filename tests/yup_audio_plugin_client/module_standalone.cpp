@@ -397,6 +397,48 @@ TEST_F (StandaloneContentTests, HidingToolbarShrinksPreferredSize)
     EXPECT_EQ (1, changes);
 }
 
+TEST_F (StandaloneContentTests, HasNoAspectRatioWithoutAnEditor)
+{
+    StandaloneContent content (processor, deviceManager, collector, false);
+
+    EXPECT_FALSE (content.getPreferredAspectRatio().has_value());
+}
+
+TEST_F (StandaloneContentTests, AspectRatioFollowsAnEditorThatKeepsIt)
+{
+    class FixedAspectEditor final : public AudioProcessorEditor
+    {
+    public:
+        explicit FixedAspectEditor (bool shouldKeepAspect)
+            : keepsAspect (shouldKeepAspect)
+        {
+        }
+
+        bool isResizable() const override { return true; }
+
+        Size<int> getPreferredSize() const override { return { 400, 200 }; }
+
+        bool shouldPreserveAspectRatio() const override { return keepsAspect; }
+
+    private:
+        bool keepsAspect;
+    };
+
+    processor.editorFactory = [] { return new FixedAspectEditor (true); };
+    StandaloneContent keeping (processor, deviceManager, collector, false);
+
+    ASSERT_TRUE (keeping.getPreferredAspectRatio().has_value());
+    EXPECT_FLOAT_EQ (400.0f / (200.0f + 28.0f), *keeping.getPreferredAspectRatio());
+
+    keeping.setToolbarVisible (false);
+    EXPECT_FLOAT_EQ (400.0f / 200.0f, *keeping.getPreferredAspectRatio());
+
+    processor.editorFactory = [] { return new FixedAspectEditor (false); };
+    StandaloneContent free (processor, deviceManager, collector, false);
+
+    EXPECT_FALSE (free.getPreferredAspectRatio().has_value());
+}
+
 TEST_F (StandaloneContentTests, KeyboardIsOnlyOfferedToNotePlayers)
 {
     StandaloneContent effect (processor, deviceManager, collector, false);

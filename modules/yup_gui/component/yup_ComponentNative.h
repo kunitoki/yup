@@ -441,6 +441,15 @@ public:
     */
     virtual bool isDecorated() const = 0;
 
+    /** Keeps the window's width over height at a ratio while the user resizes it.
+
+        @param aspectRatio The width over height to keep, or std::nullopt to resize freely.
+    */
+    virtual void setAspectRatio (std::optional<float> aspectRatio) = 0;
+
+    /** Returns the width over height the window keeps, or std::nullopt when it resizes freely. */
+    virtual std::optional<float> getAspectRatio() const = 0;
+
     //==============================================================================
     /** Sets the opacity of the window.
 

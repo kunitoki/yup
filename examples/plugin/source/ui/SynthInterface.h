@@ -65,6 +65,16 @@ public:
     /** Called with the index of a theme picked in the settings menu. */
     std::function<void (int)> onThemeChosen;
 
+    /** Called when the post effect settings change; createPostEffect() builds the new one. */
+    std::function<void()> onPostEffectChanged;
+
+    /** Returns the post effect the settings ask for, or nullptr when it is off.
+
+        The effect belongs on the component the interface fills, not on the interface, so
+        it renders at the size the interface is shown at whatever its scale.
+    */
+    static yup::ComponentEffect::Ptr createPostEffect();
+
     //==============================================================================
 
     //==============================================================================
@@ -76,7 +86,6 @@ private:
     void timerCallback() override;
 
     void showSettingsMenu();
-    void applySettings();
 
     void layoutMainPage();
     void syncFromProcessor();

@@ -96,6 +96,10 @@ public:
 
     void enableWireframe (bool) override {}
 
+    void setAspectRatio (std::optional<float>) override {}
+
+    std::optional<float> getAspectRatio() const override { return std::nullopt; }
+
     GpuTriangulationThresholds getTriangulationThresholds() const override { return thresholds; }
 
     void setTriangulationThresholds (const GpuTriangulationThresholds& newThresholds) override { thresholds = newThresholds; }
