@@ -118,7 +118,7 @@ Enables the SMTG VST3 validator as a post-build step for VST3 targets. OFF by de
 
 ### `YUP_ENABLE_AUVAL_VALIDATOR`
 
-Enables auval validation as a post-build step for AU/AUv3 targets. OFF by default.
+Enables auval validation as a post-build step for AU/AUv3 targets. OFF by default. auval only sees installed components, so AU targets are validated (by auval and pluginval) only when `PLUGIN_COPY_AFTER_BUILD` is enabled, right after the copy.
 
 ---
 

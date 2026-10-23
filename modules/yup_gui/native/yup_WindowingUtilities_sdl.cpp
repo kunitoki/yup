@@ -401,7 +401,10 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
 
 #if YUP_MAC
 /** SDL only reads Cocoa key events while pumping the event queue itself, which never happens when a
-    host owns the run loop (plugins), so the window class is swapped for a subclass forwarding them.
+    host owns the run loop (plugins), so the window class sendEvent: is replaced to forward them.
+
+    The class is patched instead of the instance because KVO already swapped the window class, and
+    the SDL window class is private to the plugin image so other plugins in the host are unaffected.
 */
 void installHostKeyEventForwarding (SDL_Window* window)
 {
@@ -409,38 +412,32 @@ void installHostKeyEventForwarding (SDL_Window* window)
     if (nsWindow == nil)
         return;
 
-    static Class sdlWindowClass = object_getClass (nsWindow);
-    static Class hostedWindowClass = []
+    using SendEventFn = void (*) (id, SEL, NSEvent*);
+
+    static SendEventFn originalSendEvent = nullptr;
+    if (originalSendEvent != nullptr)
+        return;
+
+    Class sdlWindowClass = [nsWindow class];
+    originalSendEvent = reinterpret_cast<SendEventFn> (method_getImplementation (class_getInstanceMethod (sdlWindowClass, @selector (sendEvent:))));
+
+    const SendEventFn sendEvent = [] (id self, SEL selector, NSEvent* event)
     {
-        const auto name = "YUPHostedSDLWindow_" + String::toHexString (Random::getSystemRandom().nextInt64());
-        Class cls = objc_allocateClassPair (sdlWindowClass, name.toRawUTF8(), 0);
+        const auto type = [event type];
+        const bool isKeyEvent = type == NSEventTypeKeyDown || type == NSEventTypeKeyUp;
 
-        const auto sendEvent = +[] (id self, SEL selector, NSEvent* event)
+        if (isKeyEvent || type == NSEventTypeFlagsChanged)
         {
-            const auto type = [event type];
-            const bool isKeyEvent = type == NSEventTypeKeyDown || type == NSEventTypeKeyUp;
+            Cocoa_HandleKeyEvent (SDL_GetVideoDevice(), event);
 
-            if (isKeyEvent || type == NSEventTypeFlagsChanged)
-            {
-                YUP_MODULE_DBG (GUI_WINDOWING, "SDL: hosted window key event: type=" << static_cast<int> (type) << ", sdlKeyboardFocus=" << String (SDL_GetKeyboardFocus() != nullptr ? "true" : "false"));
+            if (isKeyEvent)
+                return;
+        }
 
-                Cocoa_HandleKeyEvent (SDL_GetVideoDevice(), event);
+        originalSendEvent (self, selector, event);
+    };
 
-                if (isKeyEvent)
-                    return;
-            }
-
-            objc_super superclass = { self, sdlWindowClass };
-            reinterpret_cast<void (*) (objc_super*, SEL, NSEvent*)> (objc_msgSendSuper) (&superclass, selector, event);
-        };
-
-        class_addMethod (cls, @selector (sendEvent:), (IMP) sendEvent, "v@:@");
-        objc_registerClassPair (cls);
-        return cls;
-    }();
-
-    if (object_getClass (nsWindow) == sdlWindowClass)
-        object_setClass (nsWindow, hostedWindowClass);
+    class_replaceMethod (sdlWindowClass, @selector (sendEvent:), reinterpret_cast<IMP> (sendEvent), "v@:@");
 }
 #endif
 
