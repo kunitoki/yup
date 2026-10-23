@@ -204,7 +204,7 @@ private:
     SynthRoutes routes;
     HarmonicSynthEngine engine;
     std::array<yup::SoftClipper<float>, 2> masterClippers;
-    SynthQuality preparedQuality = SynthQuality::x4;
+    SynthQuality preparedQuality = SynthQuality::x2;
     std::atomic<double> preparedSampleRate { 0.0 };
     int preparedBlockSize = 0;
 

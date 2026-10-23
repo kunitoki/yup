@@ -62,6 +62,9 @@ public:
 
     /** Rereads the series from the parameters and partials, after anything changed them.
 
+        The values read are kept, so edits made on the display until the next refresh keep
+        showing the same modulated spectrum.
+
         @param reader  Where the parameter values come from: the parameters themselves, or a
                        table with the modulation of the most recent note applied, so the
                        drawn wave follows a modulated spectrum.
@@ -106,6 +109,7 @@ public:
 
 private:
     //==============================================================================
+    void rebuild();
     void reconstruct (const yup::FourierSeries<double>& series) noexcept;
     yup::GpuTexture::Ptr renderLandscape (yup::Graphics& g);
     static float measurePeak (const std::vector<float>& samples) noexcept;
@@ -155,6 +159,7 @@ private:
     bool animating = false;
 
     SynthSpectrumDerivation preview;
+    SynthOscillatorValues shownValues;
     yup::FourierSeries<double> displaySeries;
     std::vector<float> displaySamples;
     yup::Path path;

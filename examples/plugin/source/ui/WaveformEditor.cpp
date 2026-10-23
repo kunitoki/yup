@@ -78,7 +78,14 @@ void WaveformEditor::applyOperation (PartialsOperation operation)
 
 void WaveformEditor::refresh (SynthParameterReader reader)
 {
-    auto values = parameters.read (reader);
+    shownValues = parameters.read (reader);
+
+    rebuild();
+}
+
+void WaveformEditor::rebuild()
+{
+    auto& values = shownValues;
 
     if (partials.usesCustomSeries())
     {
@@ -259,7 +266,7 @@ void WaveformEditor::mouseUp (const yup::MouseEvent&)
     if (lastDrawnIndex.has_value())
     {
         lastDrawnIndex.reset();
-        refresh();
+        rebuild();
     }
 
     recordEdit (gestureStart);
@@ -473,7 +480,7 @@ void WaveformEditor::publishEdit()
 {
     pendingEdit = true;
 
-    refresh();
+    rebuild();
 }
 
 /** Starts a stroke from the source waveform, normalized as the display shows it. */

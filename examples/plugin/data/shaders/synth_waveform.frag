@@ -69,7 +69,8 @@ void main()
         color += tone / max(d * z, 1.0e-4);
     }
 
-    vec3 glow = tanh(color / 900.0);
+    // Clamped because some backends expand tanh into exp ratios that turn NaN once exp overflows.
+    vec3 glow = tanh(clamp(color / 900.0, vec3(-15.0), vec3(15.0)));
 
     if (u.lightMode > 0.5)
         fragColor = vec4(mix(u.background.rgb, u.accent.rgb, clamp(max(glow.r, max(glow.g, glow.b)), 0.0, 1.0)), 1.0);
