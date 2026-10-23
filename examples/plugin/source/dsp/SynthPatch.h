@@ -102,11 +102,25 @@ int getPresetIndex (const yup::DataTree& state);
 int findRouteDestination (yup::Span<const yup::AudioParameter::Ptr> parameters, const yup::String& parameterID);
 
 /** Creates a random patch that keeps the current volume, voice mode, glide, quality and
-    macro positions, named "Random" with the macro names given. It switches on the
-    modules it uses and off the rest. */
+    macro positions, named "Random" with the macro names given.
+
+    The patch aims for a kind of sound, a pluck, keys, a pad, a lead, a bass or a bell,
+    which shapes its amplitude envelope. Only the modules it uses are switched on, always
+    the first ones of each kind: every operator is heard or modulates another, every filter
+    receives sound, and every envelope and LFO drives at least one route.
+*/
 yup::DataTree createRandomState (const SynthParameters& parameters,
                                  yup::Random& random,
                                  const std::array<yup::String, SynthExample::macroCount>& macroNames);
+
+/** Moves the sound of a patch made by createState() a little, keeping its structure.
+
+    The continuous controls of the modules that are on move by a few percent of their
+    range, and the depths of the routes in use by up to 30% of themselves, never changing
+    sign. Pitch, the switches, every choice, every control at its minimum, like an unused
+    FM link or send, and every spectral control at its neutral value keep their values.
+*/
+void varyState (yup::DataTree& state, const SynthParameters& parameters, yup::Random& random);
 
 //==============================================================================
 /** Returns how many factory presets there are. */

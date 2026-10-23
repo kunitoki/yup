@@ -101,6 +101,9 @@ public:
     /** Replaces the patch with a random one, keeping volume, voice mode and glide. Message thread. */
     void randomize();
 
+    /** Moves the current patch's sound a little, keeping its structure, see SynthPatch::varyState(). Message thread. */
+    void randomizeSlightly();
+
     /** Writes the current patch to a user preset file, in the session state format. Message thread. */
     yup::Result savePresetFile (const yup::File& file);
 

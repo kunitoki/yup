@@ -260,6 +260,19 @@ void PrismProcessor::randomize()
     applyState (SynthPatch::createRandomState (synthParameters, yup::Random::getSystemRandom(), getPresetInfo().macroNames), {});
 }
 
+void PrismProcessor::randomizeSlightly()
+{
+    auto info = getPresetInfo();
+
+    // A varied factory preset is no longer the factory's.
+    if (currentPreset.load() >= 0)
+        info.bank = info.author = {};
+
+    auto state = SynthPatch::createState (getParameters(), getPatchState(), -1, info);
+    SynthPatch::varyState (state, synthParameters, yup::Random::getSystemRandom());
+    applyState (state, {});
+}
+
 //==============================================================================
 yup::Result PrismProcessor::loadStateFromDataTree (const yup::DataTree& state)
 {

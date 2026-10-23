@@ -61,7 +61,11 @@ SynthHeader::SynthHeader (PrismProcessor& processorToControl)
     loadButton.onClick = [this] { presetBar.loadPreset(); };
     randomButton.onClick = [this]
     {
-        processor.randomize();
+        if (randomButton.wasRightClicked())
+            processor.randomizeSlightly();
+        else
+            processor.randomize();
+
         presetBar.syncFromProcessor();
     };
     panicButton.onClick = [this]

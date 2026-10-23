@@ -47,3 +47,10 @@ void SynthIconButton::paintButton (yup::Graphics& g)
     g.setFillColor (isButtonOver() ? SynthTheme::accent (*this) : SynthTheme::textPrimary (*this).withAlpha (0.85f));
     g.fillFittedText (glyph, font, bounds, yup::Justification::center);
 }
+
+void SynthIconButton::mouseDown (const yup::MouseEvent& event)
+{
+    // Releasing any button clicks, so the press remembers which one it was.
+    rightClicked = event.isRightButtonDown();
+    yup::Button::mouseDown (event);
+}

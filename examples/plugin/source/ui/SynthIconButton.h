@@ -33,10 +33,15 @@ public:
     /** Creates the button; a button without a tile draws only its glyph, for use inside a tile. */
     SynthIconButton (yup::StringRef componentID, const char* iconGlyph, float iconHeight = 15.0f, bool drawsTile = true);
 
+    /** True when the last press was made with the right button, for buttons with a second action. */
+    bool wasRightClicked() const noexcept { return rightClicked; }
+
     void paintButton (yup::Graphics& g) override;
+    void mouseDown (const yup::MouseEvent& event) override;
 
 private:
     yup::String glyph;
     float height;
     bool tile;
+    bool rightClicked = false;
 };

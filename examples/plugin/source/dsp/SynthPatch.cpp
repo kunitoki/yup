@@ -23,6 +23,7 @@
 #include "SynthAlgorithms.h"
 
 #include <algorithm>
+#include <numeric>
 #include <string>
 #include <vector>
 
@@ -105,6 +106,8 @@ struct FactoryPreset
 constexpr float sine = static_cast<float> (yup::Waveform::sine);
 constexpr float sawtooth = static_cast<float> (yup::Waveform::sawtooth);
 constexpr float square = static_cast<float> (yup::Waveform::square);
+constexpr float triangle = static_cast<float> (yup::Waveform::triangle);
+constexpr float pulse = static_cast<float> (yup::Waveform::pulse);
 
 /** Joins value lists, later lists overriding earlier ones. */
 std::vector<PresetValue> join (std::initializer_list<std::vector<PresetValue>> lists)
@@ -341,6 +344,106 @@ yup::DataTree createRoutesTree (const std::vector<std::pair<SynthModulationSourc
 
     return tree;
 }
+
+//==============================================================================
+/** A range a random patch draws a value from. */
+struct Between
+{
+    float low;
+    float high;
+};
+
+float drawLinear (yup::Random& random, Between range)
+{
+    return range.low + random.nextFloat() * (range.high - range.low);
+}
+
+/** Draws evenly across octaves, for times and frequencies. */
+float drawExponential (yup::Random& random, Between range)
+{
+    return range.low * std::pow (range.high / range.low, random.nextFloat());
+}
+
+bool chance (yup::Random& random, int percent)
+{
+    return random.nextInt (100) < percent;
+}
+
+/** Returns an index drawn with chances proportional to the weights. */
+int drawWeighted (yup::Random& random, std::initializer_list<int> weights)
+{
+    auto draw = random.nextInt (std::accumulate (weights.begin(), weights.end(), 0));
+    auto index = 0;
+
+    for (const auto weight : weights)
+    {
+        if (draw < weight)
+            break;
+
+        draw -= weight;
+        ++index;
+    }
+
+    return index;
+}
+
+template <typename Item, std::size_t size>
+const Item& drawFrom (yup::Random& random, const Item (&items)[size])
+{
+    return items[static_cast<std::size_t> (random.nextInt (static_cast<int> (size)))];
+}
+
+/** The kind of sound a random patch aims for, which shapes its amplitude envelope. Times in seconds. */
+struct RandomCharacter
+{
+    const char* name;
+    Between attack;
+    Between decay;
+    Between sustain;
+    Between release;
+    int unisonPercent;
+    bool inharmonic; /**< FM on inharmonic ratios, as bells are. */
+    bool lowPitch;   /**< Plays an octave down. */
+};
+
+const RandomCharacter randomCharacters[] {
+    { "pluck", { 0.001f, 0.005f }, { 0.15f, 0.6f }, { 0.0f, 0.15f }, { 0.1f, 0.4f }, 15, false, false },
+    { "keys", { 0.001f, 0.01f }, { 0.8f, 2.5f }, { 0.2f, 0.6f }, { 0.2f, 0.6f }, 15, false, false },
+    { "pad", { 0.3f, 1.5f }, { 0.5f, 2.0f }, { 0.6f, 0.9f }, { 1.0f, 3.0f }, 60, false, false },
+    { "lead", { 0.003f, 0.05f }, { 0.2f, 0.8f }, { 0.6f, 1.0f }, { 0.08f, 0.3f }, 30, false, false },
+    { "bass", { 0.001f, 0.01f }, { 0.2f, 0.8f }, { 0.4f, 0.9f }, { 0.05f, 0.2f }, 10, false, true },
+    { "bell", { 0.001f, 0.005f }, { 2.0f, 5.0f }, { 0.0f, 0.0f }, { 1.5f, 3.0f }, 20, true, false }
+};
+
+/** A filter type with the cutoffs it sounds good at, in Hz. */
+struct RandomFilter
+{
+    SynthFilterType type;
+    Between cutoff;
+};
+
+/** The filters that shape the whole sound; lowpasses are repeated to be drawn more often. */
+const RandomFilter shapingFilters[] {
+    { SynthFilterType::lowpass12, { 600.0f, 6000.0f } },
+    { SynthFilterType::lowpass24, { 400.0f, 5000.0f } },
+    { SynthFilterType::lowpass24, { 400.0f, 5000.0f } },
+    { SynthFilterType::moogLadder, { 300.0f, 4000.0f } },
+    { SynthFilterType::moogLadder, { 300.0f, 4000.0f } },
+    { SynthFilterType::korg35, { 400.0f, 5000.0f } },
+    { SynthFilterType::diode, { 300.0f, 4000.0f } },
+    { SynthFilterType::bandpass12, { 500.0f, 3000.0f } },
+    { SynthFilterType::vowel, { 400.0f, 2500.0f } }
+};
+
+/** The filters that color what a shaping filter already shaped, in series after it. */
+const RandomFilter coloringFilters[] {
+    { SynthFilterType::highpass12, { 60.0f, 400.0f } },
+    { SynthFilterType::peak, { 500.0f, 4000.0f } },
+    { SynthFilterType::notch, { 500.0f, 4000.0f } },
+    { SynthFilterType::bandpass12, { 600.0f, 3000.0f } },
+    { SynthFilterType::lowpass12, { 2000.0f, 10000.0f } },
+    { SynthFilterType::comb, { 200.0f, 1500.0f } }
+};
 } // namespace
 
 //==============================================================================
@@ -446,7 +549,13 @@ yup::DataTree createRandomState (const SynthParameters& parameters,
                                  yup::Random& random,
                                  const std::array<yup::String, SynthExample::macroCount>& macroNames)
 {
-    PresetInfo info { "Random" };
+    using Source = SynthModulationSource;
+    using Shape = SynthLFOValues::Shape;
+    using Parameter = yup::AudioParameter::Ptr;
+
+    const auto& character = drawFrom (random, randomCharacters);
+
+    PresetInfo info { "Random", {}, {}, yup::String ("random, ") + character.name };
     info.macroNames = macroNames;
 
     auto state = createEmptyState (-1, info);
@@ -459,111 +568,369 @@ yup::DataTree createRandomState (const SynthParameters& parameters,
     for (const auto& macro : parameters.macros)
         builder.keep (macro);
 
-    builder.set (parameters.unisonVoices, static_cast<float> (random.nextInt (3) == 0 ? 1 + random.nextInt (SynthExample::maxUnisonVoices) : 1));
-    builder.set (parameters.unisonDetune, random.nextFloat() * 0.5f);
-    builder.set (parameters.unisonSpread, random.nextFloat());
-    builder.set (parameters.filterRouting, static_cast<float> (random.nextInt (2)));
+    // The operators in use are always the first ones. Operator 1 is heard, and every other
+    // one is heard too or modulates an operator below it, so none is idle and none loops.
+    const auto fmPatch = character.inharmonic || chance (random, 60);
+    const auto numOperators = 1 + drawWeighted (random, { character.inharmonic ? 0 : 2, 4, 3, 3 });
+    std::array<int, SynthExample::oscillatorCount> targets; // the operator each one modulates, -1 when heard
+    targets.fill (-1);
+    auto numCarriers = 1;
 
-    // Musical FM lives on small integer ratios and moderate depths, so most of the draws do.
-    const float ratios[] = { 0.5f, 1.0f, 1.0f, 2.0f, 2.0f, 3.0f, 4.0f, 5.0f, 7.0f };
-    std::array<bool, SynthExample::oscillatorCount> used {};
-
-    for (std::size_t index = 0; index < parameters.oscillators.size(); ++index)
+    for (int op = 1; op < numOperators; ++op)
     {
-        const auto& oscillator = parameters.oscillators[index];
-        const auto carrier = index == 0 || random.nextInt (3) == 0;
-        used[index] = carrier;
-
-        builder.set (oscillator.waveform, static_cast<float> (random.nextInt (3) == 0 ? random.nextInt (6) : 0));
-        builder.set (oscillator.syncMode, static_cast<float> (random.nextInt (4) == 0 ? random.nextInt (4) : 0));
-        builder.set (oscillator.syncRatio, 1.0f + random.nextFloat() * 3.0f);
-        builder.set (oscillator.ratio, ratios[random.nextInt (static_cast<int> (std::size (ratios)))]);
-        builder.set (oscillator.fine, random.nextInt (4) == 0 ? (random.nextFloat() - 0.5f) * 20.0f : 0.0f);
-        builder.set (oscillator.level, carrier ? 0.4f + random.nextFloat() * 0.5f : 0.0f);
-        builder.set (oscillator.pan, (random.nextFloat() - 0.5f) * 0.6f);
-        builder.set (oscillator.toFilter1, random.nextInt (4) == 0 ? 0.0f : 1.0f);
-        builder.set (oscillator.toFilter2, random.nextBool() ? random.nextFloat() : 0.0f);
-        builder.set (oscillator.direct, random.nextInt (4) == 0 ? random.nextFloat() * 0.5f : 0.0f);
-        builder.set (oscillator.ridgeSpacing, 0.5f + random.nextFloat() * 3.0f);
-        builder.set (oscillator.color, random.nextFloat() * 0.6f);
-        builder.set (oscillator.dispersion, 0.1f + random.nextFloat() * 0.8f);
-        builder.set (oscillator.tilt, (random.nextFloat() - 0.5f) * 2.0f);
-        builder.set (oscillator.oddEven, 0.3f + random.nextFloat() * 0.4f);
-        builder.set (oscillator.scatter, random.nextBool() ? 0.0f : random.nextFloat() * 0.4f);
+        if (chance (random, fmPatch ? 75 : 25))
+            targets[static_cast<std::size_t> (op)] = chance (random, 70) ? op - 1 : random.nextInt (op);
+        else
+            ++numCarriers;
     }
 
-    for (int carrier = 0; carrier < SynthExample::oscillatorCount; ++carrier)
-    {
-        for (int modulator = 0; modulator < SynthExample::oscillatorCount; ++modulator)
-        {
-            const auto& parameter = parameters.fm.get (carrier, modulator);
+    // A filter is on only when sound reaches it, and filter 2 only after filter 1.
+    const auto numFilters = drawWeighted (random, { 1, 3, 1 });
+    const auto parallel = numFilters == 2 && numCarriers > 1 && random.nextBool();
+    builder.set (parameters.filterRouting, static_cast<float> (parallel ? SynthFilterRouting::parallel : SynthFilterRouting::serial));
 
-            if (carrier == modulator)
-                builder.set (parameter, random.nextInt (5) == 0 ? random.nextFloat() : 0.0f);
-            else
-            {
-                const auto depth = random.nextInt (4) == 0 ? random.nextFloat() * random.nextFloat() * 2.0f : 0.0f;
-                builder.set (parameter, depth);
-                used[static_cast<std::size_t> (modulator)] = used[static_cast<std::size_t> (modulator)] || depth != 0.0f;
-            }
+    const float carrierRatios[] = { 0.5f, 1.0f, 1.0f, 1.0f, 2.0f };
+    const float layerRatios[] = { 0.5f, 1.0f, 1.0f, 2.0f, 2.0f, 3.0f, 4.0f };
+    const float modulatorRatios[] = { 0.5f, 1.0f, 1.0f, 2.0f, 2.0f, 3.0f, 4.0f, 5.0f, 7.0f };
+    const float bellRatios[] = { 1.41f, 2.0f, 2.76f, 3.5f, 4.2f, 5.4f };
+    const float spectralWaveforms[] = { sawtooth, sawtooth, square, triangle, pulse };
+    const auto carrierLevel = 0.75f / std::sqrt (static_cast<float> (numCarriers));
+    std::vector<Parameter> timbres; // what envelopes, velocity, controllers and sweeps move
+    auto nextBus = random.nextInt (2);
+    auto topModulator = -1;
+
+    for (std::size_t op = 0; op < parameters.oscillators.size(); ++op)
+    {
+        const auto& oscillator = parameters.oscillators[op];
+        const auto used = static_cast<int> (op) < numOperators;
+        builder.set (oscillator.enabled, used ? 1.0f : 0.0f);
+
+        if (! used)
+        {
+            builder.set (oscillator.level, 0.0f);
+            continue;
+        }
+
+        const auto heard = targets[op] < 0;
+
+        // Modulators are mostly sines, so their FM is predictable, and so are the carriers of an FM patch.
+        const auto waveform = heard ? (chance (random, fmPatch ? 70 : 15) ? sine : drawFrom (random, spectralWaveforms))
+                                    : (chance (random, 85) ? sine : triangle);
+        builder.set (oscillator.waveform, waveform);
+
+        if (! heard)
+            builder.set (oscillator.ratio, character.inharmonic ? drawFrom (random, bellRatios) : drawFrom (random, modulatorRatios));
+        else if (op == 0)
+            builder.set (oscillator.ratio, character.lowPitch ? 0.5f : drawFrom (random, carrierRatios));
+        else
+            builder.set (oscillator.ratio, drawFrom (random, layerRatios));
+
+        // Layers beat against operator 1, and a slightly detuned modulator makes FM move.
+        const auto detune = heard ? (op > 0 ? drawLinear (random, { 3.0f, 12.0f }) : 0.0f)
+                                  : (chance (random, 20) ? drawLinear (random, { 1.0f, 7.0f }) : 0.0f);
+        builder.set (oscillator.fine, random.nextBool() ? detune : -detune);
+
+        builder.set (oscillator.level, heard ? carrierLevel * drawLinear (random, { 0.8f, 1.0f }) : 0.0f);
+        builder.set (oscillator.pan, heard && numCarriers > 1 ? drawLinear (random, { -0.35f, 0.35f }) : 0.0f);
+
+        // Modulators send to the first filter, so raising their level is heard through it.
+        const auto bus = parallel && heard ? nextBus++ % 2 : 0;
+        builder.set (oscillator.toFilter1, numFilters > 0 && bus == 0 ? 1.0f : 0.0f);
+        builder.set (oscillator.toFilter2, numFilters > 0 && bus == 1 ? 1.0f : 0.0f);
+        builder.set (oscillator.direct, numFilters == 0 ? 1.0f : 0.0f);
+
+        if (! heard)
+        {
+            topModulator = static_cast<int> (op);
+            builder.set (parameters.fm.get (targets[op], static_cast<int> (op)),
+                         drawExponential (random, character.inharmonic ? Between { 0.3f, 2.0f } : Between { 0.15f, 1.5f }));
+            timbres.push_back (parameters.fm.get (targets[op], static_cast<int> (op)));
+        }
+
+        // Sines and triangles play as they are; the shaping is for the richer waveforms.
+        if (waveform == sine || waveform == triangle)
+        {
+            builder.set (oscillator.color, 0.0f);
+            continue;
+        }
+
+        builder.set (oscillator.color, random.nextBool() ? drawLinear (random, { 0.1f, 0.6f }) : 0.0f);
+        builder.set (oscillator.ridgeSpacing, drawLinear (random, { 0.5f, 3.5f }));
+        builder.set (oscillator.dispersion, drawLinear (random, { 0.2f, 0.8f }));
+        builder.set (oscillator.tilt, drawLinear (random, { -1.0f, 0.5f }));
+        builder.set (oscillator.oddEven, drawLinear (random, { 0.3f, 0.7f }));
+        builder.set (oscillator.scatter, chance (random, 25) ? drawLinear (random, { 0.05f, 0.3f }) : 0.0f);
+        timbres.push_back (oscillator.color);
+        timbres.push_back (oscillator.tilt);
+
+        if (chance (random, 15))
+        {
+            builder.set (oscillator.syncMode, static_cast<float> (yup::SyncMode::hard));
+            builder.set (oscillator.syncRatio, drawLinear (random, { 1.5f, 4.0f }));
+            timbres.push_back (oscillator.syncRatio);
         }
     }
 
+    // Feedback, kept low: on the top modulator, or on operator 1 when an FM patch has none.
+    const auto feedbackOp = topModulator >= 0 ? (chance (random, 40) ? topModulator : -1) : (fmPatch ? 0 : -1);
+
+    if (feedbackOp >= 0)
+    {
+        builder.set (parameters.fm.get (feedbackOp, feedbackOp), drawLinear (random, topModulator >= 0 ? Between { 0.05f, 0.35f } : Between { 0.2f, 0.5f }));
+        timbres.push_back (parameters.fm.get (feedbackOp, feedbackOp));
+    }
+
+    // Unison stops at four copies: eight voices of eight copies of four operators is too heavy.
+    builder.set (parameters.unisonVoices, static_cast<float> (chance (random, character.unisonPercent) ? 2 + random.nextInt (3) : 1));
+    builder.set (parameters.unisonDetune, drawLinear (random, { 0.05f, 0.25f }));
+    builder.set (parameters.unisonSpread, drawLinear (random, { 0.4f, 0.9f }));
+
+    std::array<const RandomFilter*, SynthExample::filterCount> filterChoices {};
+
+    for (std::size_t index = 0; index < static_cast<std::size_t> (numFilters); ++index)
+    {
+        filterChoices[index] = index == 0 || parallel ? &drawFrom (random, shapingFilters) : &drawFrom (random, coloringFilters);
+        timbres.push_back (parameters.filters[index].cutoff);
+    }
+
+    //==============================================================================
+    struct Route
+    {
+        Source source;
+        Parameter destination;
+        float depth;
+    };
+
+    std::vector<Route> routes;
+
+    const auto addRoute = [&routes] (Source source, const Parameter& destination, float depth)
+    {
+        const auto taken = std::any_of (routes.begin(), routes.end(), [&] (const Route& route) { return route.source == source && route.destination == destination; });
+
+        if (! taken && routes.size() < static_cast<std::size_t> (SynthExample::modulationSlots))
+            routes.push_back ({ source, destination, depth });
+    };
+
+    const auto drawTimbre = [&random, &timbres]
+    {
+        return timbres[static_cast<std::size_t> (random.nextInt (static_cast<int> (timbres.size())))];
+    };
+
+    // The envelopes and LFOs in use are the first ones, and each drives at least one route.
+    const auto numEnvelopes = timbres.empty() ? 0 : drawWeighted (random, { 3, 4, 2, 1 });
+
+    for (int index = 1; index <= numEnvelopes; ++index)
+    {
+        const auto source = static_cast<Source> (static_cast<int> (Source::env1) + index);
+
+        for (int count = chance (random, 25) ? 2 : 1; count > 0; --count)
+            addRoute (source, drawTimbre(), drawLinear (random, { 0.15f, 0.5f }));
+    }
+
+    const auto numLFOs = drawWeighted (random, { 3, 4, 2, 1, 1 });
+    auto hasVibrato = false;
+
+    for (int index = 0; index < numLFOs; ++index)
+    {
+        const auto& lfo = parameters.lfos[static_cast<std::size_t> (index)];
+        const auto source = static_cast<Source> (static_cast<int> (Source::lfo1) + index);
+        const auto role = drawWeighted (random, { hasVibrato ? 0 : 2, 1, timbres.empty() ? 0 : 3 });
+
+        builder.set (lfo.phase, random.nextFloat());
+
+        if (role == 0)
+        {
+            // Every operator moves by the same cents, so the FM ratios hold.
+            hasVibrato = true;
+            const auto depth = drawLinear (random, { 0.03f, 0.08f });
+
+            for (int op = 0; op < numOperators; ++op)
+                addRoute (source, parameters.oscillators[static_cast<std::size_t> (op)].fine, depth);
+
+            builder.set (lfo.shape, static_cast<float> (random.nextBool() ? Shape::sine : Shape::triangle));
+            builder.set (lfo.rate, drawLinear (random, { 4.5f, 6.5f }));
+            builder.set (lfo.retrigger, static_cast<float> (SynthLFOValues::RetriggerMode::free));
+        }
+        else if (role == 1)
+        {
+            auto sign = random.nextBool() ? 1.0f : -1.0f;
+
+            for (int op = 0; op < numOperators; ++op)
+            {
+                if (targets[static_cast<std::size_t> (op)] >= 0)
+                    continue;
+
+                addRoute (source, parameters.oscillators[static_cast<std::size_t> (op)].pan, sign * drawLinear (random, { 0.2f, 0.5f }));
+                sign = -sign;
+            }
+
+            const Shape shapes[] = { Shape::sine, Shape::triangle, Shape::smoothRandom };
+            builder.set (lfo.shape, static_cast<float> (drawFrom (random, shapes)));
+            builder.set (lfo.rate, drawExponential (random, { 0.1f, 1.5f }));
+            builder.set (lfo.retrigger, static_cast<float> (SynthLFOValues::RetriggerMode::free));
+        }
+        else
+        {
+            addRoute (source, drawTimbre(), (random.nextBool() ? 1.0f : -1.0f) * drawLinear (random, { 0.05f, 0.25f }));
+
+            const Shape shapes[] = { Shape::sine, Shape::sine, Shape::triangle, Shape::triangle, Shape::sawtooth, Shape::sawDown,
+                                     Shape::square, Shape::sampleAndHold, Shape::smoothRandom, Shape::smoothRandom };
+            builder.set (lfo.shape, static_cast<float> (drawFrom (random, shapes)));
+            builder.set (lfo.retrigger, static_cast<float> (random.nextBool() ? SynthLFOValues::RetriggerMode::retrigger : SynthLFOValues::RetriggerMode::free));
+
+            // From eight bars to an eighth when synced.
+            const auto synced = chance (random, 30);
+            builder.set (lfo.tempoSync, synced ? 1.0f : 0.0f);
+            builder.set (lfo.division, static_cast<float> (random.nextInt (7)));
+            builder.set (lfo.rate, drawExponential (random, { 0.05f, 2.0f }));
+        }
+    }
+
+    if (! timbres.empty())
+    {
+        if (chance (random, 50))
+            addRoute (Source::velocity, drawTimbre(), drawLinear (random, { 0.1f, 0.3f }));
+
+        if (chance (random, 40))
+            addRoute (Source::modWheel, drawTimbre(), drawLinear (random, { 0.2f, 0.4f }));
+
+        if (chance (random, 25))
+            addRoute (Source::aftertouch, drawTimbre(), drawLinear (random, { 0.1f, 0.3f }));
+    }
+
+    std::vector<std::pair<Source, yup::String>> routeIDs;
+
+    for (std::size_t slot = 0; slot < routes.size(); ++slot)
+    {
+        routeIDs.emplace_back (routes[slot].source, routes[slot].destination->getID());
+        builder.set (parameters.modulation.depths[slot], routes[slot].depth);
+    }
+
+    builder.addChild (createRoutesTree (routeIDs));
+
+    for (int index = 1; index < SynthExample::envelopeCount; ++index)
+        builder.set (parameters.envelopes[static_cast<std::size_t> (index)].enabled, index <= numEnvelopes ? 1.0f : 0.0f);
+
+    for (int index = 0; index < SynthExample::lfoCount; ++index)
+        builder.set (parameters.lfos[static_cast<std::size_t> (index)].enabled, index < numLFOs ? 1.0f : 0.0f);
+
+    //==============================================================================
     for (std::size_t index = 0; index < parameters.filters.size(); ++index)
     {
         const auto& filter = parameters.filters[index];
-        const auto enabled = index == 0 || random.nextBool();
-        builder.set (filter.enabled, enabled ? 1.0f : 0.0f);
-        builder.set (filter.type, static_cast<float> (enabled ? 1 + random.nextInt (14) : 0));
-        builder.set (filter.cutoff, 200.0f * std::exp2 (random.nextFloat() * 6.0f));
-        builder.set (filter.resonance, random.nextFloat() * 0.7f);
-        builder.set (filter.drive, random.nextBool() ? 0.0f : random.nextFloat() * 0.5f);
-        builder.set (filter.keytrack, random.nextBool() ? 0.0f : 1.0f);
+        builder.set (filter.enabled, filterChoices[index] != nullptr ? 1.0f : 0.0f);
+
+        if (filterChoices[index] == nullptr)
+            continue;
+
+        // A cutoff a route sweeps up starts lower, so the sweep opens it.
+        const auto sweptUp = std::any_of (routes.begin(), routes.end(), [&filter] (const Route& route) { return route.destination == filter.cutoff && route.depth > 0.0f; });
+
+        builder.set (filter.type, static_cast<float> (filterChoices[index]->type));
+        builder.set (filter.cutoff, drawExponential (random, filterChoices[index]->cutoff) * (sweptUp ? 0.5f : 1.0f));
+        builder.set (filter.resonance, drawLinear (random, { 0.05f, 0.5f }));
+        builder.set (filter.drive, chance (random, 30) ? drawLinear (random, { 0.05f, 0.3f }) : 0.0f);
+        builder.set (filter.keytrack, random.nextBool() ? drawLinear (random, { 0.2f, 0.6f }) : 0.0f);
     }
 
-    for (const auto& lfo : parameters.lfos)
+    builder.set (parameters.envelopes[0].velocity, drawLinear (random, { 0.2f, 0.7f }));
+
+    SynthCurveState curves;
+    curves.setEnvelope (0, SynthCurveState::makeAdsr (drawExponential (random, character.attack), drawExponential (random, character.decay),
+                                                      drawLinear (random, character.sustain), drawExponential (random, character.release),
+                                                      drawLinear (random, { -0.7f, -0.3f })));
+
+    for (int index = 1; index <= numEnvelopes; ++index)
     {
-        builder.set (lfo.shape, static_cast<float> (random.nextInt (7)));
-        builder.set (lfo.rate, 0.1f * std::exp2 (random.nextFloat() * 6.0f));
-        builder.set (lfo.phase, random.nextBool() ? 0.0f : random.nextFloat());
+        builder.set (parameters.envelopes[static_cast<std::size_t> (index)].velocity, drawLinear (random, { 0.0f, 0.5f }));
+        curves.setEnvelope (index, SynthCurveState::makeAdsr (drawExponential (random, { 0.001f, std::max (0.05f, character.attack.high) }),
+                                                              drawExponential (random, { 0.1f, 1.5f }), drawLinear (random, { 0.0f, 0.5f }),
+                                                              drawExponential (random, { 0.1f, 1.0f }), drawLinear (random, { -0.7f, -0.3f })));
     }
 
-    // A few live routes, never to the operator levels, so a random patch cannot fall silent.
-    const char* destinations[] = { "osc1.color", "osc1.tilt", "osc1.fine", "osc2.ratio", "fm.12", "fm.21", "fm.13",
-                                   "flt1.cutoff", "flt1.resonance", "flt2.cutoff", "osc1.pan", "osc1.formantPosition" };
-    std::vector<std::pair<SynthModulationSource, yup::String>> routes;
-    const auto liveRoutes = 1 + random.nextInt (4);
-
-    for (int index = 0; index < liveRoutes; ++index)
-    {
-        const auto source = static_cast<SynthModulationSource> (random.nextInt (static_cast<int> (SynthModulationSource::lfo4) + 1));
-        const yup::String destination (destinations[random.nextInt (static_cast<int> (std::size (destinations)))]);
-        routes.emplace_back (source, destination);
-        builder.set (parameters.modulation.depths[static_cast<std::size_t> (index)], (random.nextFloat() - 0.5f) * 0.6f);
-
-        // A routed FM depth makes its modulator heard: "fm.12" is operator 2 into operator 1.
-        if (destination.startsWith ("fm."))
-            used[static_cast<std::size_t> (destination.getLastCharacter() - '1')] = true;
-    }
-
-    builder.addChild (createRoutesTree (routes));
-
-    const auto isSourced = [&routes] (SynthModulationSource source)
-    {
-        return std::any_of (routes.begin(), routes.end(), [source] (const auto& route) { return route.first == source; });
-    };
-
-    for (std::size_t index = 0; index < parameters.oscillators.size(); ++index)
-        builder.set (parameters.oscillators[index].enabled, used[index] ? 1.0f : 0.0f);
-
-    for (std::size_t index = 0; index < parameters.envelopes.size(); ++index)
-        if (const auto& enabled = parameters.envelopes[index].enabled; enabled != nullptr)
-            builder.set (enabled, isSourced (static_cast<SynthModulationSource> (static_cast<int> (SynthModulationSource::env1) + static_cast<int> (index))) ? 1.0f : 0.0f);
-
-    for (std::size_t index = 0; index < parameters.lfos.size(); ++index)
-        builder.set (parameters.lfos[index].enabled, isSourced (static_cast<SynthModulationSource> (static_cast<int> (SynthModulationSource::lfo1) + static_cast<int> (index))) ? 1.0f : 0.0f);
+    builder.addChild (curves.createTree());
 
     return state;
+}
+
+void varyState (yup::DataTree& state, const SynthParameters& parameters, yup::Random& random)
+{
+    using Parameter = yup::AudioParameter::Ptr;
+
+    // The most a control moves, in its normalized range; most moves are far smaller.
+    constexpr float width = 0.15f;
+
+    const auto valueOf = [&state] (const Parameter& parameter)
+    {
+        return static_cast<float> (static_cast<double> (state.getProperty (yup::Identifier (parameter->getID()))));
+    };
+
+    const auto isOn = [&valueOf] (const Parameter& enabled) { return enabled == nullptr || valueOf (enabled) >= 0.5f; };
+
+    StateBuilder builder (state);
+
+    const auto move = [&] (const Parameter& parameter)
+    {
+        const auto moved = parameter->convertToNormalizedValue (valueOf (parameter)) + (random.nextFloat() - random.nextFloat()) * width;
+        builder.set (parameter, parameter->convertToDenormalizedValue (yup::jlimit (0.01f, 1.0f, moved)));
+    };
+
+    // A control at its minimum is switched off, like an unused FM link or send, and stays so.
+    const auto nudge = [&] (const Parameter& parameter)
+    {
+        if (valueOf (parameter) > parameter->getMinimumValue())
+            move (parameter);
+    };
+
+    // The spectral controls rest at their neutral values in the middle of their ranges, so
+    // only a shape the patch already has moves; an unshaped waveform stays unshaped.
+    const auto nudgeShape = [&] (const Parameter& parameter)
+    {
+        if (valueOf (parameter) != parameter->getDefaultValue())
+            move (parameter);
+    };
+
+    for (int op = 0; op < SynthExample::oscillatorCount; ++op)
+    {
+        const auto& oscillator = parameters.oscillators[static_cast<std::size_t> (op)];
+
+        if (! isOn (oscillator.enabled))
+            continue;
+
+        for (const auto& parameter : { oscillator.level, oscillator.pan, oscillator.toFilter1, oscillator.toFilter2, oscillator.direct })
+            nudge (parameter);
+
+        for (const auto& parameter : oscillator.getSpectralParameters())
+            nudgeShape (parameter);
+
+        for (int carrier = 0; carrier < SynthExample::oscillatorCount; ++carrier)
+            if (isOn (parameters.oscillators[static_cast<std::size_t> (carrier)].enabled))
+                nudge (parameters.fm.get (carrier, op));
+    }
+
+    for (const auto& filter : parameters.filters)
+        if (isOn (filter.enabled))
+            for (const auto& parameter : { filter.cutoff, filter.resonance, filter.drive, filter.keytrack })
+                nudge (parameter);
+
+    for (const auto& envelope : parameters.envelopes)
+        if (isOn (envelope.enabled))
+            nudge (envelope.timeScale);
+
+    for (const auto& lfo : parameters.lfos)
+        if (isOn (lfo.enabled))
+            nudge (lfo.rate);
+
+    // Depths scale by up to 30% either way, so a route in use never stops or turns around.
+    for (const auto& depth : parameters.modulation.depths)
+        if (const auto value = valueOf (depth); value != 0.0f)
+            builder.set (depth, yup::jlimit (-1.0f, 1.0f, value * (1.0f + (random.nextFloat() - random.nextFloat()) * 0.3f)));
+
+    if (valueOf (parameters.unisonVoices) > 1.0f)
+    {
+        nudge (parameters.unisonDetune);
+        nudge (parameters.unisonSpread);
+    }
 }
 
 //==============================================================================
