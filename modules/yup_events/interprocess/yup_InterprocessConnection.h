@@ -222,6 +222,7 @@ private:
     void initialise();
     void initialiseWithSocket (std::unique_ptr<StreamingSocket>);
     void initialiseWithPipe (std::unique_ptr<NamedPipe>);
+    void closeConnection (int timeoutMs);
     void deletePipeAndSocket();
     void connectionMadeInt();
     void connectionLostInt();
