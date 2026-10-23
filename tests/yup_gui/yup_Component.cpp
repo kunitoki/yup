@@ -2686,6 +2686,27 @@ TEST_F (ComponentTest, FindColorWalksUpTheHierarchy)
     EXPECT_FALSE (child->findColor ("unknown-id").has_value());
 }
 
+TEST_F (ComponentTest, FindPaletteReturnsClosestPaletteUpTheHierarchy)
+{
+    const ThemePalette rootPalette (std::vector<Color> { Color (0xff101010), Color (0xffff8000) });
+    const ThemePalette parentPalette (std::vector<Color> { Color (0xff101010), Color (0xff0080ff) });
+
+    EXPECT_EQ (nullptr, child->findPalette());
+
+    root->setPalette (rootPalette);
+    ASSERT_NE (nullptr, child->findPalette());
+    EXPECT_EQ (rootPalette, *child->findPalette());
+    EXPECT_EQ (nullptr, child->getPalette());
+
+    parent->setPalette (parentPalette);
+    EXPECT_EQ (parentPalette, *child->findPalette());
+    EXPECT_EQ (rootPalette, *root->findPalette());
+
+    parent->setPalette (std::nullopt);
+    EXPECT_EQ (nullptr, parent->getPalette());
+    EXPECT_EQ (rootPalette, *child->findPalette());
+}
+
 TEST_F (ComponentTest, InternalDisplayAndCloseDispatch)
 {
     ComponentHelper::triggerDisplayChanged (*root);

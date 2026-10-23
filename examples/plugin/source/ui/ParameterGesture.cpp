@@ -49,14 +49,14 @@ void ParameterGesture::begin()
     active = true;
 }
 
-void ParameterGesture::end()
+void ParameterGesture::end (bool joinsLastStep)
 {
     if (! active)
         return;
 
     active = false;
     parameter->endChangeGesture();
-    record (startValue);
+    record (startValue, joinsLastStep);
 }
 
 void ParameterGesture::setNormalized (float normalizedValue, bool joinsLastStep)

@@ -143,27 +143,38 @@ std::vector<PresetValue> algorithm (int number, float depth, float feedback, flo
 }
 
 /** Switches off the modules a factory preset does not use: silent operators that modulate
-    nothing, and envelopes and LFOs no route reads. The first operator always plays, and the
-    filters keep their defaults unless the preset sets them. */
+    nothing, and envelopes and LFOs no route reads. An operator a route makes heard or
+    modulating counts as used. The first operator always plays, and the filters keep their
+    defaults unless the preset sets them. */
 std::vector<std::pair<std::string, bool>> getFactoryEnables (const FactoryPreset& preset)
 {
+    // Later values override earlier ones, as they do when the preset is applied.
     const auto valueOf = [&preset] (const std::string& id)
     {
-        for (const auto& value : preset.values)
-            if (value.id == id)
-                return value.value;
+        for (auto value = preset.values.rbegin(); value != preset.values.rend(); ++value)
+            if (value->id == id)
+                return value->value;
 
         return 0.0f;
+    };
+
+    const auto isRouted = [&preset] (const std::string& id)
+    {
+        return std::any_of (preset.routes.begin(), preset.routes.end(), [&id] (const auto& route) { return route.depth != 0.0f && id == route.destination; });
     };
 
     std::vector<std::pair<std::string, bool>> enables;
 
     for (int op = 2; op <= SynthExample::oscillatorCount; ++op)
     {
-        auto used = valueOf ("osc" + std::to_string (op) + ".level") > 0.0f;
+        const auto level = "osc" + std::to_string (op) + ".level";
+        auto used = valueOf (level) > 0.0f || isRouted (level);
 
         for (int carrier = 1; carrier <= SynthExample::oscillatorCount; ++carrier)
-            used = used || (carrier != op && valueOf ("fm." + std::to_string (carrier) + std::to_string (op)) != 0.0f);
+        {
+            const auto link = "fm." + std::to_string (carrier) + std::to_string (op);
+            used = used || (carrier != op && (valueOf (link) != 0.0f || isRouted (link)));
+        }
 
         enables.emplace_back ("osc" + std::to_string (op) + ".enabled", used);
     }
@@ -448,9 +459,6 @@ yup::DataTree createRandomState (const SynthParameters& parameters,
     for (const auto& macro : parameters.macros)
         builder.keep (macro);
 
-    for (const auto& parameter : parameters.getEnableParameters())
-        builder.keep (parameter);
-
     builder.set (parameters.unisonVoices, static_cast<float> (random.nextInt (3) == 0 ? 1 + random.nextInt (SynthExample::maxUnisonVoices) : 1));
     builder.set (parameters.unisonDetune, random.nextFloat() * 0.5f);
     builder.set (parameters.unisonSpread, random.nextFloat());
@@ -458,11 +466,13 @@ yup::DataTree createRandomState (const SynthParameters& parameters,
 
     // Musical FM lives on small integer ratios and moderate depths, so most of the draws do.
     const float ratios[] = { 0.5f, 1.0f, 1.0f, 2.0f, 2.0f, 3.0f, 4.0f, 5.0f, 7.0f };
+    std::array<bool, SynthExample::oscillatorCount> used {};
 
     for (std::size_t index = 0; index < parameters.oscillators.size(); ++index)
     {
         const auto& oscillator = parameters.oscillators[index];
         const auto carrier = index == 0 || random.nextInt (3) == 0;
+        used[index] = carrier;
 
         builder.set (oscillator.waveform, static_cast<float> (random.nextInt (3) == 0 ? random.nextInt (6) : 0));
         builder.set (oscillator.syncMode, static_cast<float> (random.nextInt (4) == 0 ? random.nextInt (4) : 0));
@@ -491,14 +501,20 @@ yup::DataTree createRandomState (const SynthParameters& parameters,
             if (carrier == modulator)
                 builder.set (parameter, random.nextInt (5) == 0 ? random.nextFloat() : 0.0f);
             else
-                builder.set (parameter, random.nextInt (4) == 0 ? random.nextFloat() * random.nextFloat() * 2.0f : 0.0f);
+            {
+                const auto depth = random.nextInt (4) == 0 ? random.nextFloat() * random.nextFloat() * 2.0f : 0.0f;
+                builder.set (parameter, depth);
+                used[static_cast<std::size_t> (modulator)] = used[static_cast<std::size_t> (modulator)] || depth != 0.0f;
+            }
         }
     }
 
     for (std::size_t index = 0; index < parameters.filters.size(); ++index)
     {
         const auto& filter = parameters.filters[index];
-        builder.set (filter.type, static_cast<float> (index == 0 || random.nextBool() ? 1 + random.nextInt (14) : 0));
+        const auto enabled = index == 0 || random.nextBool();
+        builder.set (filter.enabled, enabled ? 1.0f : 0.0f);
+        builder.set (filter.type, static_cast<float> (enabled ? 1 + random.nextInt (14) : 0));
         builder.set (filter.cutoff, 200.0f * std::exp2 (random.nextFloat() * 6.0f));
         builder.set (filter.resonance, random.nextFloat() * 0.7f);
         builder.set (filter.drive, random.nextBool() ? 0.0f : random.nextFloat() * 0.5f);
@@ -521,11 +537,31 @@ yup::DataTree createRandomState (const SynthParameters& parameters,
     for (int index = 0; index < liveRoutes; ++index)
     {
         const auto source = static_cast<SynthModulationSource> (random.nextInt (static_cast<int> (SynthModulationSource::lfo4) + 1));
-        routes.emplace_back (source, destinations[random.nextInt (static_cast<int> (std::size (destinations)))]);
+        const yup::String destination (destinations[random.nextInt (static_cast<int> (std::size (destinations)))]);
+        routes.emplace_back (source, destination);
         builder.set (parameters.modulation.depths[static_cast<std::size_t> (index)], (random.nextFloat() - 0.5f) * 0.6f);
+
+        // A routed FM depth makes its modulator heard: "fm.12" is operator 2 into operator 1.
+        if (destination.startsWith ("fm."))
+            used[static_cast<std::size_t> (destination.getLastCharacter() - '1')] = true;
     }
 
     builder.addChild (createRoutesTree (routes));
+
+    const auto isSourced = [&routes] (SynthModulationSource source)
+    {
+        return std::any_of (routes.begin(), routes.end(), [source] (const auto& route) { return route.first == source; });
+    };
+
+    for (std::size_t index = 0; index < parameters.oscillators.size(); ++index)
+        builder.set (parameters.oscillators[index].enabled, used[index] ? 1.0f : 0.0f);
+
+    for (std::size_t index = 0; index < parameters.envelopes.size(); ++index)
+        if (const auto& enabled = parameters.envelopes[index].enabled; enabled != nullptr)
+            builder.set (enabled, isSourced (static_cast<SynthModulationSource> (static_cast<int> (SynthModulationSource::env1) + static_cast<int> (index))) ? 1.0f : 0.0f);
+
+    for (std::size_t index = 0; index < parameters.lfos.size(); ++index)
+        builder.set (parameters.lfos[index].enabled, isSourced (static_cast<SynthModulationSource> (static_cast<int> (SynthModulationSource::lfo1) + static_cast<int> (index))) ? 1.0f : 0.0f);
 
     return state;
 }

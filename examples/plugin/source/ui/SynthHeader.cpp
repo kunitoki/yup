@@ -55,17 +55,6 @@ SynthHeader::SynthHeader (PrismProcessor& processorToControl)
     setOpaque (false);
     SynthTheme::applySection (*this, SynthTheme::Section::header);
 
-    // The rays leave the prism in the colors of the sections they light.
-    const auto ray = [] (SynthTheme::Section section) { return SynthTheme::sectionRole (section, yup::ThemePalette::Role::accent).toString(); };
-
-    logo.parseSVG (yup::String (synthLogoSvg)
-                       .replace ("#FFFFFF", SynthTheme::textPrimary (*this).toString())
-                       .replace ("#RAY1", ray (SynthTheme::Section::oscillators))
-                       .replace ("#RAY2", ray (SynthTheme::Section::matrix))
-                       .replace ("#RAY3", ray (SynthTheme::Section::filters))
-                       .replace ("#RAY4", ray (SynthTheme::Section::envelopes))
-                       .replace ("#RAY5", ray (SynthTheme::Section::lfos)));
-
     addAndMakeVisible (presetBar);
 
     saveButton.onClick = [this] { presetBar.savePreset(); };
@@ -159,11 +148,34 @@ void SynthHeader::resized()
 void SynthHeader::mouseDown (const yup::MouseEvent& event)
 {
     if (event.isRightButtonDown() && logoTile.contains (event.getPosition()) && onSettingsRequested != nullptr)
-        onSettingsRequested();
+        onSettingsRequested (event.getPosition());
+}
+
+void SynthHeader::styleChanged()
+{
+    logoNeedsColors = true;
+    repaint();
+}
+
+/** The rays leave the prism in the colors of the sections they light. */
+void SynthHeader::colorLogo()
+{
+    const auto ray = [this] (SynthTheme::Section section) { return SynthTheme::sectionAccent (*this, section).toString(); };
+
+    logo.parseSVG (yup::String (synthLogoSvg)
+                       .replace ("#FFFFFF", SynthTheme::textPrimary (*this).toString())
+                       .replace ("#RAY1", ray (SynthTheme::Section::oscillators))
+                       .replace ("#RAY2", ray (SynthTheme::Section::matrix))
+                       .replace ("#RAY3", ray (SynthTheme::Section::filters))
+                       .replace ("#RAY4", ray (SynthTheme::Section::envelopes))
+                       .replace ("#RAY5", ray (SynthTheme::Section::lfos)));
 }
 
 void SynthHeader::paint (yup::Graphics& g)
 {
+    if (std::exchange (logoNeedsColors, false))
+        colorLogo();
+
     for (const auto& tile : { logoTile, statsTile, volumeTile })
         SynthTheme::paintTile (g, *this, tile);
 

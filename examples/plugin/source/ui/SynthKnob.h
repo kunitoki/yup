@@ -72,14 +72,15 @@ public:
     /** Draws the value inside the well at all times, without the dot pointer or the pill. */
     void setShowsValueInWell (bool shouldShowValueInWell);
 
-    /** Draws the value arc and pill in this color rather than the theme accent. */
-    void setAccent (yup::Color newAccent);
+    /** Draws the value arc and pill in the color of a modulation source family (see
+        SynthTheme::sourceAccent()) rather than the section accent. */
+    void setSourceAccent (int family);
 
 private:
     static void paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme, const yup::Slider& slider);
 
     std::vector<ModulationArc> modulationArcs;
-    std::optional<yup::Color> accentOverride;
+    std::optional<int> accentFamily;
     std::optional<float> modulatedValue;
     bool showingValue = false;
     bool showsValueInWell = false;

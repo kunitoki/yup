@@ -30,7 +30,8 @@ yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
                                                   const std::vector<float>& samples,
                                                   float time,
                                                   yup::Color accent,
-                                                  yup::Color ground)
+                                                  yup::Color ground,
+                                                  bool isLight)
 {
     jassert (samples.size() == static_cast<std::size_t> (sampleCount));
 
@@ -43,13 +44,11 @@ yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
     if (target == nullptr)
         return nullptr;
 
-    const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
-
     const Params params {
         time,
         static_cast<float> (width),
         static_cast<float> (height),
-        palette.getMode() == yup::ThemePalette::Mode::light ? 1.0f : 0.0f,
+        isLight ? 1.0f : 0.0f,
         { accent.getRedFloat(), accent.getGreenFloat(), accent.getBlueFloat(), 1.0f },
         { ground.getRedFloat(), ground.getGreenFloat(), ground.getBlueFloat(), 1.0f }
     };

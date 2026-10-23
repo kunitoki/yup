@@ -20,6 +20,7 @@
 */
 #include "SynthFilterResponse.h"
 #include "SynthTheme.h"
+#include "SynthUndoHistory.h"
 
 SynthFilterResponse::SynthFilterResponse (const SynthFilterParameters& parametersToShow)
     : parameters (parametersToShow)
@@ -27,7 +28,7 @@ SynthFilterResponse::SynthFilterResponse (const SynthFilterParameters& parameter
     , resonanceGesture (*this, parametersToShow.resonance)
 {
     setOpaque (false);
-    stage.prepare (48000.0);
+    stage.prepare (sampleRate);
 
     shownValues = parameters.read();
     stage.configureForDisplay (shownValues);
@@ -48,6 +49,17 @@ bool SynthFilterResponse::syncFromParameters (SynthParameterReader modulated)
     stage.configureForDisplay (values);
     repaint();
     return true;
+}
+
+void SynthFilterResponse::setSampleRate (double newSampleRate)
+{
+    if (newSampleRate <= 0.0 || newSampleRate == sampleRate)
+        return;
+
+    sampleRate = newSampleRate;
+    stage.prepare (sampleRate);
+    stage.configureForDisplay (shownValues);
+    repaint();
 }
 
 float SynthFilterResponse::frequencyToX (float frequency) const
@@ -154,6 +166,8 @@ void SynthFilterResponse::mouseDrag (const yup::MouseEvent& event)
 
 void SynthFilterResponse::mouseUp (const yup::MouseEvent&)
 {
-    cutoffGesture.end();
-    resonanceGesture.end();
+    // One drag moves both parameters, and is undone as one step.
+    SynthUndoHistory::beginStep (*this);
+    cutoffGesture.end (true);
+    resonanceGesture.end (true);
 }

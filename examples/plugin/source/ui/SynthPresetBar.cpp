@@ -73,8 +73,13 @@ void SynthPresetBar::syncFromProcessor()
         auto& editor = editors[field];
         editor.setReadOnly (isFactory);
 
-        if (! editor.hasKeyboardFocus() && editor.getText() != values[field])
-            editor.setText (values[field], yup::dontSendNotification);
+        if (editor.getText() == values[field])
+            continue;
+
+        if (editor.hasKeyboardFocus())
+            fieldsBeforeEdit[field] = values[field];
+
+        editor.setText (values[field], yup::dontSendNotification);
     }
 
     if (info == shownInfo)
@@ -115,7 +120,7 @@ void SynthPresetBar::paint (yup::Graphics& g)
     SynthTheme::paintTile (g, *this, bounds);
 
     const auto middle = bounds.getY() + bounds.getHeight() * 0.5f;
-    SynthTheme::paintSeam (g, { bounds.getX() + 1.0f, middle }, { bounds.getRight() - 1.0f, middle });
+    SynthTheme::paintSeam (g, *this, { bounds.getX() + 1.0f, middle }, { bounds.getRight() - 1.0f, middle });
 
     g.setFillColor (SynthTheme::accent (*this));
     g.fillFittedText (shownInfo.name.isNotEmpty() ? shownInfo.name : yup::String ("Untitled"), SynthTheme::valueFont (18.0f), nameArea, yup::Justification::centerLeft);

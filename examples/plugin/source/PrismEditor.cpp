@@ -26,10 +26,11 @@
 PrismEditor::PrismEditor (PrismProcessor& processorToEdit)
     : processor (processorToEdit)
 {
-    SynthThemes::applyTheme (SynthThemes::loadSelectedTheme());
     buildInterface();
+    setComponentEffect (SynthInterface::createPostEffect());
 
     setSize (getPreferredSize().to<float>());
+    startTimerHz (10);
 }
 
 PrismEditor::~PrismEditor()
@@ -54,35 +55,35 @@ void PrismEditor::resized()
 
 void PrismEditor::paint (yup::Graphics& g)
 {
-    g.setFillColor (SynthTheme::frameColor());
+    g.setFillColor (SynthTheme::frameColor (interface != nullptr ? static_cast<const yup::Component&> (*interface) : *this));
     g.fillAll();
 }
 
 void PrismEditor::buildInterface()
 {
-    interface = std::make_unique<SynthInterface> (processor);
+    builtTheme = getTheme();
+    interface = std::make_unique<SynthInterface> (processor, builtTheme);
     interface->onThemeChosen = [this] (int index)
     {
-        pendingTheme = index;
-        startTimerHz (30);
+        processor.setThemeName (SynthThemes::getThemes()[static_cast<std::size_t> (index)].name);
+        SynthThemes::saveSelectedTheme (index);
     };
     interface->onPostEffectChanged = [this] { setComponentEffect (SynthInterface::createPostEffect()); };
-    setComponentEffect (SynthInterface::createPostEffect());
 
     addAndMakeVisible (*interface);
     resized();
 }
 
+int PrismEditor::getTheme() const
+{
+    const auto theme = SynthThemes::findTheme (processor.getThemeName());
+    return theme >= 0 ? theme : SynthThemes::loadSelectedTheme();
+}
+
 void PrismEditor::timerCallback()
 {
-    stopTimer();
-
-    if (pendingTheme < 0)
+    if (getTheme() == builtTheme)
         return;
-
-    SynthThemes::saveSelectedTheme (pendingTheme);
-    SynthThemes::applyTheme (pendingTheme);
-    pendingTheme = -1;
 
     interface.reset();
     buildInterface();

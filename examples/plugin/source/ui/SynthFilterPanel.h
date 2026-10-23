@@ -45,6 +45,9 @@ public:
     */
     void syncFromParameters (SynthParameterReader modulated = {});
 
+    /** Draws the response at the rate the voices play at, see SynthFilterResponse::setSampleRate(). */
+    void setSampleRate (double sampleRate) { response.setSampleRate (sampleRate); }
+
     void resized() override;
 
 private:

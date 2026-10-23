@@ -54,7 +54,7 @@ SynthFMPanel::SynthFMPanel (const SynthParameters& parametersToEdit)
             showPercentInWell (*knob, parameter);
 
             if (carrier == modulator)
-                knob->getKnob().setAccent (SynthTheme::lfoAccent());
+                knob->getKnob().setSourceAccent (1);
 
             addAndMakeVisible (*knob);
         }
@@ -260,5 +260,5 @@ void SynthFMPanel::paint (yup::Graphics& g)
     const auto outX = grid.getX() + cellWidth * static_cast<float> (count);
     g.fillFittedText ("OUT", font, { outX, 0.0f, cellWidth, labelSize }, yup::Justification::center);
 
-    SynthTheme::paintSeam (g, { outX, grid.getY() + 4.0f }, { outX, grid.getBottom() - 4.0f });
+    SynthTheme::paintSeam (g, *this, { outX, grid.getY() + 4.0f }, { outX, grid.getBottom() - 4.0f });
 }

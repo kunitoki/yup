@@ -102,7 +102,8 @@ int getPresetIndex (const yup::DataTree& state);
 int findRouteDestination (yup::Span<const yup::AudioParameter::Ptr> parameters, const yup::String& parameterID);
 
 /** Creates a random patch that keeps the current volume, voice mode, glide, quality and
-    macro positions, named "Random" with the macro names given. */
+    macro positions, named "Random" with the macro names given. It switches on the
+    modules it uses and off the rest. */
 yup::DataTree createRandomState (const SynthParameters& parameters,
                                  yup::Random& random,
                                  const std::array<yup::String, SynthExample::macroCount>& macroNames);

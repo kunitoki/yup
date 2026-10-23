@@ -53,6 +53,7 @@ private:
     static constexpr int columns = 2;
 
     void writeName (int macro, const yup::String& text);
+    static yup::String toStoredName (int macro, const yup::String& text);
     void finishName (int macro);
 
     PrismProcessor& processor;

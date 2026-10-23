@@ -222,14 +222,14 @@ void EnvelopeDisplay::mouseDoubleClick (const yup::MouseEvent& event)
     if (curve.getNumPoints() >= SynthCurveState::Curve::maxPoints)
         return;
 
-    const auto time = toTime (position.getX(), false);
-    auto index = 0;
+    // A point added right of the sustain point, the hold included, belongs after it: its time
+    // is read past the hold and never earlier than the sustain point's.
+    const auto sustain = curve.getSustainIndex();
+    const auto sustainTime = sustain >= 0 ? curve.getPoint (sustain).time : 0.0f;
+    const auto afterHold = sustain >= 0 && position.getX() > toScreen (sustainTime, 0.0f, false).getX();
+    const auto time = toTime (position.getX(), afterHold);
 
-    while (index < curve.getNumPoints() && curve.getPoint (index).time <= time)
-        ++index;
-
-    // A point added past the hold belongs after the sustain point, so its time is read past the hold too.
-    curve.addPoint (isAfterHold (index) ? toTime (position.getX(), true) : time, toLevel (position.getY()));
+    curve.addPoint (afterHold ? yup::jmax (time, sustainTime) : time, toLevel (position.getY()));
     publish();
 
     if (onEditFinished != nullptr)
@@ -268,7 +268,7 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
             path.lineTo (toScreen (to.time, to.level, true));
     }
 
-    const auto color = SynthTheme::envelopeAccent();
+    const auto color = SynthTheme::envelopeAccent (*this);
 
     // Paths share their data when copied, so the area under the curve gets a path of its own.
     yup::Path fill;

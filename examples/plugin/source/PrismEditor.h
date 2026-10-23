@@ -35,9 +35,10 @@
     its aspect ratio, so resizing zooms the whole instrument. The post effect sits on the
     editor rather than on the interface, so it renders at the size shown.
 
-    The interface reads its colors from the theme while it is built, so switching the
-    palette builds a new one. The switch is deferred to the editor's timer, because it is
-    requested from inside the interface being replaced.
+    The interface wears the theme of the processor it edits, so editors of different
+    instances can wear different themes. A new theme, picked in the interface or loaded
+    with a session, builds a new interface; the editor's timer notices it, which also
+    keeps the interface from being replaced from inside its own settings menu.
 
     @see SynthInterface, PrismProcessor
 */
@@ -60,9 +61,10 @@ public:
 
 private:
     void timerCallback() override;
+    int getTheme() const;
     void buildInterface();
 
     PrismProcessor& processor;
     std::unique_ptr<SynthInterface> interface;
-    int pendingTheme = -1;
+    int builtTheme = -1;
 };

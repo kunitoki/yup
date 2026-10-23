@@ -50,14 +50,15 @@ public:
     virtual void showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> modulatedValue) = 0;
 };
 
-/** Returns the color a modulation source is drawn in: the envelopes' and LFOs' section
-    accents, then the other accents for the note sources and the random one. */
-inline yup::Color getSourceColor (SynthModulationSource source)
+/** Returns the color a modulation source is drawn in, inside the interface a component is
+    in: the envelopes' and LFOs' section accents, then the other accents for the note
+    sources and the random one. */
+inline yup::Color getSourceColor (const yup::Component& scope, SynthModulationSource source)
 {
     const auto family = getSourceEnvelope (source) >= 0 ? 0
                       : getSourceLFO (source) >= 0    ? 1
                       : source == SynthModulationSource::random ? 3
                                                                  : 2;
 
-    return SynthTheme::sourceAccent (family);
+    return SynthTheme::sourceAccent (scope, family);
 }

@@ -237,7 +237,8 @@ void SynthOscillatorPanel::syncFromParameters (SynthParameterReader modulated)
     auto values = parameters.read (modulated);
     partials.fillValues (values);
 
-    if (values == shownValues)
+    // A hidden tab catches up once it shows, as its values still differ from the shown ones.
+    if (values == shownValues || ! isShowing())
         return;
 
     shownValues = values;
@@ -341,5 +342,5 @@ void SynthOscillatorPanel::paint (yup::Graphics& g)
     g.fillFittedText ("SYNC", SynthTheme::captionFont (11.5f), syncCaptionArea, yup::Justification::centerLeft);
 
     const auto controlsTop = displayArea.getBottom() + SynthTheme::controlGap + 10.0f;
-    SynthTheme::paintSeam (g, { seamX, controlsTop }, { seamX, getHeight() - 10.0f });
+    SynthTheme::paintSeam (g, *this, { seamX, controlsTop }, { seamX, getHeight() - 10.0f });
 }

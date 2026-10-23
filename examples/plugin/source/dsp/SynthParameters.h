@@ -28,8 +28,6 @@
 #include "SynthModulationParameters.h"
 #include "SynthOscillatorParameters.h"
 
-#include <vector>
-
 //==============================================================================
 /** A plain snapshot of the voice wide controls. */
 struct SynthGlobalValues
@@ -70,9 +68,6 @@ public:
 
     /** Returns the quality the network runs at. Read when the processor prepares. */
     SynthQuality getQuality() const noexcept;
-
-    /** Returns the enable switch of every module that has one; the amplitude envelope has none. */
-    std::vector<yup::AudioParameter::Ptr> getEnableParameters() const;
 
     std::array<SynthOscillatorParameters, SynthExample::oscillatorCount> oscillators;
     SynthFMParameters fm;

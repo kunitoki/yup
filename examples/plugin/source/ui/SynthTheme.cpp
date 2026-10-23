@@ -54,60 +54,26 @@ yup::Font withAxis (yup::Font font, const char* tag, float value)
 //==============================================================================
 namespace
 {
-constexpr std::array<yup::ThemePalette::Role, 8> roles { yup::ThemePalette::Role::background, yup::ThemePalette::Role::surface,
-                                                         yup::ThemePalette::Role::surfaceRaised, yup::ThemePalette::Role::outline,
-                                                         yup::ThemePalette::Role::text, yup::ThemePalette::Role::textMuted,
-                                                         yup::ThemePalette::Role::accent, yup::ThemePalette::Role::onAccent };
+const yup::Identifier sectionProperty ("synthSection");
+const yup::Identifier frameColorId ("synthFrame");
+const yup::Identifier baseAccentId ("synthBaseAccent");
 
-const yup::Identifier& getRoleId (yup::ThemePalette::Role paletteRole)
+yup::Identifier getSectionAccentId (Section section)
 {
-    static const std::array<yup::Identifier, 8> ids { "synthBackground", "synthSurface", "synthSurfaceRaised", "synthOutline",
-                                                      "synthText", "synthTextMuted", "synthAccent", "synthOnAccent" };
-
-    for (std::size_t index = 0; index < roles.size(); ++index)
-        if (roles[index] == paletteRole)
-            return ids[index];
-
-    return ids.front();
+    return yup::Identifier ("synthSectionAccent" + yup::String (static_cast<int> (section)));
 }
 
-const yup::ThemePalette& getGlobalPalette()
+yup::Color wellFrom (const yup::Component& scope, yup::Color background)
 {
-    return yup::ApplicationTheme::getGlobalTheme()->getPalette();
+    return mix (background, isDark (scope) ? yup::Colors::black : yup::Colors::white, 0.35f);
 }
 
-std::array<std::optional<yup::ThemePalette>, sectionCount>& getSectionPalettes()
+void applySectionColors (yup::Component& component)
 {
-    static std::array<std::optional<yup::ThemePalette>, sectionCount> palettes;
-    return palettes;
-}
-
-yup::Color wellFrom (yup::Color background)
-{
-    return mix (background, isDark() ? yup::Colors::black : yup::Colors::white, 0.35f);
-}
-} // namespace
-
-void setSectionPalettes (std::array<std::optional<yup::ThemePalette>, sectionCount> palettes)
-{
-    getSectionPalettes() = std::move (palettes);
-}
-
-yup::Color sectionRole (Section section, yup::ThemePalette::Role paletteRole)
-{
-    const auto& palette = getSectionPalettes()[static_cast<std::size_t> (section)];
-    return palette.has_value() ? palette->getColor (paletteRole) : getGlobalPalette().getColor (paletteRole);
-}
-
-void applySection (yup::Component& component, Section section)
-{
-    for (const auto paletteRole : roles)
-        component.setColor (getRoleId (paletteRole), sectionRole (section, paletteRole));
-
-    const auto well = wellFrom (sectionRole (section, yup::ThemePalette::Role::background));
-    const auto text = sectionRole (section, yup::ThemePalette::Role::text);
-    const auto muted = sectionRole (section, yup::ThemePalette::Role::textMuted);
-    const auto sectionAccent = sectionRole (section, yup::ThemePalette::Role::accent);
+    const auto well = wellColor (component);
+    const auto text = textPrimary (component);
+    const auto muted = textSecondary (component);
+    const auto sectionAccent = accent (component);
 
     component.setColor (yup::ComboBox::Style::backgroundColorId, well);
     component.setColor (yup::ComboBox::Style::textColorId, text);
@@ -121,63 +87,103 @@ void applySection (yup::Component& component, Section section)
     component.setColor (yup::TextEditor::Style::caretColorId, sectionAccent);
 }
 
-yup::Color role (const yup::Component& scope, yup::ThemePalette::Role paletteRole)
+void applySectionPalettes (yup::Component& component, const SectionPalettes& sections)
 {
-    if (const auto color = scope.findColor (getRoleId (paletteRole)))
-        return *color;
+    if (const auto section = component.getProperties().getVarPointer (sectionProperty); section != nullptr)
+    {
+        component.setPalette (sections[static_cast<std::size_t> (static_cast<int> (*section))]);
+        applySectionColors (component);
+    }
 
-    return getGlobalPalette().getColor (paletteRole);
+    for (int index = 0; index < component.getNumChildComponents(); ++index)
+        applySectionPalettes (*component.getChildComponent (index), sections);
+}
+} // namespace
+
+void applyTheme (yup::Component& root, const yup::ThemePalette& base, const SectionPalettes& sections)
+{
+    root.setPalette (base);
+
+    const auto background = base.getColor (yup::ThemePalette::Role::background);
+    const auto text = base.getColor (yup::ThemePalette::Role::text);
+    root.setColor (frameColorId, isDark (root) ? mix (background, yup::Colors::black, 0.5f) : mix (background, text, 0.25f));
+    root.setColor (baseAccentId, base.getColor (yup::ThemePalette::Role::accent));
+
+    for (int section = 0; section < sectionCount; ++section)
+    {
+        const auto& palette = sections[static_cast<std::size_t> (section)];
+        root.setColor (getSectionAccentId (static_cast<Section> (section)), (palette.has_value() ? *palette : base).getColor (yup::ThemePalette::Role::accent));
+    }
+
+    applySectionPalettes (root, sections);
 }
 
-yup::Color sourceAccent (int index)
+void applySection (yup::Component& component, Section section)
+{
+    component.getProperties().set (sectionProperty, static_cast<int> (section));
+}
+
+yup::Color role (const yup::Component& scope, yup::ThemePalette::Role paletteRole)
+{
+    return yup::ApplicationTheme::getGlobalTheme()->getPalette (scope).getColor (paletteRole);
+}
+
+bool isDark (const yup::Component& scope)
+{
+    return yup::ApplicationTheme::getGlobalTheme()->getPalette (scope).getMode() == yup::ThemePalette::Mode::dark;
+}
+
+yup::Color sectionAccent (const yup::Component& scope, Section section)
+{
+    return scope.findColor (getSectionAccentId (section)).value_or (accent (scope));
+}
+
+yup::Color sourceAccent (const yup::Component& scope, int index)
 {
     if (index <= 0)
-        return sectionRole (Section::envelopes, yup::ThemePalette::Role::accent);
+        return sectionAccent (scope, Section::envelopes);
 
     if (index == 1)
-        return sectionRole (Section::lfos, yup::ThemePalette::Role::accent);
+        return sectionAccent (scope, Section::lfos);
 
-    const auto [hue, saturation, lightness] = getGlobalPalette().getColor (yup::ThemePalette::Role::accent).toHSL();
+    const auto [hue, saturation, lightness] = scope.findColor (baseAccentId).value_or (accent (scope)).toHSL();
     const auto turn = static_cast<float> (yup::jmin (index, 3) - 1) / 3.0f;
     return yup::Color::fromHSL (std::fmod (hue + turn, 1.0f), saturation, lightness);
 }
 
 //==============================================================================
-yup::Color frameColor()
+yup::Color frameColor (const yup::Component& scope)
 {
-    const auto background = getGlobalPalette().getColor (yup::ThemePalette::Role::background);
-    const auto text = getGlobalPalette().getColor (yup::ThemePalette::Role::text);
-
-    return isDark() ? mix (background, yup::Colors::black, 0.5f) : mix (background, text, 0.25f);
+    return scope.findColor (frameColorId).value_or (windowBackground (scope));
 }
 
 yup::Color panelColor (const yup::Component& scope)
 {
-    return isDark() ? role (scope, yup::ThemePalette::Role::surfaceRaised)
-                    : mix (windowBackground (scope), yup::Colors::white, 0.6f);
+    return isDark (scope) ? role (scope, yup::ThemePalette::Role::surfaceRaised)
+                          : mix (windowBackground (scope), yup::Colors::white, 0.6f);
 }
 
 yup::Color stripColor (const yup::Component& scope)
 {
-    return mix (frameColor(), panelColor (scope), isDark() ? 0.45f : 0.55f);
+    return mix (frameColor (scope), panelColor (scope), isDark (scope) ? 0.45f : 0.55f);
 }
 
 yup::Color raisedColor (const yup::Component& scope)
 {
-    return isDark() ? mix (panelColor (scope), textPrimary (scope), 0.12f)
-                    : mix (panelColor (scope), yup::Colors::white, 0.5f);
+    return isDark (scope) ? mix (panelColor (scope), textPrimary (scope), 0.12f)
+                          : mix (panelColor (scope), yup::Colors::white, 0.5f);
 }
 
 yup::Color wellColor (const yup::Component& scope)
 {
-    return wellFrom (windowBackground (scope));
+    return wellFrom (scope, windowBackground (scope));
 }
 
 //==============================================================================
-void paintBevel (yup::Graphics& g, yup::Rectangle<float> bounds, float corner)
+void paintBevel (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner)
 {
-    const auto highlight = yup::Colors::white.withAlpha (isDark() ? 0.08f : 0.6f);
-    const auto shade = yup::Colors::black.withAlpha (isDark() ? 0.45f : 0.15f);
+    const auto highlight = yup::Colors::white.withAlpha (isDark (scope) ? 0.08f : 0.6f);
+    const auto shade = yup::Colors::black.withAlpha (isDark (scope) ? 0.45f : 0.15f);
     const auto edge = bounds.reduced (0.5f);
 
     g.setStrokeColorGradient (makeVerticalGradient (edge, { { 0.0f, highlight }, { 0.35f, highlight.withAlpha (0.0f) }, { 0.65f, shade.withAlpha (0.0f) }, { 1.0f, shade } }));
@@ -189,14 +195,14 @@ void paintPanel (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<f
 {
     g.setFillColor (panelColor (scope));
     g.fillRoundedRect (bounds, panelCorner);
-    paintBevel (g, bounds, panelCorner);
+    paintBevel (g, scope, bounds, panelCorner);
 }
 
 void paintTile (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds)
 {
     g.setFillColor (stripColor (scope));
     g.fillRoundedRect (bounds, panelCorner);
-    paintBevel (g, bounds, panelCorner);
+    paintBevel (g, scope, bounds, panelCorner);
 }
 
 void paintWell (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner)
@@ -205,24 +211,24 @@ void paintWell (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<fl
     g.fillRoundedRect (bounds, corner);
 
     const auto edge = bounds.reduced (0.5f);
-    const auto shade = yup::Colors::black.withAlpha (isDark() ? 0.7f : 0.25f);
+    const auto shade = yup::Colors::black.withAlpha (isDark (scope) ? 0.7f : 0.25f);
 
     g.setStrokeColorGradient (makeVerticalGradient (edge, { { 0.0f, shade }, { 0.4f, shade.withAlpha (0.0f) } }));
     g.setStrokeWidth (1.0f);
     g.strokeRoundedRect (edge, corner);
 
-    g.setStrokeColor (yup::Colors::white.withAlpha (isDark() ? 0.06f : 0.5f));
+    g.setStrokeColor (yup::Colors::white.withAlpha (isDark (scope) ? 0.06f : 0.5f));
     g.strokeLine (bounds.getX() + corner, bounds.getBottom() + 0.5f, bounds.getRight() - corner, bounds.getBottom() + 0.5f);
 }
 
 void paintRaised (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner)
 {
-    g.setFillColor (yup::Colors::black.withAlpha (isDark() ? 0.6f : 0.25f));
+    g.setFillColor (yup::Colors::black.withAlpha (isDark (scope) ? 0.6f : 0.25f));
     g.fillRoundedRect (bounds.withY (bounds.getY() + 1.0f), corner);
 
     g.setFillColor (raisedColor (scope));
     g.fillRoundedRect (bounds, corner);
-    paintBevel (g, bounds, corner);
+    paintBevel (g, scope, bounds, corner);
 }
 
 void paintTrail (yup::Graphics& g, const yup::Path& area, float x, float width, yup::Color color)
@@ -238,15 +244,15 @@ void paintTrail (yup::Graphics& g, const yup::Path& area, float x, float width, 
     g.fillPath (area);
 }
 
-void paintSeam (yup::Graphics& g, yup::Point<float> from, yup::Point<float> to)
+void paintSeam (yup::Graphics& g, const yup::Component& scope, yup::Point<float> from, yup::Point<float> to)
 {
     const auto vertical = std::abs (to.getX() - from.getX()) < std::abs (to.getY() - from.getY());
     const auto offset = vertical ? yup::Point<float> (1.0f, 0.0f) : yup::Point<float> (0.0f, 1.0f);
 
     g.setStrokeWidth (1.0f);
-    g.setStrokeColor (yup::Colors::black.withAlpha (isDark() ? 0.5f : 0.15f));
+    g.setStrokeColor (yup::Colors::black.withAlpha (isDark (scope) ? 0.5f : 0.15f));
     g.strokeLine (from, to);
-    g.setStrokeColor (yup::Colors::white.withAlpha (isDark() ? 0.05f : 0.6f));
+    g.setStrokeColor (yup::Colors::white.withAlpha (isDark (scope) ? 0.05f : 0.6f));
     g.strokeLine (from + offset, to + offset);
 }
 

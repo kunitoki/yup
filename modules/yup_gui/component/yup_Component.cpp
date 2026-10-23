@@ -1460,6 +1460,30 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
 
 //==============================================================================
 
+void Component::setPalette (std::optional<ThemePalette> newPalette)
+{
+    palette = newPalette.has_value() ? std::make_unique<ThemePalette> (std::move (*newPalette)) : nullptr;
+
+    styleChanged();
+    repaint();
+}
+
+const ThemePalette* Component::getPalette() const
+{
+    return palette.get();
+}
+
+const ThemePalette* Component::findPalette() const
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+        if (component->palette != nullptr)
+            return component->palette.get();
+
+    return nullptr;
+}
+
+//==============================================================================
+
 void Component::setMetric (const Identifier& metricId, const std::optional<float>& metric)
 {
     if (metric)
@@ -2260,26 +2284,6 @@ bool Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
     return dispatchKey (keys, position, &Component::keyUp);
 }
 
-/** Offers a key to this component, then to each parent in turn, until one handles it.
-    A component that is disabled, or inside a disabled parent, is passed over, as isEnabled()
-    takes the parents into account. A handler that deletes its own component ends the climb,
-    as if it handled the key. */
-bool Component::dispatchKey (const KeyPress& keys, const Point<float>& position, KeyHandler handler)
-{
-    for (auto* component = this; component != nullptr; component = component->parentComponent)
-    {
-        if (! component->isVisible() || ! component->isEnabled())
-            continue;
-
-        auto bailOutChecker = BailOutChecker (component);
-
-        if ((component->*handler) (keys, position) || bailOutChecker.shouldBailOut())
-            return true;
-    }
-
-    return false;
-}
-
 //==============================================================================
 
 void Component::internalTextInput (const String& text)
@@ -2685,6 +2689,24 @@ AffineTransform Component::getTransformToScreen() const
     }
 
     return transform.translated (getTopLevelScreenOrigin());
+}
+
+//==============================================================================
+
+bool Component::dispatchKey (const KeyPress& keys, const Point<float>& position, KeyHandler handler)
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (! component->isVisible() || ! component->isEnabled())
+            continue;
+
+        auto bailOutChecker = BailOutChecker (component);
+
+        if ((component->*handler) (keys, position) || bailOutChecker.shouldBailOut())
+            return true;
+    }
+
+    return false;
 }
 
 } // namespace yup

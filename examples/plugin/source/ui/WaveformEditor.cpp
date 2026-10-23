@@ -288,7 +288,8 @@ yup::GpuTexture::Ptr WaveformEditor::renderLandscape (yup::Graphics& g)
                            displaySamples,
                            animationTime,
                            SynthTheme::accent (*this),
-                           SynthTheme::wellColor (*this));
+                           SynthTheme::wellColor (*this),
+                           ! SynthTheme::isDark (*this));
 }
 
 /** True while a stroke or a rotation is in progress. */

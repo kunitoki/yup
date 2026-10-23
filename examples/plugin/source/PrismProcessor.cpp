@@ -22,6 +22,12 @@
 #include "PrismProcessor.h"
 #include "PrismEditor.h"
 #include "PluginLogger.h"
+#include "ui/SynthThemes.h"
+
+namespace
+{
+const yup::Identifier themeProperty ("theme");
+} // namespace
 
 PrismProcessor::PrismProcessor()
     : yup::AudioProcessor ("Prism",
@@ -42,6 +48,8 @@ PrismProcessor::PrismProcessor()
 
     for (int index = 0; index < SynthPatch::getNumFactoryPresets(); ++index)
         presetNames.push_back (SynthPatch::getFactoryPresetName (index));
+
+    themeName = SynthThemes::getThemes()[static_cast<std::size_t> (SynthThemes::loadSelectedTheme())].name;
 }
 
 PrismProcessor::~PrismProcessor()
@@ -255,12 +263,22 @@ void PrismProcessor::randomize()
 //==============================================================================
 yup::Result PrismProcessor::loadStateFromDataTree (const yup::DataTree& state)
 {
-    return applyState (state, {});
+    if (auto result = applyState (state, {}); result.failed())
+        return result;
+
+    if (const auto name = state.getProperty (themeProperty, {}).toString(); name.isNotEmpty())
+    {
+        const yup::SpinLock::ScopedLockType lock (themeNameLock);
+        themeName = name;
+    }
+
+    return yup::Result::ok();
 }
 
 yup::Result PrismProcessor::saveStateIntoDataTree (yup::DataTree& state)
 {
     state = SynthPatch::createState (getParameters(), getPatchState(), currentPreset.load(), getPresetInfo());
+    state.beginTransaction().setProperty (themeProperty, getThemeName());
     return yup::Result::ok();
 }
 
@@ -268,6 +286,10 @@ yup::Result PrismProcessor::savePresetFile (const yup::File& file)
 {
     auto info = getPresetInfo();
     info.name = file.getFileNameWithoutExtension();
+
+    // A factory preset saved as a file becomes the user's own.
+    if (currentPreset.load() >= 0)
+        info.bank = info.author = {};
 
     const auto xml = SynthPatch::createState (getParameters(), getPatchState(), -1, info).createXml();
 
@@ -296,6 +318,26 @@ yup::Result PrismProcessor::loadPresetFile (const yup::File& file)
     }
 
     return yup::Result::ok();
+}
+
+yup::String PrismProcessor::getThemeName() const
+{
+    const yup::SpinLock::ScopedLockType lock (themeNameLock);
+    return themeName;
+}
+
+void PrismProcessor::setThemeName (const yup::String& newName)
+{
+    {
+        const yup::SpinLock::ScopedLockType lock (themeNameLock);
+
+        if (themeName == newName)
+            return;
+
+        themeName = newName;
+    }
+
+    updateHostDisplay (ChangeDetails {}.withNonParameterStateChanged (true));
 }
 
 SynthPatch::PresetInfo PrismProcessor::getPresetInfo() const

@@ -50,8 +50,12 @@ public:
     /** Starts a drag and remembers the normalized value it started from. */
     void begin();
 
-    /** Ends the drag, if one is running. */
-    void end();
+    /** Ends the drag, if one is running.
+
+        @param joinsLastStep True to undo it together with the step recorded just before,
+                             for a drag that moves many parameters
+    */
+    void end (bool joinsLastStep = false);
 
     /** True while a drag runs. */
     bool isActive() const noexcept { return active; }

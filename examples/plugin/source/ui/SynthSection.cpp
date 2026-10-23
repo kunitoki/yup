@@ -91,7 +91,7 @@ void SynthSection::updatePageLook()
     }
 }
 
-bool SynthSection::syncFromParameters()
+void SynthSection::syncFromParameters()
 {
     auto changed = false;
 
@@ -114,8 +114,6 @@ bool SynthSection::syncFromParameters()
         updatePageLook();
         repaint();
     }
-
-    return changed;
 }
 
 yup::Rectangle<float> SynthSection::getTabBounds (int index) const
@@ -169,7 +167,7 @@ void SynthSection::paint (yup::Graphics& g)
     g.setFillColor (SynthTheme::stripColor (*this));
     g.fillRoundedRect (strip, corner, corner, 0.0f, 0.0f);
 
-    g.setFillColor (yup::Colors::black.withAlpha (SynthTheme::isDark() ? 0.6f : 0.2f));
+    g.setFillColor (yup::Colors::black.withAlpha (SynthTheme::isDark (*this) ? 0.6f : 0.2f));
     g.fillRect (strip.getX(), strip.getBottom() - 1.0f, strip.getWidth(), 1.0f);
 
     const auto font = SynthTheme::captionFont (13.5f);
@@ -188,7 +186,7 @@ void SynthSection::paint (yup::Graphics& g)
         }
         else
         {
-            SynthTheme::paintSeam (g, { area.getRight() - 1.0f, area.getY() + 1.0f }, { area.getRight() - 1.0f, area.getBottom() - 1.0f });
+            SynthTheme::paintSeam (g, *this, { area.getRight() - 1.0f, area.getY() + 1.0f }, { area.getRight() - 1.0f, area.getBottom() - 1.0f });
         }
 
         auto text = area.withTrimmedLeft (tabPadding).withTrimmedRight (tabPadding);

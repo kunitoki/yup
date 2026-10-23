@@ -58,23 +58,37 @@ void SynthMacroPanel::syncFromProcessor()
 
     for (int macro = 0; macro < SynthExample::macroCount; ++macro)
     {
-        auto& name = names[static_cast<std::size_t> (macro)];
+        const auto index = static_cast<std::size_t> (macro);
+        auto& name = names[index];
         const auto shown = info.getMacroName (macro);
 
-        if (! name.hasKeyboardFocus() && name.getText() != shown)
+        if (! name.hasKeyboardFocus())
+        {
+            if (name.getText() != shown)
+                name.setText (shown, yup::dontSendNotification);
+        }
+        else if (info.macroNames[index] != toStoredName (macro, name.getText()))
+        {
+            namesBeforeEdit[index] = info.macroNames[index];
             name.setText (shown, yup::dontSendNotification);
+        }
     }
 }
 
-/** Stores a name as it is typed; an empty one, or the default, leaves the macro unnamed. */
 void SynthMacroPanel::writeName (int macro, const yup::String& text)
 {
     auto info = processor.getPresetInfo();
+    info.macroNames[static_cast<std::size_t> (macro)] = toStoredName (macro, text);
+    processor.setPresetInfo (std::move (info));
+}
+
+/** Returns a name as the patch keeps it; an empty one, or the default, leaves the macro unnamed. */
+yup::String SynthMacroPanel::toStoredName (int macro, const yup::String& text)
+{
     const auto trimmed = text.trim();
     const auto isDefault = trimmed.isEmpty() || trimmed == SynthPatch::PresetInfo().getMacroName (macro);
 
-    info.macroNames[static_cast<std::size_t> (macro)] = isDefault ? yup::String() : trimmed;
-    processor.setPresetInfo (std::move (info));
+    return isDefault ? yup::String() : trimmed;
 }
 
 /** Keeps a finished rename as one undo step. */

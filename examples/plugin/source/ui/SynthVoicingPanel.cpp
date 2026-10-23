@@ -109,11 +109,11 @@ void SynthVoicingPanel::paint (yup::Graphics& g)
         const auto line = area.withHeight (titleHeight);
         g.setFillColor (SynthTheme::textPrimary (*this));
         g.fillFittedText (title, titleFont, line, yup::Justification::centerLeft);
-        SynthTheme::paintSeam (g, { line.getX(), line.getBottom() + 1.0f }, { line.getRight(), line.getBottom() + 1.0f });
+        SynthTheme::paintSeam (g, *this, { line.getX(), line.getBottom() + 1.0f }, { line.getRight(), line.getBottom() + 1.0f });
     }
 
     const auto seamX = (voicingArea.getRight() + unisonArea.getX()) * 0.5f;
-    SynthTheme::paintSeam (g, { seamX, voicingArea.getY() + 4.0f }, { seamX, voicingArea.getBottom() - 4.0f });
+    SynthTheme::paintSeam (g, *this, { seamX, voicingArea.getY() + 4.0f }, { seamX, voicingArea.getBottom() - 4.0f });
 
     const auto captionFont = SynthTheme::captionFont (12.0f);
     const auto mono = shownMode != SynthPlayMode::poly;

@@ -82,6 +82,7 @@ private:
     bool ensureTargets (yup::GpuDevice::Ptr device, int width, int height, int smallWidth, int smallHeight);
 
     const Options options;
+    yup::GpuDevice::Ptr pipelineDevice;
     yup::GpuPipeline::Ptr prefilter;
     yup::GpuPipeline::Ptr blur;
     yup::GpuPipeline::Ptr composite;

@@ -42,8 +42,8 @@ class SynthHeader : public yup::Component
 public:
     explicit SynthHeader (PrismProcessor& processorToControl);
 
-    /** Called when the logo is right clicked, to show the global settings. */
-    std::function<void()> onSettingsRequested;
+    /** Called with the click position, in the header, when the logo is right clicked, to show the global settings. */
+    std::function<void (yup::Point<float>)> onSettingsRequested;
 
     /** Shows the processor's preset, voices, load and output level. Call at the display rate. */
     void syncFromProcessor();
@@ -54,14 +54,18 @@ public:
     void resized() override;
     void paint (yup::Graphics& g) override;
     void mouseDown (const yup::MouseEvent& event) override;
+    void styleChanged() override;
 
 private:
     static constexpr float logoWidth = 214.0f;
     static constexpr float iconTileSize = 46.0f;
     static constexpr float volumeWidth = 120.0f;
 
+    void colorLogo();
+
     PrismProcessor& processor;
     yup::Drawable logo;
+    bool logoNeedsColors = true;
     yup::Rectangle<float> logoTile;
     yup::Rectangle<float> logoArea;
     yup::Rectangle<float> statsTile;

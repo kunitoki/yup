@@ -49,9 +49,9 @@ void SynthKnob::setShowsValueInWell (bool shouldShowValueInWell)
     repaint();
 }
 
-void SynthKnob::setAccent (yup::Color newAccent)
+void SynthKnob::setSourceAccent (int family)
 {
-    accentOverride = newAccent;
+    accentFamily = family;
     repaint();
 }
 
@@ -91,7 +91,7 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
     const auto valueAngle = startAngle + sweepAngle * value;
     const auto enabled = slider.isEnabled();
     const auto accent = ! enabled                                         ? SynthTheme::textSecondary (slider)
-                        : knob != nullptr && knob->accentOverride.has_value() ? *knob->accentOverride
+                        : knob != nullptr && knob->accentFamily.has_value() ? SynthTheme::sourceAccent (slider, *knob->accentFamily)
                                                                               : SynthTheme::accent (slider);
 
     const auto strokeArc = [&] (float radius, float from, float to, float width, yup::Color color)

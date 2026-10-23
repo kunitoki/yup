@@ -32,11 +32,11 @@
 /** The palettes the instrument can wear, and the one the user picked last.
 
     Each theme is a set of coolors palettes parsed with yup::ThemePalette::fromString, in
-    dark or light mode: a base, and one for every section that has its own. The choice belongs to the user rather than to the patch, so it is
-    kept in a small settings file in the user's application data folder.
-
-    The palette lives in the global theme, so every Prism editor in a process shows
-    the same one.
+    dark or light mode: a base, and one for every section that has its own. Each plugin
+    instance keeps its own theme with its session (see PrismProcessor::getThemeName()),
+    and the palettes are set on its interface, so editors in one process can wear
+    different themes. The theme picked last is kept in a small settings file in the
+    user's application data folder, as the one new instances start with.
 */
 namespace SynthThemes
 {
@@ -56,9 +56,12 @@ const std::vector<Theme>& getThemes();
 /** Returns the theme the user picked last, or the default. */
 int loadSelectedTheme();
 
-/** Remembers a theme for the next session. */
+/** Remembers a theme as the one new instances start with. */
 void saveSelectedTheme (int index);
 
-/** Makes a theme's palette the global one. */
-void applyTheme (int index);
+/** Returns the index of the theme with a name, or -1. */
+int findTheme (const yup::String& name);
+
+/** Themes an interface, see SynthTheme::applyTheme(). */
+void applyTheme (yup::Component& root, int index);
 } // namespace SynthThemes

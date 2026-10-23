@@ -156,6 +156,6 @@ void SynthModulationRow::paint (yup::Graphics& g)
     const auto source = static_cast<SynthModulationSource> (yup::jmax (0, selected));
     const auto dot = yup::Rectangle<float> (spacing, (getHeight() - dotSize) * 0.5f, dotSize, dotSize);
 
-    g.setFillColor (selected >= 0 ? getSourceColor (source) : SynthTheme::textSecondary (*this).withAlpha (0.4f));
+    g.setFillColor (selected >= 0 ? getSourceColor (*this, source) : SynthTheme::textSecondary (*this).withAlpha (0.4f));
     g.fillRoundedRect (dot, 2.0f);
 }

@@ -45,8 +45,9 @@ void collectModulationTargets (yup::Component& component, std::vector<SynthModul
 } // namespace
 
 //==============================================================================
-SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
+SynthInterface::SynthInterface (PrismProcessor& processorToEdit, int themeToWear)
     : processor (processorToEdit)
+    , theme (themeToWear)
     , keyboardComponent (processor.getKeyboardState(), yup::MidiKeyboardComponent::horizontalKeyboard)
     , pitchWheelComponent (processor.getKeyboardState(), "PitchWheel")
     , modWheelComponent (processor.getKeyboardState(), "ModWheel")
@@ -88,7 +89,7 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     mainPage.addAndMakeVisible (modWheelComponent);
 
     header = std::make_unique<SynthHeader> (processor);
-    header->onSettingsRequested = [this] { showSettingsMenu(); };
+    header->onSettingsRequested = [this] (yup::Point<float> position) { showSettingsMenu (getLocalPoint (header.get(), position)); };
     addAndMakeVisible (*header);
 
     for (int index = 0; index < SynthExample::oscillatorCount; ++index)
@@ -115,15 +116,11 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
         lfoPanels[static_cast<std::size_t> (index)] = std::make_unique<SynthLFOPanel> (parameters.lfos[static_cast<std::size_t> (index)], processor.getCurves(), index);
     }
 
-    const auto makeCaption = [] (const yup::String& text, std::optional<yup::Color> color)
+    const auto makeCaption = [] (const yup::String& text)
     {
         auto label = std::make_unique<yup::Label>();
         label->setText (text, yup::dontSendNotification);
         label->setFont (SynthTheme::captionFont (12.0f));
-
-        if (color.has_value())
-            label->setColor (yup::Label::Style::textFillColorId, *color);
-
         label->setJustification (yup::Justification::centerRight);
         return label;
     };
@@ -137,7 +134,7 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
 
     fmPanel = std::make_unique<SynthFMPanel> (parameters);
     modulationPage = std::make_unique<SynthModulationPage> (parameters, processor.getRoutes(), processor.getParameters());
-    matrixCaption = makeCaption (yup::String::fromUTF8 ("ROW \xe2\x86\x90 COLUMN"), std::nullopt);
+    matrixCaption = makeCaption (yup::String::fromUTF8 ("ROW \xe2\x86\x90 COLUMN"));
     matrixSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "FM", fmPanel.get(), nullptr, false, { { &fmPanel->getResetButton(), 60.0f }, { &fmPanel->getAlgorithmButton(), 88.0f } } },
                                                                                      { "Mods", modulationPage.get() } },
                                                     SynthTheme::Section::matrix,
@@ -156,7 +153,7 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     filterSection = std::make_unique<SynthSection> (std::move (filterTabs), SynthTheme::Section::filters, std::vector<SynthSection::StripControl> { { routingSelector.get(), 96.0f } });
 
     std::vector<SynthSection::Tab> envelopeTabs;
-    ampCaption = makeCaption (yup::String::fromUTF8 ("\xe2\x86\x92 AMP"), SynthTheme::envelopeAccent());
+    ampCaption = makeCaption (yup::String::fromUTF8 ("\xe2\x86\x92 AMP"));
 
     for (int index = 0; index < SynthExample::envelopeCount; ++index)
     {
@@ -191,14 +188,14 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     voicingPanel = std::make_unique<SynthVoicingPanel> (parameters);
     mainPage.addAndMakeVisible (*voicingPanel);
 
-
-
     collectModulationTargets (*this, modulationTargets);
+
+    SynthThemes::applyTheme (*this, theme);
+    ampCaption->setColor (yup::Label::Style::textFillColorId, SynthTheme::envelopeAccent (*this));
 
     // Menus and combo box lists open inside the interface, so the post effect draws them too.
     setPopupContainer (true);
     syncFromProcessor();
-
 
     // Every repaint redraws the whole interface under the post effect, so the displays
     // follow the processor at 30 Hz; dragging a control still repaints it at once.
@@ -268,7 +265,7 @@ void SynthInterface::layoutMainPage()
 
 void SynthInterface::paint (yup::Graphics& g)
 {
-    g.setFillColor (SynthTheme::frameColor());
+    g.setFillColor (SynthTheme::frameColor (*this));
     g.fillAll();
 
     SynthTheme::paintTile (g, keyboardComponent, wheelsTile);
@@ -281,7 +278,7 @@ void SynthInterface::paint (yup::Graphics& g)
     g.fillFittedText ("MOD", SynthTheme::captionFont (10.5f), captions.withTrimmedLeft (captions.getWidth() - wheelWidth).withSizeKeepingCenter (wheelWidth + 12.0f, captions.getHeight()), yup::Justification::center);
 }
 
-void SynthInterface::showSettingsMenu()
+void SynthInterface::showSettingsMenu (yup::Point<float> position)
 {
     auto& settings = SynthSettings::get();
     auto& neon = settings.neon;
@@ -305,14 +302,13 @@ void SynthInterface::showSettingsMenu()
 
     auto menu = yup::PopupMenu::create (yup::PopupMenu::Options {}
                                             .withParentComponent (this)
-                                            .withPosition (screenToLocal (yup::Desktop::getInstance()->getCurrentMouseLocation())));
+                                            .withPosition (position));
 
     auto themeMenu = yup::PopupMenu::create();
     const auto& themes = SynthThemes::getThemes();
-    const auto selectedTheme = SynthThemes::loadSelectedTheme();
 
     for (int index = 0; index < static_cast<int> (themes.size()); ++index)
-        themeMenu->addItem (themes[static_cast<std::size_t> (index)].name, themeBase + index, true, index == selectedTheme);
+        themeMenu->addItem (themes[static_cast<std::size_t> (index)].name, themeBase + index, true, index == theme);
 
     menu->addSubMenu ("Theme", themeMenu);
 
@@ -477,7 +473,6 @@ void SynthInterface::timerCallback()
     for (auto& panel : oscillatorPanels)
         panel->setAnimating (playing);
 
-
     for (int index = 0; index < SynthExample::lfoCount; ++index)
         lfoPanels[static_cast<std::size_t> (index)]->setPhase (processor.getLFOPhase (index));
 
@@ -487,7 +482,6 @@ void SynthInterface::timerCallback()
     header->syncFromProcessor();
 }
 
-/** Shows every parameter and partial change, wherever it came from. */
 /** Shows every route on the controls of its destination, and works out the values the
     most recent note plays, so the oscillators can draw their modulated spectra. */
 void SynthInterface::updateModulation()
@@ -519,7 +513,7 @@ void SynthInterface::updateModulation()
             continue;
 
         const auto destination = static_cast<std::size_t> (route.destination);
-        arcsByParameter[destination].push_back ({ depth, getSourceColor (route.source), isBipolarSource (route.source) });
+        arcsByParameter[destination].push_back ({ depth, getSourceColor (*this, route.source), isBipolarSource (route.source) });
 
         const auto amount = playing ? processor.getRouteAmount (slot) : 0.0f;
 
@@ -557,7 +551,10 @@ void SynthInterface::syncFromProcessor()
         panel->syncFromParameters (modulated);
 
     for (auto& panel : filterPanels)
+    {
+        panel->setSampleRate (processor.getSampleRate());
         panel->syncFromParameters (modulated);
+    }
 
     for (auto& panel : envelopePanels)
         panel->syncFromParameters();

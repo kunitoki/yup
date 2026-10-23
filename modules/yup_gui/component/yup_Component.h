@@ -1516,6 +1516,26 @@ public:
     virtual void modifierKeysChanged (const KeyModifiers& modifiers);
 
     //==============================================================================
+    /** Makes this component hold the popups opened by the components inside it.
+
+        Popups, such as menus and combo box lists, are normally added to the top level
+        component. Inside a popup container they are added to the container instead, so they
+        are presented like the rest of its subtree: through its component effect, for example
+        a post-processing pass over a whole interface, and with its input mapping.
+
+        @param shouldBePopupContainer True to hold the popups of this component's subtree.
+
+        @see getPopupParentComponent
+     */
+    void setPopupContainer (bool shouldBePopupContainer);
+
+    /** Returns true if this component holds the popups opened inside it.
+
+        @see setPopupContainer
+     */
+    bool isPopupContainer() const;
+
+    //==============================================================================
 
     /** Sets the style for this component.
 
@@ -1556,6 +1576,30 @@ public:
         @return The color of the component.
      */
     std::optional<Color> findColor (const Identifier& colorId) const;
+
+    //==============================================================================
+    /** Gives this component and everything inside it a palette of its own.
+
+        The theme draws the component and its children from the closest palette up the
+        parent chain instead of the theme's own: ApplicationTheme::findColor() resolves the
+        palette derived colors from it, and ApplicationTheme::getPalette (const Component&)
+        returns it. Colors set with setColor() still take precedence. Popup menus opened
+        relative to a component take its palette too.
+
+        This lets windows, or several plugin editors in one process, wear different palettes
+        with a single global theme.
+
+        @param newPalette The palette, or std::nullopt to follow the parent's again.
+
+        @see findPalette, ApplicationTheme::setPalette
+     */
+    void setPalette (std::optional<ThemePalette> newPalette);
+
+    /** Returns the palette set on this component with setPalette(), or nullptr. */
+    const ThemePalette* getPalette() const;
+
+    /** Returns the closest palette set with setPalette() on this component or a parent, or nullptr. */
+    const ThemePalette* findPalette() const;
 
     //==============================================================================
 
@@ -1675,25 +1719,6 @@ public:
         @see setManuallyComposited
      */
     bool isManuallyComposited() const;
-
-    /** Makes this component hold the popups opened by the components inside it.
-
-        Popups, such as menus and combo box lists, are normally added to the top level
-        component. Inside a popup container they are added to the container instead, so they
-        are presented like the rest of its subtree: through its component effect, for example
-        a post-processing pass over a whole interface, and with its input mapping.
-
-        @param shouldBePopupContainer True to hold the popups of this component's subtree.
-
-        @see getPopupParentComponent
-     */
-    void setPopupContainer (bool shouldBePopupContainer);
-
-    /** Returns true if this component holds the popups opened inside it.
-
-        @see setPopupContainer
-     */
-    bool isPopupContainer() const;
 
     /** Renders this component's subtree, including its effect, into a texture.
 
@@ -1851,6 +1876,7 @@ private:
     GestureListenerList gestureListeners;
     ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;
+    std::unique_ptr<ThemePalette> palette;
     NamedValueSet properties;
     MouseCursor mouseCursor;
     GestureType wantedGestures = GestureType::none;

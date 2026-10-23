@@ -24,7 +24,6 @@
 
 namespace SynthThemes
 {
-
 const std::vector<Theme>& getThemes()
 {
     // Prism splits white light into the spectrum: each section takes one of its colors,
@@ -53,14 +52,7 @@ const std::vector<Theme>& getThemes()
 
 int loadSelectedTheme()
 {
-    const auto& name = SynthSettings::get().theme;
-    const auto& themes = getThemes();
-
-    for (std::size_t index = 0; index < themes.size(); ++index)
-        if (name == themes[index].name)
-            return static_cast<int> (index);
-
-    return 0;
+    return yup::jmax (0, findTheme (SynthSettings::get().theme));
 }
 
 void saveSelectedTheme (int index)
@@ -74,15 +66,24 @@ void saveSelectedTheme (int index)
     SynthSettings::save();
 }
 
-void applyTheme (int index)
+int findTheme (const yup::String& name)
+{
+    const auto& themes = getThemes();
+
+    for (std::size_t index = 0; index < themes.size(); ++index)
+        if (name == themes[index].name)
+            return static_cast<int> (index);
+
+    return -1;
+}
+
+void applyTheme (yup::Component& root, int index)
 {
     const auto& themes = getThemes();
     const auto& theme = themes[static_cast<std::size_t> (yup::jlimit (0, static_cast<int> (themes.size()) - 1, index))];
 
-    if (auto palette = yup::ThemePalette::fromString (theme.palette, theme.mode); palette.wasOk())
-        yup::ApplicationTheme::getGlobalTheme()->setPalette (palette.getReference());
-
-    std::array<std::optional<yup::ThemePalette>, SynthTheme::sectionCount> sections;
+    auto base = yup::ThemePalette::fromString (theme.palette, theme.mode);
+    SynthTheme::SectionPalettes sections;
 
     for (std::size_t index = 0; index < sections.size(); ++index)
     {
@@ -93,6 +94,6 @@ void applyTheme (int index)
             sections[index] = palette.getReference();
     }
 
-    SynthTheme::setSectionPalettes (std::move (sections));
+    SynthTheme::applyTheme (root, base.wasOk() ? base.getReference() : yup::ThemePalette(), sections);
 }
 } // namespace SynthThemes

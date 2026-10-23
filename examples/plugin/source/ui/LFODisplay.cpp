@@ -94,7 +94,7 @@ void LFODisplay::paint (yup::Graphics& g)
             path.lineTo (x, y);
     }
 
-    const auto color = SynthTheme::lfoAccent();
+    const auto color = SynthTheme::lfoAccent (*this);
     const auto playing = ! random && phase >= 0.0f;
     const auto markerX = area.getX() + area.getWidth() * phase;
 

@@ -47,6 +47,9 @@ public:
     */
     bool syncFromParameters (SynthParameterReader modulated = {});
 
+    /** Draws the response at the rate the voices play at; ignored until it is known. */
+    void setSampleRate (double newSampleRate);
+
     void paint (yup::Graphics& g) override;
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseDrag (const yup::MouseEvent& event) override;
@@ -68,6 +71,7 @@ private:
     const SynthFilterParameters& parameters;
     SynthFilterStage stage;
     SynthFilterValues shownValues;
+    double sampleRate = 48000.0;
     ParameterGesture cutoffGesture;
     ParameterGesture resonanceGesture;
 };

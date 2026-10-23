@@ -109,6 +109,20 @@ std::optional<yup::Point<float>> SynthNeonEffect::contentToDisplay (yup::Point<f
 
 bool SynthNeonEffect::ensurePipelines (yup::GraphicsContext& context)
 {
+    const auto device = context.getGpuDevice();
+
+    // A device replacing a lost one needs pipelines and targets of its own.
+    if (device != pipelineDevice)
+    {
+        pipelineDevice = device;
+        prefilter = blur = composite = nullptr;
+        smallA = smallB = output = nullptr;
+        compileAttempted = false;
+    }
+
+    if (device == nullptr || device->isDeviceLost())
+        return false;
+
     if (prefilter != nullptr && blur != nullptr && composite != nullptr)
         return true;
 
@@ -117,7 +131,6 @@ bool SynthNeonEffect::ensurePipelines (yup::GraphicsContext& context)
 
     compileAttempted = true;
 
-    const auto device = context.getGpuDevice();
     prefilter = compile (device, prism::synthGlowPrefilterShader_data, prism::synthGlowPrefilterShader_size, "glow prefilter");
     blur = compile (device, prism::synthBlurShader_data, prism::synthBlurShader_size, "blur");
     composite = compile (device, prism::synthNeonCompositeShader_data, prism::synthNeonCompositeShader_size, "composite");
@@ -182,10 +195,12 @@ void SynthNeonEffect::apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::
     const float horizontal[] { glowSigma, radius, w, h, 1.0f, 0.0f, 0.0f, 0.0f };
     const float vertical[] { glowSigma, radius, w, h, 0.0f, 1.0f, 0.0f, 0.0f };
 
-    auto glow = run (*smallA, prefilter, input, prefilterParams, sizeof (prefilterParams));
+    // Without glow the composite adds none, so it reads the input in its place.
+    auto glow = input;
 
     if (options.glow)
     {
+        glow = run (*smallA, prefilter, input, prefilterParams, sizeof (prefilterParams));
         glow = run (*smallB, blur, glow, horizontal, sizeof (horizontal));
         glow = run (*smallA, blur, glow, vertical, sizeof (vertical));
     }

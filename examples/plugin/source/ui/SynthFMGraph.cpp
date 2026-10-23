@@ -57,7 +57,7 @@ void SynthFMGraph::paint (yup::Graphics& g)
     const auto above = nodeY - nodeRadius - area.getY() - 2.0f;
     const auto below = busY - nodeY - nodeRadius - 8.0f;
     const auto accent = SynthTheme::accent (*this);
-    const auto feedbackColor = SynthTheme::lfoAccent();
+    const auto feedbackColor = SynthTheme::lfoAccent (*this);
     const auto count = SynthExample::oscillatorCount;
 
     const auto alphaOf = [this] (int op) { return state.enabled[static_cast<std::size_t> (op)] ? 1.0f : 0.35f; };

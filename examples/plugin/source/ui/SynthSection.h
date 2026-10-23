@@ -68,13 +68,8 @@ public:
     /** Shows a tab's page. */
     void selectTab (int index);
 
-    /** Returns the selected tab. */
-    int getSelectedTab() const noexcept { return selected; }
-
-    /** Shows the modules' enable states.
-        @returns true when one of them changed.
-    */
-    bool syncFromParameters();
+    /** Shows the modules' enable states. */
+    void syncFromParameters();
 
     void resized() override;
     void paint (yup::Graphics& g) override;

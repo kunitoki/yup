@@ -35,7 +35,7 @@ namespace SynthSettings
 /** Every setting. */
 struct Values
 {
-    yup::String theme;
+    yup::String theme; /**< The theme picked last, which new instances start with. */
     int frameRate = 60; /**< Frames per second, or 0 to follow the display refresh. */
     bool postEffect = true;
     bool undo = true; /**< Keeps an undo history of edits; off forgets it. */

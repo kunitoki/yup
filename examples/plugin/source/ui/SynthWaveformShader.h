@@ -52,6 +52,7 @@ public:
         @param time     The animation time, in seconds
         @param accent   The color of the ridges
         @param ground   The color the landscape fades into
+        @param isLight  True when the landscape sits on a light palette
 
         @returns The rendered landscape, or nullptr when no GPU path is available.
     */
@@ -62,7 +63,8 @@ public:
                                  const std::vector<float>& samples,
                                  float time,
                                  yup::Color accent,
-                                 yup::Color ground);
+                                 yup::Color ground,
+                                 bool isLight);
 
 private:
     struct alignas (16) Params

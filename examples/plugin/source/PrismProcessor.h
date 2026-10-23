@@ -113,6 +113,16 @@ public:
     /** Replaces the description of the current patch, saved with it from now on. Message thread. */
     void setPresetInfo (SynthPatch::PresetInfo newInfo);
 
+    /** Returns the name of the theme the editors of this instance wear (see SynthThemes).
+
+        Each instance keeps its own, saved with the session but not with presets; a new
+        instance starts with the theme picked last.
+    */
+    yup::String getThemeName() const;
+
+    /** Chooses the theme the editors of this instance wear. Message thread. */
+    void setThemeName (const yup::String& newName);
+
     /** Returns the history of the edits made in the editor, kept here so it outlives the
         editor. Replacing the patch clears it. Message thread.
     */
@@ -148,6 +158,9 @@ public:
 
     /** Returns how many sounding voices run their operators oversampled. */
     int getNumOversamplingVoices() const noexcept { return engine.getNumOversamplingVoices(); }
+
+    /** Returns the sample rate the voices play at, or 0 before the first prepare. */
+    double getSampleRate() const noexcept { return preparedSampleRate.load(); }
 
     /** Returns the oversampling factor the engine was prepared with. */
     int getOversamplingFactor() const noexcept { return ::getOversamplingFactor (preparedQuality); }
@@ -189,7 +202,7 @@ private:
     HarmonicSynthEngine engine;
     std::array<yup::SoftClipper<float>, 2> masterClippers;
     SynthQuality preparedQuality = SynthQuality::x4;
-    double preparedSampleRate = 0.0;
+    std::atomic<double> preparedSampleRate { 0.0 };
     int preparedBlockSize = 0;
 
     std::vector<float> playedValues;     // what the engine plays, host modulation included
@@ -208,6 +221,8 @@ private:
     std::atomic<int> currentPreset { 0 };
     SynthPatch::PresetInfo presetInfo;
     mutable yup::SpinLock presetInfoLock;
+    yup::String themeName;
+    mutable yup::SpinLock themeNameLock;
 
     // Grouped by gesture rather than by time: every edit is its own step.
     yup::UndoManager undoManager { yup::RelativeTime() };

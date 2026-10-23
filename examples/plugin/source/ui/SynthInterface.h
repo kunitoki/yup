@@ -63,7 +63,8 @@ class SynthInterface
     , private yup::Timer
 {
 public:
-    explicit SynthInterface (PrismProcessor& processorToEdit);
+    /** Builds the interface in a theme, see SynthThemes::getThemes(). */
+    SynthInterface (PrismProcessor& processorToEdit, int themeToWear);
     ~SynthInterface() override;
 
     //==============================================================================
@@ -95,7 +96,7 @@ public:
 private:
     void timerCallback() override;
 
-    void showSettingsMenu();
+    void showSettingsMenu (yup::Point<float> position);
     void applyFrameRate();
     void applyUndoSetting();
 
@@ -113,6 +114,7 @@ private:
 
     //==============================================================================
     PrismProcessor& processor;
+    const int theme;
 
     std::unique_ptr<SynthHeader> header;
 
