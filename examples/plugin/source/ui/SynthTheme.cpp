@@ -52,27 +52,125 @@ yup::Font withAxis (yup::Font font, const char* tag, float value)
 } // namespace
 
 //==============================================================================
+namespace
+{
+constexpr std::array<yup::ThemePalette::Role, 8> roles { yup::ThemePalette::Role::background, yup::ThemePalette::Role::surface,
+                                                         yup::ThemePalette::Role::surfaceRaised, yup::ThemePalette::Role::outline,
+                                                         yup::ThemePalette::Role::text, yup::ThemePalette::Role::textMuted,
+                                                         yup::ThemePalette::Role::accent, yup::ThemePalette::Role::onAccent };
+
+const yup::Identifier& getRoleId (yup::ThemePalette::Role paletteRole)
+{
+    static const std::array<yup::Identifier, 8> ids { "synthBackground", "synthSurface", "synthSurfaceRaised", "synthOutline",
+                                                      "synthText", "synthTextMuted", "synthAccent", "synthOnAccent" };
+
+    for (std::size_t index = 0; index < roles.size(); ++index)
+        if (roles[index] == paletteRole)
+            return ids[index];
+
+    return ids.front();
+}
+
+const yup::ThemePalette& getGlobalPalette()
+{
+    return yup::ApplicationTheme::getGlobalTheme()->getPalette();
+}
+
+std::array<std::optional<yup::ThemePalette>, sectionCount>& getSectionPalettes()
+{
+    static std::array<std::optional<yup::ThemePalette>, sectionCount> palettes;
+    return palettes;
+}
+
+yup::Color wellFrom (yup::Color background)
+{
+    return mix (background, isDark() ? yup::Colors::black : yup::Colors::white, 0.35f);
+}
+} // namespace
+
+void setSectionPalettes (std::array<std::optional<yup::ThemePalette>, sectionCount> palettes)
+{
+    getSectionPalettes() = std::move (palettes);
+}
+
+yup::Color sectionRole (Section section, yup::ThemePalette::Role paletteRole)
+{
+    const auto& palette = getSectionPalettes()[static_cast<std::size_t> (section)];
+    return palette.has_value() ? palette->getColor (paletteRole) : getGlobalPalette().getColor (paletteRole);
+}
+
+void applySection (yup::Component& component, Section section)
+{
+    for (const auto paletteRole : roles)
+        component.setColor (getRoleId (paletteRole), sectionRole (section, paletteRole));
+
+    const auto well = wellFrom (sectionRole (section, yup::ThemePalette::Role::background));
+    const auto text = sectionRole (section, yup::ThemePalette::Role::text);
+    const auto muted = sectionRole (section, yup::ThemePalette::Role::textMuted);
+    const auto sectionAccent = sectionRole (section, yup::ThemePalette::Role::accent);
+
+    component.setColor (yup::ComboBox::Style::backgroundColorId, well);
+    component.setColor (yup::ComboBox::Style::textColorId, text);
+    component.setColor (yup::ComboBox::Style::borderColorId, well);
+    component.setColor (yup::ComboBox::Style::arrowColorId, muted);
+    component.setColor (yup::Label::Style::textFillColorId, muted);
+    component.setColor (yup::TextEditor::Style::backgroundColorId, yup::Colors::transparentBlack);
+    component.setColor (yup::TextEditor::Style::outlineColorId, yup::Colors::transparentBlack);
+    component.setColor (yup::TextEditor::Style::focusedOutlineColorId, sectionAccent);
+    component.setColor (yup::TextEditor::Style::textColorId, text);
+    component.setColor (yup::TextEditor::Style::caretColorId, sectionAccent);
+}
+
+yup::Color role (const yup::Component& scope, yup::ThemePalette::Role paletteRole)
+{
+    if (const auto color = scope.findColor (getRoleId (paletteRole)))
+        return *color;
+
+    return getGlobalPalette().getColor (paletteRole);
+}
+
+yup::Color sourceAccent (int index)
+{
+    if (index <= 0)
+        return sectionRole (Section::envelopes, yup::ThemePalette::Role::accent);
+
+    if (index == 1)
+        return sectionRole (Section::lfos, yup::ThemePalette::Role::accent);
+
+    const auto [hue, saturation, lightness] = getGlobalPalette().getColor (yup::ThemePalette::Role::accent).toHSL();
+    const auto turn = static_cast<float> (yup::jmin (index, 3) - 1) / 3.0f;
+    return yup::Color::fromHSL (std::fmod (hue + turn, 1.0f), saturation, lightness);
+}
+
+//==============================================================================
 yup::Color frameColor()
 {
-    return isDark() ? mix (windowBackground(), yup::Colors::black, 0.5f)
-                    : mix (windowBackground(), textPrimary(), 0.25f);
+    const auto background = getGlobalPalette().getColor (yup::ThemePalette::Role::background);
+    const auto text = getGlobalPalette().getColor (yup::ThemePalette::Role::text);
+
+    return isDark() ? mix (background, yup::Colors::black, 0.5f) : mix (background, text, 0.25f);
 }
 
-yup::Color panelColor()
+yup::Color panelColor (const yup::Component& scope)
 {
-    return isDark() ? role (yup::ThemePalette::Role::surfaceRaised)
-                    : mix (windowBackground(), yup::Colors::white, 0.6f);
+    return isDark() ? role (scope, yup::ThemePalette::Role::surfaceRaised)
+                    : mix (windowBackground (scope), yup::Colors::white, 0.6f);
 }
 
-yup::Color stripColor()
+yup::Color stripColor (const yup::Component& scope)
 {
-    return mix (frameColor(), panelColor(), isDark() ? 0.45f : 0.55f);
+    return mix (frameColor(), panelColor (scope), isDark() ? 0.45f : 0.55f);
 }
 
-yup::Color raisedColor()
+yup::Color raisedColor (const yup::Component& scope)
 {
-    return isDark() ? mix (panelColor(), textPrimary(), 0.12f)
-                    : mix (panelColor(), yup::Colors::white, 0.5f);
+    return isDark() ? mix (panelColor (scope), textPrimary (scope), 0.12f)
+                    : mix (panelColor (scope), yup::Colors::white, 0.5f);
+}
+
+yup::Color wellColor (const yup::Component& scope)
+{
+    return wellFrom (windowBackground (scope));
 }
 
 //==============================================================================
@@ -87,23 +185,23 @@ void paintBevel (yup::Graphics& g, yup::Rectangle<float> bounds, float corner)
     g.strokeRoundedRect (edge, corner);
 }
 
-void paintPanel (yup::Graphics& g, yup::Rectangle<float> bounds)
+void paintPanel (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds)
 {
-    g.setFillColor (panelColor());
+    g.setFillColor (panelColor (scope));
     g.fillRoundedRect (bounds, panelCorner);
     paintBevel (g, bounds, panelCorner);
 }
 
-void paintTile (yup::Graphics& g, yup::Rectangle<float> bounds)
+void paintTile (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds)
 {
-    g.setFillColor (stripColor());
+    g.setFillColor (stripColor (scope));
     g.fillRoundedRect (bounds, panelCorner);
     paintBevel (g, bounds, panelCorner);
 }
 
-void paintWell (yup::Graphics& g, yup::Rectangle<float> bounds, float corner)
+void paintWell (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner)
 {
-    g.setFillColor (wellColor());
+    g.setFillColor (wellColor (scope));
     g.fillRoundedRect (bounds, corner);
 
     const auto edge = bounds.reduced (0.5f);
@@ -117,12 +215,12 @@ void paintWell (yup::Graphics& g, yup::Rectangle<float> bounds, float corner)
     g.strokeLine (bounds.getX() + corner, bounds.getBottom() + 0.5f, bounds.getRight() - corner, bounds.getBottom() + 0.5f);
 }
 
-void paintRaised (yup::Graphics& g, yup::Rectangle<float> bounds, float corner)
+void paintRaised (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner)
 {
     g.setFillColor (yup::Colors::black.withAlpha (isDark() ? 0.6f : 0.25f));
     g.fillRoundedRect (bounds.withY (bounds.getY() + 1.0f), corner);
 
-    g.setFillColor (raisedColor());
+    g.setFillColor (raisedColor (scope));
     g.fillRoundedRect (bounds, corner);
     paintBevel (g, bounds, corner);
 }
@@ -145,12 +243,12 @@ namespace
 void paintRaisedKey (yup::Graphics& g, const yup::Button& button, const yup::String& text, bool lit)
 {
     const auto bounds = button.getLocalBounds().withTrimmedBottom (1.0f);
-    paintRaised (g, button.isButtonDown() ? bounds.withY (bounds.getY() + 1.0f) : bounds, wellCorner);
+    paintRaised (g, button, button.isButtonDown() ? bounds.withY (bounds.getY() + 1.0f) : bounds, wellCorner);
 
-    const auto color = ! button.isEnabled() ? textSecondary()
-                       : lit                 ? accent()
-                       : button.isButtonOver() ? textPrimary()
-                                               : textPrimary().withAlpha (0.85f);
+    const auto color = ! button.isEnabled() ? textSecondary (button)
+                       : lit                 ? accent (button)
+                       : button.isButtonOver() ? textPrimary (button)
+                                               : textPrimary (button).withAlpha (0.85f);
 
     g.setFillColor (color);
     g.fillFittedText (text.toUpperCase(), captionFont (yup::jmin (12.0f, bounds.getHeight() * 0.62f)), bounds.reduced (6.0f, 0.0f), yup::Justification::center);

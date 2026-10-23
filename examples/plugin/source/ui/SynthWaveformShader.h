@@ -50,6 +50,8 @@ public:
         @param height   The height of the landscape, in logical units
         @param samples  One period of the waveform, sampleCount values in the range -1 to 1
         @param time     The animation time, in seconds
+        @param accent   The color of the ridges
+        @param ground   The color the landscape fades into
 
         @returns The rendered landscape, or nullptr when no GPU path is available.
     */
@@ -58,7 +60,9 @@ public:
                                  int width,
                                  int height,
                                  const std::vector<float>& samples,
-                                 float time);
+                                 float time,
+                                 yup::Color accent,
+                                 yup::Color ground);
 
 private:
     struct alignas (16) Params

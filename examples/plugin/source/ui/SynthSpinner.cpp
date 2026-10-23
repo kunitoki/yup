@@ -43,10 +43,10 @@ bool SynthSpinner::syncFromParameter()
 void SynthSpinner::paint (yup::Graphics& g)
 {
     auto bounds = getLocalBounds();
-    SynthTheme::paintWell (g, bounds);
+    SynthTheme::paintWell (g, *this, bounds);
 
     auto arrows = bounds.removeFromRight (arrowWidth).reduced (2.0f, 4.0f);
-    const auto color = isEnabled() ? SynthTheme::textSecondary() : SynthTheme::textSecondary().withAlpha (0.5f);
+    const auto color = isEnabled() ? SynthTheme::textSecondary (*this) : SynthTheme::textSecondary (*this).withAlpha (0.5f);
 
     for (const auto up : { true, false })
     {
@@ -62,7 +62,7 @@ void SynthSpinner::paint (yup::Graphics& g)
         g.fillPath (triangle);
     }
 
-    g.setFillColor (isEnabled() ? SynthTheme::accent() : SynthTheme::textSecondary());
+    g.setFillColor (isEnabled() ? SynthTheme::accent (*this) : SynthTheme::textSecondary (*this));
     g.fillFittedText (shownText, SynthTheme::valueFont (yup::jmin (13.5f, bounds.getHeight() * 0.65f)), bounds.reduced (4.0f, 0.0f), yup::Justification::center);
 }
 

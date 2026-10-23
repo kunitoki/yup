@@ -24,7 +24,6 @@
 
 #include <yup_gui/yup_gui.h>
 
-#include <optional>
 
 //==============================================================================
 /** A small square light showing an on/off parameter, which a click toggles, with an
@@ -39,9 +38,6 @@ class ParameterLed : public yup::Component
 {
 public:
     explicit ParameterLed (yup::AudioParameter::Ptr toggleParameter, const yup::String& caption = {});
-
-    /** Lights the LED in this color rather than the theme accent. */
-    void setAccent (yup::Color newAccent);
 
     /** True when the parameter is on, or when the LED is locked on. */
     bool isOn() const;
@@ -59,6 +55,5 @@ private:
 
     ParameterGesture gesture;
     yup::String caption;
-    std::optional<yup::Color> accentOverride;
     bool shownOn = false;
 };

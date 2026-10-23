@@ -191,11 +191,11 @@ void SynthOscillatorPanel::resized()
 
 void SynthOscillatorPanel::paint (yup::Graphics& g)
 {
-    SynthTheme::paintWell (g, displayArea, SynthTheme::wellCorner + 1.0f);
+    SynthTheme::paintWell (g, *this, displayArea, SynthTheme::wellCorner + 1.0f);
 
     for (const auto& bar : { topBar, bottomBar })
     {
-        g.setFillColor (SynthTheme::stripColor().withAlpha (0.6f));
+        g.setFillColor (SynthTheme::stripColor (*this).withAlpha (0.6f));
         g.fillRect (bar.reduced (1.0f, 0.0f));
     }
 
@@ -203,7 +203,7 @@ void SynthOscillatorPanel::paint (yup::Graphics& g)
     g.fillRect (topBar.getX() + 1.0f, topBar.getBottom() - 1.0f, topBar.getWidth() - 2.0f, 1.0f);
     g.fillRect (bottomBar.getX() + 1.0f, bottomBar.getY(), bottomBar.getWidth() - 2.0f, 1.0f);
 
-    g.setFillColor (SynthTheme::textSecondary());
+    g.setFillColor (SynthTheme::textSecondary (*this));
     g.fillFittedText ("SYNC", SynthTheme::captionFont (11.5f), syncCaptionArea, yup::Justification::centerLeft);
 
     const auto controlsTop = displayArea.getBottom() + SynthTheme::controlGap + 10.0f;

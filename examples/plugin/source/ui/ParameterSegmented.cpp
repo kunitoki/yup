@@ -56,7 +56,7 @@ yup::Rectangle<float> ParameterSegmented::getSegmentBounds (int index) const
 
 void ParameterSegmented::paint (yup::Graphics& g)
 {
-    SynthTheme::paintWell (g, getLocalBounds());
+    SynthTheme::paintWell (g, *this, getLocalBounds());
 
     const auto selected = getSelectedIndex();
 
@@ -67,10 +67,10 @@ void ParameterSegmented::paint (yup::Graphics& g)
         const auto isSelected = index == selected;
 
         if (isSelected)
-            SynthTheme::paintRaised (g, bounds, 2.0f);
+            SynthTheme::paintRaised (g, *this, bounds, 2.0f);
 
-        const auto color = ! isEnabled() ? SynthTheme::textSecondary().withAlpha (0.5f)
-                                         : (isSelected ? SynthTheme::textPrimary() : SynthTheme::textSecondary());
+        const auto color = ! isEnabled() ? SynthTheme::textSecondary (*this).withAlpha (0.5f)
+                                         : (isSelected ? SynthTheme::textPrimary (*this) : SynthTheme::textSecondary (*this));
 
         if (! segment.icon.isEmpty())
         {

@@ -21,6 +21,7 @@
 #pragma once
 
 #include "ParameterLed.h"
+#include "SynthTheme.h"
 
 #include <yup_gui/yup_gui.h>
 
@@ -61,7 +62,8 @@ public:
         std::vector<StripControl> stripControls;  /**< Shown only while this tab is selected. */
     };
 
-    SynthSection (std::vector<Tab> tabsToShow, yup::Color accentColor, std::vector<StripControl> sharedStripControls = {});
+    /** Creates the panel, which wears its section's palette for everything inside it. */
+    SynthSection (std::vector<Tab> tabsToShow, SynthTheme::Section section, std::vector<StripControl> sharedStripControls = {});
 
     /** Shows a tab's page. */
     void selectTab (int index);
@@ -91,6 +93,5 @@ private:
     std::vector<StripControl> sharedControls;
     std::vector<float> tabWidths;
     std::vector<bool> shownOn;
-    yup::Color accent;
     int selected = 0;
 };

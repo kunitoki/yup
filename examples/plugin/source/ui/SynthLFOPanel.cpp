@@ -42,10 +42,7 @@ SynthLFOPanel::SynthLFOPanel (const SynthLFOParameters& parametersToEdit, const 
         addAndMakeVisible (*control);
 
     for (auto* knob : { &rateKnob, &phaseKnob, &smoothKnob, &depthKnob })
-    {
-        knob->getKnob().setAccent (SynthTheme::lfoAccent());
         addAndMakeVisible (*knob);
-    }
 
     rateKnob.setCaptionShowsValue (true);
     syncFromParameters();

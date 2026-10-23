@@ -35,9 +35,9 @@ constexpr const char* synthLogoSvg = R"svg(
     <g stroke-linecap="butt">
       <path d="M160.3 92 L242 66"  stroke="#RAY1" stroke-width="3.5"/>
       <path d="M160.3 92 L242 80"  stroke="#RAY2" stroke-width="3.2"/>
-      <path d="M160.3 92 L242 94"  stroke="#RAY3" stroke-width="3" stroke-opacity="0.8"/>
+      <path d="M160.3 92 L242 94"  stroke="#RAY3" stroke-width="3"/>
       <path d="M160.3 92 L242 108" stroke="#RAY4" stroke-width="2.7"/>
-      <path d="M160.3 92 L242 122" stroke="#RAY5" stroke-width="2.5" stroke-opacity="0.5"/>
+      <path d="M160.3 92 L242 122" stroke="#RAY5" stroke-width="2.5"/>
     </g>
   </g>
 </svg>
@@ -52,14 +52,18 @@ SynthHeader::SynthHeader (PrismProcessor& processorToControl)
     , volumeKnob ("VOLUME", processorToControl.getSynthParameters().volume, SynthTheme::captionFont (11.0f))
 {
     setOpaque (false);
+    SynthTheme::applySection (*this, SynthTheme::Section::header);
+
+    // The rays leave the prism in the colors of the sections they light.
+    const auto ray = [] (SynthTheme::Section section) { return SynthTheme::sectionRole (section, yup::ThemePalette::Role::accent).toString(); };
 
     logo.parseSVG (yup::String (synthLogoSvg)
-                       .replace ("#FFFFFF", SynthTheme::textPrimary().toString())
-                       .replace ("#RAY1", SynthTheme::sourceAccent (0).toString())
-                       .replace ("#RAY2", SynthTheme::sourceAccent (1).toString())
-                       .replace ("#RAY3", SynthTheme::textPrimary().toString())
-                       .replace ("#RAY4", SynthTheme::sourceAccent (2).toString())
-                       .replace ("#RAY5", SynthTheme::sourceAccent (3).toString()));
+                       .replace ("#FFFFFF", SynthTheme::textPrimary (*this).toString())
+                       .replace ("#RAY1", ray (SynthTheme::Section::oscillators))
+                       .replace ("#RAY2", ray (SynthTheme::Section::matrix))
+                       .replace ("#RAY3", ray (SynthTheme::Section::filters))
+                       .replace ("#RAY4", ray (SynthTheme::Section::envelopes))
+                       .replace ("#RAY5", ray (SynthTheme::Section::lfos)));
 
     presetBar.onEditingFinished = [this]
     {
@@ -74,7 +78,6 @@ SynthHeader::SynthHeader (PrismProcessor& processorToControl)
         themeBox.addItem (themes[index].name, static_cast<int> (index) + 1);
 
     themeBox.setSelectedId (SynthThemes::loadSelectedTheme() + 1, yup::dontSendNotification);
-    SynthTheme::styleComboBox (themeBox);
     themeBox.onSelectedItemChanged = [this]
     {
         if (onThemeChosen != nullptr && themeBox.getSelectedId() > 0)
@@ -168,14 +171,14 @@ void SynthHeader::resized()
 void SynthHeader::paint (yup::Graphics& g)
 {
     for (const auto& tile : { logoTile, statsTile, volumeTile })
-        SynthTheme::paintTile (g, tile);
+        SynthTheme::paintTile (g, *this, tile);
 
     logo.paint (g, logoArea);
 
     auto words = logoTile.withTrimmedLeft (logoArea.getRight() - logoTile.getX() + 10.0f).reduced (0.0f, 14.0f);
-    g.setFillColor (SynthTheme::textPrimary());
+    g.setFillColor (SynthTheme::textPrimary (*this));
     g.fillFittedText ("PRISM", SynthTheme::valueFont (24.0f).withAxisValue ("wdth", 100.0f), words.removeFromTop (words.getHeight() * 0.62f), yup::Justification::bottomLeft);
-    g.setFillColor (SynthTheme::textSecondary());
+    g.setFillColor (SynthTheme::textSecondary (*this));
     g.fillFittedText ("SPECTRAL SYNTH", SynthTheme::captionFont (9.5f), words, yup::Justification::topLeft);
 
     auto stats = statsTile.reduced (12.0f, 9.0f);
@@ -187,9 +190,9 @@ void SynthHeader::paint (yup::Graphics& g)
     for (const auto& [caption, value] : rows)
     {
         const auto line = stats.removeFromTop (rowHeight);
-        g.setFillColor (SynthTheme::textSecondary());
+        g.setFillColor (SynthTheme::textSecondary (*this));
         g.fillFittedText (caption, captionFont, line, yup::Justification::centerLeft);
-        g.setFillColor (caption == rows[0].first ? SynthTheme::accent() : SynthTheme::textPrimary());
+        g.setFillColor (caption == rows[0].first ? SynthTheme::accent (*this) : SynthTheme::textPrimary (*this));
         g.fillFittedText (value, valueFont, line, yup::Justification::centerRight);
     }
 }

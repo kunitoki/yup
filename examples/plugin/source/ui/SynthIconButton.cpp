@@ -35,7 +35,7 @@ void SynthIconButton::paintButton (yup::Graphics& g)
     const auto bounds = getLocalBounds();
 
     if (tile)
-        SynthTheme::paintTile (g, bounds);
+        SynthTheme::paintTile (g, *this, bounds);
 
     if (tile && isButtonDown())
     {
@@ -44,6 +44,6 @@ void SynthIconButton::paintButton (yup::Graphics& g)
     }
 
     const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultIconFont().withHeight (height);
-    g.setFillColor (isButtonOver() ? SynthTheme::accent() : SynthTheme::textPrimary().withAlpha (0.85f));
+    g.setFillColor (isButtonOver() ? SynthTheme::accent (*this) : SynthTheme::textPrimary (*this).withAlpha (0.85f));
     g.fillFittedText (glyph, font, bounds, yup::Justification::center);
 }

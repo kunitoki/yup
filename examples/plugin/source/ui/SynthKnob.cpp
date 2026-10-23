@@ -77,9 +77,9 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
     const auto value = static_cast<float> (slider.getValueNormalised());
     const auto valueAngle = startAngle + sweepAngle * value;
     const auto enabled = slider.isEnabled();
-    const auto accent = ! enabled                                         ? SynthTheme::textSecondary()
+    const auto accent = ! enabled                                         ? SynthTheme::textSecondary (slider)
                         : knob != nullptr && knob->accentOverride.has_value() ? *knob->accentOverride
-                                                                              : SynthTheme::accent();
+                                                                              : SynthTheme::accent (slider);
 
     const auto strokeArc = [&] (float radius, float from, float to, float width, yup::Color color)
     {
@@ -92,10 +92,10 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
     };
 
     // The well, then the track and the value around it.
-    g.setFillColor (SynthTheme::displayBackground());
+    g.setFillColor (SynthTheme::wellColor (slider));
     g.fillEllipse (yup::Rectangle<float> (center.getX() - wellRadius, center.getY() - wellRadius, wellRadius * 2.0f, wellRadius * 2.0f));
 
-    strokeArc (ringRadius, startAngle, startAngle + sweepAngle, ringWidth, SynthTheme::panelBorder());
+    strokeArc (ringRadius, startAngle, startAngle + sweepAngle, ringWidth, SynthTheme::panelBorder (slider));
 
     if (value > 0.0f)
         strokeArc (ringRadius, startAngle, valueAngle, ringWidth, accent);
@@ -120,7 +120,7 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
     {
         if (knob->getValueText != nullptr)
         {
-            g.setFillColor (value > 0.0f ? SynthTheme::textPrimary() : SynthTheme::textSecondary());
+            g.setFillColor (value > 0.0f ? SynthTheme::textPrimary (slider) : SynthTheme::textSecondary (slider));
             g.fillFittedText (knob->getValueText(), SynthTheme::valueFont (wellRadius * 0.62f),
                               yup::Rectangle<float> (center.getX() - wellRadius, center.getY() - wellRadius, wellRadius * 2.0f, wellRadius * 2.0f),
                               yup::Justification::center);
@@ -132,7 +132,7 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
     // The pointer, a dot on the well's edge.
     const auto dotRadius = ringWidth * 0.55f;
     const auto dot = center.getPointOnCircumference (wellRadius - dotRadius * 1.6f, valueAngle);
-    g.setFillColor (enabled ? SynthTheme::textPrimary() : SynthTheme::textSecondary());
+    g.setFillColor (enabled ? SynthTheme::textPrimary (slider) : SynthTheme::textSecondary (slider));
     g.fillEllipse (yup::Rectangle<float> (dot.getX() - dotRadius, dot.getY() - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f));
 
     if (knob == nullptr || ! knob->isShowingValue() || knob->getValueText == nullptr)
@@ -142,6 +142,6 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
     g.setFillColor (accent);
     g.fillRoundedRect (pill, pill.getHeight() * 0.5f);
 
-    g.setFillColor (SynthTheme::role (yup::ThemePalette::Role::onAccent));
+    g.setFillColor (SynthTheme::role (slider, yup::ThemePalette::Role::onAccent));
     g.fillFittedText (knob->getValueText(), theme.getDefaultFont().withHeight (pill.getHeight() * 0.62f), pill.reduced (3.0f, 0.0f), yup::Justification::center);
 }

@@ -78,11 +78,6 @@ SynthPresetBar::SynthPresetBar (PrismProcessor& processorToControl)
         auto& editor = editors[static_cast<std::size_t> (field)];
         editor.setMultiLine (false);
         editor.setFont (SynthTheme::valueFont (13.5f));
-        editor.setColor (yup::TextEditor::Style::backgroundColorId, yup::Colors::transparentBlack);
-        editor.setColor (yup::TextEditor::Style::outlineColorId, yup::Colors::transparentBlack);
-        editor.setColor (yup::TextEditor::Style::focusedOutlineColorId, SynthTheme::accent());
-        editor.setColor (yup::TextEditor::Style::textColorId, SynthTheme::textPrimary());
-        editor.setColor (yup::TextEditor::Style::caretColorId, SynthTheme::accent());
         editor.onTextChange = [this, field] { writeField (static_cast<Field> (field), editors[static_cast<std::size_t> (field)].getText()); };
         editor.onFinished = [this] { finishEditingWhenIdle(); };
         addAndMakeVisible (editor);
@@ -148,16 +143,16 @@ void SynthPresetBar::resized()
 void SynthPresetBar::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
-    SynthTheme::paintTile (g, bounds);
+    SynthTheme::paintTile (g, *this, bounds);
 
     const auto middle = bounds.getY() + bounds.getHeight() * 0.5f;
     SynthTheme::paintSeam (g, { bounds.getX() + 1.0f, middle }, { bounds.getRight() - 1.0f, middle });
 
-    g.setFillColor (SynthTheme::accent());
+    g.setFillColor (SynthTheme::accent (*this));
     g.fillFittedText (shownInfo.name.isNotEmpty() ? shownInfo.name : yup::String ("Untitled"), SynthTheme::valueFont (18.0f), nameArea, yup::Justification::centerLeft);
 
     const auto captionFont = SynthTheme::captionFont (11.5f);
-    g.setFillColor (SynthTheme::textSecondary());
+    g.setFillColor (SynthTheme::textSecondary (*this));
 
     for (std::size_t field = 0; field < captionAreas.size(); ++field)
         g.fillFittedText (fieldCaptions[field], captionFont, captionAreas[field], yup::Justification::centerLeft);

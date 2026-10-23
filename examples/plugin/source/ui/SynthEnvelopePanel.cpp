@@ -35,10 +35,7 @@ SynthEnvelopePanel::SynthEnvelopePanel (const SynthEnvelopeParameters& parameter
     addAndMakeVisible (display);
 
     for (auto* knob : { &timeScaleKnob, &velocityKnob, &depthKnob })
-    {
-        knob->getKnob().setAccent (SynthTheme::envelopeAccent());
         addAndMakeVisible (*knob);
-    }
 
     syncFromParameters();
 }

@@ -72,9 +72,9 @@ float SynthFilterResponse::getDecibelsAt (float frequency) const
 void SynthFilterResponse::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
-    SynthTheme::paintWell (g, bounds);
+    SynthTheme::paintWell (g, *this, bounds);
 
-    const auto gridColor = SynthTheme::textPrimary().withAlpha (0.06f);
+    const auto gridColor = SynthTheme::textPrimary (*this).withAlpha (0.06f);
     const auto labelFont = SynthTheme::captionFont (10.5f);
 
     for (const auto [frequency, text] : { std::pair { 20.0f, "20" }, std::pair { 200.0f, "200" }, std::pair { 2000.0f, "2K" }, std::pair { 20000.0f, "20K" } })
@@ -82,7 +82,7 @@ void SynthFilterResponse::paint (yup::Graphics& g)
         const auto x = frequencyToX (frequency);
         g.setFillColor (gridColor);
         g.fillRect (x, 0.0f, 1.0f, bounds.getHeight());
-        g.setFillColor (SynthTheme::textSecondary());
+        g.setFillColor (SynthTheme::textSecondary (*this));
         g.fillFittedText (text, labelFont, { yup::jlimit (4.0f, bounds.getWidth() - 34.0f, x + 3.0f), bounds.getHeight() - 15.0f, 30.0f, 12.0f }, yup::Justification::centerLeft);
     }
 
@@ -114,17 +114,17 @@ void SynthFilterResponse::paint (yup::Graphics& g)
     area.lineTo (0.0f, bounds.getHeight());
     area.closeSubPath();
 
-    g.setFillColor (SynthTheme::accent().withAlpha (0.14f));
+    g.setFillColor (SynthTheme::accent (*this).withAlpha (0.14f));
     g.fillPath (area);
 
-    g.setStrokeColor (SynthTheme::accent());
+    g.setStrokeColor (SynthTheme::accent (*this));
     g.setStrokeWidth (2.0f);
     g.strokePath (curve);
 
     const auto cutoff = yup::jlimit (minimumFrequency, maximumFrequency, shownValues.cutoff);
     const auto handle = yup::Point<float> (frequencyToX (cutoff), decibelsToY (getDecibelsAt (cutoff)));
 
-    g.setFillColor (SynthTheme::textPrimary());
+    g.setFillColor (SynthTheme::textPrimary (*this));
     g.fillEllipse ({ handle.getX() - 5.0f, handle.getY() - 5.0f, 10.0f, 10.0f });
 }
 

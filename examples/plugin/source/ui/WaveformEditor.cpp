@@ -133,11 +133,11 @@ void WaveformEditor::paint (yup::Graphics& g)
     }
     else
     {
-        g.setFillColor (SynthTheme::displayBackground());
+        g.setFillColor (SynthTheme::wellColor (*this));
         g.fillRoundedRect (bounds, cornerRadius);
     }
 
-    g.setStrokeColor (SynthTheme::panelBorder());
+    g.setStrokeColor (SynthTheme::panelBorder (*this));
     g.setStrokeWidth (1.0f);
     g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
@@ -197,7 +197,9 @@ yup::GpuTexture::Ptr WaveformEditor::renderLandscape (yup::Graphics& g)
                            yup::roundToInt (getWidth()),
                            yup::roundToInt (getHeight()),
                            displaySamples,
-                           animationTime);
+                           animationTime,
+                           SynthTheme::accent (*this),
+                           SynthTheme::wellColor (*this));
 }
 
 /** Returns the largest magnitude in a buffer of samples. */
@@ -233,7 +235,7 @@ void WaveformEditor::paintDrawnCycle (yup::Graphics& g, yup::Rectangle<float> bo
             drawnPath.lineTo (x, y);
     }
 
-    g.setStrokeColor (SynthTheme::accent().withAlpha (0.25f));
+    g.setStrokeColor (SynthTheme::accent (*this).withAlpha (0.25f));
     g.setStrokeWidth (1.0f);
     g.strokePath (drawnPath);
 }
@@ -241,7 +243,7 @@ void WaveformEditor::paintDrawnCycle (yup::Graphics& g, yup::Rectangle<float> bo
 /** Draws one period of the reconstructed series. */
 void WaveformEditor::paintWaveform (yup::Graphics& g, yup::Rectangle<float> bounds)
 {
-    g.setStrokeColor (SynthTheme::panelBorder());
+    g.setStrokeColor (SynthTheme::panelBorder (*this));
     g.setStrokeWidth (1.0f);
     g.strokeLine (bounds.getX(), bounds.getCenterY(), bounds.getRight(), bounds.getCenterY());
 
@@ -263,13 +265,13 @@ void WaveformEditor::paintWaveform (yup::Graphics& g, yup::Rectangle<float> boun
             path.lineTo (x, y);
     }
 
-    g.setStrokeColor (SynthTheme::accent().withAlpha (0.35f));
+    g.setStrokeColor (SynthTheme::accent (*this).withAlpha (0.35f));
     g.setStrokeWidth (4.0f);
     g.setFeather (6.0f);
     g.strokePath (path);
 
     g.setFeather (0.0f);
-    g.setStrokeColor (SynthTheme::accent());
+    g.setStrokeColor (SynthTheme::accent (*this));
     g.setStrokeWidth (1.5f);
     g.strokePath (path);
 }
@@ -287,7 +289,7 @@ void WaveformEditor::paintPartials (yup::Graphics& g, yup::Rectangle<float> boun
 
         const yup::Rectangle<float> bar { x + barGap, bounds.getBottom() - height, yup::jmax (1.0f, barWidth - barGap * 2.0f), height };
 
-        g.setFillColor (magnitude > 0.0f ? SynthTheme::accent() : SynthTheme::panelBorder());
+        g.setFillColor (magnitude > 0.0f ? SynthTheme::accent (*this) : SynthTheme::panelBorder (*this));
         g.fillRect (bar);
     }
 }

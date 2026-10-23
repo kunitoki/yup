@@ -20,7 +20,6 @@
 */
 
 #include "SynthWaveformShader.h"
-#include "SynthTheme.h"
 
 #include <ShaderBundles/SynthWaveformShaderBundle.h>
 
@@ -29,7 +28,9 @@ yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
                                                   int width,
                                                   int height,
                                                   const std::vector<float>& samples,
-                                                  float time)
+                                                  float time,
+                                                  yup::Color accent,
+                                                  yup::Color ground)
 {
     jassert (samples.size() == static_cast<std::size_t> (sampleCount));
 
@@ -43,8 +44,6 @@ yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
         return nullptr;
 
     const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
-    const auto accent = SynthTheme::accent();
-    const auto background = SynthTheme::displayBackground();
 
     const Params params {
         time,
@@ -52,14 +51,14 @@ yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
         static_cast<float> (height),
         palette.getMode() == yup::ThemePalette::Mode::light ? 1.0f : 0.0f,
         { accent.getRedFloat(), accent.getGreenFloat(), accent.getBlueFloat(), 1.0f },
-        { background.getRedFloat(), background.getGreenFloat(), background.getBlueFloat(), 1.0f }
+        { ground.getRedFloat(), ground.getGreenFloat(), ground.getBlueFloat(), 1.0f }
     };
 
     auto frame = yup::GpuFrame::begin (device);
     if (! frame.isValid())
         return nullptr;
 
-    auto pass = target->beginRenderPass (frame, { true, background });
+    auto pass = target->beginRenderPass (frame, { true, ground });
     if (! pass.isValid())
         return nullptr;
 

@@ -35,9 +35,8 @@ yup::ColorGradient makeGradient (yup::Point<float> from, yup::Point<float> to, s
     return gradient;
 }
 
-void paintWhiteKey (yup::Graphics& g, yup::Rectangle<float> key, bool pressed, bool over)
+void paintWhiteKey (yup::Graphics& g, yup::Rectangle<float> key, bool pressed, bool over, yup::Color accent)
 {
-    const auto accent = SynthTheme::accent();
     const auto tint = [&] (yup::Color color) { return pressed ? color.mixedWith (accent, 0.55f, yup::ColorSpace::SRGB) : (over ? color.mixedWith (accent, 0.12f, yup::ColorSpace::SRGB) : color); };
     const auto lip = pressed ? 3.0f : 7.0f;
     const auto body = key.reduced (0.5f, 0.0f);
@@ -58,9 +57,8 @@ void paintWhiteKey (yup::Graphics& g, yup::Rectangle<float> key, bool pressed, b
     g.fillRect (body.getRight() - 1.0f, body.getY(), 1.0f, body.getHeight() - lip);
 }
 
-void paintBlackKey (yup::Graphics& g, yup::Rectangle<float> key, bool pressed, bool over)
+void paintBlackKey (yup::Graphics& g, yup::Rectangle<float> key, bool pressed, bool over, yup::Color accent)
 {
-    const auto accent = SynthTheme::accent();
     const auto tint = [&] (yup::Color color) { return pressed ? color.mixedWith (accent, 0.5f, yup::ColorSpace::SRGB) : (over ? color.mixedWith (accent, 0.15f, yup::ColorSpace::SRGB) : color); };
 
     g.setFillColor (yup::Colors::black.withAlpha (0.55f));
@@ -82,6 +80,7 @@ void paintKeyboard (yup::Graphics& g, const yup::ApplicationTheme&, const yup::M
         return;
 
     const auto keyWidth = keyboard.getKeyWidth();
+    const auto accent = SynthTheme::accent (keyboard);
 
     for (const auto black : { false, true })
     {
@@ -95,9 +94,9 @@ void paintKeyboard (yup::Graphics& g, const yup::ApplicationTheme&, const yup::M
             keyboard.getKeyPosition (note, keyWidth, key, isBlack);
 
             if (black)
-                paintBlackKey (g, key, keyboard.isNoteOn (note), keyboard.isMouseOverNote (note));
+                paintBlackKey (g, key, keyboard.isNoteOn (note), keyboard.isMouseOverNote (note), accent);
             else
-                paintWhiteKey (g, key, keyboard.isNoteOn (note), keyboard.isMouseOverNote (note));
+                paintWhiteKey (g, key, keyboard.isNoteOn (note), keyboard.isMouseOverNote (note), accent);
         }
     }
 
@@ -105,12 +104,12 @@ void paintKeyboard (yup::Graphics& g, const yup::ApplicationTheme&, const yup::M
     g.fillRect (bounds.withHeight (6.0f));
 }
 
-void paintWheel (yup::Graphics& g, yup::Rectangle<float> bounds, float normalized, bool active)
+void paintWheel (yup::Graphics& g, const yup::Component& wheel, yup::Rectangle<float> bounds, float normalized, bool active)
 {
     if (bounds.isEmpty())
         return;
 
-    SynthTheme::paintWell (g, bounds, 7.0f);
+    SynthTheme::paintWell (g, wheel, bounds, 7.0f);
 
     const auto cylinder = bounds.reduced (bounds.getWidth() * 0.2f, 5.0f);
     const auto corner = cylinder.getWidth() * 0.25f;
@@ -137,7 +136,7 @@ void paintWheel (yup::Graphics& g, yup::Rectangle<float> bounds, float normalize
     const auto edge = 1.0f - std::abs (markerY - cylinder.getCenterY()) / (cylinder.getHeight() * 0.5f);
     g.setFillColor (yup::Colors::black.withAlpha (0.5f));
     g.fillRect (cylinder.getX(), markerY - 3.0f, cylinder.getWidth(), 6.0f);
-    g.setFillColor ((active ? SynthTheme::accent() : yup::Color (0xffdfe7ee)).withAlpha (0.35f + 0.65f * edge));
+    g.setFillColor ((active ? SynthTheme::accent (wheel) : yup::Color (0xffdfe7ee)).withAlpha (0.35f + 0.65f * edge));
     g.fillRect (cylinder.getX(), markerY - 1.5f, cylinder.getWidth(), 3.0f);
 
     g.setFillColorGradient (makeGradient (cylinder.getTopLeft(), cylinder.getTopRight(),
@@ -155,7 +154,7 @@ void apply (yup::PitchWheelComponent& wheel)
 {
     wheel.setStyle (yup::ComponentStyle::createStyle<yup::PitchWheelComponent> ([] (yup::Graphics& g, const yup::ApplicationTheme&, const yup::PitchWheelComponent& w)
     {
-        paintWheel (g, w.getLocalBounds(), static_cast<float> ((w.getValue() + 1.0) * 0.5), w.isCurrentlyBeingDragged());
+        paintWheel (g, w, w.getLocalBounds(), static_cast<float> ((w.getValue() + 1.0) * 0.5), w.isCurrentlyBeingDragged());
     }));
 }
 
@@ -163,7 +162,7 @@ void apply (yup::ModWheelComponent& wheel)
 {
     wheel.setStyle (yup::ComponentStyle::createStyle<yup::ModWheelComponent> ([] (yup::Graphics& g, const yup::ApplicationTheme&, const yup::ModWheelComponent& w)
     {
-        paintWheel (g, w.getLocalBounds(), static_cast<float> (w.getValue()), w.isCurrentlyBeingDragged());
+        paintWheel (g, w, w.getLocalBounds(), static_cast<float> (w.getValue()), w.isCurrentlyBeingDragged());
     }));
 }
 } // namespace SynthKeyboardLook

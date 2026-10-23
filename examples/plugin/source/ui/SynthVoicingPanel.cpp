@@ -31,6 +31,7 @@ SynthVoicingPanel::SynthVoicingPanel (const SynthParameters& parametersToEdit)
     , spreadKnob ("SPREAD", parametersToEdit.unisonSpread, SynthTheme::captionFont (12.0f))
 {
     setOpaque (false);
+    SynthTheme::applySection (*this, SynthTheme::Section::voicing);
 
     for (auto* control : std::initializer_list<yup::Component*> { &qualitySpinner, &unisonSpinner, &glideKnob, &detuneKnob, &spreadKnob })
         addAndMakeVisible (*control);
@@ -97,14 +98,14 @@ void SynthVoicingPanel::resized()
 
 void SynthVoicingPanel::paint (yup::Graphics& g)
 {
-    SynthTheme::paintPanel (g, getLocalBounds());
+    SynthTheme::paintPanel (g, *this, getLocalBounds());
 
     const auto titleFont = SynthTheme::captionFont (13.5f);
 
     for (const auto& [area, title] : { std::pair { voicingArea, "VOICING" }, std::pair { unisonArea, "UNISON" } })
     {
         const auto line = area.withHeight (titleHeight);
-        g.setFillColor (SynthTheme::textPrimary());
+        g.setFillColor (SynthTheme::textPrimary (*this));
         g.fillFittedText (title, titleFont, line, yup::Justification::centerLeft);
         SynthTheme::paintSeam (g, { line.getX(), line.getBottom() + 1.0f }, { line.getRight(), line.getBottom() + 1.0f });
     }
@@ -118,19 +119,19 @@ void SynthVoicingPanel::paint (yup::Graphics& g)
 
     for (const auto& [box, text, on, enabled] : { std::tuple { monoBox, "MONO", mono, true }, std::tuple { legatoBox, "LEGATO", legato, mono } })
     {
-        SynthTheme::paintWell (g, box, 2.0f);
+        SynthTheme::paintWell (g, *this, box, 2.0f);
 
         if (on)
         {
-            g.setFillColor (SynthTheme::accent());
+            g.setFillColor (SynthTheme::accent (*this));
             g.fillRoundedRect (box.reduced (3.0f), 1.0f);
         }
 
-        g.setFillColor (enabled ? SynthTheme::textPrimary() : SynthTheme::textSecondary());
+        g.setFillColor (enabled ? SynthTheme::textPrimary (*this) : SynthTheme::textSecondary (*this));
         g.fillFittedText (text, captionFont, { box.getRight() + 7.0f, box.getY() - 4.0f, checkRowWidth - checkSize - 7.0f, box.getHeight() + 8.0f }, yup::Justification::centerLeft);
     }
 
-    g.setFillColor (SynthTheme::textSecondary());
+    g.setFillColor (SynthTheme::textSecondary (*this));
     g.fillFittedText ("QUALITY", captionFont, qualityCaption, yup::Justification::centerLeft);
 }
 

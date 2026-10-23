@@ -44,7 +44,6 @@ SynthModulationRow::SynthModulationRow (int slotToEdit,
     for (auto* box : { &sourceBox, &destinationBox })
     {
         box->setTextWhenNothingSelected ("-");
-        SynthTheme::styleComboBox (*box);
         box->onSelectedItemChanged = [this] { writeRoute(); };
         addAndMakeVisible (*box);
     }
@@ -115,13 +114,13 @@ void SynthModulationRow::resized()
 
 void SynthModulationRow::paint (yup::Graphics& g)
 {
-    SynthTheme::paintWell (g, getLocalBounds());
+    SynthTheme::paintWell (g, *this, getLocalBounds());
 
     const auto selected = sourceBox.getSelectedId() - 1;
     const auto source = static_cast<SynthModulationSource> (yup::jmax (0, selected));
     const auto family = getSourceEnvelope (source) >= 0 ? 0 : getSourceLFO (source) >= 0 ? 1 : source == SynthModulationSource::random ? 3 : 2;
     const auto dot = yup::Rectangle<float> (spacing, (getHeight() - dotSize) * 0.5f, dotSize, dotSize);
 
-    g.setFillColor (selected >= 0 ? SynthTheme::sourceAccent (family) : SynthTheme::textSecondary().withAlpha (0.4f));
+    g.setFillColor (selected >= 0 ? SynthTheme::sourceAccent (family) : SynthTheme::textSecondary (*this).withAlpha (0.4f));
     g.fillRoundedRect (dot, 2.0f);
 }

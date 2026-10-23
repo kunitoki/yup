@@ -65,28 +65,28 @@ void SynthSliderField::paint (yup::Graphics& g)
     const auto bounds = getLocalBounds();
     const auto track = getTrackBounds();
     const auto& parameter = gesture.getParameter();
-    const auto accent = isEnabled() ? SynthTheme::accent() : SynthTheme::textSecondary();
+    const auto accent = isEnabled() ? SynthTheme::accent (*this) : SynthTheme::textSecondary (*this);
     const auto value = parameter->getNormalizedValue();
 
     if (look == Look::boxed)
     {
-        SynthTheme::paintWell (g, bounds);
+        SynthTheme::paintWell (g, *this, bounds);
 
         const auto text = bounds.reduced (9.0f, 0.0f).withHeight (track.getY() - 2.0f - bounds.getY());
-        g.setFillColor (SynthTheme::textSecondary());
+        g.setFillColor (SynthTheme::textSecondary (*this));
         g.fillFittedText (caption.toUpperCase(), SynthTheme::captionFont (11.5f), text, yup::Justification::bottomLeft);
-        g.setFillColor (SynthTheme::textPrimary());
+        g.setFillColor (SynthTheme::textPrimary (*this));
         g.fillFittedText (parameter->toString(), SynthTheme::valueFont (13.0f), text, yup::Justification::bottomRight);
     }
     else
     {
-        g.setFillColor (SynthTheme::textSecondary());
+        g.setFillColor (SynthTheme::textSecondary (*this));
         g.fillFittedText (caption.toUpperCase(), SynthTheme::captionFont (11.5f), bounds.withWidth (captionWidth), yup::Justification::centerLeft);
         g.setFillColor (accent);
         g.fillFittedText (parameter->toString(), SynthTheme::valueFont (12.0f), bounds.withTrimmedLeft (bounds.getWidth() - valueWidth), yup::Justification::centerRight);
     }
 
-    g.setFillColor (SynthTheme::wellColor().mixedWith (SynthTheme::panelColor(), 0.35f, yup::ColorSpace::SRGB));
+    g.setFillColor (SynthTheme::wellColor (*this).mixedWith (SynthTheme::panelColor (*this), 0.35f, yup::ColorSpace::SRGB));
     g.fillRoundedRect (track, 2.0f);
 
     const auto positionOf = [&track] (float normalized) { return track.getX() + track.getWidth() * yup::jlimit (0.0f, 1.0f, normalized); };
@@ -98,7 +98,7 @@ void SynthSliderField::paint (yup::Graphics& g)
 
     if (bipolar)
     {
-        g.setFillColor (SynthTheme::textSecondary());
+        g.setFillColor (SynthTheme::textSecondary (*this));
         g.fillRect (origin - 0.5f, track.getY() - 2.0f, 1.0f, track.getHeight() + 4.0f);
     }
 

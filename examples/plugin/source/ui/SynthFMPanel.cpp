@@ -87,7 +87,7 @@ void SynthFMPanel::paint (yup::Graphics& g)
     const auto cellHeight = grid.getHeight() / count;
     const auto font = SynthTheme::captionFont (11.5f);
 
-    g.setFillColor (SynthTheme::textSecondary());
+    g.setFillColor (SynthTheme::textSecondary (*this));
 
     for (int index = 0; index < SynthExample::oscillatorCount; ++index)
     {

@@ -23,13 +23,16 @@
 
 #include <yup_gui/yup_gui.h>
 
+#include "SynthTheme.h"
+
+#include <array>
 #include <vector>
 
 //==============================================================================
 /** The palettes the instrument can wear, and the one the user picked last.
 
-    Each theme is a coolors palette parsed with yup::ThemePalette::fromString, in dark
-    or light mode. The choice belongs to the user rather than to the patch, so it is
+    Each theme is a set of coolors palettes parsed with yup::ThemePalette::fromString, in
+    dark or light mode: a base, and one for every section that has its own. The choice belongs to the user rather than to the patch, so it is
     kept in a small settings file in the user's application data folder.
 
     The palette lives in the global theme, so every Prism editor in a process shows
@@ -37,12 +40,14 @@
 */
 namespace SynthThemes
 {
-/** One selectable theme. */
+/** One selectable theme: a base palette, and a palette for each section that has one of
+    its own, in the order of SynthTheme::Section. A section without one wears the base. */
 struct Theme
 {
     const char* name;
     const char* palette;
     yup::ThemePalette::Mode mode;
+    std::array<const char*, SynthTheme::sectionCount> sections {};
 };
 
 /** Returns every theme, the default first. */

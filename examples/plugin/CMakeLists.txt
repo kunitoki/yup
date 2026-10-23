@@ -53,6 +53,21 @@ yup_add_shader_bundle (${target_name}_shaders
     OUTPUT_NAME SynthWaveformShaderBundle
     RESOURCE_NAME synthWaveformShader)
 
+# ==== Embed the bloom shaders, one bundle per fragment stage
+yup_add_shader_bundle (${target_name}_bloom_prefilter_shaders
+    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/prism_bloom_prefilter.frag"
+    NAMESPACE prism
+    OUTPUT_NAME SynthBloomPrefilterShaderBundle
+    RESOURCE_NAME synthBloomPrefilterShader)
+
+yup_add_shader_bundle (${target_name}_bloom_blur_shaders
+    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/prism_bloom_blur.frag"
+    NAMESPACE prism
+    OUTPUT_NAME SynthBloomBlurShaderBundle
+    RESOURCE_NAME synthBloomBlurShader)
+
 yup_audio_plugin (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
@@ -87,12 +102,17 @@ yup_audio_plugin (
         yup::yup_audio_processors
         yup::yup_audio_gui
         pffft_library
-        ${target_name}_shaders)
+        ${target_name}_shaders
+        ${target_name}_bloom_prefilter_shaders
+        ${target_name}_bloom_blur_shaders)
 
 # ==== Prepare sources
 file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/source/*.h")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-# The shader bundle is an OBJECT library, whose objects only reach targets linking it directly
-target_sources (${target_name}_shared PUBLIC ${sources} $<TARGET_OBJECTS:${target_name}_shaders>)
+# The shader bundles are OBJECT libraries, whose objects only reach targets linking them directly
+target_sources (${target_name}_shared PUBLIC ${sources}
+    $<TARGET_OBJECTS:${target_name}_shaders>
+    $<TARGET_OBJECTS:${target_name}_bloom_prefilter_shaders>
+    $<TARGET_OBJECTS:${target_name}_bloom_blur_shaders>)

@@ -20,6 +20,7 @@
 */
 
 #include "SynthInterface.h"
+#include "SynthBloomEffect.h"
 #include "SynthKeyboardLook.h"
 #include "SynthTheme.h"
 
@@ -57,6 +58,7 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     keyboardComponent.setMidiChannel (1);
     keyboardComponent.setVelocity (0.7f);
     SynthKeyboardLook::apply (keyboardComponent);
+    SynthTheme::applySection (keyboardComponent, SynthTheme::Section::keys);
     mainPage.addAndMakeVisible (keyboardComponent);
 
     // The wheels follow the processor's keyboard state, host MIDI included; the keyboard state
@@ -69,6 +71,9 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     {
         processor.sendMidiFromEditor (yup::MidiMessage::controllerEvent (1, 1, static_cast<int> (value * 127.0)));
     };
+
+    for (auto* wheel : std::initializer_list<yup::Component*> { &pitchWheelComponent, &modWheelComponent })
+        SynthTheme::applySection (*wheel, SynthTheme::Section::keys);
 
     SynthKeyboardLook::apply (pitchWheelComponent);
     SynthKeyboardLook::apply (modWheelComponent);
@@ -108,12 +113,15 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
         lfoPanels[static_cast<std::size_t> (index)] = std::make_unique<SynthLFOPanel> (parameters.lfos[static_cast<std::size_t> (index)], processor.getCurves(), index);
     }
 
-    const auto makeCaption = [] (const yup::String& text, yup::Color color)
+    const auto makeCaption = [] (const yup::String& text, std::optional<yup::Color> color)
     {
         auto label = std::make_unique<yup::Label>();
         label->setText (text, yup::dontSendNotification);
         label->setFont (SynthTheme::captionFont (12.0f));
-        label->setColor (yup::Label::Style::textFillColorId, color);
+
+        if (color.has_value())
+            label->setColor (yup::Label::Style::textFillColorId, *color);
+
         label->setJustification (yup::Justification::centerRight);
         return label;
     };
@@ -123,13 +131,13 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     for (int index = 0; index < SynthExample::oscillatorCount; ++index)
         oscillatorTabs.push_back ({ "Osc " + yup::String (index + 1), oscillatorPanels[static_cast<std::size_t> (index)].get(), parameters.oscillators[static_cast<std::size_t> (index)].enabled });
 
-    oscillatorSection = std::make_unique<SynthSection> (std::move (oscillatorTabs), SynthTheme::accent());
+    oscillatorSection = std::make_unique<SynthSection> (std::move (oscillatorTabs), SynthTheme::Section::oscillators);
 
     fmPanel = std::make_unique<SynthFMPanel> (parameters.fm);
     modulationPage = std::make_unique<SynthModulationPage> (parameters, processor.getRoutes(), processor.getParameters());
-    matrixCaption = makeCaption (yup::String::fromUTF8 ("ROW \xe2\x86\x90 COLUMN"), SynthTheme::textSecondary());
+    matrixCaption = makeCaption (yup::String::fromUTF8 ("ROW \xe2\x86\x90 COLUMN"), std::nullopt);
     matrixSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "FM", fmPanel.get() }, { "Mods", modulationPage.get() } },
-                                                    SynthTheme::accent(),
+                                                    SynthTheme::Section::matrix,
                                                     std::vector<SynthSection::StripControl> { { matrixCaption.get(), 110.0f } });
 
     std::vector<SynthSection::Tab> filterTabs;
@@ -138,7 +146,7 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
         filterTabs.push_back ({ "Filter " + yup::String (index + 1), filterPanels[static_cast<std::size_t> (index)].get(), parameters.filters[static_cast<std::size_t> (index)].enabled });
 
     routingSelector = std::make_unique<ParameterSegmented> (parameters.filterRouting, std::vector<ParameterSegmented::Segment> { { "Serial" }, { "Par" } });
-    filterSection = std::make_unique<SynthSection> (std::move (filterTabs), SynthTheme::accent(), std::vector<SynthSection::StripControl> { { routingSelector.get(), 96.0f } });
+    filterSection = std::make_unique<SynthSection> (std::move (filterTabs), SynthTheme::Section::filters, std::vector<SynthSection::StripControl> { { routingSelector.get(), 96.0f } });
 
     std::vector<SynthSection::Tab> envelopeTabs;
     ampCaption = makeCaption (yup::String::fromUTF8 ("\xe2\x86\x92 AMP"), SynthTheme::envelopeAccent());
@@ -154,7 +162,7 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
         envelopeTabs.push_back (std::move (tab));
     }
 
-    envelopeSection = std::make_unique<SynthSection> (std::move (envelopeTabs), SynthTheme::envelopeAccent());
+    envelopeSection = std::make_unique<SynthSection> (std::move (envelopeTabs), SynthTheme::Section::envelopes);
 
     std::vector<SynthSection::Tab> lfoTabs;
 
@@ -162,12 +170,11 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     {
         const auto& lfo = parameters.lfos[static_cast<std::size_t> (index)];
         auto& syncLed = lfoSyncLeds.emplace_back (std::make_unique<ParameterLed> (lfo.tempoSync, "Sync"));
-        syncLed->setAccent (SynthTheme::lfoAccent());
 
         lfoTabs.push_back ({ "LFO " + yup::String (index + 1), lfoPanels[static_cast<std::size_t> (index)].get(), lfo.enabled, false, { { syncLed.get(), 56.0f } } });
     }
 
-    lfoSection = std::make_unique<SynthSection> (std::move (lfoTabs), SynthTheme::lfoAccent());
+    lfoSection = std::make_unique<SynthSection> (std::move (lfoTabs), SynthTheme::Section::lfos);
 
     for (auto* section : { oscillatorSection.get(), matrixSection.get(), filterSection.get(), envelopeSection.get(), lfoSection.get() })
         mainPage.addAndMakeVisible (*section);
@@ -181,6 +188,7 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
 
 
     keepFocusOnKeyboard (*this, keyboardComponent);
+    setComponentEffect (yup::ComponentEffect::Ptr (new SynthBloomEffect()));
     syncFromProcessor();
 
 
@@ -251,12 +259,12 @@ void SynthInterface::paint (yup::Graphics& g)
     g.setFillColor (SynthTheme::frameColor());
     g.fillAll();
 
-    SynthTheme::paintTile (g, wheelsTile);
-    SynthTheme::paintTile (g, keyboardTile);
-    SynthTheme::paintWell (g, keyboardTile.reduced (6.0f));
+    SynthTheme::paintTile (g, keyboardComponent, wheelsTile);
+    SynthTheme::paintTile (g, keyboardComponent, keyboardTile);
+    SynthTheme::paintWell (g, keyboardComponent, keyboardTile.reduced (6.0f));
 
     const auto captions = wheelsTile.reduced (12.0f, 8.0f).withTrimmedTop (wheelsTile.getHeight() - 16.0f - wheelCaptionHeight);
-    g.setFillColor (SynthTheme::textSecondary());
+    g.setFillColor (SynthTheme::textSecondary (keyboardComponent));
     g.fillFittedText ("PITCH", SynthTheme::captionFont (10.5f), captions.withWidth (wheelWidth).withSizeKeepingCenter (wheelWidth + 12.0f, captions.getHeight()), yup::Justification::center);
     g.fillFittedText ("MOD", SynthTheme::captionFont (10.5f), captions.withTrimmedLeft (captions.getWidth() - wheelWidth).withSizeKeepingCenter (wheelWidth + 12.0f, captions.getHeight()), yup::Justification::center);
 }

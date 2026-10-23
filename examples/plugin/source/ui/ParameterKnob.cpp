@@ -42,7 +42,6 @@ ParameterKnob::ParameterKnob (const yup::String& caption, yup::AudioParameter::P
     captionText = caption;
     label.setText (caption, yup::dontSendNotification);
     label.setFont (font);
-    label.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary());
     label.setJustification (yup::Justification::center);
     addAndMakeVisible (label);
 }

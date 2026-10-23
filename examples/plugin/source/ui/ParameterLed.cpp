@@ -29,12 +29,6 @@ ParameterLed::ParameterLed (yup::AudioParameter::Ptr toggleParameter, const yup:
     shownOn = isOn();
 }
 
-void ParameterLed::setAccent (yup::Color newAccent)
-{
-    accentOverride = newAccent;
-    repaint();
-}
-
 bool ParameterLed::isOn() const
 {
     const auto& parameter = gesture.getParameter();
@@ -59,21 +53,21 @@ void ParameterLed::paint (yup::Graphics& g)
 
     if (caption.isNotEmpty())
     {
-        g.setFillColor (SynthTheme::textPrimary());
+        g.setFillColor (SynthTheme::textPrimary (*this));
         g.fillFittedText (caption.toUpperCase(), SynthTheme::captionFont (12.0f), bounds.withTrimmedRight (6.0f), yup::Justification::centerRight);
     }
 
-    const auto lit = accentOverride.value_or (SynthTheme::accent());
+    const auto lit = SynthTheme::accent (*this);
 
     if (! isOn())
     {
-        SynthTheme::paintWell (g, led, 2.0f);
+        SynthTheme::paintWell (g, *this, led, 2.0f);
         return;
     }
 
     g.setFillColor (lit.withAlpha (0.35f));
     g.fillRoundedRect (led.reduced (-2.0f), 4.0f);
-    g.setFillColor (isEnabled() ? lit : SynthTheme::textSecondary());
+    g.setFillColor (isEnabled() ? lit : SynthTheme::textSecondary (*this));
     g.fillRoundedRect (led, 2.0f);
 }
 

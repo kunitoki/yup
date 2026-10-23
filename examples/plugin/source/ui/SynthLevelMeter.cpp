@@ -56,12 +56,12 @@ void SynthLevelMeter::paint (yup::Graphics& g)
         const auto bar = bounds.removeFromLeft (barWidth);
         bounds.removeFromLeft (2.0f);
 
-        SynthTheme::paintWell (g, bar, 2.0f);
+        SynthTheme::paintWell (g, *this, bar, 2.0f);
 
         const auto proportion = (decibels - floorDecibels) / -floorDecibels;
         const auto height = (bar.getHeight() - 2.0f) * yup::jlimit (0.0f, 1.0f, proportion);
 
-        g.setFillColor (decibels > -1.0f ? SynthTheme::accent().brighter (0.3f) : SynthTheme::accent());
+        g.setFillColor (decibels > -1.0f ? SynthTheme::accent (*this).brighter (0.3f) : SynthTheme::accent (*this));
         g.fillRoundedRect (bar.reduced (1.0f).withTrimmedTop (bar.getHeight() - 2.0f - height), 1.0f);
     }
 }

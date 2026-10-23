@@ -53,7 +53,7 @@ bool SynthNumberField::syncFromParameter()
 void SynthNumberField::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
-    SynthTheme::paintWell (g, bounds);
+    SynthTheme::paintWell (g, *this, bounds);
 
     auto content = bounds.reduced (7.0f, 0.0f);
     const auto height = yup::jmin (13.5f, bounds.getHeight() * 0.62f);
@@ -63,11 +63,11 @@ void SynthNumberField::paint (yup::Graphics& g)
         const auto font = SynthTheme::captionFont (height * 0.85f);
         const auto captionWidth = yup::jmin (content.getWidth() * 0.5f, SynthTheme::textWidth (caption, font) + 6.0f);
 
-        g.setFillColor (SynthTheme::textSecondary());
+        g.setFillColor (SynthTheme::textSecondary (*this));
         g.fillFittedText (caption, font, content.removeFromLeft (captionWidth), yup::Justification::centerLeft);
     }
 
-    g.setFillColor (isEnabled() ? SynthTheme::accent() : SynthTheme::textSecondary());
+    g.setFillColor (isEnabled() ? SynthTheme::accent (*this) : SynthTheme::textSecondary (*this));
     g.fillFittedText (shownText, SynthTheme::valueFont (height), content, caption.isNotEmpty() ? yup::Justification::centerRight : yup::Justification::center);
 }
 

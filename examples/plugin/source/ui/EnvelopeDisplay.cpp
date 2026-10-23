@@ -204,7 +204,7 @@ void EnvelopeDisplay::mouseDoubleClick (const yup::MouseEvent& event)
 void EnvelopeDisplay::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
-    SynthTheme::paintWell (g, bounds);
+    SynthTheme::paintWell (g, *this, bounds);
 
     const auto area = getArea();
 
@@ -253,9 +253,9 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
         const auto handle = getHandle (segment);
         const auto active = dragKind == DragKind::slope && dragIndex == segment;
 
-        g.setFillColor (SynthTheme::wellColor());
+        g.setFillColor (SynthTheme::wellColor (*this));
         g.fillEllipse (handle.getX() - handleRadius, handle.getY() - handleRadius, handleRadius * 2.0f, handleRadius * 2.0f);
-        g.setStrokeColor (active ? SynthTheme::textPrimary() : color);
+        g.setStrokeColor (active ? SynthTheme::textPrimary (*this) : color);
         g.setStrokeWidth (1.5f);
         g.strokeEllipse (handle.getX() - handleRadius, handle.getY() - handleRadius, handleRadius * 2.0f, handleRadius * 2.0f);
     }
@@ -266,7 +266,7 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
         const auto center = toScreen (point.time, point.level);
         const auto radius = dragKind == DragKind::point && dragIndex == index ? pointRadius + 1.5f : pointRadius;
 
-        g.setFillColor (index == sustain ? color : SynthTheme::textPrimary());
+        g.setFillColor (index == sustain ? color : SynthTheme::textPrimary (*this));
         g.fillEllipse (center.getX() - radius, center.getY() - radius, radius * 2.0f, radius * 2.0f);
     }
 
@@ -285,6 +285,6 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
 
     g.setFillColor (color);
     g.fillRoundedRect (pill, 9.0f);
-    g.setFillColor (SynthTheme::role (yup::ThemePalette::Role::onAccent));
+    g.setFillColor (SynthTheme::role (*this, yup::ThemePalette::Role::onAccent));
     g.fillFittedText (text, font, pill, yup::Justification::center);
 }

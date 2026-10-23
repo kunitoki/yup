@@ -50,14 +50,14 @@ void LFODisplay::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
 
-    SynthTheme::paintWell (g, bounds);
+    SynthTheme::paintWell (g, *this, bounds);
 
     const auto area = bounds.reduced (8.0f);
 
     if (area.getWidth() <= 0.0f || area.getHeight() <= 0.0f)
         return;
 
-    g.setFillColor (SynthTheme::textPrimary().withAlpha (0.08f));
+    g.setFillColor (SynthTheme::textPrimary (*this).withAlpha (0.08f));
     g.fillRect (area.getX(), area.getCenterY(), area.getWidth(), 1.0f);
 
     // One period at one sample per point: the shape is read the way the engine reads it.
@@ -91,6 +91,6 @@ void LFODisplay::paint (yup::Graphics& g)
     const auto markerX = area.getX() + area.getWidth() * phase;
     const auto markerY = area.getCenterY() - shape.getValue() * area.getHeight() * 0.45f;
 
-    g.setFillColor (SynthTheme::textPrimary());
+    g.setFillColor (SynthTheme::textPrimary (*this));
     g.fillEllipse (yup::Rectangle<float> (markerX - 3.0f, markerY - 3.0f, 6.0f, 6.0f));
 }

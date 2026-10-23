@@ -21,12 +21,12 @@
 #include "SynthSection.h"
 #include "SynthTheme.h"
 
-SynthSection::SynthSection (std::vector<Tab> tabsToShow, yup::Color accentColor, std::vector<StripControl> sharedStripControls)
+SynthSection::SynthSection (std::vector<Tab> tabsToShow, SynthTheme::Section section, std::vector<StripControl> sharedStripControls)
     : tabs (std::move (tabsToShow))
     , sharedControls (std::move (sharedStripControls))
-    , accent (accentColor)
 {
     setOpaque (false);
+    SynthTheme::applySection (*this, section);
 
     const auto font = SynthTheme::captionFont (13.5f);
 
@@ -35,10 +35,7 @@ SynthSection::SynthSection (std::vector<Tab> tabsToShow, yup::Color accentColor,
         auto led = (tab.enable != nullptr || tab.lockedOn) ? std::make_unique<ParameterLed> (tab.enable) : nullptr;
 
         if (led != nullptr)
-        {
-            led->setAccent (accent);
             addAndMakeVisible (*led);
-        }
 
         tabWidths.push_back (SynthTheme::textWidth (tab.name.toUpperCase(), font) + tabPadding * 2.0f + (led != nullptr ? ledSpace : 0.0f));
         leds.push_back (std::move (led));
@@ -160,12 +157,12 @@ void SynthSection::resized()
 void SynthSection::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
-    SynthTheme::paintPanel (g, bounds);
+    SynthTheme::paintPanel (g, *this, bounds);
 
     const auto strip = bounds.withHeight (SynthTheme::stripHeight);
     const auto corner = SynthTheme::panelCorner;
 
-    g.setFillColor (SynthTheme::stripColor());
+    g.setFillColor (SynthTheme::stripColor (*this));
     g.fillRoundedRect (strip, corner, corner, 0.0f, 0.0f);
 
     g.setFillColor (yup::Colors::black.withAlpha (SynthTheme::isDark() ? 0.6f : 0.2f));
@@ -180,9 +177,9 @@ void SynthSection::paint (yup::Graphics& g)
 
         if (isSelected)
         {
-            g.setFillColor (SynthTheme::panelColor());
+            g.setFillColor (SynthTheme::panelColor (*this));
             g.fillRoundedRect (area, tab == 0 ? corner : 0.0f, 0.0f, 0.0f, 0.0f);
-            g.setFillColor (shownOn[static_cast<std::size_t> (tab)] ? accent : SynthTheme::textSecondary());
+            g.setFillColor (shownOn[static_cast<std::size_t> (tab)] ? SynthTheme::accent (*this) : SynthTheme::textSecondary (*this));
             g.fillRoundedRect (area.withHeight (2.0f), tab == 0 ? corner : 0.0f, 0.0f, 0.0f, 0.0f);
         }
         else
@@ -195,7 +192,7 @@ void SynthSection::paint (yup::Graphics& g)
         if (leds[static_cast<std::size_t> (tab)] != nullptr)
             text.removeFromLeft (ledSpace);
 
-        g.setFillColor (isSelected && shownOn[static_cast<std::size_t> (tab)] ? SynthTheme::textPrimary() : SynthTheme::textSecondary());
+        g.setFillColor (isSelected && shownOn[static_cast<std::size_t> (tab)] ? SynthTheme::textPrimary (*this) : SynthTheme::textSecondary (*this));
         g.fillFittedText (tabs[static_cast<std::size_t> (tab)].name.toUpperCase(), font, text, yup::Justification::centerLeft);
     }
 }

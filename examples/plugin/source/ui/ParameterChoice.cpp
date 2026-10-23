@@ -29,7 +29,6 @@ ParameterChoice::ParameterChoice (const yup::String& caption, yup::AudioParamete
 
     label.setText (caption, yup::dontSendNotification);
     label.setFont (font);
-    label.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary());
 
     if (caption.isNotEmpty())
         addAndMakeVisible (label);
@@ -39,7 +38,6 @@ ParameterChoice::ParameterChoice (const yup::String& caption, yup::AudioParamete
 
     comboBox.setTextWhenNothingSelected ("-");
     comboBox.setSelectedId (getParameterItemId(), yup::dontSendNotification);
-    SynthTheme::styleComboBox (comboBox);
     comboBox.onSelectedItemChanged = [this]
     {
         const auto id = comboBox.getSelectedId();
