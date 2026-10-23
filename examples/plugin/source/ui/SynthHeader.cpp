@@ -50,6 +50,8 @@ SynthHeader::SynthHeader (PrismProcessor& processorToControl)
     , presetBar (processorToControl)
     , volumeKnob ("VOLUME", processorToControl.getSynthParameters().volume, SynthTheme::captionFont (11.0f))
 {
+    setCachedToTexture (true);
+
     setOpaque (false);
     SynthTheme::applySection (*this, SynthTheme::Section::header);
 
@@ -96,6 +98,13 @@ void SynthHeader::syncFromProcessor()
     presetBar.syncFromProcessor();
     volumeKnob.syncFromParameter();
     meter.setLevels (processor.getOutputPeak (0), processor.getOutputPeak (1));
+
+    // The readouts change on almost every call, and each change repaints the interface,
+    // so they follow at a reading pace.
+    if (++readoutCalls < readoutInterval)
+        return;
+
+    readoutCalls = 0;
 
     const auto newVoices = yup::String (processor.getNumActiveVoices()) + " / " + yup::String (SynthExample::voiceCount);
     const auto newLoad = yup::String (processor.getLoadPercentage(), 1) + "%";
@@ -169,7 +178,7 @@ void SynthHeader::paint (yup::Graphics& g)
     g.setFillColor (SynthTheme::textPrimary (*this));
     g.fillFittedText ("PRISM", SynthTheme::valueFont (24.0f).withAxisValue ("wdth", 100.0f), words.removeFromTop (words.getHeight() * 0.62f), yup::Justification::bottomLeft);
     g.setFillColor (SynthTheme::textSecondary (*this));
-    g.fillFittedText ("SPECTRAL FMOD", SynthTheme::captionFont (9.5f), words, yup::Justification::topLeft);
+    g.fillFittedText ("SPECTRAL FMOD", SynthTheme::captionFont (10.0f), words, yup::Justification::topLeft);
 
     auto stats = statsTile.reduced (12.0f, 9.0f);
     const auto rowHeight = stats.getHeight() / 3.0f;

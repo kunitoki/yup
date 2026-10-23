@@ -20,18 +20,10 @@
 */
 
 #include "SynthThemes.h"
+#include "SynthSettings.h"
 
 namespace SynthThemes
 {
-namespace
-{
-yup::File getSettingsFile()
-{
-    return yup::File::getSpecialLocation (yup::File::userApplicationDataDirectory)
-        .getChildFile ("Prism")
-        .getChildFile ("Theme.txt");
-}
-} // namespace
 
 const std::vector<Theme>& getThemes()
 {
@@ -61,7 +53,7 @@ const std::vector<Theme>& getThemes()
 
 int loadSelectedTheme()
 {
-    const auto name = getSettingsFile().loadFileAsString().trim();
+    const auto& name = SynthSettings::get().theme;
     const auto& themes = getThemes();
 
     for (std::size_t index = 0; index < themes.size(); ++index)
@@ -78,9 +70,8 @@ void saveSelectedTheme (int index)
     if (! yup::isPositiveAndBelow (index, static_cast<int> (themes.size())))
         return;
 
-    const auto file = getSettingsFile();
-    file.getParentDirectory().createDirectory();
-    file.replaceWithText (themes[static_cast<std::size_t> (index)].name);
+    SynthSettings::get().theme = themes[static_cast<std::size_t> (index)].name;
+    SynthSettings::save();
 }
 
 void applyTheme (int index)

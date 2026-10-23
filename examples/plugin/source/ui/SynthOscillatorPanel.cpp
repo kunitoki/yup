@@ -53,6 +53,8 @@ SynthOscillatorPanel::SynthOscillatorPanel (const SynthOscillatorParameters& par
                  SynthSliderField ("F. Pos", parametersToEdit.formantPosition, SynthSliderField::Look::boxed),
                  SynthSliderField ("Scatter", parametersToEdit.scatter, SynthSliderField::Look::boxed) }
 {
+    setCachedToTexture (true);
+
     setOpaque (false);
 
     addAndMakeVisible (editor);

@@ -34,6 +34,8 @@ SynthLFOPanel::SynthLFOPanel (const SynthLFOParameters& parametersToEdit, const 
     , smoothKnob ("SMOOTH", parametersToEdit.smoothing, SynthTheme::captionFont (12.0f))
     , depthKnob ("DEPTH", parametersToEdit.depth, SynthTheme::captionFont (12.0f))
 {
+    setCachedToTexture (true);
+
     setOpaque (false);
 
     display.setValues (shownValues);

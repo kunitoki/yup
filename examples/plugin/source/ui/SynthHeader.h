@@ -77,6 +77,9 @@ private:
     ParameterKnob volumeKnob;
     SynthLevelMeter meter;
     float rightGroupWidth = 381.0f;
+    static constexpr int readoutInterval = 8;
+
+    int readoutCalls = 0;
     yup::String voices;
     yup::String load;
     yup::String xruns;

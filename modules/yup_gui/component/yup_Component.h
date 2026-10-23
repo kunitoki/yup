@@ -1805,7 +1805,8 @@ private:
     void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const;
     void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous);
-    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
+    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt);
+    std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
@@ -1841,6 +1842,8 @@ private:
     std::optional<float> windowAspectRatio;
     GpuCanvas::Ptr cachedTextureCanvas;
     GpuCanvas::Ptr effectOffscreenCanvas;
+    RectangleList<float> effectDirtyRegion;
+    static constexpr int maximumDirtyRectangles = 8;
     GpuCanvas::Ptr presentedCanvas;
     float contentScale = 1.0f;
     uint8 opacity = 255;

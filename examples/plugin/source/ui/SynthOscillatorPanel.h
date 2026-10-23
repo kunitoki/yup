@@ -52,6 +52,9 @@ public:
     /** Publishes a frame's worth of partial edits and shows changes made anywhere else. */
     void syncFromParameters();
 
+    /** Lets the waveform display move, while something plays. */
+    void setAnimating (bool shouldAnimate) noexcept { editor.setAnimating (shouldAnimate); }
+
     void resized() override;
     void paint (yup::Graphics& g) override;
 

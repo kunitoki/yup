@@ -43,6 +43,7 @@ WaveformEditor::WaveformEditor (const SynthOscillatorParameters& parametersToSho
 void WaveformEditor::setEditingPartials (bool shouldEdit)
 {
     editingPartials = shouldEdit;
+    landscapeDirty = true;
     repaint();
 }
 
@@ -85,6 +86,7 @@ void WaveformEditor::refresh()
             sample *= scale;
     }
 
+    landscapeDirty = true;
     repaint();
 }
 
@@ -119,7 +121,7 @@ void WaveformEditor::revertToPreset()
 void WaveformEditor::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
-    const auto landscape = editingPartials ? nullptr : renderLandscape (g);
+    const auto landscape = editingPartials ? nullptr : getLandscape (g);
 
     if (landscape != nullptr)
     {
@@ -151,11 +153,36 @@ void WaveformEditor::paint (yup::Graphics& g)
 
 void WaveformEditor::refreshDisplay (double lastFrameTimeSeconds)
 {
-    if (editingPartials || ! isShowing())
+    if (editingPartials || ! isShowing() || ! (animating || hovered))
+    {
+        sinceLastFrame = 0.0;
+        return;
+    }
+
+    sinceLastFrame += lastFrameTimeSeconds;
+
+    if (sinceLastFrame < animationInterval)
         return;
 
-    animationTime += static_cast<float> (lastFrameTimeSeconds);
+    animationTime += static_cast<float> (sinceLastFrame);
+    sinceLastFrame = 0.0;
+    landscapeDirty = true;
     repaint();
+}
+
+void WaveformEditor::resized()
+{
+    landscapeDirty = true;
+}
+
+void WaveformEditor::mouseEnter (const yup::MouseEvent&)
+{
+    hovered = true;
+}
+
+void WaveformEditor::mouseExit (const yup::MouseEvent&)
+{
+    hovered = false;
 }
 
 void WaveformEditor::mouseDown (const yup::MouseEvent& event)
@@ -189,6 +216,18 @@ void WaveformEditor::mouseUp (const yup::MouseEvent&)
 }
 
 //==============================================================================
+/** Returns the landscape, rendered again only when it moved or its waveform changed. */
+yup::GpuTexture::Ptr WaveformEditor::getLandscape (yup::Graphics& g)
+{
+    if (landscapeDirty || cachedLandscape == nullptr)
+    {
+        cachedLandscape = renderLandscape (g);
+        landscapeDirty = false;
+    }
+
+    return cachedLandscape;
+}
+
 /** Renders the shader landscape behind the waveform, or returns nullptr without a GPU. */
 yup::GpuTexture::Ptr WaveformEditor::renderLandscape (yup::Graphics& g)
 {

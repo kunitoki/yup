@@ -23,23 +23,11 @@
 #include "SynthNeonEffect.h"
 #include "SynthKeyboardLook.h"
 #include "SynthTheme.h"
+#include "SynthSettings.h"
 #include "SynthThemes.h"
 
 namespace
 {
-/** Global and debug switches, kept for the process so a theme change does not reset them. */
-struct Settings
-{
-    bool postEffect = true;
-    SynthNeonEffect::Options neon;
-};
-
-Settings& getSettings()
-{
-    static Settings settings;
-    return settings;
-}
-
 /** Keeps every control under a component out of the keyboard focus, so the computer
     keyboard keeps playing the on-screen keyboard while the mouse tweaks them. Sliders,
     combo boxes and buttons all take the focus on click whenever they want it. */
@@ -204,7 +192,9 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     syncFromProcessor();
 
 
-    startTimerHz (60);
+    // Every repaint redraws the whole interface under the post effect, so the displays
+    // follow the processor at 30 Hz; dragging a control still repaints it at once.
+    startTimerHz (30);
 }
 
 SynthInterface::~SynthInterface()
@@ -283,12 +273,14 @@ void SynthInterface::paint (yup::Graphics& g)
 
 void SynthInterface::showSettingsMenu()
 {
-    auto& settings = getSettings();
+    auto& settings = SynthSettings::get();
     auto& neon = settings.neon;
 
     // Switch IDs are 1 based, a switch reached through its index in this table; theme IDs
-    // start at themeBase, a theme reached through its index in SynthThemes.
+    // start at themeBase, a theme reached through its index in SynthThemes; frame rate IDs
+    // are frameRateBase plus the rate, 0 standing for vsync.
     constexpr int themeBase = 1000;
+    constexpr int frameRateBase = 2000;
 
     const std::pair<const char*, bool*> switches[] { { "Post Effect", &settings.postEffect },
                                                      { "Neon Glow", &neon.glow },
@@ -312,6 +304,13 @@ void SynthInterface::showSettingsMenu()
         themeMenu->addItem (themes[static_cast<std::size_t> (index)].name, themeBase + index, true, index == selectedTheme);
 
     menu->addSubMenu ("Theme", themeMenu);
+
+    auto frameRateMenu = yup::PopupMenu::create();
+
+    for (const auto& [name, rate] : { std::pair<const char*, int> { "30 FPS", 30 }, { "60 FPS", 60 }, { "VSync", 0 } })
+        frameRateMenu->addItem (name, frameRateBase + rate, true, settings.frameRate == rate);
+
+    menu->addSubMenu ("Frame Rate", frameRateMenu);
     menu->addSeparator();
 
     for (int index = 0; index < static_cast<int> (std::size (switches)); ++index)
@@ -335,6 +334,14 @@ void SynthInterface::showSettingsMenu()
         if (interface == nullptr)
             return;
 
+        if (selectedId >= frameRateBase)
+        {
+            SynthSettings::get().frameRate = selectedId - frameRateBase;
+            SynthSettings::save();
+            interface->applyFrameRate();
+            return;
+        }
+
         if (selectedId >= themeBase)
         {
             if (interface->onThemeChosen != nullptr)
@@ -348,6 +355,7 @@ void SynthInterface::showSettingsMenu()
 
         auto* value = values[static_cast<std::size_t> (selectedId - 1)];
         *value = ! *value;
+        SynthSettings::save();
 
         if (interface->onPostEffectChanged != nullptr)
             interface->onPostEffectChanged();
@@ -356,7 +364,7 @@ void SynthInterface::showSettingsMenu()
 
 yup::ComponentEffect::Ptr SynthInterface::createPostEffect()
 {
-    const auto& settings = getSettings();
+    const auto& settings = SynthSettings::get();
     return settings.postEffect ? yup::ComponentEffect::Ptr (new SynthNeonEffect (settings.neon)) : nullptr;
 }
 
@@ -366,9 +374,34 @@ void SynthInterface::mouseDown (const yup::MouseEvent&)
 }
 
 //==============================================================================
+void SynthInterface::applyFrameRate()
+{
+    auto* native = getNativeComponent();
+
+    if (native == nullptr)
+        return;
+
+    const auto rate = SynthSettings::get().frameRate;
+    native->setVsyncEnabled (rate == 0);
+
+    if (rate > 0)
+        native->setDesiredFrameRate (static_cast<float> (rate));
+
+    appliedFrameRate = rate;
+}
+
 void SynthInterface::timerCallback()
 {
+    // The window may only exist once the interface is on screen, as in a plugin host.
+    if (appliedFrameRate != SynthSettings::get().frameRate)
+        applyFrameRate();
+
     syncFromProcessor();
+
+    const auto playing = processor.getNumActiveVoices() > 0;
+
+    for (auto& panel : oscillatorPanels)
+        panel->setAnimating (playing);
 
 
     for (int index = 0; index < SynthExample::lfoCount; ++index)

@@ -31,6 +31,8 @@ SynthFilterPanel::SynthFilterPanel (const SynthFilterParameters& parametersToEdi
     , keytrackKnob ("KEYTRACK", parametersToEdit.keytrack, SynthTheme::captionFont (12.0f))
     , mixKnob ("MIX", parametersToEdit.mix, SynthTheme::captionFont (12.0f))
 {
+    setCachedToTexture (true);
+
     setOpaque (false);
 
     for (auto* control : std::initializer_list<yup::Component*> { &typeChoice, &cutoffField, &resonanceField, &response, &driveKnob, &keytrackKnob, &mixKnob })

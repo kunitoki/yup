@@ -24,6 +24,8 @@
 
 SynthFMPanel::SynthFMPanel (const SynthFMParameters& parametersToEdit)
 {
+    setCachedToTexture (true);
+
     setOpaque (false);
 
     for (int carrier = 0; carrier < SynthExample::oscillatorCount; ++carrier)

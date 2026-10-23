@@ -29,6 +29,8 @@ SynthEnvelopePanel::SynthEnvelopePanel (const SynthEnvelopeParameters& parameter
     , velocityKnob ("VELOCITY", parametersToEdit.velocity, SynthTheme::captionFont (12.0f))
     , depthKnob ("DEPTH", parametersToEdit.depth, SynthTheme::captionFont (12.0f))
 {
+    setCachedToTexture (true);
+
     setOpaque (false);
 
     display.onCurveEdited = [this] (const SynthCurveState::Curve& curve) { curves.setEnvelope (index, curve); };

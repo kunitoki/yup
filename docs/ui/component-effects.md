@@ -168,6 +168,22 @@ still repaint every frame on top of the cached (un-effected) background.
 
 ---
 
+## Repainting Under an Effect
+
+The effect itself always runs over the whole component, since a warp or a blur can
+move or spread any pixel. The subtree it runs on is not repainted in full every time:
+the offscreen canvas keeps the last rendering, and only what was repainted since is
+painted again over it, clipped to those areas. When nothing inside changed, the
+subtree is not painted at all and the effect runs over the previous rendering.
+
+That needs every dirty pixel to be covered again from the bottom up, so it applies
+when the component is opaque (and paints all of its bounds, as opaque components
+must) and clipped. A transparent component, one with unclipped rendering, a resized
+canvas or continuous rendering repaints the whole subtree as before.
+
+So keep the component with the effect opaque, and repaint only what changes: a meter
+that repaints its own bounds costs the meter, not the interface under the effect.
+
 ## Input Mapping for Distorting Effects
 
 An effect that moves pixels (a wave, a lens, a zoom) displays the subtree
@@ -213,8 +229,8 @@ private:
 - Return a point even when it falls outside the bounds, so a captured drag keeps
   tracking. Return `std::nullopt` only for degenerate mappings: hit-testing then
   skips the component, and other conversions fall back to its position.
-- Repainting anything inside a component with an effect repaints the whole
-  component, since the effect can move pixels anywhere inside it.
+- Repainting anything inside a component with an effect runs the effect over the
+  whole component again, since the effect can move pixels anywhere inside it.
 - When an animated effect moves content under a pointer that stays still, the
   window re-checks the pointer after each painted frame and sends the
   enter / exit, move or drag events the new mapping implies, so hover and

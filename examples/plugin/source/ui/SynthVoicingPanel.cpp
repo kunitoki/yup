@@ -30,6 +30,8 @@ SynthVoicingPanel::SynthVoicingPanel (const SynthParameters& parametersToEdit)
     , detuneKnob ("DETUNE", parametersToEdit.unisonDetune, SynthTheme::captionFont (12.0f))
     , spreadKnob ("SPREAD", parametersToEdit.unisonSpread, SynthTheme::captionFont (12.0f))
 {
+    setCachedToTexture (true);
+
     setOpaque (false);
     SynthTheme::applySection (*this, SynthTheme::Section::voicing);
 

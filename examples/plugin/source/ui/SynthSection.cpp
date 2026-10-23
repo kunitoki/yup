@@ -25,6 +25,10 @@ SynthSection::SynthSection (std::vector<Tab> tabsToShow, SynthTheme::Section sec
     : tabs (std::move (tabsToShow))
     , sharedControls (std::move (sharedStripControls))
 {
+    // Its own drawing, the chrome around the children, is drawn once and reused until
+    // it repaints, since the post effect repaints the whole interface on every change.
+    setCachedToTexture (true);
+
     setOpaque (false);
     SynthTheme::applySection (*this, section);
 

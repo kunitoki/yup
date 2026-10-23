@@ -593,7 +593,10 @@ void Component::setTransform (const AffineTransform& newTransform)
     if (transform == newTransform)
         return;
 
+    // The pixels move, so both what the component covered and what it covers now repaint
+    repaint();
     transform = newTransform;
+    repaint();
 
     transformChanged();
 }
@@ -1698,9 +1701,13 @@ void Component::internalRepaint (const Rectangle<float>& rect)
     {
         component->subtreeDirty = true;
 
-        // A warp can move pixels anywhere inside the component
+        // A warp can move pixels anywhere inside the component, so the whole of it is
+        // presented again; what changed underneath is kept, so only that is repainted
         if (component->componentEffect != nullptr)
+        {
+            component->effectDirtyRegion.add (dirtyArea);
             dirtyArea = component->getLocalBounds();
+        }
 
         auto* parent = component->parentComponent;
 
@@ -1729,7 +1736,7 @@ void Component::paintChildrenAndOverChildren (Graphics& g, const RectangleList<f
     paintOverChildren (g);
 }
 
-GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas)
+GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas, const std::optional<RectangleList<float>>& dirtyRegion)
 {
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
@@ -1737,9 +1744,10 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     const auto renderOffscreen = [&] () -> GpuCanvas::Ptr
     {
         const auto pixelSize = getCanvasPixelSize (getSize(), scale);
+        const auto reused = hasPixelSize (reuseCanvas, pixelSize);
 
         GpuCanvas::Ptr canvas;
-        if (hasPixelSize (reuseCanvas, pixelSize))
+        if (reused)
         {
             canvas = std::move (reuseCanvas);
         }
@@ -1752,11 +1760,21 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
         if (canvas == nullptr)
             return nullptr;
 
-        auto& offscreenG = canvas->beginDraw ({}, scale);
+        const auto partial = reused && dirtyRegion.has_value();
+
+        if (partial && dirtyRegion->isEmpty())
+            return canvas;
+
+        GpuFrameDescriptor frame;
+
+        if (partial)
+            frame.loadOp = GpuLoadOp::load;
+
+        auto& offscreenG = canvas->beginDraw (frame, scale);
 
         flags.paintAsOffscreenRoot = true;
 
-        paintSubtree (offscreenG, RectangleList<float> { getLocalBounds() }, opacity, renderContinuous);
+        paintSubtree (offscreenG, partial ? *dirtyRegion : RectangleList<float> { getLocalBounds() }, opacity, renderContinuous);
 
         flags.paintAsOffscreenRoot = false;
 
@@ -1772,6 +1790,35 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     }
 
     return renderOffscreen();
+}
+
+std::optional<RectangleList<float>> Component::takeEffectDirtyRegion (bool renderContinuous)
+{
+    RectangleList<float> region;
+    std::swap (region, effectDirtyRegion);
+
+    if (renderContinuous || ! isOpaque() || flags.unclippedRendering)
+        return std::nullopt;
+
+    const auto bounds = getLocalBounds();
+    RectangleList<float> clipped;
+
+    for (const auto& rect : region.getRectangles())
+    {
+        const auto inside = rect.intersection (bounds).smallestIntContainer();
+
+        if (! inside.isEmpty())
+            clipped.add (inside);
+    }
+
+    if (clipped.getNumRectangles() > maximumDirtyRectangles)
+    {
+        const auto box = clipped.getBoundingBox();
+        clipped.clearQuick();
+        clipped.add (box);
+    }
+
+    return clipped;
 }
 
 //==============================================================================
@@ -1909,7 +1956,12 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
     if (componentEffect != nullptr)
     {
-        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), 1.0f, renderContinuous, g.getContextScale(), std::move (effectOffscreenCanvas));
+        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(),
+                                              1.0f,
+                                              renderContinuous,
+                                              g.getContextScale(),
+                                              std::move (effectOffscreenCanvas),
+                                              takeEffectDirtyRegion (renderContinuous));
         if (canvas == nullptr)
             return;
 

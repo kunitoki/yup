@@ -86,6 +86,7 @@ private:
     void timerCallback() override;
 
     void showSettingsMenu();
+    void applyFrameRate();
 
     void layoutMainPage();
     void syncFromProcessor();
@@ -126,6 +127,7 @@ private:
     std::unique_ptr<SynthSection> lfoSection;
 
     std::unique_ptr<SynthVoicingPanel> voicingPanel;
+    int appliedFrameRate = -1;
     yup::Rectangle<float> wheelsTile;
     yup::Rectangle<float> keyboardTile;
 };

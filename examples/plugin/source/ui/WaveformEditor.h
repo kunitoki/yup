@@ -65,9 +65,15 @@ public:
     /** Drops the edited partials and returns to the selected waveform preset. */
     void revertToPreset();
 
+    /** Lets the landscape move while something plays; it also moves while hovered. */
+    void setAnimating (bool shouldAnimate) noexcept { animating = shouldAnimate; }
+
     //==============================================================================
     void paint (yup::Graphics& g) override;
     void refreshDisplay (double lastFrameTimeSeconds) override;
+    void resized() override;
+    void mouseEnter (const yup::MouseEvent& event) override;
+    void mouseExit (const yup::MouseEvent& event) override;
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseDrag (const yup::MouseEvent& event) override;
     void mouseUp (const yup::MouseEvent& event) override;
@@ -100,8 +106,20 @@ private:
     SynthPartials& partials;
     const SynthOscillatorResources& resources;
     std::shared_ptr<SynthWaveformShader> shader;
+    // Every repaint of the interface repaints this display, so the landscape is only
+    // rendered again when it moved or its waveform changed, and moves at most 30 times
+    // a second, only while something plays or the pointer is over it.
+    static constexpr double animationInterval = 1.0 / 30.0;
+
+    yup::GpuTexture::Ptr getLandscape (yup::Graphics& g);
+
     yup::GpuTarget::Ptr landscapeTarget;
+    yup::GpuTexture::Ptr cachedLandscape;
     float animationTime = 0.0f;
+    double sinceLastFrame = 0.0;
+    bool landscapeDirty = true;
+    bool animating = false;
+    bool hovered = false;
 
     SynthSpectrumDerivation preview;
     yup::FourierSeries<double> displaySeries;
