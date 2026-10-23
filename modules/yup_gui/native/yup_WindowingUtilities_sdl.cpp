@@ -19,6 +19,15 @@
   ==============================================================================
 */
 
+#if YUP_MAC
+extern "C"
+{
+    struct SDL_VideoDevice;
+    SDL_VideoDevice* SDL_GetVideoDevice (void);
+    void Cocoa_HandleKeyEvent (SDL_VideoDevice* _this, NSEvent* event);
+}
+#endif
+
 namespace yup
 {
 
@@ -387,6 +396,53 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
 
 #endif
 }
+
+//==============================================================================
+
+#if YUP_MAC
+/** SDL only reads Cocoa key events while pumping the event queue itself, which never happens when a
+    host owns the run loop (plugins), so the window class is swapped for a subclass forwarding them.
+*/
+void installHostKeyEventForwarding (SDL_Window* window)
+{
+    NSWindow* nsWindow = (__bridge NSWindow*) getNativeWindowHandle (window);
+    if (nsWindow == nil)
+        return;
+
+    static Class sdlWindowClass = object_getClass (nsWindow);
+    static Class hostedWindowClass = []
+    {
+        const auto name = "YUPHostedSDLWindow_" + String::toHexString (Random::getSystemRandom().nextInt64());
+        Class cls = objc_allocateClassPair (sdlWindowClass, name.toRawUTF8(), 0);
+
+        const auto sendEvent = +[] (id self, SEL selector, NSEvent* event)
+        {
+            const auto type = [event type];
+            const bool isKeyEvent = type == NSEventTypeKeyDown || type == NSEventTypeKeyUp;
+
+            if (isKeyEvent || type == NSEventTypeFlagsChanged)
+            {
+                YUP_MODULE_DBG (GUI_WINDOWING, "SDL: hosted window key event: type=" << static_cast<int> (type) << ", sdlKeyboardFocus=" << String (SDL_GetKeyboardFocus() != nullptr ? "true" : "false"));
+
+                Cocoa_HandleKeyEvent (SDL_GetVideoDevice(), event);
+
+                if (isKeyEvent)
+                    return;
+            }
+
+            objc_super superclass = { self, sdlWindowClass };
+            reinterpret_cast<void (*) (objc_super*, SEL, NSEvent*)> (objc_msgSendSuper) (&superclass, selector, event);
+        };
+
+        class_addMethod (cls, @selector (sendEvent:), (IMP) sendEvent, "v@:@");
+        objc_registerClassPair (cls);
+        return cls;
+    }();
+
+    if (object_getClass (nsWindow) == sdlWindowClass)
+        object_setClass (nsWindow, hostedWindowClass);
+}
+#endif
 
 //==============================================================================
 

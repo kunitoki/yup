@@ -222,7 +222,7 @@ void SynthPresetBar::scanUserPresets()
     {
         std::vector<yup::File> found;
 
-        for (const auto& file : folder.findChildFiles (yup::File::findFiles, true, yup::String ("*") + presetExtension))
+        for (const auto& file : folder.findChildFiles (yup::File::findFiles, true, yup::String ("*") + presetExtension, yup::File::FollowSymlinks::noCycles))
             found.push_back (file);
 
         std::sort (found.begin(), found.end(), [] (const yup::File& a, const yup::File& b)

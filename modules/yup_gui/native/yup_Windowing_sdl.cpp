@@ -201,6 +201,11 @@ SDLComponentNative::SDLComponentNative (Component& component,
     }
 #endif
 
+#if YUP_MAC
+    if (! YUPApplicationBase::isStandaloneApp())
+        installHostKeyEventForwarding (window);
+#endif
+
     if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
     {
         windowContext = SDL_GL_CreateContext (window);
