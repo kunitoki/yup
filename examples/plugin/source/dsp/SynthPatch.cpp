@@ -20,7 +20,10 @@
 */
 
 #include "SynthPatch.h"
+#include "SynthAlgorithms.h"
 
+#include <algorithm>
+#include <string>
 #include <vector>
 
 namespace SynthPatch
@@ -51,7 +54,7 @@ yup::DataTree createEmptyState (int presetIndex)
 //==============================================================================
 struct PresetValue
 {
-    const char* id;
+    std::string id;
     float value;
 };
 
@@ -85,29 +88,79 @@ constexpr float sine = static_cast<float> (yup::Waveform::sine);
 constexpr float sawtooth = static_cast<float> (yup::Waveform::sawtooth);
 constexpr float square = static_cast<float> (yup::Waveform::square);
 
+/** Joins value lists, later lists overriding earlier ones. */
+std::vector<PresetValue> join (std::initializer_list<std::vector<PresetValue>> lists)
+{
+    std::vector<PresetValue> result;
+
+    for (const auto& list : lists)
+        result.insert (result.end(), list.begin(), list.end());
+
+    return result;
+}
+
+/** The values that wire a TX81Z style algorithm: sine operators, every link at one
+    depth, operator 4's feedback, and the output operators at one level.
+*/
+std::vector<PresetValue> algorithm (int number, float depth, float feedback, float level)
+{
+    const auto& chosen = getSynthAlgorithms()[static_cast<std::size_t> (number - 1)];
+    std::vector<PresetValue> values;
+
+    const auto add = [&values] (const std::string& id, float value) { values.push_back ({ id, value }); };
+
+    for (int op = 1; op <= SynthExample::oscillatorCount; ++op)
+    {
+        const auto isOutput = std::find (chosen.outputs.begin(), chosen.outputs.end(), op) != chosen.outputs.end();
+        add ("osc" + std::to_string (op) + ".waveform", sine);
+        add ("osc" + std::to_string (op) + ".color", 0.0f);
+        add ("osc" + std::to_string (op) + ".level", isOutput ? level : 0.0f);
+    }
+
+    for (const auto& link : chosen.links)
+        add ("fm." + std::to_string (link.carrier) + std::to_string (link.modulator), depth);
+
+    add ("fm.44", feedback);
+    return values;
+}
+
 const std::vector<FactoryPreset>& getFactoryPresets()
 {
     using Source = SynthModulationSource;
 
+    const auto noFilter = std::vector<PresetValue> { { "flt1.type", static_cast<float> (SynthFilterType::off) } };
+
     static const std::vector<FactoryPreset> presets {
         { "Init", {}, {}, {}, {} },
 
+        { "FM E-Piano",
+          join ({ algorithm (5, 0.2f, 0.0f, 0.6f), noFilter,
+                  { { "osc3.fine", 6.0f }, { "osc4.ratio", 14.0f }, { "fm.34", 0.08f } } }),
+          { { Source::env2, "fm.12", 0.3f }, { Source::env3, "fm.34", 0.35f }, { Source::velocity, "fm.12", 0.15f } },
+          { { 0, 0.002f, 2.5f, 0.0f, 0.4f, -0.6f }, { 1, 0.001f, 1.0f, 0.1f, 0.5f, -0.6f }, { 2, 0.001f, 0.15f, 0.0f, 0.1f, -0.7f } },
+          {} },
+
         { "FM Bell",
-          { { "osc1.waveform", sine }, { "osc1.level", 0.7f }, { "osc1.color", 0.0f },
-            { "osc2.ratio", 3.5f }, { "fm.12", 0.6f },
-            { "flt1.type", static_cast<float> (SynthFilterType::off) } },
-          { { Source::env2, "fm.12", 0.3f } },
-          { { 0, 0.002f, 2.5f, 0.0f, 2.5f, -0.7f }, { 1, 0.001f, 1.2f, 0.0f, 1.2f, -0.6f } },
+          join ({ algorithm (5, 0.5f, 0.0f, 0.6f), noFilter,
+                  { { "osc2.ratio", 3.5f }, { "osc4.ratio", 3.5f }, { "osc3.fine", 4.0f } } }),
+          { { Source::env2, "fm.12", 0.3f }, { Source::env2, "fm.34", 0.3f } },
+          { { 0, 0.002f, 4.0f, 0.0f, 3.0f, -0.7f }, { 1, 0.001f, 2.0f, 0.0f, 2.0f, -0.6f } },
           {} },
 
         { "FM Bass",
-          { { "global.mode", static_cast<float> (SynthPlayMode::mono) }, { "global.glide", 0.0f },
-            { "osc1.waveform", sine }, { "osc1.level", 0.8f }, { "osc1.color", 0.0f }, { "osc1.ratio", 0.5f },
-            { "osc2.ratio", 0.5f }, { "fm.12", 0.5f }, { "fm.22", 0.7f },
-            { "flt1.type", static_cast<float> (SynthFilterType::lowpass24) }, { "flt1.cutoff", 1800.0f }, { "flt1.resonance", 0.25f },
-            { "flt1.drive", 0.3f } },
+          join ({ algorithm (3, 0.35f, 0.5f, 0.8f),
+                  { { "global.mode", static_cast<float> (SynthPlayMode::mono) }, { "global.glide", 0.0f },
+                    { "osc1.ratio", 0.5f }, { "osc2.ratio", 0.5f }, { "osc4.ratio", 0.5f },
+                    { "flt1.type", static_cast<float> (SynthFilterType::lowpass24) }, { "flt1.cutoff", 1800.0f },
+                    { "flt1.resonance", 0.25f } } }),
           { { Source::env2, "fm.12", 0.35f } },
           { { 0, 0.002f, 0.4f, 0.6f, 0.12f, -0.5f }, { 1, 0.001f, 0.25f, 0.0f, 0.1f, -0.6f } },
+          {} },
+
+        { "FM Brass",
+          join ({ algorithm (3, 0.15f, 0.35f, 0.7f), noFilter, { { "lfo1.rate", 5.5f }, { "lfo1.retrigger", 0.0f } } }),
+          { { Source::env2, "fm.12", 0.35f }, { Source::lfo1, "osc1.fine", 0.02f } },
+          { { 0, 0.06f, 0.3f, 0.8f, 0.2f, -0.3f }, { 1, 0.08f, 0.4f, 0.6f, 0.2f, -0.3f } },
           {} },
 
         { "Spectral Pad",
@@ -120,7 +173,7 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           {} },
 
         { "Drawn Organ",
-          { { "flt1.type", static_cast<float> (SynthFilterType::off) }, { "lfo1.rate", 6.0f } },
+          join ({ noFilter, { { "lfo1.rate", 6.0f } } }),
           { { Source::lfo1, "osc1.fine", 0.02f } },
           { { 0, 0.005f, 0.1f, 1.0f, 0.08f, 0.0f } },
           { 0.8f, 0.6f, 0.5f, 0.4f, 0.0f, 0.3f, 0.0f, 0.25f } },
@@ -131,6 +184,36 @@ const std::vector<FactoryPreset>& getFactoryPresets()
             { "flt1.resonance", 0.35f }, { "flt1.keytrack", 0.3f } },
           { { Source::env2, "flt1.cutoff", 0.45f } },
           { { 0, 0.002f, 0.35f, 0.2f, 0.15f, -0.5f }, { 1, 0.001f, 0.25f, 0.0f, 0.15f, -0.6f } },
+          {} },
+
+        // The budget cases of the performance pass, at 4x with a sustained amplitude.
+        { "Bench / 4 Saws",
+          { { "global.quality", 1.0f }, { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
+            { "osc2.waveform", sawtooth }, { "osc2.level", 0.25f }, { "osc3.waveform", sawtooth }, { "osc3.level", 0.25f },
+            { "osc4.waveform", sawtooth }, { "osc4.level", 0.25f } },
+          {},
+          { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
+          {} },
+
+        { "Bench / FM 4 Ops",
+          join ({ algorithm (1, 0.3f, 0.3f, 0.8f), { { "global.quality", 1.0f } } }),
+          {},
+          { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
+          {} },
+
+        { "Bench / FM Unison 4",
+          join ({ algorithm (1, 0.3f, 0.3f, 0.8f), { { "global.quality", 1.0f }, { "global.unisonVoices", 4.0f } } }),
+          {},
+          { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
+          {} },
+
+        { "Bench / Spectral LFO",
+          { { "global.quality", 1.0f }, { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
+            { "osc2.waveform", sawtooth }, { "osc2.level", 0.25f }, { "osc3.waveform", sawtooth }, { "osc3.level", 0.25f },
+            { "osc4.waveform", sawtooth }, { "osc4.level", 0.25f }, { "lfo1.rate", 2.0f } },
+          { { Source::lfo1, "osc1.tilt", 0.25f }, { Source::lfo1, "osc2.tilt", 0.25f },
+            { Source::lfo1, "osc3.tilt", 0.25f }, { Source::lfo1, "osc4.tilt", 0.25f } },
+          { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
           {} }
     };
 
@@ -229,6 +312,11 @@ yup::Result loadState (const yup::DataTree& tree, yup::Span<const yup::AudioPara
     for (const auto& parameter : parameters)
     {
         const yup::Identifier id (parameter->getID());
+
+        // Settings that are not part of the sound, like the quality, stay as they are
+        // when a patch does not mention them.
+        if (! tree.hasProperty (id) && ! parameter->isAutomatable())
+            continue;
 
         parameter->setValue (tree.hasProperty (id) ? static_cast<float> (static_cast<double> (tree.getProperty (id)))
                                                    : parameter->getDefaultValue());
@@ -382,7 +470,7 @@ yup::DataTree createFactoryState (int index)
     auto transaction = state.beginTransaction();
 
     for (const auto& value : preset.values)
-        transaction.setProperty (value.id, value.value);
+        transaction.setProperty (yup::Identifier (value.id.c_str()), value.value);
 
     std::vector<std::pair<SynthModulationSource, yup::String>> routes;
 

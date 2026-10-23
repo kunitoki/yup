@@ -98,6 +98,9 @@ public:
     /** Returns how many voices are currently sounding. */
     int getNumActiveVoices() const noexcept { return activeVoices.load(); }
 
+    /** Returns how many sounding voices run their operators oversampled. */
+    int getNumOversamplingVoices() const noexcept { return oversamplingVoices.load(); }
+
 private:
     void updateContext (yup::Span<const float> parameterValues, double bpm) noexcept;
     void updateRoutes (const SynthParameterReader& reader) noexcept;
@@ -130,6 +133,7 @@ private:
     bool monoKeyActive = false;
     std::atomic<bool> releaseRequested { false };
     std::atomic<int> activeVoices { 0 };
+    std::atomic<int> oversamplingVoices { 0 };
 
     SynthOscillatorResources resources;
     std::array<SynthOscillatorSlot, SynthExample::oscillatorCount> oscillatorSlots;

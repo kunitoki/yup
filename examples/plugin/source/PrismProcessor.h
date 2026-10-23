@@ -128,6 +128,12 @@ public:
     /** Returns how many voices are sounding. */
     int getNumActiveVoices() const noexcept { return engine.getNumActiveVoices(); }
 
+    /** Returns how many sounding voices run their operators oversampled. */
+    int getNumOversamplingVoices() const noexcept { return engine.getNumOversamplingVoices(); }
+
+    /** Returns the oversampling factor the engine was prepared with. */
+    int getOversamplingFactor() const noexcept { return ::getOversamplingFactor (preparedQuality); }
+
     /** Returns the share of the block's time the last blocks took, in percent. */
     double getLoadPercentage() const { return loadMeasurer.getLoadAsPercentage(); }
 

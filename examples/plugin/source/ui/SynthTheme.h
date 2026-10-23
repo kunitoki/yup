@@ -44,17 +44,50 @@ inline yup::Color accentDim() { return accent().mixedWith (windowBackground(), 0
 inline yup::Color textPrimary() { return role (yup::ThemePalette::Role::text); }
 inline yup::Color textSecondary() { return role (yup::ThemePalette::Role::textMuted); }
 
+/** The dark well displays and knobs sit in, darker than the panels in either mode. */
 inline yup::Color displayBackground()
 {
     const auto isDark = yup::ApplicationTheme::getGlobalTheme()->getPalette().getMode() == yup::ThemePalette::Mode::dark;
     return windowBackground().mixedWith (isDark ? yup::Colors::black : yup::Colors::white, 0.35f, yup::ColorSpace::SRGB);
 }
 
+/** The color of one of the four modulation source families, the accent first and the
+    others a quarter turn of hue apart, so routes read by color on any palette.
+*/
+inline yup::Color sourceAccent (int index)
+{
+    const auto [hue, saturation, lightness] = accent().toHSL();
+    const auto turn = static_cast<float> (yup::jlimit (0, 3, index)) * 0.25f;
+
+    return yup::Color::fromHSL (std::fmod (hue + turn, 1.0f), saturation, lightness);
+}
+
 constexpr float panelCorner = 6.0f;
 
-/** Colors a toggle button like the rest of the instrument's chrome. */
+/** Paints a toggle as a pill: an outline when off, filled with the accent when on. */
+inline void paintPillToggle (yup::Graphics& g, const yup::ApplicationTheme& theme, const yup::ToggleButton& button)
+{
+    const auto bounds = button.getLocalBounds().reduced (1.0f);
+    const auto radius = bounds.getHeight() * 0.5f;
+    const auto on = button.getToggleState();
+    const auto hot = button.isButtonOver() || button.isButtonDown();
+
+    g.setFillColor (on ? accent().withAlpha (hot ? 1.0f : 0.85f) : displayBackground());
+    g.fillRoundedRect (bounds, radius);
+
+    g.setStrokeWidth (1.0f);
+    g.setStrokeColor (on ? accent() : (hot ? accentDim() : panelBorder()));
+    g.strokeRoundedRect (bounds.reduced (0.5f), radius);
+
+    g.setFillColor (on ? role (yup::ThemePalette::Role::onAccent) : (button.isEnabled() ? textPrimary() : textSecondary()));
+    g.fillFittedText (button.getButtonText(), theme.getDefaultFont().withHeight (yup::jmin (11.0f, bounds.getHeight() * 0.6f)),
+                      bounds.reduced (radius * 0.5f, 0.0f), yup::Justification::center);
+}
+
+/** Colors a toggle button like the rest of the instrument's chrome, drawn as a pill. */
 inline void styleToggle (yup::ToggleButton& button)
 {
+    button.setStyle (yup::ComponentStyle::createStyle<yup::ToggleButton> (paintPillToggle));
     button.setColor (yup::ToggleButton::Style::backgroundColorId, displayBackground());
     button.setColor (yup::ToggleButton::Style::backgroundToggledColorId, accentDim());
     button.setColor (yup::ToggleButton::Style::textColorId, textSecondary());

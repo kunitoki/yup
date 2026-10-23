@@ -24,8 +24,6 @@
 
 ParameterKnob::ParameterKnob (const yup::String& caption, yup::AudioParameter::Ptr parameterToControl, const yup::Font& font)
     : parameter (std::move (parameterToControl))
-    , slider (yup::Slider::RotaryVerticalDrag)
-    , captionText (caption)
 {
     setOpaque (false); // the knob and its caption paint themselves, the row draws nothing
 
@@ -33,17 +31,13 @@ ParameterKnob::ParameterKnob (const yup::String& caption, yup::AudioParameter::P
     slider.setRange (0.0, 1.0, steps > 0 ? 1.0 / steps : 0.0);
     slider.setDefaultValue (parameter->convertToNormalizedValue (parameter->getDefaultValue()));
     slider.setValue (parameter->getNormalizedValue(), yup::dontSendNotification);
-    slider.setColor (yup::Slider::Style::backgroundColorId, SynthTheme::displayBackground());
-    slider.setColor (yup::Slider::Style::trackColorId, SynthTheme::panelBorder());
-    slider.setColor (yup::Slider::Style::thumbColorId, SynthTheme::accent());
-    slider.setColor (yup::Slider::Style::thumbOverColorId, SynthTheme::accent().brighter (0.3f));
-    slider.setColor (yup::Slider::Style::thumbDownColorId, SynthTheme::accent());
+    slider.getValueText = [this] { return parameter->toString(); };
     slider.onValueChanged = [this] (double value) { setParameterValue (value); };
     slider.onDragStart = [this] (const yup::MouseEvent&)
     {
         parameter->beginChangeGesture();
         dragging = true;
-        label.setText (parameter->toString(), yup::dontSendNotification);
+        slider.setShowingValue (true);
     };
     slider.onDragEnd = [this] (const yup::MouseEvent&) { endGesture(); };
     addAndMakeVisible (slider);
@@ -95,7 +89,6 @@ void ParameterKnob::setParameterValue (double normalizedValue)
     }
 
     parameter->setValueNotifyingHost (value);
-    label.setText (parameter->toString(), yup::dontSendNotification);
 }
 
 void ParameterKnob::endGesture()
@@ -105,5 +98,5 @@ void ParameterKnob::endGesture()
 
     dragging = false;
     parameter->endChangeGesture();
-    label.setText (captionText, yup::dontSendNotification);
+    slider.setShowingValue (false);
 }

@@ -60,9 +60,11 @@ namespace yup
         max (factor * |f_i|, |f_i| + sum_j |M_ij| |f_j| peakSlope_j)
 
     which bounds the fastest the read phase can move, taking the larger end of each
-    ramp. The first term caps the harmonics at the base rate's Nyquist, so an
-    unmodulated operator renders exactly the table it would render without
-    oversampling. In this mode a table's frequency is its bandwidth, not its pitch.
+    ramp. The second term is rounded up to quarter octaves, so a moving modulation
+    depth only re-renders a table when it crosses a step. The first term caps the
+    harmonics at the base rate's Nyquist, so an unmodulated operator renders exactly the
+    table it would render without oversampling. In this mode a table's frequency is its
+    bandwidth, not its pitch.
 
     Oversampling, decimation and voice stacking are left to the caller. An operator
     whose output gain and outgoing amounts are all zero is skipped: it only advances
@@ -446,7 +448,15 @@ private:
                 deviation += depth * speeds[j] * static_cast<double> (tables[j]->getPeakSlope());
             }
 
-            const auto bandwidth = jmax (oversampling * speeds[i], speeds[i] + deviation);
+            // A moving modulation depth would change the harmonic limit, and so cost a
+            // render, on every step: the modulated bandwidth is rounded up to quarter
+            // octaves, which only ever removes harmonics. The unmodulated term is exact.
+            auto modulated = speeds[i] + deviation;
+
+            if (deviation > 0.0 && modulated > 0.0)
+                modulated = std::exp2 (std::ceil (std::log2 (modulated) * 4.0) * 0.25);
+
+            const auto bandwidth = jmax (oversampling * speeds[i], modulated);
             tables[i]->setFrequency (jmin (bandwidth, 0.49 * internalSampleRate));
         }
     }

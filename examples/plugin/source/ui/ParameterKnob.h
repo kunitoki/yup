@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "SynthKnob.h"
 #include <yup_audio_processors/yup_audio_processors.h>
 #include <yup_gui/yup_gui.h>
 
@@ -55,8 +56,7 @@ private:
     void endGesture();
 
     yup::AudioParameter::Ptr parameter;
-    yup::Slider slider;
+    SynthKnob slider;
     yup::Label label;
-    yup::String captionText;
     bool dragging = false;
 };

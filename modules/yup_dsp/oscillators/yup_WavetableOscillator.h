@@ -350,7 +350,7 @@ public:
         can drift slightly past Nyquist until the next render, so callers are
         expected to refresh once per block with update() on the owning facade.
     */
-    SampleType processSample() noexcept
+    forcedinline SampleType processSample() noexcept
     {
         const auto value = tick (phase);
 
@@ -372,7 +372,7 @@ public:
 
         As with getValueAtPhase(), the caller is responsible for bandwidth.
     */
-    SampleType processSampleAtPhase (double normalizedPhase) noexcept
+    forcedinline SampleType processSampleAtPhase (double normalizedPhase) noexcept
     {
         if (tableSize <= 0 || ! std::isfinite (normalizedPhase))
         {
@@ -415,7 +415,7 @@ public:
 
 private:
     //==============================================================================
-    SampleType tick (double wrappedPhase) noexcept
+    forcedinline SampleType tick (double wrappedPhase) noexcept
     {
         auto value = readTable (current, wrappedPhase, false);
 
@@ -486,16 +486,20 @@ private:
         return value;
     }
 
-    SampleType readTable (const std::vector<SampleType>& table, double normalizedPhase, bool derivative) const noexcept
+    forcedinline SampleType readTable (const std::vector<SampleType>& table, double normalizedPhase, bool derivative) const noexcept
     {
+        // The phase is wrapped to [0, 1), so truncating is flooring, and the raw pointer
+        // keeps checked standard library builds from bounds checking every tap.
         const auto position = normalizedPhase * static_cast<double> (tableSize);
-        const auto index = static_cast<int> (position) & tableMask;
-        const auto fraction = static_cast<CoeffType> (position - std::floor (position));
+        const auto whole = static_cast<int> (position);
+        const auto index = whole & tableMask;
+        const auto fraction = static_cast<CoeffType> (position - static_cast<double> (whole));
+        const auto* data = table.data();
 
-        const auto y0 = static_cast<CoeffType> (table[static_cast<std::size_t> ((index - 1) & tableMask)]);
-        const auto y1 = static_cast<CoeffType> (table[static_cast<std::size_t> (index)]);
-        const auto y2 = static_cast<CoeffType> (table[static_cast<std::size_t> ((index + 1) & tableMask)]);
-        const auto y3 = static_cast<CoeffType> (table[static_cast<std::size_t> ((index + 2) & tableMask)]);
+        const auto y0 = static_cast<CoeffType> (data[(index - 1) & tableMask]);
+        const auto y1 = static_cast<CoeffType> (data[index]);
+        const auto y2 = static_cast<CoeffType> (data[(index + 1) & tableMask]);
+        const auto y3 = static_cast<CoeffType> (data[(index + 2) & tableMask]);
 
         const auto c0 = y1;
         const auto c1 = static_cast<CoeffType> (0.5) * (y2 - y0);

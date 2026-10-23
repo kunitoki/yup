@@ -185,17 +185,20 @@ void HarmonicSynthEngine::updateRoutes (const SynthParameterReader& reader) noex
 void HarmonicSynthEngine::publishVoiceState() noexcept
 {
     int active = 0;
+    int oversampling = 0;
     const SynthVoice* newest = nullptr;
 
     for (auto* voice : ownedVoices)
     {
         active += voice->isSounding() ? 1 : 0;
+        oversampling += voice->isSounding() && voice->isOversampling() ? 1 : 0;
 
         if (voice->isVoiceActive() && (newest == nullptr || newest->wasStartedBefore (*voice)))
             newest = voice;
     }
 
     activeVoices.store (active);
+    oversamplingVoices.store (oversampling);
 
     // The displays follow the LFOs of the most recent note.
     if (newest != nullptr)

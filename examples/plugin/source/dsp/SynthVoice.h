@@ -76,6 +76,9 @@ public:
     /** Includes a recycled voice's short continuation in the activity meter. */
     bool isSounding() const noexcept { return isVoiceActive() || tailPosition < tailLength; }
 
+    /** True while the voice plays its oversampled path, for the load readout. */
+    bool isOversampling() const noexcept { return network.isOversampling(); }
+
     /** Returns the phase of one of this voice's LFOs, for the display. */
     float getLFOPhase (int lfoIndex) const noexcept { return lfos[static_cast<std::size_t> (lfoIndex)].getPhase(); }
 
