@@ -47,12 +47,14 @@ yup::AudioParameter::Ptr createContinuous (const yup::String& id,
                                            const yup::String& modulePath,
                                            yup::NormalisableRange<float> range,
                                            float defaultValue,
-                                           Formatter format)
+                                           Formatter format,
+                                           Parser parse)
 {
     return makeBuilder (id, name, hostID, modulePath)
         .withRange (range)
         .withDefault (defaultValue)
         .withValueToString ([format = std::move (format)] (float value) { return format (value); })
+        .withStringToValue ([parse = std::move (parse)] (const yup::String& text) { return static_cast<float> (parse (text)); })
         .build();
 }
 
@@ -70,6 +72,7 @@ yup::AudioParameter::Ptr createInteger (const yup::String& id,
         .withDefault (static_cast<float> (defaultValue))
         .withStepped (true)
         .withValueToString ([format = std::move (format)] (float value) { return format (value); })
+        .withStringToValue ([] (const yup::String& text) { return static_cast<float> (SynthFormat::parse (text)); })
         .build();
 }
 

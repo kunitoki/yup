@@ -66,7 +66,8 @@ SynthParameters::SynthParameters()
 
     volume = createContinuous ("global.volume", "Master Volume", 1, "Global", { 0.0f, 1.0f }, 0.5f, SynthFormat::percent);
     playMode = createChoice ("global.mode", "Voice Mode", 2, "Global", getSynthPlayModeNames(), static_cast<int> (defaults.mode));
-    glide = createContinuous ("global.glide", "Glide", 3, "Global", { 0.0f, 2000.0f }, defaults.glideSeconds * 1000.0f, [] (double value) { return SynthFormat::milliseconds (value * 0.001); });
+    glide = createContinuous ("global.glide", "Glide", 3, "Global", { 0.0f, 2000.0f }, defaults.glideSeconds * 1000.0f, [] (double value) { return SynthFormat::milliseconds (value * 0.001); },
+                              [] (const yup::String& text) { return SynthFormat::parse (text) * 1000.0; });
 
     quality = yup::AudioParameterBuilder()
                   .withID ("global.quality")
@@ -79,6 +80,7 @@ SynthParameters::SynthParameters()
                   .withEnum (true)
                   .withAutomatable (false)
                   .withValueToString ([] (float value) { return getSynthQualityNames()[yup::roundToInt (value)]; })
+                  .withStringToValue ([] (const yup::String& text) { return static_cast<float> (yup::jmax (0, getSynthQualityNames().indexOf (text))); })
                   .build();
 
     unisonVoices = createInteger ("global.unisonVoices", "Unison Voices", 5, "Global", 1, SynthExample::maxUnisonVoices, defaults.unisonVoices, SynthFormat::count);

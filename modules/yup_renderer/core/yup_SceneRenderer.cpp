@@ -30,12 +30,6 @@ constexpr uint8_t debugViewShaderBundle[] = {
 #include "yup_renderer_shaders/yup_DebugView.inc"
 };
 
-// std140 mirror of DebugViewBlock in yup_DebugView.frag
-struct DebugViewBlock
-{
-    float options[4]; // x what to show: 0 black, else the RenderSettings::DebugView of the texture bound; y the scale of a circle of confusion
-};
-
 /** The largest power of two within both @p requested and what @p device supports. */
 uint32_t getSupportedSampleCount (int requested, const GpuDevice& device) noexcept
 {
@@ -612,6 +606,12 @@ struct SceneRenderer::Impl
         if (probeBaker != nullptr)
             probeBaker->forgetBakes();
     }
+
+    // std140 mirror of DebugViewBlock in yup_DebugView.frag
+    struct DebugViewBlock
+    {
+        float options[4]; // x what to show: 0 black, else the RenderSettings::DebugView of the texture bound; y the scale of a circle of confusion
+    };
 
     /** Full tier: draws RenderSettings::debugView into @p output in place of the final image, from
         this frame's @p lighting, @p indirectDiffuse, depth of field and @p gbuffer, or black when the frame has none of them,

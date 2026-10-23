@@ -188,6 +188,12 @@ class MidiInputCallback;
 /** @internal */
 class MidiDeviceDisconnectionNotifier;
 
+/** @internal Destroys a MidiDeviceDisconnectionNotifier where its type is complete. */
+struct MidiDeviceDisconnectionNotifierDeleter
+{
+    void operator() (MidiDeviceDisconnectionNotifier* notifier) const noexcept;
+};
+
 //==============================================================================
 /**
     Represents a midi input device.
@@ -313,11 +319,11 @@ private:
     //==============================================================================
     explicit MidiInput (const String&, const String&, ump::PacketProtocol = ump::PacketProtocol::MIDI_1_0);
 
-    static std::unique_ptr<MidiDeviceDisconnectionNotifier> createDisconnectionNotifier();
+    static std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> createDisconnectionNotifier();
 
     MidiDeviceInfo deviceInfo;
 
-    std::unique_ptr<MidiDeviceDisconnectionNotifier> disconnectionNotifier = createDisconnectionNotifier();
+    std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> disconnectionNotifier = createDisconnectionNotifier();
     std::unique_ptr<Pimpl> internal;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiInput)
@@ -541,11 +547,11 @@ private:
     explicit MidiOutput (const String&, const String&, ump::PacketProtocol = ump::PacketProtocol::MIDI_1_0);
     void run() override;
 
-    static std::unique_ptr<MidiDeviceDisconnectionNotifier> createDisconnectionNotifier();
+    static std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> createDisconnectionNotifier();
 
     MidiDeviceInfo deviceInfo;
 
-    std::unique_ptr<MidiDeviceDisconnectionNotifier> disconnectionNotifier = createDisconnectionNotifier();
+    std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> disconnectionNotifier = createDisconnectionNotifier();
     std::unique_ptr<Pimpl> internal;
 
     CriticalSection lock;

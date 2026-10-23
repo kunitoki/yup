@@ -240,7 +240,15 @@ function (_yup_audio_plugin_create_lv2)
         yup_audio_plugin_client
         ${target_ide_group}
         lv2
-        ${unparsed_args})
+        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
+        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
+        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
+        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
+        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
+        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
+        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
+        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
+        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO})
 
     # Extract PLUGIN_ID for LV2 URI
     if (YUP_ARG_PLUGIN_ID)

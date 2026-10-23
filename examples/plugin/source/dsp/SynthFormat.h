@@ -30,12 +30,34 @@
 namespace SynthFormat
 {
 inline yup::String plain (double value, int decimals) { return yup::String (value, decimals); }
-inline yup::String hertz (double value) { return value >= 1000.0 ? yup::String (value / 1000.0, 2) + " kHz" : yup::String (value, value < 100.0 ? 2 : 0) + " Hz"; }
+inline yup::String hertz (double value) { return std::round (value) >= 1000.0 ? yup::String (value / 1000.0, 2) + " kHz" : yup::String (value, std::round (value * 100.0) < 10000.0 ? 2 : 0) + " Hz"; }
 inline yup::String percent (double value) { return yup::String (static_cast<int> (std::round (value * 100.0))) + " %"; }
 inline yup::String cents (double value) { return yup::String (static_cast<int> (std::round (value))) + " ct"; }
 inline yup::String octaves (double value) { return yup::String (static_cast<int> (std::round (value))) + " oct"; }
-inline yup::String milliseconds (double seconds) { return seconds >= 1.0 ? yup::String (seconds, 2) + " s" : yup::String (static_cast<int> (std::round (seconds * 1000.0))) + " ms"; }
+inline yup::String milliseconds (double seconds) { return std::round (seconds * 1000.0) >= 1000.0 ? yup::String (seconds, 2) + " s" : yup::String (static_cast<int> (std::round (seconds * 1000.0))) + " ms"; }
 inline yup::String ratio (double value) { return yup::String (value, 2) + " x"; }
 inline yup::String count (double value) { return yup::String (static_cast<int> (std::round (value))); }
-inline yup::String bipolar (double value) { return yup::String (value >= 0.0 ? "+" : "") + yup::String (static_cast<int> (std::round (value * 100.0))) + " %"; }
+inline yup::String bipolar (double value)
+{
+    const auto rounded = static_cast<int> (std::round (value * 100.0));
+    return yup::String (rounded >= 0 ? "+" : "") + yup::String (rounded) + " %";
+}
+
+/** Reads the text of any of the formatters above back into the value it shows, scaled by its unit. */
+inline double parse (const yup::String& text)
+{
+    const auto trimmed = text.trim();
+    const auto value = trimmed.getDoubleValue();
+
+    if (trimmed.endsWith ("kHz"))
+        return value * 1000.0;
+
+    if (trimmed.endsWith ("ms"))
+        return value * 0.001;
+
+    if (trimmed.endsWith ("%"))
+        return value * 0.01;
+
+    return value;
+}
 } // namespace SynthFormat

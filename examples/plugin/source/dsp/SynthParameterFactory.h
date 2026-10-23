@@ -23,6 +23,8 @@
 
 #include <yup_audio_processors/yup_audio_processors.h>
 
+#include "SynthFormat.h"
+
 #include <functional>
 
 //==============================================================================
@@ -37,6 +39,9 @@ namespace SynthParameterFactory
 /** Formats a real parameter value for display. */
 using Formatter = std::function<yup::String (double)>;
 
+/** Reads the text of a Formatter back into the real parameter value. */
+using Parser = std::function<double (const yup::String&)>;
+
 /** Creates a continuous parameter; the range carries any skew. */
 yup::AudioParameter::Ptr createContinuous (const yup::String& id,
                                            const yup::String& name,
@@ -44,7 +49,8 @@ yup::AudioParameter::Ptr createContinuous (const yup::String& id,
                                            const yup::String& modulePath,
                                            yup::NormalisableRange<float> range,
                                            float defaultValue,
-                                           Formatter format);
+                                           Formatter format,
+                                           Parser parse = SynthFormat::parse);
 
 /** Creates an integer parameter stepping by one between minimum and maximum. */
 yup::AudioParameter::Ptr createInteger (const yup::String& id,
