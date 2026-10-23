@@ -33,9 +33,13 @@ SynthFilterResponse::SynthFilterResponse (const SynthFilterParameters& parameter
     stage.configureForDisplay (shownValues);
 }
 
-bool SynthFilterResponse::syncFromParameters()
+bool SynthFilterResponse::syncFromParameters (SynthParameterReader modulated)
 {
-    const auto values = parameters.read();
+    // While the handle is dragged the curve follows the hand, not the modulation.
+    if (cutoffGesture.isActive())
+        modulated = {};
+
+    const auto values = parameters.read (modulated);
 
     if (values == shownValues)
         return false;

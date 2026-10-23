@@ -540,7 +540,7 @@ void SynthInterface::syncFromProcessor()
         panel->syncFromParameters (modulated);
 
     for (auto& panel : filterPanels)
-        panel->syncFromParameters();
+        panel->syncFromParameters (modulated);
 
     for (auto& panel : envelopePanels)
         panel->syncFromParameters();

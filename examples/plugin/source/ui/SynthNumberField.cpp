@@ -50,6 +50,19 @@ bool SynthNumberField::syncFromParameter()
     return true;
 }
 
+void SynthNumberField::showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> newModulatedValue)
+{
+    const auto sameValue = newModulatedValue.has_value() == modulatedValue.has_value()
+                        && (! newModulatedValue.has_value() || std::abs (*newModulatedValue - *modulatedValue) < 1.0e-4f);
+
+    if (arcs == modulationArcs && sameValue)
+        return;
+
+    modulationArcs = std::move (arcs);
+    modulatedValue = newModulatedValue;
+    repaint();
+}
+
 void SynthNumberField::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
@@ -67,8 +80,35 @@ void SynthNumberField::paint (yup::Graphics& g)
         g.fillFittedText (caption, font, content.removeFromLeft (captionWidth), yup::Justification::centerLeft);
     }
 
-    g.setFillColor (isEnabled() ? SynthTheme::accent (*this) : SynthTheme::textSecondary (*this));
-    g.fillFittedText (shownText, SynthTheme::valueFont (height), content, caption.isNotEmpty() ? yup::Justification::centerRight : yup::Justification::center);
+    const auto& parameter = gesture.getParameter();
+    const auto text = modulatedValue.has_value() ? parameter->convertToString (parameter->convertToDenormalizedValue (*modulatedValue)) : shownText;
+    const auto color = ! isEnabled()                 ? SynthTheme::textSecondary (*this)
+                       : modulatedValue.has_value() ? SynthTheme::textPrimary (*this)
+                                                    : SynthTheme::accent (*this);
+
+    g.setFillColor (color);
+    g.fillFittedText (text, SynthTheme::valueFont (height), content, caption.isNotEmpty() ? yup::Justification::centerRight : yup::Justification::center);
+
+    // Route ranges along the bottom edge, across the parameter's whole range.
+    const auto track = bounds.reduced (3.0f, 0.0f);
+    const auto positionOf = [&track] (float normalized) { return track.getX() + track.getWidth() * yup::jlimit (0.0f, 1.0f, normalized); };
+    const auto value = parameter->getNormalizedValue();
+    auto lane = bounds.getBottom() - 3.0f;
+
+    for (const auto& arc : modulationArcs)
+    {
+        const auto from = positionOf (arc.bipolar ? value - arc.depth : value);
+        const auto to = positionOf (value + arc.depth);
+        g.setFillColor (arc.color);
+        g.fillRect (yup::jmin (from, to), lane, yup::jmax (1.0f, std::abs (to - from)), 1.5f);
+        lane -= 2.0f;
+    }
+
+    if (modulatedValue.has_value())
+    {
+        g.setFillColor (SynthTheme::textPrimary (*this));
+        g.fillRect (positionOf (*modulatedValue) - 1.0f, lane + 0.5f, 2.0f, bounds.getBottom() - lane - 1.5f);
+    }
 }
 
 void SynthNumberField::mouseDown (const yup::MouseEvent&)

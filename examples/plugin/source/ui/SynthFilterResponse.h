@@ -40,9 +40,12 @@ public:
     explicit SynthFilterResponse (const SynthFilterParameters& parametersToShow);
 
     /** Redraws the curve when the filter's controls changed.
+
+        @param modulated  Where the values come from: the parameters, or a table with the
+                          most recent note's modulation, so the curve follows a modulated cutoff.
         @returns true when they did.
     */
-    bool syncFromParameters();
+    bool syncFromParameters (SynthParameterReader modulated = {});
 
     void paint (yup::Graphics& g) override;
     void mouseDown (const yup::MouseEvent& event) override;

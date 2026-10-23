@@ -38,8 +38,12 @@ class SynthFilterPanel : public yup::Component
 public:
     explicit SynthFilterPanel (const SynthFilterParameters& parametersToEdit);
 
-    /** Shows changes made by the host, a preset or a state load. */
-    void syncFromParameters();
+    /** Shows changes made by the host, a preset or a state load.
+
+        @param modulated  The values the response is drawn from: the parameters, or a table
+                          with the most recent note's modulation.
+    */
+    void syncFromParameters (SynthParameterReader modulated = {});
 
     void resized() override;
 

@@ -389,7 +389,7 @@ void SynthVoice::prepareControls (SynthNetworkControls& controls, DelayedControl
 float SynthVoice::getEnvelopePosition (int envelopeIndex) const noexcept
 {
     if (envelopeIndex == 0)
-        return amplitude.isActive() ? amplitude.getPosition() : -1.0f;
+        return amplitude.isActive() ? amplitude.getPointPosition() : -1.0f;
 
     const auto index = static_cast<std::size_t> (envelopeIndex);
 
@@ -397,7 +397,7 @@ float SynthVoice::getEnvelopePosition (int envelopeIndex) const noexcept
         || ! envelopeValues[index].enabled || ! envelopes[index].isActive())
         return -1.0f;
 
-    return envelopes[index].getPosition();
+    return envelopes[index].getPointPosition();
 }
 
 float SynthVoice::getSourceValue (SynthModulationSource source) const noexcept

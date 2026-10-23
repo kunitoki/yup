@@ -21,6 +21,7 @@
 #pragma once
 
 #include "ParameterGesture.h"
+#include "SynthModulationTarget.h"
 
 #include <yup_gui/yup_gui.h>
 
@@ -29,11 +30,15 @@
     dragging up or down.
 
     A full drag of 200 pixels sweeps the whole range, ten times finer with shift held. A
-    double-click returns the parameter to its default.
+    double-click returns the parameter to its default. Routes reaching the parameter are
+    drawn as ranges along the bottom edge, and while a note plays the field shows the
+    value the modulation plays.
 
     @see SynthSliderField, ParameterKnob
 */
-class SynthNumberField : public yup::Component
+class SynthNumberField
+    : public yup::Component
+    , public SynthModulationTarget
 {
 public:
     SynthNumberField (const yup::String& caption, yup::AudioParameter::Ptr parameterToControl);
@@ -45,6 +50,9 @@ public:
         @returns true when the shown value changed.
     */
     bool syncFromParameter();
+
+    yup::AudioParameter::Ptr getModulationParameter() const override { return gesture.getParameter(); }
+    void showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> modulatedValue) override;
 
     void paint (yup::Graphics& g) override;
     void mouseDown (const yup::MouseEvent& event) override;
@@ -58,4 +66,6 @@ private:
     ParameterGesture gesture;
     yup::String caption;
     yup::String shownText;
+    std::vector<SynthKnob::ModulationArc> modulationArcs;
+    std::optional<float> modulatedValue;
 };

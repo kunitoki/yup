@@ -35,7 +35,7 @@ class SynthEnvelopePanel : public yup::Component
 public:
     SynthEnvelopePanel (const SynthEnvelopeParameters& parametersToEdit, SynthCurveState& curvesToEdit, int envelopeIndex);
 
-    /** Shows where the most recent note is along the curve, in seconds, or hides it when negative. */
+    /** Shows where the most recent note is along the curve's points, or hides it when negative. */
     void setPlayhead (float position) { display.setPlayhead (position); }
 
     /** Shows changes made by the host, a preset or a state load. */

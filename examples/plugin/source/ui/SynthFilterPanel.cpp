@@ -39,12 +39,12 @@ SynthFilterPanel::SynthFilterPanel (const SynthFilterParameters& parametersToEdi
         addAndMakeVisible (*control);
 }
 
-void SynthFilterPanel::syncFromParameters()
+void SynthFilterPanel::syncFromParameters (SynthParameterReader modulated)
 {
     typeChoice.syncFromParameter();
     cutoffField.syncFromParameter();
     resonanceField.syncFromParameter();
-    response.syncFromParameters();
+    response.syncFromParameters (modulated);
 
     for (auto* knob : { &driveKnob, &keytrackKnob, &mixKnob })
         knob->syncFromParameter();

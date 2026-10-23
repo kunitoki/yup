@@ -278,8 +278,17 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
 
     if (playhead >= 0.0f)
     {
-        const auto afterHold = sustain >= 0 && playhead > curve.getPoint (sustain).time;
-        playheadPosition = toScreen (playhead, curve.evaluate (playhead), afterHold);
+        const auto last = curve.getNumPoints() - 1;
+        const auto index = yup::jlimit (0, last, static_cast<int> (std::floor (playhead)));
+        const auto t = index < last ? playhead - static_cast<float> (index) : 0.0f;
+        const auto& from = curve.getPoint (index);
+        const auto& to = curve.getPoint (yup::jmin (index + 1, last));
+
+        // On a point the playhead sits where that point is drawn, before the hold for the
+        // sustain point; inside a segment it belongs to the segment's end point.
+        playheadPosition = toScreen (from.time + (to.time - from.time) * t,
+                                     SynthCurveState::Curve::segmentValue (from.level, to.level, to.curve, t),
+                                     isAfterHold (t > 0.0f ? index + 1 : index));
         playing = playheadPosition.getX() <= area.getRight();
     }
 

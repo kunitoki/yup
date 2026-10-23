@@ -140,7 +140,7 @@ public:
         destination's normalized range, or 0 when no note plays. */
     float getRouteAmount (int slot) const noexcept { return engine.getRouteAmount (slot); }
 
-    /** Returns where an envelope of the most recent note is along its curve, in seconds, or -1. */
+    /** Returns where an envelope of the most recent note is along its points (see yup::CurveEnvelope::getPointPosition()), or -1. */
     float getEnvelopePosition (int envelopeIndex) const noexcept { return engine.getEnvelopePosition (envelopeIndex); }
 
     /** Returns how many voices are sounding. */

@@ -82,9 +82,9 @@ public:
     /** Returns the phase of one of this voice's LFOs, for the display. */
     float getLFOPhase (int lfoIndex) const noexcept { return lfos[static_cast<std::size_t> (lfoIndex)].getPhase(); }
 
-    /** Returns where an envelope is along its curve, in seconds of the unscaled curve, or
-        -1 when it is not playing: finished, or a modulation envelope nothing reads. The
-        first envelope is the amplitude, which always plays. */
+    /** Returns where an envelope is along its points (see yup::CurveEnvelope::getPointPosition()), or -1 when it is
+        not playing: finished, or a modulation envelope nothing reads. The first envelope
+        is the amplitude, which always plays. */
     float getEnvelopePosition (int envelopeIndex) const noexcept;
 
     /** Returns how far a route slot moved its destination in the last block, in the

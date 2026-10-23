@@ -100,7 +100,7 @@ public:
         return routeAmounts[static_cast<std::size_t> (slot)].load();
     }
 
-    /** Returns where an envelope of the most recent note is along its curve, in seconds,
+    /** Returns where an envelope of the most recent note is along its points (see yup::CurveEnvelope::getPointPosition()),
         or -1 when no note plays it. */
     float getEnvelopePosition (int envelopeIndex) const noexcept
     {

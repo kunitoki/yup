@@ -63,6 +63,12 @@ points; removing a marked point clears its marker.
 current segment, so it can be automated. Zero-length segments are crossed
 instantly, and a loop shorter than a sample holds instead of spinning.
 
+To show where a note is, `getPosition()` returns the time along the curve and
+`getPointPosition()` the place along its points: `2` on the third point, `1.5`
+halfway from the second to the third. The second one does not depend on the
+points' times, so an editor can draw it on its own copy of a curve that is being
+dragged without the playhead jumping.
+
 ```cpp
 yup::CurveEnvelope<float> envelope;
 envelope.prepare (sampleRate);

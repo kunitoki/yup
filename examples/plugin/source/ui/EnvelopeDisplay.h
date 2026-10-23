@@ -54,8 +54,13 @@ public:
         Every envelope ends at level 0: its last point only moves in time. */
     void setAmplitude (bool isAmplitudeEnvelope);
 
-    /** Shows where the most recent note is along the curve, in seconds, with a band of
-        light trailing it; a negative position hides it. Called every frame. */
+    /** Shows where the most recent note is along the curve's points, with a band of light
+        trailing it; a negative position hides it. Called every frame.
+
+        The position counts points, not seconds (see yup::CurveEnvelope::getPointPosition()),
+        so it lands on the curve shown even while a drag moves the points ahead of the
+        curve the voices play.
+    */
     void setPlayhead (float position);
 
     /** Updates the drawn curve. Called from the message thread. */
