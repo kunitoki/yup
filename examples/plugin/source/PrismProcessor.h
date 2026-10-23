@@ -158,10 +158,14 @@ public:
     /** Returns how many blocks took longer than their duration. */
     int getXRunCount() const { return loadMeasurer.getXRunCount(); }
 
-    /** Returns the absolute peak of the last block on an output channel, 0 or 1, linear. */
-    float getOutputPeak (int channel) const noexcept
+    /** Returns the highest absolute sample on an output channel, 0 or 1, since the last call,
+        linear, and starts the next measure. Message thread. */
+    float takeOutputPeak (int channel) noexcept
     {
-        return yup::isPositiveAndBelow (channel, static_cast<int> (outputPeaks.size())) ? outputPeaks[static_cast<std::size_t> (channel)].load (std::memory_order_relaxed) : 0.0f;
+        if (! yup::isPositiveAndBelow (channel, static_cast<int> (outputPeaks.size())))
+            return 0.0f;
+
+        return outputPeaks[static_cast<std::size_t> (channel)].exchange (0.0f, std::memory_order_relaxed);
     }
 
 

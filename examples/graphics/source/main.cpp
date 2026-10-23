@@ -782,7 +782,7 @@ public:
             g.drawImage (image, logoBounds);
     }
 
-    void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
+    bool keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
     {
         switch (keys.getKey())
         {
@@ -801,7 +801,12 @@ public:
             case yup::KeyPress::textZKey:
                 setFullScreen (! isFullScreen());
                 break;
+
+            default:
+                return false;
         }
+
+        return true;
     }
 
     void timerCallback() override

@@ -1099,10 +1099,10 @@ void CodeEditor::mouseWheel (const MouseEvent&, const MouseWheelData& wheelData)
 
 //==============================================================================
 
-void CodeEditor::keyDown (const KeyPress& key, const Point<float>&)
+bool CodeEditor::keyDown (const KeyPress& key, const Point<float>&)
 {
     if (! isEnabled())
-        return;
+        return false;
 
     const bool shiftDown = key.getModifiers().isShiftDown();
     const bool ctrlDown = key.getModifiers().isControlDown() || key.getModifiers().isCommandDown();
@@ -1205,7 +1205,19 @@ void CodeEditor::keyDown (const KeyPress& key, const Point<float>&)
         {
             redo();
         }
+        else
+        {
+            return false;
+        }
     }
+    else
+    {
+        // Typed characters arrive through textInput(), so their presses belong here too;
+        // only Escape is left to the components around.
+        return key.getKey() != KeyPress::escapeKey;
+    }
+
+    return true;
 }
 
 void CodeEditor::textInput (const String& text)

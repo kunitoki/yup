@@ -85,6 +85,12 @@ SynthParameters::SynthParameters()
     unisonDetune = createContinuous ("global.unisonDetune", "Unison Detune", 6, "Global", { 0.0f, 1.0f }, defaults.unisonDetune, SynthFormat::percent);
     unisonSpread = createContinuous ("global.unisonSpread", "Unison Spread", 7, "Global", { 0.0f, 1.0f }, defaults.unisonSpread, SynthFormat::percent);
     filterRouting = createChoice ("global.filterRouting", "Filter Routing", 8, "Global", getSynthFilterRoutingNames(), static_cast<int> (defaults.filterRouting));
+
+    for (std::size_t index = 0; index < macros.size(); ++index)
+    {
+        const auto number = yup::String (static_cast<int> (index) + 1);
+        macros[index] = createContinuous ("macro" + number, "Macro " + number, 7000 + static_cast<yup::uint32> (index), "Macros", { 0.0f, 1.0f }, 0.0f, SynthFormat::percent);
+    }
 }
 
 void SynthParameters::addTo (yup::AudioProcessor& processor) const
@@ -107,6 +113,9 @@ void SynthParameters::addTo (yup::AudioProcessor& processor) const
         lfo.addTo (processor);
 
     modulation.addTo (processor);
+
+    for (const auto& macro : macros)
+        processor.addParameter (macro);
 
 #if YUP_DEBUG
     // A host ID used twice silently breaks automation in CLAP and VST3 hosts.

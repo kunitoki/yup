@@ -160,7 +160,13 @@ void PrismProcessor::processBlock (yup::AudioProcessContext<float>& context)
     {
         const auto source = yup::jmin (channel, audio.getNumChannels() - 1);
         const auto peak = source >= 0 && numSamples > 0 ? audio.getMagnitude (source, 0, numSamples) : 0.0f;
-        outputPeaks[static_cast<std::size_t> (channel)].store (peak, std::memory_order_relaxed);
+        // Kept as a running maximum until the meter takes it, so no block's peak is missed.
+        auto& stored = outputPeaks[static_cast<std::size_t> (channel)];
+        auto previous = stored.load (std::memory_order_relaxed);
+
+        while (peak > previous && ! stored.compare_exchange_weak (previous, peak, std::memory_order_relaxed))
+        {
+        }
     }
 
     // Whatever is left in the buffer goes back to the host as output events.
@@ -243,7 +249,7 @@ void PrismProcessor::setPresetName (int index, yup::StringRef newName)
 
 void PrismProcessor::randomize()
 {
-    applyState (SynthPatch::createRandomState (synthParameters, yup::Random::getSystemRandom()), {});
+    applyState (SynthPatch::createRandomState (synthParameters, yup::Random::getSystemRandom(), getPresetInfo().macroNames), {});
 }
 
 //==============================================================================

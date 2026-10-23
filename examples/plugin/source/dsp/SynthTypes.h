@@ -220,6 +220,14 @@ enum class SynthModulationSource
     modWheel,   /**< MIDI controller 1, unipolar. */
     aftertouch, /**< Channel pressure, unipolar. */
     random,     /**< A value drawn per note, bipolar. */
+    macro1,     /**< A macro knob, unipolar. */
+    macro2,
+    macro3,
+    macro4,
+    macro5,
+    macro6,
+    macro7,
+    macro8,
     count
 };
 
@@ -227,7 +235,8 @@ enum class SynthModulationSource
 inline yup::StringArray getSynthModulationSourceNames()
 {
     return { "ENV 1", "ENV 2", "ENV 3", "ENV 4", "LFO 1", "LFO 2", "LFO 3", "LFO 4",
-             "VELOCITY", "NOTE", "MOD WHEEL", "AFTERTOUCH", "RANDOM" };
+             "VELOCITY", "NOTE", "MOD WHEEL", "AFTERTOUCH", "RANDOM",
+             "MACRO 1", "MACRO 2", "MACRO 3", "MACRO 4", "MACRO 5", "MACRO 6", "MACRO 7", "MACRO 8" };
 }
 
 /** True for the sources that swing both ways, so a route from them reaches depth either side. */
@@ -250,4 +259,11 @@ constexpr int getSourceLFO (SynthModulationSource source) noexcept
 {
     const auto index = static_cast<int> (source) - static_cast<int> (SynthModulationSource::lfo1);
     return index >= 0 && index < SynthExample::lfoCount ? index : -1;
+}
+
+/** Returns the macro a source reads, or -1. */
+constexpr int getSourceMacro (SynthModulationSource source) noexcept
+{
+    const auto index = static_cast<int> (source) - static_cast<int> (SynthModulationSource::macro1);
+    return index >= 0 && index < SynthExample::macroCount ? index : -1;
 }

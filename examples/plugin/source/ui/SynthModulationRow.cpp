@@ -89,6 +89,15 @@ void SynthModulationRow::syncFromRoutes()
     destinationBox.setSelectedId (destinationId, yup::dontSendNotification);
 }
 
+void SynthModulationRow::setMacroNames (const std::array<yup::String, SynthExample::macroCount>& macroNames)
+{
+    // Item n is source n, and the macros come last.
+    const auto first = static_cast<int> (SynthModulationSource::macro1);
+
+    for (std::size_t macro = 0; macro < macroNames.size(); ++macro)
+        sourceBox.changeItemText (first + static_cast<int> (macro), macroNames[macro]);
+}
+
 void SynthModulationRow::writeRoute()
 {
     const auto source = sourceBox.getSelectedId() - 1;

@@ -1454,18 +1454,31 @@ public:
     /**
         Called when a key is pressed.
 
+        The key goes to the component with the keyboard focus first. When that one does not
+        handle it, it goes to its parent, and so on up to the top-level component, so a
+        focused control never swallows the keys meant for what is around it, such as
+        shortcuts or an on-screen keyboard. Invisible components are skipped, and so are
+        disabled ones and everything inside a disabled parent (see isEnabled()).
+
         @param keys The key press.
         @param position The position of the key press.
+
+        @returns true when the component handled the key, which stops it going further up.
      */
-    virtual void keyDown (const KeyPress& keys, const Point<float>& position);
+    virtual bool keyDown (const KeyPress& keys, const Point<float>& position);
 
     /**
         Called when a key is released.
 
+        It goes up the parents like keyDown(), so a component that acted on a key press
+        receives its release even after the focus moved to one of its children.
+
         @param keys The key press.
         @param position The position of the key press.
+
+        @returns true when the component handled the key, which stops it going further up.
      */
-    virtual void keyUp (const KeyPress& keys, const Point<float>& position);
+    virtual bool keyUp (const KeyPress& keys, const Point<float>& position);
 
     /**
         Called when text is input.
@@ -1772,8 +1785,8 @@ private:
     void internalMouseDoubleClick (const MouseEvent& event);
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
     void internalGesture (const GestureEvent& event);
-    void internalKeyDown (const KeyPress& keys, const Point<float>& position);
-    void internalKeyUp (const KeyPress& keys, const Point<float>& position);
+    bool internalKeyDown (const KeyPress& keys, const Point<float>& position);
+    bool internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);
     void internalKeyStateChanged (const KeyPress& keys, bool isDown);
     void internalModifierKeysChanged (const KeyModifiers& modifiers);
@@ -1792,6 +1805,9 @@ private:
 
     void takeKeyboardFocus (FocusChangeType cause);
     void handleKeyboardFocusFromClick();
+
+    using KeyHandler = bool (Component::*) (const KeyPress&, const Point<float>&);
+    bool dispatchKey (const KeyPress& keys, const Point<float>& position, KeyHandler handler);
 
     void updateMouseCursor();
 

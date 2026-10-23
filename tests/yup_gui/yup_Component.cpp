@@ -267,14 +267,14 @@ public:
         comp.internalRefreshDisplay (lastFrameTimeSeconds);
     }
 
-    static void triggerKeyDown (Component& comp, const KeyPress& keys, const Point<float>& position)
+    static bool triggerKeyDown (Component& comp, const KeyPress& keys, const Point<float>& position)
     {
-        comp.internalKeyDown (keys, position);
+        return comp.internalKeyDown (keys, position);
     }
 
-    static void triggerKeyUp (Component& comp, const KeyPress& keys, const Point<float>& position)
+    static bool triggerKeyUp (Component& comp, const KeyPress& keys, const Point<float>& position)
     {
-        comp.internalKeyUp (keys, position);
+        return comp.internalKeyUp (keys, position);
     }
 
     static void triggerTextInput (Component& comp, const String& text)
@@ -2721,6 +2721,113 @@ TEST_F (ComponentTest, InternalKeyboardDispatch)
     ComponentHelper::triggerTextInput (*root, "a");
     root->setWantsKeyboardFocus (true);
     ComponentHelper::triggerTextInput (*root, "a");
+}
+
+//==============================================================================
+class ComponentKeyDispatchTest : public ::testing::Test
+{
+protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    /** Logs the keys it receives and handles them when told to. */
+    class KeyRecorder : public Component
+    {
+    public:
+        KeyRecorder (const String& recorderName, std::vector<String>& sharedLog)
+            : name (recorderName)
+            , log (sharedLog)
+        {
+            setVisible (true);
+        }
+
+        bool keyDown (const KeyPress&, const Point<float>&) override
+        {
+            log.push_back (name + " down");
+
+            // The callback may delete this recorder, so nothing of it is read afterwards.
+            const auto handled = handles;
+            const auto callback = onKey;
+
+            if (callback != nullptr)
+                callback();
+
+            return handled;
+        }
+
+        bool keyUp (const KeyPress&, const Point<float>&) override
+        {
+            log.push_back (name + " up");
+            return handles;
+        }
+
+        bool handles = false;
+        std::function<void()> onKey;
+
+    private:
+        String name;
+        std::vector<String>& log;
+    };
+
+    void SetUp() override
+    {
+        root.addChildComponent (parent);
+        parent.addChildComponent (child);
+    }
+
+    const KeyPress key { KeyPress::textAKey };
+    std::vector<String> log;
+    KeyRecorder root { "root", log };
+    KeyRecorder parent { "parent", log };
+    KeyRecorder child { "child", log };
+};
+
+TEST_F (ComponentKeyDispatchTest, UnhandledKeyClimbsToEveryParent)
+{
+    EXPECT_FALSE (ComponentHelper::triggerKeyDown (child, key, {}));
+    EXPECT_EQ ((std::vector<String> { "child down", "parent down", "root down" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, HandledKeyStopsClimbing)
+{
+    parent.handles = true;
+
+    EXPECT_TRUE (ComponentHelper::triggerKeyDown (child, key, {}));
+    EXPECT_EQ ((std::vector<String> { "child down", "parent down" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, KeyUpClimbsLikeKeyDown)
+{
+    root.handles = true;
+
+    EXPECT_TRUE (ComponentHelper::triggerKeyUp (child, key, {}));
+    EXPECT_EQ ((std::vector<String> { "child up", "parent up", "root up" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, DisabledComponentIsSkippedButTheKeyStillClimbs)
+{
+    child.setEnabled (false);
+
+    ComponentHelper::triggerKeyDown (child, key, {});
+    EXPECT_EQ ((std::vector<String> { "parent down", "root down" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, ComponentsInsideADisabledParentReceiveNoKeys)
+{
+    parent.setEnabled (false);
+
+    ComponentHelper::triggerKeyDown (child, key, {});
+    ComponentHelper::triggerKeyUp (child, key, {});
+    EXPECT_EQ ((std::vector<String> { "root down", "root up" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, ComponentDeletedByItsHandlerEndsTheClimb)
+{
+    auto doomed = std::make_unique<KeyRecorder> ("doomed", log);
+    child.addChildComponent (*doomed);
+    doomed->onKey = [&doomed] { doomed.reset(); };
+
+    EXPECT_TRUE (ComponentHelper::triggerKeyDown (*doomed, key, {}));
+    EXPECT_EQ ((std::vector<String> { "doomed down" }), log);
 }
 
 TEST_F (ComponentTest, InternalMouseDispatch)

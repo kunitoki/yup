@@ -519,14 +519,14 @@ struct PyComponent : PyGestureListener<PyMouseListener<Base>>
         PYBIND11_OVERRIDE (void, Base, styleChanged);
     }
 
-    void keyDown (const yup::KeyPress& key, const Point<float>& position) override
+    bool keyDown (const yup::KeyPress& key, const Point<float>& position) override
     {
-        PYBIND11_OVERRIDE (void, Base, keyDown, key, position);
+        PYBIND11_OVERRIDE (bool, Base, keyDown, key, position);
     }
 
-    void keyUp (const yup::KeyPress& key, const Point<float>& position) override
+    bool keyUp (const yup::KeyPress& key, const Point<float>& position) override
     {
-        PYBIND11_OVERRIDE (void, Base, keyUp, key, position);
+        PYBIND11_OVERRIDE (bool, Base, keyUp, key, position);
     }
 
     void textInput (const String& text) override

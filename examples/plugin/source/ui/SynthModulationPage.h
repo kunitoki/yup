@@ -45,6 +45,9 @@ public:
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
 
+    /** Shows the macros under the names the patch gives them, in every row. */
+    void setMacroNames (const std::array<yup::String, SynthExample::macroCount>& macroNames);
+
     void resized() override;
 
 private:
@@ -54,6 +57,7 @@ private:
     std::vector<SynthRouteDestination> destinations;
     const SynthRoutes& routes;
     int shownGeneration = -1;
+    std::array<yup::String, SynthExample::macroCount> shownMacroNames;
 
     std::array<std::unique_ptr<SynthModulationRow>, SynthExample::modulationSlots> rows;
 };

@@ -137,7 +137,12 @@ void SynthVoice::startNote (int midiNoteNumber, float velocity, yup::Synthesiser
         controls.noteFrequency = midiNoteToFrequency (currentNote);
         controls.deriveLocally = context.spectralRouted;
         controls.refreshSpectra = true;
-        controls.applyEnables();
+
+        // A note starts with its operators already switched, with no fade.
+        for (std::size_t op = 0; op < enableGains.size(); ++op)
+            enableGains[op] = controls.oscillators[op].enabled ? 1.0f : 0.0f;
+
+        controls.applyEnables (enableGains);
         network.startNote (controls);
 
         for (auto& filter : filters)
@@ -240,7 +245,8 @@ void SynthVoice::renderChunk (yup::AudioBuffer<float>& outputBuffer, int startSa
         SynthNetworkControls controls = context.network;
         DelayedControls delayed;
         prepareControls (controls, delayed);
-        controls.applyEnables();
+        fadeEnables (controls, numSamples);
+        controls.applyEnables (enableGains);
 
         controls.noteFrequency = midiNoteToFrequency (currentNote);
         controls.refreshSpectra = samplesSinceSpectra >= SynthExample::spectralChunk;
@@ -386,6 +392,19 @@ void SynthVoice::prepareControls (SynthNetworkControls& controls, DelayedControl
     delayed.ampVelocityGain = envelopeValues[0].getVelocityGain (noteVelocity);
 }
 
+void SynthVoice::fadeEnables (const SynthNetworkControls& controls, int numSamples) noexcept
+{
+    const auto step = static_cast<float> (numSamples / (SynthExample::enableFadeSeconds * playbackRate));
+
+    for (std::size_t op = 0; op < enableGains.size(); ++op)
+    {
+        const auto target = controls.oscillators[op].enabled ? 1.0f : 0.0f;
+        auto& gain = enableGains[op];
+
+        gain = target > gain ? yup::jmin (target, gain + step) : yup::jmax (target, gain - step);
+    }
+}
+
 float SynthVoice::getEnvelopePosition (int envelopeIndex) const noexcept
 {
     if (envelopeIndex == 0)
@@ -417,6 +436,9 @@ float SynthVoice::getSourceValue (SynthModulationSource source) const noexcept
         const auto& values = lfoValues[static_cast<std::size_t> (lfo)];
         return values.enabled ? lfos[static_cast<std::size_t> (lfo)].getValue() * values.depth : 0.0f;
     }
+
+    if (const auto macro = getSourceMacro (source); macro >= 0)
+        return context.macros[static_cast<std::size_t> (macro)];
 
     switch (source)
     {

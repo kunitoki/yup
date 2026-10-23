@@ -85,7 +85,7 @@ void SynthFilterStage::process (float* left, float* right, int numSamples, const
         cutoff = targetCutoff;
         resonance = values.resonance;
         drive = values.drive;
-        mix = values.enabled ? values.mix : 0.0f;
+        mix = 0.0f; // Fades in from dry across the chunk, whether the note starts or the filter is switched on.
         hasState = true;
     }
 

@@ -135,7 +135,7 @@ public:
     /** @internal */
     void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
     /** @internal */
-    void keyDown (const KeyPress& keys, const Point<float>& position) override;
+    bool keyDown (const KeyPress& keys, const Point<float>& position) override;
 
 protected:
     //==============================================================================

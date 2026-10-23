@@ -59,8 +59,16 @@ struct PresetInfo
     yup::String bank;
     yup::String author;
     yup::String tags; /**< Comma separated. */
+    std::array<yup::String, SynthExample::macroCount> macroNames; /**< Empty for a macro's default name. */
 
     bool operator== (const PresetInfo&) const = default;
+
+    /** Returns what a macro is called: its name, or "Macro N" when it has none. */
+    yup::String getMacroName (int index) const
+    {
+        const auto& name = macroNames[static_cast<std::size_t> (index)];
+        return name.isNotEmpty() ? name : "Macro " + yup::String (index + 1);
+    }
 };
 
 /** Returns the description stored in a patch. */
@@ -89,12 +97,15 @@ int getPresetIndex (const yup::DataTree& state);
 
     Only continuous parameters the voices play are destinations: modulating a choice or
     a count would jump between steps, the quality would change the latency, and volume,
-    glide and the route depths are not applied per voice.
+    glide, the route depths and the macros are not applied per voice.
 */
 int findRouteDestination (yup::Span<const yup::AudioParameter::Ptr> parameters, const yup::String& parameterID);
 
-/** Creates a random patch that keeps the current volume, voice mode, glide and quality. */
-yup::DataTree createRandomState (const SynthParameters& parameters, yup::Random& random);
+/** Creates a random patch that keeps the current volume, voice mode, glide, quality and
+    macro positions, named "Random" with the macro names given. */
+yup::DataTree createRandomState (const SynthParameters& parameters,
+                                 yup::Random& random,
+                                 const std::array<yup::String, SynthExample::macroCount>& macroNames);
 
 //==============================================================================
 /** Returns how many factory presets there are. */

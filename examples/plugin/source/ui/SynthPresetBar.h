@@ -21,6 +21,7 @@
 #pragma once
 
 #include "../PrismProcessor.h"
+#include "SynthFieldEditor.h"
 #include "SynthIconButton.h"
 
 #include <yup_gui/yup_gui.h>
@@ -56,9 +57,6 @@ public:
     /** Asks for a preset file and loads it. */
     void loadPreset();
 
-    /** Called when the description stops being edited, so the keyboard can take the focus back. */
-    std::function<void()> onEditingFinished;
-
     void resized() override;
     void paint (yup::Graphics& g) override;
 
@@ -73,26 +71,12 @@ private:
         tags
     };
 
-    /** A field of the description: takes the keyboard focus only while it is clicked to
-        be edited, and gives it up on return or escape, so the computer keyboard keeps
-        playing the notes otherwise. */
-    class FieldEditor : public yup::TextEditor
-    {
-    public:
-        FieldEditor();
-
-        std::function<void()> onFinished;
-
-        void mouseDown (const yup::MouseEvent& event) override;
-        void focusLost() override;
-        void keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override;
-    };
-
     void stepPreset (int delta);
     void showPresetMenu();
     void scanUserPresets();
     void writeField (Field field, const yup::String& text);
-    void finishEditingWhenIdle();
+    void finishField (Field field);
+    static yup::String& getField (SynthPatch::PresetInfo& info, Field field);
     static yup::File getPresetFolder();
 
     PrismProcessor& processor;
@@ -100,7 +84,8 @@ private:
     SynthIconButton menuButton { "PresetMenu", YUP_ICON_CARET_DOWN, 12.0f, false };
     SynthIconButton previousButton { "PreviousPreset", YUP_ICON_CHEVRON_LEFT, 11.0f, false };
     SynthIconButton nextButton { "NextPreset", YUP_ICON_CHEVRON_RIGHT, 11.0f, false };
-    std::array<FieldEditor, 3> editors;
+    std::array<SynthFieldEditor, 3> editors;
+    std::array<yup::String, 3> fieldsBeforeEdit;
     std::array<yup::Rectangle<float>, 3> captionAreas;
     yup::Rectangle<float> nameArea;
     SynthPatch::PresetInfo shownInfo;

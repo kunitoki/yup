@@ -127,6 +127,14 @@ int EnvelopeDisplay::findHandle (yup::Point<float> position) const
 
 void EnvelopeDisplay::publish()
 {
+    // Every envelope ends silent, whichever point an edit left last.
+    if (const auto last = curve.getNumPoints() - 1; last > 0 && curve.getPoint (last).level != 0.0f)
+    {
+        auto point = curve.getPoint (last);
+        point.level = 0.0f;
+        curve.setPoint (last, point);
+    }
+
     repaint();
 
     if (onCurveEdited != nullptr)

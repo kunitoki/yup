@@ -61,6 +61,17 @@ void SynthModulationPage::syncFromParameters()
     }
 }
 
+void SynthModulationPage::setMacroNames (const std::array<yup::String, SynthExample::macroCount>& macroNames)
+{
+    if (macroNames == shownMacroNames)
+        return;
+
+    shownMacroNames = macroNames;
+
+    for (auto& row : rows)
+        row->setMacroNames (macroNames);
+}
+
 void SynthModulationPage::resized()
 {
     auto bounds = getLocalBounds();

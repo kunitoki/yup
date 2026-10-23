@@ -1357,9 +1357,9 @@ void Component::gesturePan ([[maybe_unused]] const GestureEvent& event) {}
 
 void Component::gestureSwipe ([[maybe_unused]] const GestureEvent& event) {}
 
-void Component::keyDown ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) {}
+bool Component::keyDown ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) { return false; }
 
-void Component::keyUp ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) {}
+bool Component::keyUp ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) { return false; }
 
 void Component::textInput ([[maybe_unused]] const String& text) {}
 
@@ -2248,22 +2248,36 @@ void Component::internalGesture (const GestureEvent& event)
 
 //==============================================================================
 
-void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
+bool Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible() || ! isEnabled())
-        return;
-
-    keyDown (keys, position);
+    return dispatchKey (keys, position, &Component::keyDown);
 }
 
 //==============================================================================
 
-void Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
+bool Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible() || ! isEnabled())
-        return;
+    return dispatchKey (keys, position, &Component::keyUp);
+}
 
-    keyUp (keys, position);
+/** Offers a key to this component, then to each parent in turn, until one handles it.
+    A component that is disabled, or inside a disabled parent, is passed over, as isEnabled()
+    takes the parents into account. A handler that deletes its own component ends the climb,
+    as if it handled the key. */
+bool Component::dispatchKey (const KeyPress& keys, const Point<float>& position, KeyHandler handler)
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (! component->isVisible() || ! component->isEnabled())
+            continue;
+
+        auto bailOutChecker = BailOutChecker (component);
+
+        if ((component->*handler) (keys, position) || bailOutChecker.shouldBailOut())
+            return true;
+    }
+
+    return false;
 }
 
 //==============================================================================

@@ -42,9 +42,6 @@ class SynthHeader : public yup::Component
 public:
     explicit SynthHeader (PrismProcessor& processorToControl);
 
-    /** Called when the preset description stops being edited. */
-    std::function<void()> onEditingFinished;
-
     /** Called when the logo is right clicked, to show the global settings. */
     std::function<void()> onSettingsRequested;
 

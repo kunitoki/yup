@@ -66,11 +66,6 @@ SynthHeader::SynthHeader (PrismProcessor& processorToControl)
                        .replace ("#RAY4", ray (SynthTheme::Section::envelopes))
                        .replace ("#RAY5", ray (SynthTheme::Section::lfos)));
 
-    presetBar.onEditingFinished = [this]
-    {
-        if (onEditingFinished != nullptr)
-            onEditingFinished();
-    };
     addAndMakeVisible (presetBar);
 
     saveButton.onClick = [this] { presetBar.savePreset(); };
@@ -97,7 +92,7 @@ void SynthHeader::syncFromProcessor()
 {
     presetBar.syncFromProcessor();
     volumeKnob.syncFromParameter();
-    meter.setLevels (processor.getOutputPeak (0), processor.getOutputPeak (1));
+    meter.setLevels (processor.takeOutputPeak (0), processor.takeOutputPeak (1));
 
     // The readouts change on almost every call, and each change repaints the interface,
     // so they follow at a reading pace.

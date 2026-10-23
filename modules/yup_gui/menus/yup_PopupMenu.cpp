@@ -1011,7 +1011,7 @@ void PopupMenu::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel
         scrollDown();
 }
 
-void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
+bool PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
 {
     auto keyCode = key.getKey();
 
@@ -1032,6 +1032,8 @@ void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
 
     else if (keyCode == KeyPress::enterKey)
         selectCurrentItem();
+
+    return true;
 }
 
 //==============================================================================

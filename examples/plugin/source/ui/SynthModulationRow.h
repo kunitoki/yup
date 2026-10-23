@@ -25,6 +25,7 @@
 #include "SynthIconButton.h"
 #include "SynthSliderField.h"
 
+#include <array>
 #include <vector>
 
 //==============================================================================
@@ -56,6 +57,9 @@ public:
 
     /** Shows the slot's route and depth, wherever they were changed. */
     void syncFromRoutes();
+
+    /** Shows the macros under the names the patch gives them. */
+    void setMacroNames (const std::array<yup::String, SynthExample::macroCount>& macroNames);
 
     /** True when the slot holds a route. */
     bool isUsed() const noexcept { return routes.getRoute (slot).isActive(); }

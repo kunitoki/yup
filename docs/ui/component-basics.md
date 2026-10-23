@@ -665,10 +665,34 @@ once with the one that gained it.
 ### Keyboard input
 
 ```cpp
-virtual void keyDown   (const KeyPress& keys, const Point<float>& pos) override;
-virtual void keyUp     (const KeyPress& keys, const Point<float>& pos) override;
+virtual bool keyDown   (const KeyPress& keys, const Point<float>& pos) override;
+virtual bool keyUp     (const KeyPress& keys, const Point<float>& pos) override;
 virtual void textInput (const String& text) override;
 ```
+
+A key goes to the component with the keyboard focus first. Return `true` from
+`keyDown()` or `keyUp()` when the component used the key; otherwise the key goes
+to its parent, and so on up to the top-level component. Invisible components are
+skipped, and so are disabled ones and every component inside a disabled parent. So a focused control only keeps the keys it uses, and a
+container can handle what its children leave: shortcuts, or playing a
+`MidiKeyboardComponent` from the computer keyboard while a knob has the focus.
+
+```cpp
+bool MyPanel::keyDown (const KeyPress& key, const Point<float>&) override
+{
+    if (key.getKey() == KeyPress::textZKey && key.getModifiers().isCommandDown())
+    {
+        undoManager.undo();
+        return true;
+    }
+
+    return false; // let the components around have it
+}
+```
+
+Text editors return `true` for every key that types, edits or moves the caret,
+since typed characters also arrive through `textInput()`, and leave Escape and
+the shortcuts they don't implement to the components around them.
 
 Two lower-level callbacks report input that `keyDown()` may never see:
 

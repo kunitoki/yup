@@ -42,22 +42,6 @@ void collectModulationTargets (yup::Component& component, std::vector<SynthModul
     }
 }
 
-/** Keeps every control under a component out of the keyboard focus, so the computer
-    keyboard keeps playing the on-screen keyboard while the mouse tweaks them. Sliders,
-    combo boxes and buttons all take the focus on click whenever they want it. */
-void keepFocusOnKeyboard (yup::Component& component, const yup::Component& keyboard)
-{
-    for (int index = 0; index < component.getNumChildComponents(); ++index)
-    {
-        auto* child = component.getChildComponent (index);
-
-        if (child == &keyboard)
-            continue;
-
-        child->setWantsKeyboardFocus (false);
-        keepFocusOnKeyboard (*child, keyboard);
-    }
-}
 } // namespace
 
 //==============================================================================
@@ -77,19 +61,10 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     SynthTheme::applySection (keyboardComponent, SynthTheme::Section::keys);
     mainPage.addAndMakeVisible (keyboardComponent);
 
-    // The keyboard keeps the focus, so the shortcuts reach the interface through it.
-    keyboardComponent.onShortcut = [this] (const yup::KeyPress& key)
-    {
-        if (key.getKey() != yup::KeyPress::textZKey)
-            return;
-
-        auto& undoManager = processor.getUndoManager();
-
-        if (key.getModifiers().isShiftDown())
-            undoManager.redo();
-        else
-            undoManager.undo();
-    };
+    // The interface takes the focus in place of the keyboard, which plays the keys that reach
+    // the interface, so a click on the keys gives the focus to the interface.
+    keyboardComponent.setWantsKeyboardFocus (false);
+    setWantsKeyboardFocus (true);
 
     applyUndoSetting();
 
@@ -113,7 +88,6 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
     mainPage.addAndMakeVisible (modWheelComponent);
 
     header = std::make_unique<SynthHeader> (processor);
-    header->onEditingFinished = [this] { keyboardComponent.takeKeyboardFocus(); };
     header->onSettingsRequested = [this] { showSettingsMenu(); };
     addAndMakeVisible (*header);
 
@@ -169,6 +143,10 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
                                                     SynthTheme::Section::matrix,
                                                     std::vector<SynthSection::StripControl> { { matrixCaption.get(), 110.0f } });
 
+    // The macros drive routes, so they wear the matrix's palette.
+    macroPanel = std::make_unique<SynthMacroPanel> (processor);
+    macroSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "Macros", macroPanel.get() } }, SynthTheme::Section::matrix);
+
     std::vector<SynthSection::Tab> filterTabs;
 
     for (int index = 0; index < SynthExample::filterCount; ++index)
@@ -205,10 +183,9 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
 
     lfoSection = std::make_unique<SynthSection> (std::move (lfoTabs), SynthTheme::Section::lfos);
 
-    for (auto* section : { oscillatorSection.get(), matrixSection.get(), filterSection.get(), envelopeSection.get(), lfoSection.get() })
+    for (auto* section : { oscillatorSection.get(), macroSection.get(), matrixSection.get(), filterSection.get(), envelopeSection.get(), lfoSection.get() })
         mainPage.addAndMakeVisible (*section);
 
-    mainPage.onMouseDown = [this] { keyboardComponent.takeKeyboardFocus(); };
     addAndMakeVisible (mainPage);
 
     voicingPanel = std::make_unique<SynthVoicingPanel> (parameters);
@@ -216,7 +193,6 @@ SynthInterface::SynthInterface (PrismProcessor& processorToEdit)
 
 
 
-    keepFocusOnKeyboard (*this, keyboardComponent);
     collectModulationTargets (*this, modulationTargets);
 
     // Menus and combo box lists open inside the interface, so the post effect draws them too.
@@ -278,6 +254,8 @@ void SynthInterface::layoutMainPage()
     bounds.removeFromTop (gap);
 
     matrixSection->setBounds (firstRow.removeFromRight (rightWidth));
+    firstRow.removeFromRight (gap);
+    macroSection->setBounds (firstRow.removeFromRight (macroColumnWidth));
     firstRow.removeFromRight (gap);
     oscillatorSection->setBounds (firstRow);
 
@@ -411,9 +389,44 @@ yup::ComponentEffect::Ptr SynthInterface::createPostEffect()
     return settings.postEffect ? yup::ComponentEffect::Ptr (new SynthNeonEffect (settings.neon)) : nullptr;
 }
 
-void SynthInterface::mouseDown (const yup::MouseEvent&)
+/** Keys come up from the focused control when it does not use them: the undo shortcuts are
+    the interface's, and the rest play the keyboard. */
+bool SynthInterface::keyDown (const yup::KeyPress& key, const yup::Point<float>&)
 {
-    keyboardComponent.takeKeyboardFocus();
+    const auto modifiers = key.getModifiers();
+
+    if ((modifiers.isCommandDown() || modifiers.isControlDown()) && key.getKey() == yup::KeyPress::textZKey)
+    {
+        // A field being typed in is finished first, which records it, so it is the step undone.
+        if (auto* native = getNativeComponent(); native != nullptr && dynamic_cast<SynthFieldEditor*> (native->getFocusedComponent()) != nullptr)
+            takeKeyboardFocus();
+
+        auto& undoManager = processor.getUndoManager();
+
+        if (modifiers.isShiftDown())
+            undoManager.redo();
+        else
+            undoManager.undo();
+
+        return true;
+    }
+
+    return keyboardComponent.handleNoteKey (key, true);
+}
+
+bool SynthInterface::keyUp (const yup::KeyPress& key, const yup::Point<float>&)
+{
+    return keyboardComponent.handleNoteKey (key, false);
+}
+
+/** Takes the focus once the interface is in a window, so the keys play it from the start. */
+void SynthInterface::attachedToNative()
+{
+    yup::MessageManager::callAsync ([safeThis = yup::WeakReference<yup::Component> (this)]
+    {
+        if (auto* interface = safeThis.get())
+            interface->takeKeyboardFocus();
+    });
 }
 
 //==============================================================================
@@ -454,6 +467,10 @@ void SynthInterface::timerCallback()
 
     updateModulation();
     syncFromProcessor();
+
+    // A window that lost the focus no longer hears key releases, so held keys let go.
+    if (auto* native = getNativeComponent(); native != nullptr && native->getFocusedComponent() == nullptr)
+        keyboardComponent.releaseKeyPressNotes();
 
     const auto playing = processor.getNumActiveVoices() > 0;
 
@@ -550,8 +567,17 @@ void SynthInterface::syncFromProcessor()
 
     fmPanel->syncFromParameters();
     modulationPage->syncFromParameters();
+    macroPanel->syncFromProcessor();
 
-    for (auto* section : { oscillatorSection.get(), matrixSection.get(), filterSection.get(), envelopeSection.get(), lfoSection.get() })
+    const auto info = processor.getPresetInfo();
+    std::array<yup::String, SynthExample::macroCount> macroNames;
+
+    for (int macro = 0; macro < SynthExample::macroCount; ++macro)
+        macroNames[static_cast<std::size_t> (macro)] = info.getMacroName (macro);
+
+    modulationPage->setMacroNames (macroNames);
+
+    for (auto* section : { oscillatorSection.get(), macroSection.get(), matrixSection.get(), filterSection.get(), envelopeSection.get(), lfoSection.get() })
         section->syncFromParameters();
 
     for (auto& led : lfoSyncLeds)

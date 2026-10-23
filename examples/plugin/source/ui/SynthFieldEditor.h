@@ -21,25 +21,30 @@
 
 #pragma once
 
-#include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_gui/yup_gui.h>
 
 #include <functional>
 
 //==============================================================================
-/** The on-screen keyboard, which keeps the keyboard focus so the computer keys play it.
+/** A one line text field that takes the keyboard focus only while it is clicked to be
+    edited, and on return or escape hands it to the nearest parent that takes it, so the
+    computer keyboard plays the notes again.
 
-    Holding the focus, it is also the one component that hears the interface's shortcuts,
-    so it hands every key pressed with command or control to onShortcut.
-
-    @see SynthInterface
+    @see SynthPresetBar, SynthMacroPanel
 */
-class SynthKeyboard : public yup::MidiKeyboardComponent
+class SynthFieldEditor : public yup::TextEditor
 {
 public:
-    using yup::MidiKeyboardComponent::MidiKeyboardComponent;
+    SynthFieldEditor();
 
-    /** Called with every key pressed with command or control held. */
-    std::function<void (const yup::KeyPress&)> onShortcut;
+    /** Called when a click starts editing. */
+    std::function<void()> onStarted;
 
-    void keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override;
+    /** Called when editing stops, by return, escape or the focus moving away. It runs
+        inside the focus change, so it must not move the focus itself. */
+    std::function<void()> onFinished;
+
+    void mouseDown (const yup::MouseEvent& event) override;
+    void focusLost() override;
+    bool keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override;
 };

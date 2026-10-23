@@ -39,6 +39,11 @@ const yup::Identifier authorProperty ("author");
 const yup::Identifier tagsProperty ("tags");
 constexpr int stateVersion = 3;
 
+yup::Identifier getMacroNameProperty (std::size_t macro)
+{
+    return yup::Identifier ("macro" + yup::String (static_cast<int> (macro) + 1) + "Name");
+}
+
 yup::Identifier getPartialsType (std::size_t oscillator)
 {
     return yup::Identifier ("Partials" + yup::String (static_cast<int> (oscillator) + 1));
@@ -55,6 +60,10 @@ yup::DataTree createEmptyState (int presetIndex, const SynthPatch::PresetInfo& i
     transaction.setProperty (bankProperty, info.bank);
     transaction.setProperty (authorProperty, info.author);
     transaction.setProperty (tagsProperty, info.tags);
+
+    for (std::size_t macro = 0; macro < info.macroNames.size(); ++macro)
+        if (info.macroNames[macro].isNotEmpty())
+            transaction.setProperty (getMacroNameProperty (macro), info.macroNames[macro]);
 
     return state;
 }
@@ -326,10 +335,15 @@ yup::DataTree createRoutesTree (const std::vector<std::pair<SynthModulationSourc
 //==============================================================================
 PresetInfo readInfo (const yup::DataTree& state)
 {
-    return { state.getProperty (nameProperty, {}).toString(),
-             state.getProperty (bankProperty, {}).toString(),
-             state.getProperty (authorProperty, {}).toString(),
-             state.getProperty (tagsProperty, {}).toString() };
+    PresetInfo info { state.getProperty (nameProperty, {}).toString(),
+                      state.getProperty (bankProperty, {}).toString(),
+                      state.getProperty (authorProperty, {}).toString(),
+                      state.getProperty (tagsProperty, {}).toString() };
+
+    for (std::size_t macro = 0; macro < info.macroNames.size(); ++macro)
+        info.macroNames[macro] = state.getProperty (getMacroNameProperty (macro), {}).toString();
+
+    return info;
 }
 
 yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state, int presetIndex, const PresetInfo& info)
@@ -404,10 +418,11 @@ int findRouteDestination (yup::Span<const yup::AudioParameter::Ptr> parameters, 
         if (parameter->getID() != parameterID)
             continue;
 
-        // Volume and glide act outside the voices, and route depths are read before any
-        // route applies, so modulating them would do nothing.
+        // Volume and glide act outside the voices, and route depths and macros are read
+        // before any route applies, so modulating them would do nothing.
         if (parameter->isStepped() || ! parameter->isAutomatable()
-            || parameterID == "global.volume" || parameterID == "global.glide" || parameterID.startsWith ("route."))
+            || parameterID == "global.volume" || parameterID == "global.glide" || parameterID.startsWith ("route.")
+            || parameterID.startsWith ("macro"))
             return -1;
 
         return parameter->getIndexInContainer();
@@ -416,13 +431,22 @@ int findRouteDestination (yup::Span<const yup::AudioParameter::Ptr> parameters, 
     return -1;
 }
 
-yup::DataTree createRandomState (const SynthParameters& parameters, yup::Random& random)
+yup::DataTree createRandomState (const SynthParameters& parameters,
+                                 yup::Random& random,
+                                 const std::array<yup::String, SynthExample::macroCount>& macroNames)
 {
-    auto state = createEmptyState (-1, { "Random", {}, {}, {} });
+    PresetInfo info { "Random" };
+    info.macroNames = macroNames;
+
+    auto state = createEmptyState (-1, info);
     StateBuilder builder (state);
 
     for (const auto& parameter : { parameters.volume, parameters.playMode, parameters.glide, parameters.quality })
         builder.keep (parameter);
+
+    // The macros are where the user's hands are, so a random patch leaves them in place.
+    for (const auto& macro : parameters.macros)
+        builder.keep (macro);
 
     for (const auto& parameter : parameters.getEnableParameters())
         builder.keep (parameter);

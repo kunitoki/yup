@@ -52,7 +52,7 @@ struct SynthGlobalValues
 
     Host IDs are grouped per section so the sections can grow: globals below 100,
     oscillators from 1000, FM from 2000, envelopes from 3000, LFOs from 4000, filters
-    from 5000 and route depths from 6000.
+    from 5000, route depths from 6000 and macros from 7000.
 
     @see SynthPatch, HarmonicSynthEngine
 */
@@ -89,4 +89,7 @@ public:
     yup::AudioParameter::Ptr unisonDetune;  /**< Detune between the copies, 0 to 1 semitone. */
     yup::AudioParameter::Ptr unisonSpread;  /**< Stereo spread of the copies. */
     yup::AudioParameter::Ptr filterRouting; /**< A SynthFilterRouting. */
+
+    /** The macro knobs, 0 to 1: modulation sources the user turns and the host automates. */
+    std::array<yup::AudioParameter::Ptr, SynthExample::macroCount> macros;
 };

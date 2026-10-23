@@ -226,6 +226,25 @@ public:
     */
     void setKeyboardKeys (const String& keys);
 
+    /** Plays or releases the note a computer key is mapped to, as keyDown() and keyUp() do
+        while the keyboard has the focus.
+
+        Keys a focused component does not handle go up to its parents, so a parent can pass
+        the keyboard the keys nothing else took, and the computer keyboard keeps playing
+        whichever control has the focus. A press held with command or control is a shortcut
+        and plays nothing; a release always lets its note go.
+
+        @param key    the key pressed or released
+        @param isDown true for a press, false for a release
+
+        @returns true when the key is one of the note keys and was used as one
+    */
+    bool handleNoteKey (const KeyPress& key, bool isDown);
+
+    /** Releases every note the computer keys hold, for when their releases can no longer
+        arrive, such as after the window lost the focus. */
+    void releaseKeyPressNotes();
+
     /** Returns the current computer-keyboard key mapping (always lower-case). */
     String getKeyboardKeys() const noexcept { return keyboardKeys; }
 
@@ -478,9 +497,9 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    void keyDown (const KeyPress& key, const Point<float>& position) override;
+    bool keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
-    void keyUp (const KeyPress& key, const Point<float>& position) override;
+    bool keyUp (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void focusLost() override;
 
@@ -493,7 +512,6 @@ private:
     void updateNoteUnderMouse (const MouseEvent& e, bool isDown);
     bool isNoteHeldByPointer (int midiNoteNumber) const;
     void resetAnyKeysInUse();
-    void releaseKeyPressNotes();
     void updateShadowNoteUnderMouse (const MouseEvent& e);
     void updateScrollButtons();
 

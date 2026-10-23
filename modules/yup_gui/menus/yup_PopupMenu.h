@@ -345,7 +345,7 @@ public:
     /** @internal */
     void mouseWheel (const MouseEvent& event, const MouseWheelData& wheel) override;
     /** @internal */
-    void keyDown (const KeyPress& key, const Point<float>& position) override;
+    bool keyDown (const KeyPress& key, const Point<float>& position) override;
 
 private:
     PopupMenu (const Options& options = {});

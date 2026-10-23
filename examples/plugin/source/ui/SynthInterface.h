@@ -33,7 +33,8 @@
 #include "SynthOscillatorPanel.h"
 #include "SynthPage.h"
 #include "SynthHeader.h"
-#include "SynthKeyboard.h"
+#include "SynthFieldEditor.h"
+#include "SynthMacroPanel.h"
 #include "SynthSection.h"
 #include "SynthUndoHistory.h"
 #include "SynthVoicingPanel.h"
@@ -87,7 +88,9 @@ public:
     //==============================================================================
     void resized() override;
     void paint (yup::Graphics& g) override;
-    void mouseDown (const yup::MouseEvent& event) override;
+    bool keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override;
+    bool keyUp (const yup::KeyPress& key, const yup::Point<float>& position) override;
+    void attachedToNative() override;
 
 private:
     void timerCallback() override;
@@ -106,13 +109,14 @@ private:
     static constexpr float wheelCaptionHeight = 16.0f;
     static constexpr float firstRowShare = 0.6f;
     static constexpr float filterShare = 384.0f / 790.0f;
+    static constexpr float macroColumnWidth = 128.0f;
 
     //==============================================================================
     PrismProcessor& processor;
 
     std::unique_ptr<SynthHeader> header;
 
-    SynthKeyboard keyboardComponent;
+    yup::MidiKeyboardComponent keyboardComponent;
     yup::PitchWheelComponent pitchWheelComponent;
     yup::ModWheelComponent modWheelComponent;
 
@@ -125,12 +129,14 @@ private:
     std::array<std::unique_ptr<SynthLFOPanel>, SynthExample::lfoCount> lfoPanels;
     std::unique_ptr<SynthFMPanel> fmPanel;
     std::unique_ptr<SynthModulationPage> modulationPage;
+    std::unique_ptr<SynthMacroPanel> macroPanel;
     std::unique_ptr<ParameterSegmented> routingSelector;
     std::unique_ptr<yup::Label> matrixCaption;
     std::unique_ptr<yup::Label> ampCaption;
     std::vector<std::unique_ptr<ParameterLed>> lfoSyncLeds;
     std::unique_ptr<SynthSection> oscillatorSection;
     std::unique_ptr<SynthSection> matrixSection;
+    std::unique_ptr<SynthSection> macroSection;
     std::unique_ptr<SynthSection> filterSection;
     std::unique_ptr<SynthSection> envelopeSection;
     std::unique_ptr<SynthSection> lfoSection;

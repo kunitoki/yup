@@ -115,6 +115,9 @@ void HarmonicSynthEngine::updateContext (yup::Span<const float> parameterValues,
     context.played = parameterValues;
     context.bpm = bpm;
 
+    for (std::size_t index = 0; index < context.macros.size(); ++index)
+        context.macros[index] = reader (parameters.macros[index]);
+
     context.network.globals = parameters.readGlobals (reader);
     portamentoSeconds = static_cast<double> (context.network.globals.glideSeconds);
 

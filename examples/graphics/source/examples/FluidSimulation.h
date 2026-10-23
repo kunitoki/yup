@@ -250,7 +250,7 @@ public:
     }
 
     //==============================================================================
-    void keyDown (const yup::KeyPress& keys, const yup::Point<float>&) override
+    bool keyDown (const yup::KeyPress& keys, const yup::Point<float>&) override
     {
         const int key = keys.getKey();
 
@@ -263,6 +263,12 @@ public:
         {
             queueRandomSplats (12);
         }
+        else
+        {
+            return false;
+        }
+
+        return true;
     }
 
     void mouseDown (const yup::MouseEvent& event) override

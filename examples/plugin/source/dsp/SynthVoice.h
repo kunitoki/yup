@@ -111,6 +111,8 @@ private:
     static constexpr int delayedChunks = 16;
 
     void renderChunk (yup::AudioBuffer<float>& outputBuffer, int startSample, int numSamples) noexcept;
+    /** Moves each operator's enable gain toward its switch, over enableFadeSeconds. */
+    void fadeEnables (const SynthNetworkControls& controls, int numSamples) noexcept;
     void prepareControls (SynthNetworkControls& controls, DelayedControls& delayed) noexcept;
     void configureLFOs() noexcept;
     float getSourceValue (SynthModulationSource source) const noexcept;
@@ -143,6 +145,7 @@ private:
     std::array<SynthLFOValues, SynthExample::lfoCount> lfoValues;
     std::vector<float> modulatedValues;
     std::array<float, SynthExample::modulationSlots> routeAmounts {};
+    std::array<float, SynthExample::oscillatorCount> enableGains {};
     std::array<std::array<std::vector<float>, 2>, SynthOperatorNetwork::numBuses> buses;
     std::vector<float> gains;
     std::vector<float> scratch;

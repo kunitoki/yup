@@ -285,10 +285,13 @@ private:
                 dismiss();
         }
 
-        void keyDown (const KeyPress& key, const Point<float>&) override
+        bool keyDown (const KeyPress& key, const Point<float>&) override
         {
-            if (key.getKey() == KeyPress::escapeKey)
-                dismiss();
+            if (key.getKey() != KeyPress::escapeKey)
+                return false;
+
+            dismiss();
+            return true;
         }
 
     private:

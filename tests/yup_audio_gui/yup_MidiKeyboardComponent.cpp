@@ -190,10 +190,27 @@ TEST_F (MidiKeyboardComponentTests, KeyDownSendsNoteOnForMappedKey)
 
 TEST_F (MidiKeyboardComponentTests, KeyDownWithCommandOrControlSendsNoNoteOn)
 {
-    keyboard->keyDown (KeyPress ('z', KeyModifiers::commandMask), {});
-    keyboard->keyDown (KeyPress ('z', KeyModifiers::controlMask), {});
+    EXPECT_FALSE (keyboard->keyDown (KeyPress ('z', KeyModifiers::commandMask), {}));
+    EXPECT_FALSE (keyboard->keyDown (KeyPress ('z', KeyModifiers::controlMask), {}));
 
     EXPECT_TRUE (listener->noteOnCalls.empty());
+    EXPECT_FALSE (keyboard->isNoteOn (kDefaultOctaveOffset));
+}
+
+TEST_F (MidiKeyboardComponentTests, NoteKeysAreHandledAndOtherKeysAreNot)
+{
+    EXPECT_TRUE (keyboard->handleNoteKey (KeyPress ('z'), true));
+    EXPECT_TRUE (keyboard->handleNoteKey (KeyPress ('z'), false));
+    EXPECT_FALSE (keyboard->handleNoteKey (KeyPress ('a'), true));
+    EXPECT_FALSE (keyboard->handleNoteKey (KeyPress (KeyPress::upKey), true));
+}
+
+TEST_F (MidiKeyboardComponentTests, ReleaseWithAModifierHeldStillSendsNoteOff)
+{
+    keyboard->handleNoteKey (KeyPress ('z'), true);
+    keyboard->handleNoteKey (KeyPress ('z', KeyModifiers::commandMask), false);
+
+    ASSERT_EQ (1, (int) listener->noteOffCalls.size());
     EXPECT_FALSE (keyboard->isNoteOn (kDefaultOctaveOffset));
 }
 

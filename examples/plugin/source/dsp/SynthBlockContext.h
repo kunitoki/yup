@@ -58,5 +58,6 @@ struct SynthBlockContext
 
     float modWheel = 0.0f;   /**< The last controller 1 value, 0 to 1, kept across blocks. */
     float aftertouch = 0.0f; /**< The last channel pressure, 0 to 1, kept across blocks. */
+    std::array<float, SynthExample::macroCount> macros {}; /**< The macro knobs as played, 0 to 1. */
     double bpm = 0.0;        /**< The host tempo, or zero when unknown. */
 };

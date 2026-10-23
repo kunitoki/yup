@@ -33,6 +33,7 @@ constexpr int envelopeCount = 4;
 constexpr int lfoCount = 4;
 constexpr int filterCount = 2;
 constexpr int modulationSlots = 32;
+constexpr int macroCount = 8;
 
 /** Samples between control updates: modulation, filter targets, FM ramps and host parameter changes. */
 constexpr int controlChunk = 32;
@@ -51,4 +52,5 @@ constexpr int editableHarmonics = 64;
 constexpr int displayHarmonics = 64;
 
 constexpr double levelRampSeconds = 0.01;
+constexpr double enableFadeSeconds = 0.005; /**< How long switching an operator on or off fades it. */
 } // namespace SynthExample

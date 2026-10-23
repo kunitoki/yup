@@ -38,24 +38,26 @@ struct SynthNetworkControls
     std::array<bool, SynthExample::oscillatorCount> deriveLocally {};
     bool refreshSpectra = false; /**< True when local spectra may be rebuilt in this chunk. */
 
-    /** Silences every disabled operator and removes the phase modulation it gives or takes.
-
-        The matrix ramps gains and amounts across the chunk, so switching an operator
-        does not click, and an operator left without gain or modulation stops rendering.
+    /** Scales each operator by its enable gain: its level and the phase modulation it gives
+        and takes. A gain of 0 silences the operator and removes it from the matrix, so a
+        disabled operator stops rendering; the voice fades the gains over a few
+        milliseconds so switching an operator never clicks.
     */
-    void applyEnables() noexcept
+    void applyEnables (const std::array<float, SynthExample::oscillatorCount>& gains) noexcept
     {
         for (std::size_t op = 0; op < oscillators.size(); ++op)
         {
-            if (oscillators[op].enabled)
+            const auto gain = gains[op];
+
+            if (gain >= 1.0f)
                 continue;
 
-            oscillators[op].level = 0.0f;
+            oscillators[op].level *= gain;
 
             for (std::size_t other = 0; other < oscillators.size(); ++other)
             {
-                fm.amounts[other][op] = 0.0f;
-                fm.amounts[op][other] = 0.0f;
+                fm.amounts[other][op] *= gain;
+                fm.amounts[op][other] *= gain;
             }
         }
     }

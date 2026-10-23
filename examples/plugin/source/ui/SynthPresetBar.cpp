@@ -20,6 +20,7 @@
 */
 #include "SynthPresetBar.h"
 #include "SynthTheme.h"
+#include "SynthUndoHistory.h"
 
 #include <algorithm>
 
@@ -28,39 +29,6 @@ namespace
 constexpr const char* presetExtension = ".prism";
 constexpr const char* fieldCaptions[] = { "BANK:", "AUTHOR:", "TAGS:" };
 } // namespace
-
-SynthPresetBar::FieldEditor::FieldEditor()
-{
-    setWantsKeyboardFocus (false);
-}
-
-void SynthPresetBar::FieldEditor::mouseDown (const yup::MouseEvent& event)
-{
-    if (! isReadOnly())
-        setWantsKeyboardFocus (true);
-
-    yup::TextEditor::mouseDown (event);
-}
-
-void SynthPresetBar::FieldEditor::focusLost()
-{
-    yup::TextEditor::focusLost();
-    setWantsKeyboardFocus (false);
-
-    if (onFinished != nullptr)
-        onFinished();
-}
-
-void SynthPresetBar::FieldEditor::keyDown (const yup::KeyPress& key, const yup::Point<float>& position)
-{
-    if (key.getKey() == yup::KeyPress::enterKey || key.getKey() == yup::KeyPress::escapeKey)
-    {
-        leaveKeyboardFocus();
-        return;
-    }
-
-    yup::TextEditor::keyDown (key, position);
-}
 
 SynthPresetBar::SynthPresetBar (PrismProcessor& processorToControl)
     : processor (processorToControl)
@@ -81,7 +49,12 @@ SynthPresetBar::SynthPresetBar (PrismProcessor& processorToControl)
         editor.setMultiLine (false);
         editor.setFont (SynthTheme::valueFont (13.5f));
         editor.onTextChange = [this, field] { writeField (static_cast<Field> (field), editors[static_cast<std::size_t> (field)].getText()); };
-        editor.onFinished = [this] { finishEditingWhenIdle(); };
+        editor.onStarted = [this, field]
+        {
+            auto info = processor.getPresetInfo();
+            fieldsBeforeEdit[static_cast<std::size_t> (field)] = getField (info, static_cast<Field> (field));
+        };
+        editor.onFinished = [this, field] { finishField (static_cast<Field> (field)); };
         addAndMakeVisible (editor);
     }
 
@@ -154,32 +127,40 @@ void SynthPresetBar::paint (yup::Graphics& g)
         g.fillFittedText (fieldCaptions[field], captionFont, captionAreas[field], yup::Justification::centerLeft);
 }
 
-void SynthPresetBar::finishEditingWhenIdle()
-{
-    // Deferred, so moving from one field to another does not hand the focus away.
-    yup::MessageManager::callAsync ([safeThis = yup::WeakReference<yup::Component> (this)]
-    {
-        auto* bar = dynamic_cast<SynthPresetBar*> (safeThis.get());
-
-        if (bar == nullptr || bar->onEditingFinished == nullptr)
-            return;
-
-        for (const auto& editor : bar->editors)
-            if (editor.hasKeyboardFocus())
-                return;
-
-        bar->onEditingFinished();
-    });
-}
-
 void SynthPresetBar::writeField (Field field, const yup::String& text)
 {
     if (processor.getCurrentPreset() >= 0)
         return;
 
     auto info = processor.getPresetInfo();
-    (field == bank ? info.bank : field == author ? info.author : info.tags) = text;
+    getField (info, field) = text;
     processor.setPresetInfo (std::move (info));
+}
+
+/** Keeps a finished edit as one undo step. */
+void SynthPresetBar::finishField (Field field)
+{
+    const auto index = static_cast<std::size_t> (field);
+    auto info = processor.getPresetInfo();
+    const auto before = fieldsBeforeEdit[index];
+    const auto after = getField (info, field);
+
+    if (after != before)
+    {
+        SynthUndoHistory::record<yup::String> (*this, before, after, [&processor = processor, field] (const yup::String& text)
+        {
+            auto restored = processor.getPresetInfo();
+            getField (restored, field) = text;
+            processor.setPresetInfo (std::move (restored));
+        });
+    }
+
+    fieldsBeforeEdit[index] = after;
+}
+
+yup::String& SynthPresetBar::getField (SynthPatch::PresetInfo& info, Field field)
+{
+    return field == bank ? info.bank : field == author ? info.author : info.tags;
 }
 
 void SynthPresetBar::showPresetMenu()
