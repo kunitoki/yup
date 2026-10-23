@@ -386,11 +386,12 @@ Additional algorithm references:
 `PhaseModulationMatrix<SampleType, NumOperators = 4>` turns `WavetableOscillator`
 tables into phase modulation operators wired through a full matrix, in the spirit
 of the TX81Z but with any operator able to modulate any other. Each operator reads
-its caller-owned table at its own phase plus the operators' previous outputs:
+its caller-owned table at its own phase, plus a fixed phase offset, plus the
+operators' previous outputs:
 
 ```
 pm_i  = sum_j (M_ij * (y_j[n-1] + y_j[n-2]) / 2)
-y_i   = table_i (phase_i + pm_i)
+y_i   = table_i (phase_i + offset_i + pm_i)
 ```
 
 Every link is delayed, so the evaluation order never matters and cycles are well
@@ -404,8 +405,9 @@ between operators are feedback loops as well: two sines modulating each other at
 the same pitch stay clean up to about 0.3 periods each way and turn noisy beyond,
 and bright tables reach that point sooner.
 
-Frequencies, amounts and gains are ramped linearly over each control step, so a
-modulation index never zippers. The matrix also picks every table's bandwidth once
+Frequencies, amounts, gains and phase offsets (`Controls::phaseOffsets`, in periods)
+are ramped linearly over each control step, so a modulation index never zippers and a
+moving phase offset never clicks. The matrix also picks every table's bandwidth once
 per step, setting its frequency to
 
 ```

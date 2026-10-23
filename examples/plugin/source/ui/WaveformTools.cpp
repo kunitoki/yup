@@ -96,11 +96,16 @@ void stampWaveformShape (yup::Span<float> cycle,
     const auto length = last - first + 1;
     const auto forward = toIndex >= fromIndex;
 
-    // Seeded per sample, or per grid cell, so the noise already drawn stays put as the span grows.
+    // Hashed per sample, or per grid cell, so the noise already drawn stays put as the span grows.
+    // A hash rather than a Random per key: neighboring seeds give nearly equal first values.
     const auto noiseAt = [seed] (int key)
     {
-        yup::Random random (static_cast<yup::int64> (static_cast<yup::uint64> (seed) * 7919u + static_cast<yup::uint64> (key)));
-        return random.nextFloat() * 2.0f - 1.0f;
+        auto hash = static_cast<yup::uint64> (seed) + static_cast<yup::uint64> (key) * 0x9e3779b97f4a7c15ull;
+        hash = (hash ^ (hash >> 30)) * 0xbf58476d1ce4e5b9ull;
+        hash = (hash ^ (hash >> 27)) * 0x94d049bb133111ebull;
+        hash ^= hash >> 31;
+
+        return static_cast<float> (hash >> 40) / static_cast<float> (1 << 24) * 2.0f - 1.0f;
     };
 
     for (int index = first; index <= last; ++index)

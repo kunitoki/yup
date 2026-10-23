@@ -117,17 +117,17 @@ void SynthOperatorNetwork::startNote (const SynthNetworkControls& controls) noex
         std::array<double, SynthExample::oscillatorCount> phases {};
 
         // Layers start spread over the period, so a unison stack does not begin in phase.
+        // The phase control is an offset added to every read, so it is not part of the start.
         const auto layerOffset = static_cast<double> (layer) / static_cast<double> (SynthExample::maxUnisonVoices);
 
         for (std::size_t index = 0; index < phases.size(); ++index)
-        {
-            const auto& values = controls.oscillators[index];
-            phases[index] = values.freeRunning ? matrix.getPhase (static_cast<int> (index))
-                                               : static_cast<double> (values.phase) + layerOffset;
-        }
+            phases[index] = controls.oscillators[index].freeRunning ? matrix.getPhase (static_cast<int> (index)) : layerOffset;
 
         matrix.reset (phases);
     }
+
+    for (std::size_t index = 0; index < smoothedPhases.size(); ++index)
+        smoothedPhases[index] = static_cast<double> (controls.oscillators[index].phase);
 
     updateSeries (controls, true);
 
@@ -178,6 +178,12 @@ void SynthOperatorNetwork::render (const Outputs& outputs, int numSamples, const
     }
 
     const auto internalSamples = numSamples * factor;
+
+    // A phase offset that moves shifts the pitch while it moves, so its steps glide.
+    const auto phaseAmount = 1.0 - std::exp (-static_cast<double> (numSamples) / (phaseSmoothingSeconds * sampleRate));
+
+    for (std::size_t index = 0; index < smoothedPhases.size(); ++index)
+        smoothedPhases[index] += (static_cast<double> (controls.oscillators[index].phase) - smoothedPhases[index]) * phaseAmount;
 
     // The series first, so the tables the matrices size are the ones about to play.
     updateSeries (controls, controls.refreshSpectra);
@@ -403,7 +409,9 @@ void SynthOperatorNetwork::renderDirect (const Outputs& outputs, int numSamples,
             auto& table = oscillators[opIndex].getTable (layer);
             auto& phase = directPhases[layerIndex][opIndex];
             auto& level = directLevels[layerIndex][opIndex];
+            auto& offset = directOffsets[layerIndex][opIndex];
             const auto increment = getPlayedFrequency (controls, op, shape) / sampleRate;
+            const auto offsetTarget = smoothedPhases[opIndex];
 
             // Operators nobody hears still advance, so they are in phase when they return.
             if (! matrix.isOperatorAudible (op))
@@ -412,15 +420,25 @@ void SynthOperatorNetwork::renderDirect (const Outputs& outputs, int numSamples,
                 phase -= std::floor (phase);
                 table.advanceCrossfade (numSamples);
                 level = 0.0f;
+                offset = offsetTarget;
                 continue;
             }
 
+            // The phase offset ramps across the chunk as the matrix ramps it.
+            const auto offsetStep = directLevelsValid ? (offsetTarget - offset) / numSamples : 0.0;
+
+            if (! directLevelsValid)
+                offset = offsetTarget;
+
             for (int sample = 0; sample < numSamples; ++sample)
             {
-                directScratch[static_cast<std::size_t> (sample)] = table.processSampleAtPhase (phase);
+                directScratch[static_cast<std::size_t> (sample)] = table.processSampleAtPhase (phase + offset);
                 phase += increment;
                 phase -= std::floor (phase);
+                offset += offsetStep;
             }
+
+            offset = offsetTarget;
 
             const auto& starts = panSendStart[layerIndex][opIndex];
             const auto& ends = panSendEnd[layerIndex][opIndex];
@@ -527,6 +545,7 @@ void SynthOperatorNetwork::setTargets (const SynthNetworkControls& controls, int
 
             targets.frequencies[op] = getPlayedFrequency (controls, static_cast<int> (op), shape);
             targets.gains[op] = values.getTotalSend() > 0.0f ? static_cast<double> (values.level) : 0.0;
+            targets.phaseOffsets[op] = smoothedPhases[op];
 
             for (std::size_t modulator = 0; modulator < targets.frequencies.size(); ++modulator)
                 targets.amounts[op][modulator] = static_cast<double> (controls.fm.amounts[op][modulator]);

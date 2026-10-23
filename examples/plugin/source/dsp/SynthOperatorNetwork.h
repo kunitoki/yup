@@ -151,6 +151,7 @@ private:
 
     static constexpr int fadeLength = 64;
     static constexpr double panSendSmoothingSeconds = 0.005;
+    static constexpr double phaseSmoothingSeconds = 0.02;
     static constexpr float panSendSilence = 1.0e-5f;
 
     using Buses = std::array<std::array<std::vector<float>, 2>, numBuses>;
@@ -185,9 +186,13 @@ private:
     PanSends panSendEnd {};
     int smoothedLayers = 0;
 
-    // The direct path: phases and last levels per layer and operator, the delay that
-    // aligns it with the decimators, and the second path's output during a switch.
+    // Each operator's phase offset, smoothed across chunks like pan and sends.
+    std::array<double, SynthExample::oscillatorCount> smoothedPhases {};
+
+    // The direct path: phases, phase offsets and last levels per layer and operator, the
+    // delay that aligns it with the decimators, and the second path's output during a switch.
     std::array<std::array<double, SynthExample::oscillatorCount>, SynthExample::maxUnisonVoices> directPhases {};
+    std::array<std::array<double, SynthExample::oscillatorCount>, SynthExample::maxUnisonVoices> directOffsets {};
     std::array<std::array<float, SynthExample::oscillatorCount>, SynthExample::maxUnisonVoices> directLevels {};
     std::vector<float> directScratch;
     Buses directBuses;

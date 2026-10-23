@@ -532,6 +532,80 @@ TEST_F (PhaseModulationMatrixTests, PhasesAdvanceForSkippedOperators)
     EXPECT_NEAR (1200.0 * 120.0 / (sampleRate * factor), matrix.getPhase (1), 1e-12);
 }
 
+TEST_F (PhaseModulationMatrixTests, PhaseOffsetShiftsTheRead)
+{
+    prepare (1);
+    matrix.reset();
+
+    Matrix::Controls controls;
+    controls.frequencies = { 440.0, 440.0, 0.0, 0.0 };
+    controls.gains = { 1.0, 1.0, 0.0, 0.0 };
+    controls.phaseOffsets = { 0.0, 0.25, 0.0, 0.0 };
+
+    prime (controls);
+
+    std::vector<double> plain (blockSize);
+    std::vector<double> shifted (blockSize);
+    std::vector<double> unused (blockSize);
+    double* pointers[] = { plain.data(), shifted.data(), unused.data(), unused.data() };
+
+    matrix.setTargets (controls, blockSize);
+    renderTables();
+    matrix.process (pointers, blockSize);
+
+    for (int s = 0; s < blockSize; ++s)
+    {
+        const auto phase = 440.0 * s / sampleRate;
+
+        EXPECT_NEAR (std::sin (MathConstants<double>::twoPi * phase), plain[static_cast<std::size_t> (s)], 1e-4) << s;
+        EXPECT_NEAR (std::sin (MathConstants<double>::twoPi * (phase + 0.25)), shifted[static_cast<std::size_t> (s)], 1e-4) << s;
+    }
+
+    EXPECT_NEAR (440.0 * blockSize / sampleRate, matrix.getPhase (1), 1e-12);
+}
+
+TEST_F (PhaseModulationMatrixTests, PhaseOffsetRampsWhenNothingElseChanges)
+{
+    prepare (factor);
+    matrix.reset();
+
+    Matrix::Controls controls;
+    controls.frequencies = { 440.0, 440.0, 0.0, 0.0 };
+    controls.gains = { 1.0, 1.0, 0.0, 0.0 };
+
+    prime (controls);
+
+    constexpr int steps = 8;
+    constexpr int stepLength = blockSize * factor;
+
+    std::vector<double> shifted;
+    std::vector<double> plain;
+    std::vector<double> buffer (stepLength);
+    std::vector<double> reference (stepLength);
+    std::vector<double> unused (stepLength);
+    double* pointers[] = { buffer.data(), reference.data(), unused.data(), unused.data() };
+
+    for (int step = 0; step < steps; ++step)
+    {
+        if (step == 2)
+            controls.phaseOffsets[0] = 0.5;
+
+        matrix.setTargets (controls, stepLength);
+        renderTables();
+        matrix.process (pointers, stepLength);
+        shifted.insert (shifted.end(), buffer.begin(), buffer.end());
+        plain.insert (plain.end(), reference.begin(), reference.end());
+    }
+
+    // Half a period at once would jump by up to 2. Ramped over a step, the steepest move
+    // is 2 pi (440 / 192000 + 0.5 / 128) per sample.
+    EXPECT_LT (maxJump (shifted), 0.1);
+
+    // Once the ramp has finished the operator plays half a period ahead of its twin.
+    for (std::size_t i = 3 * stepLength; i < shifted.size(); ++i)
+        ASSERT_NEAR (-plain[i], shifted[i], 1e-9) << i;
+}
+
 TEST_F (PhaseModulationMatrixTests, DISABLED_BenchmarkFourOperators)
 {
     constexpr int voices = 8;

@@ -28,12 +28,12 @@ namespace yup
 /**
     Phase modulation between wavetable operators through a full modulation matrix.
 
-    Each operator reads a caller-owned WavetableOscillator at its own phase plus a
-    phase offset made of the operators' outputs, its own included. Per internal
-    sample:
+    Each operator reads a caller-owned WavetableOscillator at its own phase, plus a
+    fixed phase offset, plus a phase modulation made of the operators' outputs, its
+    own included. Per internal sample:
 
         pm_i  = sum_j (M_ij * (y_j[n-1] + y_j[n-2]) / 2)
-        y_i   = table_i (phase_i + pm_i)
+        y_i   = table_i (phase_i + offset_i + pm_i)
         out_i = gain_i * y_i
 
     Every link is delayed, so the evaluation order never matters and cycles are well
@@ -53,8 +53,8 @@ namespace yup
     the largest feedback that stays clear of the chaotic regime, whatever the table
     holds, so a sine gets the full DX7 range and a bright table a subtler one.
 
-    Frequencies, amounts and gains are ramped linearly over each control step, so a
-    modulation index never zippers. Once per step the matrix also chooses every
+    Frequencies, amounts, gains and phase offsets are ramped linearly over each control
+    step, so a modulation index never zippers. Once per step the matrix also chooses every
     operator's table bandwidth: the table frequency is set to
 
         max (factor * |f_i|, |f_i| + sum_j |M_ij| |f_j| peakSlope_j)
@@ -118,6 +118,11 @@ public:
 
         /** Output gains applied to each operator's output. */
         std::array<double, NumOperators> gains {};
+
+        /** Phase offsets in periods, added to every read of the operator's table. A ramp
+            briefly shifts the operator's frequency, which the table bandwidth ignores.
+        */
+        std::array<double, NumOperators> phaseOffsets {};
     };
 
     //==============================================================================
@@ -182,6 +187,7 @@ public:
 
             targetIncrements[ii] = targets.frequencies[ii] / internalSampleRate;
             targetGains[ii] = targets.gains[ii];
+            targetOffsets[ii] = targets.phaseOffsets[ii];
             previousFeedback[ii] = hasState ? targetFeedback[ii] : jlimit (0.0, 1.0, targets.amounts[ii][ii]);
             targetFeedback[ii] = jlimit (0.0, 1.0, targets.amounts[ii][ii]);
 
@@ -204,6 +210,7 @@ public:
             {
                 incrementSteps[i] = (targetIncrements[i] - increments[i]) * inverse;
                 gainSteps[i] = (targetGains[i] - gains[i]) * inverse;
+                offsetSteps[i] = (targetOffsets[i] - offsets[i]) * inverse;
 
                 for (std::size_t j = 0; j < static_cast<std::size_t> (NumOperators); ++j)
                     amountSteps[i][j] = i != j ? (targetAmounts[i][j] - amounts[i][j]) * inverse : 0.0;
@@ -286,7 +293,7 @@ public:
         return isOperatorActive (index) && audible[static_cast<std::size_t> (index)];
     }
 
-    /** Returns an operator's unmodulated phase in periods. */
+    /** Returns an operator's unmodulated phase in periods, without its phase offset. */
     double getPhase (int index) const noexcept
     {
         return isPositiveAndBelow (index, NumOperators) ? phases[static_cast<std::size_t> (index)] : 0.0;
@@ -322,7 +329,7 @@ private:
                 for (std::size_t j = 0; j < size; ++j)
                     pm += amounts[i][j] * (history1[j] + history2[j]);
 
-                values[i] = static_cast<double> (tables[i]->processSampleAtPhase (phases[i] + 0.5 * pm));
+                values[i] = static_cast<double> (tables[i]->processSampleAtPhase (phases[i] + offsets[i] + 0.5 * pm));
             }
 
             for (std::size_t i = 0; i < size; ++i)
@@ -343,6 +350,7 @@ private:
                 {
                     increments[i] += incrementSteps[i];
                     gains[i] += gainSteps[i];
+                    offsets[i] += offsetSteps[i];
 
                     for (std::size_t j = 0; j < size; ++j)
                         amounts[i][j] += amountSteps[i][j];
@@ -358,7 +366,7 @@ private:
     {
         for (std::size_t i = 0; i < size; ++i)
         {
-            if (targetIncrements[i] != increments[i] || targetGains[i] != gains[i]
+            if (targetIncrements[i] != increments[i] || targetGains[i] != gains[i] || targetOffsets[i] != offsets[i]
                 || targetFeedback[i] > 0.0 || previousFeedback[i] > 0.0)
                 return true;
 
@@ -376,6 +384,7 @@ private:
         {
             increments[i] = targetIncrements[i];
             gains[i] = targetGains[i];
+            offsets[i] = targetOffsets[i];
 
             for (std::size_t j = 0; j < size; ++j)
                 if (i != j)
@@ -470,6 +479,9 @@ private:
     Row gains {};
     Row gainSteps {};
     Row targetGains {};
+    Row offsets {};
+    Row offsetSteps {};
+    Row targetOffsets {};
     Row targetFeedback {};
     Row previousFeedback {};
     Row history1 {};
