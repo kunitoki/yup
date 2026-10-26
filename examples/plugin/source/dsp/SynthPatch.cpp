@@ -38,6 +38,9 @@ const yup::Identifier nameProperty ("name");
 const yup::Identifier bankProperty ("bank");
 const yup::Identifier authorProperty ("author");
 const yup::Identifier tagsProperty ("tags");
+const yup::Identifier categoryProperty ("category");
+const yup::Identifier descriptionProperty ("description");
+const yup::Identifier notesProperty ("notes");
 constexpr int stateVersion = 3;
 
 yup::Identifier getMacroNameProperty (std::size_t macro)
@@ -54,18 +57,13 @@ yup::DataTree createEmptyState (int presetIndex, const SynthPatch::PresetInfo& i
 {
     yup::DataTree state (stateType);
 
-    auto transaction = state.beginTransaction();
-    transaction.setProperty (versionProperty, stateVersion);
-    transaction.setProperty (presetProperty, presetIndex);
-    transaction.setProperty (nameProperty, info.name);
-    transaction.setProperty (bankProperty, info.bank);
-    transaction.setProperty (authorProperty, info.author);
-    transaction.setProperty (tagsProperty, info.tags);
+    {
+        auto transaction = state.beginTransaction();
+        transaction.setProperty (versionProperty, stateVersion);
+        transaction.setProperty (presetProperty, presetIndex);
+    }
 
-    for (std::size_t macro = 0; macro < info.macroNames.size(); ++macro)
-        if (info.macroNames[macro].isNotEmpty())
-            transaction.setProperty (getMacroNameProperty (macro), info.macroNames[macro]);
-
+    SynthPatch::writeInfo (state, info);
     return state;
 }
 
@@ -96,7 +94,10 @@ struct PresetEnvelope
 struct FactoryPreset
 {
     const char* name;
+    const char* category;
     const char* tags;
+    const char* description;
+    const char* notes;
     std::vector<PresetValue> values;
     std::vector<PresetRoute> routes;
     std::vector<PresetEnvelope> envelopes;
@@ -203,23 +204,23 @@ const std::vector<FactoryPreset>& getFactoryPresets()
     const auto noFilter = std::vector<PresetValue> { { "flt1.enabled", 0.0f } };
 
     static const std::vector<FactoryPreset> presets {
-        { "Init", "init", {}, {}, {}, {} },
+        { "Init", "Init", "init", "A single sine, the starting point.", "", {}, {}, {}, {} },
 
-        { "FM E-Piano", "fm, keys, electric piano",
+        { "FM E-Piano", "Keys", "fm, keys, electric piano", "Two-operator tine piano with a soft bark.", "Velocity opens the FM.",
           join ({ algorithm (5, 0.2f, 0.0f, 0.6f), noFilter,
                   { { "osc3.fine", 6.0f }, { "osc4.ratio", 14.0f }, { "fm.34", 0.08f } } }),
           { { Source::env2, "fm.12", 0.3f }, { Source::env3, "fm.34", 0.35f }, { Source::velocity, "fm.12", 0.15f } },
           { { 0, 0.002f, 2.5f, 0.0f, 0.4f, -0.6f }, { 1, 0.001f, 1.0f, 0.1f, 0.5f, -0.6f }, { 2, 0.001f, 0.15f, 0.0f, 0.1f, -0.7f } },
           {} },
 
-        { "FM Bell", "fm, bell, bright",
+        { "FM Bell", "Bell", "fm, bell, bright", "Inharmonic bell with a long ring.", "",
           join ({ algorithm (5, 0.5f, 0.0f, 0.6f), noFilter,
                   { { "osc2.ratio", 3.5f }, { "osc4.ratio", 3.5f }, { "osc3.fine", 4.0f } } }),
           { { Source::env2, "fm.12", 0.3f }, { Source::env2, "fm.34", 0.3f } },
           { { 0, 0.002f, 4.0f, 0.0f, 3.0f, -0.7f }, { 1, 0.001f, 2.0f, 0.0f, 2.0f, -0.6f } },
           {} },
 
-        { "FM Bass", "fm, bass",
+        { "FM Bass", "Bass", "fm, bass", "Punchy FM bass.", "",
           join ({ algorithm (3, 0.35f, 0.5f, 0.8f),
                   { { "global.mode", static_cast<float> (SynthPlayMode::mono) }, { "global.glide", 0.0f },
                     { "osc1.ratio", 0.5f }, { "osc2.ratio", 0.5f }, { "osc4.ratio", 0.5f },
@@ -229,13 +230,13 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           { { 0, 0.002f, 0.4f, 0.6f, 0.12f, -0.5f }, { 1, 0.001f, 0.25f, 0.0f, 0.1f, -0.6f } },
           {} },
 
-        { "FM Brass", "fm, brass, lead",
+        { "FM Brass", "Lead", "fm, brass, lead", "Swelling FM brass.", "",
           join ({ algorithm (3, 0.15f, 0.35f, 0.7f), noFilter, { { "lfo1.rate", 5.5f }, { "lfo1.retrigger", 0.0f } } }),
           { { Source::env2, "fm.12", 0.35f }, { Source::lfo1, "osc1.fine", 0.02f } },
           { { 0, 0.06f, 0.3f, 0.8f, 0.2f, -0.3f }, { 1, 0.08f, 0.4f, 0.6f, 0.2f, -0.3f } },
           {} },
 
-        { "Spectral Pad", "spectral, pad, evolving",
+        { "Spectral Pad", "Pad", "spectral, pad, evolving", "Slowly evolving spectral pad.", "",
           { { "global.unisonVoices", 4.0f }, { "global.unisonDetune", 0.25f }, { "global.unisonSpread", 0.8f },
             { "osc1.ridges", 2.5f }, { "osc1.color", 0.6f }, { "osc1.dispersion", 0.3f }, { "osc1.scatter", 0.2f },
             { "osc2.waveform", sawtooth }, { "osc2.ratio", 0.5f }, { "osc2.level", 0.25f }, { "osc2.ridges", 3.0f },
@@ -244,13 +245,13 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           { { 0, 0.8f, 1.2f, 0.8f, 2.0f, -0.4f } },
           {} },
 
-        { "Drawn Organ", "drawn, organ, keys",
+        { "Drawn Organ", "Keys", "drawn, organ, keys", "Organ drawn from partials.", "",
           join ({ noFilter, { { "lfo1.rate", 6.0f } } }),
           { { Source::lfo1, "osc1.fine", 0.02f } },
           { { 0, 0.005f, 0.1f, 1.0f, 0.08f, 0.0f } },
           { 0.8f, 0.6f, 0.5f, 0.4f, 0.0f, 0.3f, 0.0f, 0.25f } },
 
-        { "Pluck Square", "pluck, square",
+        { "Pluck Square", "Pluck", "pluck, square", "Short square pluck.", "",
           { { "osc1.waveform", square }, { "osc1.squeeze", 0.1f },
             { "flt1.type", static_cast<float> (SynthFilterType::moogLadder) }, { "flt1.cutoff", 400.0f },
             { "flt1.resonance", 0.35f }, { "flt1.keytrack", 0.3f } },
@@ -259,7 +260,7 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           {} },
 
         // The budget cases of the performance pass, at 4x with a sustained amplitude.
-        { "Bench / 4 Saws", "bench",
+        { "Bench / 4 Saws", "Bench", "bench", "Benchmark: four saws.", "CPU measurement patch.",
           { { "global.quality", 1.0f }, { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
             { "osc2.waveform", sawtooth }, { "osc2.level", 0.25f }, { "osc3.waveform", sawtooth }, { "osc3.level", 0.25f },
             { "osc4.waveform", sawtooth }, { "osc4.level", 0.25f } },
@@ -267,19 +268,19 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
           {} },
 
-        { "Bench / FM 4 Ops", "bench, fm",
+        { "Bench / FM 4 Ops", "Bench", "bench, fm", "Benchmark: four FM operators.", "CPU measurement patch.",
           join ({ algorithm (1, 0.3f, 0.3f, 0.8f), { { "global.quality", 1.0f } } }),
           {},
           { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
           {} },
 
-        { "Bench / FM Unison 4", "bench, fm, unison",
+        { "Bench / FM Unison 4", "Bench", "bench, fm, unison", "Benchmark: FM with unison.", "CPU measurement patch.",
           join ({ algorithm (1, 0.3f, 0.3f, 0.8f), { { "global.quality", 1.0f }, { "global.unisonVoices", 4.0f } } }),
           {},
           { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
           {} },
 
-        { "Bench / Spectral LFO", "bench, spectral",
+        { "Bench / Spectral LFO", "Bench", "bench, spectral", "Benchmark: LFO-driven spectral tilt.", "CPU measurement patch.",
           { { "global.quality", 1.0f }, { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
             { "osc2.waveform", sawtooth }, { "osc2.level", 0.25f }, { "osc3.waveform", sawtooth }, { "osc3.level", 0.25f },
             { "osc4.waveform", sawtooth }, { "osc4.level", 0.25f }, { "lfo1.rate", 2.0f } },
@@ -452,12 +453,40 @@ PresetInfo readInfo (const yup::DataTree& state)
     PresetInfo info { state.getProperty (nameProperty, {}).toString(),
                       state.getProperty (bankProperty, {}).toString(),
                       state.getProperty (authorProperty, {}).toString(),
-                      state.getProperty (tagsProperty, {}).toString() };
+                      state.getProperty (tagsProperty, {}).toString(),
+                      state.getProperty (categoryProperty, {}).toString(),
+                      state.getProperty (descriptionProperty, {}).toString(),
+                      state.getProperty (notesProperty, {}).toString() };
 
     for (std::size_t macro = 0; macro < info.macroNames.size(); ++macro)
         info.macroNames[macro] = state.getProperty (getMacroNameProperty (macro), {}).toString();
 
     return info;
+}
+
+void writeInfo (yup::DataTree& state, const PresetInfo& info)
+{
+    auto transaction = state.beginTransaction();
+    transaction.setProperty (nameProperty, info.name);
+    transaction.setProperty (bankProperty, info.bank);
+    transaction.setProperty (authorProperty, info.author);
+    transaction.setProperty (tagsProperty, info.tags);
+    transaction.setProperty (categoryProperty, info.category);
+    transaction.setProperty (descriptionProperty, info.description);
+    transaction.setProperty (notesProperty, info.notes);
+
+    for (std::size_t macro = 0; macro < info.macroNames.size(); ++macro)
+    {
+        if (info.macroNames[macro].isNotEmpty())
+            transaction.setProperty (getMacroNameProperty (macro), info.macroNames[macro]);
+        else
+            transaction.removeProperty (getMacroNameProperty (macro));
+    }
+}
+
+bool isPatch (const yup::DataTree& state)
+{
+    return state.getType() == stateType;
 }
 
 yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state, int presetIndex, const PresetInfo& info)
@@ -953,7 +982,7 @@ PresetInfo getFactoryPresetInfo (int index)
         return {};
 
     const auto& preset = getFactoryPresets()[static_cast<std::size_t> (index)];
-    return { preset.name, "Factory", "kunitoki", preset.tags };
+    return { preset.name, "Factory", "kunitoki", preset.tags, preset.category, preset.description, preset.notes };
 }
 
 yup::DataTree createFactoryState (int index)

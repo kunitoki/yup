@@ -33,6 +33,7 @@
 #include "SynthOscillatorPanel.h"
 #include "SynthPage.h"
 #include "SynthHeader.h"
+#include "SynthPresetBrowser.h"
 #include "SynthFieldEditor.h"
 #include "SynthMacroPanel.h"
 #include "SynthSection.h"
@@ -81,6 +82,15 @@ public:
         it renders at the size the interface is shown at whatever its scale.
     */
     static yup::ComponentEffect::Ptr createPostEffect();
+
+    //==============================================================================
+    /** Shows the preset browser over the instrument's panels, or hides it again. The
+        header, the wheels, the keyboard and the voicing stay visible and playable.
+    */
+    void setBrowserOpen (bool shouldBeOpen);
+
+    /** True while the preset browser is shown. */
+    bool isBrowserOpen() const noexcept { return presetBrowser->isVisible(); }
 
     //==============================================================================
     /** Returns the processor's undo history, which every control in the interface records into. */
@@ -144,6 +154,7 @@ private:
     std::unique_ptr<SynthSection> lfoSection;
 
     std::unique_ptr<SynthVoicingPanel> voicingPanel;
+    std::unique_ptr<SynthPresetBrowser> presetBrowser;
 
     std::vector<SynthModulationTarget*> modulationTargets;
     std::vector<std::vector<SynthKnob::ModulationArc>> arcsByParameter;

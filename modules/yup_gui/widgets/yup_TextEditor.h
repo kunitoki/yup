@@ -305,6 +305,7 @@ public:
 private:
     //==============================================================================
     void updateStyledTextIfNeeded();
+    Font getEffectiveFont() const;
     void updateCaretPosition();
     void ensureCaretVisible();
     void blinkCaret();

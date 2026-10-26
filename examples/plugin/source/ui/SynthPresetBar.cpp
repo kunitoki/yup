@@ -19,10 +19,10 @@
   ==============================================================================
 */
 #include "SynthPresetBar.h"
+#include "SynthPresetLibrary.h"
 #include "SynthTheme.h"
 #include "SynthUndoHistory.h"
-
-#include <algorithm>
+#include "../browser/PresetBrowseState.h"
 
 namespace
 {
@@ -35,8 +35,8 @@ SynthPresetBar::SynthPresetBar (RetraceProcessor& processorToControl)
 {
     setOpaque (false);
 
-    listButton.onClick = [this] { showPresetMenu(); };
-    menuButton.onClick = [this] { showPresetMenu(); };
+    listButton.onClick = [this] { toggleBrowser(); };
+    menuButton.onClick = [this] { toggleBrowser(); };
     previousButton.onClick = [this] { stepPreset (-1); };
     nextButton.onClick = [this] { stepPreset (1); };
 
@@ -58,8 +58,8 @@ SynthPresetBar::SynthPresetBar (RetraceProcessor& processorToControl)
         addAndMakeVisible (editor);
     }
 
+    processor.getPresetBrowser();
     syncFromProcessor();
-    scanUserPresets();
 }
 
 void SynthPresetBar::syncFromProcessor()
@@ -168,93 +168,42 @@ yup::String& SynthPresetBar::getField (SynthPatch::PresetInfo& info, Field field
     return field == bank ? info.bank : field == author ? info.author : info.tags;
 }
 
-void SynthPresetBar::showPresetMenu()
-{
-    auto menu = yup::PopupMenu::create (yup::PopupMenu::Options {}
-                                            .withParentComponent (getPopupParentComponent())
-                                            .withMinimumWidth (static_cast<int> (nameArea.getWidth()))
-                                            .withRelativePosition (this));
-
-    // Factory preset IDs are 1 based; user preset IDs are userBase plus their index.
-    constexpr int userBase = 10000;
-
-    for (int index = 0; index < processor.getNumPresets(); ++index)
-        menu->addItem (processor.getPresetName (index), index + 1, true, index == processor.getCurrentPreset());
-
-    if (! userPresets.empty())
-    {
-        menu->addSeparator();
-        menu->addItem ("User", -1, false);
-
-        for (std::size_t index = 0; index < userPresets.size(); ++index)
-        {
-            const auto name = userPresets[index].getFileNameWithoutExtension();
-            menu->addItem (name, userBase + static_cast<int> (index), true, processor.getCurrentPreset() < 0 && name == shownInfo.name);
-        }
-    }
-
-    menu->show ([safeThis = yup::WeakReference<yup::Component> (this)] (int selectedId)
-    {
-        auto* bar = dynamic_cast<SynthPresetBar*> (safeThis.get());
-
-        if (bar == nullptr || selectedId <= 0)
-            return;
-
-        if (selectedId < userBase)
-        {
-            bar->processor.setCurrentPreset (selectedId - 1);
-        }
-        else if (const auto index = static_cast<std::size_t> (selectedId - userBase); index < bar->userPresets.size())
-        {
-            if (const auto result = bar->processor.loadPresetFile (bar->userPresets[index]); result.failed())
-                yup::Logger::writeToLog ("Retrace: " + result.getErrorMessage());
-        }
-
-        bar->syncFromProcessor();
-    });
-}
-
-/** Gathers the preset files of the preset folder on a background thread, so a large
-    folder never stalls the interface, and hands the list to the bar when done. */
-void SynthPresetBar::scanUserPresets()
-{
-    yup::Thread::launch ([folder = getPresetFolder(), safeThis = yup::WeakReference<yup::Component> (this)]
-    {
-        std::vector<yup::File> found;
-
-        for (const auto& file : folder.findChildFiles (yup::File::findFiles, true, yup::String ("*") + presetExtension, yup::File::FollowSymlinks::noCycles))
-            found.push_back (file);
-
-        std::sort (found.begin(), found.end(), [] (const yup::File& a, const yup::File& b)
-        {
-            return a.getFileNameWithoutExtension().compareNatural (b.getFileNameWithoutExtension()) < 0;
-        });
-
-        yup::MessageManager::callAsync ([safeThis, found = std::move (found)]() mutable
-        {
-            if (auto* bar = dynamic_cast<SynthPresetBar*> (safeThis.get()))
-                bar->userPresets = std::move (found);
-        });
-    });
-}
-
 void SynthPresetBar::stepPreset (int delta)
 {
-    const auto count = processor.getNumPresets();
+    const auto currentKey = processor.getCurrentPresetKey();
+    const auto key = processor.getPresetBrowser().getSteppedKey (currentKey, delta);
+    const auto* entry = processor.getPresetLibrary().getLibrary().findEntry (key);
 
-    if (count <= 0)
+    if (entry == nullptr || key == currentKey)
         return;
 
-    const auto current = processor.getCurrentPreset();
-    const auto next = current < 0 ? 0 : (current + delta + count) % count;
+    if (const auto result = processor.loadPresetEntry (*entry); result.failed())
+        yup::Logger::writeToLog ("Retrace: " + result.getErrorMessage());
 
-    processor.setCurrentPreset (next);
     syncFromProcessor();
+}
+
+void SynthPresetBar::setBrowserOpen (bool isOpen)
+{
+    listButton.setHighlighted (isOpen);
+    menuButton.setHighlighted (isOpen);
+}
+
+void SynthPresetBar::toggleBrowser()
+{
+    if (onBrowserToggled != nullptr)
+        onBrowserToggled();
+}
+
+void SynthPresetBar::mouseDown (const yup::MouseEvent& event)
+{
+    if (nameArea.contains (event.getPosition()))
+        toggleBrowser();
 }
 
 void SynthPresetBar::savePreset()
 {
-    auto chooser = yup::FileChooser::create ("Save Retrace preset", getPresetFolder(), yup::String ("*") + presetExtension);
+    auto chooser = yup::FileChooser::create ("Save Retrace preset", SynthPresetLibrary::getUserFolder(), yup::String ("*") + presetExtension);
 
     chooser->browseForFileToSave ([safeThis = yup::WeakReference<yup::Component> (this)] (bool success, const yup::Array<yup::File>& results)
     {
@@ -265,15 +214,16 @@ void SynthPresetBar::savePreset()
 
         if (const auto result = bar->processor.savePresetFile (results[0].withFileExtension (presetExtension)); result.failed())
             yup::Logger::writeToLog ("Retrace: " + result.getErrorMessage());
+        else
+            bar->processor.getPresetLibrary().getLibrary().rescan();
 
         bar->syncFromProcessor();
-        bar->scanUserPresets();
     }, true);
 }
 
 void SynthPresetBar::loadPreset()
 {
-    auto chooser = yup::FileChooser::create ("Load Retrace preset", getPresetFolder(), yup::String ("*") + presetExtension);
+    auto chooser = yup::FileChooser::create ("Load Retrace preset", SynthPresetLibrary::getUserFolder(), yup::String ("*") + presetExtension);
 
     chooser->browseForFileToOpen ([safeThis = yup::WeakReference<yup::Component> (this)] (bool success, const yup::Array<yup::File>& results)
     {
@@ -287,13 +237,4 @@ void SynthPresetBar::loadPreset()
 
         bar->syncFromProcessor();
     });
-}
-
-yup::File SynthPresetBar::getPresetFolder()
-{
-    auto folder = yup::File::getSpecialLocation (yup::File::userAudioPresetsDirectory)
-                      .getChildFile (yup::File::createLegalFileName (YupPlugin_Vendor))
-                      .getChildFile (yup::File::createLegalFileName (YupPlugin_Name));
-    folder.createDirectory();
-    return folder;
 }

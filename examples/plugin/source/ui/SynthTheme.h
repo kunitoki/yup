@@ -109,6 +109,7 @@ constexpr float panelPadding = 8.0f;
 constexpr float controlGap = 6.0f;
 constexpr float panelCorner = 4.0f;
 constexpr float wellCorner = 3.0f;
+constexpr float displayCorner = wellCorner + 1.0f; /**< The corner of the displays inside wells, like the waveform's. */
 constexpr float stripHeight = 30.0f;
 constexpr float headerHeight = 66.0f;
 constexpr float bottomRowHeight = 126.0f;
@@ -125,6 +126,10 @@ void paintTile (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<fl
 
 /** Paints a sunken well: shaded under its top edge, lit under its bottom one. */
 void paintWell (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner = wellCorner);
+
+/** Strokes the one pixel border of a display, like the waveform's, over what it shows.
+    Pair it with paintWell() at displayCorner under the display's content. */
+void paintDisplayBorder (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds);
 
 /** Paints a raised box: a lit top edge and a one pixel drop shadow. */
 void paintRaised (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner);

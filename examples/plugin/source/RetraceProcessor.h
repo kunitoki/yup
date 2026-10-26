@@ -26,10 +26,15 @@
 #include "dsp/HarmonicSynthEngine.h"
 #include "dsp/MidiMessageFifo.h"
 #include "dsp/SynthPatch.h"
+#include "browser/PresetEntry.h"
 
 #include <array>
 #include <atomic>
+#include <memory>
 #include <vector>
+
+class PresetBrowseState;
+class SynthPresetLibrary;
 
 //==============================================================================
 /** RETRACE, a four operator spectral FM synthesiser, as an audio plugin.
@@ -109,6 +114,35 @@ public:
 
     /** Loads a user preset file written by savePresetFile(). Message thread. */
     yup::Result loadPresetFile (const yup::File& file);
+
+    /** Returns the preset library shared by every instance, acquired on the first call. Message thread. */
+    SynthPresetLibrary& getPresetLibrary();
+
+    /** Returns this instance's view of the preset library, which the browser shows and the
+        header arrows step through. Created on the first call. Message thread.
+    */
+    PresetBrowseState& getPresetBrowser();
+
+    /** Loads a factory preset or a preset file listed by the browser. Message thread. */
+    yup::Result loadPresetEntry (const PresetEntry& entry);
+
+    /** Returns the preset file the current patch was loaded from or saved to, or an invalid
+        file. Replacing the patch any other way forgets it.
+    */
+    yup::File getCurrentPresetFile() const;
+
+    /** Returns the browser key of the current patch: the file's path, the factory preset's
+        key, or empty for a patch that is neither.
+    */
+    yup::String getCurrentPresetKey() const;
+
+    /** Follows a change the browser made to a preset file, when it is the current one.
+
+        The current file moves to entry.file and the description takes the entry's fields,
+        keeping the macro names. An invalid entry.file, a deleted file, only forgets the
+        current file and keeps the description. Message thread.
+    */
+    void presetFileChanged (const yup::File& previousFile, const PresetEntry& entry);
 
     /** Returns the description of the current patch: its name, bank, author and tags. */
     SynthPatch::PresetInfo getPresetInfo() const;
@@ -223,12 +257,17 @@ private:
     std::vector<yup::String> presetNames;
     std::atomic<int> currentPreset { 0 };
     SynthPatch::PresetInfo presetInfo;
+    yup::File currentPresetFile;
     mutable yup::SpinLock presetInfoLock;
     yup::String themeName;
     mutable yup::SpinLock themeNameLock;
 
     // Grouped by gesture rather than by time: every edit is its own step.
     yup::UndoManager undoManager { yup::RelativeTime() };
+
+    // The browse state watches the library, so it is declared after it to go first.
+    std::shared_ptr<SynthPresetLibrary> presetLibrary;
+    std::unique_ptr<PresetBrowseState> presetBrowser;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RetraceProcessor)
 };

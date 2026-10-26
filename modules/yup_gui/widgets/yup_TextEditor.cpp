@@ -565,6 +565,12 @@ void TextEditor::textInput (const String& inputText)
 
 //==============================================================================
 
+Font TextEditor::getEffectiveFont() const
+{
+    const auto& defaultFont = ApplicationTheme::getGlobalTheme()->getDefaultFont();
+    return font.value_or (defaultFont).withHeight (fontSize.value_or (defaultFont.getHeight()));
+}
+
 void TextEditor::updateStyledTextIfNeeded()
 {
     if (! needsUpdate)
@@ -576,8 +582,6 @@ void TextEditor::updateStyledTextIfNeeded()
     if (text.isNotEmpty())
     {
         auto textColor = findColor (Style::textColorId).value_or (Colors::black);
-        const auto& defaultFont = ApplicationTheme::getGlobalTheme()->getDefaultFont();
-        auto currentFont = font.value_or (defaultFont);
 
         modifier.setMaxSize (getTextBounds().getSize());
         modifier.setHorizontalAlign (StyledText::left);
@@ -585,7 +589,7 @@ void TextEditor::updateStyledTextIfNeeded()
         modifier.setWrap (multiLine ? StyledText::wrap : StyledText::noWrap);
         modifier.setOverflow (StyledText::visible);
 
-        modifier.appendText (text, currentFont.withHeight (fontSize.value_or (defaultFont.getHeight())));
+        modifier.appendText (text, getEffectiveFont());
     }
 
     needsUpdate = false;
@@ -685,6 +689,13 @@ Rectangle<float> TextEditor::getCaretBounds() const
 {
     auto textBounds = getTextBounds();
     auto caretBounds = styledText.getCaretBounds (caretPosition);
+
+    // Empty text lays out no line, so the caret takes the height of a line of the font.
+    if (text.isEmpty())
+    {
+        const auto currentFont = getEffectiveFont();
+        caretBounds = { 0.0f, 0.0f, 1.0f, (currentFont.getDescent() - currentFont.getAscent()) * currentFont.getHeight() };
+    }
 
     // Adjust bounds to be relative to the text editor's bounds with scroll offset applied
     return caretBounds.translated (textBounds.getTopLeft() - scrollOffset);

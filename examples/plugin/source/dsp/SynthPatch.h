@@ -59,6 +59,9 @@ struct PresetInfo
     yup::String bank;
     yup::String author;
     yup::String tags; /**< Comma separated. */
+    yup::String category; /**< The one main kind of sound, like Bass or Pad. */
+    yup::String description;
+    yup::String notes;
     std::array<yup::String, SynthExample::macroCount> macroNames; /**< Empty for a macro's default name. */
 
     bool operator== (const PresetInfo&) const = default;
@@ -73,6 +76,12 @@ struct PresetInfo
 
 /** Returns the description stored in a patch. */
 PresetInfo readInfo (const yup::DataTree& state);
+
+/** Replaces the description stored in a patch, leaving the sound as it is. */
+void writeInfo (yup::DataTree& state, const PresetInfo& info);
+
+/** True when the tree is a patch, in any version. */
+bool isPatch (const yup::DataTree& state);
 
 /** Captures the current patch.
 

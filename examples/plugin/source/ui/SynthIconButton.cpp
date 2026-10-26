@@ -44,8 +44,17 @@ void SynthIconButton::paintButton (yup::Graphics& g)
     }
 
     const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultIconFont().withHeight (height);
-    g.setFillColor (isButtonOver() ? SynthTheme::accent (*this) : SynthTheme::textPrimary (*this).withAlpha (0.85f));
+    g.setFillColor (isButtonOver() || highlighted ? SynthTheme::accent (*this) : SynthTheme::textPrimary (*this).withAlpha (0.85f));
     g.fillFittedText (glyph, font, bounds, yup::Justification::center);
+}
+
+void SynthIconButton::setHighlighted (bool shouldBeHighlighted)
+{
+    if (highlighted == shouldBeHighlighted)
+        return;
+
+    highlighted = shouldBeHighlighted;
+    repaint();
 }
 
 void SynthIconButton::mouseDown (const yup::MouseEvent& event)

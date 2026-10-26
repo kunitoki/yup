@@ -26,6 +26,9 @@ namespace SynthSettings
 namespace
 {
 constexpr const char* rootTag = "SETTINGS";
+constexpr const char* favoriteTag = "FAVORITE";
+constexpr const char* ratingTag = "RATING";
+constexpr const char* folderTag = "FOLDER";
 
 yup::File getFile()
 {
@@ -60,6 +63,18 @@ Values load()
     for (const auto& [name, flag] : getSwitches (values))
         *flag = xml->getBoolAttribute (name, *flag);
 
+    for (const auto* favorite : xml->getChildWithTagNameIterator (favoriteTag))
+        values.favorites.addIfNotAlreadyThere (favorite->getStringAttribute ("key"));
+
+    for (const auto* rating : xml->getChildWithTagNameIterator (ratingTag))
+    {
+        if (const auto stars = yup::jlimit (0, 5, rating->getIntAttribute ("stars")); stars > 0)
+            values.ratings[rating->getStringAttribute ("key")] = stars;
+    }
+
+    for (const auto* folder : xml->getChildWithTagNameIterator (folderTag))
+        values.presetFolders.addIfNotAlreadyThere (folder->getStringAttribute ("path"));
+
     return values;
 }
 } // namespace
@@ -79,6 +94,19 @@ void save()
 
     for (const auto& [name, flag] : getSwitches (values))
         xml.setAttribute (name, *flag ? 1 : 0);
+
+    for (const auto& key : values.favorites)
+        xml.createNewChildElement (favoriteTag)->setAttribute ("key", key);
+
+    for (const auto& [key, stars] : values.ratings)
+    {
+        auto* rating = xml.createNewChildElement (ratingTag);
+        rating->setAttribute ("key", key);
+        rating->setAttribute ("stars", stars);
+    }
+
+    for (const auto& path : values.presetFolders)
+        xml.createNewChildElement (folderTag)->setAttribute ("path", path);
 
     const auto file = getFile();
     file.getParentDirectory().createDirectory();

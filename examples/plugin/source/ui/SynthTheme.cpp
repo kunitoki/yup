@@ -221,6 +221,13 @@ void paintWell (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<fl
     g.strokeLine (bounds.getX() + corner, bounds.getBottom() + 0.5f, bounds.getRight() - corner, bounds.getBottom() + 0.5f);
 }
 
+void paintDisplayBorder (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds)
+{
+    g.setStrokeColor (panelBorder (scope));
+    g.setStrokeWidth (1.0f);
+    g.strokeRoundedRect (bounds.reduced (0.5f), displayCorner);
+}
+
 void paintRaised (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds, float corner)
 {
     g.setFillColor (yup::Colors::black.withAlpha (isDark (scope) ? 0.6f : 0.25f));

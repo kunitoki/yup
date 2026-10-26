@@ -672,6 +672,23 @@ TEST_F (TextEditorTests, MoveCaretUpInSingleLineDoesNotThrow)
     EXPECT_NO_THROW (editor->moveCaretUp());
 }
 
+TEST_F (TextEditorTests, CaretHasLineBoundsWhenEmpty)
+{
+    editor->setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    editor->setText ("a");
+    editor->setCaretPosition (0);
+    const auto lineCaret = editor->getCaretBounds();
+
+    editor->setText ("");
+    const auto emptyCaret = editor->getCaretBounds();
+
+    ASSERT_FALSE (lineCaret.isEmpty());
+    EXPECT_FALSE (emptyCaret.isEmpty());
+    EXPECT_NEAR (lineCaret.getX(), emptyCaret.getX(), 1.0f);
+    EXPECT_NEAR (lineCaret.getY(), emptyCaret.getY(), 1.0f);
+    EXPECT_NEAR (lineCaret.getHeight(), emptyCaret.getHeight(), 1.0f);
+}
+
 /* TODO: moveCaretToWordEnd/moveCaretToWordStart is private
 TEST_F (TextEditorTests, DoubleClickSelectsWord)
 {

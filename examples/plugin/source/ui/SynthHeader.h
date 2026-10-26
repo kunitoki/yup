@@ -45,6 +45,12 @@ public:
     /** Called with the click position, in the header, when the logo is right clicked, to show the global settings. */
     std::function<void (yup::Point<float>)> onSettingsRequested;
 
+    /** Called when the preset bar asks to open or close the preset browser. */
+    std::function<void()> onBrowserToggled;
+
+    /** Shows whether the preset browser is open on the preset bar. */
+    void setBrowserOpen (bool isOpen) { presetBar.setBrowserOpen (isOpen); }
+
     /** Shows the processor's preset, voices, load and output level. Call at the display rate. */
     void syncFromProcessor();
 

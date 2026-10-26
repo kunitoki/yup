@@ -23,6 +23,8 @@
 #include "RetraceEditor.h"
 #include "PluginLogger.h"
 #include "ui/SynthThemes.h"
+#include "ui/SynthPresetLibrary.h"
+#include "browser/PresetBrowseState.h"
 
 namespace
 {
@@ -310,7 +312,10 @@ yup::Result RetraceProcessor::savePresetFile (const yup::File& file)
         return yup::Result::fail ("Cannot write " + file.getFullPathName());
 
     currentPreset.store (-1);
-    setPresetInfo (std::move (info));
+
+    const yup::SpinLock::ScopedLockType lock (presetInfoLock);
+    presetInfo = std::move (info);
+    currentPresetFile = file;
     return yup::Result::ok();
 }
 
@@ -324,13 +329,79 @@ yup::Result RetraceProcessor::loadPresetFile (const yup::File& file)
     if (auto result = applyState (yup::DataTree::fromXml (*xml), ChangeDetails {}.withProgramChanged (true)); result.failed())
         return result;
 
-    if (auto info = getPresetInfo(); info.name.isEmpty())
-    {
-        info.name = file.getFileNameWithoutExtension();
-        setPresetInfo (std::move (info));
-    }
+    const yup::SpinLock::ScopedLockType lock (presetInfoLock);
+    currentPresetFile = file;
+
+    if (presetInfo.name.isEmpty())
+        presetInfo.name = file.getFileNameWithoutExtension();
 
     return yup::Result::ok();
+}
+
+SynthPresetLibrary& RetraceProcessor::getPresetLibrary()
+{
+    if (presetLibrary == nullptr)
+        presetLibrary = SynthPresetLibrary::acquire();
+
+    return *presetLibrary;
+}
+
+PresetBrowseState& RetraceProcessor::getPresetBrowser()
+{
+    if (presetBrowser == nullptr)
+        presetBrowser = std::make_unique<PresetBrowseState> (getPresetLibrary().getLibrary(), getPresetLibrary().getUserData());
+
+    return *presetBrowser;
+}
+
+yup::Result RetraceProcessor::loadPresetEntry (const PresetEntry& entry)
+{
+    if (! entry.isFactory())
+        return loadPresetFile (entry.file);
+
+    if (! yup::isPositiveAndBelow (entry.factoryIndex, SynthPatch::getNumFactoryPresets()))
+        return yup::Result::fail ("No factory preset " + yup::String (entry.factoryIndex));
+
+    setCurrentPreset (entry.factoryIndex);
+    return yup::Result::ok();
+}
+
+yup::File RetraceProcessor::getCurrentPresetFile() const
+{
+    const yup::SpinLock::ScopedLockType lock (presetInfoLock);
+    return currentPresetFile;
+}
+
+yup::String RetraceProcessor::getCurrentPresetKey() const
+{
+    if (const auto file = getCurrentPresetFile(); file != yup::File())
+        return file.getFullPathName();
+
+    if (const auto index = currentPreset.load(); index >= 0)
+        return PresetEntry::makeFactoryKey (SynthPatch::getFactoryPresetName (index));
+
+    return {};
+}
+
+void RetraceProcessor::presetFileChanged (const yup::File& previousFile, const PresetEntry& entry)
+{
+    const yup::SpinLock::ScopedLockType lock (presetInfoLock);
+
+    if (previousFile == yup::File() || previousFile != currentPresetFile)
+        return;
+
+    currentPresetFile = entry.file;
+
+    if (entry.file == yup::File())
+        return;
+
+    presetInfo.name = entry.name;
+    presetInfo.category = entry.category;
+    presetInfo.author = entry.author;
+    presetInfo.bank = entry.bank;
+    presetInfo.description = entry.description;
+    presetInfo.notes = entry.notes;
+    presetInfo.tags = PresetEntry::joinTags (entry.tags);
 }
 
 yup::String RetraceProcessor::getThemeName() const
@@ -371,7 +442,12 @@ yup::Result RetraceProcessor::applyState (const yup::DataTree& state, ChangeDeta
         return result;
 
     currentPreset.store (SynthPatch::getPresetIndex (state));
-    setPresetInfo (SynthPatch::readInfo (state));
+
+    {
+        const yup::SpinLock::ScopedLockType lock (presetInfoLock);
+        presetInfo = SynthPatch::readInfo (state);
+        currentPresetFile = yup::File();
+    }
 
     // A patch replaced by a preset, a file or the host leaves nothing to undo into.
     undoManager.clear();

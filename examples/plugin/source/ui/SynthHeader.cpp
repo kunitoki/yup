@@ -68,6 +68,12 @@ SynthHeader::SynthHeader (RetraceProcessor& processorToControl)
 
     addAndMakeVisible (presetBar);
 
+    presetBar.onBrowserToggled = [this]
+    {
+        if (onBrowserToggled != nullptr)
+            onBrowserToggled();
+    };
+
     saveButton.onClick = [this] { presetBar.savePreset(); };
     loadButton.onClick = [this] { presetBar.loadPreset(); };
     randomButton.onClick = [this]

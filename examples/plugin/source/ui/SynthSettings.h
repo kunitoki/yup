@@ -23,8 +23,11 @@
 
 #include "SynthNeonEffect.h"
 
+#include <map>
+
 //==============================================================================
-/** The user's settings: the theme, the frame rate, the post effect switches and undo.
+/** The user's settings: the theme, the frame rate, the post effect switches, undo, and
+    the preset browser's favorites, ratings and folders.
 
     They belong to the user rather than to a patch, so they are kept in a small XML file in
     the user's preferences folder, next to the standalone's state, read once per process
@@ -40,6 +43,9 @@ struct Values
     bool postEffect = true;
     bool undo = true; /**< Keeps an undo history of edits; off forgets it. */
     SynthNeonEffect::Options neon;
+    yup::StringArray favorites; /**< The browser keys of the favorite presets. */
+    std::map<yup::String, int> ratings; /**< 1 to 5 stars by browser key; unrated presets are absent. */
+    yup::StringArray presetFolders; /**< The full paths of the preset folders added to the browser. */
 };
 
 /** Returns the settings, read from the file the first time. */

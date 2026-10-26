@@ -36,6 +36,9 @@ public:
     /** True when the last press was made with the right button, for buttons with a second action. */
     bool wasRightClicked() const noexcept { return rightClicked; }
 
+    /** Draws the glyph in the accent color, as when hovered, to show that what it opens is open. */
+    void setHighlighted (bool shouldBeHighlighted);
+
     void paintButton (yup::Graphics& g) override;
     void mouseDown (const yup::MouseEvent& event) override;
 
@@ -44,4 +47,5 @@ private:
     float height;
     bool tile;
     bool rightClicked = false;
+    bool highlighted = false;
 };

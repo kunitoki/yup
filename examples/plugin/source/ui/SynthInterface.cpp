@@ -90,6 +90,7 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
 
     header = std::make_unique<SynthHeader> (processor);
     header->onSettingsRequested = [this] (yup::Point<float> position) { showSettingsMenu (getLocalPoint (header.get(), position)); };
+    header->onBrowserToggled = [this] { setBrowserOpen (! isBrowserOpen()); };
     addAndMakeVisible (*header);
 
     for (int index = 0; index < SynthExample::oscillatorCount; ++index)
@@ -188,6 +189,11 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
     voicingPanel = std::make_unique<SynthVoicingPanel> (parameters);
     mainPage.addAndMakeVisible (*voicingPanel);
 
+    // Built hidden with the rest so the theme reaches it; it wears the header's palette.
+    presetBrowser = std::make_unique<SynthPresetBrowser> (processor);
+    SynthTheme::applySection (*presetBrowser, SynthTheme::Section::header);
+    mainPage.addChildComponent (*presetBrowser);
+
     collectModulationTargets (*this, modulationTargets);
 
     SynthThemes::applyTheme (*this, theme);
@@ -247,6 +253,8 @@ void SynthInterface::layoutMainPage()
     wheelsTile = wheelsTile.withPosition (wheelsTile.getPosition() + offset);
     keyboardTile = keyboardTile.withPosition (keyboardTile.getPosition() + offset);
 
+    presetBrowser->setBounds (bounds);
+
     auto firstRow = bounds.removeFromTop (std::round ((bounds.getHeight() - gap) * firstRowShare));
     bounds.removeFromTop (gap);
 
@@ -261,6 +269,25 @@ void SynthInterface::layoutMainPage()
     filterSection->setBounds (bounds.removeFromLeft (std::round ((bounds.getWidth() + gap) * filterShare - gap)));
     bounds.removeFromLeft (gap);
     envelopeSection->setBounds (bounds);
+}
+
+/** The browser takes the place of the six sections, which are hidden rather than covered
+    so the waveform displays stop drawing. */
+void SynthInterface::setBrowserOpen (bool shouldBeOpen)
+{
+    if (shouldBeOpen == isBrowserOpen())
+        return;
+
+    for (auto* section : { oscillatorSection.get(), macroSection.get(), matrixSection.get(), filterSection.get(), envelopeSection.get(), lfoSection.get() })
+        section->setVisible (! shouldBeOpen);
+
+    presetBrowser->setVisible (shouldBeOpen);
+    header->setBrowserOpen (shouldBeOpen);
+
+    if (shouldBeOpen)
+        presetBrowser->focusList();
+    else
+        takeKeyboardFocus();
 }
 
 void SynthInterface::paint (yup::Graphics& g)
@@ -389,6 +416,12 @@ yup::ComponentEffect::Ptr SynthInterface::createPostEffect()
     the interface's, and the rest play the keyboard. */
 bool SynthInterface::keyDown (const yup::KeyPress& key, const yup::Point<float>&)
 {
+    if (key.getKey() == yup::KeyPress::escapeKey && isBrowserOpen())
+    {
+        setBrowserOpen (false);
+        return true;
+    }
+
     const auto modifiers = key.getModifiers();
 
     if ((modifiers.isCommandDown() || modifiers.isControlDown()) && key.getKey() == yup::KeyPress::textZKey)
@@ -480,6 +513,9 @@ void SynthInterface::timerCallback()
         envelopePanels[static_cast<std::size_t> (index)]->setPlayhead (processor.getEnvelopePosition (index));
 
     header->syncFromProcessor();
+
+    if (isBrowserOpen())
+        presetBrowser->syncFromProcessor();
 }
 
 /** Shows every route on the controls of its destination, and works out the values the
