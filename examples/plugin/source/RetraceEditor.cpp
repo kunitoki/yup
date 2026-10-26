@@ -20,6 +20,7 @@
 */
 
 #include "RetraceEditor.h"
+#include "ui/SynthNeonEffect.h"
 #include "ui/SynthTheme.h"
 #include "ui/SynthThemes.h"
 
@@ -27,10 +28,12 @@ RetraceEditor::RetraceEditor (RetraceProcessor& processorToEdit)
     : processor (processorToEdit)
 {
     buildInterface();
-    setComponentEffect (SynthInterface::createPostEffect());
+    updatePostEffect();
 
     setSize (getPreferredSize().to<float>());
-    startTimerHz (10);
+
+    // Fast while the tube powers on, then only polling for a new theme.
+    startTimerHz (60);
 }
 
 RetraceEditor::~RetraceEditor()
@@ -68,7 +71,7 @@ void RetraceEditor::buildInterface()
         processor.setThemeName (SynthThemes::getThemes()[static_cast<std::size_t> (index)].name);
         SynthThemes::saveSelectedTheme (index);
     };
-    interface->onPostEffectChanged = [this] { setComponentEffect (SynthInterface::createPostEffect()); };
+    interface->onPostEffectChanged = [this] { updatePostEffect(); };
 
     addAndMakeVisible (*interface);
     resized();
@@ -80,8 +83,43 @@ int RetraceEditor::getTheme() const
     return theme >= 0 ? theme : SynthThemes::loadSelectedTheme();
 }
 
+void RetraceEditor::updatePostEffect()
+{
+    auto effect = SynthInterface::createPostEffect();
+
+    if (auto* neon = dynamic_cast<SynthNeonEffect*> (effect.get()))
+        neon->setOpening (opening);
+
+    setComponentEffect (effect);
+}
+
+void RetraceEditor::advanceOpening()
+{
+    // Hosts may build an editor before showing it, so the tube powers on once it is on screen.
+    if (getNativeComponent() == nullptr || ! isShowing())
+        return;
+
+    const auto now = yup::Time::getMillisecondCounterHiRes();
+
+    if (openingStart <= 0.0)
+        openingStart = now;
+
+    opening = static_cast<float> (yup::jmin (1.0, (now - openingStart) / (openingSeconds * 1000.0)));
+
+    if (auto* neon = dynamic_cast<SynthNeonEffect*> (getComponentEffect().get()))
+        neon->setOpening (opening);
+
+    repaint();
+
+    if (opening >= 1.0f)
+        startTimerHz (10);
+}
+
 void RetraceEditor::timerCallback()
 {
+    if (opening < 1.0f)
+        advanceOpening();
+
     if (getTheme() == builtTheme)
         return;
 

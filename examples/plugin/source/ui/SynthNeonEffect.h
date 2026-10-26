@@ -22,6 +22,8 @@
 
 #include <yup_gui/yup_gui.h>
 
+#include <atomic>
+
 //==============================================================================
 /** A synthwave finish over the whole interface, like an old tube screen: curvature in
     a bezel, neon glow, chromatic aberration, a violet color grade, scanlines, a
@@ -31,7 +33,8 @@
     colors are taken at one texel per two points, colored light far more than white, and blurred
     both ways; a full size pass then shifts red and blue apart toward the corners,
     screens the glow back, grades, and draws the scanlines, phosphor mask, vignette and
-    grain, all through the curve of the tube. The mouse is mapped through the same curve,
+    grain, all through the curve of the tube. It can also play the tube powering on,
+    driven by setOpening(). The mouse is mapped through the same curve,
     so what is clicked is what is shown. Each part can be switched off. Sizes are in points,
     so every display scale looks alike. Without a GPU, or if a shader fails to compile, the
     interface is drawn as it is.
@@ -60,6 +63,12 @@ public:
     std::optional<yup::Point<float>> displayToContent (yup::Point<float> displayPoint, yup::Rectangle<float> bounds) const override;
     std::optional<yup::Point<float>> contentToDisplay (yup::Point<float> contentPoint, yup::Rectangle<float> bounds) const override;
 
+    /** Sets how far the tube has powered on, from 0 when off to 1 when fully on, the default.
+
+        Called on the message thread; the next repaint draws it.
+    */
+    void setOpening (float newOpening) noexcept { opening = yup::jlimit (0.0f, 1.0f, newOpening); }
+
 private:
     static constexpr float downsamplePerPoint = 2.0f;
     static constexpr float glowThreshold = 0.35f;
@@ -82,6 +91,7 @@ private:
     bool ensureTargets (yup::GpuDevice::Ptr device, int width, int height, int smallWidth, int smallHeight);
 
     const Options options;
+    std::atomic<float> opening { 1.0f };
     yup::GpuDevice::Ptr pipelineDevice;
     yup::GpuPipeline::Ptr prefilter;
     yup::GpuPipeline::Ptr blur;

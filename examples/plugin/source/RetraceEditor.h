@@ -40,6 +40,8 @@
     with a session, builds a new interface; the editor's timer notices it, which also
     keeps the interface from being replaced from inside its own settings menu.
 
+    When the editor first shows, the post effect plays the tube powering on.
+
     @see SynthInterface, RetraceProcessor
 */
 class RetraceEditor
@@ -63,8 +65,14 @@ private:
     void timerCallback() override;
     int getTheme() const;
     void buildInterface();
+    void updatePostEffect();
+    void advanceOpening();
+
+    static constexpr double openingSeconds = 0.42;
 
     RetraceProcessor& processor;
     std::unique_ptr<SynthInterface> interface;
     int builtTheme = -1;
+    double openingStart = 0.0;
+    float opening = 0.0f;
 };

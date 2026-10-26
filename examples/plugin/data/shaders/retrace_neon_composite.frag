@@ -10,7 +10,9 @@
 // - color grade: shadows lifted into violet and colors pushed a little more saturated;
 // - scanlines: fine horizontal lines, one every three points;
 // - vignette: corners pulled down;
-// - grain: static noise that breaks banding and gives the surfaces some texture.
+// - grain: static noise that breaks banding and gives the surfaces some texture;
+// - opening: the tube powering on, a dot widening into a line that opens into the
+//   picture, from 0 when off to 1 when fully on.
 layout(set = 0, binding = 0) uniform Params
 {
     float width;
@@ -25,6 +27,10 @@ layout(set = 0, binding = 0) uniform Params
     float phosphor;
     float cornerRadius;
     float pixelScale;
+    float opening;
+    float pad0;
+    float pad1;
+    float pad2;
 } p;
 
 layout(set = 0, binding = 1) uniform texture2D u_interface;
@@ -33,6 +39,9 @@ layout(set = 0, binding = 3) uniform texture2D u_glow;
 layout(set = 0, binding = 4) uniform sampler u_glowSampler;
 
 layout(location = 0) out vec4 fragColor;
+
+const vec3 offColor = vec3(0.0859, 0.0937, 0.1328);
+const float squashSpeed = 1.5;
 
 vec3 fetch(vec2 uv)
 {
@@ -64,15 +73,31 @@ void main()
     vec2 uv = picture * 0.5 + 0.5;
     vec2 centered = uv - 0.5;
 
-    vec2 shift = centered * dot(centered, centered) * 4.0 * p.aberration / size;
-    vec3 color = vec3(fetch(uv + shift).r, fetch(uv).g, fetch(uv - shift).b);
+    // Powering on runs a tube switching off backwards: the picture, squashed into a bright
+    // line one pixel tall, first fades in while the line widens from the center, then
+    // opens vertically as it dims back to its own colors.
+    float onePixel = (p.height - 1.0) / p.height;
+    float time = (1.0 - clamp(p.opening, 0.0, 1.0)) * (1.0 / squashSpeed + 1.0);
+    float squash = clamp(time * squashSpeed, 0.0, onePixel);
+    float fade = clamp(time - onePixel / squashSpeed, 0.0, 1.0);
+    vec2 source = vec2(centered.x * (1.0 - squash), centered.y / (1.0 - squash)) + 0.5;
 
-    vec3 glow = texture(sampler2D(u_glow, u_glowSampler), uv).rgb * p.glow;
+    vec2 shift = centered * dot(centered, centered) * 4.0 * p.aberration / size;
+    vec3 color = vec3(fetch(source + shift).r, fetch(source).g, fetch(source - shift).b);
+
+    vec3 glow = texture(sampler2D(u_glow, u_glowSampler), source).rgb * p.glow;
     color = 1.0 - (1.0 - color) * (1.0 - clamp(glow, 0.0, 1.0));
 
     float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
     color = mix(vec3(luminance), color, 1.0 + 0.3 * p.grade);
     color += p.grade * (1.0 - luminance) * (1.0 - luminance) * vec3(0.07, 0.0, 0.12);
+
+    if (p.opening < 1.0)
+    {
+        // A quarter pixel of margin keeps the line lit on its middle rows, which the curve pushes out.
+        float lit = step(abs(centered.y), (1.0 - squash) * 0.5 + 0.25 / p.height) * step(abs(centered.x), 1.0 - fade);
+        color = mix(offColor, mix(offColor, color + squash, 1.0 - fade), lit);
+    }
 
     vec2 point = gl_FragCoord.xy / max(p.pixelScale, 1.0);
 

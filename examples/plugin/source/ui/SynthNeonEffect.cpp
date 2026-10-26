@@ -217,7 +217,11 @@ void SynthNeonEffect::apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::
                                     getCurvature(),
                                     amount (options.phosphor, phosphorAmount),
                                     amount (options.curvature, cornerRadius),
-                                    pixelScale };
+                                    pixelScale,
+                                    opening.load(),
+                                    0.0f,
+                                    0.0f,
+                                    0.0f };
 
     auto pass = output->beginRenderPass (frame, { true, yup::Colors::black });
     pass.setPipeline (composite);
