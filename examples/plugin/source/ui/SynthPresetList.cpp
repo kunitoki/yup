@@ -208,6 +208,12 @@ void SynthPresetList::focusList()
     rows->takeKeyboardFocus();
 }
 
+bool SynthPresetList::navigate (const yup::KeyPress& key)
+{
+    focusList();
+    return rows->keyDown (key, {});
+}
+
 std::array<yup::Rectangle<float>, 7> SynthPresetList::layoutColumns (yup::Rectangle<float> row)
 {
     constexpr float favoriteWidth = 24.0f;
@@ -389,16 +395,20 @@ void SynthPresetList::loadRow (int row)
 /** Selects the loaded preset's row without notifying, so following it never loads. */
 void SynthPresetList::showLoadedPreset()
 {
-    shownKey = processor.getCurrentPresetKey();
+    const auto key = processor.getCurrentPresetKey();
+    const auto loadedChanged = key != shownKey;
+    shownKey = key;
 
     if (const auto row = browser.findRow (shownKey); row >= 0)
     {
         if (rows->getSelectedRow() != row)
-            rows->selectRow (row, true, yup::dontSendNotification);
+            rows->selectRow (row, loadedChanged, yup::dontSendNotification);
     }
     else
     {
+        // The next arrow then starts from the list's ends rather than from a row that moved.
         rows->deselectAllRows (yup::dontSendNotification);
+        rows->setCurrentRow (-1, yup::dontSendNotification);
     }
 }
 

@@ -145,7 +145,7 @@ void SynthPresetInfoPanel::finishField (Field field)
         {
             edited.file = renamed.getValue();
             edited.key = edited.file.getFullPathName();
-            edited.name = text.trim();
+            edited.name = edited.file.getFileNameWithoutExtension();
         }
     }
     else

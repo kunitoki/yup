@@ -62,21 +62,23 @@ yup::ResultValue<yup::File> rename (const PresetEntry& entry, const yup::String&
     if (target == yup::File())
         return yup::makeResultValueFail ("The name has no characters a file name can use");
 
+    const auto storedName = target.getFileNameWithoutExtension();
+
     if (target == entry.file)
     {
-        if (const auto result = format.writeMetadata (entry.file, withFile (entry, entry.file, name)); result.failed())
+        if (const auto result = format.writeMetadata (entry.file, withFile (entry, entry.file, storedName)); result.failed())
             return yup::makeResultValueFail (result.getErrorMessage());
 
         return yup::makeResultValueOk (entry.file);
     }
 
     if (target.exists())
-        return yup::makeResultValueFail ("A preset called '" + name + "' already exists");
+        return yup::makeResultValueFail ("A preset called '" + storedName + "' already exists");
 
     if (! entry.file.moveFileTo (target))
         return yup::makeResultValueFail ("Can't rename " + entry.file.getFullPathName());
 
-    if (const auto result = format.writeMetadata (target, withFile (entry, target, name)); result.failed())
+    if (const auto result = format.writeMetadata (target, withFile (entry, target, storedName)); result.failed())
     {
         target.moveFileTo (entry.file);
         return yup::makeResultValueFail (result.getErrorMessage());

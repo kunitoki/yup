@@ -141,6 +141,7 @@ PresetLibrary::ScanResult PresetLibrary::scanFolders (const std::vector<Folder>&
 {
     ScanResult result;
     std::unordered_set<yup::String> seenKeys;
+    std::unordered_set<yup::String> seenDirectories;
 
     for (const auto& root : folders)
     {
@@ -156,7 +157,9 @@ PresetLibrary::ScanResult PresetLibrary::scanFolders (const std::vector<Folder>&
 
             if (child.isDirectory())
             {
-                result.directories.add (file);
+                if (seenDirectories.insert (file.getFullPathName()).second)
+                    result.directories.add (file);
+
                 continue;
             }
 

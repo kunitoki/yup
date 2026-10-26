@@ -85,6 +85,20 @@ void SynthPresetBrowser::resized()
     filters.setBounds (left);
 }
 
+/** The browser holds the focus after a click on its filters or a finished search, so the
+    list's navigation keys reach the list from here too. */
+bool SynthPresetBrowser::keyDown (const yup::KeyPress& key, const yup::Point<float>&)
+{
+    for (const auto navigationKey : { yup::KeyPress::upKey, yup::KeyPress::downKey, yup::KeyPress::pageUpKey,
+                                      yup::KeyPress::pageDownKey, yup::KeyPress::homeKey, yup::KeyPress::endKey })
+    {
+        if (key.getKey() == navigationKey)
+            return list.navigate (key);
+    }
+
+    return false;
+}
+
 void SynthPresetBrowser::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
@@ -170,7 +184,7 @@ void SynthPresetBrowser::renamePreset (const PresetEntry& entry)
         auto edited = entry;
         edited.file = renamed.getValue();
         edited.key = edited.file.getFullPathName();
-        edited.name = name;
+        edited.name = edited.file.getFileNameWithoutExtension();
 
         processor.presetFileChanged (entry.file, edited);
         presetLibrary.getLibrary().rescan();
@@ -220,7 +234,7 @@ void SynthPresetBrowser::saveIntoFolder (const yup::File& folder)
             return "The name has no characters a file name can use";
 
         if (file.exists())
-            return "A preset called '" + name + "' already exists";
+            return "A preset called '" + file.getFileNameWithoutExtension() + "' already exists";
 
         if (const auto result = processor.savePresetFile (file); result.failed())
             return result.getErrorMessage();

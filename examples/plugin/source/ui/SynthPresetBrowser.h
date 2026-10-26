@@ -53,6 +53,7 @@ public:
 
     void resized() override;
     void paint (yup::Graphics& g) override;
+    bool keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override;
 
 private:
     static constexpr float leftColumnWidth = 180.0f;

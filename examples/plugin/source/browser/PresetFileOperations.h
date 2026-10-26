@@ -40,9 +40,10 @@ namespace PresetFileOperations
 */
 yup::File getFileFor (const yup::File& folder, const yup::String& name, const PresetFormat& format);
 
-/** Moves the file to the new name in the same folder and writes the name inside it,
-    carrying its favorite and rating over. Fails for factory presets, empty names and
-    names already taken.
+/** Moves the file to the new name in the same folder and writes the new file's name inside
+    it, so the two stay in step: characters a file name cannot hold are dropped from both.
+    Carries the favorite and rating over. Fails for factory presets, empty names and names
+    already taken.
 */
 yup::ResultValue<yup::File> rename (const PresetEntry& entry, const yup::String& newName, const PresetFormat& format, PresetUserData& userData);
 

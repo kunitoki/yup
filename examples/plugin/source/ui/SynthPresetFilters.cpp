@@ -58,7 +58,15 @@ void SynthPresetFilters::changeListenerCallback (yup::ChangeBroadcaster*)
 void SynthPresetFilters::refreshChips()
 {
     const auto& entries = browser.getLibrary().getEntries();
-    const auto texts = showingTags ? PresetQuery::collectTags (entries) : PresetQuery::collectCategories (entries);
+    auto texts = showingTags ? PresetQuery::collectTags (entries) : PresetQuery::collectCategories (entries);
+
+    // A selected value no preset carries any more keeps its chip, so it can still be turned off.
+    const auto& query = browser.getQuery();
+
+    for (const auto& selected : showingTags ? query.tags : query.categories)
+        texts.addIfNotAlreadyThere (selected, true);
+
+    texts.sortNatural();
 
     chips.clear();
 
@@ -227,7 +235,7 @@ void SynthPresetFilters::toggleChip (const yup::String& text)
         selected.add (text);
 
     browser.setQuery (std::move (query));
-    repaint();
+    refreshChips();
 }
 
 yup::Rectangle<float> SynthPresetFilters::getStarArea (int star) const

@@ -59,6 +59,11 @@ public:
     /** Gives the list the keyboard focus, so the arrows move through it. */
     void focusList();
 
+    /** Gives the list the focus and moves it with a navigation key, loading the preset it
+        reaches. Returns false for keys that do not move the list.
+    */
+    bool navigate (const yup::KeyPress& key);
+
     /** Called on a right click on a row (row >= 0) or the list background (-1), with the
         position in this component.
     */
