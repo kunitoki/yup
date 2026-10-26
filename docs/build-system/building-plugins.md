@@ -170,8 +170,10 @@ cmake --build build --config Release
 
 ## Standalone Application
 
-`PLUGIN_CREATE_STANDALONE ON` builds the plugin as an application. The window
-shows a slim toolbar above the editor:
+`PLUGIN_CREATE_STANDALONE ON` builds the plugin as an application. The target is
+`<TARGET_NAME>_standalone_plugin`, while the application itself is named after
+`PLUGIN_NAME` (for example `Retrace.app`, shown as Retrace in the macOS menu bar).
+The window shows a slim toolbar above the editor:
 
 - **Settings** opens the audio and MIDI device settings inside the window. Close
   it with the Close button, Escape or a click outside the panel.

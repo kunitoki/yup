@@ -288,6 +288,7 @@ also be used independently for non-plugin GUI applications.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `TARGET_NAME` | string | *(required)* | Target name for the executable. |
+| `TARGET_PRODUCT_NAME` | string | `<TARGET_NAME>` | Name of the built application: the executable, the `.app` bundle and the name macOS shows in the menu bar, and the `.html` page on Emscripten. Android and `TARGET_WHEEL` builds keep `<TARGET_NAME>`. |
 | `TARGET_VERSION` | string | *(required)* | Version in `major.minor.patch` format. |
 | `TARGET_CONSOLE` | ON\|OFF | OFF | Build a console app (no windowing/SDL, no macOS bundle). |
 | `TARGET_IDE_GROUP` | string | - | IDE folder group name. |

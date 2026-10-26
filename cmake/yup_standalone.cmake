@@ -24,7 +24,7 @@ function (yup_standalone_app)
     set (options "")
     set (one_value_args
         # Globals
-        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_ICON_COMPOSER TARGET_WHEEL TARGET_CXX_STANDARD
+        TARGET_NAME TARGET_PRODUCT_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_ICON_COMPOSER TARGET_WHEEL TARGET_CXX_STANDARD
         # Emscripten
         INITIAL_MEMORY MAXIMUM_MEMORY PTHREAD_POOL_SIZE STACK_SIZE CUSTOM_PLIST CUSTOM_SHELL ENABLE_EMSCRIPTEN_WEBGPU ENABLE_EMSCRIPTEN_GL_DEBUGGING ENABLE_EMSCRIPTEN_NODERAWFS)
     set (multi_value_args
@@ -45,6 +45,7 @@ function (yup_standalone_app)
     _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_NODERAWFS OFF)
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
+    set (target_product_name "${YUP_ARG_TARGET_PRODUCT_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")
     set (target_console "${YUP_ARG_TARGET_CONSOLE}")
     set (target_icon "${YUP_ARG_TARGET_ICON}")
@@ -59,6 +60,9 @@ function (yup_standalone_app)
     set (additional_link_options "")
 
     _yup_set_default (target_console OFF)
+    if ("${target_product_name}" STREQUAL "")
+        set (target_product_name "${target_name}")
+    endif()
     _yup_set_default (target_wheel OFF)
     _yup_make_short_version ("${target_version}" target_version_short)
 
@@ -137,6 +141,11 @@ function (yup_standalone_app)
         add_executable (${target_name} ${executable_options})
     endif()
 
+    # Android loads the library and Python imports the wheel by the target name, so they keep it.
+    if (NOT YUP_PLATFORM_ANDROID AND NOT target_wheel)
+        set_target_properties (${target_name} PROPERTIES OUTPUT_NAME "${target_product_name}")
+    endif()
+
     set_target_properties (${target_name} PROPERTIES
         C_VISIBILITY_PRESET hidden
         CXX_VISIBILITY_PRESET hidden
@@ -171,9 +180,9 @@ function (yup_standalone_app)
             set_target_properties (${target_name} PROPERTIES
                 BUNDLE                                         ON
                 CXX_EXTENSIONS                                 OFF
-                MACOSX_BUNDLE_EXECUTABLE_NAME                  "${target_name}"
+                MACOSX_BUNDLE_EXECUTABLE_NAME                  "${target_product_name}"
                 MACOSX_BUNDLE_GUI_IDENTIFIER                   "${target_app_identifier}"
-                MACOSX_BUNDLE_BUNDLE_NAME                      "${target_name}"
+                MACOSX_BUNDLE_BUNDLE_NAME                      "${target_product_name}"
                 MACOSX_BUNDLE_BUNDLE_VERSION                   "${target_version}"
                 MACOSX_BUNDLE_LONG_VERSION_STRING              "${target_version}"
                 MACOSX_BUNDLE_SHORT_VERSION_STRING             "${target_version_short}"
