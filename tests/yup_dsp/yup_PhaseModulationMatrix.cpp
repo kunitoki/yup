@@ -457,6 +457,45 @@ TEST_F (PhaseModulationMatrixTests, RampedAmountsDoNotStep)
         ASSERT_NEAR (snappedOutput[i], rampedOutput[i], 1e-9) << i;
 }
 
+TEST_F (PhaseModulationMatrixTests, RampedAmountsFadeOutToThePlainCarrier)
+{
+    prepare (factor);
+    matrix.reset();
+
+    Matrix::Controls controls;
+    controls.frequencies = { 440.0, 440.0, 0.0, 0.0 };
+    controls.gains = { 1.0, 0.0, 0.0, 0.0 };
+    controls.amounts[0][1] = 0.5;
+
+    prime (controls);
+
+    constexpr int steps = 8;
+    constexpr int stepLength = blockSize * factor;
+
+    std::vector<double> output;
+    std::vector<double> buffer (stepLength);
+    std::vector<double> unused (stepLength);
+    double* pointers[] = { buffer.data(), unused.data(), unused.data(), unused.data() };
+
+    for (int step = 0; step < steps; ++step)
+    {
+        if (step == 2)
+            controls.amounts[0][1] = 0.0;
+
+        matrix.setTargets (controls, stepLength);
+        renderTables();
+        matrix.process (pointers, stepLength);
+        output.insert (output.end(), buffer.begin(), buffer.end());
+    }
+
+    // The link fades out over its step instead of dropping at once.
+    EXPECT_LT (maxJump (output), 0.1);
+
+    // Once the ramp has finished the carrier plays unmodulated.
+    for (std::size_t i = 3 * stepLength; i < output.size(); ++i)
+        ASSERT_NEAR (std::sin (MathConstants<double>::twoPi * 440.0 * static_cast<double> (i) / (sampleRate * factor)), output[i], 1e-4) << i;
+}
+
 TEST_F (PhaseModulationMatrixTests, SilentOperatorStillModulates)
 {
     prepare (factor);

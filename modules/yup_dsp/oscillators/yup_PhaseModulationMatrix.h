@@ -315,47 +315,86 @@ private:
     template <bool Ramping>
     void run (SampleType* const* outputs, int offset, int numSamples) noexcept
     {
+        // The table reads write through pointers, so the state is copied to locals they
+        // cannot alias, and nothing has to be reloaded after every read.
+        const auto tableList = tables;
+        const auto isActive = active;
+        const auto links = modulators;
+        const auto linkCounts = modulatorCounts;
+        auto phase = phases;
+        auto increment = increments;
+        auto gain = gains;
+        auto phaseOffset = offsets;
+        auto amount = amounts;
+        auto past1 = history1;
+        auto past2 = history2;
+        std::array<SampleType*, NumOperators> destinations {};
+        Row averages {};
         Row values {};
+
+        for (std::size_t i = 0; i < size; ++i)
+            destinations[i] = outputs[i] != nullptr ? outputs[i] + offset : nullptr;
 
         for (int s = 0; s < numSamples; ++s)
         {
+            for (std::size_t j = 0; j < size; ++j)
+                averages[j] = 0.5 * (past1[j] + past2[j]);
+
             for (std::size_t i = 0; i < size; ++i)
             {
-                if (! active[i])
+                if (! isActive[i])
                     continue;
 
                 auto pm = 0.0;
 
-                for (std::size_t j = 0; j < size; ++j)
-                    pm += amounts[i][j] * (history1[j] + history2[j]);
+                for (int k = 0; k < linkCounts[i]; ++k)
+                {
+                    const auto j = links[i][static_cast<std::size_t> (k)];
+                    pm += amount[i][j] * averages[j];
+                }
 
-                values[i] = static_cast<double> (tables[i]->processSampleAtPhase (phases[i] + offsets[i] + 0.5 * pm));
+                values[i] = static_cast<double> (tableList[i]->processSampleAtPhase (phase[i] + phaseOffset[i] + pm));
             }
 
             for (std::size_t i = 0; i < size; ++i)
             {
-                if (active[i])
+                if (isActive[i])
                 {
-                    history2[i] = history1[i];
-                    history1[i] = values[i];
+                    past2[i] = past1[i];
+                    past1[i] = values[i];
 
-                    if (auto* output = outputs[i])
-                        output[offset + s] = static_cast<SampleType> (gains[i] * values[i]);
+                    if (auto* output = destinations[i])
+                        output[s] = static_cast<SampleType> (gain[i] * values[i]);
                 }
 
-                phases[i] += increments[i];
-                phases[i] -= std::floor (phases[i]);
+                phase[i] += increment[i];
+                phase[i] -= std::floor (phase[i]);
 
                 if constexpr (Ramping)
                 {
-                    increments[i] += incrementSteps[i];
-                    gains[i] += gainSteps[i];
-                    offsets[i] += offsetSteps[i];
+                    increment[i] += incrementSteps[i];
+                    gain[i] += gainSteps[i];
+                    phaseOffset[i] += offsetSteps[i];
 
-                    for (std::size_t j = 0; j < size; ++j)
-                        amounts[i][j] += amountSteps[i][j];
+                    for (int k = 0; k < linkCounts[i]; ++k)
+                    {
+                        const auto j = links[i][static_cast<std::size_t> (k)];
+                        amount[i][j] += amountSteps[i][j];
+                    }
                 }
             }
+        }
+
+        phases = phase;
+        history1 = past1;
+        history2 = past2;
+
+        if constexpr (Ramping)
+        {
+            increments = increment;
+            gains = gain;
+            offsets = phaseOffset;
+            amounts = amount;
         }
     }
 
@@ -410,6 +449,25 @@ private:
                 amountSteps[i][i] = (targetAmounts[i][i] - amounts[i][i]) / static_cast<double> (rampRemaining);
             else
                 amounts[i][i] = targetAmounts[i][i];
+        }
+
+        updateModulators();
+    }
+
+    /** Lists each operator's links that are non-zero at either end of the ramp. The
+        others stay exactly zero all step, so they are neither summed nor ramped.
+    */
+    void updateModulators() noexcept
+    {
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            auto count = 0;
+
+            for (std::size_t j = 0; j < size; ++j)
+                if (amounts[i][j] != 0.0 || targetAmounts[i][j] != 0.0)
+                    modulators[i][static_cast<std::size_t> (count++)] = j;
+
+            modulatorCounts[i] = count;
         }
     }
 
@@ -489,6 +547,8 @@ private:
     Square amounts {};
     Square amountSteps {};
     Square targetAmounts {};
+    std::array<std::array<std::size_t, NumOperators>, NumOperators> modulators {};
+    std::array<int, NumOperators> modulatorCounts {};
     std::array<bool, NumOperators> active {};
     std::array<bool, NumOperators> audible {};
     double internalSampleRate = 44100.0;
