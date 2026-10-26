@@ -21,10 +21,26 @@
 
 #include "SynthPresetBrowser.h"
 #include "SynthPresetLibrary.h"
+#include "SynthPresetPrompt.h"
 #include "SynthTheme.h"
+#include "../browser/PresetBrowseState.h"
+#include "../browser/PresetFileOperations.h"
+
+namespace
+{
+enum MenuItem
+{
+    renameId = 1,
+    duplicateId,
+    deleteId,
+    revealId,
+    saveHereId
+};
+} // namespace
 
 SynthPresetBrowser::SynthPresetBrowser (RetraceProcessor& processorToControl)
-    : sources (processorToControl, processorToControl.getPresetLibrary())
+    : processor (processorToControl)
+    , sources (processorToControl, processorToControl.getPresetLibrary())
     , filters (processorToControl.getPresetBrowser())
     , list (processorToControl)
     , info (processorToControl)
@@ -39,6 +55,9 @@ SynthPresetBrowser::SynthPresetBrowser (RetraceProcessor& processorToControl)
 
     for (auto* column : std::initializer_list<yup::Component*> { &sources, &filters, &list, &info })
         addAndMakeVisible (*column);
+
+    list.onMenuRequested = [this] (int row, yup::Point<float> position) { showRowMenu (row, getLocalPoint (&list, position)); };
+    sources.onSaveIntoFolder = [this] (const yup::File& folder) { saveIntoFolder (folder); };
 }
 
 void SynthPresetBrowser::syncFromProcessor()
@@ -73,4 +92,140 @@ void SynthPresetBrowser::paint (yup::Graphics& g)
     g.setFillColor (SynthTheme::frameColor (*this));
     g.fillRect (bounds);
     SynthTheme::paintTile (g, *this, bounds);
+}
+
+/** A row's menu works on a copy of its entry, since a rescan may replace the listed one
+    before an item is picked. */
+void SynthPresetBrowser::showRowMenu (int row, yup::Point<float> position)
+{
+    const auto* listed = processor.getPresetBrowser().getResult (row);
+    const auto entry = listed != nullptr ? *listed : PresetEntry {};
+    auto* parent = getPopupParentComponent();
+    auto menu = yup::PopupMenu::create (yup::PopupMenu::Options {}
+                                            .withParentComponent (parent)
+                                            .withPosition (parent != nullptr ? parent->getLocalPoint (this, position) : position));
+
+    if (listed != nullptr)
+    {
+        const auto isFile = ! entry.isFactory();
+        menu->addItem ("Rename...", renameId, isFile);
+        menu->addItem ("Duplicate", duplicateId, isFile);
+        menu->addItem ("Delete...", deleteId, isFile);
+        menu->addSeparator();
+        menu->addItem (SynthPresetSources::getRevealCommandName(), revealId, isFile);
+    }
+    else
+    {
+        menu->addItem ("Save current patch here...", saveHereId);
+    }
+
+    menu->show ([safeThis = yup::WeakReference<yup::Component> (this), entry] (int selectedId)
+    {
+        auto* browser = dynamic_cast<SynthPresetBrowser*> (safeThis.get());
+
+        if (browser == nullptr)
+            return;
+
+        switch (selectedId)
+        {
+            case renameId:
+                browser->renamePreset (entry);
+                break;
+
+            case duplicateId:
+                browser->duplicatePreset (entry);
+                break;
+
+            case deleteId:
+                browser->deletePreset (entry);
+                break;
+
+            case revealId:
+                entry.file.revealToUser();
+                break;
+
+            case saveHereId:
+            {
+                const auto& query = browser->processor.getPresetBrowser().getQuery();
+                browser->saveIntoFolder (query.source == PresetQuery::Source::folder ? query.folder : SynthPresetLibrary::getUserFolder());
+                break;
+            }
+
+            default:
+                break;
+        }
+    });
+}
+
+void SynthPresetBrowser::renamePreset (const PresetEntry& entry)
+{
+    SynthPresetPrompt::askForName (*this, "Rename preset", entry.name, [this, entry] (const yup::String& name) -> yup::String
+    {
+        auto& presetLibrary = processor.getPresetLibrary();
+        const auto renamed = PresetFileOperations::rename (entry, name, presetLibrary.getLibrary().getFormat(), presetLibrary.getUserData());
+
+        if (renamed.failed())
+            return renamed.getErrorMessage();
+
+        auto edited = entry;
+        edited.file = renamed.getValue();
+        edited.key = edited.file.getFullPathName();
+        edited.name = name;
+
+        processor.presetFileChanged (entry.file, edited);
+        presetLibrary.getLibrary().rescan();
+        return {};
+    });
+}
+
+void SynthPresetBrowser::duplicatePreset (const PresetEntry& entry)
+{
+    auto& presetLibrary = processor.getPresetLibrary();
+
+    if (const auto copied = PresetFileOperations::duplicate (entry, presetLibrary.getLibrary().getFormat(), presetLibrary.getUserData()); copied.failed())
+        yup::Logger::writeToLog ("Retrace: " + copied.getErrorMessage());
+    else
+        presetLibrary.getLibrary().rescan();
+}
+
+void SynthPresetBrowser::deletePreset (const PresetEntry& entry)
+{
+    SynthPresetPrompt::askToConfirm (*this, "Delete preset", "Delete '" + entry.name + "'?", "Delete", [this, entry]
+    {
+        auto& presetLibrary = processor.getPresetLibrary();
+
+        if (const auto result = PresetFileOperations::remove (entry, presetLibrary.getUserData()); result.failed())
+        {
+            yup::Logger::writeToLog ("Retrace: " + result.getErrorMessage());
+            return;
+        }
+
+        // The patch stays loaded, but no longer comes from a file.
+        processor.presetFileChanged (entry.file, PresetEntry {});
+        presetLibrary.getLibrary().rescan();
+    });
+}
+
+void SynthPresetBrowser::saveIntoFolder (const yup::File& folder)
+{
+    SynthPresetPrompt::askForName (*this, "Save preset", processor.getPresetInfo().name, [this, folder] (const yup::String& name) -> yup::String
+    {
+        auto& library = processor.getPresetLibrary().getLibrary();
+        const auto file = PresetFileOperations::getFileFor (folder, name, library.getFormat());
+
+        if (name.isEmpty())
+            return "A preset needs a name";
+
+        if (file == yup::File())
+            return "The name has no characters a file name can use";
+
+        if (file.exists())
+            return "A preset called '" + name + "' already exists";
+
+        if (const auto result = processor.savePresetFile (file); result.failed())
+            return result.getErrorMessage();
+
+        library.rescan();
+        return {};
+    });
 }

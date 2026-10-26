@@ -34,6 +34,10 @@
     keyboard stay playable: the sources and filters on the left, the preset list in the
     middle and the selected preset's details on the right.
 
+    A right click on a user preset renames, duplicates, deletes or reveals it; on the list
+    background or a folder it saves the current patch there. Factory presets offer the
+    same items disabled.
+
     @see SynthPresetList, SynthInterface
 */
 class SynthPresetBrowser : public yup::Component
@@ -55,6 +59,13 @@ private:
     static constexpr float rightColumnWidth = 200.0f;
     static constexpr float sourcesShare = 0.6f;
 
+    void showRowMenu (int row, yup::Point<float> position);
+    void renamePreset (const PresetEntry& entry);
+    void duplicatePreset (const PresetEntry& entry);
+    void deletePreset (const PresetEntry& entry);
+    void saveIntoFolder (const yup::File& folder);
+
+    RetraceProcessor& processor;
     SynthPresetSources sources;
     SynthPresetFilters filters;
     SynthPresetList list;

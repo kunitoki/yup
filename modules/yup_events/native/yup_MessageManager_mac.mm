@@ -53,24 +53,6 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
         : ObjCClass("YUPAppDelegate_")
     {
         // clang-format off
-        addMethod(@selector(applicationWillFinishLaunching:), [](id self, SEL, NSNotification*)
-        {
-            YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
-            [[NSAppleEventManager sharedAppleEventManager] setEventHandler: self
-                                                               andSelector: @selector (getUrl:withReplyEvent:)
-                                                             forEventClass: kInternetEventClass
-                                                                andEventID: kAEGetURL];
-            YUP_END_IGNORE_WARNINGS_GCC_LIKE
-        });
-
-        addMethod(@selector(applicationDidFinishLaunching:), [](id self, SEL, NSNotification*)
-        {
-            [[NSAppleEventManager sharedAppleEventManager] setEventHandler:self
-                                                               andSelector:@selector(handleQuitEvent:withReplyEvent:)
-                                                             forEventClass:kCoreEventClass
-                                                                andEventID:kAEQuitApplication];
-        });
-
         addMethod(@selector(applicationShouldTerminate:), [](id /*self*/, SEL, NSApplication*)
         {
             if (auto* app = YUPApplicationBase::getInstance())
@@ -306,6 +288,20 @@ struct AppDelegate
         {
             [NSApp setDelegate:delegate];
 
+            auto* appleEventManager = [NSAppleEventManager sharedAppleEventManager];
+
+            YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
+            [appleEventManager setEventHandler:delegate
+                                   andSelector:@selector(handleQuitEvent:withReplyEvent:)
+                                 forEventClass:kCoreEventClass
+                                    andEventID:kAEQuitApplication];
+
+            [appleEventManager setEventHandler:delegate
+                                   andSelector:@selector(getUrl:withReplyEvent:)
+                                 forEventClass:kInternetEventClass
+                                    andEventID:kAEGetURL];
+            YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
             YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
             [[NSDistributedNotificationCenter defaultCenter] addObserver:delegate
                                                                 selector:@selector(broadcastMessageCallback:)
@@ -341,6 +337,9 @@ struct AppDelegate
         if (YUPApplicationBase::isStandaloneApp())
         {
             [NSApp setDelegate:nil];
+
+            [[NSAppleEventManager sharedAppleEventManager] removeEventHandlerForEventClass:kCoreEventClass andEventID:kAEQuitApplication];
+            [[NSAppleEventManager sharedAppleEventManager] removeEventHandlerForEventClass:kInternetEventClass andEventID:kAEGetURL];
 
             [[NSDistributedNotificationCenter defaultCenter] removeObserver:delegate
                                                                        name:getBroadcastEventName()
