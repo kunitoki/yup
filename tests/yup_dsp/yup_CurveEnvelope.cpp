@@ -36,9 +36,7 @@ protected:
 
     static constexpr double sampleRate = 48000.0;
 
-    /** Linear attack, decay, sustain and release, ported from the Prism example's
-        SynthEnvelope without its delay and hold stages.
-    */
+    /** Linear attack, decay, sustain and release. */
     struct LinearAdsr
     {
         float attackIncrement = 0.0f;

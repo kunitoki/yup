@@ -20,7 +20,7 @@
 */
 #pragma once
 
-#include "../PrismProcessor.h"
+#include "../RetraceProcessor.h"
 #include "ParameterKnob.h"
 #include "SynthIconButton.h"
 #include "SynthLevelMeter.h"
@@ -40,7 +40,7 @@
 class SynthHeader : public yup::Component
 {
 public:
-    explicit SynthHeader (PrismProcessor& processorToControl);
+    explicit SynthHeader (RetraceProcessor& processorToControl);
 
     /** Called with the click position, in the header, when the logo is right clicked, to show the global settings. */
     std::function<void (yup::Point<float>)> onSettingsRequested;
@@ -57,13 +57,14 @@ public:
     void styleChanged() override;
 
 private:
-    static constexpr float logoWidth = 214.0f;
+    static constexpr float logoWidth = 190.0f;
     static constexpr float iconTileSize = 46.0f;
     static constexpr float volumeWidth = 120.0f;
+    static constexpr int readoutInterval = 8;
 
     void colorLogo();
 
-    PrismProcessor& processor;
+    RetraceProcessor& processor;
     yup::Drawable logo;
     bool logoNeedsColors = true;
     yup::Rectangle<float> logoTile;
@@ -78,8 +79,6 @@ private:
     ParameterKnob volumeKnob;
     SynthLevelMeter meter;
     float rightGroupWidth = 381.0f;
-    static constexpr int readoutInterval = 8;
-
     int readoutCalls = 0;
     yup::String voices;
     yup::String load;

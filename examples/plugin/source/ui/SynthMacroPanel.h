@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "../PrismProcessor.h"
+#include "../RetraceProcessor.h"
 #include "ParameterKnob.h"
 #include "SynthFieldEditor.h"
 
@@ -41,7 +41,7 @@
 class SynthMacroPanel : public yup::Component
 {
 public:
-    explicit SynthMacroPanel (PrismProcessor& processorToControl);
+    explicit SynthMacroPanel (RetraceProcessor& processorToControl);
 
     /** Shows the macros' values and names, wherever they were changed. */
     void syncFromProcessor();
@@ -56,7 +56,7 @@ private:
     static yup::String toStoredName (int macro, const yup::String& text);
     void finishName (int macro);
 
-    PrismProcessor& processor;
+    RetraceProcessor& processor;
     std::array<std::unique_ptr<ParameterKnob>, SynthExample::macroCount> knobs;
     std::array<SynthFieldEditor, SynthExample::macroCount> names;
     std::array<yup::String, SynthExample::macroCount> namesBeforeEdit;

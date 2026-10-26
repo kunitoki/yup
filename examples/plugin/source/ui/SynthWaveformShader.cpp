@@ -85,7 +85,7 @@ bool SynthWaveformShader::ensurePipeline (yup::GraphicsContext& context)
     yup::GpuPipelineOptions options;
     options.colorTargets.emplace_back().blendEnabled = false;
 
-    auto bundle = yup::ShaderBundle::loadFromData (prism::synthWaveformShader_data, prism::synthWaveformShader_size);
+    auto bundle = yup::ShaderBundle::loadFromData (retrace::synthWaveformShader_data, retrace::synthWaveformShader_size);
     if (bundle.failed())
     {
         yup::Logger::outputDebugString ("SynthWaveformShader: shader bundle failed to load: " + bundle.getErrorMessage());

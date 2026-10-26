@@ -23,13 +23,13 @@
 
 #include <yup_audio_gui/yup_audio_gui.h>
 
-#include "PrismProcessor.h"
+#include "RetraceProcessor.h"
 #include "ui/SynthInterface.h"
 
 #include <memory>
 
 //==============================================================================
-/** The PRISM editor: hosts the interface and rebuilds it when the theme changes.
+/** The RETRACE editor: hosts the interface and rebuilds it when the theme changes.
 
     The interface is laid out at the preferred size and scaled to fit the editor, keeping
     its aspect ratio, so resizing zooms the whole instrument. The post effect sits on the
@@ -40,15 +40,15 @@
     with a session, builds a new interface; the editor's timer notices it, which also
     keeps the interface from being replaced from inside its own settings menu.
 
-    @see SynthInterface, PrismProcessor
+    @see SynthInterface, RetraceProcessor
 */
-class PrismEditor
+class RetraceEditor
     : public yup::AudioProcessorEditor
     , private yup::Timer
 {
 public:
-    explicit PrismEditor (PrismProcessor& processorToEdit);
-    ~PrismEditor() override;
+    explicit RetraceEditor (RetraceProcessor& processorToEdit);
+    ~RetraceEditor() override;
 
     //==============================================================================
     bool isResizable() const override { return true; }
@@ -64,7 +64,7 @@ private:
     int getTheme() const;
     void buildInterface();
 
-    PrismProcessor& processor;
+    RetraceProcessor& processor;
     std::unique_ptr<SynthInterface> interface;
     int builtTheme = -1;
 };

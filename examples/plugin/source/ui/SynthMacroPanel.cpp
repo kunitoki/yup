@@ -23,7 +23,7 @@
 #include "SynthTheme.h"
 #include "SynthUndoHistory.h"
 
-SynthMacroPanel::SynthMacroPanel (PrismProcessor& processorToControl)
+SynthMacroPanel::SynthMacroPanel (RetraceProcessor& processorToControl)
     : processor (processorToControl)
 {
     setOpaque (false);

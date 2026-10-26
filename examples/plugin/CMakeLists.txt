@@ -49,29 +49,29 @@ endif()
 yup_add_shader_bundle (${target_name}_shaders
     VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
     FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/synth_waveform.frag"
-    NAMESPACE prism
+    NAMESPACE retrace
     OUTPUT_NAME SynthWaveformShaderBundle
     RESOURCE_NAME synthWaveformShader)
 
 # ==== Embed the post effect shaders, one bundle per fragment stage
 yup_add_shader_bundle (${target_name}_glow_prefilter_shaders
     VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
-    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/prism_glow_prefilter.frag"
-    NAMESPACE prism
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/retrace_glow_prefilter.frag"
+    NAMESPACE retrace
     OUTPUT_NAME SynthGlowPrefilterShaderBundle
     RESOURCE_NAME synthGlowPrefilterShader)
 
 yup_add_shader_bundle (${target_name}_blur_shaders
     VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
-    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/prism_blur.frag"
-    NAMESPACE prism
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/retrace_blur.frag"
+    NAMESPACE retrace
     OUTPUT_NAME SynthBlurShaderBundle
     RESOURCE_NAME synthBlurShader)
 
 yup_add_shader_bundle (${target_name}_neon_composite_shaders
     VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
-    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/prism_neon_composite.frag"
-    NAMESPACE prism
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/retrace_neon_composite.frag"
+    NAMESPACE retrace
     OUTPUT_NAME SynthNeonCompositeShaderBundle
     RESOURCE_NAME synthNeonCompositeShader)
 
@@ -82,8 +82,8 @@ yup_audio_plugin (
     TARGET_APP_ID "yup.audio.${target_name}"
     TARGET_APP_NAMESPACE "yup.audio"
     TARGET_CXX_STANDARD 20
-    PLUGIN_ID "yup.audio.Prism"
-    PLUGIN_NAME "Prism"
+    PLUGIN_ID "yup.audio.Retrace"
+    PLUGIN_NAME "Retrace"
     PLUGIN_VENDOR "yup.audio"
     PLUGIN_EMAIL "kunitoki@gmail.com"
     PLUGIN_VERSION "${target_version}"

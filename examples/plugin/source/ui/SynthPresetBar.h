@@ -20,7 +20,7 @@
 */
 #pragma once
 
-#include "../PrismProcessor.h"
+#include "../RetraceProcessor.h"
 #include "SynthFieldEditor.h"
 #include "SynthIconButton.h"
 
@@ -41,12 +41,12 @@
     plugin's vendor and name. The list offers every preset file found there, gathered in
     the background when the bar opens and after each save.
 
-    @see PrismProcessor, SynthPatch, SynthHeader
+    @see RetraceProcessor, SynthPatch, SynthHeader
 */
 class SynthPresetBar : public yup::Component
 {
 public:
-    explicit SynthPresetBar (PrismProcessor& processorToControl);
+    explicit SynthPresetBar (RetraceProcessor& processorToControl);
 
     /** Shows the patch the processor is on and its description. */
     void syncFromProcessor();
@@ -79,7 +79,7 @@ private:
     static yup::String& getField (SynthPatch::PresetInfo& info, Field field);
     static yup::File getPresetFolder();
 
-    PrismProcessor& processor;
+    RetraceProcessor& processor;
     SynthIconButton listButton { "PresetList", YUP_ICON_LIST, 13.0f, false };
     SynthIconButton menuButton { "PresetMenu", YUP_ICON_CARET_DOWN, 12.0f, false };
     SynthIconButton previousButton { "PreviousPreset", YUP_ICON_CHEVRON_LEFT, 11.0f, false };

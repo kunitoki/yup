@@ -31,7 +31,7 @@ namespace SynthPatch
 {
 namespace
 {
-const yup::Identifier stateType ("PrismState");
+const yup::Identifier stateType ("RetraceState");
 const yup::Identifier versionProperty ("version");
 const yup::Identifier presetProperty ("preset");
 const yup::Identifier nameProperty ("name");
@@ -484,15 +484,15 @@ yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters,
 yup::Result loadState (const yup::DataTree& tree, yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state)
 {
     if (! tree.isValid() || tree.getType() != stateType)
-        return yup::Result::fail ("Not a Prism patch");
+        return yup::Result::fail ("Not a Retrace patch");
 
     const auto version = static_cast<int> (tree.getProperty (versionProperty, 0));
 
     if (version > stateVersion)
-        return yup::Result::fail ("The patch was saved by a newer version of Prism");
+        return yup::Result::fail ("The patch was saved by a newer version of Retrace");
 
     if (version < stateVersion)
-        return yup::Result::fail ("The patch was saved by an older version of Prism, which this version cannot load");
+        return yup::Result::fail ("The patch was saved by an older version of Retrace, which this version cannot load");
 
     for (const auto& parameter : parameters)
     {

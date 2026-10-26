@@ -36,7 +36,7 @@
     SynthPartials, whose generation tells the oscillator slots when to rebuild, and the
     routes and curves from their patch state objects, once per block.
 
-    @see SynthParameters, SynthPartials, SynthRoutes, SynthCurveState, PrismProcessor
+    @see SynthParameters, SynthPartials, SynthRoutes, SynthCurveState, RetraceProcessor
 */
 class HarmonicSynthEngine : public yup::Synthesiser
 {

@@ -32,7 +32,7 @@
 #include <vector>
 
 //==============================================================================
-/** PRISM, a four operator spectral FM synthesiser, as an audio plugin.
+/** RETRACE, a four operator spectral FM synthesiser, as an audio plugin.
 
     Every control is an AudioParameter with a stable host ID; the drawn partials of
     each oscillator, the envelope and LFO curves and the modulation routes are state
@@ -48,15 +48,15 @@
     table follows the parameters, keeps any modulation offset on top, and takes the
     block's parameter events at the start of each control chunk of the block.
 
-    @see PrismEditor, SynthParameters, SynthPatch, HarmonicSynthEngine
+    @see RetraceEditor, SynthParameters, SynthPatch, HarmonicSynthEngine
 */
-class PrismProcessor
+class RetraceProcessor
     : public yup::AudioProcessor
     , private yup::AudioParameter::Listener
 {
 public:
-    PrismProcessor();
-    ~PrismProcessor() override;
+    RetraceProcessor();
+    ~RetraceProcessor() override;
 
     //==============================================================================
     void prepareToPlay (const yup::AudioSpec& spec) override;
@@ -230,5 +230,5 @@ private:
     // Grouped by gesture rather than by time: every edit is its own step.
     yup::UndoManager undoManager { yup::RelativeTime() };
 
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrismProcessor)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RetraceProcessor)
 };

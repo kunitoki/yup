@@ -26,10 +26,10 @@ namespace SynthThemes
 {
 const std::vector<Theme>& getThemes()
 {
-    // Prism splits white light into the spectrum: each section takes one of its colors,
-    // softened, over the same deep blue grey, and the header keeps the light itself.
+    // Retrace scans its signal in colored lines: each section takes one of their colors,
+    // softened, over the same deep blue grey, and the header keeps the white of the beam.
     static const std::vector<Theme> themes {
-        { "Prism",
+        { "Retrace",
           "https://coolors.co/0c111b-172131-8b97a8-eef2f8-b9c6ff",
           yup::ThemePalette::Mode::dark,
           { "https://coolors.co/0c111b-172131-8b97a8-eef2f8-b9c6ff",
@@ -40,7 +40,7 @@ const std::vector<Theme>& getThemes()
             "https://coolors.co/0c111b-172131-8b97a8-eef2f8-7cc7ec",
             "https://coolors.co/0c111b-172131-8b97a8-eef2f8-9aa6f4",
             "https://coolors.co/0c111b-172131-8b97a8-eef2f8-c79cf0" } },
-        { "Prism Classic", "https://coolors.co/011627-f71735-41ead4-fdfffc-ff9f1c", yup::ThemePalette::Mode::dark },
+        { "Retrace Classic", "https://coolors.co/011627-f71735-41ead4-fdfffc-ff9f1c", yup::ThemePalette::Mode::dark },
         { "Deep Sea", "https://coolors.co/0b132b-1c2541-3a506b-5bc0be-6fffe9", yup::ThemePalette::Mode::dark },
         { "Moss", "https://coolors.co/1f2421-216869-49a078-9cc5a1-dce1de", yup::ThemePalette::Mode::dark },
         { "Ember", "https://coolors.co/1a1423-372549-774c60-b75d69-eacdc2", yup::ThemePalette::Mode::dark },

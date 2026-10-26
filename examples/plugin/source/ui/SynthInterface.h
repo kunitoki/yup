@@ -23,7 +23,7 @@
 
 #include <yup_audio_gui/yup_audio_gui.h>
 
-#include "../PrismProcessor.h"
+#include "../RetraceProcessor.h"
 #include "ParameterSegmented.h"
 #include "SynthEnvelopePanel.h"
 #include "SynthFMPanel.h"
@@ -44,10 +44,10 @@
 #include <vector>
 
 //==============================================================================
-/** The whole PRISM interface: operators, filters, envelopes, LFOs, FM matrix and keyboard.
+/** The whole RETRACE interface: operators, filters, envelopes, LFOs, FM matrix and keyboard.
 
     Each section shows one of its panels at a time, picked with a row of tabs. The
-    interface takes its colors from the theme when it is built, so PrismEditor rebuilds
+    interface takes its colors from the theme when it is built, so RetraceEditor rebuilds
     it when the theme changes.
 
     Every control is bound to a parameter of the processor. A timer shows whatever the
@@ -55,7 +55,7 @@
     edits once per frame. The keyboard and wheels show and play the processor's keyboard
     state, so the host's notes light the keys.
 
-    @see PrismProcessor
+    @see RetraceProcessor
 */
 class SynthInterface
     : public yup::Component
@@ -64,7 +64,7 @@ class SynthInterface
 {
 public:
     /** Builds the interface in a theme, see SynthThemes::getThemes(). */
-    SynthInterface (PrismProcessor& processorToEdit, int themeToWear);
+    SynthInterface (RetraceProcessor& processorToEdit, int themeToWear);
     ~SynthInterface() override;
 
     //==============================================================================
@@ -113,7 +113,7 @@ private:
     static constexpr float macroColumnWidth = 128.0f;
 
     //==============================================================================
-    PrismProcessor& processor;
+    RetraceProcessor& processor;
     const int theme;
 
     std::unique_ptr<SynthHeader> header;

@@ -33,7 +33,7 @@
 
     Each theme is a set of coolors palettes parsed with yup::ThemePalette::fromString, in
     dark or light mode: a base, and one for every section that has its own. Each plugin
-    instance keeps its own theme with its session (see PrismProcessor::getThemeName()),
+    instance keeps its own theme with its session (see RetraceProcessor::getThemeName()),
     and the palettes are set on its interface, so editors in one process can wear
     different themes. The theme picked last is kept in a small settings file in the
     user's application data folder, as the one new instances start with.

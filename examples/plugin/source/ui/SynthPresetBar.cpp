@@ -26,11 +26,11 @@
 
 namespace
 {
-constexpr const char* presetExtension = ".prism";
+constexpr const char* presetExtension = ".retrace";
 constexpr const char* fieldCaptions[] = { "BANK:", "AUTHOR:", "TAGS:" };
 } // namespace
 
-SynthPresetBar::SynthPresetBar (PrismProcessor& processorToControl)
+SynthPresetBar::SynthPresetBar (RetraceProcessor& processorToControl)
     : processor (processorToControl)
 {
     setOpaque (false);
@@ -207,7 +207,7 @@ void SynthPresetBar::showPresetMenu()
         else if (const auto index = static_cast<std::size_t> (selectedId - userBase); index < bar->userPresets.size())
         {
             if (const auto result = bar->processor.loadPresetFile (bar->userPresets[index]); result.failed())
-                yup::Logger::writeToLog ("Prism: " + result.getErrorMessage());
+                yup::Logger::writeToLog ("Retrace: " + result.getErrorMessage());
         }
 
         bar->syncFromProcessor();
@@ -254,7 +254,7 @@ void SynthPresetBar::stepPreset (int delta)
 
 void SynthPresetBar::savePreset()
 {
-    auto chooser = yup::FileChooser::create ("Save Prism preset", getPresetFolder(), yup::String ("*") + presetExtension);
+    auto chooser = yup::FileChooser::create ("Save Retrace preset", getPresetFolder(), yup::String ("*") + presetExtension);
 
     chooser->browseForFileToSave ([safeThis = yup::WeakReference<yup::Component> (this)] (bool success, const yup::Array<yup::File>& results)
     {
@@ -264,7 +264,7 @@ void SynthPresetBar::savePreset()
             return;
 
         if (const auto result = bar->processor.savePresetFile (results[0].withFileExtension (presetExtension)); result.failed())
-            yup::Logger::writeToLog ("Prism: " + result.getErrorMessage());
+            yup::Logger::writeToLog ("Retrace: " + result.getErrorMessage());
 
         bar->syncFromProcessor();
         bar->scanUserPresets();
@@ -273,7 +273,7 @@ void SynthPresetBar::savePreset()
 
 void SynthPresetBar::loadPreset()
 {
-    auto chooser = yup::FileChooser::create ("Load Prism preset", getPresetFolder(), yup::String ("*") + presetExtension);
+    auto chooser = yup::FileChooser::create ("Load Retrace preset", getPresetFolder(), yup::String ("*") + presetExtension);
 
     chooser->browseForFileToOpen ([safeThis = yup::WeakReference<yup::Component> (this)] (bool success, const yup::Array<yup::File>& results)
     {
@@ -283,7 +283,7 @@ void SynthPresetBar::loadPreset()
             return;
 
         if (const auto result = bar->processor.loadPresetFile (results[0]); result.failed())
-            yup::Logger::writeToLog ("Prism: " + result.getErrorMessage());
+            yup::Logger::writeToLog ("Retrace: " + result.getErrorMessage());
 
         bar->syncFromProcessor();
     });

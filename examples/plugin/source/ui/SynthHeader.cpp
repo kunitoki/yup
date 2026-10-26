@@ -23,29 +23,40 @@
 
 namespace
 {
-/** The PRISM logo, with the viewBox cropped to the drawing. Its #FFFFFF strokes take the
-    palette's text color and the five rays the colors named #RAY1 to #RAY5. */
+/** The RETRACE logo, with the viewBox cropped to the drawing: a signal entering a CRT that
+    scans it in five lines. Its #FFFFFF strokes take the palette's text color and the
+    scanlines the colors named #SCAN1 to #SCAN5. */
 constexpr const char* synthLogoSvg = R"svg(
-<svg xmlns="http://www.w3.org/2000/svg" width="236" height="122" viewBox="10 66 236 122" fill="none">
-  <g stroke="#FFFFFF" stroke-linejoin="miter" stroke-linecap="square" transform="translate(0 37)">
-    <path d="M14 100 q4 -7 8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 L91 100" stroke-width="3.2" stroke-linecap="round"/>
-    <path d="M128 36 L191.5 146 L64.5 146 Z" stroke-width="4.5"/>
-    <path d="M91 100 L160.3 92" stroke-width="2.5" stroke-opacity="0.5"/>
-    <g stroke-linecap="butt">
-      <path d="M160.3 92 L242 66"  stroke="#RAY1" stroke-width="3.5"/>
-      <path d="M160.3 92 L242 80"  stroke="#RAY2" stroke-width="3.2"/>
-      <path d="M160.3 92 L242 94"  stroke="#RAY3" stroke-width="3"/>
-      <path d="M160.3 92 L242 108" stroke="#RAY4" stroke-width="2.7"/>
-      <path d="M160.3 92 L242 122" stroke="#RAY5" stroke-width="2.5"/>
-    </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="136" height="100" viewBox="1 0 136 100" fill="none">
+  <g stroke="#FFFFFF" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M4 61 q3 -7 6 0 t6 0 t6 0 t6 0 t6 0 L40 61" stroke-width="3.2"/>
+    <path d="M82 21 L66 5 M82 21 L102 3" stroke-width="2.2"/>
+    <path d="M73 26 Q82 15 91 26" stroke-width="3"/>
+    <path d="M46 26 L116 26 Q122 26 122 32 L122 86 Q122 92 116 92 L46 92 Q40 92 40 86 L40 32 Q40 26 46 26 Z" stroke-width="4"/>
+    <path d="M122 31 L134 37 L134 83 L122 89" stroke-width="2.5"/>
+    <path d="M53 33 Q75 30.5 97 33 Q103 33.5 103.5 39.5 Q106 59 103.5 78.5 Q103 84.5 97 85 Q75 87.5 53 85 Q47 84.5 46.5 78.5 Q44 59 46.5 39.5 Q47 33.5 53 33 Z" stroke-width="3"/>
+    <path d="M108 40 L117 40 M108 45 L117 45 M108 50 L117 50" stroke-width="1.8"/>
+    <circle cx="112.5" cy="67" r="4" stroke-width="2.2"/>
+    <circle cx="112.5" cy="80" r="4" stroke-width="2.2"/>
+    <path d="M48 92 L51 97 L111 97 L114 92" stroke-width="2.5"/>
+    <path d="M96 43 L54 51 M96 51 L54 59 M96 59 L54 67 M96 67 L54 75" stroke-width="2" stroke-opacity="0.5"/>
+  </g>
+  <circle cx="66" cy="5" r="2.6" fill="#FFFFFF"/>
+  <circle cx="102" cy="3" r="2.6" fill="#FFFFFF"/>
+  <g stroke-width="3" stroke-linecap="round">
+    <path d="M54 43 L96 43" stroke="#SCAN1"/>
+    <path d="M54 51 L96 51" stroke="#SCAN2"/>
+    <path d="M54 59 L96 59" stroke="#SCAN3"/>
+    <path d="M54 67 L96 67" stroke="#SCAN4"/>
+    <path d="M54 75 L96 75" stroke="#SCAN5"/>
   </g>
 </svg>
 )svg";
 
-constexpr float logoAspect = 236.0f / 122.0f;
+constexpr float logoAspect = 136.0f / 100.0f;
 } // namespace
 
-SynthHeader::SynthHeader (PrismProcessor& processorToControl)
+SynthHeader::SynthHeader (RetraceProcessor& processorToControl)
     : processor (processorToControl)
     , presetBar (processorToControl)
     , volumeKnob ("VOLUME", processorToControl.getSynthParameters().volume, SynthTheme::captionFont (11.0f))
@@ -161,18 +172,18 @@ void SynthHeader::styleChanged()
     repaint();
 }
 
-/** The rays leave the prism in the colors of the sections they light. */
+/** The scanlines take the colors of the sections they light. */
 void SynthHeader::colorLogo()
 {
-    const auto ray = [this] (SynthTheme::Section section) { return SynthTheme::sectionAccent (*this, section).toString(); };
+    const auto scan = [this] (SynthTheme::Section section) { return SynthTheme::sectionAccent (*this, section).toString(); };
 
     logo.parseSVG (yup::String (synthLogoSvg)
                        .replace ("#FFFFFF", SynthTheme::textPrimary (*this).toString())
-                       .replace ("#RAY1", ray (SynthTheme::Section::oscillators))
-                       .replace ("#RAY2", ray (SynthTheme::Section::matrix))
-                       .replace ("#RAY3", ray (SynthTheme::Section::filters))
-                       .replace ("#RAY4", ray (SynthTheme::Section::envelopes))
-                       .replace ("#RAY5", ray (SynthTheme::Section::lfos)));
+                       .replace ("#SCAN1", scan (SynthTheme::Section::oscillators))
+                       .replace ("#SCAN2", scan (SynthTheme::Section::matrix))
+                       .replace ("#SCAN3", scan (SynthTheme::Section::filters))
+                       .replace ("#SCAN4", scan (SynthTheme::Section::envelopes))
+                       .replace ("#SCAN5", scan (SynthTheme::Section::lfos)));
 }
 
 void SynthHeader::paint (yup::Graphics& g)
@@ -186,10 +197,11 @@ void SynthHeader::paint (yup::Graphics& g)
     logo.paint (g, logoArea);
 
     auto words = logoTile.withTrimmedLeft (logoArea.getRight() - logoTile.getX() + 10.0f).reduced (0.0f, 14.0f);
+    words.removeFromTop (10.0f);
     g.setFillColor (SynthTheme::textPrimary (*this));
-    g.fillFittedText ("PRISM", SynthTheme::valueFont (24.0f).withAxisValue ("wdth", 100.0f), words.removeFromTop (words.getHeight() * 0.62f), yup::Justification::bottomLeft);
+    g.fillFittedText ("RETRACE", SynthTheme::valueFont (24.0f).withAxisValue ("wdth", 80.0f), words.removeFromTop (words.getHeight() * 0.62f), yup::Justification::bottomLeft);
     g.setFillColor (SynthTheme::textSecondary (*this));
-    g.fillFittedText ("SPECTRAL FMOD", SynthTheme::captionFont (10.0f), words, yup::Justification::topLeft);
+    g.fillFittedText ("SPECTRAL FMOD", SynthTheme::captionFont (13.5f), words, yup::Justification::topLeft);
 
     auto stats = statsTile.reduced (12.0f, 9.0f);
     const auto rowHeight = stats.getHeight() / 3.0f;

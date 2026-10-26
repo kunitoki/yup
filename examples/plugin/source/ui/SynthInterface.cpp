@@ -45,7 +45,7 @@ void collectModulationTargets (yup::Component& component, std::vector<SynthModul
 } // namespace
 
 //==============================================================================
-SynthInterface::SynthInterface (PrismProcessor& processorToEdit, int themeToWear)
+SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWear)
     : processor (processorToEdit)
     , theme (themeToWear)
     , keyboardComponent (processor.getKeyboardState(), yup::MidiKeyboardComponent::horizontalKeyboard)

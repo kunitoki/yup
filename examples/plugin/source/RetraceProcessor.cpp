@@ -19,8 +19,8 @@
   ==============================================================================
 */
 
-#include "PrismProcessor.h"
-#include "PrismEditor.h"
+#include "RetraceProcessor.h"
+#include "RetraceEditor.h"
 #include "PluginLogger.h"
 #include "ui/SynthThemes.h"
 
@@ -29,8 +29,8 @@ namespace
 const yup::Identifier themeProperty ("theme");
 } // namespace
 
-PrismProcessor::PrismProcessor()
-    : yup::AudioProcessor ("Prism",
+RetraceProcessor::RetraceProcessor()
+    : yup::AudioProcessor ("Retrace",
                            yup::AudioBusLayout ({}, { yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     , engine (synthParameters, partials, routes, curves)
 {
@@ -52,13 +52,13 @@ PrismProcessor::PrismProcessor()
     themeName = SynthThemes::getThemes()[static_cast<std::size_t> (SynthThemes::loadSelectedTheme())].name;
 }
 
-PrismProcessor::~PrismProcessor()
+RetraceProcessor::~RetraceProcessor()
 {
     synthParameters.quality->removeListener (this);
 }
 
 //==============================================================================
-void PrismProcessor::prepareToPlay (const yup::AudioSpec& spec)
+void RetraceProcessor::prepareToPlay (const yup::AudioSpec& spec)
 {
     preparedSampleRate = spec.sampleRate;
     preparedBlockSize = yup::jmax (spec.maxBlockSize, SynthExample::maxBlockSize);
@@ -77,14 +77,14 @@ void PrismProcessor::prepareToPlay (const yup::AudioSpec& spec)
     loadMeasurer.reset (spec.sampleRate, spec.maxBlockSize);
 }
 
-void PrismProcessor::prepareEngine (SynthQuality quality)
+void RetraceProcessor::prepareEngine (SynthQuality quality)
 {
     preparedQuality = quality;
     engine.prepare (preparedSampleRate, preparedBlockSize, quality, getParameters());
     setLatencySamples (engine.getLatencyInSamples());
 }
 
-void PrismProcessor::parameterValueChanged (const yup::AudioParameter::Ptr&, int)
+void RetraceProcessor::parameterValueChanged (const yup::AudioParameter::Ptr&, int)
 {
     const auto quality = synthParameters.getQuality();
 
@@ -101,17 +101,17 @@ void PrismProcessor::parameterValueChanged (const yup::AudioParameter::Ptr&, int
     updateHostDisplay (ChangeDetails {}.withLatencyChanged (true));
 }
 
-void PrismProcessor::releaseResources()
+void RetraceProcessor::releaseResources()
 {
     engine.allNotesOff (0, false);
 }
 
-void PrismProcessor::flush()
+void RetraceProcessor::flush()
 {
     engine.allNotesOff (0, false);
 }
 
-void PrismProcessor::processBlock (yup::AudioProcessContext<float>& context)
+void RetraceProcessor::processBlock (yup::AudioProcessContext<float>& context)
 {
     const yup::ScopedNoDenormals noDenormals;
 
@@ -181,7 +181,7 @@ void PrismProcessor::processBlock (yup::AudioProcessContext<float>& context)
     context.midi.clear();
 }
 
-void PrismProcessor::followParameters (const yup::ParameterChangeBuffer& changes) noexcept
+void RetraceProcessor::followParameters (const yup::ParameterChangeBuffer& changes) noexcept
 {
     std::fill (changedByEvents.begin(), changedByEvents.end(), 0);
 
@@ -211,7 +211,7 @@ void PrismProcessor::followParameters (const yup::ParameterChangeBuffer& changes
     }
 }
 
-void PrismProcessor::applyParameterChange (const yup::ParameterChange& change) noexcept
+void RetraceProcessor::applyParameterChange (const yup::ParameterChange& change) noexcept
 {
     const auto parameters = getParameters();
 
@@ -223,12 +223,12 @@ void PrismProcessor::applyParameterChange (const yup::ParameterChange& change) n
 }
 
 //==============================================================================
-int PrismProcessor::getCurrentPreset() const noexcept
+int RetraceProcessor::getCurrentPreset() const noexcept
 {
     return currentPreset.load();
 }
 
-void PrismProcessor::setCurrentPreset (int index) noexcept
+void RetraceProcessor::setCurrentPreset (int index) noexcept
 {
     const auto state = SynthPatch::createFactoryState (index);
 
@@ -236,12 +236,12 @@ void PrismProcessor::setCurrentPreset (int index) noexcept
         applyState (state, ChangeDetails {}.withProgramChanged (true));
 }
 
-int PrismProcessor::getNumPresets() const
+int RetraceProcessor::getNumPresets() const
 {
     return static_cast<int> (presetNames.size());
 }
 
-yup::String PrismProcessor::getPresetName (int index) const
+yup::String RetraceProcessor::getPresetName (int index) const
 {
     if (yup::isPositiveAndBelow (index, getNumPresets()))
         return presetNames[static_cast<std::size_t> (index)];
@@ -249,18 +249,18 @@ yup::String PrismProcessor::getPresetName (int index) const
     return {};
 }
 
-void PrismProcessor::setPresetName (int index, yup::StringRef newName)
+void RetraceProcessor::setPresetName (int index, yup::StringRef newName)
 {
     if (yup::isPositiveAndBelow (index, getNumPresets()))
         presetNames[static_cast<std::size_t> (index)] = newName;
 }
 
-void PrismProcessor::randomize()
+void RetraceProcessor::randomize()
 {
     applyState (SynthPatch::createRandomState (synthParameters, yup::Random::getSystemRandom(), getPresetInfo().macroNames), {});
 }
 
-void PrismProcessor::randomizeSlightly()
+void RetraceProcessor::randomizeSlightly()
 {
     auto info = getPresetInfo();
 
@@ -274,7 +274,7 @@ void PrismProcessor::randomizeSlightly()
 }
 
 //==============================================================================
-yup::Result PrismProcessor::loadStateFromDataTree (const yup::DataTree& state)
+yup::Result RetraceProcessor::loadStateFromDataTree (const yup::DataTree& state)
 {
     if (auto result = applyState (state, {}); result.failed())
         return result;
@@ -288,14 +288,14 @@ yup::Result PrismProcessor::loadStateFromDataTree (const yup::DataTree& state)
     return yup::Result::ok();
 }
 
-yup::Result PrismProcessor::saveStateIntoDataTree (yup::DataTree& state)
+yup::Result RetraceProcessor::saveStateIntoDataTree (yup::DataTree& state)
 {
     state = SynthPatch::createState (getParameters(), getPatchState(), currentPreset.load(), getPresetInfo());
     state.beginTransaction().setProperty (themeProperty, getThemeName());
     return yup::Result::ok();
 }
 
-yup::Result PrismProcessor::savePresetFile (const yup::File& file)
+yup::Result RetraceProcessor::savePresetFile (const yup::File& file)
 {
     auto info = getPresetInfo();
     info.name = file.getFileNameWithoutExtension();
@@ -314,7 +314,7 @@ yup::Result PrismProcessor::savePresetFile (const yup::File& file)
     return yup::Result::ok();
 }
 
-yup::Result PrismProcessor::loadPresetFile (const yup::File& file)
+yup::Result RetraceProcessor::loadPresetFile (const yup::File& file)
 {
     const auto xml = yup::parseXML (file);
 
@@ -333,13 +333,13 @@ yup::Result PrismProcessor::loadPresetFile (const yup::File& file)
     return yup::Result::ok();
 }
 
-yup::String PrismProcessor::getThemeName() const
+yup::String RetraceProcessor::getThemeName() const
 {
     const yup::SpinLock::ScopedLockType lock (themeNameLock);
     return themeName;
 }
 
-void PrismProcessor::setThemeName (const yup::String& newName)
+void RetraceProcessor::setThemeName (const yup::String& newName)
 {
     {
         const yup::SpinLock::ScopedLockType lock (themeNameLock);
@@ -353,19 +353,19 @@ void PrismProcessor::setThemeName (const yup::String& newName)
     updateHostDisplay (ChangeDetails {}.withNonParameterStateChanged (true));
 }
 
-SynthPatch::PresetInfo PrismProcessor::getPresetInfo() const
+SynthPatch::PresetInfo RetraceProcessor::getPresetInfo() const
 {
     const yup::SpinLock::ScopedLockType lock (presetInfoLock);
     return presetInfo;
 }
 
-void PrismProcessor::setPresetInfo (SynthPatch::PresetInfo newInfo)
+void RetraceProcessor::setPresetInfo (SynthPatch::PresetInfo newInfo)
 {
     const yup::SpinLock::ScopedLockType lock (presetInfoLock);
     presetInfo = std::move (newInfo);
 }
 
-yup::Result PrismProcessor::applyState (const yup::DataTree& state, ChangeDetails details)
+yup::Result RetraceProcessor::applyState (const yup::DataTree& state, ChangeDetails details)
 {
     if (auto result = SynthPatch::loadState (state, getParameters(), getPatchState()); result.failed())
         return result;
@@ -381,13 +381,13 @@ yup::Result PrismProcessor::applyState (const yup::DataTree& state, ChangeDetail
 }
 
 //==============================================================================
-yup::AudioProcessorEditor* PrismProcessor::createEditor()
+yup::AudioProcessorEditor* RetraceProcessor::createEditor()
 {
-    return new PrismEditor (*this);
+    return new RetraceEditor (*this);
 }
 
 //==============================================================================
 extern "C" yup::AudioProcessor* createPluginProcessor()
 {
-    return new PrismProcessor();
+    return new RetraceProcessor();
 }

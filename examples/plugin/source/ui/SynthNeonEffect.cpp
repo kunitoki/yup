@@ -131,9 +131,9 @@ bool SynthNeonEffect::ensurePipelines (yup::GraphicsContext& context)
 
     compileAttempted = true;
 
-    prefilter = compile (device, prism::synthGlowPrefilterShader_data, prism::synthGlowPrefilterShader_size, "glow prefilter");
-    blur = compile (device, prism::synthBlurShader_data, prism::synthBlurShader_size, "blur");
-    composite = compile (device, prism::synthNeonCompositeShader_data, prism::synthNeonCompositeShader_size, "composite");
+    prefilter = compile (device, retrace::synthGlowPrefilterShader_data, retrace::synthGlowPrefilterShader_size, "glow prefilter");
+    blur = compile (device, retrace::synthBlurShader_data, retrace::synthBlurShader_size, "blur");
+    composite = compile (device, retrace::synthNeonCompositeShader_data, retrace::synthNeonCompositeShader_size, "composite");
 
     return prefilter != nullptr && blur != nullptr && composite != nullptr;
 }
