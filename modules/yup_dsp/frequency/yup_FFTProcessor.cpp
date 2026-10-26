@@ -37,6 +37,8 @@ public:
 
     virtual void performRealFFTForward (const SampleType* realInput, SampleType* complexOutput) = 0;
     virtual void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput) = 0;
+    virtual void performRealFFTForwardPacked (const SampleType* realInput, SampleType* packedOutput) = 0;
+    virtual void performRealFFTInversePacked (const SampleType* packedInput, SampleType* realOutput) = 0;
     virtual void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) = 0;
     virtual void performComplexFFTInverse (const SampleType* complexInput, SampleType* complexOutput) = 0;
 
@@ -177,6 +179,24 @@ public:
         std::copy_n (outputBuffer.get(), this->fftSize, realOutput);
     }
 
+    void performRealFFTForwardPacked (const SampleType* realInput, SampleType* packedOutput) override
+    {
+        std::copy_n (realInput, this->fftSize, inputBuffer.get());
+
+        performTransform<TransformKind::real> (PFFFT_FORWARD);
+
+        std::copy_n (outputBuffer.get(), this->fftSize, packedOutput);
+    }
+
+    void performRealFFTInversePacked (const SampleType* packedInput, SampleType* realOutput) override
+    {
+        std::copy_n (packedInput, this->fftSize, inputBuffer.get());
+
+        performTransform<TransformKind::real> (PFFFT_BACKWARD);
+
+        std::copy_n (outputBuffer.get(), this->fftSize, realOutput);
+    }
+
     void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) override
     {
         std::copy_n (complexInput, this->fftSize * 2, inputBuffer.get());
@@ -307,6 +327,39 @@ public:
         }
     }
 
+    void performRealFFTForwardPacked (const SampleType* realInput, SampleType* packedOutput) override
+    {
+        std::copy (realInput, realInput + this->fftSize, workBuffer.begin());
+
+        rdft (this->fftSize, 1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
+
+        packedOutput[0] = workBuffer[0];
+        packedOutput[1] = workBuffer[1];
+
+        for (int i = 1; i < this->fftSize / 2; ++i)
+        {
+            packedOutput[i * 2] = workBuffer[i * 2];
+            packedOutput[i * 2 + 1] = -workBuffer[i * 2 + 1];
+        }
+    }
+
+    void performRealFFTInversePacked (const SampleType* packedInput, SampleType* realOutput) override
+    {
+        workBuffer[0] = packedInput[0];
+        workBuffer[1] = packedInput[1];
+
+        for (int i = 1; i < this->fftSize / 2; ++i)
+        {
+            workBuffer[i * 2] = packedInput[i * 2];
+            workBuffer[i * 2 + 1] = -packedInput[i * 2 + 1];
+        }
+
+        rdft (this->fftSize, -1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
+
+        for (int i = 0; i < this->fftSize; ++i)
+            realOutput[i] = workBuffer[i] * SampleType (2);
+    }
+
     void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) override
     {
         // Copy interleaved complex input to work buffer
@@ -386,54 +439,55 @@ public:
 
     void performRealFFTForward (const SampleType* realInput, SampleType* complexOutput) override
     {
-        // Copy input to output buffer to work in-place
-        std::copy_n (realInput, this->fftSize, complexOutput);
-        complexOutput[this->fftSize] = SampleType (0);
+        performRealFFTForwardPacked (realInput, complexOutput);
 
-        // Perform vDSP real FFT
-        SplitComplex splitInOut = { complexOutput, complexOutput + 1 };
-
-        if constexpr (std::is_same_v<SampleType, double>)
-            vDSP_fft_zripD (fftSetup, &splitInOut, 2, order, kFFTDirection_Forward);
-        else
-            vDSP_fft_zrip (fftSetup, &splitInOut, 2, order, kFFTDirection_Forward);
-
-        // Normalize vDSP output to match other engines (vDSP outputs 2x expected)
-        if constexpr (std::is_same_v<SampleType, double>)
-            vDSP_vsmulD (complexOutput, 1, &forwardNormalisation, complexOutput, 1, static_cast<vDSP_Length> (this->fftSize << 1));
-        else
-            vDSP_vsmul (complexOutput, 1, &forwardNormalisation, complexOutput, 1, static_cast<vDSP_Length> (this->fftSize << 1));
-
-        // Set Nyquist bin (real only, imaginary = 0), set DC bin (real only, imaginary = 0)
-        auto* complexData = reinterpret_cast<Complex*> (complexOutput);
-        complexData[this->fftSize >> 1] = Complex (complexData[0].imag(), SampleType (0));
-        complexData[0] = Complex (complexData[0].real(), SampleType (0));
+        // Move Nyquist out of the DC imaginary slot: both imaginary parts are 0
+        complexOutput[this->fftSize] = complexOutput[1];
+        complexOutput[this->fftSize + 1] = SampleType (0);
+        complexOutput[1] = SampleType (0);
     }
 
     void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput) override
     {
-        // Copy input to temp buffer for processing
-        std::copy_n (complexInput, this->fftSize * 2, tempBuffer.data());
+        // Pack Nyquist real into DC imaginary (read first: the buffers may overlap)
+        const SampleType nyquist = complexInput[this->fftSize];
+        std::memmove (realOutput, complexInput, static_cast<size_t> (this->fftSize) * sizeof (SampleType));
+        realOutput[1] = nyquist;
 
-        // Pack Nyquist real into DC imaginary for vDSP
-        auto* complexData = reinterpret_cast<Complex*> (tempBuffer.data());
-        complexData[0] = Complex (complexData[0].real(), complexData[this->fftSize >> 1].real());
+        performRealFFTInversePacked (realOutput, realOutput);
+    }
 
-        // Perform vDSP real inverse FFT
-        SplitComplex splitInOut = { tempBuffer.data(), tempBuffer.data() + 1 };
+    void performRealFFTForwardPacked (const SampleType* realInput, SampleType* packedOutput) override
+    {
+        if (packedOutput != realInput)
+            std::copy_n (realInput, this->fftSize, packedOutput);
+
+        SplitComplex splitInOut = { packedOutput, packedOutput + 1 };
+
+        // vDSP outputs twice the transform: halve it to match the other engines
+        if constexpr (std::is_same_v<SampleType, double>)
+        {
+            vDSP_fft_zripD (fftSetup, &splitInOut, 2, order, kFFTDirection_Forward);
+            vDSP_vsmulD (packedOutput, 1, &forwardNormalisation, packedOutput, 1, static_cast<vDSP_Length> (this->fftSize));
+        }
+        else
+        {
+            vDSP_fft_zrip (fftSetup, &splitInOut, 2, order, kFFTDirection_Forward);
+            vDSP_vsmul (packedOutput, 1, &forwardNormalisation, packedOutput, 1, static_cast<vDSP_Length> (this->fftSize));
+        }
+    }
+
+    void performRealFFTInversePacked (const SampleType* packedInput, SampleType* realOutput) override
+    {
+        if (realOutput != packedInput)
+            std::copy_n (packedInput, this->fftSize, realOutput);
+
+        SplitComplex splitInOut = { realOutput, realOutput + 1 };
 
         if constexpr (std::is_same_v<SampleType, double>)
             vDSP_fft_zripD (fftSetup, &splitInOut, 2, order, kFFTDirection_Inverse);
         else
             vDSP_fft_zrip (fftSetup, &splitInOut, 2, order, kFFTDirection_Inverse);
-
-        // Clear upper half and extract real parts
-        if constexpr (std::is_same_v<SampleType, double>)
-            vDSP_vclrD (tempBuffer.data() + this->fftSize, 1, static_cast<vDSP_Length> (this->fftSize));
-        else
-            vDSP_vclr (tempBuffer.data() + this->fftSize, 1, static_cast<vDSP_Length> (this->fftSize));
-
-        std::copy_n (tempBuffer.data(), this->fftSize, realOutput);
     }
 
     void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) override
@@ -475,7 +529,6 @@ public:
     String getBackendName() const override { return "Apple vDSP"; }
 
 private:
-    using Complex = std::complex<SampleType>;
     using SplitComplex = std::conditional_t<std::is_same_v<SampleType, double>, DSPDoubleSplitComplex, DSPSplitComplex>;
     using SetupType = std::conditional_t<std::is_same_v<SampleType, double>, FFTSetupD, FFTSetup>;
 
@@ -582,6 +635,42 @@ public:
             ippsFFTInv_PackToR_64f (complexInput, realOutput, specReal, workBuffer);
         else
             ippsFFTInv_PackToR_32f (complexInput, realOutput, specReal, workBuffer);
+    }
+
+    void performRealFFTForwardPacked (const SampleType* realInput, SampleType* packedOutput) override
+    {
+        if constexpr (std::is_same_v<SampleType, double>)
+        {
+            if (packedOutput == realInput)
+                ippsFFTFwd_RToPerm_64f_I (packedOutput, specReal, workBuffer);
+            else
+                ippsFFTFwd_RToPerm_64f (realInput, packedOutput, specReal, workBuffer);
+        }
+        else
+        {
+            if (packedOutput == realInput)
+                ippsFFTFwd_RToPerm_32f_I (packedOutput, specReal, workBuffer);
+            else
+                ippsFFTFwd_RToPerm_32f (realInput, packedOutput, specReal, workBuffer);
+        }
+    }
+
+    void performRealFFTInversePacked (const SampleType* packedInput, SampleType* realOutput) override
+    {
+        if constexpr (std::is_same_v<SampleType, double>)
+        {
+            if (realOutput == packedInput)
+                ippsFFTInv_PermToR_64f_I (realOutput, specReal, workBuffer);
+            else
+                ippsFFTInv_PermToR_64f (packedInput, realOutput, specReal, workBuffer);
+        }
+        else
+        {
+            if (realOutput == packedInput)
+                ippsFFTInv_PermToR_32f_I (realOutput, specReal, workBuffer);
+            else
+                ippsFFTInv_PermToR_32f (packedInput, realOutput, specReal, workBuffer);
+        }
     }
 
     void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) override
@@ -715,6 +804,42 @@ public:
         {
             tempComplexBuffer[i][0] = complexInput[i * 2];     // real
             tempComplexBuffer[i][1] = complexInput[i * 2 + 1]; // imag
+        }
+
+        execute (planRealInverse);
+
+        std::copy_n (tempRealBuffer, this->fftSize, realOutput);
+    }
+
+    void performRealFFTForwardPacked (const SampleType* realInput, SampleType* packedOutput) override
+    {
+        std::copy_n (realInput, this->fftSize, tempRealBuffer);
+
+        execute (planRealForward);
+
+        const auto halfSize = this->fftSize / 2;
+        packedOutput[0] = tempComplexBuffer[0][0];
+        packedOutput[1] = tempComplexBuffer[halfSize][0];
+
+        for (int i = 1; i < halfSize; ++i)
+        {
+            packedOutput[i * 2] = tempComplexBuffer[i][0];
+            packedOutput[i * 2 + 1] = tempComplexBuffer[i][1];
+        }
+    }
+
+    void performRealFFTInversePacked (const SampleType* packedInput, SampleType* realOutput) override
+    {
+        const auto halfSize = this->fftSize / 2;
+        tempComplexBuffer[0][0] = packedInput[0];
+        tempComplexBuffer[0][1] = SampleType (0);
+        tempComplexBuffer[halfSize][0] = packedInput[1];
+        tempComplexBuffer[halfSize][1] = SampleType (0);
+
+        for (int i = 1; i < halfSize; ++i)
+        {
+            tempComplexBuffer[i][0] = packedInput[i * 2];
+            tempComplexBuffer[i][1] = packedInput[i * 2 + 1];
         }
 
         execute (planRealInverse);
@@ -919,6 +1044,28 @@ void FFTProcessor<SampleType>::performRealFFTInverse (const SampleType* complexI
     jassert (engine != nullptr);
 
     engine->performRealFFTInverse (complexInput, realOutput);
+
+    applyScaling (realOutput, fftSize, false);
+}
+
+template <typename SampleType>
+void FFTProcessor<SampleType>::performRealFFTForwardPacked (const SampleType* realInput, SampleType* packedOutput)
+{
+    jassert (realInput != nullptr && packedOutput != nullptr);
+    jassert (engine != nullptr);
+
+    engine->performRealFFTForwardPacked (realInput, packedOutput);
+
+    applyScaling (packedOutput, fftSize, true);
+}
+
+template <typename SampleType>
+void FFTProcessor<SampleType>::performRealFFTInversePacked (const SampleType* packedInput, SampleType* realOutput)
+{
+    jassert (packedInput != nullptr && realOutput != nullptr);
+    jassert (engine != nullptr);
+
+    engine->performRealFFTInversePacked (packedInput, realOutput);
 
     applyScaling (realOutput, fftSize, false);
 }

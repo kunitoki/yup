@@ -185,6 +185,39 @@ struct FloatVectorOperationsBase
 
     /** Returns the maximum absolute value in the given array. */
     static FloatType YUP_CALLTYPE maxAbs (const FloatType* src, CountType numValues) noexcept;
+
+    /** Finds the minimum value in the given array and the index of its first occurrence (0 for an empty array). */
+    static FloatType YUP_CALLTYPE findMinimum (const FloatType* src, CountType numValues, CountType& index) noexcept;
+
+    /** Finds the maximum value in the given array and the index of its first occurrence (0 for an empty array). */
+    static FloatType YUP_CALLTYPE findMaximum (const FloatType* src, CountType numValues, CountType& index) noexcept;
+
+    /** Returns the arithmetic mean of the values in the given array (0 for an empty array). */
+    static FloatType YUP_CALLTYPE mean (const FloatType* src, CountType numValues) noexcept;
+
+    /** Returns the sample standard deviation of the values in the given array (divided by numValues - 1; 0 for fewer than 2 values). */
+    static FloatType YUP_CALLTYPE standardDeviation (const FloatType* src, CountType numValues) noexcept;
+
+    /** Each element of dest is the square root of the corresponding src element (dest may be src). */
+    static void YUP_CALLTYPE sqrt (FloatType* dest, const FloatType* src, CountType numValues) noexcept;
+
+    /** Each element of dest is the exponential of the corresponding src element (dest may be src). */
+    static void YUP_CALLTYPE exp (FloatType* dest, const FloatType* src, CountType numValues) noexcept;
+
+    /** Each element of dest is the natural logarithm of the corresponding src element, which is raised to minimum first (dest may be src). */
+    static void YUP_CALLTYPE log (FloatType* dest, const FloatType* src, FloatType minimum, CountType numValues) noexcept;
+
+    /** Each element of dest is replacement where the corresponding src element is below threshold, the src element otherwise (dest may be src). */
+    static void YUP_CALLTYPE replaceBelow (FloatType* dest, const FloatType* src, FloatType threshold, FloatType replacement, CountType numValues) noexcept;
+
+    /** Each element of dest is replacement where the corresponding src element is above threshold, the src element otherwise (dest may be src). */
+    static void YUP_CALLTYPE replaceAbove (FloatType* dest, const FloatType* src, FloatType threshold, FloatType replacement, CountType numValues) noexcept;
+
+    /** Each element of dest is the corresponding src phase (in radians) wrapped into (-pi, pi], the range of std::atan2 (dest may be src). */
+    static void YUP_CALLTYPE wrapPhase (FloatType* dest, const FloatType* src, CountType numValues) noexcept;
+
+    /** Computes the sine and the cosine of each element of src (radians). */
+    static void YUP_CALLTYPE sinCos (FloatType* sinDest, FloatType* cosDest, const FloatType* src, CountType numValues) noexcept;
 };
 
 #if ! DOXYGEN
@@ -217,7 +250,16 @@ struct NameForwarder : public Bases...
         Bases::sumSquares...,
         Bases::rms...,
         Bases::dotProduct...,
-        Bases::maxAbs...;
+        Bases::maxAbs...,
+        Bases::mean...,
+        Bases::standardDeviation...,
+        Bases::sqrt...,
+        Bases::exp...,
+        Bases::log...,
+        Bases::replaceBelow...,
+        Bases::replaceAbove...,
+        Bases::wrapPhase...,
+        Bases::sinCos...;
 };
 
 } // namespace detail

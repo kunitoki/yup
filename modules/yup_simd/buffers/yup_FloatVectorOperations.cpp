@@ -1902,6 +1902,118 @@ double computeCorrelation (const float* a, const float* b, Size num) noexcept
     return sumAB / std::sqrt (sumA2 * sumB2);
 }
 
+#if ! defined(XSIMD_NO_SUPPORTED_ARCHITECTURE)
+template <typename Type>
+constexpr bool hasNativeBatch = xsimd::types::has_simd_register<Type, xsimd::default_arch>::value;
+#endif
+
+// x * y + z, x * y - z and z - x * y: fused on xsimd batches where the hardware has FMA (one rounding instead
+// of two), plain arithmetic on scalars so targets without FMA never fall into a software std::fma.
+template <typename Value>
+Value multiplyAdd (const Value& x, const Value& y, const Value& z) noexcept
+{
+    if constexpr (std::is_floating_point_v<Value>)
+        return x * y + z;
+    else
+        return xsimd::fma (x, y, z);
+}
+
+template <typename Value>
+Value multiplySubtract (const Value& x, const Value& y, const Value& z) noexcept
+{
+    if constexpr (std::is_floating_point_v<Value>)
+        return x * y - z;
+    else
+        return xsimd::fms (x, y, z);
+}
+
+template <typename Value>
+Value negativeMultiplyAdd (const Value& x, const Value& y, const Value& z) noexcept
+{
+    if constexpr (std::is_floating_point_v<Value>)
+        return z - x * y;
+    else
+        return xsimd::fnma (x, y, z);
+}
+
+// Square root, correctly rounded: xsimd's float sqrt on AArch64 is an rsqrte estimate with two Newton
+// steps, which is both slower and less accurate than the hardware instruction.
+template <typename Value>
+Value squareRoot (const Value& x) noexcept
+{
+    if constexpr (std::is_floating_point_v<Value>)
+    {
+        return std::sqrt (x);
+    }
+    else
+    {
+#if XSIMD_WITH_NEON64
+        if constexpr (std::is_same_v<typename Value::value_type, float> && std::is_same_v<typename Value::arch_type, xsimd::neon64>)
+            return vsqrtq_f32 (x);
+#endif
+
+        return xsimd::sqrt (x);
+    }
+}
+
+// Applies an operation written for both xsimd batches and scalars to every element. The tail goes
+// through a zero padded batch too, so an element gets the same result wherever it sits in the buffer.
+template <typename Type, typename Size, typename Operation>
+void transformElements (Type* dest, const Type* src, Size num, Operation&& operation) noexcept
+{
+#if ! defined(XSIMD_NO_SUPPORTED_ARCHITECTURE)
+    if constexpr (hasNativeBatch<Type>)
+    {
+        using Batch = xsimd::batch<Type>;
+        constexpr auto batchSize = static_cast<Size> (Batch::size);
+
+        Size i = 0;
+        for (; i + batchSize <= num; i += batchSize)
+            operation (Batch::load_unaligned (src + i)).store_unaligned (dest + i);
+
+        if (i < num)
+        {
+            Type lanes[Batch::size] = {};
+            std::copy (src + i, src + num, lanes);
+            operation (Batch::load_unaligned (lanes)).store_unaligned (lanes);
+            std::copy (lanes, lanes + (num - i), dest + i);
+        }
+
+        return;
+    }
+#endif
+
+    for (Size i = 0; i < num; ++i)
+        dest[i] = operation (src[i]);
+}
+
+// Folds every element into a zero sum with accumulate (sum, x), written for both xsimd batches and scalars.
+template <typename Type, typename Size, typename Accumulate>
+Type sumElements (const Type* src, Size num, Accumulate&& accumulate) noexcept
+{
+    Type result = {};
+    Size i = 0;
+
+#if ! defined(XSIMD_NO_SUPPORTED_ARCHITECTURE)
+    if constexpr (hasNativeBatch<Type>)
+    {
+        using Batch = xsimd::batch<Type>;
+        constexpr auto batchSize = static_cast<Size> (Batch::size);
+
+        Batch sum (Type {});
+        for (; i + batchSize <= num; i += batchSize)
+            sum = accumulate (sum, Batch::load_unaligned (src + i));
+
+        result = xsimd::reduce_add (sum);
+    }
+#endif
+
+    for (; i < num; ++i)
+        result = accumulate (result, src[i]);
+
+    return result;
+}
+
 } // namespace
 } // namespace FloatVectorHelpers
 
@@ -2221,6 +2333,290 @@ FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::maxAbs (
                                                                                 CountType numValues) noexcept
 {
     return FloatVectorHelpers::maxAbs (src, numValues);
+}
+
+template <typename FloatType, typename CountType>
+FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::findMinimum (const FloatType* src,
+                                                                                     CountType numValues,
+                                                                                     CountType& index) noexcept
+{
+    index = 0;
+    if (numValues < 1)
+        return FloatType();
+
+    // The vectorised minimum, then its first occurrence: nothing matches only when there are NaNs
+    const FloatType vectorised = FloatVectorHelpers::findMinimum (src, numValues);
+    for (CountType i = 0; i < numValues; ++i)
+    {
+        if (src[i] == vectorised)
+        {
+            index = i;
+            return src[i];
+        }
+    }
+
+    FloatType minimum = src[0];
+    for (CountType i = 1; i < numValues; ++i)
+    {
+        if (src[i] < minimum)
+        {
+            minimum = src[i];
+            index = i;
+        }
+    }
+
+    return minimum;
+}
+
+template <typename FloatType, typename CountType>
+FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::findMaximum (const FloatType* src,
+                                                                                     CountType numValues,
+                                                                                     CountType& index) noexcept
+{
+    index = 0;
+    if (numValues < 1)
+        return FloatType();
+
+    // The vectorised maximum, then its first occurrence: nothing matches only when there are NaNs
+    const FloatType vectorised = FloatVectorHelpers::findMaximum (src, numValues);
+    for (CountType i = 0; i < numValues; ++i)
+    {
+        if (src[i] == vectorised)
+        {
+            index = i;
+            return src[i];
+        }
+    }
+
+    FloatType maximum = src[0];
+    for (CountType i = 1; i < numValues; ++i)
+    {
+        if (src[i] > maximum)
+        {
+            maximum = src[i];
+            index = i;
+        }
+    }
+
+    return maximum;
+}
+
+template <typename FloatType, typename CountType>
+FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::mean (const FloatType* src,
+                                                                              CountType numValues) noexcept
+{
+    if (numValues < 1)
+        return FloatType();
+
+#if YUP_USE_VDSP_FRAMEWORK
+    FloatType result = {};
+
+    if constexpr (std::is_same_v<FloatType, float>)
+        vDSP_meanv (src, 1, &result, (vDSP_Length) numValues);
+    else
+        vDSP_meanvD (src, 1, &result, (vDSP_Length) numValues);
+
+    return result;
+#else
+    const auto sum = FloatVectorHelpers::sumElements (src, numValues, [] (const auto& total, const auto& x)
+    {
+        return total + x;
+    });
+
+    return sum / static_cast<FloatType> (numValues);
+#endif
+}
+
+template <typename FloatType, typename CountType>
+FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::standardDeviation (const FloatType* src,
+                                                                                           CountType numValues) noexcept
+{
+    if (numValues < 2)
+        return FloatType();
+
+    const FloatType average = mean (src, numValues);
+
+    const auto sum = FloatVectorHelpers::sumElements (src, numValues, [average] (const auto& total, const auto& x)
+    {
+        using Value = std::decay_t<decltype (x)>;
+
+        const Value difference = x - Value (average);
+        return FloatVectorHelpers::multiplyAdd (difference, difference, total);
+    });
+
+    return std::sqrt (sum / static_cast<FloatType> (numValues - 1));
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::sqrt (FloatType* dest,
+                                                                         const FloatType* src,
+                                                                         CountType numValues) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    const int count = static_cast<int> (numValues);
+
+    if constexpr (std::is_same_v<FloatType, float>)
+        vvsqrtf (dest, src, &count);
+    else
+        vvsqrt (dest, src, &count);
+#else
+    FloatVectorHelpers::transformElements (dest, src, numValues, [] (const auto& x)
+    {
+        return FloatVectorHelpers::squareRoot (x);
+    });
+#endif
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::exp (FloatType* dest,
+                                                                        const FloatType* src,
+                                                                        CountType numValues) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    const int count = static_cast<int> (numValues);
+
+    if constexpr (std::is_same_v<FloatType, float>)
+        vvexpf (dest, src, &count);
+    else
+        vvexp (dest, src, &count);
+#else
+    FloatVectorHelpers::transformElements (dest, src, numValues, [] (const auto& x)
+    {
+        return xsimd::exp (x);
+    });
+#endif
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::log (FloatType* dest,
+                                                                        const FloatType* src,
+                                                                        FloatType minimum,
+                                                                        CountType numValues) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    const int count = static_cast<int> (numValues);
+
+    if constexpr (std::is_same_v<FloatType, float>)
+    {
+        vDSP_vthr (src, 1, &minimum, dest, 1, (vDSP_Length) numValues);
+        vvlogf (dest, dest, &count);
+    }
+    else
+    {
+        vDSP_vthrD (src, 1, &minimum, dest, 1, (vDSP_Length) numValues);
+        vvlog (dest, dest, &count);
+    }
+#else
+    FloatVectorHelpers::transformElements (dest, src, numValues, [minimum] (const auto& x)
+    {
+        using Value = std::decay_t<decltype (x)>;
+
+        return xsimd::log (xsimd::select (x < Value (minimum), Value (minimum), x));
+    });
+#endif
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::replaceBelow (FloatType* dest,
+                                                                                 const FloatType* src,
+                                                                                 FloatType threshold,
+                                                                                 FloatType replacement,
+                                                                                 CountType numValues) noexcept
+{
+    FloatVectorHelpers::transformElements (dest, src, numValues, [threshold, replacement] (const auto& x)
+    {
+        using Value = std::decay_t<decltype (x)>;
+
+        return xsimd::select (x < Value (threshold), Value (replacement), x);
+    });
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::replaceAbove (FloatType* dest,
+                                                                                 const FloatType* src,
+                                                                                 FloatType threshold,
+                                                                                 FloatType replacement,
+                                                                                 CountType numValues) noexcept
+{
+    FloatVectorHelpers::transformElements (dest, src, numValues, [threshold, replacement] (const auto& x)
+    {
+        using Value = std::decay_t<decltype (x)>;
+
+        return xsimd::select (x > Value (threshold), Value (replacement), x);
+    });
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::wrapPhase (FloatType* dest,
+                                                                              const FloatType* src,
+                                                                              CountType numValues) noexcept
+{
+    FloatVectorHelpers::transformElements (dest, src, numValues, [] (const auto& x)
+    {
+        using Value = std::decay_t<decltype (x)>;
+
+        const Value pi (MathConstants<FloatType>::pi);
+        const Value twoPi (MathConstants<FloatType>::twoPi);
+        const Value minusInverseTwoPi (FloatType (-1) / MathConstants<FloatType>::twoPi);
+
+        const Value shifted = x + pi;
+        return FloatVectorHelpers::multiplyAdd (xsimd::floor (shifted * minusInverseTwoPi), twoPi, shifted) + pi;
+    });
+}
+
+template <typename FloatType, typename CountType>
+void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::sinCos (FloatType* sinDest,
+                                                                           FloatType* cosDest,
+                                                                           const FloatType* src,
+                                                                           CountType numValues) noexcept
+{
+#if YUP_USE_VDSP_FRAMEWORK
+    const int count = static_cast<int> (numValues);
+
+    if constexpr (std::is_same_v<FloatType, float>)
+        vvsincosf (sinDest, cosDest, src, &count);
+    else
+        vvsincos (sinDest, cosDest, src, &count);
+#else
+    CountType i = 0;
+
+#if ! defined(XSIMD_NO_SUPPORTED_ARCHITECTURE)
+    if constexpr (FloatVectorHelpers::hasNativeBatch<FloatType>)
+    {
+        using Batch = xsimd::batch<FloatType>;
+        constexpr auto batchSize = static_cast<CountType> (Batch::size);
+
+        for (; i + batchSize <= numValues; i += batchSize)
+        {
+            const auto [sines, cosines] = xsimd::sincos (Batch::load_unaligned (src + i));
+            sines.store_unaligned (sinDest + i);
+            cosines.store_unaligned (cosDest + i);
+        }
+
+        if (i < numValues)
+        {
+            FloatType sineLanes[Batch::size] = {};
+            FloatType cosineLanes[Batch::size] = {};
+            std::copy (src + i, src + numValues, sineLanes);
+
+            const auto [sines, cosines] = xsimd::sincos (Batch::load_unaligned (sineLanes));
+            sines.store_unaligned (sineLanes);
+            cosines.store_unaligned (cosineLanes);
+
+            std::copy (sineLanes, sineLanes + (numValues - i), sinDest + i);
+            std::copy (cosineLanes, cosineLanes + (numValues - i), cosDest + i);
+        }
+
+        return;
+    }
+#endif
+
+    for (; i < numValues; ++i)
+    {
+        sinDest[i] = std::sin (src[i]);
+        cosDest[i] = std::cos (src[i]);
+    }
+#endif
 }
 
 //==============================================================================

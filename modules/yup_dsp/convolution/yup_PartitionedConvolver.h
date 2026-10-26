@@ -32,6 +32,8 @@ namespace yup
     - Direct FIR computation for early coefficients (low latency)
     - One or more FFT-based Overlap-Add layers with uniform partitioning per layer
 
+    The output has no latency: it is the exact convolution of the input with the impulse response.
+
     The engine uses YUP's FFTProcessor for real FFT operations and supports:
     - Arbitrary input/output block sizes with internal buffering
     - Real-time safe processing (no heap allocations during process())
@@ -82,6 +84,11 @@ public:
     //==============================================================================
     /**
         Configure the convolution layers before setting the impulse response.
+
+        A layer of hop L can only convolve, without latency, the taps from L onwards. Each layer therefore starts
+        at the later of its hop and the previous layer's start, and covers the taps up to the next layer's start;
+        the last layer covers the rest of the impulse response. The direct FIR covers the taps before the first
+        layer, so it grows to the first hop when `directFIRCoefficients` is smaller.
 
         @param directFIRCoefficients  Number of early coefficients to process with direct FIR (for low latency)
         @param layers         Vector of layer specifications with increasing hop sizes

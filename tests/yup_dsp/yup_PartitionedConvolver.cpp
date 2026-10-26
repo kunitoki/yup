@@ -85,6 +85,31 @@ protected:
         return peak;
     }
 
+    // Loads the impulse response as it is: no peak normalization, no headroom
+    static PartitionedConvolver::IRLoadOptions unscaledLoadOptions()
+    {
+        PartitionedConvolver::IRLoadOptions options;
+        options.normalize = false;
+        options.headroomDb = 0.0f;
+        return options;
+    }
+
+    static std::vector<float> referenceConvolution (const std::vector<float>& input, const std::vector<float>& ir)
+    {
+        std::vector<float> output (input.size(), 0.0f);
+
+        for (std::size_t n = 0; n < input.size(); ++n)
+        {
+            double sum = 0.0;
+            for (std::size_t k = 0; k < std::min (ir.size(), n + 1); ++k)
+                sum += static_cast<double> (ir[k]) * static_cast<double> (input[n - k]);
+
+            output[n] = static_cast<float> (sum);
+        }
+
+        return output;
+    }
+
     std::mt19937 generator;
 };
 
@@ -410,6 +435,133 @@ TEST_F (PartitionedConvolverTest, ImpulseResponseTest)
     // Check for non-zero output
     float outputRMS = calculateRMS (output);
     EXPECT_GT (outputRMS, 0.01f);
+}
+
+TEST_F (PartitionedConvolverTest, FFTLayerReproducesADelayedTapExactly)
+{
+    // A single tap past the direct coefficients is convolved by the FFT layer alone: the output must be the
+    // input, delayed and at unit gain, including its Nyquist content (white noise has some in every frame)
+    constexpr std::size_t directCoefficients = 64;
+    constexpr std::size_t tap = 300;
+    constexpr std::size_t blockSize = 128;
+    constexpr std::size_t numSamples = 4096;
+
+    PartitionedConvolver convolver;
+    convolver.setTypicalLayout (directCoefficients, { 64 });
+    convolver.prepare (blockSize);
+
+    std::vector<float> ir (tap + 1, 0.0f);
+    ir[tap] = 1.0f;
+    convolver.setImpulseResponse (ir, unscaledLoadOptions());
+
+    const auto processInBlocks = [&convolver] (const std::vector<float>& input)
+    {
+        std::vector<float> output (input.size(), 0.0f);
+
+        for (std::size_t start = 0; start < input.size(); start += blockSize)
+            convolver.process (input.data() + start, output.data() + start, blockSize);
+
+        return output;
+    };
+
+    std::vector<float> impulse (numSamples, 0.0f);
+    impulse[0] = 1.0f;
+    const auto impulseResponse = processInBlocks (impulse);
+
+    std::size_t delay = 0;
+    for (std::size_t i = 1; i < numSamples; ++i)
+    {
+        if (std::abs (impulseResponse[i]) > std::abs (impulseResponse[delay]))
+            delay = i;
+    }
+
+    EXPECT_NEAR (impulseResponse[delay], 1.0f, 1.0e-4f) << "FFT layer gain";
+    ASSERT_EQ (delay, tap) << "FFT layer alignment";
+
+    convolver.reset();
+
+    std::vector<float> input (numSamples);
+    fillWithRandomData (input);
+    const auto output = processInBlocks (input);
+
+    for (std::size_t i = 0; i < numSamples; ++i)
+    {
+        const float expected = i >= delay ? input[i - delay] : 0.0f;
+        ASSERT_NEAR (output[i], expected, 1.0e-4f) << "at sample " << i << " (delay " << delay << ")";
+    }
+}
+
+TEST_F (PartitionedConvolverTest, MatchesReferenceConvolutionForAnyBlockSize)
+{
+    // (direct coefficients, hops): several layers, direct taps shorter than the first hop, no direct taps
+    const std::vector<std::pair<std::size_t, std::vector<int>>> layouts = {
+        { 64, { 64, 256, 1024 } },
+        { 16, { 128 } },
+        { 0, { 64, 512 } },
+    };
+
+    constexpr std::size_t maxBlockSize = 512;
+    const std::vector<std::size_t> blockSizes = { 1, 7, 64, 100, 257, 512 };
+
+    std::vector<float> ir (2500);
+    for (std::size_t i = 0; i < ir.size(); ++i)
+        ir[i] = std::exp (-static_cast<float> (i) / 500.0f) * randomFloat();
+
+    std::vector<float> input (5000);
+    fillWithRandomData (input);
+
+    const auto expected = referenceConvolution (input, ir);
+
+    for (const auto& [directCoefficients, hops] : layouts)
+    {
+        SCOPED_TRACE (testing::Message() << "direct " << directCoefficients << ", first hop " << hops.front() << ", " << hops.size() << " layers");
+
+        PartitionedConvolver convolver;
+        convolver.setTypicalLayout (directCoefficients, hops);
+        convolver.prepare (maxBlockSize);
+        convolver.setImpulseResponse (ir, unscaledLoadOptions());
+
+        std::vector<float> output (input.size(), 0.0f);
+
+        std::size_t start = 0;
+        for (std::size_t block = 0; start < input.size(); ++block)
+        {
+            const std::size_t blockSize = std::min (blockSizes[block % blockSizes.size()], input.size() - start);
+            convolver.process (input.data() + start, output.data() + start, blockSize);
+            start += blockSize;
+        }
+
+        for (std::size_t i = 0; i < input.size(); ++i)
+            ASSERT_NEAR (output[i], expected[i], 1.0e-3f) << "at sample " << i;
+    }
+}
+
+TEST_F (PartitionedConvolverTest, LayoutSurvivesAnEmptyImpulseResponse)
+{
+    constexpr std::size_t blockSize = 128;
+
+    PartitionedConvolver convolver;
+    convolver.setTypicalLayout (64, { 64, 256 });
+    convolver.prepare (blockSize);
+
+    convolver.setImpulseResponse (std::vector<float> {}, unscaledLoadOptions());
+
+    std::vector<float> ir (1000);
+    for (std::size_t i = 0; i < ir.size(); ++i)
+        ir[i] = std::exp (-static_cast<float> (i) / 200.0f) * randomFloat();
+
+    convolver.setImpulseResponse (ir, unscaledLoadOptions());
+
+    std::vector<float> input (2048);
+    fillWithRandomData (input);
+
+    std::vector<float> output (input.size(), 0.0f);
+    for (std::size_t start = 0; start < input.size(); start += blockSize)
+        convolver.process (input.data() + start, output.data() + start, blockSize);
+
+    const auto expected = referenceConvolution (input, ir);
+    for (std::size_t i = 0; i < input.size(); ++i)
+        ASSERT_NEAR (output[i], expected[i], 1.0e-3f) << "at sample " << i;
 }
 
 TEST_F (PartitionedConvolverTest, SineWaveConvolution)
