@@ -95,8 +95,7 @@ public:
         fft = std::make_unique<FFTProcessor<float>> (tableSize);
         fft->setScaling (FFTProcessor<float>::FFTScaling::none);
 
-        spectrum.assign (static_cast<std::size_t> (tableSize) * 2, 0.0f);
-        renderBuffer.assign (static_cast<std::size_t> (tableSize), 0.0f);
+        spectrum.assign (static_cast<std::size_t> (tableSize), 0.0f);
         current.assign (static_cast<std::size_t> (tableSize), SampleType (0));
         next.assign (static_cast<std::size_t> (tableSize), SampleType (0));
 
@@ -212,7 +211,7 @@ public:
 
         bakeCrossfade();
 
-        FloatVectorOperations::clear (spectrum.data(), tableSize * 2);
+        FloatVectorOperations::clear (spectrum.data(), tableSize);
 
         const auto limit = jmin (getNyquistHarmonicLimit (frequency, sampleRate, series.getNumHarmonics()),
                                  tableSize / 2 - 1);
@@ -232,12 +231,14 @@ public:
         if (includeDC)
             spectrum[0] = static_cast<float> (series.getDC());
 
-        fft->performRealFFTInverse (spectrum.data(), renderBuffer.data());
+        // The packed layout matches the interleaved one from bin 1 up, and slot 1, the
+        // Nyquist bin, stays zero as the limit is below it.
+        fft->performRealFFTInversePacked (spectrum.data(), spectrum.data());
 
         if constexpr (std::is_same_v<SampleType, float>)
-            FloatVectorOperations::copy (next.data(), renderBuffer.data(), tableSize);
+            FloatVectorOperations::copy (next.data(), spectrum.data(), tableSize);
         else
-            FloatVectorOperations::convertFloatToDouble (next.data(), renderBuffer.data(), tableSize);
+            FloatVectorOperations::convertFloatToDouble (next.data(), spectrum.data(), tableSize);
 
         nextPeak.dirty = true;
         renderedHarmonics = limit;
@@ -516,7 +517,6 @@ private:
     std::unique_ptr<FFTProcessor<float>> fft;
     FourierSeries<CoeffType> series;
     std::vector<float> spectrum;
-    std::vector<float> renderBuffer;
     std::vector<SampleType> current;
     std::vector<SampleType> next;
     double sampleRate = 44100.0;
