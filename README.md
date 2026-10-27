@@ -35,7 +35,7 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 ## Screenshots
 
 <div>
-  <a href="./examples/plugin"><img src="./docs/_static/images/yup_prism_synth.jpg" style="width:99.8%;" /></a>
+  <a href="https://kunitoki.github.io/yup-demos/demos/retrace"><img src="./docs/_static/images/yup_retrace_plugin.jpg" style="width:99.8%;" /></a>
 </div>
 
 <div>
