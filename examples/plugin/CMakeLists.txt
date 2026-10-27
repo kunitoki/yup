@@ -114,6 +114,20 @@ yup_audio_plugin (
         ${target_name}_blur_shaders
         ${target_name}_neon_composite_shaders)
 
+# ==== Enable link time optimization for release builds of every plugin format
+include (CheckIPOSupported)
+check_ipo_supported (RESULT ipo_supported OUTPUT ipo_output)
+if (ipo_supported)
+    foreach (plugin_format clap vst3 standalone au auv3 aax lv2)
+        if (TARGET ${target_name}_${plugin_format}_plugin)
+            set_target_properties (${target_name}_${plugin_format}_plugin PROPERTIES
+                INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+        endif()
+    endforeach()
+else()
+    message (STATUS "LTO not supported for ${target_name}: ${ipo_output}")
+endif()
+
 # ==== Prepare sources
 file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp"

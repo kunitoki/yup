@@ -261,9 +261,9 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           { { 0, 0.002f, 0.35f, 0.2f, 0.15f, -0.5f }, { 1, 0.001f, 0.25f, 0.0f, 0.15f, -0.6f } },
           {} },
 
-        // The budget cases of the performance pass, at 4x with a sustained amplitude.
+        // The budget cases of the performance pass, with a sustained amplitude.
         { "0fef9e10-dfc6-43cb-aaab-117cdc6d9b6e", "Bench / 4 Saws", "Bench", "bench", "Benchmark: four saws.", "CPU measurement patch.",
-          { { "global.quality", 1.0f }, { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
+          { { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
             { "osc2.waveform", sawtooth }, { "osc2.level", 0.25f }, { "osc3.waveform", sawtooth }, { "osc3.level", 0.25f },
             { "osc4.waveform", sawtooth }, { "osc4.level", 0.25f } },
           {},
@@ -271,19 +271,19 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           {} },
 
         { "3f1091d9-1d44-45b4-84c9-cd365eceb072", "Bench / FM 4 Ops", "Bench", "bench, fm", "Benchmark: four FM operators.", "CPU measurement patch.",
-          join ({ algorithm (1, 0.3f, 0.3f, 0.8f), { { "global.quality", 1.0f } } }),
+          algorithm (1, 0.3f, 0.3f, 0.8f),
           {},
           { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
           {} },
 
         { "9d53331f-f30a-4f90-942a-0659fa41c5db", "Bench / FM Unison 4", "Bench", "bench, fm, unison", "Benchmark: FM with unison.", "CPU measurement patch.",
-          join ({ algorithm (1, 0.3f, 0.3f, 0.8f), { { "global.quality", 1.0f }, { "global.unisonVoices", 4.0f } } }),
+          join ({ algorithm (1, 0.3f, 0.3f, 0.8f), { { "global.unisonVoices", 4.0f } } }),
           {},
           { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
           {} },
 
         { "01d0f112-366d-4f52-b76a-22dd5e20e174", "Bench / Spectral LFO", "Bench", "bench, spectral", "Benchmark: LFO-driven spectral tilt.", "CPU measurement patch.",
-          { { "global.quality", 1.0f }, { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
+          { { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
             { "osc2.waveform", sawtooth }, { "osc2.level", 0.25f }, { "osc3.waveform", sawtooth }, { "osc3.level", 0.25f },
             { "osc4.waveform", sawtooth }, { "osc4.level", 0.25f }, { "lfo1.rate", 2.0f } },
           { { Source::lfo1, "osc1.tilt", 0.25f }, { Source::lfo1, "osc2.tilt", 0.25f },
@@ -535,8 +535,6 @@ yup::Result loadState (const yup::DataTree& tree, yup::Span<const yup::AudioPara
     {
         const yup::Identifier id (parameter->getID());
 
-        // Settings that are not part of the sound, like the quality, stay as they are
-        // when a patch does not mention them.
         if (! tree.hasProperty (id) && ! parameter->isAutomatable())
             continue;
 
@@ -569,8 +567,6 @@ int findRouteDestination (yup::Span<const yup::AudioParameter::Ptr> parameters, 
         if (parameter->getID() != parameterID)
             continue;
 
-        // Volume and glide act outside the voices, and route depths and macros are read
-        // before any route applies, so modulating them would do nothing.
         if (parameter->isStepped() || ! parameter->isAutomatable()
             || parameterID == "global.volume" || parameterID == "global.glide" || parameterID.startsWith ("route.")
             || parameterID.startsWith ("macro"))
@@ -1009,6 +1005,9 @@ yup::DataTree createFactoryState (int index)
     const auto& preset = getFactoryPresets()[static_cast<std::size_t> (index)];
     auto state = createEmptyState (index, getFactoryPresetInfo (index));
     auto transaction = state.beginTransaction();
+
+    // Quality is not automatable, so loading a patch without it would keep the current one.
+    transaction.setProperty ("global.quality", static_cast<float> (SynthQuality::x2));
 
     for (const auto& value : preset.values)
         transaction.setProperty (yup::Identifier (value.id.c_str()), value.value);
