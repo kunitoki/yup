@@ -858,10 +858,13 @@ window.setWindowAspectRatio (16.0f / 9.0f);
 window.setWindowAspectRatio (std::nullopt); // resize freely again
 ```
 
-The ratio constrains the whole window. Content that should keep its own
-proportions inside decorations or toolbars still has to fit itself, for example by
+The ratio constrains the whole window while the user resizes it. It may not hold
+for a fullscreen or maximized window, and is not applied to the browser canvas,
+whose size is given by the page. Content that should keep its own proportions inside decorations or toolbars,
+or in a window that ignores the ratio, still has to fit itself, for example by
 scaling to the largest size that fits and centering. Standalone plugin windows set
-it from editors whose `shouldPreserveAspectRatio()` returns true.
+it from editors whose `shouldPreserveAspectRatio()` returns true, and letterbox
+their content when the window does not keep the ratio.
 
 ---
 

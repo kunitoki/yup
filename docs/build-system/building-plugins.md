@@ -186,6 +186,11 @@ saved when the settings close and when the application quits, then restored on
 the next launch. On desktop they live in
 `<user application data>/<PLUGIN_VENDOR>/<PLUGIN_NAME>/standalone.xml`.
 
+When the editor's `shouldPreserveAspectRatio()` returns true, the window keeps
+its proportions while resized. Fullscreen, maximized and full browser windows
+are letterboxed: the toolbar, editor and keyboard keep those proportions,
+centered, instead of being stretched.
+
 An editor that prefers its own settings button can hide the toolbar. Only the
 standalone application has a host, so this code does nothing when the plugin is
 loaded as CLAP, VST3 or AU:

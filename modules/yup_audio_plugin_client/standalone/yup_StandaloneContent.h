@@ -182,7 +182,8 @@ public:
     /** Returns the width over height the window should keep, when the editor keeps its
         aspect ratio: the preferred size, toolbar and keyboard included. The toolbar and
         keyboard keep their heights as the window scales, so the editor fits itself into
-        what is left.
+        what is left. Bounds that do not keep the ratio, like a fullscreen window, are
+        letterboxed: the content keeps the ratio, centered in them.
     */
     std::optional<float> getPreferredAspectRatio() const
     {
@@ -216,7 +217,7 @@ public:
     /** @internal */
     void resized() override
     {
-        auto bounds = getLocalBounds();
+        auto bounds = getLetterboxedBounds();
 
         if (toolbarVisible)
         {
@@ -309,6 +310,27 @@ private:
     };
 
     //==============================================================================
+    /** The largest area keeping getPreferredAspectRatio(), centered, so a fullscreen or
+        full window that ignores the ratio letterboxes the content instead of stretching it.
+    */
+    Rectangle<float> getLetterboxedBounds() const
+    {
+        const auto bounds = getLocalBounds();
+        const auto ratio = getPreferredAspectRatio();
+
+        if (! ratio.has_value() || bounds.isEmpty())
+            return bounds;
+
+        const auto width = jmin (bounds.getWidth(), bounds.getHeight() * *ratio);
+        const auto height = jmin (bounds.getHeight(), bounds.getWidth() / *ratio);
+
+        // A window kept at the ratio is still rounded to whole units, so it is left as is.
+        if (bounds.getWidth() - width < 1.0f && bounds.getHeight() - height < 1.0f)
+            return bounds;
+
+        return bounds.withSizeKeepingCenter (width, height).roundToInt().to<float>();
+    }
+
     void preferredSizeChanged()
     {
         resized();

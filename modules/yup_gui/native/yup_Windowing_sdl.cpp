@@ -617,12 +617,15 @@ void SDLComponentNative::setAspectRatio (std::optional<float> newAspectRatio)
 {
     aspectRatio = newAspectRatio;
 
+    // On the web the page sizes the canvas: SDL would clamp its backbuffer to the ratio, and the page stretch it.
+#if ! YUP_EMSCRIPTEN
     if (window == nullptr)
         return;
 
     // Zero for both bounds lets the window resize freely again.
     const auto ratio = aspectRatio.value_or (0.0f);
     SDL_SetWindowAspectRatio (window, ratio, ratio);
+#endif
 }
 
 std::optional<float> SDLComponentNative::getAspectRatio() const

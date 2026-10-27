@@ -346,6 +346,24 @@ TEST_F (StandaloneStateStoreTests, CorruptFileLoadsEmptyState)
 class StandaloneContentTests : public ::testing::Test
 {
 protected:
+    class FixedAspectEditor final : public AudioProcessorEditor
+    {
+    public:
+        explicit FixedAspectEditor (bool shouldKeepAspect)
+            : keepsAspect (shouldKeepAspect)
+        {
+        }
+
+        bool isResizable() const override { return true; }
+
+        Size<int> getPreferredSize() const override { return { 400, 200 }; }
+
+        bool shouldPreserveAspectRatio() const override { return keepsAspect; }
+
+    private:
+        bool keepsAspect;
+    };
+
     AudioDeviceManager deviceManager;
     MidiMessageCollector collector;
     TestPluginProcessor processor { testPluginBusLayoutStereo() };
@@ -418,24 +436,6 @@ TEST_F (StandaloneContentTests, HasNoAspectRatioWithoutAnEditor)
 
 TEST_F (StandaloneContentTests, AspectRatioFollowsAnEditorThatKeepsIt)
 {
-    class FixedAspectEditor final : public AudioProcessorEditor
-    {
-    public:
-        explicit FixedAspectEditor (bool shouldKeepAspect)
-            : keepsAspect (shouldKeepAspect)
-        {
-        }
-
-        bool isResizable() const override { return true; }
-
-        Size<int> getPreferredSize() const override { return { 400, 200 }; }
-
-        bool shouldPreserveAspectRatio() const override { return keepsAspect; }
-
-    private:
-        bool keepsAspect;
-    };
-
     processor.editorFactory = [] { return new FixedAspectEditor (true); };
     StandaloneContent keeping (processor, deviceManager, collector, false);
 
@@ -449,6 +449,54 @@ TEST_F (StandaloneContentTests, AspectRatioFollowsAnEditorThatKeepsIt)
     StandaloneContent free (processor, deviceManager, collector, false);
 
     EXPECT_FALSE (free.getPreferredAspectRatio().has_value());
+}
+
+TEST_F (StandaloneContentTests, FillsBoundsMatchingItsAspectRatio)
+{
+    processor.editorFactory = [] { return new FixedAspectEditor (true); };
+    StandaloneContent content (processor, deviceManager, collector, false);
+
+    // Within a unit of the exact ratio, as a window rounded to whole units is
+    content.setBounds (0, 0, 801, 457);
+
+    ASSERT_NE (nullptr, content.getEditor());
+    EXPECT_EQ (Rectangle<float> (0, 28, 801, 457 - 28), content.getEditor()->getBounds());
+}
+
+TEST_F (StandaloneContentTests, LetterboxesBoundsWiderThanItsAspectRatio)
+{
+    processor.editorFactory = [] { return new FixedAspectEditor (true); };
+    StandaloneContent content (processor, deviceManager, collector, false);
+    content.setToolbarVisible (false);
+
+    content.setBounds (0, 0, 1000, 200);
+
+    ASSERT_NE (nullptr, content.getEditor());
+    EXPECT_EQ (Rectangle<float> (300, 0, 400, 200), content.getEditor()->getBounds());
+}
+
+TEST_F (StandaloneContentTests, LetterboxesBoundsTallerThanItsAspectRatio)
+{
+    processor.editorFactory = [] { return new FixedAspectEditor (true); };
+    StandaloneContent content (processor, deviceManager, collector, false);
+    content.setToolbarVisible (false);
+
+    content.setBounds (0, 0, 400, 1000);
+
+    ASSERT_NE (nullptr, content.getEditor());
+    EXPECT_EQ (Rectangle<float> (0, 400, 400, 200), content.getEditor()->getBounds());
+}
+
+TEST_F (StandaloneContentTests, StretchesEditorsThatDoNotKeepTheirAspectRatio)
+{
+    processor.editorFactory = [] { return new FixedAspectEditor (false); };
+    StandaloneContent content (processor, deviceManager, collector, false);
+    content.setToolbarVisible (false);
+
+    content.setBounds (0, 0, 1000, 200);
+
+    ASSERT_NE (nullptr, content.getEditor());
+    EXPECT_EQ (Rectangle<float> (0, 0, 1000, 200), content.getEditor()->getBounds());
 }
 
 TEST_F (StandaloneContentTests, KeyboardIsOnlyOfferedToNotePlayers)
