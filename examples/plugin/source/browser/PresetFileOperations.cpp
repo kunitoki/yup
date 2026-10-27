@@ -27,13 +27,28 @@ namespace
 {
 const char* const factoryError = "Factory presets can't be changed";
 
-PresetEntry withFile (const PresetEntry& entry, const yup::File& file, const yup::String& name)
+/** The entry as it is about to be written to a file: with that file and name, and an id,
+    which is also its key from now on. */
+PresetEntry prepareForFile (const PresetEntry& entry, const yup::File& file, const yup::String& name, bool needsNewId)
 {
     auto result = entry;
-    result.key = file.getFullPathName();
     result.file = file;
     result.name = name;
+
+    if (needsNewId || result.id.isEmpty())
+        result.id = yup::Uuid().toDashedString();
+
+    result.key = result.id;
     return result;
+}
+
+void moveMarks (PresetUserData& userData, const yup::String& fromKey, const yup::String& toKey)
+{
+    if (fromKey == toKey)
+        return;
+
+    userData.copyKey (fromKey, toKey);
+    userData.forgetKey (fromKey);
 }
 } // namespace
 
@@ -47,7 +62,7 @@ yup::File getFileFor (const yup::File& folder, const yup::String& name, const Pr
     return folder.getChildFile (fileName + format.extension);
 }
 
-yup::ResultValue<yup::File> rename (const PresetEntry& entry, const yup::String& newName, const PresetFormat& format, PresetUserData& userData)
+yup::ResultValue<PresetEntry> rename (const PresetEntry& entry, const yup::String& newName, const PresetFormat& format, PresetUserData& userData)
 {
     if (entry.isFactory())
         return yup::makeResultValueFail (factoryError);
@@ -64,29 +79,27 @@ yup::ResultValue<yup::File> rename (const PresetEntry& entry, const yup::String&
 
     const auto storedName = target.getFileNameWithoutExtension();
 
-    if (target == entry.file)
+    if (target != entry.file)
     {
-        if (const auto result = format.writeMetadata (entry.file, withFile (entry, entry.file, storedName)); result.failed())
-            return yup::makeResultValueFail (result.getErrorMessage());
+        if (target.exists())
+            return yup::makeResultValueFail ("A preset called '" + storedName + "' already exists");
 
-        return yup::makeResultValueOk (entry.file);
+        if (! entry.file.moveFileTo (target))
+            return yup::makeResultValueFail ("Can't rename " + entry.file.getFullPathName());
     }
 
-    if (target.exists())
-        return yup::makeResultValueFail ("A preset called '" + storedName + "' already exists");
+    auto renamed = prepareForFile (entry, target != entry.file ? target : entry.file, storedName, false);
 
-    if (! entry.file.moveFileTo (target))
-        return yup::makeResultValueFail ("Can't rename " + entry.file.getFullPathName());
-
-    if (const auto result = format.writeMetadata (target, withFile (entry, target, storedName)); result.failed())
+    if (const auto result = format.writeMetadata (renamed.file, renamed); result.failed())
     {
-        target.moveFileTo (entry.file);
+        if (renamed.file != entry.file)
+            renamed.file.moveFileTo (entry.file);
+
         return yup::makeResultValueFail (result.getErrorMessage());
     }
 
-    userData.copyKey (entry.key, target.getFullPathName());
-    userData.forgetKey (entry.key);
-    return yup::makeResultValueOk (target);
+    moveMarks (userData, entry.key, renamed.key);
+    return yup::makeResultValueOk (std::move (renamed));
 }
 
 yup::ResultValue<yup::File> duplicate (const PresetEntry& entry, const PresetFormat& format, PresetUserData& userData)
@@ -104,13 +117,15 @@ yup::ResultValue<yup::File> duplicate (const PresetEntry& entry, const PresetFor
     if (! entry.file.copyFileTo (target))
         return yup::makeResultValueFail ("Can't copy " + entry.file.getFullPathName());
 
-    if (const auto result = format.writeMetadata (target, withFile (entry, target, target.getFileNameWithoutExtension())); result.failed())
+    const auto copy = prepareForFile (entry, target, target.getFileNameWithoutExtension(), true);
+
+    if (const auto result = format.writeMetadata (target, copy); result.failed())
     {
         target.deleteFile();
         return yup::makeResultValueFail (result.getErrorMessage());
     }
 
-    userData.copyKey (entry.key, target.getFullPathName());
+    userData.copyKey (entry.key, copy.key);
     return yup::makeResultValueOk (target);
 }
 
@@ -126,11 +141,17 @@ yup::Result remove (const PresetEntry& entry, PresetUserData& userData)
     return yup::Result::ok();
 }
 
-yup::Result writeMetadata (const PresetEntry& edited, const PresetFormat& format)
+yup::ResultValue<PresetEntry> writeMetadata (const PresetEntry& edited, const PresetFormat& format, PresetUserData& userData)
 {
     if (edited.isFactory())
-        return yup::Result::fail (factoryError);
+        return yup::makeResultValueFail (factoryError);
 
-    return format.writeMetadata (edited.file, edited);
+    auto written = prepareForFile (edited, edited.file, edited.name, false);
+
+    if (const auto result = format.writeMetadata (written.file, written); result.failed())
+        return yup::makeResultValueFail (result.getErrorMessage());
+
+    moveMarks (userData, edited.key, written.key);
+    return yup::makeResultValueOk (std::move (written));
 }
 } // namespace PresetFileOperations

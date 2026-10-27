@@ -21,7 +21,6 @@
 
 #include "SynthPresetList.h"
 #include "SynthTheme.h"
-#include "../browser/PresetBrowseState.h"
 
 #include <cmath>
 
@@ -54,6 +53,17 @@ class SynthPresetList::Rows : public yup::ListBox
 {
 public:
     std::function<bool (int row, const yup::MouseEvent& event)> onPress;
+
+    void mouseMove (const yup::MouseEvent& event) override
+    {
+        yup::ListBox::mouseMove (event);
+
+        const auto position = event.getPosition();
+        const auto row = findRowAt (position);
+        const auto columns = layoutColumns (getRowBounds (row));
+        const auto marks = row >= 0 && (columns[0].contains (position) || columns[6].contains (position));
+        setMouseCursor (marks ? yup::MouseCursor::Hand : yup::MouseCursor::Default);
+    }
 
     void mouseDown (const yup::MouseEvent& event) override
     {
@@ -180,12 +190,7 @@ SynthPresetList::SynthPresetList (RetraceProcessor& processorToControl)
     rows->setModel (this);
     addAndMakeVisible (*rows);
 
-    browser.onResultsChanged = [this]
-    {
-        rows->updateContent();
-        showLoadedPreset();
-        repaint();
-    };
+    browser.addListener (this);
 
     updateSortButton();
     showLoadedPreset();
@@ -193,7 +198,7 @@ SynthPresetList::SynthPresetList (RetraceProcessor& processorToControl)
 
 SynthPresetList::~SynthPresetList()
 {
-    browser.onResultsChanged = nullptr;
+    browser.removeListener (this);
     rows->setModel (nullptr);
 }
 
@@ -296,6 +301,11 @@ void SynthPresetList::paintOverChildren (yup::Graphics& g)
     g.fillFittedText ("Search", SynthTheme::valueFont (13.5f), searchField.getBounds().reduced (4.0f, 0.0f), yup::Justification::centerLeft);
 }
 
+void SynthPresetList::mouseMove (const yup::MouseEvent& event)
+{
+    setMouseCursor (columnHeader.contains (event.getPosition()) ? yup::MouseCursor::Hand : yup::MouseCursor::Default);
+}
+
 void SynthPresetList::mouseDown (const yup::MouseEvent& event)
 {
     const auto columns = layoutColumns (columnHeader);
@@ -308,6 +318,13 @@ void SynthPresetList::mouseDown (const yup::MouseEvent& event)
             return;
         }
     }
+}
+
+void SynthPresetList::presetResultsChanged()
+{
+    rows->updateContent();
+    showLoadedPreset();
+    repaint();
 }
 
 int SynthPresetList::getNumRows()
@@ -328,6 +345,27 @@ void SynthPresetList::refreshRowComponent (int row, bool isSelected, std::unique
     }
 
     rowComponent.show (entry, userData.isFavorite (entry->key), userData.getRating (entry->key), isSelected);
+}
+
+/** A double click on a row's name or details chooses its preset; on its star or rating it
+    stays two marking clicks. */
+void SynthPresetList::rowDoubleClicked (int row, const yup::MouseEvent& event)
+{
+    const auto* entry = browser.getResult (row);
+
+    if (entry == nullptr || event.isRightButtonDown())
+        return;
+
+    const auto columns = layoutColumns (rows->getRowBounds (row));
+
+    if (columns[0].contains (event.getPosition()) || columns[6].contains (event.getPosition()))
+        return;
+
+    if (entry->key != processor.getCurrentPresetKey())
+        loadRow (row);
+
+    if (onPresetChosen != nullptr)
+        onPresetChosen();
 }
 
 bool SynthPresetList::handleRowPress (int row, const yup::MouseEvent& event)

@@ -133,48 +133,33 @@ void SynthPresetInfoPanel::finishField (Field field)
 
     const auto previousFile = entry->file;
     auto edited = *entry;
-    auto result = yup::Result::ok();
 
-    if (field == name)
-    {
-        if (const auto renamed = PresetFileOperations::rename (*entry, text, library.getFormat(), presetLibrary.getUserData()); renamed.failed())
-        {
-            result = yup::Result::fail (renamed.getErrorMessage());
-        }
-        else
-        {
-            edited.file = renamed.getValue();
-            edited.key = edited.file.getFullPathName();
-            edited.name = edited.file.getFileNameWithoutExtension();
-        }
-    }
-    else
-    {
-        if (field == tags)
-            edited.tags = PresetEntry::parseTags (text);
-        else if (field == category)
-            edited.category = text;
-        else if (field == author)
-            edited.author = text;
-        else if (field == bank)
-            edited.bank = text;
-        else if (field == description)
-            edited.description = text;
-        else
-            edited.notes = text;
+    if (field == tags)
+        edited.tags = PresetEntry::parseTags (text);
+    else if (field == category)
+        edited.category = text;
+    else if (field == author)
+        edited.author = text;
+    else if (field == bank)
+        edited.bank = text;
+    else if (field == description)
+        edited.description = text;
+    else if (field == notes)
+        edited.notes = text;
 
-        result = PresetFileOperations::writeMetadata (edited, library.getFormat());
-    }
+    const auto written = field == name ? PresetFileOperations::rename (*entry, text, library.getFormat(), presetLibrary.getUserData())
+                                       : PresetFileOperations::writeMetadata (edited, library.getFormat(), presetLibrary.getUserData());
 
-    if (result.failed())
+    if (written.failed())
     {
-        yup::Logger::writeToLog ("Retrace: " + result.getErrorMessage());
+        yup::Logger::writeToLog ("Retrace: " + written.getErrorMessage());
         editors[index].setText (shownValues[index], yup::dontSendNotification);
         return;
     }
 
-    shownValues[index] = getValue (edited, field);
-    processor.presetFileChanged (previousFile, edited);
+    shownKey = written.getReference().key;
+    shownValues[index] = getValue (written.getReference(), field);
+    presetLibrary.presetFileChanged (previousFile, written.getReference());
     library.rescan();
 }
 

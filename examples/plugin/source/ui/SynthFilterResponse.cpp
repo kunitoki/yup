@@ -28,6 +28,7 @@ SynthFilterResponse::SynthFilterResponse (const SynthFilterParameters& parameter
     , resonanceGesture (*this, parametersToShow.resonance)
 {
     setOpaque (false);
+    setMouseCursor (yup::MouseCursor::Hand);
     stage.prepare (sampleRate);
 
     shownValues = parameters.read();

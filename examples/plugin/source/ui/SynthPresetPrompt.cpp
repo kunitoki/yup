@@ -148,27 +148,29 @@ void SynthPresetPrompt::confirm()
 }
 
 /** Hands the focus back to the host and deletes the prompt once the click or key that
-    closed it is done with it. */
+    closed it is done with it. It keeps listening to the host, so it is deleted with the
+    host if that goes first. */
 void SynthPresetPrompt::close()
 {
     auto* covered = host.get();
 
-    if (covered == nullptr)
+    if (covered == nullptr || getParentComponent() != covered)
         return;
-
-    covered->removeComponentListener (this);
-    host = nullptr;
 
     setVisible (false);
     covered->removeChildComponent (this);
     covered->takeKeyboardFocus();
 
-    yup::MessageManager::callAsync ([this] { delete this; });
+    yup::MessageManager::callAsync ([prompt = yup::WeakReference<yup::Component> (this)]
+    {
+        delete prompt.get();
+    });
 }
 
 void SynthPresetPrompt::componentResized (yup::Component& component)
 {
-    setBounds (component.getLocalBounds());
+    if (getParentComponent() == &component)
+        setBounds (component.getLocalBounds());
 }
 
 void SynthPresetPrompt::componentBeingDeleted (yup::Component&)

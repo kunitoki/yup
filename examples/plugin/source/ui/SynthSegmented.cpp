@@ -27,6 +27,7 @@ SynthSegmented::SynthSegmented (std::vector<Segment> segmentsToShow, bool isVert
     , vertical (isVertical)
 {
     setOpaque (false);
+    setMouseCursor (yup::MouseCursor::Hand);
 }
 
 yup::Path SynthSegmented::makePolyline (std::initializer_list<yup::Point<float>> points)

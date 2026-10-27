@@ -142,6 +142,14 @@ void EnvelopeDisplay::publish()
 }
 
 //==============================================================================
+void EnvelopeDisplay::mouseMove (const yup::MouseEvent& event)
+{
+    const auto position = event.getPosition();
+    const auto point = findPoint (position);
+    const auto draggable = (point >= 0 && ! (amplitude && point == 0)) || findHandle (position) >= 0;
+    setMouseCursor (draggable ? yup::MouseCursor::Hand : yup::MouseCursor::Default);
+}
+
 void EnvelopeDisplay::mouseDown (const yup::MouseEvent& event)
 {
     const auto position = event.getPosition();

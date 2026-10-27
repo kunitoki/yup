@@ -67,6 +67,7 @@ public:
     void setCurve (const SynthCurveState::Curve& newCurve);
 
     void paint (yup::Graphics& g) override;
+    void mouseMove (const yup::MouseEvent& event) override;
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseDrag (const yup::MouseEvent& event) override;
     void mouseUp (const yup::MouseEvent& event) override;

@@ -29,6 +29,8 @@
 
 #include <yup_gui/yup_gui.h>
 
+#include <functional>
+
 //==============================================================================
 /** The preset browser, shown over the instrument's panels while the header and the
     keyboard stay playable: the sources and filters on the left, the preset list in the
@@ -50,6 +52,9 @@ public:
 
     /** Gives the preset list the keyboard focus. */
     void focusList();
+
+    /** Called when a preset is double clicked in the list, once it is loaded. */
+    std::function<void()> onPresetChosen;
 
     void resized() override;
     void paint (yup::Graphics& g) override;

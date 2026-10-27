@@ -137,6 +137,14 @@ void SynthVoicingPanel::paint (yup::Graphics& g)
     g.fillFittedText ("QUALITY", captionFont, qualityCaption, yup::Justification::centerLeft);
 }
 
+void SynthVoicingPanel::mouseMove (const yup::MouseEvent& event)
+{
+    const auto position = event.getPosition();
+    const auto row = [&position] (yup::Rectangle<float> box) { return box.withWidth (checkRowWidth).enlarged (0.0f, 6.0f).contains (position); };
+    const auto clickable = row (monoBox) || (row (legatoBox) && getMode() != SynthPlayMode::poly);
+    setMouseCursor (clickable ? yup::MouseCursor::Hand : yup::MouseCursor::Default);
+}
+
 void SynthVoicingPanel::mouseDown (const yup::MouseEvent& event)
 {
     const auto position = event.getPosition();

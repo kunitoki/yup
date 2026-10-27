@@ -25,7 +25,6 @@
 #include "PresetQuery.h"
 #include "PresetUserData.h"
 
-#include <functional>
 #include <unordered_map>
 #include <vector>
 
@@ -43,6 +42,17 @@
 class PresetBrowseState : private yup::ChangeListener
 {
 public:
+    /** Told when the results change. */
+    struct Listener
+    {
+        virtual ~Listener() = default;
+
+        /** Called when the results changed: a new order or set from setQuery(), and every
+            library or user data change, which can change what the rows show.
+        */
+        virtual void presetResultsChanged() = 0;
+    };
+
     /** Starts with the default query over the library. */
     PresetBrowseState (PresetLibrary& library, PresetUserData& userData);
 
@@ -76,10 +86,11 @@ public:
     */
     yup::String getSteppedKey (const yup::String& currentKey, int delta) const;
 
-    /** Called when the results changed: a new order or set from setQuery(), and every
-        library or user data change, which can change what the rows show.
-    */
-    std::function<void()> onResultsChanged;
+    /** Adds a listener told when the results change. */
+    void addListener (Listener* listener);
+
+    /** Removes a listener added with addListener(). */
+    void removeListener (Listener* listener);
 
 private:
     void changeListenerCallback (yup::ChangeBroadcaster* source) override;
@@ -88,6 +99,7 @@ private:
     PresetLibrary& library;
     PresetUserData& userData;
     PresetQuery query;
+    yup::ListenerList<Listener> listeners;
     std::vector<yup::String> results;
     std::unordered_map<yup::String, int> rowByKey;
 

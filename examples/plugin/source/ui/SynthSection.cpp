@@ -199,6 +199,16 @@ void SynthSection::paint (yup::Graphics& g)
     }
 }
 
+void SynthSection::mouseMove (const yup::MouseEvent& event)
+{
+    auto overTab = false;
+
+    for (int tab = 0; tab < static_cast<int> (tabs.size()) && ! overTab; ++tab)
+        overTab = getTabBounds (tab).contains (event.getPosition());
+
+    setMouseCursor (overTab ? yup::MouseCursor::Hand : yup::MouseCursor::Default);
+}
+
 void SynthSection::mouseDown (const yup::MouseEvent& event)
 {
     for (int tab = 0; tab < static_cast<int> (tabs.size()); ++tab)

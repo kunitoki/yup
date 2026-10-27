@@ -23,7 +23,9 @@
 
 #include "SynthNeonEffect.h"
 
+#include <functional>
 #include <map>
+#include <set>
 
 //==============================================================================
 /** The user's settings: the theme, the frame rate, the post effect switches, undo, and
@@ -31,7 +33,9 @@
 
     They belong to the user rather than to a patch, so they are kept in a small XML file in
     the user's preferences folder, next to the standalone's state, read once per process
-    and written on every change.
+    and written on every change. The preset browser's data is read again before each of
+    its changes, so instances in other processes (a standalone and a host) keep each
+    other's favorites, ratings and folders.
 */
 namespace SynthSettings
 {
@@ -43,7 +47,7 @@ struct Values
     bool postEffect = true;
     bool undo = true; /**< Keeps an undo history of edits; off forgets it. */
     SynthNeonEffect::Options neon;
-    yup::StringArray favorites; /**< The browser keys of the favorite presets. */
+    std::set<yup::String> favorites; /**< The browser keys of the favorite presets. */
     std::map<yup::String, int> ratings; /**< 1 to 5 stars by browser key; unrated presets are absent. */
     yup::StringArray presetFolders; /**< The full paths of the preset folders added to the browser. */
 };
@@ -53,4 +57,12 @@ Values& get();
 
 /** Writes the settings to the file. */
 void save();
+
+/** Reads the favorites, ratings and preset folders from the file again, applies a change
+    to them and writes the file when the change reports that it changed something.
+
+    @param change   Edits the values and returns true when it changed them.
+    @returns what the change returned.
+*/
+bool updateBrowserData (const std::function<bool (Values&)>& change);
 } // namespace SynthSettings

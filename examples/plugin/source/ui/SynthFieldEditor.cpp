@@ -30,6 +30,7 @@ void SynthFieldEditor::mouseDown (const yup::MouseEvent& event)
 {
     if (! isReadOnly() && ! hasKeyboardFocus())
     {
+        textBeforeEdit = getText();
         setWantsKeyboardFocus (true);
 
         if (onStarted != nullptr)
@@ -52,6 +53,9 @@ bool SynthFieldEditor::keyDown (const yup::KeyPress& key, const yup::Point<float
 {
     if (key.getKey() == yup::KeyPress::enterKey || key.getKey() == yup::KeyPress::escapeKey)
     {
+        if (key.getKey() == yup::KeyPress::escapeKey)
+            setText (textBeforeEdit, yup::sendNotification);
+
         // The nearest parent that takes the focus gets it, so the keys go on reaching it.
         for (auto* parent = getParentComponent(); parent != nullptr; parent = parent->getParentComponent())
         {

@@ -39,6 +39,6 @@ PresetFormat create();
 /** Returns the browser entry of a factory preset. */
 PresetEntry makeFactoryEntry (int index);
 
-/** Returns an entry holding a patch's description, without a key, file or location. */
+/** Returns an entry holding a patch's id and description, without a key, file or location. */
 PresetEntry fromInfo (const SynthPatch::PresetInfo& info);
 } // namespace SynthPresetFormat

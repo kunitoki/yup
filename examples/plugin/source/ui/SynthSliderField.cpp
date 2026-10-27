@@ -28,6 +28,7 @@ SynthSliderField::SynthSliderField (const yup::String& captionText, yup::AudioPa
     , bipolar (isBipolar)
 {
     setOpaque (false);
+    setMouseCursor (yup::MouseCursor::Hand);
     syncFromParameter();
 }
 

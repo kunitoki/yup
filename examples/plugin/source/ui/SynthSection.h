@@ -73,6 +73,7 @@ public:
 
     void resized() override;
     void paint (yup::Graphics& g) override;
+    void mouseMove (const yup::MouseEvent& event) override;
     void mouseDown (const yup::MouseEvent& event) override;
 
 private:

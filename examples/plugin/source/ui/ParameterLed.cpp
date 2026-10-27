@@ -26,6 +26,7 @@ ParameterLed::ParameterLed (yup::AudioParameter::Ptr toggleParameter, const yup:
     , caption (captionText)
 {
     setOpaque (false);
+    setMouseCursor (yup::MouseCursor::Hand);
     shownOn = isOn();
 }
 

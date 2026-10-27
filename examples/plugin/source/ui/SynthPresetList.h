@@ -22,6 +22,7 @@
 #pragma once
 
 #include "../RetraceProcessor.h"
+#include "../browser/PresetBrowseState.h"
 #include "SynthFieldEditor.h"
 #include "SynthIconButton.h"
 
@@ -30,8 +31,6 @@
 #include <array>
 #include <functional>
 #include <memory>
-
-class PresetBrowseState;
 
 //==============================================================================
 /** The middle column of the preset browser: the search, the sort and the rescan above
@@ -48,6 +47,7 @@ class PresetBrowseState;
 class SynthPresetList
     : public yup::Component
     , private yup::ListBoxModel
+    , private PresetBrowseState::Listener
 {
 public:
     explicit SynthPresetList (RetraceProcessor& processorToControl);
@@ -69,6 +69,9 @@ public:
     */
     std::function<void (int row, yup::Point<float> position)> onMenuRequested;
 
+    /** Called when a preset is double clicked, once it is loaded, to close the browser. */
+    std::function<void()> onPresetChosen;
+
     /** Splits a row into its columns: favorite, name, category, author, location,
         modified and rating, in the order of PresetQuery::SortKey.
     */
@@ -77,6 +80,7 @@ public:
     void resized() override;
     void paint (yup::Graphics& g) override;
     void paintOverChildren (yup::Graphics& g) override;
+    void mouseMove (const yup::MouseEvent& event) override;
     void mouseDown (const yup::MouseEvent& event) override;
 
 private:
@@ -87,8 +91,10 @@ private:
     static constexpr float columnHeaderHeight = 22.0f;
     static constexpr float rowHeight = 24.0f;
 
+    void presetResultsChanged() override;
     int getNumRows() override;
     void refreshRowComponent (int row, bool isSelected, std::unique_ptr<yup::Component>& component) override;
+    void rowDoubleClicked (int row, const yup::MouseEvent& event) override;
 
     bool handleRowPress (int row, const yup::MouseEvent& event);
     void loadRow (int row);

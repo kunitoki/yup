@@ -29,6 +29,7 @@
 namespace
 {
 const yup::Identifier themeProperty ("theme");
+const yup::Identifier presetFileProperty ("presetFile");
 } // namespace
 
 RetraceProcessor::RetraceProcessor()
@@ -57,6 +58,9 @@ RetraceProcessor::RetraceProcessor()
 RetraceProcessor::~RetraceProcessor()
 {
     synthParameters.quality->removeListener (this);
+
+    if (presetLibrary != nullptr)
+        presetLibrary->removeFileListener (this);
 }
 
 //==============================================================================
@@ -287,29 +291,71 @@ yup::Result RetraceProcessor::loadStateFromDataTree (const yup::DataTree& state)
         themeName = name;
     }
 
+    // Only remembered, never read: a file that is gone simply is not listed by the browser.
+    if (const auto path = state.getProperty (presetFileProperty, {}).toString(); yup::File::isAbsolutePath (path))
+    {
+        const yup::SpinLock::ScopedLockType lock (presetInfoLock);
+        currentPresetFile = yup::File (path);
+    }
+
     return yup::Result::ok();
 }
 
 yup::Result RetraceProcessor::saveStateIntoDataTree (yup::DataTree& state)
 {
     state = SynthPatch::createState (getParameters(), getPatchState(), currentPreset.load(), getPresetInfo());
-    state.beginTransaction().setProperty (themeProperty, getThemeName());
+    auto transaction = state.beginTransaction();
+    transaction.setProperty (themeProperty, getThemeName());
+
+    if (const auto file = getCurrentPresetFile(); file != yup::File())
+        transaction.setProperty (presetFileProperty, file.getFullPathName());
+
     return yup::Result::ok();
 }
 
+/** A file keeps the id it is listed with, so its favorite and rating stay with it, and the
+    current file keeps the id it was saved with before the library lists it; anything else,
+    a factory preset included, gets a new id. */
 yup::Result RetraceProcessor::savePresetFile (const yup::File& file)
 {
     auto info = getPresetInfo();
     info.name = file.getFileNameWithoutExtension();
 
+    const auto isFactory = currentPreset.load() >= 0;
+
     // A factory preset saved as a file becomes the user's own.
-    if (currentPreset.load() >= 0)
+    if (isFactory)
         info.bank = info.author = {};
+
+    const PresetEntry* listed = nullptr;
+
+    if (presetLibrary != nullptr)
+    {
+        for (const auto& entry : presetLibrary->getLibrary().getEntries())
+        {
+            if (! entry.isFactory() && entry.file == file)
+                listed = &entry;
+        }
+    }
+
+    const auto previousKey = listed != nullptr ? listed->key : yup::String();
+
+    if (listed != nullptr && listed->id.isNotEmpty())
+        info.id = listed->id;
+    else if (listed != nullptr || isFactory || file != getCurrentPresetFile() || info.id.isEmpty())
+        info.id = yup::Uuid().toDashedString();
 
     const auto xml = SynthPatch::createState (getParameters(), getPatchState(), -1, info).createXml();
 
     if (xml == nullptr || ! xml->writeTo (file))
         return yup::Result::fail ("Cannot write " + file.getFullPathName());
+
+    if (previousKey.isNotEmpty() && previousKey != info.id)
+    {
+        auto& userData = presetLibrary->getUserData();
+        userData.copyKey (previousKey, info.id);
+        userData.forgetKey (previousKey);
+    }
 
     currentPreset.store (-1);
 
@@ -341,7 +387,10 @@ yup::Result RetraceProcessor::loadPresetFile (const yup::File& file)
 SynthPresetLibrary& RetraceProcessor::getPresetLibrary()
 {
     if (presetLibrary == nullptr)
+    {
         presetLibrary = SynthPresetLibrary::acquire();
+        presetLibrary->addFileListener (this);
+    }
 
     return *presetLibrary;
 }
@@ -375,14 +424,23 @@ yup::File RetraceProcessor::getCurrentPresetFile() const
 yup::String RetraceProcessor::getCurrentPresetKey() const
 {
     if (const auto file = getCurrentPresetFile(); file != yup::File())
-        return file.getFullPathName();
+    {
+        // Keyed as the library keys it: by its id, or by its path when it has none or
+        // another file holds the same id.
+        const auto id = getPresetInfo().id;
+        const auto* listed = id.isNotEmpty() && presetLibrary != nullptr ? presetLibrary->getLibrary().findEntry (id) : nullptr;
+        return id.isEmpty() || (listed != nullptr && listed->file != file) ? file.getFullPathName() : id;
+    }
 
     if (const auto index = currentPreset.load(); index >= 0)
-        return PresetEntry::makeFactoryKey (SynthPatch::getFactoryPresetName (index));
+        return SynthPatch::getFactoryPresetId (index);
 
     return {};
 }
 
+/** Follows a preset file the browser changed when it is the current one, in whichever
+    instance the browser ran: the current file moves with it and the description takes its
+    fields, keeping the macro names; a deleted file is only forgotten. */
 void RetraceProcessor::presetFileChanged (const yup::File& previousFile, const PresetEntry& entry)
 {
     const yup::SpinLock::ScopedLockType lock (presetInfoLock);
@@ -402,6 +460,7 @@ void RetraceProcessor::presetFileChanged (const yup::File& previousFile, const P
     presetInfo.description = entry.description;
     presetInfo.notes = entry.notes;
     presetInfo.tags = PresetEntry::joinTags (entry.tags);
+    presetInfo.id = entry.id;
 }
 
 yup::String RetraceProcessor::getThemeName() const

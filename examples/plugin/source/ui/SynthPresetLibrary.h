@@ -38,6 +38,17 @@
 class SynthPresetLibrary
 {
 public:
+    /** Told about every change the browser makes to a preset file, in any instance. */
+    struct FileListener
+    {
+        virtual ~FileListener() = default;
+
+        /** Called when the file at previousFile was renamed, edited or deleted; entry
+            describes it now, with an invalid file when it was deleted.
+        */
+        virtual void presetFileChanged (const yup::File& previousFile, const PresetEntry& entry) = 0;
+    };
+
     /** Returns the library every instance shares. When no instance holds it, it is created,
         filled with the factory presets and a scan of the folders starts.
     */
@@ -63,12 +74,22 @@ public:
     /** Removes a folder the user added, saves the settings and rescans. */
     void removeFolder (const yup::File& folder);
 
+    /** Adds a listener told about preset file changes. */
+    void addFileListener (FileListener* listener);
+
+    /** Removes a listener added with addFileListener(). */
+    void removeFileListener (FileListener* listener);
+
+    /** Tells every instance that the browser changed the file at previousFile. */
+    void presetFileChanged (const yup::File& previousFile, const PresetEntry& entry);
+
 private:
     SynthPresetLibrary();
     void applyFolders();
 
     SynthPresetUserData userData;
     PresetLibrary library;
+    yup::ListenerList<FileListener> fileListeners;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SynthPresetLibrary)
 };

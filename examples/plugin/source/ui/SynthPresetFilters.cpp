@@ -168,6 +168,17 @@ void SynthPresetFilters::paint (yup::Graphics& g)
     }
 }
 
+void SynthPresetFilters::mouseMove (const yup::MouseEvent& event)
+{
+    const auto position = event.getPosition();
+    auto clickable = categoriesTab.contains (position) || tagsTab.contains (position) || findChipAt (position) != nullptr;
+
+    for (int index = 0; index < 5 && ! clickable; ++index)
+        clickable = getStarArea (index).contains (position);
+
+    setMouseCursor (clickable ? yup::MouseCursor::Hand : yup::MouseCursor::Default);
+}
+
 void SynthPresetFilters::mouseDown (const yup::MouseEvent& event)
 {
     const auto position = event.getPosition();
@@ -192,19 +203,24 @@ void SynthPresetFilters::mouseDown (const yup::MouseEvent& event)
         }
     }
 
+    if (const auto* chip = findChipAt (position))
+        toggleChip (chip->text);
+}
+
+const SynthPresetFilters::Chip* SynthPresetFilters::findChipAt (yup::Point<float> position) const
+{
     if (! chipArea.contains (position))
-        return;
+        return nullptr;
 
     const auto chipPosition = position - chipArea.getPosition() + yup::Point<float> (0.0f, scrollOffset);
 
     for (const auto& chip : chips)
     {
         if (chip.bounds.contains (chipPosition))
-        {
-            toggleChip (chip.text);
-            return;
-        }
+            return &chip;
     }
+
+    return nullptr;
 }
 
 void SynthPresetFilters::mouseWheel (const yup::MouseEvent&, const yup::MouseWheelData& wheelData)

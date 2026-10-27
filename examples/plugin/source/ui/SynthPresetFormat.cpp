@@ -72,6 +72,7 @@ PresetFormat create()
         info.description = entry.description;
         info.notes = entry.notes;
         info.tags = PresetEntry::joinTags (entry.tags);
+        info.id = entry.id;
         SynthPatch::writeInfo (state, info);
 
         const auto xml = state.createXml();
@@ -88,7 +89,7 @@ PresetFormat create()
 PresetEntry makeFactoryEntry (int index)
 {
     auto entry = fromInfo (SynthPatch::getFactoryPresetInfo (index));
-    entry.key = PresetEntry::makeFactoryKey (SynthPatch::getFactoryPresetName (index));
+    entry.key = entry.id;
     entry.factoryIndex = index;
     entry.location = "Factory";
     return entry;
@@ -104,6 +105,7 @@ PresetEntry fromInfo (const SynthPatch::PresetInfo& info)
     entry.description = info.description;
     entry.notes = info.notes;
     entry.tags = PresetEntry::parseTags (info.tags);
+    entry.id = info.id;
     return entry;
 }
 } // namespace SynthPresetFormat

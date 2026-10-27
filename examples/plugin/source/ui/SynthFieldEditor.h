@@ -28,7 +28,8 @@
 //==============================================================================
 /** A one line text field that takes the keyboard focus only while it is clicked to be
     edited, and on return or escape hands it to the nearest parent that takes it, so the
-    computer keyboard plays the notes again.
+    computer keyboard plays the notes again. Return keeps the edit; escape first restores
+    the text the field had when the edit started, notifying onTextChange.
 
     @see SynthPresetBar, SynthMacroPanel
 */
@@ -47,4 +48,7 @@ public:
     void mouseDown (const yup::MouseEvent& event) override;
     void focusLost() override;
     bool keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override;
+
+private:
+    yup::String textBeforeEdit;
 };

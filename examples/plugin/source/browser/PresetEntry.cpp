@@ -21,11 +21,6 @@
 
 #include "PresetEntry.h"
 
-yup::String PresetEntry::makeFactoryKey (const yup::String& name)
-{
-    return "factory:" + name;
-}
-
 yup::StringArray PresetEntry::parseTags (const yup::String& commaSeparated)
 {
     yup::StringArray result;

@@ -25,6 +25,7 @@ SynthSpinner::SynthSpinner (yup::AudioParameter::Ptr steppedParameter)
     : gesture (*this, std::move (steppedParameter))
 {
     setOpaque (false);
+    setMouseCursor (yup::MouseCursor::Hand);
     syncFromParameter();
 }
 

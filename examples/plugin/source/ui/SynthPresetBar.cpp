@@ -21,7 +21,6 @@
 #include "SynthPresetBar.h"
 #include "SynthPresetLibrary.h"
 #include "SynthTheme.h"
-#include "SynthUndoHistory.h"
 #include "../browser/PresetBrowseState.h"
 
 namespace
@@ -43,21 +42,6 @@ SynthPresetBar::SynthPresetBar (RetraceProcessor& processorToControl)
     for (auto* button : { &listButton, &menuButton, &previousButton, &nextButton })
         addAndMakeVisible (*button);
 
-    for (int field = bank; field <= tags; ++field)
-    {
-        auto& editor = editors[static_cast<std::size_t> (field)];
-        editor.setMultiLine (false);
-        editor.setFont (SynthTheme::valueFont (13.5f));
-        editor.onTextChange = [this, field] { writeField (static_cast<Field> (field), editors[static_cast<std::size_t> (field)].getText()); };
-        editor.onStarted = [this, field]
-        {
-            auto info = processor.getPresetInfo();
-            fieldsBeforeEdit[static_cast<std::size_t> (field)] = getField (info, static_cast<Field> (field));
-        };
-        editor.onFinished = [this, field] { finishField (static_cast<Field> (field)); };
-        addAndMakeVisible (editor);
-    }
-
     processor.getPresetBrowser();
     syncFromProcessor();
 }
@@ -65,22 +49,6 @@ SynthPresetBar::SynthPresetBar (RetraceProcessor& processorToControl)
 void SynthPresetBar::syncFromProcessor()
 {
     const auto info = processor.getPresetInfo();
-    const auto isFactory = processor.getCurrentPreset() >= 0;
-    const std::array<yup::String, 3> values { info.bank, info.author, info.tags };
-
-    for (std::size_t field = 0; field < editors.size(); ++field)
-    {
-        auto& editor = editors[field];
-        editor.setReadOnly (isFactory);
-
-        if (editor.getText() == values[field])
-            continue;
-
-        if (editor.hasKeyboardFocus())
-            fieldsBeforeEdit[field] = values[field];
-
-        editor.setText (values[field], yup::dontSendNotification);
-    }
 
     if (info == shownInfo)
         return;
@@ -106,11 +74,11 @@ void SynthPresetBar::resized()
     const auto fieldWidth = second.getWidth() / 3.0f;
     const auto captionFont = SynthTheme::captionFont (11.5f);
 
-    for (std::size_t field = 0; field < editors.size(); ++field)
+    for (std::size_t field = 0; field < valueAreas.size(); ++field)
     {
         auto area = second.removeFromLeft (fieldWidth);
         captionAreas[field] = area.removeFromLeft (SynthTheme::textWidth (fieldCaptions[field], captionFont) + 4.0f);
-        editors[field].setBounds (area.reduced (2.0f, 6.0f));
+        valueAreas[field] = area.reduced (4.0f, 6.0f);
     }
 }
 
@@ -130,42 +98,13 @@ void SynthPresetBar::paint (yup::Graphics& g)
 
     for (std::size_t field = 0; field < captionAreas.size(); ++field)
         g.fillFittedText (fieldCaptions[field], captionFont, captionAreas[field], yup::Justification::centerLeft);
-}
 
-void SynthPresetBar::writeField (Field field, const yup::String& text)
-{
-    if (processor.getCurrentPreset() >= 0)
-        return;
+    const std::array<yup::String, 3> values { shownInfo.bank, shownInfo.author, shownInfo.tags };
+    const auto valueFont = SynthTheme::valueFont (13.5f);
+    g.setFillColor (SynthTheme::textPrimary (*this));
 
-    auto info = processor.getPresetInfo();
-    getField (info, field) = text;
-    processor.setPresetInfo (std::move (info));
-}
-
-/** Keeps a finished edit as one undo step. */
-void SynthPresetBar::finishField (Field field)
-{
-    const auto index = static_cast<std::size_t> (field);
-    auto info = processor.getPresetInfo();
-    const auto before = fieldsBeforeEdit[index];
-    const auto after = getField (info, field);
-
-    if (after != before)
-    {
-        SynthUndoHistory::record<yup::String> (*this, before, after, [&processor = processor, field] (const yup::String& text)
-        {
-            auto restored = processor.getPresetInfo();
-            getField (restored, field) = text;
-            processor.setPresetInfo (std::move (restored));
-        });
-    }
-
-    fieldsBeforeEdit[index] = after;
-}
-
-yup::String& SynthPresetBar::getField (SynthPatch::PresetInfo& info, Field field)
-{
-    return field == bank ? info.bank : field == author ? info.author : info.tags;
+    for (std::size_t field = 0; field < valueAreas.size(); ++field)
+        g.fillFittedText (values[field], valueFont, valueAreas[field], yup::Justification::centerLeft);
 }
 
 void SynthPresetBar::stepPreset (int delta)
@@ -193,6 +132,11 @@ void SynthPresetBar::toggleBrowser()
 {
     if (onBrowserToggled != nullptr)
         onBrowserToggled();
+}
+
+void SynthPresetBar::mouseMove (const yup::MouseEvent& event)
+{
+    setMouseCursor (nameArea.contains (event.getPosition()) ? yup::MouseCursor::Hand : yup::MouseCursor::Default);
 }
 
 void SynthPresetBar::mouseDown (const yup::MouseEvent& event)

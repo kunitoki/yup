@@ -62,6 +62,7 @@ struct PresetInfo
     yup::String category; /**< The one main kind of sound, like Bass or Pad. */
     yup::String description;
     yup::String notes;
+    yup::String id; /**< The preset's UUID, which stays with it through renames; empty for a patch that is not a preset. */
     std::array<yup::String, SynthExample::macroCount> macroNames; /**< Empty for a macro's default name. */
 
     bool operator== (const PresetInfo&) const = default;
@@ -134,6 +135,9 @@ void varyState (yup::DataTree& state, const SynthParameters& parameters, yup::Ra
 //==============================================================================
 /** Returns how many factory presets there are. */
 int getNumFactoryPresets();
+
+/** Returns the UUID of a factory preset, which stays the same when it is renamed. */
+yup::String getFactoryPresetId (int index);
 
 /** Returns the name of a factory preset. */
 yup::String getFactoryPresetName (int index);

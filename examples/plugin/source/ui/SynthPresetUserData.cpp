@@ -24,23 +24,26 @@
 
 bool SynthPresetUserData::isFavorite (const yup::String& key) const
 {
-    return SynthSettings::get().favorites.contains (key);
+    return SynthSettings::get().favorites.count (key) > 0;
 }
 
 void SynthPresetUserData::setFavorite (const yup::String& key, bool shouldBeFavorite)
 {
-    auto& favorites = SynthSettings::get().favorites;
+    const auto changed = SynthSettings::updateBrowserData ([&] (SynthSettings::Values& values)
+    {
+        if ((values.favorites.count (key) > 0) == shouldBeFavorite)
+            return false;
 
-    if (favorites.contains (key) == shouldBeFavorite)
-        return;
+        if (shouldBeFavorite)
+            values.favorites.insert (key);
+        else
+            values.favorites.erase (key);
 
-    if (shouldBeFavorite)
-        favorites.add (key);
-    else
-        favorites.removeString (key);
+        return true;
+    });
 
-    SynthSettings::save();
-    sendChangeMessage();
+    if (changed)
+        sendChangeMessage();
 }
 
 int SynthPresetUserData::getRating (const yup::String& key) const
@@ -54,16 +57,19 @@ void SynthPresetUserData::setRating (const yup::String& key, int stars)
 {
     stars = yup::jlimit (0, 5, stars);
 
-    if (getRating (key) == stars)
-        return;
+    const auto changed = SynthSettings::updateBrowserData ([&] (SynthSettings::Values& values)
+    {
+        if (getRating (key) == stars)
+            return false;
 
-    auto& ratings = SynthSettings::get().ratings;
+        if (stars == 0)
+            values.ratings.erase (key);
+        else
+            values.ratings[key] = stars;
 
-    if (stars == 0)
-        ratings.erase (key);
-    else
-        ratings[key] = stars;
+        return true;
+    });
 
-    SynthSettings::save();
-    sendChangeMessage();
+    if (changed)
+        sendChangeMessage();
 }

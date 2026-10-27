@@ -48,13 +48,38 @@ std::vector<std::pair<const char*, bool*>> getSwitches (Values& values)
              { "grain", &neon.grain }, { "curvature", &neon.curvature }, { "phosphor", &neon.phosphor } };
 }
 
+std::unique_ptr<yup::XmlElement> readFile()
+{
+    auto xml = yup::XmlDocument::parse (getFile());
+    return xml != nullptr && xml->hasTagName (rootTag) ? std::move (xml) : nullptr;
+}
+
+void readBrowserData (const yup::XmlElement& xml, Values& values)
+{
+    values.favorites.clear();
+    values.ratings.clear();
+    values.presetFolders.clear();
+
+    for (const auto* favorite : xml.getChildWithTagNameIterator (favoriteTag))
+        values.favorites.insert (favorite->getStringAttribute ("key"));
+
+    for (const auto* rating : xml.getChildWithTagNameIterator (ratingTag))
+    {
+        if (const auto stars = yup::jlimit (0, 5, rating->getIntAttribute ("stars")); stars > 0)
+            values.ratings[rating->getStringAttribute ("key")] = stars;
+    }
+
+    for (const auto* folder : xml.getChildWithTagNameIterator (folderTag))
+        values.presetFolders.addIfNotAlreadyThere (folder->getStringAttribute ("path"));
+}
+
 /** Reads the settings, keeping the default of anything the file does not hold. */
 Values load()
 {
     Values values;
-    const auto xml = yup::XmlDocument::parse (getFile());
+    const auto xml = readFile();
 
-    if (xml == nullptr || ! xml->hasTagName (rootTag))
+    if (xml == nullptr)
         return values;
 
     values.theme = xml->getStringAttribute ("theme", values.theme);
@@ -63,18 +88,7 @@ Values load()
     for (const auto& [name, flag] : getSwitches (values))
         *flag = xml->getBoolAttribute (name, *flag);
 
-    for (const auto* favorite : xml->getChildWithTagNameIterator (favoriteTag))
-        values.favorites.addIfNotAlreadyThere (favorite->getStringAttribute ("key"));
-
-    for (const auto* rating : xml->getChildWithTagNameIterator (ratingTag))
-    {
-        if (const auto stars = yup::jlimit (0, 5, rating->getIntAttribute ("stars")); stars > 0)
-            values.ratings[rating->getStringAttribute ("key")] = stars;
-    }
-
-    for (const auto* folder : xml->getChildWithTagNameIterator (folderTag))
-        values.presetFolders.addIfNotAlreadyThere (folder->getStringAttribute ("path"));
-
+    readBrowserData (*xml, values);
     return values;
 }
 } // namespace
@@ -111,5 +125,19 @@ void save()
     const auto file = getFile();
     file.getParentDirectory().createDirectory();
     xml.writeTo (file);
+}
+
+bool updateBrowserData (const std::function<bool (Values&)>& change)
+{
+    auto& values = get();
+
+    if (const auto xml = readFile())
+        readBrowserData (*xml, values);
+
+    if (! change (values))
+        return false;
+
+    save();
+    return true;
 }
 } // namespace SynthSettings

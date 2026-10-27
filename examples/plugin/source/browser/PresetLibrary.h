@@ -78,7 +78,9 @@ public:
     bool isScanning() const noexcept;
 
     /** Returns the factory presets, then the files found by the last scan. A file found
-        under several folders is listed once, under the first of them.
+        under several folders is listed once, under the first of them. Files are keyed by
+        their id; of files sharing one, the first by path keeps it and the others are keyed
+        by their path.
     */
     const std::vector<PresetEntry>& getEntries() const noexcept;
 

@@ -27,6 +27,7 @@
 #include "dsp/MidiMessageFifo.h"
 #include "dsp/SynthPatch.h"
 #include "browser/PresetEntry.h"
+#include "ui/SynthPresetLibrary.h"
 
 #include <array>
 #include <atomic>
@@ -34,7 +35,6 @@
 #include <vector>
 
 class PresetBrowseState;
-class SynthPresetLibrary;
 
 //==============================================================================
 /** RETRACE, a four operator spectral FM synthesiser, as an audio plugin.
@@ -58,6 +58,7 @@ class SynthPresetLibrary;
 class RetraceProcessor
     : public yup::AudioProcessor
     , private yup::AudioParameter::Listener
+    , private SynthPresetLibrary::FileListener
 {
 public:
     RetraceProcessor();
@@ -127,22 +128,14 @@ public:
     yup::Result loadPresetEntry (const PresetEntry& entry);
 
     /** Returns the preset file the current patch was loaded from or saved to, or an invalid
-        file. Replacing the patch any other way forgets it.
+        file. It is kept with the session; replacing the patch any other way forgets it.
     */
     yup::File getCurrentPresetFile() const;
 
-    /** Returns the browser key of the current patch: the file's path, the factory preset's
-        key, or empty for a patch that is neither.
+    /** Returns the browser key of the current patch: the preset's id (or the file's path
+        when the file has none), or empty for a patch that is not a preset. Message thread.
     */
     yup::String getCurrentPresetKey() const;
-
-    /** Follows a change the browser made to a preset file, when it is the current one.
-
-        The current file moves to entry.file and the description takes the entry's fields,
-        keeping the macro names. An invalid entry.file, a deleted file, only forgets the
-        current file and keeps the description. Message thread.
-    */
-    void presetFileChanged (const yup::File& previousFile, const PresetEntry& entry);
 
     /** Returns the description of the current patch: its name, bank, author and tags. */
     SynthPatch::PresetInfo getPresetInfo() const;
@@ -226,6 +219,7 @@ private:
     void prepareEngine (SynthQuality quality);
 
     void parameterValueChanged (const yup::AudioParameter::Ptr& parameter, int indexInContainer) override;
+    void presetFileChanged (const yup::File& previousFile, const PresetEntry& entry) override;
     void parameterGestureBegin (const yup::AudioParameter::Ptr&, int) override {}
     void parameterGestureEnd (const yup::AudioParameter::Ptr&, int) override {}
     void followParameters (const yup::ParameterChangeBuffer& changes) noexcept;

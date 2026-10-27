@@ -26,6 +26,7 @@ SynthNumberField::SynthNumberField (const yup::String& captionText, yup::AudioPa
     , caption (captionText)
 {
     setOpaque (false);
+    setMouseCursor (yup::MouseCursor::Hand);
     syncFromParameter();
 }
 

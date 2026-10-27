@@ -57,6 +57,11 @@ SynthPresetBrowser::SynthPresetBrowser (RetraceProcessor& processorToControl)
         addAndMakeVisible (*column);
 
     list.onMenuRequested = [this] (int row, yup::Point<float> position) { showRowMenu (row, getLocalPoint (&list, position)); };
+    list.onPresetChosen = [this]
+    {
+        if (onPresetChosen != nullptr)
+            onPresetChosen();
+    };
     sources.onSaveIntoFolder = [this] (const yup::File& folder) { saveIntoFolder (folder); };
 }
 
@@ -181,12 +186,7 @@ void SynthPresetBrowser::renamePreset (const PresetEntry& entry)
         if (renamed.failed())
             return renamed.getErrorMessage();
 
-        auto edited = entry;
-        edited.file = renamed.getValue();
-        edited.key = edited.file.getFullPathName();
-        edited.name = edited.file.getFileNameWithoutExtension();
-
-        processor.presetFileChanged (entry.file, edited);
+        presetLibrary.presetFileChanged (entry.file, renamed.getReference());
         presetLibrary.getLibrary().rescan();
         return {};
     });
@@ -215,7 +215,7 @@ void SynthPresetBrowser::deletePreset (const PresetEntry& entry)
         }
 
         // The patch stays loaded, but no longer comes from a file.
-        processor.presetFileChanged (entry.file, PresetEntry {});
+        presetLibrary.presetFileChanged (entry.file, PresetEntry {});
         presetLibrary.getLibrary().rescan();
     });
 }

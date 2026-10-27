@@ -447,8 +447,6 @@ void SynthOperatorNetwork::renderDirect (const Outputs& outputs, int numSamples,
 
             level = levelTarget;
 
-            // The level ramps across the chunk as the matrix ramps it, and pan and sends
-            // glide as they do on the oversampled path.
             for (std::size_t bus = 0; bus < static_cast<std::size_t> (numBuses); ++bus)
             {
                 if (! busActive[bus])
@@ -468,7 +466,6 @@ void SynthOperatorNetwork::renderDirect (const Outputs& outputs, int numSamples,
 
     directLevelsValid = true;
 
-    // The delay matches the decimators, so both paths come out on the same timeline.
     const auto delayLength = static_cast<int> (delayLines[0][0].size());
 
     for (std::size_t bus = 0; bus < directBuses.size(); ++bus)
@@ -497,7 +494,6 @@ SynthOperatorNetwork::LayerShape SynthOperatorNetwork::getLayerShape (int layer,
     if (numLayers <= 1)
         return {};
 
-    // Layers are spread from -1 to 1, so the last one plays highest and leads the renders.
     const auto offset = 2.0f * static_cast<float> (layer) / static_cast<float> (numLayers - 1) - 1.0f;
 
     return { std::exp2 (static_cast<double> (offset * globals.unisonDetune) / 12.0), offset * globals.unisonSpread };
@@ -519,8 +515,6 @@ double SynthOperatorNetwork::getPlayedFrequency (const SynthNetworkControls& con
 {
     const auto& values = controls.oscillators[static_cast<std::size_t> (op)];
 
-    // The table holds one period of the synced waveform, which for mirrored sync is
-    // two leader periods, so it is played at the fundamental the transform produced.
     return values.getFrequency (controls.noteFrequency)
          * yup::SyncSpectralResampler<double>::getFundamentalScale (values.syncMode)
          * shape.frequencyScale;
@@ -564,9 +558,6 @@ void SynthOperatorNetwork::renderTables (int layers) noexcept
             oscillators[static_cast<std::size_t> (op)].renderTables (layers);
 }
 
-/** Moves every layer's pan and sends a chunk's step towards their targets, as a one-pole
-    smoother stepped once per chunk, so an abrupt change glides over a few milliseconds.
-    A layer that was not playing starts on its target. */
 void SynthOperatorNetwork::updatePanSends (const SynthNetworkControls& controls, int numSamples) noexcept
 {
     const auto amount = static_cast<float> (1.0 - std::exp (-static_cast<double> (numSamples) / (panSendSmoothingSeconds * sampleRate)));
@@ -618,7 +609,6 @@ void SynthOperatorNetwork::updateBusActivity (const SynthNetworkControls& contro
 
         const auto sends = getSends (values);
 
-        // A send that was just turned off is still gliding out, so it keeps its bus going.
         for (std::size_t bus = 0; bus < sending.size(); ++bus)
         {
             sending[bus] = sending[bus] || sends[bus] > 0.0f;
@@ -643,7 +633,6 @@ void SynthOperatorNetwork::updateBusActivity (const SynthNetworkControls& contro
             continue;
         }
 
-        // A bus nothing sends to keeps decimating until its tail has left the filter.
         busHold[bus] = yup::jmax (0, busHold[bus] - numSamples);
         busActive[bus] = busActive[bus] && busHold[bus] > 0;
     }

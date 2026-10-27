@@ -33,6 +33,7 @@ WaveformEditor::WaveformEditor (const SynthOscillatorParameters& parametersToSho
     , resources (sharedResources)
     , shader (std::move (sharedShader))
 {
+    setMouseCursor (yup::MouseCursor::Crosshair);
     preview.prepare();
     displaySeries.resize (SynthExample::maxHarmonics);
     displaySamples.assign (displayResolution, 0.0f);

@@ -191,6 +191,7 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
 
     // Built hidden with the rest so the theme reaches it; it wears the header's palette.
     presetBrowser = std::make_unique<SynthPresetBrowser> (processor);
+    presetBrowser->onPresetChosen = [this] { setBrowserOpen (false); };
     SynthTheme::applySection (*presetBrowser, SynthTheme::Section::header);
     mainPage.addChildComponent (*presetBrowser);
 

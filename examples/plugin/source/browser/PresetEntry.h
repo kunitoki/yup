@@ -30,7 +30,8 @@
 */
 struct PresetEntry
 {
-    yup::String key; /**< "factory:<name>" or the file's full path. */
+    yup::String key; /**< The id, or the file's full path for a file without one. */
+    yup::String id; /**< The UUID stored with the preset, empty for a file saved without one. */
     yup::File file; /**< Invalid for a factory preset. */
     int factoryIndex = -1; /**< The factory preset's index, or -1 for a file. */
     yup::String name, category, author, bank, description, notes;
@@ -40,9 +41,6 @@ struct PresetEntry
 
     /** True for a preset defined in code rather than in a file. */
     bool isFactory() const noexcept { return factoryIndex >= 0; }
-
-    /** Returns the stable key of the factory preset with this name. */
-    static yup::String makeFactoryKey (const yup::String& name);
 
     /** Splits comma separated tags, trimmed, without empty ones, and keeps the first spelling
         of tags that differ only in case.

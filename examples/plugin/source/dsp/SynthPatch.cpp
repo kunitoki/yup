@@ -41,6 +41,7 @@ const yup::Identifier tagsProperty ("tags");
 const yup::Identifier categoryProperty ("category");
 const yup::Identifier descriptionProperty ("description");
 const yup::Identifier notesProperty ("notes");
+const yup::Identifier presetIdProperty ("presetId");
 constexpr int stateVersion = 3;
 
 yup::Identifier getMacroNameProperty (std::size_t macro)
@@ -93,6 +94,7 @@ struct PresetEnvelope
 
 struct FactoryPreset
 {
+    const char* id; /**< A fixed UUID, so the user's marks on the preset survive a new name. */
     const char* name;
     const char* category;
     const char* tags;
@@ -204,23 +206,23 @@ const std::vector<FactoryPreset>& getFactoryPresets()
     const auto noFilter = std::vector<PresetValue> { { "flt1.enabled", 0.0f } };
 
     static const std::vector<FactoryPreset> presets {
-        { "Init", "Init", "init", "A single sine, the starting point.", "", {}, {}, {}, {} },
+        { "ed6a924c-6fe7-4f9f-8f0e-7bf8b69740ea", "Init", "Init", "init", "A single sine, the starting point.", "", {}, {}, {}, {} },
 
-        { "FM E-Piano", "Keys", "fm, keys, electric piano", "Two-operator tine piano with a soft bark.", "Velocity opens the FM.",
+        { "bdb6e52d-e0a0-4613-aaaa-edc2d2df62b6", "FM E-Piano", "Keys", "fm, keys, electric piano", "Two-operator tine piano with a soft bark.", "Velocity opens the FM.",
           join ({ algorithm (5, 0.2f, 0.0f, 0.6f), noFilter,
                   { { "osc3.fine", 6.0f }, { "osc4.ratio", 14.0f }, { "fm.34", 0.08f } } }),
           { { Source::env2, "fm.12", 0.3f }, { Source::env3, "fm.34", 0.35f }, { Source::velocity, "fm.12", 0.15f } },
           { { 0, 0.002f, 2.5f, 0.0f, 0.4f, -0.6f }, { 1, 0.001f, 1.0f, 0.1f, 0.5f, -0.6f }, { 2, 0.001f, 0.15f, 0.0f, 0.1f, -0.7f } },
           {} },
 
-        { "FM Bell", "Bell", "fm, bell, bright", "Inharmonic bell with a long ring.", "",
+        { "ee2ad62f-af1e-4ccf-81d8-af8cb9f7127a", "FM Bell", "Bell", "fm, bell, bright", "Inharmonic bell with a long ring.", "",
           join ({ algorithm (5, 0.5f, 0.0f, 0.6f), noFilter,
                   { { "osc2.ratio", 3.5f }, { "osc4.ratio", 3.5f }, { "osc3.fine", 4.0f } } }),
           { { Source::env2, "fm.12", 0.3f }, { Source::env2, "fm.34", 0.3f } },
           { { 0, 0.002f, 4.0f, 0.0f, 3.0f, -0.7f }, { 1, 0.001f, 2.0f, 0.0f, 2.0f, -0.6f } },
           {} },
 
-        { "FM Bass", "Bass", "fm, bass", "Punchy FM bass.", "",
+        { "ffc5ad40-26c8-4522-b7dd-667aff608e6e", "FM Bass", "Bass", "fm, bass", "Punchy FM bass.", "",
           join ({ algorithm (3, 0.35f, 0.5f, 0.8f),
                   { { "global.mode", static_cast<float> (SynthPlayMode::mono) }, { "global.glide", 0.0f },
                     { "osc1.ratio", 0.5f }, { "osc2.ratio", 0.5f }, { "osc4.ratio", 0.5f },
@@ -230,13 +232,13 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           { { 0, 0.002f, 0.4f, 0.6f, 0.12f, -0.5f }, { 1, 0.001f, 0.25f, 0.0f, 0.1f, -0.6f } },
           {} },
 
-        { "FM Brass", "Lead", "fm, brass, lead", "Swelling FM brass.", "",
+        { "8c174bd5-ef1e-4a25-966a-ef3c4ab78895", "FM Brass", "Lead", "fm, brass, lead", "Swelling FM brass.", "",
           join ({ algorithm (3, 0.15f, 0.35f, 0.7f), noFilter, { { "lfo1.rate", 5.5f }, { "lfo1.retrigger", 0.0f } } }),
           { { Source::env2, "fm.12", 0.35f }, { Source::lfo1, "osc1.fine", 0.02f } },
           { { 0, 0.06f, 0.3f, 0.8f, 0.2f, -0.3f }, { 1, 0.08f, 0.4f, 0.6f, 0.2f, -0.3f } },
           {} },
 
-        { "Spectral Pad", "Pad", "spectral, pad, evolving", "Slowly evolving spectral pad.", "",
+        { "abc76eaa-3bab-4c1a-a5a4-4f83d822dae1", "Spectral Pad", "Pad", "spectral, pad, evolving", "Slowly evolving spectral pad.", "",
           { { "global.unisonVoices", 4.0f }, { "global.unisonDetune", 0.25f }, { "global.unisonSpread", 0.8f },
             { "osc1.ridges", 2.5f }, { "osc1.color", 0.6f }, { "osc1.dispersion", 0.3f }, { "osc1.scatter", 0.2f },
             { "osc2.waveform", sawtooth }, { "osc2.ratio", 0.5f }, { "osc2.level", 0.25f }, { "osc2.ridges", 3.0f },
@@ -245,13 +247,13 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           { { 0, 0.8f, 1.2f, 0.8f, 2.0f, -0.4f } },
           {} },
 
-        { "Drawn Organ", "Keys", "drawn, organ, keys", "Organ drawn from partials.", "",
+        { "0bac86f1-810f-423d-9861-36831e1c2a78", "Drawn Organ", "Keys", "drawn, organ, keys", "Organ drawn from partials.", "",
           join ({ noFilter, { { "lfo1.rate", 6.0f } } }),
           { { Source::lfo1, "osc1.fine", 0.02f } },
           { { 0, 0.005f, 0.1f, 1.0f, 0.08f, 0.0f } },
           { 0.8f, 0.6f, 0.5f, 0.4f, 0.0f, 0.3f, 0.0f, 0.25f } },
 
-        { "Pluck Square", "Pluck", "pluck, square", "Short square pluck.", "",
+        { "4340a4b7-9138-410a-9c4c-c3b1e22b063e", "Pluck Square", "Pluck", "pluck, square", "Short square pluck.", "",
           { { "osc1.waveform", square }, { "osc1.squeeze", 0.1f },
             { "flt1.type", static_cast<float> (SynthFilterType::moogLadder) }, { "flt1.cutoff", 400.0f },
             { "flt1.resonance", 0.35f }, { "flt1.keytrack", 0.3f } },
@@ -260,7 +262,7 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           {} },
 
         // The budget cases of the performance pass, at 4x with a sustained amplitude.
-        { "Bench / 4 Saws", "Bench", "bench", "Benchmark: four saws.", "CPU measurement patch.",
+        { "0fef9e10-dfc6-43cb-aaab-117cdc6d9b6e", "Bench / 4 Saws", "Bench", "bench", "Benchmark: four saws.", "CPU measurement patch.",
           { { "global.quality", 1.0f }, { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
             { "osc2.waveform", sawtooth }, { "osc2.level", 0.25f }, { "osc3.waveform", sawtooth }, { "osc3.level", 0.25f },
             { "osc4.waveform", sawtooth }, { "osc4.level", 0.25f } },
@@ -268,19 +270,19 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
           {} },
 
-        { "Bench / FM 4 Ops", "Bench", "bench, fm", "Benchmark: four FM operators.", "CPU measurement patch.",
+        { "3f1091d9-1d44-45b4-84c9-cd365eceb072", "Bench / FM 4 Ops", "Bench", "bench, fm", "Benchmark: four FM operators.", "CPU measurement patch.",
           join ({ algorithm (1, 0.3f, 0.3f, 0.8f), { { "global.quality", 1.0f } } }),
           {},
           { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
           {} },
 
-        { "Bench / FM Unison 4", "Bench", "bench, fm, unison", "Benchmark: FM with unison.", "CPU measurement patch.",
+        { "9d53331f-f30a-4f90-942a-0659fa41c5db", "Bench / FM Unison 4", "Bench", "bench, fm, unison", "Benchmark: FM with unison.", "CPU measurement patch.",
           join ({ algorithm (1, 0.3f, 0.3f, 0.8f), { { "global.quality", 1.0f }, { "global.unisonVoices", 4.0f } } }),
           {},
           { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
           {} },
 
-        { "Bench / Spectral LFO", "Bench", "bench, spectral", "Benchmark: LFO-driven spectral tilt.", "CPU measurement patch.",
+        { "01d0f112-366d-4f52-b76a-22dd5e20e174", "Bench / Spectral LFO", "Bench", "bench, spectral", "Benchmark: LFO-driven spectral tilt.", "CPU measurement patch.",
           { { "global.quality", 1.0f }, { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
             { "osc2.waveform", sawtooth }, { "osc2.level", 0.25f }, { "osc3.waveform", sawtooth }, { "osc3.level", 0.25f },
             { "osc4.waveform", sawtooth }, { "osc4.level", 0.25f }, { "lfo1.rate", 2.0f } },
@@ -456,7 +458,8 @@ PresetInfo readInfo (const yup::DataTree& state)
                       state.getProperty (tagsProperty, {}).toString(),
                       state.getProperty (categoryProperty, {}).toString(),
                       state.getProperty (descriptionProperty, {}).toString(),
-                      state.getProperty (notesProperty, {}).toString() };
+                      state.getProperty (notesProperty, {}).toString(),
+                      state.getProperty (presetIdProperty, {}).toString() };
 
     for (std::size_t macro = 0; macro < info.macroNames.size(); ++macro)
         info.macroNames[macro] = state.getProperty (getMacroNameProperty (macro), {}).toString();
@@ -474,6 +477,11 @@ void writeInfo (yup::DataTree& state, const PresetInfo& info)
     transaction.setProperty (categoryProperty, info.category);
     transaction.setProperty (descriptionProperty, info.description);
     transaction.setProperty (notesProperty, info.notes);
+
+    if (info.id.isNotEmpty())
+        transaction.setProperty (presetIdProperty, info.id);
+    else
+        transaction.removeProperty (presetIdProperty);
 
     for (std::size_t macro = 0; macro < info.macroNames.size(); ++macro)
     {
@@ -968,6 +976,14 @@ int getNumFactoryPresets()
     return static_cast<int> (getFactoryPresets().size());
 }
 
+yup::String getFactoryPresetId (int index)
+{
+    if (! yup::isPositiveAndBelow (index, getNumFactoryPresets()))
+        return {};
+
+    return getFactoryPresets()[static_cast<std::size_t> (index)].id;
+}
+
 yup::String getFactoryPresetName (int index)
 {
     if (! yup::isPositiveAndBelow (index, getNumFactoryPresets()))
@@ -982,7 +998,7 @@ PresetInfo getFactoryPresetInfo (int index)
         return {};
 
     const auto& preset = getFactoryPresets()[static_cast<std::size_t> (index)];
-    return { preset.name, "Factory", "kunitoki", preset.tags, preset.category, preset.description, preset.notes };
+    return { preset.name, "Factory", "kunitoki", preset.tags, preset.category, preset.description, preset.notes, preset.id };
 }
 
 yup::DataTree createFactoryState (int index)

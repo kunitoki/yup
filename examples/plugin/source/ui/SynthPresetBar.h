@@ -21,7 +21,6 @@
 #pragma once
 
 #include "../RetraceProcessor.h"
-#include "SynthFieldEditor.h"
 #include "SynthIconButton.h"
 
 #include <yup_gui/yup_gui.h>
@@ -33,11 +32,10 @@
 /** The preset tile of the header: the patch name with the browser toggle and the steps
     through the browser's list, and below it the patch's bank, author and tags.
 
-    The description is the processor's, so it follows whatever loaded the patch. A user
-    patch's bank, author and tags are edited in place and saved with it; a factory
-    preset's are read only. User presets are files holding the same patch the host saves
-    with the session, kept by default in the user's audio presets folder under the
-    plugin's vendor and name. The arrows follow the browser's current search, filters and
+    The description is the processor's, so it follows whatever loaded the patch; it is
+    edited in the preset browser's info panel. User presets are files holding the same
+    patch the host saves with the session, kept by default in the user's audio presets
+    folder under the plugin's vendor and name. The arrows follow the browser's current search, filters and
     order, even while the browser is closed.
 
     @see RetraceProcessor, SynthPatch, SynthHeader
@@ -64,33 +62,23 @@ public:
 
     void resized() override;
     void paint (yup::Graphics& g) override;
+    void mouseMove (const yup::MouseEvent& event) override;
     void mouseDown (const yup::MouseEvent& event) override;
 
 private:
     static constexpr float arrowWidth = 22.0f;
     static constexpr float padding = 12.0f;
 
-    enum Field
-    {
-        bank,
-        author,
-        tags
-    };
-
     void stepPreset (int delta);
     void toggleBrowser();
-    void writeField (Field field, const yup::String& text);
-    void finishField (Field field);
-    static yup::String& getField (SynthPatch::PresetInfo& info, Field field);
 
     RetraceProcessor& processor;
     SynthIconButton listButton { "PresetList", YUP_ICON_LIST, 13.0f, false };
     SynthIconButton menuButton { "PresetMenu", YUP_ICON_CARET_DOWN, 12.0f, false };
     SynthIconButton previousButton { "PreviousPreset", YUP_ICON_CHEVRON_LEFT, 11.0f, false };
     SynthIconButton nextButton { "NextPreset", YUP_ICON_CHEVRON_RIGHT, 11.0f, false };
-    std::array<SynthFieldEditor, 3> editors;
-    std::array<yup::String, 3> fieldsBeforeEdit;
     std::array<yup::Rectangle<float>, 3> captionAreas;
+    std::array<yup::Rectangle<float>, 3> valueAreas;
     yup::Rectangle<float> nameArea;
     SynthPatch::PresetInfo shownInfo;
 };

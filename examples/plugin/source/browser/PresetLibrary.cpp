@@ -140,7 +140,7 @@ yup::Array<yup::File> PresetLibrary::getSubfolders (const yup::File& folder) con
 PresetLibrary::ScanResult PresetLibrary::scanFolders (const std::vector<Folder>& folders, const PresetFormat& format, const std::atomic<bool>& cancelled)
 {
     ScanResult result;
-    std::unordered_set<yup::String> seenKeys;
+    std::unordered_set<yup::String> seenPaths;
     std::unordered_set<yup::String> seenDirectories;
 
     for (const auto& root : folders)
@@ -163,7 +163,7 @@ PresetLibrary::ScanResult PresetLibrary::scanFolders (const std::vector<Folder>&
                 continue;
             }
 
-            if (! file.hasFileExtension (format.extension) || ! seenKeys.insert (file.getFullPathName()).second)
+            if (! file.hasFileExtension (format.extension) || ! seenPaths.insert (file.getFullPathName()).second)
                 continue;
 
             auto entry = format.readEntry (file);
@@ -171,7 +171,6 @@ PresetLibrary::ScanResult PresetLibrary::scanFolders (const std::vector<Folder>&
             if (! entry.has_value())
                 continue;
 
-            entry->key = file.getFullPathName();
             entry->file = file;
             entry->factoryIndex = -1;
             entry->location = makePresetLocation (root, file);
@@ -184,8 +183,30 @@ PresetLibrary::ScanResult PresetLibrary::scanFolders (const std::vector<Folder>&
     return result;
 }
 
+/** Keys the scanned files by their ids. When files share an id, as copies made outside
+    the browser do, the one first by path keeps it, so the choice never changes between
+    scans; the others lose the id, which they get anew when next written, and are keyed by
+    their path. */
 void PresetLibrary::applyScan (ScanResult result)
 {
+    std::sort (result.files.begin(), result.files.end(), [] (const PresetEntry& a, const PresetEntry& b)
+    {
+        return a.file.getFullPathName() < b.file.getFullPathName();
+    });
+
+    std::unordered_set<yup::String> usedIds;
+
+    for (std::size_t index = 0; index < numFactoryEntries; ++index)
+        usedIds.insert (entries[index].key);
+
+    for (auto& file : result.files)
+    {
+        if (file.id.isEmpty() || ! usedIds.insert (file.id).second)
+            file.id.clear();
+
+        file.key = file.id.isNotEmpty() ? file.id : file.file.getFullPathName();
+    }
+
     entries.erase (entries.begin() + static_cast<std::ptrdiff_t> (numFactoryEntries), entries.end());
     entries.insert (entries.end(), std::make_move_iterator (result.files.begin()), std::make_move_iterator (result.files.end()));
     directories = std::move (result.directories);

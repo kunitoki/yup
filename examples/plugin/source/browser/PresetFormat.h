@@ -35,15 +35,17 @@ struct PresetFormat
 {
     yup::String extension; /**< With the dot: ".retrace". */
 
-    /** Reads one file's metadata (name, category, author, bank, description, notes and tags).
+    /** Reads one file's id and metadata (name, category, author, bank, description, notes
+        and tags), leaving the key to the library.
 
-        Runs on the scan thread, so it must not touch shared state. Returning nullopt skips
-        the file.
+        Runs on the scan thread, so it must not touch shared state, and it never writes:
+        files without an id get one only when they are next written. Returning nullopt
+        skips the file.
     */
     std::function<std::optional<PresetEntry> (const yup::File&)> readEntry;
 
-    /** Writes the entry's name, category, author, bank, description, notes and tags into the
-        file, keeping the rest of it. Called on the message thread.
+    /** Writes the entry's id, name, category, author, bank, description, notes and tags into
+        the file, keeping the rest of it. Called on the message thread.
     */
     std::function<yup::Result (const yup::File&, const PresetEntry&)> writeMetadata;
 };

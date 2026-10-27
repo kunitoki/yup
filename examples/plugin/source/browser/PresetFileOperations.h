@@ -29,7 +29,8 @@
 /** The browser's operations on preset files.
 
     Each one either succeeds completely or leaves the files and the user data as they were.
-    Factory presets live in code, so every operation refuses them.
+    Factory presets live in code, so every operation refuses them. A file they write gets an
+    id when it has none, which becomes its key, and its favorite and rating follow.
 
     @see PresetLibrary, PresetUserData
 */
@@ -42,19 +43,22 @@ yup::File getFileFor (const yup::File& folder, const yup::String& name, const Pr
 
 /** Moves the file to the new name in the same folder and writes the new file's name inside
     it, so the two stay in step: characters a file name cannot hold are dropped from both.
-    Carries the favorite and rating over. Fails for factory presets, empty names and names
-    already taken.
+    Returns the renamed entry. Fails for factory presets, empty names and names already
+    taken.
 */
-yup::ResultValue<yup::File> rename (const PresetEntry& entry, const yup::String& newName, const PresetFormat& format, PresetUserData& userData);
+yup::ResultValue<PresetEntry> rename (const PresetEntry& entry, const yup::String& newName, const PresetFormat& format, PresetUserData& userData);
 
 /** Copies the file to "<name> copy" next to it, numbered when taken, with the name inside
-    matching the new file name. The copy gets the original's favorite and rating.
+    matching the new file name and an id of its own. The copy gets the original's favorite
+    and rating.
 */
 yup::ResultValue<yup::File> duplicate (const PresetEntry& entry, const PresetFormat& format, PresetUserData& userData);
 
 /** Deletes the file permanently and forgets its favorite and rating. Fails for factory presets. */
 yup::Result remove (const PresetEntry& entry, PresetUserData& userData);
 
-/** Writes the edited metadata into the entry's file. Fails for factory presets. */
-yup::Result writeMetadata (const PresetEntry& edited, const PresetFormat& format);
+/** Writes the edited metadata into the entry's file and returns the entry as written.
+    Fails for factory presets.
+*/
+yup::ResultValue<PresetEntry> writeMetadata (const PresetEntry& edited, const PresetFormat& format, PresetUserData& userData);
 } // namespace PresetFileOperations

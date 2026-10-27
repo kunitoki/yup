@@ -55,8 +55,18 @@ void PresetBrowseState::setQuery (PresetQuery newQuery)
 {
     query = std::move (newQuery);
 
-    if (recompute() && onResultsChanged != nullptr)
-        onResultsChanged();
+    if (recompute())
+        listeners.call (&Listener::presetResultsChanged);
+}
+
+void PresetBrowseState::addListener (Listener* listener)
+{
+    listeners.add (listener);
+}
+
+void PresetBrowseState::removeListener (Listener* listener)
+{
+    listeners.remove (listener);
 }
 
 int PresetBrowseState::getNumResults() const noexcept
@@ -95,9 +105,7 @@ yup::String PresetBrowseState::getSteppedKey (const yup::String& currentKey, int
 void PresetBrowseState::changeListenerCallback (yup::ChangeBroadcaster*)
 {
     recompute();
-
-    if (onResultsChanged != nullptr)
-        onResultsChanged();
+    listeners.call (&Listener::presetResultsChanged);
 }
 
 bool PresetBrowseState::recompute()

@@ -68,27 +68,52 @@ yup::Array<yup::File> SynthPresetLibrary::getExtraFolders() const
 
 void SynthPresetLibrary::addFolder (const yup::File& folder)
 {
-    auto& paths = SynthSettings::get().presetFolders;
-
-    if (folder == getUserFolder() || getExtraFolders().contains (folder))
+    if (folder == getUserFolder())
         return;
 
-    paths.add (folder.getFullPathName());
-    SynthSettings::save();
-    applyFolders();
+    const auto added = SynthSettings::updateBrowserData ([&] (SynthSettings::Values& values)
+    {
+        if (getExtraFolders().contains (folder))
+            return false;
+
+        values.presetFolders.add (folder.getFullPathName());
+        return true;
+    });
+
+    if (added)
+        applyFolders();
 }
 
 void SynthPresetLibrary::removeFolder (const yup::File& folder)
 {
-    auto& paths = SynthSettings::get().presetFolders;
-    const auto index = getExtraFolders().indexOf (folder);
+    const auto removed = SynthSettings::updateBrowserData ([&] (SynthSettings::Values& values)
+    {
+        const auto index = getExtraFolders().indexOf (folder);
 
-    if (index < 0)
-        return;
+        if (index < 0)
+            return false;
 
-    paths.remove (index);
-    SynthSettings::save();
-    applyFolders();
+        values.presetFolders.remove (index);
+        return true;
+    });
+
+    if (removed)
+        applyFolders();
+}
+
+void SynthPresetLibrary::addFileListener (FileListener* listener)
+{
+    fileListeners.add (listener);
+}
+
+void SynthPresetLibrary::removeFileListener (FileListener* listener)
+{
+    fileListeners.remove (listener);
+}
+
+void SynthPresetLibrary::presetFileChanged (const yup::File& previousFile, const PresetEntry& entry)
+{
+    fileListeners.call (&FileListener::presetFileChanged, previousFile, entry);
 }
 
 void SynthPresetLibrary::applyFolders()

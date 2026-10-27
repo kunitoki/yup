@@ -48,6 +48,7 @@ public:
 
     void resized() override;
     void paint (yup::Graphics& g) override;
+    void mouseMove (const yup::MouseEvent& event) override;
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData) override;
 
@@ -66,6 +67,7 @@ private:
     void changeListenerCallback (yup::ChangeBroadcaster* source) override;
     void refreshChips();
     void layoutChips();
+    const Chip* findChipAt (yup::Point<float> position) const;
     bool isChipOn (const yup::String& text) const;
     void toggleChip (const yup::String& text);
     yup::Rectangle<float> getStarArea (int star) const;
