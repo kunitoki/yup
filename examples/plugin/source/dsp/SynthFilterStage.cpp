@@ -63,6 +63,7 @@ void SynthFilterStage::reset() noexcept
         drivers[index].reset();
     }
 
+    driveFade = 0.0f;
     hasState = false;
 }
 
@@ -85,6 +86,7 @@ void SynthFilterStage::process (float* left, float* right, int numSamples, const
         cutoff = targetCutoff;
         resonance = values.resonance;
         drive = values.drive;
+        driveFade = yup::jmin (1.0f, drive / driveFadeRange);
         mix = 0.0f; // Fades in from dry across the chunk, whether the note starts or the filter is switched on.
         hasState = true;
     }
@@ -96,7 +98,13 @@ void SynthFilterStage::process (float* left, float* right, int numSamples, const
     const auto driveStep = (values.drive - drive) * inverse;
     const auto targetMix = values.enabled ? values.mix : 0.0f;
     const auto mixStep = (targetMix - mix) * inverse;
-    const auto driving = drive > 0.0f || values.drive > 0.0f;
+    const auto driving = drive > 0.0f || values.drive > 0.0f || driveFade > 0.0f;
+    const auto driveFadeStep = static_cast<float> (1.0 / (SynthExample::enableFadeSeconds * sampleRate));
+
+    // A drive rising from zero starts its antialiasers clean, not from where they stopped.
+    if (drive <= 0.0f && driveFade <= 0.0f && values.drive > 0.0f)
+        for (auto& driver : drivers)
+            driver.reset();
 
     float* channels[] = { left, right };
 
@@ -107,6 +115,7 @@ void SynthFilterStage::process (float* left, float* right, int numSamples, const
 
         const auto gain = 1.0f + 9.0f * drive;
         const auto makeup = 1.0f / std::tanh (gain);
+        driveFade = yup::jlimit (driveFade - driveFadeStep, driveFade + driveFadeStep, yup::jmin (1.0f, drive / driveFadeRange));
 
         for (int channel = 0; channel < 2; ++channel)
         {
@@ -114,7 +123,10 @@ void SynthFilterStage::process (float* left, float* right, int numSamples, const
             auto x = dry;
 
             if (driving)
-                x = drivers[static_cast<std::size_t> (channel)].processSample (x * gain) * makeup;
+            {
+                const auto driven = drivers[static_cast<std::size_t> (channel)].processSample (x * gain) * makeup;
+                x += driveFade * (driven - x);
+            }
 
             const auto wet = filterSample (channel, activeType, x);
             channels[channel][sample] = dry + mix * (wet - dry);

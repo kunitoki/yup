@@ -33,6 +33,9 @@
     their own saturation is not antialiased, so it is kept mild and follows the drive.
 
     Drive is a tanh through yup::AaIirAntialiaser, so it does not alias at the host rate.
+    It is blended in over the clean signal below driveFadeRange, and the blend moves by at
+    most a full swing per enable fade, so neither a slow nor a sudden drive change from or
+    to zero switches it in or out at once.
     Cutoff, resonance, drive and mix are ramped across each control chunk and the
     coefficients are refreshed every few samples, not on every sample.
 
@@ -65,6 +68,7 @@ public:
 private:
     //==============================================================================
     static constexpr int coefficientInterval = 8;
+    static constexpr float driveFadeRange = 0.05f;
 
     using Antialiaser = yup::AaIirAntialiaser<float, yup::TanhClipperTraits>;
 
@@ -85,6 +89,7 @@ private:
     float cutoff = 8000.0f;
     float resonance = 0.2f;
     float drive = 0.0f;
+    float driveFade = 0.0f;
     float mix = 1.0f;
     bool hasState = false;
 };
