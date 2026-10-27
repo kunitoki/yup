@@ -25,6 +25,8 @@
 
 #include <chrono>
 #include <cstdio>
+#include <limits>
+#include <memory>
 #include <vector>
 
 using namespace yup;
@@ -189,6 +191,47 @@ protected:
 
         return result;
     }
+
+    /** Unison layers: one matrix per layer, each with its own tables. */
+    template <typename Type>
+    struct Stack
+    {
+        using StackMatrix = PhaseModulationMatrix<Type>;
+        using StackTable = WavetableOscillator<Type>;
+
+        Stack (int numLayers, int oversampling, const std::array<Waveform, StackMatrix::numOperators>& waveforms)
+            : matrices (static_cast<std::size_t> (numLayers))
+            , tables (static_cast<std::size_t> (numLayers))
+        {
+            for (std::size_t layer = 0; layer < matrices.size(); ++layer)
+            {
+                matrices[layer].prepare (sampleRate, oversampling);
+
+                for (int i = 0; i < StackMatrix::numOperators; ++i)
+                {
+                    auto& table = tables[layer][static_cast<std::size_t> (i)];
+                    table.prepare (sampleRate * oversampling, 256);
+                    table.setWaveform (waveforms[static_cast<std::size_t> (i)]);
+                    matrices[layer].setTable (i, &table);
+                }
+
+                matrices[layer].reset();
+                pointers.push_back (&matrices[layer]);
+            }
+        }
+
+        void renderTables (bool crossfade)
+        {
+            for (auto& layer : tables)
+                for (auto& table : layer)
+                    if (table.needsRender())
+                        table.render (crossfade);
+        }
+
+        std::vector<StackMatrix> matrices;
+        std::vector<std::array<StackTable, StackMatrix::numOperators>> tables;
+        std::vector<StackMatrix*> pointers;
+    };
 };
 
 //==============================================================================
@@ -496,6 +539,113 @@ TEST_F (PhaseModulationMatrixTests, RampedAmountsFadeOutToThePlainCarrier)
         ASSERT_NEAR (std::sin (MathConstants<double>::twoPi * 440.0 * static_cast<double> (i) / (sampleRate * factor)), output[i], 1e-4) << i;
 }
 
+TEST_F (PhaseModulationMatrixTests, InterleavedMatchesProcessingEachMatrix)
+{
+    constexpr int steps = 8;
+    constexpr int stepLength = blockSize * factor;
+    constexpr int split = 50;
+
+    const std::array<Waveform, Matrix::numOperators> waveforms { Waveform::sawtooth, Waveform::sine, Waveform::square, Waveform::sine };
+
+    // Odd layers feed back, so they ramp every step over its full length. Even layers
+    // only ramp when a link moves, over half a step, so the lanes' ramps end apart.
+    const auto controlsFor = [] (int layer, int step)
+    {
+        const auto detune = 1.0 + 0.01 * layer;
+
+        Matrix::Controls controls;
+        controls.frequencies = { 220.0 * detune, 110.0 * detune, 880.0 * detune, 330.0 };
+        controls.gains = { 1.0, 0.0, 0.5, 0.0 };
+        controls.amounts[0][0] = layer % 2 == 1 ? 0.3 : 0.0;
+        controls.amounts[0][1] = step < 5 ? 0.2 : 0.0;
+        controls.amounts[2][1] = step >= 3 ? 0.4 : 0.0;
+        return controls;
+    };
+
+    for (const auto numLayers : { 1, 2, 3, 5, 8 })
+    {
+        Stack<double> reference (numLayers, factor, waveforms);
+        Stack<double> interleaved (numLayers, factor, waveforms);
+
+        const auto layers = static_cast<std::size_t> (numLayers);
+        std::vector<std::array<std::vector<double>, Matrix::numOperators>> referenceBuffers (layers);
+        std::vector<std::array<std::vector<double>, Matrix::numOperators>> interleavedBuffers (layers);
+
+        for (std::size_t layer = 0; layer < layers; ++layer)
+        {
+            for (std::size_t i = 0; i < Matrix::numOperators; ++i)
+            {
+                referenceBuffers[layer][i].assign (stepLength, 0.0);
+                interleavedBuffers[layer][i].assign (stepLength, 0.0);
+            }
+        }
+
+        for (auto* stack : { &reference, &interleaved })
+        {
+            for (int pass = 0; pass < 2; ++pass)
+            {
+                for (int layer = 0; layer < numLayers; ++layer)
+                    stack->matrices[static_cast<std::size_t> (layer)].setTargets (controlsFor (layer, 0), 0);
+
+                stack->renderTables (false);
+            }
+        }
+
+        // Operator 1 modulates but is silent, and operator 3 is skipped: neither is written.
+        const auto pointersAt = [] (std::array<std::vector<double>, Matrix::numOperators>& buffers, int start)
+        {
+            return std::array<double*, Matrix::numOperators> { buffers[0].data() + start, nullptr, buffers[2].data() + start, nullptr };
+        };
+
+        for (int step = 0; step < steps; ++step)
+        {
+            for (auto* stack : { &reference, &interleaved })
+            {
+                for (int layer = 0; layer < numLayers; ++layer)
+                    stack->matrices[static_cast<std::size_t> (layer)].setTargets (controlsFor (layer, step), layer % 2 == 1 ? stepLength : stepLength / 2);
+
+                stack->renderTables (true);
+            }
+
+            // One step is processed in two calls, which ends a call in the middle of a ramp.
+            const auto parts = step == 4 ? std::vector<std::pair<int, int>> { { 0, split }, { split, stepLength - split } }
+                                         : std::vector<std::pair<int, int>> { { 0, stepLength } };
+
+            for (const auto& [start, length] : parts)
+            {
+                for (std::size_t layer = 0; layer < layers; ++layer)
+                {
+                    const auto pointers = pointersAt (referenceBuffers[layer], start);
+                    reference.matrices[layer].process (pointers.data(), length);
+                }
+
+                std::vector<std::array<double*, Matrix::numOperators>> pointers;
+                std::vector<double* const*> outputs;
+
+                for (std::size_t layer = 0; layer < layers; ++layer)
+                    pointers.push_back (pointersAt (interleavedBuffers[layer], start));
+
+                for (const auto& layerPointers : pointers)
+                    outputs.push_back (layerPointers.data());
+
+                Matrix::processInterleaved (Span<Matrix* const> (interleaved.pointers.data(), layers),
+                                            Span<double* const* const> (outputs.data(), layers),
+                                            length);
+            }
+
+            for (std::size_t layer = 0; layer < layers; ++layer)
+                for (const auto i : { std::size_t (0), std::size_t (2) })
+                    for (std::size_t s = 0; s < static_cast<std::size_t> (stepLength); ++s)
+                        ASSERT_EQ (referenceBuffers[layer][i][s], interleavedBuffers[layer][i][s])
+                            << numLayers << " layers, step " << step << ", layer " << layer << ", operator " << i << ", sample " << s;
+
+            for (std::size_t layer = 0; layer < layers; ++layer)
+                for (int i = 0; i < Matrix::numOperators; ++i)
+                    ASSERT_EQ (reference.matrices[layer].getPhase (i), interleaved.matrices[layer].getPhase (i));
+        }
+    }
+}
+
 TEST_F (PhaseModulationMatrixTests, SilentOperatorStillModulates)
 {
     prepare (factor);
@@ -707,5 +857,139 @@ TEST_F (PhaseModulationMatrixTests, DISABLED_BenchmarkFourOperators)
     const auto perVoiceSample = elapsed / (static_cast<double> (voices) * blocks * blockSize);
 
     std::printf ("PhaseModulationMatrix 4 ops %dx: %.4f us per voice per output sample (budget 0.25)\n", factor, perVoiceSample);
+    SUCCEED();
+}
+
+TEST_F (PhaseModulationMatrixTests, DISABLED_BenchmarkUnisonInterleaved)
+{
+    // Shaped like a two operator patch with self-feedback, stacked three times.
+    constexpr int voices = 8;
+    constexpr int layers = 3;
+    constexpr int seconds = 1;
+    constexpr int stepLength = blockSize * factor;
+
+    using FloatMatrix = PhaseModulationMatrix<float>;
+
+    const std::array<Waveform, FloatMatrix::numOperators> waveforms { Waveform::sine, Waveform::sine, Waveform::sine, Waveform::sine };
+
+    std::vector<std::unique_ptr<Stack<float>>> sequentialVoices;
+    std::vector<std::unique_ptr<Stack<float>>> interleavedVoices;
+
+    for (int v = 0; v < voices; ++v)
+    {
+        sequentialVoices.push_back (std::make_unique<Stack<float>> (layers, factor, waveforms));
+        interleavedVoices.push_back (std::make_unique<Stack<float>> (layers, factor, waveforms));
+    }
+
+    const auto controlsFor = [] (int voice, int layer)
+    {
+        const auto note = 110.0 * std::exp2 (voice / 12.0);
+        const auto detune = std::exp2 ((layer - 1) * 0.145 / 12.0);
+
+        FloatMatrix::Controls controls;
+        controls.frequencies = { 0.5 * note * detune, 4.0 * note * detune * std::exp2 (-9.9 / 1200.0), 0.0, 0.0 };
+        controls.gains = { 0.47, 0.53, 0.0, 0.0 };
+        controls.amounts[0][0] = 0.31;
+        return controls;
+    };
+
+    std::vector<std::vector<float>> outputs (layers * FloatMatrix::numOperators, std::vector<float> (stepLength));
+    std::vector<std::vector<float>> checks (layers * FloatMatrix::numOperators, std::vector<float> (stepLength));
+    std::array<std::array<float*, FloatMatrix::numOperators>, layers> pointers {};
+    std::array<std::array<float*, FloatMatrix::numOperators>, layers> checkPointers {};
+    std::array<float* const*, layers> layerOutputs {};
+
+    for (std::size_t layer = 0; layer < layers; ++layer)
+    {
+        for (std::size_t i = 0; i < FloatMatrix::numOperators; ++i)
+        {
+            pointers[layer][i] = outputs[layer * FloatMatrix::numOperators + i].data();
+            checkPointers[layer][i] = checks[layer * FloatMatrix::numOperators + i].data();
+        }
+
+        layerOutputs[layer] = pointers[layer].data();
+    }
+
+    const auto step = [&] (Stack<float>& stack, int voice, int length)
+    {
+        for (int layer = 0; layer < layers; ++layer)
+            stack.matrices[static_cast<std::size_t> (layer)].setTargets (controlsFor (voice, layer), length);
+
+        stack.renderTables (length > 0);
+    };
+
+    for (int v = 0; v < voices; ++v)
+    {
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            step (*sequentialVoices[static_cast<std::size_t> (v)], v, 0);
+            step (*interleavedVoices[static_cast<std::size_t> (v)], v, 0);
+        }
+    }
+
+    const auto blocks = static_cast<int> (sampleRate) * seconds / blockSize;
+
+    const auto measure = [&] (bool interleave)
+    {
+        const auto begin = std::chrono::steady_clock::now();
+
+        for (int block = 0; block < blocks; ++block)
+        {
+            for (int v = 0; v < voices; ++v)
+            {
+                auto& stack = interleave ? *interleavedVoices[static_cast<std::size_t> (v)] : *sequentialVoices[static_cast<std::size_t> (v)];
+                step (stack, v, stepLength);
+
+                if (interleave)
+                {
+                    FloatMatrix::processInterleaved (Span<FloatMatrix* const> (stack.pointers.data(), layers),
+                                                     Span<float* const* const> (layerOutputs.data(), layers),
+                                                     stepLength);
+                }
+                else
+                {
+                    for (std::size_t layer = 0; layer < layers; ++layer)
+                        stack.matrices[layer].process (pointers[layer].data(), stepLength);
+                }
+            }
+        }
+
+        return std::chrono::duration<double, std::micro> (std::chrono::steady_clock::now() - begin).count()
+             / (static_cast<double> (voices) * blocks * blockSize);
+    };
+
+    // Alternating rounds, keeping each path's best, so neither gains from warm caches or
+    // a rising clock. Both sets of stacks run the same steps, for the check below.
+    auto sequential = std::numeric_limits<double>::max();
+    auto interleaved = std::numeric_limits<double>::max();
+
+    for (int round = 0; round < 3; ++round)
+    {
+        sequential = jmin (sequential, measure (false));
+        interleaved = jmin (interleaved, measure (true));
+    }
+
+    // Both paths ran the same steps, so the last voice's last step must agree.
+    auto& lastSequential = *sequentialVoices.back();
+    auto& lastInterleaved = *interleavedVoices.back();
+    step (lastSequential, voices - 1, stepLength);
+    step (lastInterleaved, voices - 1, stepLength);
+
+    for (std::size_t layer = 0; layer < layers; ++layer)
+        lastSequential.matrices[layer].process (checkPointers[layer].data(), stepLength);
+
+    FloatMatrix::processInterleaved (Span<FloatMatrix* const> (lastInterleaved.pointers.data(), layers),
+                                     Span<float* const* const> (layerOutputs.data(), layers),
+                                     stepLength);
+
+    for (std::size_t i = 0; i < outputs.size(); ++i)
+        ASSERT_EQ (checks[i], outputs[i]) << i;
+
+    std::printf ("PhaseModulationMatrix %d layers %dx: %.4f us sequential, %.4f us interleaved per voice per output sample (%.2fx)\n",
+                 layers,
+                 factor,
+                 sequential,
+                 interleaved,
+                 interleaved / sequential);
     SUCCEED();
 }

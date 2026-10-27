@@ -66,7 +66,8 @@ namespace yup
     table it would render without oversampling. In this mode a table's frequency is its
     bandwidth, not its pitch.
 
-    Oversampling, decimation and voice stacking are left to the caller. An operator
+    Oversampling, decimation and voice stacking are left to the caller; for a stack,
+    processInterleaved() computes one sample of every layer in turn. An operator
     whose output gain and outgoing amounts are all zero is skipped: it only advances
     its phase and its table's crossfade.
 
@@ -236,43 +237,61 @@ public:
         if (operatorOutputs == nullptr || numInternalSamples <= 0)
             return;
 
-        if (feedbackPending)
-            updateFeedback();
+        PhaseModulationMatrix* matrix = this;
+        processGroup<1> (&matrix, &operatorOutputs, numInternalSamples);
+    }
 
-        int offset = 0;
+    /** Processes several matrices, with the same result as calling process() on each.
 
-        while (offset < numInternalSamples)
+        One sample of every matrix is computed in turn, so their feedback loops, which
+        each wait on their previous sample, overlap on the CPU instead of running one
+        after the other. Use it for the layers of a unison stack.
+
+        No two matrices may share a table: each read advances its table's crossfade.
+
+        @param matrices            The matrices to process.
+        @param operatorOutputs     One set of operator outputs per matrix, as in process(),
+                                   none of them null.
+        @param numInternalSamples  Samples to produce for every matrix.
+    */
+    static void processInterleaved (Span<PhaseModulationMatrix* const> matrices,
+                                    Span<SampleType* const* const> operatorOutputs,
+                                    int numInternalSamples) noexcept
+    {
+        jassert (matrices.size() == operatorOutputs.size());
+
+        const auto count = static_cast<int> (jmin (matrices.size(), operatorOutputs.size()));
+
+        if (numInternalSamples <= 0)
+            return;
+
+        for (int index = 0; index < count; ++index)
         {
-            if (rampRemaining > 0)
+            if (matrices[static_cast<std::size_t> (index)] == nullptr || operatorOutputs[static_cast<std::size_t> (index)] == nullptr)
             {
-                const auto count = jmin (rampRemaining, numInternalSamples - offset);
-                run<true> (operatorOutputs, offset, count);
-
-                rampRemaining -= count;
-                offset += count;
-
-                if (rampRemaining == 0)
-                    snapToTargets();
-            }
-            else
-            {
-                run<false> (operatorOutputs, offset, numInternalSamples - offset);
-                offset = numInternalSamples;
+                jassertfalse;
+                return;
             }
         }
 
-        for (int i = 0; i < NumOperators; ++i)
+        // Groups are as even as possible, so no matrix is left without others to overlap.
+        const auto numGroups = (count + maximumGroupSize - 1) / maximumGroupSize;
+
+        for (int group = 0, first = 0; group < numGroups; ++group)
         {
-            const auto ii = static_cast<std::size_t> (i);
+            const auto groupSize = (count - first) / (numGroups - group);
+            auto* const* groupMatrices = matrices.data() + first;
+            auto* const* groupOutputs = operatorOutputs.data() + first;
 
-            if (active[ii])
-                continue;
+            switch (groupSize)
+            {
+                case 1: processGroup<1> (groupMatrices, groupOutputs, numInternalSamples); break;
+                case 2: processGroup<2> (groupMatrices, groupOutputs, numInternalSamples); break;
+                case 3: processGroup<3> (groupMatrices, groupOutputs, numInternalSamples); break;
+                default: processGroup<4> (groupMatrices, groupOutputs, numInternalSamples); break;
+            }
 
-            if (tables[ii] != nullptr)
-                tables[ii]->advanceCrossfade (numInternalSamples);
-
-            if (operatorOutputs[i] != nullptr)
-                std::fill (operatorOutputs[i], operatorOutputs[i] + numInternalSamples, SampleType (0));
+            first += groupSize;
         }
     }
 
@@ -312,37 +331,68 @@ private:
 
     static constexpr auto size = static_cast<std::size_t> (NumOperators);
 
-    template <bool Ramping>
-    void run (SampleType* const* outputs, int offset, int numSamples) noexcept
+    static constexpr int maximumGroupSize = 4;
+
+    /** A matrix's state while it runs. The table reads write through pointers, so the
+        state is held apart from the matrix, where they cannot alias it and force a
+        reload after every read.
+    */
+    struct Lane
     {
-        // The table reads write through pointers, so the state is copied to locals they
-        // cannot alias, and nothing has to be reloaded after every read.
-        const auto tableList = tables;
-        const auto isActive = active;
-        const auto links = modulators;
-        const auto linkCounts = modulatorCounts;
-        auto phase = phases;
-        auto increment = increments;
-        auto gain = gains;
-        auto phaseOffset = offsets;
-        auto amount = amounts;
-        auto past1 = history1;
-        auto past2 = history2;
-        std::array<SampleType*, NumOperators> destinations {};
-        Row averages {};
-        Row values {};
-
-        for (std::size_t i = 0; i < size; ++i)
-            destinations[i] = outputs[i] != nullptr ? outputs[i] + offset : nullptr;
-
-        for (int s = 0; s < numSamples; ++s)
+        void load (const PhaseModulationMatrix& matrix, SampleType* const* outputs, int offset) noexcept
         {
+            tables = matrix.tables;
+            active = matrix.active;
+            links = matrix.modulators;
+            linkCounts = matrix.modulatorCounts;
+            phases = matrix.phases;
+            increments = matrix.increments;
+            gains = matrix.gains;
+            offsets = matrix.offsets;
+            amounts = matrix.amounts;
+            history1 = matrix.history1;
+            history2 = matrix.history2;
+            ramping = matrix.rampRemaining > 0;
+
+            for (std::size_t i = 0; i < size; ++i)
+                destinations[i] = outputs[i] != nullptr ? outputs[i] + offset : nullptr;
+
+            if (! ramping)
+                return;
+
+            incrementSteps = matrix.incrementSteps;
+            gainSteps = matrix.gainSteps;
+            offsetSteps = matrix.offsetSteps;
+            amountSteps = matrix.amountSteps;
+        }
+
+        void store (PhaseModulationMatrix& matrix) const noexcept
+        {
+            matrix.phases = phases;
+            matrix.history1 = history1;
+            matrix.history2 = history2;
+
+            if (! ramping)
+                return;
+
+            matrix.increments = increments;
+            matrix.gains = gains;
+            matrix.offsets = offsets;
+            matrix.amounts = amounts;
+        }
+
+        template <bool Ramping>
+        forcedinline void tick (int sample) noexcept
+        {
+            Row averages {};
+            Row values {};
+
             for (std::size_t j = 0; j < size; ++j)
-                averages[j] = 0.5 * (past1[j] + past2[j]);
+                averages[j] = 0.5 * (history1[j] + history2[j]);
 
             for (std::size_t i = 0; i < size; ++i)
             {
-                if (! isActive[i])
+                if (! active[i])
                     continue;
 
                 auto pm = 0.0;
@@ -350,51 +400,139 @@ private:
                 for (int k = 0; k < linkCounts[i]; ++k)
                 {
                     const auto j = links[i][static_cast<std::size_t> (k)];
-                    pm += amount[i][j] * averages[j];
+                    pm += amounts[i][j] * averages[j];
                 }
 
-                values[i] = static_cast<double> (tableList[i]->processSampleAtPhase (phase[i] + phaseOffset[i] + pm));
+                values[i] = static_cast<double> (tables[i]->processSampleAtPhase (phases[i] + offsets[i] + pm));
             }
 
             for (std::size_t i = 0; i < size; ++i)
             {
-                if (isActive[i])
+                if (active[i])
                 {
-                    past2[i] = past1[i];
-                    past1[i] = values[i];
+                    history2[i] = history1[i];
+                    history1[i] = values[i];
 
                     if (auto* output = destinations[i])
-                        output[s] = static_cast<SampleType> (gain[i] * values[i]);
+                        output[sample] = static_cast<SampleType> (gains[i] * values[i]);
                 }
 
-                phase[i] += increment[i];
-                phase[i] -= std::floor (phase[i]);
+                phases[i] += increments[i];
+                phases[i] -= std::floor (phases[i]);
 
                 if constexpr (Ramping)
                 {
-                    increment[i] += incrementSteps[i];
-                    gain[i] += gainSteps[i];
-                    phaseOffset[i] += offsetSteps[i];
+                    increments[i] += incrementSteps[i];
+                    gains[i] += gainSteps[i];
+                    offsets[i] += offsetSteps[i];
 
                     for (int k = 0; k < linkCounts[i]; ++k)
                     {
                         const auto j = links[i][static_cast<std::size_t> (k)];
-                        amount[i][j] += amountSteps[i][j];
+                        amounts[i][j] += amountSteps[i][j];
                     }
                 }
             }
         }
 
-        phases = phase;
-        history1 = past1;
-        history2 = past2;
+        std::array<Table*, NumOperators> tables {};
+        std::array<SampleType*, NumOperators> destinations {};
+        std::array<std::array<std::size_t, NumOperators>, NumOperators> links {};
+        std::array<int, NumOperators> linkCounts {};
+        Row phases {};
+        Row increments {};
+        Row incrementSteps {};
+        Row gains {};
+        Row gainSteps {};
+        Row offsets {};
+        Row offsetSteps {};
+        Row history1 {};
+        Row history2 {};
+        Square amounts {};
+        Square amountSteps {};
+        std::array<bool, NumOperators> active {};
+        bool ramping = false;
+    };
 
-        if constexpr (Ramping)
+    template <bool Ramping, std::size_t Count>
+    static void runLanes (std::array<Lane, Count>& lanes, int numSamples) noexcept
+    {
+        for (int sample = 0; sample < numSamples; ++sample)
+            for (auto& lane : lanes)
+                lane.template tick<Ramping> (sample);
+    }
+
+    template <int Count>
+    static void processGroup (PhaseModulationMatrix* const* matrices, SampleType* const* const* outputs, int numSamples) noexcept
+    {
+        for (int lane = 0; lane < Count; ++lane)
+            if (matrices[lane]->feedbackPending)
+                matrices[lane]->updateFeedback();
+
+        std::array<Lane, Count> lanes;
+
+        for (int offset = 0; offset < numSamples;)
         {
-            increments = increment;
-            gains = gain;
-            offsets = phaseOffset;
-            amounts = amount;
+            // A segment ends where any ramp does, so each lane ramps or holds throughout.
+            auto length = numSamples - offset;
+
+            for (int lane = 0; lane < Count; ++lane)
+                if (matrices[lane]->rampRemaining > 0)
+                    length = jmin (length, matrices[lane]->rampRemaining);
+
+            for (int lane = 0; lane < Count; ++lane)
+                lanes[static_cast<std::size_t> (lane)].load (*matrices[lane], outputs[lane], offset);
+
+            // The ramp is decided at compile time when the lanes agree, which they always
+            // do for a single matrix; only a mixed group pays a branch per lane and sample.
+            auto rampingLanes = 0;
+
+            for (const auto& lane : lanes)
+                rampingLanes += lane.ramping ? 1 : 0;
+
+            if (rampingLanes == 0)
+                runLanes<false> (lanes, length);
+            else if (rampingLanes == Count)
+                runLanes<true> (lanes, length);
+            else
+                for (int sample = 0; sample < length; ++sample)
+                    for (auto& lane : lanes)
+                        lane.ramping ? lane.template tick<true> (sample) : lane.template tick<false> (sample);
+
+            for (int lane = 0; lane < Count; ++lane)
+            {
+                auto& matrix = *matrices[lane];
+                lanes[static_cast<std::size_t> (lane)].store (matrix);
+
+                if (matrix.rampRemaining > 0)
+                {
+                    matrix.rampRemaining -= length;
+
+                    if (matrix.rampRemaining == 0)
+                        matrix.snapToTargets();
+                }
+            }
+
+            offset += length;
+        }
+
+        for (int lane = 0; lane < Count; ++lane)
+            matrices[lane]->finishSkipped (outputs[lane], numSamples);
+    }
+
+    /** Skipped operators advance their table's crossfade and write zeros. */
+    void finishSkipped (SampleType* const* outputs, int numSamples) noexcept
+    {
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            if (active[i])
+                continue;
+
+            if (tables[i] != nullptr)
+                tables[i]->advanceCrossfade (numSamples);
+
+            if (outputs[i] != nullptr)
+                std::fill (outputs[i], outputs[i] + numSamples, SampleType (0));
         }
     }
 

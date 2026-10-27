@@ -174,7 +174,7 @@ private:
     //==============================================================================
     std::array<SynthOscillator, SynthExample::oscillatorCount> oscillators;
     std::array<yup::PhaseModulationMatrix<float>, SynthExample::maxUnisonVoices> matrices;
-    std::array<std::vector<float>, SynthExample::oscillatorCount> operatorBuffers;
+    std::array<std::array<std::vector<float>, SynthExample::oscillatorCount>, SynthExample::maxUnisonVoices> operatorBuffers;
     std::variant<Decimators<2>, Decimators<4>> decimators;
 
     std::array<bool, numBuses> busActive {};

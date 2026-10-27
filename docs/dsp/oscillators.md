@@ -423,6 +423,11 @@ Oversampling, decimation and voice stacking stay with the caller: run the matrix
 the oversampled rate and decimate with `HalfbandOversampler`. Operators with zero
 gain and no outgoing links are skipped and only advance their phase and crossfade.
 
+For a unison stack, give each layer its own matrix and tables and process them with
+`PhaseModulationMatrix::processInterleaved()`. It produces exactly what calling
+`process()` on each matrix would, but computes one sample of every layer in turn, so
+the layers' feedback loops overlap on the CPU instead of running back to back.
+
 ```cpp
 yup::PhaseModulationMatrix<float> matrix;
 std::array<yup::WavetableOscillator<float>, 4> tables;

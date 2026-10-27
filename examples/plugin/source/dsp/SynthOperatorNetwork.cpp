@@ -65,8 +65,9 @@ void SynthOperatorNetwork::prepare (double newSampleRate,
         for (int index = 0; index < SynthExample::oscillatorCount; ++index)
             matrices[static_cast<std::size_t> (layer)].setTable (index, &oscillators[static_cast<std::size_t> (index)].getTable (layer));
 
-    for (auto& buffer : operatorBuffers)
-        buffer.assign (static_cast<std::size_t> (SynthExample::controlChunk * factor), 0.0f);
+    for (auto& layer : operatorBuffers)
+        for (auto& buffer : layer)
+            buffer.assign (static_cast<std::size_t> (SynthExample::controlChunk * factor), 0.0f);
 
     const auto prepareDecimators = [this] (auto& set)
     {
@@ -334,17 +335,28 @@ void SynthOperatorNetwork::renderOversampled (const Outputs& outputs, int numSam
                         }
                     }
 
-                    float* operatorPointers[SynthExample::oscillatorCount];
+                    std::array<std::array<float*, SynthExample::oscillatorCount>, SynthExample::maxUnisonVoices> operatorPointers {};
+                    std::array<float* const*, SynthExample::maxUnisonVoices> layerOutputs {};
+                    std::array<yup::PhaseModulationMatrix<float>*, SynthExample::maxUnisonVoices> layerMatrices {};
+                    const auto layers = static_cast<std::size_t> (numLayers);
 
-                    for (std::size_t index = 0; index < operatorBuffers.size(); ++index)
-                        operatorPointers[index] = operatorBuffers[index].data();
+                    for (std::size_t layer = 0; layer < layers; ++layer)
+                    {
+                        for (std::size_t op = 0; op < operatorPointers[layer].size(); ++op)
+                            operatorPointers[layer][op] = operatorBuffers[layer][op].data();
+
+                        layerOutputs[layer] = operatorPointers[layer].data();
+                        layerMatrices[layer] = &matrices[layer];
+                    }
+
+                    // The layers run together, so their feedback loops overlap on the CPU.
+                    yup::PhaseModulationMatrix<float>::processInterleaved ({ layerMatrices.data(), layers }, { layerOutputs.data(), layers }, internalSamples);
 
                     const auto layerGain = 1.0f / static_cast<float> (numLayers);
 
                     for (int layer = 0; layer < numLayers; ++layer)
                     {
-                        auto& matrix = matrices[static_cast<std::size_t> (layer)];
-                        matrix.process (operatorPointers, internalSamples);
+                        const auto& matrix = matrices[static_cast<std::size_t> (layer)];
 
                         for (int op = 0; op < SynthExample::oscillatorCount; ++op)
                         {
@@ -353,7 +365,7 @@ void SynthOperatorNetwork::renderOversampled (const Outputs& outputs, int numSam
 
                             const auto& starts = panSendStart[static_cast<std::size_t> (layer)][static_cast<std::size_t> (op)];
                             const auto& ends = panSendEnd[static_cast<std::size_t> (layer)][static_cast<std::size_t> (op)];
-                            const auto* source = operatorPointers[op];
+                            const auto* source = operatorPointers[static_cast<std::size_t> (layer)][static_cast<std::size_t> (op)];
 
                             for (std::size_t bus = 0; bus < static_cast<std::size_t> (numBuses); ++bus)
                             {
