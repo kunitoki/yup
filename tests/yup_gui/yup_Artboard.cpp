@@ -3167,6 +3167,8 @@ protected:
 
         Component* getFocusedComponent() const override { return focusedComponent; }
 
+        Component* getPointerTarget() const override { return nullptr; }
+
         bool isContinuousRepaintingEnabled() const override { return false; }
 
         void enableContinuousRepainting (bool) override {}

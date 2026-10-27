@@ -1178,7 +1178,7 @@ void Component::setMouseCursor (const MouseCursor& cursorType)
 
     if (auto nativeComponent = getNativeComponent())
     {
-        if (nativeComponent->getFocusedComponent() == this)
+        if (nativeComponent->getPointerTarget() == this)
             updateMouseCursor();
     }
 }

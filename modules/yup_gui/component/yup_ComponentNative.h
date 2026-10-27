@@ -478,6 +478,13 @@ public:
     */
     virtual Component* getFocusedComponent() const = 0;
 
+    /** Gets the component the pointer's events go to: the one being pressed while a button
+        or finger is down, otherwise the one under the pointer.
+
+        @return The component, or nullptr when the pointer is over none of the window's components.
+    */
+    virtual Component* getPointerTarget() const = 0;
+
     //==============================================================================
     /** Checks whether continuous repainting is enabled.
 

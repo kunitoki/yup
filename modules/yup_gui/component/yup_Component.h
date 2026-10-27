@@ -925,6 +925,9 @@ public:
     /**
         Set the mouse cursor of the component.
 
+        It shows at once when the component receives the pointer's events (see
+        ComponentNative::getPointerTarget()), otherwise when the pointer next reaches it.
+
         @param cursorType The new mouse cursor of the component.
      */
     void setMouseCursor (const MouseCursor& cursorType);

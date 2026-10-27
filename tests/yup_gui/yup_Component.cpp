@@ -88,6 +88,8 @@ public:
 
     Component* getFocusedComponent() const override { return focusedComponent; }
 
+    Component* getPointerTarget() const override { return pointerTarget; }
+
     bool isContinuousRepaintingEnabled() const override { return false; }
 
     void enableContinuousRepainting (bool) override {}
@@ -148,6 +150,8 @@ public:
     void setGlobalMouseCaptureActive (bool) override {}
 
     void cancelCurrentMouseGesture() override {}
+
+    Component* pointerTarget = nullptr;
 
 private:
     Component* focusedComponent = nullptr;
@@ -2580,6 +2584,37 @@ TEST_F (ComponentTest, WindowAspectRatioIsKeptAndForwardedToTheNative)
     EXPECT_FALSE (native->getAspectRatio().has_value());
 }
 
+TEST_F (ComponentTest, CursorOfComponentUnderPointerReachesTheDesktopAtOnce)
+{
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    native->pointerTarget = child.get();
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+
+    child->setMouseCursor (MouseCursor (MouseCursor::Hand));
+
+    EXPECT_EQ (MouseCursor::Hand, Desktop::getInstance()->getMouseCursor().getType());
+
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+}
+
+TEST_F (ComponentTest, CursorOfFocusedComponentAwayFromPointerLeavesTheDesktopAlone)
+{
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    native->pointerTarget = child.get();
+
+    parent->setWantsKeyboardFocus (true);
+    parent->takeKeyboardFocus();
+    ASSERT_TRUE (parent->hasKeyboardFocus());
+
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+
+    parent->setMouseCursor (MouseCursor (MouseCursor::Text));
+
+    EXPECT_EQ (MouseCursor::Default, Desktop::getInstance()->getMouseCursor().getType());
+}
+
 TEST_F (ComponentTest, TransformToScreenMatchesLocalToScreenOnDesktop)
 {
     // The mock native sits at the screen origin, so the root bounds position must not be added again.
@@ -3544,13 +3579,8 @@ TEST (ComponentFocusReportingTests, FocusIsReportedThroughTheNativeWindow)
     comp.takeKeyboardFocus();
     ASSERT_TRUE (comp.hasKeyboardFocus());
 
-    // Only the focused component passes its cursor on to the desktop.
     comp.setMouseCursor (MouseCursor (MouseCursor::Crosshair));
     EXPECT_EQ (MouseCursor::Crosshair, comp.getMouseCursor().getType());
-
-    // Setting the cursor on a focused component reaches the desktop's global cursor, so put it back
-    // the way the rest of the suite expects to find it.
-    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
 
     comp.leaveKeyboardFocus();
     EXPECT_FALSE (comp.hasKeyboardFocus());
