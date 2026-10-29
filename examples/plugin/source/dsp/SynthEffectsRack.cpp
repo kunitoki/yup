@@ -30,6 +30,10 @@ void SynthEffectsRack::prepare (double sampleRate, int maxBlockSize)
     flanger.prepare (sampleRate);
     delay.prepare (sampleRate);
     reverb.prepare (sampleRate);
+    distortion.prepare (sampleRate);
+    equalizer.prepare (sampleRate);
+    compressor.prepare (sampleRate);
+    surround.prepare (sampleRate);
 
     fadeStep = static_cast<float> (1.0 / (SynthExample::enableFadeSeconds * sampleRate));
     wetLeft.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
@@ -43,12 +47,12 @@ void SynthEffectsRack::reset() noexcept
         resetEffect (static_cast<SynthEffectType> (index));
 }
 
-void SynthEffectsRack::process (float* left, float* right, int numSamples, const SynthEffectsValues& values, double bpm) noexcept
+void SynthEffectsRack::process (float* left, float* right, int numSamples, const SynthEffectOrder& order, const SynthEffectsValues& values, double bpm) noexcept
 {
     jassert (numSamples <= static_cast<int> (wetLeft.size()));
     numSamples = yup::jmin (numSamples, static_cast<int> (wetLeft.size()));
 
-    for (const auto type : values.order)
+    for (const auto type : order)
     {
         auto& gain = enableGains[static_cast<std::size_t> (type)];
         const auto target = values.isEnabled (type) ? 1.0f : 0.0f;
@@ -87,6 +91,10 @@ void SynthEffectsRack::processEffect (SynthEffectType type, float* left, float* 
         case SynthEffectType::flanger: flanger.process (left, right, numSamples, values.flanger); break;
         case SynthEffectType::delay: delay.process (left, right, numSamples, values.delay, bpm); break;
         case SynthEffectType::reverb: reverb.process (left, right, numSamples, values.reverb); break;
+        case SynthEffectType::distortion: distortion.process (left, right, numSamples, values.distortion); break;
+        case SynthEffectType::equalizer: equalizer.process (left, right, numSamples, values.equalizer); break;
+        case SynthEffectType::compressor: compressor.process (left, right, numSamples, values.compressor); break;
+        case SynthEffectType::surround: surround.process (left, right, numSamples, values.surround); break;
     }
 }
 
@@ -100,5 +108,9 @@ void SynthEffectsRack::resetEffect (SynthEffectType type) noexcept
         case SynthEffectType::flanger: flanger.reset(); break;
         case SynthEffectType::delay: delay.reset(); break;
         case SynthEffectType::reverb: reverb.reset(); break;
+        case SynthEffectType::distortion: distortion.reset(); break;
+        case SynthEffectType::equalizer: equalizer.reset(); break;
+        case SynthEffectType::compressor: compressor.reset(); break;
+        case SynthEffectType::surround: surround.reset(); break;
     }
 }

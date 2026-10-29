@@ -171,7 +171,7 @@ void RetraceProcessor::processBlock (yup::AudioProcessContext<float>& context)
         if (audio.getNumChannels() >= 2)
         {
             const auto values = synthParameters.effects.read ({ engine.getGlobalValues (globalValues) });
-            effects.process (audio.getWritePointer (0, start), audio.getWritePointer (1, start), count, values, bpm);
+            effects.process (audio.getWritePointer (0, start), audio.getWritePointer (1, start), count, effectChain.getOrder(), values, bpm);
         }
 
         outputGain.setTargetValue (playedValues[static_cast<std::size_t> (volumeIndex)]);
@@ -289,7 +289,15 @@ SynthTransport RetraceProcessor::getTransport() const noexcept
 
 void RetraceProcessor::randomize()
 {
-    applyState (SynthPatch::createRandomState (synthParameters, yup::Random::getSystemRandom(), getPresetInfo().macroNames), {});
+    auto state = SynthPatch::createRandomState (synthParameters, yup::Random::getSystemRandom(), getPresetInfo().macroNames);
+
+    // Like the effect parameters, the chain order is the user's mix and stays as it is.
+    {
+        auto transaction = state.beginTransaction();
+        transaction.addChild (effectChain.createTree());
+    }
+
+    applyState (state, {});
 }
 
 void RetraceProcessor::randomizeSlightly()

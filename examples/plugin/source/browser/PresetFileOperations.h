@@ -37,7 +37,8 @@
 namespace PresetFileOperations
 {
 /** Returns where a preset called name goes in the folder: the legal file name plus the
-    format's extension. Invalid for a name with no legal characters.
+    format's extension, unless the name already ends with it. Invalid for a name with no
+    legal characters.
 */
 yup::File getFileFor (const yup::File& folder, const yup::String& name, const PresetFormat& format);
 

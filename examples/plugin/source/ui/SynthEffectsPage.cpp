@@ -23,6 +23,7 @@
 #include "ParameterChoice.h"
 #include "ParameterSegmented.h"
 #include "SynthTheme.h"
+#include "SynthUndoHistory.h"
 
 #include <algorithm>
 #include <functional>
@@ -112,10 +113,11 @@ private:
 };
 
 //==============================================================================
-SynthEffectsPage::SynthEffectsPage (const SynthEffectsParameters& parametersToEdit)
+SynthEffectsPage::SynthEffectsPage (const SynthEffectsParameters& parametersToEdit, SynthEffectChain& chainToEdit)
     : parameters (parametersToEdit)
-    , shownOrder (SynthEffectsParameters::decodeOrder (yup::roundToInt (parametersToEdit.order->getValue())))
-    , orderGesture (*this, parametersToEdit.order)
+    , chain (chainToEdit)
+    , shownOrder (chainToEdit.getOrder())
+    , orderBeforeDrag (shownOrder)
 {
     captionFont = SynthTheme::captionFont (12.0f);
 
@@ -199,6 +201,50 @@ SynthEffectsPage::SynthEffectsPage (const SynthEffectsParameters& parametersToEd
         panel.addKnob ("MIX", p.mix);
     }
 
+    {
+        const auto& p = parameters.distortion;
+        auto& panel = panelFor (SynthEffectType::distortion);
+        panel.addHeader (std::make_unique<ParameterSegmented> (p.type, std::vector<ParameterSegmented::Segment> { { "Soft" }, { "Cubic" }, { "Hard" } }), 132.0f);
+        panel.addKnob ("DRIVE", p.drive);
+        panel.addKnob ("BIAS", p.bias);
+        panel.addKnob ("TONE", p.tone);
+        panel.addKnob ("OUTPUT", p.output);
+        panel.addKnob ("MIX", p.mix);
+    }
+
+    {
+        const auto& p = parameters.equalizer;
+        auto& panel = panelFor (SynthEffectType::equalizer);
+        panel.addKnob ("LOW", p.lowGain);
+        panel.addKnob ("MID", p.midGain);
+        panel.addKnob ("HIGH", p.highGain);
+        panel.addKnob ("MID Q", p.midQ);
+        panel.addKnob ("LOW FREQ", p.lowFrequency);
+        panel.addKnob ("MID FREQ", p.midFrequency);
+        panel.addKnob ("HIGH FREQ", p.highFrequency);
+    }
+
+    {
+        const auto& p = parameters.compressor;
+        auto& panel = panelFor (SynthEffectType::compressor);
+        panel.addKnob ("THRESHOLD", p.threshold);
+        panel.addKnob ("RATIO", p.ratio);
+        panel.addKnob ("ATTACK", p.attack);
+        panel.addKnob ("RELEASE", p.release);
+        panel.addKnob ("MAKEUP", p.makeup);
+        panel.addKnob ("MIX", p.mix);
+    }
+
+    {
+        const auto& p = parameters.surround;
+        auto& panel = panelFor (SynthEffectType::surround);
+        panel.addKnob ("WIDTH", p.width);
+        panel.addKnob ("DEPTH", p.depth);
+        panel.addKnob ("TIME", p.time);
+        panel.addKnob ("MONO BELOW", p.monoBelow);
+        panel.addKnob ("MIX", p.mix);
+    }
+
     selectEffect (selected);
     syncFromParameters();
 }
@@ -221,9 +267,9 @@ void SynthEffectsPage::syncFromParameters()
     for (auto& panel : panels)
         panel->syncFromParameters();
 
-    if (values.order != shownOrder && ! orderGesture.isActive())
+    if (const auto order = chain.getOrder(); order != shownOrder && draggedRow < 0)
     {
-        shownOrder = values.order;
+        shownOrder = order;
         layoutRows();
         repaint();
     }
@@ -316,6 +362,7 @@ void SynthEffectsPage::mouseDown (const yup::MouseEvent& event)
         return;
 
     draggedRow = getRowAt (position.getY());
+    orderBeforeDrag = shownOrder;
     selectEffect (shownOrder[static_cast<std::size_t> (draggedRow)]);
 }
 
@@ -337,8 +384,7 @@ void SynthEffectsPage::mouseDrag (const yup::MouseEvent& event)
     else
         std::rotate (moved, moved + 1, order.begin() + row + 1);
 
-    orderGesture.begin();
-    orderGesture.setNormalized (parameters.order->convertToNormalizedValue (static_cast<float> (SynthEffectsParameters::encodeOrder (order))));
+    chain.setOrder (order);
 
     shownOrder = order;
     draggedRow = row;
@@ -348,6 +394,11 @@ void SynthEffectsPage::mouseDrag (const yup::MouseEvent& event)
 
 void SynthEffectsPage::mouseUp (const yup::MouseEvent&)
 {
-    draggedRow = -1;
-    orderGesture.end();
+    if (std::exchange (draggedRow, -1) < 0 || shownOrder == orderBeforeDrag)
+        return;
+
+    SynthUndoHistory::record<SynthEffectOrder> (*this, orderBeforeDrag, shownOrder, [&chain = chain] (const SynthEffectOrder& order)
+    {
+        chain.setOrder (order);
+    });
 }

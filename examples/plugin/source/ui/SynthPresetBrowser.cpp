@@ -239,6 +239,10 @@ void SynthPresetBrowser::saveIntoFolder (const yup::File& folder)
         if (const auto result = processor.savePresetFile (file); result.failed())
             return result.getErrorMessage();
 
+#if YUP_WASM
+        file.startAsProcess();
+#endif
+
         library.rescan();
         return {};
     });

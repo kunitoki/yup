@@ -24,8 +24,6 @@
 
 namespace
 {
-constexpr std::array<int, SynthExample::effectCount> factorials { 120, 24, 6, 2, 1, 1 };
-
 yup::NormalisableRange<float> skewed (float minimum, float maximum, float centre)
 {
     yup::NormalisableRange<float> range (minimum, maximum);
@@ -38,41 +36,9 @@ yup::String formatMilliseconds (double value) { return SynthFormat::milliseconds
 double parseMilliseconds (const yup::String& text) { return SynthFormat::parse (text) * 1000.0; }
 
 yup::String formatBits (double value) { return yup::String (value, 1) + " bits"; }
-
-yup::String formatOrder (float value)
-{
-    const auto names = getSynthEffectNames();
-    yup::StringArray chain;
-
-    for (const auto type : SynthEffectsParameters::decodeOrder (yup::roundToInt (value)))
-        chain.add (names[static_cast<int> (type)]);
-
-    return chain.joinIntoString (" > ");
-}
-
-float parseOrder (const yup::String& text)
-{
-    const auto names = getSynthEffectNames();
-    const auto tokens = yup::StringArray::fromTokens (text, ">", {});
-    SynthEffectOrder order {};
-    std::array<bool, SynthExample::effectCount> used {};
-
-    if (tokens.size() != SynthExample::effectCount)
-        return 0.0f;
-
-    for (int index = 0; index < tokens.size(); ++index)
-    {
-        const auto type = names.indexOf (tokens[index].trim(), true);
-
-        if (type < 0 || used[static_cast<std::size_t> (type)])
-            return 0.0f;
-
-        used[static_cast<std::size_t> (type)] = true;
-        order[static_cast<std::size_t> (index)] = static_cast<SynthEffectType> (type);
-    }
-
-    return static_cast<float> (SynthEffectsParameters::encodeOrder (order));
-}
+yup::String formatDecibels (double value) { return yup::String (value >= 0.05 ? "+" : "") + yup::String (value, 1) + " dB"; }
+yup::String formatRatio (double value) { return yup::String (value, 1) + ":1"; }
+yup::String formatQ (double value) { return yup::String (value, 2); }
 } // namespace
 
 SynthEffectsParameters::SynthEffectsParameters()
@@ -81,18 +47,6 @@ SynthEffectsParameters::SynthEffectsParameters()
 
     const SynthEffectsValues defaults;
     const auto names = getSynthEffectNames();
-
-    order = yup::AudioParameterBuilder()
-                .withID ("fx.order")
-                .withName ("Effects Order")
-                .withHostID (8000)
-                .withModulePath ("Effects")
-                .withRange (yup::NormalisableRange<float> (0.0f, static_cast<float> (orderCount - 1), 1.0f))
-                .withDefault (static_cast<float> (encodeOrder (defaults.order)))
-                .withStepped (true)
-                .withValueToString (formatOrder)
-                .withStringToValue (parseOrder)
-                .build();
 
     const auto prefix = [] (const char* name) { return yup::String ("fx.") + name + "."; };
     const auto hostBase = [] (SynthEffectType type) { return static_cast<yup::uint32> (8100 + 100 * static_cast<int> (type)); };
@@ -181,6 +135,58 @@ SynthEffectsParameters::SynthEffectsParameters()
         reverb.width = createContinuous (id + "width", "Reverb Width", base + 4, "Reverb", { 0.0f, 1.0f }, values.width, SynthFormat::percent);
         reverb.mix = createContinuous (id + "mix", "Reverb Mix", base + 5, "Reverb", { 0.0f, 1.0f }, values.mix, SynthFormat::percent);
     }
+
+    {
+        const auto id = prefix ("distortion");
+        const auto base = hostBase (SynthEffectType::distortion);
+        const auto& values = defaults.distortion;
+
+        distortion.type = createChoice (id + "type", "Distortion Type", base + 1, "Distortion", getSynthDistortionTypeNames(), static_cast<int> (values.type));
+        distortion.drive = createContinuous (id + "drive", "Distortion Drive", base + 2, "Distortion", { 0.0f, 48.0f }, values.driveDb, formatDecibels);
+        distortion.bias = createContinuous (id + "bias", "Distortion Bias", base + 3, "Distortion", { -1.0f, 1.0f }, values.bias, SynthFormat::bipolar);
+        distortion.tone = createContinuous (id + "tone", "Distortion Tone", base + 4, "Distortion", skewed (500.0f, 20000.0f, 4000.0f), values.tone, SynthFormat::hertz);
+        distortion.output = createContinuous (id + "output", "Distortion Output", base + 5, "Distortion", { -24.0f, 12.0f }, values.outputDb, formatDecibels);
+        distortion.mix = createContinuous (id + "mix", "Distortion Mix", base + 6, "Distortion", { 0.0f, 1.0f }, values.mix, SynthFormat::percent);
+    }
+
+    {
+        const auto id = prefix ("eq");
+        const auto base = hostBase (SynthEffectType::equalizer);
+        const auto& values = defaults.equalizer;
+
+        equalizer.lowGain = createContinuous (id + "lowgain", "EQ Low Gain", base + 1, "EQ", { -18.0f, 18.0f }, values.lowGainDb, formatDecibels);
+        equalizer.lowFrequency = createContinuous (id + "lowfreq", "EQ Low Frequency", base + 2, "EQ", skewed (20.0f, 1000.0f, 150.0f), values.lowFrequency, SynthFormat::hertz);
+        equalizer.midGain = createContinuous (id + "midgain", "EQ Mid Gain", base + 3, "EQ", { -18.0f, 18.0f }, values.midGainDb, formatDecibels);
+        equalizer.midFrequency = createContinuous (id + "midfreq", "EQ Mid Frequency", base + 4, "EQ", skewed (100.0f, 10000.0f, 1000.0f), values.midFrequency, SynthFormat::hertz);
+        equalizer.midQ = createContinuous (id + "midq", "EQ Mid Q", base + 5, "EQ", skewed (0.2f, 8.0f, 1.0f), values.midQ, formatQ);
+        equalizer.highGain = createContinuous (id + "highgain", "EQ High Gain", base + 6, "EQ", { -18.0f, 18.0f }, values.highGainDb, formatDecibels);
+        equalizer.highFrequency = createContinuous (id + "highfreq", "EQ High Frequency", base + 7, "EQ", skewed (1000.0f, 20000.0f, 5000.0f), values.highFrequency, SynthFormat::hertz);
+    }
+
+    {
+        const auto id = prefix ("compressor");
+        const auto base = hostBase (SynthEffectType::compressor);
+        const auto& values = defaults.compressor;
+
+        compressor.threshold = createContinuous (id + "threshold", "Compressor Threshold", base + 1, "Compressor", { -60.0f, 0.0f }, values.thresholdDb, formatDecibels);
+        compressor.ratio = createContinuous (id + "ratio", "Compressor Ratio", base + 2, "Compressor", skewed (1.0f, 20.0f, 4.0f), values.ratio, formatRatio);
+        compressor.attack = createContinuous (id + "attack", "Compressor Attack", base + 3, "Compressor", skewed (0.1f, 100.0f, 10.0f), values.attackMs, formatMilliseconds, parseMilliseconds);
+        compressor.release = createContinuous (id + "release", "Compressor Release", base + 4, "Compressor", skewed (10.0f, 1000.0f, 150.0f), values.releaseMs, formatMilliseconds, parseMilliseconds);
+        compressor.makeup = createContinuous (id + "makeup", "Compressor Makeup", base + 5, "Compressor", { 0.0f, 24.0f }, values.makeupDb, formatDecibels);
+        compressor.mix = createContinuous (id + "mix", "Compressor Mix", base + 6, "Compressor", { 0.0f, 1.0f }, values.mix, SynthFormat::percent);
+    }
+
+    {
+        const auto id = prefix ("surround");
+        const auto base = hostBase (SynthEffectType::surround);
+        const auto& values = defaults.surround;
+
+        surround.width = createContinuous (id + "width", "Surround Width", base + 1, "Surround", { 0.0f, 2.0f }, values.width, SynthFormat::percent);
+        surround.depth = createContinuous (id + "depth", "Surround Depth", base + 2, "Surround", { 0.0f, 1.0f }, values.depth, SynthFormat::percent);
+        surround.time = createContinuous (id + "time", "Surround Time", base + 3, "Surround", { 1.0f, 30.0f }, values.timeMs, formatMilliseconds, parseMilliseconds);
+        surround.monoBelow = createContinuous (id + "mono", "Surround Mono Below", base + 4, "Surround", skewed (20.0f, 500.0f, 120.0f), values.monoBelow, SynthFormat::hertz);
+        surround.mix = createContinuous (id + "mix", "Surround Mix", base + 5, "Surround", { 0.0f, 1.0f }, values.mix, SynthFormat::percent);
+    }
 }
 
 void SynthEffectsParameters::addTo (yup::AudioProcessor& processor) const
@@ -191,22 +197,23 @@ void SynthEffectsParameters::addTo (yup::AudioProcessor& processor) const
 
 std::vector<yup::AudioParameter::Ptr> SynthEffectsParameters::getParameters() const
 {
-    std::vector<yup::AudioParameter::Ptr> parameters { order };
-    parameters.insert (parameters.end(), enabled.begin(), enabled.end());
+    std::vector<yup::AudioParameter::Ptr> parameters (enabled.begin(), enabled.end());
     parameters.insert (parameters.end(), { bitcrusher.bits, bitcrusher.rate, bitcrusher.dither, bitcrusher.mix,
                                            chorus.mode, chorus.rate, chorus.depth, chorus.delay, chorus.feedback, chorus.mix,
                                            phaser.stages, phaser.rate, phaser.depth, phaser.center, phaser.feedback, phaser.stereo, phaser.mix,
                                            flanger.rate, flanger.depth, flanger.delay, flanger.feedback, flanger.stereo, flanger.mix,
                                            delay.tempoSync, delay.time, delay.division, delay.feedback, delay.pingPong, delay.lowCut, delay.highCut, delay.mix,
-                                           reverb.predelay, reverb.decay, reverb.damping, reverb.width, reverb.mix });
+                                           reverb.predelay, reverb.decay, reverb.damping, reverb.width, reverb.mix,
+                                           distortion.type, distortion.drive, distortion.bias, distortion.tone, distortion.output, distortion.mix,
+                                           equalizer.lowGain, equalizer.lowFrequency, equalizer.midGain, equalizer.midFrequency, equalizer.midQ, equalizer.highGain, equalizer.highFrequency,
+                                           compressor.threshold, compressor.ratio, compressor.attack, compressor.release, compressor.makeup, compressor.mix,
+                                           surround.width, surround.depth, surround.time, surround.monoBelow, surround.mix });
     return parameters;
 }
 
 SynthEffectsValues SynthEffectsParameters::read (SynthParameterReader reader) const noexcept
 {
     SynthEffectsValues values;
-
-    values.order = decodeOrder (reader.asInt (order));
 
     for (std::size_t index = 0; index < enabled.size(); ++index)
         values.enabled[index] = reader.asInt (enabled[index]) != 0;
@@ -232,46 +239,16 @@ SynthEffectsValues SynthEffectsParameters::read (SynthParameterReader reader) co
 
     values.reverb = { reader (reverb.predelay), reader (reverb.decay), reader (reverb.damping), reader (reverb.width), reader (reverb.mix) };
 
+    values.distortion = { static_cast<SynthDistortionType> (yup::jlimit (0, 2, reader.asInt (distortion.type))),
+                          reader (distortion.drive), reader (distortion.bias), reader (distortion.tone), reader (distortion.output), reader (distortion.mix) };
+
+    values.equalizer = { reader (equalizer.lowGain), reader (equalizer.lowFrequency), reader (equalizer.midGain), reader (equalizer.midFrequency),
+                         reader (equalizer.midQ), reader (equalizer.highGain), reader (equalizer.highFrequency) };
+
+    values.compressor = { reader (compressor.threshold), reader (compressor.ratio), reader (compressor.attack), reader (compressor.release),
+                          reader (compressor.makeup), reader (compressor.mix) };
+
+    values.surround = { reader (surround.width), reader (surround.depth), reader (surround.time), reader (surround.monoBelow), reader (surround.mix) };
+
     return values;
-}
-
-SynthEffectOrder SynthEffectsParameters::decodeOrder (int index) noexcept
-{
-    index = yup::jlimit (0, orderCount - 1, index);
-
-    std::array<int, SynthExample::effectCount> remaining { 0, 1, 2, 3, 4, 5 };
-    auto numRemaining = SynthExample::effectCount;
-    SynthEffectOrder order {};
-
-    for (std::size_t position = 0; position < order.size(); ++position)
-    {
-        const auto pick = index / factorials[position];
-        index %= factorials[position];
-
-        order[position] = static_cast<SynthEffectType> (remaining[static_cast<std::size_t> (pick)]);
-
-        for (auto shift = pick; shift < numRemaining - 1; ++shift)
-            remaining[static_cast<std::size_t> (shift)] = remaining[static_cast<std::size_t> (shift + 1)];
-
-        --numRemaining;
-    }
-
-    return order;
-}
-
-int SynthEffectsParameters::encodeOrder (const SynthEffectOrder& order) noexcept
-{
-    auto index = 0;
-
-    for (std::size_t position = 0; position < order.size(); ++position)
-    {
-        auto smallerAfter = 0;
-
-        for (auto later = position + 1; later < order.size(); ++later)
-            smallerAfter += order[later] < order[position] ? 1 : 0;
-
-        index += smallerAfter * factorials[position];
-    }
-
-    return index;
 }

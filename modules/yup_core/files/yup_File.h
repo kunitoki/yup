@@ -866,6 +866,9 @@ public:
 
         - if it's a folder, it will be opened in Explorer, Finder, or equivalent.
 
+        - on the web, a file is handed to the browser as a download (its bytes
+        are copied out of the in-memory filesystem), and folders are not supported.
+
         @see revealToUser
     */
     bool startAsProcess (const String& parameters = String()) const;

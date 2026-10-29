@@ -141,7 +141,7 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
 
     fmPanel = std::make_unique<SynthFMPanel> (parameters);
     modulationPage = std::make_unique<SynthModulationPage> (parameters, processor.getRoutes(), processor.getParameters());
-    effectsPage = std::make_unique<SynthEffectsPage> (parameters.effects);
+    effectsPage = std::make_unique<SynthEffectsPage> (parameters.effects, processor.getEffectChain());
 
     // The caption reads both grids; a strip control belongs to one tab, so each grid has its own.
     const auto gridCaption = yup::String::fromUTF8 ("ROW \xe2\x86\x90 COLUMN");

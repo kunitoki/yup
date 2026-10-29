@@ -156,10 +156,22 @@ void SynthPresetBar::savePreset()
         if (bar == nullptr || ! success || results.isEmpty())
             return;
 
-        if (const auto result = bar->processor.savePresetFile (results[0].withFileExtension (presetExtension)); result.failed())
+        auto file = results[0];
+
+        if (! file.hasFileExtension (presetExtension))
+            file = file.getSiblingFile (file.getFileName() + presetExtension);
+
+        if (const auto result = bar->processor.savePresetFile (file); result.failed())
+        {
             yup::Logger::writeToLog ("Retrace: " + result.getErrorMessage());
+        }
         else
+        {
+#if YUP_WASM
+            file.startAsProcess();
+#endif
             bar->processor.getPresetLibrary().getLibrary().rescan();
+        }
 
         bar->syncFromProcessor();
     }, true);

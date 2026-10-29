@@ -21,8 +21,8 @@
 
 #pragma once
 
+#include "../dsp/SynthEffectChain.h"
 #include "../dsp/SynthEffectsParameters.h"
-#include "ParameterGesture.h"
 #include "ParameterKnob.h"
 #include "ParameterLed.h"
 
@@ -34,15 +34,15 @@
     Each row of the chain has the effect's switch. Clicking a row shows its effect,
     dragging it up or down moves the effect along the chain, as one undoable step.
 
-    @see SynthEffectsParameters
+    @see SynthEffectsParameters, SynthEffectChain
 */
 class SynthEffectsPage : public yup::Component
 {
 public:
-    explicit SynthEffectsPage (const SynthEffectsParameters& parametersToEdit);
+    SynthEffectsPage (const SynthEffectsParameters& parametersToEdit, SynthEffectChain& chainToEdit);
     ~SynthEffectsPage() override;
 
-    /** Shows changes made by the host, a preset or a state load. */
+    /** Shows changes made by the host, a preset, a state load or an undo. */
     void syncFromParameters();
 
     void resized() override;
@@ -64,13 +64,13 @@ private:
     void layoutRows();
 
     const SynthEffectsParameters& parameters;
-    SynthEffectOrder shownOrder;
+    SynthEffectChain& chain;
+    SynthEffectOrder shownOrder, orderBeforeDrag;
     SynthEffectType selected = SynthEffectType::chorus;
     std::array<std::unique_ptr<ParameterLed>, SynthExample::effectCount> leds;
     std::array<std::unique_ptr<EffectPanel>, SynthExample::effectCount> panels;
     std::array<ParameterKnob*, 4> chorusGenericKnobs {};
     ParameterKnob* delayTimeKnob = nullptr;
-    ParameterGesture orderGesture;
     int draggedRow = -1;
     yup::Font captionFont;
 };

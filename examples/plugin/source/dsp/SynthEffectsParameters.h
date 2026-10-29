@@ -27,7 +27,7 @@
 #include <vector>
 
 //==============================================================================
-/** The master effects, in their default chain order. */
+/** The master effects. Their order here sets their host IDs, not where they run in the chain. */
 enum class SynthEffectType
 {
     bitcrusher,
@@ -35,7 +35,11 @@ enum class SynthEffectType
     phaser,
     flanger,
     delay,
-    reverb
+    reverb,
+    distortion,
+    equalizer,
+    compressor,
+    surround
 };
 
 /** The effects from the first to process to the last, each present once. */
@@ -44,7 +48,7 @@ using SynthEffectOrder = std::array<SynthEffectType, SynthExample::effectCount>;
 /** @internal Display names for SynthEffectType, index aligned with the enumeration. */
 inline yup::StringArray getSynthEffectNames()
 {
-    return { "Bitcrusher", "Chorus", "Phaser", "Flanger", "Delay", "Reverb" };
+    return { "Bitcrusher", "Chorus", "Phaser", "Flanger", "Delay", "Reverb", "Distortion", "EQ", "Compressor", "Surround" };
 }
 
 /** How the chorus moves: free controls, or the fixed settings of the Juno-60 buttons. */
@@ -60,6 +64,20 @@ enum class SynthChorusMode
 inline yup::StringArray getSynthChorusModeNames()
 {
     return { "Generic", "Juno I", "Juno II", "Juno I+II" };
+}
+
+/** The curve the distortion shapes with. */
+enum class SynthDistortionType
+{
+    soft,
+    cubic,
+    hard
+};
+
+/** @internal Item names for SynthDistortionType, index aligned with the enumeration. */
+inline yup::StringArray getSynthDistortionTypeNames()
+{
+    return { "Soft", "Cubic", "Hard" };
 }
 
 //==============================================================================
@@ -158,11 +176,61 @@ struct SynthReverbValues
     bool operator== (const SynthReverbValues&) const = default;
 };
 
-/** A plain snapshot of the whole effects chain. */
+/** A plain snapshot of the distortion. */
+struct SynthDistortionValues
+{
+    SynthDistortionType type = SynthDistortionType::soft;
+    float driveDb = 12.0f;
+    float bias = 0.0f;       /**< Bipolar offset before the curve, for even harmonics. */
+    float tone = 12000.0f;   /**< Lowpass after the curve, in Hz. */
+    float outputDb = 0.0f;   /**< Gain after the automatic level match. */
+    float mix = 1.0f;
+
+    bool operator== (const SynthDistortionValues&) const = default;
+};
+
+/** A plain snapshot of the three band equalizer: a low shelf, a peak and a high shelf. */
+struct SynthEqualizerValues
+{
+    float lowGainDb = 0.0f;
+    float lowFrequency = 120.0f;
+    float midGainDb = 0.0f;
+    float midFrequency = 1000.0f;
+    float midQ = 0.7f;
+    float highGainDb = 0.0f;
+    float highFrequency = 6000.0f;
+
+    bool operator== (const SynthEqualizerValues&) const = default;
+};
+
+/** A plain snapshot of the compressor. */
+struct SynthCompressorValues
+{
+    float thresholdDb = -18.0f;
+    float ratio = 4.0f;
+    float attackMs = 10.0f;
+    float releaseMs = 150.0f;
+    float makeupDb = 0.0f;
+    float mix = 1.0f; /**< Below one, parallel compression. */
+
+    bool operator== (const SynthCompressorValues&) const = default;
+};
+
+/** A plain snapshot of the surround: a mid/side widener with a delayed ambience. */
+struct SynthSurroundValues
+{
+    float width = 1.0f;      /**< Side level, 0 for mono to 2 for twice as wide. */
+    float depth = 0.5f;      /**< Level of the delayed mid sent to the sides. */
+    float timeMs = 12.0f;    /**< Delay of that ambience. */
+    float monoBelow = 120.0f; /**< The sides are cut below this frequency, keeping the bass centered. */
+    float mix = 1.0f;
+
+    bool operator== (const SynthSurroundValues&) const = default;
+};
+
+/** A plain snapshot of every effect's controls; the chain order is SynthEffectChain's. */
 struct SynthEffectsValues
 {
-    SynthEffectOrder order { SynthEffectType::bitcrusher, SynthEffectType::chorus, SynthEffectType::phaser,
-                             SynthEffectType::flanger, SynthEffectType::delay, SynthEffectType::reverb };
     std::array<bool, SynthExample::effectCount> enabled {};
 
     SynthBitcrusherValues bitcrusher;
@@ -171,6 +239,10 @@ struct SynthEffectsValues
     SynthFlangerValues flanger;
     SynthDelayValues delay;
     SynthReverbValues reverb;
+    SynthDistortionValues distortion;
+    SynthEqualizerValues equalizer;
+    SynthCompressorValues compressor;
+    SynthSurroundValues surround;
 
     bool operator== (const SynthEffectsValues&) const = default;
 
@@ -181,13 +253,12 @@ struct SynthEffectsValues
 //==============================================================================
 /** The parameters of the master effects, IDs prefixed "fx.".
 
-    Each effect has its own switch, all off by default. The chain order is one stepped
-    parameter, "fx.order", indexing the permutations of the effects, so the order is
-    saved, recalled, automated and undone like any other value.
+    Each effect has its own switch, all off by default. The chain order is not a parameter
+    but patch state, see SynthEffectChain.
 
-    Host IDs start at 8000: the order, then 100 per effect from 8100 in SynthEffectType order.
+    Host IDs are 100 per effect from 8100, in SynthEffectType order.
 
-    @see SynthEffectsRack
+    @see SynthEffectsRack, SynthEffectChain
 */
 class SynthEffectsParameters
 {
@@ -206,15 +277,6 @@ public:
 
     /** Returns the switch of an effect. */
     const yup::AudioParameter::Ptr& getEnabled (SynthEffectType type) const noexcept { return enabled[static_cast<std::size_t> (type)]; }
-
-    /** Returns the chain order an "fx.order" value stands for. */
-    static SynthEffectOrder decodeOrder (int index) noexcept;
-
-    /** Returns the "fx.order" value of a chain order. */
-    static int encodeOrder (const SynthEffectOrder& order) noexcept;
-
-    /** How many chain orders there are: every permutation of the effects. */
-    static constexpr int orderCount = 720;
 
     struct Bitcrusher
     {
@@ -246,7 +308,26 @@ public:
         yup::AudioParameter::Ptr predelay, decay, damping, width, mix;
     };
 
-    yup::AudioParameter::Ptr order;
+    struct Distortion
+    {
+        yup::AudioParameter::Ptr type, drive, bias, tone, output, mix;
+    };
+
+    struct Equalizer
+    {
+        yup::AudioParameter::Ptr lowGain, lowFrequency, midGain, midFrequency, midQ, highGain, highFrequency;
+    };
+
+    struct Compressor
+    {
+        yup::AudioParameter::Ptr threshold, ratio, attack, release, makeup, mix;
+    };
+
+    struct Surround
+    {
+        yup::AudioParameter::Ptr width, depth, time, monoBelow, mix;
+    };
+
     std::array<yup::AudioParameter::Ptr, SynthExample::effectCount> enabled;
 
     Bitcrusher bitcrusher;
@@ -255,4 +336,8 @@ public:
     Flanger flanger;
     Delay delay;
     Reverb reverb;
+    Distortion distortion;
+    Equalizer equalizer;
+    Compressor compressor;
+    Surround surround;
 };

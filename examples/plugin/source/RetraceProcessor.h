@@ -99,6 +99,9 @@ public:
     /** Returns the envelope and LFO curves. */
     SynthCurveState& getCurves() noexcept { return curves; }
 
+    /** Returns the order the master effects run in. */
+    SynthEffectChain& getEffectChain() noexcept { return effectChain; }
+
     /** Returns the modulation routes. */
     SynthRoutes& getRoutes() noexcept { return routes; }
 
@@ -219,7 +222,7 @@ public:
 private:
     //==============================================================================
     yup::Result applyState (const yup::DataTree& state, ChangeDetails details);
-    SynthPatch::State getPatchState() noexcept { return { partials, curves, routes }; }
+    SynthPatch::State getPatchState() noexcept { return { partials, curves, routes, effectChain }; }
     void prepareEngine (SynthQuality quality);
 
     void parameterValueChanged (const yup::AudioParameter::Ptr& parameter, int indexInContainer) override;
@@ -234,6 +237,7 @@ private:
     SynthPatch::Partials partials;
     SynthCurveState curves;
     SynthRoutes routes;
+    SynthEffectChain effectChain;
     HarmonicSynthEngine engine;
     SynthEffectsRack effects;
     std::array<yup::SoftClipper<float>, 2> masterClippers;

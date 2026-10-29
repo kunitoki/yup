@@ -54,7 +54,10 @@ void moveMarks (PresetUserData& userData, const yup::String& fromKey, const yup:
 
 yup::File getFileFor (const yup::File& folder, const yup::String& name, const PresetFormat& format)
 {
-    const auto fileName = yup::File::createLegalFileName (name).trim();
+    auto fileName = yup::File::createLegalFileName (name).trim();
+
+    if (fileName.endsWithIgnoreCase (format.extension))
+        fileName = fileName.dropLastCharacters (format.extension.length()).trimEnd();
 
     if (fileName.isEmpty())
         return {};

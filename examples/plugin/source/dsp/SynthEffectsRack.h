@@ -23,21 +23,25 @@
 
 #include "SynthBitcrusher.h"
 #include "SynthChorus.h"
+#include "SynthCompressor.h"
 #include "SynthDelay.h"
+#include "SynthDistortion.h"
+#include "SynthEqualizer.h"
 #include "SynthFlanger.h"
 #include "SynthPhaser.h"
 #include "SynthPlateReverb.h"
+#include "SynthSurround.h"
 
 #include <vector>
 
 //==============================================================================
 /** The master effects chain, run on the summed voices.
 
-    Effects run in the snapshot's order. Switching one on or off crossfades it in or out
+    Effects run in the given order. Switching one on or off crossfades it in or out
     over SynthExample::enableFadeSeconds; once faded out it is cleared and skipped, so a
     disabled effect costs nothing and comes back without an old tail.
 
-    @see SynthEffectsParameters
+    @see SynthEffectsParameters, SynthEffectChain
 */
 class SynthEffectsRack
 {
@@ -53,9 +57,10 @@ public:
 
     /** Processes a stereo chunk in place.
 
-        @param bpm  The host tempo, or zero when unknown
+        @param order  The effects from first to last, see SynthEffectChain
+        @param bpm    The host tempo, or zero when unknown
     */
-    void process (float* left, float* right, int numSamples, const SynthEffectsValues& values, double bpm) noexcept;
+    void process (float* left, float* right, int numSamples, const SynthEffectOrder& order, const SynthEffectsValues& values, double bpm) noexcept;
 
 private:
     void processEffect (SynthEffectType type, float* left, float* right, int numSamples, const SynthEffectsValues& values, double bpm) noexcept;
@@ -67,6 +72,10 @@ private:
     SynthFlanger flanger;
     SynthDelay delay;
     SynthPlateReverb reverb;
+    SynthDistortion distortion;
+    SynthEqualizer equalizer;
+    SynthCompressor compressor;
+    SynthSurround surround;
 
     float fadeStep = 1.0f;
     std::array<float, SynthExample::effectCount> enableGains {};
