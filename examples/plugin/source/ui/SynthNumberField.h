@@ -68,4 +68,6 @@ private:
     yup::String shownText;
     std::vector<SynthKnob::ModulationArc> modulationArcs;
     std::optional<float> modulatedValue;
+    yup::Font captionFont;
+    yup::Font valueFont;
 };

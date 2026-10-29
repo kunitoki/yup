@@ -78,4 +78,5 @@ private:
     SynthFMGraph graph;
     yup::TextButton algorithmButton { "Algorithm" };
     yup::TextButton resetButton { "Reset" };
+    yup::Font captionFont;
 };

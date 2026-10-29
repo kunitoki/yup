@@ -66,4 +66,5 @@ private:
     std::array<SynthFieldEditor, SynthExample::macroCount> names;
     std::array<std::unique_ptr<SynthModulationHandle>, SynthExample::macroCount> handles;
     std::array<yup::String, SynthExample::macroCount> namesBeforeEdit;
+    yup::Font captionFont;
 };

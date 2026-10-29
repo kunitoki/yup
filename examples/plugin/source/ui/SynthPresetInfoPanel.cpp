@@ -33,6 +33,8 @@ constexpr const char* captions[] = { "NAME", "CATEGORY", "AUTHOR", "BANK", "DESC
 SynthPresetInfoPanel::SynthPresetInfoPanel (RetraceProcessor& processorToControl)
     : processor (processorToControl)
 {
+    captionFont = SynthTheme::captionFont (9.5f);
+
     setOpaque (false);
 
     for (int field = 0; field < fieldCount; ++field)
@@ -215,7 +217,6 @@ void SynthPresetInfoPanel::resized()
 
 void SynthPresetInfoPanel::paint (yup::Graphics& g)
 {
-    const auto captionFont = SynthTheme::captionFont (9.5f);
     g.setFillColor (SynthTheme::textSecondary (*this));
 
     for (std::size_t index = 0; index < captionAreas.size(); ++index)

@@ -41,14 +41,6 @@ yup::ColorGradient makeVerticalGradient (yup::Rectangle<float> bounds, std::init
 
     return yup::ColorGradient (yup::ColorGradient::Linear, std::move (colorStops));
 }
-
-yup::Font withAxis (yup::Font font, const char* tag, float value)
-{
-    if (const auto axis = font.getAxisDescription (tag); axis.has_value())
-        return font.withAxisValue (tag, yup::jlimit (axis->minimumValue, axis->maximumValue, value));
-
-    return font;
-}
 } // namespace
 
 //==============================================================================
@@ -266,7 +258,7 @@ void paintSeam (yup::Graphics& g, const yup::Component& scope, yup::Point<float>
 //==============================================================================
 namespace
 {
-void paintRaisedKey (yup::Graphics& g, const yup::Button& button, const yup::String& text, bool lit)
+void paintRaisedKey (yup::Graphics& g, const yup::Button& button, const yup::Font& font, const yup::String& text, bool lit)
 {
     const auto bounds = button.getLocalBounds().withTrimmedBottom (1.0f);
     paintRaised (g, button, button.isButtonDown() ? bounds.withY (bounds.getY() + 1.0f) : bounds, wellCorner);
@@ -277,41 +269,46 @@ void paintRaisedKey (yup::Graphics& g, const yup::Button& button, const yup::Str
                                                : textPrimary (button).withAlpha (0.85f);
 
     g.setFillColor (color);
-    g.fillFittedText (text.toUpperCase(), captionFont (yup::jmin (12.0f, bounds.getHeight() * 0.62f)), bounds.reduced (6.0f, 0.0f), yup::Justification::center);
+    g.fillFittedText (text.toUpperCase(), font.withHeight (yup::jmin (12.0f, bounds.getHeight() * 0.62f)), bounds.reduced (6.0f, 0.0f), yup::Justification::center);
 }
 } // namespace
 
 void styleRaisedButton (yup::TextButton& button)
 {
-    button.setStyle (yup::ComponentStyle::createStyle<yup::TextButton> ([] (yup::Graphics& g, const yup::ApplicationTheme&, const yup::TextButton& b)
+    button.setStyle (yup::ComponentStyle::createStyle<yup::TextButton> ([font = captionFont (12.0f)] (yup::Graphics& g, const yup::ApplicationTheme&, const yup::TextButton& b)
     {
-        paintRaisedKey (g, b, b.getButtonText(), false);
+        paintRaisedKey (g, b, font, b.getButtonText(), false);
     }));
 }
 
 void styleRaisedToggle (yup::ToggleButton& button)
 {
-    button.setStyle (yup::ComponentStyle::createStyle<yup::ToggleButton> ([] (yup::Graphics& g, const yup::ApplicationTheme&, const yup::ToggleButton& b)
+    button.setStyle (yup::ComponentStyle::createStyle<yup::ToggleButton> ([font = captionFont (12.0f)] (yup::Graphics& g, const yup::ApplicationTheme&, const yup::ToggleButton& b)
     {
-        paintRaisedKey (g, b, b.getButtonText(), b.getToggleState());
+        paintRaisedKey (g, b, font, b.getButtonText(), b.getToggleState());
     }));
 }
 
 //==============================================================================
 yup::Font captionFont (float height)
 {
-    const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (height);
-    return withAxis (withAxis (font, "wdth", 70.0f), "wght", 600.0f);
+    // Roboto Flex condenses mostly through XTRA (counter width), wdth alone only narrows by a few percent
+    const auto& font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
+    const auto variant = font.withAxisValues ({ { "wdth", 75.0f }, { "XTRA", 380.0f }, { "wght", 600.0f } });
+    return (variant != yup::Font() ? variant : font).withHeight (height);
 }
 
 yup::Font valueFont (float height)
 {
-    const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (height);
-    return withAxis (font, "wdth", 75.0f);
+    const auto& font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
+    const auto variant = font.withAxisValues ({ { "wdth", 80.0f }, { "XTRA", 400.0f } });
+    return (variant != yup::Font() ? variant : font).withHeight (height);
 }
+
 float textWidth (const yup::String& text, const yup::Font& font)
 {
     yup::StyledText styledText;
+
     {
         auto modifier = styledText.startUpdate();
         modifier.setWrap (yup::StyledText::noWrap);

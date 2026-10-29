@@ -55,6 +55,8 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
     , pitchWheelComponent (processor.getKeyboardState(), "PitchWheel")
     , modWheelComponent (processor.getKeyboardState(), "ModWheel")
 {
+    wheelCaptionFont = SynthTheme::captionFont (10.5f);
+
     const auto& parameters = processor.getSynthParameters();
 
     keyboardComponent.setAvailableRange (36, 84); // C2 to C6
@@ -314,8 +316,8 @@ void SynthInterface::paint (yup::Graphics& g)
 
     const auto captions = wheelsTile.reduced (12.0f, 8.0f).withTrimmedTop (wheelsTile.getHeight() - 16.0f - wheelCaptionHeight);
     g.setFillColor (SynthTheme::textSecondary (keyboardComponent));
-    g.fillFittedText ("PITCH", SynthTheme::captionFont (10.5f), captions.withWidth (wheelWidth).withSizeKeepingCenter (wheelWidth + 12.0f, captions.getHeight()), yup::Justification::center);
-    g.fillFittedText ("MOD", SynthTheme::captionFont (10.5f), captions.withTrimmedLeft (captions.getWidth() - wheelWidth).withSizeKeepingCenter (wheelWidth + 12.0f, captions.getHeight()), yup::Justification::center);
+    g.fillFittedText ("PITCH", wheelCaptionFont, captions.withWidth (wheelWidth).withSizeKeepingCenter (wheelWidth + 12.0f, captions.getHeight()), yup::Justification::center);
+    g.fillFittedText ("MOD", wheelCaptionFont, captions.withTrimmedLeft (captions.getWidth() - wheelWidth).withSizeKeepingCenter (wheelWidth + 12.0f, captions.getHeight()), yup::Justification::center);
 }
 
 void SynthInterface::paintOverChildren (yup::Graphics& g)

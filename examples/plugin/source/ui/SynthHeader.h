@@ -89,4 +89,6 @@ private:
     yup::String voices;
     yup::String load;
     yup::String xruns;
+    yup::Font captionFont;
+    yup::Font valueFont;
 };

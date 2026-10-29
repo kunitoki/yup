@@ -40,6 +40,8 @@ void showPercentInWell (ParameterKnob& knob, const yup::AudioParameter::Ptr& par
 SynthFMPanel::SynthFMPanel (const SynthParameters& parametersToEdit)
     : parameters (parametersToEdit)
 {
+    captionFont = SynthTheme::captionFont (11.5f);
+
     setCachedToTexture (true);
 
     setOpaque (false);
@@ -246,19 +248,18 @@ void SynthFMPanel::paint (yup::Graphics& g)
     const auto count = SynthExample::oscillatorCount;
     const auto cellWidth = grid.getWidth() / static_cast<float> (count + 1);
     const auto cellHeight = grid.getHeight() / static_cast<float> (count);
-    const auto font = SynthTheme::captionFont (11.5f);
 
     g.setFillColor (SynthTheme::textSecondary (*this));
 
     for (int index = 0; index < count; ++index)
     {
         const auto offset = static_cast<float> (index);
-        g.fillFittedText ("OP " + yup::String (index + 1), font, { grid.getX() + cellWidth * offset, 0.0f, cellWidth, labelSize }, yup::Justification::center);
-        g.fillFittedText (yup::String (index + 1), font, { 0.0f, grid.getY() + cellHeight * offset, labelSize, cellHeight }, yup::Justification::centerLeft);
+        g.fillFittedText ("OP " + yup::String (index + 1), captionFont, { grid.getX() + cellWidth * offset, 0.0f, cellWidth, labelSize }, yup::Justification::center);
+        g.fillFittedText (yup::String (index + 1), captionFont, { 0.0f, grid.getY() + cellHeight * offset, labelSize, cellHeight }, yup::Justification::centerLeft);
     }
 
     const auto outX = grid.getX() + cellWidth * static_cast<float> (count);
-    g.fillFittedText ("OUT", font, { outX, 0.0f, cellWidth, labelSize }, yup::Justification::center);
+    g.fillFittedText ("OUT", captionFont, { outX, 0.0f, cellWidth, labelSize }, yup::Justification::center);
 
     SynthTheme::paintSeam (g, *this, { outX, grid.getY() + 4.0f }, { outX, grid.getBottom() - 4.0f });
 }

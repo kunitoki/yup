@@ -76,6 +76,8 @@ private:
     yup::Rectangle<float> fieldArea;
     std::function<yup::String (const yup::String&)> onConfirmName;
     std::function<void()> onConfirmAction;
+    yup::Font captionFont;
+    yup::Font valueFont;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SynthPresetPrompt)
 };

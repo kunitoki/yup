@@ -74,4 +74,5 @@ private:
     yup::Rectangle<float> legatoBox;
     yup::Rectangle<float> qualityCaption;
     SynthPlayMode shownMode = SynthPlayMode::poly;
+    yup::Font captionFont;
 };

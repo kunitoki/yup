@@ -117,6 +117,8 @@ SynthEffectsPage::SynthEffectsPage (const SynthEffectsParameters& parametersToEd
     , shownOrder (SynthEffectsParameters::decodeOrder (yup::roundToInt (parametersToEdit.order->getValue())))
     , orderGesture (*this, parametersToEdit.order)
 {
+    captionFont = SynthTheme::captionFont (12.0f);
+
     setCachedToTexture (true);
     setOpaque (false);
 
@@ -282,7 +284,6 @@ void SynthEffectsPage::paint (yup::Graphics& g)
     const auto list = getListBounds().withHeight (getRowBounds (SynthExample::effectCount - 1).getBottom());
     SynthTheme::paintWell (g, *this, list);
 
-    const auto font = SynthTheme::captionFont (12.0f);
     const auto names = getSynthEffectNames();
 
     for (int row = 0; row < SynthExample::effectCount; ++row)
@@ -303,7 +304,7 @@ void SynthEffectsPage::paint (yup::Graphics& g)
             g.fillRect (grip.getX(), grip.getY() + static_cast<float> (line) * 3.0f, grip.getWidth(), 1.0f);
 
         g.setFillColor (type == selected ? SynthTheme::textPrimary (*this) : SynthTheme::textSecondary (*this));
-        g.fillFittedText (names[static_cast<int> (type)].toUpperCase(), font, area, yup::Justification::centerLeft);
+        g.fillFittedText (names[static_cast<int> (type)].toUpperCase(), captionFont, area, yup::Justification::centerLeft);
     }
 }
 

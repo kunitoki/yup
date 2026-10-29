@@ -208,4 +208,5 @@ private:
 
     bool editingPartials = false;
     bool pendingEdit = false;
+    yup::Font captionFont;
 };

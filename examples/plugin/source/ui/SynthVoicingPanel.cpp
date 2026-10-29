@@ -30,6 +30,8 @@ SynthVoicingPanel::SynthVoicingPanel (const SynthParameters& parametersToEdit)
     , detuneKnob ("DETUNE", parametersToEdit.unisonDetune, SynthTheme::captionFont (12.0f))
     , spreadKnob ("SPREAD", parametersToEdit.unisonSpread, SynthTheme::captionFont (12.0f))
 {
+    captionFont = SynthTheme::captionFont (12.0f);
+
     setCachedToTexture (true);
 
     setOpaque (false);
@@ -89,7 +91,7 @@ void SynthVoicingPanel::resized()
     auto voicingTitle = voicingArea.withHeight (titleHeight);
     qualitySpinner.setBounds (voicingTitle.removeFromRight (42.0f).reduced (0.0f, 3.0f));
     voicingTitle.removeFromRight (SynthTheme::controlGap);
-    qualityCaption = voicingTitle.removeFromRight (SynthTheme::textWidth ("QUALITY", SynthTheme::captionFont (12.0f)) + 2.0f);
+    qualityCaption = voicingTitle.removeFromRight (SynthTheme::textWidth ("QUALITY", captionFont) + 2.0f);
 
     auto body = voicingArea.withTrimmedTop (titleHeight + 4.0f);
     auto checks = body.removeFromLeft (checkRowWidth);
@@ -104,20 +106,17 @@ void SynthVoicingPanel::paint (yup::Graphics& g)
 {
     SynthTheme::paintPanel (g, *this, getLocalBounds());
 
-    const auto titleFont = SynthTheme::captionFont (13.5f);
-
     for (const auto& [area, title] : { std::pair { voicingArea, "VOICING" }, std::pair { unisonArea, "UNISON" } })
     {
         const auto line = area.withHeight (titleHeight);
         g.setFillColor (SynthTheme::textPrimary (*this));
-        g.fillFittedText (title, titleFont, line, yup::Justification::centerLeft);
+        g.fillFittedText (title, captionFont.withHeight (13.5f), line, yup::Justification::centerLeft);
         SynthTheme::paintSeam (g, *this, { line.getX(), line.getBottom() + 1.0f }, { line.getRight(), line.getBottom() + 1.0f });
     }
 
     const auto seamX = (voicingArea.getRight() + unisonArea.getX()) * 0.5f;
     SynthTheme::paintSeam (g, *this, { seamX, voicingArea.getY() + 4.0f }, { seamX, voicingArea.getBottom() - 4.0f });
 
-    const auto captionFont = SynthTheme::captionFont (12.0f);
     const auto mono = shownMode != SynthPlayMode::poly;
     const auto legato = shownMode == SynthPlayMode::legato;
 

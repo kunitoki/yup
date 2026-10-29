@@ -24,6 +24,9 @@
 
 SynthFMGraph::SynthFMGraph()
 {
+    captionFont = SynthTheme::captionFont (10.5f);
+    valueFont = SynthTheme::valueFont (12.0f);
+
     setOpaque (false);
 }
 
@@ -142,7 +145,7 @@ void SynthFMGraph::paint (yup::Graphics& g)
         g.strokeLine (busStart, busY, area.getRight() - 26.0f, busY);
 
         g.setFillColor (SynthTheme::textSecondary (*this));
-        g.fillFittedText ("OUT", SynthTheme::captionFont (10.5f), { area.getRight() - 24.0f, busY - 7.0f, 24.0f, 14.0f }, yup::Justification::centerLeft);
+        g.fillFittedText ("OUT", captionFont, { area.getRight() - 24.0f, busY - 7.0f, 24.0f, 14.0f }, yup::Justification::centerLeft);
     }
 
     // Nodes last, over the links
@@ -161,6 +164,6 @@ void SynthFMGraph::paint (yup::Graphics& g)
         g.strokeEllipse (node);
 
         g.setFillColor (SynthTheme::textPrimary (*this).withAlpha (alpha));
-        g.fillFittedText (yup::String (op + 1), SynthTheme::valueFont (12.0f), node, yup::Justification::center);
+        g.fillFittedText (yup::String (op + 1), valueFont, node, yup::Justification::center);
     }
 }

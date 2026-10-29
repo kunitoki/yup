@@ -36,6 +36,8 @@
 class LFODisplay : public yup::Component
 {
 public:
+    LFODisplay();
+
     /** Updates the drawn shape. Called from the message thread. */
     void setValues (const SynthLFOValues& newValues);
 
@@ -72,4 +74,5 @@ private:
     yup::LFO<float> generator;
     std::vector<float> samples;
     yup::Path path;
+    yup::Font gridFont;
 };

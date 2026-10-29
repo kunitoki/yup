@@ -77,6 +77,9 @@ SynthPresetPrompt::SynthPresetPrompt (const yup::String& titleToShow, const yup:
     : title (titleToShow)
     , message (messageToShow)
 {
+    captionFont = SynthTheme::captionFont (13.5f);
+    valueFont = SynthTheme::valueFont (13.0f);
+
     setOpaque (false);
     setWantsKeyboardFocus (true);
 
@@ -209,7 +212,7 @@ void SynthPresetPrompt::paint (yup::Graphics& g)
 
     auto content = tile.reduced (SynthTheme::panelPadding * 2.0f);
     g.setFillColor (SynthTheme::textPrimary (*this));
-    g.fillFittedText (title, SynthTheme::captionFont (13.5f), content.removeFromTop (lineHeight), yup::Justification::centerLeft);
+    g.fillFittedText (title, captionFont, content.removeFromTop (lineHeight), yup::Justification::centerLeft);
 
     if (field != nullptr)
     {
@@ -219,12 +222,12 @@ void SynthPresetPrompt::paint (yup::Graphics& g)
     else
     {
         g.setFillColor (SynthTheme::textSecondary (*this));
-        g.fillFittedText (message, SynthTheme::valueFont (13.0f), fieldArea, yup::Justification::centerLeft);
+        g.fillFittedText (message, valueFont, fieldArea, yup::Justification::centerLeft);
     }
 
     const auto errorArea = fieldArea.withY (fieldArea.getBottom() + SynthTheme::controlGap);
     g.setFillColor (SynthTheme::accent (*this));
-    g.fillFittedText (error, SynthTheme::valueFont (12.0f), errorArea, yup::Justification::centerLeft);
+    g.fillFittedText (error, valueFont.withHeight (12.0f), errorArea, yup::Justification::centerLeft);
 }
 
 bool SynthPresetPrompt::keyDown (const yup::KeyPress& key, const yup::Point<float>&)

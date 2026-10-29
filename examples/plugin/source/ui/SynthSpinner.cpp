@@ -24,6 +24,8 @@
 SynthSpinner::SynthSpinner (yup::AudioParameter::Ptr steppedParameter)
     : gesture (*this, std::move (steppedParameter))
 {
+    valueFont = SynthTheme::valueFont (13.5f);
+
     setOpaque (false);
     setMouseCursor (yup::MouseCursor::Hand);
     syncFromParameter();
@@ -64,7 +66,7 @@ void SynthSpinner::paint (yup::Graphics& g)
     }
 
     g.setFillColor (isEnabled() ? SynthTheme::accent (*this) : SynthTheme::textSecondary (*this));
-    g.fillFittedText (shownText, SynthTheme::valueFont (yup::jmin (13.5f, bounds.getHeight() * 0.65f)), bounds.reduced (4.0f, 0.0f), yup::Justification::center);
+    g.fillFittedText (shownText, valueFont.withHeight (yup::jmin (13.5f, bounds.getHeight() * 0.65f)), bounds.reduced (4.0f, 0.0f), yup::Justification::center);
 }
 
 void SynthSpinner::stepTo (float value)

@@ -25,6 +25,8 @@ ParameterLed::ParameterLed (yup::AudioParameter::Ptr toggleParameter, const yup:
     : gesture (*this, std::move (toggleParameter))
     , caption (captionText)
 {
+    captionFont = SynthTheme::captionFont (12.0f);
+
     setOpaque (false);
     setMouseCursor (yup::MouseCursor::Hand);
     shownOn = isOn();
@@ -55,7 +57,7 @@ void ParameterLed::paint (yup::Graphics& g)
     if (caption.isNotEmpty())
     {
         g.setFillColor (SynthTheme::textPrimary (*this));
-        g.fillFittedText (caption.toUpperCase(), SynthTheme::captionFont (12.0f), bounds.withTrimmedRight (6.0f), yup::Justification::centerRight);
+        g.fillFittedText (caption.toUpperCase(), captionFont, bounds.withTrimmedRight (6.0f), yup::Justification::centerRight);
     }
 
     const auto lit = SynthTheme::accent (*this);

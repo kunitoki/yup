@@ -82,6 +82,7 @@ private:
     SynthIconButton categoryButton { "PresetCategories", YUP_ICON_CARET_DOWN, 11.0f, false };
     yup::String shownKey;
     bool hasEntry = false;
+    yup::Font captionFont;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SynthPresetInfoPanel)
 };

@@ -75,12 +75,13 @@ float snap (float time, const Timing& timing, int snapChoice);
 /** Formats a time in curve units: milliseconds or seconds, or bar.beat.sixteenth. */
 yup::String format (float time, const Timing& timing);
 
-/** Draws grid lines and their labels in an area, at the positions toX() gives; a line
-    toX() gives no position for is left out. */
+/** Draws grid lines and their labels in an area with a font, at the positions toX() gives;
+    a line toX() gives no position for is left out. */
 void paint (yup::Graphics& g,
             const yup::Component& scope,
             const std::vector<Line>& lines,
             yup::Rectangle<float> area,
+            const yup::Font& font,
             const std::function<std::optional<float> (float)>& toX);
 
 } // namespace SynthTimeGrid

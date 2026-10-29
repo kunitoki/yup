@@ -72,4 +72,5 @@ private:
     ParameterKnob* delayTimeKnob = nullptr;
     ParameterGesture orderGesture;
     int draggedRow = -1;
+    yup::Font captionFont;
 };

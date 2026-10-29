@@ -26,6 +26,8 @@ SynthSegmented::SynthSegmented (std::vector<Segment> segmentsToShow, bool isVert
     : segments (std::move (segmentsToShow))
     , vertical (isVertical)
 {
+    captionFont = SynthTheme::captionFont (12.0f);
+
     setOpaque (false);
     setMouseCursor (yup::MouseCursor::Hand);
 }
@@ -102,7 +104,7 @@ void SynthSegmented::paint (yup::Graphics& g)
         }
 
         g.setFillColor (color);
-        g.fillFittedText (segment.text.toUpperCase(), SynthTheme::captionFont (yup::jmin (12.0f, bounds.getHeight() * 0.7f)), bounds, yup::Justification::center);
+        g.fillFittedText (segment.text.toUpperCase(), captionFont.withHeight (yup::jmin (12.0f, bounds.getHeight() * 0.7f)), bounds, yup::Justification::center);
     }
 }
 

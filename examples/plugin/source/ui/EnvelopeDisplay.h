@@ -135,4 +135,6 @@ private:
     float frozenLength = 0.0f;
     SynthCurveState::Curve editStart;
     yup::Point<float> dragPosition;
+    yup::Font gridFont;
+    yup::Font valueFont;
 };

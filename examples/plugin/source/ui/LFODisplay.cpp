@@ -22,6 +22,11 @@
 #include "LFODisplay.h"
 #include "SynthTheme.h"
 
+LFODisplay::LFODisplay()
+{
+    gridFont = SynthTheme::captionFont (9.5f);
+}
+
 void LFODisplay::setValues (const SynthLFOValues& newValues)
 {
     if (newValues == values)
@@ -135,7 +140,7 @@ void LFODisplay::paint (yup::Graphics& g)
     const auto periods = getPeriods();
     const auto polarity = values.inverted ? -1.0f : 1.0f;
 
-    SynthTimeGrid::paint (g, *this, SynthTimeGrid::getLines (timing, static_cast<float> (periods), area.getWidth()), area, [&] (float time)
+    SynthTimeGrid::paint (g, *this, SynthTimeGrid::getLines (timing, static_cast<float> (periods), area.getWidth()), area, gridFont, [&] (float time)
     {
         return std::optional<float> (area.getX() + area.getWidth() * time / static_cast<float> (periods));
     });

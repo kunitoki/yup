@@ -33,6 +33,8 @@ WaveformEditor::WaveformEditor (const SynthOscillatorParameters& parametersToSho
     , resources (sharedResources)
     , shader (std::move (sharedShader))
 {
+    captionFont = SynthTheme::captionFont (11.5f);
+
     setMouseCursor (yup::MouseCursor::Crosshair);
     setWantedGestures (yup::GestureType::pinch);
     setWantsKeyboardFocus (true);
@@ -593,7 +595,7 @@ void WaveformEditor::paintPartialsOverview (yup::Graphics& g, yup::Rectangle<flo
 
     g.setFillColor (SynthTheme::textSecondary (*this));
     g.fillFittedText (yup::String (first + 1) + "-" + yup::String (first + count) + " / " + yup::String (SynthExample::editableHarmonics),
-                      SynthTheme::captionFont (11.5f),
+                      captionFont,
                       getPartialsArea().reduced (2.0f),
                       yup::Justification::topRight);
 }

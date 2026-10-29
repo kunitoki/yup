@@ -67,4 +67,6 @@ private:
 
     State state;
     Row nodeX {};
+    yup::Font captionFont;
+    yup::Font valueFont;
 };

@@ -72,4 +72,5 @@ private:
     std::vector<Segment> segments;
     int selectedIndex = -1;
     bool vertical = false;
+    yup::Font captionFont;
 };

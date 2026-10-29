@@ -207,10 +207,10 @@ void paint (yup::Graphics& g,
             const yup::Component& scope,
             const std::vector<Line>& lines,
             yup::Rectangle<float> area,
+            const yup::Font& font,
             const std::function<std::optional<float> (float)>& toX)
 {
     const auto color = SynthTheme::textPrimary (scope);
-    const auto font = SynthTheme::captionFont (9.5f);
     auto labelRight = area.getX() - 4.0f;
 
     for (const auto& line : lines)

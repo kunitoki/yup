@@ -25,6 +25,9 @@ SynthNumberField::SynthNumberField (const yup::String& captionText, yup::AudioPa
     : gesture (*this, std::move (parameterToControl))
     , caption (captionText)
 {
+    captionFont = SynthTheme::captionFont (11.5f);
+    valueFont = SynthTheme::valueFont (13.5f);
+
     setOpaque (false);
     setMouseCursor (yup::MouseCursor::Hand);
     syncFromParameter();
@@ -74,7 +77,7 @@ void SynthNumberField::paint (yup::Graphics& g)
 
     if (caption.isNotEmpty())
     {
-        const auto font = SynthTheme::captionFont (height * 0.85f);
+        const auto font = captionFont.withHeight (height * 0.85f);
         const auto captionWidth = yup::jmin (content.getWidth() * 0.5f, SynthTheme::textWidth (caption, font) + 6.0f);
 
         g.setFillColor (SynthTheme::textSecondary (*this));
@@ -88,7 +91,7 @@ void SynthNumberField::paint (yup::Graphics& g)
                                                     : SynthTheme::accent (*this);
 
     g.setFillColor (color);
-    g.fillFittedText (text, SynthTheme::valueFont (height), content, caption.isNotEmpty() ? yup::Justification::centerRight : yup::Justification::center);
+    g.fillFittedText (text, valueFont.withHeight (height), content, caption.isNotEmpty() ? yup::Justification::centerRight : yup::Justification::center);
 
     // Route ranges along the bottom edge, across the parameter's whole range.
     const auto track = bounds.reduced (3.0f, 0.0f);

@@ -56,4 +56,5 @@ private:
     ParameterGesture gesture;
     yup::String caption;
     bool shownOn = false;
+    yup::Font captionFont;
 };

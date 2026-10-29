@@ -96,4 +96,5 @@ private:
     float tabInset = tabPadding;
     std::vector<bool> shownOn;
     int selected = 0;
+    yup::Font tabFont;
 };

@@ -113,4 +113,5 @@ private:
     ParameterKnob phaseKnob;
     std::array<SynthSliderField, 3> sends;
     std::array<SynthSliderField, 10> spectrum;
+    yup::Font captionFont;
 };

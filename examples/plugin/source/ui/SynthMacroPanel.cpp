@@ -26,6 +26,8 @@
 SynthMacroPanel::SynthMacroPanel (RetraceProcessor& processorToControl)
     : processor (processorToControl)
 {
+    captionFont = SynthTheme::captionFont (12.0f);
+
     setOpaque (false);
 
     const auto& macros = processor.getSynthParameters().macros;
@@ -149,6 +151,6 @@ void SynthMacroPanel::paint (yup::Graphics& g)
     {
         const auto knob = knobs[static_cast<std::size_t> (macro)]->getBounds();
         const auto title = yup::Rectangle<float> (knob.getX(), knob.getY() - titleHeight, knob.getWidth() - handleSize, titleHeight);
-        g.fillFittedText ("M" + yup::String (macro + 1), SynthTheme::captionFont (12.0f), title, yup::Justification::centerLeft);
+        g.fillFittedText ("M" + yup::String (macro + 1), captionFont, title, yup::Justification::centerLeft);
     }
 }

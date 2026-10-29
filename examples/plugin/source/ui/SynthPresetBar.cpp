@@ -32,6 +32,9 @@ constexpr const char* fieldCaptions[] = { "BANK:", "AUTHOR:", "TAGS:" };
 SynthPresetBar::SynthPresetBar (RetraceProcessor& processorToControl)
     : processor (processorToControl)
 {
+    captionFont = SynthTheme::captionFont (11.5f);
+    valueFont = SynthTheme::valueFont (13.5f);
+
     setOpaque (false);
 
     listButton.onClick = [this] { toggleBrowser(); };
@@ -72,7 +75,6 @@ void SynthPresetBar::resized()
     nameArea = first;
 
     const auto fieldWidth = second.getWidth() / 3.0f;
-    const auto captionFont = SynthTheme::captionFont (11.5f);
 
     for (std::size_t field = 0; field < valueAreas.size(); ++field)
     {
@@ -91,16 +93,14 @@ void SynthPresetBar::paint (yup::Graphics& g)
     SynthTheme::paintSeam (g, *this, { bounds.getX() + 1.0f, middle }, { bounds.getRight() - 1.0f, middle });
 
     g.setFillColor (SynthTheme::accent (*this));
-    g.fillFittedText (shownInfo.name.isNotEmpty() ? shownInfo.name : yup::String ("Untitled"), SynthTheme::valueFont (18.0f), nameArea, yup::Justification::centerLeft);
+    g.fillFittedText (shownInfo.name.isNotEmpty() ? shownInfo.name : yup::String ("Untitled"), valueFont.withHeight (18.0f), nameArea, yup::Justification::centerLeft);
 
-    const auto captionFont = SynthTheme::captionFont (11.5f);
     g.setFillColor (SynthTheme::textSecondary (*this));
 
     for (std::size_t field = 0; field < captionAreas.size(); ++field)
         g.fillFittedText (fieldCaptions[field], captionFont, captionAreas[field], yup::Justification::centerLeft);
 
     const std::array<yup::String, 3> values { shownInfo.bank, shownInfo.author, shownInfo.tags };
-    const auto valueFont = SynthTheme::valueFont (13.5f);
     g.setFillColor (SynthTheme::textPrimary (*this));
 
     for (std::size_t field = 0; field < valueAreas.size(); ++field)

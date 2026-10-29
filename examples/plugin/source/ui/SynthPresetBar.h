@@ -81,4 +81,6 @@ private:
     std::array<yup::Rectangle<float>, 3> valueAreas;
     yup::Rectangle<float> nameArea;
     SynthPatch::PresetInfo shownInfo;
+    yup::Font captionFont;
+    yup::Font valueFont;
 };

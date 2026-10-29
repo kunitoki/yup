@@ -31,6 +31,8 @@ constexpr float sweepAngle = yup::degreesToRadians (270.0f);
 SynthKnob::SynthKnob()
     : yup::Slider (yup::Slider::RotaryVerticalDrag)
 {
+    valueFont = SynthTheme::valueFont (13.5f);
+
     setStyle (yup::ComponentStyle::createStyle<yup::Slider> (paintKnob));
 }
 
@@ -143,7 +145,7 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
         if (knob->getValueText != nullptr)
         {
             g.setFillColor (value > 0.0f ? SynthTheme::textPrimary (slider) : SynthTheme::textSecondary (slider));
-            g.fillFittedText (knob->getValueText(), SynthTheme::valueFont (wellRadius * 0.62f),
+            g.fillFittedText (knob->getValueText(), knob->valueFont.withHeight (wellRadius * 0.62f),
                               yup::Rectangle<float> (center.getX() - wellRadius, center.getY() - wellRadius, wellRadius * 2.0f, wellRadius * 2.0f),
                               yup::Justification::center);
         }

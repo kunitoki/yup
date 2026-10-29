@@ -25,6 +25,8 @@ SynthSection::SynthSection (std::vector<Tab> tabsToShow, SynthTheme::Section sec
     : tabs (std::move (tabsToShow))
     , sharedControls (std::move (sharedStripControls))
 {
+    tabFont = SynthTheme::captionFont (13.5f);
+
     // Its own drawing, the chrome around the children, is drawn once and reused until
     // it repaints, since the post effect repaints the whole interface on every change.
     setCachedToTexture (true);
@@ -145,12 +147,11 @@ void SynthSection::resized()
 
     // Tabs are laid out before the selected tab's own controls, so they keep their widths
     // whichever tab is selected; those controls shrink into the space left instead
-    const auto font = SynthTheme::captionFont (13.5f);
     auto contentWidth = 0.0f;
 
     for (std::size_t tab = 0; tab < tabs.size(); ++tab)
     {
-        tabWidths[tab] = SynthTheme::textWidth (tabs[tab].name.toUpperCase(), font) + (leds[tab] != nullptr ? ledSpace : 0.0f);
+        tabWidths[tab] = SynthTheme::textWidth (tabs[tab].name.toUpperCase(), tabFont) + (leds[tab] != nullptr ? ledSpace : 0.0f);
         contentWidth += tabWidths[tab];
     }
 
@@ -212,8 +213,6 @@ void SynthSection::paint (yup::Graphics& g)
     g.setFillColor (yup::Colors::black.withAlpha (SynthTheme::isDark (*this) ? 0.6f : 0.2f));
     g.fillRect (strip.getX(), strip.getBottom() - 1.0f, strip.getWidth(), 1.0f);
 
-    const auto font = SynthTheme::captionFont (13.5f);
-
     for (int tab = 0; tab < static_cast<int> (tabs.size()); ++tab)
     {
         const auto area = getTabBounds (tab);
@@ -241,7 +240,7 @@ void SynthSection::paint (yup::Graphics& g)
         g.setClipPath (area);
 
         g.setFillColor (isSelected && shownOn[static_cast<std::size_t> (tab)] ? SynthTheme::textPrimary (*this) : SynthTheme::textSecondary (*this));
-        g.fillFittedText (name, font, text.withWidth (yup::jmax (text.getWidth(), SynthTheme::textWidth (name, font))), yup::Justification::centerLeft);
+        g.fillFittedText (name, tabFont, text.withWidth (yup::jmax (text.getWidth(), SynthTheme::textWidth (name, tabFont))), yup::Justification::centerLeft);
     }
 }
 

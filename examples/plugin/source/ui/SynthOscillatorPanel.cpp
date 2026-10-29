@@ -56,6 +56,8 @@ SynthOscillatorPanel::SynthOscillatorPanel (const SynthOscillatorParameters& par
     , drawTools (makeDrawToolSegments(), true)
     , partialsTools (makePartialsToolSegments(), true)
 {
+    captionFont = SynthTheme::captionFont (11.5f);
+
     setCachedToTexture (true);
 
     setOpaque (false);
@@ -339,7 +341,7 @@ void SynthOscillatorPanel::paint (yup::Graphics& g)
     g.fillRect (bottomBar.getX() + 1.0f, bottomBar.getY(), bottomBar.getWidth() - 2.0f, 1.0f);
 
     g.setFillColor (SynthTheme::textSecondary (*this));
-    g.fillFittedText ("SYNC", SynthTheme::captionFont (11.5f), syncCaptionArea, yup::Justification::centerLeft);
+    g.fillFittedText ("SYNC", captionFont, syncCaptionArea, yup::Justification::centerLeft);
 
     const auto controlsTop = displayArea.getBottom() + SynthTheme::controlGap + 10.0f;
     SynthTheme::paintSeam (g, *this, { seamX, controlsTop }, { seamX, getHeight() - 10.0f });

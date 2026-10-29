@@ -104,6 +104,9 @@ yup_audio_plugin (
     PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE YpSA
     PLUGIN_AAX_CATEGORY AAX_ePlugInCategory_Example
     PLUGIN_COPY_AFTER_BUILD ON
+    # Embed Roboto Flex on every platform, so text measures the same everywhere
+    DEFINITIONS
+        YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT=1
     MODULES
         yup::yup_gui
         yup::yup_audio_processors

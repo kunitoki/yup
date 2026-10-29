@@ -27,6 +27,8 @@ SynthFilterResponse::SynthFilterResponse (const SynthFilterParameters& parameter
     , cutoffGesture (*this, parametersToShow.cutoff)
     , resonanceGesture (*this, parametersToShow.resonance)
 {
+    labelFont = SynthTheme::captionFont (10.5f);
+
     setOpaque (false);
     setMouseCursor (yup::MouseCursor::Hand);
     stage.prepare (sampleRate);
@@ -92,7 +94,6 @@ void SynthFilterResponse::paint (yup::Graphics& g)
     SynthTheme::paintWell (g, *this, bounds);
 
     const auto gridColor = SynthTheme::textPrimary (*this).withAlpha (0.06f);
-    const auto labelFont = SynthTheme::captionFont (10.5f);
 
     for (const auto [frequency, text] : { std::pair { 20.0f, "20" }, std::pair { 200.0f, "200" }, std::pair { 2000.0f, "2K" }, std::pair { 20000.0f, "20K" } })
     {

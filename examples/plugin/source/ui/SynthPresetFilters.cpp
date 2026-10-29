@@ -30,16 +30,14 @@ namespace
 {
 constexpr float chipPadding = 8.0f;
 constexpr float starWidth = 16.0f;
-
-yup::Font getChipFont()
-{
-    return SynthTheme::valueFont (11.5f);
-}
 } // namespace
 
 SynthPresetFilters::SynthPresetFilters (PresetBrowseState& stateToFilter)
     : browser (stateToFilter)
 {
+    captionFont = SynthTheme::captionFont (10.0f);
+    chipFont = SynthTheme::valueFont (11.5f);
+
     setOpaque (false);
     browser.getLibrary().addChangeListener (this);
     refreshChips();
@@ -80,13 +78,12 @@ void SynthPresetFilters::refreshChips()
 void SynthPresetFilters::layoutChips()
 {
     const auto width = chipArea.getWidth();
-    const auto font = getChipFont();
     float x = 0.0f;
     float y = 0.0f;
 
     for (auto& chip : chips)
     {
-        const auto chipWidth = std::min (width, SynthTheme::textWidth (chip.text, font) + chipPadding * 2.0f);
+        const auto chipWidth = std::min (width, SynthTheme::textWidth (chip.text, chipFont) + chipPadding * 2.0f);
 
         if (x > 0.0f && x + chipWidth > width)
         {
@@ -121,7 +118,6 @@ void SynthPresetFilters::paint (yup::Graphics& g)
 {
     const auto accent = SynthTheme::accent (*this);
     const auto secondary = SynthTheme::textSecondary (*this);
-    const auto captionFont = SynthTheme::captionFont (10.0f);
 
     for (const auto& [tab, isActive, title] : { std::tuple { categoriesTab, ! showingTags, "CATEGORIES" }, std::tuple { tagsTab, showingTags, "TAGS" } })
     {
@@ -136,8 +132,6 @@ void SynthPresetFilters::paint (yup::Graphics& g)
         const auto savedState = g.saveState();
         g.setClipPath (chipArea);
 
-        const auto font = getChipFont();
-
         for (const auto& chip : chips)
         {
             const auto bounds = chip.bounds.withPosition (chip.bounds.getX() + chipArea.getX(), chip.bounds.getY() + chipArea.getY() - scrollOffset);
@@ -150,7 +144,7 @@ void SynthPresetFilters::paint (yup::Graphics& g)
             g.fillRoundedRect (bounds, chipHeight * 0.5f);
 
             g.setFillColor (on ? SynthTheme::onAccent (*this) : SynthTheme::textPrimary (*this));
-            g.fillFittedText (chip.text, font, bounds.reduced (chipPadding * 0.5f, 0.0f), yup::Justification::center);
+            g.fillFittedText (chip.text, chipFont, bounds.reduced (chipPadding * 0.5f, 0.0f), yup::Justification::center);
         }
     }
 

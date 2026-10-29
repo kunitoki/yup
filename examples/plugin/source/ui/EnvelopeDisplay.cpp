@@ -25,6 +25,9 @@
 
 EnvelopeDisplay::EnvelopeDisplay()
 {
+    gridFont = SynthTheme::captionFont (9.5f);
+    valueFont = SynthTheme::valueFont (12.0f);
+
     setOpaque (false);
 }
 
@@ -380,7 +383,7 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
 
     // Keep the grid above the fill and trail, with no elapsed time inside the sustain hold.
     const auto sustainTime = sustain >= 0 ? curve.getPoint (sustain).time : 0.0f;
-    SynthTimeGrid::paint (g, *this, SynthTimeGrid::getLines (timing, getShownLength(), area.getWidth() - getHoldWidth()), area, [&] (float time)
+    SynthTimeGrid::paint (g, *this, SynthTimeGrid::getLines (timing, getShownLength(), area.getWidth() - getHoldWidth()), area, gridFont, [&] (float time)
     {
         return std::optional<float> (toScreen (time, 0.0f, sustain >= 0 && time > sustainTime).getX());
     });
@@ -426,8 +429,7 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
     const auto level = cycle ? SynthFormat::bipolar ((inverted ? -1.0 : 1.0) * (2.0 * point.level - 1.0)) : SynthFormat::percent (point.level);
     const auto text = dragKind == DragKind::point ? SynthTimeGrid::format (point.time, timing) + "  " + level
                                                   : "CURVE " + yup::String (point.curve, 2);
-    const auto font = SynthTheme::valueFont (12.0f);
-    const auto width = SynthTheme::textWidth (text, font) + 14.0f;
+    const auto width = SynthTheme::textWidth (text, valueFont) + 14.0f;
     const auto pill = yup::Rectangle<float> (yup::jlimit (area.getX(), area.getRight() - width, dragPosition.getX() - width * 0.5f),
                                              yup::jmax (area.getY(), dragPosition.getY() - 30.0f),
                                              width,
@@ -436,5 +438,5 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
     g.setFillColor (color);
     g.fillRoundedRect (pill, 9.0f);
     g.setFillColor (SynthTheme::role (*this, yup::ThemePalette::Role::onAccent));
-    g.fillFittedText (text, font, pill, yup::Justification::center);
+    g.fillFittedText (text, valueFont, pill, yup::Justification::center);
 }

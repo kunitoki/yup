@@ -142,10 +142,14 @@ void paintTrail (yup::Graphics& g, const yup::Path& area, float x, float width, 
 /** Paints an engraved line between two areas of a panel. */
 void paintSeam (yup::Graphics& g, const yup::Component& scope, yup::Point<float> from, yup::Point<float> to);
 
-/** The narrow, semibold face of captions and tab names. */
+/** The narrow, semibold face of captions and tab names.
+
+    Creating a variable font instance is expensive: keep the result in the component that uses it
+    and rescale it with withHeight() instead of calling this while painting.
+*/
 yup::Font captionFont (float height);
 
-/** The narrow face of values. */
+/** The narrow face of values. Cache it like captionFont(). */
 yup::Font valueFont (float height);
 
 /** Returns the width a single line of text takes in a font. */

@@ -191,4 +191,5 @@ private:
     int appliedFrameRate = -1;
     yup::Rectangle<float> wheelsTile;
     yup::Rectangle<float> keyboardTile;
+    yup::Font wheelCaptionFont;
 };

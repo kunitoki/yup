@@ -27,6 +27,9 @@ SynthSliderField::SynthSliderField (const yup::String& captionText, yup::AudioPa
     , look (lookToUse)
     , bipolar (isBipolar)
 {
+    captionFont = SynthTheme::captionFont (11.5f);
+    valueFont = SynthTheme::valueFont (13.0f);
+
     setOpaque (false);
     setMouseCursor (yup::MouseCursor::Hand);
     syncFromParameter();
@@ -97,20 +100,20 @@ void SynthSliderField::paint (yup::Graphics& g)
 
         const auto text = bounds.reduced (9.0f, 0.0f).withHeight (track.getY() - 2.0f - bounds.getY());
         g.setFillColor (SynthTheme::textSecondary (*this));
-        g.fillFittedText (caption.toUpperCase(), SynthTheme::captionFont (11.5f), text, yup::Justification::bottomLeft);
+        g.fillFittedText (caption.toUpperCase(), captionFont, text, yup::Justification::bottomLeft);
         g.setFillColor (SynthTheme::textPrimary (*this));
-        g.fillFittedText (parameter->toString(), SynthTheme::valueFont (13.0f), text, yup::Justification::bottomRight);
+        g.fillFittedText (parameter->toString(), valueFont, text, yup::Justification::bottomRight);
     }
     else
     {
         if (caption.isNotEmpty())
         {
             g.setFillColor (SynthTheme::textSecondary (*this));
-            g.fillFittedText (caption.toUpperCase(), SynthTheme::captionFont (11.5f), bounds.withWidth (captionWidth), yup::Justification::centerLeft);
+            g.fillFittedText (caption.toUpperCase(), captionFont, bounds.withWidth (captionWidth), yup::Justification::centerLeft);
         }
 
         g.setFillColor (accent);
-        g.fillFittedText (parameter->toString(), SynthTheme::valueFont (12.0f), bounds.withTrimmedLeft (bounds.getWidth() - valueWidth), yup::Justification::centerRight);
+        g.fillFittedText (parameter->toString(), valueFont.withHeight (12.0f), bounds.withTrimmedLeft (bounds.getWidth() - valueWidth), yup::Justification::centerRight);
     }
 
     g.setFillColor (SynthTheme::wellColor (*this).mixedWith (SynthTheme::panelColor (*this), 0.35f, yup::ColorSpace::SRGB));

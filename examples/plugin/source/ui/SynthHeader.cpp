@@ -61,6 +61,9 @@ SynthHeader::SynthHeader (RetraceProcessor& processorToControl)
     , presetBar (processorToControl)
     , volumeKnob ("VOLUME", processorToControl.getSynthParameters().volume, SynthTheme::captionFont (11.0f))
 {
+    captionFont = SynthTheme::captionFont (11.5f);
+    valueFont = SynthTheme::valueFont (13.5f);
+
     setCachedToTexture (true);
 
     setOpaque (false);
@@ -205,14 +208,12 @@ void SynthHeader::paint (yup::Graphics& g)
     auto words = logoTile.withTrimmedLeft (logoArea.getRight() - logoTile.getX() + 10.0f).reduced (0.0f, 14.0f);
     words.removeFromTop (10.0f);
     g.setFillColor (SynthTheme::textPrimary (*this));
-    g.fillFittedText ("RETRACE", SynthTheme::valueFont (24.0f).withAxisValue ("wdth", 80.0f), words.removeFromTop (words.getHeight() * 0.62f), yup::Justification::bottomLeft);
+    g.fillFittedText ("RETRACE", valueFont.withHeight (24.0f), words.removeFromTop (words.getHeight() * 0.62f), yup::Justification::bottomLeft);
     g.setFillColor (SynthTheme::textSecondary (*this));
-    g.fillFittedText ("SPECTRAL FMOD", SynthTheme::captionFont (13.5f), words, yup::Justification::topLeft);
+    g.fillFittedText ("SPECTRAL FMOD", captionFont.withHeight (13.5f), words, yup::Justification::topLeft);
 
     auto stats = statsTile.reduced (12.0f, 9.0f);
     const auto rowHeight = stats.getHeight() / 3.0f;
-    const auto captionFont = SynthTheme::captionFont (11.5f);
-    const auto valueFont = SynthTheme::valueFont (13.5f);
     const std::pair<const char*, yup::String> rows[] = { { "VOICES", voices }, { "CPU", load }, { "XRUNS", xruns } };
 
     for (const auto& [caption, value] : rows)

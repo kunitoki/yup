@@ -84,4 +84,5 @@ private:
     std::optional<float> modulatedValue;
     bool showingValue = false;
     bool showsValueInWell = false;
+    yup::Font valueFont;
 };

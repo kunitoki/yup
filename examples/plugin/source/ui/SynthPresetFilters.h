@@ -81,6 +81,8 @@ private:
     yup::Rectangle<float> tagsTab;
     yup::Rectangle<float> chipArea;
     yup::Rectangle<float> ratingArea;
+    yup::Font captionFont;
+    yup::Font chipFont;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SynthPresetFilters)
 };

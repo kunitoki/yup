@@ -93,6 +93,8 @@ class SynthPresetList::Row : public yup::Component
 public:
     Row()
     {
+        valueFont = SynthTheme::valueFont (13.0f);
+
         setOpaque (true);
         setWantsMouseEvents (false, false);
     }
@@ -129,11 +131,11 @@ public:
         g.fillFittedText (star, iconFont, columns[0], yup::Justification::center);
 
         g.setFillColor (selected ? accent : SynthTheme::textPrimary (*this));
-        g.fillFittedText (entry.name, SynthTheme::valueFont (13.0f), columns[1].reduced (4.0f, 0.0f), yup::Justification::centerLeft);
+        g.fillFittedText (entry.name, valueFont, columns[1].reduced (4.0f, 0.0f), yup::Justification::centerLeft);
 
         const auto date = entry.isFactory() ? yup::String ("-") : entry.modified.formatted ("%Y-%m-%d");
         const std::array<yup::String, 4> details { entry.category, entry.author, entry.location, date };
-        const auto detailFont = SynthTheme::valueFont (12.0f);
+        const auto detailFont = valueFont.withHeight (12.0f);
         g.setFillColor (SynthTheme::textSecondary (*this));
 
         for (std::size_t index = 0; index < details.size(); ++index)
@@ -151,6 +153,7 @@ private:
     bool favorite = false;
     int rating = 0;
     bool selected = false;
+    yup::Font valueFont;
 };
 
 //==============================================================================
@@ -159,6 +162,9 @@ SynthPresetList::SynthPresetList (RetraceProcessor& processorToControl)
     , browser (processorToControl.getPresetBrowser())
     , rows (std::make_unique<Rows>())
 {
+    captionFont = SynthTheme::captionFont (10.0f);
+    valueFont = SynthTheme::valueFont (13.5f);
+
     setOpaque (false);
 
     searchField.setMultiLine (false);
@@ -266,7 +272,6 @@ void SynthPresetList::paint (yup::Graphics& g)
 
     const auto& query = browser.getQuery();
     const auto columns = layoutColumns (columnHeader);
-    const auto captionFont = SynthTheme::captionFont (10.0f);
     const auto sortColumn = static_cast<std::size_t> (query.sortKey);
 
     for (std::size_t index = 0; index < columns.size(); ++index)
@@ -298,7 +303,7 @@ void SynthPresetList::paintOverChildren (yup::Graphics& g)
         return;
 
     g.setFillColor (SynthTheme::textSecondary (*this).withAlpha (0.6f));
-    g.fillFittedText ("Search", SynthTheme::valueFont (13.5f), searchField.getBounds().reduced (4.0f, 0.0f), yup::Justification::centerLeft);
+    g.fillFittedText ("Search", valueFont, searchField.getBounds().reduced (4.0f, 0.0f), yup::Justification::centerLeft);
 }
 
 void SynthPresetList::mouseMove (const yup::MouseEvent& event)

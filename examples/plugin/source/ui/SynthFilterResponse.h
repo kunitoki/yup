@@ -74,4 +74,5 @@ private:
     double sampleRate = 48000.0;
     ParameterGesture cutoffGesture;
     ParameterGesture resonanceGesture;
+    yup::Font labelFont;
 };

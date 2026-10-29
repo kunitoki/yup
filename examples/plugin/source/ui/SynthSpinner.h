@@ -55,4 +55,5 @@ private:
     yup::String shownText;
     float dragStartValue = 0.0f;
     bool dragged = false;
+    yup::Font valueFont;
 };

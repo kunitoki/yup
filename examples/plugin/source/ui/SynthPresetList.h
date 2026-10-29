@@ -113,6 +113,8 @@ private:
     yup::Rectangle<float> listArea;
     yup::Rectangle<float> columnHeader;
     yup::String shownKey;
+    yup::Font captionFont;
+    yup::Font valueFont;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SynthPresetList)
 };

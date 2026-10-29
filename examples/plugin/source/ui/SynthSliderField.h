@@ -87,4 +87,6 @@ private:
     float shownValue = -1.0f;
     std::vector<SynthKnob::ModulationArc> modulationArcs;
     std::optional<float> modulatedValue;
+    yup::Font captionFont;
+    yup::Font valueFont;
 };
