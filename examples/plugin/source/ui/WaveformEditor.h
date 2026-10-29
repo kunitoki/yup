@@ -36,7 +36,10 @@
     drag draws into that period with the chosen tool: the stroke is analyzed back into
     partials, phase included, which become the oscillator's custom series. A drag with
     shift held rotates the period instead. In editing mode it shows each harmonic as a
-    bar whose magnitude, or phase, can be dragged.
+    bar whose magnitude, or phase, can be dragged. The bars show a window of the
+    editable harmonics: the wheel scrolls it, the wheel with command or control held
+    or a pinch zooms it around the pointer, and the strip below the bars jumps to
+    wherever it is pressed.
 
     Every stroke and operation is one step of the undo history the editor sits in.
 
@@ -106,6 +109,8 @@ public:
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseDrag (const yup::MouseEvent& event) override;
     void mouseUp (const yup::MouseEvent& event) override;
+    void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData) override;
+    void gesturePinch (const yup::GestureEvent& event) override;
 
 private:
     //==============================================================================
@@ -118,6 +123,7 @@ private:
     void paintGrid (yup::Graphics& g, yup::Rectangle<float> bounds);
     void paintWaveform (yup::Graphics& g, yup::Rectangle<float> bounds);
     void paintPartials (yup::Graphics& g, yup::Rectangle<float> bounds);
+    void paintPartialsOverview (yup::Graphics& g, yup::Rectangle<float> bounds);
 
     void beginCustomEdit();
     void publishEdit();
@@ -132,22 +138,33 @@ private:
     int cycleIndexAt (float x) const noexcept;
     float cycleValueAt (float y) const noexcept;
 
+    yup::Rectangle<float> getPartialsArea() const noexcept;
+    int getVisiblePartialCount() const noexcept;
+    int getFirstVisiblePartial() const noexcept;
+    void zoomPartials (float factor, float x);
+    void centerPartialsAt (float x);
+    void clampPartialsView() noexcept;
+
     //==============================================================================
     static constexpr int displayResolution = 256;
     static constexpr float contentInset = 6.0f;
     static constexpr float cornerRadius = 4.0f;
     static constexpr float barGap = 1.0f;
+    static constexpr float overviewHeight = 3.0f;
+    static constexpr float overviewGap = 4.0f;
+    static constexpr int minimumVisiblePartials = 16;
+    static constexpr int defaultVisiblePartials = 64;
+    static constexpr double animationInterval = 1.0 / 30.0;
 
     static_assert (displayResolution == SynthWaveformShader::sampleCount);
+
+    // A drawn cycle is analyzed back into partials, and its points carry no more than this.
+    static_assert (SynthExample::displayHarmonics < displayResolution / 2);
 
     const SynthOscillatorParameters& parameters;
     SynthPartials& partials;
     const SynthOscillatorResources& resources;
     std::shared_ptr<SynthWaveformShader> shader;
-    // Every repaint of the interface repaints this display, so the landscape is only
-    // rendered again when it moved or its waveform changed, and moves at most 30 times
-    // a second, only while something plays and nothing is being drawn.
-    static constexpr double animationInterval = 1.0 / 30.0;
 
     yup::GpuTexture::Ptr getLandscape (yup::Graphics& g);
 
@@ -183,6 +200,11 @@ private:
     yup::FourierSeries<double> rotated;
 
     SynthPartials::Snapshot gestureStart;
+
+    // The window of partials shown, kept fractional so slow scrolls and pinches add up.
+    float partialsViewStart = 0.0f;
+    float partialsViewCount = static_cast<float> (defaultVisiblePartials);
+    bool draggingOverview = false;
 
     bool editingPartials = false;
     bool pendingEdit = false;

@@ -29,8 +29,8 @@ namespace
     counterpart on the coefficients. Allocates, so it runs on the message thread. */
 void mirrorPartials (SynthPartials::Snapshot& partials)
 {
-    constexpr int resolution = 512;
     constexpr int harmonics = SynthExample::editableHarmonics;
+    constexpr int resolution = 4 * harmonics;
 
     yup::FourierSeries<double> series (harmonics);
 

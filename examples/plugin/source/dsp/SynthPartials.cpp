@@ -23,8 +23,8 @@
 
 namespace
 {
-/** Points the level measurement sums, matching the waveform display's resolution. */
-constexpr int measureResolution = 256;
+/** Points the level measurement sums, enough to catch the peak of the highest editable harmonic. */
+constexpr int measureResolution = 4 * SynthExample::editableHarmonics;
 
 const yup::Identifier customProperty ("custom");
 const yup::Identifier cosinesProperty ("cosines");
@@ -53,15 +53,22 @@ float evaluateFourierSeries (const yup::FourierSeries<double>& series, double ph
 {
     const auto count = yup::jmin (maxHarmonic, series.getNumHarmonics());
     const auto theta = yup::MathConstants<double>::twoPi * phase;
+    const auto stepCosine = std::cos (theta);
+    const auto stepSine = std::sin (theta);
 
+    // Each harmonic's phasor is the previous one rotated by the fundamental's, which
+    // replaces a cosine and a sine per harmonic with a complex multiplication.
+    auto cosine = stepCosine;
+    auto sine = stepSine;
     auto value = series.getDC();
 
     for (int harmonic = 1; harmonic <= count; ++harmonic)
     {
-        const auto angle = theta * harmonic;
+        value += series.getCosine (harmonic) * cosine + series.getSine (harmonic) * sine;
 
-        value += series.getCosine (harmonic) * std::cos (angle)
-               + series.getSine (harmonic) * std::sin (angle);
+        const auto rotated = cosine * stepCosine - sine * stepSine;
+        sine = sine * stepCosine + cosine * stepSine;
+        cosine = rotated;
     }
 
     return static_cast<float> (value);
@@ -191,7 +198,7 @@ void SynthPartials::updateHarmonicScale()
     {
         const auto phase = static_cast<double> (index) / static_cast<double> (measureResolution - 1);
 
-        peak = yup::jmax (peak, std::abs (evaluateFourierSeries (series, phase, SynthExample::displayHarmonics)));
+        peak = yup::jmax (peak, std::abs (evaluateFourierSeries (series, phase, SynthExample::editableHarmonics)));
     }
 
     if (peak > 1.0e-6f)

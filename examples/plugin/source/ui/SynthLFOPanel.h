@@ -21,27 +21,40 @@
 
 #pragma once
 
+#include "EnvelopeDisplay.h"
 #include "LFODisplay.h"
 #include "ParameterChoice.h"
 #include "ParameterKnob.h"
+#include "ParameterLed.h"
 #include "ParameterSegmented.h"
+#include "SynthModulationHandle.h"
 
 //==============================================================================
 /** One LFO: its shape and retrigger mode, its display, and rate, phase, smoothing and
-    depth. The rate knob turns into the tempo division while the LFO is synced.
+    depth, its inversion, and a handle dragged onto a control to modulate it. The rate
+    knob turns into the tempo division while the LFO is synced.
+
+    The custom shape shows its curve for editing, one cycle snapping to the chosen step;
+    the other shapes show what the LFO plays.
 
     @see SynthLFOParameters
 */
 class SynthLFOPanel : public yup::Component
 {
 public:
-    SynthLFOPanel (const SynthLFOParameters& parametersToEdit, const SynthCurveState& curvesToShow, int lfoIndex);
+    SynthLFOPanel (const SynthLFOParameters& parametersToEdit, SynthCurveState& curvesToEdit, int lfoIndex);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
 
     /** Moves the display marker to the engine's phase. */
-    void setPhase (float phase) { display.setPhase (phase); }
+    void setPhase (float phase);
+
+    /** Follows the host's tempo and meter, for the grid and the synced rate. */
+    void setTransport (const SynthTransport& newTransport);
+
+    /** Returns the drag handle placed right of Sync in the section strip. */
+    SynthModulationHandle& getModulationHandle() noexcept { return handle; }
 
     void resized() override;
 
@@ -49,18 +62,30 @@ private:
     static constexpr float lineHeight = 24.0f;
     static constexpr float knobRowHeight = 62.0f;
     static constexpr float retriggerWidth = 96.0f;
+    static constexpr float optionsWidth = 76.0f;
+    static constexpr int defaultSnap = 5;
 
     static std::vector<ParameterSegmented::Segment> makeShapeSegments();
 
+    bool isCustom() const noexcept { return shownValues.shape == SynthLFOValues::Shape::custom; }
+    void showValues();
+    void updateTiming();
+
     const SynthLFOParameters& parameters;
-    const SynthCurveState& curves;
+    SynthCurveState& curves;
     int index = 0;
     int shownGeneration = -1;
     SynthLFOValues shownValues;
+    SynthTransport transport;
+    bool shownMusical = false;
 
     ParameterSegmented shapeSelector;
     ParameterChoice retriggerChoice;
     LFODisplay display;
+    EnvelopeDisplay editor;
+    ParameterLed invertLed;
+    yup::ComboBox snapBox;
+    SynthModulationHandle handle;
     ParameterKnob rateKnob;
     ParameterKnob phaseKnob;
     ParameterKnob smoothKnob;

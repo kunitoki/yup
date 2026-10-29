@@ -33,6 +33,30 @@ void EnvelopeDisplay::setAmplitude (bool isAmplitudeEnvelope)
     amplitude = isAmplitudeEnvelope;
 }
 
+void EnvelopeDisplay::setTiming (const SynthTimeGrid::Timing& newTiming)
+{
+    if (newTiming == timing)
+        return;
+
+    timing = newTiming;
+    repaint();
+}
+
+void EnvelopeDisplay::setCycle (bool isCycle)
+{
+    cycle = isCycle;
+    repaint();
+}
+
+void EnvelopeDisplay::setInverted (bool shouldBeInverted)
+{
+    if (shouldBeInverted == inverted)
+        return;
+
+    inverted = shouldBeInverted;
+    repaint();
+}
+
 void EnvelopeDisplay::setPlayhead (float position)
 {
     if (std::abs (position - playhead) < 1.0e-4f)
@@ -59,18 +83,21 @@ yup::Rectangle<float> EnvelopeDisplay::getArea() const
 
 float EnvelopeDisplay::getShownLength() const
 {
+    if (cycle)
+        return 1.0f;
+
     return dragKind != DragKind::none ? frozenLength : yup::jmax (1.0e-3f, curve.getLength() * headroom);
 }
 
 float EnvelopeDisplay::getHoldWidth() const
 {
-    return curve.getSustainIndex() >= 0 ? getArea().getWidth() * sustainShare : 0.0f;
+    return ! cycle && curve.getSustainIndex() >= 0 ? getArea().getWidth() * sustainShare : 0.0f;
 }
 
 bool EnvelopeDisplay::isAfterHold (int index) const
 {
     const auto sustain = curve.getSustainIndex();
-    return sustain >= 0 && index > sustain;
+    return ! cycle && sustain >= 0 && index > sustain;
 }
 
 yup::Point<float> EnvelopeDisplay::toScreen (float time, float level, bool afterHold) const
@@ -79,7 +106,9 @@ yup::Point<float> EnvelopeDisplay::toScreen (float time, float level, bool after
     const auto timedWidth = area.getWidth() - getHoldWidth();
     const auto x = area.getX() + time / getShownLength() * timedWidth + (afterHold ? getHoldWidth() : 0.0f);
 
-    return { x, area.getBottom() - yup::jlimit (0.0f, 1.0f, level) * area.getHeight() };
+    const auto shown = yup::jlimit (0.0f, 1.0f, inverted ? 1.0f - level : level);
+
+    return { x, area.getBottom() - shown * area.getHeight() };
 }
 
 float EnvelopeDisplay::toTime (float x, bool afterHold) const
@@ -94,7 +123,14 @@ float EnvelopeDisplay::toTime (float x, bool afterHold) const
 float EnvelopeDisplay::toLevel (float y) const
 {
     const auto area = getArea();
-    return yup::jlimit (0.0f, 1.0f, (area.getBottom() - y) / yup::jmax (1.0f, area.getHeight()));
+    const auto level = yup::jlimit (0.0f, 1.0f, (area.getBottom() - y) / yup::jmax (1.0f, area.getHeight()));
+
+    return inverted ? 1.0f - level : level;
+}
+
+float EnvelopeDisplay::snapTime (float time, const yup::MouseEvent& event) const
+{
+    return event.getModifiers().isShiftDown() ? time : SynthTimeGrid::snap (time, timing, snapChoice);
 }
 
 yup::Point<float> EnvelopeDisplay::getHandle (int segment) const
@@ -128,7 +164,7 @@ int EnvelopeDisplay::findHandle (yup::Point<float> position) const
 void EnvelopeDisplay::publish()
 {
     // Every envelope ends silent, whichever point an edit left last.
-    if (const auto last = curve.getNumPoints() - 1; last > 0 && curve.getPoint (last).level != 0.0f)
+    if (const auto last = curve.getNumPoints() - 1; ! cycle && last > 0 && curve.getPoint (last).level != 0.0f)
     {
         auto point = curve.getPoint (last);
         point.level = 0.0f;
@@ -146,7 +182,7 @@ void EnvelopeDisplay::mouseMove (const yup::MouseEvent& event)
 {
     const auto position = event.getPosition();
     const auto point = findPoint (position);
-    const auto draggable = (point >= 0 && ! (amplitude && point == 0)) || findHandle (position) >= 0;
+    const auto draggable = (point >= 0 && ! (amplitude && ! cycle && point == 0)) || findHandle (position) >= 0;
     setMouseCursor (draggable ? yup::MouseCursor::Hand : yup::MouseCursor::Default);
 }
 
@@ -158,7 +194,7 @@ void EnvelopeDisplay::mouseDown (const yup::MouseEvent& event)
     editStart = curve;
 
     if (dragIndex = findPoint (position); dragIndex >= 0)
-        dragKind = amplitude && dragIndex == 0 ? DragKind::none : DragKind::point;
+        dragKind = amplitude && ! cycle && dragIndex == 0 ? DragKind::none : DragKind::point;
     else if (dragIndex = findHandle (position); dragIndex >= 0)
         dragKind = DragKind::slope;
     else
@@ -178,9 +214,17 @@ void EnvelopeDisplay::mouseDrag (const yup::MouseEvent& event)
     if (dragKind == DragKind::point)
     {
         const auto isLast = dragIndex == curve.getNumPoints() - 1;
+        const auto time = snapTime (toTime (dragPosition.getX(), isAfterHold (dragIndex)), event);
 
-        point.time = dragIndex == 0 ? 0.0f : toTime (dragPosition.getX(), isAfterHold (dragIndex));
-        point.level = isLast ? 0.0f : toLevel (dragPosition.getY());
+        // A cycle's ends stay at its start and end; an envelope's last point ends silent.
+        if (dragIndex == 0)
+            point.time = 0.0f;
+        else if (cycle)
+            point.time = isLast ? 1.0f : yup::jlimit (0.0f, 1.0f, time);
+        else
+            point.time = time;
+
+        point.level = isLast && ! cycle ? 0.0f : toLevel (dragPosition.getY());
         curve.setPoint (dragIndex, point);
         publish();
         return;
@@ -215,7 +259,7 @@ void EnvelopeDisplay::mouseDoubleClick (const yup::MouseEvent& event)
 
     if (const auto index = findPoint (position); index >= 0)
     {
-        if (index == 0 || curve.getNumPoints() <= 2)
+        if (index == 0 || curve.getNumPoints() <= 2 || (cycle && index == curve.getNumPoints() - 1))
             return;
 
         curve.removePoint (index);
@@ -235,9 +279,13 @@ void EnvelopeDisplay::mouseDoubleClick (const yup::MouseEvent& event)
     const auto sustain = curve.getSustainIndex();
     const auto sustainTime = sustain >= 0 ? curve.getPoint (sustain).time : 0.0f;
     const auto afterHold = sustain >= 0 && position.getX() > toScreen (sustainTime, 0.0f, false).getX();
-    const auto time = toTime (position.getX(), afterHold);
+    const auto time = snapTime (toTime (position.getX(), afterHold), event);
 
-    curve.addPoint (afterHold ? yup::jmax (time, sustainTime) : time, toLevel (position.getY()));
+    // A point added to a cycle stays strictly inside it, so its ends keep their places.
+    if (cycle)
+        curve.addPoint (yup::jlimit (cycleMargin, 1.0f - cycleMargin, time), toLevel (position.getY()));
+    else
+        curve.addPoint (afterHold ? yup::jmax (time, sustainTime) : time, toLevel (position.getY()));
     publish();
 
     if (onEditFinished != nullptr)
@@ -255,10 +303,39 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
     if (area.getWidth() <= 0.0f || area.getHeight() <= 0.0f || curve.getNumPoints() < 2)
         return;
 
-    const auto sustain = curve.getSustainIndex();
+    const auto sustain = cycle ? -1 : curve.getSustainIndex();
+
+    if (cycle)
+    {
+        g.setFillColor (SynthTheme::textPrimary (*this).withAlpha (0.08f));
+        g.fillRect (area.getX(), area.getCenterY(), area.getWidth(), 1.0f);
+    }
+
+    const auto baseline = cycle ? area.getCenterY() : area.getBottom();
+    auto previous = toScreen (0.0f, curve.getPoint (0).level, false);
+    yup::Path fill;
+    fill.moveTo (previous.getX(), baseline);
+    fill.lineTo (previous);
 
     path.clear();
-    path.moveTo (toScreen (0.0f, curve.getPoint (0).level, false));
+    path.moveTo (previous);
+
+    const auto appendPoint = [&] (yup::Point<float> point)
+    {
+        // Close each bipolar lobe at zero instead of making a self-intersecting fill.
+        if (cycle && (previous.getY() - baseline) * (point.getY() - baseline) < 0.0f)
+        {
+            const auto fraction = (baseline - previous.getY()) / (point.getY() - previous.getY());
+            const auto x = previous.getX() + fraction * (point.getX() - previous.getX());
+            fill.lineTo (x, baseline);
+            fill.closeSubPath();
+            fill.moveTo (x, baseline);
+        }
+
+        path.lineTo (point);
+        fill.lineTo (point);
+        previous = point;
+    };
 
     for (int index = 1; index < curve.getNumPoints(); ++index)
     {
@@ -269,20 +346,15 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
         {
             const auto t = static_cast<float> (step) / static_cast<float> (stepsPerSegment);
             const auto time = from.time + (to.time - from.time) * t;
-            path.lineTo (toScreen (time, SynthCurveState::Curve::segmentValue (from.level, to.level, to.curve, t), isAfterHold (index)));
+            appendPoint (toScreen (time, SynthCurveState::Curve::segmentValue (from.level, to.level, to.curve, t), isAfterHold (index)));
         }
 
         if (index == sustain)
-            path.lineTo (toScreen (to.time, to.level, true));
+            appendPoint (toScreen (to.time, to.level, true));
     }
 
-    const auto color = SynthTheme::envelopeAccent (*this);
-
-    // Paths share their data when copied, so the area under the curve gets a path of its own.
-    yup::Path fill;
-    fill.appendPath (path);
-    fill.lineTo (toScreen (curve.getPoint (curve.getNumPoints() - 1).time, 0.0f, isAfterHold (curve.getNumPoints() - 1)));
-    fill.lineTo (area.getX(), area.getBottom());
+    const auto color = cycle ? SynthTheme::lfoAccent (*this) : SynthTheme::envelopeAccent (*this);
+    fill.lineTo (previous.getX(), baseline);
     fill.closeSubPath();
     g.setFillColor (color.withAlpha (0.13f));
     g.fillPath (fill);
@@ -310,6 +382,13 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
 
     if (playing)
         SynthTheme::paintTrail (g, fill, playheadPosition.getX(), trailWidth, color);
+
+    // Keep the grid above the fill and trail, with no elapsed time inside the sustain hold.
+    const auto sustainTime = sustain >= 0 ? curve.getPoint (sustain).time : 0.0f;
+    SynthTimeGrid::paint (g, *this, SynthTimeGrid::getLines (timing, getShownLength(), area.getWidth() - getHoldWidth()), area, [&] (float time)
+    {
+        return std::optional<float> (toScreen (time, 0.0f, sustain >= 0 && time > sustainTime).getX());
+    });
 
     g.setStrokeColor (color);
     g.setStrokeWidth (2.0f);
@@ -349,7 +428,8 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
         return;
 
     const auto& point = curve.getPoint (dragIndex);
-    const auto text = dragKind == DragKind::point ? SynthFormat::milliseconds (point.time) + "  " + SynthFormat::percent (point.level)
+    const auto level = cycle ? SynthFormat::bipolar ((inverted ? -1.0 : 1.0) * (2.0 * point.level - 1.0)) : SynthFormat::percent (point.level);
+    const auto text = dragKind == DragKind::point ? SynthTimeGrid::format (point.time, timing) + "  " + level
                                                   : "CURVE " + yup::String (point.curve, 2);
     const auto font = SynthTheme::valueFont (12.0f);
     const auto width = SynthTheme::textWidth (text, font) + 14.0f;

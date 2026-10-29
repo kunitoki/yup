@@ -40,6 +40,7 @@ struct SynthLFOValues
     RetriggerMode retrigger = RetriggerMode::retrigger;
     float depth = 1.0f;
     bool enabled = true;
+    bool inverted = false; /**< Negates the output, after smoothing. */
 
     bool operator== (const SynthLFOValues&) const = default;
 
@@ -82,4 +83,5 @@ public:
     yup::AudioParameter::Ptr retrigger;
     yup::AudioParameter::Ptr depth;
     yup::AudioParameter::Ptr enabled; /**< Stepped, 0 or 1; off is not computed and sources 0. */
+    yup::AudioParameter::Ptr inverted; /**< Stepped, 0 or 1. */
 };

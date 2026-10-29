@@ -39,6 +39,8 @@ SynthEnvelopeParameters::SynthEnvelopeParameters (int envelopeIndex, const Synth
 
     if (envelopeIndex > 0)
         enabled = createChoice (prefix + "enabled", module + " Enabled", hostBase + 3, module, { "Off", "On" }, defaults.enabled ? 1 : 0);
+
+    tempoSync = createChoice (prefix + "sync", module + " Sync", hostBase + 4, module, { "Off", "On" }, defaults.tempoSync ? 1 : 0);
 }
 
 void SynthEnvelopeParameters::addTo (yup::AudioProcessor& processor) const
@@ -48,9 +50,11 @@ void SynthEnvelopeParameters::addTo (yup::AudioProcessor& processor) const
 
     if (enabled != nullptr)
         processor.addParameter (enabled);
+
+    processor.addParameter (tempoSync);
 }
 
 SynthEnvelopeValues SynthEnvelopeParameters::read (SynthParameterReader reader) const noexcept
 {
-    return { reader (timeScale), reader (velocity), reader (depth), enabled == nullptr || reader.asInt (enabled) != 0 };
+    return { reader (timeScale), reader (velocity), reader (depth), enabled == nullptr || reader.asInt (enabled) != 0, reader.asInt (tempoSync) != 0 };
 }

@@ -46,6 +46,24 @@ void LFODisplay::setPhase (float newPhase)
     repaint();
 }
 
+void LFODisplay::setTempo (double bpm)
+{
+    if (bpm == tempo)
+        return;
+
+    tempo = bpm;
+    repaint();
+}
+
+void LFODisplay::setTiming (const SynthTimeGrid::Timing& newTiming)
+{
+    if (newTiming == timing)
+        return;
+
+    timing = newTiming;
+    repaint();
+}
+
 void LFODisplay::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
@@ -65,7 +83,13 @@ void LFODisplay::paint (yup::Graphics& g)
     // period, so they show several periods; one period is run first to settle the smoother.
     const auto random = values.shape == yup::LFO<float>::Shape::sampleAndHold || values.shape == yup::LFO<float>::Shape::smoothRandom;
     const auto periods = random ? randomPeriods : 1;
-    const auto frequency = yup::jmax (0.01f, values.getFrequency (displayTempo));
+    const auto frequency = yup::jmax (0.01f, values.getFrequency (tempo > 0.0 ? tempo : displayTempo));
+    const auto polarity = values.inverted ? -1.0f : 1.0f;
+
+    SynthTimeGrid::paint (g, *this, SynthTimeGrid::getLines (timing, static_cast<float> (periods), area.getWidth()), area, [&] (float time)
+    {
+        return std::optional<float> (area.getX() + area.getWidth() * time / static_cast<float> (periods));
+    });
 
     yup::LFO<float> shape;
     shape.prepare (static_cast<double> (points) * frequency / static_cast<double> (periods));
@@ -86,7 +110,7 @@ void LFODisplay::paint (yup::Graphics& g)
     for (int index = 0; index <= points; ++index)
     {
         const auto x = area.getX() + area.getWidth() * static_cast<float> (index) / static_cast<float> (points);
-        const auto y = area.getCenterY() - shape.processSample() * area.getHeight() * 0.45f;
+        const auto y = area.getCenterY() - polarity * shape.processSample() * area.getHeight() * 0.45f;
 
         if (index == 0)
             path.moveTo (x, y);
@@ -106,7 +130,7 @@ void LFODisplay::paint (yup::Graphics& g)
         return;
 
     shape.reset (phase);
-    const auto markerY = area.getCenterY() - shape.getValue() * area.getHeight() * 0.45f;
+    const auto markerY = area.getCenterY() - polarity * shape.getValue() * area.getHeight() * 0.45f;
 
     g.setFillColor (color.withAlpha (0.35f));
     g.fillEllipse (markerX - 7.0f, markerY - 7.0f, 14.0f, 14.0f);

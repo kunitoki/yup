@@ -20,11 +20,14 @@
 */
 
 #include "SynthInterface.h"
+#include "ParameterGesture.h"
 #include "SynthNeonEffect.h"
 #include "SynthKeyboardLook.h"
 #include "SynthTheme.h"
 #include "SynthSettings.h"
 #include "SynthThemes.h"
+
+#include "../dsp/SynthPatch.h"
 
 namespace
 {
@@ -159,7 +162,9 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
     for (int index = 0; index < SynthExample::envelopeCount; ++index)
     {
         const auto& envelope = parameters.envelopes[static_cast<std::size_t> (index)];
-        SynthSection::Tab tab { "Env " + yup::String (index + 1), envelopePanels[static_cast<std::size_t> (index)].get(), envelope.enabled, envelope.enabled == nullptr };
+        auto& panel = *envelopePanels[static_cast<std::size_t> (index)];
+        SynthSection::Tab tab { "Env " + yup::String (index + 1), &panel, envelope.enabled, envelope.enabled == nullptr,
+                                { { &panel.getSyncLed(), 56.0f } }, &panel.getModulationHandle() };
 
         if (index == 0)
             tab.stripControls.push_back ({ ampCaption.get(), 48.0f });
@@ -176,7 +181,9 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
         const auto& lfo = parameters.lfos[static_cast<std::size_t> (index)];
         auto& syncLed = lfoSyncLeds.emplace_back (std::make_unique<ParameterLed> (lfo.tempoSync, "Sync"));
 
-        lfoTabs.push_back ({ "LFO " + yup::String (index + 1), lfoPanels[static_cast<std::size_t> (index)].get(), lfo.enabled, false, { { syncLed.get(), 56.0f } } });
+        auto& panel = *lfoPanels[static_cast<std::size_t> (index)];
+        lfoTabs.push_back ({ "LFO " + yup::String (index + 1), &panel, lfo.enabled, false,
+                            { { syncLed.get(), 56.0f } }, &panel.getModulationHandle() });
     }
 
     lfoSection = std::make_unique<SynthSection> (std::move (lfoTabs), SynthTheme::Section::lfos);
@@ -306,6 +313,174 @@ void SynthInterface::paint (yup::Graphics& g)
     g.fillFittedText ("MOD", SynthTheme::captionFont (10.5f), captions.withTrimmedLeft (captions.getWidth() - wheelWidth).withSizeKeepingCenter (wheelWidth + 12.0f, captions.getHeight()), yup::Justification::center);
 }
 
+void SynthInterface::paintOverChildren (yup::Graphics& g)
+{
+    if (! dragSource.has_value())
+        return;
+
+    const auto color = getSourceColor (*this, *dragSource);
+
+    for (auto* target : modulationTargets)
+    {
+        auto* component = dynamic_cast<yup::Component*> (target);
+
+        if (component == nullptr || ! component->isShowing() || ! canRoute (*dragSource, *target))
+            continue;
+
+        const auto area = getLocalArea (component, component->getLocalBounds()).enlarged (2.0f);
+        const auto hovered = target == dropTarget;
+
+        if (hovered)
+        {
+            g.setFillColor (color.withAlpha (0.16f));
+            g.fillRoundedRect (area, 6.0f);
+        }
+
+        g.setStrokeColor (color.withAlpha (hovered ? 1.0f : 0.4f));
+        g.setStrokeWidth (hovered ? 2.0f : 1.0f);
+        g.strokeRoundedRect (area, 6.0f);
+    }
+}
+
+//==============================================================================
+std::optional<SynthModulationSource> SynthInterface::getDraggedSource() const
+{
+    // Only a handle of this interface routes, never another instance's or an outside drag.
+    auto* manager = yup::DragAndDropManager::getInstanceWithoutCreating();
+
+    if (manager == nullptr || ! manager->isDragging() || manager->getCurrentDragData().getText() != SynthModulationHandle::dragText)
+        return std::nullopt;
+
+    auto* handle = dynamic_cast<SynthModulationHandle*> (manager->getCurrentDragSourceComponent());
+
+    if (handle == nullptr || handle->getParentComponentWithType<SynthInterface>() != this)
+        return std::nullopt;
+
+    return handle->getSource();
+}
+
+bool SynthInterface::canRoute (SynthModulationSource source, const SynthModulationTarget& target) const
+{
+    const auto parameter = target.getModulationParameter();
+
+    if (parameter == nullptr || SynthPatch::findRouteDestination (processor.getParameters(), parameter->getID()) < 0)
+        return false;
+
+    const auto& routes = processor.getRoutes();
+    return routes.findRoute (source, parameter->getID()) < 0 && routes.findFreeSlot() >= 0;
+}
+
+SynthModulationTarget* SynthInterface::findTargetAt (yup::Point<float> position) const
+{
+    for (auto* target : modulationTargets)
+        if (auto* component = dynamic_cast<yup::Component*> (target); component != nullptr && component->isShowing()
+                                                                      && getLocalArea (component, component->getLocalBounds()).contains (position))
+            return target;
+
+    return nullptr;
+}
+
+void SynthInterface::hoverDrag (yup::Point<float> position)
+{
+    const auto source = isBrowserOpen() ? std::nullopt : getDraggedSource();
+    auto* target = source.has_value() ? findTargetAt (position) : nullptr;
+
+    if (target != nullptr && ! canRoute (*source, *target))
+        target = nullptr;
+
+    if (source == dragSource && target == dropTarget)
+        return;
+
+    dragSource = source;
+    dropTarget = target;
+    repaint();
+}
+
+void SynthInterface::clearDrag()
+{
+    if (! dragSource.has_value() && dropTarget == nullptr)
+        return;
+
+    dragSource.reset();
+    dropTarget = nullptr;
+    repaint();
+}
+
+bool SynthInterface::isInterestedInDragSource (const yup::DragAndDropSourceDetails& details)
+{
+    return details.data.getText() == SynthModulationHandle::dragText && getDraggedSource().has_value();
+}
+
+void SynthInterface::itemDragEnter (const yup::DragAndDropSourceDetails& details)
+{
+    hoverDrag (details.localPosition);
+}
+
+void SynthInterface::itemDragMove (const yup::DragAndDropSourceDetails& details)
+{
+    hoverDrag (details.localPosition);
+}
+
+void SynthInterface::itemDragExit (const yup::DragAndDropSourceDetails&)
+{
+    // Moving onto another control leaves the last one and enters the next at once, so only
+    // the hovered control is forgotten; the lit controls stay until the drag ends.
+    if (dropTarget == nullptr)
+        return;
+
+    dropTarget = nullptr;
+    repaint();
+}
+
+bool SynthInterface::itemDropped (const yup::DragAndDropSourceDetails& details)
+{
+    hoverDrag (details.localPosition);
+
+    const auto source = dragSource;
+    auto* target = dropTarget;
+    clearDrag();
+
+    if (! source.has_value() || target == nullptr)
+        return false;
+
+    auto* component = dynamic_cast<yup::Component*> (target);
+    auto& routes = processor.getRoutes();
+    const auto slot = routes.findFreeSlot();
+    const auto parameter = target->getModulationParameter();
+    const auto destination = SynthPatch::findRouteDestination (processor.getParameters(), parameter->getID());
+
+    if (component == nullptr || slot < 0 || destination < 0)
+        return false;
+
+    struct RouteState
+    {
+        int source = 0;
+        int destination = -1;
+        yup::String destinationID;
+
+        bool operator== (const RouteState&) const = default;
+    };
+
+    const auto previous = routes.getRoute (slot);
+    const RouteState before { static_cast<int> (previous.source), previous.destination, routes.getDestinationID (slot) };
+
+    routes.setRoute (slot, *source, parameter->getID(), destination);
+    SynthUndoHistory::record<RouteState> (*component, before, { static_cast<int> (*source), destination, parameter->getID() }, [&routes = routes, slot] (const RouteState& state)
+    {
+        if (state.destination < 0)
+            routes.clearRoute (slot);
+        else
+            routes.setRoute (slot, static_cast<SynthModulationSource> (state.source), state.destinationID, state.destination);
+    });
+
+    // The depth joins the route's step, so one undo takes both back.
+    const auto& depth = processor.getSynthParameters().modulation.depths[static_cast<std::size_t> (slot)];
+    ParameterGesture (*component, depth).setNormalized (depth->convertToNormalizedValue (initialDepth), true);
+
+    return true;
+}
+
+//==============================================================================
 void SynthInterface::showSettingsMenu (yup::Point<float> position)
 {
     auto& settings = SynthSettings::get();
@@ -498,6 +673,10 @@ void SynthInterface::timerCallback()
     updateModulation();
     syncFromProcessor();
 
+    // A drag cancelled or dropped elsewhere does not always leave through itemDragExit().
+    if (dragSource.has_value() && ! getDraggedSource().has_value())
+        clearDrag();
+
     // A window that lost the focus no longer hears key releases, so held keys let go.
     if (auto* native = getNativeComponent(); native != nullptr && native->getFocusedComponent() == nullptr)
         keyboardComponent.releaseKeyPressNotes();
@@ -593,11 +772,19 @@ void SynthInterface::syncFromProcessor()
         panel->syncFromParameters (modulated);
     }
 
+    const auto transport = processor.getTransport();
+
     for (auto& panel : envelopePanels)
+    {
+        panel->setTransport (transport);
         panel->syncFromParameters();
+    }
 
     for (auto& panel : lfoPanels)
+    {
+        panel->setTransport (transport);
         panel->syncFromParameters();
+    }
 
     fmPanel->syncFromParameters();
     modulationPage->syncFromParameters();

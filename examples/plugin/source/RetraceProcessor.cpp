@@ -142,7 +142,17 @@ void RetraceProcessor::processBlock (yup::AudioProcessContext<float>& context)
 
     if (context.playHead != nullptr)
         if (const auto position = context.playHead->getPosition())
+        {
             bpm = position->getBpm().value_or (0.0);
+
+            if (const auto signature = position->getTimeSignature(); signature.has_value() && signature->numerator > 0 && signature->denominator > 0)
+            {
+                hostNumerator.store (signature->numerator, std::memory_order_relaxed);
+                hostDenominator.store (signature->denominator, std::memory_order_relaxed);
+            }
+        }
+
+    hostBpm.store (bpm, std::memory_order_relaxed);
 
     for (int start = 0; start < numSamples; start += SynthExample::controlChunk)
     {
@@ -259,6 +269,11 @@ void RetraceProcessor::setPresetName (int index, yup::StringRef newName)
 {
     if (yup::isPositiveAndBelow (index, getNumPresets()))
         presetNames[static_cast<std::size_t> (index)] = newName;
+}
+
+SynthTransport RetraceProcessor::getTransport() const noexcept
+{
+    return { hostBpm.load (std::memory_order_relaxed), hostNumerator.load (std::memory_order_relaxed), hostDenominator.load (std::memory_order_relaxed) };
 }
 
 void RetraceProcessor::randomize()

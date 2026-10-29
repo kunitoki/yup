@@ -86,6 +86,15 @@ int SynthRoutes::findFreeSlot() const
     return -1;
 }
 
+int SynthRoutes::findRoute (SynthModulationSource source, const yup::String& destinationID) const
+{
+    for (int slot = 0; slot < SynthExample::modulationSlots; ++slot)
+        if (getRoute (slot).isActive() && getSource (slot) == source && getDestinationID (slot) == destinationID)
+            return slot;
+
+    return -1;
+}
+
 SynthRoute SynthRoutes::getRoute (int slot) const noexcept
 {
     if (! yup::isPositiveAndBelow (slot, SynthExample::modulationSlots))

@@ -38,7 +38,8 @@
     though it stays editable.
 
     The right end of the strip holds controls: the ones shared by every tab, then the
-    ones of the selected tab.
+    ones of the selected tab. An optional trailing control sits right of that tab's
+    other controls.
 
     @see ParameterLed
 */
@@ -60,6 +61,7 @@ public:
         yup::AudioParameter::Ptr enable;          /**< Null for a tab without an LED, unless lockedOn. */
         bool lockedOn = false;                    /**< Shows an LED that is always lit, for a module that is always on. */
         std::vector<StripControl> stripControls;  /**< Shown only while this tab is selected. */
+        yup::Component* trailingControl = nullptr; /**< Optional control right of stripControls, shown only while this tab is selected. */
     };
 
     /** Creates the panel, which wears its section's palette for everything inside it. */
@@ -78,7 +80,9 @@ public:
 
 private:
     static constexpr float tabPadding = 12.0f;
+    static constexpr float minimumTabPadding = 4.0f;
     static constexpr float ledSpace = 16.0f;
+    static constexpr float trailingControlWidth = 24.0f;
 
     yup::Rectangle<float> getTabBounds (int index) const;
     bool isTabOn (int index) const;
@@ -88,6 +92,7 @@ private:
     std::vector<std::unique_ptr<ParameterLed>> leds;
     std::vector<StripControl> sharedControls;
     std::vector<float> tabWidths;
+    float tabInset = tabPadding;
     std::vector<bool> shownOn;
     int selected = 0;
 };

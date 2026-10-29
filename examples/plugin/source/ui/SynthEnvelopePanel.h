@@ -24,9 +24,15 @@
 #include "../dsp/SynthEnvelopeParameters.h"
 #include "EnvelopeDisplay.h"
 #include "ParameterKnob.h"
+#include "ParameterLed.h"
+#include "SynthModulationHandle.h"
 
 //==============================================================================
-/** One envelope: its editable curve over its time, velocity and depth macros.
+/** One envelope: its editable curve over its time, velocity and depth macros, its
+    tempo sync, the curve's snapping, and a handle dragged onto a control to modulate it.
+
+    Synced, the curve's times are quarter note beats and the grid counts bars and beats
+    in the host's meter; otherwise they are seconds.
 
     @see SynthEnvelopeParameters, SynthCurveState
 */
@@ -41,16 +47,35 @@ public:
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
 
+    /** Follows the host's tempo and meter, for the grid. */
+    void setTransport (const SynthTransport& newTransport);
+
+    /** Returns the Sync control placed in the section strip. */
+    ParameterLed& getSyncLed() noexcept { return syncLed; }
+
+    /** Returns the drag handle placed right of Sync in the section strip. */
+    SynthModulationHandle& getModulationHandle() noexcept { return handle; }
+
     void resized() override;
 
 private:
     static constexpr float knobRowHeight = 62.0f;
+    static constexpr float optionsWidth = 76.0f;
+    static constexpr int defaultSnap = 5;
 
+    void updateTiming();
+
+    const SynthEnvelopeParameters& parameters;
     SynthCurveState& curves;
     int index = 0;
     int shownGeneration = -1;
+    SynthTransport transport;
+    bool shownMusical = false;
 
     EnvelopeDisplay display;
+    ParameterLed syncLed;
+    yup::ComboBox snapBox;
+    SynthModulationHandle handle;
 
     ParameterKnob timeScaleKnob;
     ParameterKnob velocityKnob;

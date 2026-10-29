@@ -122,7 +122,7 @@ void SynthVoice::startNote (int midiNoteNumber, float velocity, yup::Synthesiser
 
         for (std::size_t index = 0; index < envelopes.size(); ++index)
         {
-            envelopes[index].setTimeScale (context.envelopes[index].timeScale);
+            envelopes[index].setTimeScale (context.envelopes[index].getTimeScale (context.bpm));
             envelopes[index].noteOn();
         }
 
@@ -156,7 +156,7 @@ void SynthVoice::startNote (int midiNoteNumber, float velocity, yup::Synthesiser
         initial.note = currentNote;
         delayedControls.fill (initial);
 
-        amplitude.setTimeScale (context.envelopes[0].timeScale);
+        amplitude.setTimeScale (context.envelopes[0].getTimeScale (context.bpm));
         gateOnCountdown = network.getLatencyInSamples();
         gateOffCountdown = -1;
         samplesSinceSpectra = SynthExample::spectralChunk;
@@ -434,7 +434,11 @@ float SynthVoice::getSourceValue (SynthModulationSource source) const noexcept
     if (const auto lfo = getSourceLFO (source); lfo >= 0)
     {
         const auto& values = lfoValues[static_cast<std::size_t> (lfo)];
-        return values.enabled ? lfos[static_cast<std::size_t> (lfo)].getValue() * values.depth : 0.0f;
+        if (! values.enabled)
+            return 0.0f;
+
+        const auto value = lfos[static_cast<std::size_t> (lfo)].getValue() * values.depth;
+        return values.inverted ? -value : value;
     }
 
     if (const auto macro = getSourceMacro (source); macro >= 0)
@@ -458,13 +462,13 @@ void SynthVoice::advanceSources (int numSamples) noexcept
     // Envelopes and LFOs nothing reads, or that are disabled, are not advanced; they still follow the notes.
     for (std::size_t index = 0; index < envelopes.size(); ++index)
     {
-        envelopes[index].setTimeScale (envelopeValues[index].timeScale);
+        envelopes[index].setTimeScale (envelopeValues[index].getTimeScale (context.bpm));
 
         if (context.envelopeRouted[index] && envelopeValues[index].enabled)
             envelopes[index].processBlock (scratch.data(), numSamples);
     }
 
-    amplitude.setTimeScale (envelopeValues[0].timeScale);
+    amplitude.setTimeScale (envelopeValues[0].getTimeScale (context.bpm));
 
     configureLFOs();
 

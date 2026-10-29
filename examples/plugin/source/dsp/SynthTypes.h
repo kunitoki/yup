@@ -146,10 +146,21 @@ inline yup::StringArray getSynthFilterRoutingNames()
 }
 
 //==============================================================================
-/** @internal Item names of the yup::LFO::Shape values offered, index aligned with the enumeration; the custom shape is not offered yet. */
+/** The host tempo and meter, as last reported to the processor. */
+struct SynthTransport
+{
+    double bpm = 0.0; /**< Zero while the host reports no tempo. */
+    int numerator = 4;
+    int denominator = 4;
+
+    bool operator== (const SynthTransport&) const = default;
+};
+
+//==============================================================================
+/** @internal Item names for yup::LFO::Shape, index aligned with the enumeration; Custom plays the patch's LFO curve. */
 inline yup::StringArray getSynthLFOShapeNames()
 {
-    return { "Sine", "Triangle", "Saw Up", "Square", "S&H", "Saw Down", "Smooth Random" };
+    return { "Sine", "Triangle", "Saw Up", "Square", "S&H", "Saw Down", "Smooth Random", "Custom" };
 }
 
 /** @internal Item names for yup::LFO::RetriggerMode, index aligned with the enumeration. */

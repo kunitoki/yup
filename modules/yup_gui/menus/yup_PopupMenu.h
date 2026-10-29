@@ -389,6 +389,8 @@ private:
     Rectangle<float> getMenuContentBounds() const;
     void updateVisibleItemRange();
     float getVisibleItemsHeight() const;
+    void applyVisibleItemRange();
+    void scrollTickedItemUnderMouse();
     void scrollUp();
     void scrollDown();
     void dragScroll (float y);

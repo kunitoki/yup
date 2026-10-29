@@ -31,13 +31,30 @@ struct SynthEnvelopeValues
     float velocity = 0.0f;  /**< How much the note velocity scales the output, 0 to 1. */
     float depth = 1.0f;     /**< Output scale as a modulation source. */
     bool enabled = true;    /**< Off is not computed and sources 0; the amplitude envelope is always on. */
+    bool tempoSync = false; /**< The curve's times are quarter note beats instead of seconds. */
 
     bool operator== (const SynthEnvelopeValues&) const = default;
+
+    /** The tempo a synced envelope plays at while the host reports none. */
+    static constexpr double fallbackTempo = 120.0;
 
     /** Returns the output scale for a note velocity. */
     float getVelocityGain (float noteVelocity) const noexcept
     {
         return 1.0f - velocity + velocity * noteVelocity;
+    }
+
+    /** Returns the factor turning the curve's times into seconds: the time scale, and the
+        length of a beat when synced.
+
+        @param bpm  The host tempo, or zero when unknown, which plays at fallbackTempo
+    */
+    float getTimeScale (double bpm) const noexcept
+    {
+        if (! tempoSync)
+            return timeScale;
+
+        return timeScale * static_cast<float> (60.0 / (bpm > 0.0 ? bpm : fallbackTempo));
     }
 };
 
@@ -63,4 +80,5 @@ public:
     yup::AudioParameter::Ptr velocity;
     yup::AudioParameter::Ptr depth;
     yup::AudioParameter::Ptr enabled; /**< Stepped, 0 or 1; null for the amplitude envelope, which is always on. */
+    yup::AudioParameter::Ptr tempoSync; /**< Stepped, 0 or 1. */
 };

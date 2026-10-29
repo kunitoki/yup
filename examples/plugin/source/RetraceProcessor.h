@@ -101,6 +101,9 @@ public:
     /** Returns the modulation routes. */
     SynthRoutes& getRoutes() noexcept { return routes; }
 
+    /** Returns the tempo and meter the host last reported, for the editor's time grids. */
+    SynthTransport getTransport() const noexcept;
+
     /** Returns the waveform presets the oscillators play. */
     const SynthOscillatorResources& getResources() const noexcept { return engine.getResources(); }
 
@@ -247,6 +250,9 @@ private:
 
     yup::AudioProcessLoadMeasurer loadMeasurer;
     std::array<std::atomic<float>, 2> outputPeaks {};
+    std::atomic<double> hostBpm { 0.0 };
+    std::atomic<int> hostNumerator { 4 };
+    std::atomic<int> hostDenominator { 4 };
 
     std::vector<yup::String> presetNames;
     std::atomic<int> currentPreset { 0 };

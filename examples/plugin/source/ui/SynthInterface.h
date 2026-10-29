@@ -36,12 +36,14 @@
 #include "SynthPresetBrowser.h"
 #include "SynthFieldEditor.h"
 #include "SynthMacroPanel.h"
+#include "SynthModulationHandle.h"
 #include "SynthSection.h"
 #include "SynthUndoHistory.h"
 #include "SynthVoicingPanel.h"
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <vector>
 
 //==============================================================================
@@ -56,11 +58,16 @@
     edits once per frame. The keyboard and wheels show and play the processor's keyboard
     state, so the host's notes light the keys.
 
+    An envelope's or LFO's modulation handle dragged over the interface lights every
+    control it can be routed into, and the one under the mouse more brightly; dropped
+    there, it takes a free route slot at +25 % depth, as one undoable step.
+
     @see RetraceProcessor
 */
 class SynthInterface
     : public yup::Component
     , public UndoHistoryOwner
+    , public yup::DragAndDropTarget
     , private yup::Timer
 {
 public:
@@ -99,9 +106,17 @@ public:
     //==============================================================================
     void resized() override;
     void paint (yup::Graphics& g) override;
+    void paintOverChildren (yup::Graphics& g) override;
     bool keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override;
     bool keyUp (const yup::KeyPress& key, const yup::Point<float>& position) override;
     void attachedToNative() override;
+
+    //==============================================================================
+    bool isInterestedInDragSource (const yup::DragAndDropSourceDetails& details) override;
+    void itemDragEnter (const yup::DragAndDropSourceDetails& details) override;
+    void itemDragMove (const yup::DragAndDropSourceDetails& details) override;
+    void itemDragExit (const yup::DragAndDropSourceDetails& details) override;
+    bool itemDropped (const yup::DragAndDropSourceDetails& details) override;
 
 private:
     void timerCallback() override;
@@ -114,6 +129,12 @@ private:
     void syncFromProcessor();
     void updateModulation();
 
+    std::optional<SynthModulationSource> getDraggedSource() const;
+    bool canRoute (SynthModulationSource source, const SynthModulationTarget& target) const;
+    SynthModulationTarget* findTargetAt (yup::Point<float> position) const;
+    void hoverDrag (yup::Point<float> position);
+    void clearDrag();
+
     //==============================================================================
     static constexpr float wheelWidth = 30.0f;
     static constexpr float wheelsTileWidth = 100.0f;
@@ -121,6 +142,7 @@ private:
     static constexpr float firstRowShare = 0.6f;
     static constexpr float filterShare = 384.0f / 790.0f;
     static constexpr float macroColumnWidth = 128.0f;
+    static constexpr float initialDepth = 0.25f;
 
     //==============================================================================
     RetraceProcessor& processor;
@@ -157,6 +179,8 @@ private:
     std::unique_ptr<SynthPresetBrowser> presetBrowser;
 
     std::vector<SynthModulationTarget*> modulationTargets;
+    std::optional<SynthModulationSource> dragSource;
+    SynthModulationTarget* dropTarget = nullptr;
     std::vector<std::vector<SynthKnob::ModulationArc>> arcsByParameter;
     std::vector<float> modulatedValues;
     bool modulationLive = false;

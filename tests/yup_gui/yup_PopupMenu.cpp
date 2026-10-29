@@ -910,6 +910,29 @@ TEST_F (PopupMenuTest, ScrollingKeepsRowsAdjacentToScrollIndicators)
     EXPECT_LE (downIndicatorTop - lastVisibleItemBottom, 4.0f);
 }
 
+TEST_F (PopupMenuTest, ShowScrollsTickedItemIntoView)
+{
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 220, 130);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (smallParent.get()).withPosition (Point<int> (10, 10)));
+    for (int i = 1; i <= 40; ++i)
+        menu->addItem (String ("Item ") + String (i), i, true, i == 35);
+
+    menu->show();
+    ASSERT_TRUE (menu->needsScrolling());
+
+    const auto& ticked = **std::find_if (menu->begin(), menu->end(), [] (const auto& item)
+    {
+        return item->isTicked;
+    });
+
+    EXPECT_TRUE (menu->canScrollUp());
+    EXPECT_FALSE (ticked.area.isEmpty());
+    EXPECT_GE (ticked.area.getY(), menu->getScrollUpIndicatorBounds().getBottom());
+    EXPECT_LE (ticked.area.getBottom(), menu->getScrollDownIndicatorBounds().getY());
+}
+
 TEST_F (PopupMenuTest, TappingScrollIndicatorsScrollsTheMenu)
 {
     auto smallParent = std::make_unique<Component> ("smallParent");

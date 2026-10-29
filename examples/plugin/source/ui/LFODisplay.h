@@ -25,10 +25,12 @@
 
 #include "../dsp/SynthCurveState.h"
 #include "../dsp/SynthLFOParameters.h"
+#include "SynthTimeGrid.h"
 
 //==============================================================================
 /** Draws an LFO shape at its own rate and smoothing: one period with a marker at the
-    engine's current phase, or several periods of the random shapes. */
+    engine's current phase, or several periods of the random shapes, over a grid of one
+    period's time, upside down when the LFO is inverted. */
 class LFODisplay : public yup::Component
 {
 public:
@@ -42,6 +44,12 @@ public:
         Called every frame from the message thread. */
     void setPhase (float newPhase);
 
+    /** Sets the host tempo a synced LFO is drawn at, or zero to draw it at 120 BPM. */
+    void setTempo (double bpm);
+
+    /** Sets how one period's time reads, for the grid. */
+    void setTiming (const SynthTimeGrid::Timing& newTiming);
+
     void paint (yup::Graphics& g) override;
 
 private:
@@ -53,5 +61,7 @@ private:
     SynthLFOValues values;
     SynthCurveState::Curve curve;
     float phase = -1.0f;
+    double tempo = 0.0;
+    SynthTimeGrid::Timing timing;
     yup::Path path;
 };

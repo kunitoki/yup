@@ -23,6 +23,7 @@
 #include <yup_gui/yup_gui.h>
 
 #include "../dsp/SynthCurveState.h"
+#include "SynthTimeGrid.h"
 
 #include <functional>
 
@@ -38,6 +39,10 @@
     the width after the sustain point; what comes after the sustain point by order, not
     by time, is drawn after the hold, so a point dragged onto the sustain time stays on
     its side of it.
+
+    A grid marks the curve's time, in seconds or in bars and beats, and dragged or added
+    points snap to the chosen step unless shift is held. The same editor edits a custom
+    LFO cycle, see setCycle().
 */
 class EnvelopeDisplay : public yup::Component
 {
@@ -53,6 +58,20 @@ public:
     /** Locks the start of an amplitude envelope, which begins silent, at time and level 0.
         Every envelope ends at level 0: its last point only moves in time. */
     void setAmplitude (bool isAmplitudeEnvelope);
+
+    /** Sets how the curve's times read, for the grid, the snapping and the readout. */
+    void setTiming (const SynthTimeGrid::Timing& newTiming);
+
+    /** Picks a snapping choice of SynthTimeGrid::getSnapNames(); 0 is off. */
+    void setSnap (int newSnapChoice) { snapChoice = newSnapChoice; }
+
+    /** Edits one cycle of a custom LFO instead of an envelope: the curve spans times 0 to 1,
+        its ends keep those times but their levels move freely, levels read bipolar and no
+        sustain hold is drawn. */
+    void setCycle (bool isCycle);
+
+    /** Draws the levels upside down, as an inverted LFO plays them, without changing the curve. */
+    void setInverted (bool shouldBeInverted);
 
     /** Shows where the most recent note is along the curve's points, with a band of light
         trailing it; a negative position hides it. Called every frame.
@@ -86,6 +105,7 @@ private:
     static constexpr float handleRadius = 3.5f;
     static constexpr float hitRadius = 8.0f;
     static constexpr float headroom = 1.2f;
+    static constexpr float cycleMargin = 1.0e-3f;
     static constexpr float trailWidth = 90.0f;
     static constexpr int stepsPerSegment = 24;
 
@@ -96,6 +116,7 @@ private:
     float toTime (float x, bool afterHold) const;
     bool isAfterHold (int index) const;
     float toLevel (float y) const;
+    float snapTime (float time, const yup::MouseEvent& event) const;
     yup::Point<float> getHandle (int segment) const;
     int findPoint (yup::Point<float> position) const;
     int findHandle (yup::Point<float> position) const;
@@ -104,6 +125,10 @@ private:
     SynthCurveState::Curve curve;
     yup::Path path;
     bool amplitude = false;
+    bool cycle = false;
+    bool inverted = false;
+    SynthTimeGrid::Timing timing;
+    int snapChoice = 0;
     float playhead = -1.0f;
     DragKind dragKind = DragKind::none;
     int dragIndex = -1;

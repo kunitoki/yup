@@ -78,6 +78,9 @@ public:
     /** Returns the first unused slot, or -1. Message thread. */
     int findFreeSlot() const;
 
+    /** Returns the slot routing a source into a destination, or -1. Message thread. */
+    int findRoute (SynthModulationSource source, const yup::String& destinationID) const;
+
     //==============================================================================
     /** Returns a slot as the audio thread plays it. */
     SynthRoute getRoute (int slot) const noexcept;

@@ -34,13 +34,19 @@ WaveformEditor::WaveformEditor (const SynthOscillatorParameters& parametersToSho
     , shader (std::move (sharedShader))
 {
     setMouseCursor (yup::MouseCursor::Crosshair);
+    setWantedGestures (yup::GestureType::pinch);
+    setWantsKeyboardFocus (true);
+    
+    clampPartialsView();
     preview.prepare();
+
     displaySeries.resize (SynthExample::maxHarmonics);
     displaySamples.assign (displayResolution, 0.0f);
     drawnCycle.assign (displayResolution, 0.0f);
-    drawnSeries.resize (SynthExample::editableHarmonics);
+    drawnSeries.resize (SynthExample::displayHarmonics);
     rotationBase.resize (SynthExample::editableHarmonics);
     rotated.resize (SynthExample::editableHarmonics);
+
     refresh();
 }
 
@@ -229,7 +235,13 @@ void WaveformEditor::mouseDown (const yup::MouseEvent& event)
 
     if (editingPartials)
     {
-        applyEdit (event);
+        draggingOverview = event.getPosition().getY() > getPartialsArea().getBottom();
+
+        if (draggingOverview)
+            centerPartialsAt (event.getPosition().getX());
+        else
+            applyEdit (event);
+
         return;
     }
 
@@ -252,7 +264,9 @@ void WaveformEditor::mouseDown (const yup::MouseEvent& event)
 
 void WaveformEditor::mouseDrag (const yup::MouseEvent& event)
 {
-    if (editingPartials)
+    if (editingPartials && draggingOverview)
+        centerPartialsAt (event.getPosition().getX());
+    else if (editingPartials)
         applyEdit (event);
     else if (rotationStartX.has_value())
         applyRotation (event);
@@ -263,6 +277,7 @@ void WaveformEditor::mouseDrag (const yup::MouseEvent& event)
 void WaveformEditor::mouseUp (const yup::MouseEvent&)
 {
     rotationStartX.reset();
+    draggingOverview = false;
 
     if (lastDrawnIndex.has_value())
     {
@@ -271,6 +286,33 @@ void WaveformEditor::mouseUp (const yup::MouseEvent&)
     }
 
     recordEdit (gestureStart);
+}
+
+void WaveformEditor::mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData)
+{
+    if (! editingPartials)
+        return;
+
+    const auto modifiers = event.getModifiers();
+
+    if (modifiers.isCommandDown() || modifiers.isControlDown())
+    {
+        zoomPartials (std::exp2 (wheelData.getDeltaY() * 0.5f), event.getPosition().getX());
+        return;
+    }
+
+    // A vertical trackpad swipe carries a little horizontal motion too, so the larger axis wins.
+    const auto delta = std::abs (wheelData.getDeltaX()) > std::abs (wheelData.getDeltaY()) ? wheelData.getDeltaX() : wheelData.getDeltaY();
+
+    partialsViewStart -= delta * partialsViewCount * 0.1f;
+    clampPartialsView();
+    repaint();
+}
+
+void WaveformEditor::gesturePinch (const yup::GestureEvent& event)
+{
+    if (editingPartials)
+        zoomPartials (event.getScaleDelta(), event.getPosition().getX());
 }
 
 //==============================================================================
@@ -326,6 +368,61 @@ float WaveformEditor::cycleValueAt (float y) const noexcept
         return 0.0f;
 
     return yup::jlimit (-1.0f, 1.0f, (bounds.getCenterY() - y) / (bounds.getHeight() * 0.45f));
+}
+
+/** Returns where the bars go in editing mode, above the overview strip. */
+yup::Rectangle<float> WaveformEditor::getPartialsArea() const noexcept
+{
+    return getLocalBounds().reduced (contentInset).withTrimmedBottom (overviewHeight + overviewGap);
+}
+
+int WaveformEditor::getVisiblePartialCount() const noexcept
+{
+    return yup::jlimit (1, SynthExample::editableHarmonics, yup::roundToInt (partialsViewCount));
+}
+
+int WaveformEditor::getFirstVisiblePartial() const noexcept
+{
+    return yup::jlimit (0, SynthExample::editableHarmonics - getVisiblePartialCount(), yup::roundToInt (partialsViewStart));
+}
+
+/** Scales the window of partials shown, keeping the partial under a horizontal position in place. */
+void WaveformEditor::zoomPartials (float factor, float x)
+{
+    const auto area = getPartialsArea();
+
+    if (area.getWidth() <= 0.0f || ! (factor > 0.0f))
+        return;
+
+    const auto fraction = yup::jlimit (0.0f, 1.0f, (x - area.getX()) / area.getWidth());
+    const auto anchor = partialsViewStart + fraction * partialsViewCount;
+
+    partialsViewCount /= factor;
+    clampPartialsView();
+    partialsViewStart = anchor - fraction * partialsViewCount;
+    clampPartialsView();
+    repaint();
+}
+
+/** Moves the window of partials shown so it is centered where the overview strip was pressed. */
+void WaveformEditor::centerPartialsAt (float x)
+{
+    const auto bounds = getLocalBounds().reduced (contentInset);
+
+    if (bounds.getWidth() <= 0.0f)
+        return;
+
+    partialsViewStart = (x - bounds.getX()) / bounds.getWidth() * static_cast<float> (SynthExample::editableHarmonics) - partialsViewCount * 0.5f;
+    clampPartialsView();
+    repaint();
+}
+
+void WaveformEditor::clampPartialsView() noexcept
+{
+    const auto total = static_cast<float> (SynthExample::editableHarmonics);
+
+    partialsViewCount = yup::jlimit (yup::jmin (total, static_cast<float> (minimumVisiblePartials)), total, partialsViewCount);
+    partialsViewStart = yup::jlimit (0.0f, total - partialsViewCount, partialsViewStart);
 }
 
 /** Returns the largest magnitude in a buffer of samples. */
@@ -428,27 +525,33 @@ void WaveformEditor::paintWaveform (yup::Graphics& g, yup::Rectangle<float> boun
     strokeGlowing (g, path);
 }
 
-/** Draws the editable magnitude of every harmonic. */
+/** Draws the editable magnitude of every harmonic in the window shown. */
 void WaveformEditor::paintPartials (yup::Graphics& g, yup::Rectangle<float> bounds)
 {
-    const auto barWidth = bounds.getWidth() / static_cast<float> (SynthExample::editableHarmonics);
+    paintPartialsOverview (g, bounds);
+
+    const auto area = getPartialsArea();
+
+    const auto first = getFirstVisiblePartial();
+    const auto count = getVisiblePartialCount();
+    const auto barWidth = area.getWidth() / static_cast<float> (count);
     const auto showsPhase = partialsTool == PartialsTool::phase;
 
     if (showsPhase)
     {
         g.setStrokeColor (SynthTheme::panelBorder (*this));
         g.setStrokeWidth (1.0f);
-        g.strokeLine (bounds.getX(), bounds.getCenterY(), bounds.getRight(), bounds.getCenterY());
+        g.strokeLine (area.getX(), area.getCenterY(), area.getRight(), area.getCenterY());
     }
 
-    for (int index = 0; index < SynthExample::editableHarmonics; ++index)
+    for (int index = first; index < first + count; ++index)
     {
         const auto magnitude = yup::jlimit (0.0f, 1.0f, static_cast<float> (displaySeries.getMagnitude (index + 1)));
-        const auto height = yup::jmax (1.0f, magnitude * bounds.getHeight());
-        const auto x = bounds.getX() + barWidth * static_cast<float> (index) + barGap;
+        const auto height = yup::jmax (1.0f, magnitude * area.getHeight());
+        const auto x = area.getX() + barWidth * static_cast<float> (index - first) + barGap;
         const auto width = yup::jmax (1.0f, barWidth - barGap * 2.0f);
 
-        const yup::Rectangle<float> bar { x, bounds.getBottom() - height, width, height };
+        const yup::Rectangle<float> bar { x, area.getBottom() - height, width, height };
 
         g.setFillColor (magnitude > 0.0f ? SynthTheme::accent (*this).withAlpha (showsPhase ? 0.25f : 1.0f) : SynthTheme::panelBorder (*this));
         g.fillRect (bar);
@@ -458,11 +561,38 @@ void WaveformEditor::paintPartials (yup::Graphics& g, yup::Rectangle<float> boun
 
         // The phase from -pi to pi, drawn up or down from the middle; a sine sits at zero.
         const auto phase = std::atan2 (displaySeries.getCosine (index + 1), displaySeries.getSine (index + 1));
-        const auto offset = static_cast<float> (phase / yup::MathConstants<double>::pi) * bounds.getHeight() * 0.5f;
+        const auto offset = static_cast<float> (phase / yup::MathConstants<double>::pi) * area.getHeight() * 0.5f;
 
         g.setFillColor (SynthTheme::accent (*this));
-        g.fillRect (yup::Rectangle<float> { x, bounds.getCenterY() - yup::jmax (0.0f, offset), width, yup::jmax (1.0f, std::abs (offset)) });
+        g.fillRect (yup::Rectangle<float> { x, area.getCenterY() - yup::jmax (0.0f, offset), width, yup::jmax (1.0f, std::abs (offset)) });
     }
+}
+
+/** Draws where the window of partials shown sits among all of them, and which ones it holds. */
+void WaveformEditor::paintPartialsOverview (yup::Graphics& g, yup::Rectangle<float> bounds)
+{
+    const auto total = static_cast<float> (SynthExample::editableHarmonics);
+    const auto first = getFirstVisiblePartial();
+    const auto count = getVisiblePartialCount();
+    const yup::Rectangle<float> strip { bounds.getX(), bounds.getBottom() - overviewHeight, bounds.getWidth(), overviewHeight };
+
+    g.setFillColor (SynthTheme::panelBorder (*this));
+    g.fillRect (strip);
+
+    g.setFillColor (SynthTheme::accent (*this));
+    g.fillRect (yup::Rectangle<float> { strip.getX() + strip.getWidth() * static_cast<float> (first) / total,
+                                        strip.getY(),
+                                        strip.getWidth() * static_cast<float> (count) / total,
+                                        overviewHeight });
+
+    if (count >= SynthExample::editableHarmonics)
+        return;
+
+    g.setFillColor (SynthTheme::textSecondary (*this));
+    g.fillFittedText (yup::String (first + 1) + "-" + yup::String (first + count) + " / " + yup::String (SynthExample::editableHarmonics),
+                      SynthTheme::captionFont (11.5f),
+                      getPartialsArea().reduced (2.0f),
+                      yup::Justification::topRight);
 }
 
 //==============================================================================
@@ -586,7 +716,7 @@ void WaveformEditor::recordEdit (const SynthPartials::Snapshot& before, bool joi
 /** Turns a mouse position into the magnitude, or the phase, of one harmonic. */
 void WaveformEditor::applyEdit (const yup::MouseEvent& event)
 {
-    const auto bounds = getLocalBounds().reduced (contentInset);
+    const auto bounds = getPartialsArea();
 
     if (bounds.getWidth() <= 0.0f || bounds.getHeight() <= 0.0f)
         return;
@@ -594,10 +724,10 @@ void WaveformEditor::applyEdit (const yup::MouseEvent& event)
     beginCustomEdit();
 
     const auto position = event.getPosition();
-    const auto barWidth = bounds.getWidth() / static_cast<float> (SynthExample::editableHarmonics);
-    const auto index = yup::jlimit (0,
-                                    SynthExample::editableHarmonics - 1,
-                                    static_cast<int> ((position.getX() - bounds.getX()) / barWidth));
+    const auto count = getVisiblePartialCount();
+    const auto barWidth = bounds.getWidth() / static_cast<float> (count);
+    const auto index = getFirstVisiblePartial()
+                     + yup::jlimit (0, count - 1, static_cast<int> ((position.getX() - bounds.getX()) / barWidth));
 
     if (partialsTool == PartialsTool::phase)
     {
