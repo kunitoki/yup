@@ -55,6 +55,9 @@ public:
     sources and the random one. */
 inline yup::Color getSourceColor (const yup::Component& scope, SynthModulationSource source)
 {
+    if (getSourceMacro (source) >= 0)
+        return SynthTheme::sectionAccent (scope, SynthTheme::Section::macros);
+
     const auto family = getSourceEnvelope (source) >= 0 ? 0
                       : getSourceLFO (source) >= 0    ? 1
                       : source == SynthModulationSource::random ? 3

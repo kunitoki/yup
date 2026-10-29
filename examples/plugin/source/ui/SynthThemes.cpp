@@ -39,6 +39,7 @@ const std::vector<Theme>& getThemes()
             "https://coolors.co/0c111b-172131-8b97a8-eef2f8-8fd6a4",
             "https://coolors.co/0c111b-172131-8b97a8-eef2f8-7cc7ec",
             "https://coolors.co/0c111b-172131-8b97a8-eef2f8-9aa6f4",
+            "https://coolors.co/0c111b-172131-8b97a8-eef2f8-c79cf0",
             "https://coolors.co/0c111b-172131-8b97a8-eef2f8-c79cf0" } },
         { "Retrace Classic", "https://coolors.co/011627-f71735-41ead4-fdfffc-ff9f1c", yup::ThemePalette::Mode::dark },
         { "Deep Sea", "https://coolors.co/0b132b-1c2541-3a506b-5bc0be-6fffe9", yup::ThemePalette::Mode::dark },

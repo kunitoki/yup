@@ -144,9 +144,9 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
                                                     SynthTheme::Section::matrix,
                                                     std::vector<SynthSection::StripControl> { { matrixCaption.get(), 110.0f } });
 
-    // The macros drive routes, so they wear the matrix's palette.
+    // The macros drive routes, and use the purple source-family accent.
     macroPanel = std::make_unique<SynthMacroPanel> (processor);
-    macroSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "Macros", macroPanel.get() } }, SynthTheme::Section::matrix);
+    macroSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "Macros", macroPanel.get() } }, SynthTheme::Section::macros);
 
     std::vector<SynthSection::Tab> filterTabs;
 

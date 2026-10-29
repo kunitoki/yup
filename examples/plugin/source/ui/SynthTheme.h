@@ -54,10 +54,11 @@ enum class Section
     envelopes,
     lfos,
     voicing,
-    keys
+    keys,
+    macros
 };
 
-constexpr int sectionCount = 8;
+constexpr int sectionCount = 9;
 
 /** A palette for each section, in the order of Section; a missing one follows the base palette. */
 using SectionPalettes = std::array<std::optional<yup::ThemePalette>, sectionCount>;
