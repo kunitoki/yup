@@ -105,14 +105,15 @@ int getPresetIndex (const yup::DataTree& state);
 
 /** Returns the index of the parameter a route may reach, or -1.
 
-    Only continuous parameters the voices play are destinations: modulating a choice or
-    a count would jump between steps, the quality would change the latency, and volume,
-    glide, the route depths and the macros are not applied per voice.
+    Only continuous parameters are destinations: modulating a choice or a count would jump
+    between steps, the quality would change the latency, and volume, glide, the route
+    depths and the macros are not applied per voice. The master effects are destinations
+    too, modulated monophonically (see HarmonicSynthEngine::getGlobalValues()).
 */
 int findRouteDestination (yup::Span<const yup::AudioParameter::Ptr> parameters, const yup::String& parameterID);
 
-/** Creates a random patch that keeps the current volume, voice mode, glide, quality and
-    macro positions, named "Random" with the macro names given.
+/** Creates a random patch that keeps the current volume, voice mode, glide, quality,
+    macro positions and effects, named "Random" with the macro names given.
 
     The patch aims for a kind of sound, a pluck, keys, a pad, a lead, a bass or a bell,
     which shapes its amplitude envelope. Only the modules it uses are switched on, always

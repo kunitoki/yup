@@ -119,6 +119,8 @@ void SynthParameters::addTo (yup::AudioProcessor& processor) const
     for (const auto& macro : macros)
         processor.addParameter (macro);
 
+    effects.addTo (processor);
+
 #if YUP_DEBUG
     // A host ID used twice silently breaks automation in CLAP and VST3 hosts.
     std::set<yup::uint32> hostIDs;

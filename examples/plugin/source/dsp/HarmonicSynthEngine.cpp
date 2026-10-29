@@ -41,18 +41,20 @@ HarmonicSynthEngine::HarmonicSynthEngine (const SynthParameters& synthParameters
     }
 }
 
-void HarmonicSynthEngine::prepare (double sampleRate, int maxBlockSize, SynthQuality quality, yup::Span<const yup::AudioParameter::Ptr> processorParameters)
+void HarmonicSynthEngine::prepare (double sampleRate, int maxBlockSize, SynthQuality quality, yup::Span<const yup::AudioParameter::Ptr> newProcessorParameters)
 {
     allNotesOff (0, false);
     setCurrentPlaybackSampleRate (sampleRate);
     activeVoices.store (0);
+    processorParameters = newProcessorParameters;
+    heldSourceValues.fill (0.0f);
 
     for (int index = 0; index < ownedVoices.size(); ++index)
-        ownedVoices[index]->prepare (sampleRate, maxBlockSize, quality, processorParameters);
+        ownedVoices[index]->prepare (sampleRate, maxBlockSize, quality, newProcessorParameters);
 
     latency = ownedVoices.isEmpty() ? 0 : ownedVoices[0]->getLatencyInSamples();
 
-    spectralOwner.assign (processorParameters.size(), -1);
+    spectralOwner.assign (newProcessorParameters.size(), -1);
 
     for (std::size_t oscillator = 0; oscillator < parameters.oscillators.size(); ++oscillator)
         for (const auto& parameter : parameters.oscillators[oscillator].getSpectralParameters())
@@ -213,6 +215,56 @@ void HarmonicSynthEngine::publishVoiceState() noexcept
 
     for (int slot = 0; slot < SynthExample::modulationSlots; ++slot)
         routeAmounts[static_cast<std::size_t> (slot)].store (newest != nullptr ? newest->getRouteAmount (slot) : 0.0f);
+
+    if (newest == nullptr)
+        return;
+
+    for (int index = 0; index < context.numRoutes; ++index)
+    {
+        const auto slot = static_cast<std::size_t> (context.slots[static_cast<std::size_t> (index)]);
+        heldSources[slot] = context.routes[static_cast<std::size_t> (index)].source;
+        heldSourceValues[slot] = newest->getRouteAmount (static_cast<int> (slot)) / context.depths[static_cast<std::size_t> (index)];
+    }
+}
+
+float HarmonicSynthEngine::getGlobalSourceValue (SynthModulationSource source, int slot) const noexcept
+{
+    if (const auto macro = getSourceMacro (source); macro >= 0)
+        return context.macros[static_cast<std::size_t> (macro)];
+
+    if (source == SynthModulationSource::modWheel)
+        return context.modWheel;
+
+    if (source == SynthModulationSource::aftertouch)
+        return context.aftertouch;
+
+    const auto index = static_cast<std::size_t> (slot);
+    return heldSources[index] == source ? heldSourceValues[index] : 0.0f;
+}
+
+yup::Span<const float> HarmonicSynthEngine::getGlobalValues (std::vector<float>& storage) const noexcept
+{
+    if (context.numRoutes == 0 || storage.size() < context.played.size() || processorParameters.size() < context.played.size())
+        return context.played;
+
+    std::copy (context.played.begin(), context.played.end(), storage.begin());
+
+    for (int index = 0; index < context.numRoutes; ++index)
+    {
+        const auto& route = context.routes[static_cast<std::size_t> (index)];
+        const auto amount = context.depths[static_cast<std::size_t> (index)] * getGlobalSourceValue (route.source, context.slots[static_cast<std::size_t> (index)]);
+
+        if (amount == 0.0f || ! yup::isPositiveAndBelow (route.destination, static_cast<int> (context.played.size())))
+            continue;
+
+        const auto destination = static_cast<std::size_t> (route.destination);
+        const auto& parameter = processorParameters[destination];
+        const auto normalized = yup::jlimit (0.0f, 1.0f, parameter->convertToNormalizedValue (storage[destination]) + amount);
+
+        storage[destination] = parameter->convertToDenormalizedValue (normalized);
+    }
+
+    return { storage.data(), context.played.size() };
 }
 
 //==============================================================================

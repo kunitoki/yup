@@ -29,6 +29,7 @@
 #include "SynthFMPanel.h"
 #include "SynthFilterPanel.h"
 #include "SynthLFOPanel.h"
+#include "SynthEffectsPage.h"
 #include "SynthModulationPage.h"
 #include "SynthOscillatorPanel.h"
 #include "SynthPage.h"
@@ -164,9 +165,11 @@ private:
     std::array<std::unique_ptr<SynthLFOPanel>, SynthExample::lfoCount> lfoPanels;
     std::unique_ptr<SynthFMPanel> fmPanel;
     std::unique_ptr<SynthModulationPage> modulationPage;
+    std::unique_ptr<SynthEffectsPage> effectsPage;
     std::unique_ptr<SynthMacroPanel> macroPanel;
     std::unique_ptr<ParameterSegmented> routingSelector;
     std::unique_ptr<yup::Label> matrixCaption;
+    std::unique_ptr<yup::Label> modulationCaption;
     std::unique_ptr<yup::Label> ampCaption;
     std::vector<std::unique_ptr<ParameterLed>> lfoSyncLeds;
     std::unique_ptr<SynthSection> oscillatorSection;

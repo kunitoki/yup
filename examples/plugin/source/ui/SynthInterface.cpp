@@ -138,11 +138,16 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
 
     fmPanel = std::make_unique<SynthFMPanel> (parameters);
     modulationPage = std::make_unique<SynthModulationPage> (parameters, processor.getRoutes(), processor.getParameters());
-    matrixCaption = makeCaption (yup::String::fromUTF8 ("ROW \xe2\x86\x90 COLUMN"));
-    matrixSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "FM", fmPanel.get(), nullptr, false, { { &fmPanel->getResetButton(), 60.0f }, { &fmPanel->getAlgorithmButton(), 88.0f } } },
-                                                                                     { "Mods", modulationPage.get() } },
-                                                    SynthTheme::Section::matrix,
-                                                    std::vector<SynthSection::StripControl> { { matrixCaption.get(), 110.0f } });
+    effectsPage = std::make_unique<SynthEffectsPage> (parameters.effects);
+
+    // The caption reads both grids; a strip control belongs to one tab, so each grid has its own.
+    const auto gridCaption = yup::String::fromUTF8 ("ROW \xe2\x86\x90 COLUMN");
+    matrixCaption = makeCaption (gridCaption);
+    modulationCaption = makeCaption (gridCaption);
+    matrixSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "FM", fmPanel.get(), nullptr, false, { { matrixCaption.get(), 110.0f, false }, { &fmPanel->getResetButton(), 60.0f }, { &fmPanel->getAlgorithmButton(), 88.0f } } },
+                                                                                     { "Mods", modulationPage.get(), nullptr, false, { { modulationCaption.get(), 110.0f, false } } },
+                                                                                     { "EFX", effectsPage.get() } },
+                                                    SynthTheme::Section::matrix);
 
     // The macros drive routes, with a palette of their own between the oscillators and the matrix.
     macroPanel = std::make_unique<SynthMacroPanel> (processor);
@@ -167,7 +172,7 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
                                 { { &panel.getSyncLed(), 56.0f } }, &panel.getModulationHandle() };
 
         if (index == 0)
-            tab.stripControls.push_back ({ ampCaption.get(), 48.0f });
+            tab.stripControls.push_back ({ ampCaption.get(), 48.0f, false });
 
         envelopeTabs.push_back (std::move (tab));
     }
@@ -841,6 +846,7 @@ void SynthInterface::syncFromProcessor()
 
     fmPanel->syncFromParameters();
     modulationPage->syncFromParameters();
+    effectsPage->syncFromParameters();
     macroPanel->syncFromProcessor();
 
     const auto info = processor.getPresetInfo();

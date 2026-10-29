@@ -46,6 +46,7 @@ RetraceProcessor::RetraceProcessor()
         parameterValues.push_back (parameter->getValue());
 
     playedValues = parameterValues;
+    globalValues = parameterValues;
     changedByEvents.assign (parameterValues.size(), 0);
     volumeIndex = synthParameters.volume->getIndexInContainer();
 
@@ -69,6 +70,8 @@ void RetraceProcessor::prepareToPlay (const yup::AudioSpec& spec)
     preparedSampleRate = spec.sampleRate;
     preparedBlockSize = yup::jmax (spec.maxBlockSize, SynthExample::maxBlockSize);
     prepareEngine (synthParameters.getQuality());
+
+    effects.prepare (spec.sampleRate, SynthExample::controlChunk);
 
     for (auto& clipper : masterClippers)
         clipper.prepare (spec.sampleRate, spec.maxBlockSize);
@@ -110,11 +113,13 @@ void RetraceProcessor::parameterValueChanged (const yup::AudioParameter::Ptr&, i
 void RetraceProcessor::releaseResources()
 {
     engine.allNotesOff (0, false);
+    effects.reset();
 }
 
 void RetraceProcessor::flush()
 {
     engine.allNotesOff (0, false);
+    effects.reset();
 }
 
 void RetraceProcessor::processBlock (yup::AudioProcessContext<float>& context)
@@ -162,6 +167,12 @@ void RetraceProcessor::processBlock (yup::AudioProcessContext<float>& context)
             applyParameterChange (*change);
 
         engine.renderRange (audio, context.midi, start, count, playedValues, bpm);
+
+        if (audio.getNumChannels() >= 2)
+        {
+            const auto values = synthParameters.effects.read ({ engine.getGlobalValues (globalValues) });
+            effects.process (audio.getWritePointer (0, start), audio.getWritePointer (1, start), count, values, bpm);
+        }
 
         outputGain.setTargetValue (playedValues[static_cast<std::size_t> (volumeIndex)]);
 

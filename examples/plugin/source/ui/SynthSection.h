@@ -39,7 +39,8 @@
 
     The right end of the strip holds controls: the ones shared by every tab, then the
     ones of the selected tab. An optional trailing control sits right of that tab's
-    other controls.
+    other controls. Tabs keep their widths whichever tab is selected; when the selected
+    tab's controls don't fit beside them, those controls shrink instead.
 
     @see ParameterLed
 */
@@ -51,6 +52,7 @@ public:
     {
         yup::Component* component = nullptr;
         float width = 0.0f;
+        bool canShrink = true; /**< False for a control, like a caption, that keeps its width when the strip is tight. */
     };
 
     /** One tab and the page it shows. */

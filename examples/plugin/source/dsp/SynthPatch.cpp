@@ -601,6 +601,10 @@ yup::DataTree createRandomState (const SynthParameters& parameters,
     for (const auto& macro : parameters.macros)
         builder.keep (macro);
 
+    // The effects are the user's mix, not part of the sound being drawn.
+    for (const auto& parameter : parameters.effects.getParameters())
+        builder.keep (parameter);
+
     // The operators in use are always the first ones. Operator 1 is heard, and every other
     // one is heard too or modulates an operator below it, so none is idle and none loops.
     const auto fmPatch = character.inharmonic || chance (random, 60);

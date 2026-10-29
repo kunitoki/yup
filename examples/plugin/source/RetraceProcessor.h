@@ -24,6 +24,7 @@
 #include <yup_audio_processors/yup_audio_processors.h>
 
 #include "dsp/HarmonicSynthEngine.h"
+#include "dsp/SynthEffectsRack.h"
 #include "dsp/MidiMessageFifo.h"
 #include "dsp/SynthPatch.h"
 #include "browser/PresetEntry.h"
@@ -234,6 +235,7 @@ private:
     SynthCurveState curves;
     SynthRoutes routes;
     HarmonicSynthEngine engine;
+    SynthEffectsRack effects;
     std::array<yup::SoftClipper<float>, 2> masterClippers;
     SynthQuality preparedQuality = SynthQuality::x2;
     std::atomic<double> preparedSampleRate { 0.0 };
@@ -241,6 +243,7 @@ private:
 
     std::vector<float> playedValues;     // what the engine plays, host modulation included
     std::vector<float> parameterValues;  // the parameter values playedValues last followed
+    std::vector<float> globalValues;     // playedValues with the routes into global parameters applied
     std::vector<char> changedByEvents;
     int volumeIndex = 0;
     yup::SmoothedValue<float> outputGain;

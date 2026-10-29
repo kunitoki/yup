@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "SynthEffectsParameters.h"
 #include "SynthEnvelopeParameters.h"
 #include "SynthFMParameters.h"
 #include "SynthFilterParameters.h"
@@ -50,7 +51,7 @@ struct SynthGlobalValues
 
     Host IDs are grouped per section so the sections can grow: globals below 100,
     oscillators from 1000, FM from 2000, envelopes from 3000, LFOs from 4000, filters
-    from 5000, route depths from 6000 and macros from 7000.
+    from 5000, route depths from 6000, macros from 7000 and effects from 8000.
 
     @see SynthPatch, HarmonicSynthEngine
 */
@@ -75,6 +76,7 @@ public:
     std::array<SynthEnvelopeParameters, SynthExample::envelopeCount> envelopes;
     std::array<SynthLFOParameters, SynthExample::lfoCount> lfos;
     SynthModulationParameters modulation;
+    SynthEffectsParameters effects;
 
     yup::AudioParameter::Ptr volume;        /**< Master output gain, 0 to 1. */
     yup::AudioParameter::Ptr playMode;      /**< A SynthPlayMode. */

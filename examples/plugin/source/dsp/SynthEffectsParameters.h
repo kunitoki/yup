@@ -1,0 +1,258 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#pragma once
+
+#include "SynthParameterFactory.h"
+#include "SynthTypes.h"
+
+#include <vector>
+
+//==============================================================================
+/** The master effects, in their default chain order. */
+enum class SynthEffectType
+{
+    bitcrusher,
+    chorus,
+    phaser,
+    flanger,
+    delay,
+    reverb
+};
+
+/** The effects from the first to process to the last, each present once. */
+using SynthEffectOrder = std::array<SynthEffectType, SynthExample::effectCount>;
+
+/** @internal Display names for SynthEffectType, index aligned with the enumeration. */
+inline yup::StringArray getSynthEffectNames()
+{
+    return { "Bitcrusher", "Chorus", "Phaser", "Flanger", "Delay", "Reverb" };
+}
+
+/** How the chorus moves: free controls, or the fixed settings of the Juno-60 buttons. */
+enum class SynthChorusMode
+{
+    generic,
+    junoI,
+    junoII,
+    junoBoth
+};
+
+/** @internal Item names for SynthChorusMode, index aligned with the enumeration. */
+inline yup::StringArray getSynthChorusModeNames()
+{
+    return { "Generic", "Juno I", "Juno II", "Juno I+II" };
+}
+
+//==============================================================================
+/** A plain snapshot of the bitcrusher. */
+struct SynthBitcrusherValues
+{
+    float bits = 8.0f;     /**< Quantization depth, 1 to 16, fractional values included. */
+    float rate = 11025.0f; /**< The rate samples are held at, in Hz. */
+    float dither = 0.0f;
+    float mix = 1.0f;
+
+    bool operator== (const SynthBitcrusherValues&) const = default;
+};
+
+/** A plain snapshot of the chorus. Rate, depth, delay and feedback only apply to the generic mode. */
+struct SynthChorusValues
+{
+    SynthChorusMode mode = SynthChorusMode::generic;
+    float rate = 0.8f;
+    float depth = 0.5f;
+    float delayMs = 7.0f;
+    float feedback = 0.0f;
+    float mix = 0.5f;
+
+    bool operator== (const SynthChorusValues&) const = default;
+};
+
+/** A plain snapshot of the phaser. */
+struct SynthPhaserValues
+{
+    int stages = 8; /**< 4, 8 or 12 allpass stages. */
+    float rate = 0.4f;
+    float depth = 0.7f;
+    float center = 800.0f;
+    float feedback = 0.5f;
+    float stereo = 0.5f; /**< LFO phase offset of the right channel, 0 to half a cycle. */
+    float mix = 0.5f;
+
+    bool operator== (const SynthPhaserValues&) const = default;
+};
+
+/** A plain snapshot of the flanger. */
+struct SynthFlangerValues
+{
+    float rate = 0.25f;
+    float depth = 0.7f;
+    float delayMs = 2.5f;
+    float feedback = 0.5f; /**< Bipolar: negative feedback hollows the comb out. */
+    float stereo = 0.5f;
+    float mix = 0.5f;
+
+    bool operator== (const SynthFlangerValues&) const = default;
+};
+
+/** A plain snapshot of the delay. */
+struct SynthDelayValues
+{
+    static constexpr double fallbackTempo = 120.0;
+
+    bool tempoSync = true;
+    float timeMs = 375.0f;
+    int division = 13; /**< Index into getSynthLFODivisions(), 1/8 D by default. */
+    float feedback = 0.35f;
+    bool pingPong = true;
+    float lowCut = 100.0f;
+    float highCut = 8000.0f;
+    float mix = 0.3f;
+
+    bool operator== (const SynthDelayValues&) const = default;
+
+    /** Returns the delay time in seconds, following the division when synced.
+
+        @param bpm  The host tempo, or zero when unknown, which plays at fallbackTempo
+    */
+    double getSeconds (double bpm) const noexcept
+    {
+        if (! tempoSync)
+            return timeMs * 0.001;
+
+        const auto& divisions = getSynthLFODivisions();
+        const auto beats = divisions[static_cast<std::size_t> (yup::jlimit (0, static_cast<int> (divisions.size()) - 1, division))].beats;
+
+        return 60.0 * beats / (bpm > 0.0 ? bpm : fallbackTempo);
+    }
+};
+
+/** A plain snapshot of the plate reverb. */
+struct SynthReverbValues
+{
+    float predelayMs = 20.0f;
+    float decay = 0.6f;
+    float damping = 0.4f;
+    float width = 1.0f;
+    float mix = 0.3f;
+
+    bool operator== (const SynthReverbValues&) const = default;
+};
+
+/** A plain snapshot of the whole effects chain. */
+struct SynthEffectsValues
+{
+    SynthEffectOrder order { SynthEffectType::bitcrusher, SynthEffectType::chorus, SynthEffectType::phaser,
+                             SynthEffectType::flanger, SynthEffectType::delay, SynthEffectType::reverb };
+    std::array<bool, SynthExample::effectCount> enabled {};
+
+    SynthBitcrusherValues bitcrusher;
+    SynthChorusValues chorus;
+    SynthPhaserValues phaser;
+    SynthFlangerValues flanger;
+    SynthDelayValues delay;
+    SynthReverbValues reverb;
+
+    bool operator== (const SynthEffectsValues&) const = default;
+
+    /** True when an effect is switched on. */
+    bool isEnabled (SynthEffectType type) const noexcept { return enabled[static_cast<std::size_t> (type)]; }
+};
+
+//==============================================================================
+/** The parameters of the master effects, IDs prefixed "fx.".
+
+    Each effect has its own switch, all off by default. The chain order is one stepped
+    parameter, "fx.order", indexing the permutations of the effects, so the order is
+    saved, recalled, automated and undone like any other value.
+
+    Host IDs start at 8000: the order, then 100 per effect from 8100 in SynthEffectType order.
+
+    @see SynthEffectsRack
+*/
+class SynthEffectsParameters
+{
+public:
+    /** Creates every parameter at its default. */
+    SynthEffectsParameters();
+
+    /** Registers every parameter with the processor. */
+    void addTo (yup::AudioProcessor& processor) const;
+
+    /** Returns every parameter, in registration order. */
+    std::vector<yup::AudioParameter::Ptr> getParameters() const;
+
+    /** Takes a snapshot. */
+    SynthEffectsValues read (SynthParameterReader reader = {}) const noexcept;
+
+    /** Returns the switch of an effect. */
+    const yup::AudioParameter::Ptr& getEnabled (SynthEffectType type) const noexcept { return enabled[static_cast<std::size_t> (type)]; }
+
+    /** Returns the chain order an "fx.order" value stands for. */
+    static SynthEffectOrder decodeOrder (int index) noexcept;
+
+    /** Returns the "fx.order" value of a chain order. */
+    static int encodeOrder (const SynthEffectOrder& order) noexcept;
+
+    /** How many chain orders there are: every permutation of the effects. */
+    static constexpr int orderCount = 720;
+
+    struct Bitcrusher
+    {
+        yup::AudioParameter::Ptr bits, rate, dither, mix;
+    };
+
+    struct Chorus
+    {
+        yup::AudioParameter::Ptr mode, rate, depth, delay, feedback, mix;
+    };
+
+    struct Phaser
+    {
+        yup::AudioParameter::Ptr stages, rate, depth, center, feedback, stereo, mix;
+    };
+
+    struct Flanger
+    {
+        yup::AudioParameter::Ptr rate, depth, delay, feedback, stereo, mix;
+    };
+
+    struct Delay
+    {
+        yup::AudioParameter::Ptr tempoSync, time, division, feedback, pingPong, lowCut, highCut, mix;
+    };
+
+    struct Reverb
+    {
+        yup::AudioParameter::Ptr predelay, decay, damping, width, mix;
+    };
+
+    yup::AudioParameter::Ptr order;
+    std::array<yup::AudioParameter::Ptr, SynthExample::effectCount> enabled;
+
+    Bitcrusher bitcrusher;
+    Chorus chorus;
+    Phaser phaser;
+    Flanger flanger;
+    Delay delay;
+    Reverb reverb;
+};

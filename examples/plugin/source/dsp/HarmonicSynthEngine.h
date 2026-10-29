@@ -100,6 +100,19 @@ public:
         return routeAmounts[static_cast<std::size_t> (slot)].load();
     }
 
+    /** Returns the parameter values of the last rendered range with the routes applied
+        monophonically, for global processing such as the master effects.
+
+        Like a monophonic synth: macros, the mod wheel and aftertouch apply directly, while
+        the per-note sources (envelopes, LFOs, velocity, note, random) follow the most
+        recently started voice and hold their last value once no note plays. Call it on the
+        audio thread after renderRange().
+
+        @param storage  Room for one value per parameter index, filled when a route is active
+        @returns        The modulated values, or the played ones when no route is active
+    */
+    yup::Span<const float> getGlobalValues (std::vector<float>& storage) const noexcept;
+
     /** Returns where an envelope of the most recent note is along its points (see yup::CurveEnvelope::getPointPosition()),
         or -1 when no note plays it. */
     float getEnvelopePosition (int envelopeIndex) const noexcept
@@ -126,6 +139,7 @@ private:
     void updateContext (yup::Span<const float> parameterValues, double bpm) noexcept;
     void updateRoutes (const SynthParameterReader& reader) noexcept;
     void publishVoiceState() noexcept;
+    float getGlobalSourceValue (SynthModulationSource source, int slot) const noexcept;
     void playMonoNote (int channel, int note, float velocity);
     void selectMonoNote (bool tailOff);
 
@@ -161,6 +175,11 @@ private:
     std::array<std::atomic<float>, SynthExample::lfoCount> lfoPhases {};
     std::array<std::atomic<float>, SynthExample::envelopeCount> envelopePositions {};
     std::array<std::atomic<float>, SynthExample::modulationSlots> routeAmounts {};
+
+    /** Per route slot, the per-note source value of the most recent voice, kept once it stops. */
+    std::array<float, SynthExample::modulationSlots> heldSourceValues {};
+    std::array<SynthModulationSource, SynthExample::modulationSlots> heldSources {};
+    yup::Span<const yup::AudioParameter::Ptr> processorParameters;
     SynthBlockContext context;
     yup::ReferenceCountedArray<SynthVoice> ownedVoices;
 

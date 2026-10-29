@@ -134,21 +134,17 @@ void SynthSection::resized()
 {
     auto strip = getLocalBounds().removeFromTop (SynthTheme::stripHeight);
 
-    const auto place = [&strip] (const StripControl& control)
+    const auto place = [&strip] (const StripControl& control, float scale)
     {
-        auto area = strip.removeFromRight (control.width + SynthTheme::panelPadding * 2.0f);
-        control.component->setBounds (area.reduced (SynthTheme::panelPadding, 4.0f));
+        auto area = strip.removeFromRight ((control.width + SynthTheme::panelPadding * 2.0f) * scale);
+        control.component->setBounds (area.reduced (SynthTheme::panelPadding * scale, 4.0f));
     };
 
     for (const auto& control : sharedControls)
-        place (control);
+        place (control, 1.0f);
 
-    if (auto* control = tabs[static_cast<std::size_t> (selected)].trailingControl; control != nullptr)
-        place ({ control, trailingControlWidth });
-
-    for (const auto& control : tabs[static_cast<std::size_t> (selected)].stripControls)
-        place (control);
-
+    // Tabs are laid out before the selected tab's own controls, so they keep their widths
+    // whichever tab is selected; those controls shrink into the space left instead
     const auto font = SynthTheme::captionFont (13.5f);
     auto contentWidth = 0.0f;
 
@@ -174,6 +170,27 @@ void SynthSection::resized()
         if (auto& led = leds[index]; led != nullptr)
             led->setBounds (area.removeFromLeft (ledSpace).withWidth (ledSpace - 4.0f));
     }
+
+    const auto& selectedTab = tabs[static_cast<std::size_t> (selected)];
+    std::vector<StripControl> controls;
+
+    if (selectedTab.trailingControl != nullptr)
+        controls.push_back ({ selectedTab.trailingControl, trailingControlWidth });
+
+    controls.insert (controls.end(), selectedTab.stripControls.begin(), selectedTab.stripControls.end());
+
+    auto fixedWidth = 0.0f;
+    auto shrinkableWidth = 0.0f;
+
+    for (const auto& control : controls)
+        (control.canShrink ? shrinkableWidth : fixedWidth) += control.width + SynthTheme::panelPadding * 2.0f;
+
+    const auto tabsRight = getTabBounds (static_cast<int> (tabs.size()) - 1).getRight();
+    const auto spareWidth = strip.getRight() - tabsRight - fixedWidth;
+    const auto controlScale = shrinkableWidth > 0.0f ? yup::jlimit (0.0f, 1.0f, spareWidth / shrinkableWidth) : 1.0f;
+
+    for (const auto& control : controls)
+        place (control, control.canShrink ? controlScale : 1.0f);
 
     const auto body = getLocalBounds().withTrimmedTop (SynthTheme::stripHeight).reduced (SynthTheme::panelPadding);
 
