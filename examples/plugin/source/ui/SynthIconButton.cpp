@@ -44,7 +44,8 @@ void SynthIconButton::paintButton (yup::Graphics& g)
     }
 
     const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultIconFont().withHeight (height);
-    g.setFillColor (isButtonOver() || highlighted ? SynthTheme::accent (*this) : SynthTheme::textPrimary (*this).withAlpha (0.85f));
+    const auto alpha = isEnabled() ? 0.85f : 0.3f;
+    g.setFillColor (isButtonOver() || highlighted ? SynthTheme::accent (*this) : SynthTheme::textPrimary (*this).withAlpha (alpha));
     g.fillFittedText (glyph, font, bounds, yup::Justification::center);
 }
 
@@ -62,4 +63,9 @@ void SynthIconButton::mouseDown (const yup::MouseEvent& event)
     // Releasing any button clicks, so the press remembers which one it was.
     rightClicked = event.isRightButtonDown();
     yup::Button::mouseDown (event);
+}
+
+void SynthIconButton::enablementChanged()
+{
+    repaint();
 }

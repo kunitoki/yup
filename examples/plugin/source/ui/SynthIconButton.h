@@ -41,6 +41,7 @@ public:
 
     void paintButton (yup::Graphics& g) override;
     void mouseDown (const yup::MouseEvent& event) override;
+    void enablementChanged() override;
 
 private:
     yup::String glyph;

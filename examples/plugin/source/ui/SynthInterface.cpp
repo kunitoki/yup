@@ -96,6 +96,7 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
     header = std::make_unique<SynthHeader> (processor);
     header->onSettingsRequested = [this] (yup::Point<float> position) { showSettingsMenu (getLocalPoint (header.get(), position)); };
     header->onBrowserToggled = [this] { setBrowserOpen (! isBrowserOpen()); };
+    header->onUndoRequested = [this] (bool redo) { undoStep (redo); };
     addAndMakeVisible (*header);
 
     for (int index = 0; index < SynthExample::oscillatorCount; ++index)
@@ -662,17 +663,7 @@ bool SynthInterface::keyDown (const yup::KeyPress& key, const yup::Point<float>&
 
     if ((modifiers.isCommandDown() || modifiers.isControlDown()) && key.getKey() == yup::KeyPress::textZKey)
     {
-        // A field being typed in is finished first, which records it, so it is the step undone.
-        if (auto* native = getNativeComponent(); native != nullptr && dynamic_cast<SynthFieldEditor*> (native->getFocusedComponent()) != nullptr)
-            takeKeyboardFocus();
-
-        auto& undoManager = processor.getUndoManager();
-
-        if (modifiers.isShiftDown())
-            undoManager.redo();
-        else
-            undoManager.undo();
-
+        undoStep (modifiers.isShiftDown());
         return true;
     }
 
@@ -706,6 +697,20 @@ void SynthInterface::applyUndoSetting()
 
     undoManager.clear();
     undoManager.setEnabled (enabled);
+}
+
+void SynthInterface::undoStep (bool redo)
+{
+    // A field being typed in is finished first, which records it, so it is the step undone.
+    if (auto* native = getNativeComponent(); native != nullptr && dynamic_cast<SynthFieldEditor*> (native->getFocusedComponent()) != nullptr)
+        takeKeyboardFocus();
+
+    auto& undoManager = processor.getUndoManager();
+
+    if (redo)
+        undoManager.redo();
+    else
+        undoManager.undo();
 }
 
 void SynthInterface::applyFrameRate()

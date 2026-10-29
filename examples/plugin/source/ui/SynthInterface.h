@@ -125,6 +125,7 @@ private:
     void showSettingsMenu (yup::Point<float> position);
     void applyFrameRate();
     void applyUndoSetting();
+    void undoStep (bool redo);
 
     void layoutMainPage();
     void syncFromProcessor();

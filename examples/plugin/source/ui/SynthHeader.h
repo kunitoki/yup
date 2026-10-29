@@ -32,8 +32,8 @@
 
 //==============================================================================
 /** The header of the instrument, a row of tiles: the logo, the preset with its
-    description, the file, random and panic buttons, the voice and load
-    readouts, and the master volume with its meter.
+    description, the file, undo, redo, random and panic buttons, the voice and
+    load readouts, and the master volume with its meter.
 
     @see SynthPresetBar, SynthInterface
 */
@@ -48,10 +48,13 @@ public:
     /** Called when the preset bar asks to open or close the preset browser. */
     std::function<void()> onBrowserToggled;
 
+    /** Called when the undo or redo button is clicked, with true for redo. */
+    std::function<void (bool)> onUndoRequested;
+
     /** Shows whether the preset browser is open on the preset bar. */
     void setBrowserOpen (bool isOpen) { presetBar.setBrowserOpen (isOpen); }
 
-    /** Shows the processor's preset, voices, load and output level. Call at the display rate. */
+    /** Shows the processor's preset, undo history, voices, load and output level. Call at the display rate. */
     void syncFromProcessor();
 
     /** Sets the width of the tiles right of the preset, so they line up with the column below. */
@@ -80,6 +83,8 @@ private:
     SynthPresetBar presetBar;
     SynthIconButton saveButton { "SavePreset", YUP_ICON_FLOPPY_DISK };
     SynthIconButton loadButton { "LoadPreset", YUP_ICON_FOLDER_OPEN };
+    SynthIconButton undoButton { "Undo", YUP_ICON_ARROW_ROTATE_LEFT };
+    SynthIconButton redoButton { "Redo", YUP_ICON_ARROW_ROTATE_RIGHT };
     SynthIconButton randomButton { "Randomize", YUP_ICON_DICE };
     SynthIconButton panicButton { "AllNotesOff", YUP_ICON_SKULL };
     ParameterKnob volumeKnob;

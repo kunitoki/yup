@@ -79,6 +79,16 @@ SynthHeader::SynthHeader (RetraceProcessor& processorToControl)
 
     saveButton.onClick = [this] { presetBar.savePreset(); };
     loadButton.onClick = [this] { presetBar.loadPreset(); };
+    undoButton.onClick = [this]
+    {
+        if (onUndoRequested != nullptr)
+            onUndoRequested (false);
+    };
+    redoButton.onClick = [this]
+    {
+        if (onUndoRequested != nullptr)
+            onUndoRequested (true);
+    };
     randomButton.onClick = [this]
     {
         if (randomButton.wasRightClicked())
@@ -94,7 +104,7 @@ SynthHeader::SynthHeader (RetraceProcessor& processorToControl)
         processor.requestAllNotesOff();
     };
 
-    for (auto* button : { &saveButton, &loadButton, &randomButton, &panicButton })
+    for (auto* button : { &saveButton, &loadButton, &undoButton, &redoButton, &randomButton, &panicButton })
         addAndMakeVisible (*button);
 
     addAndMakeVisible (volumeKnob);
@@ -106,6 +116,10 @@ void SynthHeader::syncFromProcessor()
     presetBar.syncFromProcessor();
     volumeKnob.syncFromParameter();
     meter.setLevels (processor.takeOutputPeak (0), processor.takeOutputPeak (1));
+
+    const auto& undoManager = processor.getUndoManager();
+    undoButton.setEnabled (undoManager.canUndo());
+    redoButton.setEnabled (undoManager.canRedo());
 
     // The readouts change on almost every call, and each change repaints the interface,
     // so they follow at a reading pace.
@@ -145,16 +159,23 @@ void SynthHeader::resized()
     bounds.removeFromRight (gap);
     presetBar.setBounds (bounds);
 
-    auto icons = right.removeFromLeft (iconTileSize * 2.0f + gap);
+    auto icons = right.removeFromLeft (iconTileSize * 3.0f + gap * 2.0f);
     right.removeFromLeft (gap);
     const auto row = (icons.getHeight() - gap) * 0.5f;
     auto top = icons.removeFromTop (row);
     icons.removeFromTop (gap);
 
-    saveButton.setBounds (top.removeFromLeft (iconTileSize));
-    loadButton.setBounds (top.removeFromRight (iconTileSize));
-    randomButton.setBounds (icons.removeFromLeft (iconTileSize));
-    panicButton.setBounds (icons.removeFromRight (iconTileSize));
+    const std::pair<SynthIconButton*, SynthIconButton*> columns[] = {
+        { &saveButton, &undoButton }, { &loadButton, &redoButton }, { &randomButton, &panicButton }
+    };
+
+    for (const auto& [upper, lower] : columns)
+    {
+        upper->setBounds (top.removeFromLeft (iconTileSize));
+        lower->setBounds (icons.removeFromLeft (iconTileSize));
+        top.removeFromLeft (gap);
+        icons.removeFromLeft (gap);
+    }
 
     volumeTile = right.removeFromRight (volumeWidth);
     right.removeFromRight (gap);
