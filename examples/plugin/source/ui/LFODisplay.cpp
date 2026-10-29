@@ -89,7 +89,7 @@ int LFODisplay::getPeriods() const
 void LFODisplay::rebuildSamples()
 {
     const auto periods = getPeriods();
-    const auto frequency = yup::jmax (0.01f, values.getFrequency (tempo > 0.0 ? tempo : displayTempo));
+    const auto frequency = yup::jmax (0.01f, values.getFrequency (tempo));
 
     generator.prepare (static_cast<double> (points) * frequency / static_cast<double> (periods));
     generator.setFrequency (frequency);

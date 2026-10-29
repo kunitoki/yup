@@ -44,16 +44,22 @@ struct SynthLFOValues
 
     bool operator== (const SynthLFOValues&) const = default;
 
-    /** Returns the rate in Hz, following the tempo when synced and one is known. */
+    /** The tempo a synced LFO plays at while the host reports none. */
+    static constexpr double fallbackTempo = 120.0;
+
+    /** Returns the rate in Hz, following the division when synced.
+
+        @param bpm  The host tempo, or zero when unknown, which plays at fallbackTempo
+    */
     float getFrequency (double bpm) const noexcept
     {
-        if (! tempoSync || bpm <= 0.0)
+        if (! tempoSync)
             return rate;
 
         const auto& divisions = getSynthLFODivisions();
         const auto beats = divisions[static_cast<std::size_t> (yup::jlimit (0, static_cast<int> (divisions.size()) - 1, division))].beats;
 
-        return static_cast<float> (bpm / (60.0 * beats));
+        return static_cast<float> ((bpm > 0.0 ? bpm : fallbackTempo) / (60.0 * beats));
     }
 };
 

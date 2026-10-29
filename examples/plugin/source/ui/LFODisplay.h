@@ -46,7 +46,7 @@ public:
         Called every frame from the message thread. */
     void setPhase (float newPhase);
 
-    /** Sets the host tempo a synced LFO is drawn at, or zero to draw it at 120 BPM. */
+    /** Sets the host tempo a synced LFO is drawn at, or zero to draw it at SynthLFOValues::fallbackTempo. */
     void setTempo (double bpm);
 
     /** Sets how one period's time reads, for the grid. */
@@ -57,7 +57,6 @@ public:
 private:
     static constexpr int points = 128;
     static constexpr int randomPeriods = 4;
-    static constexpr double displayTempo = 120.0;
     static constexpr yup::uint32 displaySeed = 1;
 
     bool isRandom() const;
