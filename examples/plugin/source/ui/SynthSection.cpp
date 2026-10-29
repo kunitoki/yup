@@ -179,18 +179,16 @@ void SynthSection::resized()
 
     controls.insert (controls.end(), selectedTab.stripControls.begin(), selectedTab.stripControls.end());
 
-    auto fixedWidth = 0.0f;
-    auto shrinkableWidth = 0.0f;
+    auto wantedWidth = 0.0f;
 
     for (const auto& control : controls)
-        (control.canShrink ? shrinkableWidth : fixedWidth) += control.width + SynthTheme::panelPadding * 2.0f;
+        wantedWidth += control.width + SynthTheme::panelPadding * 2.0f;
 
     const auto tabsRight = getTabBounds (static_cast<int> (tabs.size()) - 1).getRight();
-    const auto spareWidth = strip.getRight() - tabsRight - fixedWidth;
-    const auto controlScale = shrinkableWidth > 0.0f ? yup::jlimit (0.0f, 1.0f, spareWidth / shrinkableWidth) : 1.0f;
+    const auto controlScale = wantedWidth > 0.0f ? yup::jlimit (0.0f, 1.0f, (strip.getRight() - tabsRight) / wantedWidth) : 1.0f;
 
     for (const auto& control : controls)
-        place (control, control.canShrink ? controlScale : 1.0f);
+        place (control, controlScale);
 
     const auto body = getLocalBounds().withTrimmedTop (SynthTheme::stripHeight).reduced (SynthTheme::panelPadding);
 

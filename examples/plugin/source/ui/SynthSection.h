@@ -52,7 +52,6 @@ public:
     {
         yup::Component* component = nullptr;
         float width = 0.0f;
-        bool canShrink = true; /**< False for a control, like a caption, that keeps its width when the strip is tight. */
     };
 
     /** One tab and the page it shows. */

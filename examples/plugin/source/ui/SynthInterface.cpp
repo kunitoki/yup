@@ -144,8 +144,8 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
     const auto gridCaption = yup::String::fromUTF8 ("ROW \xe2\x86\x90 COLUMN");
     matrixCaption = makeCaption (gridCaption);
     modulationCaption = makeCaption (gridCaption);
-    matrixSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "FM", fmPanel.get(), nullptr, false, { { matrixCaption.get(), 110.0f, false }, { &fmPanel->getResetButton(), 60.0f }, { &fmPanel->getAlgorithmButton(), 88.0f } } },
-                                                                                     { "Mods", modulationPage.get(), nullptr, false, { { modulationCaption.get(), 110.0f, false } } },
+    matrixSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "FM", fmPanel.get(), nullptr, false, { { matrixCaption.get(), 110.0f }, { &fmPanel->getResetButton(), 60.0f }, { &fmPanel->getAlgorithmButton(), 88.0f } } },
+                                                                                     { "Mods", modulationPage.get(), nullptr, false, { { modulationCaption.get(), 110.0f } } },
                                                                                      { "EFX", effectsPage.get() } },
                                                     SynthTheme::Section::matrix);
 
@@ -172,7 +172,7 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
                                 { { &panel.getSyncLed(), 56.0f } }, &panel.getModulationHandle() };
 
         if (index == 0)
-            tab.stripControls.push_back ({ ampCaption.get(), 48.0f, false });
+            tab.stripControls.push_back ({ ampCaption.get(), 48.0f });
 
         envelopeTabs.push_back (std::move (tab));
     }
