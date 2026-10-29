@@ -220,6 +220,38 @@ TEST_F (TextEditorTests, StyledTextWrapModeFollowsMultiLineMode)
     EXPECT_EQ (StyledText::wrap, editor->getStyledText().getWrap());
 }
 
+TEST_F (TextEditorTests, JustificationPlacesTextThatFits)
+{
+    editor->setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    editor->setText ("Hi");
+    editor->setCaretPosition (0);
+
+    EXPECT_TRUE (editor->getJustification() == Justification::left);
+    EXPECT_FLOAT_EQ (0.0f, editor->getScrollOffset().getX());
+    const auto leftX = editor->getCaretBounds().getX();
+
+    editor->setJustification (Justification::horizontalCenter);
+    const auto centeredX = editor->getCaretBounds().getX();
+    EXPECT_GT (centeredX, leftX);
+
+    editor->setJustification (Justification::right);
+    EXPECT_GT (editor->getCaretBounds().getX(), centeredX);
+
+    editor->setJustification (Justification::horizontalCenter);
+    editor->setText ({});
+    EXPECT_NEAR (editor->getTextBounds().getCenterX(), editor->getCaretBounds().getX(), 1.0f);
+}
+
+TEST_F (TextEditorTests, JustificationIgnoredForTextWiderThanEditor)
+{
+    editor->setBounds (0.0f, 0.0f, 40.0f, 30.0f);
+    editor->setJustification (Justification::horizontalCenter);
+    editor->setText ("A line much wider than the editor can show");
+    editor->setCaretPosition (0);
+
+    EXPECT_FLOAT_EQ (0.0f, editor->getScrollOffset().getX());
+}
+
 TEST_F (TextEditorTests, ReadOnlyMode)
 {
     editor->setText (kSingleText);

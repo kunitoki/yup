@@ -39,11 +39,17 @@ SynthMacroPanel::SynthMacroPanel (RetraceProcessor& processorToControl)
 
         auto& name = names[index];
         name.setMultiLine (false);
-        name.setFont (SynthTheme::captionFont (11.5f));
+        name.setFont (SynthTheme::captionFont (12.5f));
+        name.setJustification (yup::Justification::horizontalCenter);
+        name.setSelectAllWhenFocused (true);
+        name.setDeselectWhenUnfocused (true);
         name.onStarted = [this, macro] { namesBeforeEdit[static_cast<std::size_t> (macro)] = processor.getPresetInfo().macroNames[static_cast<std::size_t> (macro)]; };
         name.onTextChange = [this, macro] { writeName (macro, names[static_cast<std::size_t> (macro)].getText()); };
         name.onFinished = [this, macro] { finishName (macro); };
         addAndMakeVisible (name);
+
+        handles[index] = std::make_unique<SynthModulationHandle> (static_cast<SynthModulationSource> (static_cast<int> (SynthModulationSource::macro1) + macro));
+        addAndMakeVisible (*handles[index]);
     }
 
     syncFromProcessor();
@@ -118,7 +124,7 @@ void SynthMacroPanel::resized()
     const auto rows = SynthExample::macroCount / columns;
     const auto cellWidth = bounds.getWidth() / static_cast<float> (columns);
     const auto cellHeight = bounds.getHeight() / static_cast<float> (rows);
-    const auto knobSize = yup::jmax (0.0f, yup::jmin (cellWidth, cellHeight - nameHeight) - SynthTheme::controlGap);
+    const auto knobSize = yup::jmax (0.0f, yup::jmin (cellWidth, cellHeight - nameHeight - titleHeight) - SynthTheme::controlGap);
 
     for (int macro = 0; macro < SynthExample::macroCount; ++macro)
     {
@@ -127,8 +133,22 @@ void SynthMacroPanel::resized()
                                            cellWidth,
                                            cellHeight };
 
-        auto area = cell.withSizeKeepingCenter (cellWidth, knobSize + nameHeight);
+        auto area = cell.withSizeKeepingCenter (cellWidth, titleHeight + knobSize + nameHeight);
+        auto title = area.removeFromTop (titleHeight).withSizeKeepingCenter (knobSize, titleHeight);
+        handles[static_cast<std::size_t> (macro)]->setBounds (title.removeFromRight (handleSize).withSizeKeepingCenter (handleSize, handleSize));
         knobs[static_cast<std::size_t> (macro)]->setBounds (area.removeFromTop (knobSize).withSizeKeepingCenter (knobSize, knobSize));
         names[static_cast<std::size_t> (macro)].setBounds (area.reduced (2.0f, 0.0f));
+    }
+}
+
+void SynthMacroPanel::paint (yup::Graphics& g)
+{
+    g.setFillColor (SynthTheme::textSecondary (*this));
+
+    for (int macro = 0; macro < SynthExample::macroCount; ++macro)
+    {
+        const auto knob = knobs[static_cast<std::size_t> (macro)]->getBounds();
+        const auto title = yup::Rectangle<float> (knob.getX(), knob.getY() - titleHeight, knob.getWidth() - handleSize, titleHeight);
+        g.fillFittedText ("M" + yup::String (macro + 1), SynthTheme::captionFont (12.0f), title, yup::Justification::centerLeft);
     }
 }

@@ -30,11 +30,11 @@ SynthModulationRow::SynthModulationRow (int slotToEdit,
     : slot (slotToEdit)
     , routes (routesToEdit)
     , destinations (destinationsToOffer)
-    , depthField ("Depth", std::move (depthParameter), SynthSliderField::Look::bar, true)
+    , depthField ({}, std::move (depthParameter), SynthSliderField::Look::bar, true)
 {
     setOpaque (false);
 
-    const auto sourceNames = getSynthModulationSourceNames();
+    const auto sourceNames = getSynthModulationSourceShortNames();
 
     for (int index = 0; index < sourceNames.size(); ++index)
         sourceBox.addItem (sourceNames[index], index + 1);
@@ -68,6 +68,7 @@ void SynthModulationRow::syncFromRoutes()
     depthField.syncFromParameter();
 
     const auto route = routes.getRoute (slot);
+    removeButton.setVisible (route.isActive());
     repaint();
 
     if (! route.isActive())
@@ -109,6 +110,7 @@ void SynthModulationRow::writeRoute()
     const auto before = readRoute();
     const auto& target = destinations[static_cast<std::size_t> (destination)];
     routes.setRoute (slot, static_cast<SynthModulationSource> (source), target.id, target.index);
+    removeButton.setVisible (isUsed());
     recordRoute (before);
 }
 
@@ -143,8 +145,8 @@ void SynthModulationRow::resized()
     depthField.setBounds (bounds.removeFromRight (depthWidth));
     bounds.removeFromRight (spacing);
     bounds.removeFromLeft (dotSize + spacing);
-    sourceBox.setBounds (bounds.removeFromLeft (bounds.getWidth() * 0.4f).reduced (0.0f, 6.0f));
-    bounds.removeFromLeft (spacing);
+    sourceBox.setBounds (bounds.removeFromLeft (sourceWidth).reduced (0.0f, 6.0f));
+    arrowBounds = bounds.removeFromLeft (arrowWidth);
     destinationBox.setBounds (bounds.reduced (0.0f, 6.0f));
 }
 
@@ -158,4 +160,8 @@ void SynthModulationRow::paint (yup::Graphics& g)
 
     g.setFillColor (selected >= 0 ? getSourceColor (*this, source) : SynthTheme::textSecondary (*this).withAlpha (0.4f));
     g.fillRoundedRect (dot, 2.0f);
+
+    const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultIconFont().withHeight (10.0f);
+    g.setFillColor (SynthTheme::textSecondary (*this));
+    g.fillFittedText (yup::String::fromUTF8 (YUP_ICON_ARROW_RIGHT_LONG), font, arrowBounds, yup::Justification::center);
 }

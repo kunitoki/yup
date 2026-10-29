@@ -250,6 +250,17 @@ inline yup::StringArray getSynthModulationSourceNames()
              "MACRO 1", "MACRO 2", "MACRO 3", "MACRO 4", "MACRO 5", "MACRO 6", "MACRO 7", "MACRO 8" };
 }
 
+/** @internal Compact display names for SynthModulationSource, index aligned with the enumeration.
+
+    Only for display: patches store getSynthModulationSourceNames().
+*/
+inline yup::StringArray getSynthModulationSourceShortNames()
+{
+    return { "ENV1", "ENV2", "ENV3", "ENV4", "LFO1", "LFO2", "LFO3", "LFO4",
+             "VELO", "NOTE", "MOD", "AFTT", "RAND",
+             "MAC1", "MAC2", "MAC3", "MAC4", "MAC5", "MAC6", "MAC7", "MAC8" };
+}
+
 /** True for the sources that swing both ways, so a route from them reaches depth either side. */
 constexpr bool isBipolarSource (SynthModulationSource source) noexcept
 {

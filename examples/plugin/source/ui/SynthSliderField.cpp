@@ -74,7 +74,10 @@ yup::Rectangle<float> SynthSliderField::getTrackBounds() const
     auto bounds = getLocalBounds();
 
     if (look == Look::bar)
-        return bounds.withTrimmedLeft (captionWidth).withTrimmedRight (valueWidth).withSizeKeepingCenter (bounds.getWidth() - captionWidth - valueWidth, 4.0f);
+    {
+        const auto trimmed = bounds.withTrimmedLeft (getCaptionWidth()).withTrimmedRight (valueWidth);
+        return trimmed.withSizeKeepingCenter (trimmed.getWidth(), 4.0f);
+    }
 
     bounds = bounds.reduced (9.0f, 0.0f);
     return bounds.withSizeKeepingCenter (bounds.getWidth(), 4.0f).withY (bounds.getCenterY() + bounds.getHeight() * 0.18f);
@@ -100,8 +103,12 @@ void SynthSliderField::paint (yup::Graphics& g)
     }
     else
     {
-        g.setFillColor (SynthTheme::textSecondary (*this));
-        g.fillFittedText (caption.toUpperCase(), SynthTheme::captionFont (11.5f), bounds.withWidth (captionWidth), yup::Justification::centerLeft);
+        if (caption.isNotEmpty())
+        {
+            g.setFillColor (SynthTheme::textSecondary (*this));
+            g.fillFittedText (caption.toUpperCase(), SynthTheme::captionFont (11.5f), bounds.withWidth (captionWidth), yup::Justification::centerLeft);
+        }
+
         g.setFillColor (accent);
         g.fillFittedText (parameter->toString(), SynthTheme::valueFont (12.0f), bounds.withTrimmedLeft (bounds.getWidth() - valueWidth), yup::Justification::centerRight);
     }

@@ -87,6 +87,20 @@ public:
     void setMultiLine (bool shouldBeMultiLine);
 
     //==============================================================================
+    /** Returns the horizontal justification of text that fits the editor. */
+    Justification getJustification() const noexcept { return justification; }
+
+    /** Sets how text narrower than the editor sits horizontally: left (the default),
+        horizontalCenter or right.
+
+        Text wider than the editor always scrolls from its left edge. Multi-line text is
+        positioned as one block, its lines still left aligned within it.
+
+        @param newJustification     The justification, only its horizontal flags are used
+    */
+    void setJustification (Justification newJustification);
+
+    //==============================================================================
     /** Returns whether the editor is read-only.
 
         @returns True if the editor is read-only
@@ -178,6 +192,25 @@ public:
 
     /** Selects all text in the editor. */
     void selectAll();
+
+    /** Returns whether a click that gives the editor the keyboard focus selects all its text. */
+    bool isSelectAllWhenFocused() const noexcept { return selectAllWhenFocused; }
+
+    /** Sets whether a click that gives the editor the keyboard focus selects all its text,
+        instead of placing the caret. Clicks while it already has the focus are unaffected.
+
+        @param shouldSelectAll      True to select all on a focusing click
+    */
+    void setSelectAllWhenFocused (bool shouldSelectAll) noexcept { selectAllWhenFocused = shouldSelectAll; }
+
+    /** Returns whether losing the keyboard focus clears the selection. */
+    bool isDeselectWhenUnfocused() const noexcept { return deselectWhenUnfocused; }
+
+    /** Sets whether losing the keyboard focus clears the selection, leaving the caret where it was.
+
+        @param shouldDeselect       True to clear the selection when the focus moves away
+    */
+    void setDeselectWhenUnfocused (bool shouldDeselect) noexcept { deselectWhenUnfocused = shouldDeselect; }
 
     /** Returns true if any text is currently selected. */
     bool hasSelection() const;
@@ -343,6 +376,9 @@ private:
     int selectionEnd = 0;
 
     bool multiLine = false;
+    Justification justification = Justification::left;
+    bool selectAllWhenFocused = false;
+    bool deselectWhenUnfocused = false;
     bool readOnly = false;
     bool isDragging = false;
     bool caretVisible = true;

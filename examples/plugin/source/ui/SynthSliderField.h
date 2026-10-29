@@ -78,6 +78,7 @@ private:
     static constexpr float valueWidth = 34.0f;
 
     yup::Rectangle<float> getTrackBounds() const;
+    float getCaptionWidth() const noexcept { return caption.isEmpty() ? 0.0f : captionWidth; }
 
     ParameterGesture gesture;
     yup::String caption;

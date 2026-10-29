@@ -24,6 +24,7 @@
 #include "../RetraceProcessor.h"
 #include "ParameterKnob.h"
 #include "SynthFieldEditor.h"
+#include "SynthModulationHandle.h"
 
 #include <array>
 #include <functional>
@@ -34,7 +35,8 @@
 
     A macro is a parameter the host automates and a modulation source the routes read, so
     one knob can move any number of destinations. Its name belongs to the patch: a click
-    on it starts editing, and each rename is one step of the undo history.
+    on it starts editing, and each rename is one step of the undo history. The handle in the
+    title above the knob is dragged onto a control to modulate it with the macro.
 
     @see SynthParameters, SynthModulationSource
 */
@@ -47,9 +49,12 @@ public:
     void syncFromProcessor();
 
     void resized() override;
+    void paint (yup::Graphics& g) override;
 
 private:
     static constexpr float nameHeight = 18.0f;
+    static constexpr float handleSize = 16.0f;
+    static constexpr float titleHeight = 18.0f;
     static constexpr int columns = 2;
 
     void writeName (int macro, const yup::String& text);
@@ -59,5 +64,6 @@ private:
     RetraceProcessor& processor;
     std::array<std::unique_ptr<ParameterKnob>, SynthExample::macroCount> knobs;
     std::array<SynthFieldEditor, SynthExample::macroCount> names;
+    std::array<std::unique_ptr<SynthModulationHandle>, SynthExample::macroCount> handles;
     std::array<yup::String, SynthExample::macroCount> namesBeforeEdit;
 };

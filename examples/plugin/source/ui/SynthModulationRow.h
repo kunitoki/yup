@@ -39,7 +39,7 @@ struct SynthRouteDestination
 
 //==============================================================================
 /** One modulation route in a sunken strip: a dot in the source's color, which source
-    drives which destination, how much, and a remove button.
+    drives which destination, how much, and a remove button shown while the slot holds a route.
 
     Picking a source and a destination writes the route; the depth is the slot's
     automatable depth parameter. Every change to the route is one step of the undo
@@ -68,7 +68,9 @@ public:
     void paint (yup::Graphics& g) override;
 
 private:
-    static constexpr float depthWidth = 140.0f;
+    static constexpr float depthWidth = 100.0f;
+    static constexpr float sourceWidth = 72.0f;
+    static constexpr float arrowWidth = 20.0f;
     static constexpr float buttonWidth = 22.0f;
     static constexpr float dotSize = 8.0f;
     static constexpr float spacing = 6.0f;
@@ -94,5 +96,6 @@ private:
     yup::ComboBox sourceBox;
     yup::ComboBox destinationBox;
     SynthSliderField depthField;
+    yup::Rectangle<float> arrowBounds;
     SynthIconButton removeButton { "RemoveRoute", YUP_ICON_XMARK, 11.0f };
 };

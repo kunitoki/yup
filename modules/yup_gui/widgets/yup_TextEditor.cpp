@@ -116,6 +116,18 @@ void TextEditor::setMultiLine (bool shouldBeMultiLine)
 
 //==============================================================================
 
+void TextEditor::setJustification (Justification newJustification)
+{
+    if (justification == newJustification)
+        return;
+
+    justification = newJustification;
+    clampScrollOffset();
+    repaint();
+}
+
+//==============================================================================
+
 void TextEditor::setReadOnly (bool shouldBeReadOnly)
 {
     if (readOnly != shouldBeReadOnly)
@@ -344,6 +356,10 @@ void TextEditor::focusGained()
 void TextEditor::focusLost()
 {
     isDragging = false;
+
+    if (deselectWhenUnfocused)
+        selectionStart = selectionEnd = caretPosition;
+
     stopCaretBlinking();
     relinquishTextInput();
     repaint();
@@ -353,8 +369,17 @@ void TextEditor::focusLost()
 
 void TextEditor::mouseDown (const MouseEvent& event)
 {
+    const auto hadFocus = hasKeyboardFocus();
+
     if (getWantsKeyboardFocus())
         takeKeyboardFocus();
+
+    if (selectAllWhenFocused && ! hadFocus && hasKeyboardFocus())
+    {
+        selectAll();
+        isDragging = false;
+        return;
+    }
 
     auto position = event.getPosition().to<float>();
     int newCaretPos = getGlyphIndexAtPosition (position);
@@ -617,7 +642,10 @@ void TextEditor::ensureCaretVisible()
     auto caretBounds = styledText.getCaretBounds (caretPosition);
 
     if (caretBounds.isEmpty())
+    {
+        clampScrollOffset();
         return;
+    }
 
     // Check if caret is outside visible area and adjust scroll offset
     bool needsRepaint = false;
@@ -888,7 +916,16 @@ void TextEditor::clampScrollOffset()
     auto textBounds = getTextBounds();
     auto textSize = styledText.getComputedTextBounds();
 
-    scrollOffset.setX (jmax (0.0f, jmin (scrollOffset.getX(), jmax (0.0f, textSize.getWidth() - textBounds.getWidth()))));
+    const auto freeWidth = textBounds.getWidth() - textSize.getWidth();
+
+    // Text that fits sits where the justification puts it, as a negative scroll.
+    if (freeWidth > 0.0f && justification.testFlags (Justification::horizontalCenter))
+        scrollOffset.setX (-freeWidth * 0.5f);
+    else if (freeWidth > 0.0f && justification.testFlags (Justification::right))
+        scrollOffset.setX (-freeWidth);
+    else
+        scrollOffset.setX (jmax (0.0f, jmin (scrollOffset.getX(), -freeWidth)));
+
     scrollOffset.setY (jmax (0.0f, jmin (scrollOffset.getY(), jmax (0.0f, textSize.getHeight() - textBounds.getHeight()))));
 
     updateTextInputRectIfActive();
