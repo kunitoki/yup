@@ -309,6 +309,9 @@ struct AppDelegate
                                                                   object:nil
                                                       suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
             YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+            [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+            [NSApp finishLaunching];
         }
         else
         {

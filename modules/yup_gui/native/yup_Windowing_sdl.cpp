@@ -413,9 +413,15 @@ void SDLComponentNative::setVisible (bool shouldBeVisible)
         updateMouseCapture (true);
 
 #if YUP_MAC
-        // Work around a macOS launch race where the first standalone window shows inactive until
-        // the user switches away and back (see activateAppWindowOnLaunch).
+        // Bring the first top-level standalone window to the front and make it key on launch. The
+        // app itself is activated earlier via -finishLaunching (see the mac AppDelegate); this just
+        // promotes our main window, like a normal app does when showing it.
         const bool isFocusable = (SDL_GetWindowFlags (window) & SDL_WINDOW_NOT_FOCUSABLE) == 0;
+
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setVisible(true) activation guard: parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parentWindow)))
+                                         << ", focusable=" << String (isFocusable ? "true" : "false")
+                                         << ", standalone=" << String (YUPApplicationBase::isStandaloneApp() ? "true" : "false"));
+
         if (parentWindow == nullptr && isFocusable && YUPApplicationBase::isStandaloneApp())
             activateAppWindowOnLaunch (getNativeHandle());
 #endif

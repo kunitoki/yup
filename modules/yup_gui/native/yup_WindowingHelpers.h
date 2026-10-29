@@ -43,11 +43,12 @@ void focusNativeWindow (void* nativeWindow);
 
 #if YUP_MAC
 /**
-    Activates the application and focuses the given window once, the first time it is called.
+    Brings the first top-level standalone window to the front and makes it key, once, the first
+    time it is called.
 
-    This works around a macOS launch race where the activation requested while the app is still
-    launching can be dropped by the window server, leaving the first window inactive (grey titlebar,
-    no app menu, no keyboard events) until the user switches to another app and back.
+    The application itself is activated earlier through the AppKit launch sequence (-finishLaunching,
+    run from the mac AppDelegate); this only promotes the main window, as a normal app does when it
+    shows its main window on launch.
 
     @param nativeWindow The native window handle.
  */
