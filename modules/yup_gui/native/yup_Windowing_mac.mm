@@ -62,8 +62,25 @@ void focusNativeWindow (void* nativeWindow)
                          ? (NSWindow*) nativeObject
                          : [nativeObject window];
 
-    [NSApp activateIgnoringOtherApps:YES];
-    [window makeKeyAndOrderFront:nil];
+    const auto activate = ^{
+        [NSApp activateIgnoringOtherApps:YES];
+        [window makeKeyAndOrderFront:nil];
+    };
+
+    activate();
+
+    // macOS can drop an activation requested while the app is still launching, leaving the window
+    // inactive (grey titlebar, no app menu, no key events) until the user focuses another app and
+    // back. Re-issuing it on the next run loop iteration wins the race reliably.
+    dispatch_async (dispatch_get_main_queue(), activate);
+}
+
+void activateAppWindowOnLaunch (void* nativeWindow)
+{
+    static std::atomic_flag hasActivatedOnLaunch;
+
+    if (! hasActivatedOnLaunch.test_and_set())
+        focusNativeWindow (nativeWindow);
 }
 
 } // namespace yup

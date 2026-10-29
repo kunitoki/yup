@@ -87,6 +87,17 @@ public:
     */
     void setScrollStep (float pixels);
 
+    /** Chooses which scrollbars may appear when the content exceeds the visible area.
+
+        Both scrollbars are enabled by default and appear only when needed. A hidden scrollbar
+        reserves no space, but scrolling on its axis remains available through the mouse wheel,
+        touch gestures, setViewPosition() and scrollToShow().
+
+        @param showVertical    Whether the vertical scrollbar may be shown.
+        @param showHorizontal  Whether the horizontal scrollbar may be shown.
+    */
+    void setScrollBarsShown (bool showVertical, bool showHorizontal);
+
     /** Returns the bounds of the visible area in viewed-component coordinates. */
     Rectangle<float> getVisibleArea() const noexcept;
 
@@ -120,6 +131,8 @@ private:
     KineticScroller verticalScroller;
     double gestureClock = 0.0;
     float scrollStep = 40.0f;
+    bool showVerticalScrollBar = true;
+    bool showHorizontalScrollBar = true;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Viewport)
 };

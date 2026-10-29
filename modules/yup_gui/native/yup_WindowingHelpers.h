@@ -41,4 +41,17 @@ Rectangle<int> getNativeWindowPosition (void* nativeWindow);
  */
 void focusNativeWindow (void* nativeWindow);
 
+#if YUP_MAC
+/**
+    Activates the application and focuses the given window once, the first time it is called.
+
+    This works around a macOS launch race where the activation requested while the app is still
+    launching can be dropped by the window server, leaving the first window inactive (grey titlebar,
+    no app menu, no keyboard events) until the user switches to another app and back.
+
+    @param nativeWindow The native window handle.
+ */
+void activateAppWindowOnLaunch (void* nativeWindow);
+#endif
+
 } // namespace yup

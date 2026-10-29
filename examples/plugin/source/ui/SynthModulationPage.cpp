@@ -156,6 +156,7 @@ SynthModulationPage::SynthModulationPage (const SynthParameters& parametersToEdi
     : content (std::make_unique<Content> (parametersToEdit, routesToEdit, processorParameters))
 {
     setOpaque (false);
+    viewport.setScrollBarsShown (true, false);
     viewport.setViewedComponent (content.get());
     addAndMakeVisible (viewport);
 }
@@ -167,7 +168,12 @@ void SynthModulationPage::syncFromParameters()
     const auto oldCount = content->getListedCount();
     content->syncFromRoutes();
 
-    if (content->getListedCount() == oldCount + 1)
+    const auto newCount = content->getListedCount();
+
+    if (newCount != oldCount)
+        resized();
+
+    if (newCount == oldCount + 1)
         viewport.scrollToShow (content->getEmptyRowBounds());
 }
 
@@ -181,6 +187,7 @@ void SynthModulationPage::resized()
     viewport.setBounds (getLocalBounds());
 
     const auto needsVerticalScroll = content->getContentHeight() > viewport.getHeight();
-    const auto width = viewport.getWidth() - (needsVerticalScroll ? viewport.getVerticalScrollBar().getScrollBarWidth() : 0.0f);
+    const auto scrollBarSpace = needsVerticalScroll ? viewport.getVerticalScrollBar().getScrollBarWidth() + 4.0f : 0.0f;
+    const auto width = viewport.getWidth() - scrollBarSpace;
     content->setContentWidth (width);
 }

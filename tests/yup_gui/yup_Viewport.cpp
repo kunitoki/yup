@@ -57,6 +57,71 @@ TEST (ViewportTests, ShowsScrollBarsWhenContentExceedsVisibleArea)
     EXPECT_LT (viewport.getVisibleArea().getHeight(), 100.0f);
 }
 
+TEST (ViewportTests, CanHideEitherOrBothScrollBarsWithoutReservingSpace)
+{
+    for (const auto showVertical : { false, true })
+    {
+        for (const auto showHorizontal : { false, true })
+        {
+            Viewport viewport;
+            viewport.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+            viewport.setScrollBarsShown (showVertical, showHorizontal);
+
+            auto content = std::make_unique<Component>();
+            content->setSize (300.0f, 400.0f);
+            viewport.setViewedComponent (content.release(), true);
+            viewport.setBounds (0.0f, 0.0f, 120.0f, 110.0f);
+            viewport.setViewPosition ({ 50.0f, 60.0f });
+
+            EXPECT_EQ (showVertical, viewport.getVerticalScrollBar().isVisible());
+            EXPECT_EQ (showHorizontal, viewport.getHorizontalScrollBar().isVisible());
+            EXPECT_FLOAT_EQ (120.0f - (showVertical ? viewport.getVerticalScrollBar().getScrollBarWidth() : 0.0f),
+                             viewport.getVisibleArea().getWidth());
+            EXPECT_FLOAT_EQ (110.0f - (showHorizontal ? viewport.getHorizontalScrollBar().getScrollBarWidth() : 0.0f),
+                             viewport.getVisibleArea().getHeight());
+        }
+    }
+}
+
+TEST (ViewportTests, HiddenScrollBarsAllowScrollingAndCanBeShownAgain)
+{
+    Viewport viewport;
+    viewport.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    auto content = std::make_unique<Component>();
+    content->setSize (300.0f, 400.0f);
+    viewport.setViewedComponent (content.release(), true);
+    viewport.setScrollBarsShown (false, false);
+
+    const MouseEvent event (MouseEvent::noButtons, KeyModifiers(), Point<float>());
+    EXPECT_TRUE (viewport.mouseWheel (event, MouseWheelData (0.0f, -1.0f)));
+    EXPECT_FLOAT_EQ (40.0f, viewport.getViewPosition().getY());
+
+    viewport.scrollToShow ({ 250.0f, 350.0f, 20.0f, 20.0f });
+    EXPECT_EQ (Point<float> (170.0f, 270.0f), viewport.getViewPosition());
+    EXPECT_FALSE (viewport.getVerticalScrollBar().isVisible());
+    EXPECT_FALSE (viewport.getHorizontalScrollBar().isVisible());
+
+    viewport.setScrollBarsShown (true, true);
+    EXPECT_TRUE (viewport.getVerticalScrollBar().isVisible());
+    EXPECT_TRUE (viewport.getHorizontalScrollBar().isVisible());
+}
+
+TEST (ViewportTests, HiddenVerticalScrollBarDoesNotForceHorizontalOverflow)
+{
+    Viewport viewport;
+    viewport.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    auto content = std::make_unique<Component>();
+    content->setSize (100.0f - viewport.getVerticalScrollBar().getScrollBarWidth() * 0.5f, 200.0f);
+    viewport.setViewedComponent (content.release(), true);
+    EXPECT_TRUE (viewport.getHorizontalScrollBar().isVisible());
+
+    viewport.setScrollBarsShown (false, true);
+    EXPECT_FALSE (viewport.getVerticalScrollBar().isVisible());
+    EXPECT_FALSE (viewport.getHorizontalScrollBar().isVisible());
+    EXPECT_FLOAT_EQ (100.0f, viewport.getVisibleArea().getWidth());
+    EXPECT_FLOAT_EQ (100.0f, viewport.getVisibleArea().getHeight());
+}
+
 TEST (ViewportTests, ClampsViewPositionToContentBounds)
 {
     Viewport viewport;

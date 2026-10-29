@@ -129,6 +129,16 @@ void Viewport::setScrollStep (float pixels)
     scrollStep = jmax (0.0f, pixels);
 }
 
+void Viewport::setScrollBarsShown (bool showVertical, bool showHorizontal)
+{
+    if (showVerticalScrollBar == showVertical && showHorizontalScrollBar == showHorizontal)
+        return;
+
+    showVerticalScrollBar = showVertical;
+    showHorizontalScrollBar = showHorizontal;
+    resized();
+}
+
 Rectangle<float> Viewport::getVisibleArea() const noexcept
 {
     return { viewPosition.getX(), viewPosition.getY(), visibleSize.getX(), visibleSize.getY() };
@@ -231,15 +241,15 @@ void Viewport::updateScrollBars()
     const auto contentHeight = viewedComponent != nullptr ? viewedComponent->getHeight() : 0.0f;
     const auto verticalSize = verticalScrollBar.getScrollBarWidth();
     const auto horizontalSize = horizontalScrollBar.getScrollBarWidth();
-    auto needsHorizontal = contentWidth > bounds.getWidth();
-    auto needsVertical = contentHeight > bounds.getHeight();
+    auto needsHorizontal = showHorizontalScrollBar && contentWidth > bounds.getWidth();
+    auto needsVertical = showVerticalScrollBar && contentHeight > bounds.getHeight();
 
     for (int pass = 0; pass < 2; ++pass)
     {
         const auto width = bounds.getWidth() - (needsVertical ? verticalSize : 0.0f);
         const auto height = bounds.getHeight() - (needsHorizontal ? horizontalSize : 0.0f);
-        needsHorizontal = contentWidth > width;
-        needsVertical = contentHeight > height;
+        needsHorizontal = showHorizontalScrollBar && contentWidth > width;
+        needsVertical = showVerticalScrollBar && contentHeight > height;
     }
 
     visibleSize = { jmax (0.0f, bounds.getWidth() - (needsVertical ? verticalSize : 0.0f)),

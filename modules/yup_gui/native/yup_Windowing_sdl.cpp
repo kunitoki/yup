@@ -411,6 +411,14 @@ void SDLComponentNative::setVisible (bool shouldBeVisible)
         SDL_ShowWindow (window);
         repaint();
         updateMouseCapture (true);
+
+#if YUP_MAC
+        // Work around a macOS launch race where the first standalone window shows inactive until
+        // the user switches away and back (see activateAppWindowOnLaunch).
+        const bool isFocusable = (SDL_GetWindowFlags (window) & SDL_WINDOW_NOT_FOCUSABLE) == 0;
+        if (parentWindow == nullptr && isFocusable && YUPApplicationBase::isStandaloneApp())
+            activateAppWindowOnLaunch (getNativeHandle());
+#endif
     }
     else
     {

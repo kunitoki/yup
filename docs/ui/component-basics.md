@@ -505,6 +505,25 @@ for it are not.
 
 ---
 
+## Scrollable content
+
+`Viewport` displays a component through a clipped area and automatically shows
+scrollbars when the content is larger than that area:
+
+```cpp
+viewport.setViewedComponent (&content); // content keeps its own size and ownership
+viewport.setScrollBarsShown (true, false); // vertical scrollbar only
+viewport.scrollToShow (control.getBounds());
+```
+
+`setScrollBarsShown (showVertical, showHorizontal)` independently controls which
+bars may appear. Pass `false, false` to hide both. Hidden bars reserve no space,
+but wheel, touch and programmatic scrolling remain available on both axes.
+To fit content without horizontal scrolling, size it to the available width
+after accounting for a visible vertical scrollbar.
+
+---
+
 ## Mouse and keyboard
 
 ### Mouse events
