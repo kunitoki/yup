@@ -299,7 +299,7 @@ public:
     /** @internal */
     void mouseDrag (const MouseEvent& event) override;
     /** @internal */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& data) override;
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& data) override;
     /** @internal */
     void mouseDoubleClick (const MouseEvent& event) override;
     /** @internal */

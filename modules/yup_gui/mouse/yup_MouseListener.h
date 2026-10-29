@@ -82,8 +82,12 @@ public:
 
         @param event The mouse event.
         @param wheelData The data associated with the mouse wheel movement.
+
+        @returns false by default. When this callback is invoked on a registered listener, the
+                 return value is ignored; on a Component, it determines whether the wheel
+                 propagates to the parent.
     */
-    virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
+    virtual bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) { return false; }
 
 private:
     YUP_DECLARE_WEAK_REFERENCEABLE (MouseListener)

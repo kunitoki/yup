@@ -8,13 +8,12 @@
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of this software for any purpose is hereby granted, provided that the
+   above copyright notice and this permission notice appear in all copies.
 
-   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
   ==============================================================================
 */
@@ -22,16 +21,18 @@
 #pragma once
 
 #include "../dsp/SynthParameters.h"
-#include "SynthModulationRow.h"
+#include "../dsp/SynthRoutes.h"
+
+#include <yup_gui/yup_gui.h>
 
 #include <array>
 #include <memory>
 
 //==============================================================================
-/** The modulation routes as an editable list.
+/** The modulation routes as a scrollable editable list.
 
-    Shows every used route and one empty row to add the next. An interim list until
-    drag-to-assign modulation and the route drawer replace it.
+    Shows every used route and one empty row to add the next. When they do not all fit,
+    the viewport scrolls by whole rows and adding a route brings the new empty row into view.
 
     @see SynthRoutes, SynthModulationRow
 */
@@ -41,6 +42,7 @@ public:
     SynthModulationPage (const SynthParameters& parametersToEdit,
                          SynthRoutes& routesToEdit,
                          yup::Span<const yup::AudioParameter::Ptr> processorParameters);
+    ~SynthModulationPage() override;
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
@@ -51,13 +53,8 @@ public:
     void resized() override;
 
 private:
-    static constexpr float rowHeight = 34.0f;
-    static constexpr float spacing = 4.0f;
+    class Content;
 
-    std::vector<SynthRouteDestination> destinations;
-    const SynthRoutes& routes;
-    int shownGeneration = -1;
-    std::array<yup::String, SynthExample::macroCount> shownMacroNames;
-
-    std::array<std::unique_ptr<SynthModulationRow>, SynthExample::modulationSlots> rows;
+    std::unique_ptr<Content> content;
+    yup::Viewport viewport;
 };

@@ -318,28 +318,81 @@ void SynthInterface::paintOverChildren (yup::Graphics& g)
     if (! dragSource.has_value())
         return;
 
+    constexpr auto corner = 6.0f;
     const auto color = getSourceColor (*this, *dragSource);
+    const auto areas = getDropAreas();
+
+    // Everything but the controls the source can reach recedes
+    yup::Path dimmed;
+    dimmed.setUsingNonZeroWinding (false);
+    dimmed.addRectangle (getLocalBounds());
+
+    for (const auto& [target, area] : areas)
+        dimmed.addRoundedRectangle (area, corner);
+
+    g.setFillColor (yup::Colors::black.withAlpha (SynthTheme::isDark (*this) ? 0.45f : 0.25f));
+    g.fillPath (dimmed);
+
+    for (const auto& [target, area] : areas)
+    {
+        const auto hovered = target == dropTarget;
+        const auto strokeWidth = hovered ? 2.5f : 1.5f;
+
+        g.setFillColor (color.withAlpha (hovered ? 0.3f : 0.1f));
+        g.fillRoundedRect (area, corner);
+
+        g.setStrokeColor (color.withAlpha (hovered ? 1.0f : 0.75f));
+        g.setStrokeWidth (strokeWidth);
+        g.strokeRoundedRect (area.reduced (strokeWidth * 0.5f), corner - strokeWidth * 0.5f);
+    }
+}
+
+std::vector<std::pair<SynthModulationTarget*, yup::Rectangle<float>>> SynthInterface::getDropAreas() const
+{
+    constexpr auto margin = 3.0f;
+    constexpr auto gap = 2.0f;
+
+    std::vector<std::pair<SynthModulationTarget*, yup::Rectangle<float>>> areas;
 
     for (auto* target : modulationTargets)
     {
         auto* component = dynamic_cast<yup::Component*> (target);
 
-        if (component == nullptr || ! component->isShowing() || ! canRoute (*dragSource, *target))
-            continue;
-
-        const auto area = getLocalArea (component, component->getLocalBounds()).enlarged (2.0f);
-        const auto hovered = target == dropTarget;
-
-        if (hovered)
-        {
-            g.setFillColor (color.withAlpha (0.16f));
-            g.fillRoundedRect (area, 6.0f);
-        }
-
-        g.setStrokeColor (color.withAlpha (hovered ? 1.0f : 0.4f));
-        g.setStrokeWidth (hovered ? 2.0f : 1.0f);
-        g.strokeRoundedRect (area, 6.0f);
+        if (component != nullptr && component->isShowing() && canRoute (*dragSource, *target))
+            areas.emplace_back (target, getLocalArea (component, component->getLocalBounds()).enlarged (margin));
     }
+
+    // Neighbors split the space they share along its narrower side, so outlines never overlap
+    for (std::size_t i = 0; i < areas.size(); ++i)
+    {
+        for (std::size_t j = i + 1; j < areas.size(); ++j)
+        {
+            auto& a = areas[i].second;
+            auto& b = areas[j].second;
+            const auto overlap = a.intersection (b);
+
+            if (overlap.isEmpty())
+                continue;
+
+            auto& first = (overlap.getWidth() <= overlap.getHeight() ? a.getCenterX() <= b.getCenterX() : a.getCenterY() <= b.getCenterY()) ? a : b;
+            auto& second = &first == &a ? b : a;
+
+            if (overlap.getWidth() <= overlap.getHeight())
+            {
+                const auto middle = overlap.getCenterX();
+                first = first.withTrimmedRight (first.getRight() - middle + gap * 0.5f);
+                second = second.withTrimmedLeft (middle + gap * 0.5f - second.getX());
+            }
+            else
+            {
+                const auto middle = overlap.getCenterY();
+                first = first.withTrimmedBottom (first.getBottom() - middle + gap * 0.5f);
+                second = second.withTrimmedTop (middle + gap * 0.5f - second.getY());
+            }
+        }
+    }
+
+    return areas;
 }
 
 //==============================================================================

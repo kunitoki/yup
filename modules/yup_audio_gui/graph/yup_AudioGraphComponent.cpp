@@ -683,7 +683,7 @@ void AudioGraphComponent::mouseDoubleClick (const MouseEvent& event)
     }
 }
 
-void AudioGraphComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+bool AudioGraphComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     const auto screenPos = eventPositionInThisComponent (event);
     const auto canvasPos = screenToCanvas (screenPos);
@@ -691,7 +691,7 @@ void AudioGraphComponent::mouseWheel (const MouseEvent& event, const MouseWheelD
     const auto newZoom = jlimit (minZoom, maxZoom, zoom * zoomFactor);
 
     if (newZoom == zoom)
-        return;
+        return false;
 
     needsInitialReset = false;
     needsInitialZoomToFit = false;
@@ -699,6 +699,7 @@ void AudioGraphComponent::mouseWheel (const MouseEvent& event, const MouseWheelD
     canvasOffset = screenPos - (canvasPos * zoom);
     updateNodeBounds();
     repaint();
+    return true;
 }
 
 bool AudioGraphComponent::keyDown (const KeyPress& keys, const Point<float>&)

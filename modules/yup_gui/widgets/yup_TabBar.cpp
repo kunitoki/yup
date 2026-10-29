@@ -466,12 +466,12 @@ bool TabBar::keyDown (const KeyPress& key, const Point<float>& position)
     return true;
 }
 
-void TabBar::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+bool TabBar::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     ignoreUnused (event);
 
     if (overflow != Overflow::scroll)
-        return;
+        return false;
 
     // A plain vertical wheel still scrolls a horizontal bar.
     auto delta = isVertical() ? wheelData.getDeltaY() : wheelData.getDeltaX();
@@ -479,10 +479,12 @@ void TabBar::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelDat
         delta = isVertical() ? wheelData.getDeltaX() : wheelData.getDeltaY();
 
     if (delta == 0.0f)
-        return;
+        return false;
 
+    const auto previousOffset = scrollOffset;
     scrollOffset -= delta * tabBarWheelStep;
     updateLayout (false, false);
+    return scrollOffset != previousOffset;
 }
 
 void TabBar::focusLost()

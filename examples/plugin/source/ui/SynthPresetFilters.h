@@ -50,7 +50,7 @@ public:
     void paint (yup::Graphics& g) override;
     void mouseMove (const yup::MouseEvent& event) override;
     void mouseDown (const yup::MouseEvent& event) override;
-    void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData) override;
+    bool mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData) override;
 
 private:
     struct Chip

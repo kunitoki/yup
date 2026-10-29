@@ -519,10 +519,11 @@ void mouseUp         (const MouseEvent& event) override;
 void mouseMove       (const MouseEvent& event) override;
 void mouseDrag       (const MouseEvent& event) override;
 void mouseDoubleClick(const MouseEvent& event) override;
-void mouseWheel      (const MouseEvent& event, const MouseWheelData& wheel) override;
+bool mouseWheel      (const MouseEvent& event, const MouseWheelData& wheel) override;
 ```
 
-By default these are no-ops. To receive mouse events, a component must opt in:
+By default these are no-ops, and `mouseWheel()` returns `false`. To receive mouse
+events, a component must opt in:
 
 ```cpp
 comp.setWantsMouseEvents (true, true);
@@ -533,6 +534,23 @@ comp.setWantsMouseEvents (true, true);
 The first flag controls whether this component receives mouse events on itself.
 The second controls whether its children can receive them (useful for
 mouse-blocking overlays).
+
+Mouse button and movement events go only to the component under the mouse. The
+wheel goes further: it starts at the component under the pointer and travels up
+the parent hierarchy until a component handles it. Return `true` to consume the
+wheel or `false` to let the next enabled parent try. The default returns
+`false`, so a scrollable container receives the wheel over any of its children.
+
+```cpp
+bool MyList::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
+{
+    if (! canScroll())
+        return false; // let the parent scroll
+
+    scrollBy (wheel.getDeltaY());
+    return true;
+}
+```
 
 ### Multitouch (any platform with touch hardware)
 
@@ -697,9 +715,14 @@ the shortcuts they don't implement to the components around them.
 Two lower-level callbacks report input that `keyDown()` may never see:
 
 ```cpp
-virtual void keyStateChanged (const KeyPress& key, bool isDown) override;
+virtual bool keyStateChanged (const KeyPress& key, bool isDown) override;
 virtual void modifierKeysChanged (const KeyModifiers& modifiers) override;
 ```
+
+Like `keyDown()`, `keyStateChanged()` starts at the focused component and goes up
+the parents until one returns `true`. `modifierKeysChanged()` is passed to the
+parent by default; an override that still wants its parents notified calls
+`Component::modifierKeysChanged (modifiers)`.
 
 `keyStateChanged()` fires once when a key goes down and once when it comes up,
 including for presses consumed before they reach `keyDown()`, and auto-repeat
@@ -717,6 +740,12 @@ Instead of subclassing to receive mouse events, attach a `MouseListener`:
 comp.addMouseListener (myListener);
 comp.removeMouseListener (myListener);
 ```
+
+Pass `true` as the second argument of `addMouseListener()` to also receive the
+events of every component nested inside `comp`. The event keeps the position and
+source component of the child that received it. `MouseListener::mouseWheel()`
+returns `bool` to share the callback signature with `Component`; its return value
+is ignored when the object is registered as a listener.
 
 ---
 

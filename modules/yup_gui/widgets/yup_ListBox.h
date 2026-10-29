@@ -798,7 +798,7 @@ public:
     /** @internal */
     void mouseExit (const MouseEvent& event) override;
     /** @internal */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
     /** @internal */
     void mouseDoubleClick (const MouseEvent& event) override;
     /** @internal */

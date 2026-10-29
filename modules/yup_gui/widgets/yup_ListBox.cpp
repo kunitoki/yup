@@ -1174,10 +1174,10 @@ int ListBox::getHoveredRow() const noexcept
     return hoveredRow;
 }
 
-void ListBox::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+bool ListBox::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     if (getMaxScrollOffset() <= 0.0f)
-        return;
+        return false;
 
     const bool vertical = orientation == Orientation::vertical;
 
@@ -1186,11 +1186,13 @@ void ListBox::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelDa
     if (delta == 0.0f)
         delta = vertical ? wheelData.getDeltaX() : wheelData.getDeltaY();
 
+    const auto previousOffset = scroller.getOffset();
     scroller.setOffset (scroller.getOffset() - delta * getRowSize() * 3.0f);
 
     updateLayout();
     updateHoveredRow (event.getPosition());
     dispatchPendingNotifications();
+    return scroller.getOffset() != previousOffset;
 }
 
 void ListBox::mouseDoubleClick (const MouseEvent& event)

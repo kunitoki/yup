@@ -24,7 +24,11 @@
 
 void LFODisplay::setValues (const SynthLFOValues& newValues)
 {
+    if (newValues == values)
+        return;
+
     values = newValues;
+    samples.clear();
     repaint();
 }
 
@@ -34,6 +38,7 @@ void LFODisplay::setCurve (const SynthCurveState::Curve& newCurve)
         return;
 
     curve = newCurve;
+    samples.clear();
     repaint();
 }
 
@@ -41,6 +46,10 @@ void LFODisplay::setPhase (float newPhase)
 {
     if (std::abs (newPhase - phase) < 1.0e-3f)
         return;
+
+    // A wrap while playing starts a new period, which scrolls a random shape by one
+    if (isRandom() && ! samples.empty() && phase >= 0.0f && newPhase >= 0.0f && newPhase < phase - 0.5f)
+        appendPeriod();
 
     phase = newPhase;
     repaint();
@@ -52,6 +61,7 @@ void LFODisplay::setTempo (double bpm)
         return;
 
     tempo = bpm;
+    samples.clear();
     repaint();
 }
 
@@ -62,6 +72,50 @@ void LFODisplay::setTiming (const SynthTimeGrid::Timing& newTiming)
 
     timing = newTiming;
     repaint();
+}
+
+bool LFODisplay::isRandom() const
+{
+    return values.shape == yup::LFO<float>::Shape::sampleAndHold || values.shape == yup::LFO<float>::Shape::smoothRandom;
+}
+
+int LFODisplay::getPeriods() const
+{
+    return isRandom() ? randomPeriods : 1;
+}
+
+/** Reads the shape the way the engine reads it, at the LFO's own rate and smoothing, from
+    a fixed seed. One period is run first to settle the smoother. */
+void LFODisplay::rebuildSamples()
+{
+    const auto periods = getPeriods();
+    const auto frequency = yup::jmax (0.01f, values.getFrequency (tempo > 0.0 ? tempo : displayTempo));
+
+    generator.prepare (static_cast<double> (points) * frequency / static_cast<double> (periods));
+    generator.setFrequency (frequency);
+    generator.setShape (values.shape);
+    generator.setPhaseOffset (values.phase);
+    generator.setSmoothing (values.smoothing);
+    generator.setCustomCurve (&curve);
+    generator.setSeed (displaySeed);
+    generator.reset (0.0f);
+
+    for (int index = 0; index < points / periods; ++index)
+        generator.processSample();
+
+    samples.resize (points + 1);
+
+    for (auto& sample : samples)
+        sample = generator.processSample();
+}
+
+void LFODisplay::appendPeriod()
+{
+    const auto perPeriod = static_cast<std::ptrdiff_t> (points / getPeriods());
+    samples.erase (samples.begin(), samples.begin() + perPeriod);
+
+    for (std::ptrdiff_t index = 0; index < perPeriod; ++index)
+        samples.push_back (generator.processSample());
 }
 
 void LFODisplay::paint (yup::Graphics& g)
@@ -78,12 +132,7 @@ void LFODisplay::paint (yup::Graphics& g)
     g.setFillColor (SynthTheme::textPrimary (*this).withAlpha (0.08f));
     g.fillRect (area.getX(), area.getCenterY(), area.getWidth(), 1.0f);
 
-    // The shape is read the way the engine reads it, at the LFO's own rate and smoothing,
-    // from a fixed seed so the random shapes hold still. Random shapes draw a new value per
-    // period, so they show several periods; one period is run first to settle the smoother.
-    const auto random = values.shape == yup::LFO<float>::Shape::sampleAndHold || values.shape == yup::LFO<float>::Shape::smoothRandom;
-    const auto periods = random ? randomPeriods : 1;
-    const auto frequency = yup::jmax (0.01f, values.getFrequency (tempo > 0.0 ? tempo : displayTempo));
+    const auto periods = getPeriods();
     const auto polarity = values.inverted ? -1.0f : 1.0f;
 
     SynthTimeGrid::paint (g, *this, SynthTimeGrid::getLines (timing, static_cast<float> (periods), area.getWidth()), area, [&] (float time)
@@ -91,18 +140,13 @@ void LFODisplay::paint (yup::Graphics& g)
         return std::optional<float> (area.getX() + area.getWidth() * time / static_cast<float> (periods));
     });
 
-    yup::LFO<float> shape;
-    shape.prepare (static_cast<double> (points) * frequency / static_cast<double> (periods));
-    shape.setFrequency (frequency);
-    shape.setShape (values.shape);
-    shape.setPhaseOffset (values.phase);
-    shape.setSmoothing (values.smoothing);
-    shape.setCustomCurve (&curve);
-    shape.setSeed (displaySeed);
-    shape.reset (0.0f);
+    if (samples.empty())
+        rebuildSamples();
 
-    for (int index = 0; index < points / periods; ++index)
-        shape.processSample();
+    const auto toY = [&] (float value)
+    {
+        return area.getCenterY() - polarity * value * area.getHeight() * 0.45f;
+    };
 
     path.clear();
     path.reserveSpace (points + 1);
@@ -110,7 +154,7 @@ void LFODisplay::paint (yup::Graphics& g)
     for (int index = 0; index <= points; ++index)
     {
         const auto x = area.getX() + area.getWidth() * static_cast<float> (index) / static_cast<float> (points);
-        const auto y = area.getCenterY() - polarity * shape.processSample() * area.getHeight() * 0.45f;
+        const auto y = toY (samples[static_cast<std::size_t> (index)]);
 
         if (index == 0)
             path.moveTo (x, y);
@@ -119,18 +163,21 @@ void LFODisplay::paint (yup::Graphics& g)
     }
 
     const auto color = SynthTheme::lfoAccent (*this);
-    const auto playing = ! random && phase >= 0.0f;
-    const auto markerX = area.getX() + area.getWidth() * phase;
 
     g.setStrokeColor (color);
     g.setStrokeWidth (2.0f);
     g.strokePath (path);
 
-    if (! playing)
+    if (phase < 0.0f)
         return;
 
-    shape.reset (phase);
-    const auto markerY = area.getCenterY() - polarity * shape.getValue() * area.getHeight() * 0.45f;
+    // The marker runs through the newest period, reading the drawn samples so it carries
+    // the same smoothing as the curve
+    const auto shown = (static_cast<float> (periods - 1) + phase) / static_cast<float> (periods);
+    const auto position = yup::jlimit (0.0f, static_cast<float> (points), shown * static_cast<float> (points));
+    const auto lower = yup::jmin (static_cast<int> (position), points - 1);
+    const auto markerX = area.getX() + area.getWidth() * shown;
+    const auto markerY = toY (yup::jmap (position - static_cast<float> (lower), samples[static_cast<std::size_t> (lower)], samples[static_cast<std::size_t> (lower + 1)]));
 
     g.setFillColor (color.withAlpha (0.35f));
     g.fillEllipse (markerX - 7.0f, markerY - 7.0f, 14.0f, 14.0f);

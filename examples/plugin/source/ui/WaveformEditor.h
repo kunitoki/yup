@@ -109,7 +109,7 @@ public:
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseDrag (const yup::MouseEvent& event) override;
     void mouseUp (const yup::MouseEvent& event) override;
-    void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData) override;
+    bool mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData) override;
     void gesturePinch (const yup::GestureEvent& event) override;
 
 private:

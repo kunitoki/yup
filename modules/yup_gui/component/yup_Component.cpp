@@ -1321,7 +1321,11 @@ void Component::mouseUp ([[maybe_unused]] const MouseEvent& event) {}
 
 void Component::mouseDoubleClick ([[maybe_unused]] const MouseEvent& event) {}
 
-void Component::mouseWheel ([[maybe_unused]] const MouseEvent& event, [[maybe_unused]] const MouseWheelData& wheelData) {}
+bool Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+{
+    ignoreUnused (event, wheelData);
+    return false;
+}
 
 //==============================================================================
 
@@ -1363,20 +1367,30 @@ bool Component::keyUp ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] c
 
 void Component::textInput ([[maybe_unused]] const String& text) {}
 
-void Component::keyStateChanged ([[maybe_unused]] const KeyPress& key, [[maybe_unused]] bool isDown) {}
+bool Component::keyStateChanged ([[maybe_unused]] const KeyPress& key, [[maybe_unused]] bool isDown) { return false; }
 
-void Component::modifierKeysChanged ([[maybe_unused]] const KeyModifiers& modifiers) {}
+void Component::modifierKeysChanged (const KeyModifiers& modifiers)
+{
+    if (parentComponent != nullptr)
+        parentComponent->modifierKeysChanged (modifiers);
+}
 
 //==============================================================================
 
-void Component::addMouseListener (MouseListener* listener)
+void Component::addMouseListener (MouseListener* listener, bool wantsEventsForAllNestedChildComponents)
 {
-    mouseListeners.add (listener);
+    removeMouseListener (listener);
+
+    if (wantsEventsForAllNestedChildComponents)
+        nestedMouseListeners.add (listener);
+    else
+        mouseListeners.add (listener);
 }
 
 void Component::removeMouseListener (MouseListener* listener)
 {
     mouseListeners.remove (listener);
+    nestedMouseListeners.remove (listener);
 }
 
 void Component::addGestureListener (GestureListener* listener)
@@ -2090,7 +2104,7 @@ void Component::internalMouseEnter (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseEnter, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseEnter, event);
 }
 
 //==============================================================================
@@ -2109,7 +2123,7 @@ void Component::internalMouseExit (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseExit, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseExit, event);
 }
 
 //==============================================================================
@@ -2133,7 +2147,7 @@ void Component::internalMouseDown (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDown, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseDown, event);
 }
 
 //==============================================================================
@@ -2152,7 +2166,7 @@ void Component::internalMouseMove (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseMove, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseMove, event);
 }
 
 //==============================================================================
@@ -2171,7 +2185,7 @@ void Component::internalMouseDrag (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDrag, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseDrag, event);
 }
 
 //==============================================================================
@@ -2190,7 +2204,7 @@ void Component::internalMouseUp (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseUp, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseUp, event);
 }
 
 //==============================================================================
@@ -2207,7 +2221,7 @@ void Component::internalMouseDoubleClick (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDoubleClick, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseDoubleClick, event);
 }
 
 //==============================================================================
@@ -2219,12 +2233,25 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
 
     auto bailOutChecker = BailOutChecker (this);
 
-    mouseWheel (event, wheelData);
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (! component->isVisible() || ! component->isEnabled())
+            continue;
+
+        auto componentBailOutChecker = BailOutChecker (component);
+        const auto componentEvent = event.withPosition (component->getLocalPoint (this, event.getPosition()))
+                                         .withSourceComponent (component);
+
+        if (component->mouseWheel (componentEvent, wheelData)
+            || componentBailOutChecker.shouldBailOut()
+            || bailOutChecker.shouldBailOut())
+            break;
+    }
 
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseWheel, event, wheelData);
+    callMouseWheelListeners (bailOutChecker, event, wheelData);
 }
 
 //==============================================================================
@@ -2296,12 +2323,20 @@ void Component::internalTextInput (const String& text)
 
 //==============================================================================
 
-void Component::internalKeyStateChanged (const KeyPress& keys, bool isDown)
+bool Component::internalKeyStateChanged (const KeyPress& keys, bool isDown)
 {
-    if (! isVisible() || ! isEnabled())
-        return;
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (! component->isVisible() || ! component->isEnabled())
+            continue;
 
-    keyStateChanged (keys, isDown);
+        auto bailOutChecker = BailOutChecker (component);
+
+        if (component->keyStateChanged (keys, isDown) || bailOutChecker.shouldBailOut())
+            return true;
+    }
+
+    return false;
 }
 
 //==============================================================================

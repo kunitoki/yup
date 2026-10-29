@@ -54,6 +54,8 @@ private:
     static constexpr float unisonWidth = 146.0f;
     static constexpr float checkSize = 13.0f;
     static constexpr float checkRowWidth = 74.0f;
+    static constexpr float knobHeight = 62.0f;
+    static constexpr float glideWidth = 64.0f;
 
     SynthPlayMode getMode() const;
     void setMode (SynthPlayMode mode);

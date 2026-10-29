@@ -225,6 +225,7 @@
 #include "widgets/yup_Slider.cpp"
 #include "widgets/yup_ComboBox.cpp"
 #include "widgets/yup_ScrollBar.cpp"
+#include "widgets/yup_Viewport.cpp"
 #include "code/yup_CodeEditor.cpp"
 #include "widgets/yup_ProgressBar.cpp"
 #include "widgets/yup_ListBoxItem.cpp"

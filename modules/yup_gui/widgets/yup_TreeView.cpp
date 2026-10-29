@@ -167,12 +167,13 @@ public:
         owner.updateHoveredItem (event, ! getLocalBounds().contains (event.getPosition()));
     }
 
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override
     {
-        ListBox::mouseWheel (event, wheelData);
+        const auto handled = ListBox::mouseWheel (event, wheelData);
 
         // The content moved under a still pointer.
         owner.updateHoveredItem (event, false);
+        return handled;
     }
 
     void mouseDown (const MouseEvent& event) override

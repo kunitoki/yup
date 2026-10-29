@@ -288,17 +288,19 @@ void WaveformEditor::mouseUp (const yup::MouseEvent&)
     recordEdit (gestureStart);
 }
 
-void WaveformEditor::mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData)
+bool WaveformEditor::mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData)
 {
     if (! editingPartials)
-        return;
+        return false;
 
     const auto modifiers = event.getModifiers();
+    const auto previousViewStart = partialsViewStart;
+    const auto previousViewCount = partialsViewCount;
 
     if (modifiers.isCommandDown() || modifiers.isControlDown())
     {
         zoomPartials (std::exp2 (wheelData.getDeltaY() * 0.5f), event.getPosition().getX());
-        return;
+        return partialsViewStart != previousViewStart || partialsViewCount != previousViewCount;
     }
 
     // A vertical trackpad swipe carries a little horizontal motion too, so the larger axis wins.
@@ -307,6 +309,7 @@ void WaveformEditor::mouseWheel (const yup::MouseEvent& event, const yup::MouseW
     partialsViewStart -= delta * partialsViewCount * 0.1f;
     clampPartialsView();
     repaint();
+    return partialsViewStart != previousViewStart || partialsViewCount != previousViewCount;
 }
 
 void WaveformEditor::gesturePinch (const yup::GestureEvent& event)

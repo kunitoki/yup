@@ -2929,7 +2929,7 @@ TEST_F (ComponentTest, InternalMouseDispatchNotifiesListeners)
         void mouseDrag (const MouseEvent&) override { ++drags; }
         void mouseUp (const MouseEvent&) override { ++ups; }
         void mouseDoubleClick (const MouseEvent&) override { ++doubleClicks; }
-        void mouseWheel (const MouseEvent&, const MouseWheelData&) override { ++wheels; }
+        bool mouseWheel (const MouseEvent&, const MouseWheelData&) override { ++wheels; return false; }
 
         int enters = 0;
         int exits = 0;
@@ -4061,4 +4061,126 @@ TEST (ComponentModifierKeysChangedTests, AnInvisibleComponentIsNotNotified)
     EXPECT_CALL (comp, modifierKeysChanged (_)).Times (0);
 
     ComponentHelper::triggerModifierKeysChanged (comp, KeyModifiers (KeyModifiers::shiftMask));
+}
+
+// =============================================================================
+// Parent propagation
+// =============================================================================
+
+TEST (ComponentPropagationTests, AnUnhandledWheelGoesToTheNearestEnabledParent)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock parent;
+    Component disabledMiddle;
+    Component leaf;
+    parent.setVisible (true);
+    parent.addAndMakeVisible (disabledMiddle);
+    disabledMiddle.addAndMakeVisible (leaf);
+    disabledMiddle.setBounds (5.0f, 5.0f, 100.0f, 100.0f);
+    leaf.setBounds (10.0f, 20.0f, 50.0f, 50.0f);
+    disabledMiddle.setEnabled (false);
+
+    EXPECT_CALL (parent, mouseWheel (_, _)).WillOnce ([&] (const MouseEvent& event, const MouseWheelData&)
+    {
+        EXPECT_EQ (Point<float> (16.0f, 26.0f), event.getPosition());
+        EXPECT_EQ (&parent, event.getSourceComponent());
+        return true;
+    });
+
+    const MouseEvent event (MouseEvent::noButtons, KeyModifiers(), Point<float> (1.0f, 1.0f));
+    ComponentHelper::triggerMouseWheel (leaf, event.withSourceComponent (&leaf), MouseWheelData (0.0f, 1.0f));
+}
+
+TEST (ComponentPropagationTests, AnOverriddenWheelIsNotPassedToTheParent)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock parent;
+    ComponentMock child;
+    parent.setVisible (true);
+    parent.addAndMakeVisible (child);
+
+    EXPECT_CALL (child, mouseWheel (_, _)).WillOnce ([] (const MouseEvent&, const MouseWheelData&)
+    {
+        return true;
+    });
+    EXPECT_CALL (parent, mouseWheel (_, _)).Times (0);
+
+    const MouseEvent event (MouseEvent::noButtons, KeyModifiers(), Point<float>());
+    ComponentHelper::triggerMouseWheel (child, event, MouseWheelData (0.0f, 1.0f));
+}
+
+TEST (ComponentPropagationTests, ModifierChangesGoToTheParentByDefault)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock parent;
+    Component child;
+    parent.setVisible (true);
+    parent.addAndMakeVisible (child);
+
+    const KeyModifiers modifiers (KeyModifiers::shiftMask);
+    EXPECT_CALL (parent, modifierKeysChanged (modifiers)).Times (1);
+
+    ComponentHelper::triggerModifierKeysChanged (child, modifiers);
+}
+
+TEST (ComponentPropagationTests, KeyStateChangesGoUpUntilAComponentHandlesThem)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock grandParent;
+    ComponentMock parent;
+    Component child;
+    grandParent.setVisible (true);
+    grandParent.addAndMakeVisible (parent);
+    parent.addAndMakeVisible (child);
+
+    EXPECT_CALL (parent, keyStateChanged (_, true)).WillOnce (::testing::Return (true));
+    EXPECT_CALL (grandParent, keyStateChanged (_, _)).Times (0);
+
+    ComponentHelper::triggerKeyStateChanged (child, KeyPress (KeyPress::spaceKey), true);
+}
+
+TEST (ComponentPropagationTests, OnlyNestedMouseListenersReceiveChildEvents)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    struct CountingListener : public MouseListener
+    {
+        void mouseDown (const MouseEvent& event) override
+        {
+            ++downs;
+            lastSource = event.getSourceComponent();
+        }
+
+        int downs = 0;
+        Component* lastSource = nullptr;
+    };
+
+    Component parent;
+    Component child;
+    parent.setVisible (true);
+    parent.addAndMakeVisible (child);
+
+    CountingListener nested;
+    CountingListener direct;
+    parent.addMouseListener (&nested, true);
+    parent.addMouseListener (&direct);
+
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float>());
+    ComponentHelper::triggerMouseDown (child, event.withSourceComponent (&child));
+
+    EXPECT_EQ (1, nested.downs);
+    EXPECT_EQ (&child, nested.lastSource);
+    EXPECT_EQ (0, direct.downs);
+
+    parent.addMouseListener (&nested, false);
+    ComponentHelper::triggerMouseDown (child, event.withSourceComponent (&child));
+
+    EXPECT_EQ (1, nested.downs);
+
+    parent.removeMouseListener (&nested);
+    parent.removeMouseListener (&direct);
 }

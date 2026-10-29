@@ -82,20 +82,22 @@ void SynthVoicingPanel::resized()
     unisonSpinner.setBounds (unisonTitle.removeFromRight (42.0f).reduced (0.0f, 3.0f));
 
     auto unisonBody = unisonArea.withTrimmedTop (titleHeight + 4.0f);
+    unisonBody = unisonBody.withSizeKeepingCenter (unisonBody.getWidth(), yup::jmin (knobHeight, unisonBody.getHeight()));
     detuneKnob.setBounds (unisonBody.removeFromLeft (unisonBody.getWidth() * 0.5f));
     spreadKnob.setBounds (unisonBody);
 
-    auto body = voicingArea.withTrimmedTop (titleHeight + 4.0f);
-    glideKnob.setBounds (body.removeFromRight (56.0f));
+    auto voicingTitle = voicingArea.withHeight (titleHeight);
+    qualitySpinner.setBounds (voicingTitle.removeFromRight (42.0f).reduced (0.0f, 3.0f));
+    voicingTitle.removeFromRight (SynthTheme::controlGap);
+    qualityCaption = voicingTitle.removeFromRight (SynthTheme::textWidth ("QUALITY", SynthTheme::captionFont (12.0f)) + 2.0f);
 
+    auto body = voicingArea.withTrimmedTop (titleHeight + 4.0f);
     auto checks = body.removeFromLeft (checkRowWidth);
     const auto rowHeight = checks.getHeight() * 0.5f;
     monoBox = checks.removeFromTop (rowHeight).withWidth (checkSize).withSizeKeepingCenter (checkSize, checkSize);
     legatoBox = checks.withWidth (checkSize).withSizeKeepingCenter (checkSize, checkSize);
 
-    body.removeFromLeft (SynthTheme::controlGap);
-    qualityCaption = body.removeFromTop (rowHeight).withTrimmedRight (body.getWidth() * 0.45f);
-    qualitySpinner.setBounds (qualityCaption.withX (qualityCaption.getRight()).withWidth (body.getWidth() * 0.45f).reduced (0.0f, 5.0f));
+    glideKnob.setBounds (body.withSizeKeepingCenter (yup::jmin (glideWidth, body.getWidth()), yup::jmin (knobHeight, body.getHeight())));
 }
 
 void SynthVoicingPanel::paint (yup::Graphics& g)
@@ -134,7 +136,7 @@ void SynthVoicingPanel::paint (yup::Graphics& g)
     }
 
     g.setFillColor (SynthTheme::textSecondary (*this));
-    g.fillFittedText ("QUALITY", captionFont, qualityCaption, yup::Justification::centerLeft);
+    g.fillFittedText ("QUALITY", captionFont, qualityCaption, yup::Justification::centerRight);
 }
 
 void SynthVoicingPanel::mouseMove (const yup::MouseEvent& event)

@@ -487,7 +487,7 @@ public:
     /** @internal */
     void mouseExit (const MouseEvent& e) override;
     /** @internal */
-    void mouseWheel (const MouseEvent& e, const MouseWheelData& wheel) override;
+    bool mouseWheel (const MouseEvent& e, const MouseWheelData& wheel) override;
     /** @internal */
     void handleNoteOn (MidiKeyboardState* source, int midiChannel, int midiNoteNumber, float velocity) override;
     /** @internal */

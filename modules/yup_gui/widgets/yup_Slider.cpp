@@ -465,15 +465,17 @@ void Slider::mouseDrag (const MouseEvent& event)
     updateValueFromMousePosition (event.getPosition(), dragMode); // Already returns Point<float>
 }
 
-void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
+bool Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 {
     if (! isEnabled())
-        return;
+        return false;
 
+    const auto previousValue = getValue();
     const double multiplier = event.getModifiers().isShiftDown() ? 0.001 : 0.01;
     const double distance = (data.getDeltaX() + data.getDeltaY()) * multiplier * mouseDragSensitivity;
 
     setValueNormalised (getValueNormalised() + distance);
+    return getValue() != previousValue;
 }
 
 void Slider::mouseDoubleClick (const MouseEvent& event)

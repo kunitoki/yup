@@ -132,6 +132,7 @@ private:
     std::optional<SynthModulationSource> getDraggedSource() const;
     bool canRoute (SynthModulationSource source, const SynthModulationTarget& target) const;
     SynthModulationTarget* findTargetAt (yup::Point<float> position) const;
+    std::vector<std::pair<SynthModulationTarget*, yup::Rectangle<float>>> getDropAreas() const;
     void hoverDrag (yup::Point<float> position);
     void clearDrag();
 

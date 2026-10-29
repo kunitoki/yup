@@ -322,16 +322,6 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
 
     const auto appendPoint = [&] (yup::Point<float> point)
     {
-        // Close each bipolar lobe at zero instead of making a self-intersecting fill.
-        if (cycle && (previous.getY() - baseline) * (point.getY() - baseline) < 0.0f)
-        {
-            const auto fraction = (baseline - previous.getY()) / (point.getY() - previous.getY());
-            const auto x = previous.getX() + fraction * (point.getX() - previous.getX());
-            fill.lineTo (x, baseline);
-            fill.closeSubPath();
-            fill.moveTo (x, baseline);
-        }
-
         path.lineTo (point);
         fill.lineTo (point);
         previous = point;
@@ -356,8 +346,13 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
     const auto color = cycle ? SynthTheme::lfoAccent (*this) : SynthTheme::envelopeAccent (*this);
     fill.lineTo (previous.getX(), baseline);
     fill.closeSubPath();
-    g.setFillColor (color.withAlpha (0.13f));
-    g.fillPath (fill);
+
+    // A cycle is a bipolar line only, an envelope fills the area under it
+    if (! cycle)
+    {
+        g.setFillColor (color.withAlpha (0.13f));
+        g.fillPath (fill);
+    }
 
     // The playhead keeps moving while a point is dragged; the time axis holds its scale
     // then, so a playhead past the shown length is left out rather than drawn outside.
@@ -380,7 +375,7 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
         playing = playheadPosition.getX() <= area.getRight();
     }
 
-    if (playing)
+    if (playing && ! cycle)
         SynthTheme::paintTrail (g, fill, playheadPosition.getX(), trailWidth, color);
 
     // Keep the grid above the fill and trail, with no elapsed time inside the sustain hold.

@@ -277,16 +277,16 @@ void AudioViewComponent::mouseDown (const MouseEvent& event)
     Component::mouseDown (event);
 }
 
-void AudioViewComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+bool AudioViewComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     if (! selectable)
-    {
-        Component::mouseWheel (event, wheelData);
-        return;
-    }
+        return false;
 
     if (getTotalSamples() <= 0)
-        return;
+        return false;
+
+    const auto previousRangeStart = viewRangeSamples.getStart();
+    const auto previousRangeLength = viewRangeSamples.getLength();
 
     const float deltaX = wheelData.getDeltaX();
     const float deltaY = wheelData.getDeltaY();
@@ -306,6 +306,9 @@ void AudioViewComponent::mouseWheel (const MouseEvent& event, const MouseWheelDa
         const double scrollAmount = viewRangeSamples.getLength() * static_cast<double> (deltaX) * 0.15;
         scrollBySamples (scrollAmount);
     }
+
+    return viewRangeSamples.getStart() != previousRangeStart
+        || viewRangeSamples.getLength() != previousRangeLength;
 }
 
 bool AudioViewComponent::keyDown (const KeyPress& keys, const Point<float>&)

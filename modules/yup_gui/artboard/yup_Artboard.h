@@ -546,7 +546,7 @@ public:
     /** @internal */
     void mouseDrag (const MouseEvent& event) override;
     /** @internal */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
     /** @internal */
     bool keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */

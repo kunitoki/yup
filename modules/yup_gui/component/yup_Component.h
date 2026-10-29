@@ -1362,10 +1362,16 @@ public:
     /**
         Called when the mouse wheel is scrolled.
 
-        @param event The mouse event.
+        The event starts at the component under the pointer and travels up its parent hierarchy.
+        Return true to consume it; return false to let the next enabled parent handle it. The
+        default implementation returns false.
+
+        @param event The mouse event, with its position in this component's coordinates.
         @param wheelData The mouse wheel data.
+
+        @returns true if this component handled the wheel event.
      */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
 
     //==============================================================================
     /**
@@ -1419,9 +1425,15 @@ public:
     /**
         Add a mouse listener to the component.
 
+        Adding a listener that is already registered only updates whether it wants the events
+        of nested child components.
+
         @param listener The mouse listener to add.
+        @param wantsEventsForAllNestedChildComponents When true, the listener also receives the
+               mouse events of every component inside this one, with positions relative to the
+               component that received them.
      */
-    void addMouseListener (MouseListener* listener);
+    void addMouseListener (MouseListener* listener, bool wantsEventsForAllNestedChildComponents = false);
 
     /**
         Remove a mouse listener from the component.
@@ -1499,18 +1511,26 @@ public:
         makes it the reliable place to track whether a modifier or a chord key is being
         held.
 
+        It goes up the parents like keyDown(), starting from the component with the keyboard
+        focus, until a component returns true.
+
         @param key    The key that changed state.
         @param isDown True if the key has just gone down, false if it has just come up.
 
+        @returns true when the component handled the change, which stops it going further up.
+
         @see keyDown, keyUp, modifierKeysChanged
      */
-    virtual void keyStateChanged (const KeyPress& key, bool isDown);
+    virtual bool keyStateChanged (const KeyPress& key, bool isDown);
 
     /**
         Called when the state of the modifier keys changes.
 
         Modifiers are refreshed from mouse button events as well as key events, so this also
         fires when a click reveals a modifier that changed while the keyboard was idle.
+
+        The default implementation passes the change up to the parent component, so an
+        override consumes it unless it calls the base class version.
 
         @param modifiers The modifier keys that are now held down.
 
@@ -1816,7 +1836,7 @@ private:
     bool internalKeyDown (const KeyPress& keys, const Point<float>& position);
     bool internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);
-    void internalKeyStateChanged (const KeyPress& keys, bool isDown);
+    bool internalKeyStateChanged (const KeyPress& keys, bool isDown);
     void internalModifierKeysChanged (const KeyModifiers& modifiers);
     void internalResized (int width, int height);
     void internalMoved (int xpos, int ypos);
@@ -1838,6 +1858,57 @@ private:
     bool dispatchKey (const KeyPress& keys, const Point<float>& position, KeyHandler handler);
 
     void updateMouseCursor();
+
+    template <class... MethodArgs, class... Args>
+    void callMouseListeners (const BailOutChecker& bailOutChecker, void (MouseListener::*callback) (MethodArgs...), const Args&... args)
+    {
+        struct NestedBailOutChecker
+        {
+            bool shouldBailOut() const { return source.shouldBailOut() || parent.shouldBailOut(); }
+
+            BailOutChecker source, parent;
+        };
+
+        mouseListeners.callChecked (bailOutChecker, callback, args...);
+
+        for (auto* parent = parentComponent; parent != nullptr && ! bailOutChecker.shouldBailOut(); parent = parent->parentComponent)
+        {
+            const NestedBailOutChecker nestedChecker { bailOutChecker, BailOutChecker (parent) };
+
+            parent->nestedMouseListeners.callChecked (nestedChecker, callback, args...);
+
+            if (nestedChecker.shouldBailOut())
+                return;
+        }
+    }
+
+    void callMouseWheelListeners (const BailOutChecker& bailOutChecker,
+                                  const MouseEvent& event,
+                                  const MouseWheelData& wheelData)
+    {
+        const auto call = [&] (MouseListener& listener)
+        {
+            ignoreUnused (listener.mouseWheel (event, wheelData));
+        };
+
+        mouseListeners.callChecked (bailOutChecker, call);
+
+        for (auto* parent = parentComponent; parent != nullptr && ! bailOutChecker.shouldBailOut(); parent = parent->parentComponent)
+        {
+            struct NestedBailOutChecker
+            {
+                bool shouldBailOut() const { return source.shouldBailOut() || parent.shouldBailOut(); }
+
+                BailOutChecker source, parent;
+            };
+
+            const NestedBailOutChecker nestedChecker { bailOutChecker, BailOutChecker (parent) };
+            parent->nestedMouseListeners.callChecked (nestedChecker, call);
+
+            if (nestedChecker.shouldBailOut())
+                return;
+        }
+    }
 
     void sendMoved();
     void sendResized();
@@ -1876,6 +1947,7 @@ private:
     ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
+    MouseListenerList nestedMouseListeners;
     GestureListenerList gestureListeners;
     ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;

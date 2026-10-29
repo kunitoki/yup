@@ -223,15 +223,17 @@ const SynthPresetFilters::Chip* SynthPresetFilters::findChipAt (yup::Point<float
     return nullptr;
 }
 
-void SynthPresetFilters::mouseWheel (const yup::MouseEvent&, const yup::MouseWheelData& wheelData)
+bool SynthPresetFilters::mouseWheel (const yup::MouseEvent&, const yup::MouseWheelData& wheelData)
 {
     const auto maximum = std::max (0.0f, chipsHeight - chipArea.getHeight());
 
     if (maximum <= 0.0f)
-        return;
+        return false;
 
+    const auto previousOffset = scrollOffset;
     scrollOffset = yup::jlimit (0.0f, maximum, scrollOffset - wheelData.getDeltaY() * chipHeight * 3.0f);
     repaint();
+    return scrollOffset != previousOffset;
 }
 
 bool SynthPresetFilters::isChipOn (const yup::String& text) const

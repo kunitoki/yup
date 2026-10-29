@@ -1024,17 +1024,29 @@ void PopupMenu::mouseExit (const MouseEvent& event)
     setSelectedItemIndex (-1, true);
 }
 
-void PopupMenu::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
+bool PopupMenu::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
 {
+    ignoreUnused (event);
+
     if (! needsScrolling())
-        return;
+        return false;
 
     auto deltaY = wheel.getDeltaY();
 
     if (deltaY > 0)
+    {
+        const auto canScroll = canScrollUp();
         scrollUp();
+        return canScroll;
+    }
     else if (deltaY < 0)
+    {
+        const auto canScroll = canScrollDown();
         scrollDown();
+        return canScroll;
+    }
+
+    return false;
 }
 
 bool PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)

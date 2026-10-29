@@ -357,8 +357,10 @@ void MidiKeyboardComponent::mouseExit (const MouseEvent& e)
     updateNoteUnderMouse (e, false);
 }
 
-void MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
+bool MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
 {
+    const auto previousLowestKey = lowestVisibleKey;
+    const auto previousHighestKey = highestVisibleKey;
     const auto modifiers = event.getModifiers();
 
     // Ctrl/Cmd + wheel zooms in and out, clamped to a minimum span of a single
@@ -367,17 +369,16 @@ void MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWhee
     {
         auto zoomDelta = wheel.getDeltaY() != 0.0f ? wheel.getDeltaY() : wheel.getDeltaX();
 
-        if (zoomDelta != 0.0f)
-        {
-            auto anchorNote = getNoteAtPosition (event.getPosition());
+        if (zoomDelta == 0.0f)
+            return false;
 
-            if (anchorNote < 0)
-                anchorNote = lowestVisibleKey + (highestVisibleKey - lowestVisibleKey) / 2;
+        auto anchorNote = getNoteAtPosition (event.getPosition());
 
-            zoomBy (zoomDelta, anchorNote);
-        }
+        if (anchorNote < 0)
+            anchorNote = lowestVisibleKey + (highestVisibleKey - lowestVisibleKey) / 2;
 
-        return;
+        zoomBy (zoomDelta, anchorNote);
+        return lowestVisibleKey != previousLowestKey || highestVisibleKey != previousHighestKey;
     }
 
     // Plain wheel scrolls along the keyboard axis, one white key per notch.
@@ -388,6 +389,8 @@ void MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWhee
 
     if (scrollDelta != 0.0f)
         scrollByWhiteKeys (roundToInt (scrollDelta));
+
+    return lowestVisibleKey != previousLowestKey || highestVisibleKey != previousHighestKey;
 }
 
 //==============================================================================

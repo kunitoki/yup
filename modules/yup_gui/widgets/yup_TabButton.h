@@ -204,7 +204,6 @@ public:
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
     /** @internal */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
 
 private:
     friend class TabBar;

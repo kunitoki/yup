@@ -43,6 +43,7 @@ class RecordingListener(yup.MouseListener):
 
     def mouseWheel(self, event, wheelData):
         self.log.append(("mouseWheel", event, wheelData))
+        return False
 
 
 # ==============================================================================
@@ -89,7 +90,7 @@ def test_override_receives_the_wheel_data():
     listener = RecordingListener()
     wheel = yup.MouseWheelData(1.0, -2.0)
 
-    listener.mouseWheel(make_event(), wheel)
+    assert listener.mouseWheel(make_event(), wheel) is False
 
     _, receivedEvent, receivedWheel = listener.log[0]
 
@@ -114,7 +115,7 @@ def test_default_implementations_do_nothing():
     assert listener.mouseDrag(event) is None
     assert listener.mouseUp(event) is None
     assert listener.mouseDoubleClick(event) is None
-    assert listener.mouseWheel(event, wheel) is None
+    assert listener.mouseWheel(event, wheel) is False
 
 
 def test_a_partial_override_only_receives_what_it_overrides():

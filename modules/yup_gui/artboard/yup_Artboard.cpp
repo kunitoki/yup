@@ -1060,11 +1060,11 @@ void Artboard::mouseDrag (const MouseEvent& event)
     afterInput();
 }
 
-void Artboard::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+bool Artboard::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     // A focused component gets the wheel wherever the pointer is.
     if (scene == nullptr || ! getLocalBounds().contains (event.getPosition()))
-        return;
+        return false;
 
     artboardFile->bindDeferredRecordingThread();
 
@@ -1085,6 +1085,7 @@ void Artboard::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelD
                           pointerIdFor (event));
 
     afterInput();
+    return true;
 }
 
 //==============================================================================

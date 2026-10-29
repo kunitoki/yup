@@ -28,9 +28,11 @@
 #include "SynthTimeGrid.h"
 
 //==============================================================================
-/** Draws an LFO shape at its own rate and smoothing: one period with a marker at the
-    engine's current phase, or several periods of the random shapes, over a grid of one
-    period's time, upside down when the LFO is inverted. */
+/** Draws an LFO shape at its own rate and smoothing, with a marker at the engine's current
+    phase, over a grid of one period's time, upside down when the LFO is inverted.
+
+    Random shapes show several periods that scroll by one, with a new random value, each
+    time the playing phase wraps; the marker runs through the newest one. */
 class LFODisplay : public yup::Component
 {
 public:
@@ -58,10 +60,17 @@ private:
     static constexpr double displayTempo = 120.0;
     static constexpr yup::uint32 displaySeed = 1;
 
+    bool isRandom() const;
+    int getPeriods() const;
+    void rebuildSamples();
+    void appendPeriod();
+
     SynthLFOValues values;
     SynthCurveState::Curve curve;
     float phase = -1.0f;
     double tempo = 0.0;
     SynthTimeGrid::Timing timing;
+    yup::LFO<float> generator;
+    std::vector<float> samples;
     yup::Path path;
 };

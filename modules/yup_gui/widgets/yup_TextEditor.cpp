@@ -896,13 +896,15 @@ void TextEditor::clampScrollOffset()
 
 //==============================================================================
 
-void TextEditor::mouseWheel (const MouseEvent& /*event*/, const MouseWheelData& wheelData)
+bool TextEditor::mouseWheel (const MouseEvent& /*event*/, const MouseWheelData& wheelData)
 {
+    const auto previousOffset = scrollOffset;
     const float wheelSpeed = 30.0f;
     scrollOffset.setX (scrollOffset.getX() - wheelData.getDeltaX() * wheelSpeed);
     scrollOffset.setY (scrollOffset.getY() - wheelData.getDeltaY() * wheelSpeed);
     clampScrollOffset();
     repaint();
+    return scrollOffset != previousOffset;
 }
 
 //==============================================================================
