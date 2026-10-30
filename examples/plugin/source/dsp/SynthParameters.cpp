@@ -64,9 +64,15 @@ SynthParameters::SynthParameters()
 
     const SynthGlobalValues defaults;
 
-    volume = createContinuous ("global.volume", "Master Volume", 1, "Global", { 0.0f, 1.0f }, 0.5f, SynthFormat::percent);
+    const auto formatVolume = [] (double value) { return value <= volumeFloorDb ? yup::String ("-inf dB") : SynthFormat::decibels (value); };
+    const auto parseVolume = [] (const yup::String& text) { return text.containsIgnoreCase ("inf") ? static_cast<double> (volumeFloorDb) : SynthFormat::parse (text); };
+
+    yup::NormalisableRange<float> glideRange (0.0f, 2000.0f);
+    glideRange.setSkewForCentre (200.0f);
+
+    volume = createContinuous ("global.volume", "Master Volume", 1, "Global", { volumeFloorDb, 6.0f }, -12.0f, formatVolume, parseVolume);
     playMode = createChoice ("global.mode", "Voice Mode", 2, "Global", getSynthPlayModeNames(), static_cast<int> (defaults.mode));
-    glide = createContinuous ("global.glide", "Glide", 3, "Global", { 0.0f, 2000.0f }, defaults.glideSeconds * 1000.0f, [] (double value) { return SynthFormat::milliseconds (value * 0.001); },
+    glide = createContinuous ("global.glide", "Glide", 3, "Global", glideRange, defaults.glideSeconds * 1000.0f, [] (double value) { return SynthFormat::milliseconds (value * 0.001); },
                               [] (const yup::String& text) { return SynthFormat::parse (text) * 1000.0; });
 
     quality = yup::AudioParameterBuilder()

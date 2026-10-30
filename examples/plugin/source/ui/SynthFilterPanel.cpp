@@ -22,11 +22,11 @@
 #include "SynthFilterPanel.h"
 #include "SynthTheme.h"
 
-SynthFilterPanel::SynthFilterPanel (const SynthFilterParameters& parametersToEdit)
+SynthFilterPanel::SynthFilterPanel (const SynthFilterParameters& parametersToEdit, std::shared_ptr<SynthWaveformShader> landscapeShader)
     : typeChoice ({}, parametersToEdit.type, SynthTheme::valueFont (13.5f))
     , cutoffField ("Cut", parametersToEdit.cutoff)
     , resonanceField ("Q", parametersToEdit.resonance)
-    , response (parametersToEdit)
+    , response (parametersToEdit, std::move (landscapeShader))
     , driveKnob ("DRIVE", parametersToEdit.drive, SynthTheme::captionFont (12.0f))
     , keytrackKnob ("KEYTRACK", parametersToEdit.keytrack, SynthTheme::captionFont (12.0f))
     , mixKnob ("MIX", parametersToEdit.mix, SynthTheme::captionFont (12.0f))

@@ -23,6 +23,7 @@
 
 #include "../dsp/SynthEffectChain.h"
 #include "../dsp/SynthEffectsParameters.h"
+#include "EnvelopeDisplay.h"
 #include "ParameterKnob.h"
 #include "ParameterLed.h"
 
@@ -33,13 +34,17 @@
 
     Each row of the chain has the effect's switch. Clicking a row shows its effect,
     dragging it up or down moves the effect along the chain, as one undoable step.
+    The waveshaper's panel also edits its drawn transfer curve.
 
-    @see SynthEffectsParameters, SynthEffectChain
+    @see SynthEffectsParameters, SynthEffectChain, SynthCurveState::getShaper()
 */
 class SynthEffectsPage : public yup::Component
 {
 public:
-    SynthEffectsPage (const SynthEffectsParameters& parametersToEdit, SynthEffectChain& chainToEdit);
+    SynthEffectsPage (const SynthEffectsParameters& parametersToEdit,
+                      SynthEffectChain& chainToEdit,
+                      SynthCurveState& curvesToEdit,
+                      std::shared_ptr<SynthWaveformShader> landscapeShader);
     ~SynthEffectsPage() override;
 
     /** Shows changes made by the host, a preset, a state load or an undo. */
@@ -65,6 +70,9 @@ private:
 
     const SynthEffectsParameters& parameters;
     SynthEffectChain& chain;
+    SynthCurveState& curves;
+    EnvelopeDisplay shaperEditor;
+    int shownCurveGeneration = -1;
     SynthEffectOrder shownOrder, orderBeforeDrag;
     SynthEffectType selected = SynthEffectType::chorus;
     std::array<std::unique_ptr<ParameterLed>, SynthExample::effectCount> leds;

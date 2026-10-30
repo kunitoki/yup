@@ -25,6 +25,7 @@
 
 #include "../dsp/SynthCurveState.h"
 #include "../dsp/SynthLFOParameters.h"
+#include "SynthLandscape.h"
 #include "SynthTimeGrid.h"
 
 //==============================================================================
@@ -32,11 +33,14 @@
     phase, over a grid of one period's time, upside down when the LFO is inverted.
 
     Random shapes show several periods that scroll by one, with a new random value, each
-    time the playing phase wraps; the marker runs through the newest one. */
+    time the playing phase wraps; the marker runs through the newest one.
+
+    With landscape displays on, the shape is the ridge of a shader landscape, which the
+    marker lights as it runs. */
 class LFODisplay : public yup::Component
 {
 public:
-    LFODisplay();
+    explicit LFODisplay (std::shared_ptr<SynthWaveformShader> landscapeShader);
 
     /** Updates the drawn shape. Called from the message thread. */
     void setValues (const SynthLFOValues& newValues);
@@ -54,12 +58,19 @@ public:
     /** Sets how one period's time reads, for the grid. */
     void setTiming (const SynthTimeGrid::Timing& newTiming);
 
+    /** Lets the landscape move, while something plays. */
+    void setAnimating (bool shouldAnimate) noexcept { landscape.setAnimating (shouldAnimate); }
+
     void paint (yup::Graphics& g) override;
+    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void mouseEnter (const yup::MouseEvent& event) override;
+    void mouseExit (const yup::MouseEvent& event) override;
 
 private:
     static constexpr int points = 128;
     static constexpr int randomPeriods = 4;
     static constexpr yup::uint32 displaySeed = 1;
+    static constexpr float trailWidth = 90.0f;
 
     bool isRandom() const;
     int getPeriods() const;
@@ -75,4 +86,6 @@ private:
     std::vector<float> samples;
     yup::Path path;
     yup::Font gridFont;
+    SynthLandscape landscape;
+    bool hovered = false;
 };

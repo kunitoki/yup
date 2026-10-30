@@ -23,11 +23,13 @@
 #include "SynthUndoHistory.h"
 
 #include <algorithm>
+#include <iterator>
 
-SynthFilterResponse::SynthFilterResponse (const SynthFilterParameters& parametersToShow)
+SynthFilterResponse::SynthFilterResponse (const SynthFilterParameters& parametersToShow, std::shared_ptr<SynthWaveformShader> landscapeShader)
     : parameters (parametersToShow)
     , cutoffGesture (*this, parametersToShow.cutoff)
     , resonanceGesture (*this, parametersToShow.resonance)
+    , landscape (std::move (landscapeShader))
 {
     labelFont = SynthTheme::captionFont (10.5f);
 
@@ -213,7 +215,33 @@ std::vector<yup::Point<float>> SynthFilterResponse::getCurveVertices() const
 void SynthFilterResponse::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
-    SynthTheme::paintWell (g, *this, bounds);
+    const auto vertices = shownValues.enabled ? getCurveVertices() : std::vector<yup::Point<float>>();
+
+    if (! vertices.empty() && SynthLandscape::isEnabled())
+    {
+        landscape.setProfile (bounds.getWidth(), bounds.getHeight(), [&vertices] (float x)
+        {
+            const auto next = std::lower_bound (vertices.begin(), vertices.end(), x, [] (const auto& vertex, float position)
+            {
+                return vertex.getX() < position;
+            });
+
+            if (next == vertices.begin())
+                return next->getY();
+
+            if (next == vertices.end())
+                return vertices.back().getY();
+
+            const auto& previous = *std::prev (next);
+            const auto span = next->getX() - previous.getX();
+            return span > 0.0f ? yup::jmap (x, previous.getX(), next->getX(), previous.getY(), next->getY()) : next->getY();
+        });
+    }
+
+    const auto onLandscape = ! vertices.empty() && landscape.paint (g, *this, bounds, SynthTheme::accent (*this));
+
+    if (! onLandscape)
+        SynthTheme::paintWell (g, *this, bounds);
 
     const auto gridColor = SynthTheme::textPrimary (*this).withAlpha (0.06f);
 
@@ -229,44 +257,56 @@ void SynthFilterResponse::paint (yup::Graphics& g)
     g.setFillColor (gridColor);
     g.fillRect (0.0f, decibelsToY (0.0f), bounds.getWidth(), 1.0f);
 
-    if (! shownValues.enabled)
+    if (vertices.empty())
         return;
 
-    const auto vertices = getCurveVertices();
-
-    // Paths share their data when copied, so the curve and the area under it are built apart.
-    yup::Path curve;
-    yup::Path area;
-    area.moveTo (0.0f, bounds.getHeight());
-
-    for (const auto& vertex : vertices)
+    // The landscape's ridge already traces the curve.
+    if (! onLandscape)
     {
-        if (curve.isEmpty())
-            curve.moveTo (vertex);
-        else
-            curve.lineTo (vertex);
+        // Paths share their data when copied, so the curve and the area under it are built apart.
+        yup::Path curve;
+        yup::Path area;
+        area.moveTo (0.0f, bounds.getHeight());
 
-        area.lineTo (vertex);
+        for (const auto& vertex : vertices)
+        {
+            if (curve.isEmpty())
+                curve.moveTo (vertex);
+            else
+                curve.lineTo (vertex);
+
+            area.lineTo (vertex);
+        }
+
+        area.lineTo (bounds.getWidth(), bounds.getHeight());
+        area.lineTo (0.0f, bounds.getHeight());
+        area.closeSubPath();
+
+        g.setFillColor (SynthTheme::accent (*this).withAlpha (0.14f));
+        g.fillPath (area);
+
+        // A narrow peak turns the curve almost back on itself, where a miter would spike out.
+        g.setStrokeColor (SynthTheme::accent (*this));
+        g.setStrokeWidth (2.0f);
+        g.setStrokeJoin (yup::StrokeJoin::Round);
+        g.strokePath (curve);
     }
 
-    area.lineTo (bounds.getWidth(), bounds.getHeight());
-    area.lineTo (0.0f, bounds.getHeight());
-    area.closeSubPath();
-
-    g.setFillColor (SynthTheme::accent (*this).withAlpha (0.14f));
-    g.fillPath (area);
-
-    // A narrow peak turns the curve almost back on itself, where a miter would spike out.
-    g.setStrokeColor (SynthTheme::accent (*this));
-    g.setStrokeWidth (2.0f);
-    g.setStrokeJoin (yup::StrokeJoin::Round);
-    g.strokePath (curve);
+    // Over the landscape the handle only shows under the mouse, or while it is dragged.
+    if (onLandscape && ! hovered && ! cutoffGesture.isActive())
+        return;
 
     const auto cutoff = yup::jlimit (minimumFrequency, maximumFrequency, shownValues.cutoff);
     const auto handle = yup::Point<float> (frequencyToX (cutoff), decibelsToY (getDecibelsAt (cutoff)));
 
     g.setFillColor (SynthTheme::textPrimary (*this));
     g.fillEllipse ({ handle.getX() - 5.0f, handle.getY() - 5.0f, 10.0f, 10.0f });
+}
+
+void SynthFilterResponse::refreshDisplay (double lastFrameTimeSeconds)
+{
+    if (isShowing() && landscape.advance (lastFrameTimeSeconds))
+        repaint();
 }
 
 void SynthFilterResponse::mouseDown (const yup::MouseEvent&)
@@ -295,4 +335,17 @@ void SynthFilterResponse::mouseUp (const yup::MouseEvent&)
     SynthUndoHistory::beginStep (*this);
     cutoffGesture.end (true);
     resonanceGesture.end (true);
+    repaint();
+}
+
+void SynthFilterResponse::mouseEnter (const yup::MouseEvent&)
+{
+    hovered = true;
+    repaint();
+}
+
+void SynthFilterResponse::mouseExit (const yup::MouseEvent&)
+{
+    hovered = false;
+    repaint();
 }

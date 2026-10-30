@@ -23,10 +23,14 @@
 #include "SynthTheme.h"
 #include "SynthUndoHistory.h"
 
-SynthEnvelopePanel::SynthEnvelopePanel (const SynthEnvelopeParameters& parametersToEdit, SynthCurveState& curvesToEdit, int envelopeIndex)
+SynthEnvelopePanel::SynthEnvelopePanel (const SynthEnvelopeParameters& parametersToEdit,
+                                        SynthCurveState& curvesToEdit,
+                                        int envelopeIndex,
+                                        std::shared_ptr<SynthWaveformShader> landscapeShader)
     : parameters (parametersToEdit)
     , curves (curvesToEdit)
     , index (envelopeIndex)
+    , display (std::move (landscapeShader))
     , syncLed (parametersToEdit.tempoSync, "Sync")
     , handle (static_cast<SynthModulationSource> (static_cast<int> (SynthModulationSource::env1) + envelopeIndex))
     , attackKnob ("ATK", parametersToEdit.attack, SynthTheme::captionFont (12.0f))

@@ -39,7 +39,8 @@ enum class SynthEffectType
     distortion,
     equalizer,
     compressor,
-    surround
+    surround,
+    waveshaper
 };
 
 /** The effects from the first to process to the last, each present once. */
@@ -48,7 +49,7 @@ using SynthEffectOrder = std::array<SynthEffectType, SynthExample::effectCount>;
 /** @internal Display names for SynthEffectType, index aligned with the enumeration. */
 inline yup::StringArray getSynthEffectNames()
 {
-    return { "Bitcrusher", "Chorus", "Phaser", "Flanger", "Delay", "Reverb", "Distortion", "EQ", "Compressor", "Surround" };
+    return { "Bitcrusher", "Chorus", "Phaser", "Flanger", "Delay", "Reverb", "Distortion", "EQ", "Compressor", "Surround", "Waveshaper" };
 }
 
 /** How the chorus moves: free controls, or the fixed settings of the Juno-60 buttons. */
@@ -228,6 +229,17 @@ struct SynthSurroundValues
     bool operator== (const SynthSurroundValues&) const = default;
 };
 
+/** A plain snapshot of the waveshaper; its transfer curve is patch state, see SynthCurveState. */
+struct SynthWaveshaperValues
+{
+    float driveDb = 0.0f;  /**< Gain into the curve. */
+    float bias = 0.0f;     /**< Bipolar offset before the curve, for even harmonics. */
+    float outputDb = 0.0f; /**< Gain after the curve. */
+    float mix = 1.0f;
+
+    bool operator== (const SynthWaveshaperValues&) const = default;
+};
+
 /** A plain snapshot of every effect's controls; the chain order is SynthEffectChain's. */
 struct SynthEffectsValues
 {
@@ -243,6 +255,7 @@ struct SynthEffectsValues
     SynthEqualizerValues equalizer;
     SynthCompressorValues compressor;
     SynthSurroundValues surround;
+    SynthWaveshaperValues waveshaper;
 
     bool operator== (const SynthEffectsValues&) const = default;
 
@@ -328,6 +341,11 @@ public:
         yup::AudioParameter::Ptr width, depth, time, monoBelow, mix;
     };
 
+    struct Waveshaper
+    {
+        yup::AudioParameter::Ptr drive, bias, output, mix;
+    };
+
     std::array<yup::AudioParameter::Ptr, SynthExample::effectCount> enabled;
 
     Bitcrusher bitcrusher;
@@ -340,4 +358,5 @@ public:
     Equalizer equalizer;
     Compressor compressor;
     Surround surround;
+    Waveshaper waveshaper;
 };

@@ -39,12 +39,19 @@ void SynthNumberField::setParameter (yup::AudioParameter::Ptr newParameter)
         return;
 
     gesture.setParameter (std::move (newParameter));
+    shownValue.reset();
     syncFromParameter();
 }
 
 bool SynthNumberField::syncFromParameter()
 {
-    const auto text = gesture.getParameter()->toString();
+    const auto& parameter = gesture.getParameter();
+
+    // Formatting is costly at the interface rate, so only a new value is formatted.
+    if (const auto value = parameter->getValue(); std::exchange (shownValue, value) == value)
+        return false;
+
+    const auto text = parameter->toString();
 
     if (text == shownText)
         return false;

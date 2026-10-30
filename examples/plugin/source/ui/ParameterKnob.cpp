@@ -95,7 +95,8 @@ bool ParameterKnob::syncFromParameter()
 {
     const auto normalized = static_cast<double> (parameter->getNormalizedValue());
 
-    if (captionShowsValue && label.getText() != parameter->toString())
+    // Formatting is costly at the interface rate, so only a new value is formatted.
+    if (const auto value = parameter->getValue(); captionShowsValue && std::exchange (captionValue, value) != value)
         label.setText (parameter->toString(), yup::dontSendNotification);
     if (gesture.isActive() || std::abs (slider.getValue() - normalized) < 1.0e-6)
         return false;

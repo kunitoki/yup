@@ -43,9 +43,9 @@ std::vector<std::pair<const char*, bool*>> getSwitches (Values& values)
 {
     auto& neon = values.neon;
 
-    return { { "undo", &values.undo }, { "postEffect", &values.postEffect }, { "glow", &neon.glow }, { "aberration", &neon.aberration },
+    return { { "undo", &values.undo }, { "postEffect", &values.postEffect }, { "landscapes", &values.landscapes }, { "glow", &neon.glow }, { "aberration", &neon.aberration },
              { "grade", &neon.grade }, { "scanlines", &neon.scanlines }, { "vignette", &neon.vignette },
-             { "grain", &neon.grain }, { "curvature", &neon.curvature }, { "phosphor", &neon.phosphor } };
+             { "grain", &neon.grain }, { "curvature", &neon.curvature }, { "phosphor", &neon.phosphor }, { "reflection", &neon.reflection } };
 }
 
 std::unique_ptr<yup::XmlElement> readFile()

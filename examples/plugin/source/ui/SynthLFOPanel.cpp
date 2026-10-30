@@ -23,13 +23,18 @@
 #include "SynthTheme.h"
 #include "SynthUndoHistory.h"
 
-SynthLFOPanel::SynthLFOPanel (const SynthLFOParameters& parametersToEdit, SynthCurveState& curvesToEdit, int lfoIndex)
+SynthLFOPanel::SynthLFOPanel (const SynthLFOParameters& parametersToEdit,
+                              SynthCurveState& curvesToEdit,
+                              int lfoIndex,
+                              std::shared_ptr<SynthWaveformShader> landscapeShader)
     : parameters (parametersToEdit)
     , curves (curvesToEdit)
     , index (lfoIndex)
     , shownValues (parametersToEdit.read())
     , shapeSelector (parametersToEdit.shape, makeShapeSegments())
     , retriggerChoice ({}, parametersToEdit.retrigger, SynthTheme::valueFont (13.5f))
+    , display (landscapeShader)
+    , editor (landscapeShader)
     , invertLed (parametersToEdit.inverted, "Invert")
     , handle (static_cast<SynthModulationSource> (static_cast<int> (SynthModulationSource::lfo1) + lfoIndex))
     , rateKnob ("RATE", parametersToEdit.rate, SynthTheme::captionFont (12.0f))

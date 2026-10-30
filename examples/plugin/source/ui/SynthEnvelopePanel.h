@@ -44,10 +44,16 @@
 class SynthEnvelopePanel : public yup::Component
 {
 public:
-    SynthEnvelopePanel (const SynthEnvelopeParameters& parametersToEdit, SynthCurveState& curvesToEdit, int envelopeIndex);
+    SynthEnvelopePanel (const SynthEnvelopeParameters& parametersToEdit,
+                        SynthCurveState& curvesToEdit,
+                        int envelopeIndex,
+                        std::shared_ptr<SynthWaveformShader> landscapeShader);
 
     /** Shows where the most recent note is along the curve's points, or hides it when negative. */
     void setPlayhead (float position) { display.setPlayhead (position); }
+
+    /** Lets the curve's landscape move, while something plays. */
+    void setAnimating (bool shouldAnimate) noexcept { display.setAnimating (shouldAnimate); }
 
     /** Shows changes made by the host, a preset or a state load, and the curve as the
         modulated values read play it. */

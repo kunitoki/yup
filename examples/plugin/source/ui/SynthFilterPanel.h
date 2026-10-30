@@ -36,7 +36,7 @@
 class SynthFilterPanel : public yup::Component
 {
 public:
-    explicit SynthFilterPanel (const SynthFilterParameters& parametersToEdit);
+    SynthFilterPanel (const SynthFilterParameters& parametersToEdit, std::shared_ptr<SynthWaveformShader> landscapeShader);
 
     /** Shows changes made by the host, a preset or a state load.
 
@@ -47,6 +47,9 @@ public:
 
     /** Draws the response at the rate the voices play at, see SynthFilterResponse::setSampleRate(). */
     void setSampleRate (double sampleRate) { response.setSampleRate (sampleRate); }
+
+    /** Lets the response's landscape move, while something plays. */
+    void setAnimating (bool shouldAnimate) noexcept { response.setAnimating (shouldAnimate); }
 
     void resized() override;
 

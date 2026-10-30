@@ -50,8 +50,8 @@ public:
     yup::DataTree createTree() const;
 
     /** Replaces the order from an "EffectChain" tree. Unknown names are skipped and
-        effects it does not list follow in their default order, so a missing tree loads
-        the default. Message thread.
+        effects it does not list are inserted after the effect preceding them in the
+        default order, so a missing tree loads the default. Message thread.
     */
     void readFrom (const yup::DataTree& tree);
 

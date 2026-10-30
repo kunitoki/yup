@@ -94,4 +94,5 @@ private:
     std::array<Channel, 2> channels;
     yup::SmoothedValue<float> drive, bias, tone, output, mix;
     float levelCoefficient = 0.0f, dryPower = 0.0f, wetPower = 0.0f;
+    bool outputQuiet = false;
 };

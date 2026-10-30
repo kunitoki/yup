@@ -34,7 +34,7 @@ constexpr int lfoCount = 4;
 constexpr int filterCount = 2;
 constexpr int modulationSlots = 64;
 constexpr int macroCount = 8;
-constexpr int effectCount = 10;
+constexpr int effectCount = 11;
 
 /** Samples between control updates: modulation, filter targets, FM ramps and host parameter changes. */
 constexpr int controlChunk = 16;

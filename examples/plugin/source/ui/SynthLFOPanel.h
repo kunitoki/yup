@@ -42,13 +42,23 @@
 class SynthLFOPanel : public yup::Component
 {
 public:
-    SynthLFOPanel (const SynthLFOParameters& parametersToEdit, SynthCurveState& curvesToEdit, int lfoIndex);
+    SynthLFOPanel (const SynthLFOParameters& parametersToEdit,
+                   SynthCurveState& curvesToEdit,
+                   int lfoIndex,
+                   std::shared_ptr<SynthWaveformShader> landscapeShader);
 
     /** Shows changes made by the host, a preset or a state load. */
     void syncFromParameters();
 
     /** Moves the display marker to the engine's phase. */
     void setPhase (float phase);
+
+    /** Lets the shape's landscape move, while something plays. */
+    void setAnimating (bool shouldAnimate) noexcept
+    {
+        display.setAnimating (shouldAnimate);
+        editor.setAnimating (shouldAnimate);
+    }
 
     /** Follows the host's tempo and meter, for the grid and the synced rate. */
     void setTransport (const SynthTransport& newTransport);

@@ -23,15 +23,18 @@
 
 #include <ShaderBundles/SynthWaveformShaderBundle.h>
 
+float SynthWaveformShader::sampleForY (float y, float height) noexcept
+{
+    return height > 0.0f ? (height * 0.5f - y) / (height * ridgeScale) : 0.0f;
+}
+
 yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
                                                   yup::GpuTarget::Ptr& target,
                                                   int width,
                                                   int height,
                                                   const std::vector<float>& samples,
                                                   float time,
-                                                  yup::Color accent,
-                                                  yup::Color ground,
-                                                  bool isLight)
+                                                  const Look& look)
 {
     jassert (samples.size() == static_cast<std::size_t> (sampleCount));
 
@@ -44,20 +47,27 @@ yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
     if (target == nullptr)
         return nullptr;
 
+    const auto& accent = look.accent;
+    const auto& ground = look.ground;
+
     const Params params {
         time,
         static_cast<float> (width),
         static_cast<float> (height),
-        isLight ? 1.0f : 0.0f,
+        look.isLight ? 1.0f : 0.0f,
         { accent.getRedFloat(), accent.getGreenFloat(), accent.getBlueFloat(), 1.0f },
-        { ground.getRedFloat(), ground.getGreenFloat(), ground.getBlueFloat(), 1.0f }
+        { ground.getRedFloat(), ground.getGreenFloat(), ground.getBlueFloat(), 1.0f },
+        look.scrolls ? 1.0f : 0.0f,
+        look.playhead,
+        look.trail,
+        0.0f
     };
 
     auto frame = yup::GpuFrame::begin (device);
     if (! frame.isValid())
         return nullptr;
 
-    auto pass = target->beginRenderPass (frame, { true, ground });
+    auto pass = target->beginRenderPass (frame, { true, look.ground });
     if (! pass.isValid())
         return nullptr;
 

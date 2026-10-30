@@ -69,7 +69,7 @@ private:
     static constexpr float logoWidth = 190.0f;
     static constexpr float iconTileSize = 46.0f;
     static constexpr float volumeWidth = 120.0f;
-    static constexpr int readoutInterval = 8;
+    static constexpr int readoutInterval = 30;
 
     void colorLogo();
 

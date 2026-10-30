@@ -30,6 +30,7 @@ SynthModulationRow::SynthModulationRow (int slotToEdit,
     : slot (slotToEdit)
     , routes (routesToEdit)
     , destinations (destinationsToOffer)
+    , depth (depthParameter)
     , depthField ({}, std::move (depthParameter), SynthSliderField::Look::bar, true)
 {
     setOpaque (false);
@@ -49,13 +50,7 @@ SynthModulationRow::SynthModulationRow (int slotToEdit,
         addAndMakeVisible (*box);
     }
 
-    removeButton.onClick = [this]
-    {
-        const auto before = readRoute();
-        routes.clearRoute (slot);
-        syncFromRoutes();
-        recordRoute (before);
-    };
+    removeButton.onClick = [this] { clear(); };
     addAndMakeVisible (removeButton);
 
     addAndMakeVisible (depthField);
@@ -90,6 +85,21 @@ void SynthModulationRow::syncFromRoutes()
     destinationBox.setSelectedId (destinationId, yup::dontSendNotification);
 }
 
+void SynthModulationRow::clear (bool joinsLastStep)
+{
+    if (! joinsLastStep)
+        SynthUndoHistory::beginStep (*this);
+
+    const auto before = readRoute();
+    routes.clearRoute (slot);
+    recordRoute (before, true);
+
+    if (depth->getValue() != depth->getDefaultValue())
+        ParameterGesture (*this, depth).setNormalized (depth->convertToNormalizedValue (depth->getDefaultValue()), true);
+
+    syncFromRoutes();
+}
+
 void SynthModulationRow::setMacroNames (const std::array<yup::String, SynthExample::macroCount>& macroNames)
 {
     // Item n is source n, and the macros come last.
@@ -120,7 +130,7 @@ SynthModulationRow::RouteState SynthModulationRow::readRoute() const
     return { static_cast<int> (route.source), route.destination, routes.getDestinationID (slot) };
 }
 
-void SynthModulationRow::recordRoute (const RouteState& before)
+void SynthModulationRow::recordRoute (const RouteState& before, bool joinsLastStep)
 {
     const auto after = readRoute();
 
@@ -133,7 +143,8 @@ void SynthModulationRow::recordRoute (const RouteState& before)
             routes.clearRoute (slot);
         else
             routes.setRoute (slot, static_cast<SynthModulationSource> (state.source), state.destinationID, state.destination);
-    });
+    },
+                                          joinsLastStep);
 }
 
 void SynthModulationRow::resized()

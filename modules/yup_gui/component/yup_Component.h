@@ -1988,6 +1988,7 @@ private:
         bool blockChildrenMouseEvents : 1;
         bool paintProfilingDisabled : 1;
         bool cachedToTexture : 1;
+        bool cachedTextureStale : 1;
         bool paintAsOffscreenRoot : 1;
         bool manuallyComposited : 1;
         bool popupContainer : 1;

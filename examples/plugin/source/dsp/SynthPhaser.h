@@ -43,10 +43,18 @@ public:
 
 private:
     static constexpr int maximumStages = 12;
+    static constexpr int controlInterval = 32;
+
+    bool isSilent (const float* left, const float* right, int numSamples) const noexcept;
+    float computeCoefficient (double channelPhase, float sweep, float frequency) const noexcept;
 
     double sampleRate = 44100.0;
     double phase = 0.0;
+    int samplesUntilUpdate = 0;
+    bool snapCoefficients = true;
     std::array<std::array<float, maximumStages>, 2> states {};
     std::array<float, 2> lastWet {};
+    std::array<float, 2> coefficients {};
+    std::array<float, 2> coefficientSteps {};
     yup::SmoothedValue<float> rate, depth, center, feedback, stereo, mix;
 };

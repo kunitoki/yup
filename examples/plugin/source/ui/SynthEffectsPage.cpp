@@ -29,7 +29,7 @@
 #include <functional>
 
 //==============================================================================
-/** One effect's controls: its name and choices on a line, its knobs in a grid below. */
+/** One effect's controls: its name and choices on a line, an optional display, its knobs in a grid below. */
 class SynthEffectsPage::EffectPanel : public yup::Component
 {
 public:
@@ -59,6 +59,18 @@ public:
         return knob;
     }
 
+    /** Places a display between the header line and the knobs, which then sit in one row. */
+    void setDisplay (yup::Component& displayToShow)
+    {
+        display = &displayToShow;
+        addAndMakeVisible (displayToShow);
+    }
+
+    void enablementChanged() override
+    {
+        repaint();
+    }
+
     void syncFromParameters()
     {
         for (auto& sync : syncs)
@@ -86,10 +98,18 @@ public:
 
         const auto count = static_cast<int> (knobs.size());
 
+        if (display != nullptr)
+        {
+            auto knobRow = bounds.removeFromBottom (count > 0 ? yup::jmin (maximumKnobHeight, bounds.getHeight() * 0.4f) : 0.0f);
+            bounds.removeFromBottom (gap);
+            display->setBounds (bounds);
+            bounds = knobRow;
+        }
+
         if (count == 0)
             return;
 
-        const auto columns = count <= 4 ? count : (count + 1) / 2;
+        const auto columns = display != nullptr || count <= 4 ? count : (count + 1) / 2;
         const auto rows = (count + columns - 1) / columns;
         const auto width = bounds.getWidth() / static_cast<float> (columns);
         const auto height = yup::jmin (maximumKnobHeight, bounds.getHeight() / static_cast<float> (rows));
@@ -107,15 +127,21 @@ private:
     static constexpr float maximumKnobHeight = 72.0f;
 
     yup::Label title;
+    yup::Component* display = nullptr;
     std::vector<std::pair<std::unique_ptr<yup::Component>, float>> headers;
     std::vector<std::function<void()>> syncs;
     std::vector<std::unique_ptr<ParameterKnob>> knobs;
 };
 
 //==============================================================================
-SynthEffectsPage::SynthEffectsPage (const SynthEffectsParameters& parametersToEdit, SynthEffectChain& chainToEdit)
+SynthEffectsPage::SynthEffectsPage (const SynthEffectsParameters& parametersToEdit,
+                                    SynthEffectChain& chainToEdit,
+                                    SynthCurveState& curvesToEdit,
+                                    std::shared_ptr<SynthWaveformShader> landscapeShader)
     : parameters (parametersToEdit)
     , chain (chainToEdit)
+    , curves (curvesToEdit)
+    , shaperEditor (std::move (landscapeShader))
     , shownOrder (chainToEdit.getOrder())
     , orderBeforeDrag (shownOrder)
 {
@@ -245,6 +271,32 @@ SynthEffectsPage::SynthEffectsPage (const SynthEffectsParameters& parametersToEd
         panel.addKnob ("MIX", p.mix);
     }
 
+    {
+        const auto& p = parameters.waveshaper;
+        auto& panel = panelFor (SynthEffectType::waveshaper);
+
+        shaperEditor.setTransfer (true);
+        shaperEditor.onCurveEdited = [this] (const SynthCurveState::Curve& curve) { curves.setShaper (curve); };
+        shaperEditor.onEditFinished = [this] (const SynthCurveState::Curve& before)
+        {
+            const auto after = curves.getShaper();
+
+            if (after == before)
+                return;
+
+            SynthUndoHistory::record<SynthCurveState::Curve> (*this, before, after, [&curves = curves] (const SynthCurveState::Curve& curve)
+            {
+                curves.setShaper (curve);
+            });
+        };
+
+        panel.setDisplay (shaperEditor);
+        panel.addKnob ("DRIVE", p.drive);
+        panel.addKnob ("BIAS", p.bias);
+        panel.addKnob ("OUTPUT", p.output);
+        panel.addKnob ("MIX", p.mix);
+    }
+
     selectEffect (selected);
     syncFromParameters();
 }
@@ -264,8 +316,17 @@ void SynthEffectsPage::syncFromParameters()
     for (auto* knob : chorusGenericKnobs)
         knob->setEnabled (values.chorus.mode == SynthChorusMode::generic);
 
-    for (auto& panel : panels)
-        panel->syncFromParameters();
+    for (std::size_t index = 0; index < panels.size(); ++index)
+    {
+        panels[index]->setEnabled (values.enabled[index]);
+        panels[index]->syncFromParameters();
+    }
+
+    if (const auto generation = curves.getGeneration(); generation != shownCurveGeneration)
+    {
+        shownCurveGeneration = generation;
+        shaperEditor.setCurve (curves.getShaper());
+    }
 
     if (const auto order = chain.getOrder(); order != shownOrder && draggedRow < 0)
     {

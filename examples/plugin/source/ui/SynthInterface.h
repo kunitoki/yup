@@ -194,6 +194,7 @@ private:
     std::vector<std::vector<SynthKnob::ModulationArc>> arcsByParameter;
     std::vector<float> modulatedValues;
     bool modulationLive = false;
+    std::optional<SynthPatch::PresetInfo> shownPresetInfo;
     int appliedFrameRate = -1;
     yup::Rectangle<float> wheelsTile;
     yup::Rectangle<float> keyboardTile;

@@ -342,9 +342,7 @@ yup::GpuTexture::Ptr WaveformEditor::renderLandscape (yup::Graphics& g)
                            yup::roundToInt (getHeight()),
                            displaySamples,
                            animationTime,
-                           SynthTheme::accent (*this),
-                           SynthTheme::wellColor (*this),
-                           ! SynthTheme::isDark (*this));
+                           { SynthTheme::accent (*this), SynthTheme::wellColor (*this), ! SynthTheme::isDark (*this) });
 }
 
 /** True while a stroke or a rotation is in progress. */

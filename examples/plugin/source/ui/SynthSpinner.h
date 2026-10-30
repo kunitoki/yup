@@ -53,6 +53,7 @@ private:
 
     ParameterGesture gesture;
     yup::String shownText;
+    std::optional<float> shownValue;
     float dragStartValue = 0.0f;
     bool dragged = false;
     yup::Font valueFont;

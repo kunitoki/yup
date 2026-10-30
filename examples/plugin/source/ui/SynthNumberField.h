@@ -66,6 +66,7 @@ private:
     ParameterGesture gesture;
     yup::String caption;
     yup::String shownText;
+    std::optional<float> shownValue;
     std::vector<SynthKnob::ModulationArc> modulationArcs;
     std::optional<float> modulatedValue;
     yup::Font captionFont;

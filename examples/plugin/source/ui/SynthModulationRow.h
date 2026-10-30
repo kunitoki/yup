@@ -61,6 +61,12 @@ public:
     /** Shows the macros under the names the patch gives them. */
     void setMacroNames (const std::array<yup::String, SynthExample::macroCount>& macroNames);
 
+    /** Removes the slot's route and returns its depth to the default.
+
+        @param joinsLastStep True to undo it together with the step recorded just before
+    */
+    void clear (bool joinsLastStep = false);
+
     /** True when the slot holds a route. */
     bool isUsed() const noexcept { return routes.getRoute (slot).isActive(); }
 
@@ -87,11 +93,12 @@ private:
 
     void writeRoute();
     RouteState readRoute() const;
-    void recordRoute (const RouteState& before);
+    void recordRoute (const RouteState& before, bool joinsLastStep = false);
 
     int slot = 0;
     SynthRoutes& routes;
     const std::vector<SynthRouteDestination>& destinations;
+    yup::AudioParameter::Ptr depth;
 
     yup::ComboBox sourceBox;
     yup::ComboBox destinationBox;

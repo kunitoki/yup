@@ -34,6 +34,7 @@ void SynthEffectsRack::prepare (double sampleRate, int maxBlockSize)
     equalizer.prepare (sampleRate);
     compressor.prepare (sampleRate);
     surround.prepare (sampleRate);
+    waveshaper.prepare (sampleRate);
 
     fadeStep = static_cast<float> (1.0 / (SynthExample::enableFadeSeconds * sampleRate));
     wetLeft.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
@@ -95,6 +96,7 @@ void SynthEffectsRack::processEffect (SynthEffectType type, float* left, float* 
         case SynthEffectType::equalizer: equalizer.process (left, right, numSamples, values.equalizer); break;
         case SynthEffectType::compressor: compressor.process (left, right, numSamples, values.compressor); break;
         case SynthEffectType::surround: surround.process (left, right, numSamples, values.surround); break;
+        case SynthEffectType::waveshaper: waveshaper.process (left, right, numSamples, values.waveshaper); break;
     }
 }
 
@@ -112,5 +114,6 @@ void SynthEffectsRack::resetEffect (SynthEffectType type) noexcept
         case SynthEffectType::equalizer: equalizer.reset(); break;
         case SynthEffectType::compressor: compressor.reset(); break;
         case SynthEffectType::surround: surround.reset(); break;
+        case SynthEffectType::waveshaper: waveshaper.reset(); break;
     }
 }

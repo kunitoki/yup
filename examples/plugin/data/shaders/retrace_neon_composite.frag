@@ -11,6 +11,8 @@
 // - scanlines: fine horizontal lines, one every three points;
 // - vignette: corners pulled down;
 // - grain: static noise that breaks banding and gives the surfaces some texture;
+// - reflection: the glass in front of the picture catching the room, a soft window
+//   highlight up left, a sheen where it curves away at the top and toward its edges;
 // - opening: the tube powering on, a dot widening into a line that opens into the
 //   picture, from 0 when off to 1 when fully on.
 layout(set = 0, binding = 0) uniform Params
@@ -28,7 +30,7 @@ layout(set = 0, binding = 0) uniform Params
     float cornerRadius;
     float pixelScale;
     float opening;
-    float pad0;
+    float reflection;
     float pad1;
     float pad2;
 } p;
@@ -109,6 +111,20 @@ void main()
 
     vec2 aspect = centered * vec2(p.width / p.height, 1.0);
     color *= 1.0 - p.vignette * smoothstep(0.35, 1.05, length(aspect));
+
+    // Screened over the picture, so the glass shows on dark areas and never clips the bright ones.
+    if (p.reflection > 0.0)
+    {
+        vec2 window = screen - vec2(-0.5, -0.7);
+        vec2 along = vec2(window.x + window.y, window.y - window.x) * 0.7071 * vec2(1.3, 3.5);
+        float highlight = exp(-dot(along, along));
+
+        float top = smoothstep(0.82, 0.98, -screen.y) * (1.0 - smoothstep(0.98, 1.0, -screen.y)) * (1.0 - screen.x * screen.x);
+        float sheen = pow(clamp(length(screen) / 1.4142, 0.0, 1.0), 3.0);
+
+        float glass = clamp((highlight + 0.7 * top + 0.5 * sheen) * p.reflection, 0.0, 1.0);
+        color = 1.0 - (1.0 - color) * (1.0 - glass * vec3(0.85, 0.9, 1.0));
+    }
 
     float noise = fract(sin(dot(floor(point), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
     color += noise * p.grain;

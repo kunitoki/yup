@@ -78,5 +78,6 @@ private:
     SynthKnob slider;
     yup::Label label;
     yup::String captionText;
+    std::optional<float> captionValue;
     bool captionShowsValue = false;
 };

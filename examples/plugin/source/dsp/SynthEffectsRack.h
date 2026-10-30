@@ -31,6 +31,7 @@
 #include "SynthPhaser.h"
 #include "SynthPlateReverb.h"
 #include "SynthSurround.h"
+#include "SynthWaveshaper.h"
 
 #include <vector>
 
@@ -55,6 +56,9 @@ public:
     /** Clears every effect's memory, cutting the tails. */
     void reset() noexcept;
 
+    /** Picks up the drawn curves the effects shape with when they changed. Audio thread, never waits. */
+    void updateCurves (const SynthCurveState& curves) noexcept { waveshaper.updateCurve (curves); }
+
     /** Processes a stereo chunk in place.
 
         @param order  The effects from first to last, see SynthEffectChain
@@ -76,6 +80,7 @@ private:
     SynthEqualizer equalizer;
     SynthCompressor compressor;
     SynthSurround surround;
+    SynthWaveshaper waveshaper;
 
     float fadeStep = 1.0f;
     std::array<float, SynthExample::effectCount> enableGains {};

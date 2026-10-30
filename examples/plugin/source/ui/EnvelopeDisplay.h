@@ -24,9 +24,11 @@
 
 #include "../dsp/SynthCurveState.h"
 #include "../dsp/SynthEnvelopeParameters.h"
+#include "SynthLandscape.h"
 #include "SynthTimeGrid.h"
 
 #include <functional>
+#include <optional>
 
 //==============================================================================
 /** Draws and edits the curve an envelope traces.
@@ -42,12 +44,15 @@
 
     A grid marks the curve's time, in seconds or in bars and beats, and dragged or added
     points snap to the chosen step unless shift is held. The same editor edits a custom
-    LFO cycle, see setCycle().
+    LFO cycle, see setCycle(), and a waveshaper's transfer curve, see setTransfer().
+
+    With landscape displays on, the curve is the ridge of a shader landscape and the
+    playhead lights it as it runs; the stroke only shows while a drag edits it.
 */
 class EnvelopeDisplay : public yup::Component
 {
 public:
-    EnvelopeDisplay();
+    explicit EnvelopeDisplay (std::shared_ptr<SynthWaveformShader> landscapeShader);
 
     /** Called with the curve after every edit. */
     std::function<void (const SynthCurveState::Curve&)> onCurveEdited;
@@ -73,6 +78,10 @@ public:
         sustain point is marked. */
     void setCycle (bool isCycle);
 
+    /** Edits a waveshaper's transfer curve: a cycle whose times read as the input from
+        -1 to 1, so no time grid is drawn and a dragged point shows its input and output. */
+    void setTransfer (bool isTransfer);
+
     /** Draws the levels upside down, as an inverted LFO plays them, without changing the curve. */
     void setInverted (bool shouldBeInverted);
 
@@ -88,7 +97,13 @@ public:
     /** Updates the drawn curve. Called from the message thread. */
     void setCurve (const SynthCurveState::Curve& newCurve);
 
+    /** Lets the landscape move, while something plays. */
+    void setAnimating (bool shouldAnimate) noexcept { landscape.setAnimating (shouldAnimate); }
+
     void paint (yup::Graphics& g) override;
+    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void mouseEnter (const yup::MouseEvent& event) override;
+    void mouseExit (const yup::MouseEvent& event) override;
     void mouseMove (const yup::MouseEvent& event) override;
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseDrag (const yup::MouseEvent& event) override;
@@ -111,6 +126,8 @@ private:
     static constexpr float trailWidth = 90.0f;
     static constexpr int stepsPerSegment = 24;
 
+    bool hovered = false;
+
     yup::Rectangle<float> getArea() const;
     float getShownLength() const;
     yup::Point<float> toScreen (float time, float level) const;
@@ -119,6 +136,8 @@ private:
     float toCurveTime (float shownTime, int segment) const;
     void updateShown();
     float snapTime (float time, const yup::MouseEvent& event) const;
+    float getLevelAt (float shownTime) const;
+    std::optional<yup::Point<float>> getPlayheadPosition() const;
     yup::Point<float> getHandle (int segment) const;
     int findPoint (yup::Point<float> position) const;
     int findHandle (yup::Point<float> position) const;
@@ -130,6 +149,7 @@ private:
     yup::Path path;
     bool amplitude = false;
     bool cycle = false;
+    bool transfer = false;
     bool inverted = false;
     SynthTimeGrid::Timing timing;
     int snapChoice = 0;
@@ -141,4 +161,5 @@ private:
     yup::Point<float> dragPosition;
     yup::Font gridFont;
     yup::Font valueFont;
+    SynthLandscape landscape;
 };

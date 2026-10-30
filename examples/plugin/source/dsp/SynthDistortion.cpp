@@ -71,6 +71,7 @@ void SynthDistortion::reset() noexcept
     }
 
     dryPower = wetPower = 0.0f;
+    outputQuiet = false;
 }
 
 float SynthDistortion::curve (SynthDistortionType type, float x) noexcept
@@ -103,6 +104,7 @@ void SynthDistortion::process (float* left, float* right, int numSamples, const 
     if (values.type != type)
     {
         type = values.type;
+        outputQuiet = false;
 
         for (auto& channel : channels)
         {
@@ -117,6 +119,20 @@ void SynthDistortion::process (float* left, float* right, int numSamples, const 
     tone.setTargetValue (values.tone);
     output.setTargetValue (yup::Decibels::decibelsToGain (values.outputDb));
     mix.setTargetValue (values.mix);
+
+    // Silence in and nothing left ringing: the filters hold still and the output stays silent.
+    // A moving bias would shift the curve's resting point, so it is followed rather than skipped.
+    if (outputQuiet && ! bias.isSmoothing()
+        && SynthEffectTools::isQuiet (left, numSamples) && SynthEffectTools::isQuiet (right, numSamples))
+    {
+        for (auto* value : { &drive, &bias, &tone, &output, &mix })
+            value->skip (numSamples);
+
+        const auto decay = std::pow (1.0f - levelCoefficient, static_cast<float> (numSamples));
+        dryPower *= decay;
+        wetPower *= decay;
+        return;
+    }
 
     // The tone follows its smoothing once per chunk; the chunks are short.
     const auto toneHz = tone.skip (numSamples);
@@ -160,4 +176,6 @@ void SynthDistortion::process (float* left, float* right, int numSamples, const 
             buffers[c][i] = dry[c] + wetAmount * (shaped - dry[c]);
         }
     }
+
+    outputQuiet = SynthEffectTools::isQuiet (left, numSamples) && SynthEffectTools::isQuiet (right, numSamples);
 }

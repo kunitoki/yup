@@ -82,7 +82,7 @@ SynthOscillatorPanel::SynthOscillatorPanel (const SynthOscillatorParameters& par
     toolsMenuButton.onClick = [this] { showToolsMenu(); };
 
     SynthTheme::styleRaisedButton (resetButton);
-    resetButton.onClick = [this] { editor.revertToPreset(); };
+    resetButton.onClick = [this] { resetShape(); };
 
     for (auto* control : std::initializer_list<yup::Component*> { &waveformChoice, &frequencyModeSelector, &pitchField, &fineField, &freeRunningLed,
                                                                   &syncModeChoice, &syncRatioField, &partialsButton, &resetButton, &levelKnob, &panKnob, &phaseKnob,
@@ -208,6 +208,23 @@ std::vector<SynthSegmented::Segment> SynthOscillatorPanel::makePartialsToolSegme
 
     // In the order of PartialsTool.
     return { { "Magnitude", magnitude }, { "Phase", phase } };
+}
+
+/** Returns the drawn partials to the waveform and every spectral modifier to its default, as one undo step. */
+void SynthOscillatorPanel::resetShape()
+{
+    SynthUndoHistory::beginStep (*this);
+    editor.revertToPreset (true);
+
+    for (auto& field : spectrum)
+    {
+        const auto& parameter = field.getModulationParameter();
+
+        if (parameter->getValue() != parameter->getDefaultValue())
+            ParameterGesture (*this, parameter).setNormalized (parameter->convertToNormalizedValue (parameter->getDefaultValue()), true);
+    }
+
+    syncFromParameters();
 }
 
 void SynthOscillatorPanel::syncFromParameters (SynthParameterReader modulated)

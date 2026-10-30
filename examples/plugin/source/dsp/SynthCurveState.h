@@ -28,7 +28,8 @@
 #include <atomic>
 
 //==============================================================================
-/** The drawn curves of every envelope and LFO: patch state, not parameters.
+/** The drawn curves of every envelope and LFO, and the waveshaper's transfer curve:
+    patch state, not parameters.
 
     The message thread edits the curves under a spin lock and bumps the generation. The
     audio thread compares the generation once per block and copies the curves with a
@@ -48,7 +49,7 @@ public:
     using EnvelopeCurves = std::array<Curve, SynthExample::envelopeCount>;
     using LFOCurves = std::array<Curve, SynthExample::lfoCount>;
 
-    /** Creates the default curves: an ADSR per envelope and a ramp per LFO. */
+    /** Creates the default curves: an ADSR per envelope, a triangle per LFO and a soft S for the waveshaper. */
     SynthCurveState();
 
     //==============================================================================
@@ -64,6 +65,15 @@ public:
     /** Replaces an LFO's custom curve and publishes it. Message thread. */
     void setLFO (int index, const Curve& curve);
 
+    /** Returns a copy of the waveshaper's transfer curve. Message thread.
+
+        Times 0 to 1 span the input from -1 to 1 and levels 0 to 1 the output from -1 to 1.
+    */
+    Curve getShaper() const;
+
+    /** Replaces the waveshaper's transfer curve and publishes it. Message thread. */
+    void setShaper (const Curve& curve);
+
     /** Bumped on every change. */
     int getGeneration() const noexcept { return generation.load(); }
 
@@ -73,6 +83,12 @@ public:
         @returns True when the curves were copied, in which case seenGeneration is updated.
     */
     bool copyIfChanged (EnvelopeCurves& envelopes, LFOCurves& lfos, int& seenGeneration) const noexcept;
+
+    /** Copies the waveshaper's curve when the generation moved since seenGeneration. Audio thread.
+
+        @returns True when the curve was copied, in which case seenGeneration is updated.
+    */
+    bool copyShaperIfChanged (Curve& shaperOut, int& seenGeneration) const noexcept;
 
     //==============================================================================
     /** Writes every curve into a "Curves" tree. */
@@ -94,6 +110,9 @@ public:
     /** Returns the default custom LFO curve, a triangle. */
     static Curve makeDefaultLFO();
 
+    /** Returns the default waveshaper curve, a soft S that saturates gently. */
+    static Curve makeDefaultShaper();
+
     /** Makes a curve safe to drive the amplitude with, see the class description. */
     static Curve sanitizeAmplitude (Curve curve);
 
@@ -101,6 +120,7 @@ private:
     mutable yup::SpinLock lock;
     EnvelopeCurves envelopes;
     LFOCurves lfos;
+    Curve shaper;
     std::atomic<int> generation { 0 };
 
     YUP_DECLARE_NON_COPYABLE (SynthCurveState)

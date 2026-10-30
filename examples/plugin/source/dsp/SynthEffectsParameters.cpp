@@ -36,7 +36,6 @@ yup::String formatMilliseconds (double value) { return SynthFormat::milliseconds
 double parseMilliseconds (const yup::String& text) { return SynthFormat::parse (text) * 1000.0; }
 
 yup::String formatBits (double value) { return yup::String (value, 1) + " bits"; }
-yup::String formatDecibels (double value) { return yup::String (value >= 0.05 ? "+" : "") + yup::String (value, 1) + " dB"; }
 yup::String formatRatio (double value) { return yup::String (value, 1) + ":1"; }
 yup::String formatQ (double value) { return yup::String (value, 2); }
 } // namespace
@@ -142,10 +141,10 @@ SynthEffectsParameters::SynthEffectsParameters()
         const auto& values = defaults.distortion;
 
         distortion.type = createChoice (id + "type", "Distortion Type", base + 1, "Distortion", getSynthDistortionTypeNames(), static_cast<int> (values.type));
-        distortion.drive = createContinuous (id + "drive", "Distortion Drive", base + 2, "Distortion", { 0.0f, 48.0f }, values.driveDb, formatDecibels);
+        distortion.drive = createContinuous (id + "drive", "Distortion Drive", base + 2, "Distortion", { 0.0f, 48.0f }, values.driveDb, SynthFormat::decibels);
         distortion.bias = createContinuous (id + "bias", "Distortion Bias", base + 3, "Distortion", { -1.0f, 1.0f }, values.bias, SynthFormat::bipolar);
         distortion.tone = createContinuous (id + "tone", "Distortion Tone", base + 4, "Distortion", skewed (500.0f, 20000.0f, 4000.0f), values.tone, SynthFormat::hertz);
-        distortion.output = createContinuous (id + "output", "Distortion Output", base + 5, "Distortion", { -24.0f, 12.0f }, values.outputDb, formatDecibels);
+        distortion.output = createContinuous (id + "output", "Distortion Output", base + 5, "Distortion", { -24.0f, 12.0f }, values.outputDb, SynthFormat::decibels);
         distortion.mix = createContinuous (id + "mix", "Distortion Mix", base + 6, "Distortion", { 0.0f, 1.0f }, values.mix, SynthFormat::percent);
     }
 
@@ -154,12 +153,12 @@ SynthEffectsParameters::SynthEffectsParameters()
         const auto base = hostBase (SynthEffectType::equalizer);
         const auto& values = defaults.equalizer;
 
-        equalizer.lowGain = createContinuous (id + "lowgain", "EQ Low Gain", base + 1, "EQ", { -18.0f, 18.0f }, values.lowGainDb, formatDecibels);
+        equalizer.lowGain = createContinuous (id + "lowgain", "EQ Low Gain", base + 1, "EQ", { -18.0f, 18.0f }, values.lowGainDb, SynthFormat::decibels);
         equalizer.lowFrequency = createContinuous (id + "lowfreq", "EQ Low Frequency", base + 2, "EQ", skewed (20.0f, 1000.0f, 150.0f), values.lowFrequency, SynthFormat::hertz);
-        equalizer.midGain = createContinuous (id + "midgain", "EQ Mid Gain", base + 3, "EQ", { -18.0f, 18.0f }, values.midGainDb, formatDecibels);
+        equalizer.midGain = createContinuous (id + "midgain", "EQ Mid Gain", base + 3, "EQ", { -18.0f, 18.0f }, values.midGainDb, SynthFormat::decibels);
         equalizer.midFrequency = createContinuous (id + "midfreq", "EQ Mid Frequency", base + 4, "EQ", skewed (100.0f, 10000.0f, 1000.0f), values.midFrequency, SynthFormat::hertz);
         equalizer.midQ = createContinuous (id + "midq", "EQ Mid Q", base + 5, "EQ", skewed (0.2f, 8.0f, 1.0f), values.midQ, formatQ);
-        equalizer.highGain = createContinuous (id + "highgain", "EQ High Gain", base + 6, "EQ", { -18.0f, 18.0f }, values.highGainDb, formatDecibels);
+        equalizer.highGain = createContinuous (id + "highgain", "EQ High Gain", base + 6, "EQ", { -18.0f, 18.0f }, values.highGainDb, SynthFormat::decibels);
         equalizer.highFrequency = createContinuous (id + "highfreq", "EQ High Frequency", base + 7, "EQ", skewed (1000.0f, 20000.0f, 5000.0f), values.highFrequency, SynthFormat::hertz);
     }
 
@@ -168,11 +167,11 @@ SynthEffectsParameters::SynthEffectsParameters()
         const auto base = hostBase (SynthEffectType::compressor);
         const auto& values = defaults.compressor;
 
-        compressor.threshold = createContinuous (id + "threshold", "Compressor Threshold", base + 1, "Compressor", { -60.0f, 0.0f }, values.thresholdDb, formatDecibels);
+        compressor.threshold = createContinuous (id + "threshold", "Compressor Threshold", base + 1, "Compressor", { -60.0f, 0.0f }, values.thresholdDb, SynthFormat::decibels);
         compressor.ratio = createContinuous (id + "ratio", "Compressor Ratio", base + 2, "Compressor", skewed (1.0f, 20.0f, 4.0f), values.ratio, formatRatio);
         compressor.attack = createContinuous (id + "attack", "Compressor Attack", base + 3, "Compressor", skewed (0.1f, 100.0f, 10.0f), values.attackMs, formatMilliseconds, parseMilliseconds);
         compressor.release = createContinuous (id + "release", "Compressor Release", base + 4, "Compressor", skewed (10.0f, 1000.0f, 150.0f), values.releaseMs, formatMilliseconds, parseMilliseconds);
-        compressor.makeup = createContinuous (id + "makeup", "Compressor Makeup", base + 5, "Compressor", { 0.0f, 24.0f }, values.makeupDb, formatDecibels);
+        compressor.makeup = createContinuous (id + "makeup", "Compressor Makeup", base + 5, "Compressor", { 0.0f, 24.0f }, values.makeupDb, SynthFormat::decibels);
         compressor.mix = createContinuous (id + "mix", "Compressor Mix", base + 6, "Compressor", { 0.0f, 1.0f }, values.mix, SynthFormat::percent);
     }
 
@@ -186,6 +185,17 @@ SynthEffectsParameters::SynthEffectsParameters()
         surround.time = createContinuous (id + "time", "Surround Time", base + 3, "Surround", { 1.0f, 30.0f }, values.timeMs, formatMilliseconds, parseMilliseconds);
         surround.monoBelow = createContinuous (id + "mono", "Surround Mono Below", base + 4, "Surround", skewed (20.0f, 500.0f, 120.0f), values.monoBelow, SynthFormat::hertz);
         surround.mix = createContinuous (id + "mix", "Surround Mix", base + 5, "Surround", { 0.0f, 1.0f }, values.mix, SynthFormat::percent);
+    }
+
+    {
+        const auto id = prefix ("waveshaper");
+        const auto base = hostBase (SynthEffectType::waveshaper);
+        const auto& values = defaults.waveshaper;
+
+        waveshaper.drive = createContinuous (id + "drive", "Waveshaper Drive", base + 1, "Waveshaper", { -12.0f, 36.0f }, values.driveDb, SynthFormat::decibels);
+        waveshaper.bias = createContinuous (id + "bias", "Waveshaper Bias", base + 2, "Waveshaper", { -1.0f, 1.0f }, values.bias, SynthFormat::bipolar);
+        waveshaper.output = createContinuous (id + "output", "Waveshaper Output", base + 3, "Waveshaper", { -24.0f, 12.0f }, values.outputDb, SynthFormat::decibels);
+        waveshaper.mix = createContinuous (id + "mix", "Waveshaper Mix", base + 4, "Waveshaper", { 0.0f, 1.0f }, values.mix, SynthFormat::percent);
     }
 }
 
@@ -207,7 +217,8 @@ std::vector<yup::AudioParameter::Ptr> SynthEffectsParameters::getParameters() co
                                            distortion.type, distortion.drive, distortion.bias, distortion.tone, distortion.output, distortion.mix,
                                            equalizer.lowGain, equalizer.lowFrequency, equalizer.midGain, equalizer.midFrequency, equalizer.midQ, equalizer.highGain, equalizer.highFrequency,
                                            compressor.threshold, compressor.ratio, compressor.attack, compressor.release, compressor.makeup, compressor.mix,
-                                           surround.width, surround.depth, surround.time, surround.monoBelow, surround.mix });
+                                           surround.width, surround.depth, surround.time, surround.monoBelow, surround.mix,
+                                           waveshaper.drive, waveshaper.bias, waveshaper.output, waveshaper.mix });
     return parameters;
 }
 
@@ -249,6 +260,8 @@ SynthEffectsValues SynthEffectsParameters::read (SynthParameterReader reader) co
                           reader (compressor.makeup), reader (compressor.mix) };
 
     values.surround = { reader (surround.width), reader (surround.depth), reader (surround.time), reader (surround.monoBelow), reader (surround.mix) };
+
+    values.waveshaper = { reader (waveshaper.drive), reader (waveshaper.bias), reader (waveshaper.output), reader (waveshaper.mix) };
 
     return values;
 }

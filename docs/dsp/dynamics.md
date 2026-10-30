@@ -66,9 +66,30 @@ domain using an IIR anti-aliasing filter, which the paper shows reduces
 aliasing more than oversampling at comparable cost. It has an **inherent
 1-sample latency**.
 
-The nonlinearity is supplied as a *traits* policy with a static `f(x)` and an
-optional `fillBreakpoints` (used for piecewise functions like hard clipping).
-`TanhClipperTraits` provides a smooth `std::tanh` policy with no breakpoints.
+The nonlinearity is supplied as a *traits* policy with an `f(x)` and an
+optional static `fillBreakpoints` (used for piecewise functions like hard
+clipping). `TanhClipperTraits` provides a smooth `std::tanh` policy with no
+breakpoints. `f` may also be a const member function: the processor holds a
+traits instance, passed to the constructor or swapped with `setTraits()`
+between samples, so a curve chosen at runtime (such as a drawn lookup table)
+can be antialiased too.
+
+```cpp
+struct TableTraits
+{
+    const float* table = nullptr; // 257 samples of f over [-1, 1]
+
+    double f (double x) const noexcept
+    {
+        const auto position = (std::clamp (x, -1.0, 1.0) + 1.0) * 128.0;
+        const auto index = std::min (static_cast<int> (position), 255);
+        return table[index] + (table[index + 1] - table[index]) * (position - index);
+    }
+};
+
+using Shaper = yup::AaIirAntialiaser<float, TableTraits>;
+Shaper shaper (Shaper::makeChebyshevTypeIIOrder10(), TableTraits { myTable });
+```
 
 Two factory presets configure the anti-aliasing filter:
 

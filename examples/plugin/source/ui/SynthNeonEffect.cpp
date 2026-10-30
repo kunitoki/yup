@@ -219,7 +219,7 @@ void SynthNeonEffect::apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::
                                     amount (options.curvature, cornerRadius),
                                     pixelScale,
                                     opening.load(),
-                                    0.0f,
+                                    amount (options.reflection, reflectionAmount),
                                     0.0f,
                                     0.0f };
 

@@ -23,7 +23,8 @@
 
 #include "../dsp/SynthFormat.h"
 
-EnvelopeDisplay::EnvelopeDisplay()
+EnvelopeDisplay::EnvelopeDisplay (std::shared_ptr<SynthWaveformShader> landscapeShader)
+    : landscape (std::move (landscapeShader))
 {
     gridFont = SynthTheme::captionFont (9.5f);
     valueFont = SynthTheme::valueFont (12.0f);
@@ -50,6 +51,12 @@ void EnvelopeDisplay::setCycle (bool isCycle)
     cycle = isCycle;
     updateShown();
     repaint();
+}
+
+void EnvelopeDisplay::setTransfer (bool isTransfer)
+{
+    transfer = isTransfer;
+    setCycle (isTransfer || cycle);
 }
 
 void EnvelopeDisplay::setStages (const SynthEnvelopeStages& newStages)
@@ -148,6 +155,46 @@ float EnvelopeDisplay::snapTime (float time, const yup::MouseEvent& event) const
     return event.getModifiers().isShiftDown() ? time : SynthTimeGrid::snap (time, timing, snapChoice);
 }
 
+float EnvelopeDisplay::getLevelAt (float shownTime) const
+{
+    for (int index = 1; index < shown.getNumPoints(); ++index)
+    {
+        const auto& from = shown.getPoint (index - 1);
+        const auto& to = shown.getPoint (index);
+
+        if (shownTime > to.time)
+            continue;
+
+        const auto t = to.time > from.time ? yup::jlimit (0.0f, 1.0f, (shownTime - from.time) / (to.time - from.time)) : 1.0f;
+        return SynthCurveState::Curve::segmentValue (from.level, to.level, to.curve, t);
+    }
+
+    return shown.getPoint (shown.getNumPoints() - 1).level;
+}
+
+/** Returns where the playhead is drawn, or nothing while it is hidden or past the shown length. */
+std::optional<yup::Point<float>> EnvelopeDisplay::getPlayheadPosition() const
+{
+    if (playhead < 0.0f)
+        return std::nullopt;
+
+    // The playhead keeps moving while a point is dragged; the time axis holds its scale
+    // then, so a playhead past the shown length is left out rather than drawn outside.
+    const auto last = shown.getNumPoints() - 1;
+    const auto index = yup::jlimit (0, last, static_cast<int> (std::floor (playhead)));
+    const auto t = index < last ? playhead - static_cast<float> (index) : 0.0f;
+    const auto& from = shown.getPoint (index);
+    const auto& to = shown.getPoint (yup::jmin (index + 1, last));
+
+    const auto position = toScreen (from.time + (to.time - from.time) * t,
+                                    SynthCurveState::Curve::segmentValue (from.level, to.level, to.curve, t));
+
+    if (position.getX() > getArea().getRight())
+        return std::nullopt;
+
+    return position;
+}
+
 yup::Point<float> EnvelopeDisplay::getHandle (int segment) const
 {
     const auto& from = shown.getPoint (segment - 1);
@@ -194,6 +241,18 @@ void EnvelopeDisplay::publish()
 }
 
 //==============================================================================
+void EnvelopeDisplay::mouseEnter (const yup::MouseEvent&)
+{
+    hovered = true;
+    repaint();
+}
+
+void EnvelopeDisplay::mouseExit (const yup::MouseEvent&)
+{
+    hovered = false;
+    repaint();
+}
+
 void EnvelopeDisplay::mouseMove (const yup::MouseEvent& event)
 {
     const auto position = event.getPosition();
@@ -319,11 +378,28 @@ void EnvelopeDisplay::mouseDoubleClick (const yup::MouseEvent& event)
 void EnvelopeDisplay::paint (yup::Graphics& g)
 {
     const auto bounds = getLocalBounds();
-    SynthTheme::paintWell (g, *this, bounds);
-
     const auto area = getArea();
+    const auto color = cycle ? SynthTheme::lfoAccent (*this) : SynthTheme::envelopeAccent (*this);
+    const auto hasCurve = area.getWidth() > 0.0f && area.getHeight() > 0.0f && shown.getNumPoints() >= 2;
+    const auto playheadPosition = hasCurve ? getPlayheadPosition() : std::nullopt;
 
-    if (area.getWidth() <= 0.0f || area.getHeight() <= 0.0f || shown.getNumPoints() < 2)
+    if (hasCurve && SynthLandscape::isEnabled())
+    {
+        landscape.setProfile (bounds.getWidth(), bounds.getHeight(), [this] (float x)
+        {
+            const auto time = toTime (x);
+            return toScreen (time, getLevelAt (time)).getY();
+        });
+
+        landscape.setPlayhead (playheadPosition.has_value() ? playheadPosition->getX() : -1.0f, trailWidth);
+    }
+
+    const auto onLandscape = hasCurve && landscape.paint (g, *this, bounds, color);
+
+    if (! onLandscape)
+        SynthTheme::paintWell (g, *this, bounds);
+
+    if (! hasCurve)
         return;
 
     const auto sustain = cycle ? -1 : curve.getSustainIndex();
@@ -332,6 +408,9 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
     {
         g.setFillColor (SynthTheme::textPrimary (*this).withAlpha (0.08f));
         g.fillRect (area.getX(), area.getCenterY(), area.getWidth(), 1.0f);
+
+        if (transfer)
+            g.fillRect (area.getCenterX(), area.getY(), 1.0f, area.getHeight());
     }
 
     const auto baseline = cycle ? area.getCenterY() : area.getBottom();
@@ -363,43 +442,32 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
         }
     }
 
-    const auto color = cycle ? SynthTheme::lfoAccent (*this) : SynthTheme::envelopeAccent (*this);
     fill.lineTo (previous.getX(), baseline);
     fill.closeSubPath();
 
-    // A cycle is a bipolar line only, an envelope fills the area under it
-    if (! cycle)
+    // A cycle is a bipolar line only, an envelope fills the area under it; the landscape
+    // shows both itself, and lights the playhead's trail.
+    if (! cycle && ! onLandscape)
     {
         g.setFillColor (color.withAlpha (0.13f));
         g.fillPath (fill);
+
+        if (playheadPosition.has_value())
+            SynthTheme::paintTrail (g, fill, playheadPosition->getX(), trailWidth, color);
     }
-
-    // The playhead keeps moving while a point is dragged; the time axis holds its scale
-    // then, so a playhead past the shown length is left out rather than drawn outside.
-    auto playheadPosition = yup::Point<float>();
-    auto playing = false;
-
-    if (playhead >= 0.0f)
-    {
-        const auto last = shown.getNumPoints() - 1;
-        const auto index = yup::jlimit (0, last, static_cast<int> (std::floor (playhead)));
-        const auto t = index < last ? playhead - static_cast<float> (index) : 0.0f;
-        const auto& from = shown.getPoint (index);
-        const auto& to = shown.getPoint (yup::jmin (index + 1, last));
-
-        playheadPosition = toScreen (from.time + (to.time - from.time) * t,
-                                     SynthCurveState::Curve::segmentValue (from.level, to.level, to.curve, t));
-        playing = playheadPosition.getX() <= area.getRight();
-    }
-
-    if (playing && ! cycle)
-        SynthTheme::paintTrail (g, fill, playheadPosition.getX(), trailWidth, color);
 
     // Keep the grid above the fill and trail.
-    SynthTimeGrid::paint (g, *this, SynthTimeGrid::getLines (timing, getShownLength(), area.getWidth()), area, gridFont, [&] (float time)
+    if (! transfer)
     {
-        return std::optional<float> (toScreen (time, 0.0f).getX());
-    });
+        SynthTimeGrid::paint (g, *this, SynthTimeGrid::getLines (timing, getShownLength(), area.getWidth()), area, gridFont, [&] (float time)
+        {
+            return std::optional<float> (toScreen (time, 0.0f).getX());
+        });
+    }
+
+    // Over the landscape the stroke and its points only show under the mouse, or follow a drag ahead of the ridge.
+    if (onLandscape && ! hovered && dragKind == DragKind::none)
+        return;
 
     g.setStrokeColor (color);
     g.setStrokeWidth (2.0f);
@@ -427,12 +495,12 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
         g.fillEllipse (center.getX() - radius, center.getY() - radius, radius * 2.0f, radius * 2.0f);
     }
 
-    if (playing)
+    if (playheadPosition.has_value() && ! onLandscape)
     {
         g.setFillColor (color.withAlpha (0.35f));
-        g.fillEllipse (playheadPosition.getX() - 7.0f, playheadPosition.getY() - 7.0f, 14.0f, 14.0f);
+        g.fillEllipse (playheadPosition->getX() - 7.0f, playheadPosition->getY() - 7.0f, 14.0f, 14.0f);
         g.setFillColor (SynthTheme::textPrimary (*this));
-        g.fillEllipse (playheadPosition.getX() - 3.5f, playheadPosition.getY() - 3.5f, 7.0f, 7.0f);
+        g.fillEllipse (playheadPosition->getX() - 3.5f, playheadPosition->getY() - 3.5f, 7.0f, 7.0f);
     }
 
     if (dragKind == DragKind::none || dragIndex < 0)
@@ -440,7 +508,8 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
 
     const auto& point = shown.getPoint (dragIndex);
     const auto level = cycle ? SynthFormat::bipolar ((inverted ? -1.0 : 1.0) * (2.0 * point.level - 1.0)) : SynthFormat::percent (point.level);
-    const auto text = dragKind == DragKind::point ? SynthTimeGrid::format (point.time, timing) + "  " + level
+    const auto position = transfer ? SynthFormat::bipolar (2.0 * point.time - 1.0) + " ->" : SynthTimeGrid::format (point.time, timing);
+    const auto text = dragKind == DragKind::point ? position + "  " + level
                                                   : "CURVE " + yup::String (point.curve, 2);
     const auto width = SynthTheme::textWidth (text, valueFont) + 14.0f;
     const auto pill = yup::Rectangle<float> (yup::jlimit (area.getX(), area.getRight() - width, dragPosition.getX() - width * 0.5f),
@@ -452,4 +521,10 @@ void EnvelopeDisplay::paint (yup::Graphics& g)
     g.fillRoundedRect (pill, 9.0f);
     g.setFillColor (SynthTheme::role (*this, yup::ThemePalette::Role::onAccent));
     g.fillFittedText (text, valueFont, pill, yup::Justification::center);
+}
+
+void EnvelopeDisplay::refreshDisplay (double lastFrameTimeSeconds)
+{
+    if (isShowing() && landscape.advance (lastFrameTimeSeconds))
+        repaint();
 }

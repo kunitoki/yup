@@ -81,7 +81,7 @@ void RetraceProcessor::prepareToPlay (const yup::AudioSpec& spec)
         parameterValues[index] = playedValues[index] = parameters[index]->getValue();
 
     outputGain.reset (spec.sampleRate, 0.02);
-    outputGain.setCurrentAndTargetValue (playedValues[static_cast<std::size_t> (volumeIndex)]);
+    outputGain.setCurrentAndTargetValue (SynthParameters::volumeToGain (playedValues[static_cast<std::size_t> (volumeIndex)]));
 
     loadMeasurer.reset (spec.sampleRate, spec.maxBlockSize);
 }
@@ -171,10 +171,11 @@ void RetraceProcessor::processBlock (yup::AudioProcessContext<float>& context)
         if (audio.getNumChannels() >= 2)
         {
             const auto values = synthParameters.effects.read ({ engine.getGlobalValues (globalValues) });
+            effects.updateCurves (curves);
             effects.process (audio.getWritePointer (0, start), audio.getWritePointer (1, start), count, effectChain.getOrder(), values, bpm);
         }
 
-        outputGain.setTargetValue (playedValues[static_cast<std::size_t> (volumeIndex)]);
+        outputGain.setTargetValue (SynthParameters::volumeToGain (playedValues[static_cast<std::size_t> (volumeIndex)]));
 
         for (int sample = start; sample < start + count; ++sample)
         {

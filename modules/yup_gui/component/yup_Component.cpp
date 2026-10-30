@@ -750,7 +750,7 @@ void Component::repaint (const Rectangle<float>& rect)
 {
     jassert (! isRepainting.load (std::memory_order_relaxed)); // You are likely repainting from paint !
 
-    cachedTextureCanvas = nullptr;
+    flags.cachedTextureStale = true;
 
     if (rect.isEmpty() || ! isShowing())
         return;
@@ -2040,11 +2040,17 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         const auto scale = g.getContextScale();
         const auto pixelSize = getCanvasPixelSize (getSize(), scale);
 
-        if (! hasPixelSize (cachedTextureCanvas, pixelSize))
-        {
-            cachedTextureCanvas = nullptr;
+        const auto sizeMatches = hasPixelSize (cachedTextureCanvas, pixelSize);
 
-            auto canvas = GpuCanvas::create (g.getGraphicsContext(), pixelSize.getWidth(), pixelSize.getHeight());
+        if (! sizeMatches || flags.cachedTextureStale)
+        {
+            // A stale canvas of the right size is drawn over again, sparing a new GPU target.
+            auto canvas = sizeMatches ? std::move (cachedTextureCanvas)
+                                      : GpuCanvas::create (g.getGraphicsContext(), pixelSize.getWidth(), pixelSize.getHeight());
+
+            cachedTextureCanvas = nullptr;
+            flags.cachedTextureStale = false;
+
             if (canvas != nullptr)
             {
                 auto& offscreenG = canvas->beginDraw ({}, scale);

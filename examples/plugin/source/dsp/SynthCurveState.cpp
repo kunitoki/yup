@@ -25,6 +25,7 @@ namespace
 {
 const yup::Identifier envelopeType ("Envelope");
 const yup::Identifier lfoType ("LFO");
+const yup::Identifier shaperType ("Shaper");
 const yup::Identifier indexProperty ("index");
 const yup::Identifier pointsProperty ("points");
 const yup::Identifier sustainProperty ("sustain");
@@ -87,6 +88,8 @@ SynthCurveState::SynthCurveState()
 
     for (auto& curve : lfos)
         curve = makeDefaultLFO();
+
+    shaper = makeDefaultShaper();
 }
 
 //==============================================================================
@@ -128,6 +131,22 @@ void SynthCurveState::setLFO (int index, const Curve& curve)
     generation.fetch_add (1);
 }
 
+SynthCurveState::Curve SynthCurveState::getShaper() const
+{
+    const yup::SpinLock::ScopedLockType scopedLock (lock);
+    return shaper;
+}
+
+void SynthCurveState::setShaper (const Curve& curve)
+{
+    {
+        const yup::SpinLock::ScopedLockType scopedLock (lock);
+        shaper = curve;
+    }
+
+    generation.fetch_add (1);
+}
+
 bool SynthCurveState::copyIfChanged (EnvelopeCurves& envelopesOut, LFOCurves& lfosOut, int& seenGeneration) const noexcept
 {
     const auto current = generation.load();
@@ -146,6 +165,23 @@ bool SynthCurveState::copyIfChanged (EnvelopeCurves& envelopesOut, LFOCurves& lf
     return true;
 }
 
+bool SynthCurveState::copyShaperIfChanged (Curve& shaperOut, int& seenGeneration) const noexcept
+{
+    const auto current = generation.load();
+
+    if (current == seenGeneration)
+        return false;
+
+    const yup::SpinLock::ScopedTryLockType scopedLock (lock);
+
+    if (! scopedLock.isLocked())
+        return false;
+
+    shaperOut = shaper;
+    seenGeneration = current;
+    return true;
+}
+
 //==============================================================================
 yup::DataTree SynthCurveState::createTree() const
 {
@@ -157,6 +193,8 @@ yup::DataTree SynthCurveState::createTree() const
 
     for (int index = 0; index < SynthExample::lfoCount; ++index)
         transaction.addChild (createCurveTree (lfoType, index, getLFO (index)));
+
+    transaction.addChild (createCurveTree (shaperType, 0, getShaper()));
 
     return tree;
 }
@@ -172,6 +210,8 @@ void SynthCurveState::readFrom (const yup::DataTree& tree)
     for (auto& curve : newLFOs)
         curve = makeDefaultLFO();
 
+    auto newShaper = makeDefaultShaper();
+
     if (tree.isValid() && tree.getType() == treeType)
     {
         for (int child = 0; child < tree.getNumChildren(); ++child)
@@ -183,6 +223,8 @@ void SynthCurveState::readFrom (const yup::DataTree& tree)
                 readCurveTree (curveTree, newEnvelopes[static_cast<std::size_t> (index)]);
             else if (curveTree.getType() == lfoType && yup::isPositiveAndBelow (index, SynthExample::lfoCount))
                 readCurveTree (curveTree, newLFOs[static_cast<std::size_t> (index)]);
+            else if (curveTree.getType() == shaperType)
+                readCurveTree (curveTree, newShaper);
         }
     }
 
@@ -192,6 +234,7 @@ void SynthCurveState::readFrom (const yup::DataTree& tree)
         const yup::SpinLock::ScopedLockType scopedLock (lock);
         envelopes = newEnvelopes;
         lfos = newLFOs;
+        shaper = newShaper;
     }
 
     generation.fetch_add (1);
@@ -223,6 +266,15 @@ SynthCurveState::Curve SynthCurveState::makeDefaultLFO()
     curve.addPoint (0.0f, 0.0f);
     curve.addPoint (0.5f, 1.0f);
     curve.addPoint (1.0f, 0.0f);
+    return curve;
+}
+
+SynthCurveState::Curve SynthCurveState::makeDefaultShaper()
+{
+    Curve curve;
+    curve.addPoint (0.0f, 0.0f);
+    curve.addPoint (0.5f, 0.5f, 0.5f);
+    curve.addPoint (1.0f, 1.0f, -0.5f);
     return curve;
 }
 

@@ -20,6 +20,8 @@
 
 #include "SynthModulationPage.h"
 #include "SynthModulationRow.h"
+#include "SynthTheme.h"
+#include "SynthUndoHistory.h"
 
 #include "../dsp/SynthPatch.h"
 
@@ -62,6 +64,12 @@ public:
             shownGeneration = generation;
             rebuildRows();
         }
+    }
+
+    void clearRoutes()
+    {
+        for (auto& row : rows)
+            row->clear (true);
     }
 
     void setMacroNames (const std::array<yup::String, SynthExample::macroCount>& macroNames)
@@ -159,6 +167,9 @@ SynthModulationPage::SynthModulationPage (const SynthParameters& parametersToEdi
     viewport.setScrollBarsShown (true, false);
     viewport.setViewedComponent (content.get());
     addAndMakeVisible (viewport);
+
+    SynthTheme::styleRaisedButton (resetButton);
+    resetButton.onClick = [this] { resetRoutes(); };
 }
 
 SynthModulationPage::~SynthModulationPage() = default;
@@ -175,6 +186,15 @@ void SynthModulationPage::syncFromParameters()
 
     if (newCount == oldCount + 1)
         viewport.scrollToShow (content->getEmptyRowBounds());
+}
+
+/** Removes every route and returns every depth to its default, as one undo step. */
+void SynthModulationPage::resetRoutes()
+{
+    SynthUndoHistory::beginStep (*this);
+    content->clearRoutes();
+    syncFromParameters();
+    viewport.setViewPosition ({ 0.0f, 0.0f });
 }
 
 void SynthModulationPage::setMacroNames (const std::array<yup::String, SynthExample::macroCount>& macroNames)

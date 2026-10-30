@@ -35,6 +35,7 @@ inline yup::String percent (double value) { return yup::String (static_cast<int>
 inline yup::String cents (double value) { return yup::String (static_cast<int> (std::round (value))) + " ct"; }
 inline yup::String octaves (double value) { return yup::String (static_cast<int> (std::round (value))) + " oct"; }
 inline yup::String milliseconds (double seconds) { return std::round (seconds * 1000.0) >= 1000.0 ? yup::String (seconds, 2) + " s" : yup::String (static_cast<int> (std::round (seconds * 1000.0))) + " ms"; }
+inline yup::String decibels (double value) { return yup::String (value >= 0.05 ? "+" : "") + yup::String (value, 1) + " dB"; }
 inline yup::String ratio (double value) { return yup::String (value, 2) + " x"; }
 inline yup::String count (double value) { return yup::String (static_cast<int> (std::round (value))); }
 inline yup::String bipolar (double value)

@@ -129,17 +129,17 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
 
     for (int index = 0; index < SynthExample::filterCount; ++index)
     {
-        filterPanels[static_cast<std::size_t> (index)] = std::make_unique<SynthFilterPanel> (parameters.filters[static_cast<std::size_t> (index)]);
+        filterPanels[static_cast<std::size_t> (index)] = std::make_unique<SynthFilterPanel> (parameters.filters[static_cast<std::size_t> (index)], waveformShader);
     }
 
     for (int index = 0; index < SynthExample::envelopeCount; ++index)
     {
-        envelopePanels[static_cast<std::size_t> (index)] = std::make_unique<SynthEnvelopePanel> (parameters.envelopes[static_cast<std::size_t> (index)], processor.getCurves(), index);
+        envelopePanels[static_cast<std::size_t> (index)] = std::make_unique<SynthEnvelopePanel> (parameters.envelopes[static_cast<std::size_t> (index)], processor.getCurves(), index, waveformShader);
     }
 
     for (int index = 0; index < SynthExample::lfoCount; ++index)
     {
-        lfoPanels[static_cast<std::size_t> (index)] = std::make_unique<SynthLFOPanel> (parameters.lfos[static_cast<std::size_t> (index)], processor.getCurves(), index);
+        lfoPanels[static_cast<std::size_t> (index)] = std::make_unique<SynthLFOPanel> (parameters.lfos[static_cast<std::size_t> (index)], processor.getCurves(), index, waveformShader);
     }
 
     const auto makeCaption = [] (const yup::String& text)
@@ -160,14 +160,14 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
 
     fmPanel = std::make_unique<SynthFMPanel> (parameters);
     modulationPage = std::make_unique<SynthModulationPage> (parameters, processor.getRoutes(), processor.getParameters());
-    effectsPage = std::make_unique<SynthEffectsPage> (parameters.effects, processor.getEffectChain());
+    effectsPage = std::make_unique<SynthEffectsPage> (parameters.effects, processor.getEffectChain(), processor.getCurves(), waveformShader);
 
     // The caption reads both grids; a strip control belongs to one tab, so each grid has its own.
     const auto gridCaption = yup::String::fromUTF8 ("ROW \xe2\x86\x90 COLUMN");
     matrixCaption = makeCaption (gridCaption);
     modulationCaption = makeCaption (gridCaption);
     matrixSection = std::make_unique<SynthSection> (std::vector<SynthSection::Tab> { { "FM", fmPanel.get(), nullptr, false, { { matrixCaption.get(), 110.0f }, { &fmPanel->getResetButton(), 60.0f }, { &fmPanel->getAlgorithmButton(), 88.0f } } },
-                                                                                     { "Mods", modulationPage.get(), nullptr, false, { { modulationCaption.get(), 110.0f } } },
+                                                                                     { "Mods", modulationPage.get(), nullptr, false, { { modulationCaption.get(), 110.0f }, { &modulationPage->getResetButton(), 60.0f } } },
                                                                                      { "EFX", effectsPage.get() } },
                                                     SynthTheme::Section::matrix);
 
@@ -574,6 +574,7 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
     constexpr int themeBase = 1000;
     constexpr int frameRateBase = 2000;
     constexpr int undoId = 3000;
+    constexpr int landscapesId = 3001;
 
     const std::pair<const char*, bool*> switches[] { { "Post Effect", &settings.postEffect },
                                                      { "Neon Glow", &neon.glow },
@@ -583,7 +584,8 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
                                                      { "Vignette", &neon.vignette },
                                                      { "Grain", &neon.grain },
                                                      { "Tube Curvature", &neon.curvature },
-                                                     { "Phosphor Mask", &neon.phosphor } };
+                                                     { "Phosphor Mask", &neon.phosphor },
+                                                     { "Glass Reflection", &neon.reflection } };
 
     auto menu = yup::PopupMenu::create (yup::PopupMenu::Options {}
                                             .withParentComponent (this)
@@ -604,6 +606,7 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
 
     menu->addSubMenu ("Frame Rate", frameRateMenu);
     menu->addItem ("Undo History", undoId, true, settings.undo);
+    menu->addItem ("Landscape Displays", landscapesId, true, settings.landscapes);
     menu->addSeparator();
 
     for (int index = 0; index < static_cast<int> (std::size (switches)); ++index)
@@ -633,6 +636,15 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
             undo = ! undo;
             SynthSettings::save();
             interface->applyUndoSetting();
+            return;
+        }
+
+        if (selectedId == landscapesId)
+        {
+            auto& landscapes = SynthSettings::get().landscapes;
+            landscapes = ! landscapes;
+            SynthSettings::save();
+            interface->repaint();
             return;
         }
 
@@ -772,6 +784,15 @@ void SynthInterface::timerCallback()
     for (auto& panel : oscillatorPanels)
         panel->setAnimating (playing);
 
+    for (auto& panel : filterPanels)
+        panel->setAnimating (playing);
+
+    for (auto& panel : envelopePanels)
+        panel->setAnimating (playing);
+
+    for (auto& panel : lfoPanels)
+        panel->setAnimating (playing);
+
     for (int index = 0; index < SynthExample::lfoCount; ++index)
         lfoPanels[static_cast<std::size_t> (index)]->setPhase (processor.getLFOPhase (index));
 
@@ -878,13 +899,16 @@ void SynthInterface::syncFromProcessor()
     effectsPage->syncFromParameters();
     macroPanel->syncFromProcessor();
 
-    const auto info = processor.getPresetInfo();
-    std::array<yup::String, SynthExample::macroCount> macroNames;
+    if (auto info = processor.getPresetInfo(); info != shownPresetInfo)
+    {
+        std::array<yup::String, SynthExample::macroCount> macroNames;
 
-    for (int macro = 0; macro < SynthExample::macroCount; ++macro)
-        macroNames[static_cast<std::size_t> (macro)] = info.getMacroName (macro);
+        for (int macro = 0; macro < SynthExample::macroCount; ++macro)
+            macroNames[static_cast<std::size_t> (macro)] = info.getMacroName (macro);
 
-    modulationPage->setMacroNames (macroNames);
+        modulationPage->setMacroNames (macroNames);
+        shownPresetInfo = std::move (info);
+    }
 
     for (auto* section : { oscillatorSection.get(), macroSection.get(), matrixSection.get(), filterSection.get(), envelopeSection.get(), lfoSection.get() })
         section->syncFromParameters();

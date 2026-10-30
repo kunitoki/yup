@@ -70,6 +70,7 @@ private:
     void showModes (const SynthOscillatorValues& values);
     void showEditingPartials (bool shouldEdit);
     void showToolsMenu();
+    void resetShape();
 
     static std::vector<SynthSegmented::Segment> makeDrawToolSegments();
     static std::vector<SynthSegmented::Segment> makePartialsToolSegments();

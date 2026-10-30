@@ -28,7 +28,8 @@
 #include <set>
 
 //==============================================================================
-/** The user's settings: the theme, the frame rate, the post effect switches, undo, and
+/** The user's settings: the theme, the frame rate, the post effect switches, landscape
+    displays, undo, and
     the preset browser's favorites, ratings and folders.
 
     They belong to the user rather than to a patch, so they are kept in a small XML file in
@@ -45,6 +46,7 @@ struct Values
     yup::String theme; /**< The theme picked last, which new instances start with. */
     int frameRate = 60; /**< Frames per second, or 0 to follow the display refresh. */
     bool postEffect = true;
+    bool landscapes = true; /**< Draws the filter, envelope and LFO curves as shader landscapes. */
     bool undo = true; /**< Keeps an undo history of edits; off forgets it. */
     SynthNeonEffect::Options neon;
     std::set<yup::String> favorites; /**< The browser keys of the favorite presets. */

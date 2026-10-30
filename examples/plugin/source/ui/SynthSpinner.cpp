@@ -33,7 +33,13 @@ SynthSpinner::SynthSpinner (yup::AudioParameter::Ptr steppedParameter)
 
 bool SynthSpinner::syncFromParameter()
 {
-    const auto text = gesture.getParameter()->toString();
+    const auto& parameter = gesture.getParameter();
+
+    // Formatting is costly at the interface rate, so only a new value is formatted.
+    if (const auto value = parameter->getValue(); std::exchange (shownValue, value) == value)
+        return false;
+
+    const auto text = parameter->toString();
 
     if (text == shownText)
         return false;

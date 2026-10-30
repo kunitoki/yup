@@ -22,6 +22,7 @@
 
 #include "../dsp/SynthFilterStage.h"
 #include "ParameterGesture.h"
+#include "SynthLandscape.h"
 
 #include <yup_gui/yup_gui.h>
 
@@ -32,14 +33,15 @@
     cutoff: dragging it sideways moves the cutoff, up and down the resonance.
 
     The curve comes from a filter stage of its own set to the filter's controls, the
-    same filters the voices play.
+    same filters the voices play. With landscape displays on, it is drawn as the ridge of
+    a shader landscape instead of a stroke.
 
     @see SynthFilterPanel, SynthFilterStage
 */
 class SynthFilterResponse : public yup::Component
 {
 public:
-    explicit SynthFilterResponse (const SynthFilterParameters& parametersToShow);
+    SynthFilterResponse (const SynthFilterParameters& parametersToShow, std::shared_ptr<SynthWaveformShader> landscapeShader);
 
     /** Redraws the curve when the filter's controls changed.
 
@@ -52,10 +54,16 @@ public:
     /** Draws the response at the rate the voices play at; ignored until it is known. */
     void setSampleRate (double newSampleRate);
 
+    /** Lets the landscape move, while something plays. */
+    void setAnimating (bool shouldAnimate) noexcept { landscape.setAnimating (shouldAnimate); }
+
     void paint (yup::Graphics& g) override;
+    void refreshDisplay (double lastFrameTimeSeconds) override;
     void mouseDown (const yup::MouseEvent& event) override;
     void mouseDrag (const yup::MouseEvent& event) override;
     void mouseUp (const yup::MouseEvent& event) override;
+    void mouseEnter (const yup::MouseEvent& event) override;
+    void mouseExit (const yup::MouseEvent& event) override;
 
 private:
     static constexpr float minimumFrequency = 20.0f;
@@ -82,4 +90,6 @@ private:
     ParameterGesture cutoffGesture;
     ParameterGesture resonanceGesture;
     yup::Font labelFont;
+    SynthLandscape landscape;
+    bool hovered = false;
 };

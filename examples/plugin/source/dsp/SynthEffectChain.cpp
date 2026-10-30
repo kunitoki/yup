@@ -40,7 +40,7 @@ SynthEffectChain::SynthEffectChain()
 SynthEffectOrder SynthEffectChain::getDefaultOrder() noexcept
 {
     using Type = SynthEffectType;
-    return { Type::distortion, Type::bitcrusher, Type::equalizer, Type::compressor, Type::chorus,
+    return { Type::distortion, Type::waveshaper, Type::bitcrusher, Type::equalizer, Type::compressor, Type::chorus,
              Type::phaser, Type::flanger, Type::delay, Type::reverb, Type::surround };
 }
 
@@ -110,8 +110,23 @@ void SynthEffectChain::readFrom (const yup::DataTree& tree)
         }
     }
 
+    // An effect the tree doesn't list, like one added after it was saved, goes right after
+    // the effect preceding it in the default order.
+    auto insertAt = chain.begin();
+
     for (const auto type : getDefaultOrder())
-        place (static_cast<int> (type));
+    {
+        auto& wasPlaced = placed[static_cast<std::size_t> (type)];
+
+        if (wasPlaced)
+        {
+            insertAt = std::next (std::find (chain.begin(), chain.end(), type));
+            continue;
+        }
+
+        wasPlaced = true;
+        insertAt = std::next (chain.insert (insertAt, type));
+    }
 
     SynthEffectOrder order {};
     std::copy (chain.begin(), chain.end(), order.begin());

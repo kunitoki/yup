@@ -33,6 +33,7 @@
 
     Shows every used route and one empty row to add the next. When they do not all fit,
     the viewport scrolls by whole rows and adding a route brings the new empty row into view.
+    A reset button, placed by the owner, clears every route as one undo step.
 
     @see SynthRoutes, SynthModulationRow
 */
@@ -50,11 +51,17 @@ public:
     /** Shows the macros under the names the patch gives them, in every row. */
     void setMacroNames (const std::array<yup::String, SynthExample::macroCount>& macroNames);
 
+    /** Returns the button that clears every route and depth, for the owner to place. */
+    yup::Component& getResetButton() noexcept { return resetButton; }
+
     void resized() override;
 
 private:
     class Content;
 
+    void resetRoutes();
+
     std::unique_ptr<Content> content;
     yup::Viewport viewport;
+    yup::TextButton resetButton { "Reset" };
 };

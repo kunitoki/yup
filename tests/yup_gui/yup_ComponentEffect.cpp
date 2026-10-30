@@ -434,9 +434,12 @@ public:
 
     void paint (Graphics& g) override
     {
+        ++paintCount;
         g.setFillColor (Color (0xff336699));
         g.fillAll();
     }
+
+    int paintCount = 0;
 };
 
 class ComponentEffectGpuTest : public ::testing::Test
@@ -643,7 +646,7 @@ TEST_F (ComponentEffectGpuTest, CachedComponentReusesTextureOnSubsequentPaints)
     EXPECT_EQ (firstCanvas.get(), ComponentHelper::getCachedTextureCanvas (*comp).get());
 }
 
-TEST_F (ComponentEffectGpuTest, RepaintInvalidatesAndRecreatesCache)
+TEST_F (ComponentEffectGpuTest, RepaintRedrawsCacheIntoSameCanvas)
 {
     if (! gpuContext)
         return;
@@ -654,14 +657,17 @@ TEST_F (ComponentEffectGpuTest, RepaintInvalidatesAndRecreatesCache)
     triggerPaintOnCanvas (*comp, 256, 256);
     auto firstCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
     ASSERT_NE (firstCanvas, nullptr);
-
-    comp->repaint();
-    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (*comp), nullptr);
+    EXPECT_EQ (comp->paintCount, 1);
 
     triggerPaintOnCanvas (*comp, 256, 256);
-    auto secondCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
-    ASSERT_NE (secondCanvas, nullptr);
-    EXPECT_NE (firstCanvas.get(), secondCanvas.get());
+    EXPECT_EQ (comp->paintCount, 1);
+
+    comp->repaint();
+    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (*comp).get(), firstCanvas.get());
+
+    triggerPaintOnCanvas (*comp, 256, 256);
+    EXPECT_EQ (comp->paintCount, 2);
+    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (*comp).get(), firstCanvas.get());
 }
 
 TEST_F (ComponentEffectGpuTest, ClearsCachedCanvasWhenEnabled)
@@ -678,33 +684,42 @@ TEST_F (ComponentEffectGpuTest, ClearsCachedCanvasWhenEnabled)
     EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
 }
 
-TEST_F (ComponentEffectGpuTest, RepaintWithRectInvalidatesCache)
+TEST_F (ComponentEffectGpuTest, RepaintWithRectRedrawsCache)
 {
-    Component comp ("test");
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 128, 128);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
 
-    auto canvas = GpuCanvas::create (*gpuContext, 64, 64);
-    ASSERT_NE (canvas, nullptr);
+    triggerPaintOnCanvas (*comp, 128, 128);
+    EXPECT_EQ (comp->paintCount, 1);
 
-    ComponentHelper::setCachedTextureCanvas (comp, canvas);
-    EXPECT_NE (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
-
-    comp.repaint (Rectangle<float> (0, 0, 10, 10));
-    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
+    comp->repaint (Rectangle<float> (0, 0, 10, 10));
+    triggerPaintOnCanvas (*comp, 128, 128);
+    EXPECT_EQ (comp->paintCount, 2);
 }
 
-TEST_F (ComponentEffectGpuTest, SetBoundsInvalidatesCache)
+TEST_F (ComponentEffectGpuTest, ResizeRecreatesCacheAtNewSize)
 {
-    Component comp ("test");
-    comp.setBounds (0, 0, 200, 200);
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 128, 128);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
 
-    auto canvas = GpuCanvas::create (*gpuContext, 64, 64);
-    ASSERT_NE (canvas, nullptr);
+    triggerPaintOnCanvas (*comp, 128, 128);
+    auto firstCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (firstCanvas, nullptr);
 
-    ComponentHelper::setCachedTextureCanvas (comp, canvas);
-    EXPECT_NE (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
+    comp->setBounds (0, 0, 256, 192);
+    triggerPaintOnCanvas (*comp, 256, 192);
 
-    comp.setBounds (10, 20, 300, 400);
-    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
+    auto secondCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (secondCanvas, nullptr);
+    EXPECT_NE (secondCanvas.get(), firstCanvas.get());
+    EXPECT_EQ (secondCanvas->getWidth(), 256);
+    EXPECT_EQ (secondCanvas->getHeight(), 192);
 }
 
 TEST_F (ComponentEffectGpuTest, DisablingCacheClearsStoredCanvas)

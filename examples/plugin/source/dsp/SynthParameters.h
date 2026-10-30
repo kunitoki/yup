@@ -70,6 +70,12 @@ public:
     /** Returns the quality the network runs at. Read when the processor prepares. */
     SynthQuality getQuality() const noexcept;
 
+    /** The lowest master volume, in decibels, which plays as silence. */
+    static constexpr float volumeFloorDb = -60.0f;
+
+    /** Converts a master volume in decibels to its linear gain, 0 at the floor. */
+    static float volumeToGain (float decibels) noexcept { return yup::Decibels::decibelsToGain (decibels, volumeFloorDb); }
+
     std::array<SynthOscillatorParameters, SynthExample::oscillatorCount> oscillators;
     SynthFMParameters fm;
     std::array<SynthFilterParameters, SynthExample::filterCount> filters;
@@ -78,7 +84,7 @@ public:
     SynthModulationParameters modulation;
     SynthEffectsParameters effects;
 
-    yup::AudioParameter::Ptr volume;        /**< Master output gain, 0 to 1. */
+    yup::AudioParameter::Ptr volume;        /**< Master output level in decibels, silent at volumeFloorDb. */
     yup::AudioParameter::Ptr playMode;      /**< A SynthPlayMode. */
     yup::AudioParameter::Ptr glide;         /**< Portamento time in milliseconds, used by mono and legato. */
     yup::AudioParameter::Ptr quality;       /**< A SynthQuality. Not automatable: it changes the latency. */

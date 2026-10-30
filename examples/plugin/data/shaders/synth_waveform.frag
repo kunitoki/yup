@@ -9,6 +9,10 @@ layout(set = 0, binding = 0) uniform Params
     float lightMode;
     vec4 accent;
     vec4 background;
+    float scrolling;
+    float playhead;
+    float trail;
+    float padding;
 } u;
 
 layout(set = 0, binding = 1) uniform Samples
@@ -19,6 +23,25 @@ layout(set = 0, binding = 1) uniform Samples
 layout(location = 0) out vec4 fragColor;
 
 const float focal = 2.8;
+
+// Lights the landscape around a playhead at a phase across the width: a bright core at the
+// head, a trail of ripples running behind it and a faint sheet of light standing up from it.
+float playheadEnergy(float phase, out float sheet)
+{
+    sheet = 0.0;
+
+    if (u.playhead < 0.0)
+        return 1.0;
+
+    float behind = u.playhead - phase;
+    float pulse = 0.8 + 0.2 * sin(u.time * 7.0);
+    float head = exp(-abs(behind) * 70.0) * pulse;
+    float ripples = 0.6 + 0.4 * sin(behind * 90.0 - u.time * 12.0);
+    float trail = behind > 0.0 ? exp(-behind / max(u.trail, 1.0e-3)) * ripples : 0.0;
+
+    sheet = exp(-abs(behind) * 260.0) * (0.6 + 0.4 * pulse);
+    return 1.0 + 7.0 * head + 2.5 * trail;
+}
 
 float fetchSample(int index)
 {
@@ -42,7 +65,6 @@ void main()
     vec3 direction = normalize(vec3(I + I - resolution, -u.height * focal));
     float frequency = u.height * focal / (8.0 * u.width);
 
-    float scroll = 0.5 + u.time * 0.01;
     float hue = u.time * 0.15;
 
     vec3 color = vec3(0.0);
@@ -55,7 +77,12 @@ void main()
         float r = max(-p.y, 0.0);
         p.y += r + r;
 
-        p.y -= wave(fract(p.x * frequency + scroll));
+        // Scrolling repeats the period sideways; otherwise the profile spans the width once.
+        float across = p.x * frequency + 0.5;
+        p.y -= wave(u.scrolling > 0.5 ? fract(across + u.time * 0.01) : clamp(across, 0.0, 1.0));
+
+        float sheet;
+        float energy = playheadEnergy(across, sheet);
 
         for (float octave = 2.0; octave < 30.0; octave += octave)
             p.y += 0.12 * cos(p.x * octave + 0.6 * u.time * cos(octave) + z) / octave;
@@ -66,7 +93,7 @@ void main()
 
         float phase = z * 0.5 + hue;
         vec3 tone = u.accent.rgb * (cos(phase) + 1.3) + u.accent.gbr * 0.15 * cos(phase + 2.0);
-        color += tone / max(d * z, 1.0e-4);
+        color += tone * energy / max(d * z, 1.0e-4) + u.accent.rgb * sheet * 3.0;
     }
 
     // Clamped because some backends expand tanh into exp ratios that turn NaN once exp overflows.

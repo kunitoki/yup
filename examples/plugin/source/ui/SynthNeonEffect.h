@@ -27,7 +27,7 @@
 //==============================================================================
 /** A synthwave finish over the whole interface, like an old tube screen: curvature in
     a bezel, neon glow, chromatic aberration, a violet color grade, scanlines, a
-    phosphor mask, a vignette and grain.
+    phosphor mask, a vignette, grain and a faint reflection on the glass.
 
     The interface is rendered to a texture by the component effect machinery. Its bright
     colors are taken at one texel per two points, colored light far more than white, and blurred
@@ -55,6 +55,7 @@ public:
         bool grain = true;
         bool curvature = true;
         bool phosphor = true;
+        bool reflection = true;
     };
 
     explicit SynthNeonEffect (Options optionsToUse);
@@ -84,6 +85,7 @@ private:
     static constexpr float curvatureAmount = 0.020f;
     static constexpr float phosphorAmount = 0.25f;
     static constexpr float cornerRadius = 0.04f;
+    static constexpr float reflectionAmount = 0.07f;
 
     float getCurvature() const noexcept { return options.curvature ? curvatureAmount : 0.0f; }
 
