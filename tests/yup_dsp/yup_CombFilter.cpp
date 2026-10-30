@@ -97,6 +97,7 @@ TEST (CombFilterTests, ResetRestoresDeterministicState)
     CombFilter<float> filter;
     filter.prepare (combSampleRate, combBlockSize);
     filter.setParameters (660.0f, 0.5f, 0.2f, combSampleRate);
+    filter.reset();
 
     std::vector<float> input (combBlockSize, 0.0f);
     std::vector<float> firstOutput (combBlockSize, 0.0f);

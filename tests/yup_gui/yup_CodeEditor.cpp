@@ -26,6 +26,21 @@
 
 using namespace yup;
 
+namespace yup
+{
+
+template <>
+class ComponentTestHelper<CodeEditor>
+{
+public:
+    static void triggerMouseWheel (Component& component, const MouseEvent& event, const MouseWheelData& wheelData)
+    {
+        component.internalMouseWheel (event, wheelData);
+    }
+};
+
+} // namespace yup
+
 namespace
 {
 
@@ -2219,7 +2234,7 @@ TEST (CodeEditorTest, MinimapMouseWheelForwardsToEditor)
 
     MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
     MouseWheelData wheelData (0.0f, -3.0f);
-    minimapComponent->mouseWheel (event, wheelData);
+    ComponentTestHelper<CodeEditor>::triggerMouseWheel (*minimapComponent, event, wheelData);
 
     EXPECT_GT (editor.getScrollOffset().getY(), 0.0f);
 }
