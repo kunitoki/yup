@@ -111,7 +111,7 @@ void SynthVoice::startNote (int midiNoteNumber, float velocity, yup::Synthesiser
         pitch.setCurrentAndTargetValue (static_cast<double> (midiNoteNumber));
 
     pitchWheelMoved (currentPitchWheelPosition);
-    currentNote = pitch.getCurrentValue();
+    currentNote = getTunedPitch (pitch.getCurrentValue(), bend.getCurrentValue());
 
     if (! preserveNote)
     {
@@ -211,8 +211,17 @@ void SynthVoice::stopNote (float, bool allowTailOff)
 
 void SynthVoice::pitchWheelMoved (int newPitchWheelValue)
 {
-    const auto normalized = (static_cast<double> (newPitchWheelValue) - 8192.0) / 8192.0;
-    bend.setTargetValue (normalized * pitchWheelRangeSemitones);
+    bend.setTargetValue (SynthTuning::normalizePitchWheel (newPitchWheelValue));
+}
+
+double SynthVoice::getTunedPitch (double key, double wheel) const noexcept
+{
+    const auto range = wheel < 0.0 ? context.bendDown : context.bendUp;
+
+    if (context.bendMode == SynthBendMode::steps)
+        return context.tuning.getPitch (key + wheel * range);
+
+    return context.tuning.getPitch (key) + wheel * range;
 }
 
 //==============================================================================
@@ -237,7 +246,7 @@ void SynthVoice::renderChunk (yup::AudioBuffer<float>& outputBuffer, int startSa
 
     if (active)
     {
-        currentNote = pitch.skip (numSamples) + bend.skip (numSamples);
+        currentNote = getTunedPitch (pitch.skip (numSamples), bend.skip (numSamples));
 
         SynthNetworkControls controls = context.network;
         DelayedControls delayed;
@@ -447,6 +456,7 @@ float SynthVoice::getSourceValue (SynthModulationSource source) const noexcept
         case SynthModulationSource::note: return yup::jlimit (-1.0f, 1.0f, static_cast<float> ((currentNote - 60.0) / 60.0));
         case SynthModulationSource::modWheel: return context.modWheel;
         case SynthModulationSource::aftertouch: return context.aftertouch;
+        case SynthModulationSource::pitchBend: return static_cast<float> (bend.getCurrentValue());
         case SynthModulationSource::random: return noteRandom;
         default: break;
     }

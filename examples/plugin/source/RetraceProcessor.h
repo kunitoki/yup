@@ -41,7 +41,7 @@ class PresetBrowseState;
 /** RETRACE, a four operator spectral FM synthesiser, as an audio plugin.
 
     Every control is an AudioParameter with a stable host ID; the drawn partials of
-    each oscillator, the envelope and LFO curves and the modulation routes are state
+    each oscillator, the envelope and LFO curves, the modulation routes and the tuning are state
     saved alongside them. Session state, factory presets and user preset files share
     one DataTree format and one apply path, SynthPatch.
 
@@ -104,6 +104,9 @@ public:
 
     /** Returns the modulation routes. */
     SynthRoutes& getRoutes() noexcept { return routes; }
+
+    /** Returns the tuning and the pitch wheel ranges. */
+    SynthTuning& getTuning() noexcept { return tuning; }
 
     /** Returns the tempo and meter the host last reported, for the editor's time grids. */
     SynthTransport getTransport() const noexcept;
@@ -222,7 +225,7 @@ public:
 private:
     //==============================================================================
     yup::Result applyState (const yup::DataTree& state, ChangeDetails details);
-    SynthPatch::State getPatchState() noexcept { return { partials, curves, routes, effectChain }; }
+    SynthPatch::State getPatchState() noexcept { return { partials, curves, routes, effectChain, tuning }; }
     void prepareEngine (SynthQuality quality);
 
     void parameterValueChanged (const yup::AudioParameter::Ptr& parameter, int indexInContainer) override;
@@ -238,6 +241,7 @@ private:
     SynthCurveState curves;
     SynthRoutes routes;
     SynthEffectChain effectChain;
+    SynthTuning tuning;
     HarmonicSynthEngine engine;
     SynthEffectsRack effects;
     std::array<yup::SoftClipper<float>, 2> masterClippers;

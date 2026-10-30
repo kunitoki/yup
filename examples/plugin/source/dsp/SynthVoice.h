@@ -65,7 +65,7 @@ public:
     bool canPlaySound (yup::SynthesiserSound* sound) override;
 
     /** Configures the next mono transition. Legato retains the envelopes and phases.
-        Glide is measured in seconds and interpolates pitch in semitones. */
+        Glide is measured in seconds and moves through the keys between, as the tuning plays them. */
     void setTransition (double seconds, bool legato) noexcept;
 
     void startNote (int midiNoteNumber, float velocity, yup::SynthesiserSound*, int currentPitchWheelPosition) override;
@@ -126,8 +126,12 @@ private:
         return 440.0 * std::pow (2.0, (midiNoteNumber - 69) / 12.0);
     }
 
+    /** Returns the pitch a key plays under the tuning, with the wheel, -1 to 1, bending it
+        by the context's ranges in semitones or in steps of the tuning. Keys may be
+        fractional while gliding. */
+    double getTunedPitch (double key, double wheel) const noexcept;
+
     //==============================================================================
-    static constexpr double pitchWheelRangeSemitones = 2.0;
 
     const SynthParameters& parameters;
     const std::array<SynthPartials, SynthExample::oscillatorCount>& partials;
@@ -160,8 +164,8 @@ private:
     int samplesSinceSpectra = 0;
     int appliedCurveGeneration = -1;
 
-    yup::SmoothedValue<double> pitch;
-    yup::SmoothedValue<double> bend;
+    yup::SmoothedValue<double> pitch; // the key, fractional while gliding
+    yup::SmoothedValue<double> bend;  // the pitch wheel, -1 to 1
     yup::AudioBuffer<float> tailBuffer;
     yup::AudioBuffer<float> tailScratch;
     yup::Random random;

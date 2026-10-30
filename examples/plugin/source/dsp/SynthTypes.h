@@ -230,6 +230,7 @@ enum class SynthModulationSource
     note,       /**< The note relative to middle C, bipolar, one unit per five octaves. */
     modWheel,   /**< MIDI controller 1, unipolar. */
     aftertouch, /**< Channel pressure, unipolar. */
+    pitchBend,  /**< The pitch wheel, bipolar. */
     random,     /**< A value drawn per note, bipolar. */
     macro1,     /**< A macro knob, unipolar. */
     macro2,
@@ -246,7 +247,7 @@ enum class SynthModulationSource
 inline yup::StringArray getSynthModulationSourceNames()
 {
     return { "ENV 1", "ENV 2", "ENV 3", "ENV 4", "LFO 1", "LFO 2", "LFO 3", "LFO 4",
-             "VELOCITY", "NOTE", "MOD WHEEL", "AFTERTOUCH", "RANDOM",
+             "VELOCITY", "NOTE", "MOD WHEEL", "AFTERTOUCH", "PITCH BEND", "RANDOM",
              "MACRO 1", "MACRO 2", "MACRO 3", "MACRO 4", "MACRO 5", "MACRO 6", "MACRO 7", "MACRO 8" };
 }
 
@@ -257,7 +258,7 @@ inline yup::StringArray getSynthModulationSourceNames()
 inline yup::StringArray getSynthModulationSourceShortNames()
 {
     return { "ENV1", "ENV2", "ENV3", "ENV4", "LFO1", "LFO2", "LFO3", "LFO4",
-             "VELO", "NOTE", "MOD", "AFTT", "RAND",
+             "VELO", "NOTE", "MOD", "AFTT", "PB", "RAND",
              "MAC1", "MAC2", "MAC3", "MAC4", "MAC5", "MAC6", "MAC7", "MAC8" };
 }
 
@@ -266,6 +267,7 @@ constexpr bool isBipolarSource (SynthModulationSource source) noexcept
 {
     return (source >= SynthModulationSource::lfo1 && source <= SynthModulationSource::lfo4)
         || source == SynthModulationSource::note
+        || source == SynthModulationSource::pitchBend
         || source == SynthModulationSource::random;
 }
 

@@ -30,6 +30,37 @@ building blocks now have their own dedicated
 - **Plugins** - hosting third-party plugins (`yup_audio_plugin_host`) and
   wrapping your own as CLAP / VST3 (`yup_audio_plugin_client`).
 
+## Microtuning
+
+`TuningMap` (`yup_audio_basics`) maps MIDI notes to frequencies under any
+tuning, ready to feed a synthesizer voice with `noteToPitch (note)`. It starts
+as 12 tone equal temperament with A4 = 440 Hz, and reads the common tuning file
+formats:
+
+- **Scala** `.scl` scales with `loadScale()`, and `.kbm` key maps, which lay the
+  scale out on the keys and set the reference pitch, with `loadKeyMap()`.
+- **AnaMark** `.tun` / `.msf` tunings with `loadTuning()`. All format versions
+  are read, including the version 2 `[Functional Tuning]` formulas and
+  `[Mapping]`. A file holding several scales gives the one assigned to the MIDI
+  channel passed in.
+
+An AnaMark tuning sets every note's frequency and replaces the scale and key
+map until the next `loadScale()` or `loadKeyMap()`. Each loader has a
+`FromString` variant for tunings kept in memory, e.g. inside a preset. A load
+that fails returns a failed `Result` and leaves the current tuning in place.
+
+```cpp
+yup::TuningMap tuning;
+
+if (auto result = tuning.loadTuning (file); result.failed())
+    showError (result.getErrorMessage());
+
+const auto frequency = tuning.noteToPitch (60); // negative if the key is unmapped
+```
+
+Loading allocates, so load on the message thread and hand the audio thread a
+copy of the frequencies rather than calling the loaders while it plays.
+
 ## MIDI device disconnection
 
 `MidiInput` and `MidiOutput` report when the device behind them goes away, for

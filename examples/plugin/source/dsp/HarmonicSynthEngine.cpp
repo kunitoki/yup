@@ -24,11 +24,13 @@
 HarmonicSynthEngine::HarmonicSynthEngine (const SynthParameters& synthParameters,
                                           const std::array<SynthPartials, SynthExample::oscillatorCount>& oscillatorPartials,
                                           const SynthRoutes& synthRoutes,
-                                          const SynthCurveState& synthCurves)
+                                          const SynthCurveState& synthCurves,
+                                          const SynthTuning& synthTuning)
     : parameters (synthParameters)
     , partials (oscillatorPartials)
     , routes (synthRoutes)
     , curves (synthCurves)
+    , tuning (synthTuning)
 {
     addSound (new SynthSound());
 
@@ -61,9 +63,11 @@ void HarmonicSynthEngine::prepare (double sampleRate, int maxBlockSize, SynthQua
             if (yup::isPositiveAndBelow (parameter->getIndexInContainer(), static_cast<int> (spectralOwner.size())))
                 spectralOwner[static_cast<std::size_t> (parameter->getIndexInContainer())] = static_cast<int> (oscillator);
 
-    // Whatever the curves are, the first block copies them.
+    // Whatever the curves and the tuning are, the first block copies them.
     context.curveGeneration = -1;
     curves.copyIfChanged (context.envelopeCurves, context.lfoCurves, context.curveGeneration);
+    context.tuningGeneration = -1;
+    tuning.copyIfChanged (context.tuning, context.tuningGeneration);
 }
 
 void HarmonicSynthEngine::renderRange (yup::AudioBuffer<float>& output,
@@ -144,6 +148,10 @@ void HarmonicSynthEngine::updateContext (yup::Span<const float> parameterValues,
     updateRoutes (reader);
 
     curves.copyIfChanged (context.envelopeCurves, context.lfoCurves, context.curveGeneration);
+    tuning.copyIfChanged (context.tuning, context.tuningGeneration);
+    context.bendDown = static_cast<double> (tuning.getBendDown());
+    context.bendUp = static_cast<double> (tuning.getBendUp());
+    context.bendMode = tuning.getBendMode();
 
     // Every voice of a slot plays the same spectrum unless a modulation is routed
     // into it, so it is derived once here rather than once per voice, and no more
@@ -238,6 +246,9 @@ float HarmonicSynthEngine::getGlobalSourceValue (SynthModulationSource source, i
     if (source == SynthModulationSource::aftertouch)
         return context.aftertouch;
 
+    if (source == SynthModulationSource::pitchBend)
+        return context.pitchBend;
+
     const auto index = static_cast<std::size_t> (slot);
     return heldSources[index] == source ? heldSourceValues[index] : 0.0f;
 }
@@ -270,6 +281,9 @@ yup::Span<const float> HarmonicSynthEngine::getGlobalValues (std::vector<float>&
 //==============================================================================
 void HarmonicSynthEngine::noteOn (int channel, int note, float velocity)
 {
+    if (! context.tuning.isMapped (note))
+        return;
+
     if (mode == SynthPlayMode::poly)
     {
         yup::Synthesiser::noteOn (channel, note, velocity);
@@ -311,6 +325,12 @@ void HarmonicSynthEngine::handleChannelPressure (int channel, int channelPressur
 {
     context.aftertouch = static_cast<float> (channelPressureValue) / 127.0f;
     yup::Synthesiser::handleChannelPressure (channel, channelPressureValue);
+}
+
+void HarmonicSynthEngine::handlePitchWheel (int channel, int wheelValue)
+{
+    context.pitchBend = static_cast<float> (SynthTuning::normalizePitchWheel (wheelValue));
+    yup::Synthesiser::handlePitchWheel (channel, wheelValue);
 }
 
 void HarmonicSynthEngine::handleController (int channel, int controller, int value)

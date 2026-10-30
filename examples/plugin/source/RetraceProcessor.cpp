@@ -35,7 +35,7 @@ const yup::Identifier presetFileProperty ("presetFile");
 RetraceProcessor::RetraceProcessor()
     : yup::AudioProcessor ("Retrace",
                            yup::AudioBusLayout ({}, { yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
-    , engine (synthParameters, partials, routes, curves)
+    , engine (synthParameters, partials, routes, curves, tuning)
 {
     PluginLogger::initialise();
 
@@ -291,10 +291,11 @@ void RetraceProcessor::randomize()
 {
     auto state = SynthPatch::createRandomState (synthParameters, yup::Random::getSystemRandom(), getPresetInfo().macroNames);
 
-    // Like the effect parameters, the chain order is the user's mix and stays as it is.
+    // Like the effect parameters, the chain order is the user's mix and stays as it is, and so does the tuning.
     {
         auto transaction = state.beginTransaction();
         transaction.addChild (effectChain.createTree());
+        transaction.addChild (tuning.createTree());
     }
 
     applyState (state, {});

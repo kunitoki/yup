@@ -34,9 +34,10 @@
     MIDI and rendering methods belong to the audio thread. The parameters are read from
     the per-chunk value table the processor passes in, the drawn partials from
     SynthPartials, whose generation tells the oscillator slots when to rebuild, and the
-    routes and curves from their patch state objects, once per block.
+    routes, curves and tuning from their patch state objects, once per block. Keys the
+    tuning leaves unmapped start no note.
 
-    @see SynthParameters, SynthPartials, SynthRoutes, SynthCurveState, RetraceProcessor
+    @see SynthParameters, SynthPartials, SynthRoutes, SynthCurveState, SynthTuning, RetraceProcessor
 */
 class HarmonicSynthEngine : public yup::Synthesiser
 {
@@ -44,7 +45,8 @@ public:
     HarmonicSynthEngine (const SynthParameters& parameters,
                          const std::array<SynthPartials, SynthExample::oscillatorCount>& partials,
                          const SynthRoutes& routes,
-                         const SynthCurveState& curves);
+                         const SynthCurveState& curves,
+                         const SynthTuning& tuning);
 
     /** Prepares every voice at a quality. Must run outside the audio callback.
 
@@ -82,6 +84,7 @@ public:
     void allNotesOff (int channel, bool tailOff) override;
     void handleController (int channel, int controller, int value) override;
     void handleChannelPressure (int channel, int channelPressureValue) override;
+    void handlePitchWheel (int channel, int wheelValue) override;
 
     /** Returns the phase of an LFO in the most recently started voice, for its display,
         or -1 when no note plays. */
@@ -103,7 +106,7 @@ public:
     /** Returns the parameter values of the last rendered range with the routes applied
         monophonically, for global processing such as the master effects.
 
-        Like a monophonic synth: macros, the mod wheel and aftertouch apply directly, while
+        Like a monophonic synth: macros, the wheels and aftertouch apply directly, while
         the per-note sources (envelopes, LFOs, velocity, note, random) follow the most
         recently started voice and hold their last value once no note plays. Call it on the
         audio thread after renderRange().
@@ -154,6 +157,7 @@ private:
     const std::array<SynthPartials, SynthExample::oscillatorCount>& partials;
     const SynthRoutes& routes;
     const SynthCurveState& curves;
+    const SynthTuning& tuning;
 
     /** Per parameter index, the oscillator whose spectrum it shapes, or -1. */
     std::vector<int> spectralOwner;

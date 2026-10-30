@@ -515,6 +515,7 @@ yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters,
     builder.addChild (state.curves.createTree());
     builder.addChild (state.routes.createTree());
     builder.addChild (state.effectChain.createTree());
+    builder.addChild (state.tuning.createTree());
 
     return tree;
 }
@@ -550,6 +551,7 @@ yup::Result loadState (const yup::DataTree& tree, yup::Span<const yup::AudioPara
     state.routes.readFrom (tree.getChildWithName (SynthRoutes::treeType),
                            [parameters] (const yup::String& id) { return findRouteDestination (parameters, id); });
     state.effectChain.readFrom (tree.getChildWithName (SynthEffectChain::treeType));
+    state.tuning.readFrom (tree.getChildWithName (SynthTuning::treeType));
 
     for (auto& oscillator : state.partials)
         oscillator.bumpGeneration();

@@ -36,6 +36,7 @@
 #include "SynthHeader.h"
 #include "SynthPresetBrowser.h"
 #include "SynthFieldEditor.h"
+#include "SynthKeyboardToolbar.h"
 #include "SynthMacroPanel.h"
 #include "SynthModulationHandle.h"
 #include "SynthSection.h"
@@ -57,9 +58,10 @@
     Every control is bound to a parameter of the processor. A timer shows whatever the
     host, a preset or a state load changed, publishes the waveform editors' pending
     edits once per frame. The keyboard and wheels show and play the processor's keyboard
-    state, so the host's notes light the keys.
+    state, so the host's notes light the keys. A toolbar above the keys sets the pitch
+    wheel ranges and the tuning.
 
-    An envelope's or LFO's modulation handle dragged over the interface lights every
+    A modulation handle of an envelope, an LFO, a macro or a wheel dragged over the interface lights every
     control it can be routed into, and the one under the mouse more brightly; dropped
     there, it takes a free route slot at +25 % depth, as one undoable step.
 
@@ -142,6 +144,8 @@ private:
     static constexpr float wheelWidth = 30.0f;
     static constexpr float wheelsTileWidth = 100.0f;
     static constexpr float wheelCaptionHeight = 16.0f;
+    static constexpr float wheelHandleSize = 16.0f;
+    static constexpr float keyboardToolbarHeight = 22.0f;
     static constexpr float firstRowShare = 0.6f;
     static constexpr float filterShare = 384.0f / 790.0f;
     static constexpr float macroColumnWidth = 128.0f;
@@ -156,7 +160,9 @@ private:
     yup::MidiKeyboardComponent keyboardComponent;
     yup::PitchWheelComponent pitchWheelComponent;
     yup::ModWheelComponent modWheelComponent;
-
+    SynthModulationHandle pitchBendHandle { SynthModulationSource::pitchBend };
+    SynthModulationHandle modWheelHandle { SynthModulationSource::modWheel };
+    SynthKeyboardToolbar keyboardToolbar;
 
     SynthPage mainPage;
     std::shared_ptr<SynthWaveformShader> waveformShader = std::make_shared<SynthWaveformShader>();
@@ -191,5 +197,6 @@ private:
     int appliedFrameRate = -1;
     yup::Rectangle<float> wheelsTile;
     yup::Rectangle<float> keyboardTile;
+    yup::Rectangle<float> keysWell;
     yup::Font wheelCaptionFont;
 };

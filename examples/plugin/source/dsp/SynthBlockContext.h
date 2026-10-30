@@ -24,6 +24,7 @@
 #include "SynthCurveState.h"
 #include "SynthOperatorNetwork.h"
 #include "SynthRoutes.h"
+#include "SynthTuning.h"
 
 //==============================================================================
 /** The parameter snapshot for this control chunk, read by every voice while it renders.
@@ -58,6 +59,13 @@ struct SynthBlockContext
 
     float modWheel = 0.0f;   /**< The last controller 1 value, 0 to 1, kept across blocks. */
     float aftertouch = 0.0f; /**< The last channel pressure, 0 to 1, kept across blocks. */
+    float pitchBend = 0.0f;  /**< The last pitch wheel position, -1 to 1, kept across blocks. */
     std::array<float, SynthExample::macroCount> macros {}; /**< The macro knobs as played, 0 to 1. */
     double bpm = 0.0;        /**< The host tempo, or zero when unknown. */
+
+    SynthTuningTable tuning;
+    int tuningGeneration = 0;
+    double bendDown = 2.0; /**< How far the wheel bends down, in semitones or steps of the tuning. */
+    double bendUp = 2.0;   /**< How far the wheel bends up, in semitones or steps of the tuning. */
+    SynthBendMode bendMode = SynthBendMode::semitones;
 };

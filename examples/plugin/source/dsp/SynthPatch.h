@@ -26,18 +26,20 @@
 #include "SynthParameters.h"
 #include "SynthPartials.h"
 #include "SynthRoutes.h"
+#include "SynthTuning.h"
 
 //==============================================================================
 /** Saving, loading and generating whole patches.
 
     A patch is one DataTree: every parameter value as a property keyed by its ID, plus
     one child per oscillator holding its drawn partials, one child with the envelope and
-    LFO curves, one with the modulation routes and one with the effects chain order. Session state, user preset files,
+    LFO curves, one with the modulation routes, one with the effects chain order and one with
+    the tuning and pitch wheel ranges. Session state, user preset files,
     factory presets and randomized patches all use this format, and all of them are
     applied through loadState(), so there is a single path that changes a patch.
 
     A property that is missing from the tree loads the parameter's default, and missing
-    curves, routes or chain order load theirs, which lets a factory preset list only what it changes.
+    curves, routes, chain order or tuning load theirs, which lets a factory preset list only what it changes.
     Patches from before the four operator engine (version 1) are rejected.
 */
 namespace SynthPatch
@@ -52,6 +54,7 @@ struct State
     SynthCurveState& curves;
     SynthRoutes& routes;
     SynthEffectChain& effectChain;
+    SynthTuning& tuning;
 };
 
 /** What a patch says about itself, stored with it. Missing fields read as empty. */
@@ -89,13 +92,13 @@ bool isPatch (const yup::DataTree& state);
 /** Captures the current patch.
 
     @param parameters   The processor's parameters
-    @param state        The partials, curves, routes and effects chain order
+    @param state        The partials, curves, routes, effects chain order and tuning
     @param presetIndex  The factory preset the patch started from, or -1
     @param info         The description stored with the patch
 */
 yup::DataTree createState (yup::Span<const yup::AudioParameter::Ptr> parameters, const State& state, int presetIndex, const PresetInfo& info);
 
-/** Applies a patch: parameters by ID, then partials, curves, routes and effects order, then one
+/** Applies a patch: parameters by ID, then partials, curves, routes, effects order and tuning, then one
     generation bump per oscillator.
 
     Message thread only; the caller notifies the host afterwards.

@@ -66,13 +66,14 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
     , keyboardComponent (processor.getKeyboardState(), yup::MidiKeyboardComponent::horizontalKeyboard)
     , pitchWheelComponent (processor.getKeyboardState(), "PitchWheel")
     , modWheelComponent (processor.getKeyboardState(), "ModWheel")
+    , keyboardToolbar (processor.getTuning(), keyboardComponent)
 {
     wheelCaptionFont = SynthTheme::captionFont (10.5f);
 
     const auto& parameters = processor.getSynthParameters();
 
-    keyboardComponent.setAvailableRange (36, 84); // C2 to C6
-    keyboardComponent.setLowestVisibleKey (48);   // Start from C3
+    keyboardComponent.setAvailableRange (24, 96); // C1 to C7
+    keyboardComponent.setVisibleRange (36, 84);   // C2 to C6
     keyboardComponent.setMidiChannel (1);
     keyboardComponent.setVelocity (0.7f);
     SynthKeyboardLook::apply (keyboardComponent);
@@ -104,6 +105,12 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
     SynthKeyboardLook::apply (modWheelComponent);
     mainPage.addAndMakeVisible (pitchWheelComponent);
     mainPage.addAndMakeVisible (modWheelComponent);
+
+    for (auto* handle : { &pitchBendHandle, &modWheelHandle })
+        mainPage.addAndMakeVisible (*handle);
+
+    SynthTheme::applySection (keyboardToolbar, SynthTheme::Section::keys);
+    mainPage.addAndMakeVisible (keyboardToolbar);
 
     header = std::make_unique<SynthHeader> (processor);
     header->onSettingsRequested = [this] (yup::Point<float> position) { showSettingsMenu (getLocalPoint (header.get(), position)); };
@@ -267,12 +274,21 @@ void SynthInterface::layoutMainPage()
     keyboardTile = bottom;
 
     auto wheels = wheelsTile.reduced (12.0f, 8.0f).withTrimmedBottom (wheelCaptionHeight);
+    auto handles = wheels.removeFromTop (wheelHandleSize + 4.0f).withTrimmedBottom (4.0f);
+    pitchBendHandle.setBounds (handles.removeFromLeft (wheelWidth).withSizeKeepingCenter (wheelHandleSize, wheelHandleSize));
+    modWheelHandle.setBounds (handles.removeFromRight (wheelWidth).withSizeKeepingCenter (wheelHandleSize, wheelHandleSize));
     pitchWheelComponent.setBounds (wheels.removeFromLeft (wheelWidth));
     modWheelComponent.setBounds (wheels.removeFromRight (wheelWidth));
-    keyboardComponent.setBounds (keyboardTile.reduced (8.0f).withTrimmedTop (2.0f));
+
+    auto keys = keyboardTile.reduced (8.0f);
+    keyboardToolbar.setBounds (keys.removeFromTop (keyboardToolbarHeight));
+    keys.removeFromTop (6.0f);
+    keysWell = keys.enlarged (2.0f);
+    keyboardComponent.setBounds (keys.withTrimmedTop (2.0f));
 
     wheelsTile = wheelsTile.withPosition (wheelsTile.getPosition() + offset);
     keyboardTile = keyboardTile.withPosition (keyboardTile.getPosition() + offset);
+    keysWell = keysWell.withPosition (keysWell.getPosition() + offset);
 
     presetBrowser->setBounds (bounds);
 
@@ -318,7 +334,7 @@ void SynthInterface::paint (yup::Graphics& g)
 
     SynthTheme::paintTile (g, keyboardComponent, wheelsTile);
     SynthTheme::paintTile (g, keyboardComponent, keyboardTile);
-    SynthTheme::paintWell (g, keyboardComponent, keyboardTile.reduced (6.0f));
+    SynthTheme::paintWell (g, keyboardComponent, keysWell);
 
     const auto captions = wheelsTile.reduced (12.0f, 8.0f).withTrimmedTop (wheelsTile.getHeight() - 16.0f - wheelCaptionHeight);
     g.setFillColor (SynthTheme::textSecondary (keyboardComponent));
