@@ -80,6 +80,11 @@ public:
     /**
         Set the enabled state of the component.
 
+        A disabled component, or one inside a disabled parent, receives no key presses,
+        gestures, mouse enters, presses, moves, drags or double clicks. It still receives
+        mouse ups and exits, so an interaction started before it got disabled can finish,
+        and shows the default mouse cursor rather than its own.
+
         @param shouldBeEnabled True if the component should be enabled, false otherwise.
      */
     void setEnabled (bool shouldBeEnabled);

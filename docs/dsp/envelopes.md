@@ -60,8 +60,11 @@ points; removing a marked point clears its marker.
   envelope simply ends at zero.
 
 `setTimeScale()` multiplies every duration and keeps the progress through the
-current segment, so it can be automated. Zero-length segments are crossed
-instantly, and a loop shorter than a sample holds instead of spinning.
+current segment, so it can be automated. `setCurve()` also takes effect at once: a
+held sustain moves to the new curve's sustain level, so a sustain level can be
+modulated by handing the envelope a modified copy of its curve. Zero-length
+segments are crossed instantly, and a loop shorter than a sample holds instead
+of spinning.
 
 To show where a note is, `getPosition()` returns the time along the curve and
 `getPointPosition()` the place along its points: `2` on the third point, `1.5`

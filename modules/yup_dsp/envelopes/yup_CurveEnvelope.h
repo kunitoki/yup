@@ -97,11 +97,15 @@ public:
     /** Copies the curve to play.
 
         Taking effect immediately, a new curve keeps the current segment index and its
-        progress when that segment still exists and finishes the envelope otherwise.
+        progress when that segment still exists and finishes the envelope otherwise. A
+        held sustain moves to the new sustain level, so the level can be modulated.
     */
     void setCurve (const Curve& newCurve) noexcept
     {
         curve = newCurve;
+
+        if (stage == Stage::sustaining && segment == curve.getSustainIndex())
+            level = curve.getPoint (segment).level;
 
         if (stage != Stage::running)
             return;

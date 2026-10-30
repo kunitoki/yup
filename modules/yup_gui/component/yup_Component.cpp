@@ -169,6 +169,20 @@ void Component::setEnabled (bool shouldBeEnabled)
     //if (flags.onDesktop && native != nullptr)
     //    native->setEnabled (shouldBeEnabled);
 
+    if (auto* nativeComponent = getNativeComponent())
+    {
+        auto* hovered = nativeComponent->getPointerTarget();
+
+        for (auto* component = hovered; component != nullptr; component = component->getParentComponent())
+        {
+            if (component == this)
+            {
+                hovered->updateMouseCursor();
+                break;
+            }
+        }
+    }
+
     enablementChanged();
 }
 
@@ -2097,6 +2111,9 @@ void Component::internalMouseEnter (const MouseEvent& event)
 
     updateMouseCursor();
 
+    if (! isEnabled())
+        return;
+
     auto bailOutChecker = BailOutChecker (this);
 
     mouseEnter (event);
@@ -2135,6 +2152,9 @@ void Component::internalMouseDown (const MouseEvent& event)
 
     updateMouseCursor();
 
+    if (! isEnabled())
+        return;
+
     auto bailOutChecker = BailOutChecker (this);
 
     handleKeyboardFocusFromClick();
@@ -2159,6 +2179,9 @@ void Component::internalMouseMove (const MouseEvent& event)
 
     updateMouseCursor();
 
+    if (! isEnabled())
+        return;
+
     auto bailOutChecker = BailOutChecker (this);
 
     mouseMove (event);
@@ -2177,6 +2200,9 @@ void Component::internalMouseDrag (const MouseEvent& event)
         return;
 
     updateMouseCursor();
+
+    if (! isEnabled())
+        return;
 
     auto bailOutChecker = BailOutChecker (this);
 
@@ -2211,7 +2237,7 @@ void Component::internalMouseUp (const MouseEvent& event)
 
 void Component::internalMouseDoubleClick (const MouseEvent& event)
 {
-    if (! isVisible())
+    if (! isVisible() || ! isEnabled())
         return;
 
     auto bailOutChecker = BailOutChecker (this);
@@ -2513,7 +2539,7 @@ void Component::internalVisibilityChanged()
 
 void Component::updateMouseCursor()
 {
-    Desktop::getInstance()->setMouseCursor (mouseCursor);
+    Desktop::getInstance()->setMouseCursor (isEnabled() ? mouseCursor : MouseCursor (MouseCursor::Default));
 }
 
 //==============================================================================

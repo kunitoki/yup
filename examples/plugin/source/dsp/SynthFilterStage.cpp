@@ -91,10 +91,15 @@ void SynthFilterStage::process (float* left, float* right, int numSamples, const
         hasState = true;
     }
 
+    // Resonance glides over many chunks: it steps once per host block, and the analog
+    // models scale their output with it, so a step across a single chunk clicks.
+    const auto resonanceCoefficient = 1.0f - std::exp (static_cast<float> (-numSamples / (resonanceSmoothingSeconds * sampleRate)));
+    const auto targetResonance = resonance + (values.resonance - resonance) * resonanceCoefficient;
+
     // Cutoff ramps in octaves, the rest linearly, all from the last chunk's values.
     const auto inverse = 1.0f / static_cast<float> (numSamples);
     const auto cutoffStep = std::exp2 (std::log2 (targetCutoff / cutoff) * inverse);
-    const auto resonanceStep = (values.resonance - resonance) * inverse;
+    const auto resonanceStep = (targetResonance - resonance) * inverse;
     const auto driveStep = (values.drive - drive) * inverse;
     const auto targetMix = values.enabled ? values.mix : 0.0f;
     const auto mixStep = (targetMix - mix) * inverse;
@@ -139,7 +144,7 @@ void SynthFilterStage::process (float* left, float* right, int numSamples, const
     }
 
     cutoff = targetCutoff;
-    resonance = values.resonance;
+    resonance = targetResonance;
     drive = values.drive;
     mix = targetMix;
 }

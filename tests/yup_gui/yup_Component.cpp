@@ -2598,6 +2598,46 @@ TEST_F (ComponentTest, CursorOfComponentUnderPointerReachesTheDesktopAtOnce)
     Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
 }
 
+TEST_F (ComponentTest, DisabledComponentUnderPointerShowsTheDefaultCursor)
+{
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    native->pointerTarget = child.get();
+    root->setVisible (true);
+    parent->setVisible (true);
+    child->setVisible (true);
+    child->setMouseCursor (MouseCursor (MouseCursor::Hand));
+    child->setEnabled (false);
+
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
+
+    for (const auto trigger : { &ComponentHelper::triggerMouseEnter, &ComponentHelper::triggerMouseMove, &ComponentHelper::triggerMouseDown,
+                                &ComponentHelper::triggerMouseDrag, &ComponentHelper::triggerMouseUp, &ComponentHelper::triggerMouseExit })
+    {
+        Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Crosshair));
+        trigger (*child, event);
+        EXPECT_EQ (MouseCursor::Default, Desktop::getInstance()->getMouseCursor().getType());
+    }
+
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+}
+
+TEST_F (ComponentTest, EnablingAParentUpdatesTheCursorOfTheChildUnderPointer)
+{
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    native->pointerTarget = child.get();
+    child->setMouseCursor (MouseCursor (MouseCursor::Hand));
+
+    parent->setEnabled (false);
+    EXPECT_EQ (MouseCursor::Default, Desktop::getInstance()->getMouseCursor().getType());
+
+    parent->setEnabled (true);
+    EXPECT_EQ (MouseCursor::Hand, Desktop::getInstance()->getMouseCursor().getType());
+
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+}
+
 TEST_F (ComponentTest, CursorOfFocusedComponentAwayFromPointerLeavesTheDesktopAlone)
 {
     auto* native = new TestComponentNative (*root);
@@ -2967,6 +3007,55 @@ TEST_F (ComponentTest, InternalMouseDispatchNotifiesListeners)
     EXPECT_EQ (listener.wheels, 1);
 
     root->removeMouseListener (&listener);
+}
+
+TEST_F (ComponentTest, DisabledComponentsOnlyReceiveTheEndOfMouseInteractions)
+{
+    struct LocalMouseListener : public MouseListener
+    {
+        void mouseEnter (const MouseEvent&) override { ++enters; }
+        void mouseExit (const MouseEvent&) override { ++exits; }
+        void mouseDown (const MouseEvent&) override { ++downs; }
+        void mouseMove (const MouseEvent&) override { ++moves; }
+        void mouseDrag (const MouseEvent&) override { ++drags; }
+        void mouseUp (const MouseEvent&) override { ++ups; }
+        void mouseDoubleClick (const MouseEvent&) override { ++doubleClicks; }
+
+        int enters = 0;
+        int exits = 0;
+        int downs = 0;
+        int moves = 0;
+        int drags = 0;
+        int ups = 0;
+        int doubleClicks = 0;
+    };
+
+    LocalMouseListener listener;
+    child->addMouseListener (&listener);
+    root->setVisible (true);
+    parent->setVisible (true);
+    child->setVisible (true);
+    parent->setEnabled (false);
+
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
+
+    ComponentHelper::triggerMouseEnter (*child, event);
+    ComponentHelper::triggerMouseDown (*child, event);
+    ComponentHelper::triggerMouseMove (*child, event);
+    ComponentHelper::triggerMouseDrag (*child, event);
+    ComponentHelper::triggerMouseDoubleClick (*child, event);
+    ComponentHelper::triggerMouseUp (*child, event);
+    ComponentHelper::triggerMouseExit (*child, event);
+
+    EXPECT_EQ (listener.enters, 0);
+    EXPECT_EQ (listener.downs, 0);
+    EXPECT_EQ (listener.moves, 0);
+    EXPECT_EQ (listener.drags, 0);
+    EXPECT_EQ (listener.doubleClicks, 0);
+    EXPECT_EQ (listener.ups, 1);
+    EXPECT_EQ (listener.exits, 1);
+
+    child->removeMouseListener (&listener);
 }
 
 TEST_F (ComponentTest, GesturesAreNotWantedByDefault)

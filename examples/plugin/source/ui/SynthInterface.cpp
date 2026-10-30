@@ -45,6 +45,18 @@ void collectModulationTargets (yup::Component& component, std::vector<SynthModul
     }
 }
 
+/** True when a source swings both ways, an envelope switched to bipolar included. */
+bool isRouteBipolar (SynthModulationSource source, const SynthParameters& parameters)
+{
+    if (const auto envelope = getSourceEnvelope (source); envelope >= 0)
+    {
+        const auto& polarity = parameters.envelopes[static_cast<std::size_t> (envelope)].polarity;
+        return polarity != nullptr && polarity->getValue() > 0.5f;
+    }
+
+    return isBipolarSource (source);
+}
+
 } // namespace
 
 //==============================================================================
@@ -165,19 +177,13 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
     filterSection = std::make_unique<SynthSection> (std::move (filterTabs), SynthTheme::Section::filters, std::vector<SynthSection::StripControl> { { routingSelector.get(), 96.0f } });
 
     std::vector<SynthSection::Tab> envelopeTabs;
-    ampCaption = makeCaption (yup::String::fromUTF8 ("\xe2\x86\x92 AMP"));
 
     for (int index = 0; index < SynthExample::envelopeCount; ++index)
     {
         const auto& envelope = parameters.envelopes[static_cast<std::size_t> (index)];
         auto& panel = *envelopePanels[static_cast<std::size_t> (index)];
-        SynthSection::Tab tab { "Env " + yup::String (index + 1), &panel, envelope.enabled, envelope.enabled == nullptr,
-                                { { &panel.getSyncLed(), 56.0f } }, &panel.getModulationHandle() };
-
-        if (index == 0)
-            tab.stripControls.push_back ({ ampCaption.get(), 48.0f });
-
-        envelopeTabs.push_back (std::move (tab));
+        envelopeTabs.push_back ({ "Env " + yup::String (index + 1), &panel, envelope.enabled, envelope.enabled == nullptr,
+                                  { { &panel.getSyncLed(), 56.0f } }, &panel.getModulationHandle() });
     }
 
     envelopeSection = std::make_unique<SynthSection> (std::move (envelopeTabs), SynthTheme::Section::envelopes);
@@ -213,7 +219,6 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
     collectModulationTargets (*this, modulationTargets);
 
     SynthThemes::applyTheme (*this, theme);
-    ampCaption->setColor (yup::Label::Style::textFillColorId, SynthTheme::envelopeAccent (*this));
 
     // Menus and combo box lists open inside the interface, so the post effect draws them too.
     setPopupContainer (true);
@@ -769,7 +774,8 @@ void SynthInterface::updateModulation()
 {
     const auto parameters = processor.getParameters();
     const auto& routes = processor.getRoutes();
-    const auto& depths = processor.getSynthParameters().modulation.depths;
+    const auto& synthParameters = processor.getSynthParameters();
+    const auto& depths = synthParameters.modulation.depths;
     const auto playing = processor.getNumActiveVoices() > 0;
     const auto count = static_cast<std::size_t> (parameters.size());
 
@@ -794,7 +800,7 @@ void SynthInterface::updateModulation()
             continue;
 
         const auto destination = static_cast<std::size_t> (route.destination);
-        arcsByParameter[destination].push_back ({ depth, getSourceColor (*this, route.source), isBipolarSource (route.source) });
+        arcsByParameter[destination].push_back ({ depth, getSourceColor (*this, route.source), isRouteBipolar (route.source, synthParameters) });
 
         const auto amount = playing ? processor.getRouteAmount (slot) : 0.0f;
 
@@ -842,7 +848,7 @@ void SynthInterface::syncFromProcessor()
     for (auto& panel : envelopePanels)
     {
         panel->setTransport (transport);
-        panel->syncFromParameters();
+        panel->syncFromParameters (modulated);
     }
 
     for (auto& panel : lfoPanels)

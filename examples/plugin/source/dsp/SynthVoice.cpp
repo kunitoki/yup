@@ -118,6 +118,7 @@ void SynthVoice::startNote (int midiNoteNumber, float velocity, yup::Synthesiser
         noteVelocity = yup::jlimit (0.0f, 1.0f, velocity);
         noteRandom = random.nextFloat() * 2.0f - 1.0f;
 
+        envelopeValues = context.envelopes;
         applyCurves();
 
         for (std::size_t index = 0; index < envelopes.size(); ++index)
@@ -126,7 +127,6 @@ void SynthVoice::startNote (int midiNoteNumber, float velocity, yup::Synthesiser
             envelopes[index].noteOn();
         }
 
-        envelopeValues = context.envelopes;
         lfoValues = context.lfos;
         configureLFOs();
 
@@ -237,9 +237,6 @@ void SynthVoice::renderChunk (yup::AudioBuffer<float>& outputBuffer, int startSa
 
     if (active)
     {
-        if (context.curveGeneration != appliedCurveGeneration)
-            applyCurves();
-
         currentNote = pitch.skip (numSamples) + bend.skip (numSamples);
 
         SynthNetworkControls controls = context.network;
@@ -428,7 +425,7 @@ float SynthVoice::getSourceValue (SynthModulationSource source) const noexcept
         if (! values.enabled)
             return 0.0f;
 
-        return envelopes[static_cast<std::size_t> (envelope)].getLevel() * values.depth * values.getVelocityGain (noteVelocity);
+        return values.getSourceValue (envelopes[static_cast<std::size_t> (envelope)].getLevel(), noteVelocity);
     }
 
     if (const auto lfo = getSourceLFO (source); lfo >= 0)
@@ -459,6 +456,8 @@ float SynthVoice::getSourceValue (SynthModulationSource source) const noexcept
 
 void SynthVoice::advanceSources (int numSamples) noexcept
 {
+    applyCurves();
+
     // Envelopes and LFOs nothing reads, or that are disabled, are not advanced; they still follow the notes.
     for (std::size_t index = 0; index < envelopes.size(); ++index)
     {
@@ -494,11 +493,23 @@ void SynthVoice::configureLFOs() noexcept
 
 void SynthVoice::applyCurves() noexcept
 {
-    for (std::size_t index = 0; index < envelopes.size(); ++index)
-        envelopes[index].setCurve (context.envelopeCurves[index]);
-
-    amplitude.setCurve (context.envelopeCurves[0]);
+    const auto curvesChanged = context.curveGeneration != appliedCurveGeneration;
     appliedCurveGeneration = context.curveGeneration;
+
+    for (std::size_t index = 0; index < envelopes.size(); ++index)
+    {
+        const auto& stages = envelopeValues[index].stages;
+
+        if (! curvesChanged && stages == appliedStages[index])
+            continue;
+
+        appliedStages[index] = stages;
+        const auto curve = stages.apply (context.envelopeCurves[index]);
+        envelopes[index].setCurve (curve);
+
+        if (index == 0)
+            amplitude.setCurve (curve);
+    }
 }
 
 void SynthVoice::renderAmplitude (float* output, int numSamples) noexcept

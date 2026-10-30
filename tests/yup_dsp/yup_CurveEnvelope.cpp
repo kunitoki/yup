@@ -199,6 +199,20 @@ TEST_F (CurveEnvelopeTests, HoldsAtSustainUntilNoteOff)
     EXPECT_NEAR (0.3f, envelope.getLevel(), 1e-6f);
 }
 
+TEST_F (CurveEnvelopeTests, HeldSustainFollowsANewSustainLevel)
+{
+    envelope.setCurve (makeAdsr (0.001f, 0.001f, 0.3f, 0.001f));
+    envelope.noteOn();
+
+    for (int i = 0; i < 4800; ++i)
+        envelope.getNextValue();
+
+    envelope.setCurve (makeAdsr (0.001f, 0.001f, 0.6f, 0.001f));
+
+    EXPECT_NEAR (0.6f, envelope.getNextValue(), 1e-6f);
+    EXPECT_TRUE (envelope.isActive());
+}
+
 TEST_F (CurveEnvelopeTests, ReleaseFromMidAttackStartsAtTheCurrentLevel)
 {
     constexpr int attack = 1000;

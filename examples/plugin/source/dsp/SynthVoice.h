@@ -117,6 +117,7 @@ private:
     void configureLFOs() noexcept;
     float getSourceValue (SynthModulationSource source) const noexcept;
     void advanceSources (int numSamples) noexcept;
+    /** Hands the envelopes their curves, reshaped by their stages, when either changed. */
     void applyCurves() noexcept;
     void renderAmplitude (float* gains, int numSamples) noexcept;
 
@@ -142,6 +143,7 @@ private:
     std::array<yup::LFO<float>, SynthExample::lfoCount> lfos;
 
     std::array<SynthEnvelopeValues, SynthExample::envelopeCount> envelopeValues;
+    std::array<SynthEnvelopeStages, SynthExample::envelopeCount> appliedStages;
     std::array<SynthLFOValues, SynthExample::lfoCount> lfoValues;
     std::vector<float> modulatedValues;
     std::array<float, SynthExample::modulationSlots> routeAmounts {};

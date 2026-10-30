@@ -171,7 +171,6 @@ private:
     std::unique_ptr<ParameterSegmented> routingSelector;
     std::unique_ptr<yup::Label> matrixCaption;
     std::unique_ptr<yup::Label> modulationCaption;
-    std::unique_ptr<yup::Label> ampCaption;
     std::vector<std::unique_ptr<ParameterLed>> lfoSyncLeds;
     std::unique_ptr<SynthSection> oscillatorSection;
     std::unique_ptr<SynthSection> matrixSection;

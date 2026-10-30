@@ -25,6 +25,8 @@
 
 #include <yup_gui/yup_gui.h>
 
+#include <vector>
+
 //==============================================================================
 /** The magnitude response of a voice filter from 20 Hz to 20 kHz, with a handle at the
     cutoff: dragging it sideways moves the cutoff, up and down the resonance.
@@ -62,11 +64,13 @@ private:
     static constexpr float bottomDecibels = -48.0f;
     static constexpr float pixelsPerResonance = 160.0f;
     static constexpr int points = 160;
+    static constexpr int refineIterations = 16;
 
     float frequencyToX (float frequency) const;
     float xToFrequency (float x) const;
     float decibelsToY (float decibels) const;
     float getDecibelsAt (float frequency) const;
+    std::vector<yup::Point<float>> getCurveVertices() const;
 
     const SynthFilterParameters& parameters;
     SynthFilterStage stage;

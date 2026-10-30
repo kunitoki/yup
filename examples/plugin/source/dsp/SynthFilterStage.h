@@ -36,8 +36,9 @@
     It is blended in over the clean signal below driveFadeRange, and the blend moves by at
     most a full swing per enable fade, so neither a slow nor a sudden drive change from or
     to zero switches it in or out at once.
-    Cutoff, resonance, drive and mix are ramped across each control chunk and the
-    coefficients are refreshed every few samples, not on every sample.
+    Cutoff, drive and mix are ramped across each control chunk; resonance glides toward
+    its target over resonanceSmoothingSeconds, because the analog models scale their
+    output with it. The coefficients are refreshed every few samples, not on every sample.
 
     @see SynthFilterParameters
 */
@@ -69,6 +70,7 @@ private:
     //==============================================================================
     static constexpr int coefficientInterval = 8;
     static constexpr float driveFadeRange = 0.05f;
+    static constexpr double resonanceSmoothingSeconds = 0.01;
 
     using Antialiaser = yup::AaIirAntialiaser<float, yup::TanhClipperTraits>;
 
