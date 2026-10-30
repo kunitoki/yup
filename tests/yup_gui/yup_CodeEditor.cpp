@@ -2228,6 +2228,7 @@ TEST (CodeEditorTest, MinimapMouseWheelForwardsToEditor)
         text += "line " + String (i) + "\n";
     editor.setText (text);
     editor.setSize (400, 200);
+    editor.setVisible (true);
 
     auto* minimapComponent = findMinimapComponent (editor);
     ASSERT_NE (nullptr, minimapComponent);
