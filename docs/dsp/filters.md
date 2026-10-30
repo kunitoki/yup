@@ -256,10 +256,14 @@ in closed form (two-pole) or by linearizing the nonlinear step function
 ### CombFilter
 
 `CombFilter` is a fractional-delay feedback comb: a power-of-two circular
-delay line (default `16384` samples) with cubic Hermite interpolation for
-fractional reads, `tanh`-clipped feedback resonance, and optional `fastAtan`
-output saturation. Delay changes ramp at ±4 samples/sample for click-free
-pitch sweeps.
+delay line (default `16384` samples) read through a Kaiser-windowed sinc of up
+to 24 taps, `tanh`-clipped feedback resonance, and optional `fastAtan` output
+saturation. The sinc is flat and in phase up to near Nyquist, so the teeth keep
+their height whatever the fractional delay, and modulating the delay causes no
+zipper noise. Delays under 13 samples (cutoffs above about 3.7 kHz at 48 kHz)
+use shorter kernels, whose top octave rolls off. Delay changes glide
+in octaves over about 2 ms, at most one sample per sample, so cutoff sweeps
+pitch smoothly without crackling, even on long delays.
 
 ```cpp
 CombFilter<float> comb;
@@ -273,6 +277,12 @@ inputs (feedback/saturation clamped to `0..1`, frequency clamped to
 `[fs/(N−1), 0.45·fs]`); `setParametersFromNote` accepts a MIDI note number.
 `getDelayInSamples()` reports the current target delay. The comb supports only
 `FilterMode::peak`.
+
+The comb's teeth repeat at every multiple of its frequency, so a display
+sampling `getMagnitudeResponse()` at a few points lands on them unpredictably.
+`getMagnitudeResponseRange (frequency)` returns the smooth envelopes through
+the troughs and the teeth's tops instead, to draw where they are too dense to
+resolve.
 
 ## Related
 

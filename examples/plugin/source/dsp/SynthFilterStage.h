@@ -66,6 +66,14 @@ public:
     /** Returns the configured filter's linear magnitude at a frequency, drive aside. */
     float getMagnitudeResponse (float frequency) const noexcept;
 
+    /** Returns the spacing in Hz of the comb's teeth, or 0 when the filter is not a comb. */
+    float getToothSpacing() const noexcept;
+
+    /** Returns the magnitudes the comb's troughs and teeth reach around a frequency, drive aside:
+        smooth envelopes for a display where they are too dense to resolve.
+    */
+    yup::Range<float> getToothMagnitudeRange (float frequency) const noexcept;
+
 private:
     //==============================================================================
     static constexpr int coefficientInterval = 8;

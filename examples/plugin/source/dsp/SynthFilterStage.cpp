@@ -221,6 +221,22 @@ float SynthFilterStage::getMagnitudeResponse (float frequency) const noexcept
     return 1.0f;
 }
 
+float SynthFilterStage::getToothSpacing() const noexcept
+{
+    const auto delay = comb[0].getDelayInSamples();
+
+    if (activeType != SynthFilterType::comb || delay <= 0.0)
+        return 0.0f;
+
+    return static_cast<float> (sampleRate / delay);
+}
+
+yup::Range<float> SynthFilterStage::getToothMagnitudeRange (float frequency) const noexcept
+{
+    const auto range = comb[0].getMagnitudeResponseRange (frequency);
+    return { static_cast<float> (range.getStart()), static_cast<float> (range.getEnd()) };
+}
+
 float SynthFilterStage::filterSample (int channel, SynthFilterType type, float input) noexcept
 {
     const auto index = static_cast<std::size_t> (channel);

@@ -64,12 +64,15 @@ private:
     static constexpr float bottomDecibels = -48.0f;
     static constexpr float pixelsPerResonance = 160.0f;
     static constexpr int points = 160;
-    static constexpr int refineIterations = 16;
+    static constexpr int refineIterations = 20;
+    static constexpr float exactToothPixels = 12.0f;
+    static constexpr float denseToothPixels = 2.0f;
 
     float frequencyToX (float frequency) const;
     float xToFrequency (float x) const;
     float decibelsToY (float decibels) const;
     float getDecibelsAt (float frequency) const;
+    float findExtremeFrequency (float lowFrequency, float highFrequency, bool peak) const;
     std::vector<yup::Point<float>> getCurveVertices() const;
 
     const SynthFilterParameters& parameters;

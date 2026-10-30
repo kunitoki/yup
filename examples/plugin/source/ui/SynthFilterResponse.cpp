@@ -90,63 +90,118 @@ float SynthFilterResponse::getDecibelsAt (float frequency) const
     return 20.0f * std::log10 (yup::jmax (1.0e-5f, stage.getMagnitudeResponse (frequency)));
 }
 
+float SynthFilterResponse::findExtremeFrequency (float lowFrequency, float highFrequency, bool peak) const
+{
+    const auto sign = peak ? 1.0f : -1.0f;
+    const auto ratio = 0.5f * (std::sqrt (5.0f) - 1.0f);
+
+    for (int iteration = 0; iteration < refineIterations; ++iteration)
+    {
+        const auto left = highFrequency - ratio * (highFrequency - lowFrequency);
+        const auto right = lowFrequency + ratio * (highFrequency - lowFrequency);
+
+        if (sign * stage.getMagnitudeResponse (left) > sign * stage.getMagnitudeResponse (right))
+            highFrequency = right;
+        else
+            lowFrequency = left;
+    }
+
+    return 0.5f * (lowFrequency + highFrequency);
+}
+
 std::vector<yup::Point<float>> SynthFilterResponse::getCurveVertices() const
 {
     const auto width = static_cast<float> (getWidth());
-    const auto decibelsAtX = [this] (float x)
+    const auto spacing = stage.getToothSpacing();
+
+    // A comb's teeth are found exactly while far apart, drawn from their envelopes once a few
+    // pixels apart, and alternate between those envelopes on every pixel once closer still.
+    const auto pixelsPerLog = width / std::log (maximumFrequency / minimumFrequency);
+    const auto frequencyWhereTeethAre = [&] (float pixelsApart)
     {
-        return getDecibelsAt (xToFrequency (x));
+        return spacing > 0.0f ? spacing / std::expm1 (pixelsApart / pixelsPerLog) : 2.0f * maximumFrequency;
     };
 
-    std::vector<float> xs, decibels;
-    xs.reserve (static_cast<std::size_t> (points + 1));
-    decibels.reserve (static_cast<std::size_t> (points + 1));
+    const auto exactBelow = frequencyWhereTeethAre (exactToothPixels);
+    const auto teethBelow = frequencyWhereTeethAre (denseToothPixels);
+
+    std::vector<yup::Point<float>> vertices;
+    vertices.reserve (static_cast<std::size_t> (2 * points) + static_cast<std::size_t> (width));
+
+    const auto addVertex = [&] (float frequency, float magnitude)
+    {
+        if (frequency >= 0.999f * minimumFrequency && frequency <= 1.001f * maximumFrequency)
+            vertices.emplace_back (frequencyToX (frequency), decibelsToY (20.0f * std::log10 (yup::jmax (1.0e-5f, magnitude))));
+    };
+
+    std::vector<float> frequencies, magnitudes;
+    frequencies.reserve (static_cast<std::size_t> (points + 1));
+    magnitudes.reserve (static_cast<std::size_t> (points + 1));
 
     for (int point = 0; point <= points; ++point)
     {
-        xs.push_back (width * static_cast<float> (point) / static_cast<float> (points));
-        decibels.push_back (decibelsAtX (xs.back()));
+        const auto frequency = xToFrequency (width * static_cast<float> (point) / static_cast<float> (points));
+
+        if (frequency >= exactBelow)
+            break;
+
+        frequencies.push_back (frequency);
+        magnitudes.push_back (stage.getMagnitudeResponse (frequency));
     }
 
-    std::vector<yup::Point<float>> vertices;
-    vertices.reserve (xs.size() + xs.size() / 2);
-
-    for (std::size_t i = 0; i < xs.size(); ++i)
+    for (std::size_t i = 0; i < frequencies.size(); ++i)
     {
-        vertices.emplace_back (xs[i], decibelsToY (decibels[i]));
+        addVertex (frequencies[i], magnitudes[i]);
 
-        if (i == 0 || i + 1 >= xs.size())
+        if (spacing > 0.0f || i == 0 || i + 1 >= frequencies.size())
             continue;
 
-        const auto rising = decibels[i] - decibels[i - 1];
-        const auto falling = decibels[i + 1] - decibels[i];
+        const auto rising = magnitudes[i] - magnitudes[i - 1];
+        const auto falling = magnitudes[i + 1] - magnitudes[i];
 
-        if (rising * falling >= 0.0f)
-            continue;
-
-        // A narrow peak or notch mostly falls between two samples, so its height would jump
-        // as it moves: a golden section search finds the true extreme to draw.
-        const auto sign = rising > 0.0f ? 1.0f : -1.0f;
-        const auto ratio = 0.5f * (std::sqrt (5.0f) - 1.0f);
-        auto low = xs[i - 1];
-        auto high = xs[i + 1];
-
-        for (int iteration = 0; iteration < refineIterations; ++iteration)
+        // A narrow peak or notch mostly falls between two points, so its height would jump
+        // as it moves: the true extreme is found and drawn too.
+        if (rising * falling < 0.0f)
         {
-            const auto left = high - ratio * (high - low);
-            const auto right = low + ratio * (high - low);
-
-            if (sign * decibelsAtX (left) > sign * decibelsAtX (right))
-                high = right;
-            else
-                low = left;
+            const auto extreme = findExtremeFrequency (frequencies[i - 1], frequencies[i + 1], rising > 0.0f);
+            addVertex (extreme, stage.getMagnitudeResponse (extreme));
         }
-
-        const auto x = 0.5f * (low + high);
-        vertices.emplace_back (x, decibelsToY (decibelsAtX (x)));
     }
 
-    // Close teeth, as a comb's, refine into the same gap, so the extremes are put in order.
+    // A tooth peaks once around each multiple of the spacing, with a trough between.
+    for (auto tooth = 0.0f; spacing > 0.0f && tooth * spacing < yup::jmin (teethBelow, maximumFrequency); tooth += 1.0f)
+    {
+        const auto top = tooth * spacing;
+        const auto bottom = top + 0.5f * spacing;
+
+        if (top < exactBelow)
+        {
+            if (tooth > 0.0f)
+            {
+                const auto peak = findExtremeFrequency (top - 0.5f * spacing, bottom, true);
+                addVertex (peak, stage.getMagnitudeResponse (peak));
+            }
+
+            const auto trough = findExtremeFrequency (top, top + spacing, false);
+            addVertex (trough, stage.getMagnitudeResponse (trough));
+        }
+        else
+        {
+            addVertex (top, stage.getToothMagnitudeRange (top).getEnd());
+            addVertex (bottom, stage.getToothMagnitudeRange (bottom).getStart());
+        }
+    }
+
+    for (auto x = std::ceil (yup::jmax (0.0f, frequencyToX (teethBelow))); spacing > 0.0f && teethBelow < maximumFrequency && x <= width; x += 1.0f)
+    {
+        const auto frequency = xToFrequency (x);
+        const auto range = stage.getToothMagnitudeRange (frequency);
+        addVertex (frequency, static_cast<int> (x) % 2 == 0 ? range.getEnd() : range.getStart());
+    }
+
+    if (spacing > 0.0f && teethBelow >= maximumFrequency)
+        addVertex (maximumFrequency, stage.getMagnitudeResponse (maximumFrequency));
+
     std::sort (vertices.begin(), vertices.end(), [] (const auto& a, const auto& b)
     {
         return a.getX() < b.getX();
