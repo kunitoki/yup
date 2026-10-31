@@ -28,7 +28,9 @@ namespace yup
     Changes are applied to the AudioDeviceManager immediately as the user
     makes selections — no Apply button required.
 
-    Embed in an AudioDeviceManagerWindow or add directly to any Component.
+    Embed in an AudioDeviceManagerWindow or add directly to any Component. Once it
+    has a parent, the panel draws itself as a rounded card with a soft drop shadow,
+    inside a transparent margin of its own bounds.
 */
 class YUP_API AudioDeviceManagerPanel : public Component
     , private AsyncUpdater
@@ -48,16 +50,52 @@ public:
     MidiDeviceListConnection makeMidiDeviceListConnection();
 
     //==============================================================================
+    /** The height of every item in the panel: labels, selectors, buttons and list rows. */
+    static constexpr float itemHeight = 28.0f;
+
+    /** The space between stacked items. */
+    static constexpr float itemGap = 4.0f;
+
+    /** Returns the height that shows every row of every list.
+
+        When the panel is given less, the lists shrink, longest first, down to one
+        row each and scroll the rest.
+    */
+    float getPreferredHeight() const;
+
+    /** Called when getPreferredHeight() changes, for example after selecting another device. */
+    std::function<void()> onPreferredHeightChanged;
+
+    /** Called when the Close button is clicked. The button is only shown while this is set. */
+    std::function<void()> onClose;
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
     void resized() override;
+    /** @internal */
+    void parentHierarchyChanged() override;
 
 private:
     void populateFromManager();
     void repopulateDeviceDependent();
     void applyToManager();
     void handleAsyncUpdate() override;
+    void listsChanged();
+    std::array<int, 3> getNaturalListRows() const;
+    std::array<int, 3> fitListRows (float height) const;
+    float getFixedHeight() const noexcept;
+    bool hasShadow() const noexcept;
+    Rectangle<float> getCardBounds() const;
+
+    static constexpr float margin = 8.0f;
+    static constexpr int numFixedItems = 9;
+    static constexpr int numGaps = 8;
+    static constexpr float cornerRadius = 10.0f;
+    static constexpr float shadowInsetSides = 24.0f;
+    static constexpr float shadowInsetTop = 16.0f;
+    static constexpr float shadowInsetBottom = 32.0f;
 
     //==============================================================================
     AudioDeviceManager& manager;
@@ -73,6 +111,7 @@ private:
     ChannelSection inputChannelSection;
     RateBufferSelector rateBufferSelector;
     MidiSection midiSection;
+    TextButton closeButton;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioDeviceManagerPanel)
 };

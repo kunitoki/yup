@@ -22,4 +22,5 @@
 #include "../mocks/yup_audio_devices.h"
 
 #include "yup_AudioDeviceManager.cpp"
+#include "yup_MidiDevices.cpp"
 #include "yup_UMPPacketCollector.cpp"

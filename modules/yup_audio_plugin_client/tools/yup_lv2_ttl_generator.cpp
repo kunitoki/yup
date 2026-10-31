@@ -26,7 +26,7 @@
 // Port index order must stay in sync with NonAudioPort enum in
 // yup_audio_plugin_client_LV2.cpp.
 
-#include <yup_audio_processors/yup_audio_processors.h>
+#include <yup_audio_plugin_client/yup_audio_plugin_client.h>
 
 #include <fstream>
 #include <iomanip>
@@ -128,6 +128,7 @@ static bool writePluginTTL (const Options& opts, yup::AudioProcessor& processor)
     f << "@prefix atom:   <http://lv2plug.in/ns/ext/atom#> .\n"
       << "@prefix bufsz:  <http://lv2plug.in/ns/ext/buf-size#> .\n"
       << "@prefix doap:   <http://usefulinc.com/ns/doap#> .\n"
+      << "@prefix foaf:   <http://xmlns.com/foaf/0.1/> .\n"
       << "@prefix lv2:    <http://lv2plug.in/ns/lv2core#> .\n"
       << "@prefix midi:   <http://lv2plug.in/ns/ext/midi#> .\n"
       << "@prefix opts:   <http://lv2plug.in/ns/ext/options#> .\n"
@@ -148,6 +149,15 @@ static bool writePluginTTL (const Options& opts, yup::AudioProcessor& processor)
     f << "    doap:name \"" << escapeString (opts.name) << "\" ;\n";
     if (! opts.description.empty())
         f << "    rdfs:comment \"" << escapeString (opts.description) << "\" ;\n";
+    if (! opts.vendor.empty())
+        f << "    doap:maintainer [ foaf:name \"" << escapeString (opts.vendor) << "\" ] ;\n";
+    if (! opts.version.empty())
+    {
+        // LV2 carries the major version in the URI, so only the minor and micro parts are written
+        const auto parts = yup::StringArray::fromTokens (yup::String (opts.version), ".", {});
+        f << "    lv2:minorVersion " << parts[1].getIntValue() << " ;\n"
+          << "    lv2:microVersion " << parts[2].getIntValue() << " ;\n";
+    }
     f << "\n";
 
     f << "    lv2:requiredFeature urid:map, opts:options ;\n"

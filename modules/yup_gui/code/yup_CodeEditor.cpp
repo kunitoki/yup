@@ -116,13 +116,6 @@ public:
         scrollToPosition (event.getPosition().to<float>());
     }
 
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override
-    {
-        editor.mouseWheel (event.withPosition (editor.getLocalPoint (this, event.getPosition()))
-                               .withSourceComponent (&editor),
-                           wheelData);
-    }
-
 private:
     void scrollToPosition (const Point<float>& position)
     {
@@ -1086,8 +1079,9 @@ void CodeEditor::mouseDoubleClick (const MouseEvent& event)
     repaint();
 }
 
-void CodeEditor::mouseWheel (const MouseEvent&, const MouseWheelData& wheelData)
+bool CodeEditor::mouseWheel (const MouseEvent&, const MouseWheelData& wheelData)
 {
+    const auto previousOffset = scrollOffset;
     const float wheelSpeed = 30.0f;
 
     scrollOffset.setX (scrollOffset.getX() + wheelData.getDeltaX() * wheelSpeed);
@@ -1095,14 +1089,15 @@ void CodeEditor::mouseWheel (const MouseEvent&, const MouseWheelData& wheelData)
 
     clampScrollOffsetIfNeeded();
     repaint();
+    return scrollOffset != previousOffset;
 }
 
 //==============================================================================
 
-void CodeEditor::keyDown (const KeyPress& key, const Point<float>&)
+bool CodeEditor::keyDown (const KeyPress& key, const Point<float>&)
 {
     if (! isEnabled())
-        return;
+        return false;
 
     const bool shiftDown = key.getModifiers().isShiftDown();
     const bool ctrlDown = key.getModifiers().isControlDown() || key.getModifiers().isCommandDown();
@@ -1205,7 +1200,19 @@ void CodeEditor::keyDown (const KeyPress& key, const Point<float>&)
         {
             redo();
         }
+        else
+        {
+            return false;
+        }
     }
+    else
+    {
+        // Typed characters arrive through textInput(), so their presses belong here too;
+        // only Escape is left to the components around.
+        return key.getKey() != KeyPress::escapeKey;
+    }
+
+    return true;
 }
 
 void CodeEditor::textInput (const String& text)

@@ -81,7 +81,7 @@ public:
     {
         none,      /**< No scaling applied */
         unitary,   /**< Unitary scaling (1/sqrt(N)) */
-        asymmetric /**< Asymmetric scaling (1/N for inverse only) */
+        asymmetric /**< Asymmetric scaling (1/N for forward only) */
     };
 
     //==============================================================================
@@ -129,6 +129,35 @@ public:
         @param realOutput    Output buffer for real data (fftSize elements)
     */
     void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput);
+
+    /**
+        Performs a forward real-to-complex FFT into the packed layout.
+
+        The packed spectrum holds fftSize values instead of the 2 * fftSize of the interleaved one:
+
+        @code
+        [ DC, Nyquist, re(1), im(1), re(2), im(2), ..., re(N/2 - 1), im(N/2 - 1) ]
+        @endcode
+
+        The DC and Nyquist bins are real, so their values share the first pair. This is the native
+        layout of the Apple vDSP and PFFFT backends (and Intel IPP's Perm format), which run it without
+        any conversion: prefer it when the transform is in a hot path. The values and the scaling are
+        those of performRealFFTForward().
+
+        @param realInput     Input buffer containing real samples (fftSize elements)
+        @param packedOutput  Output buffer for the packed spectrum (fftSize elements), may be the input buffer
+    */
+    void performRealFFTForwardPacked (const SampleType* realInput, SampleType* packedOutput);
+
+    /**
+        Performs an inverse complex-to-real FFT from the packed layout.
+
+        @param packedInput   Input buffer containing a packed spectrum (fftSize elements), see performRealFFTForwardPacked()
+        @param realOutput    Output buffer for real data (fftSize elements), may be the input buffer
+
+        @see performRealFFTForwardPacked
+    */
+    void performRealFFTInversePacked (const SampleType* packedInput, SampleType* realOutput);
 
     /**
         Performs a forward complex-to-complex FFT.

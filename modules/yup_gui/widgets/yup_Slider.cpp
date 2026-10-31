@@ -465,15 +465,17 @@ void Slider::mouseDrag (const MouseEvent& event)
     updateValueFromMousePosition (event.getPosition(), dragMode); // Already returns Point<float>
 }
 
-void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
+bool Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 {
     if (! isEnabled())
-        return;
+        return false;
 
+    const auto previousValue = getValue();
     const double multiplier = event.getModifiers().isShiftDown() ? 0.001 : 0.01;
     const double distance = (data.getDeltaX() + data.getDeltaY()) * multiplier * mouseDragSensitivity;
 
     setValueNormalised (getValueNormalised() + distance);
+    return getValue() != previousValue;
 }
 
 void Slider::mouseDoubleClick (const MouseEvent& event)
@@ -484,12 +486,12 @@ void Slider::mouseDoubleClick (const MouseEvent& event)
 
 //==============================================================================
 
-void Slider::keyDown (const KeyPress& key, const Point<float>& position)
+bool Slider::keyDown (const KeyPress& key, const Point<float>& position)
 {
     if (! isEnabled())
-        return;
+        return false;
 
-    updateValueFromKeypress (key);
+    return updateValueFromKeypress (key);
 }
 
 void Slider::focusGained()
@@ -625,7 +627,7 @@ void Slider::updateValueFromMousePosition (Point<float> mousePos, DragMode dragM
     }
 }
 
-void Slider::updateValueFromKeypress (const KeyPress& key)
+bool Slider::updateValueFromKeypress (const KeyPress& key)
 {
     const bool isUpKey = key.getKey() == KeyPress::upKey || key.getKey() == KeyPress::rightKey;
     const bool isDownKey = key.getKey() == KeyPress::downKey || key.getKey() == KeyPress::leftKey;
@@ -635,7 +637,7 @@ void Slider::updateValueFromKeypress (const KeyPress& key)
     const bool isEnd = key.getKey() == KeyPress::endKey;
 
     if (! (isUpKey || isDownKey || isPageUp || isPageDown || isHome || isEnd))
-        return;
+        return false;
 
     const double currentNormalisedValue = getValueNormalised();
     double newNormalisedValue = currentNormalisedValue;
@@ -652,6 +654,7 @@ void Slider::updateValueFromKeypress (const KeyPress& key)
     }
 
     setValueNormalised (newNormalisedValue);
+    return true;
 }
 
 void Slider::resetToDefaultValue()

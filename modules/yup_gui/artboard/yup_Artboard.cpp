@@ -1060,11 +1060,11 @@ void Artboard::mouseDrag (const MouseEvent& event)
     afterInput();
 }
 
-void Artboard::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+bool Artboard::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     // A focused component gets the wheel wherever the pointer is.
     if (scene == nullptr || ! getLocalBounds().contains (event.getPosition()))
-        return;
+        return false;
 
     artboardFile->bindDeferredRecordingThread();
 
@@ -1085,14 +1085,15 @@ void Artboard::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelD
                           pointerIdFor (event));
 
     afterInput();
+    return true;
 }
 
 //==============================================================================
 
-void Artboard::keyDown (const KeyPress& key, const Point<float>&)
+bool Artboard::keyDown (const KeyPress& key, const Point<float>&)
 {
     if (stateMachine == nullptr)
-        return;
+        return false;
 
     artboardFile->bindDeferredRecordingThread();
 
@@ -1109,6 +1110,10 @@ void Artboard::keyDown (const KeyPress& key, const Point<float>&)
                                   && ! modifiers.isAltDown()
                                   && stateMachine->focusState().expectsKeyboardInput;
 
+    const bool isTyping = stateMachine->focusState().expectsKeyboardInput
+                       && ! modifiers.isControlDown() && ! modifiers.isCommandDown()
+                       && keyCode != KeyPress::escapeKey;
+
     if (isClipboardShortcut && (keyCode == KeyPress::textCKey || keyCode == KeyPress::textXKey))
     {
         const String selection (stateMachine->selectedText());
@@ -1121,7 +1126,7 @@ void Artboard::keyDown (const KeyPress& key, const Point<float>&)
         }
 
         afterInput();
-        return;
+        return true;
     }
 
     if (isClipboardShortcut && keyCode == KeyPress::textVKey)
@@ -1129,14 +1134,14 @@ void Artboard::keyDown (const KeyPress& key, const Point<float>&)
         stateMachine->textInput (SystemClipboard::getTextFromClipboard().toStdString());
 
         afterInput();
-        return;
+        return true;
     }
 
     const auto riveKey = toRiveKey (keyCode);
     if (! riveKey.has_value())
-        return;
+        return isTyping;
 
-    const bool handled = stateMachine->keyInput (*riveKey, toRiveModifiers (modifiers), true, isRepeat);
+    auto handled = stateMachine->keyInput (*riveKey, toRiveModifiers (modifiers), true, isRepeat);
 
     if (! handled && keyCode == KeyPress::tabKey)
     {
@@ -1144,27 +1149,31 @@ void Artboard::keyDown (const KeyPress& key, const Point<float>&)
             stateMachine->focusPrevious();
         else
             stateMachine->focusNext();
+
+        handled = true;
     }
 
     afterInput();
+    return handled || isTyping;
 }
 
-void Artboard::keyUp (const KeyPress& key, const Point<float>&)
+bool Artboard::keyUp (const KeyPress& key, const Point<float>&)
 {
     pressedKeys.removeFirstMatchingValue (key.getKey());
 
     if (stateMachine == nullptr)
-        return;
+        return false;
 
     artboardFile->bindDeferredRecordingThread();
 
     const auto riveKey = toRiveKey (key.getKey());
     if (! riveKey.has_value())
-        return;
+        return false;
 
-    stateMachine->keyInput (*riveKey, toRiveModifiers (key.getModifiers()), false, false);
+    const auto handled = stateMachine->keyInput (*riveKey, toRiveModifiers (key.getModifiers()), false, false);
 
     afterInput();
+    return handled;
 }
 
 void Artboard::textInput (const String& text)

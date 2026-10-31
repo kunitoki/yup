@@ -229,20 +229,18 @@ struct PyMouseListener : Base, pybind11::trampoline_self_life_support
         PYBIND11_OVERRIDE (void, Base, mouseDoubleClick, event);
     }
 
-    void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheel) override
+    bool mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheel) override
     {
         {
             pybind11::gil_scoped_acquire gil;
 
             if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "mouseWheel"))
             {
-                override_ (event, wheel);
-                return;
+                return override_ (event, wheel).cast<bool>();
             }
         }
 
-        //if constexpr (! std::is_same_v<Base, yup::TooltipWindow>)
-        //    Base::mouseWheel (event, wheel);
+        return Base::mouseWheel (event, wheel);
     }
 };
 
@@ -519,14 +517,14 @@ struct PyComponent : PyGestureListener<PyMouseListener<Base>>
         PYBIND11_OVERRIDE (void, Base, styleChanged);
     }
 
-    void keyDown (const yup::KeyPress& key, const Point<float>& position) override
+    bool keyDown (const yup::KeyPress& key, const Point<float>& position) override
     {
-        PYBIND11_OVERRIDE (void, Base, keyDown, key, position);
+        PYBIND11_OVERRIDE (bool, Base, keyDown, key, position);
     }
 
-    void keyUp (const yup::KeyPress& key, const Point<float>& position) override
+    bool keyUp (const yup::KeyPress& key, const Point<float>& position) override
     {
-        PYBIND11_OVERRIDE (void, Base, keyUp, key, position);
+        PYBIND11_OVERRIDE (bool, Base, keyUp, key, position);
     }
 
     void textInput (const String& text) override
@@ -534,9 +532,9 @@ struct PyComponent : PyGestureListener<PyMouseListener<Base>>
         PYBIND11_OVERRIDE (void, Base, textInput, text);
     }
 
-    void keyStateChanged (const yup::KeyPress& key, bool isDown) override
+    bool keyStateChanged (const yup::KeyPress& key, bool isDown) override
     {
-        PYBIND11_OVERRIDE (void, Base, keyStateChanged, key, isDown);
+        PYBIND11_OVERRIDE (bool, Base, keyStateChanged, key, isDown);
     }
 
     void modifierKeysChanged (const yup::KeyModifiers& modifiers) override

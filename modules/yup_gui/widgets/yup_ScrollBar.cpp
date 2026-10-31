@@ -269,7 +269,7 @@ void ScrollBar::mouseExit (const MouseEvent& event)
     repaint();
 }
 
-void ScrollBar::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+bool ScrollBar::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     ignoreUnused (event);
 
@@ -279,7 +279,9 @@ void ScrollBar::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel
 
     // Scroll proportionally based on visible range size
     auto scrollAmount = delta * getCurrentRangeSize();
+    const auto previousStart = getCurrentRangeStart();
     scrollBy (-scrollAmount, sendNotification);
+    return getCurrentRangeStart() != previousStart;
 }
 
 //==============================================================================

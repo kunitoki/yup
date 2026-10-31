@@ -80,6 +80,11 @@ public:
     /**
         Set the enabled state of the component.
 
+        A disabled component, or one inside a disabled parent, receives no key presses,
+        gestures, mouse enters, presses, moves, drags or double clicks. It still receives
+        mouse ups and exits, so an interaction started before it got disabled can finish,
+        and shows the default mouse cursor rather than its own.
+
         @param shouldBeEnabled True if the component should be enabled, false otherwise.
      */
     void setEnabled (bool shouldBeEnabled);
@@ -705,6 +710,22 @@ public:
      */
     bool isFullScreen() const;
 
+    /**
+        Keeps the window of a desktop component at a width over height while it is resized.
+
+        The ratio is kept for a component that is not on the desktop yet and applied to its
+        window when it gets one. It constrains the whole window, so content that should keep
+        its own proportions inside decorations or toolbars still has to fit itself.
+
+        @param aspectRatio The width over height to keep, or std::nullopt to resize freely.
+     */
+    void setWindowAspectRatio (std::optional<float> aspectRatio);
+
+    /**
+        Returns the width over height the window keeps, or std::nullopt when it resizes freely.
+     */
+    std::optional<float> getWindowAspectRatio() const;
+
     //==============================================================================
     /**
         Called when the component changes display.
@@ -908,6 +929,9 @@ public:
     //==============================================================================
     /**
         Set the mouse cursor of the component.
+
+        It shows at once when the component receives the pointer's events (see
+        ComponentNative::getPointerTarget()), otherwise when the pointer next reaches it.
 
         @param cursorType The new mouse cursor of the component.
      */
@@ -1220,12 +1244,12 @@ public:
     /**
         Returns the component that popups opened by this component should be added to.
 
-        This is the closest ancestor that changes how its subtree is presented, because it is
-        transformed or manually composited (for example onto a 3D surface), so the popup is
-        presented the same way as the component that opened it. Without such an ancestor this
-        is the top level component.
+        This is the closest ancestor that is a popup container, or that changes how its subtree
+        is presented because it is transformed or manually composited (for example onto a 3D
+        surface), so the popup is presented the same way as the component that opened it.
+        Without such an ancestor this is the top level component.
 
-        @see setTransform, setManuallyComposited, PopupMenu::Options::withParentComponent
+        @see setPopupContainer, setTransform, setManuallyComposited, PopupMenu::Options::withParentComponent
     */
     Component* getPopupParentComponent();
 
@@ -1343,10 +1367,16 @@ public:
     /**
         Called when the mouse wheel is scrolled.
 
-        @param event The mouse event.
+        The event starts at the component under the pointer and travels up its parent hierarchy.
+        Return true to consume it; return false to let the next enabled parent handle it. The
+        default implementation returns false.
+
+        @param event The mouse event, with its position in this component's coordinates.
         @param wheelData The mouse wheel data.
+
+        @returns true if this component handled the wheel event.
      */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
 
     //==============================================================================
     /**
@@ -1400,9 +1430,15 @@ public:
     /**
         Add a mouse listener to the component.
 
+        Adding a listener that is already registered only updates whether it wants the events
+        of nested child components.
+
         @param listener The mouse listener to add.
+        @param wantsEventsForAllNestedChildComponents When true, the listener also receives the
+               mouse events of every component inside this one, with positions relative to the
+               component that received them.
      */
-    void addMouseListener (MouseListener* listener);
+    void addMouseListener (MouseListener* listener, bool wantsEventsForAllNestedChildComponents = false);
 
     /**
         Remove a mouse listener from the component.
@@ -1438,18 +1474,31 @@ public:
     /**
         Called when a key is pressed.
 
+        The key goes to the component with the keyboard focus first. When that one does not
+        handle it, it goes to its parent, and so on up to the top-level component, so a
+        focused control never swallows the keys meant for what is around it, such as
+        shortcuts or an on-screen keyboard. Invisible components are skipped, and so are
+        disabled ones and everything inside a disabled parent (see isEnabled()).
+
         @param keys The key press.
         @param position The position of the key press.
+
+        @returns true when the component handled the key, which stops it going further up.
      */
-    virtual void keyDown (const KeyPress& keys, const Point<float>& position);
+    virtual bool keyDown (const KeyPress& keys, const Point<float>& position);
 
     /**
         Called when a key is released.
 
+        It goes up the parents like keyDown(), so a component that acted on a key press
+        receives its release even after the focus moved to one of its children.
+
         @param keys The key press.
         @param position The position of the key press.
+
+        @returns true when the component handled the key, which stops it going further up.
      */
-    virtual void keyUp (const KeyPress& keys, const Point<float>& position);
+    virtual bool keyUp (const KeyPress& keys, const Point<float>& position);
 
     /**
         Called when text is input.
@@ -1467,12 +1516,17 @@ public:
         makes it the reliable place to track whether a modifier or a chord key is being
         held.
 
+        It goes up the parents like keyDown(), starting from the component with the keyboard
+        focus, until a component returns true.
+
         @param key    The key that changed state.
         @param isDown True if the key has just gone down, false if it has just come up.
 
+        @returns true when the component handled the change, which stops it going further up.
+
         @see keyDown, keyUp, modifierKeysChanged
      */
-    virtual void keyStateChanged (const KeyPress& key, bool isDown);
+    virtual bool keyStateChanged (const KeyPress& key, bool isDown);
 
     /**
         Called when the state of the modifier keys changes.
@@ -1480,11 +1534,34 @@ public:
         Modifiers are refreshed from mouse button events as well as key events, so this also
         fires when a click reveals a modifier that changed while the keyboard was idle.
 
+        The default implementation passes the change up to the parent component, so an
+        override consumes it unless it calls the base class version.
+
         @param modifiers The modifier keys that are now held down.
 
         @see keyStateChanged
      */
     virtual void modifierKeysChanged (const KeyModifiers& modifiers);
+
+    //==============================================================================
+    /** Makes this component hold the popups opened by the components inside it.
+
+        Popups, such as menus and combo box lists, are normally added to the top level
+        component. Inside a popup container they are added to the container instead, so they
+        are presented like the rest of its subtree: through its component effect, for example
+        a post-processing pass over a whole interface, and with its input mapping.
+
+        @param shouldBePopupContainer True to hold the popups of this component's subtree.
+
+        @see getPopupParentComponent
+     */
+    void setPopupContainer (bool shouldBePopupContainer);
+
+    /** Returns true if this component holds the popups opened inside it.
+
+        @see setPopupContainer
+     */
+    bool isPopupContainer() const;
 
     //==============================================================================
 
@@ -1527,6 +1604,30 @@ public:
         @return The color of the component.
      */
     std::optional<Color> findColor (const Identifier& colorId) const;
+
+    //==============================================================================
+    /** Gives this component and everything inside it a palette of its own.
+
+        The theme draws the component and its children from the closest palette up the
+        parent chain instead of the theme's own: ApplicationTheme::findColor() resolves the
+        palette derived colors from it, and ApplicationTheme::getPalette (const Component&)
+        returns it. Colors set with setColor() still take precedence. Popup menus opened
+        relative to a component take its palette too.
+
+        This lets windows, or several plugin editors in one process, wear different palettes
+        with a single global theme.
+
+        @param newPalette The palette, or std::nullopt to follow the parent's again.
+
+        @see findPalette, ApplicationTheme::setPalette
+     */
+    void setPalette (std::optional<ThemePalette> newPalette);
+
+    /** Returns the palette set on this component with setPalette(), or nullptr. */
+    const ThemePalette* getPalette() const;
+
+    /** Returns the closest palette set with setPalette() on this component or a parent, or nullptr. */
+    const ThemePalette* findPalette() const;
 
     //==============================================================================
 
@@ -1737,10 +1838,10 @@ private:
     void internalMouseDoubleClick (const MouseEvent& event);
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
     void internalGesture (const GestureEvent& event);
-    void internalKeyDown (const KeyPress& keys, const Point<float>& position);
-    void internalKeyUp (const KeyPress& keys, const Point<float>& position);
+    bool internalKeyDown (const KeyPress& keys, const Point<float>& position);
+    bool internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);
-    void internalKeyStateChanged (const KeyPress& keys, bool isDown);
+    bool internalKeyStateChanged (const KeyPress& keys, bool isDown);
     void internalModifierKeysChanged (const KeyModifiers& modifiers);
     void internalResized (int width, int height);
     void internalMoved (int xpos, int ypos);
@@ -1758,7 +1859,61 @@ private:
     void takeKeyboardFocus (FocusChangeType cause);
     void handleKeyboardFocusFromClick();
 
+    using KeyHandler = bool (Component::*) (const KeyPress&, const Point<float>&);
+    bool dispatchKey (const KeyPress& keys, const Point<float>& position, KeyHandler handler);
+
     void updateMouseCursor();
+
+    template <class... MethodArgs, class... Args>
+    void callMouseListeners (const BailOutChecker& bailOutChecker, void (MouseListener::*callback) (MethodArgs...), const Args&... args)
+    {
+        struct NestedBailOutChecker
+        {
+            bool shouldBailOut() const { return source.shouldBailOut() || parent.shouldBailOut(); }
+
+            BailOutChecker source, parent;
+        };
+
+        mouseListeners.callChecked (bailOutChecker, callback, args...);
+
+        for (auto* parent = parentComponent; parent != nullptr && ! bailOutChecker.shouldBailOut(); parent = parent->parentComponent)
+        {
+            const NestedBailOutChecker nestedChecker { bailOutChecker, BailOutChecker (parent) };
+
+            parent->nestedMouseListeners.callChecked (nestedChecker, callback, args...);
+
+            if (nestedChecker.shouldBailOut())
+                return;
+        }
+    }
+
+    void callMouseWheelListeners (const BailOutChecker& bailOutChecker,
+                                  const MouseEvent& event,
+                                  const MouseWheelData& wheelData)
+    {
+        const auto call = [&] (MouseListener& listener)
+        {
+            ignoreUnused (listener.mouseWheel (event, wheelData));
+        };
+
+        mouseListeners.callChecked (bailOutChecker, call);
+
+        for (auto* parent = parentComponent; parent != nullptr && ! bailOutChecker.shouldBailOut(); parent = parent->parentComponent)
+        {
+            struct NestedBailOutChecker
+            {
+                bool shouldBailOut() const { return source.shouldBailOut() || parent.shouldBailOut(); }
+
+                BailOutChecker source, parent;
+            };
+
+            const NestedBailOutChecker nestedChecker { bailOutChecker, BailOutChecker (parent) };
+            parent->nestedMouseListeners.callChecked (nestedChecker, call);
+
+            if (nestedChecker.shouldBailOut())
+                return;
+        }
+    }
 
     void sendMoved();
     void sendResized();
@@ -1770,7 +1925,8 @@ private:
     void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const;
     void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous);
-    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
+    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr, const std::optional<RectangleList<float>>& dirtyRegion = std::nullopt);
+    std::optional<RectangleList<float>> takeEffectDirtyRegion (bool renderContinuous);
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
@@ -1796,15 +1952,20 @@ private:
     ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
+    MouseListenerList nestedMouseListeners;
     GestureListenerList gestureListeners;
     ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;
+    std::unique_ptr<ThemePalette> palette;
     NamedValueSet properties;
     MouseCursor mouseCursor;
     GestureType wantedGestures = GestureType::none;
     ComponentEffect::Ptr componentEffect;
+    std::optional<float> windowAspectRatio;
     GpuCanvas::Ptr cachedTextureCanvas;
     GpuCanvas::Ptr effectOffscreenCanvas;
+    RectangleList<float> effectDirtyRegion;
+    static constexpr int maximumDirtyRectangles = 8;
     GpuCanvas::Ptr presentedCanvas;
     float contentScale = 1.0f;
     uint8 opacity = 255;
@@ -1827,8 +1988,10 @@ private:
         bool blockChildrenMouseEvents : 1;
         bool paintProfilingDisabled : 1;
         bool cachedToTexture : 1;
+        bool cachedTextureStale : 1;
         bool paintAsOffscreenRoot : 1;
         bool manuallyComposited : 1;
+        bool popupContainer : 1;
     };
 
     union

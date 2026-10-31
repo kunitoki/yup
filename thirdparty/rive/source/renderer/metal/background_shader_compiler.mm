@@ -299,7 +299,10 @@ void BackgroundShaderCompiler::threadMain()
         compileOptions.languageVersion =
             MTLLanguageVersion2_3; // On mac, we need version 2.3+
 #endif
-        compileOptions.fastMathEnabled = YES;
+        if (@available(macOS 15, iOS 18, *))
+        {
+            compileOptions.mathMode = MTLMathModeFast;
+        }
         if (@available(iOS 14, *))
         {
             compileOptions.preserveInvariance = YES;

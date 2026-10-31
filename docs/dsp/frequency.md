@@ -50,8 +50,8 @@ backend.
 | Mode | Behavior |
 | --- | --- |
 | `none` | no scaling applied |
-| `unitary` | forward scaled by `1/√N`, inverse unscaled |
-| `asymmetric` | inverse scaled by `1/N`, forward unscaled |
+| `unitary` | forward and inverse both scaled by `1/√N` |
+| `asymmetric` | forward scaled by `1/N`, inverse unscaled |
 
 ```cpp
 FFTProcessor<float> fft (512);
@@ -70,6 +70,57 @@ fft.setSize (1024);   // re-initialize for a new power-of-two size
 `setSize()` (re)creates the engine, so call it during initialization, not from
 the audio thread. FFTW3 plans are also created during `setSize` (with
 `FFTW_ESTIMATE`) rather than per transform.
+
+### Packed real spectra
+
+`performRealFFTForwardPacked()` and `performRealFFTInversePacked()` exchange the
+real spectrum in a packed layout of N values instead of 2 * N: the DC and
+Nyquist bins are real, so they share the first pair.
+
+```
+[DC, Nyquist, re1, im1, re2, im2, ..., re(N/2 - 1), im(N/2 - 1)]
+```
+
+It is the native layout of Apple vDSP and PFFFT (and Intel IPP's `Perm` format),
+which run it without any conversion, and both transforms may work in place.
+Values and scaling are those of the interleaved transforms. Prefer it for
+spectral processing in a hot path:
+
+```cpp
+FFTProcessor<float> fft (1024);
+std::vector<float> buffer (1024);   // N values: real signal in, packed spectrum out
+
+fft.performRealFFTForwardPacked (buffer.data(), buffer.data());
+const float dc = buffer[0], nyquist = buffer[1];   // bin k: buffer[2 * k], buffer[2 * k + 1]
+fft.performRealFFTInversePacked (buffer.data(), buffer.data());
+```
+
+## Operations on packed spectra
+
+`ComplexVectorOperations` (from `yup_simd`) works on packed spectra when passed
+`ComplexLayout::packedReal`, so spectral code never has to special-case the
+shared DC / Nyquist pair: bin `k` is at `2 * k` and `2 * k + 1`, and pair 0 is
+treated as two reals. Counts are in pairs (N / 2 for a full spectrum).
+
+| Method | Result |
+| --- | --- |
+| `multiply` | `dest = a * b` (convolution) |
+| `multiplyConjugate` | `dest = a * conj (b)` (cross-correlation) |
+| `multiplyAccumulate` | `y += a * b` |
+| `magnitude`, `powerSpectrum`, `phase` | one value per pair, `dest[0]` from DC |
+| `deinterleave`, `interleave` | to and from separate real and imaginary arrays |
+
+Every operation has `float` and `double` overloads and may write over its inputs.
+
+```cpp
+FFTProcessor<float> fft (1024);   // FFTScaling::none
+std::vector<float> a (1024), b (1024);
+
+fft.performRealFFTForwardPacked (a.data(), a.data());
+fft.performRealFFTForwardPacked (b.data(), b.data());
+ComplexVectorOperations::multiplyConjugate (a.data(), a.data(), b.data(), 512, ComplexLayout::packedReal);
+fft.performRealFFTInversePacked (a.data(), a.data());   // circular cross-correlation, times 1024
+```
 
 ## SpectrumAnalyzerState
 

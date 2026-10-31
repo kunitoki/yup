@@ -201,6 +201,11 @@ SDLComponentNative::SDLComponentNative (Component& component,
     }
 #endif
 
+#if YUP_MAC
+    if (! YUPApplicationBase::isStandaloneApp())
+        installHostKeyEventForwarding (window);
+#endif
+
     if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
     {
         windowContext = SDL_GL_CreateContext (window);
@@ -406,6 +411,20 @@ void SDLComponentNative::setVisible (bool shouldBeVisible)
         SDL_ShowWindow (window);
         repaint();
         updateMouseCapture (true);
+
+#if YUP_MAC
+        // Bring the first top-level standalone window to the front and make it key on launch. The
+        // app itself is activated earlier via -finishLaunching (see the mac AppDelegate); this just
+        // promotes our main window, like a normal app does when showing it.
+        const bool isFocusable = (SDL_GetWindowFlags (window) & SDL_WINDOW_NOT_FOCUSABLE) == 0;
+
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setVisible(true) activation guard: parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parentWindow)))
+                                         << ", focusable=" << String (isFocusable ? "true" : "false")
+                                         << ", standalone=" << String (YUPApplicationBase::isStandaloneApp() ? "true" : "false"));
+
+        if (parentWindow == nullptr && isFocusable && YUPApplicationBase::isStandaloneApp())
+            activateAppWindowOnLaunch (getNativeHandle());
+#endif
     }
     else
     {
@@ -604,6 +623,28 @@ Rectangle<int> SDLComponentNative::getSafeAreaBounds() const
     }
 
     return { 0, 0, getSize() };
+}
+
+//==============================================================================
+
+void SDLComponentNative::setAspectRatio (std::optional<float> newAspectRatio)
+{
+    aspectRatio = newAspectRatio;
+
+    // On the web the page sizes the canvas: SDL would clamp its backbuffer to the ratio, and the page stretch it.
+#if ! YUP_EMSCRIPTEN
+    if (window == nullptr)
+        return;
+
+    // Zero for both bounds lets the window resize freely again.
+    const auto ratio = aspectRatio.value_or (0.0f);
+    SDL_SetWindowAspectRatio (window, ratio, ratio);
+#endif
+}
+
+std::optional<float> SDLComponentNative::getAspectRatio() const
+{
+    return aspectRatio;
 }
 
 //==============================================================================

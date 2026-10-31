@@ -172,6 +172,18 @@ TEST_F (ChannelSectionTests, PopulateWithEmptyChannelsDoesNotCrash)
     EXPECT_EQ (section.getActiveChannels(), BigInteger {});
 }
 
+TEST_F (ChannelSectionTests, GetNumChannelsFollowsPopulate)
+{
+    ChannelSection section;
+    EXPECT_EQ (0, section.getNumChannels());
+
+    section.populate (makeChannelNames (3), {});
+    EXPECT_EQ (3, section.getNumChannels());
+
+    section.populate ({}, {});
+    EXPECT_EQ (0, section.getNumChannels());
+}
+
 TEST_F (ChannelSectionTests, SetTextDoesNotCrash)
 {
     ChannelSection section;
@@ -292,6 +304,15 @@ TEST_F (MidiSectionTests, PopulateOutputWithDevicesDoesNotCrash)
     section.populateOutput (devices, "midi_id_2");
 }
 
+TEST_F (MidiSectionTests, GetNumInputDevicesFollowsPopulate)
+{
+    MidiSection section;
+    EXPECT_EQ (0, section.getNumInputDevices());
+
+    section.populateInputs (makeMidiDevices (2), {});
+    EXPECT_EQ (2, section.getNumInputDevices());
+}
+
 TEST_F (MidiSectionTests, ResizedDoesNotCrash)
 {
     MidiSection section;
@@ -352,9 +373,9 @@ TEST_F (AudioDeviceManagerPanelTests, HasExpectedChildComponentCount)
 {
     AudioDeviceManager manager;
     AudioDeviceManagerPanel panel (manager);
-    // 6 direct children: type selector, IO selector, 2x channel section,
-    // rate+buffer selector, MIDI section
-    EXPECT_EQ (panel.getNumChildComponents(), 6);
+    // 7 direct children: type selector, IO selector, 2x channel section,
+    // rate+buffer selector, MIDI section, close button
+    EXPECT_EQ (panel.getNumChildComponents(), 7);
 }
 
 TEST_F (AudioDeviceManagerPanelTests, ResizedDoesNotCrash)
@@ -373,4 +394,97 @@ TEST_F (AudioDeviceManagerPanelTests, MakeMidiDeviceListConnectionDoesNotCrash)
 
     // Connection creation should not crash
     EXPECT_NO_THROW (panel.makeMidiDeviceListConnection());
+}
+
+TEST_F (AudioDeviceManagerPanelTests, PreferredHeightShowsEveryListRow)
+{
+    AudioDeviceManager manager;
+    AudioDeviceManagerPanel panel (manager);
+    panel.setBounds (0.0f, 0.0f, 470.0f, panel.getPreferredHeight());
+
+    const auto rowsOf = [] (Component* section)
+    {
+        if (auto* channels = dynamic_cast<ChannelSection*> (section))
+            return jmax (1, channels->getNumChannels());
+
+        return jmax (1, dynamic_cast<MidiSection*> (section)->getNumInputDevices());
+    };
+
+    const auto item = AudioDeviceManagerPanel::itemHeight;
+    const auto gap = AudioDeviceManagerPanel::itemGap;
+    EXPECT_FLOAT_EQ (item, panel.getChildComponent (0)->getHeight());
+    EXPECT_FLOAT_EQ (item * 2.0f + gap, panel.getChildComponent (1)->getHeight());
+    EXPECT_FLOAT_EQ (item * static_cast<float> (1 + rowsOf (panel.getChildComponent (2))), panel.getChildComponent (2)->getHeight());
+    EXPECT_FLOAT_EQ (item * static_cast<float> (1 + rowsOf (panel.getChildComponent (3))), panel.getChildComponent (3)->getHeight());
+    EXPECT_FLOAT_EQ (item * 2.0f + gap, panel.getChildComponent (4)->getHeight());
+    EXPECT_FLOAT_EQ (item * static_cast<float> (2 + rowsOf (panel.getChildComponent (5))) + gap, panel.getChildComponent (5)->getHeight());
+}
+
+TEST_F (AudioDeviceManagerPanelTests, ShortPanelShrinksListsToOneRow)
+{
+    AudioDeviceManager manager;
+    AudioDeviceManagerPanel panel (manager);
+    panel.setBounds (0.0f, 0.0f, 470.0f, 100.0f);
+
+    const auto item = AudioDeviceManagerPanel::itemHeight;
+    EXPECT_FLOAT_EQ (item, panel.getChildComponent (0)->getHeight());
+    EXPECT_FLOAT_EQ (item * 2.0f, panel.getChildComponent (2)->getHeight());
+    EXPECT_FLOAT_EQ (item * 2.0f, panel.getChildComponent (3)->getHeight());
+    EXPECT_FLOAT_EQ (item * 3.0f + AudioDeviceManagerPanel::itemGap, panel.getChildComponent (5)->getHeight());
+}
+
+TEST_F (AudioDeviceManagerPanelTests, PreferredHeightGrowsWithListedRows)
+{
+    AudioDeviceManager manager;
+    AudioDeviceManagerPanel panel (manager);
+
+    // Nine fixed items plus at least one row per list.
+    EXPECT_GE (panel.getPreferredHeight(), AudioDeviceManagerPanel::itemHeight * 12.0f);
+}
+
+TEST_F (AudioDeviceManagerPanelTests, CloseButtonIsShownOnlyWithOnClose)
+{
+    AudioDeviceManager manager;
+    AudioDeviceManagerPanel panel (manager);
+    const auto heightWithoutClose = panel.getPreferredHeight();
+
+    panel.setBounds (0.0f, 0.0f, 470.0f, heightWithoutClose);
+    EXPECT_FALSE (panel.getChildComponent (6)->isVisible());
+
+    int closeCount = 0;
+    panel.onClose = [&]
+    {
+        ++closeCount;
+    };
+
+    EXPECT_FLOAT_EQ (heightWithoutClose + AudioDeviceManagerPanel::itemHeight + AudioDeviceManagerPanel::itemGap, panel.getPreferredHeight());
+
+    panel.setBounds (0.0f, 0.0f, 470.0f, panel.getPreferredHeight());
+    auto* closeButton = dynamic_cast<TextButton*> (panel.getChildComponent (6));
+    ASSERT_NE (nullptr, closeButton);
+    EXPECT_TRUE (closeButton->isVisible());
+    EXPECT_FLOAT_EQ (AudioDeviceManagerPanel::itemHeight, closeButton->getHeight());
+
+    closeButton->onClick();
+    EXPECT_EQ (1, closeCount);
+}
+
+TEST_F (AudioDeviceManagerPanelTests, ParentedPanelReservesMarginForItsShadow)
+{
+    AudioDeviceManager manager;
+    AudioDeviceManagerPanel panel (manager);
+    EXPECT_TRUE (panel.isOpaque());
+
+    const auto detachedHeight = panel.getPreferredHeight();
+
+    Component parent;
+    parent.addAndMakeVisible (panel);
+
+    EXPECT_FALSE (panel.isOpaque());
+    EXPECT_GT (panel.getPreferredHeight(), detachedHeight);
+
+    parent.removeChildComponent (panel);
+
+    EXPECT_TRUE (panel.isOpaque());
+    EXPECT_FLOAT_EQ (detachedHeight, panel.getPreferredHeight());
 }

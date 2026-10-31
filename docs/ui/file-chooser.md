@@ -43,4 +43,13 @@ Limits:
 - The copies live in memory until they are deleted. Delete them once loaded if
   they are large.
 - Saving asks for a file name and returns a path in the temporary directory;
-  the file is not downloaded.
+  the file is not downloaded. Once written, call `File::startAsProcess()` on it
+  to have the browser download it:
+
+```cpp
+fileChooser->browseForFileToSave ([] (bool success, const Array<File>& results)
+{
+    if (success && results.getFirst().replaceWithText ("hello"))
+        results.getFirst().startAsProcess();
+});
+```

@@ -116,6 +116,18 @@ void TextEditor::setMultiLine (bool shouldBeMultiLine)
 
 //==============================================================================
 
+void TextEditor::setJustification (Justification newJustification)
+{
+    if (justification == newJustification)
+        return;
+
+    justification = newJustification;
+    clampScrollOffset();
+    repaint();
+}
+
+//==============================================================================
+
 void TextEditor::setReadOnly (bool shouldBeReadOnly)
 {
     if (readOnly != shouldBeReadOnly)
@@ -344,6 +356,10 @@ void TextEditor::focusGained()
 void TextEditor::focusLost()
 {
     isDragging = false;
+
+    if (deselectWhenUnfocused)
+        selectionStart = selectionEnd = caretPosition;
+
     stopCaretBlinking();
     relinquishTextInput();
     repaint();
@@ -353,8 +369,17 @@ void TextEditor::focusLost()
 
 void TextEditor::mouseDown (const MouseEvent& event)
 {
+    const auto hadFocus = hasKeyboardFocus();
+
     if (getWantsKeyboardFocus())
         takeKeyboardFocus();
+
+    if (selectAllWhenFocused && ! hadFocus && hasKeyboardFocus())
+    {
+        selectAll();
+        isDragging = false;
+        return;
+    }
 
     auto position = event.getPosition().to<float>();
     int newCaretPos = getGlyphIndexAtPosition (position);
@@ -446,10 +471,10 @@ void TextEditor::mouseDoubleClick (const MouseEvent& event)
 
 //==============================================================================
 
-void TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
+bool TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
 {
     if (! isEnabled())
-        return;
+        return false;
 
     bool shiftDown = key.getModifiers().isShiftDown();
     bool ctrlDown = key.getModifiers().isControlDown() || key.getModifiers().isCommandDown();
@@ -512,18 +537,15 @@ void TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
     }
     else if (key.getKey() == KeyPress::enterKey || key.getKey() == KeyPress::tabKey)
     {
-        if (multiLine && key.getKey() == KeyPress::enterKey)
-        {
-            insertText ("\n");
-        }
-        else if (multiLine && key.getKey() == KeyPress::tabKey)
-        {
-            insertText ("\t");
-        }
+        // A single line editor has no use for them, so they go to the components around.
+        if (! multiLine)
+            return false;
+
+        insertText (key.getKey() == KeyPress::enterKey ? "\n" : "\t");
     }
     else if (ctrlDown)
     {
-        // Handle Ctrl shortcuts
+        // Handle Ctrl shortcuts; the others, undo included, go to the components around
         if (key.getKey() == KeyPress::textAKey)
         {
             selectAll();
@@ -540,10 +562,20 @@ void TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
         {
             paste();
         }
+        else
+        {
+            return false;
+        }
+    }
+    else if (key.getKey() == KeyPress::escapeKey)
+    {
+        return false;
     }
 
+    // Typed characters arrive through textInput(), so their presses belong here too.
     updateCaretPosition();
     repaint();
+    return true;
 }
 
 void TextEditor::textInput (const String& inputText)
@@ -558,6 +590,12 @@ void TextEditor::textInput (const String& inputText)
 
 //==============================================================================
 
+Font TextEditor::getEffectiveFont() const
+{
+    const auto& defaultFont = ApplicationTheme::getGlobalTheme()->getDefaultFont();
+    return font.value_or (defaultFont).withHeight (fontSize.value_or (defaultFont.getHeight()));
+}
+
 void TextEditor::updateStyledTextIfNeeded()
 {
     if (! needsUpdate)
@@ -569,8 +607,6 @@ void TextEditor::updateStyledTextIfNeeded()
     if (text.isNotEmpty())
     {
         auto textColor = findColor (Style::textColorId).value_or (Colors::black);
-        const auto& defaultFont = ApplicationTheme::getGlobalTheme()->getDefaultFont();
-        auto currentFont = font.value_or (defaultFont);
 
         modifier.setMaxSize (getTextBounds().getSize());
         modifier.setHorizontalAlign (StyledText::left);
@@ -578,7 +614,7 @@ void TextEditor::updateStyledTextIfNeeded()
         modifier.setWrap (multiLine ? StyledText::wrap : StyledText::noWrap);
         modifier.setOverflow (StyledText::visible);
 
-        modifier.appendText (text, currentFont.withHeight (fontSize.value_or (defaultFont.getHeight())));
+        modifier.appendText (text, getEffectiveFont());
     }
 
     needsUpdate = false;
@@ -606,7 +642,10 @@ void TextEditor::ensureCaretVisible()
     auto caretBounds = styledText.getCaretBounds (caretPosition);
 
     if (caretBounds.isEmpty())
+    {
+        clampScrollOffset();
         return;
+    }
 
     // Check if caret is outside visible area and adjust scroll offset
     bool needsRepaint = false;
@@ -678,6 +717,13 @@ Rectangle<float> TextEditor::getCaretBounds() const
 {
     auto textBounds = getTextBounds();
     auto caretBounds = styledText.getCaretBounds (caretPosition);
+
+    // Empty text lays out no line, so the caret takes the height of a line of the font.
+    if (text.isEmpty())
+    {
+        const auto currentFont = getEffectiveFont();
+        caretBounds = { 0.0f, 0.0f, 1.0f, (currentFont.getDescent() - currentFont.getAscent()) * currentFont.getHeight() };
+    }
 
     // Adjust bounds to be relative to the text editor's bounds with scroll offset applied
     return caretBounds.translated (textBounds.getTopLeft() - scrollOffset);
@@ -870,7 +916,16 @@ void TextEditor::clampScrollOffset()
     auto textBounds = getTextBounds();
     auto textSize = styledText.getComputedTextBounds();
 
-    scrollOffset.setX (jmax (0.0f, jmin (scrollOffset.getX(), jmax (0.0f, textSize.getWidth() - textBounds.getWidth()))));
+    const auto freeWidth = textBounds.getWidth() - textSize.getWidth();
+
+    // Text that fits sits where the justification puts it, as a negative scroll.
+    if (freeWidth > 0.0f && justification.testFlags (Justification::horizontalCenter))
+        scrollOffset.setX (-freeWidth * 0.5f);
+    else if (freeWidth > 0.0f && justification.testFlags (Justification::right))
+        scrollOffset.setX (-freeWidth);
+    else
+        scrollOffset.setX (jmax (0.0f, jmin (scrollOffset.getX(), -freeWidth)));
+
     scrollOffset.setY (jmax (0.0f, jmin (scrollOffset.getY(), jmax (0.0f, textSize.getHeight() - textBounds.getHeight()))));
 
     updateTextInputRectIfActive();
@@ -878,13 +933,15 @@ void TextEditor::clampScrollOffset()
 
 //==============================================================================
 
-void TextEditor::mouseWheel (const MouseEvent& /*event*/, const MouseWheelData& wheelData)
+bool TextEditor::mouseWheel (const MouseEvent& /*event*/, const MouseWheelData& wheelData)
 {
+    const auto previousOffset = scrollOffset;
     const float wheelSpeed = 30.0f;
     scrollOffset.setX (scrollOffset.getX() - wheelData.getDeltaX() * wheelSpeed);
     scrollOffset.setY (scrollOffset.getY() - wheelData.getDeltaY() * wheelSpeed);
     clampScrollOffset();
     repaint();
+    return scrollOffset != previousOffset;
 }
 
 //==============================================================================

@@ -304,9 +304,9 @@ public:
     /** @internal */
     void refreshDisplay (double lastFrameTimeSeconds) override;
     /** @internal */
-    void keyDown (const KeyPress& key, const Point<float>& position) override;
+    bool keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
     /** @internal */
     void focusLost() override;
 

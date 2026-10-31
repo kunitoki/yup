@@ -33,8 +33,12 @@ conv.setImpulseResponse (irData);                    // NOT realtime-safe
   rounded up to the next power of two.
 - `setImpulseResponse (ir, options)` — loads the IR, optionally normalizing
   the peak to 0 dBFS, applying a headroom scale (default `−12 dB`), and
-  trimming trailing silence (`IRLoadOptions`). Partitions are distributed
-  across the layers in order; unused layers get empty IRs. **Not
+  trimming trailing silence (`IRLoadOptions`). A layer of hop `L` can only
+  convolve the taps from `L` onwards without latency, so each layer starts at
+  the later of its hop and the previous layer's start and runs up to the next
+  layer's start (the last one to the end of the IR). The direct FIR covers the
+  taps before the first layer, growing to the first hop if needed: the output
+  is the exact convolution, with no latency, for any block size. **Not
   realtime-safe** — call at init or while paused (it swaps under a spin
   lock so `process` can continue running).
 - `getImpulseLength()` — IR length in samples after silence trimming.

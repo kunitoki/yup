@@ -88,6 +88,8 @@ public:
 
     Component* getFocusedComponent() const override { return focusedComponent; }
 
+    Component* getPointerTarget() const override { return pointerTarget; }
+
     bool isContinuousRepaintingEnabled() const override { return false; }
 
     void enableContinuousRepainting (bool) override {}
@@ -100,11 +102,16 @@ public:
 
     void enableWireframe (bool) override {}
 
+    void setAspectRatio (std::optional<float> newAspectRatio) override { aspectRatio = newAspectRatio; }
+
+    std::optional<float> getAspectRatio() const override { return aspectRatio; }
+
     GpuTriangulationThresholds getTriangulationThresholds() const override { return thresholds; }
 
     void setTriangulationThresholds (const GpuTriangulationThresholds& newThresholds) override { thresholds = newThresholds; }
 
     GpuTriangulationThresholds thresholds;
+    std::optional<float> aspectRatio;
 
     void repaint() override {}
 
@@ -143,6 +150,8 @@ public:
     void setGlobalMouseCaptureActive (bool) override {}
 
     void cancelCurrentMouseGesture() override {}
+
+    Component* pointerTarget = nullptr;
 
 private:
     Component* focusedComponent = nullptr;
@@ -262,14 +271,14 @@ public:
         comp.internalRefreshDisplay (lastFrameTimeSeconds);
     }
 
-    static void triggerKeyDown (Component& comp, const KeyPress& keys, const Point<float>& position)
+    static bool triggerKeyDown (Component& comp, const KeyPress& keys, const Point<float>& position)
     {
-        comp.internalKeyDown (keys, position);
+        return comp.internalKeyDown (keys, position);
     }
 
-    static void triggerKeyUp (Component& comp, const KeyPress& keys, const Point<float>& position)
+    static bool triggerKeyUp (Component& comp, const KeyPress& keys, const Point<float>& position)
     {
-        comp.internalKeyUp (keys, position);
+        return comp.internalKeyUp (keys, position);
     }
 
     static void triggerTextInput (Component& comp, const String& text)
@@ -2554,6 +2563,98 @@ TEST_F (ComponentTest, DesktopNativeDelegationSetters)
     EXPECT_EQ (constRoot.getNativeComponent(), root->getNativeComponent());
 }
 
+TEST_F (ComponentTest, WindowAspectRatioIsKeptAndForwardedToTheNative)
+{
+    EXPECT_FALSE (root->getWindowAspectRatio().has_value());
+
+    // Without a window the ratio is only kept, to be applied when one is created.
+    root->setWindowAspectRatio (2.0f);
+    EXPECT_EQ (root->getWindowAspectRatio(), 2.0f);
+
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    ComponentHelper::setOnDesktop (*root, true);
+
+    root->setWindowAspectRatio (1.5f);
+    EXPECT_EQ (root->getWindowAspectRatio(), 1.5f);
+    EXPECT_EQ (native->getAspectRatio(), 1.5f);
+
+    root->setWindowAspectRatio (std::nullopt);
+    EXPECT_FALSE (root->getWindowAspectRatio().has_value());
+    EXPECT_FALSE (native->getAspectRatio().has_value());
+}
+
+TEST_F (ComponentTest, CursorOfComponentUnderPointerReachesTheDesktopAtOnce)
+{
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    native->pointerTarget = child.get();
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+
+    child->setMouseCursor (MouseCursor (MouseCursor::Hand));
+
+    EXPECT_EQ (MouseCursor::Hand, Desktop::getInstance()->getMouseCursor().getType());
+
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+}
+
+TEST_F (ComponentTest, DisabledComponentUnderPointerShowsTheDefaultCursor)
+{
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    native->pointerTarget = child.get();
+    root->setVisible (true);
+    parent->setVisible (true);
+    child->setVisible (true);
+    child->setMouseCursor (MouseCursor (MouseCursor::Hand));
+    child->setEnabled (false);
+
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
+
+    for (const auto trigger : { &ComponentHelper::triggerMouseEnter, &ComponentHelper::triggerMouseMove, &ComponentHelper::triggerMouseDown,
+                                &ComponentHelper::triggerMouseDrag, &ComponentHelper::triggerMouseUp, &ComponentHelper::triggerMouseExit })
+    {
+        Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Crosshair));
+        trigger (*child, event);
+        EXPECT_EQ (MouseCursor::Default, Desktop::getInstance()->getMouseCursor().getType());
+    }
+
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+}
+
+TEST_F (ComponentTest, EnablingAParentUpdatesTheCursorOfTheChildUnderPointer)
+{
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    native->pointerTarget = child.get();
+    child->setMouseCursor (MouseCursor (MouseCursor::Hand));
+
+    parent->setEnabled (false);
+    EXPECT_EQ (MouseCursor::Default, Desktop::getInstance()->getMouseCursor().getType());
+
+    parent->setEnabled (true);
+    EXPECT_EQ (MouseCursor::Hand, Desktop::getInstance()->getMouseCursor().getType());
+
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+}
+
+TEST_F (ComponentTest, CursorOfFocusedComponentAwayFromPointerLeavesTheDesktopAlone)
+{
+    auto* native = new TestComponentNative (*root);
+    ComponentHelper::attachNative (*root, native);
+    native->pointerTarget = child.get();
+
+    parent->setWantsKeyboardFocus (true);
+    parent->takeKeyboardFocus();
+    ASSERT_TRUE (parent->hasKeyboardFocus());
+
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+
+    parent->setMouseCursor (MouseCursor (MouseCursor::Text));
+
+    EXPECT_EQ (MouseCursor::Default, Desktop::getInstance()->getMouseCursor().getType());
+}
+
 TEST_F (ComponentTest, TransformToScreenMatchesLocalToScreenOnDesktop)
 {
     // The mock native sits at the screen origin, so the root bounds position must not be added again.
@@ -2660,6 +2761,27 @@ TEST_F (ComponentTest, FindColorWalksUpTheHierarchy)
     EXPECT_FALSE (child->findColor ("unknown-id").has_value());
 }
 
+TEST_F (ComponentTest, FindPaletteReturnsClosestPaletteUpTheHierarchy)
+{
+    const ThemePalette rootPalette (std::vector<Color> { Color (0xff101010), Color (0xffff8000) });
+    const ThemePalette parentPalette (std::vector<Color> { Color (0xff101010), Color (0xff0080ff) });
+
+    EXPECT_EQ (nullptr, child->findPalette());
+
+    root->setPalette (rootPalette);
+    ASSERT_NE (nullptr, child->findPalette());
+    EXPECT_EQ (rootPalette, *child->findPalette());
+    EXPECT_EQ (nullptr, child->getPalette());
+
+    parent->setPalette (parentPalette);
+    EXPECT_EQ (parentPalette, *child->findPalette());
+    EXPECT_EQ (rootPalette, *root->findPalette());
+
+    parent->setPalette (std::nullopt);
+    EXPECT_EQ (nullptr, parent->getPalette());
+    EXPECT_EQ (rootPalette, *child->findPalette());
+}
+
 TEST_F (ComponentTest, InternalDisplayAndCloseDispatch)
 {
     ComponentHelper::triggerDisplayChanged (*root);
@@ -2695,6 +2817,113 @@ TEST_F (ComponentTest, InternalKeyboardDispatch)
     ComponentHelper::triggerTextInput (*root, "a");
     root->setWantsKeyboardFocus (true);
     ComponentHelper::triggerTextInput (*root, "a");
+}
+
+//==============================================================================
+class ComponentKeyDispatchTest : public ::testing::Test
+{
+protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    /** Logs the keys it receives and handles them when told to. */
+    class KeyRecorder : public Component
+    {
+    public:
+        KeyRecorder (const String& recorderName, std::vector<String>& sharedLog)
+            : name (recorderName)
+            , log (sharedLog)
+        {
+            setVisible (true);
+        }
+
+        bool keyDown (const KeyPress&, const Point<float>&) override
+        {
+            log.push_back (name + " down");
+
+            // The callback may delete this recorder, so nothing of it is read afterwards.
+            const auto handled = handles;
+            const auto callback = onKey;
+
+            if (callback != nullptr)
+                callback();
+
+            return handled;
+        }
+
+        bool keyUp (const KeyPress&, const Point<float>&) override
+        {
+            log.push_back (name + " up");
+            return handles;
+        }
+
+        bool handles = false;
+        std::function<void()> onKey;
+
+    private:
+        String name;
+        std::vector<String>& log;
+    };
+
+    void SetUp() override
+    {
+        root.addChildComponent (parent);
+        parent.addChildComponent (child);
+    }
+
+    const KeyPress key { KeyPress::textAKey };
+    std::vector<String> log;
+    KeyRecorder root { "root", log };
+    KeyRecorder parent { "parent", log };
+    KeyRecorder child { "child", log };
+};
+
+TEST_F (ComponentKeyDispatchTest, UnhandledKeyClimbsToEveryParent)
+{
+    EXPECT_FALSE (ComponentHelper::triggerKeyDown (child, key, {}));
+    EXPECT_EQ ((std::vector<String> { "child down", "parent down", "root down" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, HandledKeyStopsClimbing)
+{
+    parent.handles = true;
+
+    EXPECT_TRUE (ComponentHelper::triggerKeyDown (child, key, {}));
+    EXPECT_EQ ((std::vector<String> { "child down", "parent down" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, KeyUpClimbsLikeKeyDown)
+{
+    root.handles = true;
+
+    EXPECT_TRUE (ComponentHelper::triggerKeyUp (child, key, {}));
+    EXPECT_EQ ((std::vector<String> { "child up", "parent up", "root up" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, DisabledComponentIsSkippedButTheKeyStillClimbs)
+{
+    child.setEnabled (false);
+
+    ComponentHelper::triggerKeyDown (child, key, {});
+    EXPECT_EQ ((std::vector<String> { "parent down", "root down" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, ComponentsInsideADisabledParentReceiveNoKeys)
+{
+    parent.setEnabled (false);
+
+    ComponentHelper::triggerKeyDown (child, key, {});
+    ComponentHelper::triggerKeyUp (child, key, {});
+    EXPECT_EQ ((std::vector<String> { "root down", "root up" }), log);
+}
+
+TEST_F (ComponentKeyDispatchTest, ComponentDeletedByItsHandlerEndsTheClimb)
+{
+    auto doomed = std::make_unique<KeyRecorder> ("doomed", log);
+    child.addChildComponent (*doomed);
+    doomed->onKey = [&doomed] { doomed.reset(); };
+
+    EXPECT_TRUE (ComponentHelper::triggerKeyDown (*doomed, key, {}));
+    EXPECT_EQ ((std::vector<String> { "doomed down" }), log);
 }
 
 TEST_F (ComponentTest, InternalMouseDispatch)
@@ -2740,7 +2969,7 @@ TEST_F (ComponentTest, InternalMouseDispatchNotifiesListeners)
         void mouseDrag (const MouseEvent&) override { ++drags; }
         void mouseUp (const MouseEvent&) override { ++ups; }
         void mouseDoubleClick (const MouseEvent&) override { ++doubleClicks; }
-        void mouseWheel (const MouseEvent&, const MouseWheelData&) override { ++wheels; }
+        bool mouseWheel (const MouseEvent&, const MouseWheelData&) override { ++wheels; return false; }
 
         int enters = 0;
         int exits = 0;
@@ -2778,6 +3007,55 @@ TEST_F (ComponentTest, InternalMouseDispatchNotifiesListeners)
     EXPECT_EQ (listener.wheels, 1);
 
     root->removeMouseListener (&listener);
+}
+
+TEST_F (ComponentTest, DisabledComponentsOnlyReceiveTheEndOfMouseInteractions)
+{
+    struct LocalMouseListener : public MouseListener
+    {
+        void mouseEnter (const MouseEvent&) override { ++enters; }
+        void mouseExit (const MouseEvent&) override { ++exits; }
+        void mouseDown (const MouseEvent&) override { ++downs; }
+        void mouseMove (const MouseEvent&) override { ++moves; }
+        void mouseDrag (const MouseEvent&) override { ++drags; }
+        void mouseUp (const MouseEvent&) override { ++ups; }
+        void mouseDoubleClick (const MouseEvent&) override { ++doubleClicks; }
+
+        int enters = 0;
+        int exits = 0;
+        int downs = 0;
+        int moves = 0;
+        int drags = 0;
+        int ups = 0;
+        int doubleClicks = 0;
+    };
+
+    LocalMouseListener listener;
+    child->addMouseListener (&listener);
+    root->setVisible (true);
+    parent->setVisible (true);
+    child->setVisible (true);
+    parent->setEnabled (false);
+
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
+
+    ComponentHelper::triggerMouseEnter (*child, event);
+    ComponentHelper::triggerMouseDown (*child, event);
+    ComponentHelper::triggerMouseMove (*child, event);
+    ComponentHelper::triggerMouseDrag (*child, event);
+    ComponentHelper::triggerMouseDoubleClick (*child, event);
+    ComponentHelper::triggerMouseUp (*child, event);
+    ComponentHelper::triggerMouseExit (*child, event);
+
+    EXPECT_EQ (listener.enters, 0);
+    EXPECT_EQ (listener.downs, 0);
+    EXPECT_EQ (listener.moves, 0);
+    EXPECT_EQ (listener.drags, 0);
+    EXPECT_EQ (listener.doubleClicks, 0);
+    EXPECT_EQ (listener.ups, 1);
+    EXPECT_EQ (listener.exits, 1);
+
+    child->removeMouseListener (&listener);
 }
 
 TEST_F (ComponentTest, GesturesAreNotWantedByDefault)
@@ -3390,13 +3668,8 @@ TEST (ComponentFocusReportingTests, FocusIsReportedThroughTheNativeWindow)
     comp.takeKeyboardFocus();
     ASSERT_TRUE (comp.hasKeyboardFocus());
 
-    // Only the focused component passes its cursor on to the desktop.
     comp.setMouseCursor (MouseCursor (MouseCursor::Crosshair));
     EXPECT_EQ (MouseCursor::Crosshair, comp.getMouseCursor().getType());
-
-    // Setting the cursor on a focused component reaches the desktop's global cursor, so put it back
-    // the way the rest of the suite expects to find it.
-    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
 
     comp.leaveKeyboardFocus();
     EXPECT_FALSE (comp.hasKeyboardFocus());
@@ -3877,4 +4150,126 @@ TEST (ComponentModifierKeysChangedTests, AnInvisibleComponentIsNotNotified)
     EXPECT_CALL (comp, modifierKeysChanged (_)).Times (0);
 
     ComponentHelper::triggerModifierKeysChanged (comp, KeyModifiers (KeyModifiers::shiftMask));
+}
+
+// =============================================================================
+// Parent propagation
+// =============================================================================
+
+TEST (ComponentPropagationTests, AnUnhandledWheelGoesToTheNearestEnabledParent)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock parent;
+    Component disabledMiddle;
+    Component leaf;
+    parent.setVisible (true);
+    parent.addAndMakeVisible (disabledMiddle);
+    disabledMiddle.addAndMakeVisible (leaf);
+    disabledMiddle.setBounds (5.0f, 5.0f, 100.0f, 100.0f);
+    leaf.setBounds (10.0f, 20.0f, 50.0f, 50.0f);
+    disabledMiddle.setEnabled (false);
+
+    EXPECT_CALL (parent, mouseWheel (_, _)).WillOnce ([&] (const MouseEvent& event, const MouseWheelData&)
+    {
+        EXPECT_EQ (Point<float> (16.0f, 26.0f), event.getPosition());
+        EXPECT_EQ (&parent, event.getSourceComponent());
+        return true;
+    });
+
+    const MouseEvent event (MouseEvent::noButtons, KeyModifiers(), Point<float> (1.0f, 1.0f));
+    ComponentHelper::triggerMouseWheel (leaf, event.withSourceComponent (&leaf), MouseWheelData (0.0f, 1.0f));
+}
+
+TEST (ComponentPropagationTests, AnOverriddenWheelIsNotPassedToTheParent)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock parent;
+    ComponentMock child;
+    parent.setVisible (true);
+    parent.addAndMakeVisible (child);
+
+    EXPECT_CALL (child, mouseWheel (_, _)).WillOnce ([] (const MouseEvent&, const MouseWheelData&)
+    {
+        return true;
+    });
+    EXPECT_CALL (parent, mouseWheel (_, _)).Times (0);
+
+    const MouseEvent event (MouseEvent::noButtons, KeyModifiers(), Point<float>());
+    ComponentHelper::triggerMouseWheel (child, event, MouseWheelData (0.0f, 1.0f));
+}
+
+TEST (ComponentPropagationTests, ModifierChangesGoToTheParentByDefault)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock parent;
+    Component child;
+    parent.setVisible (true);
+    parent.addAndMakeVisible (child);
+
+    const KeyModifiers modifiers (KeyModifiers::shiftMask);
+    EXPECT_CALL (parent, modifierKeysChanged (modifiers)).Times (1);
+
+    ComponentHelper::triggerModifierKeysChanged (child, modifiers);
+}
+
+TEST (ComponentPropagationTests, KeyStateChangesGoUpUntilAComponentHandlesThem)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock grandParent;
+    ComponentMock parent;
+    Component child;
+    grandParent.setVisible (true);
+    grandParent.addAndMakeVisible (parent);
+    parent.addAndMakeVisible (child);
+
+    EXPECT_CALL (parent, keyStateChanged (_, true)).WillOnce (::testing::Return (true));
+    EXPECT_CALL (grandParent, keyStateChanged (_, _)).Times (0);
+
+    ComponentHelper::triggerKeyStateChanged (child, KeyPress (KeyPress::spaceKey), true);
+}
+
+TEST (ComponentPropagationTests, OnlyNestedMouseListenersReceiveChildEvents)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    struct CountingListener : public MouseListener
+    {
+        void mouseDown (const MouseEvent& event) override
+        {
+            ++downs;
+            lastSource = event.getSourceComponent();
+        }
+
+        int downs = 0;
+        Component* lastSource = nullptr;
+    };
+
+    Component parent;
+    Component child;
+    parent.setVisible (true);
+    parent.addAndMakeVisible (child);
+
+    CountingListener nested;
+    CountingListener direct;
+    parent.addMouseListener (&nested, true);
+    parent.addMouseListener (&direct);
+
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float>());
+    ComponentHelper::triggerMouseDown (child, event.withSourceComponent (&child));
+
+    EXPECT_EQ (1, nested.downs);
+    EXPECT_EQ (&child, nested.lastSource);
+    EXPECT_EQ (0, direct.downs);
+
+    parent.addMouseListener (&nested, false);
+    ComponentHelper::triggerMouseDown (child, event.withSourceComponent (&child));
+
+    EXPECT_EQ (1, nested.downs);
+
+    parent.removeMouseListener (&nested);
+    parent.removeMouseListener (&direct);
 }

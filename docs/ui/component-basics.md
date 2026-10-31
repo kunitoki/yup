@@ -449,6 +449,16 @@ Popups should be added to `getPopupParentComponent()`, the closest transformed
 (or manually composited) ancestor, so they are presented with the same transform
 as the component that opened them; `ComboBox` does this.
 
+A component marked with `setPopupContainer (true)` holds the popups opened inside
+it, even untransformed. Use it when a component effect is the look of a whole
+interface, such as a color grade or a CRT pass, so its menus and combo box lists
+are drawn through the effect and follow its input mapping too:
+
+```cpp
+interface.setComponentEffect (new InterfaceLookEffect());
+interface.setPopupContainer (true);
+```
+
 To get the cumulative transform between two components:
 
 ```cpp
@@ -495,6 +505,25 @@ for it are not.
 
 ---
 
+## Scrollable content
+
+`Viewport` displays a component through a clipped area and automatically shows
+scrollbars when the content is larger than that area:
+
+```cpp
+viewport.setViewedComponent (&content); // content keeps its own size and ownership
+viewport.setScrollBarsShown (true, false); // vertical scrollbar only
+viewport.scrollToShow (control.getBounds());
+```
+
+`setScrollBarsShown (showVertical, showHorizontal)` independently controls which
+bars may appear. Pass `false, false` to hide both. Hidden bars reserve no space,
+but wheel, touch and programmatic scrolling remain available on both axes.
+To fit content without horizontal scrolling, size it to the available width
+after accounting for a visible vertical scrollbar.
+
+---
+
 ## Mouse and keyboard
 
 ### Mouse events
@@ -509,10 +538,11 @@ void mouseUp         (const MouseEvent& event) override;
 void mouseMove       (const MouseEvent& event) override;
 void mouseDrag       (const MouseEvent& event) override;
 void mouseDoubleClick(const MouseEvent& event) override;
-void mouseWheel      (const MouseEvent& event, const MouseWheelData& wheel) override;
+bool mouseWheel      (const MouseEvent& event, const MouseWheelData& wheel) override;
 ```
 
-By default these are no-ops. To receive mouse events, a component must opt in:
+By default these are no-ops, and `mouseWheel()` returns `false`. To receive mouse
+events, a component must opt in:
 
 ```cpp
 comp.setWantsMouseEvents (true, true);
@@ -523,6 +553,23 @@ comp.setWantsMouseEvents (true, true);
 The first flag controls whether this component receives mouse events on itself.
 The second controls whether its children can receive them (useful for
 mouse-blocking overlays).
+
+Mouse button and movement events go only to the component under the mouse. The
+wheel goes further: it starts at the component under the pointer and travels up
+the parent hierarchy until a component handles it. Return `true` to consume the
+wheel or `false` to let the next enabled parent try. The default returns
+`false`, so a scrollable container receives the wheel over any of its children.
+
+```cpp
+bool MyList::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
+{
+    if (! canScroll())
+        return false; // let the parent scroll
+
+    scrollBy (wheel.getDeltaY());
+    return true;
+}
+```
 
 ### Multitouch (any platform with touch hardware)
 
@@ -655,17 +702,46 @@ once with the one that gained it.
 ### Keyboard input
 
 ```cpp
-virtual void keyDown   (const KeyPress& keys, const Point<float>& pos) override;
-virtual void keyUp     (const KeyPress& keys, const Point<float>& pos) override;
+virtual bool keyDown   (const KeyPress& keys, const Point<float>& pos) override;
+virtual bool keyUp     (const KeyPress& keys, const Point<float>& pos) override;
 virtual void textInput (const String& text) override;
 ```
+
+A key goes to the component with the keyboard focus first. Return `true` from
+`keyDown()` or `keyUp()` when the component used the key; otherwise the key goes
+to its parent, and so on up to the top-level component. Invisible components are
+skipped, and so are disabled ones and every component inside a disabled parent. So a focused control only keeps the keys it uses, and a
+container can handle what its children leave: shortcuts, or playing a
+`MidiKeyboardComponent` from the computer keyboard while a knob has the focus.
+
+```cpp
+bool MyPanel::keyDown (const KeyPress& key, const Point<float>&) override
+{
+    if (key.getKey() == KeyPress::textZKey && key.getModifiers().isCommandDown())
+    {
+        undoManager.undo();
+        return true;
+    }
+
+    return false; // let the components around have it
+}
+```
+
+Text editors return `true` for every key that types, edits or moves the caret,
+since typed characters also arrive through `textInput()`, and leave Escape and
+the shortcuts they don't implement to the components around them.
 
 Two lower-level callbacks report input that `keyDown()` may never see:
 
 ```cpp
-virtual void keyStateChanged (const KeyPress& key, bool isDown) override;
+virtual bool keyStateChanged (const KeyPress& key, bool isDown) override;
 virtual void modifierKeysChanged (const KeyModifiers& modifiers) override;
 ```
+
+Like `keyDown()`, `keyStateChanged()` starts at the focused component and goes up
+the parents until one returns `true`. `modifierKeysChanged()` is passed to the
+parent by default; an override that still wants its parents notified calls
+`Component::modifierKeysChanged (modifiers)`.
 
 `keyStateChanged()` fires once when a key goes down and once when it comes up,
 including for presses consumed before they reach `keyDown()`, and auto-repeat
@@ -683,6 +759,12 @@ Instead of subclassing to receive mouse events, attach a `MouseListener`:
 comp.addMouseListener (myListener);
 comp.removeMouseListener (myListener);
 ```
+
+Pass `true` as the second argument of `addMouseListener()` to also receive the
+events of every component nested inside `comp`. The event keeps the position and
+source component of the child that received it. `MouseListener::mouseWheel()`
+returns `bool` to share the callback signature with `Component`; its return value
+is ignored when the object is registered as a listener.
 
 ---
 
@@ -812,6 +894,25 @@ comp.setFullScreen (true);
 comp.setFullScreen (false);
 bool isFS = comp.isFullScreen();
 ```
+
+## Window aspect ratio
+
+A desktop window can keep its proportions while the user resizes it. The ratio is
+width over height, kept for a component that is not on the desktop yet and applied
+when its window is created:
+
+```cpp
+window.setWindowAspectRatio (16.0f / 9.0f);
+window.setWindowAspectRatio (std::nullopt); // resize freely again
+```
+
+The ratio constrains the whole window while the user resizes it. It may not hold
+for a fullscreen or maximized window, and is not applied to the browser canvas,
+whose size is given by the page. Content that should keep its own proportions inside decorations or toolbars,
+or in a window that ignores the ratio, still has to fit itself, for example by
+scaling to the largest size that fits and centering. Standalone plugin windows set
+it from editors whose `shouldPreserveAspectRatio()` returns true, and letterbox
+their content when the window does not keep the ratio.
 
 ---
 

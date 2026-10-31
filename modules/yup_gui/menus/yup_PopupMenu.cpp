@@ -735,6 +735,9 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
     this->options = options;
     menuCallback = std::move (callback);
 
+    if (auto* source = isSubmenu ? parentMenu.get() : options.targetComponent)
+        inheritColors (*source);
+
     if (! isSubmenu)
         focusComponentToRestore = getFocusComponentForDismissal();
 
@@ -773,11 +776,34 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
 
     setupMenuItems();
     positionMenu();
+    scrollTickedItemUnderMouse();
 
     setVisible (true);
     toFront (true);
 
     YUP_MODULE_DBG (GUI_POPUPMENU, "showCustom EXIT: visible=" << (isVisible() ? 1 : 0) << " size=" << getWidth() << "x" << getHeight() << " screenBounds=" << getScreenBounds().toString() << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
+}
+
+void PopupMenu::inheritColors (const Component& source)
+{
+    if (getPalette() == nullptr)
+        if (const auto* sourcePalette = source.findPalette())
+            setPalette (*sourcePalette);
+
+    for (const auto* colorId : { &Style::menuBackground,
+                                 &Style::menuBorder,
+                                 &Style::menuItemText,
+                                 &Style::menuItemTextDisabled,
+                                 &Style::menuItemBackground,
+                                 &Style::menuItemBackgroundHighlighted,
+                                 &Style::menuItemBackgroundActiveSubmenu })
+    {
+        if (getColor (*colorId).has_value())
+            continue;
+
+        if (const auto color = source.findColor (*colorId))
+            setColor (*colorId, *color);
+    }
 }
 
 //==============================================================================
@@ -998,20 +1024,32 @@ void PopupMenu::mouseExit (const MouseEvent& event)
     setSelectedItemIndex (-1, true);
 }
 
-void PopupMenu::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
+bool PopupMenu::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
 {
+    ignoreUnused (event);
+
     if (! needsScrolling())
-        return;
+        return false;
 
     auto deltaY = wheel.getDeltaY();
 
     if (deltaY > 0)
+    {
+        const auto canScroll = canScrollUp();
         scrollUp();
+        return canScroll;
+    }
     else if (deltaY < 0)
+    {
+        const auto canScroll = canScrollDown();
         scrollDown();
+        return canScroll;
+    }
+
+    return false;
 }
 
-void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
+bool PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
 {
     auto keyCode = key.getKey();
 
@@ -1032,6 +1070,8 @@ void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
 
     else if (keyCode == KeyPress::enterKey)
         selectCurrentItem();
+
+    return true;
 }
 
 //==============================================================================
@@ -1622,6 +1662,72 @@ float PopupMenu::getVisibleItemsHeight() const
     return height;
 }
 
+void PopupMenu::applyVisibleItemRange()
+{
+    // Recalculate the end based on available space
+    updateVisibleItemRange();
+
+    // Re-layout visible items using the exact height of the visible rows.
+    const auto menuHeight = verticalPadding * 2.0f
+                          + getVisibleItemsHeight()
+                          + (showScrollIndicators ? scrollIndicatorHeight * 2.0f : 0.0f);
+    setSize (getWidth(), static_cast<int> (std::ceil (jmax (itemHeight, menuHeight))));
+    layoutVisibleItems (getWidth());
+
+    // Repaint to update the display
+    repaint();
+}
+
+void PopupMenu::scrollTickedItemUnderMouse()
+{
+    if (! needsScrolling())
+        return;
+
+    const auto ticked = std::find_if (items.begin(), items.end(), [] (const auto& item)
+    {
+        return item->isTicked && ! item->isSeparator();
+    });
+
+    if (ticked == items.end())
+        return;
+
+    const auto tickedIndex = static_cast<int> (std::distance (items.begin(), ticked));
+    const auto tickedHalfHeight = getItemHeight (**ticked) * 0.5f;
+    const auto firstRowY = verticalPadding + scrollIndicatorHeight;
+
+    auto mouseY = firstRowY;
+    if (auto* desktop = Desktop::getInstance())
+        mouseY = screenToLocal (desktop->getCurrentMouseLocation()).getY();
+
+    // Every scroll offset showing the ticked row is a candidate, the closest one to the mouse wins
+    auto bestStart = 0;
+    auto bestDistance = std::numeric_limits<float>::max();
+
+    for (int start = 0; start <= tickedIndex; ++start)
+    {
+        visibleItemRange = Range<int> (start, start);
+        updateVisibleItemRange();
+
+        if (! visibleItemRange.contains (tickedIndex))
+            continue;
+
+        auto rowY = firstRowY;
+        for (int i = visibleItemRange.getStart(); i < tickedIndex; ++i)
+            rowY += getItemHeight (*items[static_cast<std::size_t> (i)]);
+
+        const auto distance = std::abs (rowY + tickedHalfHeight - mouseY);
+        if (distance < bestDistance)
+        {
+            bestDistance = distance;
+            bestStart = visibleItemRange.getStart();
+        }
+    }
+
+    visibleItemRange = Range<int> (bestStart, bestStart);
+    applyVisibleItemRange();
+    positionMenu();
+}
+
 void PopupMenu::scrollUp()
 {
     if (canScrollUp())
@@ -1630,18 +1736,7 @@ void PopupMenu::scrollUp()
         int newStart = jmax (0, visibleItemRange.getStart() - scrollSpeed);
         visibleItemRange = Range<int> (newStart, newStart);
 
-        // Recalculate the end based on available space
-        updateVisibleItemRange();
-
-        // Re-layout visible items using the exact height of the visible rows.
-        const auto menuHeight = verticalPadding * 2.0f
-                              + getVisibleItemsHeight()
-                              + (showScrollIndicators ? scrollIndicatorHeight * 2.0f : 0.0f);
-        setSize (getWidth(), static_cast<int> (std::ceil (jmax (itemHeight, menuHeight))));
-        layoutVisibleItems (getWidth());
-
-        // Repaint to update the display
-        repaint();
+        applyVisibleItemRange();
     }
 }
 
@@ -1653,18 +1748,7 @@ void PopupMenu::scrollDown()
         int newStart = jmin (static_cast<int> (items.size()) - 1, visibleItemRange.getStart() + scrollSpeed);
         visibleItemRange = Range<int> (newStart, newStart);
 
-        // Recalculate the end based on available space
-        updateVisibleItemRange();
-
-        // Re-layout visible items using the exact height of the visible rows.
-        const auto menuHeight = verticalPadding * 2.0f
-                              + getVisibleItemsHeight()
-                              + (showScrollIndicators ? scrollIndicatorHeight * 2.0f : 0.0f);
-        setSize (getWidth(), static_cast<int> (std::ceil (jmax (itemHeight, menuHeight))));
-        layoutVisibleItems (getWidth());
-
-        // Repaint to update the display
-        repaint();
+        applyVisibleItemRange();
     }
 }
 

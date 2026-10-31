@@ -35,6 +35,14 @@ AudioDeviceManagerPanel::AudioDeviceManagerPanel (AudioDeviceManager& m)
     addAndMakeVisible (rateBufferSelector);
     addAndMakeVisible (midiSection);
 
+    closeButton.setButtonText ("Close");
+    closeButton.onClick = [this]
+    {
+        if (onClose != nullptr)
+            onClose();
+    };
+    addChildComponent (closeButton);
+
     deviceTypeSelector.onTypeChanged = [this] (const String& typeName)
     {
         manager.setCurrentAudioDeviceType (typeName, true);
@@ -122,6 +130,8 @@ void AudioDeviceManagerPanel::populateFromManager()
     midiSection.populateOutput (MidiOutput::getAvailableDevices(),
                                 manager.getDefaultMidiOutputIdentifier());
     stagedMidiOutputId = manager.getDefaultMidiOutputIdentifier();
+
+    listsChanged();
 }
 
 void AudioDeviceManagerPanel::repopulateDeviceDependent()
@@ -168,6 +178,8 @@ void AudioDeviceManagerPanel::repopulateDeviceDependent()
         inputChannelSection.populate ({}, {});
         rateBufferSelector.populate ({}, 0.0, {}, 0);
     }
+
+    listsChanged();
 }
 
 void AudioDeviceManagerPanel::applyToManager()
@@ -200,33 +212,125 @@ MidiDeviceListConnection AudioDeviceManagerPanel::makeMidiDeviceListConnection()
 
 void AudioDeviceManagerPanel::paint (Graphics& g)
 {
-    g.setFillColor (ApplicationTheme::findComponentColor (*this, DocumentWindow::Style::backgroundColorId).value_or (Colors::dimgray));
-    g.fillAll();
+    const auto background = ApplicationTheme::findComponentColor (*this, DocumentWindow::Style::backgroundColorId).value_or (Colors::dimgray);
+
+    if (! hasShadow())
+    {
+        g.setFillColor (background);
+        g.fillAll();
+        return;
+    }
+
+    const auto card = getCardBounds();
+
+    // A wide, soft key shadow under a tight contact shadow.
+    g.setFillColor (Colors::black.withAlpha (0.35f));
+    g.setFeather (24.0f);
+    g.fillRoundedRect (card.translated (0.0f, 8.0f), cornerRadius);
+
+    g.setFillColor (Colors::black.withAlpha (0.25f));
+    g.setFeather (4.0f);
+    g.fillRoundedRect (card.translated (0.0f, 1.0f), cornerRadius);
+
+    g.setFeather (0.0f);
+    g.setFillColor (background);
+    g.fillRoundedRect (card, cornerRadius);
 }
 
 void AudioDeviceManagerPanel::resized()
 {
-    auto bounds = getLocalBounds().reduced (8);
-    const int rowH = 44;
-    const int gap = 4;
-    const int listH = 100;
+    const auto card = getCardBounds();
+    const auto listRows = fitListRows (card.getHeight());
+    auto bounds = card.reduced (margin);
 
-    deviceTypeSelector.setBounds (bounds.removeFromTop (rowH));
-    bounds.removeFromTop (gap);
+    closeButton.setVisible (onClose != nullptr);
+    if (closeButton.isVisible())
+    {
+        closeButton.setBounds (bounds.removeFromBottom (itemHeight).removeFromRight (90.0f));
+        bounds.removeFromBottom (itemGap);
+    }
 
-    deviceIOSelector.setBounds (bounds.removeFromTop (rowH * 2));
-    bounds.removeFromTop (gap);
+    // Sections keep their height when the card is too short and overflow it, rather
+    // than being squashed to nothing.
+    auto top = bounds.getY();
+    const auto place = [&bounds, &top] (Component& component, float height)
+    {
+        component.setBounds (bounds.getX(), top, bounds.getWidth(), height);
+        top += height + itemGap;
+    };
 
-    outputChannelSection.setBounds (bounds.removeFromTop (20 + listH));
-    bounds.removeFromTop (gap);
+    place (deviceTypeSelector, itemHeight);
+    place (deviceIOSelector, itemHeight * 2.0f + itemGap);
+    place (outputChannelSection, itemHeight * static_cast<float> (1 + listRows[0]));
+    place (inputChannelSection, itemHeight * static_cast<float> (1 + listRows[1]));
+    place (rateBufferSelector, itemHeight * 2.0f + itemGap);
+    place (midiSection, itemHeight * static_cast<float> (2 + listRows[2]) + itemGap);
+}
 
-    inputChannelSection.setBounds (bounds.removeFromTop (20 + listH));
-    bounds.removeFromTop (gap);
+void AudioDeviceManagerPanel::parentHierarchyChanged()
+{
+    setOpaque (! hasShadow());
+    repaint();
+}
 
-    rateBufferSelector.setBounds (bounds.removeFromTop (rowH * 2));
-    bounds.removeFromTop (gap);
+float AudioDeviceManagerPanel::getPreferredHeight() const
+{
+    const auto listRows = getNaturalListRows();
+    const auto shadowInsets = hasShadow() ? shadowInsetTop + shadowInsetBottom : 0.0f;
 
-    midiSection.setBounds (bounds.removeFromTop (20 + listH + rowH));
+    return getFixedHeight() + itemHeight * static_cast<float> (listRows[0] + listRows[1] + listRows[2]) + shadowInsets;
+}
+
+void AudioDeviceManagerPanel::listsChanged()
+{
+    resized();
+
+    if (onPreferredHeightChanged != nullptr)
+        onPreferredHeightChanged();
+}
+
+std::array<int, 3> AudioDeviceManagerPanel::getNaturalListRows() const
+{
+    return { jmax (1, outputChannelSection.getNumChannels()),
+             jmax (1, inputChannelSection.getNumChannels()),
+             jmax (1, midiSection.getNumInputDevices()) };
+}
+
+std::array<int, 3> AudioDeviceManagerPanel::fitListRows (float height) const
+{
+    auto listRows = getNaturalListRows();
+    const auto availableRows = static_cast<int> ((height - getFixedHeight()) / itemHeight);
+
+    while (listRows[0] + listRows[1] + listRows[2] > availableRows)
+    {
+        auto longest = std::max_element (listRows.begin(), listRows.end());
+        if (*longest <= 1)
+            break;
+
+        --*longest;
+    }
+
+    return listRows;
+}
+
+float AudioDeviceManagerPanel::getFixedHeight() const noexcept
+{
+    const auto closeRow = onClose != nullptr ? itemHeight + itemGap : 0.0f;
+
+    return margin * 2.0f + itemHeight * static_cast<float> (numFixedItems) + itemGap * static_cast<float> (numGaps) + closeRow;
+}
+
+bool AudioDeviceManagerPanel::hasShadow() const noexcept
+{
+    return getParentComponent() != nullptr;
+}
+
+Rectangle<float> AudioDeviceManagerPanel::getCardBounds() const
+{
+    if (! hasShadow())
+        return getLocalBounds();
+
+    return getLocalBounds().reduced (shadowInsetSides, shadowInsetTop, shadowInsetSides, shadowInsetBottom);
 }
 
 } // namespace yup

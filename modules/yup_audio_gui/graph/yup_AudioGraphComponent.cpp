@@ -683,7 +683,7 @@ void AudioGraphComponent::mouseDoubleClick (const MouseEvent& event)
     }
 }
 
-void AudioGraphComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+bool AudioGraphComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     const auto screenPos = eventPositionInThisComponent (event);
     const auto canvasPos = screenToCanvas (screenPos);
@@ -691,7 +691,7 @@ void AudioGraphComponent::mouseWheel (const MouseEvent& event, const MouseWheelD
     const auto newZoom = jlimit (minZoom, maxZoom, zoom * zoomFactor);
 
     if (newZoom == zoom)
-        return;
+        return false;
 
     needsInitialReset = false;
     needsInitialZoomToFit = false;
@@ -699,9 +699,10 @@ void AudioGraphComponent::mouseWheel (const MouseEvent& event, const MouseWheelD
     canvasOffset = screenPos - (canvasPos * zoom);
     updateNodeBounds();
     repaint();
+    return true;
 }
 
-void AudioGraphComponent::keyDown (const KeyPress& keys, const Point<float>&)
+bool AudioGraphComponent::keyDown (const KeyPress& keys, const Point<float>&)
 {
     const auto modifiers = keys.getModifiers();
     const bool commandDown = modifiers.isCommandDown() || modifiers.isControlDown();
@@ -715,13 +716,13 @@ void AudioGraphComponent::keyDown (const KeyPress& keys, const Point<float>&)
             else
                 undoManager->undo();
 
-            return;
+            return true;
         }
 
         if (keys.getKey() == KeyPress::textYKey)
         {
             undoManager->redo();
-            return;
+            return true;
         }
     }
 
@@ -729,26 +730,32 @@ void AudioGraphComponent::keyDown (const KeyPress& keys, const Point<float>&)
     {
         spacebarDown = true;
         setMouseCursor (MouseCursor::ResizeAll);
-        return;
+        return true;
     }
 
     if (keys.getKey() == KeyPress::textFKey || keys.getKey() == KeyPress::homeKey)
     {
         zoomToFitNodes();
-        return;
+        return true;
     }
 
     if (keys.getKey() == KeyPress::number0Key)
+    {
         resetView();
+        return true;
+    }
+
+    return false;
 }
 
-void AudioGraphComponent::keyUp (const KeyPress& keys, const Point<float>&)
+bool AudioGraphComponent::keyUp (const KeyPress& keys, const Point<float>&)
 {
-    if (keys.getKey() == KeyPress::spaceKey)
-    {
-        spacebarDown = false;
-        setMouseCursor (MouseCursor::Default);
-    }
+    if (keys.getKey() != KeyPress::spaceKey)
+        return false;
+
+    spacebarDown = false;
+    setMouseCursor (MouseCursor::Default);
+    return true;
 }
 
 //==============================================================================

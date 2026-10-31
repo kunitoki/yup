@@ -387,6 +387,69 @@ TEST_F (ApplicationThemeTest, FindColorInstanceMethodReturnsNulloptForUnknown)
     EXPECT_FALSE (result.has_value());
 }
 
+TEST_F (ApplicationThemeTest, ComponentPaletteColorsTheSubtreeThroughTheMapping)
+{
+    const Identifier accentId ("accentId");
+    theme->setPaletteMapping ([accentId] (const ThemePalette& palette, ApplicationTheme& t)
+    {
+        t.setPaletteColor (accentId, palette.getColor (ThemePalette::Role::accent));
+    });
+
+    const ThemePalette ownPalette (std::vector<Color> { Color (0xff101010), Color (0xff0080ff) });
+    theme->setPalette (ThemePalette (std::vector<Color> { Color (0xff101010), Color (0xffff8000) }));
+
+    Component parent ("parent");
+    Component child ("child");
+    Component outside ("outside");
+    parent.addChildComponent (child);
+    parent.setPalette (ownPalette);
+
+    EXPECT_EQ (ownPalette.getColor (ThemePalette::Role::accent), theme->findColor (child, accentId));
+    EXPECT_EQ (theme->getPalette().getColor (ThemePalette::Role::accent), theme->findColor (outside, accentId));
+
+    EXPECT_EQ (ownPalette, theme->getPalette (child));
+    EXPECT_EQ (theme->getPalette(), theme->getPalette (outside));
+}
+
+TEST_F (ApplicationThemeTest, ExplicitThemeColorWinsOverComponentPalette)
+{
+    const Identifier accentId ("accentId");
+    theme->setPaletteMapping ([accentId] (const ThemePalette& palette, ApplicationTheme& t)
+    {
+        t.setPaletteColor (accentId, palette.getColor (ThemePalette::Role::accent));
+    });
+
+    const Color explicitColor (0xff123456);
+    theme->setColor (accentId, explicitColor);
+
+    Component c ("component");
+    c.setPalette (ThemePalette (std::vector<Color> { Color (0xff101010), Color (0xff0080ff) }));
+
+    EXPECT_EQ (explicitColor, theme->findColor (c, accentId));
+}
+
+TEST_F (ApplicationThemeTest, ChangingPaletteMappingRemapsComponentPalettes)
+{
+    const Identifier colorId ("colorId");
+    const auto mapRole = [colorId] (ThemePalette::Role role)
+    {
+        return [colorId, role] (const ThemePalette& palette, ApplicationTheme& t)
+        {
+            t.setPaletteColor (colorId, palette.getColor (role));
+        };
+    };
+
+    const ThemePalette ownPalette (std::vector<Color> { Color (0xff101010), Color (0xff0080ff) });
+    Component c ("component");
+    c.setPalette (ownPalette);
+
+    theme->setPaletteMapping (mapRole (ThemePalette::Role::accent));
+    EXPECT_EQ (ownPalette.getColor (ThemePalette::Role::accent), theme->findColor (c, colorId));
+
+    theme->setPaletteMapping (mapRole (ThemePalette::Role::background));
+    EXPECT_EQ (ownPalette.getColor (ThemePalette::Role::background), theme->findColor (c, colorId));
+}
+
 TEST_F (ApplicationThemeTest, FindColorInstanceMethodRespectsComponentOverride)
 {
     Component c ("testComponent");

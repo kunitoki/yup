@@ -245,7 +245,7 @@ void MidiKeyboardState::processNextMidiEvent (const MidiMessage& message)
     {
         noteOffInternal (message.getChannel(), message.getNoteNumber(), message.getFloatVelocity());
     }
-    else if (message.isAllNotesOff())
+    else if (message.isAllNotesOff() || message.isAllSoundOff())
     {
         for (int i = 0; i < 128; ++i)
             noteOffInternal (message.getChannel(), i, 0.0f);

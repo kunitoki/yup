@@ -37,12 +37,12 @@ public:
         fftSize = hopSize * 2;
 
         fftProcessor.setSize (fftSize);
-        fftProcessor.setScaling (FFTProcessor<float>::FFTScaling::asymmetric);
+        fftProcessor.setScaling (FFTProcessor<float>::FFTScaling::none);
 
         overlapBuffer.assign (static_cast<std::size_t> (hopSize), 0.0f);
         timeBuffer.assign (static_cast<std::size_t> (fftSize), 0.0f);
-        frequencyBuffer.assign (static_cast<std::size_t> (fftSize) * 2, 0.0f);
-        tempBuffer.assign (static_cast<std::size_t> (fftSize) * 2, 0.0f); // Must hold complex data for in-place FFT
+        frequencyBuffer.assign (static_cast<std::size_t> (fftSize), 0.0f);
+        tempBuffer.assign (static_cast<std::size_t> (fftSize), 0.0f); // Zero padded time domain input
 
         fdlIndex = 0;
         configured = true;
@@ -54,14 +54,14 @@ public:
 
     bool isConfigured() const { return configured; }
 
-    std::size_t setImpulseResponse (const float* impulseResponse, std::size_t length, float scaling)
+    void setImpulseResponse (const float* impulseResponse, std::size_t length, float scaling)
     {
         jassert (configured);
 
         if (fftSize <= 0 || hopSize <= 0)
         {
             resetState();
-            return 0;
+            return;
         }
 
         frequencyPartitions.clear();
@@ -70,23 +70,25 @@ public:
         if (length == 0 || impulseResponse == nullptr)
         {
             resetState();
-            return 0;
+            return;
         }
 
         const auto numPartitions = (length + static_cast<std::size_t> (hopSize) - 1) / static_cast<std::size_t> (hopSize);
         if (numPartitions == 0)
         {
             resetState();
-            return 0;
+            return;
         }
 
-        std::size_t processedSamples = 0;
+        // The unscaled inverse FFT returns fftSize times the convolution: fold 1 / fftSize into the partitions
+        const float partitionScaling = scaling / static_cast<float> (fftSize);
+
         frequencyPartitions.reserve (numPartitions);
 
         for (std::size_t p = 0; p < numPartitions; ++p)
         {
             std::vector<float> partition;
-            partition.resize (static_cast<std::size_t> (fftSize) * 2);
+            partition.resize (static_cast<std::size_t> (fftSize));
 
             std::fill (tempBuffer.begin(), tempBuffer.end(), 0.0f);
 
@@ -96,22 +98,18 @@ public:
             if (copyCount > 0 && offset < length)
             {
                 for (std::size_t i = 0; i < copyCount && offset + i < length; ++i)
-                    tempBuffer[i] = impulseResponse[offset + i] * scaling;
+                    tempBuffer[i] = impulseResponse[offset + i] * partitionScaling;
             }
 
-            fftProcessor.performRealFFTForward (tempBuffer.data(), partition.data());
+            fftProcessor.performRealFFTForwardPacked (tempBuffer.data(), partition.data());
 
             frequencyPartitions.push_back (std::move (partition));
-
-            processedSamples += copyCount;
         }
 
-        frequencyDelayLine.assign (numPartitions, std::vector<float> (static_cast<std::size_t> (fftSize) * 2, 0.0f));
+        frequencyDelayLine.assign (numPartitions, std::vector<float> (static_cast<std::size_t> (fftSize), 0.0f));
         fdlIndex = 0;
 
         resetState();
-
-        return processedSamples;
     }
 
     void resetState()
@@ -133,16 +131,15 @@ public:
         if (frequencyPartitions.empty())
             return;
 
-        // 1) Transform current input hop to frequency domain
-        FloatVectorOperations::copy (tempBuffer.data(), inputHop, hopSize);
-        fftProcessor.performRealFFTForward (tempBuffer.data(), tempBuffer.data());
-
-        // 2) Store in frequency delay line (circular buffer) - copy full complex buffer
+        // 1) Transform the zero padded input hop straight into the frequency delay line (most recent at fdlIndex)
         fdlIndex = (fdlIndex == 0) ? static_cast<int> (frequencyDelayLine.size()) - 1 : fdlIndex - 1;
-        std::copy (tempBuffer.begin(), tempBuffer.begin() + (fftSize * 2), frequencyDelayLine[static_cast<std::size_t> (fdlIndex)].begin());
 
-        // 3) Frequency domain convolution: Y = sum(X[k-p] * H[p])
-        FloatVectorOperations::clear (frequencyBuffer.data(), fftSize * 2);
+        FloatVectorOperations::copy (tempBuffer.data(), inputHop, hopSize);
+        FloatVectorOperations::clear (tempBuffer.data() + hopSize, hopSize);
+        fftProcessor.performRealFFTForwardPacked (tempBuffer.data(), frequencyDelayLine[static_cast<std::size_t> (fdlIndex)].data());
+
+        // 2) Frequency domain convolution: Y = sum(X[k-p] * H[p])
+        FloatVectorOperations::clear (frequencyBuffer.data(), fftSize);
 
         int xIndex = fdlIndex;
         for (std::size_t p = 0; p < frequencyPartitions.size(); ++p)
@@ -150,8 +147,7 @@ public:
             const float* X = frequencyDelayLine[static_cast<std::size_t> (xIndex)].data();
             const float* H = frequencyPartitions[p].data();
 
-            // fftSize_/2 gives the number of complex pairs for real FFT
-            ComplexVectorOperations::multiplyAccumulate (X, H, frequencyBuffer.data(), fftSize / 2);
+            ComplexVectorOperations::multiplyAccumulate (X, H, frequencyBuffer.data(), fftSize / 2, ComplexLayout::packedReal);
 
             // Move to next older spectrum
             xIndex++;
@@ -159,10 +155,10 @@ public:
                 xIndex = 0;
         }
 
-        // 4) Inverse FFT back to time domain
-        fftProcessor.performRealFFTInverse (frequencyBuffer.data(), timeBuffer.data());
+        // 3) Inverse FFT back to time domain
+        fftProcessor.performRealFFTInversePacked (frequencyBuffer.data(), timeBuffer.data());
 
-        // 5) Overlap-Add: output first hopSize samples, store last hopSize as overlap
+        // 4) Overlap-Add: output first hopSize samples, store last hopSize as overlap
         for (int i = 0; i < hopSize; ++i)
         {
             outputAccumulator[i] += timeBuffer[i] + overlapBuffer[i];
@@ -207,12 +203,14 @@ public:
         clear();
     }
 
-    void clear()
+    void clear (std::size_t delaySamples = 0)
     {
+        jassert (buffer.empty() || delaySamples <= buffer.size()); // empty until the convolver is prepared
+
         std::fill (buffer.begin(), buffer.end(), 0.0f);
-        writeIndex = 0;
+        writeIndex = delaySamples % std::max (buffer.size(), std::size_t (1));
         readIndex = 0;
-        availableForRead = 0;
+        availableForRead = std::min (delaySamples, buffer.size());
     }
 
     std::size_t getAvailableForRead() const { return availableForRead; }
@@ -302,30 +300,28 @@ public:
 
     void configureLayers (std::size_t directFIRCoefficients, const std::vector<LayerSpec>& newLayers)
     {
-        directFIRCoefficientCount = directFIRCoefficients;
-
         layers.clear();
         layers.resize (newLayers.size());
+        layerHopSizes.resize (newLayers.size());
+        layerOffsets.resize (newLayers.size());
 
+        std::size_t offset = directFIRCoefficients;
         std::size_t maximumHopSize = 0;
 
-        baseHopSize = newLayers.empty() ? 0 : newLayers.front().hopSize;
         for (std::size_t i = 0; i < newLayers.size(); ++i)
         {
-            layers[i].configure (newLayers[i].hopSize);
-            if (i == 0)
-                baseHopSize = newLayers[i].hopSize;
-            else
-                baseHopSize = std::min (baseHopSize, newLayers[i].hopSize);
+            const auto hopSize = static_cast<std::size_t> (newLayers[i].hopSize);
 
-            maximumHopSize = std::max (maximumHopSize, static_cast<std::size_t> (newLayers[i].hopSize));
+            layers[i].configure (newLayers[i].hopSize);
+            layerHopSizes[i] = newLayers[i].hopSize;
+            offset = std::max (offset, hopSize);
+            layerOffsets[i] = offset;
+
+            maximumHopSize = std::max (maximumHopSize, hopSize);
         }
 
+        directFIRCoefficientCount = layerOffsets.empty() ? directFIRCoefficients : layerOffsets.front();
         maxHopSize = maximumHopSize;
-
-        // Clear staging buffers - will be allocated in prepare()
-        inputStaging.clear();
-        outputStaging.clear();
 
         // Resize per-layer circular buffers - will be allocated in prepare()
         layerInputBuffers.resize (layers.size());
@@ -336,6 +332,7 @@ public:
 
         // Clear working buffers - will be allocated in prepare()
         workingOutput.clear();
+        layerBlockOutput.clear();
 
         isPrepared = false;
     }
@@ -344,24 +341,16 @@ public:
     {
         this->maxBlockSize = maxBlockSize;
 
-        // Prepare main input staging - needs to accumulate up to baseHopSize samples plus incoming block
-        const std::size_t inputStagingSize = static_cast<std::size_t> (baseHopSize) + maxBlockSize;
-        inputStaging.resize (inputStagingSize);
-        outputStaging.assign (static_cast<std::size_t> (baseHopSize), 0.0f);
-
-        // Prepare per-layer circular buffers with layer-specific sizing
         for (std::size_t i = 0; i < layerInputBuffers.size(); ++i)
         {
             const std::size_t layerHopSize = static_cast<std::size_t> (layers[i].getHopSize());
 
-            // Input buffer: needs to accumulate up to layerHopSize samples plus incoming block
-            const std::size_t layerInputBufferSize = layerHopSize + maxBlockSize;
-            layerInputBuffers[i].resize (layerInputBufferSize);
+            // Input: less than a hop left over plus the incoming block
+            layerInputBuffers[i].resize (layerHopSize + maxBlockSize);
 
-            // Output buffer: needs to handle bursts of layerHopSize samples
-            // Size it to handle multiple hops since read rate (baseHopSize) may be much smaller than write rate (layerHopSize)
-            const std::size_t layerOutputBufferSize = layerHopSize * ((layerHopSize / static_cast<std::size_t> (baseHopSize)) + 2);
-            layerOutputBuffers[i].resize (layerOutputBufferSize);
+            // Output: the layer offset as a delay (the output is read that many samples after its input was
+            // written), plus the hops a block can complete
+            layerOutputBuffers[i].resize (layerOffsets[i] + layerHopSize + maxBlockSize);
         }
 
         // Allocate temp buffers
@@ -373,6 +362,9 @@ public:
 
         // Allocate working buffers
         workingOutput.resize (maxBlockSize);
+        layerBlockOutput.resize (maxBlockSize);
+
+        resetStateUnsafe();
 
         isPrepared = true;
     }
@@ -435,7 +427,11 @@ public:
     void setImpulseResponse (const float* impulseResponse, std::size_t length, const PartitionedConvolver::IRLoadOptions& options)
     {
         DirectFIRFloat newFIR;
-        std::vector<FFTLayer> newLayers (layers.size());
+        std::vector<FFTLayer> newLayers (layerHopSizes.size());
+
+        // Configured even for an empty impulse response, so the layout survives it
+        for (std::size_t i = 0; i < newLayers.size(); ++i)
+            newLayers[i].configure (layerHopSizes[i]);
 
         std::size_t trimmedLength = length;
 
@@ -463,21 +459,18 @@ public:
             const auto directCoefficientsCount = std::min (directFIRCoefficientCount, trimmedLength);
             newFIR.setCoefficients (impulseResponse, directCoefficientsCount, headroomScale);
 
-            // Update FFT layers
-            std::size_t consumed = directCoefficientsCount;
+            // Update FFT layers: each one convolves the taps from its offset to the next layer's offset
             for (std::size_t i = 0; i < newLayers.size(); ++i)
             {
                 auto& layer = newLayers[i];
-                layer.configure (layers[i].getHopSize());
 
-                const std::size_t remaining = (consumed < trimmedLength) ? (trimmedLength - consumed) : 0;
-                if (remaining == 0)
-                {
+                const std::size_t start = std::min (layerOffsets[i], trimmedLength);
+                const std::size_t end = (i + 1 < newLayers.size()) ? std::min (layerOffsets[i + 1], trimmedLength) : trimmedLength;
+
+                if (start < end)
+                    layer.setImpulseResponse (impulseResponse + start, end - start, headroomScale);
+                else
                     layer.setImpulseResponse (nullptr, 0, headroomScale);
-                    continue;
-                }
-
-                consumed += layer.setImpulseResponse (impulseResponse + consumed, remaining, headroomScale);
             }
         }
 
@@ -518,16 +511,12 @@ private:
     void resetStateUnsafe()
     {
         directFIR.reset();
-        inputStagingReadIndex = 0;
-        inputStagingWriteIndex = 0;
-        inputStagingAvailable = 0;
-        std::fill (outputStaging.begin(), outputStaging.end(), 0.0f);
 
         for (auto& buffer : layerInputBuffers)
             buffer.clear();
 
-        for (auto& buffer : layerOutputBuffers)
-            buffer.clear();
+        for (std::size_t i = 0; i < layerOutputBuffers.size(); ++i)
+            layerOutputBuffers[i].clear (layerOffsets[i]);
 
         for (auto& layer : layers)
             layer.resetState();
@@ -550,57 +539,31 @@ private:
             return;
         }
 
-        // Add input to main input staging buffer using circular buffer logic
-        writeToInputStaging (input, numSamples);
-
-        std::size_t outputSamplesProduced = 0;
-        while (getInputStagingAvailable() >= static_cast<std::size_t> (baseHopSize))
+        for (std::size_t layerIndex = 0; layerIndex < layers.size(); ++layerIndex)
         {
-            const std::size_t hopSize = static_cast<std::size_t> (baseHopSize);
+            auto& layer = layers[layerIndex];
+            if (! layer.hasImpulseResponse())
+                continue;
 
-            // Read hop from input staging
-            readFromInputStaging (tempLayerHop.data(), hopSize);
-            FloatVectorOperations::clear (outputStaging.data(), outputStaging.size());
+            const auto layerHopSize = static_cast<std::size_t> (layer.getHopSize());
+            auto& inputBuffer = layerInputBuffers[layerIndex];
+            auto& outputBuffer = layerOutputBuffers[layerIndex];
 
-            for (std::size_t layerIndex = 0; layerIndex < layers.size(); ++layerIndex)
+            inputBuffer.write (input, numSamples);
+
+            while (inputBuffer.getAvailableForRead() >= layerHopSize)
             {
-                auto& layer = layers[layerIndex];
-                if (! layer.hasImpulseResponse())
-                    continue;
+                inputBuffer.read (tempLayerHop.data(), layerHopSize);
+                FloatVectorOperations::clear (layerTempOutput.data(), layer.getHopSize());
 
-                const int layerHopSize = layer.getHopSize();
-                auto& inputBuffer = layerInputBuffers[layerIndex];
-                auto& outputBuffer = layerOutputBuffers[layerIndex];
+                layer.processHop (tempLayerHop.data(), layerTempOutput.data());
 
-                // Write input hop to layer's input buffer
-                inputBuffer.write (tempLayerHop.data(), hopSize);
-
-                // Process complete layer hops
-                while (inputBuffer.getAvailableForRead() >= static_cast<std::size_t> (layerHopSize))
-                {
-                    // Read a full hop for this layer
-                    inputBuffer.read (tempLayerHop.data(), static_cast<std::size_t> (layerHopSize));
-                    FloatVectorOperations::clear (layerTempOutput.data(), layerHopSize);
-
-                    // Process hop
-                    layer.processHop (tempLayerHop.data(), layerTempOutput.data());
-
-                    // Write output to layer's output buffer
-                    outputBuffer.write (layerTempOutput.data(), static_cast<std::size_t> (layerHopSize));
-                }
-
-                // Mix available output from this layer
-                if (outputBuffer.getAvailableForRead() >= hopSize)
-                {
-                    outputBuffer.read (layerTempOutput.data(), hopSize);
-                    FloatVectorOperations::add (outputStaging.data(), layerTempOutput.data(), hopSize);
-                }
+                outputBuffer.write (layerTempOutput.data(), layerHopSize);
             }
 
-            // Add staging output to main output
-            const std::size_t samplesToWrite = std::min (hopSize, numSamples - outputSamplesProduced);
-            FloatVectorOperations::add (workingOutput.data() + outputSamplesProduced, outputStaging.data(), samplesToWrite);
-            outputSamplesProduced += samplesToWrite;
+            // The layer offset is at least its hop, so the samples for this block are always ready
+            outputBuffer.read (layerBlockOutput.data(), numSamples);
+            FloatVectorOperations::add (workingOutput.data(), layerBlockOutput.data(), numSamples);
         }
 
         // Copy final result to output (accumulate)
@@ -608,47 +571,9 @@ private:
     }
 
 private:
-    void writeToInputStaging (const float* data, std::size_t numSamples)
-    {
-        const std::size_t available = inputStaging.size() - inputStagingAvailable;
-        jassert (numSamples <= available);
-        numSamples = std::min (numSamples, available);
-        if (numSamples == 0)
-            return;
-
-        const std::size_t beforeWrap = std::min (numSamples, inputStaging.size() - inputStagingWriteIndex);
-        const std::size_t afterWrap = numSamples - beforeWrap;
-
-        std::copy (data, data + beforeWrap, inputStaging.begin() + inputStagingWriteIndex);
-        if (afterWrap > 0)
-            std::copy (data + beforeWrap, data + numSamples, inputStaging.begin());
-
-        inputStagingWriteIndex = (inputStagingWriteIndex + numSamples) % inputStaging.size();
-        inputStagingAvailable += numSamples;
-    }
-
-    void readFromInputStaging (float* data, std::size_t numSamples)
-    {
-        jassert (numSamples <= inputStagingAvailable);
-        numSamples = std::min (numSamples, inputStagingAvailable);
-        if (numSamples == 0)
-            return;
-
-        const std::size_t beforeWrap = std::min (numSamples, inputStaging.size() - inputStagingReadIndex);
-        const std::size_t afterWrap = numSamples - beforeWrap;
-
-        std::copy (inputStaging.begin() + inputStagingReadIndex, inputStaging.begin() + inputStagingReadIndex + beforeWrap, data);
-        if (afterWrap > 0)
-            std::copy (inputStaging.begin(), inputStaging.begin() + afterWrap, data + beforeWrap);
-
-        inputStagingReadIndex = (inputStagingReadIndex + numSamples) % inputStaging.size();
-        inputStagingAvailable -= numSamples;
-    }
-
-    std::size_t getInputStagingAvailable() const { return inputStagingAvailable; }
-
     std::size_t directFIRCoefficientCount = 0;
-    int baseHopSize = 0;
+    std::vector<int> layerHopSizes;
+    std::vector<std::size_t> layerOffsets;
     std::size_t maxHopSize = 0;
     std::size_t maxBlockSize = 0;
     std::size_t finalImpulseLength = 0;
@@ -659,13 +584,7 @@ private:
 
     // Working buffers
     std::vector<float> workingOutput;
-
-    // Input staging with circular buffer management
-    std::vector<float> inputStaging;
-    std::size_t inputStagingReadIndex = 0;
-    std::size_t inputStagingWriteIndex = 0;
-    std::size_t inputStagingAvailable = 0;
-    std::vector<float> outputStaging;
+    std::vector<float> layerBlockOutput;
 
     // Per-layer circular buffering
     std::vector<CircularBuffer> layerInputBuffers;

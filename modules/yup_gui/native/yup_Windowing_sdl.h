@@ -93,6 +93,8 @@ public:
 
     //==============================================================================
     bool isDecorated() const override;
+    void setAspectRatio (std::optional<float> newAspectRatio) override;
+    std::optional<float> getAspectRatio() const override;
 
     //==============================================================================
     bool isContinuousRepaintingEnabled() const override;
@@ -165,7 +167,7 @@ public:
     void handleMouseMoveOrDrag (const Point<float>& position, TouchFinger* touchFinger = nullptr);
     void revalidateStationaryPointer();
     void rememberPointerPosition (const Point<float>& position);
-    Component* getPointerTarget() const;
+    Component* getPointerTarget() const override;
     void handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger = nullptr);
     void handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger = nullptr, bool wasCanceled = false);
     void handleTouchDown (SDL_FingerID fingerId, const Point<float>& position, float pressure);
@@ -274,6 +276,7 @@ private:
     WeakReference<SDLComponentNative>::Master masterReference;
 
     SDL_Window* window = nullptr;
+    std::optional<float> aspectRatio;
     SDL_GLContext windowContext = nullptr;
     SDL_GLContext computeContext = nullptr;
     bool computeContextLost = false;

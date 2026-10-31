@@ -94,7 +94,15 @@ Controls whether targets are added for test projects. OFF by default.
 
 ### `YUP_TEST_MODULES`
 
-Semicolon-separated list of modules whose tests are compiled into `yup_tests`. Empty by default, which builds every module's tests. When set, only the listed modules' tests are built, linking just what they need (the test runner, plus each module's `optionalDeps` and `testDeps`), e.g. `-DYUP_TEST_MODULES="yup_core;yup_dsp"`.
+Semicolon-separated list of modules whose tests are built. Empty by default, which builds every module's tests. Each tested module gets its own `<module>_tests` runner, registered with `ctest` as `<module>`, and the `yup_tests` target builds them all. The `yup_tests_run` target builds them and then runs them all through `ctest`. When set, only the listed modules' runners are built, linking just what they need (the shared `yup_tests_runtime` library, plus each module's `optionalDeps` and `testDeps`), e.g. `-DYUP_TEST_MODULES="yup_core;yup_dsp"`.
+
+### `YUP_TEST_LINK_JOBS`
+
+Maximum number of test runners linked at the same time with Ninja generators, to bound the memory used by the links. `2` by default, `0` removes the limit.
+
+### `YUP_TEST_WASM_DEBUG_INFO`
+
+Debug information of the Emscripten Debug test runners, passed as `EMSCRIPTEN_DEBUG_INFO` to `yup_standalone_app`. `NAMES` by default, for fast links with function names in stack traces; set `FULL` to debug the runners with DWARF and source maps in a browser.
 
 ### `YUP_BUILD_BENCHMARKS`
 
@@ -118,7 +126,7 @@ Enables the SMTG VST3 validator as a post-build step for VST3 targets. OFF by de
 
 ### `YUP_ENABLE_AUVAL_VALIDATOR`
 
-Enables auval validation as a post-build step for AU/AUv3 targets. OFF by default.
+Enables auval validation as a post-build step for AU/AUv3 targets. OFF by default. auval only sees installed components, so AU targets are validated (by auval and pluginval) only when `PLUGIN_COPY_AFTER_BUILD` is enabled, right after the copy.
 
 ---
 
@@ -288,6 +296,7 @@ also be used independently for non-plugin GUI applications.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `TARGET_NAME` | string | *(required)* | Target name for the executable. |
+| `TARGET_PRODUCT_NAME` | string | `<TARGET_NAME>` | Name of the built application: the executable, the `.app` bundle and the name macOS shows in the menu bar, and the `.html` page on Emscripten. Android and `TARGET_WHEEL` builds keep `<TARGET_NAME>`. |
 | `TARGET_VERSION` | string | *(required)* | Version in `major.minor.patch` format. |
 | `TARGET_CONSOLE` | ON\|OFF | OFF | Build a console app (no windowing/SDL, no macOS bundle). |
 | `TARGET_IDE_GROUP` | string | - | IDE folder group name. |
@@ -296,6 +305,7 @@ also be used independently for non-plugin GUI applications.
 | `TARGET_ICON` | path | *(built-in)* | Path to an application icon image (PNG). Files beside it with the same name are picked up too: `<name>.ico` becomes the Windows executable icon, and `<name>-foreground.png` with `<name>-background.png` (432 x 432, the foreground within the middle 288) make an Android adaptive icon, themed from Android 13. |
 | `TARGET_ICON_COMPOSER` | path | *(built-in when `TARGET_ICON` is not set)* | Apple only: an Icon Composer `.icon` bundle, the layered Liquid Glass icon of macOS and iOS 26. Needs Xcode 26; it is compiled into the app as `Assets.car`, while `TARGET_ICON` stays the icon on older systems. A `CUSTOM_PLIST` must set `CFBundleIconName` to `AppIcon`. |
 | `TARGET_WHEEL` | ON\|OFF | OFF | Build as a loadable module (e.g. a Python wheel) instead of an executable. |
+| `TARGET_STATIC_LIBRARY` | ON\|OFF | OFF | Build the `MODULES` once into a static library instead of an executable. Apps listing it in their `MODULES` link it and get the same compile settings, without compiling the modules again. |
 | `DEFINITIONS` | list | - | Additional compile definitions. |
 | `COMPILE_OPTIONS` | list | - | Additional compile options. |
 | `MODULES` | list | - | YUP module dependencies. |
@@ -319,6 +329,7 @@ These arguments only affect the Emscripten build and are ignored elsewhere.
 | `MAXIMUM_MEMORY` | integer | *(unset)* | Maximum WASM heap size in bytes (`-sMAXIMUM_MEMORY`). Only applied when set; use with `ALLOW_MEMORY_GROWTH` to cap unbounded growth. |
 | `PTHREAD_POOL_SIZE` | integer | `8` | Size of the pthread pool (`-sPTHREAD_POOL_SIZE`). |
 | `STACK_SIZE` | integer | `2097152` | Stack size in bytes (`-sSTACK_SIZE`). |
+| `EMSCRIPTEN_DEBUG_INFO` | FULL\|NAMES | `FULL` | Debug information of Debug links. `FULL` keeps DWARF and writes a source map (`-gsource-map -g`), `NAMES` keeps only function names (`-g2`) for much faster links, still enough for readable stack traces. |
 | `CUSTOM_SHELL` | path | *(built-in)* | Custom Emscripten shell HTML (`--shell-file`). |
 | `PRELOAD_FILES` | list | - | Files to preload into the virtual filesystem (`--preload-file`), e.g. `"local/path@/vfs/path"`. |
 | `ENABLE_EMSCRIPTEN_WEBGPU` | boolean | `ON` | Enable the native WebGPU rendering backend via the Emdawnwebgpu port (`--use-port=emdawnwebgpu`). Per-target parameter on `yup_standalone_app`. Requires Emscripten 4.0.22+. Set `OFF` to build for WebGL2 instead, for browsers without WebGPU; WebGL2 antialiases with 4x MSAA, so text and thin edges look rougher on displays with a device pixel ratio of 1. |

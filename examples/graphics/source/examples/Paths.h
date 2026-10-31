@@ -133,11 +133,11 @@ public:
         document.endGesture();
     }
 
-    void keyDown (const yup::KeyPress& keys, const yup::Point<float>&) override
+    bool keyDown (const yup::KeyPress& keys, const yup::Point<float>&) override
     {
         // Every key is consumed here, so Escape and Z never reach the demo window (quit / fullscreen)
         if (document.isGestureActive())
-            return;
+            return true;
 
         const auto modifiers = keys.getModifiers();
         const bool command = modifiers.isCommandDown() || modifiers.isControlDown();
@@ -162,19 +162,32 @@ public:
             setTool (Tool::select);
         else if (! command && key == yup::KeyPress::textPKey)
             setTool (Tool::pen);
+
+        return true;
     }
 
-    void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData) override
+    bool mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& wheelData) override
     {
-        // The focused component receives the wheel: forward it to the scrollable component under the mouse
-        for (auto* target = findComponentAtForMouseEvent (event.getPosition()); target != nullptr && target != this; target = target->getParentComponent())
+        // The focused component receives the wheel: hand it to the component under the mouse, which passes it up until one uses it
+        auto* target = findComponentAtForMouseEvent (event.getPosition());
+        if (forwardingWheel || target == nullptr || target == this)
+            return false;
+
+        const yup::ScopedValueSetter<bool> forwarding (forwardingWheel, true);
+
+        for (auto* component = target; component != nullptr && component != this; component = component->getParentComponent())
         {
-            if (dynamic_cast<PathEditor::ScrollPanel*> (target) != nullptr || dynamic_cast<yup::ListBox*> (target) != nullptr)
-            {
-                target->mouseWheel (event.withPosition (target->getLocalPoint (this, event.getPosition())), wheelData);
-                return;
-            }
+            if (! component->isVisible() || ! component->isEnabled())
+                continue;
+
+            const auto componentEvent = event.withPosition (component->getLocalPoint (this, event.getPosition()))
+                                            .withSourceComponent (component);
+
+            if (component->mouseWheel (componentEvent, wheelData))
+                return true;
         }
+
+        return false;
     }
 
 private:
@@ -290,4 +303,5 @@ private:
     yup::TextButton* undoButton = nullptr;
     yup::TextButton* redoButton = nullptr;
     yup::FileChooser::Ptr fileChooser;
+    bool forwardingWheel = false;
 };

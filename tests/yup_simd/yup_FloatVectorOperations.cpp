@@ -567,6 +567,207 @@ TEST_F (FloatVectorOperationsTests, FindMaximum)
     EXPECT_FLOAT_EQ (maxVal, 0.9f);
 }
 
+TEST_F (FloatVectorOperationsTests, FindMinimumAndMaximumReportFirstIndex)
+{
+    const float data[8] = { 0.1f, -0.7f, 0.9f, -0.2f, -0.7f, 0.4f, 0.9f, 0.3f };
+
+    int index = -1;
+    EXPECT_FLOAT_EQ (FloatVectorOperations::findMinimum (data, 8, index), -0.7f);
+    EXPECT_EQ (index, 1);
+
+    index = -1;
+    EXPECT_FLOAT_EQ (FloatVectorOperations::findMaximum (data, 8, index), 0.9f);
+    EXPECT_EQ (index, 2);
+
+    const double doubles[4] = { 3.0, 2.0, 1.0, 4.0 };
+    size_t doubleIndex = 99;
+    EXPECT_DOUBLE_EQ (FloatVectorOperations::findMinimum (doubles, size_t (4), doubleIndex), 1.0);
+    EXPECT_EQ (doubleIndex, 2u);
+    EXPECT_DOUBLE_EQ (FloatVectorOperations::findMaximum (doubles, size_t (4), doubleIndex), 4.0);
+    EXPECT_EQ (doubleIndex, 3u);
+}
+
+TEST_F (FloatVectorOperationsTests, FindMinimumAndMaximumOfEmptyArray)
+{
+    const float data[1] = { 5.0f };
+
+    int index = -1;
+    EXPECT_FLOAT_EQ (FloatVectorOperations::findMinimum (data, 0, index), 0.0f);
+    EXPECT_EQ (index, 0);
+
+    index = -1;
+    EXPECT_FLOAT_EQ (FloatVectorOperations::findMaximum (data, 0, index), 0.0f);
+    EXPECT_EQ (index, 0);
+}
+
+TEST_F (FloatVectorOperationsTests, MeanAndStandardDeviation)
+{
+    const float data[8] = { 2.0f, 4.0f, 4.0f, 4.0f, 5.0f, 5.0f, 7.0f, 9.0f };
+
+    // Squared deviations from the mean of 5 sum to 32, divided by n - 1
+    EXPECT_FLOAT_EQ (FloatVectorOperations::mean (data, 8), 5.0f);
+    EXPECT_NEAR (FloatVectorOperations::standardDeviation (data, 8), std::sqrt (32.0f / 7.0f), 1.0e-5f);
+
+    const double doubles[3] = { -1.0, 0.5, 3.5 };
+    EXPECT_NEAR (FloatVectorOperations::mean (doubles, 3), 1.0, 1.0e-12);
+    EXPECT_NEAR (FloatVectorOperations::standardDeviation (doubles, 3), std::sqrt (10.5 / 2.0), 1.0e-12);
+}
+
+TEST_F (FloatVectorOperationsTests, MeanAndStandardDeviationOfTooFewValues)
+{
+    const float data[1] = { 3.0f };
+
+    EXPECT_FLOAT_EQ (FloatVectorOperations::mean (data, 0), 0.0f);
+    EXPECT_FLOAT_EQ (FloatVectorOperations::mean (data, 1), 3.0f);
+    EXPECT_FLOAT_EQ (FloatVectorOperations::standardDeviation (data, 0), 0.0f);
+    EXPECT_FLOAT_EQ (FloatVectorOperations::standardDeviation (data, 1), 0.0f);
+}
+
+TEST_F (FloatVectorOperationsTests, SqrtAndExpMatchStandardLibrary)
+{
+    const float src[5] = { 0.0f, 0.25f, 1.0f, 2.0f, 9.0f };
+    float dest[5];
+
+    FloatVectorOperations::sqrt (dest, src, 5);
+    for (int i = 0; i < 5; ++i)
+        EXPECT_FLOAT_EQ (dest[i], std::sqrt (src[i]));
+
+    FloatVectorOperations::exp (dest, src, 5);
+    for (int i = 0; i < 5; ++i)
+        EXPECT_FLOAT_EQ (dest[i], std::exp (src[i]));
+
+    double inPlace[3] = { -1.0, 0.0, 2.5 };
+    FloatVectorOperations::exp (inPlace, inPlace, 3);
+    EXPECT_DOUBLE_EQ (inPlace[0], std::exp (-1.0));
+    EXPECT_DOUBLE_EQ (inPlace[1], 1.0);
+    EXPECT_DOUBLE_EQ (inPlace[2], std::exp (2.5));
+
+    FloatVectorOperations::sqrt (inPlace, inPlace, 3);
+    EXPECT_DOUBLE_EQ (inPlace[0], std::sqrt (std::exp (-1.0)));
+    EXPECT_DOUBLE_EQ (inPlace[1], 1.0);
+    EXPECT_DOUBLE_EQ (inPlace[2], std::sqrt (std::exp (2.5)));
+}
+
+TEST_F (FloatVectorOperationsTests, LogRaisesValuesToMinimum)
+{
+    const float minimum = 1.0e-6f;
+    float data[5] = { -1.0f, 0.0f, 1.0e-9f, 1.0f, 10.0f };
+
+    FloatVectorOperations::log (data, data, minimum, 5);
+
+    EXPECT_FLOAT_EQ (data[0], std::log (minimum));
+    EXPECT_FLOAT_EQ (data[1], std::log (minimum));
+    EXPECT_FLOAT_EQ (data[2], std::log (minimum));
+    EXPECT_FLOAT_EQ (data[3], 0.0f);
+    EXPECT_FLOAT_EQ (data[4], std::log (10.0f));
+}
+
+TEST_F (FloatVectorOperationsTests, ReplaceBelowAndAboveKeepValuesAtThreshold)
+{
+    const float src[5] = { -2.0f, -1.0f, 0.0f, 1.0f, 2.0f };
+    float dest[5];
+
+    FloatVectorOperations::replaceBelow (dest, src, -1.0f, 100.0f, 5);
+    EXPECT_FLOAT_EQ (dest[0], 100.0f);
+    EXPECT_FLOAT_EQ (dest[1], -1.0f);
+    EXPECT_FLOAT_EQ (dest[2], 0.0f);
+    EXPECT_FLOAT_EQ (dest[3], 1.0f);
+    EXPECT_FLOAT_EQ (dest[4], 2.0f);
+
+    FloatVectorOperations::replaceAbove (dest, src, 1.0f, -100.0f, 5);
+    EXPECT_FLOAT_EQ (dest[0], -2.0f);
+    EXPECT_FLOAT_EQ (dest[1], -1.0f);
+    EXPECT_FLOAT_EQ (dest[2], 0.0f);
+    EXPECT_FLOAT_EQ (dest[3], 1.0f);
+    EXPECT_FLOAT_EQ (dest[4], -100.0f);
+
+    double inPlace[4] = { -0.5, 0.5, 1.5, 2.5 };
+    FloatVectorOperations::replaceBelow (inPlace, inPlace, 0.0, 0.0, 4);
+    FloatVectorOperations::replaceAbove (inPlace, inPlace, 2.0, 2.0, 4);
+    EXPECT_DOUBLE_EQ (inPlace[0], 0.0);
+    EXPECT_DOUBLE_EQ (inPlace[1], 0.5);
+    EXPECT_DOUBLE_EQ (inPlace[2], 1.5);
+    EXPECT_DOUBLE_EQ (inPlace[3], 2.0);
+}
+
+TEST_F (FloatVectorOperationsTests, WrapPhaseKnownValues)
+{
+    const double pi = MathConstants<double>::pi;
+    const double src[6] = { 0.0, 1.0, 1.5 * pi, -1.5 * pi, 2.0 * pi + 0.5, -4.0 * pi - 0.5 };
+    const double expected[6] = { 0.0, 1.0, -0.5 * pi, 0.5 * pi, 0.5, -0.5 };
+    double dest[6];
+
+    FloatVectorOperations::wrapPhase (dest, src, 6);
+
+    for (int i = 0; i < 6; ++i)
+        EXPECT_NEAR (dest[i], expected[i], 1.0e-12) << "at index " << i;
+}
+
+TEST_F (FloatVectorOperationsTests, WrapPhaseMapsBoundariesToPlusPi)
+{
+    // The range is (-pi, pi], like std::atan2: odd multiples of pi land on +pi
+    const double pi = MathConstants<double>::pi;
+    const double src[4] = { -pi, pi, 3.0 * pi, -3.0 * pi };
+    double dest[4];
+
+    FloatVectorOperations::wrapPhase (dest, src, 4);
+
+    for (int i = 0; i < 4; ++i)
+        EXPECT_DOUBLE_EQ (dest[i], pi) << "at index " << i;
+}
+
+TEST_F (FloatVectorOperationsTests, WrapPhaseStaysInRangeAndKeepsTheAngle)
+{
+    const float pi = MathConstants<float>::pi;
+    const float twoPi = MathConstants<float>::twoPi;
+
+    float data[64];
+    for (int i = 0; i < 64; ++i)
+        data[i] = -50.0f + static_cast<float> (i) * 1.7f;
+
+    float wrapped[64];
+    FloatVectorOperations::wrapPhase (wrapped, data, 64);
+
+    for (int i = 0; i < 64; ++i)
+    {
+        EXPECT_GE (wrapped[i], -pi) << "at index " << i;
+        EXPECT_LE (wrapped[i], pi) << "at index " << i;
+        EXPECT_NEAR (std::remainder (wrapped[i] - data[i], twoPi), 0.0f, 1.0e-4f) << "at index " << i;
+    }
+
+    FloatVectorOperations::wrapPhase (data, data, 64);
+
+    for (int i = 0; i < 64; ++i)
+        EXPECT_FLOAT_EQ (data[i], wrapped[i]);
+}
+
+TEST_F (FloatVectorOperationsTests, SinCosMatchStandardLibrary)
+{
+    const float src[5] = { 0.0f, 0.5f, -1.0f, 3.0f, 10.0f };
+    float sines[5];
+    float cosines[5];
+
+    FloatVectorOperations::sinCos (sines, cosines, src, 5);
+
+    for (int i = 0; i < 5; ++i)
+    {
+        EXPECT_FLOAT_EQ (sines[i], std::sin (src[i]));
+        EXPECT_FLOAT_EQ (cosines[i], std::cos (src[i]));
+    }
+
+    const double doubles[2] = { 0.25, -2.0 };
+    double doubleSines[2];
+    double doubleCosines[2];
+
+    FloatVectorOperations::sinCos (doubleSines, doubleCosines, doubles, 2);
+
+    for (int i = 0; i < 2; ++i)
+    {
+        EXPECT_DOUBLE_EQ (doubleSines[i], std::sin (doubles[i]));
+        EXPECT_DOUBLE_EQ (doubleCosines[i], std::cos (doubles[i]));
+    }
+}
+
 TEST_F (FloatVectorOperationsTests, Negate)
 {
     float src[5] = { 1.0f, -2.0f, 3.0f, -4.0f, 5.0f };
@@ -1229,3 +1430,4 @@ TEST_F (FloatVectorOperationsTests, ScopedNoDenormals_NestedScopes)
     // All scopes exited, should not crash
     EXPECT_TRUE (true);
 }
+

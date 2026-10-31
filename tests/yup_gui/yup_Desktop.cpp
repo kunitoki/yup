@@ -103,7 +103,7 @@ public:
             Desktop::getInstance()->removeGlobalMouseListener (this);
     }
 
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override
     {
         mouseWheelCallCount++;
         lastMouseEvent = event;
@@ -117,6 +117,8 @@ public:
 
         if (removeSelfOnMouseWheel)
             Desktop::getInstance()->removeGlobalMouseListener (this);
+
+        return false;
     }
 
     void reset()

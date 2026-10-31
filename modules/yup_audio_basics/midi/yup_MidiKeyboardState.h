@@ -163,6 +163,8 @@ public:
     //==============================================================================
     /** Looks at a key-up/down event and uses it to update the state of this object.
 
+        All notes off and all sound off both release every note held on their channel.
+
         To process a buffer full of midi messages, use the processNextMidiBuffer() method
         instead.
     */

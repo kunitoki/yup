@@ -61,13 +61,22 @@ namespace yup
         file header or the optional "&lt; first last" range lines that override
         it - are the ones considered playable (see isNoteActive()).
 
-    Loading never leaves the tuning half-modified: if a file fails to parse, a
-    failed yup::Result is returned and the previously loaded scale/key map stays
-    in effect.
+    Tunings can also be loaded from AnaMark tuning files (.tun and .msf, see
+    loadTuning()), which give every MIDI note its own frequency. An AnaMark
+    tuning replaces the scale and key map in noteToPitch() until the next
+    loadScale() or loadKeyMap() call, which switches back to the scale and key
+    map (see isUsingTuningTable()).
 
-    noteToPitch() performs no allocation, but it reads state that loadScale()
-    and loadKeyMap() replace, so it can be called from a real-time thread only
-    while no load is in progress.
+    Every loader has a FromString variant reading the file contents from
+    memory, e.g. for tunings embedded in a preset.
+
+    Loading never leaves the tuning half-modified: if a file fails to parse, a
+    failed yup::Result is returned and the previously loaded tuning stays in
+    effect.
+
+    noteToPitch() performs no allocation, but it reads state that the loaders
+    replace, so it can be called from a real-time thread only while no load is
+    in progress.
 
     @tags{Audio}
 */
@@ -88,10 +97,11 @@ public:
 
     //==============================================================================
     /** Returns the frequency, in Hz, of a MIDI note under the current scale
-        and key map.
+        and key map, or under the AnaMark tuning in use.
 
-        Notes that the current key map excludes (an "x" entry in a .kbm file)
-        are not audible: this method returns a negative value for them.
+        Notes that the current key map excludes (an "x" entry in a .kbm file,
+        or a key mapped outside the scale notes of an AnaMark tuning) are not
+        audible: this method returns a negative value for them.
 
         @param note    the MIDI note number to look up, in the range 0 to 127
 
@@ -170,7 +180,70 @@ public:
     */
     Result loadKeyMap (const File& file);
 
+    /** Loads a tuning from an AnaMark tuning file (.tun or .msf).
+
+        All versions of the format are read: the version 0 [Tuning] section
+        (integer cents per MIDI note), the version 1 [Exact Tuning] section
+        (cents per MIDI note relative to a base frequency, with the periodic
+        auto completion), and the version 2 [Functional Tuning] section (the
+        InitEqual call and the note formulas, references, loops and "!"
+        frequency shifts) together with its [Mapping] keyboard mapping. When a
+        scale carries more than one tuning section, [Functional Tuning] takes
+        precedence over [Exact Tuning], which takes precedence over [Tuning].
+
+        A file holding several scales (between [Scale Begin] and [Scale End])
+        uses the first one whose [Assignment] section applies to midiChannel,
+        a scale without channel restrictions applying to every channel. Unknown
+        sections and keys are ignored.
+
+        Once loaded, the tuning gives each MIDI note its own frequency and
+        replaces the scale and key map until the next loadScale() or
+        loadKeyMap() call. Keys mapped outside the scale notes are unmapped,
+        and every note is active.
+
+        If the file cannot be read, holds no scale for the channel, contains
+        an invalid value or formula, or tunes a mapped note to a frequency
+        that is not positive, a failed yup::Result is returned and the
+        previously loaded tuning stays in effect.
+
+        @param file           the AnaMark tuning file to read
+        @param midiChannel    the MIDI channel, 1 to 65535, used to pick a
+                              scale out of a multiple scale file
+
+        @see isUsingTuningTable, getTuningFile, getName
+    */
+    Result loadTuning (const File& file, int midiChannel = 1);
+
+    /** Loads a scale from the contents of a Scala .scl file.
+
+        @see loadScale
+    */
+    Result loadScaleFromString (const String& scaleText);
+
+    /** Loads a key map from the contents of a Scala .kbm file.
+
+        @see loadKeyMap
+    */
+    Result loadKeyMapFromString (const String& keyMapText);
+
+    /** Loads a tuning from the contents of an AnaMark tuning file.
+
+        @see loadTuning
+    */
+    Result loadTuningFromString (const String& tuningText, int midiChannel = 1);
+
+    /** Returns true while an AnaMark tuning loaded with loadTuning() sets the
+        note frequencies, false while the scale and key map set them.
+
+        @see loadTuning
+    */
+    bool isUsingTuningTable() const noexcept;
+
     //==============================================================================
+    // The following accessors describe the scale and key map. While an AnaMark
+    // tuning is in use (see isUsingTuningTable()), they describe the scale and
+    // key map that the next loadScale() or loadKeyMap() call switches back to.
+
     /** Returns the MIDI note number whose scale degree is considered the
         tonic of the current key map, i.e. the key the mapping is anchored to.
 
@@ -210,20 +283,36 @@ public:
     */
     int getNumberOfScaleDegrees() const noexcept;
 
-    /** Returns the path of the .scl file most recently loaded with loadScale(),
-        or an empty string if no scale file has been loaded yet.
+    /** Returns the .scl file most recently loaded with loadScale(), or a
+        default File if the scale was not loaded from a file.
 
         @see loadScale
     */
-    String getScaleFile() const noexcept;
+    File getScaleFile() const noexcept;
 
-    /** Returns the path of the .kbm file most recently loaded with
-        loadKeyMap(), or an empty string if no key map file has been loaded
-        yet.
+    /** Returns the .kbm file most recently loaded with loadKeyMap(), or a
+        default File if the key map was not loaded from a file.
 
         @see loadKeyMap
     */
-    String getKeyMapFile() const noexcept;
+    File getKeyMapFile() const noexcept;
+
+    //==============================================================================
+    /** Returns the AnaMark tuning file most recently loaded with
+        loadTuning(), or a default File if the tuning was not loaded from a file.
+
+        @see loadTuning
+    */
+    File getTuningFile() const noexcept;
+
+    /** Returns the name of the tuning in use: the [Info] name of an AnaMark
+        tuning (the file name when it has none), or the description line of
+        the .scl scale. Returns an empty string when the tuning has no name,
+        e.g. the default one.
+
+        @see loadScale, loadTuning
+    */
+    String getName() const noexcept;
 
 private:
     //==============================================================================
@@ -233,10 +322,14 @@ private:
     //==============================================================================
     std::vector<double> scale;
     std::vector<int> mapping;
+    std::vector<double> tuningTable;
     std::array<bool, 128> activeRange {};
 
-    String scaleFile;
-    String keyMapFile;
+    File scaleFile;
+    File keyMapFile;
+    File tuningFile;
+    String scaleName;
+    String tuningName;
 
     int zeroNote = 0;
     int refNote = 69;

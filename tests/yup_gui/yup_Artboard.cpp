@@ -3167,6 +3167,8 @@ protected:
 
         Component* getFocusedComponent() const override { return focusedComponent; }
 
+        Component* getPointerTarget() const override { return nullptr; }
+
         bool isContinuousRepaintingEnabled() const override { return false; }
 
         void enableContinuousRepainting (bool) override {}
@@ -3178,6 +3180,10 @@ protected:
         bool isWireframeEnabled() const override { return false; }
 
         void enableWireframe (bool) override {}
+
+        void setAspectRatio (std::optional<float>) override {}
+
+        std::optional<float> getAspectRatio() const override { return std::nullopt; }
 
         GpuTriangulationThresholds getTriangulationThresholds() const override { return thresholds; }
 

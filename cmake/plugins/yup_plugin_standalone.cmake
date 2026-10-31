@@ -51,14 +51,30 @@ function (_yup_audio_plugin_create_standalone)
         PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
         PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO})
 
+    # ==== The application is named after the plugin, the target keeps its own name
+    set (product_args "")
+    if (YUP_ARG_PLUGIN_NAME)
+        list (APPEND product_args TARGET_PRODUCT_NAME "${YUP_ARG_PLUGIN_NAME}")
+    endif()
+
+    # ==== Forward only the emscripten options that were given, so yup_standalone_app keeps its defaults
+    set (emscripten_args "")
+    foreach (emscripten_arg CUSTOM_SHELL INITIAL_MEMORY PTHREAD_POOL_SIZE STACK_SIZE PRELOAD_FILES)
+        if (YUP_ARG_${emscripten_arg})
+            list (APPEND emscripten_args ${emscripten_arg} ${YUP_ARG_${emscripten_arg}})
+        endif()
+    endforeach()
+
     _yup_message (STATUS "Creating standalone plugin target")
     yup_standalone_app (
         TARGET_NAME ${target_name}_standalone_plugin
+        ${product_args}
         TARGET_VERSION ${target_version}
         TARGET_IDE_GROUP ${target_ide_group}
         TARGET_APP_ID ${target_bundle_id}
         TARGET_APP_NAMESPACE ${target_app_namespace}
         TARGET_CXX_STANDARD ${target_cxx_standard}
+        ${emscripten_args}
         DEFINITIONS
             YUP_AUDIO_PLUGIN_ENABLE_STANDALONE=1
         MODULES
@@ -66,6 +82,7 @@ function (_yup_audio_plugin_create_standalone)
             ${target_name}_standalone
             yup_audio_plugin_client
             yup_audio_devices
+            yup_audio_gui
             ${additional_libraries}
             ${target_modules})
 

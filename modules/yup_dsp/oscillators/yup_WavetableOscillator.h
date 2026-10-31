@@ -95,14 +95,15 @@ public:
         fft = std::make_unique<FFTProcessor<float>> (tableSize);
         fft->setScaling (FFTProcessor<float>::FFTScaling::none);
 
-        spectrum.assign (static_cast<std::size_t> (tableSize) * 2, 0.0f);
-        renderBuffer.assign (static_cast<std::size_t> (tableSize), 0.0f);
+        spectrum.assign (static_cast<std::size_t> (tableSize), 0.0f);
         current.assign (static_cast<std::size_t> (tableSize), SampleType (0));
         next.assign (static_cast<std::size_t> (tableSize), SampleType (0));
 
         renderedHarmonics = 0;
         seriesChanged = true;
         crossfadePosition = CoeffType (1);
+        currentPeak = {};
+        nextPeak = {};
 
         reset();
     }
@@ -208,13 +209,9 @@ public:
         if (fft == nullptr || tableSize <= 0)
             return;
 
-        if (crossfadePosition < CoeffType (1))
-        {
-            FloatVectorOperations::subtract (next.data(), current.data(), tableSize);
-            FloatVectorOperations::addWithMultiply (current.data(), next.data(), static_cast<SampleType> (crossfadePosition), tableSize);
-        }
+        bakeCrossfade();
 
-        FloatVectorOperations::clear (spectrum.data(), tableSize * 2);
+        FloatVectorOperations::clear (spectrum.data(), tableSize);
 
         const auto limit = jmin (getNyquistHarmonicLimit (frequency, sampleRate, series.getNumHarmonics()),
                                  tableSize / 2 - 1);
@@ -234,22 +231,60 @@ public:
         if (includeDC)
             spectrum[0] = static_cast<float> (series.getDC());
 
-        fft->performRealFFTInverse (spectrum.data(), renderBuffer.data());
+        // The packed layout matches the interleaved one from bin 1 up, and slot 1, the
+        // Nyquist bin, stays zero as the limit is below it.
+        fft->performRealFFTInversePacked (spectrum.data(), spectrum.data());
 
         if constexpr (std::is_same_v<SampleType, float>)
-            FloatVectorOperations::copy (next.data(), renderBuffer.data(), tableSize);
+            FloatVectorOperations::copy (next.data(), spectrum.data(), tableSize);
         else
-            FloatVectorOperations::convertFloatToDouble (next.data(), renderBuffer.data(), tableSize);
+            FloatVectorOperations::convertFloatToDouble (next.data(), spectrum.data(), tableSize);
 
+        nextPeak.dirty = true;
         renderedHarmonics = limit;
         seriesChanged = false;
-        crossfadePosition = CoeffType (0);
 
-        if (! crossfade)
-        {
-            std::swap (current, next);
-            crossfadePosition = CoeffType (1);
-        }
+        startCrossfade (crossfade);
+    }
+
+    /**
+        Starts crossfading into the table another oscillator rendered last, instead
+        of running an inverse FFT.
+
+        This lets oscillators playing the same series at close pitches, like unison
+        voices, share one render: render the source, then call renderFrom() on the
+        others. The copied table holds the harmonics the source rendered for its own
+        frequency, so render the source at the highest pitch any of the sharing
+        oscillators plays, or the higher ones will alias. Lower ones simply lack the
+        few top harmonics they could have played.
+
+        The source's latest rendition is taken, even while it is still crossfading
+        into it. An in-progress crossfade of this oscillator is baked first, as in
+        render(). The source's rendered harmonic count is taken over and the series
+        is marked as rendered, so needsRender() on this oscillator no longer reflects
+        its own series and pitch until the next render().
+
+        @param source     The oscillator to copy from. Must have the same table size.
+        @param crossfade  When false, installs the table immediately, as in render().
+    */
+    void renderFrom (const WavetableOscillator& source, bool crossfade = true) noexcept
+    {
+        jassert (source.getTableSize() == tableSize);
+
+        if (&source == this || source.getTableSize() != tableSize || tableSize <= 0)
+            return;
+
+        bakeCrossfade();
+
+        const auto sourceIsFading = source.crossfadePosition < CoeffType (1);
+        const auto& latest = sourceIsFading ? source.next : source.current;
+        FloatVectorOperations::copy (next.data(), latest.data(), tableSize);
+        nextPeak = sourceIsFading ? source.nextPeak : source.currentPeak;
+
+        renderedHarmonics = source.renderedHarmonics;
+        seriesChanged = false;
+
+        startCrossfade (crossfade);
     }
 
     /** Reads the rendered waveform at a phase in periods without advancing state.
@@ -278,6 +313,31 @@ public:
     /** Returns the rendered table size in samples. */
     int getTableSize() const noexcept { return tableSize; }
 
+    /** Returns the table being played, one period long.
+
+        While a crossfade is in progress this is the table being faded out, not the
+        mix being heard. Empty before prepare().
+    */
+    Span<const SampleType> getRenderedTable() const noexcept
+    {
+        return { current.data(), current.size() };
+    }
+
+    /** Returns the steepest slope of the audible table, in units per period.
+
+        Measured from the rendered samples on the first call after a render, so
+        callers that never ask pay nothing. While a crossfade is in progress it covers
+        both tables. A phase modulator's peak slope times its modulation depth and
+        frequency bounds the frequency deviation it causes, which is what a phase
+        modulation matrix needs to pick a carrier's bandwidth. Zero before the first
+        render.
+    */
+    SampleType getPeakSlope() const noexcept
+    {
+        const auto currentSlope = peakSlopeOf (current, currentPeak);
+        return crossfadePosition < CoeffType (1) ? jmax (currentSlope, peakSlopeOf (next, nextPeak)) : currentSlope;
+    }
+
     /** Returns the number of harmonics present in the rendered table. */
     int getNumRenderedHarmonics() const noexcept { return renderedHarmonics; }
 
@@ -291,24 +351,9 @@ public:
         can drift slightly past Nyquist until the next render, so callers are
         expected to refresh once per block with update() on the owning facade.
     */
-    SampleType processSample() noexcept
+    forcedinline SampleType processSample() noexcept
     {
-        auto value = readTable (current, phase, false);
-
-        if (crossfadePosition < CoeffType (1))
-        {
-            const auto target = readTable (next, phase, false);
-
-            value += (target - value) * static_cast<SampleType> (crossfadePosition);
-
-            crossfadePosition += crossfadeStep;
-
-            if (crossfadePosition >= CoeffType (1))
-            {
-                crossfadePosition = CoeffType (1);
-                std::swap (current, next);
-            }
-        }
+        const auto value = tick (phase);
 
         const auto increment = static_cast<double> (frequency) / sampleRate;
 
@@ -316,6 +361,47 @@ public:
         phase -= std::floor (phase);
 
         return value;
+    }
+
+    /** Produces one sample read at an externally driven phase.
+
+        Use this when the caller owns the phase, as a phase modulation operator does.
+        Like processSample(), it advances the render crossfade by one sample, so a
+        fade lasts the same number of calls whichever method drives the table. The
+        oscillator's own phase is left untouched. Negative phases wrap periodically,
+        and a non-finite phase reads silence while still advancing the crossfade.
+
+        As with getValueAtPhase(), the caller is responsible for bandwidth.
+    */
+    forcedinline SampleType processSampleAtPhase (double normalizedPhase) noexcept
+    {
+        if (tableSize <= 0 || ! std::isfinite (normalizedPhase))
+        {
+            advanceCrossfade (1);
+            return SampleType (0);
+        }
+
+        return tick (normalizedPhase - std::floor (normalizedPhase));
+    }
+
+    /** Advances the render crossfade as if numSamples samples had been produced.
+
+        Lets a caller that skips an oscillator for a while keep its fade timing.
+        Does nothing when no crossfade is in progress.
+    */
+    void advanceCrossfade (int numSamples) noexcept
+    {
+        if (crossfadePosition >= CoeffType (1) || numSamples <= 0)
+            return;
+
+        crossfadePosition += crossfadeStep * static_cast<CoeffType> (numSamples);
+
+        if (crossfadePosition >= CoeffType (1))
+        {
+            crossfadePosition = CoeffType (1);
+            std::swap (current, next);
+            currentPeak = nextPeak;
+        }
     }
 
     /** Produces a block of samples. */
@@ -330,6 +416,63 @@ public:
 
 private:
     //==============================================================================
+    forcedinline SampleType tick (double wrappedPhase) noexcept
+    {
+        auto value = readTable (current, wrappedPhase, false);
+
+        if (crossfadePosition < CoeffType (1))
+        {
+            value += (readTable (next, wrappedPhase, false) - value) * static_cast<SampleType> (crossfadePosition);
+            advanceCrossfade (1);
+        }
+
+        return value;
+    }
+
+    void bakeCrossfade() noexcept
+    {
+        if (crossfadePosition >= CoeffType (1))
+            return;
+
+        FloatVectorOperations::subtract (next.data(), current.data(), tableSize);
+        FloatVectorOperations::addWithMultiply (current.data(), next.data(), static_cast<SampleType> (crossfadePosition), tableSize);
+
+        currentPeak.dirty = true;
+    }
+
+    void startCrossfade (bool crossfade) noexcept
+    {
+        crossfadePosition = CoeffType (0);
+
+        if (crossfade)
+            return;
+
+        std::swap (current, next);
+        currentPeak = nextPeak;
+        crossfadePosition = CoeffType (1);
+    }
+
+    struct PeakSlope
+    {
+        SampleType value = SampleType (0);
+        bool dirty = false;
+    };
+
+    SampleType peakSlopeOf (const std::vector<SampleType>& table, PeakSlope& peak) const noexcept
+    {
+        if (! peak.dirty)
+            return peak.value;
+
+        auto largest = SampleType (0);
+
+        for (int i = 0; i < tableSize; ++i)
+            largest = jmax (largest, std::abs (table[static_cast<std::size_t> ((i + 1) & tableMask)] - table[static_cast<std::size_t> (i)]));
+
+        peak.value = largest * static_cast<SampleType> (tableSize);
+        peak.dirty = false;
+        return peak.value;
+    }
+
     SampleType readAtPhase (double normalizedPhase, bool derivative) const noexcept
     {
         if (tableSize <= 0 || ! std::isfinite (normalizedPhase))
@@ -344,16 +487,20 @@ private:
         return value;
     }
 
-    SampleType readTable (const std::vector<SampleType>& table, double normalizedPhase, bool derivative) const noexcept
+    forcedinline SampleType readTable (const std::vector<SampleType>& table, double normalizedPhase, bool derivative) const noexcept
     {
+        // The phase is wrapped to [0, 1), so truncating is flooring, and the raw pointer
+        // keeps checked standard library builds from bounds checking every tap.
         const auto position = normalizedPhase * static_cast<double> (tableSize);
-        const auto index = static_cast<int> (position) & tableMask;
-        const auto fraction = static_cast<CoeffType> (position - std::floor (position));
+        const auto whole = static_cast<int> (position);
+        const auto index = whole & tableMask;
+        const auto fraction = static_cast<CoeffType> (position - static_cast<double> (whole));
+        const auto* data = table.data();
 
-        const auto y0 = static_cast<CoeffType> (table[static_cast<std::size_t> ((index - 1) & tableMask)]);
-        const auto y1 = static_cast<CoeffType> (table[static_cast<std::size_t> (index)]);
-        const auto y2 = static_cast<CoeffType> (table[static_cast<std::size_t> ((index + 1) & tableMask)]);
-        const auto y3 = static_cast<CoeffType> (table[static_cast<std::size_t> ((index + 2) & tableMask)]);
+        const auto y0 = static_cast<CoeffType> (data[(index - 1) & tableMask]);
+        const auto y1 = static_cast<CoeffType> (data[index]);
+        const auto y2 = static_cast<CoeffType> (data[(index + 1) & tableMask]);
+        const auto y3 = static_cast<CoeffType> (data[(index + 2) & tableMask]);
 
         const auto c0 = y1;
         const auto c1 = static_cast<CoeffType> (0.5) * (y2 - y0);
@@ -370,7 +517,6 @@ private:
     std::unique_ptr<FFTProcessor<float>> fft;
     FourierSeries<CoeffType> series;
     std::vector<float> spectrum;
-    std::vector<float> renderBuffer;
     std::vector<SampleType> current;
     std::vector<SampleType> next;
     double sampleRate = 44100.0;
@@ -378,6 +524,8 @@ private:
     CoeffType frequency = static_cast<CoeffType> (440);
     CoeffType crossfadeStep = CoeffType (0);
     CoeffType crossfadePosition = CoeffType (1);
+    mutable PeakSlope currentPeak;
+    mutable PeakSlope nextPeak;
     int tableSize = 0;
     int tableMask = 0;
     int crossfadeLength = 64;

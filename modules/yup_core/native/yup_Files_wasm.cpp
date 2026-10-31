@@ -98,7 +98,9 @@ File File::getSpecialLocation (const SpecialLocationType type)
         case userMoviesDirectory:             return resolveXDGFolder ("XDG_VIDEOS_DIR",    "~/Videos");
         case userPicturesDirectory:           return resolveXDGFolder ("XDG_PICTURES_DIR",  "~/Pictures");
         case userDesktopDirectory:            return resolveXDGFolder ("XDG_DESKTOP_DIR",   "~/Desktop");
-        case userApplicationDataDirectory:    return resolveXDGFolder ("XDG_CONFIG_HOME",   "~/.config");
+        case userApplicationDataDirectory:
+        case userPreferencesDirectory:
+        case userAudioPresetsDirectory:       return resolveXDGFolder ("XDG_CONFIG_HOME",   "~/.config");
         case commonDocumentsDirectory:
         case commonApplicationDataDirectory:  return File ("/opt");
         case globalApplicationsDirectory:     return File ("/usr");
@@ -195,22 +197,47 @@ static bool isFileExecutable (const String& filename)
 
 bool Process::openDocument (const String& fileName, const String&)
 {
-    auto cmdString = String ("file://");
-    cmdString << fileName.replace (" ", "\\ ", false);
+    if (fileName.contains ("://") || fileName.startsWithIgnoreCase ("mailto:"))
+    {
+        MAIN_THREAD_EM_ASM ({
+            if (typeof window === "undefined" || typeof window.document === "undefined")
+                return;
 
-    MAIN_THREAD_EM_ASM ({
-        if (typeof window !== "undefined" && typeof window.document !== "undefined")
-        {
             var elem = window.document.createElement ("a");
             elem.href = UTF8ToString ($0);
             elem.target = "_blank";
+            elem.rel = "noopener";
             window.document.body.appendChild (elem);
             elem.click();
             window.document.body.removeChild (elem);
-        }
-    }, cmdString.toRawUTF8());
+        }, fileName.toRawUTF8());
 
-    return true;
+        return true;
+    }
+
+    const File file (fileName);
+
+    MemoryBlock data;
+    if (! file.existsAsFile() || ! file.loadFileAsData (data))
+        return false;
+
+    // The file only exists in the in-memory filesystem: hand its bytes to the browser as a download.
+    return MAIN_THREAD_EM_ASM_INT ({
+        if (typeof window === "undefined" || typeof window.document === "undefined")
+            return 0;
+
+        var blob = new Blob ([ HEAPU8.slice ($1, $1 + $2) ], { type: "application/octet-stream" });
+        var url = URL.createObjectURL (blob);
+        var elem = window.document.createElement ("a");
+        elem.href = url;
+        elem.download = UTF8ToString ($0);
+        elem.style.display = "none";
+        window.document.body.appendChild (elem);
+        elem.click();
+        window.document.body.removeChild (elem);
+        setTimeout (function() { URL.revokeObjectURL (url); }, 40000);
+        return 1;
+    }, file.getFileName().toRawUTF8(), data.getData(), static_cast<int> (data.getSize())) != 0;
 }
 
 bool Process::openDocument (const String& fileName, const String& parameters, const StringPairArray&)

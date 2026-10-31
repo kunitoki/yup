@@ -169,6 +169,20 @@ void Component::setEnabled (bool shouldBeEnabled)
     //if (flags.onDesktop && native != nullptr)
     //    native->setEnabled (shouldBeEnabled);
 
+    if (auto* nativeComponent = getNativeComponent())
+    {
+        auto* hovered = nativeComponent->getPointerTarget();
+
+        for (auto* component = hovered; component != nullptr; component = component->getParentComponent())
+        {
+            if (component == this)
+            {
+                hovered->updateMouseCursor();
+                break;
+            }
+        }
+    }
+
     enablementChanged();
 }
 
@@ -593,7 +607,10 @@ void Component::setTransform (const AffineTransform& newTransform)
     if (transform == newTransform)
         return;
 
+    // The pixels move, so both what the component covered and what it covers now repaint
+    repaint();
     transform = newTransform;
+    repaint();
 
     transformChanged();
 }
@@ -628,6 +645,19 @@ void Component::setFullScreen (bool shouldBeFullScreen)
 
     if (flags.onDesktop && native != nullptr)
         native->setFullScreen (shouldBeFullScreen);
+}
+
+void Component::setWindowAspectRatio (std::optional<float> aspectRatio)
+{
+    windowAspectRatio = aspectRatio;
+
+    if (flags.onDesktop && native != nullptr)
+        native->setAspectRatio (aspectRatio);
+}
+
+std::optional<float> Component::getWindowAspectRatio() const
+{
+    return windowAspectRatio;
 }
 
 //==============================================================================
@@ -720,7 +750,7 @@ void Component::repaint (const Rectangle<float>& rect)
 {
     jassert (! isRepainting.load (std::memory_order_relaxed)); // You are likely repainting from paint !
 
-    cachedTextureCanvas = nullptr;
+    flags.cachedTextureStale = true;
 
     if (rect.isEmpty() || ! isShowing())
         return;
@@ -789,6 +819,9 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
     flags.onDesktop = true;
 
     native = ComponentNative::createFor (*this, nativeOptions, parent);
+
+    if (windowAspectRatio.has_value() && native != nullptr)
+        native->setAspectRatio (windowAspectRatio);
 
     internalAttachedToNative();
 
@@ -1144,7 +1177,7 @@ Component* Component::getPopupParentComponent()
     {
         popupParent = ancestor;
 
-        if (ancestor->isTransformed() || ancestor->flags.manuallyComposited)
+        if (ancestor->isTransformed() || ancestor->flags.manuallyComposited || ancestor->flags.popupContainer)
             break;
     }
 
@@ -1159,7 +1192,7 @@ void Component::setMouseCursor (const MouseCursor& cursorType)
 
     if (auto nativeComponent = getNativeComponent())
     {
-        if (nativeComponent->getFocusedComponent() == this)
+        if (nativeComponent->getPointerTarget() == this)
             updateMouseCursor();
     }
 }
@@ -1302,7 +1335,11 @@ void Component::mouseUp ([[maybe_unused]] const MouseEvent& event) {}
 
 void Component::mouseDoubleClick ([[maybe_unused]] const MouseEvent& event) {}
 
-void Component::mouseWheel ([[maybe_unused]] const MouseEvent& event, [[maybe_unused]] const MouseWheelData& wheelData) {}
+bool Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+{
+    ignoreUnused (event, wheelData);
+    return false;
+}
 
 //==============================================================================
 
@@ -1338,26 +1375,36 @@ void Component::gesturePan ([[maybe_unused]] const GestureEvent& event) {}
 
 void Component::gestureSwipe ([[maybe_unused]] const GestureEvent& event) {}
 
-void Component::keyDown ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) {}
+bool Component::keyDown ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) { return false; }
 
-void Component::keyUp ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) {}
+bool Component::keyUp ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) { return false; }
 
 void Component::textInput ([[maybe_unused]] const String& text) {}
 
-void Component::keyStateChanged ([[maybe_unused]] const KeyPress& key, [[maybe_unused]] bool isDown) {}
+bool Component::keyStateChanged ([[maybe_unused]] const KeyPress& key, [[maybe_unused]] bool isDown) { return false; }
 
-void Component::modifierKeysChanged ([[maybe_unused]] const KeyModifiers& modifiers) {}
+void Component::modifierKeysChanged (const KeyModifiers& modifiers)
+{
+    if (parentComponent != nullptr)
+        parentComponent->modifierKeysChanged (modifiers);
+}
 
 //==============================================================================
 
-void Component::addMouseListener (MouseListener* listener)
+void Component::addMouseListener (MouseListener* listener, bool wantsEventsForAllNestedChildComponents)
 {
-    mouseListeners.add (listener);
+    removeMouseListener (listener);
+
+    if (wantsEventsForAllNestedChildComponents)
+        nestedMouseListeners.add (listener);
+    else
+        mouseListeners.add (listener);
 }
 
 void Component::removeMouseListener (MouseListener* listener)
 {
     mouseListeners.remove (listener);
+    nestedMouseListeners.remove (listener);
 }
 
 void Component::addGestureListener (GestureListener* listener)
@@ -1441,6 +1488,30 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
 
 //==============================================================================
 
+void Component::setPalette (std::optional<ThemePalette> newPalette)
+{
+    palette = newPalette.has_value() ? std::make_unique<ThemePalette> (std::move (*newPalette)) : nullptr;
+
+    styleChanged();
+    repaint();
+}
+
+const ThemePalette* Component::getPalette() const
+{
+    return palette.get();
+}
+
+const ThemePalette* Component::findPalette() const
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+        if (component->palette != nullptr)
+            return component->palette.get();
+
+    return nullptr;
+}
+
+//==============================================================================
+
 void Component::setMetric (const Identifier& metricId, const std::optional<float>& metric)
 {
     if (metric)
@@ -1520,6 +1591,16 @@ void Component::setManuallyComposited (bool shouldBeManuallyComposited)
 bool Component::isManuallyComposited() const
 {
     return flags.manuallyComposited;
+}
+
+void Component::setPopupContainer (bool shouldBePopupContainer)
+{
+    flags.popupContainer = shouldBePopupContainer;
+}
+
+bool Component::isPopupContainer() const
+{
+    return flags.popupContainer;
 }
 
 GpuTexture::Ptr Component::renderToTexture (GraphicsContext& ctx, float scale)
@@ -1672,9 +1753,13 @@ void Component::internalRepaint (const Rectangle<float>& rect)
     {
         component->subtreeDirty = true;
 
-        // A warp can move pixels anywhere inside the component
+        // A warp can move pixels anywhere inside the component, so the whole of it is
+        // presented again; what changed underneath is kept, so only that is repainted
         if (component->componentEffect != nullptr)
+        {
+            component->effectDirtyRegion.add (dirtyArea);
             dirtyArea = component->getLocalBounds();
+        }
 
         auto* parent = component->parentComponent;
 
@@ -1703,7 +1788,7 @@ void Component::paintChildrenAndOverChildren (Graphics& g, const RectangleList<f
     paintOverChildren (g);
 }
 
-GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas)
+GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas, const std::optional<RectangleList<float>>& dirtyRegion)
 {
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
@@ -1711,9 +1796,10 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     const auto renderOffscreen = [&] () -> GpuCanvas::Ptr
     {
         const auto pixelSize = getCanvasPixelSize (getSize(), scale);
+        const auto reused = hasPixelSize (reuseCanvas, pixelSize);
 
         GpuCanvas::Ptr canvas;
-        if (hasPixelSize (reuseCanvas, pixelSize))
+        if (reused)
         {
             canvas = std::move (reuseCanvas);
         }
@@ -1726,11 +1812,21 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
         if (canvas == nullptr)
             return nullptr;
 
-        auto& offscreenG = canvas->beginDraw ({}, scale);
+        const auto partial = reused && dirtyRegion.has_value();
+
+        if (partial && dirtyRegion->isEmpty())
+            return canvas;
+
+        GpuFrameDescriptor frame;
+
+        if (partial)
+            frame.loadOp = GpuLoadOp::load;
+
+        auto& offscreenG = canvas->beginDraw (frame, scale);
 
         flags.paintAsOffscreenRoot = true;
 
-        paintSubtree (offscreenG, RectangleList<float> { getLocalBounds() }, opacity, renderContinuous);
+        paintSubtree (offscreenG, partial ? *dirtyRegion : RectangleList<float> { getLocalBounds() }, opacity, renderContinuous);
 
         flags.paintAsOffscreenRoot = false;
 
@@ -1746,6 +1842,35 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     }
 
     return renderOffscreen();
+}
+
+std::optional<RectangleList<float>> Component::takeEffectDirtyRegion (bool renderContinuous)
+{
+    RectangleList<float> region;
+    std::swap (region, effectDirtyRegion);
+
+    if (renderContinuous || ! isOpaque() || flags.unclippedRendering)
+        return std::nullopt;
+
+    const auto bounds = getLocalBounds();
+    RectangleList<float> clipped;
+
+    for (const auto& rect : region.getRectangles())
+    {
+        const auto inside = rect.intersection (bounds).smallestIntContainer();
+
+        if (! inside.isEmpty())
+            clipped.add (inside);
+    }
+
+    if (clipped.getNumRectangles() > maximumDirtyRectangles)
+    {
+        const auto box = clipped.getBoundingBox();
+        clipped.clearQuick();
+        clipped.add (box);
+    }
+
+    return clipped;
 }
 
 //==============================================================================
@@ -1883,7 +2008,12 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
     if (componentEffect != nullptr)
     {
-        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), 1.0f, renderContinuous, g.getContextScale(), std::move (effectOffscreenCanvas));
+        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(),
+                                              1.0f,
+                                              renderContinuous,
+                                              g.getContextScale(),
+                                              std::move (effectOffscreenCanvas),
+                                              takeEffectDirtyRegion (renderContinuous));
         if (canvas == nullptr)
             return;
 
@@ -1910,11 +2040,17 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         const auto scale = g.getContextScale();
         const auto pixelSize = getCanvasPixelSize (getSize(), scale);
 
-        if (! hasPixelSize (cachedTextureCanvas, pixelSize))
-        {
-            cachedTextureCanvas = nullptr;
+        const auto sizeMatches = hasPixelSize (cachedTextureCanvas, pixelSize);
 
-            auto canvas = GpuCanvas::create (g.getGraphicsContext(), pixelSize.getWidth(), pixelSize.getHeight());
+        if (! sizeMatches || flags.cachedTextureStale)
+        {
+            // A stale canvas of the right size is drawn over again, sparing a new GPU target.
+            auto canvas = sizeMatches ? std::move (cachedTextureCanvas)
+                                      : GpuCanvas::create (g.getGraphicsContext(), pixelSize.getWidth(), pixelSize.getHeight());
+
+            cachedTextureCanvas = nullptr;
+            flags.cachedTextureStale = false;
+
             if (canvas != nullptr)
             {
                 auto& offscreenG = canvas->beginDraw ({}, scale);
@@ -1981,6 +2117,9 @@ void Component::internalMouseEnter (const MouseEvent& event)
 
     updateMouseCursor();
 
+    if (! isEnabled())
+        return;
+
     auto bailOutChecker = BailOutChecker (this);
 
     mouseEnter (event);
@@ -1988,7 +2127,7 @@ void Component::internalMouseEnter (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseEnter, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseEnter, event);
 }
 
 //==============================================================================
@@ -2007,7 +2146,7 @@ void Component::internalMouseExit (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseExit, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseExit, event);
 }
 
 //==============================================================================
@@ -2018,6 +2157,9 @@ void Component::internalMouseDown (const MouseEvent& event)
         return;
 
     updateMouseCursor();
+
+    if (! isEnabled())
+        return;
 
     auto bailOutChecker = BailOutChecker (this);
 
@@ -2031,7 +2173,7 @@ void Component::internalMouseDown (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDown, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseDown, event);
 }
 
 //==============================================================================
@@ -2043,6 +2185,9 @@ void Component::internalMouseMove (const MouseEvent& event)
 
     updateMouseCursor();
 
+    if (! isEnabled())
+        return;
+
     auto bailOutChecker = BailOutChecker (this);
 
     mouseMove (event);
@@ -2050,7 +2195,7 @@ void Component::internalMouseMove (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseMove, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseMove, event);
 }
 
 //==============================================================================
@@ -2062,6 +2207,9 @@ void Component::internalMouseDrag (const MouseEvent& event)
 
     updateMouseCursor();
 
+    if (! isEnabled())
+        return;
+
     auto bailOutChecker = BailOutChecker (this);
 
     mouseDrag (event);
@@ -2069,7 +2217,7 @@ void Component::internalMouseDrag (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDrag, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseDrag, event);
 }
 
 //==============================================================================
@@ -2088,14 +2236,14 @@ void Component::internalMouseUp (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseUp, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseUp, event);
 }
 
 //==============================================================================
 
 void Component::internalMouseDoubleClick (const MouseEvent& event)
 {
-    if (! isVisible())
+    if (! isVisible() || ! isEnabled())
         return;
 
     auto bailOutChecker = BailOutChecker (this);
@@ -2105,7 +2253,7 @@ void Component::internalMouseDoubleClick (const MouseEvent& event)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDoubleClick, event);
+    callMouseListeners (bailOutChecker, &MouseListener::mouseDoubleClick, event);
 }
 
 //==============================================================================
@@ -2117,12 +2265,25 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
 
     auto bailOutChecker = BailOutChecker (this);
 
-    mouseWheel (event, wheelData);
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (! component->isVisible() || ! component->isEnabled())
+            continue;
+
+        auto componentBailOutChecker = BailOutChecker (component);
+        const auto componentEvent = event.withPosition (component->getLocalPoint (this, event.getPosition()))
+                                         .withSourceComponent (component);
+
+        if (component->mouseWheel (componentEvent, wheelData)
+            || componentBailOutChecker.shouldBailOut()
+            || bailOutChecker.shouldBailOut())
+            break;
+    }
 
     if (bailOutChecker.shouldBailOut())
         return;
 
-    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseWheel, event, wheelData);
+    callMouseWheelListeners (bailOutChecker, event, wheelData);
 }
 
 //==============================================================================
@@ -2170,22 +2331,16 @@ void Component::internalGesture (const GestureEvent& event)
 
 //==============================================================================
 
-void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
+bool Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible() || ! isEnabled())
-        return;
-
-    keyDown (keys, position);
+    return dispatchKey (keys, position, &Component::keyDown);
 }
 
 //==============================================================================
 
-void Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
+bool Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible() || ! isEnabled())
-        return;
-
-    keyUp (keys, position);
+    return dispatchKey (keys, position, &Component::keyUp);
 }
 
 //==============================================================================
@@ -2200,12 +2355,20 @@ void Component::internalTextInput (const String& text)
 
 //==============================================================================
 
-void Component::internalKeyStateChanged (const KeyPress& keys, bool isDown)
+bool Component::internalKeyStateChanged (const KeyPress& keys, bool isDown)
 {
-    if (! isVisible() || ! isEnabled())
-        return;
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (! component->isVisible() || ! component->isEnabled())
+            continue;
 
-    keyStateChanged (keys, isDown);
+        auto bailOutChecker = BailOutChecker (component);
+
+        if (component->keyStateChanged (keys, isDown) || bailOutChecker.shouldBailOut())
+            return true;
+    }
+
+    return false;
 }
 
 //==============================================================================
@@ -2382,7 +2545,7 @@ void Component::internalVisibilityChanged()
 
 void Component::updateMouseCursor()
 {
-    Desktop::getInstance()->setMouseCursor (mouseCursor);
+    Desktop::getInstance()->setMouseCursor (isEnabled() ? mouseCursor : MouseCursor (MouseCursor::Default));
 }
 
 //==============================================================================
@@ -2593,6 +2756,24 @@ AffineTransform Component::getTransformToScreen() const
     }
 
     return transform.translated (getTopLevelScreenOrigin());
+}
+
+//==============================================================================
+
+bool Component::dispatchKey (const KeyPress& keys, const Point<float>& position, KeyHandler handler)
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (! component->isVisible() || ! component->isEnabled())
+            continue;
+
+        auto bailOutChecker = BailOutChecker (component);
+
+        if ((component->*handler) (keys, position) || bailOutChecker.shouldBailOut())
+            return true;
+    }
+
+    return false;
 }
 
 } // namespace yup

@@ -402,6 +402,14 @@ File File::getSpecialLocation(const SpecialLocationType type)
                 resultPath = "~/Library";
                 break;
 
+            case userPreferencesDirectory:
+                resultPath = "~/Library/Preferences";
+                break;
+
+            case userAudioPresetsDirectory:
+                resultPath = "~/Library/Audio/Presets";
+                break;
+
             case commonApplicationDataDirectory:
                 resultPath = "/Library";
                 break;

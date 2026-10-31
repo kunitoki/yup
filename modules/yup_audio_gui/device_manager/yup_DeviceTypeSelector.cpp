@@ -57,8 +57,8 @@ void DeviceTypeSelector::populate (const OwnedArray<AudioIODeviceType>& types, c
 void DeviceTypeSelector::resized()
 {
     auto bounds = getLocalBounds();
-    typeLabel.setBounds (bounds.removeFromLeft (170).reduced (0, 10));
-    typeCombo.setBounds (bounds.reduced (2, 4));
+    typeLabel.setBounds (bounds.removeFromLeft (170));
+    typeCombo.setBounds (bounds.reduced (2, 0));
 }
 
 } // namespace yup

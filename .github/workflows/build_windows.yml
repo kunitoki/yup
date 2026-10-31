@@ -40,9 +40,7 @@ jobs:
     - uses: actions/checkout@v6
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON '-DYUP_TEST_MODULES=${{ inputs.test_modules }}'
     - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
-    - working-directory: ${{ runner.workspace }}/build/tests/${{ matrix.config }}
-      run: ./yup_tests.exe
-      shell: bash
+    - run: ctest --test-dir ${{ runner.workspace }}/build/tests -C ${{ matrix.config }} --output-on-failure
 
   build_examples:
     runs-on: windows-latest

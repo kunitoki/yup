@@ -614,7 +614,7 @@ public:
         profilerWindow->updateSnapshot (snap);
     }
 
-    void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
+    bool keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
     {
         if (keys.getKey() == yup::KeyPress::textPKey)
         {
@@ -629,6 +629,12 @@ public:
         {
             logSnapshot();
         }
+        else
+        {
+            return false;
+        }
+
+        return true;
     }
 
 private:

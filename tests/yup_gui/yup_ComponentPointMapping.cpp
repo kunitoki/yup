@@ -382,6 +382,25 @@ TEST_F (ComponentPointMappingTests, PopupParentIsTheClosestPresentingAncestor)
     EXPECT_EQ (child.getPopupParentComponent(), &root);
 }
 
+TEST_F (ComponentPointMappingTests, PopupParentIsTheClosestPopupContainer)
+{
+    addVisible (root, parent, { 10.0f, 10.0f, 200.0f, 200.0f });
+    addVisible (parent, child, { 10.0f, 10.0f, 50.0f, 50.0f });
+
+    EXPECT_FALSE (parent.isPopupContainer());
+
+    parent.setPopupContainer (true);
+    EXPECT_TRUE (parent.isPopupContainer());
+    EXPECT_EQ (child.getPopupParentComponent(), &parent);
+
+    // An effect on the container does not change where its popups go
+    parent.setComponentEffect (new ZoomEffect());
+    EXPECT_EQ (child.getPopupParentComponent(), &parent);
+
+    parent.setPopupContainer (false);
+    EXPECT_EQ (child.getPopupParentComponent(), &root);
+}
+
 // =============================================================================
 // Painting composes the transforms of the whole hierarchy
 // =============================================================================

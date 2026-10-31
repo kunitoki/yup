@@ -50,8 +50,18 @@ function (yup_audio_plugin)
     string (REGEX REPLACE "[^A-Za-z0-9.-]" "-" target_bundle_id "${target_bundle_id}")
 
     # ==== Validation stage
-    if (NOT YUP_PLATFORM_DESKTOP)
-        _yup_message (FATAL_ERROR "Audio plugins are not supported on emscripten or mobile (yet).")
+    if (YUP_PLATFORM_EMSCRIPTEN)
+        if (NOT YUP_ARG_PLUGIN_CREATE_STANDALONE)
+            _yup_message (FATAL_ERROR "Only the standalone plugin format is supported on emscripten.")
+            return()
+        endif()
+
+        _yup_message (STATUS "Building only the standalone plugin format on emscripten")
+        foreach (plugin_format CLAP VST3 AU AUv3 AAX LV2)
+            set (YUP_ARG_PLUGIN_CREATE_${plugin_format} OFF)
+        endforeach()
+    elseif (NOT YUP_PLATFORM_DESKTOP)
+        _yup_message (FATAL_ERROR "Audio plugins are not supported on mobile (yet).")
         return()
     endif()
 
@@ -267,6 +277,7 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
         add_custom_command(TARGET ${dependency_target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_target_path}"
             COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "$<TARGET_BUNDLE_DIR:${dependency_target}>" "${plugin_path}"
+            COMMAND /bin/sh -c "killall -9 AudioComponentRegistrar 2>/dev/null; sleep 2; true"
             COMMENT "Copying AU plugin ${plugin_type_upper} to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "auv3")

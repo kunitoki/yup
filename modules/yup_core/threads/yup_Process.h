@@ -113,7 +113,11 @@ public:
     static bool YUP_CALLTYPE isRunningUnderDebugger() noexcept;
 
     //==============================================================================
-    /** Tries to launch the OS's default reader application for a given file or URL. */
+    /** Tries to launch the OS's default reader application for a given file or URL.
+
+        On the web, a URL is opened in a new browser tab, and a file of the in-memory
+        filesystem is downloaded by the browser under its file name.
+    */
     static bool YUP_CALLTYPE openDocument (const String& documentURL, const String& parameters);
 
     /** Tries to launch the OS's default reader application for a given file or URL, using an explicit environment. */

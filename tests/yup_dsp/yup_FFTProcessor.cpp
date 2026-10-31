@@ -192,6 +192,59 @@ protected:
         }
     }
 
+    // Convert the standard interleaved real spectrum (size + 2 values) to the packed layout (size values)
+    void toPacked (const SampleType* interleaved, SampleType* packed, int size)
+    {
+        std::copy_n (interleaved, size, packed);
+        packed[1] = interleaved[size];
+    }
+
+    // result[n] = sum_m a[m] * b[(n - m) mod size]
+    static std::vector<SampleType> circularConvolution (const std::vector<SampleType>& a, const std::vector<SampleType>& b)
+    {
+        const int size = static_cast<int> (a.size());
+        std::vector<SampleType> result (a.size(), SampleType (0));
+
+        for (int n = 0; n < size; ++n)
+            for (int m = 0; m < size; ++m)
+                result[n] += a[m] * b[(n - m + size) % size];
+
+        return result;
+    }
+
+    // result[n] = sum_m a[(m + n) mod size] * b[m]
+    static std::vector<SampleType> circularCrossCorrelation (const std::vector<SampleType>& a, const std::vector<SampleType>& b)
+    {
+        const int size = static_cast<int> (a.size());
+        std::vector<SampleType> result (a.size(), SampleType (0));
+
+        for (int n = 0; n < size; ++n)
+            for (int m = 0; m < size; ++m)
+                result[n] += a[(m + n) % size] * b[m];
+
+        return result;
+    }
+
+    // Transforms a and b, combines the packed spectra and returns the inverse, normalised by the FFT size
+    template <typename Operation>
+    static std::vector<SampleType> combinePackedSpectra (std::vector<SampleType> a, std::vector<SampleType> b, Operation&& operation)
+    {
+        const int size = static_cast<int> (a.size());
+        ProcessorType processor (size);
+
+        processor.performRealFFTForwardPacked (a.data(), a.data());
+        processor.performRealFFTForwardPacked (b.data(), b.data());
+
+        operation (a.data(), a.data(), b.data(), size / 2, ComplexLayout::packedReal);
+
+        processor.performRealFFTInversePacked (a.data(), a.data());
+
+        for (auto& value : a)
+            value /= static_cast<SampleType> (size);
+
+        return a;
+    }
+
     // Check if two arrays are approximately equal
     bool areArraysClose (const SampleType* a, const SampleType* b, int size, SampleType tolerance = defaultTolerance)
     {
@@ -586,6 +639,221 @@ TEST_F (FFTProcessorValidation, EdgeCaseSizes)
     }
 }
 
+TEST_F (FFTProcessorValidation, RealPackedForwardTransformAccuracy)
+{
+    const SampleType sentinel = SampleType (12345);
+
+    for (int order = 6; order <= 8; ++order)
+    {
+        const int size = 1 << order;
+        ProcessorType processor (size);
+
+        std::vector<SampleType> input (size);
+        std::vector<SampleType> referenceInterleaved (size + 2);
+        std::vector<SampleType> referencePacked (size);
+        std::vector<SampleType> packed (size + 1, sentinel);
+
+        generateRandomReal (input.data(), size);
+        computeReferenceRealDFT (input.data(), referenceInterleaved.data(), size);
+        toPacked (referenceInterleaved.data(), referencePacked.data(), size);
+
+        processor.performRealFFTForwardPacked (input.data(), packed.data());
+
+        EXPECT_TRUE (areArraysClose (packed.data(), referencePacked.data(), size))
+            << "Real packed forward FFT failed for size " << size;
+        EXPECT_EQ (packed[size], sentinel) << "Real packed forward FFT wrote past fftSize for size " << size;
+    }
+}
+
+TEST_F (FFTProcessorValidation, RealPackedInverseTransformAccuracy)
+{
+    const SampleType sentinel = SampleType (12345);
+
+    for (int order = 6; order <= 8; ++order)
+    {
+        const int size = 1 << order;
+
+        std::vector<SampleType> input (size);
+        std::vector<SampleType> referenceInterleaved (size + 2);
+        std::vector<SampleType> packed (size);
+
+        generateRandomReal (input.data(), size);
+        computeReferenceRealDFT (input.data(), referenceInterleaved.data(), size);
+        toPacked (referenceInterleaved.data(), packed.data(), size);
+
+        for (auto scaling : { ProcessorType::FFTScaling::none, ProcessorType::FFTScaling::unitary })
+        {
+            ProcessorType processor (size);
+            processor.setScaling (scaling);
+
+            // The unscaled inverse returns the original signal scaled by the FFT size, unitary by its square root
+            const SampleType expectedGain = (scaling == ProcessorType::FFTScaling::none) ? static_cast<SampleType> (size) : std::sqrt (static_cast<SampleType> (size));
+
+            std::vector<SampleType> expected (size);
+            for (int i = 0; i < size; ++i)
+                expected[i] = input[i] * expectedGain;
+
+            std::vector<SampleType> restored (size + 1, sentinel);
+            processor.performRealFFTInversePacked (packed.data(), restored.data());
+
+            EXPECT_TRUE (areArraysClose (restored.data(), expected.data(), size, defaultTolerance * expectedGain))
+                << "Real packed inverse FFT failed for size " << size << " and scaling mode " << static_cast<int> (scaling);
+            EXPECT_EQ (restored[size], sentinel) << "Real packed inverse FFT wrote past fftSize for size " << size;
+        }
+    }
+}
+
+TEST_F (FFTProcessorValidation, RealPackedMatchesInterleavedForAllScalingModes)
+{
+    const int size = 128;
+
+    std::vector<SampleType> input (size);
+    generateRandomReal (input.data(), size);
+
+    for (auto scaling : { ProcessorType::FFTScaling::none,
+                          ProcessorType::FFTScaling::unitary,
+                          ProcessorType::FFTScaling::asymmetric })
+    {
+        ProcessorType processor (size);
+        processor.setScaling (scaling);
+
+        // Values reach the FFT size when neither direction is scaled
+        const SampleType tolerance = (scaling == ProcessorType::FFTScaling::none) ? defaultTolerance * static_cast<SampleType> (size) : defaultTolerance;
+
+        std::vector<SampleType> interleaved (size * 2); // performRealFFTForward takes fftSize * 2 values
+        std::vector<SampleType> interleavedAsPacked (size);
+        std::vector<SampleType> packed (size);
+
+        processor.performRealFFTForward (input.data(), interleaved.data());
+        processor.performRealFFTForwardPacked (input.data(), packed.data());
+        toPacked (interleaved.data(), interleavedAsPacked.data(), size);
+
+        EXPECT_TRUE (areArraysClose (packed.data(), interleavedAsPacked.data(), size, tolerance))
+            << "Packed forward differs from interleaved forward for scaling mode " << static_cast<int> (scaling);
+
+        std::vector<SampleType> restoredInterleaved (size);
+        std::vector<SampleType> restoredPacked (size);
+
+        processor.performRealFFTInverse (interleaved.data(), restoredInterleaved.data());
+        processor.performRealFFTInversePacked (interleavedAsPacked.data(), restoredPacked.data());
+
+        EXPECT_TRUE (areArraysClose (restoredPacked.data(), restoredInterleaved.data(), size, tolerance))
+            << "Packed inverse differs from interleaved inverse for scaling mode " << static_cast<int> (scaling);
+    }
+}
+
+TEST_F (FFTProcessorValidation, RealPackedRoundtripConsistency)
+{
+    for (int order = 6; order <= 8; ++order)
+    {
+        const int size = 1 << order;
+        ProcessorType processor (size);
+        processor.setScaling (ProcessorType::FFTScaling::asymmetric);
+
+        std::vector<SampleType> original (size);
+        std::vector<SampleType> packed (size);
+        std::vector<SampleType> restored (size);
+
+        generateRandomReal (original.data(), size);
+
+        processor.performRealFFTForwardPacked (original.data(), packed.data());
+        processor.performRealFFTInversePacked (packed.data(), restored.data());
+
+        EXPECT_TRUE (areArraysClose (original.data(), restored.data(), size))
+            << "Real packed roundtrip failed for size " << size;
+    }
+}
+
+TEST_F (FFTProcessorValidation, RealPackedTransformsWorkInPlace)
+{
+    for (int order = 6; order <= 8; ++order)
+    {
+        const int size = 1 << order;
+        ProcessorType processor (size);
+        processor.setScaling (ProcessorType::FFTScaling::asymmetric);
+
+        std::vector<SampleType> original (size);
+        std::vector<SampleType> outOfPlace (size);
+
+        generateRandomReal (original.data(), size);
+        processor.performRealFFTForwardPacked (original.data(), outOfPlace.data());
+
+        std::vector<SampleType> buffer (original);
+        processor.performRealFFTForwardPacked (buffer.data(), buffer.data());
+
+        EXPECT_TRUE (areArraysClose (buffer.data(), outOfPlace.data(), size))
+            << "In-place packed forward FFT differs from out-of-place for size " << size;
+
+        processor.performRealFFTInversePacked (buffer.data(), buffer.data());
+
+        EXPECT_TRUE (areArraysClose (buffer.data(), original.data(), size))
+            << "In-place packed inverse FFT failed for size " << size;
+    }
+}
+
+TEST_F (FFTProcessorValidation, PackedMultiplyIsCircularConvolution)
+{
+    for (int size : { 64, 256 })
+    {
+        std::vector<SampleType> a (size), b (size);
+        generateRandomReal (a.data(), size);
+        generateRandomReal (b.data(), size);
+
+        const auto result = combinePackedSpectra (a, b, [] (auto... args)
+        {
+            ComplexVectorOperations::multiply (args...);
+        });
+
+        EXPECT_TRUE (areArraysClose (result.data(), circularConvolution (a, b).data(), size))
+            << "Packed multiply is not a circular convolution for size " << size;
+    }
+}
+
+TEST_F (FFTProcessorValidation, PackedMultiplyConjugateIsCircularCrossCorrelation)
+{
+    for (int size : { 64, 256 })
+    {
+        std::vector<SampleType> a (size), b (size);
+        generateRandomReal (a.data(), size);
+        generateRandomReal (b.data(), size);
+
+        const auto result = combinePackedSpectra (a, b, [] (auto... args)
+        {
+            ComplexVectorOperations::multiplyConjugate (args...);
+        });
+
+        EXPECT_TRUE (areArraysClose (result.data(), circularCrossCorrelation (a, b).data(), size))
+            << "Packed conjugate multiply is not a circular cross-correlation for size " << size;
+    }
+}
+
+TEST_F (FFTProcessorValidation, PackedInterleaveMatchesTheInterleavedTransform)
+{
+    const int size = 64;
+    ProcessorType processor (size);
+
+    std::vector<SampleType> input (size);
+    generateRandomReal (input.data(), size);
+
+    std::vector<SampleType> interleaved (size * 2); // performRealFFTForward takes fftSize * 2 values
+    std::vector<SampleType> packed (size);
+    processor.performRealFFTForward (input.data(), interleaved.data());
+    processor.performRealFFTForwardPacked (input.data(), packed.data());
+
+    // DC to Nyquist real parts, then the imaginary parts of bins 1 to N/2 - 1
+    std::vector<SampleType> real (size / 2 + 1);
+    std::vector<SampleType> imag (size / 2 - 1);
+    for (int k = 0; k <= size / 2; ++k)
+        real[k] = interleaved[2 * k];
+    for (int k = 1; k < size / 2; ++k)
+        imag[k - 1] = interleaved[2 * k + 1];
+
+    std::vector<SampleType> repacked (size);
+    ComplexVectorOperations::interleave (repacked.data(), real.data(), imag.data(), size / 2, ComplexLayout::packedReal);
+
+    EXPECT_TRUE (areArraysClose (repacked.data(), packed.data(), size));
+}
+
 //==============================================================================
 // Double precision validation - the same public interface at a higher precision
 //==============================================================================
@@ -781,6 +1049,120 @@ TEST_F (FFTProcessorDoubleValidation, EdgeCaseSizes)
         }) << "Double FFT failed for edge case size "
            << size;
     }
+}
+
+TEST_F (FFTProcessorDoubleValidation, RealPackedForwardTransformAccuracy)
+{
+    for (int order = 6; order <= 9; ++order)
+    {
+        const int size = 1 << order;
+        ProcessorType processor (size);
+
+        std::vector<SampleType> input (size);
+        std::vector<SampleType> referenceInterleaved (size + 2);
+        std::vector<SampleType> referencePacked (size);
+        std::vector<SampleType> packed (size);
+
+        generateRandomReal (input.data(), size);
+        computeReferenceRealDFT (input.data(), referenceInterleaved.data(), size);
+        toPacked (referenceInterleaved.data(), referencePacked.data(), size);
+
+        processor.performRealFFTForwardPacked (input.data(), packed.data());
+
+        EXPECT_TRUE (areArraysClose (packed.data(), referencePacked.data(), size, tightTolerance))
+            << "Double real packed forward FFT failed for size " << size;
+    }
+}
+
+TEST_F (FFTProcessorDoubleValidation, RealPackedRoundtripConsistency)
+{
+    for (int order = 6; order <= 9; ++order)
+    {
+        const int size = 1 << order;
+        ProcessorType processor (size);
+        processor.setScaling (ProcessorType::FFTScaling::asymmetric);
+
+        std::vector<SampleType> original (size);
+        std::vector<SampleType> packed (size);
+        std::vector<SampleType> restored (size);
+
+        generateRandomReal (original.data(), size);
+
+        processor.performRealFFTForwardPacked (original.data(), packed.data());
+        processor.performRealFFTInversePacked (packed.data(), restored.data());
+
+        EXPECT_TRUE (areArraysClose (original.data(), restored.data(), size, tightTolerance))
+            << "Double real packed roundtrip failed for size " << size;
+    }
+}
+
+TEST_F (FFTProcessorDoubleValidation, RealPackedHandlesUnalignedBuffers)
+{
+    for (int order = 6; order <= 9; ++order)
+    {
+        const int size = 1 << order;
+        ProcessorType processor (size);
+        processor.setScaling (ProcessorType::FFTScaling::asymmetric);
+
+        std::vector<SampleType> inputStorage (size + 1);
+        std::vector<SampleType> packedStorage (size + 1);
+        std::vector<SampleType> restoredStorage (size + 1);
+        std::vector<SampleType> referenceInterleaved (size + 2);
+        std::vector<SampleType> referencePacked (size);
+
+        // Offset by one sample so the pointers are not aligned for vectorized access
+        SampleType* input = inputStorage.data() + 1;
+        SampleType* packed = packedStorage.data() + 1;
+        SampleType* restored = restoredStorage.data() + 1;
+
+        generateRandomReal (input, size);
+        computeReferenceRealDFT (input, referenceInterleaved.data(), size);
+        toPacked (referenceInterleaved.data(), referencePacked.data(), size);
+
+        // Asymmetric scaling applies 1/N to the forward transform
+        for (auto& value : referencePacked)
+            value /= static_cast<SampleType> (size);
+
+        processor.performRealFFTForwardPacked (input, packed);
+
+        EXPECT_TRUE (areArraysClose (packed, referencePacked.data(), size, tightTolerance))
+            << "Unaligned double real packed forward FFT failed for size " << size;
+
+        processor.performRealFFTInversePacked (packed, restored);
+
+        EXPECT_TRUE (areArraysClose (restored, input, size, tightTolerance))
+            << "Unaligned double real packed inverse FFT failed for size " << size;
+    }
+}
+
+TEST_F (FFTProcessorDoubleValidation, PackedMultiplyIsCircularConvolution)
+{
+    const int size = 128;
+    std::vector<SampleType> a (size), b (size);
+    generateRandomReal (a.data(), size);
+    generateRandomReal (b.data(), size);
+
+    const auto result = combinePackedSpectra (a, b, [] (auto... args)
+    {
+        ComplexVectorOperations::multiply (args...);
+    });
+
+    EXPECT_TRUE (areArraysClose (result.data(), circularConvolution (a, b).data(), size, tightTolerance));
+}
+
+TEST_F (FFTProcessorDoubleValidation, PackedMultiplyConjugateIsCircularCrossCorrelation)
+{
+    const int size = 128;
+    std::vector<SampleType> a (size), b (size);
+    generateRandomReal (a.data(), size);
+    generateRandomReal (b.data(), size);
+
+    const auto result = combinePackedSpectra (a, b, [] (auto... args)
+    {
+        ComplexVectorOperations::multiplyConjugate (args...);
+    });
+
+    EXPECT_TRUE (areArraysClose (result.data(), circularCrossCorrelation (a, b).data(), size, tightTolerance));
 }
 
 } // namespace yup::test

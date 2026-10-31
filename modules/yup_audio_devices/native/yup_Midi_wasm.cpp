@@ -251,6 +251,44 @@ void unregisterInput (const String& portId, MidiInput::Pimpl* pimpl)
 }
 
 //==============================================================================
+// Every open input and output, so a removed port can report the disconnection to them.
+struct OpenPort
+{
+    const void* owner = nullptr;
+    String portId;
+    bool isInput = false;
+    std::function<void()> markDisconnected;
+};
+
+std::vector<OpenPort> openPorts;
+
+void registerOpenPort (const void* owner, const String& portId, bool isInput, std::function<void()> markDisconnected)
+{
+    const ScopedLock sl (midiCallbackLock);
+    openPorts.push_back ({ owner, portId, isInput, std::move (markDisconnected) });
+}
+
+void unregisterOpenPort (const void* owner)
+{
+    const ScopedLock sl (midiCallbackLock);
+
+    openPorts.erase (std::remove_if (openPorts.begin(), openPorts.end(), [owner] (const OpenPort& port)
+    {
+        return port.owner == owner;
+    }),
+                     openPorts.end());
+}
+
+void markPortDisconnected (const String& portId, bool isInput)
+{
+    const ScopedLock sl (midiCallbackLock);
+
+    for (const auto& port : openPorts)
+        if (port.portId == portId && port.isInput == isInput)
+            port.markDisconnected();
+}
+
+//==============================================================================
 class WebMidiAccess
 {
 public:
@@ -309,6 +347,7 @@ public:
             });
         }
 
+        markPortDisconnected (id, isInput);
         MidiDeviceListConnectionBroadcaster::get().notify();
     }
 
@@ -367,16 +406,19 @@ public:
         : portId (input.getIdentifier())
         , handler (std::make_unique<ump::BytestreamToBytestreamHandler> (input, callback))
     {
+        registerOpenPort (this, portId, true, [&input] { input.markDisconnected(); });
     }
 
     Pimpl (MidiInput& input, ump::PacketProtocol protocol, ump::Receiver& receiver)
         : portId (input.getIdentifier())
         , handler (std::make_unique<ump::BytestreamToUMPHandler> (protocol, receiver))
     {
+        registerOpenPort (this, portId, true, [&input] { input.markDisconnected(); });
     }
 
     ~Pimpl()
     {
+        unregisterOpenPort (this);
         stop();
         unregisterInput (portId, this);
     }
@@ -418,9 +460,15 @@ public:
 class MidiOutput::Pimpl
 {
 public:
-    explicit Pimpl (String portIdIn)
+    Pimpl (MidiOutput& output, String portIdIn)
         : portId (std::move (portIdIn))
     {
+        registerOpenPort (this, portId, false, [&output] { output.markDisconnected(); });
+    }
+
+    ~Pimpl()
+    {
+        unregisterOpenPort (this);
     }
 
     void send (const uint8_t* data, size_t len)
@@ -562,7 +610,7 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
         return {};
 
     std::unique_ptr<MidiOutput> midiOutput (new MidiOutput (info->name, deviceIdentifier, ump::PacketProtocol::MIDI_1_0));
-    midiOutput->internal = std::make_unique<MidiOutput::Pimpl> (deviceIdentifier);
+    midiOutput->internal = std::make_unique<MidiOutput::Pimpl> (*midiOutput, deviceIdentifier);
 
     return midiOutput;
 }

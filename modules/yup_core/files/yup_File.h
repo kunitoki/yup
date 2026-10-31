@@ -866,6 +866,9 @@ public:
 
         - if it's a folder, it will be opened in Explorer, Finder, or equivalent.
 
+        - on the web, a file is handed to the browser as a download (its bytes
+        are copied out of the in-memory filesystem), and folders are not supported.
+
         @see revealToUser
     */
     bool startAsProcess (const String& parameters = String()) const;
@@ -914,6 +917,19 @@ public:
             On GNU/Linux it is "~/.config".
         */
         userApplicationDataDirectory,
+
+        /** The folder in which applications store their user preferences.
+            On macOS and iOS it is "~/Library/Preferences"; elsewhere it is the same as
+            userApplicationDataDirectory. Always create your own sub-folder in it.
+        */
+        userPreferencesDirectory,
+
+        /** The folder in which audio applications and plugins keep their user presets.
+            On macOS and iOS it is "~/Library/Audio/Presets", where hosts look for them, usually in a
+            sub-folder per vendor and product; elsewhere it is the same as
+            userApplicationDataDirectory. Always create your own sub-folder in it.
+        */
+        userAudioPresetsDirectory,
 
         /** An equivalent of the userApplicationDataDirectory folder that is shared by all users
             of the computer, rather than just the current user.
