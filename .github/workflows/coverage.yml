@@ -97,7 +97,8 @@ jobs:
           -DCMAKE_BUILD_TYPE=Debug
     - name: Build Tests
       working-directory: ${{ runner.workspace }}/build
-      run: cmake --build . --config Debug --target yup_tests
+      # Coverage-instrumented unity TUs use several GB each, the default -j exhausts the runner memory
+      run: cmake --build . --config Debug --target yup_tests --parallel 3
     - name: Clean Coverage Data
       working-directory: ${{ runner.workspace }}/build
       run: cmake --build . --target coverage_clean
