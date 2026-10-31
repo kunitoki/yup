@@ -71,7 +71,7 @@ env:
 
 jobs:
   cpp-coverage:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       CMAKE_C_COMPILER_LAUNCHER: ccache
