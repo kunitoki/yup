@@ -22,6 +22,9 @@ cmake_minimum_required(VERSION 3.31)
 enable_testing()
 
 option (YUP_TEST_ALLOCATION_HOOKS "Enable allocation-count assertions in realtime tests" OFF)
+set (YUP_TEST_LINK_JOBS 2 CACHE STRING "Maximum number of test runners linked at once by Ninja generators (0 for no limit)")
+set (YUP_TEST_WASM_DEBUG_INFO NAMES CACHE STRING "Debug information of the Emscripten Debug test runners: NAMES (fast link) or FULL (DWARF and source maps)")
+set_property (CACHE YUP_TEST_WASM_DEBUG_INFO PROPERTY STRINGS NAMES FULL)
 
 # ==== Setup googletests
 if (YUP_PLATFORM_EMSCRIPTEN)
@@ -49,7 +52,7 @@ set_target_properties (gtest_main PROPERTIES FOLDER "Tests")
 set_target_properties (gmock PROPERTIES FOLDER "Tests")
 set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 
-# ==== Create executable
+# ==== Modules linked by the test runners
 set (target_name yup_tests)
 set (target_version "2.0.0")
 set (target_console OFF)
@@ -199,87 +202,127 @@ if (YUP_PLATFORM_MAC AND "yup_python" IN_LIST target_modules)
     list (APPEND target_modules "${target_name}_python_stdlib_binary")
 endif()
 
+# ==== Shared runtime: the linked modules are compiled once into a static library,
+#      so every test runner only links the objects its tests actually reference.
+set (runtime_target_name ${target_name}_runtime)
+
 yup_standalone_app (
-    TARGET_NAME ${target_name}
+    TARGET_NAME ${runtime_target_name}
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Tests"
     TARGET_CONSOLE ${target_console}
-    INITIAL_MEMORY 268435456   # 256MB: enlarged for wasm pthread stress tests (CI stability)
-    MAXIMUM_MEMORY 1073741824  # 1GB:  cap for ALLOW_MEMORY_GROWTH under node/wasm
-    STACK_SIZE 1048576         # 1MB:  per-thread stack for concurrent stress tests
+    TARGET_STATIC_LIBRARY ON
     DEFINITIONS
         YUP_ENABLE_ALLOCATION_HOOKS=$<BOOL:${YUP_TEST_ALLOCATION_HOOKS}>
         YUP_USE_CURL=0
         YUP_MODAL_LOOPS_PERMITTED=1
-    BUNDLE_RESOURCES
-        ${target_bundle_resources}
+    COMPILE_OPTIONS
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wno-subobject-linkage>
     MODULES
         ${target_modules}
         ${target_gtest_modules})
 
-# ==== (Only For Manual Testing) Setup FFTW3
-# _yup_find_fftw3 (${target_name})
+# ==== One test runner per module, all built by the yup_tests target and run by ctest
+if (YUP_TEST_LINK_JOBS GREATER 0)
+    set_property (GLOBAL APPEND PROPERTY JOB_POOLS ${target_name}_link=${YUP_TEST_LINK_JOBS})
+endif()
 
-# ==== Setup sources
-set (sources "")
-set (imported_sources "")
+add_custom_target (${target_name})
+set_target_properties (${target_name} PROPERTIES FOLDER "Tests")
+
 foreach (module ${target_test_modules})
     set (module_main "${CMAKE_CURRENT_LIST_DIR}/${module}/module.cpp")
-    file (GLOB module_sources "${module_main}")
-    list (APPEND sources ${module_sources})
+    if (NOT EXISTS "${module_main}")
+        continue()
+    endif()
 
-    file (GLOB module_imported_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
-    list (APPEND imported_sources ${module_imported_sources})
+    set (module_target_name ${module}_tests)
+
+    set (sources "${module_main}" "${CMAKE_CURRENT_LIST_DIR}/main.cpp")
+    if (YUP_PLATFORM_APPLE AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/${module}/module.mm")
+        list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/${module}/module.mm")
+    endif()
+
+    file (GLOB imported_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
     list (REMOVE_ITEM imported_sources "${module_main}")
 
-    if (YUP_PLATFORM_APPLE)
-        file (GLOB_RECURSE apple_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/module.mm")
-        list (APPEND sources ${apple_sources})
+    yup_standalone_app (
+        TARGET_NAME ${module_target_name}
+        TARGET_VERSION ${target_version}
+        TARGET_IDE_GROUP "Tests"
+        TARGET_CONSOLE ${target_console}
+        INITIAL_MEMORY 268435456   # 256MB: enlarged for wasm pthread stress tests (CI stability)
+        MAXIMUM_MEMORY 1073741824  # 1GB:  cap for ALLOW_MEMORY_GROWTH under node/wasm
+        STACK_SIZE 1048576         # 1MB:  per-thread stack for concurrent stress tests
+        EMSCRIPTEN_DEBUG_INFO ${YUP_TEST_WASM_DEBUG_INFO}
+        BUNDLE_RESOURCES
+            ${target_bundle_resources}
+        MODULES
+            ${runtime_target_name})
 
-        set (apple_main "${CMAKE_CURRENT_LIST_DIR}/${module}/module.mm")
-        file (GLOB_RECURSE apple_imported_sources "${apple_main}")
-        list (APPEND imported_sources ${apple_imported_sources})
-        list (REMOVE_ITEM imported_sources "${apple_main}")
+    target_sources (${module_target_name} PRIVATE ${sources} ${imported_sources})
+    source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources} ${imported_sources})
+    set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
+
+    set_target_properties (${module_target_name} PROPERTIES
+        XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
+        VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")
+
+    if (YUP_TEST_LINK_JOBS GREATER 0)
+        set_target_properties (${module_target_name} PROPERTIES JOB_POOL_LINK ${target_name}_link)
+    endif()
+
+    add_dependencies (${target_name} ${module_target_name})
+
+    # Runs from the folder holding the runners, emscripten runners go through CMAKE_CROSSCOMPILING_EMULATOR (node)
+    if (YUP_PLATFORM_MAC)
+        set (module_working_directory "$<TARGET_BUNDLE_DIR:${module_target_name}>/..")
+    else()
+        set (module_working_directory "$<TARGET_FILE_DIR:${module_target_name}>")
+    endif()
+
+    add_test (NAME ${module} COMMAND ${module_target_name} WORKING_DIRECTORY "${module_working_directory}")
+    set_tests_properties (${module} PROPERTIES LABELS "${module}")
+
+    # Debug wasm frames are large and exceptions add JS trampolines: the default ~1MB V8 stack of node
+    # overflows on deep recursion tests, so give the main thread 4MB of its 8MB native stack
+    if (YUP_PLATFORM_EMSCRIPTEN AND CMAKE_CROSSCOMPILING_EMULATOR)
+        set_target_properties (${module_target_name} PROPERTIES
+            CROSSCOMPILING_EMULATOR "${CMAKE_CROSSCOMPILING_EMULATOR};--stack-size=4096")
     endif()
 endforeach()
-
-list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/main.cpp")
-
-target_sources (${target_name} PRIVATE ${sources} ${imported_sources})
-source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${imported_sources})
-set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 if (YUP_PLATFORM_APPLE)
     set_source_files_properties ("${CMAKE_CURRENT_LIST_DIR}/yup_rhi/module.mm" PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 endif()
 
 # ==== Plugin wrapper standalone test TUs (compiled directly, not HEADER_FILE_ONLY)
-if (YUP_PLATFORM_DESKTOP AND "yup_audio_plugin_client" IN_LIST target_test_modules)
+set (plugin_client_target_name yup_audio_plugin_client_tests)
+if (YUP_PLATFORM_DESKTOP AND TARGET ${plugin_client_target_name})
     if (TARGET clap)
-        target_link_libraries (${target_name} PRIVATE clap)
-        target_sources (${target_name} PRIVATE
+        target_link_libraries (${plugin_client_target_name} PRIVATE clap)
+        target_sources (${plugin_client_target_name} PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_clap.cpp")
     endif()
 
-    target_sources (${target_name} PRIVATE
+    target_sources (${plugin_client_target_name} PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_standalone.cpp")
     set_source_files_properties (
         "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_standalone.cpp"
         PROPERTIES HEADER_FILE_ONLY FALSE)
 
     if (TARGET sdk)
-        target_link_libraries (${target_name} PRIVATE sdk)
-        target_sources (${target_name} PRIVATE
+        target_link_libraries (${plugin_client_target_name} PRIVATE sdk)
+        target_sources (${plugin_client_target_name} PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_vst3.cpp")
         if (TARGET sdk_hosting)
-            target_link_libraries (${target_name} PRIVATE sdk_hosting)
+            target_link_libraries (${plugin_client_target_name} PRIVATE sdk_hosting)
         endif()
     endif()
 
     if (YUP_PLATFORM_MAC AND TARGET base-sdk-auv2)
-        target_link_libraries (${target_name} PRIVATE base-sdk-auv2)
-        target_sources (${target_name} PRIVATE
+        target_link_libraries (${plugin_client_target_name} PRIVATE base-sdk-auv2)
+        target_sources (${plugin_client_target_name} PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_au.mm")
         set_source_files_properties (
             "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_au.mm"
@@ -287,25 +330,18 @@ if (YUP_PLATFORM_DESKTOP AND "yup_audio_plugin_client" IN_LIST target_test_modul
     endif()
 
     if (YUP_PLATFORM_MAC)
-        target_sources (${target_name} PRIVATE
+        target_sources (${plugin_client_target_name} PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_auv3.mm")
         set_source_files_properties (
             "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_auv3.mm"
             PROPERTIES COMPILE_FLAGS "-fobjc-arc")
-        target_link_libraries (${target_name} PRIVATE "-framework CoreAudioKit")
+        target_link_libraries (${plugin_client_target_name} PRIVATE "-framework CoreAudioKit")
     endif()
 endif()
 
-target_compile_options (${target_name} PRIVATE
-    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wno-subobject-linkage>)
-
-set_target_properties (${target_name} PROPERTIES
-    XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
-    VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")
-
 # ==== Setup coverage support
 if (YUP_ENABLE_COVERAGE)
-    _yup_setup_coverage_flags (${target_name})
+    _yup_setup_coverage_flags (${runtime_target_name})
     foreach (module ${target_modules})
         _yup_setup_coverage_flags (${module})
     endforeach()

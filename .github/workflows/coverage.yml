@@ -102,8 +102,7 @@ jobs:
       working-directory: ${{ runner.workspace }}/build
       run: cmake --build . --target coverage_clean
     - name: Run C++ Tests
-      working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: xvfb-run -a catchsegv ./yup_tests
+      run: xvfb-run -a ctest --test-dir ${{ runner.workspace }}/build/tests -C Debug --output-on-failure
     - name: Generate C++ Coverage Report
       working-directory: ${{ runner.workspace }}/build
       run: |

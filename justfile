@@ -18,12 +18,12 @@ cleanall:
 build PLATFORM="mac" CONFIG="Debug" TARGET="yup_tests":
   cmake --build build/{{PLATFORM}} --config {{CONFIG}} --target {{TARGET}}
 
-[doc("execute unit tests using cmake")]
+[doc("execute unit tests using cmake and ctest (MODULE selects a single module, e.g. yup_core)")]
 [macos]
-test CONFIG="Debug" GTEST_FILTER="*":
+test CONFIG="Debug" GTEST_FILTER="*" MODULE="":
   cmake -G Xcode -B build/mac
   cmake --build build/mac --target yup_tests --config {{CONFIG}}
-  build/mac/tests/{{CONFIG}}/yup_tests.app/Contents/MacOS/yup_tests --gtest_filter="{{GTEST_FILTER}}"
+  GTEST_FILTER="{{GTEST_FILTER}}" ctest --test-dir build/mac/tests -C {{CONFIG}} --output-on-failure -R "^{{MODULE}}"
 
 [doc("generate and open project in macOS using Xcode")]
 [macos]
@@ -80,17 +80,15 @@ emscripten CONFIG="Debug" TARGET="yup_tests":
   emcmake cmake -G "Ninja Multi-Config" -B build/emscripten
   @just build emscripten {{CONFIG}} {{TARGET}}
 
-[doc("run Debug tests for WASM")]
-[working-directory: 'build/emscripten/tests/Debug/']
-emscripten_test_debug GTEST_FILTER="*":
+[doc("run Debug tests for WASM (MODULE selects a single module, e.g. yup_core)")]
+emscripten_test_debug GTEST_FILTER="*" MODULE="":
   @just build emscripten Debug
-  node yup_tests.js --gtest_filter="{{GTEST_FILTER}}"
+  GTEST_FILTER="{{GTEST_FILTER}}" ctest --test-dir build/emscripten/tests -C Debug --output-on-failure -R "^{{MODULE}}"
 
-[doc("run Release tests for WASM")]
-[working-directory: 'build/emscripten/tests/Release/']
-emscripten_test_release GTEST_FILTER="*":
+[doc("run Release tests for WASM (MODULE selects a single module, e.g. yup_core)")]
+emscripten_test_release GTEST_FILTER="*" MODULE="":
   @just build emscripten Release
-  node yup_tests.js --gtest_filter="{{GTEST_FILTER}}"
+  GTEST_FILTER="{{GTEST_FILTER}}" ctest --test-dir build/emscripten/tests -C Release --output-on-failure -R "^{{MODULE}}"
 
 [doc("serve project for WASM")]
 emscripten_serve INTERFACE="localhost":

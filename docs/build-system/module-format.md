@@ -131,7 +131,7 @@ Possible values:
   - (Optional) A list (space or comma-separated) of modules or libraries this module uses **only when they are also present** in the build (guarded by `#if YUP_MODULE_AVAILABLE_<name>`). Advisory metadata: it is parsed but never force-links anything, so optional deps may safely form cycles.
 
 - testDeps
-  - (Optional) A list (space or comma-separated) of modules that the module's **tests** use beyond its own dependencies. They are linked into `yup_tests` only when the module's tests are built, and a change to them reruns those tests in the smart CI.
+  - (Optional) A list (space or comma-separated) of modules that the module's **tests** use beyond its own dependencies. They are linked into the test runners only when the module's tests are built, and a change to them reruns those tests in the smart CI.
 
 - website
   - (Optional) A URL linking to useful info about the module.

@@ -234,7 +234,8 @@ Available recipes:
     default                                      # list available recipes
     emscripten CONFIG="Debug" TARGET="yup_tests" # generate and build project for WASM
     emscripten_serve                             # serve project for WASM
-    emscripten_test                              # run tests for WASM
+    emscripten_test_debug GTEST_FILTER="*" MODULE=""   # run Debug tests for WASM (MODULE selects a single module, e.g. yup_core)
+    emscripten_test_release GTEST_FILTER="*" MODULE="" # run Release tests for WASM (MODULE selects a single module, e.g. yup_core)
     fetch_coverage PR                            # fetch missing coverage lines for a pull request
     ios IOS_PLATFORM="OS64"                      # generate and open project for iOS using Xcode
     ios_simulator IOS_PLATFORM="SIMULATORARM64"  # generate and open project for iOS Simulator macOS using Xcode
@@ -247,7 +248,7 @@ Available recipes:
     rive_shaders_update                          # update rive shaders
     rive_update REF="runtime-v0.1.62"            # update rive runtime
     shader_bundler *COMPILE_ARGS                 # compile and invoke shader_bundler tool
-    test CONFIG="Debug"                          # execute unit tests using cmake
+    test CONFIG="Debug" GTEST_FILTER="*" MODULE=""     # execute unit tests using cmake and ctest (MODULE selects a single module, e.g. yup_core)
 ```
 
 
@@ -308,7 +309,7 @@ These commands build the project in Release mode. Replace `Release` with `Debug`
 After compilation, you can validate the build and explore YUP’s features:
 
 - Run tests:
-Build and execute the `yup_tests` target to run the automated test suite.
+Build the `yup_tests` target, which builds one `<module>_tests` runner per tested module, then run them all with `ctest --test-dir <build>/tests -C <config> --output-on-failure` (add `-R yup_core` to run a single module). Set the `GTEST_FILTER` environment variable to filter tests across all runners.
 
 - Build examples:
 Compile example targets like `example_app`, `example_console`, or `example_graphics` to see practical implementations.

@@ -36,13 +36,31 @@
 
 #include <yup_events/yup_events.h>
 
+#include <emscripten.h>
+
+// Node environment variables are not visible to getenv, forward GTEST_FILTER (used by ctest runs) explicitly
+EM_JS_DEPS (yupTestsMain, "$stringToNewUTF8");
+EM_JS (char*, yupTestsGetNodeFilter, (), {
+    if (typeof process === "undefined" || ! process.env || ! process.env.GTEST_FILTER)
+        return 0;
+
+    return stringToNewUTF8 (process.env.GTEST_FILTER);
+});
+
 int main (int argc, char** argv)
 {
     int totalShards = 1;
     int shardIndex = 0;
 
+    std::string environmentFilter;
+    if (char* nodeFilter = yupTestsGetNodeFilter())
+    {
+        environmentFilter = std::string ("--gtest_filter=") + nodeFilter;
+        free (nodeFilter);
+    }
+
     std::vector<char*> filteredArgv;
-    filteredArgv.reserve (argc);
+    filteredArgv.reserve (argc + 1);
     for (int i = 0; i < argc; ++i)
     {
         const std::string_view arg = argv[i];
@@ -54,6 +72,9 @@ int main (int argc, char** argv)
         else
             filteredArgv.push_back (argv[i]);
     }
+
+    if (! environmentFilter.empty() && ! filteredArgv.empty())
+        filteredArgv.insert (filteredArgv.begin() + 1, environmentFilter.data());
 
     int filteredArgc = static_cast<int> (filteredArgv.size());
     testing::InitGoogleMock (&filteredArgc, filteredArgv.data());
@@ -131,6 +152,10 @@ struct TestApplication : yup::YUPApplication
         testing::InitGoogleMock (&argc, argv.data());
 
         parseCommandLineSettings (commandLineParameters);
+
+        // Also covers a filter coming from the GTEST_FILTER environment variable (used by ctest runs)
+        if (::testing::GTEST_FLAG (filter) != "*")
+            shouldUseSingleCall = true;
 
         testing::TestEventListeners& listeners = testing::UnitTest::GetInstance()->listeners();
         delete listeners.Release (listeners.default_result_printer());
