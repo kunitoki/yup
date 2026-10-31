@@ -94,7 +94,7 @@ Controls whether targets are added for test projects. OFF by default.
 
 ### `YUP_TEST_MODULES`
 
-Semicolon-separated list of modules whose tests are built. Empty by default, which builds every module's tests. Each tested module gets its own `<module>_tests` runner, registered with `ctest` as `<module>`, and the `yup_tests` target builds them all. When set, only the listed modules' runners are built, linking just what they need (the shared `yup_tests_runtime` library, plus each module's `optionalDeps` and `testDeps`), e.g. `-DYUP_TEST_MODULES="yup_core;yup_dsp"`.
+Semicolon-separated list of modules whose tests are built. Empty by default, which builds every module's tests. Each tested module gets its own `<module>_tests` runner, registered with `ctest` as `<module>`, and the `yup_tests` target builds them all. The `yup_tests_run` target builds them and then runs them all through `ctest`. When set, only the listed modules' runners are built, linking just what they need (the shared `yup_tests_runtime` library, plus each module's `optionalDeps` and `testDeps`), e.g. `-DYUP_TEST_MODULES="yup_core;yup_dsp"`.
 
 ### `YUP_TEST_LINK_JOBS`
 

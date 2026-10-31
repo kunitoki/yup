@@ -228,7 +228,15 @@ if (YUP_TEST_LINK_JOBS GREATER 0)
 endif()
 
 add_custom_target (${target_name})
-set_target_properties (${target_name} PROPERTIES FOLDER "Tests")
+set_target_properties (${target_name} PROPERTIES FOLDER "Tests" XCODE_GENERATE_SCHEME ON)
+
+add_custom_target (${target_name}_run
+    COMMAND "${CMAKE_CTEST_COMMAND}" --test-dir "${CMAKE_CURRENT_BINARY_DIR}" -C "$<CONFIG>" --output-on-failure
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+    USES_TERMINAL
+    VERBATIM)
+add_dependencies (${target_name}_run ${target_name})
+set_target_properties (${target_name}_run PROPERTIES FOLDER "Tests" XCODE_GENERATE_SCHEME ON)
 
 foreach (module ${target_test_modules})
     set (module_main "${CMAKE_CURRENT_LIST_DIR}/${module}/module.cpp")

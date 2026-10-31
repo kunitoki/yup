@@ -82,8 +82,9 @@ function (yup_standalone_app)
             APPLICATION_NAMESPACE "${target_app_namespace}"
             APPLICATION_VERSION "${target_version}")
 
-        _yup_message (STATUS "${target_name} - Copying SDL java activity to application")
         _yup_fetch_sdl()
+
+        _yup_message (STATUS "${target_name} - Copying SDL java activity to application")
         _yup_android_copy_sdl_activity() # TODO - this should be ported to sdl3
 
         return()
@@ -106,7 +107,6 @@ function (yup_standalone_app)
 
     # ==== Find dependencies
     if (NOT "${target_console}")
-        _yup_message (STATUS "${target_name} - Fetching SDL library")
         _yup_fetch_sdl()
         list (APPEND additional_libraries sdl::sdl)
     endif()
@@ -174,7 +174,10 @@ function (yup_standalone_app)
             list (APPEND target_resources "${target_iconset}")
 
             if (YUP_ARG_TARGET_ICON_COMPOSER)
-                _yup_compile_icon_composer ("${YUP_ARG_TARGET_ICON_COMPOSER}" "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_icon" target_asset_catalog)
+                # Shared by the apps using the same icon, so it is compiled once
+                string (SHA256 icon_composer_key "${YUP_ARG_TARGET_ICON_COMPOSER}")
+                string (SUBSTRING "${icon_composer_key}" 0 16 icon_composer_key)
+                _yup_compile_icon_composer ("${YUP_ARG_TARGET_ICON_COMPOSER}" "${CMAKE_BINARY_DIR}/icon_composer/${icon_composer_key}" target_asset_catalog)
                 if (target_asset_catalog)
                     target_sources (${target_name} PRIVATE ${target_asset_catalog})
                     list (APPEND target_resources "${target_asset_catalog}")

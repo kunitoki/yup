@@ -309,7 +309,7 @@ These commands build the project in Release mode. Replace `Release` with `Debug`
 After compilation, you can validate the build and explore YUP’s features:
 
 - Run tests:
-Build the `yup_tests` target, which builds one `<module>_tests` runner per tested module, then run them all with `ctest --test-dir <build>/tests -C <config> --output-on-failure` (add `-R yup_core` to run a single module). Set the `GTEST_FILTER` environment variable to filter tests across all runners.
+Build the `yup_tests` target, which builds one `<module>_tests` runner per tested module, then run them all with `ctest --test-dir <build>/tests -C <config> --output-on-failure` (add `-R yup_core` to run a single module). Building the `yup_tests_run` target does both in one step on every platform and IDE. Set the `GTEST_FILTER` environment variable to filter tests across all runners.
 
 - Build examples:
 Compile example targets like `example_app`, `example_console`, or `example_graphics` to see practical implementations.
