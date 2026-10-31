@@ -29,8 +29,8 @@ The cache is automatically invalidated (and re-rendered on the next frame) when:
 
 | Trigger | Explanation |
 |---|---|
-| `repaint()` | Any explicit or implicit repaint clears the cache. |
-| `setBounds()` | Bounds change → cache dimensions are stale. |
+| `repaint()` | Any explicit or implicit repaint marks the cache stale; the next frame paints into the same texture. |
+| `setBounds()` | A new size makes the next frame allocate a texture of matching size. |
 | `setCachedToTexture(true)` | Enabling (or toggling) the flag clears any previous cache. |
 
 ```{tip}

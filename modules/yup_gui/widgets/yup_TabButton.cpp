@@ -294,9 +294,4 @@ void TabButton::mouseUp (const MouseEvent& event)
     owner.buttonMouseUp (*this, event);
 }
 
-void TabButton::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
-{
-    owner.mouseWheel (event.withPosition (owner.getLocalPoint (this, event.getPosition())), wheelData);
-}
-
 } // namespace yup

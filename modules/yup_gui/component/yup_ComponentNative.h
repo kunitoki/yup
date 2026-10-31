@@ -441,6 +441,15 @@ public:
     */
     virtual bool isDecorated() const = 0;
 
+    /** Keeps the window's width over height at a ratio while the user resizes it.
+
+        @param aspectRatio The width over height to keep, or std::nullopt to resize freely.
+    */
+    virtual void setAspectRatio (std::optional<float> aspectRatio) = 0;
+
+    /** Returns the width over height the window keeps, or std::nullopt when it resizes freely. */
+    virtual std::optional<float> getAspectRatio() const = 0;
+
     //==============================================================================
     /** Sets the opacity of the window.
 
@@ -468,6 +477,13 @@ public:
         @return The currently focused component, or nullptr if no component has focus.
     */
     virtual Component* getFocusedComponent() const = 0;
+
+    /** Gets the component the pointer's events go to: the one being pressed while a button
+        or finger is down, otherwise the one under the pointer.
+
+        @return The component, or nullptr when the pointer is over none of the window's components.
+    */
+    virtual Component* getPointerTarget() const = 0;
 
     //==============================================================================
     /** Checks whether continuous repainting is enabled.

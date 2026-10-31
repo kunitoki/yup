@@ -1174,10 +1174,10 @@ int ListBox::getHoveredRow() const noexcept
     return hoveredRow;
 }
 
-void ListBox::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+bool ListBox::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     if (getMaxScrollOffset() <= 0.0f)
-        return;
+        return false;
 
     const bool vertical = orientation == Orientation::vertical;
 
@@ -1186,11 +1186,13 @@ void ListBox::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelDa
     if (delta == 0.0f)
         delta = vertical ? wheelData.getDeltaX() : wheelData.getDeltaY();
 
+    const auto previousOffset = scroller.getOffset();
     scroller.setOffset (scroller.getOffset() - delta * getRowSize() * 3.0f);
 
     updateLayout();
     updateHoveredRow (event.getPosition());
     dispatchPendingNotifications();
+    return scroller.getOffset() != previousOffset;
 }
 
 void ListBox::mouseDoubleClick (const MouseEvent& event)
@@ -1222,13 +1224,13 @@ void ListBox::mouseDoubleClick (const MouseEvent& event)
 }
 
 //==============================================================================
-void ListBox::keyDown (const KeyPress& key, const Point<float>& position)
+bool ListBox::keyDown (const KeyPress& key, const Point<float>& position)
 {
     ignoreUnused (position);
     jassert (isRowCountInSync());
 
     if (model == nullptr || numRows == 0)
-        return;
+        return false;
 
     const auto keyCode = key.getKey();
     const auto modifiers = key.getModifiers();
@@ -1251,18 +1253,22 @@ void ListBox::keyDown (const KeyPress& key, const Point<float>& position)
         navigateTo (numRows - 1, modifiers);
     else if (keyCode == KeyPress::spaceKey)
     {
-        if (selectionMode == SelectionMode::multiple && currentRow >= 0)
-        {
-            if (isRowSelected (currentRow))
-                deselectRow (currentRow, sendNotification);
-            else
-                selectRow (currentRow, false, sendNotification);
-        }
+        if (selectionMode != SelectionMode::multiple || currentRow < 0)
+            return false;
+
+        if (isRowSelected (currentRow))
+            deselectRow (currentRow, sendNotification);
+        else
+            selectRow (currentRow, false, sendNotification);
     }
     else if (keyCode == KeyPress::enterKey || keyCode == KeyPress::kpEnterKey)
         model->returnKeyPressed (currentRow);
     else if (keyCode == KeyPress::deleteKey || keyCode == KeyPress::backspaceKey)
         model->deleteKeyPressed (selectedRows);
+    else
+        return false;
+
+    return true;
 }
 
 void ListBox::focusGained()

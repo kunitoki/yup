@@ -97,7 +97,7 @@ public:
         g.strokeLine ({ buttonBounds.getRight(), 0 }, { buttonBounds.getRight(), bounds.getHeight() });
     }
 
-    void keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override
+    bool keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override
     {
         if (key.getKey() == yup::KeyPress::spaceKey || key.getKey() == yup::KeyPress::enterKey)
         {
@@ -113,6 +113,12 @@ public:
             currentPlacementIndex = (currentPlacementIndex - 1 + static_cast<int> (placements.size())) % static_cast<int> (placements.size());
             showPlacementTest();
         }
+        else
+        {
+            return false;
+        }
+
+        return true;
     }
 
     void mouseDown (const yup::MouseEvent& event) override

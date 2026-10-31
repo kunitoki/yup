@@ -41,6 +41,12 @@ namespace yup
 
     The algorithm introduces one sample of inherent latency.
 
+    The traits provide f(x), either as a static function or as a const member function
+    of a traits instance the processor holds, so a curve chosen at runtime can be
+    antialiased too (see setTraits()). The optional static fillBreakpoints() splits the
+    integration where f has a kink; without it f is integrated as one affine segment
+    per sample, which is exact for smooth curves.
+
     @tparam SampleType      Audio sample type (float or double).
     @tparam NonlinearTraits Policy class providing the nonlinear function f(x) and
                             its closed-form integral computations.
@@ -89,13 +95,31 @@ public:
 
         Call prepare() before processing audio.
 
-        @param config  Pole configuration. Defaults to a 2nd-order Butterworth
-                       lowpass at 0.45*Fs (the AA-IIR-1 preset from the paper).
+        @param config           Pole configuration. Defaults to a 10th-order Chebyshev
+                                Type II lowpass (the AA-IIR-2 preset from the paper).
+        @param nonlinearTraits  The traits instance providing f(x).
     */
-    explicit AaIirAntialiaser (PoleConfig config = makeChebyshevTypeIIOrder10()) noexcept
+    explicit AaIirAntialiaser (PoleConfig config = makeChebyshevTypeIIOrder10(), NonlinearTraits nonlinearTraits = {})
+        : traits (std::move (nonlinearTraits))
     {
         configure (std::move (config));
+        prevF = traits.f (prevX);
     }
+
+    //==============================================================================
+    /** Replaces the traits instance providing f(x), keeping the filter state.
+
+        Safe to call between samples: the next sample integrates from the previous
+        input through the new curve.
+    */
+    void setTraits (NonlinearTraits newTraits) noexcept
+    {
+        traits = std::move (newTraits);
+        prevF = traits.f (prevX);
+    }
+
+    /** Returns the traits instance providing f(x). */
+    const NonlinearTraits& getTraits() const noexcept { return traits; }
 
     //==============================================================================
     /** Reconfigures the processor with new pole specifications.
@@ -142,15 +166,39 @@ public:
     */
     void prepare (double /*sampleRate*/, int /*maximumBlockSize*/) noexcept
     {
+        // Over a single affine segment the integral is P f(x0) + Q f(x1), with
+        // P = (e^b - (e^b - 1) / b) / b and Q = ((e^b - 1) / b - 1) / b.
         for (auto& p : complexPoles)
         {
-            const CoeffType mag = std::exp (p.poleReal);
-            p.expReal = mag * std::cos (p.poleImag);
-            p.expImag = mag * std::sin (p.poleImag);
+            using Complex = std::complex<CoeffType>;
+
+            const Complex pole (p.poleReal, p.poleImag);
+            const Complex e = std::exp (pole);
+            const Complex inv = CoeffType (1) / pole;
+            const Complex ramp = (e - CoeffType (1)) * inv;
+            const Complex residue = CoeffType (2) * Complex (p.residueReal, p.residueImag);
+            const Complex gain0 = residue * (e - ramp) * inv;
+            const Complex gain1 = residue * (ramp - CoeffType (1)) * inv;
+
+            p.expReal = e.real();
+            p.expImag = e.imag();
+            p.invReal = inv.real();
+            p.invImag = inv.imag();
+            p.gain0Real = gain0.real();
+            p.gain0Imag = gain0.imag();
+            p.gain1Real = gain1.real();
+            p.gain1Imag = gain1.imag();
         }
 
         for (auto& p : realPoles)
+        {
             p.expAlpha = std::exp (p.pole);
+            p.invPole = CoeffType (1) / p.pole;
+
+            const CoeffType ramp = (p.expAlpha - CoeffType (1)) * p.invPole;
+            p.gain0 = p.residue * (p.expAlpha - ramp) * p.invPole;
+            p.gain1 = p.residue * (ramp - CoeffType (1)) * p.invPole;
+        }
 
         reset();
     }
@@ -162,6 +210,7 @@ public:
     void reset() noexcept
     {
         prevX = CoeffType (0);
+        prevF = traits.f (prevX);
 
         for (auto& p : complexPoles)
         {
@@ -190,18 +239,33 @@ public:
         const CoeffType x1 = static_cast<CoeffType> (inputSample);
         prevX = x1;
 
-        CoeffType output = constantTerm != CoeffType (0)
-                             ? constantTerm * NonlinearTraits::f (x0)
-                             : CoeffType (0);
+        // The segments and the curve values are shared by every pole; f(x0) is last sample's f(x1).
+        const auto segments = makeSegments (x0, x1, prevF);
+        const bool affine = segments.count == 2;
+        const CoeffType f0 = segments.f[0];
+        const CoeffType f1 = segments.f[segments.count - 1];
+        prevF = f1;
+
+        CoeffType output = constantTerm * f0;
 
         for (auto& p : complexPoles)
         {
-            const auto [IR, II] = computeComplexIntegral (x0, x1, p.poleReal, p.poleImag);
+            CoeffType drivenR, drivenI;
 
-            const CoeffType newY = p.expReal * p.stateY - p.expImag * p.stateZ
-                                 + CoeffType (2) * (p.residueReal * IR - p.residueImag * II);
-            const CoeffType newZ = p.expImag * p.stateY + p.expReal * p.stateZ
-                                 + CoeffType (2) * (p.residueImag * IR + p.residueReal * II);
+            if (affine)
+            {
+                drivenR = p.gain0Real * f0 + p.gain1Real * f1;
+                drivenI = p.gain0Imag * f0 + p.gain1Imag * f1;
+            }
+            else
+            {
+                const auto [IR, II] = computeComplexIntegral (segments, p);
+                drivenR = CoeffType (2) * (p.residueReal * IR - p.residueImag * II);
+                drivenI = CoeffType (2) * (p.residueImag * IR + p.residueReal * II);
+            }
+
+            const CoeffType newY = p.expReal * p.stateY - p.expImag * p.stateZ + drivenR;
+            const CoeffType newZ = p.expImag * p.stateY + p.expReal * p.stateZ + drivenI;
 
             p.stateY = newY;
             p.stateZ = newZ;
@@ -210,10 +274,10 @@ public:
 
         for (auto& p : realPoles)
         {
-            const CoeffType I = computeRealIntegral (x0, x1, p.pole);
-            const CoeffType newY = p.expAlpha * p.state + p.residue * I;
-            p.state = newY;
-            output += newY;
+            const CoeffType driven = affine ? p.gain0 * f0 + p.gain1 * f1
+                                            : p.residue * computeRealIntegral (segments, p);
+            p.state = p.expAlpha * p.state + driven;
+            output += p.state;
         }
 
         return static_cast<SampleType> (output);
@@ -375,6 +439,36 @@ public:
 
 private:
     //==============================================================================
+    struct ComplexPoleState
+    {
+        CoeffType poleReal = CoeffType (0);
+        CoeffType poleImag = CoeffType (0);
+        CoeffType residueReal = CoeffType (0);
+        CoeffType residueImag = CoeffType (0);
+        CoeffType expReal = CoeffType (0); // Re(e^beta), computed in prepare()
+        CoeffType expImag = CoeffType (0); // Im(e^beta), computed in prepare()
+        CoeffType invReal = CoeffType (0); // Re(1/beta), computed in prepare()
+        CoeffType invImag = CoeffType (0); // Im(1/beta), computed in prepare()
+        CoeffType gain0Real = CoeffType (0); // 2 B P, weight of f(x0) over a single segment
+        CoeffType gain0Imag = CoeffType (0);
+        CoeffType gain1Real = CoeffType (0); // 2 B Q, weight of f(x1) over a single segment
+        CoeffType gain1Imag = CoeffType (0);
+        CoeffType stateY = CoeffType (0);  // Re(ŷ_n)
+        CoeffType stateZ = CoeffType (0);  // Im(ŷ_n)
+    };
+
+    struct RealPoleState
+    {
+        CoeffType pole = CoeffType (0);
+        CoeffType residue = CoeffType (0);
+        CoeffType expAlpha = CoeffType (0); // e^pole, computed in prepare()
+        CoeffType invPole = CoeffType (0);  // 1/pole, computed in prepare()
+        CoeffType gain0 = CoeffType (0);    // A P, weight of f(x0) over a single segment
+        CoeffType gain1 = CoeffType (0);    // A Q, weight of f(x1) over a single segment
+        CoeffType state = CoeffType (0);    // y_n
+    };
+
+    //==============================================================================
     // Detection helper: true when NonlinearTraits provides fillBreakpoints<T>.
     // Traits that satisfy this get piecewise-accurate integration (needed for
     // hard clipping). Traits that do not (smooth functions like tanh) use a
@@ -396,6 +490,36 @@ private:
     };
 
     //==============================================================================
+    /** The affine segments of f over [x0, x1], in u = (xi - x0) / (x1 - x0) space.
+
+        Holds the breakpoints u[0] = 0 < ... < u[count - 1] = 1 and f at each of them.
+        Traits breakpoints only ever fall strictly inside (0, 1).
+    */
+    struct Segments
+    {
+        CoeffType u[4] = { CoeffType (0), CoeffType (1), CoeffType (0), CoeffType (0) };
+        CoeffType f[4] = {};
+        int count = 2;
+    };
+
+    Segments makeSegments (CoeffType x0, CoeffType x1, CoeffType f0) const noexcept
+    {
+        Segments segments;
+        segments.f[0] = f0;
+        const CoeffType delta = x1 - x0;
+
+        if (std::abs (delta) >= CoeffType (1e-7))
+        {
+            BreakpointHelper<NonlinearTraits, CoeffType>::fill (x0, delta, segments.u, segments.count);
+            std::sort (segments.u, segments.u + segments.count);
+        }
+
+        for (int i = 1; i < segments.count; ++i)
+            segments.f[i] = traits.f (x0 + segments.u[i] * delta);
+
+        return segments;
+    }
+
     /** Computes the mean definite integral used by the AA-IIR method for a complex pole.
 
         The paper uses the mean integral (eq. 3): ⁻∫_a^b = (1/(b-a)) * ∫_a^b.
@@ -411,84 +535,54 @@ private:
 
         where slopeU = (fB-fA)/(ub-ua) is the slope of f in u-space (independent of delta).
         This formula has the correct finite limit as delta → 0: f(x0) * (exp(beta)-1)/beta.
+
+        exp(beta*(1-u)) is e^beta at u = 0 and 1 at u = 1, both known in advance, so
+        only the breakpoints inside the interval cost a complex exponential.
     */
-    template <typename T>
-    static std::pair<T, T> computeComplexIntegral (T x0, T x1, T poleReal, T poleImag) noexcept
+    static std::pair<CoeffType, CoeffType> computeComplexIntegral (const Segments& segments, const ComplexPoleState& p) noexcept
     {
-        // 1/beta = conj(beta) / |beta|^2
-        const T betaMagSq = poleReal * poleReal + poleImag * poleImag;
-        const T ibR = poleReal / betaMagSq;  // Re(1/beta)
-        const T ibI = -poleImag / betaMagSq; // Im(1/beta)
-
-        // exp(beta) at u=0
-        const T emag = std::exp (poleReal);
-        const T e1R = emag * std::cos (poleImag); // Re(exp(beta))
-        const T e1I = emag * std::sin (poleImag); // Im(exp(beta))
-
-        const T delta = x1 - x0;
-
-        // Build segment breakpoints in u-space via the traits (if provided).
-        // Traits that implement fillBreakpoints<T> (e.g. HardClipperTraits) add
-        // their characteristic breakpoints here; smooth nonlinearities don't and
-        // the integral collapses to a single affine segment over [x0, x1].
-        T pts[4] = { T (0), T (1), T (0), T (0) };
-        int nPts = 2;
-
-        if (std::abs (delta) >= T (1e-7))
+        const auto expAt = [&] (int i) -> std::pair<CoeffType, CoeffType>
         {
-            BreakpointHelper<NonlinearTraits, T>::fill (x0, delta, pts, nPts);
+            if (i == 0)
+                return { p.expReal, p.expImag };
 
-            for (int i = 1; i < nPts; ++i)
-            {
-                const T key = pts[i];
-                int j = i - 1;
-                while (j >= 0 && pts[j] > key)
-                {
-                    pts[j + 1] = pts[j];
-                    --j;
-                }
-                pts[j + 1] = key;
-            }
-        }
+            if (i == segments.count - 1)
+                return { CoeffType (1), CoeffType (0) };
 
-        T resultR = T (0);
-        T resultI = T (0);
+            const CoeffType v = CoeffType (1) - segments.u[i];
+            const CoeffType mag = std::exp (p.poleReal * v);
+            return { mag * std::cos (p.poleImag * v), mag * std::sin (p.poleImag * v) };
+        };
 
-        for (int i = 0; i < nPts - 1; ++i)
+        CoeffType resultR = CoeffType (0);
+        CoeffType resultI = CoeffType (0);
+        auto [eaR, eaI] = expAt (0);
+
+        for (int i = 0; i < segments.count - 1; ++i)
         {
-            const T ua = pts[i];
-            const T ub = pts[i + 1];
-            const T xiA = x0 + ua * delta;
-            const T xiB = x0 + ub * delta;
-            const T fA = NonlinearTraits::f (xiA);
-            const T fB = NonlinearTraits::f (xiB);
+            const auto [ebR, ebI] = expAt (i + 1);
+            const CoeffType fA = segments.f[i];
+            const CoeffType fB = segments.f[i + 1];
 
-            // Slope in u-space: slopeU = (fB-fA)/(ub-ua) - independent of delta.
-            // ub > ua always, so no division by zero here.
-            const T slopeU = (fB - fA) / (ub - ua);
+            // Slope in u-space - independent of delta; ub > ua always.
+            const CoeffType slopeU = (fB - fA) / (segments.u[i + 1] - segments.u[i]);
 
             // slopeU / beta (complex)
-            const T sR = slopeU * ibR;
-            const T sI = slopeU * ibI;
-
-            // exp(beta*(1-ua)) and exp(beta*(1-ub))
-            const T magA = std::exp (poleReal * (T (1) - ua));
-            const T eaR = magA * std::cos (poleImag * (T (1) - ua));
-            const T eaI = magA * std::sin (poleImag * (T (1) - ua));
-
-            const T magB = std::exp (poleReal * (T (1) - ub));
-            const T ebR = magB * std::cos (poleImag * (T (1) - ub));
-            const T ebI = magB * std::sin (poleImag * (T (1) - ub));
+            const CoeffType sR = slopeU * p.invReal;
+            const CoeffType sI = slopeU * p.invImag;
 
             // e_a*(fA + slopeU/beta) - e_b*(fB + slopeU/beta)
-            const T tAR = fA + sR;
-            const T tBR = fB + sR;
-            const T diffPR = eaR * tAR - eaI * sI - ebR * tBR + ebI * sI;
-            const T diffPI = eaR * sI + eaI * tAR - ebR * sI - ebI * tBR;
+            const CoeffType tAR = fA + sR;
+            const CoeffType tBR = fB + sR;
+            const CoeffType diffPR = eaR * tAR - eaI * sI - ebR * tBR + ebI * sI;
+            const CoeffType diffPI = eaR * sI + eaI * tAR - ebR * sI - ebI * tBR;
 
             // I_seg = (1/beta) * diff
-            resultR += ibR * diffPR - ibI * diffPI;
-            resultI += ibR * diffPI + ibI * diffPR;
+            resultR += p.invReal * diffPR - p.invImag * diffPI;
+            resultI += p.invReal * diffPI + p.invImag * diffPR;
+
+            eaR = ebR;
+            eaI = ebI;
         }
 
         return { resultR, resultI };
@@ -500,82 +594,45 @@ private:
 
             I_mean = (1/delta) * integral_{x0}^{x1} f(xi) * exp(pole*(1-(xi-x0)/delta)) dxi
     */
-    template <typename T>
-    static T computeRealIntegral (T x0, T x1, T pole) noexcept
+    static CoeffType computeRealIntegral (const Segments& segments, const RealPoleState& p) noexcept
     {
-        const T invPole = T (1) / pole;
-        const T delta = x1 - x0;
-
-        T pts[4] = { T (0), T (1), T (0), T (0) };
-        int nPts = 2;
-
-        if (std::abs (delta) >= T (1e-7))
+        const auto expAt = [&] (int i) -> CoeffType
         {
-            BreakpointHelper<NonlinearTraits, T>::fill (x0, delta, pts, nPts);
+            if (i == 0)
+                return p.expAlpha;
 
-            for (int i = 1; i < nPts; ++i)
-            {
-                const T key = pts[i];
-                int j = i - 1;
-                while (j >= 0 && pts[j] > key)
-                {
-                    pts[j + 1] = pts[j];
-                    --j;
-                }
-                pts[j + 1] = key;
-            }
-        }
+            if (i == segments.count - 1)
+                return CoeffType (1);
 
-        T result = T (0);
+            return std::exp (p.pole * (CoeffType (1) - segments.u[i]));
+        };
 
-        for (int i = 0; i < nPts - 1; ++i)
+        CoeffType result = CoeffType (0);
+        CoeffType ea = expAt (0);
+
+        for (int i = 0; i < segments.count - 1; ++i)
         {
-            const T ua = pts[i];
-            const T ub = pts[i + 1];
-            const T xiA = x0 + ua * delta;
-            const T xiB = x0 + ub * delta;
-            const T fA = NonlinearTraits::f (xiA);
-            const T fB = NonlinearTraits::f (xiB);
-            const T slopeU = (fB - fA) / (ub - ua);
-            const T sOverP = slopeU * invPole;
-
-            const T ea = std::exp (pole * (T (1) - ua));
-            const T eb = std::exp (pole * (T (1) - ub));
+            const CoeffType eb = expAt (i + 1);
+            const CoeffType fA = segments.f[i];
+            const CoeffType fB = segments.f[i + 1];
+            const CoeffType sOverP = (fB - fA) / (segments.u[i + 1] - segments.u[i]) * p.invPole;
 
             // I_seg = (1/pole) * (ea*(fA + slopeU/pole) - eb*(fB + slopeU/pole))
-            result += invPole * (ea * (fA + sOverP) - eb * (fB + sOverP));
+            result += p.invPole * (ea * (fA + sOverP) - eb * (fB + sOverP));
+            ea = eb;
         }
 
         return result;
     }
 
     //==============================================================================
-    struct ComplexPoleState
-    {
-        CoeffType poleReal = CoeffType (0);
-        CoeffType poleImag = CoeffType (0);
-        CoeffType residueReal = CoeffType (0);
-        CoeffType residueImag = CoeffType (0);
-        CoeffType expReal = CoeffType (0); // Re(e^beta), computed in prepare()
-        CoeffType expImag = CoeffType (0); // Im(e^beta), computed in prepare()
-        CoeffType stateY = CoeffType (0);  // Re(ŷ_n)
-        CoeffType stateZ = CoeffType (0);  // Im(ŷ_n)
-    };
-
-    struct RealPoleState
-    {
-        CoeffType pole = CoeffType (0);
-        CoeffType residue = CoeffType (0);
-        CoeffType expAlpha = CoeffType (0); // e^pole, computed in prepare()
-        CoeffType state = CoeffType (0);    // y_n
-    };
-
-    //==============================================================================
     std::vector<ComplexPoleState> complexPoles;
     std::vector<RealPoleState> realPoles;
     CoeffType constantTerm = CoeffType (0);
     CoeffType prevX = CoeffType (0);
+    CoeffType prevF = CoeffType (0);
     PoleConfig storedConfig;
+    NonlinearTraits traits;
 
     //==============================================================================
     YUP_LEAK_DETECTOR (AaIirAntialiaser)

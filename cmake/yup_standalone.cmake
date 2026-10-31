@@ -24,9 +24,9 @@ function (yup_standalone_app)
     set (options "")
     set (one_value_args
         # Globals
-        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_ICON_COMPOSER TARGET_WHEEL TARGET_CXX_STANDARD
+        TARGET_NAME TARGET_PRODUCT_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_ICON_COMPOSER TARGET_WHEEL TARGET_STATIC_LIBRARY TARGET_CXX_STANDARD
         # Emscripten
-        INITIAL_MEMORY MAXIMUM_MEMORY PTHREAD_POOL_SIZE STACK_SIZE CUSTOM_PLIST CUSTOM_SHELL ENABLE_EMSCRIPTEN_WEBGPU ENABLE_EMSCRIPTEN_GL_DEBUGGING ENABLE_EMSCRIPTEN_NODERAWFS)
+        INITIAL_MEMORY MAXIMUM_MEMORY PTHREAD_POOL_SIZE STACK_SIZE EMSCRIPTEN_DEBUG_INFO CUSTOM_PLIST CUSTOM_SHELL ENABLE_EMSCRIPTEN_WEBGPU ENABLE_EMSCRIPTEN_GL_DEBUGGING ENABLE_EMSCRIPTEN_NODERAWFS)
     set (multi_value_args
         # Globals
         DEFINITIONS COMPILE_OPTIONS MODULES SOURCES LINK_OPTIONS BUNDLE_RESOURCES
@@ -45,12 +45,14 @@ function (yup_standalone_app)
     _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_NODERAWFS OFF)
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
+    set (target_product_name "${YUP_ARG_TARGET_PRODUCT_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")
     set (target_console "${YUP_ARG_TARGET_CONSOLE}")
     set (target_icon "${YUP_ARG_TARGET_ICON}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_app_identifier "${target_app_namespace}.${target_name}")
     set (target_wheel "${YUP_ARG_TARGET_WHEEL}")
+    set (target_static_library "${YUP_ARG_TARGET_STATIC_LIBRARY}")
     set (target_resources "")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
     set (additional_definitions "")
@@ -59,7 +61,11 @@ function (yup_standalone_app)
     set (additional_link_options "")
 
     _yup_set_default (target_console OFF)
+    if ("${target_product_name}" STREQUAL "")
+        set (target_product_name "${target_name}")
+    endif()
     _yup_set_default (target_wheel OFF)
+    _yup_set_default (target_static_library OFF)
     _yup_make_short_version ("${target_version}" target_version_short)
 
     # ==== Output status
@@ -76,8 +82,9 @@ function (yup_standalone_app)
             APPLICATION_NAMESPACE "${target_app_namespace}"
             APPLICATION_VERSION "${target_version}")
 
-        _yup_message (STATUS "${target_name} - Copying SDL java activity to application")
         _yup_fetch_sdl()
+
+        _yup_message (STATUS "${target_name} - Copying SDL java activity to application")
         _yup_android_copy_sdl_activity() # TODO - this should be ported to sdl3
 
         return()
@@ -100,13 +107,12 @@ function (yup_standalone_app)
 
     # ==== Find dependencies
     if (NOT "${target_console}")
-        _yup_message (STATUS "${target_name} - Fetching SDL library")
         _yup_fetch_sdl()
         list (APPEND additional_libraries sdl::sdl)
     endif()
 
     # ==== Enable profiling
-    if (YUP_ENABLE_PROFILING AND NOT "${target_name}" STREQUAL "yup_tests")
+    if (YUP_ENABLE_PROFILING AND NOT "${target_name}" MATCHES "^yup_tests|^yup_.+_tests$")
         list (APPEND additional_definitions YUP_ENABLE_PROFILING=1)
         list (APPEND additional_libraries perfetto::perfetto)
     endif()
@@ -133,8 +139,15 @@ function (yup_standalone_app)
         add_library (${target_name} SHARED)
     elseif (target_wheel)
         add_library (${target_name} MODULE)
+    elseif (target_static_library)
+        add_library (${target_name} STATIC)
     else()
         add_executable (${target_name} ${executable_options})
+    endif()
+
+    # Android loads the library and Python imports the wheel by the target name, so they keep it.
+    if (NOT YUP_PLATFORM_ANDROID AND NOT target_wheel AND NOT target_static_library)
+        set_target_properties (${target_name} PROPERTIES OUTPUT_NAME "${target_product_name}")
     endif()
 
     set_target_properties (${target_name} PROPERTIES
@@ -151,7 +164,7 @@ function (yup_standalone_app)
 
     # ==== Per platform configuration
     if (YUP_PLATFORM_APPLE)
-        if (NOT "${target_console}" AND NOT "${target_wheel}")
+        if (NOT "${target_console}" AND NOT "${target_wheel}" AND NOT "${target_static_library}")
             _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/ApplicationInfo.plist")
             _yup_valid_identifier_string ("${target_app_identifier}" target_app_identifier)
 
@@ -161,7 +174,10 @@ function (yup_standalone_app)
             list (APPEND target_resources "${target_iconset}")
 
             if (YUP_ARG_TARGET_ICON_COMPOSER)
-                _yup_compile_icon_composer ("${YUP_ARG_TARGET_ICON_COMPOSER}" "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_icon" target_asset_catalog)
+                # Shared by the apps using the same icon, so it is compiled once
+                string (SHA256 icon_composer_key "${YUP_ARG_TARGET_ICON_COMPOSER}")
+                string (SUBSTRING "${icon_composer_key}" 0 16 icon_composer_key)
+                _yup_compile_icon_composer ("${YUP_ARG_TARGET_ICON_COMPOSER}" "${CMAKE_BINARY_DIR}/icon_composer/${icon_composer_key}" target_asset_catalog)
                 if (target_asset_catalog)
                     target_sources (${target_name} PRIVATE ${target_asset_catalog})
                     list (APPEND target_resources "${target_asset_catalog}")
@@ -171,9 +187,9 @@ function (yup_standalone_app)
             set_target_properties (${target_name} PROPERTIES
                 BUNDLE                                         ON
                 CXX_EXTENSIONS                                 OFF
-                MACOSX_BUNDLE_EXECUTABLE_NAME                  "${target_name}"
+                MACOSX_BUNDLE_EXECUTABLE_NAME                  "${target_product_name}"
                 MACOSX_BUNDLE_GUI_IDENTIFIER                   "${target_app_identifier}"
-                MACOSX_BUNDLE_BUNDLE_NAME                      "${target_name}"
+                MACOSX_BUNDLE_BUNDLE_NAME                      "${target_product_name}"
                 MACOSX_BUNDLE_BUNDLE_VERSION                   "${target_version}"
                 MACOSX_BUNDLE_LONG_VERSION_STRING              "${target_version}"
                 MACOSX_BUNDLE_SHORT_VERSION_STRING             "${target_version_short}"
@@ -202,7 +218,7 @@ function (yup_standalone_app)
             XCODE_GENERATE_SCHEME                          ON)
 
     elseif (YUP_PLATFORM_EMSCRIPTEN)
-        if (NOT "${target_console}")
+        if (NOT "${target_console}" AND NOT "${target_static_library}")
             set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
         endif()
 
@@ -210,6 +226,16 @@ function (yup_standalone_app)
         _yup_set_default (YUP_ARG_INITIAL_MEMORY 65536000) # 64mb
         _yup_set_default (YUP_ARG_PTHREAD_POOL_SIZE 8)
         _yup_set_default (YUP_ARG_STACK_SIZE 2097152) # 2mb
+        _yup_set_default (YUP_ARG_EMSCRIPTEN_DEBUG_INFO FULL)
+
+        # NAMES keeps only function names, skipping the slow DWARF and source map generation at link time
+        if ("${YUP_ARG_EMSCRIPTEN_DEBUG_INFO}" STREQUAL "NAMES")
+            set (debug_link_options -O0 -g2)
+        elseif ("${YUP_ARG_EMSCRIPTEN_DEBUG_INFO}" STREQUAL "FULL")
+            set (debug_link_options -O0 -gsource-map -g)
+        else()
+            _yup_message (FATAL_ERROR "${target_name} - EMSCRIPTEN_DEBUG_INFO must be FULL or NAMES, not '${YUP_ARG_EMSCRIPTEN_DEBUG_INFO}'")
+        endif()
 
         list (APPEND additional_options
             $<$<CONFIG:DEBUG>:-O0 -g>
@@ -221,7 +247,7 @@ function (yup_standalone_app)
             -sDISABLE_EXCEPTION_CATCHING=0)
 
         list (APPEND additional_link_options
-            $<$<CONFIG:DEBUG>:-O0 -gsource-map -g>
+            "$<$<CONFIG:DEBUG>:${debug_link_options}>"
             $<$<CONFIG:RELEASE>:-O2 -flto>
             -fexceptions
             -pthread
@@ -274,12 +300,14 @@ function (yup_standalone_app)
             yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
         endif()
 
-        set (target_copy_dest "$<TARGET_FILE_DIR:${target_name}>")
-        add_custom_command(
-            TARGET ${target_name} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy
-                "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/mini-coi.js"
-                "${target_copy_dest}/mini-coi.js")
+        if (NOT "${target_static_library}")
+            set (target_copy_dest "$<TARGET_FILE_DIR:${target_name}>")
+            add_custom_command(
+                TARGET ${target_name} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy
+                    "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/mini-coi.js"
+                    "${target_copy_dest}/mini-coi.js")
+        endif()
 
     elseif (YUP_PLATFORM_ANDROID)
        target_link_options (${target_name} PRIVATE
@@ -296,7 +324,7 @@ function (yup_standalone_app)
         get_filename_component (target_icon_name "${target_icon}" NAME_WLE)
         set (target_icon_ico "${target_icon_directory}/${target_icon_name}.ico")
 
-        if (NOT "${target_console}" AND NOT "${target_wheel}" AND EXISTS "${target_icon_ico}")
+        if (NOT "${target_console}" AND NOT "${target_wheel}" AND NOT "${target_static_library}" AND EXISTS "${target_icon_ico}")
             set (target_icon_rc "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_icon.rc")
             file (WRITE "${target_icon_rc}" "1 ICON \"${target_icon_ico}\"\n")
             target_sources (${target_name} PRIVATE "${target_icon_rc}")
@@ -343,12 +371,34 @@ function (yup_standalone_app)
         ${additional_libraries}
         ${YUP_ARG_MODULES})
 
+    # Consumers get the module sources compiled in here, so they must not see the
+    # module INTERFACE_SOURCES again: export the resolved compile settings instead.
+    if (target_static_library)
+        foreach (compile_property IN ITEMS COMPILE_DEFINITIONS COMPILE_OPTIONS COMPILE_FEATURES INCLUDE_DIRECTORIES)
+            set_property (TARGET ${target_name} APPEND PROPERTY
+                INTERFACE_${compile_property} "$<TARGET_PROPERTY:${target_name},${compile_property}>")
+        endforeach()
+
+        # Keep third party headers (e.g. googletest) as system includes, so their warnings stay hidden
+        set (system_include_dirs "")
+        set (visited_targets "")
+        _yup_collect_system_include_directories (system_include_dirs visited_targets
+            ${additional_libraries}
+            ${YUP_ARG_MODULES})
+
+        if (system_include_dirs)
+            list (REMOVE_DUPLICATES system_include_dirs)
+            set_property (TARGET ${target_name} APPEND PROPERTY
+                INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${system_include_dirs})
+        endif()
+    endif()
+
     if (YUP_ARG_SOURCES AND NOT YUP_TARGET_ANDROID)
         target_sources (${target_name} PRIVATE ${YUP_ARG_SOURCES})
     endif()
 
     # ==== Post build steps, workaround for python*.dll
-    if ("yup::yup_python" IN_LIST YUP_ARG_MODULES AND YUP_PLATFORM_WINDOWS AND NOT YUP_ENABLE_STATIC_PYTHON_LIBS AND Python_RUNTIME_LIBRARY_RELEASE)
+    if ("yup::yup_python" IN_LIST YUP_ARG_MODULES AND YUP_PLATFORM_WINDOWS AND NOT target_static_library AND NOT YUP_ENABLE_STATIC_PYTHON_LIBS AND Python_RUNTIME_LIBRARY_RELEASE)
         add_custom_command (TARGET ${target_name} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${Python_RUNTIME_LIBRARY_RELEASE}" "$<TARGET_FILE_DIR:${target_name}>"
             COMMENT "Copying Python DLL next to executable")

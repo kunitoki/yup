@@ -228,6 +228,51 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_collect_system_include_directories output_variable visited_variable)
+    set (system_include_dirs "${${output_variable}}")
+    set (visited_targets "${${visited_variable}}")
+
+    foreach (linked_target IN LISTS ARGN)
+        if (NOT TARGET "${linked_target}")
+            continue()
+        endif()
+
+        get_target_property (aliased_target "${linked_target}" ALIASED_TARGET)
+        if (aliased_target)
+            set (linked_target "${aliased_target}")
+        endif()
+
+        if ("${linked_target}" IN_LIST visited_targets)
+            continue()
+        endif()
+        list (APPEND visited_targets "${linked_target}")
+
+        get_target_property (target_system_dirs "${linked_target}" INTERFACE_SYSTEM_INCLUDE_DIRECTORIES)
+        if (target_system_dirs)
+            list (APPEND system_include_dirs ${target_system_dirs})
+        endif()
+
+        get_target_property (target_is_imported "${linked_target}" IMPORTED)
+        get_target_property (target_is_system "${linked_target}" SYSTEM)
+        if (target_is_system OR target_is_imported)
+            get_target_property (target_include_dirs "${linked_target}" INTERFACE_INCLUDE_DIRECTORIES)
+            if (target_include_dirs)
+                list (APPEND system_include_dirs ${target_include_dirs})
+            endif()
+        endif()
+
+        get_target_property (target_libraries "${linked_target}" INTERFACE_LINK_LIBRARIES)
+        if (target_libraries)
+            _yup_collect_system_include_directories (system_include_dirs visited_targets ${target_libraries})
+        endif()
+    endforeach()
+
+    set (${output_variable} "${system_include_dirs}" PARENT_SCOPE)
+    set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_target_list_contains target_list target_name output_variable)
     foreach (target IN LISTS target_list)
         if ("${target}" STREQUAL "${target_name}" OR "${target}" STREQUAL "yup::${target_name}")

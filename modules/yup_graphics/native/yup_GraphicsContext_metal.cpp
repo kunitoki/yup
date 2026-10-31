@@ -145,6 +145,14 @@ public:
 
     //==============================================================================
 
+    /** True when the device, render context and present pipeline were all created. */
+    bool isUsable() const noexcept
+    {
+        return gpuDevice != nullptr && gpuDevice->getRenderContext() != nullptr && pipelineState != nil && quadVertexBuffer != nil;
+    }
+
+    //==============================================================================
+
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Metal; }
 
     GpuDevice::Ptr getGpuDevice() const noexcept override { return gpuDevice; }
@@ -331,7 +339,14 @@ private:
 std::unique_ptr<GraphicsContext> yup_constructMetalGraphicsContext (GpuDevice::Options options,
                                                                     GpuDevice::Ptr existingGpu)
 {
-    return std::make_unique<GraphicsContextMetal> (options, std::move (existingGpu));
+    auto context = std::make_unique<GraphicsContextMetal> (options, std::move (existingGpu));
+    if (! context->isUsable())
+    {
+        Logger::outputDebugString ("Metal: unable to create the graphics context");
+        return nullptr;
+    }
+
+    return context;
 }
 
 } // namespace yup

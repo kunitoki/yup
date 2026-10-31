@@ -192,7 +192,11 @@ void Desktop::handleGlobalMouseWheel (const MouseEvent& event, const MouseWheelD
 {
     {
         ScopedValueSetter setter (sendingMouseEvent, true);
-        globalMouseListeners.call (&MouseListener::mouseWheel, event, wheelData);
+        globalMouseListeners.callChecked (ListenerList<MouseListener>::DummyBailOutChecker {},
+                                          [&] (MouseListener& listener)
+                                          {
+                                              ignoreUnused (listener.mouseWheel (event, wheelData));
+                                          });
     }
 
     addPendingMouseListeners();

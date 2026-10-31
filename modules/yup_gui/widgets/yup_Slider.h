@@ -299,11 +299,11 @@ public:
     /** @internal */
     void mouseDrag (const MouseEvent& event) override;
     /** @internal */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& data) override;
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& data) override;
     /** @internal */
     void mouseDoubleClick (const MouseEvent& event) override;
     /** @internal */
-    void keyDown (const KeyPress& key, const Point<float>& position) override;
+    bool keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void focusGained() override;
     /** @internal */
@@ -326,7 +326,7 @@ private:
     void sendMaxValueChanged (NotificationType notification);
 
     void updateValueFromMousePosition (Point<float> mousePos, DragMode dragMode);
-    void updateValueFromKeypress (const KeyPress& key);
+    bool updateValueFromKeypress (const KeyPress& key);
     void resetToDefaultValue();
 
     double constrainValue (double valueToConstrain) const;

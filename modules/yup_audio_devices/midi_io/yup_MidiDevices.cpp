@@ -40,6 +40,56 @@
 namespace yup
 {
 
+//==============================================================================
+/** Tells the disconnection listeners of a MidiInput or MidiOutput, once and on the message thread. */
+class MidiDeviceDisconnectionNotifier final : private AsyncUpdater
+{
+public:
+    ~MidiDeviceDisconnectionNotifier() override
+    {
+        cancelPendingUpdate();
+    }
+
+    void add (ump::DisconnectionListener& listener)
+    {
+        listeners.add (&listener);
+    }
+
+    void remove (ump::DisconnectionListener& listener)
+    {
+        listeners.remove (&listener);
+    }
+
+    bool isDisconnected() const noexcept
+    {
+        return disconnected.load();
+    }
+
+    void markDisconnected()
+    {
+        if (! disconnected.exchange (true))
+            triggerAsyncUpdate();
+    }
+
+private:
+    void handleAsyncUpdate() override
+    {
+        listeners.call ([] (ump::DisconnectionListener& listener)
+        {
+            listener.disconnected();
+        });
+    }
+
+    ListenerList<ump::DisconnectionListener, Array<ump::DisconnectionListener*, CriticalSection>> listeners;
+    std::atomic<bool> disconnected { false };
+};
+
+void MidiDeviceDisconnectionNotifierDeleter::operator() (MidiDeviceDisconnectionNotifier* notifier) const noexcept
+{
+    delete notifier;
+}
+
+//==============================================================================
 class MidiDeviceListConnectionBroadcaster final : private AsyncUpdater
 {
 public:
@@ -123,6 +173,58 @@ void MidiInputCallback::handlePartialSysexMessage ([[maybe_unused]] MidiInput* s
                                                    [[maybe_unused]] const uint8* messageData,
                                                    [[maybe_unused]] int numBytesSoFar,
                                                    [[maybe_unused]] double timestamp) {}
+
+//==============================================================================
+std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> MidiInput::createDisconnectionNotifier()
+{
+    return std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> (new MidiDeviceDisconnectionNotifier());
+}
+
+void MidiInput::addDisconnectionListener (ump::DisconnectionListener& listener)
+{
+    disconnectionNotifier->add (listener);
+}
+
+void MidiInput::removeDisconnectionListener (ump::DisconnectionListener& listener)
+{
+    disconnectionNotifier->remove (listener);
+}
+
+bool MidiInput::isDisconnected() const noexcept
+{
+    return disconnectionNotifier->isDisconnected();
+}
+
+void MidiInput::markDisconnected()
+{
+    disconnectionNotifier->markDisconnected();
+}
+
+//==============================================================================
+std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> MidiOutput::createDisconnectionNotifier()
+{
+    return std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> (new MidiDeviceDisconnectionNotifier());
+}
+
+void MidiOutput::addDisconnectionListener (ump::DisconnectionListener& listener)
+{
+    disconnectionNotifier->add (listener);
+}
+
+void MidiOutput::removeDisconnectionListener (ump::DisconnectionListener& listener)
+{
+    disconnectionNotifier->remove (listener);
+}
+
+bool MidiOutput::isDisconnected() const noexcept
+{
+    return disconnectionNotifier->isDisconnected();
+}
+
+void MidiOutput::markDisconnected()
+{
+    disconnectionNotifier->markDisconnected();
+}
 
 //==============================================================================
 MidiOutput::MidiOutput (const String& deviceName,

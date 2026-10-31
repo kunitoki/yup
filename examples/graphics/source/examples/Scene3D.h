@@ -1062,14 +1062,15 @@ private:
                 focusAt (event.getPosition());
         }
 
-        void mouseWheel (const yup::MouseEvent&, const yup::MouseWheelData& wheelData) override
+        bool mouseWheel (const yup::MouseEvent&, const yup::MouseWheelData& wheelData) override
         {
             if (! freeMovement || zoomedOnScreen || animator->isAnimating())
-                return;
+                return false;
 
             zoomOrbit (-wheelData.getDeltaY() * 0.15f);
             getOrbitPose().applyTo (cameraEntity);
             repaint();
+            return true;
         }
 
         void gesturePinch (const yup::GestureEvent& event) override

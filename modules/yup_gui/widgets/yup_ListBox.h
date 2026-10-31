@@ -798,11 +798,11 @@ public:
     /** @internal */
     void mouseExit (const MouseEvent& event) override;
     /** @internal */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
     /** @internal */
     void mouseDoubleClick (const MouseEvent& event) override;
     /** @internal */
-    void keyDown (const KeyPress& key, const Point<float>& position) override;
+    bool keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void focusGained() override;
     /** @internal */

@@ -220,6 +220,38 @@ TEST_F (TextEditorTests, StyledTextWrapModeFollowsMultiLineMode)
     EXPECT_EQ (StyledText::wrap, editor->getStyledText().getWrap());
 }
 
+TEST_F (TextEditorTests, JustificationPlacesTextThatFits)
+{
+    editor->setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    editor->setText ("Hi");
+    editor->setCaretPosition (0);
+
+    EXPECT_TRUE (editor->getJustification() == Justification::left);
+    EXPECT_FLOAT_EQ (0.0f, editor->getScrollOffset().getX());
+    const auto leftX = editor->getCaretBounds().getX();
+
+    editor->setJustification (Justification::horizontalCenter);
+    const auto centeredX = editor->getCaretBounds().getX();
+    EXPECT_GT (centeredX, leftX);
+
+    editor->setJustification (Justification::right);
+    EXPECT_GT (editor->getCaretBounds().getX(), centeredX);
+
+    editor->setJustification (Justification::horizontalCenter);
+    editor->setText ({});
+    EXPECT_NEAR (editor->getTextBounds().getCenterX(), editor->getCaretBounds().getX(), 1.0f);
+}
+
+TEST_F (TextEditorTests, JustificationIgnoredForTextWiderThanEditor)
+{
+    editor->setBounds (0.0f, 0.0f, 40.0f, 30.0f);
+    editor->setJustification (Justification::horizontalCenter);
+    editor->setText ("A line much wider than the editor can show");
+    editor->setCaretPosition (0);
+
+    EXPECT_FLOAT_EQ (0.0f, editor->getScrollOffset().getX());
+}
+
 TEST_F (TextEditorTests, ReadOnlyMode)
 {
     editor->setText (kSingleText);
@@ -464,6 +496,20 @@ TEST_F (TextEditorTests, TabKeyIgnoredInSingleLineMode)
     EXPECT_EQ (String ("Hello"), editor->getText());
 }
 
+TEST_F (TextEditorTests, KeyDownClaimsTypingButLeavesOtherKeysToTheComponentsAround)
+{
+    editor->setText ("Hello");
+
+    EXPECT_TRUE (editor->keyDown (KeyPress ('a'), {}));
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::leftKey), {}));
+    EXPECT_TRUE (editor->keyDown (KeyPress (KeyPress::textAKey, KeyModifiers::commandMask), {}));
+
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::escapeKey), {}));
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::enterKey), {}));
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::tabKey), {}));
+    EXPECT_FALSE (editor->keyDown (KeyPress (KeyPress::textZKey, KeyModifiers::commandMask), {}));
+}
+
 TEST_F (TextEditorTests, TabKeyInsertsInMultiLineMode)
 {
     editor->setMultiLine (true);
@@ -656,6 +702,23 @@ TEST_F (TextEditorTests, MoveCaretUpInSingleLineDoesNotThrow)
     editor->setCaretPosition (5);
 
     EXPECT_NO_THROW (editor->moveCaretUp());
+}
+
+TEST_F (TextEditorTests, CaretHasLineBoundsWhenEmpty)
+{
+    editor->setBounds (0.0f, 0.0f, 200.0f, 30.0f);
+    editor->setText ("a");
+    editor->setCaretPosition (0);
+    const auto lineCaret = editor->getCaretBounds();
+
+    editor->setText ("");
+    const auto emptyCaret = editor->getCaretBounds();
+
+    ASSERT_FALSE (lineCaret.isEmpty());
+    EXPECT_FALSE (emptyCaret.isEmpty());
+    EXPECT_NEAR (lineCaret.getX(), emptyCaret.getX(), 1.0f);
+    EXPECT_NEAR (lineCaret.getY(), emptyCaret.getY(), 1.0f);
+    EXPECT_NEAR (lineCaret.getHeight(), emptyCaret.getHeight(), 1.0f);
 }
 
 /* TODO: moveCaretToWordEnd/moveCaretToWordStart is private

@@ -45,6 +45,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE_DIR = REPO_ROOT / "tests" / "data" / "yup_3d" / "perf"
 OUTPUT_DIR = REPO_ROOT / "build" / "perf"
 DEFAULT_FILTER = "SceneRendererBenchmarkTests.DISABLED_DemoTargetFrameTimes"
+BENCHMARK_MODULE = "yup_renderer"
 DEFAULT_MAX_LOAD = 4.0
 
 
@@ -89,7 +90,7 @@ def main() -> int:
         output.unlink(missing_ok=True)
 
         # Configured and built first by a test run matching no test, so the load check sees the machine as the timing will
-        if run_just(args.just, "test", args.config, "-*") != 0:
+        if run_just(args.just, "test", args.config, "-*", BENCHMARK_MODULE) != 0:
             return 1
 
         max_load = float(env.get("YUP_PERF_MAX_LOAD", DEFAULT_MAX_LOAD))
@@ -101,7 +102,7 @@ def main() -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     env.update({"GTEST_ALSO_RUN_DISABLED_TESTS": "1", "YUP_PERF_GPU": gpu, "YUP_PERF_OUTPUT": str(output)})
 
-    result = run_just(args.just, "test", args.config, args.filter, env=env)
+    result = run_just(args.just, "test", args.config, args.filter, BENCHMARK_MODULE, env=env)
     if args.action != "record":
         return result
 

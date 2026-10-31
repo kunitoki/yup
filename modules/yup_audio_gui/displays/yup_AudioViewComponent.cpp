@@ -277,16 +277,16 @@ void AudioViewComponent::mouseDown (const MouseEvent& event)
     Component::mouseDown (event);
 }
 
-void AudioViewComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+bool AudioViewComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     if (! selectable)
-    {
-        Component::mouseWheel (event, wheelData);
-        return;
-    }
+        return false;
 
     if (getTotalSamples() <= 0)
-        return;
+        return false;
+
+    const auto previousRangeStart = viewRangeSamples.getStart();
+    const auto previousRangeLength = viewRangeSamples.getLength();
 
     const float deltaX = wheelData.getDeltaX();
     const float deltaY = wheelData.getDeltaY();
@@ -306,15 +306,18 @@ void AudioViewComponent::mouseWheel (const MouseEvent& event, const MouseWheelDa
         const double scrollAmount = viewRangeSamples.getLength() * static_cast<double> (deltaX) * 0.15;
         scrollBySamples (scrollAmount);
     }
+
+    return viewRangeSamples.getStart() != previousRangeStart
+        || viewRangeSamples.getLength() != previousRangeLength;
 }
 
-void AudioViewComponent::keyDown (const KeyPress& keys, const Point<float>&)
+bool AudioViewComponent::keyDown (const KeyPress& keys, const Point<float>&)
 {
     if (! selectable)
-        return;
+        return false;
 
     if (getTotalSamples() <= 0)
-        return;
+        return false;
 
     const int key = keys.getKey();
 
@@ -323,7 +326,7 @@ void AudioViewComponent::keyDown (const KeyPress& keys, const Point<float>&)
         const double direction = key == KeyPress::leftKey ? -1.0 : 1.0;
         const double scrollAmount = viewRangeSamples.getLength() * 0.1 * direction;
         scrollBySamples (scrollAmount);
-        return;
+        return true;
     }
 
     if (key == KeyPress::upKey || key == KeyPress::downKey)
@@ -333,7 +336,10 @@ void AudioViewComponent::keyDown (const KeyPress& keys, const Point<float>&)
         const double anchorSample = viewRangeSamples.getStart()
                                   + viewRangeSamples.getLength() * 0.5;
         zoomAroundSample (zoomMultiplier, anchorSample);
+        return true;
     }
+
+    return false;
 }
 
 void AudioViewComponent::paintBackground (Graphics& g, const Rectangle<float>&)

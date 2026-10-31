@@ -464,6 +464,97 @@ TEST_F (PopupMenuTest, StyleIdentifiers)
     EXPECT_NE (PopupMenu::Style::menuItemBackground, PopupMenu::Style::menuItemBackgroundHighlighted);
 }
 
+TEST_F (PopupMenuTest, TakesStyleColorsFromTargetComponentTree)
+{
+    const auto sectionColor = Color (0xff112233);
+
+    Component section ("section");
+    section.setBounds (0, 0, 400, 300);
+    section.setColor (PopupMenu::Style::menuBackground, sectionColor);
+    parentComponent->addAndMakeVisible (section);
+
+    Component target ("target");
+    target.setBounds (10, 10, 100, 20);
+    section.addAndMakeVisible (target);
+
+    auto menu = PopupMenu::create (PopupMenu::Options()
+                                       .withParentComponent (parentComponent.get())
+                                       .withRelativePosition (&target));
+    menu->addItem (kPopupTestText1, kPopupTestId1);
+    menu->show();
+
+    EXPECT_EQ (parentComponent.get(), menu->getParentComponent());
+    EXPECT_EQ (sectionColor, menu->findColor (PopupMenu::Style::menuBackground));
+    EXPECT_FALSE (menu->findColor (PopupMenu::Style::menuBorder).has_value());
+
+    PopupMenu::dismissAllPopups();
+}
+
+TEST_F (PopupMenuTest, TakesPaletteFromTargetComponentTree)
+{
+    const ThemePalette sectionPalette (std::vector<Color> { Color (0xff101010), Color (0xff0080ff) });
+
+    Component section ("section");
+    section.setBounds (0, 0, 400, 300);
+    section.setPalette (sectionPalette);
+    parentComponent->addAndMakeVisible (section);
+
+    Component target ("target");
+    target.setBounds (10, 10, 100, 20);
+    section.addAndMakeVisible (target);
+
+    auto menu = PopupMenu::create (PopupMenu::Options()
+                                       .withParentComponent (parentComponent.get())
+                                       .withRelativePosition (&target));
+    menu->addItem (kPopupTestText1, kPopupTestId1);
+    menu->show();
+
+    ASSERT_NE (nullptr, menu->getPalette());
+    EXPECT_EQ (sectionPalette, *menu->getPalette());
+
+    PopupMenu::dismissAllPopups();
+}
+
+TEST_F (PopupMenuTest, KeepsOwnStyleColorsOverTargetComponentTree)
+{
+    const auto ownColor = Color (0xff445566);
+    targetComponent->setColor (PopupMenu::Style::menuItemText, Color (0xff778899));
+
+    auto menu = PopupMenu::create (PopupMenu::Options()
+                                       .withParentComponent (parentComponent.get())
+                                       .withRelativePosition (targetComponent.get()));
+    menu->setColor (PopupMenu::Style::menuItemText, ownColor);
+    menu->addItem (kPopupTestText1, kPopupTestId1);
+    menu->show();
+
+    EXPECT_EQ (ownColor, menu->findColor (PopupMenu::Style::menuItemText));
+
+    PopupMenu::dismissAllPopups();
+}
+
+TEST_F (PopupMenuTest, SubmenuTakesStyleColorsFromMenu)
+{
+    const auto targetColor = Color (0xff223344);
+    targetComponent->setColor (PopupMenu::Style::menuItemText, targetColor);
+
+    auto subMenu = PopupMenu::create();
+    subMenu->addItem (kPopupTestText2, kPopupTestId2);
+
+    auto menu = PopupMenu::create (PopupMenu::Options()
+                                       .withParentComponent (parentComponent.get())
+                                       .withRelativePosition (targetComponent.get()));
+    menu->addSubMenu (kSubMenuText, subMenu);
+    menu->show();
+
+    menu->keyDown (KeyPress (KeyPress::downKey), {});
+    menu->keyDown (KeyPress (KeyPress::rightKey), {});
+
+    ASSERT_TRUE (subMenu->isVisible());
+    EXPECT_EQ (targetColor, subMenu->findColor (PopupMenu::Style::menuItemText));
+
+    PopupMenu::dismissAllPopups();
+}
+
 //==============================================================================
 // Complex Menu Scenarios
 
@@ -817,6 +908,29 @@ TEST_F (PopupMenuTest, ScrollingKeepsRowsAdjacentToScrollIndicators)
     const auto downIndicatorTop = menu->getScrollDownIndicatorBounds().getY();
     EXPECT_LE (lastVisibleItemBottom, downIndicatorTop);
     EXPECT_LE (downIndicatorTop - lastVisibleItemBottom, 4.0f);
+}
+
+TEST_F (PopupMenuTest, ShowScrollsTickedItemIntoView)
+{
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 220, 130);
+
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (smallParent.get()).withPosition (Point<int> (10, 10)));
+    for (int i = 1; i <= 40; ++i)
+        menu->addItem (String ("Item ") + String (i), i, true, i == 35);
+
+    menu->show();
+    ASSERT_TRUE (menu->needsScrolling());
+
+    const auto& ticked = **std::find_if (menu->begin(), menu->end(), [] (const auto& item)
+    {
+        return item->isTicked;
+    });
+
+    EXPECT_TRUE (menu->canScrollUp());
+    EXPECT_FALSE (ticked.area.isEmpty());
+    EXPECT_GE (ticked.area.getY(), menu->getScrollUpIndicatorBounds().getBottom());
+    EXPECT_LE (ticked.area.getBottom(), menu->getScrollDownIndicatorBounds().getY());
 }
 
 TEST_F (PopupMenuTest, TappingScrollIndicatorsScrollsTheMenu)

@@ -19,6 +19,60 @@
   ==============================================================================
 */
 
+// clang-format off
+EM_JS (void, yupAudioWorkletConnectMicrophone, (EMSCRIPTEN_AUDIO_WORKLET_NODE_T nodeHandle, EMSCRIPTEN_WEBAUDIO_T contextHandle, int numChannels), {
+    var node = emscriptenGetAudioObject (nodeHandle);
+    var audioContext = emscriptenGetAudioObject (contextHandle);
+
+    node.channelCount = numChannels;
+    node.channelCountMode = 'explicit';
+    node.channelInterpretation = 'speakers';
+
+    if (! navigator.mediaDevices || ! navigator.mediaDevices.getUserMedia)
+    {
+        console.warn ('Microphone input is not available in this browser context (it needs https or localhost)');
+        return;
+    }
+
+    var constraints = { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } };
+
+    navigator.mediaDevices.getUserMedia (constraints)
+        .then (function (stream)
+        {
+            if (node.yupClosed)
+            {
+                stream.getTracks().forEach (function (track) { track.stop(); });
+                return;
+            }
+
+            node.yupInputStream = stream;
+            node.yupInputSource = audioContext.createMediaStreamSource (stream);
+            node.yupInputSource.connect (node, 0, 0);
+        })
+        .catch (function (error)
+        {
+            console.warn ('Microphone input is unavailable: ' + error);
+        });
+});
+
+EM_JS (void, yupAudioWorkletDisconnectMicrophone, (EMSCRIPTEN_AUDIO_WORKLET_NODE_T nodeHandle), {
+    var node = emscriptenGetAudioObject (nodeHandle);
+    if (! node)
+        return;
+
+    node.yupClosed = true;
+
+    if (node.yupInputSource)
+        node.yupInputSource.disconnect();
+
+    if (node.yupInputStream)
+        node.yupInputStream.getTracks().forEach (function (track) { track.stop(); });
+
+    node.yupInputSource = null;
+    node.yupInputStream = null;
+});
+// clang-format on
+
 namespace yup
 {
 
@@ -48,6 +102,11 @@ public:
                          AudioWorkletAudioIODevice::audioWorkletTypeName)
     {
         context = emscripten_create_audio_context (0);
+
+        // Allocated once: a retired node can still be rendering while the device reopens.
+        channelInBuffer.calloc (maxNumChannels);
+        channelOutBuffer.calloc (maxNumChannels);
+        silentInput.calloc (static_cast<size_t> (getDefaultBufferSize()));
     }
 
     ~AudioWorkletAudioIODevice()
@@ -62,7 +121,11 @@ public:
     {
         StringArray result;
 
-        for (int i = 1; i <= actualNumberOfOutputs; i++)
+        // Lists what can be activated, not what is active, so a deactivated channel can be enabled again.
+        const int numAvailable = EM_ASM_INT ({ return emscriptenGetAudioObject ($0).destination.maxChannelCount;
+        }, context);
+
+        for (int i = 1; i <= (numAvailable > 0 ? jmin (numAvailable, maxNumChannels) : defaultNumChannels); i++)
             result.add ("Out #" + String (i));
 
         return result;
@@ -72,7 +135,7 @@ public:
     {
         StringArray result;
 
-        for (int i = 1; i <= actualNumberOfInputs; i++)
+        for (int i = 1; i <= defaultNumChannels; i++)
             result.add ("In #" + String (i));
 
         return result;
@@ -116,15 +179,15 @@ public:
             return lastError;
         }
 
+        // The device manager reopens an open device when only its channels change.
+        close();
+
         auto numIns = getNumContiguousSetBits (inputChannels);
         auto numOuts = getNumContiguousSetBits (outputChannels);
-        actualNumberOfInputs = jmax (numIns, 1);
-        actualNumberOfOutputs = jmax (numOuts, 1);
+        actualNumberOfInputs = jmin (numIns, maxNumChannels);
+        actualNumberOfOutputs = jlimit (1, maxNumChannels, numOuts);
         actualSampleRate = sampleRate;
         actualBufferSize = (uint32) bufferSizeSamples;
-
-        channelInBuffer.calloc (actualNumberOfInputs);
-        channelOutBuffer.calloc (actualNumberOfOutputs);
 
         isDeviceOpen = true;
         isRunning = false;
@@ -134,8 +197,18 @@ public:
         EM_ASM ({ Module.yupAudioContext = emscriptenGetAudioObject ($0);
         }, context);
 
-        emscripten_start_wasm_audio_worklet_thread_async (
-            context, audioThreadStack, sizeof (audioThreadStack), &audioThreadInitializedCallback, this);
+        // The worklet thread and processor can only be created once per context, nodes any number of times.
+        if (workletState == WorkletState::ready)
+        {
+            createWorkletNode();
+        }
+        else if (workletState == WorkletState::idle)
+        {
+            workletState = WorkletState::starting;
+
+            emscripten_start_wasm_audio_worklet_thread_async (
+                context, audioThreadStack, sizeof (audioThreadStack), &audioThreadInitializedCallback, this);
+        }
 
         return {};
     }
@@ -148,10 +221,16 @@ public:
         {
             emscripten_set_click_callback ("canvas", nullptr, 0, nullptr);
 
+            activeNodeGeneration.store (0, std::memory_order_release);
+
             if (audioWorkletNode != 0)
             {
+                yupAudioWorkletDisconnectMicrophone (audioWorkletNode);
+
                 EM_ASM ({ emscriptenGetAudioObject ($0).disconnect();
                 }, audioWorkletNode);
+
+                emscripten_destroy_web_audio_node (audioWorkletNode);
             }
 
             EM_ASM ({
@@ -171,9 +250,6 @@ public:
             actualNumberOfOutputs = 0;
             actualSampleRate = 44100.0;
             actualBufferSize = 128u;
-
-            channelInBuffer.free();
-            channelOutBuffer.free();
         }
     }
 
@@ -274,9 +350,6 @@ private:
 
     void audioThreadInitialized()
     {
-        if (! isDeviceOpen)
-            return;
-
         WebAudioWorkletProcessorCreateOptions opts = {
             .name = audioWorkletTypeName
         };
@@ -287,24 +360,37 @@ private:
 
     void audioWorkletProcessorCreated()
     {
-        if (! isDeviceOpen)
-            return;
+        workletState = WorkletState::ready;
+
+        if (isDeviceOpen)
+            createWorkletNode();
+    }
+
+    void createWorkletNode()
+    {
+        renderTargets.push_back (std::make_unique<RenderTarget> (RenderTarget { this, ++nodeGeneration }));
 
         int outputChannelCounts[1] = { actualNumberOfOutputs };
+        // All input channels arrive on a single node input, fed by the microphone stream.
         EmscriptenAudioWorkletNodeCreateOptions options = {
-            .numberOfInputs = actualNumberOfInputs,
+            .numberOfInputs = actualNumberOfInputs > 0 ? 1 : 0,
             .numberOfOutputs = 1,
             .outputChannelCounts = outputChannelCounts
         };
 
         // Create node
         audioWorkletNode = emscripten_create_wasm_audio_worklet_node (
-            context, audioWorkletTypeName, &options, renderAudioCallback, this);
+            context, audioWorkletTypeName, &options, renderAudioCallback, renderTargets.back().get());
+
+        activeNodeGeneration.store (nodeGeneration, std::memory_order_release);
 
         // Connect it to audio context destination
         // emscripten_audio_node_connect (audioWorkletNode, context, 0, 0);
         EM_ASM ({ emscriptenGetAudioObject ($0).connect (emscriptenGetAudioObject ($1).destination);
         }, audioWorkletNode, context);
+
+        if (actualNumberOfInputs > 0)
+            yupAudioWorkletConnectMicrophone (audioWorkletNode, context, actualNumberOfInputs);
 
         emscripten_set_click_callback ("canvas", reinterpret_cast<void*> (this), 0, canvasClickCallback);
     }
@@ -332,9 +418,14 @@ private:
 
         if (currentCallback != nullptr)
         {
-            // Setup channelInBuffers
+            // Setup channelInBuffers: channels of the single node input, silent until the stream connects
+            const int numInputChannelsAvailable = numInputs > 0 ? inputs[0].numberOfChannels : 0;
             for (int ch = 0; ch < actualNumberOfInputs; ++ch)
-                channelInBuffer[ch] = &(inputs[ch].data[0]);
+            {
+                channelInBuffer[ch] = ch < numInputChannelsAvailable
+                                        ? &(inputs[0].data[ch * samplesPerChannel])
+                                        : silentInput.getData();
+            }
 
             // Setup channelOutBuffers (assume a single worklet output)
             for (int ch = 0; ch < actualNumberOfOutputs; ++ch)
@@ -390,7 +481,14 @@ private:
 
     static EM_BOOL renderAudioCallback (int numInputs, const AudioSampleFrame* inputs, int numOutputs, AudioSampleFrame* outputs, int numParams, const AudioParamFrame* params, void* userData)
     {
-        return static_cast<AudioWorkletAudioIODevice*> (userData)->renderAudio (numInputs, inputs, numOutputs, outputs, numParams, params);
+        const auto* target = static_cast<const RenderTarget*> (userData);
+        auto* device = target->device;
+
+        // Returning false lets the browser stop rendering a node retired by close().
+        if (target->generation != device->activeNodeGeneration.load (std::memory_order_acquire))
+            return EM_FALSE;
+
+        return device->renderAudio (numInputs, inputs, numOutputs, outputs, numParams, params);
     }
 
     static EM_BOOL canvasClickCallback (int eventType, const EmscriptenMouseEvent* mouseEvent, void* userData)
@@ -427,8 +525,26 @@ private:
     }
 
     //==============================================================================
+    enum class WorkletState
+    {
+        idle,
+        starting,
+        ready
+    };
+
+    struct RenderTarget
+    {
+        AudioWorkletAudioIODevice* device = nullptr;
+        uint32 generation = 0;
+    };
+
     EMSCRIPTEN_WEBAUDIO_T context {};
     EMSCRIPTEN_AUDIO_WORKLET_NODE_T audioWorkletNode {};
+
+    WorkletState workletState = WorkletState::idle;
+    std::vector<std::unique_ptr<RenderTarget>> renderTargets;
+    uint32 nodeGeneration = 0;
+    std::atomic<uint32> activeNodeGeneration { 0 };
 
     bool isDeviceOpen = false;
     bool isRunning = false;
@@ -443,6 +559,10 @@ private:
 
     HeapBlock<const float*> channelInBuffer;
     HeapBlock<float*> channelOutBuffer;
+    HeapBlock<float> silentInput;
+
+    static constexpr int defaultNumChannels = 2;
+    static constexpr int maxNumChannels = 32;
 
     static constexpr size_t audioThreadStackSize = 128 * 1024;
     alignas (16) uint8 audioThreadStack[audioThreadStackSize] = {};

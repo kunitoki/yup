@@ -357,8 +357,10 @@ void MidiKeyboardComponent::mouseExit (const MouseEvent& e)
     updateNoteUnderMouse (e, false);
 }
 
-void MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
+bool MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
 {
+    const auto previousLowestKey = lowestVisibleKey;
+    const auto previousHighestKey = highestVisibleKey;
     const auto modifiers = event.getModifiers();
 
     // Ctrl/Cmd + wheel zooms in and out, clamped to a minimum span of a single
@@ -367,17 +369,16 @@ void MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWhee
     {
         auto zoomDelta = wheel.getDeltaY() != 0.0f ? wheel.getDeltaY() : wheel.getDeltaX();
 
-        if (zoomDelta != 0.0f)
-        {
-            auto anchorNote = getNoteAtPosition (event.getPosition());
+        if (zoomDelta == 0.0f)
+            return false;
 
-            if (anchorNote < 0)
-                anchorNote = lowestVisibleKey + (highestVisibleKey - lowestVisibleKey) / 2;
+        auto anchorNote = getNoteAtPosition (event.getPosition());
 
-            zoomBy (zoomDelta, anchorNote);
-        }
+        if (anchorNote < 0)
+            anchorNote = lowestVisibleKey + (highestVisibleKey - lowestVisibleKey) / 2;
 
-        return;
+        zoomBy (zoomDelta, anchorNote);
+        return lowestVisibleKey != previousLowestKey || highestVisibleKey != previousHighestKey;
     }
 
     // Plain wheel scrolls along the keyboard axis, one white key per notch.
@@ -388,6 +389,8 @@ void MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWhee
 
     if (scrollDelta != 0.0f)
         scrollByWhiteKeys (roundToInt (scrollDelta));
+
+    return lowestVisibleKey != previousLowestKey || highestVisibleKey != previousHighestKey;
 }
 
 //==============================================================================
@@ -414,33 +417,42 @@ void MidiKeyboardComponent::resized()
     updateScrollButtons();
 }
 
-void MidiKeyboardComponent::keyDown (const KeyPress& key, const Point<float>&)
+bool MidiKeyboardComponent::keyDown (const KeyPress& key, const Point<float>&)
 {
+    return handleNoteKey (key, true);
+}
+
+bool MidiKeyboardComponent::keyUp (const KeyPress& key, const Point<float>&)
+{
+    return handleNoteKey (key, false);
+}
+
+bool MidiKeyboardComponent::handleNoteKey (const KeyPress& key, bool isDown)
+{
+    if (const auto modifiers = key.getModifiers(); isDown && (modifiers.isCommandDown() || modifiers.isControlDown()))
+        return false;
+
     auto midiNote = getMidiNoteForKey (key);
 
-    if (midiNote >= 0)
-    {
-        midiNote += 12 * keyPressBaseOctave;
+    if (midiNote < 0)
+        return false;
 
+    midiNote += 12 * keyPressBaseOctave;
+
+    if (isDown)
+    {
         if (midiNote >= 0 && midiNote < 128 && ! keyDownNotes.contains (midiNote))
         {
             state.noteOn (midiChannel, midiNote, velocity);
             keyDownNotes.add (midiNote);
         }
     }
-}
-
-void MidiKeyboardComponent::keyUp (const KeyPress& key, const Point<float>&)
-{
-    auto midiNote = getMidiNoteForKey (key);
-
-    if (midiNote >= 0)
+    else if (keyDownNotes.removeFirstMatchingValue (midiNote) >= 0)
     {
-        midiNote += 12 * keyPressBaseOctave;
-
-        if (keyDownNotes.removeFirstMatchingValue (midiNote) >= 0)
-            state.noteOff (midiChannel, midiNote, 0.0f);
+        state.noteOff (midiChannel, midiNote, 0.0f);
     }
+
+    return true;
 }
 
 void MidiKeyboardComponent::focusLost()

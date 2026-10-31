@@ -28,9 +28,14 @@ namespace yup
 /**
     Fractional-delay feedback comb filter.
 
-    The filter uses a power-of-two circular delay line, cubic Hermite interpolation
-    for fractional delay reads, clipped feedback resonance, and optional atan output
-    saturation. The delay can be controlled directly in Hertz or from a MIDI note.
+    The filter uses a power-of-two circular delay line read through a Kaiser-windowed
+    sinc of up to 24 taps, clipped feedback resonance, and optional atan output
+    saturation. The sinc stays flat and in phase up to near Nyquist, so the teeth keep
+    their height and harmonic spacing whatever the fractional delay, where a short
+    polynomial interpolator would damp the upper ones by up to tens of decibels under
+    strong feedback, and being stateless it modulates without zipper noise. Delays
+    shorter than 13 samples use proportionally shorter kernels. The delay can be
+    controlled directly in Hertz or from a MIDI note.
 
     Parameter ranges are normalized for feedback and saturation:
     - frequency: fundamental frequency in Hz
@@ -221,9 +226,49 @@ public:
              + (static_cast<CoeffType> (0.5) * delayed) / denominator;
     }
 
+    /**
+        Returns the magnitudes the comb's troughs and teeth reach around the given frequency.
+
+        The teeth repeat at every multiple of the comb frequency and narrow as the
+        feedback grows, so a response sampled at a few points lands on or between them
+        unpredictably. These are the smooth envelopes through their bottoms and tops
+        instead, such as for a display too coarse to resolve them. Linearized like
+        getComplexResponse().
+    */
+    Range<CoeffType> getMagnitudeResponseRange (CoeffType responseFrequency) const
+    {
+        // Over a tooth the delay's phase turns once, tracing a circle centered on the real
+        // axis, whose nearest and farthest points from the origin lie on that axis.
+        const auto delayGain = std::abs (getFractionalDelayResponse (responseFrequency));
+        const auto feedbackGain = delayLineFeedback * delayGain;
+
+        return {
+            static_cast<CoeffType> (1) - static_cast<CoeffType> (0.5) * delayGain / (static_cast<CoeffType> (1) + feedbackGain),
+            static_cast<CoeffType> (1) + static_cast<CoeffType> (0.5) * delayGain / jmax (std::numeric_limits<CoeffType>::epsilon(), static_cast<CoeffType> (1) - feedbackGain)
+        };
+    }
+
 private:
     //==============================================================================
-    static constexpr CoeffType delayRampStep = static_cast<CoeffType> (4);
+    static constexpr CoeffType delayGlideSeconds = static_cast<CoeffType> (0.002);
+    static constexpr CoeffType maxDelaySlope = static_cast<CoeffType> (1);
+    static constexpr int maxKernelHalfLength = 12;
+    static constexpr int kernelPhases = 128;
+
+    /** The taps of the windowed sinc reading a delay, their weights blended between two phases. */
+    struct DelayKernel
+    {
+        std::size_t firstTapDelay;
+        int length;
+        const float* lowerPhase;
+        const float* upperPhase;
+        CoeffType blend;
+
+        CoeffType getWeight (int tap) const noexcept
+        {
+            return static_cast<CoeffType> (lowerPhase[tap]) + blend * static_cast<CoeffType> (upperPhase[tap] - lowerPhase[tap]);
+        }
+    };
 
     static std::size_t nextPowerOfTwo (std::size_t value) noexcept
     {
@@ -253,21 +298,6 @@ private:
         return jlimit (minFrequency, maxFrequency, frequencyHz);
     }
 
-    static CoeffType cubicHermite (
-        CoeffType y0,
-        CoeffType y1,
-        CoeffType y2,
-        CoeffType y3,
-        CoeffType fraction) noexcept
-    {
-        const auto c0 = y1;
-        const auto c1 = static_cast<CoeffType> (0.5) * (y2 - y0);
-        const auto c2 = y0 - static_cast<CoeffType> (2.5) * y1 + static_cast<CoeffType> (2) * y2 - static_cast<CoeffType> (0.5) * y3;
-        const auto c3 = static_cast<CoeffType> (0.5) * (y3 - y0) + static_cast<CoeffType> (1.5) * (y1 - y2);
-
-        return ((c3 * fraction + c2) * fraction + c1) * fraction + c0;
-    }
-
     static CoeffType fastAtan (CoeffType input) noexcept
     {
         static constexpr auto b = static_cast<CoeffType> (0.596227);
@@ -287,6 +317,8 @@ private:
 
     void initialiseDelayLine()
     {
+        getKernelTable(); // Builds the shared table here rather than on the audio thread.
+
         if (delayLine.size() != delayLineSizeInSamples)
             delayLine.assign (delayLineSizeInSamples, static_cast<SampleType> (0));
     }
@@ -298,6 +330,7 @@ private:
             static_cast<CoeffType> (delayLineSizeInSamples - 1),
             static_cast<CoeffType> (this->sampleRate) / frequency);
         delayLineFeedback = jmin (static_cast<CoeffType> (0.985), std::sqrt (feedbackAmount));
+        delayGlideCoefficient = static_cast<CoeffType> (1) - std::exp (static_cast<CoeffType> (-1) / (delayGlideSeconds * static_cast<CoeffType> (this->sampleRate)));
 
         if (saturationAmount > static_cast<CoeffType> (0))
         {
@@ -315,30 +348,97 @@ private:
             currentDelaySamples = targetDelaySamples;
     }
 
+    /** Glides the delay towards its target in octaves, so a sweep pitches smoothly: chasing
+        it at a fixed rate whenever the target moves turns long delays into a crackle.
+        The glide is capped at one sample per sample, so the read head never runs backwards
+        nor faster than double speed, which scrubs long delays into noise.
+    */
     void rampDelay() noexcept
     {
-        const auto delta = targetDelaySamples - currentDelaySamples;
+        const auto glided = currentDelaySamples * std::pow (targetDelaySamples / currentDelaySamples, delayGlideCoefficient);
 
-        if (std::abs (delta) <= delayRampStep)
-            currentDelaySamples = targetDelaySamples;
-        else
-            currentDelaySamples += delta > static_cast<CoeffType> (0) ? delayRampStep : -delayRampStep;
+        currentDelaySamples += jlimit (-maxDelaySlope, maxDelaySlope, glided - currentDelaySamples);
+    }
+
+    static double besselI0 (double x) noexcept
+    {
+        auto sum = 1.0;
+        auto term = 1.0;
+
+        for (int k = 1; k < 32; ++k)
+        {
+            term *= square (x / (2.0 * k));
+            sum += term;
+        }
+
+        return sum;
+    }
+
+    /** Kernels for every half-length up to the maximum, each tabulated at kernelPhases + 1
+        fractions from 0 to 1, as consecutive rows of 2 * halfLength normalized taps.
+    */
+    static const std::vector<float>& getKernelTable()
+    {
+        static const auto table = []
+        {
+            std::vector<float> values;
+            values.reserve (static_cast<std::size_t> (maxKernelHalfLength * (maxKernelHalfLength + 1) * (kernelPhases + 1)));
+
+            std::vector<double> taps;
+
+            for (int halfLength = 1; halfLength <= maxKernelHalfLength; ++halfLength)
+            {
+                const auto beta = 4.0 + halfLength / 4.0;
+
+                for (int phase = 0; phase <= kernelPhases; ++phase)
+                {
+                    taps.clear();
+                    auto sum = 0.0;
+
+                    for (int k = 1 - halfLength; k <= halfLength; ++k)
+                    {
+                        const auto t = k - phase / static_cast<double> (kernelPhases);
+                        const auto sinc = std::abs (t) < 1.0e-9 ? 1.0 : std::sin (MathConstants<double>::pi * t) / (MathConstants<double>::pi * t);
+                        const auto window = besselI0 (beta * std::sqrt (jmax (0.0, 1.0 - square (t / halfLength)))) / besselI0 (beta);
+
+                        taps.push_back (sinc * window);
+                        sum += taps.back();
+                    }
+
+                    for (const auto tap : taps)
+                        values.push_back (static_cast<float> (tap / sum));
+                }
+            }
+
+            return values;
+        }();
+
+        return table;
+    }
+
+    /** Centers the kernel on the delay, as long as the delay leaves it enough written samples. */
+    static DelayKernel getDelayKernel (CoeffType delaySamples) noexcept
+    {
+        const auto wholeDelay = std::ceil (delaySamples);
+        const auto halfLength = jlimit (1, maxKernelHalfLength, static_cast<int> (wholeDelay) - 1);
+        const auto phase = (wholeDelay - delaySamples) * static_cast<CoeffType> (kernelPhases);
+        const auto row = jmin (kernelPhases - 1, static_cast<int> (phase));
+        const auto length = 2 * halfLength;
+        const auto* lowerPhase = getKernelTable().data() + halfLength * (halfLength - 1) * (kernelPhases + 1) + row * length;
+
+        return { static_cast<std::size_t> (wholeDelay) + static_cast<std::size_t> (halfLength - 1), length, lowerPhase, lowerPhase + length, phase - static_cast<CoeffType> (row) };
     }
 
     CoeffType readDelayedSample (CoeffType delaySamples) const noexcept
     {
-        const auto readPosition = static_cast<CoeffType> (writeIndex)
-                                - delaySamples
-                                + static_cast<CoeffType> (delayLineSizeInSamples);
-        const auto readIndex = static_cast<std::size_t> (std::floor (readPosition)) & delayLineMask;
-        const auto fraction = readPosition - std::floor (readPosition);
+        const auto kernel = getDelayKernel (delaySamples);
+        const auto firstIndex = writeIndex - kernel.firstTapDelay;
+        auto sum = static_cast<CoeffType> (0);
 
-        const auto y0 = static_cast<CoeffType> (delayLine[(readIndex - 1) & delayLineMask]);
-        const auto y1 = static_cast<CoeffType> (delayLine[readIndex]);
-        const auto y2 = static_cast<CoeffType> (delayLine[(readIndex + 1) & delayLineMask]);
-        const auto y3 = static_cast<CoeffType> (delayLine[(readIndex + 2) & delayLineMask]);
+        for (int tap = 0; tap < kernel.length; ++tap)
+            sum += kernel.getWeight (tap) * static_cast<CoeffType> (delayLine[(firstIndex + static_cast<std::size_t> (tap)) & delayLineMask]);
 
-        return cubicHermite (y0, y1, y2, y3, fraction);
+        return sum;
     }
 
     CoeffType saturateOutput (CoeffType input) const noexcept
@@ -361,22 +461,14 @@ private:
 
     Complex<CoeffType> getFractionalDelayResponse (CoeffType responseFrequency) const noexcept
     {
-        const auto delay = getDelayForResponse();
-        const auto readDelay = static_cast<CoeffType> (std::ceil (delay));
-        const auto fraction = readDelay - delay;
-        const auto fraction2 = fraction * fraction;
-        const auto fraction3 = fraction2 * fraction;
-
-        const auto weight0 = static_cast<CoeffType> (-0.5) * fraction + fraction2 - static_cast<CoeffType> (0.5) * fraction3;
-        const auto weight1 = static_cast<CoeffType> (1) - static_cast<CoeffType> (2.5) * fraction2 + static_cast<CoeffType> (1.5) * fraction3;
-        const auto weight2 = static_cast<CoeffType> (0.5) * fraction + static_cast<CoeffType> (2) * fraction2 - static_cast<CoeffType> (1.5) * fraction3;
-        const auto weight3 = static_cast<CoeffType> (-0.5) * fraction2 + static_cast<CoeffType> (0.5) * fraction3;
+        const auto kernel = getDelayKernel (getDelayForResponse());
         const auto omega = frequencyToAngular (responseFrequency, static_cast<CoeffType> (this->sampleRate));
+        auto response = Complex<CoeffType> (static_cast<CoeffType> (0));
 
-        return weight0 * polar (static_cast<CoeffType> (1), -omega * (readDelay + static_cast<CoeffType> (1)))
-             + weight1 * polar (static_cast<CoeffType> (1), -omega * readDelay)
-             + weight2 * polar (static_cast<CoeffType> (1), -omega * (readDelay - static_cast<CoeffType> (1)))
-             + weight3 * polar (static_cast<CoeffType> (1), -omega * (readDelay - static_cast<CoeffType> (2)));
+        for (int tap = 0; tap < kernel.length; ++tap)
+            response += kernel.getWeight (tap) * polar (static_cast<CoeffType> (1), -omega * static_cast<CoeffType> (kernel.firstTapDelay - static_cast<std::size_t> (tap)));
+
+        return response;
     }
 
     //==============================================================================
@@ -391,6 +483,7 @@ private:
     CoeffType signalRange = static_cast<CoeffType> (1);
     CoeffType inverseSignalRange = static_cast<CoeffType> (1);
     CoeffType delayLineFeedback = static_cast<CoeffType> (0);
+    CoeffType delayGlideCoefficient = static_cast<CoeffType> (1);
     CoeffType currentDelaySamples = static_cast<CoeffType> (0);
     CoeffType targetDelaySamples = static_cast<CoeffType> (0);
     CoeffType saturationPreScale = static_cast<CoeffType> (1);

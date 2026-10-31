@@ -121,6 +121,11 @@ public:
         /** Position menu relative to a component (uses the component's bounds).
             The component must be a child of the parent component (if parent is set).
 
+            The menu also takes the palette (see Component::setPalette()) and the Style
+            colors the component or its parents set, for the ones it does not set itself,
+            so it matches the part of the interface it opened from. Its submenus take the
+            menu's the same way.
+
             @param component    The component to position relative to
             @param placement    Where to place menu relative to component (default: below)
         */
@@ -343,14 +348,15 @@ public:
     /** @internal */
     void mouseExit (const MouseEvent& event) override;
     /** @internal */
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheel) override;
+    bool mouseWheel (const MouseEvent& event, const MouseWheelData& wheel) override;
     /** @internal */
-    void keyDown (const KeyPress& key, const Point<float>& position) override;
+    bool keyDown (const KeyPress& key, const Point<float>& position) override;
 
 private:
     PopupMenu (const Options& options = {});
 
     void showCustom (const Options& options, bool isSubmenu, std::function<void (int)> callback);
+    void inheritColors (const Component& source);
     int getItemIndexAt (Point<float> position) const;
     void dismiss (int itemID);
     void setSelectedItemIndex (int index, bool fromMouse);
@@ -383,6 +389,8 @@ private:
     Rectangle<float> getMenuContentBounds() const;
     void updateVisibleItemRange();
     float getVisibleItemsHeight() const;
+    void applyVisibleItemRange();
+    void scrollTickedItemUnderMouse();
     void scrollUp();
     void scrollDown();
     void dragScroll (float y);

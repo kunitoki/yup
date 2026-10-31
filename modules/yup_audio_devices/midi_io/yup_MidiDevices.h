@@ -185,6 +185,15 @@ struct MidiDeviceInfo
 
 class MidiInputCallback;
 
+/** @internal */
+class MidiDeviceDisconnectionNotifier;
+
+/** @internal Destroys a MidiDeviceDisconnectionNotifier where its type is complete. */
+struct MidiDeviceDisconnectionNotifierDeleter
+{
+    void operator() (MidiDeviceDisconnectionNotifier* notifier) const noexcept;
+};
+
 //==============================================================================
 /**
     Represents a midi input device.
@@ -285,6 +294,24 @@ public:
     void setName (const String& newName) noexcept { deviceInfo.name = newName; }
 
     //==============================================================================
+    /** Adds a listener that is told when the device behind this input goes away.
+
+        The listener is called once, on the message thread, and the input never delivers
+        again afterwards. Disconnections are reported on macOS, iOS, Windows, Linux (ALSA)
+        and in the browser (Web MIDI); on Android listeners are never called.
+    */
+    void addDisconnectionListener (ump::DisconnectionListener& listener);
+
+    /** Removes a listener added with addDisconnectionListener(). */
+    void removeDisconnectionListener (ump::DisconnectionListener& listener);
+
+    /** Returns true once the device behind this input has gone away. */
+    bool isDisconnected() const noexcept;
+
+    /** @internal Called by the platform backends when the device goes away. Safe from any thread. */
+    void markDisconnected();
+
+    //==============================================================================
     /** @internal */
     class Pimpl;
 
@@ -292,8 +319,11 @@ private:
     //==============================================================================
     explicit MidiInput (const String&, const String&, ump::PacketProtocol = ump::PacketProtocol::MIDI_1_0);
 
+    static std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> createDisconnectionNotifier();
+
     MidiDeviceInfo deviceInfo;
 
+    std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> disconnectionNotifier = createDisconnectionNotifier();
     std::unique_ptr<Pimpl> internal;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiInput)
@@ -427,6 +457,24 @@ public:
     void setName (const String& newName) noexcept { deviceInfo.name = newName; }
 
     //==============================================================================
+    /** Adds a listener that is told when the device behind this output goes away.
+
+        The listener is called once, on the message thread, and the output never sends
+        again afterwards. Disconnections are reported on macOS, iOS, Windows, Linux (ALSA)
+        and in the browser (Web MIDI); on Android listeners are never called.
+    */
+    void addDisconnectionListener (ump::DisconnectionListener& listener);
+
+    /** Removes a listener added with addDisconnectionListener(). */
+    void removeDisconnectionListener (ump::DisconnectionListener& listener);
+
+    /** Returns true once the device behind this output has gone away. */
+    bool isDisconnected() const noexcept;
+
+    /** @internal Called by the platform backends when the device goes away. Safe from any thread. */
+    void markDisconnected();
+
+    //==============================================================================
     /** Sends out a MIDI message immediately. */
     void sendMessageNow (const MidiMessage& message);
 
@@ -499,8 +547,11 @@ private:
     explicit MidiOutput (const String&, const String&, ump::PacketProtocol = ump::PacketProtocol::MIDI_1_0);
     void run() override;
 
+    static std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> createDisconnectionNotifier();
+
     MidiDeviceInfo deviceInfo;
 
+    std::unique_ptr<MidiDeviceDisconnectionNotifier, MidiDeviceDisconnectionNotifierDeleter> disconnectionNotifier = createDisconnectionNotifier();
     std::unique_ptr<Pimpl> internal;
 
     CriticalSection lock;

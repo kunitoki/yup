@@ -28,9 +28,13 @@ AudioDeviceManagerWindow::AudioDeviceManagerWindow (AudioDeviceManager& manager,
     , panel (std::make_unique<AudioDeviceManagerPanel> (manager))
 {
     setTitle ("Audio Device Settings");
+    panel->onClose = [this]
+    {
+        setVisible (false);
+    };
     addAndMakeVisible (*panel);
     midiDeviceListConnection = panel->makeMidiDeviceListConnection();
-    centreWithSize ({ 470, 680 });
+    centreWithSize ({ 520, 680 });
 }
 
 void AudioDeviceManagerWindow::resized()

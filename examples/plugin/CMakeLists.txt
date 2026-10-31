@@ -45,19 +45,49 @@ else()
     endif()
 endif()
 
+# ==== Embed the waveform display shader
+yup_add_shader_bundle (${target_name}_shaders
+    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/synth_waveform.frag"
+    NAMESPACE retrace
+    OUTPUT_NAME SynthWaveformShaderBundle
+    RESOURCE_NAME synthWaveformShader)
+
+# ==== Embed the post effect shaders, one bundle per fragment stage
+yup_add_shader_bundle (${target_name}_glow_prefilter_shaders
+    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/retrace_glow_prefilter.frag"
+    NAMESPACE retrace
+    OUTPUT_NAME SynthGlowPrefilterShaderBundle
+    RESOURCE_NAME synthGlowPrefilterShader)
+
+yup_add_shader_bundle (${target_name}_blur_shaders
+    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/retrace_blur.frag"
+    NAMESPACE retrace
+    OUTPUT_NAME SynthBlurShaderBundle
+    RESOURCE_NAME synthBlurShader)
+
+yup_add_shader_bundle (${target_name}_neon_composite_shaders
+    VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
+    FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/retrace_neon_composite.frag"
+    NAMESPACE retrace
+    OUTPUT_NAME SynthNeonCompositeShaderBundle
+    RESOURCE_NAME synthNeonCompositeShader)
+
 yup_audio_plugin (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Examples"
-    TARGET_APP_ID "org.yup.${target_name}"
-    TARGET_APP_NAMESPACE "org.yup"
+    TARGET_APP_ID "yup.audio.${target_name}"
+    TARGET_APP_NAMESPACE "yup.audio"
     TARGET_CXX_STANDARD 20
-    PLUGIN_ID "org.yup.YupSynth"
-    PLUGIN_NAME "YupSynth"
-    PLUGIN_VENDOR "org.yup"
+    PLUGIN_ID "yup.audio.Retrace"
+    PLUGIN_NAME "Retrace"
+    PLUGIN_VENDOR "yup.audio"
     PLUGIN_EMAIL "kunitoki@gmail.com"
     PLUGIN_VERSION "${target_version}"
-    PLUGIN_DESCRIPTION "The best audio plugin ever."
+    PLUGIN_DESCRIPTION "A two oscillator spectral synthesiser."
     PLUGIN_URL "https://github.com/kunitoki/yup"
     PLUGIN_IS_SYNTH ON
     PLUGIN_IS_MONO OFF
@@ -74,13 +104,41 @@ yup_audio_plugin (
     PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE YpSA
     PLUGIN_AAX_CATEGORY AAX_ePlugInCategory_Example
     PLUGIN_COPY_AFTER_BUILD ON
+    # Embed Roboto Flex on every platform, so text measures the same everywhere
+    DEFINITIONS
+        YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT=1
     MODULES
         yup::yup_gui
-        yup::yup_audio_processors)
+        yup::yup_audio_processors
+        yup::yup_audio_gui
+        pffft_library
+        ${target_name}_shaders
+        ${target_name}_glow_prefilter_shaders
+        ${target_name}_blur_shaders
+        ${target_name}_neon_composite_shaders)
+
+# ==== Enable link time optimization for release builds of every plugin format
+include (CheckIPOSupported)
+check_ipo_supported (RESULT ipo_supported OUTPUT ipo_output)
+if (ipo_supported)
+    foreach (plugin_format clap vst3 standalone au auv3 aax lv2)
+        if (TARGET ${target_name}_${plugin_format}_plugin)
+            set_target_properties (${target_name}_${plugin_format}_plugin PROPERTIES
+                INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+        endif()
+    endforeach()
+else()
+    message (STATUS "LTO not supported for ${target_name}: ${ipo_output}")
+endif()
 
 # ==== Prepare sources
 file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/source/*.h")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-target_sources (${target_name}_shared PUBLIC ${sources})
+# The shader bundles are OBJECT libraries, whose objects only reach targets linking them directly
+target_sources (${target_name}_shared PUBLIC ${sources}
+    $<TARGET_OBJECTS:${target_name}_shaders>
+    $<TARGET_OBJECTS:${target_name}_glow_prefilter_shaders>
+    $<TARGET_OBJECTS:${target_name}_blur_shaders>
+    $<TARGET_OBJECTS:${target_name}_neon_composite_shaders>)

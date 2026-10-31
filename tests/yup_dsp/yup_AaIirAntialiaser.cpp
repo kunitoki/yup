@@ -360,6 +360,39 @@ TEST (AaIirCorrectnessTests, LinearFunctionMatchesAppendixBFormula)
 
 // --- Custom nonlinearity test ------------------------------------------------
 
+TEST (AaIirCorrectnessTests, StatefulTraitsFollowTheirInstance)
+{
+    struct ScaledTraits
+    {
+        double gain = 1.0;
+
+        double f (double x) const noexcept
+        {
+            return gain * x;
+        }
+    };
+
+    using ScaledShaper = yup::AaIirAntialiaser<double, ScaledTraits>;
+
+    ScaledShaper shaper (ScaledShaper::makeChebyshevTypeIIOrder10(), ScaledTraits { 0.5 });
+    shaper.prepare (44100.0, 512);
+
+    const double dc = 0.4;
+
+    for (int i = 0; i < 5000; ++i)
+        shaper.processSample (dc);
+
+    EXPECT_NEAR (shaper.processSample (dc), 0.5 * dc, 1.0e-3);
+
+    shaper.setTraits (ScaledTraits { 2.0 });
+    EXPECT_DOUBLE_EQ (shaper.getTraits().gain, 2.0);
+
+    for (int i = 0; i < 5000; ++i)
+        shaper.processSample (dc);
+
+    EXPECT_NEAR (shaper.processSample (dc), 2.0 * dc, 1.0e-3);
+}
+
 TEST (AaIirCorrectnessTests, TanhTraitsRequiresNoBreakpoints)
 {
     // TanhClipperTraits is smooth — it must work without fillBreakpoints.

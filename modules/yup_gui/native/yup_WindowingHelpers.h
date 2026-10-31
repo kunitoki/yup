@@ -41,4 +41,18 @@ Rectangle<int> getNativeWindowPosition (void* nativeWindow);
  */
 void focusNativeWindow (void* nativeWindow);
 
+#if YUP_MAC
+/**
+    Brings the first top-level standalone window to the front and makes it key, once, the first
+    time it is called.
+
+    The application itself is activated earlier through the AppKit launch sequence (-finishLaunching,
+    run from the mac AppDelegate); this only promotes the main window, as a normal app does when it
+    shows its main window on launch.
+
+    @param nativeWindow The native window handle.
+ */
+void activateAppWindowOnLaunch (void* nativeWindow);
+#endif
+
 } // namespace yup

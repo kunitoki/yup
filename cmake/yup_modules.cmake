@@ -566,7 +566,7 @@ endfunction()
 #==============================================================================
 
 function (_yup_module_setup_plugin_client target_name plugin_client_target folder_name plugin_type)
-    if (NOT YUP_PLATFORM_DESKTOP)
+    if (NOT YUP_PLATFORM_DESKTOP AND NOT (YUP_PLATFORM_EMSCRIPTEN AND plugin_type STREQUAL "standalone"))
         return()
     endif()
 

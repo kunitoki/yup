@@ -44,6 +44,9 @@ public:
     /** Returns the current active-channel bitmask as edited by the user. */
     BigInteger getActiveChannels() const;
 
+    /** Returns the number of channels listed. */
+    int getNumChannels() const noexcept;
+
     //==============================================================================
     /** Called when the user toggles any channel. */
     std::function<void (const BigInteger& active)> onChannelsChanged;
@@ -75,6 +78,7 @@ private:
 
         void setChannels (const StringArray& names, const BigInteger& active);
         BigInteger getActiveChannels() const;
+        int getNumChannels() const noexcept { return channelNames.size(); }
         std::function<void (const BigInteger&)> onChannelsChanged;
 
         int getNumRows() override;

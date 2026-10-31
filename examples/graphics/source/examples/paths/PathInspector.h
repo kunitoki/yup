@@ -78,9 +78,11 @@ public:
         updateScrollRange();
     }
 
-    void mouseWheel (const yup::MouseEvent&, const yup::MouseWheelData& wheelData) override
+    bool mouseWheel (const yup::MouseEvent&, const yup::MouseWheelData& wheelData) override
     {
+        const auto previousStart = scrollBar.getCurrentRangeStart();
         scrollBar.scrollBy (-wheelData.getDeltaY() * 60.0);
+        return scrollBar.getCurrentRangeStart() != previousStart;
     }
 
 private:

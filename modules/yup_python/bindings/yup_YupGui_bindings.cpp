@@ -522,10 +522,13 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setFullScreen", &ComponentNative::setFullScreen)
         .def ("isFullScreen", &ComponentNative::isFullScreen)
         .def ("isDecorated", &ComponentNative::isDecorated)
+        .def ("setAspectRatio", &ComponentNative::setAspectRatio, "aspectRatio"_a)
+        .def ("getAspectRatio", &ComponentNative::getAspectRatio)
         .def ("setOpacity", &ComponentNative::setOpacity)
         .def ("getOpacity", &ComponentNative::getOpacity)
         .def ("setFocusedComponent", &ComponentNative::setFocusedComponent, "comp"_a, "cause"_a = FocusChangeType::focusChangedDirectly)
         .def ("getFocusedComponent", &ComponentNative::getFocusedComponent)
+        .def ("getPointerTarget", &ComponentNative::getPointerTarget)
         .def ("isContinuousRepaintingEnabled", &ComponentNative::isContinuousRepaintingEnabled)
         .def ("enableContinuousRepainting", &ComponentNative::enableContinuousRepainting)
         .def ("isAtomicModeEnabled", &ComponentNative::isAtomicModeEnabled)
@@ -767,6 +770,11 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setFullScreen", &Component::setFullScreen)
         .def ("isFullScreen", &Component::isFullScreen)
 
+        // Window aspect ratio
+        .def ("setWindowAspectRatio", &Component::setWindowAspectRatio, "aspectRatio"_a,
+              "Keeps the window of a desktop component at a width over height while it is resized; None resizes freely.")
+        .def ("getWindowAspectRatio", &Component::getWindowAspectRatio)
+
         // Scale and display
         .def ("getScaleDpi", &Component::getScaleDpi)
 
@@ -846,7 +854,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getWantedGestures", &Component::getWantedGestures)
         .def ("doesWantSelfMouseEvents", &Component::doesWantSelfMouseEvents)
         .def ("doesWantChildrenMouseEvents", &Component::doesWantChildrenMouseEvents)
-        .def ("addMouseListener", &Component::addMouseListener, "listener"_a, py::keep_alive<1, 2>())
+        .def ("addMouseListener", &Component::addMouseListener, "listener"_a, "wantsEventsForAllNestedChildComponents"_a = false, py::keep_alive<1, 2>())
         .def ("removeMouseListener", &Component::removeMouseListener, "listener"_a)
         .def ("addGestureListener", &Component::addGestureListener, "listener"_a, py::keep_alive<1, 2>())
         .def ("removeGestureListener", &Component::removeGestureListener, "listener"_a)
@@ -877,6 +885,9 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setManuallyComposited", &Component::setManuallyComposited, "shouldBeManuallyComposited"_a,
               "When enabled the normal child painting skips this component and its renderToTexture() is composited manually.")
         .def ("isManuallyComposited", &Component::isManuallyComposited)
+        .def ("setPopupContainer", &Component::setPopupContainer, "shouldBePopupContainer"_a,
+              "When enabled the popups opened inside this component are added to it instead of the top level.")
+        .def ("isPopupContainer", &Component::isPopupContainer)
         .def ("renderToTexture", &Component::renderToTexture, "ctx"_a, "scale"_a = 1.0f,
               "Renders the subtree (with its effect) into a reused texture, only when it changed.")
 

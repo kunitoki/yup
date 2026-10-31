@@ -73,6 +73,19 @@ TEST_F (FileTests, ConstructionFromPath)
     EXPECT_FALSE (home.existsAsFile());
 }
 
+TEST_F (FileTests, PreferencesAndAudioPresetsLocations)
+{
+#if YUP_MAC || YUP_IOS
+    EXPECT_EQ (File ("~/Library/Preferences"), File::getSpecialLocation (File::userPreferencesDirectory));
+    EXPECT_EQ (File ("~/Library/Audio/Presets"), File::getSpecialLocation (File::userAudioPresetsDirectory));
+#else
+    const auto applicationData = File::getSpecialLocation (File::userApplicationDataDirectory);
+
+    EXPECT_EQ (applicationData, File::getSpecialLocation (File::userPreferencesDirectory));
+    EXPECT_EQ (applicationData, File::getSpecialLocation (File::userAudioPresetsDirectory));
+#endif
+}
+
 TEST_F (FileTests, SpecialLocations)
 {
     EXPECT_TRUE (File::getSpecialLocation (File::userHomeDirectory).isDirectory());

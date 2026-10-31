@@ -26,6 +26,21 @@
 
 using namespace yup;
 
+namespace yup
+{
+
+template <>
+class ComponentTestHelper<CodeEditor>
+{
+public:
+    static void triggerMouseWheel (Component& component, const MouseEvent& event, const MouseWheelData& wheelData)
+    {
+        component.internalMouseWheel (event, wheelData);
+    }
+};
+
+} // namespace yup
+
 namespace
 {
 
@@ -145,6 +160,19 @@ TEST (CodeEditorTest, KeyDownInsertsCharacters)
     editor.textInput ("b");
 
     EXPECT_EQ (String ("a\nb"), editor.getText());
+}
+
+TEST (CodeEditorTest, KeyDownClaimsEditingKeysButNotEscapeOrUnknownShortcuts)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    EXPECT_TRUE (editor.keyDown (KeyPress ('a'), {}));
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::enterKey), {}));
+    EXPECT_TRUE (editor.keyDown (KeyPress (KeyPress::textZKey, KeyModifiers::commandMask), {}));
+
+    EXPECT_FALSE (editor.keyDown (KeyPress (KeyPress::escapeKey), {}));
+    EXPECT_FALSE (editor.keyDown (KeyPress (KeyPress::textQKey, KeyModifiers::commandMask), {}));
 }
 
 TEST (CodeEditorTest, TabInsertsSpaces)
@@ -2200,13 +2228,14 @@ TEST (CodeEditorTest, MinimapMouseWheelForwardsToEditor)
         text += "line " + String (i) + "\n";
     editor.setText (text);
     editor.setSize (400, 200);
+    editor.setVisible (true);
 
     auto* minimapComponent = findMinimapComponent (editor);
     ASSERT_NE (nullptr, minimapComponent);
 
     MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
     MouseWheelData wheelData (0.0f, -3.0f);
-    minimapComponent->mouseWheel (event, wheelData);
+    ComponentTestHelper<CodeEditor>::triggerMouseWheel (*minimapComponent, event, wheelData);
 
     EXPECT_GT (editor.getScrollOffset().getY(), 0.0f);
 }

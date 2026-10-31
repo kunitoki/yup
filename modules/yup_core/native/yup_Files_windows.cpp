@@ -817,6 +817,8 @@ File YUP_CALLTYPE File::getSpecialLocation (const SpecialLocationType type)
             break;
 
         case userApplicationDataDirectory:
+        case userPreferencesDirectory:
+        case userAudioPresetsDirectory:
             csidlType = CSIDL_APPDATA;
             break;
 

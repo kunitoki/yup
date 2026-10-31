@@ -219,18 +219,19 @@ function (_yup_audio_plugin_create_au)
         "${YUP_ARG_PLUGIN_CODESIGN_IDENTITY}"
         "${YUP_ARG_PLUGIN_HARDENED_RUNTIME}")
 
-    yup_validate_au_plugin (
-        ${target_name}_au_plugin
-        "${YUP_ARG_PLUGIN_NAME}"
-        "${au_bundle_type}"
-        "${YUP_ARG_PLUGIN_AU_SUBTYPE}"
-        "${YUP_ARG_PLUGIN_AU_MANUFACTURER}")
-
-    yup_validate_pluginval (
-        ${target_name}_au_plugin
-        "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>")
-
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
         yup_audio_plugin_copy_bundle (${target_name} au)
+
+        # auval and pluginval only find installed components, so they must run after the copy
+        yup_validate_au_plugin (
+            ${target_name}_au_plugin
+            "${YUP_ARG_PLUGIN_NAME}"
+            "${au_bundle_type}"
+            "${YUP_ARG_PLUGIN_AU_SUBTYPE}"
+            "${YUP_ARG_PLUGIN_AU_MANUFACTURER}")
+
+        yup_validate_pluginval (
+            ${target_name}_au_plugin
+            "$<TARGET_BUNDLE_DIR:${target_name}_au_plugin>")
     endif()
 endfunction()

@@ -461,6 +461,8 @@ class MidiPortAndEndpoint
     bool canStop() const noexcept { return *port != 0; }
     void stop() const { CHECK_ERROR(MIDIPortDisconnectSource(*port, *endpoint)); }
 
+    MIDIEndpointRef getEndpoint() const noexcept { return *endpoint; }
+
    private:
     ScopedPortRef port;
     ScopedEndpointRef endpoint;
@@ -677,10 +679,50 @@ static void enableSimulatorMidiSession()
 #endif
 }
 
+static void markDisconnectedEndpoints(const std::function<bool(MIDIEndpointRef)>& isGone);
+
+static bool isEndpointOffline(MIDIEndpointRef endpoint)
+{
+    // Endpoints inherit the offline state of their entity and device.
+    SInt32 offline = 0;
+    return MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyOffline, &offline) == noErr && offline != 0;
+}
+
 static void globalSystemChangeCallback(const MIDINotification* notification, void*)
 {
-    if (notification != nullptr && notification->messageID == kMIDIMsgSetupChanged)
-        MidiDeviceListConnectionBroadcaster::get().notify();
+    if (notification == nullptr)
+        return;
+
+    switch (notification->messageID)
+    {
+        case kMIDIMsgSetupChanged:
+            MidiDeviceListConnectionBroadcaster::get().notify();
+            break;
+
+        case kMIDIMsgObjectRemoved:
+        {
+            const auto& removal = *reinterpret_cast<const MIDIObjectAddRemoveNotification*>(notification);
+
+            if (removal.childType == kMIDIObjectType_Source || removal.childType == kMIDIObjectType_Destination)
+                markDisconnectedEndpoints([&](MIDIEndpointRef endpoint) { return endpoint == removal.child; });
+
+            break;
+        }
+
+        case kMIDIMsgPropertyChanged:
+        {
+            // An unplugged device usually goes offline rather than being removed.
+            const auto& change = *reinterpret_cast<const MIDIObjectPropertyChangeNotification*>(notification);
+
+            if (change.propertyName != nullptr && CFStringCompare(change.propertyName, kMIDIPropertyOffline, 0) == kCFCompareEqualTo)
+                markDisconnectedEndpoints(isEndpointOffline);
+
+            break;
+        }
+
+        default:
+            break;
+    }
 }
 
 static String getGlobalMidiClientName()
@@ -850,6 +892,15 @@ class MidiPortAndCallback;
 CriticalSection callbackLock;
 Array<MidiPortAndCallback*> activeCallbacks;
 
+struct OpenOutput
+{
+    MidiOutput* output = nullptr;
+    MIDIEndpointRef endpoint = 0;
+};
+
+CriticalSection openOutputsLock;
+Array<OpenOutput> openOutputs;
+
 class MidiPortAndCallback
 {
    public:
@@ -867,7 +918,8 @@ class MidiPortAndCallback
             activeCallbacks.removeFirstMatchingValue(this);
         }
 
-        if (portAndEndpoint != nullptr && portAndEndpoint->canStop())
+        // A vanished endpoint can't be disconnected from anymore.
+        if (portAndEndpoint != nullptr && portAndEndpoint->canStop() && ! input->isDisconnected())
             portAndEndpoint->stop();
     }
 
@@ -892,6 +944,25 @@ class MidiPortAndCallback
    private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiPortAndCallback)
 };
+
+static void markDisconnectedEndpoints(const std::function<bool(MIDIEndpointRef)>& isGone)
+{
+    {
+        const ScopedLock sl(callbackLock);
+
+        for (auto* callback : activeCallbacks)
+            if (callback->portAndEndpoint != nullptr && isGone(callback->portAndEndpoint->getEndpoint()))
+                callback->input->markDisconnected();
+    }
+
+    {
+        const ScopedLock sl(openOutputsLock);
+
+        for (const auto& openOutput : openOutputs)
+            if (isGone(openOutput.endpoint))
+                openOutput.output->markDisconnected();
+    }
+}
 
 //==============================================================================
 static Array<MIDIEndpointRef> getEndpoints(bool isInput)
@@ -1369,6 +1440,11 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice(const String& deviceIdentifie
                                                            ScopedEndpointRef{endpoint},
                                                            protocol);
 
+            {
+                const ScopedLock sl(openOutputsLock);
+                openOutputs.add({ midiOutput.get(), endpoint });
+            }
+
             return midiOutput;
         }
     }
@@ -1426,6 +1502,11 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice(const String& deviceName
 
 MidiOutput::~MidiOutput()
 {
+    {
+        const ScopedLock sl(CoreMidiHelpers::openOutputsLock);
+        CoreMidiHelpers::openOutputs.removeIf([this](const CoreMidiHelpers::OpenOutput& openOutput) { return openOutput.output == this; });
+    }
+
     stopBackgroundThread();
 }
 

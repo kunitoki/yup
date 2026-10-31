@@ -1990,6 +1990,22 @@
               "    for (const auto& tex : glBg->m_glTextures)"
             ]
           }
+        },
+        {
+          "path": "source/renderer/metal/background_shader_compiler.mm",
+          "note": "Metal shader compile options: fastMathEnabled is deprecated since macOS 15 / iOS 18, so set the equivalent mathMode there and keep the fastMathEnabled default (YES) on older systems",
+          "already_contains": "            compileOptions.mathMode = MTLMathModeFast;",
+          "replace": {
+            "from": [
+              "        compileOptions.fastMathEnabled = YES;"
+            ],
+            "to": [
+              "        if (@available(macOS 15, iOS 18, *))",
+              "        {",
+              "            compileOptions.mathMode = MTLMathModeFast;",
+              "        }"
+            ]
+          }
         }
       ],
       "shader_generation": {

@@ -1,0 +1,91 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#pragma once
+
+#include <yup_gui/yup_gui.h>
+
+#include "../dsp/SynthCurveState.h"
+#include "../dsp/SynthLFOParameters.h"
+#include "SynthLandscape.h"
+#include "SynthTimeGrid.h"
+
+//==============================================================================
+/** Draws an LFO shape at its own rate and smoothing, with a marker at the engine's current
+    phase, over a grid of one period's time, upside down when the LFO is inverted.
+
+    Random shapes show several periods that scroll by one, with a new random value, each
+    time the playing phase wraps; the marker runs through the newest one.
+
+    With landscape displays on, the shape is the ridge of a shader landscape, which the
+    marker lights as it runs. */
+class LFODisplay : public yup::Component
+{
+public:
+    explicit LFODisplay (std::shared_ptr<SynthWaveformShader> landscapeShader);
+
+    /** Updates the drawn shape. Called from the message thread. */
+    void setValues (const SynthLFOValues& newValues);
+
+    /** Updates the curve the custom shape draws. Called from the message thread. */
+    void setCurve (const SynthCurveState::Curve& newCurve);
+
+    /** Moves the marker; a negative phase, with no note playing, hides it.
+        Called every frame from the message thread. */
+    void setPhase (float newPhase);
+
+    /** Sets the host tempo a synced LFO is drawn at, or zero to draw it at SynthLFOValues::fallbackTempo. */
+    void setTempo (double bpm);
+
+    /** Sets how one period's time reads, for the grid. */
+    void setTiming (const SynthTimeGrid::Timing& newTiming);
+
+    /** Lets the landscape move, while something plays. */
+    void setAnimating (bool shouldAnimate) noexcept { landscape.setAnimating (shouldAnimate); }
+
+    void paint (yup::Graphics& g) override;
+    void refreshDisplay (double lastFrameTimeSeconds) override;
+    void mouseEnter (const yup::MouseEvent& event) override;
+    void mouseExit (const yup::MouseEvent& event) override;
+
+private:
+    static constexpr int points = 128;
+    static constexpr int randomPeriods = 4;
+    static constexpr yup::uint32 displaySeed = 1;
+    static constexpr float trailWidth = 90.0f;
+
+    bool isRandom() const;
+    int getPeriods() const;
+    void rebuildSamples();
+    void appendPeriod();
+
+    SynthLFOValues values;
+    SynthCurveState::Curve curve;
+    float phase = -1.0f;
+    double tempo = 0.0;
+    SynthTimeGrid::Timing timing;
+    yup::LFO<float> generator;
+    std::vector<float> samples;
+    yup::Path path;
+    yup::Font gridFont;
+    SynthLandscape landscape;
+    bool hovered = false;
+};

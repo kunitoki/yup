@@ -49,7 +49,28 @@ white keys and Ctrl/Cmd + wheel zooms, both kept inside the available range.
 
 With keyboard focus, the keys `zsxdcvgbhnjmq2w3er5t6y7ui9o0p` play consecutive
 semitones from the octave set by `setKeyPressBaseOctave()` (3 by default, so
-`z` plays note 36). `setKeyboardKeys()` changes the mapping.
+`z` plays note 36). `setKeyboardKeys()` changes the mapping. Keys pressed with
+Cmd or Ctrl are shortcuts and play nothing.
+
+The keyboard doesn't need the focus to be played. Keys a focused component
+doesn't use go up to its parents, so a parent can pass the rest to
+`handleNoteKey()` and the computer keyboard keeps playing whatever control has
+the focus:
+
+```cpp
+bool MyEditor::keyDown (const KeyPress& key, const Point<float>&) override
+{
+    return keyboard.handleNoteKey (key, true);
+}
+
+bool MyEditor::keyUp (const KeyPress& key, const Point<float>&) override
+{
+    return keyboard.handleNoteKey (key, false);
+}
+```
+
+When the key releases can no longer arrive, for instance after the window lost
+the focus, `releaseKeyPressNotes()` lets every held note go.
 
 ## Appearance
 

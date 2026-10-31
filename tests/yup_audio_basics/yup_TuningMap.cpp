@@ -67,8 +67,8 @@ TEST_F (TuningMapTests, DefaultTuningIsTwelveToneEqualTemperament)
     EXPECT_EQ (map.getReferencePitch(), 440.0);
     EXPECT_EQ (map.getKeyMapRepeatIncrement(), 1);
     EXPECT_EQ (map.getNumberOfScaleDegrees(), 12);
-    EXPECT_TRUE (map.getScaleFile().isEmpty());
-    EXPECT_TRUE (map.getKeyMapFile().isEmpty());
+    EXPECT_TRUE (map.getScaleFile() == File());
+    EXPECT_TRUE (map.getKeyMapFile() == File());
 }
 
 TEST_F (TuningMapTests, DefaultTuningIsSemitoneConsecutive)
@@ -97,7 +97,7 @@ TEST_F (TuningMapTests, LoadingCentsScaleProducesEqualTemperament)
         "1200.0\n");
 
     EXPECT_TRUE (map.loadScale (file).wasOk());
-    EXPECT_EQ (map.getScaleFile(), file.getFullPathName());
+    EXPECT_EQ (map.getScaleFile(), file);
     EXPECT_EQ (map.getNumberOfScaleDegrees(), 12);
 
     for (int note = 0; note < 128; ++note)
@@ -134,7 +134,7 @@ TEST_F (TuningMapTests, LoadingRatioScaleMapsScaleDegreesToRatios)
     EXPECT_TRUE (map.loadScale (scaleFile).wasOk());
     EXPECT_TRUE (map.loadKeyMap (keyMapFile).wasOk());
 
-    EXPECT_EQ (map.getKeyMapFile(), keyMapFile.getFullPathName());
+    EXPECT_EQ (map.getKeyMapFile(), keyMapFile);
     EXPECT_EQ (map.getZeroNote(), 0);
     EXPECT_EQ (map.getReferenceNote(), 60);
     EXPECT_EQ (map.getReferencePitch(), 440.0);
@@ -407,7 +407,7 @@ TEST_F (TuningMapTests, FailedScaleLoadKeepsPreviousTuning)
     EXPECT_EQ (map.noteToPitch (60), pitch60);
     EXPECT_EQ (map.noteToPitch (61), pitch61);
     EXPECT_NEAR (map.noteToPitch (61) / map.noteToPitch (60), 9.0 / 8.0, 1e-9);
-    EXPECT_EQ (map.getScaleFile(), scaleFile.getFullPathName());
+    EXPECT_EQ (map.getScaleFile(), scaleFile);
 }
 
 TEST_F (TuningMapTests, FailedKeyMapLoadKeepsPreviousTuning)
@@ -441,7 +441,7 @@ TEST_F (TuningMapTests, FailedKeyMapLoadKeepsPreviousTuning)
     EXPECT_TRUE (map.loadKeyMap (File::getCurrentWorkingDirectory().getChildFile ("missing_key_map.kbm")).failed());
 
     EXPECT_NEAR (map.noteToPitch (60), 440.0, 1e-6);
-    EXPECT_EQ (map.getKeyMapFile(), keyMapFile.getFullPathName());
+    EXPECT_EQ (map.getKeyMapFile(), keyMapFile);
 }
 
 TEST_F (TuningMapTests, InvalidScaleAndKeyMapFilesAreRejected)
@@ -500,4 +500,207 @@ TEST_F (TuningMapTests, InvalidScaleAndKeyMapFilesAreRejected)
     EXPECT_TRUE (map.loadKeyMap (unreachableScaleDegree).failed());
 
     EXPECT_NEAR (map.noteToPitch (69), 440.0, 1e-6);
+}
+
+//==============================================================================
+class TuningMapAnaMarkTests : public TuningMapTests
+{
+protected:
+    static double equalTempered (int note)
+    {
+        return 440.0 * std::pow (2.0, (note - 69) / 12.0);
+    }
+
+    static double cents (double value)
+    {
+        return std::pow (2.0, value / 1200.0);
+    }
+};
+
+TEST_F (TuningMapAnaMarkTests, QuantizedTuningIsRelativeToTheStandardBaseFrequency)
+{
+    EXPECT_TRUE (map.loadTuningFromString (
+                        "[Tuning]\n"
+                        "note 69 = 6950\n")
+                     .wasOk());
+
+    EXPECT_TRUE (map.isUsingTuningTable());
+    EXPECT_NEAR (map.noteToPitch (69), 440.0 * cents (50.0), 1e-6);
+    EXPECT_NEAR (map.noteToPitch (60), equalTempered (60), 1e-6);
+    EXPECT_NEAR (map.noteToPitch (127), equalTempered (127), 1e-6);
+}
+
+TEST_F (TuningMapAnaMarkTests, ExactTuningCompletesThePeriodFromTheHighestNote)
+{
+    EXPECT_TRUE (map.loadTuningFromString (
+                        "; a version 1 file, without scale blocks\n"
+                        "[Tuning]\n"
+                        "note 4 = 9999\n"
+                        "[Exact Tuning]\n"
+                        "BaseFreq = 1.0e1\n"
+                        "note 4 = 412.5\n"
+                        "note 12 = 1200\n")
+                     .wasOk());
+
+    EXPECT_NEAR (map.noteToPitch (0), 10.0, 1e-9);
+    EXPECT_NEAR (map.noteToPitch (4), 10.0 * cents (412.5), 1e-9);
+    EXPECT_NEAR (map.noteToPitch (5), 10.0 * cents (500.0), 1e-9);
+    EXPECT_NEAR (map.noteToPitch (13), 20.0 * cents (100.0), 1e-9);
+    EXPECT_NEAR (map.noteToPitch (16), 20.0 * cents (412.5), 1e-9);
+    EXPECT_NEAR (map.noteToPitch (124), 10240.0 * cents (412.5), 1e-6);
+}
+
+TEST_F (TuningMapAnaMarkTests, FunctionalTuningEvaluatesFormulasInFileOrder)
+{
+    // The example of the AnaMark specifications
+    EXPECT_TRUE (map.loadTuningFromString (
+                        "[Scale Begin]\n"
+                        "Format = \"AnaMark-TUN\"\n"
+                        "FormatVersion = 200\n"
+                        "[Functional Tuning]\n"
+                        "InitEqual = (0,8)\n"
+                        "note 0 = \"\"\n"
+                        "note 1 = \"*2 /3\"\n"
+                        "note 2 = \"#>-1 %1200 +-3\"\n"
+                        "note 3 = \"#=1\"\n"
+                        "note 1 = \"*3 /2\"\n"
+                        "[Scale End]\n")
+                     .wasOk());
+
+    EXPECT_NEAR (map.noteToPitch (0), 8.0, 1e-9);
+    EXPECT_NEAR (map.noteToPitch (1), 8.0 * std::pow (2.0, 1.0 / 12.0), 1e-9);
+    EXPECT_NEAR (map.noteToPitch (2), 8.0 * std::pow (2.0, 1.0 / 12.0) * 4.0 / 3.0 - 3.0, 1e-9);
+    EXPECT_NEAR (map.noteToPitch (3), 8.0 * std::pow (2.0, 1.0 / 12.0) * 2.0 / 3.0, 1e-9);
+    EXPECT_NEAR (map.noteToPitch (4), 8.0 * std::pow (2.0, 4.0 / 12.0), 1e-9);
+}
+
+TEST_F (TuningMapAnaMarkTests, FunctionalTuningLoopsInBothDirections)
+{
+    EXPECT_TRUE (map.loadTuningFromString (
+                        "[Functional Tuning]\n"
+                        "note 9 = \"%22\"\n"
+                        "note 12 = \"#>-12 *2 ~999\"\n"
+                        "note 100 = \"*3 ~-3\"\n")
+                     .wasOk());
+
+    EXPECT_NEAR (map.noteToPitch (69), 440.0 * cents (22.0), 1e-6);
+    EXPECT_NEAR (map.noteToPitch (117), 440.0 * 16.0 * cents (22.0), 1e-6);
+    EXPECT_NEAR (map.noteToPitch (70), equalTempered (70), 1e-6);
+    EXPECT_NEAR (map.noteToPitch (100), equalTempered (100) * 3.0, 1e-6);
+    EXPECT_NEAR (map.noteToPitch (98), equalTempered (98) * 3.0, 1e-6);
+    EXPECT_NEAR (map.noteToPitch (97), equalTempered (97), 1e-6);
+}
+
+TEST_F (TuningMapAnaMarkTests, FrequencyTokenShiftsTheWholeScale)
+{
+    EXPECT_TRUE (map.loadTuningFromString (
+                        "[Functional Tuning]\n"
+                        "note 69 = \"!432\"\n")
+                     .wasOk());
+
+    EXPECT_NEAR (map.noteToPitch (69), 432.0, 1e-9);
+    EXPECT_NEAR (map.noteToPitch (81), 864.0, 1e-9);
+    EXPECT_NEAR (map.noteToPitch (60), equalTempered (60) * 432.0 / 440.0, 1e-9);
+}
+
+TEST_F (TuningMapAnaMarkTests, MappingAppliesToTheFunctionalTuning)
+{
+    EXPECT_TRUE (map.loadTuningFromString (
+                        "[Functional Tuning]\n"
+                        "[Mapping]\n"
+                        "LoopSize = 12\n"
+                        "Keyboard 1 = 0\n"
+                        "Keyboard 11 = 127\n")
+                     .wasOk());
+
+    EXPECT_NEAR (map.noteToPitch (61), equalTempered (60), 1e-6);
+    EXPECT_NEAR (map.noteToPitch (62), equalTempered (62), 1e-6);
+    EXPECT_NEAR (map.noteToPitch (11), equalTempered (127), 1e-6);
+
+    EXPECT_FALSE (map.isNoteMapped (23));
+    EXPECT_LT (map.noteToPitch (23), 0.0);
+    EXPECT_TRUE (map.isNoteActive (23));
+}
+
+TEST_F (TuningMapAnaMarkTests, FunctionalTuningTakesPrecedence)
+{
+    EXPECT_TRUE (map.loadTuningFromString (
+                        "[Functional Tuning]\n"
+                        "note 69 = \"!400\"\n"
+                        "[Exact Tuning]\n"
+                        "BaseFreq = 100\n"
+                        "[Tuning]\n"
+                        "note 69 = 0\n")
+                     .wasOk());
+
+    EXPECT_NEAR (map.noteToPitch (69), 400.0, 1e-9);
+}
+
+TEST_F (TuningMapAnaMarkTests, MultipleScaleFilesPickTheScaleOfTheChannel)
+{
+    const String text =
+        "<html> lines outside the scales are ignored\n"
+        "note 69 = 0\n"
+        "[Scale Begin]\n"
+        "[Info]\n"
+        "Name = \"Second \\\"channel\\\"\"\n"
+        "[Assignment]\n"
+        "MIDIChannels = \"2-3, 5\"\n"
+        "[Functional Tuning]\n"
+        "note 69 = \"!400\"\n"
+        "[Scale End]\n"
+        "[Scale Begin]\n"
+        "[Info]\n"
+        "Name = \"Everywhere\"\n"
+        "[Functional Tuning]\n"
+        "note 69 = \"!500\"\n"
+        "[Scale End]\n"
+        "</html>\n";
+
+    EXPECT_TRUE (map.loadTuningFromString (text, 3).wasOk());
+    EXPECT_NEAR (map.noteToPitch (69), 400.0, 1e-9);
+    EXPECT_EQ (map.getName(), "Second \"channel\"");
+
+    EXPECT_TRUE (map.loadTuningFromString (text, 1).wasOk());
+    EXPECT_NEAR (map.noteToPitch (69), 500.0, 1e-9);
+    EXPECT_EQ (map.getName(), "Everywhere");
+}
+
+TEST_F (TuningMapAnaMarkTests, FailedLoadKeepsPreviousTuning)
+{
+    EXPECT_TRUE (map.loadTuningFromString ("[Functional Tuning]\nnote 1 = \"*banana\"\n").failed());
+    EXPECT_TRUE (map.loadTuningFromString ("[Functional Tuning]\nnote 69 = \"+-1000\"\n").failed());
+    EXPECT_TRUE (map.loadTuningFromString ("[Functional Tuning]\nnote 69 = \"#=200\"\n").failed());
+    EXPECT_TRUE (map.loadTuningFromString ("[Exact Tuning]\nBaseFreq = -1\n").failed());
+    EXPECT_TRUE (map.loadTuningFromString ("[Scale Begin]\n[Assignment]\nMIDIChannels = \"2\"\n[Scale End]\n", 1).failed());
+    EXPECT_TRUE (map.loadTuning (File::getCurrentWorkingDirectory().getChildFile ("missing_tuning.tun")).failed());
+
+    EXPECT_FALSE (map.isUsingTuningTable());
+    EXPECT_NEAR (map.noteToPitch (69), 440.0, 1e-6);
+}
+
+TEST_F (TuningMapAnaMarkTests, ScaleOrKeyMapLoadLeavesTheTuningTable)
+{
+    EXPECT_TRUE (map.loadScaleFromString ("Pure octaves\n1\n2/1\n").wasOk());
+    EXPECT_EQ (map.getName(), "Pure octaves");
+
+    EXPECT_TRUE (map.loadTuningFromString ("[Functional Tuning]\nnote 69 = \"!432\"\n").wasOk());
+    EXPECT_TRUE (map.isUsingTuningTable());
+    EXPECT_TRUE (map.getName().isEmpty());
+
+    EXPECT_TRUE (map.loadKeyMapFromString ("0\n0\n127\n60\n69\n440.0\n1\n").wasOk());
+    EXPECT_FALSE (map.isUsingTuningTable());
+    EXPECT_EQ (map.getName(), "Pure octaves");
+    EXPECT_NEAR (map.noteToPitch (69), 440.0, 1e-9);
+    EXPECT_NEAR (map.noteToPitch (70), 880.0, 1e-9);
+}
+
+TEST_F (TuningMapAnaMarkTests, TuningFileNamesTheTuningAfterTheFile)
+{
+    auto file = writeTempFile ("[Functional Tuning]\nnote 69 = \"!432\"\n");
+
+    EXPECT_TRUE (map.loadTuning (file).wasOk());
+    EXPECT_EQ (map.getTuningFile(), file);
+    EXPECT_EQ (map.getName(), file.getFileNameWithoutExtension());
+    EXPECT_NEAR (map.noteToPitch (69), 432.0, 1e-9);
 }

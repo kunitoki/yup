@@ -64,7 +64,9 @@ theme->setColor (TextButton::Style::backgroundColorId, Colors::cornflowerBlue);
 Theme-level color resolution via `theme->findColor(component, id)`:
 1. Calls `component.findColor(id)` (walks parent chain for component overrides).
 2. If not found, checks the colors set with `theme->setColor()`.
-3. If not found, checks the colors derived from the theme palette (see [Palettes](#palettes)).
+3. If not found, checks the colors derived from the closest palette set on the component or a parent with `Component::setPalette()`, or else from the theme palette (see [Palettes](#palettes)).
+
+A `PopupMenu` opened relative to a component (`PopupMenu::Options::withRelativePosition()`, as a `ComboBox` opens its list) takes the palette and the `PopupMenu::Style` colors set on that component or its parents, unless the menu sets them itself, and its submenus take the menu's. Setting the menu colors on a panel styles every menu opened from inside it, even though the menu is added to a popup container higher up.
 
 ### Widget style IDs
 
@@ -306,8 +308,28 @@ when creating it: `createThemeVersion1 (palette)`.
 
 Colors set with `theme->setColor()` always win over the palette and survive
 palette changes, and colors set on a component win over both. Custom paint
-styles should read `theme.getPalette().getColor (role)` at paint time so they
-follow palette switches too.
+styles should read `theme.getPalette (component).getColor (role)` at paint time
+so they follow palette switches and component palettes too.
+
+### Component palettes
+
+The theme palette is global. To give part of the interface a palette of its own,
+set it on a component: the component and everything inside it are drawn from the
+closest palette up the parent chain, mapped to widget colors by the theme's
+palette mapping.
+
+```cpp
+// A window, a panel or a plugin editor wears its own palette
+editor.setPalette (ThemePalette::fromString ("https://coolors.co/0b132b-1c2541-3a506b-5bc0be-6fffe9").getReference());
+
+// Follow the parent again
+editor.setPalette (std::nullopt);
+```
+
+This is how several plugin editors in one process, which share the global theme,
+can each wear their own palette. `ApplicationTheme::getPalette (component)` returns
+the palette a component is drawn with, and `Component::findPalette()` the closest
+one set on it or a parent.
 
 ---
 
