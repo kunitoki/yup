@@ -46,9 +46,13 @@ jobs:
       wasm_examples: ${{ steps.wasm.outputs.examples }}
       wasm_example_targets: ${{ steps.wasm.outputs.example_targets }}
       ios_any: ${{ steps.ios.outputs.any }}
+      ios_tests: ${{ steps.ios.outputs.full_build == 'true' || steps.ios.outputs.test_modules != '' }}
+      ios_test_modules: ${{ steps.ios.outputs.test_modules }}
       ios_examples: ${{ steps.ios.outputs.examples }}
       ios_example_targets: ${{ steps.ios.outputs.example_targets }}
       android_any: ${{ steps.android.outputs.any }}
+      android_tests: ${{ steps.android.outputs.full_build == 'true' || steps.android.outputs.test_modules != '' }}
+      android_test_modules: ${{ steps.android.outputs.test_modules }}
       android_examples: ${{ steps.android.outputs.examples }}
     steps:
     - uses: actions/checkout@v6
@@ -144,6 +148,8 @@ jobs:
     if: needs.plan.outputs.ios_any == 'true'
     uses: ./.github/workflows/build_ios.yml
     with:
+      test_modules: ${{ needs.plan.outputs.ios_test_modules }}
+      tests: ${{ needs.plan.outputs.ios_tests == 'true' }}
       examples: ${{ needs.plan.outputs.ios_examples }}
       example_targets: ${{ needs.plan.outputs.ios_example_targets }}
 
@@ -153,6 +159,8 @@ jobs:
     if: needs.plan.outputs.android_any == 'true'
     uses: ./.github/workflows/build_android.yml
     with:
+      test_modules: ${{ needs.plan.outputs.android_test_modules }}
+      tests: ${{ needs.plan.outputs.android_tests == 'true' }}
       examples: ${{ needs.plan.outputs.android_examples }}
 
   result:

@@ -5,6 +5,14 @@ name: Android
 on:
   workflow_call:
     inputs:
+      test_modules:
+        description: Semicolon-separated YUP_TEST_MODULES value (empty builds every module's tests)
+        type: string
+        default: ""
+      tests:
+        description: Whether to build the tests (they are not run)
+        type: boolean
+        default: false
       examples:
         description: JSON array of the examples to build
         type: string
@@ -15,6 +23,8 @@ env:
   JAVA_VERSION: 17
   JAVA_DISTRIBUTION: 'temurin'
   NDK_VERSION: r27c
+  ANDROID_ABI: arm64-v8a
+  ANDROID_PLATFORM: android-21
   INSTALL_DEPS: >-
     libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
     libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
@@ -50,6 +60,39 @@ jobs:
         with:
           path: ${{ runner.workspace }}/build
           key: android-build-${{ github.sha }}-${{ github.run_id }}
+
+  # The gradle projects only build examples, the test runners configure directly with the NDK toolchain
+  build_tests:
+    runs-on: ubuntu-latest
+    if: inputs.tests
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+    steps:
+    - uses: actions/checkout@v6
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: android-tests-${{ matrix.config }}
+        max-size: 1G
+    - name: Setup Android NDK
+      id: setup-ndk
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: ${{env.NDK_VERSION}}
+    - name: Configure
+      run: |
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+          -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake \
+          -DANDROID_ABI=${{ env.ANDROID_ABI }} -DANDROID_PLATFORM=${{ env.ANDROID_PLATFORM }} -DANDROID_STL=c++_shared \
+          -DANDROID_CPP_FEATURES="rtti exceptions" -DYUP_ANDROID_ASSETS_DIR=${{ runner.workspace }}/build/assets \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=OFF -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
+    # Built only, the runners need a device or emulator to run
+    - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
 
   build_examples:
     runs-on: ubuntu-latest
