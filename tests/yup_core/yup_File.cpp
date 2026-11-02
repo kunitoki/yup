@@ -684,7 +684,10 @@ TEST_F (FileTests, PathUtilities)
 #if YUP_WINDOWS
     EXPECT_TRUE (File::isAbsolutePath ("C:\\Windows"));
     EXPECT_TRUE (File::isAbsolutePath ("D:/path"));
-    EXPECT_FALSE (File::isAbsolutePath ("/absolute/path"));
+    EXPECT_TRUE (File::isAbsolutePath ("/absolute/path"));
+    EXPECT_TRUE (File::isAbsolutePath ("\\absolute\\path"));
+    EXPECT_TRUE (File::isAbsolutePath ("\\\\server\\share\\path"));
+    EXPECT_FALSE (File::isAbsolutePath ("relative\\path"));
 #else
     EXPECT_FALSE (File::isAbsolutePath ("C:\\Windows"));
     EXPECT_FALSE (File::isAbsolutePath ("D:/path"));
@@ -705,6 +708,23 @@ TEST_F (FileTests, PathUtilities)
     EXPECT_FALSE (caseSensitive);
 #endif
 }
+
+#if YUP_WINDOWS
+TEST_F (FileTests, ChildFileResolvesRootRelativePathsAgainstOwnDriveOrShare)
+{
+    const File driveFile ("D:\\moose\\fish");
+    EXPECT_EQ (driveFile.getChildFile ("\\xyz"), File ("D:\\xyz"));
+    EXPECT_EQ (driveFile.getChildFile ("/xyz"), File ("D:\\xyz"));
+    EXPECT_EQ (driveFile.getChildFile ("\\xyz\\..\\abc"), File ("D:\\abc"));
+    EXPECT_EQ (driveFile.getChildFile ("E:\\xyz"), File ("E:\\xyz"));
+    EXPECT_EQ (driveFile.getChildFile ("\\\\server\\share\\xyz"), File ("\\\\server\\share\\xyz"));
+
+    const File shareFile ("\\\\server\\share\\moose\\fish");
+    EXPECT_EQ (shareFile.getChildFile ("\\xyz"), File ("\\\\server\\share\\xyz"));
+    EXPECT_EQ (shareFile.getChildFile ("/xyz"), File ("\\\\server\\share\\xyz"));
+    EXPECT_EQ (shareFile.getChildFile ("E:\\xyz"), File ("E:\\xyz"));
+}
+#endif
 
 TEST_F (FileTests, HashCodes)
 {

@@ -23,6 +23,8 @@
 
 #include <yup_data_model/yup_data_model.h>
 
+#include <limits>
+
 using namespace yup;
 
 namespace
@@ -3742,6 +3744,83 @@ TEST_F (DataTreeTests, ReadFromBinaryStreamWithIncompleteData)
     // Should still create tree with type, but no properties/children
     EXPECT_TRUE (loadedTree.isValid());
     EXPECT_EQ (Identifier ("TestType"), loadedTree.getType());
+}
+
+TEST_F (DataTreeTests, ReadFromBinaryStreamLimitsNestingDepth)
+{
+    const auto createNestedTree = [] (int depth)
+    {
+        DataTree root ("a");
+        auto node = root;
+
+        for (int i = 1; i < depth; ++i)
+        {
+            DataTree child ("a");
+            node.addChild (child);
+            node = child;
+        }
+
+        return root;
+    };
+
+    const auto countNestedChildren = [] (DataTree node)
+    {
+        int depth = 0;
+
+        for (; node.isValid(); node = node.getChild (0))
+            ++depth;
+
+        return depth;
+    };
+
+    const auto writeAndReadBack = [] (const DataTree& source)
+    {
+        MemoryOutputStream output;
+        source.writeToBinaryStream (output);
+
+        MemoryInputStream input (output.getData(), output.getDataSize(), false);
+        return DataTree::readFromBinaryStream (input);
+    };
+
+    EXPECT_EQ (256, countNestedChildren (writeAndReadBack (createNestedTree (256))));
+    EXPECT_FALSE (writeAndReadBack (createNestedTree (257)).isValid());
+}
+
+TEST_F (DataTreeTests, ReadFromBinaryStreamDeeplyNestedDataDoesNotExhaustStack)
+{
+    MemoryOutputStream output;
+
+    for (int i = 0; i < 100000; ++i)
+    {
+        output.writeString ("a");
+        output.writeCompressedInt (0);
+        output.writeCompressedInt (1);
+    }
+
+    MemoryInputStream input (output.getData(), output.getDataSize(), false);
+    EXPECT_FALSE (DataTree::readFromBinaryStream (input).isValid());
+}
+
+TEST_F (DataTreeTests, ReadFromBinaryStreamWithHugeCountsStopsAtEndOfData)
+{
+    MemoryOutputStream output;
+    output.writeString ("a");
+    output.writeCompressedInt (std::numeric_limits<int>::max());
+
+    MemoryInputStream input (output.getData(), output.getDataSize(), false);
+    auto loadedTree = DataTree::readFromBinaryStream (input);
+    EXPECT_TRUE (loadedTree.isValid());
+    EXPECT_EQ (0, loadedTree.getNumProperties());
+
+    MemoryOutputStream output2;
+    output2.writeString ("a");
+    output2.writeCompressedInt (0);
+    output2.writeCompressedInt (std::numeric_limits<int>::max());
+
+    MemoryInputStream input2 (output2.getData(), output2.getDataSize(), false);
+    loadedTree = DataTree::readFromBinaryStream (input2);
+    EXPECT_EQ (Identifier ("a"), loadedTree.getType());
+    EXPECT_EQ (0, loadedTree.getNumChildren());
 }
 
 //==============================================================================

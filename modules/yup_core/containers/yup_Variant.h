@@ -304,7 +304,8 @@ public:
 
     /** Reads back a stored binary representation of a value.
         The data in the stream must have been written using writeToStream(), or this
-        will have unpredictable results.
+        will have unpredictable results. Values nested inside more than 128 levels of
+        arrays are read as void.
         @see JSON
     */
     static var readFromStream (InputStream& input);

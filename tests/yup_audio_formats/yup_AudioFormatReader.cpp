@@ -183,6 +183,15 @@ TEST (AudioFormatReaderTests, SearchForLevelFindsFirstMatchingRun)
     EXPECT_EQ (-1, reader.searchForLevel (0, 5, 0.8, 0.9, 1));
 }
 
+TEST (AudioFormatReaderTests, SearchForLevelChecksAllChannels)
+{
+    MockAudioFormatReader reader (3, 4);
+    reader.buffer.clear();
+    fillChannel (reader.buffer, 2, { 0.0f, 0.6f, 0.6f, 0.0f });
+
+    EXPECT_EQ (1, reader.searchForLevel (0, 4, 0.5, 0.7, 2));
+}
+
 TEST (AudioFormatReaderTests, GetChannelLayoutMatchesChannelCount)
 {
     MockAudioFormatReader monoReader (1, 1);

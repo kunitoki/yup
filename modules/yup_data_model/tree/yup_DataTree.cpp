@@ -1137,8 +1137,16 @@ void DataTree::writeToBinaryStream (OutputStream& output) const
         DataTree (child).writeToBinaryStream (output);
 }
 
-DataTree DataTree::readFromBinaryStream (InputStream& input)
+static DataTree readTreeFromBinaryStream (InputStream& input, int nestingDepth, bool& nestedTooDeeply)
 {
+    constexpr int maxNestingDepth = 256;
+
+    if (nestingDepth >= maxNestingDepth)
+    {
+        nestedTooDeeply = true;
+        return {};
+    }
+
     const String type = input.readString();
     if (type.isEmpty())
         return {};
@@ -1150,6 +1158,9 @@ DataTree DataTree::readFromBinaryStream (InputStream& input)
     for (int i = 0; i < numProperties; ++i)
     {
         const String name = input.readString();
+        if (name.isEmpty())
+            return tree;
+
         const var value = var::readFromStream (input);
         tree.setProperty (name, value);
     }
@@ -1158,12 +1169,21 @@ DataTree DataTree::readFromBinaryStream (InputStream& input)
     const int numChildren = input.readCompressedInt();
     for (int i = 0; i < numChildren; ++i)
     {
-        auto child = readFromBinaryStream (input);
-        if (child.isValid())
-            tree.addChild (child);
+        auto child = readTreeFromBinaryStream (input, nestingDepth + 1, nestedTooDeeply);
+        if (! child.isValid())
+            return tree;
+
+        tree.addChild (child);
     }
 
     return tree;
+}
+
+DataTree DataTree::readFromBinaryStream (InputStream& input)
+{
+    bool nestedTooDeeply = false;
+    auto tree = readTreeFromBinaryStream (input, 0, nestedTooDeeply);
+    return nestedTooDeeply ? DataTree() : tree;
 }
 
 var DataTree::createJson() const

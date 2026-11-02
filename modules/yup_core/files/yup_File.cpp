@@ -433,6 +433,7 @@ bool File::isAbsolutePath (StringRef path)
 
     return firstChar == getSeparatorChar()
 #if YUP_WINDOWS
+        || firstChar == '/'
         || (firstChar != 0 && path.text[1] == ':');
 #else
         || firstChar == '~';
@@ -443,13 +444,33 @@ File File::getChildFile (StringRef relativePath) const
 {
     auto r = relativePath.text;
 
-    if (isAbsolutePath (r))
-        return File (String (r));
-
 #if YUP_WINDOWS
     if (r.indexOf ((yup_wchar) '/') >= 0)
         return getChildFile (String (r).replaceCharacter ('/', '\\'));
+
+    // A single leading separator names the root of an unspecified drive or share, so resolve it against this file's one
+    if (*r == getSeparatorChar() && r[1] != getSeparatorChar())
+    {
+        const auto root = [&]() -> String
+        {
+            if (fullPath[1] == ':')
+                return fullPath.substring (0, 2);
+
+            if (! fullPath.startsWith ("\\\\"))
+                return {};
+
+            const auto serverEnd = fullPath.indexOfChar (2, getSeparatorChar());
+            const auto shareEnd = serverEnd < 0 ? -1 : fullPath.indexOfChar (serverEnd + 1, getSeparatorChar());
+            return shareEnd < 0 ? fullPath : fullPath.substring (0, shareEnd);
+        }();
+
+        if (root.isNotEmpty())
+            return File (root + String (r));
+    }
 #endif
+
+    if (isAbsolutePath (r))
+        return File (String (r));
 
     auto path = fullPath;
     auto separatorChar = getSeparatorChar();

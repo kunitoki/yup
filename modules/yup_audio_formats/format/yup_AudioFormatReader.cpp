@@ -35,15 +35,15 @@ bool AudioFormatReader::read (float* const* destChannels, int numDestChannels, i
 
     const auto numChannelsToRead = jmin (numDestChannels, (int) numChannels);
 
-    if (numChannelsToRead == 0)
+    if (numChannelsToRead <= 0)
         return true;
 
     // Create temporary float buffers and read into them
-    HeapBlock<float> tempBuffer (numChannelsToRead * numSamplesToRead, true);
+    HeapBlock<float> tempBuffer ((size_t) numChannelsToRead * (size_t) numSamplesToRead, true);
     HeapBlock<float*> floatChans (numChannelsToRead, false);
 
     for (int i = 0; i < numChannelsToRead; ++i)
-        floatChans[i] = tempBuffer.getData() + i * numSamplesToRead;
+        floatChans[i] = tempBuffer.getData() + (size_t) i * (size_t) numSamplesToRead;
 
     if (! readSamples (floatChans.getData(), numChannelsToRead, 0, startSampleInSource, numSamplesToRead))
         return false;
@@ -173,12 +173,15 @@ void AudioFormatReader::readMaxLevels (int64 startSample, int64 numSamples, Rang
 {
     numChannelsToRead = jmin (numChannelsToRead, (int) numChannels);
 
-    HeapBlock<float> tempBuffer (numChannelsToRead * 4096, true);
+    if (numChannelsToRead <= 0)
+        return;
+
+    HeapBlock<float> tempBuffer ((size_t) numChannelsToRead * 4096, true);
     HeapBlock<float*> chans (numChannelsToRead, false);
 
     for (int i = 0; i < numChannelsToRead; ++i)
     {
-        chans[i] = tempBuffer + i * 4096;
+        chans[i] = tempBuffer + (size_t) i * 4096;
         results[i] = Range<float>();
     }
 
@@ -228,15 +231,18 @@ int64 AudioFormatReader::searchForLevel (int64 startSample,
                                          double magnitudeRangeMaximum,
                                          int minimumConsecutiveSamples)
 {
-    if (numSamplesToSearch <= 0)
+    if (numSamplesToSearch <= 0 || numChannels <= 0)
         return -1;
 
     const auto magnitudeRangeMin = (float) magnitudeRangeMinimum;
     const auto magnitudeRangeMax = (float) magnitudeRangeMaximum;
     const auto bufferSize = 4096;
-    HeapBlock<float> tempBuffer (bufferSize * 2, true); // Stereo buffer
+    HeapBlock<float> tempBuffer ((size_t) bufferSize * (size_t) numChannels, true);
+    HeapBlock<float*> chans (numChannels, false);
 
-    float* chans[2] = { tempBuffer.getData(), tempBuffer.getData() + bufferSize };
+    for (int ch = 0; ch < numChannels; ++ch)
+        chans[ch] = tempBuffer.getData() + (size_t) ch * (size_t) bufferSize;
+
     int consecutiveSamples = 0;
     bool lastSampleWasInRange = false;
 
@@ -244,7 +250,7 @@ int64 AudioFormatReader::searchForLevel (int64 startSample,
     {
         const auto numThisTime = jmin (numSamplesToSearch, (int64) bufferSize);
 
-        if (! readSamples (chans, 2, 0, startSample, (int) numThisTime))
+        if (! readSamples (chans, numChannels, 0, startSample, (int) numThisTime))
             break;
 
         for (int i = 0; i < (int) numThisTime; ++i)

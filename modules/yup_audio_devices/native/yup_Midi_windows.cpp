@@ -196,33 +196,31 @@ private:
         {
             if (bytes[0] >= 0x80 && isStarted.load())
             {
-                {
-                    auto len = MidiMessage::getMessageLengthFromFirstByte (bytes[0]);
-                    auto time = convertTimeStamp (timeStamp);
-                    const ScopedLock sl (clientLock);
+                auto len = MidiMessage::getMessageLengthFromFirstByte (bytes[0]);
+                auto time = convertTimeStamp (timeStamp);
+                const ScopedLock sl (clientLock);
 
-                    for (auto* c : clients)
-                        c->pushMidiData (bytes, len, time);
-                }
-
-                writeFinishedBlocks();
+                for (auto* c : clients)
+                    c->pushMidiData (bytes, len, time);
             }
         }
 
         void handleSysEx (MIDIHDR* hdr, uint32 timeStamp)
         {
-            if (isStarted.load() && hdr->dwBytesRecorded > 0)
+            if (! isStarted.load())
+                return;
+
+            if (hdr->dwBytesRecorded > 0)
             {
-                {
-                    auto time = convertTimeStamp (timeStamp);
-                    const ScopedLock sl (clientLock);
+                auto time = convertTimeStamp (timeStamp);
+                const ScopedLock sl (clientLock);
 
-                    for (auto* c : clients)
-                        c->pushMidiData (hdr->lpData, (int) hdr->dwBytesRecorded, time);
-                }
-
-                writeFinishedBlocks();
+                for (auto* c : clients)
+                    c->pushMidiData (hdr->lpData, (int) hdr->dwBytesRecorded, time);
             }
+
+            hdr->dwBytesRecorded = 0;
+            midiInAddBuffer (deviceHandle, hdr, sizeof (*hdr));
         }
 
         void startOrStop()
@@ -340,12 +338,6 @@ private:
                 midiInAddBuffer (device, &hdr, sizeof (hdr));
             }
 
-            void writeIfFinished (HMIDIIN device)
-            {
-                if ((hdr.dwFlags & WHDR_DONE) != 0)
-                    write (device);
-            }
-
             MIDIHDR hdr;
             char data[256];
 
@@ -358,12 +350,6 @@ private:
         };
 
         MidiHeader headers[numHeaders];
-
-        void writeFinishedBlocks()
-        {
-            for (int i = 0; i < (int) numHeaders; ++i)
-                headers[i].writeIfFinished (deviceHandle);
-        }
 
         void unprepareAllHeaders()
         {

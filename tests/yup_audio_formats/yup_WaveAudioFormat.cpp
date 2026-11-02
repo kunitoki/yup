@@ -69,6 +69,35 @@ protected:
         format = std::make_unique<WaveAudioFormat>();
     }
 
+    static MemoryBlock createWaveFile (int formatTag, int numChannels, int bitsPerSample, int blockAlign, const MemoryBlock& extraChunks, int dataSize)
+    {
+        MemoryOutputStream out;
+        out.write ("RIFF", 4);
+        out.writeInt (4 + 24 + (int) extraChunks.getSize() + 8 + dataSize);
+        out.write ("WAVE", 4);
+        out.write ("fmt ", 4);
+        out.writeInt (16);
+        out.writeShort ((short) formatTag);
+        out.writeShort ((short) numChannels);
+        out.writeInt (44100);
+        out.writeInt (44100 * blockAlign);
+        out.writeShort ((short) blockAlign);
+        out.writeShort ((short) bitsPerSample);
+
+        if (! extraChunks.isEmpty())
+            out.write (extraChunks.getData(), extraChunks.getSize());
+
+        out.write ("data", 4);
+        out.writeInt (dataSize);
+        out.writeRepeatedByte (0, (size_t) dataSize);
+        return out.getMemoryBlock();
+    }
+
+    std::unique_ptr<AudioFormatReader> createReaderForData (const MemoryBlock& data)
+    {
+        return format->createReaderFor (new MemoryInputStream (data, true));
+    }
+
     std::unique_ptr<WaveAudioFormat> format;
 };
 
@@ -164,6 +193,54 @@ TEST_F (WaveAudioFormatTests, CreateWriterForNullStream)
 {
     auto writer = format->createWriterFor (nullptr, 44100, 2, 16, {}, 0);
     EXPECT_EQ (nullptr, writer);
+}
+
+TEST_F (WaveAudioFormatTests, CreateWriterForInvalidChannelCountFails)
+{
+    for (int numChannels : { 0, -1, 65 })
+    {
+        auto stream = std::make_unique<MemoryOutputStream>();
+        auto writer = format->createWriterFor (stream.get(), 44100, numChannels, 16, {}, 0);
+        EXPECT_EQ (nullptr, writer);
+
+        if (writer != nullptr)
+            stream.release();
+    }
+}
+
+TEST_F (WaveAudioFormatTests, CreateReaderForUnsupportedFrameLayoutFails)
+{
+    // 12-bit PCM is framed by blockAlign, which is much larger than the channels * bytes per sample
+    EXPECT_EQ (nullptr, createReaderForData (createWaveFile (1, 2, 12, 4096, {}, 8192)));
+
+    // Integer PCM with 64 bits per sample has no matching decoder path
+    EXPECT_EQ (nullptr, createReaderForData (createWaveFile (1, 1, 64, 8, {}, 16)));
+}
+
+TEST_F (WaveAudioFormatTests, CreateReaderForValidMinimalFileSucceeds)
+{
+    auto reader = createReaderForData (createWaveFile (1, 2, 16, 4, {}, 16));
+    ASSERT_NE (nullptr, reader);
+    EXPECT_EQ (2, reader->numChannels);
+    EXPECT_EQ (4, reader->lengthInSamples);
+
+    AudioBuffer<float> buffer (2, 4);
+    EXPECT_TRUE (reader->read (buffer.getArrayOfWritePointers(), 2, 0, 4));
+}
+
+TEST_F (WaveAudioFormatTests, InfoTextWithoutNullTerminatorIsBounded)
+{
+    MemoryOutputStream list;
+    list.write ("LIST", 4);
+    list.writeInt (16);
+    list.write ("INFO", 4);
+    list.write ("INAM", 4);
+    list.writeInt (4);
+    list.write ("abcd", 4);
+
+    auto reader = createReaderForData (createWaveFile (1, 1, 16, 2, list.getMemoryBlock(), 8));
+    ASSERT_NE (nullptr, reader);
+    EXPECT_EQ (String ("abcd"), reader->metadataValues.getValue ("title", {}));
 }
 
 #if ! YUP_EMSCRIPTEN

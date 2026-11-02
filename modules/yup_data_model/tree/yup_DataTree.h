@@ -747,6 +747,9 @@ public:
         This reverses the process of writeToBinaryStream(), reconstructing the
         DataTree from the binary representation.
 
+        Trees nested more than 256 levels deep are rejected and an invalid DataTree
+        is returned. Reading stops at the first corrupted property name or child.
+
         @param input The InputStream to read from
         @return A new DataTree from the binary data, or invalid DataTree on failure
         @see writeToBinaryStream()

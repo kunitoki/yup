@@ -106,6 +106,39 @@ TEST (ThreadTests, SetCurrentThreadName)
     EXPECT_NO_THROW (Thread::setCurrentThreadName (""));
 }
 
+#if YUP_WINDOWS
+TEST (ThreadTests, SetPriorityFromRunningThreadSucceeds)
+{
+    class PriorityThread : public Thread
+    {
+    public:
+        PriorityThread()
+            : Thread ("PriorityThread")
+        {
+        }
+
+        void run() override
+        {
+            for (auto priority : { Priority::background, Priority::low, Priority::normal })
+            {
+                if (! setPriority (priority) || getPriority() != priority)
+                    return;
+            }
+
+            succeeded = true;
+        }
+
+        std::atomic<bool> succeeded { false };
+    };
+
+    PriorityThread thread;
+    thread.startThread();
+    thread.waitForThreadToExit (1000);
+
+    EXPECT_TRUE (thread.succeeded);
+}
+#endif
+
 TEST (ThreadTests, TimedOutStopLeavesThreadStopped)
 {
 #if YUP_ASSERTIONS_ENABLED_OR_LOGGED
