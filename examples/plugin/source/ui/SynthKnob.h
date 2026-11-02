@@ -28,11 +28,11 @@
 #include <vector>
 
 //==============================================================================
-/** The instrument's rotary knob: a dark well, an accent value arc and, while the knob is
-    hovered or dragged, a pill with the value as text.
+/** The instrument's rotary knob: a dark well with a pointer and an accent value arc.
 
     It also carries the modulation arcs drawn around the value, one per route reaching
-    the control, in the route source's color.
+    the control, in the route source's color. Dragging with shift held moves the value
+    ten times finer, and a click with command or control held returns the default.
 
     @see ParameterKnob
 */
@@ -51,14 +51,21 @@ public:
 
     SynthKnob();
 
-    /** Returns the text of the value pill. */
-    std::function<yup::String()> getValueText;
+    /** Called when the mouse enters or leaves the knob, see isMouseOver(). */
+    std::function<void()> onHoverChanged;
 
-    /** Keeps the value pill shown, for instance while a drag continues outside the knob. */
-    void setShowingValue (bool shouldShowValue);
+    /** Called on a right click; when set, the click starts no drag. */
+    std::function<void()> onContextClick;
 
-    /** True while the value pill is shown. */
-    bool isShowingValue() const noexcept { return showingValue || isMouseOver(); }
+    /** Called on a double-click; when set, it replaces the slider's return to the default. */
+    std::function<void()> onDoubleClick;
+
+    /** When set, its text is drawn inside the well in place of the pointer, for knobs too
+        small for a caption. */
+    std::function<yup::String()> getWellText;
+
+    /** True for a click that returns a control to its default: command or control held. */
+    static bool isResetClick (const yup::MouseEvent& event);
 
     /** Replaces the modulation arcs. */
     void setModulationArcs (std::vector<ModulationArc> newArcs);
@@ -69,20 +76,27 @@ public:
     /** Returns the modulation arcs. */
     const std::vector<ModulationArc>& getModulationArcs() const noexcept { return modulationArcs; }
 
-    /** Draws the value inside the well at all times, without the dot pointer or the pill. */
-    void setShowsValueInWell (bool shouldShowValueInWell);
-
-    /** Draws the value arc and pill in the color of a modulation source family (see
+    /** Draws the value arc in the color of a modulation source family (see
         SynthTheme::sourceAccent()) rather than the section accent. */
     void setSourceAccent (int family);
 
+    void mouseEnter (const yup::MouseEvent& event) override;
+    void mouseExit (const yup::MouseEvent& event) override;
+    void mouseDown (const yup::MouseEvent& event) override;
+    void mouseDrag (const yup::MouseEvent& event) override;
+    void mouseUp (const yup::MouseEvent& event) override;
+    void mouseDoubleClick (const yup::MouseEvent& event) override;
+
 private:
+    static constexpr double fineDragScale = 0.1;
+
     static void paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme, const yup::Slider& slider);
 
     std::vector<ModulationArc> modulationArcs;
     std::optional<int> accentFamily;
     std::optional<float> modulatedValue;
-    bool showingValue = false;
-    bool showsValueInWell = false;
-    yup::Font valueFont;
+    yup::Font wellFont;
+    yup::Point<float> dragAnchor;
+    double dragAnchorValue = 0.0;
+    bool fineDrag = false;
 };

@@ -29,14 +29,26 @@ ParameterKnob::ParameterKnob (const yup::String& caption, yup::AudioParameter::P
     setOpaque (false); // the knob and its caption paint themselves, the row draws nothing
 
     bindSlider();
-    slider.getValueText = [this] { return parameter->toString(); };
-    slider.onValueChanged = [this] (double value) { gesture.setNormalized (static_cast<float> (value)); };
+    getValueText = [this] { return parameter->toString(); };
+    slider.onValueChanged = [this] (double value)
+    {
+        gesture.setNormalized (static_cast<float> (value));
+        updateCaption();
+    };
     slider.onDragStart = [this] (const yup::MouseEvent&)
     {
         gesture.begin();
-        slider.setShowingValue (true);
+        updateCaption();
     };
     slider.onDragEnd = [this] (const yup::MouseEvent&) { endGesture(); };
+    slider.onHoverChanged = [this] { updateCaption(); };
+    slider.onDoubleClick = [this] { showTextEntry(); };
+    slider.onContextClick = [this] { requestModulationPanel (*this); };
+    textEntry.onClosed = [this]
+    {
+        syncFromParameter();
+        updateCaption();
+    };
     addAndMakeVisible (slider);
 
     captionText = caption;
@@ -68,9 +80,7 @@ void ParameterKnob::setParameter (yup::AudioParameter::Ptr newParameter)
     parameter = std::move (newParameter);
     gesture.setParameter (parameter);
     bindSlider();
-
-    if (captionShowsValue)
-        label.setText (parameter->toString(), yup::dontSendNotification);
+    updateCaption();
 }
 
 void ParameterKnob::showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> modulatedValue)
@@ -79,16 +89,22 @@ void ParameterKnob::showModulation (std::vector<SynthKnob::ModulationArc> arcs, 
     slider.setModulatedValue (modulatedValue);
 }
 
-void ParameterKnob::setCaptionShowsValue (bool shouldShowValue)
+bool ParameterKnob::isShowingValue() const
 {
-    captionShowsValue = shouldShowValue;
-    label.setText (captionShowsValue ? parameter->toString() : captionText, yup::dontSendNotification);
-    resized();
+    return ! textEntry.isShowing() && (gesture.isActive() || slider.isMouseOver());
+}
+
+void ParameterKnob::updateCaption()
+{
+    const auto text = isShowingValue() && getValueText != nullptr ? getValueText() : captionText;
+
+    if (label.getText() != text)
+        label.setText (text, yup::dontSendNotification);
 }
 
 float ParameterKnob::getCaptionHeight() const noexcept
 {
-    return captionText.isEmpty() && ! captionShowsValue ? 0.0f : captionHeight;
+    return captionText.isEmpty() ? 0.0f : captionHeight;
 }
 
 bool ParameterKnob::syncFromParameter()
@@ -96,8 +112,8 @@ bool ParameterKnob::syncFromParameter()
     const auto normalized = static_cast<double> (parameter->getNormalizedValue());
 
     // Formatting is costly at the interface rate, so only a new value is formatted.
-    if (const auto value = parameter->getValue(); captionShowsValue && std::exchange (captionValue, value) != value)
-        label.setText (parameter->toString(), yup::dontSendNotification);
+    if (const auto value = parameter->getValue(); isShowingValue() && std::exchange (captionValue, value) != value)
+        updateCaption();
     if (gesture.isActive() || std::abs (slider.getValue() - normalized) < 1.0e-6)
         return false;
 
@@ -117,11 +133,19 @@ void ParameterKnob::resized()
     label.setBounds (block);
 }
 
+void ParameterKnob::showTextEntry()
+{
+    // Over the knob, so the caption still names what is being edited.
+    const auto knob = slider.getBounds();
+    textEntry.show ({ 0.0f, knob.getCenterY() - textEntryHeight * 0.5f, getWidth(), textEntryHeight });
+    updateCaption();
+}
+
 void ParameterKnob::endGesture()
 {
     if (! gesture.isActive())
         return;
 
     gesture.end();
-    slider.setShowingValue (false);
+    updateCaption();
 }

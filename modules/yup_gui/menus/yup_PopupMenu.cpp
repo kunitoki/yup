@@ -749,6 +749,9 @@ void PopupMenu::showCustom (const Options& options, bool isSubmenu, std::functio
 
     installGlobalMouseListener();
 
+    // Inside a parent the menu has room around it for its drop shadow; a desktop window has none.
+    setPaintMargin (options.parentComponent != nullptr ? shadowMargin : 0.0f);
+
     if (options.parentComponent)
     {
         // When we have a parent component, add as child to work in local coordinates

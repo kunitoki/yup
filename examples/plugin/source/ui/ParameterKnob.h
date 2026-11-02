@@ -22,18 +22,22 @@
 #pragma once
 
 #include "ParameterGesture.h"
+#include "ParameterTextEntry.h"
 #include "SynthKnob.h"
 #include "SynthModulationTarget.h"
 #include <yup_audio_processors/yup_audio_processors.h>
 #include <yup_gui/yup_gui.h>
 
+#include <functional>
+
 //==============================================================================
 /** A rotary knob bound to an AudioParameter, with its caption underneath.
 
     The knob works in the parameter's normalized range, so any skew lives only in the
-    parameter, and shows the parameter's own value text while it is dragged. A drag is
-    one host gesture and one undo step; any other change, such as a double-click reset or
-    the mouse wheel, is wrapped in a gesture of its own.
+    parameter. While the knob is hovered or dragged, the caption shows the value text in
+    place of the caption text. A double-click opens a field over the knob to type the value
+    in, while the caption keeps the name. A drag is one host gesture and one undo step; any other change, such as a
+    typed value, a reset click or the mouse wheel, is wrapped in a gesture of its own.
 
     @see ParameterChoice, SynthNumberField
 */
@@ -54,8 +58,11 @@ public:
     /** Binds another parameter, for a knob that follows a mode such as an LFO's sync. */
     void setParameter (yup::AudioParameter::Ptr newParameter);
 
-    /** Shows the parameter's value text as the caption instead of the caption text. */
-    void setCaptionShowsValue (bool shouldShowValue);
+    /** True while the knob is hovered or dragged and its value is shown in place of a name. */
+    bool isShowingValue() const;
+
+    /** Returns the value text the caption shows; the parameter's own text by default. */
+    std::function<yup::String()> getValueText;
 
     yup::AudioParameter::Ptr getModulationParameter() const override { return parameter; }
     void showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> modulatedValue) override;
@@ -67,8 +74,11 @@ public:
 
 private:
     static constexpr float captionHeight = 13.0f;
+    static constexpr float textEntryHeight = 22.0f;
 
     void endGesture();
+    void updateCaption();
+    void showTextEntry();
 
     void bindSlider();
     float getCaptionHeight() const noexcept;
@@ -77,7 +87,7 @@ private:
     ParameterGesture gesture;
     SynthKnob slider;
     yup::Label label;
+    ParameterTextEntry textEntry { *this, gesture };
     yup::String captionText;
     std::optional<float> captionValue;
-    bool captionShowsValue = false;
 };

@@ -21,6 +21,7 @@
 #pragma once
 
 #include "ParameterGesture.h"
+#include "ParameterTextEntry.h"
 #include "SynthKnob.h"
 #include "SynthModulationTarget.h"
 
@@ -35,7 +36,9 @@
     The boxed look sits in its own sunken box with the caption and value above the
     track; the bar look is a single line of caption, track and value. A bipolar field
     fills from a center tick. Routes reaching the parameter are drawn as ranges under
-    the track in their source colors. A double-click returns the default.
+    the track in their source colors. A double-click opens a field to type the value in,
+    a click with command or control held returns the default and a right click shows the
+    routes reaching it.
 
     @see SynthNumberField, ParameterKnob
 */
@@ -55,6 +58,10 @@ public:
 
     yup::AudioParameter::Ptr getModulationParameter() const override { return gesture.getParameter(); }
     void showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> modulatedValue) override;
+
+    /** Draws the empty track in the well color instead of a shade blended with the panel,
+        for a field on a tile, whose color the blended shade would disappear into. */
+    void setTrackSunken (bool shouldBeSunken);
 
     /** Replaces the route ranges drawn under the track. */
     void setModulationArcs (std::vector<SynthKnob::ModulationArc> newArcs);
@@ -76,14 +83,17 @@ public:
 private:
     static constexpr float captionWidth = 46.0f;
     static constexpr float valueWidth = 34.0f;
+    static constexpr float barGap = 8.0f;
 
     yup::Rectangle<float> getTrackBounds() const;
     float getCaptionWidth() const noexcept { return caption.isEmpty() ? 0.0f : captionWidth; }
 
     ParameterGesture gesture;
+    ParameterTextEntry textEntry { *this, gesture };
     yup::String caption;
     Look look;
     bool bipolar;
+    bool trackSunken = false;
     float shownValue = -1.0f;
     std::vector<SynthKnob::ModulationArc> modulationArcs;
     std::optional<float> modulatedValue;

@@ -31,24 +31,8 @@ constexpr float sweepAngle = yup::degreesToRadians (270.0f);
 SynthKnob::SynthKnob()
     : yup::Slider (yup::Slider::RotaryVerticalDrag)
 {
-    valueFont = SynthTheme::valueFont (13.5f);
-
     setStyle (yup::ComponentStyle::createStyle<yup::Slider> (paintKnob));
-}
-
-void SynthKnob::setShowingValue (bool shouldShowValue)
-{
-    if (showingValue == shouldShowValue)
-        return;
-
-    showingValue = shouldShowValue;
-    repaint();
-}
-
-void SynthKnob::setShowsValueInWell (bool shouldShowValueInWell)
-{
-    showsValueInWell = shouldShowValueInWell;
-    repaint();
+    wellFont = SynthTheme::valueFont (13.5f);
 }
 
 void SynthKnob::setSourceAccent (int family)
@@ -76,7 +60,85 @@ void SynthKnob::setModulatedValue (std::optional<float> newModulatedValue)
     repaint();
 }
 
-void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme, const yup::Slider& slider)
+void SynthKnob::mouseEnter (const yup::MouseEvent& event)
+{
+    yup::Slider::mouseEnter (event);
+
+    if (onHoverChanged != nullptr)
+        onHoverChanged();
+}
+
+void SynthKnob::mouseExit (const yup::MouseEvent& event)
+{
+    yup::Slider::mouseExit (event);
+
+    if (onHoverChanged != nullptr)
+        onHoverChanged();
+}
+
+void SynthKnob::mouseDown (const yup::MouseEvent& event)
+{
+    if (event.isRightButtonDown() && onContextClick != nullptr)
+    {
+        onContextClick();
+        return;
+    }
+
+    if (isResetClick (event))
+    {
+        setValue (getDefaultValue());
+        return;
+    }
+
+    yup::Slider::mouseDown (event);
+
+    dragAnchor = event.getPosition();
+    dragAnchorValue = getValueNormalised();
+    fineDrag = event.getModifiers().isShiftDown();
+}
+
+void SynthKnob::mouseDrag (const yup::MouseEvent& event)
+{
+    if (! isCurrentlyBeingDragged())
+        return;
+
+    // Shift pressed or released mid drag carries on from where the value is, without a jump.
+    if (const auto fine = event.getModifiers().isShiftDown(); fine != fineDrag)
+    {
+        dragAnchor = event.getPosition();
+        dragAnchorValue = getValueNormalised();
+        fineDrag = fine;
+    }
+
+    const auto height = yup::jmax (1.0f, getHeight());
+    const auto travel = static_cast<double> ((dragAnchor.getY() - event.getPosition().getY()) / height);
+
+    setValueNormalised (dragAnchorValue + travel * getMouseDragSensitivity() * (fineDrag ? fineDragScale : 1.0));
+}
+
+void SynthKnob::mouseUp (const yup::MouseEvent& event)
+{
+    yup::Slider::mouseUp (event);
+
+    if (onHoverChanged != nullptr)
+        onHoverChanged();
+}
+
+void SynthKnob::mouseDoubleClick (const yup::MouseEvent& event)
+{
+    if (onDoubleClick == nullptr)
+        yup::Slider::mouseDoubleClick (event);
+    else if (isEnabled())
+        onDoubleClick();
+}
+
+bool SynthKnob::isResetClick (const yup::MouseEvent& event)
+{
+    const auto modifiers = event.getModifiers();
+    return event.isLeftButtonDown() && (modifiers.isCommandDown() || modifiers.isControlDown());
+}
+
+void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme&, const yup::Slider& slider)
 {
     const auto* knob = dynamic_cast<const SynthKnob*> (&slider);
     const auto bounds = slider.getLocalBounds().reduced (2.0f);
@@ -140,16 +202,12 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
         }
     }
 
-    if (knob != nullptr && knob->showsValueInWell)
+    if (knob != nullptr && knob->getWellText != nullptr)
     {
-        if (knob->getValueText != nullptr)
-        {
-            g.setFillColor (value > 0.0f ? SynthTheme::textPrimary (slider) : SynthTheme::textSecondary (slider));
-            g.fillFittedText (knob->getValueText(), knob->valueFont.withHeight (wellRadius * 0.62f),
-                              yup::Rectangle<float> (center.getX() - wellRadius, center.getY() - wellRadius, wellRadius * 2.0f, wellRadius * 2.0f),
-                              yup::Justification::center);
-        }
-
+        g.setFillColor (value > 0.0f ? SynthTheme::textPrimary (slider) : SynthTheme::textSecondary (slider));
+        g.fillFittedText (knob->getWellText(), knob->wellFont.withHeight (wellRadius * 0.62f),
+                          yup::Rectangle<float> (center.getX() - wellRadius, center.getY() - wellRadius, wellRadius * 2.0f, wellRadius * 2.0f),
+                          yup::Justification::center);
         return;
     }
 
@@ -158,14 +216,4 @@ void SynthKnob::paintKnob (yup::Graphics& g, const yup::ApplicationTheme& theme,
     const auto dot = center.getPointOnCircumference (wellRadius - dotRadius * 1.6f, valueAngle);
     g.setFillColor (enabled ? SynthTheme::textPrimary (slider) : SynthTheme::textSecondary (slider));
     g.fillEllipse (yup::Rectangle<float> (dot.getX() - dotRadius, dot.getY() - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f));
-
-    if (knob == nullptr || ! knob->isShowingValue() || knob->getValueText == nullptr)
-        return;
-
-    const auto pill = yup::Rectangle<float> (center.getX() - size * 0.48f, center.getY() - size * 0.15f, size * 0.96f, size * 0.3f);
-    g.setFillColor (accent);
-    g.fillRoundedRect (pill, pill.getHeight() * 0.5f);
-
-    g.setFillColor (SynthTheme::role (slider, yup::ThemePalette::Role::onAccent));
-    g.fillFittedText (knob->getValueText(), theme.getDefaultFont().withHeight (pill.getHeight() * 0.62f), pill.reduced (3.0f, 0.0f), yup::Justification::center);
 }

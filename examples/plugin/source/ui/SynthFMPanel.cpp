@@ -29,8 +29,7 @@ namespace
 /** Shows a normalized amount as a whole percentage inside the knob's well. */
 void showPercentInWell (ParameterKnob& knob, const yup::AudioParameter::Ptr& parameter)
 {
-    knob.getKnob().setShowsValueInWell (true);
-    knob.getKnob().getValueText = [parameter]
+    knob.getKnob().getWellText = [parameter]
     {
         return yup::String (yup::roundToInt (parameter->getNormalizedValue() * 100.0f));
     };

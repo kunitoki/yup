@@ -21,6 +21,7 @@
 #pragma once
 
 #include "ParameterGesture.h"
+#include "ParameterTextEntry.h"
 #include "SynthModulationTarget.h"
 
 #include <yup_gui/yup_gui.h>
@@ -30,7 +31,8 @@
     dragging up or down.
 
     A full drag of 200 pixels sweeps the whole range, ten times finer with shift held. A
-    double-click returns the parameter to its default. Routes reaching the parameter are
+    double-click opens a field to type the value in, a click with command or control held
+    returns the default and a right click shows the routes reaching it. Routes reaching the parameter are
     drawn as ranges along the bottom edge, and while a note plays the field shows the
     value the modulation plays.
 
@@ -64,6 +66,7 @@ private:
     static constexpr float pixelsPerRange = 200.0f;
 
     ParameterGesture gesture;
+    ParameterTextEntry textEntry { *this, gesture };
     yup::String caption;
     yup::String shownText;
     std::optional<float> shownValue;

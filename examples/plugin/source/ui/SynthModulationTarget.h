@@ -48,7 +48,32 @@ public:
     /** Shows the routes reaching the parameter and the value they play now, normalized,
         or no value when no note plays. */
     virtual void showModulation (std::vector<SynthKnob::ModulationArc> arcs, std::optional<float> modulatedValue) = 0;
+
+protected:
+    /** Asks the nearest SynthModulationPanelHost above a control to show the routes of this
+        target, on a right click. */
+    void requestModulationPanel (yup::Component& control);
 };
+
+//==============================================================================
+/** The component that shows the routes reaching a control in a panel, on a right click.
+
+    @see SynthModulationTarget, SynthModulationPanel
+*/
+class SynthModulationPanelHost
+{
+public:
+    virtual ~SynthModulationPanelHost() = default;
+
+    /** Shows the routes reaching a target, next to it. */
+    virtual void showModulationPanel (SynthModulationTarget& target) = 0;
+};
+
+inline void SynthModulationTarget::requestModulationPanel (yup::Component& control)
+{
+    if (auto* host = control.getParentComponentWithType<SynthModulationPanelHost>())
+        host->showModulationPanel (*this);
+}
 
 /** Returns the color a modulation source is drawn in, inside the interface a component is
     in: the envelopes' and LFOs' section accents, then the other accents for the note
