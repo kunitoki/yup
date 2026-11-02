@@ -126,7 +126,10 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
     if (title.isNotEmpty())
         arguments.add ("--title=" + title);
 
-    if (auto path = startingFile.getFullPathName(); path.isNotEmpty())
+    // A trailing separator makes zenity open inside a directory instead of selecting it in its parent
+    if (auto path = startingFile.isDirectory() ? File::addTrailingSeparator (startingFile.getFullPathName())
+                                               : startingFile.getFullPathName();
+        path.isNotEmpty())
         arguments.add ("--filename=" + path);
 
     if (filters.isNotEmpty() && ! canChooseDirectories)
