@@ -325,7 +325,14 @@ public:
         yup::jack_on_shutdown (client, shutdownCallback, this);
         yup::jack_on_info_shutdown (client, infoShutdownCallback, this);
         yup::jack_set_xrun_callback (client, xrunCallback, this);
-        yup::jack_activate (client);
+
+        // Reporting success without an active client would leave a device that never calls back
+        if (yup::jack_activate (client) != 0)
+        {
+            lastError = "Failed to activate JACK client";
+            return lastError;
+        }
+
         deviceIsOpen = true;
 
         if (! inputChannels.isZero())
