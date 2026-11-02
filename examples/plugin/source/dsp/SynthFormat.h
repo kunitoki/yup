@@ -30,6 +30,11 @@
 namespace SynthFormat
 {
 inline yup::String plain (double value, int decimals) { return yup::String (value, decimals); }
+inline yup::String compact (double value, int decimals)
+{
+    const auto text = yup::String (value, decimals);
+    return text.containsChar ('.') ? text.trimCharactersAtEnd ("0").trimCharactersAtEnd (".") : text;
+}
 inline yup::String hertz (double value) { return std::round (value) >= 1000.0 ? yup::String (value / 1000.0, 2) + " kHz" : (std::round (value * 100.0) < 10000.0 ? yup::String (value, 2) : yup::String (static_cast<int> (std::round (value)))) + " Hz"; }
 inline yup::String percent (double value) { return yup::String (static_cast<int> (std::round (value * 100.0))) + " %"; }
 inline yup::String cents (double value) { return yup::String (static_cast<int> (std::round (value))) + " ct"; }
@@ -60,5 +65,33 @@ inline double parse (const yup::String& text)
         return value * 0.01;
 
     return value;
+}
+
+/** Returns the unit after the number of a formatter's text, as "kHz" in "1.20 kHz", or nothing. */
+inline yup::String unitOf (const yup::String& text)
+{
+    const auto trimmed = text.trim();
+    const auto number = trimmed.initialSectionContainingOnly ("+-.0123456789");
+
+    return number.containsAnyOf ("0123456789") ? trimmed.substring (number.length()).trim() : yup::String();
+}
+
+/** Gives a bare typed number the unit of the text it replaces, so 50 typed over "35 %" reads as 50 %.
+    Units the formatters scale up read in their base unit: 800 over "1.20 kHz" is 800 Hz, 250 over "1.50 s" is 250 ms. */
+inline yup::String withUnitOf (const yup::String& typed, const yup::String& shown)
+{
+    const auto trimmed = typed.trim();
+
+    if (! trimmed.containsOnly ("+-.0123456789") || ! trimmed.containsAnyOf ("0123456789"))
+        return trimmed;
+
+    auto unit = unitOf (shown);
+
+    if (unit == "kHz")
+        unit = "Hz";
+    else if (unit == "s")
+        unit = "ms";
+
+    return unit.isEmpty() ? trimmed : trimmed + " " + unit;
 }
 } // namespace SynthFormat

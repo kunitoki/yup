@@ -20,6 +20,7 @@
 */
 
 #include "ParameterTextEntry.h"
+#include "../dsp/SynthFormat.h"
 #include "SynthTheme.h"
 
 ParameterTextEntry::ParameterTextEntry (yup::Component& owningControl, ParameterGesture& gestureToUse)
@@ -37,7 +38,6 @@ void ParameterTextEntry::show (yup::Rectangle<float> area)
 {
     shownText = gesture.getParameter()->toString();
     editor.setText (shownText, yup::dontSendNotification);
-    // Sections make their editors transparent; this one covers the control, so it hides it.
     editor.setColor (yup::TextEditor::Style::backgroundColorId, SynthTheme::wellColor (editor));
     editor.setBounds (area.withSizeKeepingCenter (area.getWidth(), yup::jmax (area.getHeight(), minimumHeight)));
     editor.setVisible (true);
@@ -49,7 +49,7 @@ void ParameterTextEntry::finish()
 {
     editor.setVisible (false);
 
-    if (const auto text = editor.getText().trim(); text.isNotEmpty() && text != shownText)
+    if (const auto text = SynthFormat::withUnitOf (editor.getText(), shownText); text.isNotEmpty() && text != shownText)
     {
         const auto& parameter = gesture.getParameter();
         const auto value = yup::jlimit (parameter->getMinimumValue(), parameter->getMaximumValue(), parameter->convertFromString (text));

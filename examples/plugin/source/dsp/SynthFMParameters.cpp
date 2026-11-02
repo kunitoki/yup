@@ -45,8 +45,10 @@ SynthFMParameters::SynthFMParameters()
                 yup::NormalisableRange<float> range (0.0f, maximumAmount);
                 range.setSkewForCentre (0.5f);
 
+                // Shown and typed as 0 to 100 along the knob's travel; the value stays in periods.
                 parameter = createContinuous ("fm." + digits, "FM " + yup::String (modulator + 1) + " > " + yup::String (carrier + 1), hostID, "FM",
-                                              range, 0.0f, [] (double value) { return SynthFormat::plain (value, 2); });
+                                              range, 0.0f, [range] (double value) { return SynthFormat::compact (range.convertTo0to1 (static_cast<float> (value)) * 100.0, 1); },
+                                              [range] (const yup::String& text) { return static_cast<double> (range.convertFrom0to1 (yup::jlimit (0.0f, 1.0f, text.getFloatValue() * 0.01f))); });
             }
         }
     }

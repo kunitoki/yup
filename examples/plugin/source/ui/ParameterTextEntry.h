@@ -30,7 +30,9 @@
 /** A text field shown over a control to type its parameter's value, on an opaque well.
 
     It opens filled with the parameter's value text, all selected. Return or the focus
-    moving away sets the typed value, parsed by the parameter, as one undo step; escape,
+    moving away sets the typed value, parsed by the parameter, as one undo step; a bare
+    number is read in the unit the value was shown in, so 50 over "35 %" means 50 %, or
+    in its base unit when shown scaled up, so 800 over "1.20 kHz" means 800 Hz. Escape,
     an empty text or the unchanged text leave the parameter as it was.
 
     @see ParameterKnob, SynthNumberField, SynthSliderField

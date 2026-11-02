@@ -26,12 +26,12 @@
 
 namespace
 {
-/** Shows a normalized amount as a whole percentage inside the knob's well. */
-void showPercentInWell (ParameterKnob& knob, const yup::AudioParameter::Ptr& parameter)
+/** Shows the parameter's value text, without its unit, inside the knob's well. */
+void showValueInWell (ParameterKnob& knob, const yup::AudioParameter::Ptr& parameter)
 {
     knob.getKnob().getWellText = [parameter]
     {
-        return yup::String (yup::roundToInt (parameter->getNormalizedValue() * 100.0f));
+        return parameter->toString().upToFirstOccurrenceOf (" ", false, false);
     };
 }
 } // namespace
@@ -52,7 +52,7 @@ SynthFMPanel::SynthFMPanel (const SynthParameters& parametersToEdit)
             const auto& parameter = parameters.fm.get (carrier, modulator);
             auto& knob = knobs[static_cast<std::size_t> (carrier)][static_cast<std::size_t> (modulator)];
             knob = std::make_unique<ParameterKnob> (yup::String(), parameter, SynthTheme::captionFont (11.0f));
-            showPercentInWell (*knob, parameter);
+            showValueInWell (*knob, parameter);
 
             if (carrier == modulator)
                 knob->getKnob().setSourceAccent (1);
@@ -63,7 +63,7 @@ SynthFMPanel::SynthFMPanel (const SynthParameters& parametersToEdit)
         const auto& level = parameters.oscillators[static_cast<std::size_t> (carrier)].level;
         auto& levelKnob = levelKnobs[static_cast<std::size_t> (carrier)];
         levelKnob = std::make_unique<ParameterKnob> (yup::String(), level, SynthTheme::captionFont (11.0f));
-        showPercentInWell (*levelKnob, level);
+        showValueInWell (*levelKnob, level);
         addAndMakeVisible (*levelKnob);
     }
 
