@@ -20,6 +20,7 @@
 */
 
 #include "SynthTuning.h"
+#include "SynthConstants.h"
 
 namespace
 {
@@ -137,7 +138,7 @@ void SynthTuning::setPreset (int index)
 
 yup::Result SynthTuning::loadFile (const yup::File& file)
 {
-    if (! file.existsAsFile())
+    if (! SynthExample::isReadableFile (file))
         return yup::Result::fail ("Cannot read " + file.getFullPathName());
 
     const auto extension = file.getFileExtension().toLowerCase();

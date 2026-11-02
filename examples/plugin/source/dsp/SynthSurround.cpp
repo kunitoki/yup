@@ -53,8 +53,9 @@ void SynthSurround::reset() noexcept
 float SynthSurround::readDelayed (float delay) const noexcept
 {
     const auto size = static_cast<int> (delayLine.size());
-    const auto whole = static_cast<int> (delay);
-    const auto fraction = delay - static_cast<float> (whole);
+    const auto safeDelay = std::isfinite (delay) ? yup::jlimit (0.0f, static_cast<float> (size - 2), delay) : 1.0f;
+    const auto whole = static_cast<int> (safeDelay);
+    const auto fraction = safeDelay - static_cast<float> (whole);
 
     const auto newer = delayLine[static_cast<std::size_t> ((writeIndex - whole + size) % size)];
     const auto older = delayLine[static_cast<std::size_t> ((writeIndex - whole - 1 + 2 * size) % size)];

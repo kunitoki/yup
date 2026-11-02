@@ -76,6 +76,9 @@ private:
             if (table == nullptr)
                 return x;
 
+            if (! std::isfinite (x))
+                return T (0);
+
             const auto position = (std::clamp (x, T (-1), T (1)) + T (1)) * T (0.5 * tableSegments);
             const auto index = yup::jmin (static_cast<int> (position), tableSegments - 1);
             const auto from = static_cast<T> ((*table)[static_cast<std::size_t> (index)]);

@@ -54,7 +54,8 @@ void moveMarks (PresetUserData& userData, const yup::String& fromKey, const yup:
 
 yup::File getFileFor (const yup::File& folder, const yup::String& name, const PresetFormat& format)
 {
-    auto fileName = yup::File::createLegalFileName (name).trim();
+    // A leading '~' would make the name an absolute home path, a leading '.' a hidden file.
+    auto fileName = yup::File::createLegalFileName (name).trim().trimCharactersAtStart ("~.").trimStart();
 
     if (fileName.endsWithIgnoreCase (format.extension))
         fileName = fileName.dropLastCharacters (format.extension.length()).trimEnd();
@@ -62,7 +63,8 @@ yup::File getFileFor (const yup::File& folder, const yup::String& name, const Pr
     if (fileName.isEmpty())
         return {};
 
-    return folder.getChildFile (fileName + format.extension);
+    const auto file = folder.getChildFile (fileName + format.extension);
+    return file.getParentDirectory() == folder ? file : yup::File();
 }
 
 yup::ResultValue<PresetEntry> rename (const PresetEntry& entry, const yup::String& newName, const PresetFormat& format, PresetUserData& userData)

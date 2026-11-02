@@ -32,6 +32,9 @@ const yup::Identifier sustainProperty ("sustain");
 const yup::Identifier loopStartProperty ("loopStart");
 const yup::Identifier loopEndProperty ("loopEnd");
 
+/** The latest a loaded point may sit, in seconds, so stage scaling still fits a sample count in an int. */
+constexpr float maximumPointTime = 100.0f;
+
 yup::DataTree createCurveTree (const yup::Identifier& type, int index, const SynthCurveState::Curve& curve)
 {
     yup::StringArray points;
@@ -64,8 +67,15 @@ bool readCurveTree (const yup::DataTree& tree, SynthCurveState::Curve& curve)
     {
         const auto fields = yup::StringArray::fromTokens (point, " ", "");
 
-        if (fields.size() == 3)
-            result.addPoint (fields[0].getFloatValue(), fields[1].getFloatValue(), fields[2].getFloatValue());
+        if (fields.size() != 3)
+            continue;
+
+        const auto time = fields[0].getFloatValue();
+        const auto level = fields[1].getFloatValue();
+        const auto curvature = fields[2].getFloatValue();
+
+        if (std::isfinite (time) && std::isfinite (level) && std::isfinite (curvature))
+            result.addPoint (yup::jlimit (0.0f, maximumPointTime, time), level, curvature);
     }
 
     if (result.getNumPoints() < 2)

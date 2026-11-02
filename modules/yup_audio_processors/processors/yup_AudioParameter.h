@@ -390,10 +390,15 @@ public:
     /**
         Sets the real (un-normalized) parameter value.
 
+        Non-finite values (NaN or infinity) are ignored and the current value is kept.
+
         @param newValue The new real value.
     */
     void setValue (float newValue)
     {
+        if (! std::isfinite (newValue))
+            return;
+
         currentValue.store (metadata.valueRange.snapToLegalValue (newValue));
     }
 

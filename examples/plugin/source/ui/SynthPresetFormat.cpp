@@ -20,6 +20,7 @@
 */
 
 #include "SynthPresetFormat.h"
+#include "../dsp/SynthConstants.h"
 
 namespace SynthPresetFormat
 {
@@ -27,6 +28,9 @@ namespace
 {
 yup::DataTree readPatch (const yup::File& file)
 {
+    if (! SynthExample::isReadableFile (file))
+        return {};
+
     const auto xml = yup::parseXML (file);
 
     if (xml == nullptr)

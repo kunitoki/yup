@@ -324,7 +324,7 @@ void WaveformEditor::gesturePinch (const yup::GestureEvent& event)
 /** Returns the landscape, rendered again only when it moved or its waveform changed. */
 yup::GpuTexture::Ptr WaveformEditor::getLandscape (yup::Graphics& g)
 {
-    if (landscapeDirty || cachedLandscape == nullptr)
+    if (landscapeDirty || cachedLandscape == nullptr || landscapeTarget.isStale (g.getGraphicsContext()))
     {
         cachedLandscape = renderLandscape (g);
         landscapeDirty = false;

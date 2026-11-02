@@ -94,7 +94,7 @@ public:
     const SynthParameters& getSynthParameters() const noexcept { return synthParameters; }
 
     /** Returns the drawn partials of one oscillator, which the waveform editor edits. */
-    SynthPartials& getPartials (int oscillatorIndex) noexcept { return partials[static_cast<std::size_t> (oscillatorIndex)]; }
+    SynthPartials& getPartials (int oscillatorIndex) noexcept { return partials[static_cast<std::size_t> (yup::jlimit (0, static_cast<int> (partials.size()) - 1, oscillatorIndex))]; }
 
     /** Returns the envelope and LFO curves. */
     SynthCurveState& getCurves() noexcept { return curves; }

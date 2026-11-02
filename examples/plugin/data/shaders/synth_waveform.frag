@@ -59,7 +59,7 @@ float fetchSample(int index)
 float wave(float phase)
 {
     float position = phase * 255.0;
-    int i0 = int(position);
+    int i0 = clamp(int(position), 0, 255);
     int i1 = min(i0 + 1, 255);
     return mix(fetchSample(i0), fetchSample(i1), position - float(i0));
 }
@@ -81,7 +81,7 @@ void main()
 
     // The ridge on the far wall, four units away, spans one period across the width.
     vec3 direction = normalize(vec3(I + I - resolution, -u.height * focal));
-    float frequency = u.height * focal / (8.0 * u.width);
+    float frequency = u.height * focal / (8.0 * max(u.width, 1.0));
 
     float hue = u.time * 0.15;
 

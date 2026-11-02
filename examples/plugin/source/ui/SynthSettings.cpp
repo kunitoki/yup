@@ -83,7 +83,7 @@ Values load()
         return values;
 
     values.theme = xml->getStringAttribute ("theme", values.theme);
-    values.frameRate = xml->getIntAttribute ("frameRate", values.frameRate);
+    values.frameRate = yup::jlimit (0, 240, xml->getIntAttribute ("frameRate", values.frameRate));
 
     for (const auto& [name, flag] : getSwitches (values))
         *flag = xml->getBoolAttribute (name, *flag);

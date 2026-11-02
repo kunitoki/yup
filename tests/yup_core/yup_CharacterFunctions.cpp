@@ -696,6 +696,13 @@ TEST (CharacterFunctionsGeneralTests, GetHexDigitValue)
     EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'\u20AC'), -1); // €
 }
 
+TEST (CharacterFunctionsGeneralTests, GetIntValueHandlesMostNegativeValues)
+{
+    EXPECT_EQ (String ("-2147483648").getIntValue(), std::numeric_limits<int>::min());
+    EXPECT_EQ (String ("-9223372036854775808").getLargeIntValue(), std::numeric_limits<int64>::min());
+    EXPECT_EQ (String ("-42").getIntValue(), -42);
+}
+
 TEST (CharacterFunctionsGeneralTests, GetUnicodeCharFromWindows1252Codepage)
 {
     // Values below 0x80 should pass through unchanged

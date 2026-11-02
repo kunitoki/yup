@@ -84,7 +84,7 @@ private:
     static constexpr double animationInterval = 1.0 / 30.0;
 
     std::shared_ptr<SynthWaveformShader> shader;
-    yup::GpuTarget::Ptr target;
+    SynthWaveformShader::Target target;
     yup::GpuTexture::Ptr cached;
     std::vector<float> samples;
     SynthWaveformShader::Look look;

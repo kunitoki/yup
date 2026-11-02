@@ -52,8 +52,10 @@ void ParameterTextEntry::finish()
     if (const auto text = SynthFormat::withUnitOf (editor.getText(), shownText); text.isNotEmpty() && text != shownText)
     {
         const auto& parameter = gesture.getParameter();
-        const auto value = yup::jlimit (parameter->getMinimumValue(), parameter->getMaximumValue(), parameter->convertFromString (text));
-        gesture.setNormalized (parameter->convertToNormalizedValue (value));
+        const auto parsed = parameter->convertFromString (text);
+
+        if (std::isfinite (parsed))
+            gesture.setNormalized (parameter->convertToNormalizedValue (yup::jlimit (parameter->getMinimumValue(), parameter->getMaximumValue(), parsed)));
     }
 
     if (onClosed != nullptr)

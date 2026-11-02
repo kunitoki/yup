@@ -90,6 +90,9 @@ public:
         or -1 when no note plays. */
     float getLFOPhase (int lfoIndex) const noexcept
     {
+        if (! yup::isPositiveAndBelow (lfoIndex, SynthExample::lfoCount))
+            return -1.0f;
+
         return lfoPhases[static_cast<std::size_t> (lfoIndex)].load();
     }
 

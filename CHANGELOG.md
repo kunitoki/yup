@@ -66,6 +66,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added a `YAML` class: a self-contained YAML parser and writer converting between YAML text and `var` (`parse`, `fromString`, `toString`, `writeToStream`, `FormatOptions`), with core-schema type resolution, block/flow collections, block scalars, and anchors/aliases/merge keys
 - Fixed timers never firing in a WebAssembly build without pthreads: the countdown is done by the timer thread, and the fallback that counted down on the message loop instead was behind `#if YUP_EMSCRIPTEN && ! defined(__EMSCRIPTEN_PTHREADS__)`, which never held for a target built with `yup_add_standalone_app`, the only place that flag is added. It is now selected at runtime by whether the timer thread is actually running, which also covers any other platform where it cannot be started
 - WebAssembly: `File::startAsProcess()` and `Process::openDocument()` now download a file of the in-memory filesystem through the browser, and open URLs in a new tab (they used to open an unreachable `file://` link, which also broke `URL::launchInDefaultBrowser()`).
+- `String::getIntValue()` / `getLargeIntValue()` (`CharacterFunctions::getIntValue`) no longer overflow, which is undefined behavior, when parsing the most negative value of the type.
 
 ### Graphics
 
@@ -157,6 +158,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added a `TuningMap` class (`midi/yup_TuningMap.h`): maps MIDI note numbers to frequencies under an arbitrary scale and key map, loading Scala `.scl` scale files and `.kbm` key map files via `loadScale()` / `loadKeyMap()` (which return a `yup::Result` and keep the previous tuning when a file fails to parse). `isNoteActive()` reports the notes a key map asks to retune, taken from the range in its header unless the file carries `< first last` lines, which declare it instead. AnaMark `.tun` / `.msf` tunings (all format versions, including `[Functional Tuning]` formulas and `[Mapping]`) load via `loadTuning()`, and every loader has a `FromString` variant
 - Apple plugins: the Objective-C classes declared by the YUP modules (`AudioPluginEditorViewAU`, `AudioPluginProcessorAUViewFactory`, `YUPDraggingSource`, `ToastNotificationCenterDelegate`, ...) get a per-plugin name, so two YUP AUv2 plugins loaded in the same host no longer share the Cocoa view factory and both editors open. The AUv2 `CocoaUI` property reports the renamed factory class. CMake: the plugin force-include options are passed as `SHELL:-include "<header>"` so option de-duplication cannot drop a second `-include`.
 - AUv3 plugin host bypass is now connected to the processor: the wrapper-owned bypass parameter is created and drives `processBlockBypassed`, and host bypass state is persisted/restored inside the `YUPProcessorState` blob (legacy raw processor state still loads)
+- `AudioParameter::setValue()` (and `setNormalizedValue()`, `fromString()`, `setValueNotifyingHost()`) ignores NaN and infinite values and keeps the current value, so corrupt state, host automation or text entry can't push them into the audio thread.
 
 ### DSP
 
