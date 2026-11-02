@@ -26,6 +26,7 @@
 #include "../utilities/yup_PyBind11Includes.h"
 
 #include <atomic>
+#include <exception>
 #include <functional>
 
 // =================================================================================================
@@ -154,29 +155,49 @@ void registerYupEventsBindings (py::module_& m)
         .def_static ("callAsync", &MessageManager::callAsync)
         .def ("callFunctionOnMessageThread", [] (MessageManager& self, py::function func) -> py::object
         {
+            struct CallContext
+            {
+                py::function* func = nullptr;
+                std::exception_ptr error;
+            };
+
             void* result = nullptr;
 
             if (func.is_none())
                 py::pybind11_fail ("Invalid specified function to \"MessageManager::callFunctionOnMessageThread\"");
+
+            CallContext context { std::addressof (func) };
 
             {
                 py::gil_scoped_release release;
 
                 result = self.callFunctionOnMessageThread (+[] (void* data) -> void*
                 {
+                    auto& context = *static_cast<CallContext*> (data);
+
                     py::gil_scoped_acquire acquire;
 
-                    auto func = *reinterpret_cast<py::function*> (data);
+                    try
+                    {
+                        return (*context.func)().release().ptr();
+                    }
+                    catch (...)
+                    {
+                        context.error = std::current_exception();
+                    }
 
-                    return func().ptr();
+                    return nullptr;
                 },
-                                                           std::addressof (func));
+                                                           std::addressof (context));
             }
+
+            if (context.error != nullptr)
+                std::rethrow_exception (context.error);
 
             if (result == nullptr)
                 return py::none();
 
-            return py::reinterpret_borrow<py::object> (reinterpret_cast<PyObject*> (result));
+            return py::reinterpret_steal<py::object> (reinterpret_cast<PyObject*> (result));
         })
         .def ("isThisTheMessageThread", &MessageManager::isThisTheMessageThread)
         .def ("setCurrentThreadAsMessageThread", &MessageManager::setCurrentThreadAsMessageThread)

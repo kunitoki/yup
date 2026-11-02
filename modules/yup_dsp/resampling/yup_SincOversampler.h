@@ -146,6 +146,15 @@ public:
         jassert (numChannels <= xInterp.getNumChannels());
         jassert (numSamples <= maxInputSamples);
 
+        if (numChannels <= 0 || numSamples <= 0
+            || numChannels > xInterp.getNumChannels()
+            || numSamples > maxInputSamples)
+        {
+            currentOversampledSize = 0;
+            currentNumChannels = 0;
+            return;
+        }
+
         currentOversampledSize = numSamples * OversampleFactor;
         currentNumChannels = numChannels;
         oversampledBuffer.setSize (currentNumChannels, currentOversampledSize, false, false, true);
@@ -219,16 +228,32 @@ public:
         @param numChannels Number of channels to write.
         @param numSamples  Number of output samples per channel; the oversampled
                            buffer is read as numSamples * OversampleFactor samples.
+                           Sizes exceeding the prepared capacity, or not matching a
+                           pending block, are rejected and the output is cleared.
     */
     void downsample (SampleType* const* output, int numChannels, int numSamples) noexcept
     {
         ScopedNoDenormals noDenormals;
 
-        const int interpolatedSize = numSamples * OversampleFactor;
-
         jassert (numChannels > 0 && numSamples > 0);
         jassert (numChannels <= xDecim.getNumChannels());
         jassert (numChannels <= oversampledBuffer.getNumChannels());
+        jassert (numSamples <= maxInputSamples);
+
+        if (numChannels <= 0 || numSamples <= 0
+            || numChannels > xDecim.getNumChannels()
+            || numChannels > oversampledBuffer.getNumChannels()
+            || numSamples > maxInputSamples
+            || (currentOversampledSize > 0 && numSamples * OversampleFactor != currentOversampledSize))
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
+                FloatVectorOperations::clear (output[ch], jmax (0, numSamples));
+
+            return;
+        }
+
+        const int interpolatedSize = numSamples * OversampleFactor;
+
         jassert (interpolatedSize <= oversampledBuffer.getNumSamples());
         jassert (interpolatedSize + decimationHistory <= xDecim.getNumSamples());
 

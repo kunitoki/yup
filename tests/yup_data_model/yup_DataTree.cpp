@@ -3756,7 +3756,7 @@ TEST_F (DataTreeTests, ReadFromBinaryStreamLimitsNestingDepth)
         for (int i = 1; i < depth; ++i)
         {
             DataTree child ("a");
-            node.addChild (child);
+            node.beginTransaction().addChild (child);
             node = child;
         }
 

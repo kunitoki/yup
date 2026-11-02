@@ -132,6 +132,51 @@ TEST_F (OpusAudioFormatTests, CreateWriterForNullStream)
     EXPECT_EQ (nullptr, writer);
 }
 
+TEST_F (OpusAudioFormatTests, CreateReaderRejectsOversizedTagCommentLength)
+{
+    struct Helpers
+    {
+        static void writeOggPage (MemoryOutputStream& out, const MemoryBlock& packet, uint8 headerType)
+        {
+            out.write ("OggS", 4);
+            out.writeByte (0);
+            out.writeByte ((char) headerType);
+            out.writeInt64 (0);
+            out.writeInt (1234);
+            out.writeInt (0);
+            out.writeInt (0);
+            out.writeByte (1);
+            out.writeByte ((char) packet.getSize());
+            out.write (packet.getData(), packet.getSize());
+        }
+    };
+
+    MemoryOutputStream head;
+    head.write ("OpusHead", 8);
+    head.writeByte (1);
+    head.writeByte (1);
+    head.writeShort (312);
+    head.writeInt (48000);
+    head.writeShort (0);
+    head.writeByte (0);
+
+    MemoryOutputStream tags;
+    tags.write ("OpusTags", 8);
+    tags.writeInt (0);
+    tags.writeInt (1);
+    tags.writeInt ((int) 0xfffffff0u);
+    tags.write ("title=x", 7);
+
+    MemoryOutputStream stream;
+    Helpers::writeOggPage (stream, head.getMemoryBlock(), 0x02);
+    Helpers::writeOggPage (stream, tags.getMemoryBlock(), 0x04);
+
+    auto reader = format->createReaderFor (new MemoryInputStream (stream.getMemoryBlock(), true));
+
+    if (reader != nullptr)
+        EXPECT_FALSE (reader->metadataValues.containsKey ("title"));
+}
+
 #if ! YUP_EMSCRIPTEN
 class OpusAudioFormatFileTests : public ::testing::Test
 {

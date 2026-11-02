@@ -52,9 +52,11 @@ inline uint16 getEventDataSize (const void* d) noexcept
     return readUnaligned<uint16> (static_cast<const char*> (d) + sizeof (int32));
 }
 
-inline uint16 getEventTotalSize (const void* d) noexcept
+constexpr size_t eventHeaderSize = sizeof (int32) + sizeof (uint16);
+
+inline size_t getEventTotalSize (const void* d) noexcept
 {
-    return (uint16) (getEventDataSize (d) + sizeof (int32) + sizeof (uint16));
+    return (size_t) getEventDataSize (d) + eventHeaderSize;
 }
 
 static int findActualEventLength (const uint8* data, int maxBytes) noexcept
@@ -89,10 +91,10 @@ static int findActualEventLength (const uint8* data, int maxBytes) noexcept
 
 static uint8* findEventAfter (uint8* d, uint8* endData, int samplePosition) noexcept
 {
-    while (d < endData && getEventTime (d) <= samplePosition)
-        d += getEventTotalSize (d);
+    while (endData - d >= (std::ptrdiff_t) eventHeaderSize && getEventTime (d) <= samplePosition)
+        d += jmin (getEventTotalSize (d), (size_t) (endData - d));
 
-    return d;
+    return jmin (d, endData);
 }
 } // namespace MidiBufferHelpers
 
@@ -158,7 +160,7 @@ bool MidiBuffer::addEvent (const void* newData, int maxBytes, int sampleNumber)
     }
 
     auto newItemSize = (size_t) numBytes + sizeof (int32) + sizeof (uint16);
-    auto offset = (int) (MidiBufferHelpers::findEventAfter (data.begin(), data.end(), sampleNumber) - data.begin());
+    auto offset = jlimit (0, data.size(), (int) (MidiBufferHelpers::findEventAfter (data.begin(), data.end(), sampleNumber) - data.begin()));
 
     data.insertMultiple (offset, 0, (int) newItemSize);
 
@@ -193,8 +195,8 @@ int MidiBuffer::getNumEvents() const noexcept
     int n = 0;
     auto end = data.end();
 
-    for (auto d = data.begin(); d < end; ++n)
-        d += MidiBufferHelpers::getEventTotalSize (d);
+    for (auto d = data.begin(); end - d >= (std::ptrdiff_t) MidiBufferHelpers::eventHeaderSize; ++n)
+        d += jmin (MidiBufferHelpers::getEventTotalSize (d), (size_t) (end - d));
 
     return n;
 }
@@ -213,9 +215,10 @@ int MidiBuffer::getLastEventTime() const noexcept
 
     for (auto d = data.begin();;)
     {
-        auto nextOne = d + MidiBufferHelpers::getEventTotalSize (d);
+        auto remaining = (size_t) (endData - d);
+        auto nextOne = d + jmin (MidiBufferHelpers::getEventTotalSize (d), remaining);
 
-        if (nextOne >= endData)
+        if (nextOne >= endData || (size_t) (endData - nextOne) < MidiBufferHelpers::eventHeaderSize)
             return MidiBufferHelpers::getEventTime (d);
 
         d = nextOne;

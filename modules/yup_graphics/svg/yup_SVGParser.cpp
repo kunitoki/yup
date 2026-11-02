@@ -1324,10 +1324,16 @@ SVGGradient::Ptr SVGParser::getGradientById (const String& id) const
 
 //==============================================================================
 
-SVGGradient::Ptr SVGParser::resolveGradient (SVGGradient::Ptr gradient) const
+SVGGradient::Ptr SVGParser::resolveGradient (SVGGradient::Ptr gradient, int depth) const
 {
     if (gradient == nullptr || gradient->href.isEmpty())
         return gradient;
+
+    if (depth >= maxHrefDepth)
+    {
+        YUP_DRAWABLE_LOG ("Gradient href chain too deep or cyclic: " << gradient->href);
+        return gradient;
+    }
 
     auto referencedGradient = getGradientById (gradient->href);
     if (referencedGradient == nullptr)
@@ -1336,7 +1342,7 @@ SVGGradient::Ptr SVGParser::resolveGradient (SVGGradient::Ptr gradient) const
         return gradient;
     }
 
-    referencedGradient = resolveGradient (referencedGradient);
+    referencedGradient = resolveGradient (referencedGradient, depth + 1);
 
     SVGGradient::Ptr resolvedGradient = new SVGGradient;
     resolvedGradient->type = gradient->type;
@@ -1508,12 +1514,18 @@ SVGFilter::Ptr SVGParser::getFilterById (const String& id) const
 
 //==============================================================================
 
-SVGFilter::Ptr SVGParser::resolveFilter (SVGFilter::Ptr filter) const
+SVGFilter::Ptr SVGParser::resolveFilter (SVGFilter::Ptr filter, int depth) const
 {
     if (filter == nullptr || filter->href.isEmpty())
         return filter;
 
-    auto referencedFilter = resolveFilter (getFilterById (filter->href));
+    if (depth >= maxHrefDepth)
+    {
+        YUP_DRAWABLE_LOG ("Filter href chain too deep or cyclic: " << filter->href);
+        return filter;
+    }
+
+    auto referencedFilter = resolveFilter (getFilterById (filter->href), depth + 1);
     if (referencedFilter == nullptr)
     {
         YUP_DRAWABLE_LOG ("Referenced filter not found: " << filter->href);
@@ -2171,7 +2183,34 @@ std::optional<Image> SVGParser::loadImageFromHref (const SVGDocument::ParseOptio
             return std::nullopt;
         }
 
+        if (File::isAbsolutePath (href) || href.startsWithChar ('/') || href.startsWithChar ('\\') || href.containsChar (':'))
+        {
+            YUP_DRAWABLE_LOG ("loadImageFromHref skipped - absolute local paths are not allowed: " << href);
+            return std::nullopt;
+        }
+
+        if (StringArray::fromTokens (href, "/\\", {}).contains (".."))
+        {
+            YUP_DRAWABLE_LOG ("loadImageFromHref skipped - parent directory references are not allowed: " << href);
+            return std::nullopt;
+        }
+
         auto imageFile = options.baseDirectory.getChildFile (href);
+        if (! imageFile.isAChildOf (options.baseDirectory))
+        {
+            YUP_DRAWABLE_LOG ("loadImageFromHref skipped - local file outside base directory: " << imageFile.getFullPathName());
+            return std::nullopt;
+        }
+
+        for (auto f = imageFile; f != options.baseDirectory && f.isAChildOf (options.baseDirectory); f = f.getParentDirectory())
+        {
+            if (f.isSymbolicLink())
+            {
+                YUP_DRAWABLE_LOG ("loadImageFromHref skipped - symbolic links are not allowed: " << f.getFullPathName());
+                return std::nullopt;
+            }
+        }
+
         if (! imageFile.existsAsFile() || ! imageFile.loadFileAsData (imageData))
         {
             YUP_DRAWABLE_LOG ("loadImageFromHref failed - local file missing or unreadable: " << imageFile.getFullPathName());

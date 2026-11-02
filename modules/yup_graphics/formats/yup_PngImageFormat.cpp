@@ -36,7 +36,10 @@ namespace
 static void pngReadCallback (png_structp pngPtr, png_bytep data, png_size_t length)
 {
     auto* stream = static_cast<InputStream*> (png_get_io_ptr (pngPtr));
-    stream->read (data, static_cast<int> (length));
+
+    if (length > static_cast<png_size_t> (std::numeric_limits<int>::max())
+        || stream->read (data, static_cast<int> (length)) != static_cast<int> (length))
+        png_error (pngPtr, "Read Error");
 }
 
 static void pngWriteCallback (png_structp pngPtr, png_bytep data, png_size_t length)
@@ -64,13 +67,12 @@ struct MemoryReadState
 static void memoryReadCallback (png_structp pngPtr, png_bytep data, png_size_t length)
 {
     auto* state = static_cast<MemoryReadState*> (png_get_io_ptr (pngPtr));
-    const size_t remaining = state->size - state->pos;
-    const size_t toRead = std::min (static_cast<size_t> (length), remaining);
-    std::memcpy (data, state->data + state->pos, toRead);
-    state->pos += toRead;
 
-    if (toRead < static_cast<size_t> (length))
-        std::memset (data + toRead, 0, static_cast<size_t> (length) - toRead);
+    if (static_cast<size_t> (length) > state->size - state->pos)
+        png_error (pngPtr, "Read Error");
+
+    std::memcpy (data, state->data + state->pos, static_cast<size_t> (length));
+    state->pos += static_cast<size_t> (length);
 }
 
 struct MemoryWriteState
@@ -580,6 +582,11 @@ Image PngImageFormatReader::readImage()
 
     input->setPosition (0);
 
+    // Declared before setjmp so a libpng error longjmp never skips their destructors
+    Image image;
+    std::vector<png_bytep> rowPointers;
+    std::vector<std::vector<png_byte>> rowBuffers;
+
     auto* pngPtr = png_create_read_struct (PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (pngPtr == nullptr)
         return {};
@@ -617,11 +624,10 @@ Image PngImageFormatReader::readImage()
     png_read_update_info (pngPtr, infoPtr);
 
     auto rowBytes = png_get_rowbytes (pngPtr, infoPtr);
-    Image image (width, height, pixelFormat);
+    image = Image (width, height, pixelFormat);
 
-    std::vector<png_bytep> rowPointers (static_cast<size_t> (height));
-    std::vector<std::vector<png_byte>> rowBuffers (static_cast<size_t> (height),
-                                                   std::vector<png_byte> (rowBytes));
+    rowPointers.resize (static_cast<size_t> (height));
+    rowBuffers.assign (static_cast<size_t> (height), std::vector<png_byte> (rowBytes));
     for (int y = 0; y < height; ++y)
         rowPointers[static_cast<size_t> (y)] = rowBuffers[static_cast<size_t> (y)].data();
 
@@ -707,6 +713,11 @@ Image PngImageFormatReader::decodeFrameImage (int frameIndex)
     readState.size = minimalPng.size();
     readState.pos = 0;
 
+    // Declared before setjmp so a libpng error longjmp never skips their destructors
+    Image image;
+    std::vector<png_byte> rowBuffer;
+    std::vector<png_bytep> rowPointers;
+
     auto* pngPtr = png_create_read_struct (PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (pngPtr == nullptr)
         return {};
@@ -744,11 +755,11 @@ Image PngImageFormatReader::decodeFrameImage (int frameIndex)
     png_read_update_info (pngPtr, infoPtr);
 
     const auto rowBytes = png_get_rowbytes (pngPtr, infoPtr);
-    Image image (frame.frameWidth, frame.frameHeight, PixelFormat::RGBA);
+    image = Image (frame.frameWidth, frame.frameHeight, PixelFormat::RGBA);
 
     // Single contiguous buffer with row-pointer indirection (avoids per-row allocations)
-    std::vector<png_byte> rowBuffer (static_cast<size_t> (frame.frameHeight * rowBytes));
-    std::vector<png_bytep> rowPointers (static_cast<size_t> (frame.frameHeight));
+    rowBuffer.resize (static_cast<size_t> (frame.frameHeight * rowBytes));
+    rowPointers.resize (static_cast<size_t> (frame.frameHeight));
 
     for (int y = 0; y < frame.frameHeight; ++y)
         rowPointers[static_cast<size_t> (y)] = rowBuffer.data() + static_cast<size_t> (y * rowBytes);

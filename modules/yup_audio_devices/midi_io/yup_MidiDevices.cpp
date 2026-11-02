@@ -308,6 +308,7 @@ void MidiOutput::run()
     {
         auto now = Time::getMillisecondCounter();
         uint32 eventTime = 0;
+        int32 delta = 0;
         uint32 timeToWait = 500;
 
         PendingMessage* message;
@@ -318,11 +319,13 @@ void MidiOutput::run()
 
             if (message != nullptr)
             {
-                eventTime = (uint32) roundToInt (message->message.getTimeStamp());
+                // Signed deltas keep the comparisons valid across millisecond counter wraparound
+                eventTime = (uint32) (int64) message->message.getTimeStamp();
+                delta = (int32) (eventTime - now);
 
-                if (eventTime > now + 20)
+                if (delta > 20)
                 {
-                    timeToWait = eventTime - (now + 20);
+                    timeToWait = (uint32) (delta - 20);
                     message = nullptr;
                 }
                 else
@@ -336,7 +339,7 @@ void MidiOutput::run()
         {
             std::unique_ptr<PendingMessage> messageDeleter (message);
 
-            if (eventTime > now)
+            if (delta > 0)
             {
                 Time::waitForMillisecondCounter (eventTime);
 
@@ -344,7 +347,7 @@ void MidiOutput::run()
                     break;
             }
 
-            if (eventTime > now - 200)
+            if (delta > -200)
                 sendMessageNow (message->message);
         }
         else

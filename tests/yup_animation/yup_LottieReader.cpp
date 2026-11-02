@@ -107,6 +107,22 @@ protected:
             .getChildFile ("data")
             .getChildFile ("lottie");
     }
+
+    static String makeShapeLayerJson (const String& positionJson, const String& gradientJson)
+    {
+        return R"json({ "v": "5.5.2", "ip": 0, "op": 10, "fr": 25.0, "w": 100, "h": 100, "assets": [],
+            "layers": [ { "ty": 4, "ind": 1, "ip": 0, "op": 10, "st": 0,
+                "ks": { "p": )json"
+             + positionJson
+             + R"json( },
+                "shapes": [ { "ty": "gr", "it": [
+                    { "ty": "rc", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [20, 20] }, "r": { "a": 0, "k": 0 } },
+                    { "ty": "gf", "o": { "a": 0, "k": 100 }, "r": 1, "t": 1,
+                      "s": { "a": 0, "k": [0, 0] }, "e": { "a": 0, "k": [10, 0] },
+                      "g": )json"
+             + gradientJson
+             + R"json( } ] } ] } ] })json";
+    }
 };
 
 // =============================================================================
@@ -657,3 +673,62 @@ TEST_F (LottieReaderTests, ParseStreamWithGoalLottieAsZipStream)
     EXPECT_EQ (comp->layers.size(), 3u);
 }
 #endif
+
+TEST_F (LottieReaderTests, ParseDataHandlesSingleNaNAnimatedGradientKeyframe)
+{
+    const auto json = makeShapeLayerJson (R"json({ "a": 0, "k": [0, 0] })json",
+                                          R"json({ "p": 2, "k": { "a": 1, "k": [ { "t": "nan", "s": [0, 1, 0, 0, 1, 0, 0, 1] } ] } })json");
+
+    auto comp = LottieReader::parseData (json).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+}
+
+TEST_F (LottieReaderTests, ParseDataHandlesNegativeGradientColorPoints)
+{
+    for (const char* points : { "-5", "-2147483648" })
+    {
+        const auto json = makeShapeLayerJson (R"json({ "a": 0, "k": [0, 0] })json",
+                                              String (R"json({ "p": )json") + points + R"json(, "k": { "a": 0, "k": [0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1] } })json");
+
+        auto comp = LottieReader::parseData (json).valueOr (nullptr);
+        ASSERT_NE (comp, nullptr);
+    }
+}
+
+TEST_F (LottieReaderTests, ParseDataDropsNaNSpatialPositionKeyframes)
+{
+    const auto json = makeShapeLayerJson (R"json({ "a": 1, "k": [ { "t": "nan", "s": [10, 20], "ti": [0, 0], "to": [0, 0] } ] })json",
+                                          R"json({ "p": 2, "k": { "a": 0, "k": [0, 1, 0, 0, 1, 0, 0, 1] } })json");
+
+    auto comp = LottieReader::parseData (json).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+
+    const auto& transform = comp->layers[0]->transform;
+    EXPECT_TRUE (transform.spatialKeyframes.empty());
+    (void) transform.positionAt (5.0f);
+}
+
+TEST_F (LottieReaderTests, ParseDataBreaksPrecompCycles)
+{
+    auto comp = LottieReader::parseData (R"json({ "v": "5.5.2", "ip": 0, "op": 10, "fr": 25.0, "w": 100, "h": 100,
+        "assets": [ { "id": "a", "w": 50, "h": 50,
+            "layers": [ { "ty": 0, "ind": 1, "refId": "a", "ip": 0, "op": 10, "st": 0, "w": 50, "h": 50 } ] } ],
+        "layers": [ { "ty": 0, "ind": 1, "refId": "a", "ip": 0, "op": 10, "st": 0, "w": 50, "h": 50 } ] })json")
+                    .valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+
+    const auto* root = dynamic_cast<const PrecompLayer*> (comp->layers[0].get());
+    ASSERT_NE (root, nullptr);
+    EXPECT_EQ (root->precompRefId, String ("a"));
+
+    const auto& asset = comp->assets[String ("a")];
+    ASSERT_NE (asset, nullptr);
+    ASSERT_EQ (asset->layers.size(), 1u);
+
+    const auto* inner = dynamic_cast<const PrecompLayer*> (asset->layers[0].get());
+    ASSERT_NE (inner, nullptr);
+    EXPECT_TRUE (inner->precompRefId.isEmpty());
+}

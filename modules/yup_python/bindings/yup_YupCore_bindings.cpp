@@ -754,15 +754,15 @@ void registerYupCoreBindings (py::module_& m)
     //m.def ("square", &square<?>);
     m.def ("writeLittleEndianBitsInBuffer", [] (py::buffer target, uint32 startBit, uint32 numBits, uint32 value)
     {
-        auto info = target.request (true);
-        if ((startBit + numBits) >= static_cast<uint32> (info.size) * 8)
+        auto info = Helpers::requestContiguousBuffer (target, true);
+        if (numBits > 32 || static_cast<uint64> (startBit) + numBits > static_cast<uint64> (info.size) * 8)
             py::pybind11_fail ("Insufficient bytes to write into provided buffer");
         writeLittleEndianBitsInBuffer (info.ptr, startBit, numBits, value);
     });
     m.def ("readLittleEndianBitsInBuffer", [] (py::buffer target, uint32 startBit, uint32 numBits)
     {
-        auto info = target.request();
-        if ((startBit + numBits) >= static_cast<uint32> (info.size) * 8)
+        auto info = Helpers::requestContiguousBuffer (target);
+        if (numBits > 32 || static_cast<uint64> (startBit) + numBits > static_cast<uint64> (info.size) * 8)
             py::pybind11_fail ("Insufficient bytes to write into provided buffer");
         return readLittleEndianBitsInBuffer (info.ptr, startBit, numBits);
     });
@@ -819,28 +819,28 @@ void registerYupCoreBindings (py::module_& m)
         .def_static ("swap", static_cast<double (*) (double)> (&ByteOrder::swap))
         .def_static ("littleEndianInt", [] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             if (static_cast<size_t> (info.size) < sizeof (int))
                 py::pybind11_fail ("Insufficient bytes to construct an 32bit integer");
             return ByteOrder::littleEndianInt (info.ptr);
         })
         .def_static ("littleEndianInt64", [] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             if (static_cast<size_t> (info.size) < sizeof (int64))
                 py::pybind11_fail ("Insufficient bytes to construct an 64bit integer");
             return ByteOrder::littleEndianInt64 (info.ptr);
         })
         .def_static ("littleEndianShort", [] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             if (static_cast<size_t> (info.size) < sizeof (short))
                 py::pybind11_fail ("Insufficient bytes to construct an 16bit integer");
             return ByteOrder::littleEndianShort (info.ptr);
         })
         .def_static ("littleEndian24Bit", [] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             if (static_cast<size_t> (info.size) < sizeof (int8) * 3)
                 py::pybind11_fail ("Insufficient bytes to construct an 24bit integer");
             return ByteOrder::littleEndian24Bit (info.ptr);
@@ -848,28 +848,28 @@ void registerYupCoreBindings (py::module_& m)
         //.def_static ("littleEndian24BitToChars", &ByteOrder::littleEndian24BitToChars)
         .def_static ("bigEndianInt", [] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             if (static_cast<size_t> (info.size) < sizeof (int))
                 py::pybind11_fail ("Insufficient bytes to construct an 32bit integer");
             return ByteOrder::bigEndianInt (info.ptr);
         })
         .def_static ("bigEndianInt64", [] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             if (static_cast<size_t> (info.size) < sizeof (int64))
                 py::pybind11_fail ("Insufficient bytes to construct an 64bit integer");
             return ByteOrder::bigEndianInt64 (info.ptr);
         })
         .def_static ("bigEndianShort", [] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             if (static_cast<size_t> (info.size) < sizeof (short))
                 py::pybind11_fail ("Insufficient bytes to construct an 16bit integer");
             return ByteOrder::bigEndianShort (info.ptr);
         })
         .def_static ("bigEndian24Bit", [] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             if (static_cast<size_t> (info.size) < sizeof (char) * 3)
                 py::pybind11_fail ("Insufficient bytes to construct an 24bit integer");
             return ByteOrder::bigEndian24Bit (info.ptr);
@@ -1175,13 +1175,13 @@ void registerYupCoreBindings (py::module_& m)
     classBase64
         .def_static ("convertToBase64", [] (OutputStream& base64Result, py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             return Base64::convertToBase64 (base64Result, info.ptr, static_cast<size_t> (info.size));
         })
         .def_static ("convertFromBase64", &Base64::convertFromBase64)
         .def_static ("toBase64", [] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             return Base64::toBase64 (info.ptr, static_cast<size_t> (info.size));
         })
         .def_static ("toBase64", static_cast<String (*) (const String&)> (&Base64::toBase64));
@@ -1210,7 +1210,7 @@ void registerYupCoreBindings (py::module_& m)
         .def (py::init<const Uuid&>())
         .def (py::init ([] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
 
             if (info.size != 16)
                 py::pybind11_fail ("Invalid length of bytes to construct a Uuid class, needs to be 16");
@@ -1248,8 +1248,8 @@ void registerYupCoreBindings (py::module_& m)
         .def ("hash", &Uuid::hash)
         .def ("getRawData", [] (const Uuid& self)
         {
-            return py::memoryview::from_memory (self.getRawData(), 16);
-        }, py::return_value_policy::reference_internal)
+            return py::memoryview (py::bytes (reinterpret_cast<const char*> (self.getRawData()), 16));
+        })
         .def ("__repr__", [] (const Uuid& self)
         {
             String result;
@@ -1374,6 +1374,19 @@ void registerYupCoreBindings (py::module_& m)
 
     py::class_<MemoryBlock> classMemoryBlock (m, "MemoryBlock");
 
+    const auto getMemoryBlockIndex = [] (const MemoryBlock& self, int64 index) -> size_t
+    {
+        const auto size = static_cast<int64> (self.getSize());
+
+        if (index < 0)
+            index += size;
+
+        if (index < 0 || index >= size)
+            throw py::index_error ("MemoryBlock index out of range");
+
+        return static_cast<size_t> (index);
+    };
+
     classMemoryBlock
         .def (py::init<>())
         .def (py::init<const size_t, bool>(), "initialSize"_a, "initialiseToZero"_a = false)
@@ -1397,32 +1410,28 @@ void registerYupCoreBindings (py::module_& m)
         }))
         .def (py::init ([] (py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             return MemoryBlock (info.ptr, static_cast<size_t> (info.size));
         }))
         .def (py::init<const MemoryBlock&>())
         .def (py::self == py::self)
         .def (py::self != py::self)
         .def ("matches", Helpers::makeVoidPointerAndSizeCallable<MemoryBlock> (&MemoryBlock::matches))
-        .def ("getData", [] (MemoryBlock* self)
+        .def ("getData", [] (const MemoryBlock& self)
         {
-            return py::memoryview::from_memory (self->getData(), static_cast<Py_ssize_t> (self->getSize()));
-        }, py::return_value_policy::reference_internal)
-        .def ("getData", [] (const MemoryBlock* self)
-        {
-            return py::memoryview::from_memory (self->getData(), static_cast<Py_ssize_t> (self->getSize()));
-        }, py::return_value_policy::reference_internal)
-        .def ("__getitem__", [] (const MemoryBlock& self, int index)
-        {
-            return self[index];
+            return py::memoryview (py::bytes (static_cast<const char*> (self.getData()), self.getSize()));
         })
-        .def ("__setitem__", [] (MemoryBlock* self, int index, char value)
+        .def ("__getitem__", [getMemoryBlockIndex] (const MemoryBlock& self, int64 index)
         {
-            self->operator[] (index) = value;
+            return self[getMemoryBlockIndex (self, index)];
         })
-        .def ("__setitem__", [] (MemoryBlock* self, int index, int value)
+        .def ("__setitem__", [getMemoryBlockIndex] (MemoryBlock& self, int64 index, char value)
         {
-            self->operator[] (index) = static_cast<char> (value);
+            self[getMemoryBlockIndex (self, index)] = value;
+        })
+        .def ("__setitem__", [getMemoryBlockIndex] (MemoryBlock& self, int64 index, int value)
+        {
+            self[getMemoryBlockIndex (self, index)] = static_cast<char> (value);
         })
         .def ("isEmpty", &MemoryBlock::isEmpty)
         .def ("getSize", &MemoryBlock::getSize)
@@ -1434,18 +1443,18 @@ void registerYupCoreBindings (py::module_& m)
         .def ("replaceAll", Helpers::makeVoidPointerAndSizeCallable<MemoryBlock> (&MemoryBlock::replaceAll))
         .def ("insert", [] (MemoryBlock* self, py::buffer data, size_t insertPosition)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             self->insert (info.ptr, static_cast<size_t> (info.size), insertPosition);
         })
         .def ("removeSection", &MemoryBlock::removeSection)
         .def ("copyFrom", [] (MemoryBlock* self, py::buffer data, int destinationOffset)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             self->copyFrom (info.ptr, destinationOffset, static_cast<size_t> (info.size));
         })
         .def ("copyTo", [] (const MemoryBlock* self, py::buffer data, int sourceOffset)
         {
-            auto info = data.request (true);
+            auto info = Helpers::requestContiguousBuffer (data, true);
             self->copyTo (info.ptr, sourceOffset, static_cast<size_t> (info.size));
         })
         .def ("swapWith", &MemoryBlock::swapWith)
@@ -1482,7 +1491,7 @@ void registerYupCoreBindings (py::module_& m)
         .def ("isExhausted", &InputStream::isExhausted)
         .def ("read", [] (InputStream& self, py::buffer data)
         {
-            auto info = data.request (false);
+            auto info = Helpers::requestContiguousBuffer (data, true);
             return self.read (info.ptr, static_cast<size_t> (info.size));
         }, "buffer"_a)
         .def ("readByte", &InputStream::readByte)
@@ -1509,32 +1518,42 @@ void registerYupCoreBindings (py::module_& m)
     py::class_<BufferedInputStream, InputStream, PyInputStream<BufferedInputStream>, py::smart_holder> classBufferedInputStream (m, "BufferedInputStream");
 
     classBufferedInputStream
-        .def (py::init<InputStream&, int>(), "sourceStream"_a, "bufferSize"_a)
+        .def (py::init<InputStream&, int>(), "sourceStream"_a, "bufferSize"_a, py::keep_alive<1, 2>())
         .def ("peekByte", &BufferedInputStream::peekByte);
 
     py::class_<MemoryInputStream, InputStream, PyInputStream<MemoryInputStream>, py::smart_holder> classMemoryInputStream (m, "MemoryInputStream");
 
     classMemoryInputStream
-        .def (py::init<const MemoryBlock&, bool>(), "data"_a, "keepInternalCopyOfData"_a)
-        .def (py::init ([] (py::buffer data, bool keepInternalCopyOfData)
+        .def (py::init<const MemoryBlock&, bool>(), "data"_a, "keepInternalCopyOfData"_a, py::keep_alive<1, 2>())
+        .def (py::init ([] (py::buffer data, bool)
         {
-            auto info = data.request();
-            return new MemoryInputStream (info.ptr, static_cast<size_t> (info.size), keepInternalCopyOfData);
+            auto info = Helpers::requestContiguousBuffer (data);
+            return new MemoryInputStream (info.ptr, static_cast<size_t> (info.size), true);
         }), "data"_a, "keepInternalCopyOfData"_a)
         .def ("getData", [] (const MemoryInputStream& self)
         {
-            return py::memoryview::from_memory (self.getData(), static_cast<Py_ssize_t> (self.getDataSize()));
-        }, py::return_value_policy::reference_internal)
+            return py::memoryview (py::bytes (static_cast<const char*> (self.getData()), self.getDataSize()));
+        })
         .def ("getDataSize", &MemoryInputStream::getDataSize);
 
     py::class_<SubregionStream, InputStream, PyInputStream<SubregionStream>, py::smart_holder> classSubregionStream (m, "SubregionStream");
 
     classSubregionStream
-        .def (py::init<InputStream*, int64, int64, bool>(),
+        .def (py::init ([] (InputStream* sourceStream, int64 startPositionInSourceStream, int64 lengthOfSourceStream, bool deleteSourceWhenDestroyed)
+        {
+            if (sourceStream == nullptr)
+                throw py::value_error ("Invalid source stream");
+
+            if (deleteSourceWhenDestroyed)
+                throw py::value_error ("Deleting a source stream owned by Python is not supported");
+
+            return new SubregionStream (sourceStream, startPositionInSourceStream, lengthOfSourceStream, false);
+        }),
               "sourceStream"_a,
               "startPositionInSourceStream"_a,
               "lengthOfSourceStream"_a,
-              "deleteSourceWhenDestroyed"_a);
+              "deleteSourceWhenDestroyed"_a = false,
+              py::keep_alive<1, 2>());
 
     py::class_<GZIPDecompressorInputStream, InputStream, PyInputStream<GZIPDecompressorInputStream>, py::smart_holder> classGZIPDecompressorInputStream (m, "GZIPDecompressorInputStream");
 
@@ -1545,12 +1564,22 @@ void registerYupCoreBindings (py::module_& m)
         .export_values();
 
     classGZIPDecompressorInputStream
-        .def (py::init<InputStream*, bool, GZIPDecompressorInputStream::Format, int64>(),
+        .def (py::init ([] (InputStream* sourceStream, bool deleteSourceWhenDestroyed, GZIPDecompressorInputStream::Format sourceFormat, int64 uncompressedStreamLength)
+        {
+            if (sourceStream == nullptr)
+                throw py::value_error ("Invalid source stream");
+
+            if (deleteSourceWhenDestroyed)
+                throw py::value_error ("Deleting a source stream owned by Python is not supported");
+
+            return new GZIPDecompressorInputStream (sourceStream, false, sourceFormat, uncompressedStreamLength);
+        }),
               "sourceStream"_a,
               "deleteSourceWhenDestroyed"_a = false,
               "sourceFormat"_a = GZIPDecompressorInputStream::zlibFormat,
-              "uncompressedStreamLength"_a = -1)
-        .def (py::init<InputStream&>(), "sourceStream"_a);
+              "uncompressedStreamLength"_a = -1,
+              py::keep_alive<1, 2>())
+        .def (py::init<InputStream&>(), "sourceStream"_a, py::keep_alive<1, 2>());
 
     // ============================================================================================ yup::InputSource
 
@@ -1596,16 +1625,32 @@ void registerYupCoreBindings (py::module_& m)
 
     classMemoryOutputStream
         .def (py::init<size_t>(), "initialSize"_a = 256)
-        .def (py::init<MemoryBlock&, bool>(), "memoryBlockToWriteTo"_a, "appendToExistingBlockContent"_a)
-        .def (py::init ([] (py::buffer data)
+        .def (py::init<MemoryBlock&, bool>(), "memoryBlockToWriteTo"_a, "appendToExistingBlockContent"_a, py::keep_alive<1, 2>())
+        .def (py::init ([] (py::buffer data) -> MemoryOutputStream*
         {
-            auto info = data.request();
-            return new MemoryOutputStream (info.ptr, static_cast<size_t> (info.size));
+            struct BufferPinningMemoryOutputStream : MemoryOutputStream
+            {
+                explicit BufferPinningMemoryOutputStream (Helpers::ContiguousBuffer&& buffer)
+                    : MemoryOutputStream (buffer.ptr, buffer.size)
+                    , pinnedBuffer (std::move (buffer))
+                {
+                }
+
+                ~BufferPinningMemoryOutputStream() override
+                {
+                    py::gil_scoped_acquire acquire;
+                    pinnedBuffer.info = py::buffer_info();
+                }
+
+                Helpers::ContiguousBuffer pinnedBuffer;
+            };
+
+            return new BufferPinningMemoryOutputStream (Helpers::requestContiguousBuffer (data, true));
         }), "destBuffer"_a)
-        .def ("getData", [] (const MemoryOutputStream* self)
+        .def ("getData", [] (const MemoryOutputStream& self)
         {
-            return py::memoryview::from_memory (self->getData(), static_cast<Py_ssize_t> (self->getDataSize()));
-        }, py::return_value_policy::reference_internal)
+            return py::memoryview (py::bytes (static_cast<const char*> (self.getData()), self.getDataSize()));
+        })
         .def ("getDataSize", &MemoryOutputStream::getDataSize)
         .def ("reset", &MemoryOutputStream::reset)
         .def ("preallocate", &MemoryOutputStream::preallocate, "bytesToPreallocate"_a)
@@ -1624,8 +1669,17 @@ void registerYupCoreBindings (py::module_& m)
         .export_values();
 
     classGZIPCompressorOutputStream
-        .def (py::init<OutputStream&, int, int>(), "destStream"_a, "compressionLevel"_a = -1, "windowBits"_a = 0)
-        .def (py::init<OutputStream*, int, bool, int>(), "destStream"_a, "compressionLevel"_a = -1, "deleteDestStreamWhenDestroyed"_a = false, "windowBits"_a = 0);
+        .def (py::init<OutputStream&, int, int>(), "destStream"_a, "compressionLevel"_a = -1, "windowBits"_a = 0, py::keep_alive<1, 2>())
+        .def (py::init ([] (OutputStream* destStream, int compressionLevel, bool deleteDestStreamWhenDestroyed, int windowBits)
+        {
+            if (destStream == nullptr)
+                throw py::value_error ("Invalid destination stream");
+
+            if (deleteDestStreamWhenDestroyed)
+                throw py::value_error ("Deleting a destination stream owned by Python is not supported");
+
+            return new GZIPCompressorOutputStream (destStream, compressionLevel, false, windowBits);
+        }), "destStream"_a, "compressionLevel"_a = -1, "deleteDestStreamWhenDestroyed"_a = false, "windowBits"_a = 0, py::keep_alive<1, 2>());
 
     // ============================================================================================ yup::Random
 
@@ -1644,7 +1698,7 @@ void registerYupCoreBindings (py::module_& m)
         .def ("nextLargeNumber", &Random::nextLargeNumber, "maximumValue"_a)
         .def ("fillBitsRandomly", [] (Random& self, py::buffer data)
         {
-            auto info = data.request (true);
+            auto info = Helpers::requestContiguousBuffer (data, true);
             self.fillBitsRandomly (info.ptr, static_cast<size_t> (info.size));
         }, "bufferToFill"_a)
         .def ("fillBitsRandomly", py::overload_cast<BigInteger&, int, int> (&Random::fillBitsRandomly), "arrayToChange"_a, "startBit"_a, "numBits"_a)
@@ -1752,12 +1806,12 @@ void registerYupCoreBindings (py::module_& m)
         .def ("readLines", &File::readLines, "destLines"_a)
         .def ("appendData", [] (const File& self, py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             return self.appendData (info.ptr, static_cast<size_t> (info.size));
         }, "dataToAppend"_a)
         .def ("replaceWithData", [] (const File& self, py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             return self.replaceWithData (info.ptr, static_cast<size_t> (info.size));
         }, "dataToWrite"_a)
         .def ("appendText", &File::appendText, "textToAppend"_a, "asUnicode"_a = false, "writeUnicodeHeaderBytes"_a = false, "lineEndings"_a = "\r\n")
@@ -1838,7 +1892,7 @@ void registerYupCoreBindings (py::module_& m)
 
     // ============================================================================================ yup::MemoryMappedFile
 
-    py::class_<MemoryMappedFile> classMemoryMappedFile (m, "MemoryMappedFile");
+    py::class_<MemoryMappedFile> classMemoryMappedFile (m, "MemoryMappedFile", py::buffer_protocol());
 
     py::enum_<MemoryMappedFile::AccessMode> (classMemoryMappedFile, "AccessMode")
         .value ("readOnly", MemoryMappedFile::AccessMode::readOnly)
@@ -1846,15 +1900,22 @@ void registerYupCoreBindings (py::module_& m)
         .export_values();
 
     classMemoryMappedFile
-        .def (py::init<const File&, MemoryMappedFile::AccessMode, bool>(), "file"_a, "mode"_a, "exclusive"_a = false)
-        .def (py::init<const File&, const Range<int64>&, MemoryMappedFile::AccessMode, bool>(), "file"_a, "fileRange"_a, "mode"_a, "exclusive"_a = false)
-        .def ("getData", [] (const MemoryMappedFile& self) -> std::optional<py::memoryview>
+        .def_buffer ([] (const MemoryMappedFile& self)
         {
             if (self.getData() == nullptr)
+                throw py::buffer_error ("MemoryMappedFile is not mapped");
+
+            return py::buffer_info (static_cast<const uint8*> (self.getData()), static_cast<py::ssize_t> (self.getSize()), true);
+        })
+        .def (py::init<const File&, MemoryMappedFile::AccessMode, bool>(), "file"_a, "mode"_a, "exclusive"_a = false)
+        .def (py::init<const File&, const Range<int64>&, MemoryMappedFile::AccessMode, bool>(), "file"_a, "fileRange"_a, "mode"_a, "exclusive"_a = false)
+        .def ("getData", [] (py::object self) -> std::optional<py::memoryview>
+        {
+            if (self.cast<const MemoryMappedFile&>().getData() == nullptr)
                 return std::nullopt;
 
-            return py::memoryview::from_memory (self.getData(), static_cast<Py_ssize_t> (self.getSize()));
-        }, py::return_value_policy::reference_internal)
+            return py::memoryview (self);
+        })
         .def ("getSize", &MemoryMappedFile::getSize)
         .def ("getRange", &MemoryMappedFile::getRange);
 
@@ -2274,7 +2335,7 @@ void registerYupCoreBindings (py::module_& m)
         .def ("isRunning", &ChildProcess::isRunning)
         .def ("readProcessOutput", [] (ChildProcess& self, py::buffer data)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data, true);
             return self.readProcessOutput (info.ptr, static_cast<int> (info.size));
         })
         .def ("readAllProcessOutput", &ChildProcess::readAllProcessOutput)
@@ -2879,7 +2940,7 @@ void registerYupCoreBindings (py::module_& m)
         .def (py::init<const File&>(), "file"_a)
         .def (py::init ([] (py::buffer data)
         {
-            const auto info = data.request();
+            const auto info = Helpers::requestContiguousBuffer (data);
 
             return SHA1 (info.ptr, static_cast<size_t> (info.size));
         }), "data"_a)
@@ -3191,7 +3252,7 @@ void registerYupCoreBindings (py::module_& m)
         .def (py::init<>())
         .def (py::init ([] (py::buffer bytes)
         {
-            const auto info = bytes.request();
+            const auto info = Helpers::requestContiguousBuffer (bytes);
 
             if (info.size < 6)
                 throw py::value_error ("A MACAddress needs at least 6 bytes");
@@ -3232,13 +3293,13 @@ void registerYupCoreBindings (py::module_& m)
         .def ("getName", &NamedPipe::getName)
         .def ("read", [] (NamedPipe& self, py::buffer destBuffer, int timeOutMilliseconds)
         {
-            auto info = destBuffer.request (true);
+            auto info = Helpers::requestContiguousBuffer (destBuffer, true);
 
             return self.read (info.ptr, static_cast<int> (info.size), timeOutMilliseconds);
         }, "destBuffer"_a, "timeOutMilliseconds"_a)
         .def ("write", [] (NamedPipe& self, py::buffer sourceBuffer, int timeOutMilliseconds)
         {
-            const auto info = sourceBuffer.request();
+            const auto info = Helpers::requestContiguousBuffer (sourceBuffer);
 
             return self.write (info.ptr, static_cast<int> (info.size), timeOutMilliseconds);
         }, "sourceBuffer"_a, "timeOutMilliseconds"_a);

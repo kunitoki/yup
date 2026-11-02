@@ -183,3 +183,52 @@ def test_audio_buffer_double():
     buffer.setSample(0, 0, 0.123456789)
     value = buffer.getSample(0, 0)
     assert abs(value - 0.123456789) < 0.0000001
+
+#==================================================================================================
+
+def test_audio_buffer_rejects_out_of_range_access():
+    buffer = yup.AudioBuffer(2, 16)
+
+    with pytest.raises(IndexError):
+        buffer.getSample(2, 0)
+
+    with pytest.raises(IndexError):
+        buffer.setSample(0, 16, 1.0)
+
+    with pytest.raises(IndexError):
+        buffer.addSample(-1, 0, 1.0)
+
+    with pytest.raises(IndexError):
+        buffer.clear(0, 8, 9)
+
+    with pytest.raises(IndexError):
+        buffer.applyGain(0, -1, 4, 0.5)
+
+    with pytest.raises(IndexError):
+        buffer.getRMSLevel(0, 0, 17)
+
+    with pytest.raises(IndexError):
+        buffer.copyFrom(0, 0, yup.AudioBuffer(1, 8), 0, 0, 16)
+
+    with pytest.raises(ValueError):
+        buffer.setSize(-1, 16)
+
+#==================================================================================================
+
+def test_audio_buffer_copy_from_buffer_protocol():
+    import array
+
+    buffer = yup.AudioBuffer(1, 4)
+    buffer.clear()
+
+    buffer.copyFrom(0, 0, array.array('f', [0.1, 0.2, 0.3, 0.4]), 4)
+    assert abs(buffer.getSample(0, 3) - 0.4) < 0.001
+
+    buffer.addFrom(0, 0, array.array('f', [1.0, 1.0]), 2)
+    assert abs(buffer.getSample(0, 1) - 1.2) < 0.001
+
+    with pytest.raises(ValueError):
+        buffer.copyFrom(0, 0, array.array('f', [0.1, 0.2]), 4)
+
+    with pytest.raises(ValueError):
+        buffer.copyFrom(0, 0, array.array('d', [0.1, 0.2, 0.3, 0.4]), 4)

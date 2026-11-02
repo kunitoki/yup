@@ -1137,7 +1137,7 @@ void DataTree::writeToBinaryStream (OutputStream& output) const
         DataTree (child).writeToBinaryStream (output);
 }
 
-static DataTree readTreeFromBinaryStream (InputStream& input, int nestingDepth, bool& nestedTooDeeply)
+DataTree DataTree::readTreeFromBinaryStream (InputStream& input, int nestingDepth, bool& nestedTooDeeply)
 {
     constexpr int maxNestingDepth = 256;
 

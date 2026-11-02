@@ -66,3 +66,15 @@ def test_memory_mapped_file_section_exclusive_mode():
     mmf = yup.MemoryMappedFile(data_folder.getChildFile("somefile.txt"), yup.Range[int64](0, 10), yup.MemoryMappedFile.readOnly, exclusive=True)
     assert mmf.getData() is not None
     assert mmf.getSize() == 10
+
+#==================================================================================================
+
+def test_memory_mapped_file_data_keeps_file_alive():
+    mmf = yup.MemoryMappedFile(data_folder.getChildFile("somefile.txt"), yup.MemoryMappedFile.readOnly)
+    size = mmf.getSize()
+    data = mmf.getData()
+
+    del mmf
+    assert data.readonly
+    assert len(data) == size
+    assert len(bytes(data)) == size

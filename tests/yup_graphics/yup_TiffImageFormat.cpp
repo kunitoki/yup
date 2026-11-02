@@ -869,3 +869,47 @@ TEST (TiffImageFormatTests, ParseRawChunksExtractsExifWhenPresent)
     ASSERT_NE (reader.metadata, nullptr);
     EXPECT_FALSE (reader.metadata->hasRawChunk ("tiff/exif"));
 }
+
+TEST (TiffImageFormatTests, ParseRawChunksHandlesExifAndGpsIfdOffsetTags)
+{
+    MemoryOutputStream out;
+    const auto writeEntry = [&] (uint16 tag, uint16 type, uint32 value)
+    {
+        out.writeShort (static_cast<short> (tag));
+        out.writeShort (static_cast<short> (type));
+        out.writeInt (1);
+        out.writeInt (static_cast<int> (value));
+    };
+
+    const uint32 subIfdOffset = 8 + 2 + 11 * 12 + 4;
+    const uint32 pixelOffset = subIfdOffset + 6;
+
+    out.write ("II", 2);
+    out.writeShort (42);
+    out.writeInt (8);
+    out.writeShort (11);
+    writeEntry (256, 3, 1);           // ImageWidth
+    writeEntry (257, 3, 1);           // ImageLength
+    writeEntry (258, 3, 8);           // BitsPerSample
+    writeEntry (259, 3, 1);           // Compression
+    writeEntry (262, 3, 1);           // Photometric
+    writeEntry (273, 4, pixelOffset); // StripOffsets
+    writeEntry (277, 3, 1);           // SamplesPerPixel
+    writeEntry (278, 3, 1);           // RowsPerStrip
+    writeEntry (279, 4, 1);           // StripByteCounts
+    writeEntry (34665, 4, subIfdOffset);
+    writeEntry (34853, 4, subIfdOffset);
+    out.writeInt (0);
+    out.writeShort (0);
+    out.writeInt (0);
+    out.writeByte (static_cast<char> (0x80));
+
+    auto* inStream = new MemoryInputStream (out.getData(), out.getDataSize(), true);
+    TiffImageFormatReader reader (inStream, ImageFormat::Options().withRawChunks (true));
+
+    EXPECT_EQ (reader.width, 1);
+    EXPECT_EQ (reader.height, 1);
+    ASSERT_NE (reader.metadata, nullptr);
+    EXPECT_FALSE (reader.metadata->hasRawChunk ("tiff/exif"));
+    EXPECT_FALSE (reader.metadata->hasRawChunk ("tiff/gps"));
+}

@@ -1431,3 +1431,48 @@ TEST_F (FloatVectorOperationsTests, ScopedNoDenormals_NestedScopes)
     EXPECT_TRUE (true);
 }
 
+
+TEST_F (FloatVectorOperationsTests, NegativeCountLeavesMemoryUntouched)
+{
+    constexpr float guard = 42.0f;
+    float dest[8];
+    float src[8];
+    int fixed[8];
+    std::fill (std::begin (dest), std::end (dest), guard);
+    std::fill (std::begin (src), std::end (src), 1.0f);
+    std::fill (std::begin (fixed), std::end (fixed), 7);
+
+    FloatVectorOperations::clear (dest, -1);
+    FloatVectorOperations::fill (dest, 0.0f, -3);
+    FloatVectorOperations::copy (dest, src, -1);
+    FloatVectorOperations::copyWithMultiply (dest, src, 2.0f, -5);
+    FloatVectorOperations::add (dest, 1.0f, -1);
+    FloatVectorOperations::add (dest, src, -7);
+    FloatVectorOperations::multiply (dest, src, src, -2);
+    FloatVectorOperations::negate (dest, src, -1);
+    FloatVectorOperations::abs (dest, src, -1);
+    FloatVectorOperations::clip (dest, src, 0.0f, 0.5f, -1);
+    FloatVectorOperations::sqrt (dest, src, -1);
+    FloatVectorOperations::log (dest, src, 1.0e-6f, -1);
+    FloatVectorOperations::sinCos (dest, dest + 4, src, -1);
+    FloatVectorOperations::convertFixedToFloat (dest, fixed, 1.0f, -1);
+    FloatVectorOperations::convertFloatToFixed (fixed, src, 1.0f, -1);
+
+    for (const auto value : dest)
+        EXPECT_EQ (value, guard);
+
+    for (const auto value : fixed)
+        EXPECT_EQ (value, 7);
+}
+
+TEST_F (FloatVectorOperationsTests, NegativeCountReturnsDefaults)
+{
+    const double src[4] = { 3.0, -2.0, 5.0, 1.0 };
+
+    EXPECT_EQ (FloatVectorOperations::findMinimum (src, -1), 0.0);
+    EXPECT_EQ (FloatVectorOperations::findMaximum (src, -1), 0.0);
+    EXPECT_TRUE (FloatVectorOperations::findMinAndMax (src, -1).isEmpty());
+
+    const float a[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    EXPECT_EQ (FloatVectorOperations::computeCorrelation (a, a, -1), 0.0);
+}

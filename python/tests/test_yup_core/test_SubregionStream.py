@@ -64,3 +64,27 @@ def test_seek_past_subregion_end():
 
     assert seek_result # Assuming setPosition returns success status
     assert subregion_stream.getPosition() == 16
+
+#==================================================================================================
+
+def test_source_stream_is_kept_alive():
+    import gc
+
+    subregion_stream = yup.SubregionStream(yup.MemoryInputStream(b"0123456789", True), 2, 4, False)
+    gc.collect()
+
+    assert subregion_stream.readEntireStreamAsString() == "2345"
+
+#==================================================================================================
+
+def test_delete_source_when_destroyed_is_rejected():
+    source_stream = yup.MemoryInputStream(b"0123456789", True)
+
+    with pytest.raises(ValueError):
+        yup.SubregionStream(source_stream, 0, 4, True)
+
+    with pytest.raises(ValueError):
+        yup.GZIPDecompressorInputStream(source_stream, deleteSourceWhenDestroyed=True)
+
+    with pytest.raises(ValueError):
+        yup.GZIPCompressorOutputStream(yup.MemoryOutputStream(), deleteDestStreamWhenDestroyed=True)

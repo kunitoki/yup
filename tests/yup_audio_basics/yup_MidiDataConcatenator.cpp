@@ -264,6 +264,27 @@ TEST_F (MidiDataConcatenatorTests, RunningStatusSameChannel)
     EXPECT_EQ (callback->receivedMessages[1].message.getNoteNumber(), 64);
 }
 
+TEST_F (MidiDataConcatenatorTests, RealtimeAfterTuneRequestDoesNotRepeatIt)
+{
+    pushData ({ 0xf6, 0xf8, 0xfa, 0xfe }, 1.0);
+
+    ASSERT_EQ (callback->receivedMessages.size(), 4);
+    EXPECT_EQ (callback->receivedMessages[0].message.getRawData()[0], 0xf6);
+    EXPECT_EQ (callback->receivedMessages[1].message.getRawData()[0], 0xf8);
+    EXPECT_EQ (callback->receivedMessages[2].message.getRawData()[0], 0xfa);
+    EXPECT_EQ (callback->receivedMessages[3].message.getRawData()[0], 0xfe);
+}
+
+TEST_F (MidiDataConcatenatorTests, SystemCommonMessagesCancelRunningStatus)
+{
+    pushData ({ 0xf3, 0x05, 0x07 }, 1.0);
+
+    ASSERT_EQ (callback->receivedMessages.size(), 1);
+    EXPECT_EQ (callback->receivedMessages[0].message.getRawDataSize(), 2);
+    EXPECT_EQ (callback->receivedMessages[0].message.getRawData()[0], 0xf3);
+    EXPECT_EQ (callback->receivedMessages[0].message.getRawData()[1], 0x05);
+}
+
 TEST_F (MidiDataConcatenatorTests, RunningStatusInterruptedByNewStatus)
 {
     pushData ({ 0x90, 0x3c, 0x64 }, 1.0);

@@ -440,8 +440,93 @@ TEST (ImageMetadataExifTest, FindsExifFromTiffKey)
     EXPECT_EQ (6, meta->getOrientation());
 }
 
-//==============================================================================
-// Image + ImageMetadata integration
+class ImageMetadataExifBoundsTest : public ::testing::Test
+{
+protected:
+    struct Entry
+    {
+        uint16 tag;
+        uint16 type;
+        uint32 count;
+        uint32 value;
+    };
+
+    static ImageMetadata::Ptr makeMetadata (uint32 ifdOffset, uint16 numEntries, std::initializer_list<Entry> entries)
+    {
+        std::vector<uint8> blob { 'M', 'M', 0x00, 0x2A };
+
+        const auto write16 = [&] (uint16 v)
+        {
+            blob.push_back (static_cast<uint8> (v >> 8));
+            blob.push_back (static_cast<uint8> (v & 0xFF));
+        };
+
+        const auto write32 = [&] (uint32 v)
+        {
+            write16 (static_cast<uint16> (v >> 16));
+            write16 (static_cast<uint16> (v & 0xFFFF));
+        };
+
+        write32 (ifdOffset);
+        write16 (numEntries);
+
+        for (const auto& e : entries)
+        {
+            write16 (e.tag);
+            write16 (e.type);
+            write32 (e.count);
+            write32 (e.value);
+        }
+
+        write32 (0);
+
+        auto meta = ImageMetadata::create();
+        meta->setRawChunk ("jpeg/exif", MemoryBlock (blob.data(), blob.size()));
+        return meta;
+    }
+};
+
+TEST_F (ImageMetadataExifBoundsTest, RejectsWrappingIfdOffset)
+{
+    auto meta = makeMetadata (0xFFFFFFFEu, 1, { { 0x0112, 3, 1, 0x00060000u } });
+
+    EXPECT_EQ (0, meta->getOrientation());
+    EXPECT_TRUE (meta->getCameraMake().isEmpty());
+
+    auto [lat, lon] = meta->getGpsCoordinates();
+    EXPECT_EQ (0.0, lat);
+    EXPECT_EQ (0.0, lon);
+}
+
+TEST_F (ImageMetadataExifBoundsTest, RejectsEntryCountBeyondData)
+{
+    auto meta = makeMetadata (8, 0xFFFF, { { 0x0112, 3, 1, 0x00060000u } });
+
+    EXPECT_EQ (0, meta->getOrientation());
+    EXPECT_TRUE (meta->getSoftware().isEmpty());
+}
+
+TEST_F (ImageMetadataExifBoundsTest, RejectsStringOutsideData)
+{
+    auto meta = makeMetadata (8, 2, { { 0x010F, 2, 64, 0x7FFFFFF0u }, { 0x0110, 2, 0xFFFFFFFFu, 8 } });
+
+    EXPECT_TRUE (meta->getCameraMake().isEmpty());
+    EXPECT_TRUE (meta->getCameraModel().isEmpty());
+}
+
+TEST_F (ImageMetadataExifBoundsTest, RejectsGpsPointersOutsideData)
+{
+    auto badIfd = makeMetadata (8, 1, { { 0x8825, 4, 1, 0xFFFFFFF0u } });
+    auto [lat1, lon1] = badIfd->getGpsCoordinates();
+    EXPECT_EQ (0.0, lat1);
+    EXPECT_EQ (0.0, lon1);
+
+    // GPS IFD points back at IFD0, whose entries reuse GPS tag numbers with out of range rational offsets.
+    auto badRationals = makeMetadata (8, 3, { { 0x0002, 5, 3, 0x7FFFFFF0u }, { 0x0004, 5, 3, 30 }, { 0x8825, 4, 1, 8 } });
+    auto [lat2, lon2] = badRationals->getGpsCoordinates();
+    EXPECT_EQ (0.0, lat2);
+    EXPECT_EQ (0.0, lon2);
+}
 //==============================================================================
 
 TEST (ImageMetadataIntegrationTest, DefaultImageHasNoMetadata)

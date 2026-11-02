@@ -174,3 +174,34 @@ TEST (MidiBufferTests, EventDataMatchesAddedMessage)
         EXPECT_EQ (meta.getMessage().getNoteNumber(), 64);
     }
 }
+
+TEST (MidiBufferTests, LargeSysExKeepsEventsConsistent)
+{
+    for (const int sysexSize : { 65530, 65531, 65535 })
+    {
+        std::vector<uint8> sysex ((size_t) sysexSize, 0x01);
+        sysex.front() = 0xf0;
+        sysex.back() = 0xf7;
+
+        MidiBuffer buffer;
+        EXPECT_TRUE (buffer.addEvent (sysex.data(), sysexSize, 5));
+        buffer.addEvent (MidiMessage::noteOn (1, 60, 0.5f), 0);
+        buffer.addEvent (MidiMessage::noteOn (1, 62, 0.5f), 10);
+        buffer.addEvent (MidiMessage::noteOn (1, 64, 0.5f), 7);
+
+        EXPECT_EQ (4, buffer.getNumEvents());
+        EXPECT_EQ (0, buffer.getFirstEventTime());
+        EXPECT_EQ (10, buffer.getLastEventTime());
+
+        std::vector<int> positions;
+        std::vector<int> sizes;
+        for (const auto& meta : buffer)
+        {
+            positions.push_back (meta.samplePosition);
+            sizes.push_back (meta.numBytes);
+        }
+
+        EXPECT_EQ (positions, (std::vector<int> { 0, 5, 7, 10 }));
+        EXPECT_EQ (sizes, (std::vector<int> { 3, sysexSize, 3, 3 }));
+    }
+}

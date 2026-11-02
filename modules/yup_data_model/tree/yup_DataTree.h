@@ -1280,13 +1280,14 @@ private:
     friend class MoveChildAction;
     friend class CompoundAction;
 
+    static DataTree readTreeFromBinaryStream (InputStream& input, int nestingDepth, bool& nestedTooDeeply);
+
     explicit DataTree (std::shared_ptr<DataObject> objectToUse);
     void sendPropertyChangeMessage (const Identifier& property) const;
     void sendChildAddedMessage (const DataTree& child) const;
     void sendChildRemovedMessage (const DataTree& child, int formerIndex) const;
     void sendChildMovedMessage (const DataTree& child, int oldIndex, int newIndex) const;
 
-    // Private mutation methods - only accessible through Transaction
     void setProperty (const Identifier& name, const var& newValue, UndoManager* undoManager = nullptr);
     void removeProperty (const Identifier& name, UndoManager* undoManager = nullptr);
     void removeAllProperties (UndoManager* undoManager = nullptr);

@@ -433,6 +433,26 @@ TEST_F (SincOversamplerTest, InvalidGenerationRequestsPreserveThePendingBlock)
     EXPECT_EQ (64, os4x.getOversampledNumSamples());
 }
 
+TEST_F (SincOversamplerTest, OversizedBlocksAreRejected)
+{
+    std::vector<float> input (blockSize * 2, 0.5f);
+    const float* inputPtrs[] = { input.data() };
+    os2x.upsample (inputPtrs, 1, blockSize * 2);
+    EXPECT_EQ (0, os2x.getOversampledNumSamples());
+
+    std::vector<float> output (blockSize * 2, 1.0f);
+    float* outputPtrs[] = { output.data() };
+    os2x.downsample (outputPtrs, 1, blockSize * 2);
+    for (const auto sample : output)
+        EXPECT_EQ (0.0f, sample);
+
+    ASSERT_TRUE (os2x.beginGeneration (1, 16));
+    std::fill (output.begin(), output.end(), 1.0f);
+    os2x.downsample (outputPtrs, 1, 32);
+    for (int i = 0; i < 32; ++i)
+        EXPECT_EQ (0.0f, output[static_cast<std::size_t> (i)]);
+}
+
 TEST_F (SincOversamplerTest, DirectGenerationImpulseHasTheReportedLatency)
 {
     ASSERT_TRUE (os4x.beginGeneration (1, blockSize));

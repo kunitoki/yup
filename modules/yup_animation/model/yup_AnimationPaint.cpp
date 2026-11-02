@@ -57,7 +57,7 @@ std::vector<std::pair<float, Color>> AnimationGradient::parseStopsFromFlatArray 
 {
     std::vector<std::pair<float, Color>> stops;
     const int totalSize = static_cast<int> (flat.size());
-    const int count = jmin (colorPoints, totalSize / 4);
+    const int count = jlimit (0, totalSize / 4, colorPoints);
     const int colorDataEnd = count * 4;
 
     // Collect opacity stops (position, opacity) from the tail of the array.
@@ -112,7 +112,7 @@ ColorGradient AnimationGradient::toColorGradient (float frameNo) const
         // If animated, interpolate the flat value arrays from keyframes
         if (! animatedStops.empty())
         {
-            if (fn <= animatedStops.front().frame)
+            if (animatedStops.size() < 2 || ! (fn > animatedStops.front().frame))
                 return parseStopsFromFlatArray (animatedStops.front().values, numColorPoints);
             if (fn >= animatedStops.back().frame)
                 return parseStopsFromFlatArray (animatedStops.back().values, numColorPoints);
@@ -131,7 +131,7 @@ ColorGradient AnimationGradient::toColorGradient (float frameNo) const
             const auto& k0 = animatedStops[lo];
             const auto& k1 = animatedStops[lo + 1];
             const float span = k1.frame - k0.frame;
-            if (span < 1e-6f)
+            if (! (span >= 1e-6f))
                 return parseStopsFromFlatArray (k0.values, numColorPoints);
 
             const float t = (fn - k0.frame) / span;

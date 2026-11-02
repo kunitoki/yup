@@ -1377,7 +1377,7 @@ void registerYupGraphicsBindings (py::module_& m)
              "Builds a reader around the given stream, taking ownership of it.")
         .def (py::init ([] (py::buffer data, const String& formatName)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             auto* stream = new MemoryInputStream (info.ptr, info.size, true);
             return std::unique_ptr<ImageFormatReader> (new PyImageFormatReader (stream, formatName));
         }), "data"_a, "formatName"_a,
@@ -1422,7 +1422,7 @@ void registerYupGraphicsBindings (py::module_& m)
         }), "formatName"_a, "pixelFormat"_a = PixelFormat::RGBA)
         .def ("writeRawData", [] (PyImageFormatWriter& self, py::buffer data) -> bool
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             return self.writeRawData (std::string (static_cast<const char*> (info.ptr), info.size));
         }, "data"_a)
         .def ("flushStream", [] (PyImageFormatWriter& self) { return self.flushStream(); })
@@ -1643,7 +1643,7 @@ void registerYupGraphicsBindings (py::module_& m)
         // Loading
         .def_static ("loadFromData", [] (py::buffer data) -> Image
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             auto result = Image::loadFromData (Span<const uint8> (static_cast<const uint8*> (info.ptr), info.size));
             if (! result.wasOk())
                 throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
@@ -1652,7 +1652,7 @@ void registerYupGraphicsBindings (py::module_& m)
         }, "data"_a)
         .def_static ("loadFromData", [] (py::buffer data, const ImageFormat::Options& options) -> Image
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             auto result = Image::loadFromData (Span<const uint8> (static_cast<const uint8*> (info.ptr), info.size), options);
             if (! result.wasOk())
                 throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
@@ -1734,7 +1734,7 @@ void registerYupGraphicsBindings (py::module_& m)
         // Loading fonts
         .def_static ("loadFontFromData", [] (py::buffer data) -> Font
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
             auto result = Font::loadFontFromData (Span<const uint8> (static_cast<const uint8*> (info.ptr), info.size));
             if (! result.wasOk())
                 throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));

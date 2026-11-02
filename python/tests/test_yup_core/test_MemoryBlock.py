@@ -254,3 +254,60 @@ def test_repr():
 def test_str():
     memory_block = yup.MemoryBlock([1, 2, 3, 4, 5])
     assert str(memory_block) == "\x01\x02\x03\x04\x05"
+
+#==================================================================================================
+
+def test_getitem_negative_and_out_of_range():
+    memory_block = yup.MemoryBlock([1, 2, 3])
+    assert memory_block[-1] == '\x03'
+
+    with pytest.raises(IndexError):
+        memory_block[3]
+
+    with pytest.raises(IndexError):
+        memory_block[-4]
+
+#==================================================================================================
+
+def test_setitem_out_of_range():
+    memory_block = yup.MemoryBlock([1, 2, 3])
+    memory_block[-1] = 9
+    assert memory_block[2] == '\x09'
+
+    with pytest.raises(IndexError):
+        memory_block[3] = 1
+
+    with pytest.raises(IndexError):
+        yup.MemoryBlock()[0] = 1
+
+#==================================================================================================
+
+def test_get_data_outlives_block():
+    memory_block = yup.MemoryBlock([1, 2, 3, 4, 5])
+    data = memory_block.getData()
+
+    memory_block.setSize(0)
+    del memory_block
+
+    assert bytes(data) == bytes([1, 2, 3, 4, 5])
+    assert data.readonly
+
+#==================================================================================================
+
+def test_buffer_arguments_must_be_contiguous():
+    memory_block = yup.MemoryBlock(4, True)
+
+    with pytest.raises(BufferError):
+        memory_block.append(memoryview(bytearray(8))[::2])
+
+    with pytest.raises(BufferError):
+        memory_block.copyTo(b"\x00\x00", 0)
+
+#==================================================================================================
+
+def test_buffer_arguments_use_byte_size():
+    import array
+
+    memory_block = yup.MemoryBlock()
+    memory_block.append(array.array('i', [1, 2]))
+    assert memory_block.getSize() == 2 * array.array('i').itemsize

@@ -197,6 +197,23 @@ TEST_F (PngImageFormatMalformedTests, ApngFrameOutsideCanvasFallsBackToDefaultIm
     EXPECT_EQ (image.getHeight(), 4);
 }
 
+TEST_F (PngImageFormatMalformedTests, TruncatedImageDataReturnsInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PngImageFormatWriter writer (rawStream, PixelFormat::RGBA);
+    ASSERT_TRUE (writer.writeImage (generateTestImage (64, 64, PixelFormat::RGBA)));
+
+    const auto* bytes = static_cast<const uint8*> (rawStream->getData());
+    const size_t truncatedSize = rawStream->getDataSize() / 2;
+    ASSERT_GT (truncatedSize, static_cast<size_t> (8 + 25 + 8));
+
+    PngImageFormatReader reader (new MemoryInputStream (bytes, truncatedSize, true));
+
+    EXPECT_EQ (reader.width, 64);
+    EXPECT_EQ (reader.height, 64);
+    EXPECT_FALSE (reader.readImage().isValid());
+}
+
 TEST (PngImageFormatTests, ReaderHasAccessibleMetadataValues)
 {
     auto* rawStream = new MemoryOutputStream();

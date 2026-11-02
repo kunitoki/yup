@@ -262,45 +262,25 @@ Result AudioPeakProfile::saveToFile (const File& file) const
     if (! isValid())
         return Result::fail ("Cannot save invalid profile");
 
-    try
+    TemporaryFile tempFile (file);
+
     {
-        FileOutputStream stream (file);
+        FileOutputStream stream (tempFile.getFile());
 
         if (! stream.openedOk())
             return Result::fail ("Failed to open file for writing");
 
-        // Write header
-        stream.write ("YUPPEAKS", 8);
-        stream.writeInt (1); // Version
-        stream.writeInt (0); // Reserved
+        writeToStream (stream);
+        stream.flush();
 
-        // Write metadata
-        stream.writeInt (numSamples);
-        stream.writeInt (numChannels);
-        stream.writeInt (baseResolution);
-        stream.writeInt (static_cast<int> (levels.size()));
-
-        // Write each level
-        for (const auto& level : levels)
-        {
-            stream.writeInt (level.aggregationFactor);
-
-            for (const auto& channelPeaks : level.channelPeaks)
-            {
-                const int numPeaks = static_cast<int> (channelPeaks.minValues.size());
-                stream.writeInt (numPeaks);
-
-                stream.write (channelPeaks.minValues.data(), numPeaks * sizeof (float));
-                stream.write (channelPeaks.maxValues.data(), numPeaks * sizeof (float));
-            }
-        }
-
-        return Result::ok();
+        if (stream.getStatus().failed())
+            return Result::fail ("Failed to write profile");
     }
-    catch (...)
-    {
-        return Result::fail ("Exception while saving profile");
-    }
+
+    if (! tempFile.overwriteTargetFileWithTemporary())
+        return Result::fail ("Failed to replace target file");
+
+    return Result::ok();
 }
 
 Result AudioPeakProfile::loadFromFile (const File& file)
@@ -310,69 +290,12 @@ Result AudioPeakProfile::loadFromFile (const File& file)
     if (! file.existsAsFile())
         return Result::fail ("File does not exist");
 
-    try
-    {
-        FileInputStream stream (file);
+    FileInputStream stream (file);
 
-        if (! stream.openedOk())
-            return Result::fail ("Failed to open file for reading");
+    if (! stream.openedOk())
+        return Result::fail ("Failed to open file for reading");
 
-        // Read and verify header
-        char magic[9] = { 0 };
-        stream.read (magic, 8);
-
-        if (std::string (magic) != "YUPPEAKS")
-            return Result::fail ("Invalid file format");
-
-        const int version = stream.readInt();
-        if (version != 1)
-            return Result::fail ("Unsupported version");
-
-        stream.readInt(); // Reserved
-
-        // Read metadata
-        numSamples = stream.readInt();
-        numChannels = stream.readInt();
-        baseResolution = stream.readInt();
-        const int numLevels = stream.readInt();
-
-        if (numSamples <= 0 || numChannels <= 0 || baseResolution <= 0 || numLevels <= 0)
-            return Result::fail ("Invalid metadata");
-
-        // Read each level
-        levels.reserve (numLevels);
-
-        for (int levelIndex = 0; levelIndex < numLevels; ++levelIndex)
-        {
-            Level level;
-            level.aggregationFactor = stream.readInt();
-            level.channelPeaks.resize (numChannels);
-
-            for (int channel = 0; channel < numChannels; ++channel)
-            {
-                const int numPeaks = stream.readInt();
-
-                if (numPeaks <= 0)
-                    return Result::fail ("Invalid peak count");
-
-                auto& peaks = level.channelPeaks[channel];
-                peaks.minValues.resize (numPeaks);
-                peaks.maxValues.resize (numPeaks);
-
-                stream.read (peaks.minValues.data(), numPeaks * sizeof (float));
-                stream.read (peaks.maxValues.data(), numPeaks * sizeof (float));
-            }
-
-            levels.push_back (std::move (level));
-        }
-
-        return Result::ok();
-    }
-    catch (...)
-    {
-        clear();
-        return Result::fail ("Exception while loading profile");
-    }
+    return readFromStream (stream);
 }
 
 MemoryBlock AudioPeakProfile::serialize() const
@@ -383,7 +306,24 @@ MemoryBlock AudioPeakProfile::serialize() const
         return block;
 
     MemoryOutputStream stream (block, false);
+    writeToStream (stream);
 
+    return block;
+}
+
+Result AudioPeakProfile::deserialize (const MemoryBlock& data)
+{
+    clear();
+
+    if (data.getSize() < 20)
+        return Result::fail ("Data too small");
+
+    MemoryInputStream stream (data, false);
+    return readFromStream (stream);
+}
+
+void AudioPeakProfile::writeToStream (OutputStream& stream) const
+{
     // Write header
     stream.write ("YUPPEAKS", 8);
     stream.writeInt (1); // Version
@@ -409,31 +349,29 @@ MemoryBlock AudioPeakProfile::serialize() const
             stream.write (channelPeaks.maxValues.data(), numPeaks * sizeof (float));
         }
     }
-
-    return block;
 }
 
-Result AudioPeakProfile::deserialize (const MemoryBlock& data)
+Result AudioPeakProfile::readFromStream (InputStream& stream)
 {
-    clear();
+    constexpr int maxChannels = 1024;
+    constexpr int maxLevels = 64;
 
-    if (data.getSize() < 20)
-        return Result::fail ("Data too small");
+    const auto fail = [this] (const char* message)
+    {
+        clear();
+        return Result::fail (message);
+    };
 
     try
     {
-        MemoryInputStream stream (data, false);
-
         // Read and verify header
         char magic[9] = { 0 };
-        stream.read (magic, 8);
-
-        if (std::string (magic) != "YUPPEAKS")
-            return Result::fail ("Invalid format");
+        if (stream.read (magic, 8) != 8 || std::string (magic) != "YUPPEAKS")
+            return fail ("Invalid file format");
 
         const int version = stream.readInt();
         if (version != 1)
-            return Result::fail ("Unsupported version");
+            return fail ("Unsupported version");
 
         stream.readInt(); // Reserved
 
@@ -443,31 +381,47 @@ Result AudioPeakProfile::deserialize (const MemoryBlock& data)
         baseResolution = stream.readInt();
         const int numLevels = stream.readInt();
 
-        if (numSamples <= 0 || numChannels <= 0 || baseResolution <= 0 || numLevels <= 0)
-            return Result::fail ("Invalid metadata");
+        if (numSamples <= 0 || numChannels <= 0 || numChannels > maxChannels
+            || baseResolution <= 0 || numLevels <= 0 || numLevels > maxLevels)
+            return fail ("Invalid metadata");
 
         // Read each level
-        levels.reserve (numLevels);
+        levels.reserve (static_cast<size_t> (numLevels));
 
         for (int levelIndex = 0; levelIndex < numLevels; ++levelIndex)
         {
             Level level;
             level.aggregationFactor = stream.readInt();
-            level.channelPeaks.resize (numChannels);
+
+            if (level.aggregationFactor <= 0
+                || static_cast<int64> (baseResolution) * level.aggregationFactor > std::numeric_limits<int>::max())
+                return fail ("Invalid aggregation factor");
+
+            const int64 peakResolution = static_cast<int64> (baseResolution) * level.aggregationFactor;
+            const int64 expectedNumPeaks = (static_cast<int64> (numSamples) + peakResolution - 1) / peakResolution;
+
+            level.channelPeaks.resize (static_cast<size_t> (numChannels));
 
             for (int channel = 0; channel < numChannels; ++channel)
             {
                 const int numPeaks = stream.readInt();
 
-                if (numPeaks <= 0)
-                    return Result::fail ("Invalid peak count");
+                if (numPeaks <= 0 || numPeaks != expectedNumPeaks)
+                    return fail ("Invalid peak count");
+
+                const int64 numBytes = static_cast<int64> (numPeaks) * static_cast<int64> (sizeof (float));
+                const int64 bytesRemaining = stream.getNumBytesRemaining();
+
+                if (numBytes > std::numeric_limits<int>::max() || (bytesRemaining >= 0 && bytesRemaining < numBytes * 2))
+                    return fail ("Truncated peak data");
 
                 auto& peaks = level.channelPeaks[channel];
-                peaks.minValues.resize (numPeaks);
-                peaks.maxValues.resize (numPeaks);
+                peaks.minValues.resize (static_cast<size_t> (numPeaks));
+                peaks.maxValues.resize (static_cast<size_t> (numPeaks));
 
-                stream.read (peaks.minValues.data(), numPeaks * sizeof (float));
-                stream.read (peaks.maxValues.data(), numPeaks * sizeof (float));
+                if (stream.read (peaks.minValues.data(), static_cast<int> (numBytes)) != numBytes
+                    || stream.read (peaks.maxValues.data(), static_cast<int> (numBytes)) != numBytes)
+                    return fail ("Truncated peak data");
             }
 
             levels.push_back (std::move (level));
@@ -477,8 +431,7 @@ Result AudioPeakProfile::deserialize (const MemoryBlock& data)
     }
     catch (...)
     {
-        clear();
-        return Result::fail ("Exception while deserializing");
+        return fail ("Exception while loading profile");
     }
 }
 

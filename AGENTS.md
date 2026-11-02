@@ -4,7 +4,7 @@ Directive rules for generating, reviewing and suggesting code in YUP. Apply them
 
 ## Project
 
-C++20 graphics/audio library, ISC licensed, forked from the JUCE7 ISC modules. CMake build, Google Test, Rive + OpenGL/Metal/D3D.
+C++20 graphics/audio library, ISC licensed, forked from the JUCE7 ISC modules. CMake build, Google Test, Rive + OpenGL/Metal/D3D/Vulkan/WebGPU.
 Copyright line for new files: `Copyright (c) 2026 - kunitoki@gmail.com`.
 
 ## Hard Rules

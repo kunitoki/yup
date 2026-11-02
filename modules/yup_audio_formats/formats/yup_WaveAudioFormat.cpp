@@ -95,7 +95,7 @@ WaveAudioFormatReader::WaveAudioFormatReader (InputStream* sourceStream)
         // dr_wav copies info text verbatim, so it is not guaranteed to be null terminated
         const auto infoText = [] (const drwav_metadata& metadata)
         {
-            const auto numBytes = jmin ((drwav_uint64) metadata.data.infoText.stringLength + 1, (drwav_uint64) std::numeric_limits<int>::max());
+            const auto numBytes = jmin ((drwav_uint64) metadata.data.infoText.stringLength + 1, (drwav_uint64) (std::numeric_limits<int>::max)());
             return String::fromUTF8 (metadata.data.infoText.pString, (int) numBytes);
         };
 

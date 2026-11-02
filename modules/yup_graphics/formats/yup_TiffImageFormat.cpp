@@ -313,8 +313,6 @@ void TiffImageFormatReader::parseHeader()
                 metadata->rawChunks[key] = MemoryBlock (rawData, count);
         };
 
-        extractRawTag (TIFFTAG_EXIFIFD, "tiff/exif");
-        extractRawTag (TIFFTAG_GPSIFD, "tiff/gps");
         extractRawTag (TIFFTAG_ICCPROFILE, "tiff/icc");
         extractRawTag (TIFFTAG_XMLPACKET, "tiff/xmp");
         extractRawTag (TIFFTAG_RICHTIFFIPTC, "tiff/iptc");

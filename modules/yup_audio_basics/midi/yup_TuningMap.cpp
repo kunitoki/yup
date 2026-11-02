@@ -422,7 +422,7 @@ struct AnaMarkScale
     bool readKey (const StringArray& key, const String& value)
     {
         int note = 0;
-        const bool isNoteKey = key.size() == 2 && parseInteger (key[1], note) && note < numNotes;
+        const bool isNoteKey = key.size() == 2 && parseInteger (key[1], note) && isPositiveAndBelow (note, numNotes);
 
         switch (section)
         {

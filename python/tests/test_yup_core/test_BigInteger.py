@@ -1,3 +1,4 @@
+import pytest
 from ctypes import c_uint32
 
 import yup
@@ -461,3 +462,23 @@ def test_bit_setting():
         assert c_uint32(result).value == value.value
         assert old1 == yup.readLittleEndianBitsInBuffer (test, offset - 6, 6)
         assert old2 == yup.readLittleEndianBitsInBuffer (test, offset + num, 6)
+
+#==================================================================================================
+
+def test_bit_buffer_bounds():
+    test = bytearray(4)
+
+    yup.writeLittleEndianBitsInBuffer(test, 0, 32, 0xffffffff)
+    assert yup.readLittleEndianBitsInBuffer(test, 0, 32) == 0xffffffff
+
+    with pytest.raises(RuntimeError):
+        yup.writeLittleEndianBitsInBuffer(test, 1, 32, 0)
+
+    with pytest.raises(RuntimeError):
+        yup.writeLittleEndianBitsInBuffer(bytearray(8), 0, 33, 0)
+
+    with pytest.raises(RuntimeError):
+        yup.writeLittleEndianBitsInBuffer(test, 0xfffffff0, 32, 0)
+
+    with pytest.raises(RuntimeError):
+        yup.readLittleEndianBitsInBuffer(test, 0xfffffff0, 32)

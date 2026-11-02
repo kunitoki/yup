@@ -88,6 +88,12 @@ bool AudioFormatReader::read (AudioBuffer<float>* buffer,
     if (numSamples <= 0 || numCh == 0)
         return true;
 
+    if (startSampleInDestBuffer < 0 || numSamples > buffer->getNumSamples() - startSampleInDestBuffer)
+    {
+        jassertfalse;
+        return false;
+    }
+
     // Determine what we actually can and should read
     const bool canReadLeft = useReaderLeftChan;
     const bool canReadRight = useReaderRightChan && (numChannels >= 2);

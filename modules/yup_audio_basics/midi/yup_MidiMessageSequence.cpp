@@ -364,6 +364,9 @@ public:
 
     void set (int controller, int value)
     {
+        if (! isPositiveAndBelow (controller, (int) std::size (values)))
+            return;
+
         values[controller] = (char) value;
     }
 };

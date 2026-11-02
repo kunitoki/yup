@@ -63,6 +63,33 @@ protected:
         profile.reset();
     }
 
+    static MemoryBlock makeSerializedProfile (int numSamples, int baseResolution, int aggregationFactor, int numPeaks, int numValuesWritten)
+    {
+        MemoryBlock block;
+        MemoryOutputStream stream (block, false);
+
+        stream.write ("YUPPEAKS", 8);
+        stream.writeInt (1);
+        stream.writeInt (0);
+        stream.writeInt (numSamples);
+        stream.writeInt (1);
+        stream.writeInt (baseResolution);
+        stream.writeInt (1);
+        stream.writeInt (aggregationFactor);
+        stream.writeInt (numPeaks);
+
+        for (int i = 0; i < numValuesWritten * 2; ++i)
+            stream.writeFloat (0.5f);
+
+        stream.flush();
+        return block;
+    }
+
+    static File getTestFile (const String& name)
+    {
+        return File::getSpecialLocation (File::SpecialLocationType::tempDirectory).getChildFile (name);
+    }
+
     std::unique_ptr<AudioPeakProfile> profile;
 };
 
@@ -403,6 +430,108 @@ TEST_F (AudioPeakProfileTests, EmptySerializationDataHandledGracefully)
     EXPECT_FALSE (result.wasOk());
     EXPECT_FALSE (profile->isValid());
 }
+
+TEST_F (AudioPeakProfileTests, DeserializeAcceptsConsistentData)
+{
+    auto result = profile->deserialize (makeSerializedProfile (1000, 10, 4, 25, 25));
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (profile->isValid());
+    EXPECT_EQ (4, profile->getAggregationFactor (0));
+}
+
+TEST_F (AudioPeakProfileTests, DeserializeRejectsZeroAggregationFactor)
+{
+    auto result = profile->deserialize (makeSerializedProfile (1000, 1, 0, 1000, 1000));
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, DeserializeRejectsNegativeAggregationFactor)
+{
+    auto result = profile->deserialize (makeSerializedProfile (1000, 1, -16, 1000, 1000));
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, DeserializeRejectsOverflowingAggregationFactor)
+{
+    auto result = profile->deserialize (makeSerializedProfile (1000, 1024, std::numeric_limits<int>::max(), 1, 1));
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, DeserializeRejectsPeakCountInconsistentWithSamples)
+{
+    auto result = profile->deserialize (makeSerializedProfile (1000, 1, 1, 10, 10));
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, DeserializeRejectsTruncatedPeakData)
+{
+    auto result = profile->deserialize (makeSerializedProfile (1000, 1, 1, 1000, 10));
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+}
+
+TEST_F (AudioPeakProfileTests, LoadFromFileRejectsInvalidAggregationFactor)
+{
+    File file = getTestFile ("invalid_factor_profile.yuppeaks");
+    file.deleteFile();
+    const auto data = makeSerializedProfile (1000, 1, 0, 1000, 1000);
+    ASSERT_TRUE (file.replaceWithData (data.getData(), data.getSize()));
+
+    auto result = profile->loadFromFile (file);
+
+    EXPECT_FALSE (result.wasOk());
+    EXPECT_FALSE (profile->isValid());
+
+    file.deleteFile();
+}
+
+TEST_F (AudioPeakProfileTests, SaveToFileReplacesExistingContent)
+{
+    auto buffer = createTestBuffer (1, 1000);
+    ASSERT_TRUE (profile->buildFromBuffer (buffer, 1, { 16 }).wasOk());
+
+    File file = getTestFile ("replace_existing_profile.yuppeaks");
+    ASSERT_TRUE (file.replaceWithText ("existing content that must not be kept"));
+
+    EXPECT_TRUE (profile->saveToFile (file).wasOk());
+    EXPECT_EQ (static_cast<int64> (profile->serialize().getSize()), file.getSize());
+
+    AudioPeakProfile loadedProfile;
+    EXPECT_TRUE (loadedProfile.loadFromFile (file).wasOk());
+
+    file.deleteFile();
+}
+
+#if YUP_MAC || YUP_LINUX
+TEST_F (AudioPeakProfileTests, SaveToFileDoesNotWriteThroughSymlink)
+{
+    auto buffer = createTestBuffer (1, 1000);
+    ASSERT_TRUE (profile->buildFromBuffer (buffer, 1, {}).wasOk());
+
+    File victim = getTestFile ("symlink_victim.txt");
+    File link = getTestFile ("symlink_profile.yuppeaks");
+    link.deleteFile();
+    ASSERT_TRUE (victim.replaceWithText ("victim"));
+    ASSERT_TRUE (victim.createSymbolicLink (link, true));
+
+    EXPECT_TRUE (profile->saveToFile (link).wasOk());
+    EXPECT_EQ (String ("victim"), victim.loadFileAsString());
+    EXPECT_FALSE (link.isSymbolicLink());
+
+    link.deleteFile();
+    victim.deleteFile();
+}
+#endif
 
 TEST_F (AudioPeakProfileTests, LoadFromNonExistentFileReturnsError)
 {
