@@ -24,6 +24,14 @@ layout(location = 0) out vec4 fragColor;
 
 const float focal = 2.8;
 
+// How far over the mirroring floor the ridge stays, clear of its ripples, and how softly it
+// settles there instead of sinking in.
+const float floorClearance = 0.15;
+const float floorSoftness = 0.325;
+
+// How bright the floor's reflection is next to what it reflects.
+const float reflectionLevel = 0.7;
+
 // Lights the landscape around a playhead at a phase across the width: a bright core at the
 // head, a trail of ripples running behind it and a faint sheet of light standing up from it.
 float playheadEnergy(float phase, out float sheet)
@@ -56,6 +64,16 @@ float wave(float phase)
     return mix(fetchSample(i0), fetchSample(i1), position - float(i0));
 }
 
+// The profile with its lows smoothly held over the floor, which the ridge, one unit over
+// the profile, would otherwise sink into. Higher up it is the profile unchanged.
+float ridge(float phase)
+{
+    float value = wave(phase);
+    float lowest = floorClearance - 1.0;
+    float h = max(floorSoftness - abs(value - lowest), 0.0) / floorSoftness;
+    return max(value, lowest) + h * h * floorSoftness * 0.25;
+}
+
 void main()
 {
     vec2 resolution = vec2(u.width, u.height);
@@ -79,7 +97,7 @@ void main()
 
         // Scrolling repeats the period sideways; otherwise the profile spans the width once.
         float across = p.x * frequency + 0.5;
-        p.y -= wave(u.scrolling > 0.5 ? fract(across + u.time * 0.01) : clamp(across, 0.0, 1.0));
+        p.y -= ridge(u.scrolling > 0.5 ? fract(across + u.time * 0.01) : clamp(across, 0.0, 1.0));
 
         float sheet;
         float energy = playheadEnergy(across, sheet);
@@ -93,7 +111,8 @@ void main()
 
         float phase = z * 0.5 + hue;
         vec3 tone = u.accent.rgb * (cos(phase) + 1.3) + u.accent.gbr * 0.15 * cos(phase + 2.0);
-        color += tone * energy / max(d * z, 1.0e-4) + u.accent.rgb * sheet * 3.0;
+        float mirrored = mix(1.0, reflectionLevel, smoothstep(0.0, 0.1, r));
+        color += (tone * energy / max(d * z, 1.0e-4) + u.accent.rgb * sheet * 3.0) * mirrored;
     }
 
     // Clamped because some backends expand tanh into exp ratios that turn NaN once exp overflows.
