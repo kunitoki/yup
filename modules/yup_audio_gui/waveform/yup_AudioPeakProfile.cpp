@@ -305,8 +305,11 @@ MemoryBlock AudioPeakProfile::serialize() const
     if (! isValid())
         return block;
 
-    MemoryOutputStream stream (block, false);
-    writeToStream (stream);
+    {
+        // The stream trims the block to the written size when destroyed
+        MemoryOutputStream stream (block, false);
+        writeToStream (stream);
+    }
 
     return block;
 }
