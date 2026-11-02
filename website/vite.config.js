@@ -10,7 +10,7 @@ const pages = ["index", "modules", "showcase", "compare", "releases", "get-start
 
 // Production origin, used for canonical links, social cards, the sitemap and robots.txt.
 const siteUrl = "https://yup.audio";
-const socialImage = resolve(repoRoot, "docs/_static/images/yup_prism_synth.jpg");
+const socialImage = resolve(repoRoot, "docs/_static/images/yup_retrace_plugin.jpg");
 
 // Service worker that cross-origin isolates the site on GitHub Pages, which can't send the headers
 // the threaded YUP demos need. Served from the root so its scope covers every page.
