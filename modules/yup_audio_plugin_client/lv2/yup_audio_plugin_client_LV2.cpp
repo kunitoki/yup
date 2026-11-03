@@ -219,6 +219,7 @@ public:
         outputBusViews.reserve (static_cast<size_t> (processor->getNumAudioOutputs()));
         inputChannelPtrStorage.resize (static_cast<size_t> (numInputChannels));
         outputChannelPtrStorage.resize (static_cast<size_t> (numOutputChannels));
+        audioPorts.assign (static_cast<size_t> (PortIndices { numInputChannels, numOutputChannels }.getMaxAudioPortIndex()), nullptr);
 
         // Build parameter Urid maps
         const auto params = processor->getParameters();
@@ -282,9 +283,8 @@ public:
         {
             enabledPort = static_cast<const float*> (data);
         }
-        else if (port < static_cast<uint32_t> (indices.getMaxAudioPortIndex()))
+        else if (port < audioPorts.size())
         {
-            audioPorts.resize (static_cast<std::size_t> (indices.getMaxAudioPortIndex()));
             audioPorts[port] = static_cast<float*> (data);
         }
     }
@@ -504,7 +504,7 @@ private:
         while (! lv2_atom_sequence_is_end (&inputSequence->body, inputSequence->atom.size, iter))
         {
             const auto* body = &iter->body;
-            const auto sampleOffset = static_cast<int> (iter->time.frames);
+            const auto sampleOffset = static_cast<int> (jlimit<int64> (0, jmax (0, numSamplesInt - 1), iter->time.frames));
 
             // MIDI events
             if (body->type == urids.midi_MidiEvent)
@@ -807,6 +807,9 @@ public:
         if (programData != nullptr && type == self->urids.atom_Int && size == sizeof (int32_t))
         {
             const auto programIndex = *static_cast<const int32_t*> (programData);
+            if (! isPositiveAndBelow (programIndex, self->processor->getNumPresets()))
+                return LV2_STATE_ERR_UNKNOWN;
+
             self->processor->setCurrentPreset (programIndex);
             return LV2_STATE_SUCCESS;
         }

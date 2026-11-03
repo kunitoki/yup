@@ -148,6 +148,38 @@ TEST_F (SystemClipboardTests, ClearingClipboardReleasesOwnedData)
     EXPECT_TRUE (SystemClipboard::getClipboardMimeTypes().isEmpty());
 }
 
+TEST_F (SystemClipboardTests, ReplacingClipboardDataReleasesPreviousDataOnce)
+{
+    constexpr char firstPayload[] = { 'o', 'n', 'e' };
+    constexpr char secondPayload[] = { 't', 'w', 'o' };
+    const String mimeType = "application/x-yup-test";
+    int firstReleaseCount = 0;
+    int secondReleaseCount = 0;
+
+    ASSERT_TRUE (SystemClipboard::copyToClipboard (
+        { mimeType, makeMemoryBlock (firstPayload, sizeof (firstPayload)) },
+        [&firstReleaseCount]
+    {
+        ++firstReleaseCount;
+    }));
+
+    ASSERT_TRUE (SystemClipboard::copyToClipboard (
+        { mimeType, makeMemoryBlock (secondPayload, sizeof (secondPayload)) },
+        [&secondReleaseCount]
+    {
+        ++secondReleaseCount;
+    }));
+
+    EXPECT_EQ (firstReleaseCount, 1);
+    EXPECT_EQ (secondReleaseCount, 0);
+    EXPECT_EQ (SystemClipboard::getFromClipboard (mimeType).data,
+               makeMemoryBlock (secondPayload, sizeof (secondPayload)));
+
+    EXPECT_TRUE (SystemClipboard::clearClipboardData());
+    EXPECT_EQ (firstReleaseCount, 1);
+    EXPECT_EQ (secondReleaseCount, 1);
+}
+
 TEST_F (SystemClipboardTests, CopiesAndRetrievesPrimarySelectionText)
 {
     SystemClipboard::copyTextToPrimarySelection ("primary selection");

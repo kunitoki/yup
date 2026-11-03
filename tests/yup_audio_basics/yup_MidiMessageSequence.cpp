@@ -1017,3 +1017,19 @@ TEST (MidiMessageSequenceTests, CreateControllerUpdatesForTimeDifferentChannel)
         }
     }
 }
+
+TEST_F (MidiMessageSequenceTest, CreateControllerUpdatesForTimeIgnoresOutOfRangeControllerNumbers)
+{
+    const uint8 rawController[] = { 0xb0, 0xff, 0x41 };
+
+    MidiMessageSequence sequence;
+    sequence.addEvent (MidiMessage (rawController, (int) sizeof (rawController), 0.0));
+    sequence.addEvent (MidiMessage::controllerEvent (1, 7, 100).withTimeStamp (0.0));
+
+    Array<MidiMessage> m;
+    sequence.createControllerUpdatesForTime (1, 1.0, m);
+
+    ASSERT_EQ (m.size(), 1);
+    EXPECT_EQ (m[0].getControllerNumber(), 7);
+    EXPECT_EQ (m[0].getControllerValue(), 100);
+}

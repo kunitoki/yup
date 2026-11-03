@@ -551,6 +551,27 @@ TEST_F (AudioThumbnailTests, PaintChannelWithEmptyRange)
     EXPECT_TRUE (true);
 }
 
+TEST_F (AudioThumbnailTests, PaintChannelWithOutOfBoundsRangeIsClamped)
+{
+    auto syncCache = std::make_shared<AudioPeakProfileCache>();
+    AudioThumbnail syncThumbnail (syncCache);
+
+    auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
+    syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    Rectangle<float> lane (0.0f, 0.0f, 400.0f, 100.0f);
+
+    syncThumbnail.paintChannel (g, lane, 0, Range<double> (-5000.0, 100.0), 400.0f);
+    syncThumbnail.paintChannel (g, lane, 0, Range<double> (-5000.0, kThumbnailBufferSize * 4.0), 400.0f);
+    syncThumbnail.paintChannel (g, lane, 0, Range<double> (kThumbnailBufferSize * 2.0, kThumbnailBufferSize * 4.0), 400.0f);
+
+    EXPECT_TRUE (true);
+}
+
 TEST_F (AudioThumbnailTests, PaintChannelWithNoPeakProfile)
 {
     auto context = yup_constructHeadlessGraphicsContext ({}, {});

@@ -80,12 +80,10 @@ void AudioSourcePlayer::audioDeviceIOCallbackWithContext (const float* const* in
                                                           int numSamples,
                                                           [[maybe_unused]] const AudioIODeviceCallbackContext& context)
 {
-    // these should have been prepared by audioDeviceAboutToStart()...
-    jassert (sampleRate > 0 && bufferSize > 0);
-
     const AudioLockType::ScopedLockType sl (readLock);
 
-    if (source != nullptr)
+    // A device may deliver a trailing callback after audioDeviceStopped(), once the source is released
+    if (source != nullptr && sampleRate > 0 && bufferSize > 0)
     {
         int numActiveChans = 0, numInputs = 0, numOutputs = 0;
 
@@ -185,11 +183,14 @@ void AudioSourcePlayer::prepareToPlay (double newSampleRate, int newBufferSize)
 
 void AudioSourcePlayer::audioDeviceStopped()
 {
+    {
+        const AudioLockType::ScopedLockType sl (readLock);
+        sampleRate = 0.0;
+        bufferSize = 0;
+    }
+
     if (source != nullptr)
         source->releaseResources();
-
-    sampleRate = 0.0;
-    bufferSize = 0;
 
     tempBuffer.setSize (2, 8);
 }

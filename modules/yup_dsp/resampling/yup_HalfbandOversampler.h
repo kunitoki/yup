@@ -257,6 +257,15 @@ public:
         jassert (numChannels <= maxChannelCount);
         jassert (numSamples <= maxInputSamples);
 
+        if (numChannels <= 0 || numSamples <= 0
+            || numChannels > maxChannelCount
+            || numSamples > maxInputSamples)
+        {
+            currentOversampledSize = 0;
+            currentNumChannels = 0;
+            return;
+        }
+
         currentOversampledSize = numSamples * OversampleFactor;
         currentNumChannels = numChannels;
         oversampledBuffer.setSize (numChannels, currentOversampledSize, false, false, true);
@@ -324,6 +333,7 @@ public:
                            passed to the preceding upsample() or beginGeneration() call).
         @param numSamples  Number of output samples per channel (must match the numSamples
                            passed to the preceding upsample() or beginGeneration() call).
+                           Mismatched or out of range sizes clear the output instead.
     */
     void downsample (SampleType* const* output, int numChannels, int numSamples) noexcept
     {
@@ -333,6 +343,18 @@ public:
         jassert (numChannels == currentNumChannels);
         jassert (currentOversampledSize > 0);
         jassert (numSamples * OversampleFactor == currentOversampledSize);
+
+        if (numChannels <= 0 || numSamples <= 0
+            || currentOversampledSize <= 0
+            || numChannels > currentNumChannels
+            || numSamples > maxInputSamples
+            || numSamples * OversampleFactor != currentOversampledSize)
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
+                FloatVectorOperations::clear (output[ch], jmax (0, numSamples));
+
+            return;
+        }
 
         for (int ch = 0; ch < numChannels; ++ch)
         {

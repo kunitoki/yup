@@ -1062,6 +1062,25 @@ TEST_F (StringTests, AppendedMalformedRangeStoresWellFormedBytes)
     EXPECT_EQ (str.length(), 1 + 2 + 2);
 }
 
+TEST_F (StringTests, MalformedNullTerminatedAndMaxCharsStoreWellFormedBytes)
+{
+    const char bytes[] = "\xFF\xC0\xE0\x80" "A\xF8";
+
+    const auto unbounded = String (CharPointer_UTF8 (bytes));
+    EXPECT_EQ (std::strlen (unbounded.toRawUTF8()), unbounded.getNumBytesAsUTF8());
+    EXPECT_TRUE (CharPointer_UTF8::isValidString (unbounded.toRawUTF8(), (int) unbounded.getNumBytesAsUTF8()));
+
+    const auto bounded = String (CharPointer_UTF8 (bytes), 3);
+    EXPECT_EQ (bounded.length(), 3);
+    EXPECT_EQ (std::strlen (bounded.toRawUTF8()), bounded.getNumBytesAsUTF8());
+    EXPECT_TRUE (CharPointer_UTF8::isValidString (bounded.toRawUTF8(), (int) bounded.getNumBytesAsUTF8()));
+
+    const char16_t utf16[] = { 0xd800, u'B', 0xdc00, 0 };
+    const auto fromUtf16 = String (CharPointer_UTF16 (reinterpret_cast<const CharPointer_UTF16::CharType*> (utf16)));
+    EXPECT_EQ (std::strlen (fromUtf16.toRawUTF8()), fromUtf16.getNumBytesAsUTF8());
+    EXPECT_TRUE (CharPointer_UTF8::isValidString (fromUtf16.toRawUTF8(), (int) fromUtf16.getNumBytesAsUTF8()));
+}
+
 TEST_F (StringTests, StdStringMalformedInputIsBounded)
 {
     const std::string malformed (2048, '\xC0');

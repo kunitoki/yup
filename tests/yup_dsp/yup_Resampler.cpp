@@ -210,6 +210,18 @@ TEST_F (ResamplerTest, LatencyReturnsCorrectValue)
     EXPECT_EQ (resamplerDown.getLatencyInSamples(), 8);
 }
 
+TEST_F (ResamplerTest, OversizedBlocksAreRejected)
+{
+    std::vector<float> input (blockSize * 2, 0.5f);
+    std::vector<float> output (blockSize * 4, 0.0f);
+    const float* inPtrs[] = { input.data(), input.data(), input.data() };
+    float* outPtrs[] = { output.data(), output.data(), output.data() };
+
+    EXPECT_EQ (0, resamplerUp.resample (inPtrs, outPtrs, 1, blockSize * 2));
+    EXPECT_EQ (0, resamplerUp.resample (inPtrs, outPtrs, maxChannels + 1, blockSize));
+    EXPECT_GT (resamplerUp.resample (inPtrs, outPtrs, 1, blockSize), 0);
+}
+
 TEST_F (ResamplerTest, UpsampleProducesMoreOutputThanInput)
 {
     std::vector<float> input (blockSize, 0.0f);

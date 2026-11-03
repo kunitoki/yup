@@ -130,7 +130,7 @@ struct AudioSessionObserverClass final : public ObjCClass<NSObject>
         addMethod (@selector (handleRouteChange:), handleRouteChange);
         YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-        addMethod (sel_registerName ("dealloc"), [] (id self, SEL)
+        addMethod (sel_registerName ("dealloc"), [] (__unsafe_unretained id self, SEL)
         {
             [[NSNotificationCenter defaultCenter] removeObserver:self];
             sendSuperclassMessage<void> (self, sel_registerName ("dealloc"));

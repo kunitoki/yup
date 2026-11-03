@@ -183,6 +183,15 @@ TEST (AudioFormatReaderTests, SearchForLevelFindsFirstMatchingRun)
     EXPECT_EQ (-1, reader.searchForLevel (0, 5, 0.8, 0.9, 1));
 }
 
+TEST (AudioFormatReaderTests, SearchForLevelChecksAllChannels)
+{
+    MockAudioFormatReader reader (3, 4);
+    reader.buffer.clear();
+    fillChannel (reader.buffer, 2, { 0.0f, 0.6f, 0.6f, 0.0f });
+
+    EXPECT_EQ (1, reader.searchForLevel (0, 4, 0.5, 0.7, 2));
+}
+
 TEST (AudioFormatReaderTests, GetChannelLayoutMatchesChannelCount)
 {
     MockAudioFormatReader monoReader (1, 1);
@@ -234,4 +243,83 @@ TEST (AudioFormatReaderTests, ReadOutOfRangeReturnsFalse)
 
     // Request samples beyond length
     EXPECT_FALSE (reader.read (&destination, 0, 4, 2, true, false));
+}
+
+TEST (AudioFormatReaderSourceTests, LoopingSourceShorterThanBlockWrapsWithinBuffer)
+{
+    MockAudioFormatReader reader (1, 10);
+    for (int sample = 0; sample < 10; ++sample)
+        reader.buffer.setSample (0, sample, (float) (sample + 1));
+
+    AudioFormatReaderSource source (&reader, false);
+    source.setLooping (true);
+
+    AudioBuffer<float> destination (1, 512);
+
+    for (int block = 0; block < 4; ++block)
+    {
+        destination.clear();
+        source.getNextAudioBlock (AudioSourceChannelInfo (destination));
+
+        const auto blockStart = (int64) block * 512;
+        for (int sample = 0; sample < 512; ++sample)
+            EXPECT_FLOAT_EQ ((float) ((blockStart + sample) % 10 + 1), destination.getSample (0, sample));
+
+        EXPECT_EQ ((blockStart + 512) % 10, source.getNextReadPosition());
+    }
+}
+
+TEST (AudioFormatReaderSourceTests, LoopingSourceWrapsPositionBeyondLength)
+{
+    MockAudioFormatReader reader (1, 4);
+    fillChannel (reader.buffer, 0, { 0.1f, 0.2f, 0.3f, 0.4f });
+
+    AudioFormatReaderSource source (&reader, false);
+    source.setLooping (true);
+    source.setNextReadPosition (10);
+    EXPECT_EQ (2, source.getNextReadPosition());
+
+    AudioBuffer<float> destination (1, 3);
+    source.getNextAudioBlock (AudioSourceChannelInfo (destination));
+
+    EXPECT_FLOAT_EQ (0.3f, destination.getSample (0, 0));
+    EXPECT_FLOAT_EQ (0.4f, destination.getSample (0, 1));
+    EXPECT_FLOAT_EQ (0.1f, destination.getSample (0, 2));
+    EXPECT_EQ (1, source.getNextReadPosition());
+}
+
+TEST (AudioFormatReaderSourceTests, NonLoopingSourcePastEndProducesSilence)
+{
+    MockAudioFormatReader reader (1, 4);
+    fillChannel (reader.buffer, 0, { 0.1f, 0.2f, 0.3f, 0.4f });
+
+    AudioFormatReaderSource source (&reader, false);
+    source.setNextReadPosition (100);
+
+    AudioBuffer<float> destination (1, 8);
+    destination.fill (1.0f);
+    source.getNextAudioBlock (AudioSourceChannelInfo (destination));
+
+    for (int sample = 0; sample < 8; ++sample)
+        EXPECT_FLOAT_EQ (0.0f, destination.getSample (0, sample));
+}
+
+TEST (AudioFormatReaderSourceTests, NonLoopingSourceClearsAfterEnd)
+{
+    MockAudioFormatReader reader (1, 4);
+    fillChannel (reader.buffer, 0, { 0.1f, 0.2f, 0.3f, 0.4f });
+
+    AudioFormatReaderSource source (&reader, false);
+    source.setNextReadPosition (2);
+
+    AudioBuffer<float> destination (1, 6);
+    destination.fill (1.0f);
+    source.getNextAudioBlock (AudioSourceChannelInfo (destination));
+
+    EXPECT_FLOAT_EQ (0.3f, destination.getSample (0, 0));
+    EXPECT_FLOAT_EQ (0.4f, destination.getSample (0, 1));
+    for (int sample = 2; sample < 6; ++sample)
+        EXPECT_FLOAT_EQ (0.0f, destination.getSample (0, sample));
+
+    EXPECT_EQ (4, source.getNextReadPosition());
 }

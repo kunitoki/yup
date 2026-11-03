@@ -131,6 +131,9 @@ private:
         /** Precomposition canvas leases held until the composition render completes. */
         std::vector<AnimationRenderResources::PrecompCanvasLease>* precompLeases = nullptr;
 
+        /** Number of precomposition levels entered so far, capped to stop cyclic assets. */
+        int precompDepth = 0;
+
         AffineTransform resolveLayerTransform (const AnimationLayer& layer) const;
     };
 

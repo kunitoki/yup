@@ -72,7 +72,11 @@ public:
             if (ub.data.empty())
                 continue;
 
-            UINT cbSize = static_cast<UINT> ((ub.data.size() + 15) & ~15u);
+            const UINT cbSize = static_cast<UINT> ((ub.data.size() + 15) & ~15u);
+
+            // D3D11 reads ByteWidth bytes from pSysMem, so pad the uniform data to avoid an over-read.
+            std::vector<uint8_t> paddedData (cbSize, 0);
+            std::memcpy (paddedData.data(), ub.data.data(), ub.data.size());
 
             D3D11_BUFFER_DESC cbDesc {};
             cbDesc.ByteWidth = cbSize;
@@ -81,7 +85,7 @@ public:
             cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
             D3D11_SUBRESOURCE_DATA initData {};
-            initData.pSysMem = ub.data.data();
+            initData.pSysMem = paddedData.data();
 
             ComPtr<ID3D11Buffer> cb;
             HRESULT hr = device->CreateBuffer (&cbDesc, &initData, cb.ReleaseAndGetAddressOf());

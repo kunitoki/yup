@@ -3522,3 +3522,22 @@ TEST_F (AnimationRendererTests, RenderPartialOpacityPrecompLayerDoesNotCrash)
     }
 }
 
+
+TEST_F (AnimationRendererTests, RenderCyclicPrecompStopsAtMaxDepth)
+{
+    auto comp = LottieReader::parseData (kNestedPrecompJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    const auto& outer = comp->assets[String ("outerAsset")];
+    ASSERT_NE (outer, nullptr);
+    ASSERT_EQ (outer->layers.size(), 1u);
+
+    auto* middle = dynamic_cast<PrecompLayer*> (outer->layers[0].get());
+    ASSERT_NE (middle, nullptr);
+    middle->precompRefId = "outerAsset";
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+}

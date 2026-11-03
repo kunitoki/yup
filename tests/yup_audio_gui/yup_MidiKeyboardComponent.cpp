@@ -1072,7 +1072,11 @@ protected:
 
     void runDispatchLoopUntil (int millisecondsToRunFor = 100)
     {
+#if YUP_MODAL_LOOPS_PERMITTED
         messageManager->runDispatchLoopUntil (millisecondsToRunFor);
+#else
+        ignoreUnused (millisecondsToRunFor);
+#endif
     }
 
     MessageManager* messageManager = nullptr;

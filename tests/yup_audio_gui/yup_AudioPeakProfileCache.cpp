@@ -23,6 +23,10 @@
 
 #include <yup_audio_gui/yup_audio_gui.h>
 
+#if YUP_MAC || YUP_LINUX
+#include <sys/stat.h>
+#endif
+
 using namespace yup;
 
 namespace
@@ -744,3 +748,59 @@ TEST_F (AudioPeakProfileCacheTests, ClearDiskCacheWithNoCacheDirectory)
     // Should not crash
     EXPECT_TRUE (true);
 }
+
+#if YUP_MAC || YUP_LINUX
+TEST_F (AudioPeakProfileCacheTests, DiskCacheCreatesDirectoryWithOwnerOnlyPermissions)
+{
+    File privateDir = tempDir.getChildFile ("private_cache");
+    cache->setCacheDirectory (privateDir);
+    cache->setDiskCacheEnabled (true);
+
+    struct stat info;
+    ASSERT_EQ (0, ::stat (privateDir.getFullPathName().toRawUTF8(), &info));
+    EXPECT_EQ (static_cast<mode_t> (S_IRWXU), info.st_mode & 0777);
+}
+
+TEST_F (AudioPeakProfileCacheTests, DiskCacheRefusesSymlinkedDirectory)
+{
+    File realDir = tempDir.getChildFile ("real_cache");
+    File linkDir = tempDir.getChildFile ("link_cache");
+    ASSERT_TRUE (realDir.createDirectory());
+    ASSERT_TRUE (realDir.createSymbolicLink (linkDir, true));
+
+    cache->setCacheDirectory (linkDir);
+    cache->setDiskCacheEnabled (true);
+
+    auto buildFunction = []() -> std::shared_ptr<AudioPeakProfile>
+    {
+        auto profile = std::make_shared<AudioPeakProfile>();
+        profile->buildFromBuffer (createCacheTestBuffer (1, 1000), 1, {});
+        return profile;
+    };
+
+    cache->requestProfile ("symlinked_dir", buildFunction, false);
+
+    EXPECT_EQ (0, realDir.findChildFiles (File::TypesOfFileToFind::findFiles, false, "*.yuppeaks").size());
+}
+
+TEST_F (AudioPeakProfileCacheTests, DiskCacheRefusesWorldWritableDirectory)
+{
+    File sharedDir = tempDir.getChildFile ("shared_cache");
+    ASSERT_TRUE (sharedDir.createDirectory());
+    ASSERT_EQ (0, ::chmod (sharedDir.getFullPathName().toRawUTF8(), 0777));
+
+    cache->setCacheDirectory (sharedDir);
+    cache->setDiskCacheEnabled (true);
+
+    auto buildFunction = []() -> std::shared_ptr<AudioPeakProfile>
+    {
+        auto profile = std::make_shared<AudioPeakProfile>();
+        profile->buildFromBuffer (createCacheTestBuffer (1, 1000), 1, {});
+        return profile;
+    };
+
+    cache->requestProfile ("world_writable_dir", buildFunction, false);
+
+    EXPECT_EQ (0, sharedDir.findChildFiles (File::TypesOfFileToFind::findFiles, false, "*.yuppeaks").size());
+}
+#endif

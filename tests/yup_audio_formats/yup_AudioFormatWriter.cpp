@@ -190,6 +190,21 @@ TEST (AudioFormatWriterTests, WriteFromAudioReaderUsesReaderSamples)
     EXPECT_EQ (3u, writer.writtenSamples[1].size());
 }
 
+TEST (AudioFormatWriterTests, WriteFromAudioReaderWithFewerReaderChannelsClearsTheRest)
+{
+    WriterTestAudioFormatReader reader (1, 3);
+    fillWriterChannel (reader.buffer, 0, { 0.1f, -0.2f, 0.3f });
+
+    MockAudioFormatWriter writer (3, 16);
+
+    EXPECT_TRUE (writer.writeFromAudioReader (reader, 0, 3));
+
+    ASSERT_EQ (3u, writer.writtenSamples.size());
+    expectFloatArrayEquals (writer.writtenSamples[0], { 0.1f, -0.2f, 0.3f });
+    expectFloatArrayEquals (writer.writtenSamples[1], { 0.0f, 0.0f, 0.0f });
+    expectFloatArrayEquals (writer.writtenSamples[2], { 0.0f, 0.0f, 0.0f });
+}
+
 TEST (AudioFormatWriterTests, WriteHelperEncodesIntegerAndFloatFormats)
 {
     const std::array<float, 4> sourceValues { -1.0f, -0.5f, 0.0f, 1.0f };

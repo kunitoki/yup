@@ -211,12 +211,16 @@ void AudioThumbnail::paintChannel (Graphics& g,
 
     // Get peaks for selected level
     const auto& peaks = currentProfile->getChannelPeaks (channelIndex, bestLevel);
-    const int peakBaseResolution = currentProfile->getBaseResolution() * currentProfile->getAggregationFactor (bestLevel);
+    const int64 peakBaseResolution = static_cast<int64> (currentProfile->getBaseResolution()) * currentProfile->getAggregationFactor (bestLevel);
+    if (peakBaseResolution <= 0)
+        return;
 
     // Calculate peak range
-    const int startPeak = static_cast<int> (sampleRange.getStart()) / peakBaseResolution;
-    const int endPeak = jmin (static_cast<int> (peaks.minValues.size()),
-                              (static_cast<int> (sampleRange.getEnd()) + peakBaseResolution - 1) / peakBaseResolution);
+    const int64 availablePeaks = static_cast<int64> (jmin (peaks.minValues.size(), peaks.maxValues.size()));
+    const int64 rangeStart = jmax (static_cast<int64> (0), static_cast<int64> (sampleRange.getStart()));
+    const int64 rangeEnd = jmax (static_cast<int64> (0), static_cast<int64> (sampleRange.getEnd()));
+    const int startPeak = static_cast<int> (jmin (availablePeaks, rangeStart / peakBaseResolution));
+    const int endPeak = static_cast<int> (jmin (availablePeaks, (rangeEnd + peakBaseResolution - 1) / peakBaseResolution));
 
     if (endPeak <= startPeak)
         return;

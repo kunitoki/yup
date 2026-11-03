@@ -127,9 +127,19 @@ function (_yup_audio_plugin_create_au)
 
     target_compile_features (${target_name}_au_plugin PRIVATE cxx_std_${target_cxx_standard})
 
+    # Hosts look the Cocoa view factory up by name in the bundle image, so it must be a compiled
+    # class with a name unique per plugin and version
+    if (YUP_ARG_PLUGIN_ID)
+        set (au_view_factory_id "${YUP_ARG_PLUGIN_ID}")
+    else()
+        set (au_view_factory_id "${target_name}")
+    endif()
+    string (MAKE_C_IDENTIFIER "YUPAUViewFactory_${au_view_factory_id}_${YUP_ARG_PLUGIN_VERSION}" au_view_factory_class)
+
     target_compile_definitions (${target_name}_au_plugin PRIVATE
         YUP_AUDIO_PLUGIN_ENABLE_AU=1
-        YUP_STANDALONE_APPLICATION=0)
+        YUP_STANDALONE_APPLICATION=0
+        YupPlugin_AUViewFactoryClass=${au_view_factory_class})
 
     _yup_sdl_configure_private_static_target ("${target_name}_au_plugin" au_sdl_symbols_sdl_target)
     set (au_plugin_bundle_libraries

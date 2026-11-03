@@ -1380,7 +1380,7 @@ struct AudioPluginEditorViewAUClass final : public ObjCClass<NSView>
                 state->resizeEditorToBounds();
         });
 
-        addMethod (sel_registerName ("dealloc"), [] (id self, SEL)
+        addMethod (sel_registerName ("dealloc"), [] (__unsafe_unretained id self, SEL)
         {
             delete getState (self);
             setIvar<AudioPluginEditorViewAU*> (self, "state", nullptr);
@@ -1429,66 +1429,56 @@ void AudioPluginProcessorAU::closeEditorViews()
             view->closeEditorForProcessorDestruction();
 }
 
+} // namespace yup
+
 //==============================================================================
 // Cocoa view factory
 
-struct AudioPluginProcessorAUViewFactoryClass final : public ObjCClass<NSObject>
+/* Hosts resolve the factory with [NSBundle classNamed:], which only finds classes compiled into
+   the bundle image, so this can't be a runtime class. The build system gives it a name unique to
+   the plugin and its version, so different plugins never clash in the same process. */
+#ifndef YupPlugin_AUViewFactoryClass
+#error "YupPlugin_AUViewFactoryClass must be defined by the build system"
+#endif
+
+@interface YupPlugin_AUViewFactoryClass : NSObject <AUCocoaUIBase>
+@end
+
+@implementation YupPlugin_AUViewFactoryClass
+
+- (unsigned) interfaceVersion
 {
-    AudioPluginProcessorAUViewFactoryClass()
-        : ObjCClass<NSObject> ("YUPAudioPluginProcessorAUViewFactory_")
-    {
-        addMethod (@selector (interfaceVersion), [] (id, SEL) -> unsigned
-        {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory interfaceVersion requested");
-            return 0;
-        });
-
-        addMethod (@selector (description), [] (id, SEL) -> NSString*
-        {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory description requested");
-            return @YupPlugin_Name;
-        });
-
-        addMethod (@selector (uiViewForAudioUnit:withSize:), [] (id, SEL, AudioUnit inAudioUnit, NSSize inPreferredSize) -> NSView*
-        {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory requested editor view: audioUnit=" << describePointer (inAudioUnit) << ", preferredWidth=" << String (static_cast<double> (inPreferredSize.width)) << ", preferredHeight=" << String (static_cast<double> (inPreferredSize.height)));
-
-            auto* proc = AudioPluginProcessorAU::findInstance (inAudioUnit);
-            if (proc == nullptr)
-            {
-                YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory failed: AU instance not found");
-                return nil;
-            }
-
-            if (proc->getProcessor() == nullptr)
-            {
-                YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory failed: processor is null");
-                return nil;
-            }
-
-            return AudioPluginEditorViewAUClass::create (proc, inPreferredSize);
-        });
-
-        addProtocol (@protocol (AUCocoaUIBase));
-        registerClass();
-    }
-
-    static Class get()
-    {
-        static AudioPluginProcessorAUViewFactoryClass factoryClass;
-        return factoryClass.cls;
-    }
-};
-
-/** The bundle of this plugin binary: runtime classes belong to no image, so bundleForClass would
-    answer the host's main bundle instead. */
-static NSBundle* getPluginBundle()
-{
-    const auto bundleFile = File::getSpecialLocation (File::currentApplicationFile);
-    return [NSBundle bundleWithPath:yupStringToNS (bundleFile.getFullPathName())];
+    return 0;
 }
 
-} // namespace yup
+- (NSString*) description
+{
+    return @YupPlugin_Name;
+}
+
+- (NSView*) uiViewForAudioUnit:(AudioUnit) inAudioUnit withSize:(NSSize) inPreferredSize
+{
+    using namespace yup;
+
+    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory requested editor view: audioUnit=" << describePointer (inAudioUnit) << ", preferredWidth=" << String (static_cast<double> (inPreferredSize.width)) << ", preferredHeight=" << String (static_cast<double> (inPreferredSize.height)));
+
+    auto* proc = AudioPluginProcessorAU::findInstance (inAudioUnit);
+    if (proc == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory failed: AU instance not found");
+        return nil;
+    }
+
+    if (proc->getProcessor() == nullptr)
+    {
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory failed: processor is null");
+        return nil;
+    }
+
+    return AudioPluginEditorViewAUClass::create (proc, inPreferredSize);
+}
+
+@end
 
 //==============================================================================
 // GetProperty implementation (needs ObjC)
@@ -1559,7 +1549,7 @@ OSStatus AudioPluginProcessorAU::GetProperty (AudioUnitPropertyID inID,
         auto* info = static_cast<AudioUnitCocoaViewInfo*> (outData);
 
         // The bundle location is this plugin's own bundle
-        NSBundle* bundle = getPluginBundle();
+        NSBundle* bundle = [NSBundle bundleForClass:[YupPlugin_AUViewFactoryClass class]];
         if (bundle == nil)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "GetProperty CocoaUI failed: bundle is nil");
@@ -1567,8 +1557,7 @@ OSStatus AudioPluginProcessorAU::GetProperty (AudioUnitPropertyID inID,
         }
 
         auto* bundleLocation = (__bridge_retained CFURLRef)[bundle bundleURL];
-        // The class is registered at runtime under a unique name, so pass that name to the host
-        auto* viewClass = (__bridge_retained CFStringRef) NSStringFromClass (AudioPluginProcessorAUViewFactoryClass::get());
+        auto* viewClass = (__bridge_retained CFStringRef) NSStringFromClass ([YupPlugin_AUViewFactoryClass class]);
 
         if (bundleLocation == nullptr || viewClass == nullptr)
         {

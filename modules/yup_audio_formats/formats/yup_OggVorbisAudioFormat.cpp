@@ -220,7 +220,10 @@ bool OggVorbisAudioFormatReader::readSamples (float* const* destChannels,
         if (samplesRead < 0)
             return false;
 
-        const auto numChannelsToCopy = jmin (numDestChannels, numChannels);
+        // Chained streams can change the channel count between sections
+        const auto* sectionInfo = ov_info (&vorbisFile, currentSection);
+        const auto numSectionChannels = sectionInfo != nullptr ? sectionInfo->channels : 0;
+        const auto numChannelsToCopy = jmin (numDestChannels, numChannels, numSectionChannels);
 
         for (int ch = 0; ch < numChannelsToCopy; ++ch)
         {

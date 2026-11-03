@@ -433,6 +433,30 @@ TEST_F (HalfbandOversamplerTest, ChannelCapacityDoesNotShrinkAfterAMonoBlock)
     EXPECT_NE (nullptr, os.getOversampledChannelData (1));
 }
 
+TEST_F (HalfbandOversamplerTest, OversizedBlocksAreRejected)
+{
+    HalfbandOversampler<float, 4> os;
+    os.prepare (sampleRate, 1, 64);
+
+    std::vector<float> input (128, 0.5f);
+    const float* inputPtrs[] = { input.data() };
+    os.upsample (inputPtrs, 1, 128);
+    EXPECT_EQ (0, os.getOversampledNumSamples());
+    EXPECT_EQ (nullptr, os.getOversampledChannelData (0));
+
+    std::vector<float> output (128, 1.0f);
+    float* outputPtrs[] = { output.data() };
+    os.downsample (outputPtrs, 1, 128);
+    for (const auto sample : output)
+        EXPECT_EQ (0.0f, sample);
+
+    ASSERT_TRUE (os.beginGeneration (1, 32));
+    std::fill (output.begin(), output.end(), 1.0f);
+    os.downsample (outputPtrs, 1, 64);
+    for (int i = 0; i < 64; ++i)
+        EXPECT_EQ (0.0f, output[static_cast<std::size_t> (i)]);
+}
+
 //==============================================================================
 TEST_F (HalfbandOversamplerTest, FirImpulsePeaksAtTheReportedLatencies)
 {

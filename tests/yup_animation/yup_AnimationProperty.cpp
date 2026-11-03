@@ -234,3 +234,26 @@ TEST_F (AnimationPropertyTests, EmptyKeyframeListReturnsDefaultValue)
     EXPECT_TRUE (prop.isAnimated());
     EXPECT_NEAR (prop.getValueAt (5.0f), 0.0f, 0.001f);
 }
+
+TEST_F (AnimationPropertyTests, NonFiniteKeyframeFramesAreDropped)
+{
+    auto prop = FloatProperty::Builder {}
+                    .keyframe (std::numeric_limits<float>::quiet_NaN(), 3.0f, AnimationEasing::linear())
+                    .keyframe (0.0f, 10.0f, AnimationEasing::linear())
+                    .keyframe (std::numeric_limits<float>::infinity(), 5.0f, AnimationEasing::linear())
+                    .keyframe (10.0f, 20.0f, AnimationEasing::linear())
+                    .build();
+
+    EXPECT_EQ (prop.getKeyframes().size(), 2u);
+    EXPECT_NEAR (prop.getValueAt (5.0f), 15.0f, 0.001f);
+}
+
+TEST_F (AnimationPropertyTests, NaNFrameReturnsFirstKeyframe)
+{
+    auto prop = FloatProperty::Builder {}
+                    .keyframe (0.0f, 10.0f, AnimationEasing::linear())
+                    .keyframe (10.0f, 20.0f, AnimationEasing::linear())
+                    .build();
+
+    EXPECT_NEAR (prop.getValueAt (std::numeric_limits<float>::quiet_NaN()), 10.0f, 0.001f);
+}

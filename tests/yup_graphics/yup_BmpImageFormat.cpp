@@ -58,6 +58,58 @@ TEST (BmpImageFormatTests, InvalidSignatureReturnsInvalidImage)
     EXPECT_FALSE (result.isValid());
 }
 
+class BmpImageFormatHeaderTests : public ::testing::Test
+{
+protected:
+    static std::unique_ptr<BmpImageFormatReader> readHeader (int32 width, int32 height, uint16 bitCount)
+    {
+        MemoryOutputStream out;
+        out.write ("BM", 2);
+        out.writeInt (0);  // file size
+        out.writeInt (0);  // reserved
+        out.writeInt (54); // pixel data offset
+        out.writeInt (40); // header size
+        out.writeInt (width);
+        out.writeInt (height);
+        out.writeShort (1);
+        out.writeShort (static_cast<short> (bitCount));
+        out.writeInt (0); // BI_RGB
+        out.writeInt (0);
+        out.writeInt (2835);
+        out.writeInt (2835);
+        out.writeInt (0);
+        out.writeInt (0);
+
+        auto block = out.getMemoryBlock();
+        return std::make_unique<BmpImageFormatReader> (new MemoryInputStream (block, true));
+    }
+};
+
+TEST_F (BmpImageFormatHeaderTests, RejectsMinimumIntDimensions)
+{
+    auto widthReader = readHeader (std::numeric_limits<int32>::min(), 1, 24);
+    EXPECT_EQ (widthReader->width, 0);
+    EXPECT_FALSE (widthReader->readImage().isValid());
+
+    auto heightReader = readHeader (1, std::numeric_limits<int32>::min(), 24);
+    EXPECT_EQ (heightReader->height, 0);
+    EXPECT_FALSE (heightReader->readImage().isValid());
+}
+
+TEST_F (BmpImageFormatHeaderTests, RejectsStrideOverflow)
+{
+    auto reader = readHeader (0x40000000, 1, 32);
+    EXPECT_EQ (reader->width, 0);
+    EXPECT_FALSE (reader->readImage().isValid());
+}
+
+TEST_F (BmpImageFormatHeaderTests, RejectsUnsupportedBitCount)
+{
+    auto reader = readHeader (4, 4, 2);
+    EXPECT_EQ (reader->width, 0);
+    EXPECT_FALSE (reader->readImage().isValid());
+}
+
 TEST (BmpImageFormatTests, ReaderSetsDimensionsForSmallImage)
 {
     auto* rawStream = new MemoryOutputStream();

@@ -35,6 +35,60 @@ namespace yup::Bindings
 namespace py = pybind11;
 using namespace py::literals;
 
+namespace
+{
+
+template <typename Type>
+struct AudioBufferChecks
+{
+    static void sizes (int numChannels, int numSamples)
+    {
+        if (numChannels < 0 || numSamples < 0)
+            throw py::value_error ("Number of channels and samples must not be negative");
+    }
+
+    static void channel (const AudioBuffer<Type>& buffer, int channel)
+    {
+        if (! isPositiveAndBelow (channel, buffer.getNumChannels()))
+            throw py::index_error ("Channel index out of range");
+    }
+
+    static void sample (const AudioBuffer<Type>& buffer, int channel, int sampleIndex)
+    {
+        AudioBufferChecks::channel (buffer, channel);
+
+        if (! isPositiveAndBelow (sampleIndex, buffer.getNumSamples()))
+            throw py::index_error ("Sample index out of range");
+    }
+
+    static void range (const AudioBuffer<Type>& buffer, int startSample, int numSamples)
+    {
+        if (startSample < 0 || numSamples < 0 || startSample > buffer.getNumSamples() - numSamples)
+            throw py::index_error ("Sample range out of bounds");
+    }
+
+    static void range (const AudioBuffer<Type>& buffer, int channel, int startSample, int numSamples)
+    {
+        AudioBufferChecks::channel (buffer, channel);
+        AudioBufferChecks::range (buffer, startSample, numSamples);
+    }
+
+    static Helpers::ContiguousBuffer samples (const py::buffer& source, int numSamples)
+    {
+        auto info = Helpers::requestContiguousBuffer (source);
+
+        if (! info.info.template item_type_is_equivalent_to<Type>())
+            throw py::value_error ("Source buffer has an incompatible sample format");
+
+        if (info.size < static_cast<size_t> (numSamples) * sizeof (Type))
+            throw py::value_error ("Source buffer is smaller than the number of samples requested");
+
+        return info;
+    }
+};
+
+} // namespace
+
 void registerYupAudioBasicsBindings (py::module_& m)
 {
     // clang-format off
@@ -47,43 +101,150 @@ void registerYupAudioBasicsBindings (py::module_& m)
 
         classAudioBuffer
             .def (py::init<>())
-            .def (py::init<int, int>(), "numChannels"_a, "numSamples"_a)
+            .def (py::init ([] (int numChannels, int numSamples)
+            {
+                AudioBufferChecks<Type>::sizes (numChannels, numSamples);
+                return AudioBuffer<Type> (numChannels, numSamples);
+            }), "numChannels"_a, "numSamples"_a)
             .def (py::init<const AudioBuffer<Type>&>())
             .def ("getNumChannels", &AudioBuffer<Type>::getNumChannels)
             .def ("getNumSamples", &AudioBuffer<Type>::getNumSamples)
-            .def ("getReadPointer", py::overload_cast<int> (&AudioBuffer<Type>::getReadPointer, py::const_), py::return_value_policy::reference_internal)
-            .def ("getReadPointer", py::overload_cast<int, int> (&AudioBuffer<Type>::getReadPointer, py::const_), py::return_value_policy::reference_internal)
-            .def ("getWritePointer", py::overload_cast<int> (&AudioBuffer<Type>::getWritePointer), py::return_value_policy::reference_internal)
-            .def ("getWritePointer", py::overload_cast<int, int> (&AudioBuffer<Type>::getWritePointer), py::return_value_policy::reference_internal)
+            .def ("getReadPointer", [] (const AudioBuffer<Type>& self, int channelNumber)
+            {
+                AudioBufferChecks<Type>::sample (self, channelNumber, 0);
+                return self.getReadPointer (channelNumber);
+            }, py::return_value_policy::reference_internal)
+            .def ("getReadPointer", [] (const AudioBuffer<Type>& self, int channelNumber, int sampleIndex)
+            {
+                AudioBufferChecks<Type>::sample (self, channelNumber, sampleIndex);
+                return self.getReadPointer (channelNumber, sampleIndex);
+            }, py::return_value_policy::reference_internal)
+            .def ("getWritePointer", [] (AudioBuffer<Type>& self, int channelNumber)
+            {
+                AudioBufferChecks<Type>::sample (self, channelNumber, 0);
+                return self.getWritePointer (channelNumber);
+            }, py::return_value_policy::reference_internal)
+            .def ("getWritePointer", [] (AudioBuffer<Type>& self, int channelNumber, int sampleIndex)
+            {
+                AudioBufferChecks<Type>::sample (self, channelNumber, sampleIndex);
+                return self.getWritePointer (channelNumber, sampleIndex);
+            }, py::return_value_policy::reference_internal)
             //.def ("getArrayOfReadPointers", &AudioBuffer<Type>::getArrayOfReadPointers, py::return_value_policy::reference_internal)
             //.def ("getArrayOfWritePointers", &AudioBuffer<Type>::getArrayOfWritePointers, py::return_value_policy::reference_internal)
-            .def ("setSize", &AudioBuffer<Type>::setSize, "numChannels"_a, "numSamples"_a, "keepExistingContent"_a = false, "clearExtraSpace"_a = false, "avoidReallocating"_a = false)
+            .def ("setSize", [] (AudioBuffer<Type>& self, int numChannels, int numSamples, bool keepExistingContent, bool clearExtraSpace, bool avoidReallocating)
+            {
+                AudioBufferChecks<Type>::sizes (numChannels, numSamples);
+                self.setSize (numChannels, numSamples, keepExistingContent, clearExtraSpace, avoidReallocating);
+            }, "numChannels"_a, "numSamples"_a, "keepExistingContent"_a = false, "clearExtraSpace"_a = false, "avoidReallocating"_a = false)
             .def ("setDataToReferTo", [] (AudioBuffer<Type>& self, py::list dataToReferTo, int numChannels, int numSamples)
             {
                 py::pybind11_fail ("setDataToReferTo is not yet supported in Python bindings");
             })
             .def ("clear", py::overload_cast<> (&AudioBuffer<Type>::clear))
-            .def ("clear", py::overload_cast<int, int> (&AudioBuffer<Type>::clear))
-            .def ("clear", py::overload_cast<int, int, int> (&AudioBuffer<Type>::clear))
+            .def ("clear", [] (AudioBuffer<Type>& self, int startSample, int numSamples)
+            {
+                AudioBufferChecks<Type>::range (self, startSample, numSamples);
+                self.clear (startSample, numSamples);
+            })
+            .def ("clear", [] (AudioBuffer<Type>& self, int channel, int startSample, int numSamples)
+            {
+                AudioBufferChecks<Type>::range (self, channel, startSample, numSamples);
+                self.clear (channel, startSample, numSamples);
+            })
             .def ("hasBeenCleared", &AudioBuffer<Type>::hasBeenCleared)
-            .def ("getSample", &AudioBuffer<Type>::getSample)
-            .def ("setSample", &AudioBuffer<Type>::setSample)
-            .def ("addSample", &AudioBuffer<Type>::addSample)
-            .def ("applyGain", py::overload_cast<int, int, int, Type> (&AudioBuffer<Type>::applyGain))
-            .def ("applyGain", py::overload_cast<int, int, Type> (&AudioBuffer<Type>::applyGain))
+            .def ("getSample", [] (const AudioBuffer<Type>& self, int channel, int sampleIndex)
+            {
+                AudioBufferChecks<Type>::sample (self, channel, sampleIndex);
+                return self.getSample (channel, sampleIndex);
+            })
+            .def ("setSample", [] (AudioBuffer<Type>& self, int destChannel, int destSample, Type newValue)
+            {
+                AudioBufferChecks<Type>::sample (self, destChannel, destSample);
+                self.setSample (destChannel, destSample, newValue);
+            })
+            .def ("addSample", [] (AudioBuffer<Type>& self, int destChannel, int destSample, Type valueToAdd)
+            {
+                AudioBufferChecks<Type>::sample (self, destChannel, destSample);
+                self.addSample (destChannel, destSample, valueToAdd);
+            })
+            .def ("applyGain", [] (AudioBuffer<Type>& self, int channel, int startSample, int numSamples, Type gain)
+            {
+                AudioBufferChecks<Type>::range (self, channel, startSample, numSamples);
+                self.applyGain (channel, startSample, numSamples, gain);
+            })
+            .def ("applyGain", [] (AudioBuffer<Type>& self, int startSample, int numSamples, Type gain)
+            {
+                AudioBufferChecks<Type>::range (self, startSample, numSamples);
+                self.applyGain (startSample, numSamples, gain);
+            })
             .def ("applyGain", py::overload_cast<Type> (&AudioBuffer<Type>::applyGain))
-            .def ("applyGainRamp", py::overload_cast<int, int, int, Type, Type> (&AudioBuffer<Type>::applyGainRamp))
-            .def ("addFrom", py::overload_cast<int, int, const AudioBuffer<Type>&, int, int, int, Type> (&AudioBuffer<Type>::addFrom))
-            .def ("addFrom", py::overload_cast<int, int, const Type*, int, Type> (&AudioBuffer<Type>::addFrom))
-            .def ("addFromWithRamp", &AudioBuffer<Type>::addFromWithRamp)
-            .def ("copyFrom", py::overload_cast<int, int, const AudioBuffer<Type>&, int, int, int> (&AudioBuffer<Type>::copyFrom))
-            .def ("copyFrom", py::overload_cast<int, int, const Type*, int> (&AudioBuffer<Type>::copyFrom))
-            .def ("copyFrom", py::overload_cast<int, int, const Type*, int, Type> (&AudioBuffer<Type>::copyFrom))
-            .def ("copyFromWithRamp", &AudioBuffer<Type>::copyFromWithRamp)
-            .def ("findMinMax", &AudioBuffer<Type>::findMinMax)
-            .def ("getMagnitude", py::overload_cast<int, int, int> (&AudioBuffer<Type>::getMagnitude, py::const_))
-            .def ("getMagnitude", py::overload_cast<int, int> (&AudioBuffer<Type>::getMagnitude, py::const_))
-            .def ("getRMSLevel", &AudioBuffer<Type>::getRMSLevel)
+            .def ("applyGainRamp", [] (AudioBuffer<Type>& self, int channel, int startSample, int numSamples, Type startGain, Type endGain)
+            {
+                AudioBufferChecks<Type>::range (self, channel, startSample, numSamples);
+                self.applyGainRamp (channel, startSample, numSamples, startGain, endGain);
+            })
+            .def ("addFrom", [] (AudioBuffer<Type>& self, int destChannel, int destStartSample, const AudioBuffer<Type>& source, int sourceChannel, int sourceStartSample, int numSamples, Type gainToApplyToSource)
+            {
+                AudioBufferChecks<Type>::range (self, destChannel, destStartSample, numSamples);
+                AudioBufferChecks<Type>::range (source, sourceChannel, sourceStartSample, numSamples);
+                self.addFrom (destChannel, destStartSample, source, sourceChannel, sourceStartSample, numSamples, gainToApplyToSource);
+            }, "destChannel"_a, "destStartSample"_a, "source"_a, "sourceChannel"_a, "sourceStartSample"_a, "numSamples"_a, "gainToApplyToSource"_a = Type (1))
+            .def ("addFrom", [] (AudioBuffer<Type>& self, int destChannel, int destStartSample, py::buffer source, int numSamples, Type gainToApplyToSource)
+            {
+                AudioBufferChecks<Type>::range (self, destChannel, destStartSample, numSamples);
+                const auto data = AudioBufferChecks<Type>::samples (source, numSamples);
+                self.addFrom (destChannel, destStartSample, static_cast<const Type*> (data.ptr), numSamples, gainToApplyToSource);
+            }, "destChannel"_a, "destStartSample"_a, "source"_a, "numSamples"_a, "gainToApplyToSource"_a = Type (1))
+            .def ("addFromWithRamp", [] (AudioBuffer<Type>& self, int destChannel, int destStartSample, py::buffer source, int numSamples, Type startGain, Type endGain)
+            {
+                AudioBufferChecks<Type>::range (self, destChannel, destStartSample, numSamples);
+                const auto data = AudioBufferChecks<Type>::samples (source, numSamples);
+                self.addFromWithRamp (destChannel, destStartSample, static_cast<const Type*> (data.ptr), numSamples, startGain, endGain);
+            }, "destChannel"_a, "destStartSample"_a, "source"_a, "numSamples"_a, "startGain"_a, "endGain"_a)
+            .def ("copyFrom", [] (AudioBuffer<Type>& self, int destChannel, int destStartSample, const AudioBuffer<Type>& source, int sourceChannel, int sourceStartSample, int numSamples)
+            {
+                AudioBufferChecks<Type>::range (self, destChannel, destStartSample, numSamples);
+                AudioBufferChecks<Type>::range (source, sourceChannel, sourceStartSample, numSamples);
+                self.copyFrom (destChannel, destStartSample, source, sourceChannel, sourceStartSample, numSamples);
+            }, "destChannel"_a, "destStartSample"_a, "source"_a, "sourceChannel"_a, "sourceStartSample"_a, "numSamples"_a)
+            .def ("copyFrom", [] (AudioBuffer<Type>& self, int destChannel, int destStartSample, py::buffer source, int numSamples)
+            {
+                AudioBufferChecks<Type>::range (self, destChannel, destStartSample, numSamples);
+                const auto data = AudioBufferChecks<Type>::samples (source, numSamples);
+                self.copyFrom (destChannel, destStartSample, static_cast<const Type*> (data.ptr), numSamples);
+            }, "destChannel"_a, "destStartSample"_a, "source"_a, "numSamples"_a)
+            .def ("copyFrom", [] (AudioBuffer<Type>& self, int destChannel, int destStartSample, py::buffer source, int numSamples, Type gain)
+            {
+                AudioBufferChecks<Type>::range (self, destChannel, destStartSample, numSamples);
+                const auto data = AudioBufferChecks<Type>::samples (source, numSamples);
+                self.copyFrom (destChannel, destStartSample, static_cast<const Type*> (data.ptr), numSamples, gain);
+            }, "destChannel"_a, "destStartSample"_a, "source"_a, "numSamples"_a, "gain"_a)
+            .def ("copyFromWithRamp", [] (AudioBuffer<Type>& self, int destChannel, int destStartSample, py::buffer source, int numSamples, Type startGain, Type endGain)
+            {
+                AudioBufferChecks<Type>::range (self, destChannel, destStartSample, numSamples);
+                const auto data = AudioBufferChecks<Type>::samples (source, numSamples);
+                self.copyFromWithRamp (destChannel, destStartSample, static_cast<const Type*> (data.ptr), numSamples, startGain, endGain);
+            }, "destChannel"_a, "destStartSample"_a, "source"_a, "numSamples"_a, "startGain"_a, "endGain"_a)
+            .def ("findMinMax", [] (const AudioBuffer<Type>& self, int channel, int startSample, int numSamples)
+            {
+                AudioBufferChecks<Type>::range (self, channel, startSample, numSamples);
+                return self.findMinMax (channel, startSample, numSamples);
+            })
+            .def ("getMagnitude", [] (const AudioBuffer<Type>& self, int channel, int startSample, int numSamples)
+            {
+                AudioBufferChecks<Type>::range (self, channel, startSample, numSamples);
+                return self.getMagnitude (channel, startSample, numSamples);
+            })
+            .def ("getMagnitude", [] (const AudioBuffer<Type>& self, int startSample, int numSamples)
+            {
+                AudioBufferChecks<Type>::range (self, startSample, numSamples);
+                return self.getMagnitude (startSample, numSamples);
+            })
+            .def ("getRMSLevel", [] (const AudioBuffer<Type>& self, int channel, int startSample, int numSamples)
+            {
+                AudioBufferChecks<Type>::range (self, channel, startSample, numSamples);
+                return self.getRMSLevel (channel, startSample, numSamples);
+            })
             //.def ("reverse", py::overload_cast<int, int> (&AudioBuffer<Type>::reverse))
             //.def ("reverse", py::overload_cast<int, int, int> (&AudioBuffer<Type>::reverse))
             .def ("__repr__", [name] (const AudioBuffer<Type>& self)
@@ -509,7 +670,13 @@ void registerYupAudioBasicsBindings (py::module_& m)
 
     classMixerAudioSource
         .def (py::init<>())
-        .def ("addInputSource", &MixerAudioSource::addInputSource, "newInput"_a, "deleteWhenRemoved"_a)
+        .def ("addInputSource", [] (MixerAudioSource& self, AudioSource* newInput, bool deleteWhenRemoved)
+        {
+            if (deleteWhenRemoved)
+                throw py::value_error ("Deleting an input source owned by Python is not supported");
+
+            self.addInputSource (newInput, false);
+        }, "newInput"_a, "deleteWhenRemoved"_a = false, py::keep_alive<1, 2>())
         .def ("removeInputSource", &MixerAudioSource::removeInputSource)
         .def ("removeAllInputs", &MixerAudioSource::removeAllInputs);
 

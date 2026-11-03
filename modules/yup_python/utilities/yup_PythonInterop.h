@@ -27,6 +27,7 @@
 #include "yup_ClassDemangling.h"
 
 #include <functional>
+#include <memory>
 
 //==============================================================================
 
@@ -100,6 +101,39 @@ pybind11::enum_<E> makeArithmeticEnum (pybind11::object& parent, const char* nam
 
 //==============================================================================
 
+/** A C-contiguous view on a Python buffer, with its total size expressed in bytes. */
+struct ContiguousBuffer
+{
+    pybind11::buffer_info info;
+    void* ptr = nullptr;
+    size_t size = 0;
+};
+
+/** Requests a C-contiguous (optionally writable) view on a Python buffer.
+
+    Non-contiguous or negatively strided exporters raise a BufferError, and so do read-only exporters when
+    a writable view is requested. The returned size is in bytes, regardless of the buffer item size.
+*/
+inline ContiguousBuffer requestContiguousBuffer (const pybind11::buffer& data, bool writable = false)
+{
+    int flags = PyBUF_C_CONTIGUOUS | PyBUF_FORMAT;
+    if (writable)
+        flags |= PyBUF_WRITABLE;
+
+    auto view = std::make_unique<Py_buffer>();
+    if (PyObject_GetBuffer (data.ptr(), view.get(), flags) != 0)
+        throw pybind11::error_already_set();
+
+    const auto sizeInBytes = static_cast<size_t> (view->len);
+
+    ContiguousBuffer result { pybind11::buffer_info (view.release()) };
+    result.ptr = result.info.ptr;
+    result.size = sizeInBytes;
+    return result;
+}
+
+//==============================================================================
+
 template <class T, class F>
 auto makeVoidPointerAndSizeCallable (F&& func)
 {
@@ -107,7 +141,7 @@ auto makeVoidPointerAndSizeCallable (F&& func)
     {
         return [func] (T* self, pybind11::buffer data)
         {
-            const auto info = data.request();
+            const auto info = requestContiguousBuffer (data);
 
             using return_value = std::invoke_result_t<F, T&, const void*, size_t>;
 
@@ -121,7 +155,7 @@ auto makeVoidPointerAndSizeCallable (F&& func)
     {
         return [func] (const T* self, pybind11::buffer data)
         {
-            const auto info = data.request();
+            const auto info = requestContiguousBuffer (data);
 
             using return_value = std::invoke_result_t<F, const T&, const void*, size_t>;
 
@@ -135,7 +169,7 @@ auto makeVoidPointerAndSizeCallable (F&& func)
     {
         return [func] (T* self, pybind11::buffer data)
         {
-            auto info = data.request (true);
+            auto info = requestContiguousBuffer (data, true);
 
             using return_value = std::invoke_result_t<F, T&, void*, size_t>;
 
@@ -149,7 +183,7 @@ auto makeVoidPointerAndSizeCallable (F&& func)
     {
         return [func] (const T* self, pybind11::buffer data)
         {
-            auto info = data.request (true);
+            auto info = requestContiguousBuffer (data, true);
 
             using return_value = std::invoke_result_t<F, T&, void*, size_t>;
 

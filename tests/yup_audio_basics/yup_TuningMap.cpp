@@ -679,6 +679,17 @@ TEST_F (TuningMapAnaMarkTests, FailedLoadKeepsPreviousTuning)
     EXPECT_NEAR (map.noteToPitch (69), 440.0, 1e-6);
 }
 
+TEST_F (TuningMapAnaMarkTests, OutOfRangeNoteKeysAreRejected)
+{
+    EXPECT_TRUE (map.loadTuningFromString ("[Tuning]\nnote -1 = 100\n").failed());
+    EXPECT_TRUE (map.loadTuningFromString ("[Tuning]\nnote 128 = 100\n").failed());
+    EXPECT_TRUE (map.loadTuningFromString ("[Exact Tuning]\nnote -1 = 100\n").failed());
+    EXPECT_TRUE (map.loadTuningFromString ("[Mapping]\nkeyboard -1 = 0\n").failed());
+
+    EXPECT_FALSE (map.isUsingTuningTable());
+    EXPECT_NEAR (map.noteToPitch (69), 440.0, 1e-6);
+}
+
 TEST_F (TuningMapAnaMarkTests, ScaleOrKeyMapLoadLeavesTheTuningTable)
 {
     EXPECT_TRUE (map.loadScaleFromString ("Pure octaves\n1\n2/1\n").wasOk());

@@ -698,6 +698,20 @@ struct MinMax
 namespace
 {
 template <typename Size>
+forcedinline bool isEmptyCount (Size num) noexcept
+{
+    if constexpr (std::is_signed_v<Size>)
+    {
+        jassert (num >= 0);
+        return num <= 0;
+    }
+    else
+    {
+        return num == 0;
+    }
+}
+
+template <typename Size>
 void clear (float* dest, Size num) noexcept
 {
 #if YUP_USE_VDSP_FRAMEWORK
@@ -2022,6 +2036,9 @@ template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::clear (FloatType* dest,
                                                                           CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::clear (dest, numValues);
 }
 
@@ -2030,6 +2047,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::fill (FloatTy
                                                                          FloatType valueToFill,
                                                                          CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::fill (dest, valueToFill, numValues);
 }
 
@@ -2038,6 +2058,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::copy (FloatTy
                                                                          const FloatType* src,
                                                                          CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     memcpy (dest, src, (size_t) numValues * sizeof (FloatType));
 }
 
@@ -2047,6 +2070,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::copyWithMulti
                                                                                      FloatType multiplier,
                                                                                      CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::copyWithMultiply (dest, src, multiplier, numValues);
 }
 
@@ -2056,6 +2082,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::copyWithDivid
                                                                                      FloatType dividend,
                                                                                      CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::copyWithDividend (dest, src, dividend, numValues);
 }
 
@@ -2065,6 +2094,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::copyWithDivid
                                                                                    FloatType divisor,
                                                                                    CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::copyWithDivide (dest, src, divisor, numValues);
 }
 
@@ -2073,6 +2105,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::add (FloatTyp
                                                                         FloatType amountToAdd,
                                                                         CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::add (dest, amountToAdd, numValues);
 }
 
@@ -2082,6 +2117,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::add (FloatTyp
                                                                         FloatType amount,
                                                                         CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::add (dest, src, amount, numValues);
 }
 
@@ -2090,6 +2128,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::add (FloatTyp
                                                                         const FloatType* src,
                                                                         CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::add (dest, src, numValues);
 }
 
@@ -2099,6 +2140,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::add (FloatTyp
                                                                         const FloatType* src2,
                                                                         CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::add (dest, src1, src2, num);
 }
 
@@ -2107,6 +2151,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::subtract (Flo
                                                                              const FloatType* src,
                                                                              CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::subtract (dest, src, numValues);
 }
 
@@ -2116,6 +2163,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::subtract (Flo
                                                                              const FloatType* src2,
                                                                              CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::subtract (dest, src1, src2, num);
 }
 
@@ -2125,6 +2175,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::addWithMultip
                                                                                     FloatType multiplier,
                                                                                     CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::addWithMultiply (dest, src, multiplier, numValues);
 }
 
@@ -2134,6 +2187,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::addWithMultip
                                                                                     const FloatType* src2,
                                                                                     CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::addWithMultiply (dest, src1, src2, num);
 }
 
@@ -2143,6 +2199,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::subtractWithM
                                                                                          FloatType multiplier,
                                                                                          CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::subtractWithMultiply (dest, src, multiplier, numValues);
 }
 
@@ -2152,6 +2211,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::subtractWithM
                                                                                          const FloatType* src2,
                                                                                          CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::subtractWithMultiply (dest, src1, src2, num);
 }
 
@@ -2160,6 +2222,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::multiply (Flo
                                                                              const FloatType* src,
                                                                              CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::multiply (dest, src, numValues);
 }
 
@@ -2169,6 +2234,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::multiply (Flo
                                                                              const FloatType* src2,
                                                                              CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::multiply (dest, src1, src2, numValues);
 }
 
@@ -2177,6 +2245,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::multiply (Flo
                                                                              FloatType multiplier,
                                                                              CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::multiply (dest, multiplier, numValues);
 }
 
@@ -2186,6 +2257,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::multiply (Flo
                                                                              FloatType multiplier,
                                                                              CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::multiply (dest, src, multiplier, num);
 }
 
@@ -2194,6 +2268,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (Float
                                                                            const FloatType* src,
                                                                            CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::divide (dest, src, numValues);
 }
 
@@ -2203,6 +2280,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (Float
                                                                            const FloatType* src2,
                                                                            CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::divide (dest, src1, src2, numValues);
 }
 
@@ -2211,6 +2291,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (Float
                                                                            FloatType divisor,
                                                                            CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::divide (dest, divisor, numValues);
 }
 
@@ -2220,6 +2303,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::divide (Float
                                                                            FloatType divisor,
                                                                            CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::divide (dest, src, divisor, num);
 }
 
@@ -2228,6 +2314,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::negate (Float
                                                                            const FloatType* src,
                                                                            CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::negate (dest, src, numValues);
 }
 
@@ -2236,6 +2325,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::abs (FloatTyp
                                                                         const FloatType* src,
                                                                         CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::abs (dest, src, numValues);
 }
 
@@ -2245,6 +2337,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::min (FloatTyp
                                                                         FloatType comp,
                                                                         CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::min (dest, src, comp, num);
 }
 
@@ -2254,6 +2349,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::min (FloatTyp
                                                                         const FloatType* src2,
                                                                         CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::min (dest, src1, src2, num);
 }
 
@@ -2263,6 +2361,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::max (FloatTyp
                                                                         FloatType comp,
                                                                         CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::max (dest, src, comp, num);
 }
 
@@ -2272,6 +2373,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::max (FloatTyp
                                                                         const FloatType* src2,
                                                                         CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::max (dest, src1, src2, num);
 }
 
@@ -2282,6 +2386,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::clip (FloatTy
                                                                          FloatType high,
                                                                          CountType num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::clip (dest, src, low, high, num);
 }
 
@@ -2289,6 +2396,9 @@ template <typename FloatType, typename CountType>
 Range<FloatType> YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::findMinAndMax (const FloatType* src,
                                                                                               CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return {};
+
     return FloatVectorHelpers::findMinAndMax (src, numValues);
 }
 
@@ -2296,6 +2406,9 @@ template <typename FloatType, typename CountType>
 FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::findMinimum (const FloatType* src,
                                                                                      CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return {};
+
     return FloatVectorHelpers::findMinimum (src, numValues);
 }
 
@@ -2303,6 +2416,9 @@ template <typename FloatType, typename CountType>
 FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::findMaximum (const FloatType* src,
                                                                                      CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return {};
+
     return FloatVectorHelpers::findMaximum (src, numValues);
 }
 
@@ -2452,6 +2568,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::sqrt (FloatTy
                                                                          const FloatType* src,
                                                                          CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
 #if YUP_USE_VDSP_FRAMEWORK
     const int count = static_cast<int> (numValues);
 
@@ -2472,6 +2591,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::exp (FloatTyp
                                                                         const FloatType* src,
                                                                         CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
 #if YUP_USE_VDSP_FRAMEWORK
     const int count = static_cast<int> (numValues);
 
@@ -2493,6 +2615,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::log (FloatTyp
                                                                         FloatType minimum,
                                                                         CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
 #if YUP_USE_VDSP_FRAMEWORK
     const int count = static_cast<int> (numValues);
 
@@ -2523,6 +2648,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::replaceBelow 
                                                                                  FloatType replacement,
                                                                                  CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::transformElements (dest, src, numValues, [threshold, replacement] (const auto& x)
     {
         using Value = std::decay_t<decltype (x)>;
@@ -2538,6 +2666,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::replaceAbove 
                                                                                  FloatType replacement,
                                                                                  CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::transformElements (dest, src, numValues, [threshold, replacement] (const auto& x)
     {
         using Value = std::decay_t<decltype (x)>;
@@ -2551,6 +2682,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::wrapPhase (Fl
                                                                               const FloatType* src,
                                                                               CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
     FloatVectorHelpers::transformElements (dest, src, numValues, [] (const auto& x)
     {
         using Value = std::decay_t<decltype (x)>;
@@ -2570,6 +2704,9 @@ void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::sinCos (Float
                                                                            const FloatType* src,
                                                                            CountType numValues) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (numValues))
+        return;
+
 #if YUP_USE_VDSP_FRAMEWORK
     const int count = static_cast<int> (numValues);
 
@@ -2630,41 +2767,65 @@ template struct FloatVectorOperationsBase<double, size_t>;
 
 void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const int* src, float multiplier, size_t num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::convertFixedToFloat (dest, src, multiplier, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::convertFixedToFloat (float* dest, const int* src, float multiplier, int num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::convertFixedToFloat (dest, src, multiplier, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, size_t num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::convertFloatToFixed (int* dest, const float* src, float multiplier, int num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::convertFloatToFixed (dest, src, multiplier, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::convertFloatToDouble (double* dest, const float* src, int num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::convertFloatToDouble (dest, src, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::convertFloatToDouble (double* dest, const float* src, size_t num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::convertFloatToDouble (dest, src, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::convertDoubleToFloat (float* dest, const double* src, int num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::convertDoubleToFloat (dest, src, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::convertDoubleToFloat (float* dest, const double* src, size_t num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::convertDoubleToFloat (dest, src, num);
 }
 
@@ -2672,21 +2833,33 @@ void YUP_CALLTYPE FloatVectorOperations::convertDoubleToFloat (float* dest, cons
 
 void YUP_CALLTYPE FloatVectorOperations::encodeMidSide (float* mid, float* side, const float* left, const float* right, int num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::encodeMidSide (mid, side, left, right, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::encodeMidSide (float* mid, float* side, const float* left, const float* right, size_t num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::encodeMidSide (mid, side, left, right, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::decodeMidSide (float* left, float* right, const float* mid, const float* side, int num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::decodeMidSide (left, right, mid, side, num);
 }
 
 void YUP_CALLTYPE FloatVectorOperations::decodeMidSide (float* left, float* right, const float* mid, const float* side, size_t num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return;
+
     FloatVectorHelpers::decodeMidSide (left, right, mid, side, num);
 }
 
@@ -2694,11 +2867,17 @@ void YUP_CALLTYPE FloatVectorOperations::decodeMidSide (float* left, float* righ
 
 double YUP_CALLTYPE FloatVectorOperations::computeCorrelation (const float* a, const float* b, int num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return {};
+
     return FloatVectorHelpers::computeCorrelation (a, b, num);
 }
 
 double YUP_CALLTYPE FloatVectorOperations::computeCorrelation (const float* a, const float* b, size_t num) noexcept
 {
+    if (FloatVectorHelpers::isEmptyCount (num))
+        return {};
+
     return FloatVectorHelpers::computeCorrelation (a, b, num);
 }
 

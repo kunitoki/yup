@@ -181,7 +181,8 @@ void clapEventToParameterChange (const clap_event_header_t* event, AudioProcesso
 
 bool addParameterModByCLAPEvent (AudioProcessor& processor,
                                  ParameterChangeBuffer& changes,
-                                 const clap_event_param_mod_t* modEvent)
+                                 const clap_event_param_mod_t* modEvent,
+                                 int sampleOffset)
 {
     if (modEvent->note_id != -1 || modEvent->key != -1)
         return false; // per-voice modulation needs voice infrastructure
@@ -203,7 +204,7 @@ bool addParameterModByCLAPEvent (AudioProcessor& processor,
 
     return changes.addChange (parameterIndex,
                               param->convertToNormalizedValue (modulatedValue),
-                              static_cast<int> (modEvent->header.time));
+                              sampleOffset);
 }
 
 bool addParameterChangeByCLAPValue (AudioProcessor& processor,
@@ -541,6 +542,11 @@ private:
     void handleMainThreadNotifications() noexcept;
     void handleAudioThreadNotifications() noexcept;
 
+    bool isCLAPAudioBusMain (uint32_t clapAudioBusIndex, bool isInput) const noexcept
+    {
+        return audioProcessor->getBusLayout().getAudioBusRole (static_cast<int> (clapAudioBusIndex), isInput) == AudioBus::Role::Main;
+    }
+
     ScopedYupInitialiser_GUI scopeInitialiser;
 
     std::unique_ptr<AudioProcessor> audioProcessor;
@@ -584,13 +590,6 @@ private:
 
     bool isBypassed = false;
     std::atomic<bool> isActive { false };
-
-    //==============================================================================
-    /** Returns true when the CLAP audio bus role is Main. */
-    bool isCLAPAudioBusMain (uint32_t clapAudioBusIndex, bool isInput) const noexcept
-    {
-        return audioProcessor->getBusLayout().getAudioBusRole (static_cast<int> (clapAudioBusIndex), isInput) == AudioBus::Role::Main;
-    }
 
     std::atomic<bool> isInsideProcessBlock { false };
     std::atomic<bool> callLatencyChangeOnNextActivate { false };
@@ -691,6 +690,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
 
         bool bypassed = wrapper->isBypassed;
         const auto bypassParameterID = getBypassHostParameterID (audioProcessor);
+        const int lastSampleOffset = jmax (0, static_cast<int> (process->frames_count) - 1);
 
         const uint32_t inputEventCount = process->in_events->size (process->in_events);
         for (uint32_t eventIndex = 0; eventIndex < inputEventCount; ++eventIndex)
@@ -699,6 +699,8 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
 
             if (event->space_id != CLAP_CORE_EVENT_SPACE_ID)
                 continue;
+
+            const int sampleOffset = jlimit (0, lastSampleOffset, static_cast<int> (event->time));
 
             if (event->type == CLAP_EVENT_PARAM_VALUE)
             {
@@ -715,18 +717,18 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                                                wrapper->paramChangeBuffer,
                                                paramEvent->param_id,
                                                static_cast<float> (paramEvent->value),
-                                               static_cast<int> (event->time));
+                                               sampleOffset);
 
                 clapEventToParameterChange (event, audioProcessor);
             }
             else if (event->type == CLAP_EVENT_PARAM_MOD)
             {
                 const auto* modEvent = reinterpret_cast<const clap_event_param_mod_t*> (event);
-                addParameterModByCLAPEvent (audioProcessor, wrapper->paramChangeBuffer, modEvent);
+                addParameterModByCLAPEvent (audioProcessor, wrapper->paramChangeBuffer, modEvent, sampleOffset);
             }
             else if (auto convertedEvent = clapEventToMidiMessage (event))
             {
-                midiBuffer.addEvent (*convertedEvent, static_cast<int> (event->time));
+                midiBuffer.addEvent (*convertedEvent, sampleOffset);
             }
         }
 
@@ -1358,6 +1360,8 @@ bool AudioPluginProcessorCLAP::initialise()
 
         auto wrapper = getWrapper (plugin);
 
+        ScopedYupInitialiser_Windowing windowingInitialiser;
+
         auto processorEditor = wrapper->audioProcessor->createEditor();
         if (processorEditor == nullptr)
             return false;
@@ -1471,9 +1475,9 @@ bool AudioPluginProcessorCLAP::initialise()
         else if (audioProcessorEditor->shouldPreserveAspectRatio())
         {
             if (preferredSize.getWidth() > preferredSize.getHeight())
-                *height = static_cast<uint32_t> (*width * (preferredSize.getWidth() / static_cast<float> (preferredSize.getHeight())));
+                *height = static_cast<uint32_t> (*width * (preferredSize.getHeight() / static_cast<float> (preferredSize.getWidth())));
             else
-                *width = static_cast<uint32_t> (*height * (preferredSize.getHeight() / static_cast<float> (preferredSize.getWidth())));
+                *width = static_cast<uint32_t> (*height * (preferredSize.getWidth() / static_cast<float> (preferredSize.getHeight())));
         }
 
         return true;

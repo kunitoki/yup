@@ -49,20 +49,25 @@ bool AudioFormatWriter::writeFromAudioReader (AudioFormatReader& reader,
                                               int64 startSample,
                                               int64 numSamplesToRead)
 {
-    const auto bufferSize = 16384;
-    const auto maxChans = jmin ((int) numChannels, (int) reader.numChannels);
+    if (numChannels <= 0)
+        return false;
 
-    HeapBlock<float> tempBuffer (bufferSize * maxChans, true);
-    HeapBlock<float*> channels (maxChans, false);
+    // The writer consumes numChannels pointers, so channels missing from the reader are cleared
+    constexpr int preferredBufferSize = 16384;
+    constexpr int maxBufferedSamples = 1 << 20;
+    const auto bufferSize = jlimit (1, preferredBufferSize, maxBufferedSamples / numChannels);
 
-    for (int i = 0; i < maxChans; ++i)
-        channels[i] = tempBuffer.getData() + i * bufferSize;
+    HeapBlock<float> tempBuffer ((size_t) bufferSize * (size_t) numChannels, true);
+    HeapBlock<float*> channels (numChannels, false);
+
+    for (int i = 0; i < numChannels; ++i)
+        channels[i] = tempBuffer.getData() + (size_t) i * (size_t) bufferSize;
 
     while (numSamplesToRead > 0)
     {
         const auto numThisTime = jmin (numSamplesToRead, (int64) bufferSize);
 
-        if (! reader.read (channels.getData(), maxChans, startSample, (int) numThisTime))
+        if (! reader.read (channels.getData(), numChannels, startSample, (int) numThisTime))
             return false;
 
         if (! write (channels.getData(), (int) numThisTime))
@@ -132,14 +137,17 @@ bool AudioFormatWriter::writeFromFloatArrays (const float* const* channels,
     if (numSamples <= 0)
         return true;
 
+    if (numChannels <= 0)
+        return false;
+
     numChannelsToWrite = jmin (numChannelsToWrite, (int) numChannels);
 
     // Create temp buffer with proper channel layout for write method
-    HeapBlock<float> tempBuffer (numSamples * numChannels, true);
+    HeapBlock<float> tempBuffer ((size_t) numSamples * (size_t) numChannels, true);
     HeapBlock<float*> floatChannels (numChannels, false);
 
     for (int i = 0; i < (int) numChannels; ++i)
-        floatChannels[i] = tempBuffer.getData() + i * numSamples;
+        floatChannels[i] = tempBuffer.getData() + (size_t) i * (size_t) numSamples;
 
     // Copy float data to temporary channels
     for (int i = 0; i < numChannelsToWrite; ++i)

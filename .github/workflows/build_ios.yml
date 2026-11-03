@@ -3,6 +3,14 @@ name: iOS
 on:
   workflow_call:
     inputs:
+      test_modules:
+        description: Semicolon-separated YUP_TEST_MODULES value (empty builds every module's tests)
+        type: string
+        default: ""
+      tests:
+        description: Whether to build the tests (they are not run)
+        type: boolean
+        default: false
       examples:
         description: JSON array of the examples to build
         type: string
@@ -19,7 +27,7 @@ env:
 jobs:
   configure:
     runs-on: macos-latest
-    if: inputs.examples != '[]'
+    if: inputs.tests || inputs.examples != '[]'
     env:
       CMAKE_C_COMPILER_LAUNCHER: ccache
       CMAKE_CXX_COMPILER_LAUNCHER: ccache
@@ -33,7 +41,8 @@ jobs:
     - name: Configure
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_BUILD_EXAMPLES=ON
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - name: Build SDL
       run: |
         cmake --build ${{ runner.workspace }}/build --config Debug --target SDL3-static
@@ -44,6 +53,40 @@ jobs:
       with:
         path: ${{ runner.workspace }}/build
         key: ios-build-${{ github.sha }}-${{ github.run_id }}
+
+  build_tests:
+    runs-on: macos-latest
+    needs: [configure]
+    if: inputs.tests
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJC_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
+    steps:
+    - uses: actions/checkout@v6
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ios-tests-${{ matrix.config }}
+        max-size: 1G
+    - uses: actions/cache/restore@v5
+      id: cache-restore
+      with:
+        path: ${{ runner.workspace }}/build
+        key: ios-build-${{ github.sha }}-${{ github.run_id }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: |
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
+    # Built only, the runners need a device or simulator to run
+    - run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
 
   build_examples:
     runs-on: macos-latest
@@ -72,6 +115,7 @@ jobs:
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_BUILD_EXAMPLES=ON
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ inputs.test_modules }}"
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target ${{ fromJson(inputs.example_targets)[matrix.example] }}
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target ${{ fromJson(inputs.example_targets)[matrix.example] }}

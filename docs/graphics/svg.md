@@ -90,6 +90,10 @@ options.allowLocalImages = true;                    // permit local file hrefs
 drawable.parseSVG (svgFile, options);
 ```
 
+Local image hrefs are confined to `baseDirectory`: absolute paths, drive or
+scheme prefixes, `..` components and symbolic links are rejected, so an
+untrusted SVG cannot read files outside it.
+
 ### Custom image resolver
 
 Supply your own loader to intercept `<image>` hrefs - useful for virtual file

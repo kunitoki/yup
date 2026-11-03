@@ -214,3 +214,66 @@ def test_memory_input_stream_read_compressed_int():
     data = b"\x04\x01\x02\x03\x04"
     input_stream = yup.MemoryInputStream(data, False)
     assert input_stream.readCompressedInt() == 67305985
+
+#==================================================================================================
+
+def test_buffer_data_is_copied():
+    data = bytearray(b"abcdef")
+    stream = yup.MemoryInputStream(data, False)
+
+    data[:] = b""
+    del data
+
+    assert stream.readEntireStreamAsString() == "abcdef"
+
+#==================================================================================================
+
+def test_memory_block_is_kept_alive():
+    stream = yup.MemoryInputStream(yup.MemoryBlock(b"abcdef"), False)
+    assert stream.readEntireStreamAsString() == "abcdef"
+
+#==================================================================================================
+
+def test_read_requires_writable_contiguous_buffer():
+    stream = yup.MemoryInputStream(b"abcdef", True)
+
+    with pytest.raises(BufferError):
+        stream.read(b"\x00\x00")
+
+    with pytest.raises(BufferError):
+        stream.read(memoryview(bytearray(8))[::2])
+
+    destination = bytearray(3)
+    assert stream.read(destination) == 3
+    assert destination == b"abc"
+
+#==================================================================================================
+
+def test_memory_output_stream_buffer_is_pinned():
+    target = bytearray(8)
+    stream = yup.MemoryOutputStream(target)
+    stream.write(b"abcd")
+    assert target[:4] == b"abcd"
+
+    with pytest.raises(BufferError):
+        target.extend(b"x")
+
+    del stream
+    target.extend(b"x")
+    assert len(target) == 9
+
+#==================================================================================================
+
+def test_memory_output_stream_rejects_read_only_buffer():
+    with pytest.raises(BufferError):
+        yup.MemoryOutputStream(b"\x00\x00\x00\x00")
+
+#==================================================================================================
+
+def test_memory_output_stream_get_data_outlives_stream():
+    stream = yup.MemoryOutputStream()
+    stream.write(b"abcd")
+    data = stream.getData()
+
+    del stream
+    assert bytes(data) == b"abcd"

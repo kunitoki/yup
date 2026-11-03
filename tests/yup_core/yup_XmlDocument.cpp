@@ -612,7 +612,7 @@ public:
 
     InputStream* createInputStreamFor (const String&) override
     {
-        return nullptr;
+        return createInputStream();
     }
 
     int64 hashCode() const override
@@ -693,6 +693,7 @@ TEST_F (XmlDocumentTests, SelfReferencingEntityIsRejected)
 
     XmlDocument doc (xml);
     EXPECT_EQ (doc.getDocumentElement(), nullptr);
+    EXPECT_EQ (doc.getLastParseError(), "recursive entity reference");
 }
 
 TEST_F (XmlDocumentTests, ExponentialEntityExpansionIsRejected)
@@ -713,6 +714,7 @@ TEST_F (XmlDocumentTests, ExponentialEntityExpansionIsRejected)
 
     XmlDocument doc (xml);
     EXPECT_EQ (doc.getDocumentElement(), nullptr);
+    EXPECT_EQ (doc.getLastParseError(), "entity expansion too large");
 }
 
 TEST_F (XmlDocumentTests, DeeplyNestedElementsAreRejected)
@@ -722,9 +724,82 @@ TEST_F (XmlDocumentTests, DeeplyNestedElementsAreRejected)
     for (int i = 0; i < 300; ++i)
         xml << "<e>";
 
+    xml << "&unknown;";
+
     for (int i = 0; i < 300; ++i)
         xml << "</e>";
 
     XmlDocument doc (xml);
     EXPECT_EQ (doc.getDocumentElement(), nullptr);
+    EXPECT_EQ (doc.getLastParseError(), "elements nested too deeply");
+}
+
+TEST_F (XmlDocumentTests, ExternalDtdNotLoadedThroughInputSourceByDefault)
+{
+    const String xml = "<?xml version=\"1.0\"?>\n"
+                       "<!DOCTYPE root SYSTEM \"external.dtd\">\n"
+                       "<root>&secret;</root>";
+    const String dtd = "<!ENTITY secret \"external value\">";
+
+    XmlDocument doc (xml);
+    doc.setInputSource (new CountingInputSource (dtd));
+
+    auto element = doc.getDocumentElement();
+    ASSERT_NE (element, nullptr);
+    EXPECT_EQ (element->getAllSubText(), "secret");
+    EXPECT_TRUE (doc.getLastParseError().contains ("unknown entity"));
+
+    XmlDocument allowedDoc (xml);
+    allowedDoc.setInputSource (new CountingInputSource (dtd));
+    allowedDoc.setExternalEntitiesAllowed (true);
+
+    auto allowedElement = allowedDoc.getDocumentElement();
+    ASSERT_NE (allowedElement, nullptr);
+    EXPECT_EQ (allowedElement->getAllSubText(), "external value");
+}
+
+TEST_F (XmlDocumentTests, SelfReferencingEntityMarkupIsRejected)
+{
+    XmlDocument doc ("<?xml version=\"1.0\"?>\n"
+                     "<!DOCTYPE root [\n"
+                     "  <!ENTITY e \"&lt;x&gt;&amp;e;&lt;/x&gt;\">\n"
+                     "]>\n"
+                     "<root>&e;</root>");
+
+    EXPECT_EQ (doc.getDocumentElement(), nullptr);
+    EXPECT_EQ (doc.getLastParseError(), "recursive entity reference");
+}
+
+TEST_F (XmlDocumentTests, DeeplyNestedEntitiesAreRejected)
+{
+    String xml = "<?xml version=\"1.0\"?>\n<!DOCTYPE root [\n  <!ENTITY e0 \"x\">\n";
+
+    for (int i = 1; i <= 50; ++i)
+        xml << "  <!ENTITY e" << String (i) << " \"&e" << String (i - 1) << ";\">\n";
+
+    xml << "]>\n<root>&e50;</root>";
+
+    XmlDocument doc (xml);
+    EXPECT_EQ (doc.getDocumentElement(), nullptr);
+    EXPECT_EQ (doc.getLastParseError(), "entities nested too deeply");
+}
+
+TEST_F (XmlDocumentTests, FatalErrorIsNotClearedByLaterRecoverableError)
+{
+    XmlDocument doc ("<root><a b><c/>&unknown;</root>");
+
+    EXPECT_EQ (doc.getDocumentElement(), nullptr);
+    EXPECT_TRUE (doc.getLastParseError().startsWith ("expected '='"));
+}
+
+TEST_F (XmlDocumentTests, ConsecutiveSubEntitiesAreAllExpandedOnce)
+{
+    auto element = XmlDocument::parse ("<?xml version=\"1.0\"?>\n"
+                                       "<!DOCTYPE root [\n"
+                                       "  <!ENTITY a \"&lt;&gt;&amp;lt;\">\n"
+                                       "]>\n"
+                                       "<root v=\"&a;\"/>");
+
+    ASSERT_NE (element, nullptr);
+    EXPECT_EQ (element->getStringAttribute ("v"), "<>&lt;");
 }

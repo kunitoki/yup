@@ -303,6 +303,15 @@ cd build/examples/graphics
 # ./gradlew assembleDebug
 ```
 
+The tests are configured directly with the NDK toolchain instead, and built (not run) as shared libraries:
+
+```bash
+cmake -G "Ninja Multi-Config" -S . -B build_android_tests -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-21 -DANDROID_STL=c++_shared -DANDROID_CPP_FEATURES="rtti exceptions" \
+  -DYUP_ANDROID_ASSETS_DIR=build_android_tests/assets -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=OFF
+cmake --build build_android_tests --config Release --target yup_tests
+```
+
 
 ### iOS
 You can either use Ninja or Xcode:

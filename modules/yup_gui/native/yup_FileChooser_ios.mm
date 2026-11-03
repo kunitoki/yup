@@ -71,7 +71,7 @@ struct FileChooserDelegateClass final : public ObjCClass<NSObject>
             });
         });
 
-        addMethod (sel_registerName ("dealloc"), [] (id self, SEL)
+        addMethod (sel_registerName ("dealloc"), [] (__unsafe_unretained id self, SEL)
         {
             delete getState (self);
             setIvar<State*> (self, "state", nullptr);

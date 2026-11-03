@@ -311,3 +311,21 @@ TEST_F (AnimationGradientTests, GradientTypeEnum_ValuesAreDistinct)
 {
     EXPECT_NE (AnimationGradient::GradientType::Linear, AnimationGradient::GradientType::Radial);
 }
+
+TEST_F (AnimationGradientTests, ParseStopsFromFlatArrayIgnoresNegativeColorPoints)
+{
+    const std::vector<float> flat { 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
+
+    EXPECT_TRUE (AnimationGradient::parseStopsFromFlatArray (flat, -5).empty());
+    EXPECT_TRUE (AnimationGradient::parseStopsFromFlatArray (flat, std::numeric_limits<int>::min()).empty());
+}
+
+TEST_F (AnimationGradientTests, SingleNaNAnimatedStopResolvesWithoutReadingPastEnd)
+{
+    AnimationGradient gradient;
+    gradient.numColorPoints = 2;
+    gradient.animatedStops.push_back ({ std::numeric_limits<float>::quiet_NaN(), { 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f } });
+
+    const auto result = gradient.toColorGradient (5.0f);
+    EXPECT_EQ (result.getStartColor(), Color::fromRGB (255, 0, 0));
+}

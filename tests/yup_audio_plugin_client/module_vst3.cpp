@@ -292,6 +292,71 @@ TEST (VST3WrapperTest, CreateControllerInstance)
 }
 
 //------------------------------------------------------------------------------
+// String128 conversion tests
+//------------------------------------------------------------------------------
+
+class VST3String128Tests : public ::testing::Test
+{
+protected:
+    static constexpr int capacity = 128;
+    static constexpr Steinberg::Vst::TChar sentinel = 0x7777;
+
+    void SetUp() override
+    {
+        std::fill (std::begin (buffer), std::end (buffer), sentinel);
+    }
+
+    static int lengthOf (const Steinberg::Vst::TChar* text)
+    {
+        int length = 0;
+        while (text[length] != 0)
+            ++length;
+
+        return length;
+    }
+
+    Steinberg::Vst::TChar buffer[capacity * 2];
+};
+
+TEST_F (VST3String128Tests, LongStringIsTruncatedWithinBuffer)
+{
+    toString128 (String::repeatedString ("a", 300), buffer);
+
+    EXPECT_EQ (capacity - 1, lengthOf (buffer));
+    EXPECT_EQ (0, buffer[capacity - 1]);
+    EXPECT_EQ (sentinel, buffer[capacity]);
+}
+
+TEST_F (VST3String128Tests, ShortStringIsCopiedAndTerminated)
+{
+    toString128 ("Gain", buffer);
+
+    EXPECT_EQ (4, lengthOf (buffer));
+    EXPECT_EQ (String ("Gain"), String (CharPointer_UTF16 (reinterpret_cast<CharPointer_UTF16::CharType*> (buffer))));
+}
+
+TEST_F (VST3String128Tests, TruncationDoesNotSplitSurrogatePair)
+{
+    const auto text = String::repeatedString ("a", capacity - 2) + String::charToString (static_cast<yup_wchar> (0x1f600)) + "b";
+    toString128 (text, buffer);
+
+    EXPECT_EQ (capacity - 2, lengthOf (buffer));
+    EXPECT_EQ (sentinel, buffer[capacity]);
+}
+
+TEST_F (VST3String128Tests, NonBmpCharactersCountAsTwoUnits)
+{
+    String text;
+    for (int i = 0; i < 100; ++i)
+        text += String::charToString (static_cast<yup_wchar> (0x1f600));
+
+    toString128 (text, buffer);
+
+    EXPECT_EQ (capacity - 2, lengthOf (buffer));
+    EXPECT_EQ (sentinel, buffer[capacity]);
+}
+
+//------------------------------------------------------------------------------
 // Processor tests
 //------------------------------------------------------------------------------
 

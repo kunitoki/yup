@@ -300,3 +300,17 @@ TEST_F (AnimationTransformTests, AnimatedOpacityIsNotStatic)
                     .build();
     EXPECT_FALSE (t.isStatic());
 }
+
+TEST_F (AnimationTransformTests, SpatialPositionWithSingleNaNKeyframeReturnsFirstValue)
+{
+    AnimationTransform t;
+    t.spatialKeyframes.push_back ({ std::numeric_limits<float>::quiet_NaN(),
+                                    Point<float> (10.0f, 20.0f),
+                                    std::nullopt,
+                                    Point<float> {},
+                                    Point<float> {},
+                                    AnimationEasing::linear() });
+
+    EXPECT_EQ (t.positionAt (5.0f), Point<float> (10.0f, 20.0f));
+    EXPECT_EQ (t.positionAt (std::numeric_limits<float>::quiet_NaN()), Point<float> (10.0f, 20.0f));
+}

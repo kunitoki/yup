@@ -85,8 +85,8 @@ ThreadPoolJob::JobStatus AudioPeakProfileCache::PendingJob::runJob()
 //==============================================================================
 AudioPeakProfileCache::AudioPeakProfileCache()
 {
-    // Set default cache directory to temp folder
-    cacheDirectory = File::getSpecialLocation (File::tempDirectory).getChildFile ("YUP_PeakCache");
+    cacheDirectory = File::getSpecialLocation (File::tempDirectory)
+                         .getChildFile (File::createLegalFileName ("YUP_PeakCache_" + SystemStats::getLogonName()));
 }
 
 AudioPeakProfileCache::~AudioPeakProfileCache()
@@ -109,16 +109,16 @@ void AudioPeakProfileCache::setDiskCacheEnabled (bool enabled) noexcept
 {
     diskCacheEnabled = enabled;
 
-    if (enabled && ! cacheDirectory.exists())
-        cacheDirectory.createDirectory();
+    if (enabled)
+        prepareCacheDirectory();
 }
 
 void AudioPeakProfileCache::setCacheDirectory (const File& directory)
 {
     cacheDirectory = directory;
 
-    if (diskCacheEnabled && ! cacheDirectory.exists())
-        cacheDirectory.createDirectory();
+    if (diskCacheEnabled)
+        prepareCacheDirectory();
 }
 
 void AudioPeakProfileCache::setThreadPool (ThreadPool* pool) noexcept
@@ -300,6 +300,9 @@ File AudioPeakProfileCache::getCacheFilePath (const String& cacheKey) const
 
 std::shared_ptr<AudioPeakProfile> AudioPeakProfileCache::loadFromDisk (const String& cacheKey)
 {
+    if (! prepareCacheDirectory())
+        return nullptr;
+
     const File cacheFile = getCacheFilePath (cacheKey);
 
     if (! cacheFile.existsAsFile())
@@ -316,14 +319,38 @@ std::shared_ptr<AudioPeakProfile> AudioPeakProfileCache::loadFromDisk (const Str
 
 void AudioPeakProfileCache::saveToDisk (const String& cacheKey, const AudioPeakProfile& profile)
 {
-    if (! diskCacheEnabled)
+    if (! diskCacheEnabled || ! prepareCacheDirectory())
         return;
-
-    if (! cacheDirectory.exists())
-        cacheDirectory.createDirectory();
 
     const File cacheFile = getCacheFilePath (cacheKey);
     profile.saveToFile (cacheFile);
+}
+
+bool AudioPeakProfileCache::prepareCacheDirectory() const
+{
+    if (cacheDirectory == File())
+        return false;
+
+    if (! cacheDirectory.isDirectory())
+    {
+        if (cacheDirectory.exists() || ! cacheDirectory.createDirectory())
+            return false;
+
+#if YUP_MAC || YUP_IOS || YUP_LINUX || YUP_ANDROID || YUP_BSD
+        ::chmod (cacheDirectory.getFullPathName().toRawUTF8(), S_IRWXU);
+#endif
+    }
+
+#if YUP_MAC || YUP_IOS || YUP_LINUX || YUP_ANDROID || YUP_BSD
+    struct stat info;
+    if (::lstat (cacheDirectory.getFullPathName().toRawUTF8(), &info) != 0
+        || ! S_ISDIR (info.st_mode)
+        || info.st_uid != ::geteuid()
+        || (info.st_mode & S_IWOTH) != 0)
+        return false;
+#endif
+
+    return true;
 }
 
 void AudioPeakProfileCache::notifyProfileReady (const String& cacheKey, std::shared_ptr<AudioPeakProfile> profile)

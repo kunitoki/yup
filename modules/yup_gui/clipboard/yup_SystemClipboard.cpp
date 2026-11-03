@@ -114,14 +114,8 @@ bool SystemClipboard::copyToClipboard (const Array<ClipboardData>& data, std::fu
     if (data.isEmpty())
         return false;
 
-    // Clean up any previous state held by this process
-    if (activeClipboardState != nullptr)
-    {
-        if (activeClipboardState->onRelease)
-            activeClipboardState->onRelease();
-
-        activeClipboardState = nullptr;
-    }
+    // SDL releases the previous state through clipboardCleanupCallback, so keep it alive until then
+    const ClipboardDataState::Ptr previousState = activeClipboardState;
 
     ClipboardDataState::Ptr state = new ClipboardDataState (data, std::move (onRelease));
     activeClipboardState = state;
