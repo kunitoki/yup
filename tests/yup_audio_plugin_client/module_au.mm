@@ -29,6 +29,7 @@
 #define YupPlugin_Version "1.0.0"
 #define YupPlugin_IsSynth 0
 #define YupPlugin_IsMono 0
+#define YupPlugin_AUViewFactoryClass YupTestAUPluginViewFactory
 
 // =============================================================================
 #include "yup_TestPluginProcessor.h"

@@ -23,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#if YUP_MODULE_AVAILABLE_yup_gui
+
 using namespace yup;
 
 //==============================================================================
@@ -92,3 +94,5 @@ TEST_F (AudioProcessorEditorTests, ShowsResizableCornerOnlyWhenResizable)
     editor.resizable = false;
     EXPECT_FALSE (editor.shouldShowResizableCorner());
 }
+
+#endif
