@@ -25,6 +25,20 @@
 
 using namespace yup;
 
+namespace
+{
+// The File constructor only takes absolute paths, so the paths are built per platform.
+File dragDropFirstTestFile()
+{
+    return File::getSpecialLocation (File::tempDirectory).getChildFile ("yup_drag_one.txt");
+}
+
+File dragDropSecondTestFile()
+{
+    return File::getSpecialLocation (File::tempDirectory).getChildFile ("yup_drag_two.txt");
+}
+} // namespace
+
 TEST (DragAndDropDataTests, DefaultIsEmpty)
 {
     DragAndDropData data;
@@ -41,15 +55,15 @@ TEST (DragAndDropDataTests, DefaultIsEmpty)
 TEST (DragAndDropDataTests, WithFilesSetsFiles)
 {
     Array<File> files;
-    files.add (File ("/tmp/one.txt"));
-    files.add (File ("/tmp/two.txt"));
+    files.add (dragDropFirstTestFile());
+    files.add (dragDropSecondTestFile());
 
     auto data = DragAndDropData().withFiles (files);
 
     EXPECT_TRUE (data.hasFiles());
     EXPECT_FALSE (data.isEmpty());
     EXPECT_EQ (data.getFiles().size(), 2);
-    EXPECT_EQ (data.getFiles()[0], File ("/tmp/one.txt"));
+    EXPECT_EQ (data.getFiles()[0], dragDropFirstTestFile());
 }
 
 TEST (DragAndDropDataTests, WithTextSetsText)
@@ -86,7 +100,7 @@ TEST (DragAndDropDataTests, BuildersAreImmutable)
 TEST (DragAndDropDataTests, BuildersChainAndPreservePreviousValues)
 {
     Array<File> files;
-    files.add (File ("/tmp/one.txt"));
+    files.add (dragDropFirstTestFile());
 
     auto data = DragAndDropData()
                     .withFiles (files)
@@ -170,8 +184,8 @@ TEST (DragAndDropDataTests, EmptyMimeDataRemovesEntry)
 TEST (DragAndDropDataTests, FilesRoundTripThroughUriList)
 {
     Array<File> files;
-    files.add (File ("/tmp/one.txt"));
-    files.add (File ("/tmp/two.txt"));
+    files.add (dragDropFirstTestFile());
+    files.add (dragDropSecondTestFile());
 
     auto data = DragAndDropData().withFiles (files);
 
@@ -179,8 +193,8 @@ TEST (DragAndDropDataTests, FilesRoundTripThroughUriList)
     EXPECT_TRUE (data.hasUris());
     EXPECT_TRUE (data.hasMimeData (DragAndDropData::mimeTypeUriList));
     EXPECT_EQ (data.getFiles().size(), 2);
-    EXPECT_EQ (data.getFiles()[0], File ("/tmp/one.txt"));
-    EXPECT_EQ (data.getFiles()[1], File ("/tmp/two.txt"));
+    EXPECT_EQ (data.getFiles()[0], dragDropFirstTestFile());
+    EXPECT_EQ (data.getFiles()[1], dragDropSecondTestFile());
     EXPECT_EQ (data.getUris().size(), 2);
 }
 

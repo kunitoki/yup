@@ -1187,7 +1187,8 @@ TEST_F (PopupMenuTest, DismissingAllPopupsFromTheSelectionCallbackIsSafe)
         menuReference = rawMenu;
     }
 
-    const auto itemCenter = rawMenu->begin()->area.getCenter();
+    const auto& firstItem = **rawMenu->begin();
+    const auto itemCenter = firstItem.area.getCenter();
     const auto click = MouseEvent (MouseEvent::leftButton, KeyModifiers(), itemCenter)
                            .withLastMouseDownPosition (itemCenter);
 
