@@ -47,7 +47,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
         with:
-          packages: platform-tools
+          packages: |
+            platform-tools
+            cmake;3.22.1
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
         with:
@@ -79,6 +81,12 @@ jobs:
       with:
         key: android-tests-${{ matrix.config }}
         max-size: 1G
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v4
+      with:
+        packages: |
+          platform-tools
+          cmake;3.22.1
     - name: Setup Android NDK
       id: setup-ndk
       uses: nttld/setup-ndk@v1
@@ -118,7 +126,9 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v4
       with:
-        packages: platform-tools
+        packages: |
+          platform-tools
+          cmake;3.22.1
     - name: Setup Android NDK
       uses: nttld/setup-ndk@v1
       with:
