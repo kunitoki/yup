@@ -98,6 +98,8 @@ TEST_F (GpuDeviceErrorTests, HeadlessReportsNoAdvancedCapabilities)
     EXPECT_FALSE (headless->isFragmentStorageBufferAvailable());
     EXPECT_FALSE (headless->isStorageTextureAvailable());
     EXPECT_FALSE (headless->isDynamicUniformOffsetAvailable());
+    EXPECT_FALSE (headless->isMultisampledTextureReadAvailable());
+    EXPECT_TRUE (headless->getPipelineCacheData().isEmpty());
 }
 
 #if YUP_ANDROID || YUP_LINUX

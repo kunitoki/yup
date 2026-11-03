@@ -52,11 +52,6 @@ rive::TextWrap toTextWrap (StyledText::TextWrap wrap) noexcept
     return rive::TextWrap::noWrap;
 }
 
-/** Glyph outlines shared by every text, kept for the most recently used fonts.
-
-    Each entry holds its font, so another font cannot reuse its address while it is cached. The
-    bound matters for variable fonts, which make a new font for every axis change.
-*/
 class GlyphOutlineCache
 {
 public:
@@ -66,7 +61,6 @@ public:
         return cache;
     }
 
-    /** Returns a glyph's outline transformed, made under the lock so eviction cannot touch it. */
     rive::RawPath getOutline (const rive::rcp<rive::Font>& font, rive::GlyphID glyphId, const rive::Mat2D& transform)
     {
         const ScopedLock sl (lock);
@@ -463,10 +457,8 @@ void StyledText::update()
         return;
     }
 
-    // Compute glyph lookup for text positioning
     glyphLookup.compute (styledTexts.unichars(), shape);
 
-    // Build up ordered runs as we go.
     int paragraphIndex = 0;
     float y = 0.0f;
     float minY = 0.0f;
@@ -481,8 +473,6 @@ void StyledText::update()
     bool isEllipsisLineLast = false;
     bool wantEllipsis = (overflow == TextOverflow::ellipsis);
 
-    // Initialize defaultLineHeight from the first non-empty paragraph so that empty paragraphs
-    // (consecutive \n) advance y by a sensible amount even before any non-empty para is seen.
     for (const auto& pgLines : lines)
     {
         if (! pgLines.empty())
@@ -559,6 +549,7 @@ void StyledText::update()
                     rive::OrderedLine (paragraph,
                                        line,
                                        maxSize.getWidth(),
+                                       toTextAlign (horizontalAlign),
                                        ellipsisLine == lineIndex,
                                        isEllipsisLineLast,
                                        &ellipsisRun,
@@ -610,7 +601,6 @@ void StyledText::update()
 
                 if (auto layers = findColorGlyphLayers (run->font, glyphId))
                 {
-                    // Drawn with the paint of their style, like the outlines
                     colorGlyphs.push_back ({ std::move (layers), glyphTransform, run->styleId });
                     continue;
                 }
@@ -620,7 +610,6 @@ void StyledText::update()
 
                 if (style->isEmpty)
                 {
-                    // This was the first path added to the style, so let's mark it in our draw list.
                     style->isEmpty = false;
 
                     renderStyles.push_back (style);
@@ -629,7 +618,6 @@ void StyledText::update()
 
             lineEndX[static_cast<size_t> (lineIndex)] = x;
 
-            // Early return if we're done after ellipsis line
             if (lineIndex == ellipsisLine)
                 return;
 
@@ -704,8 +692,6 @@ int StyledText::getGlyphIndexAtPosition (const Point<float>& position) const
         return findParagraphNewlinePosition (targetLineIndex);
     }
 
-    // Find the closest character using the cached line-relative x positions, so
-    // hit-testing agrees with what is drawn (xpos alone is paragraph-relative).
     int bestCharIndex = 0;
     float minDistance = std::numeric_limits<float>::max();
     bool foundAnyGlyph = false;
@@ -716,7 +702,6 @@ int StyledText::getGlyphIndexAtPosition (const Point<float>& position) const
     int glyphIdx = 0;
     for (const auto& [glyphRun, glyphIndex] : targetLine)
     {
-        // Check if this glyph run has valid data (same check as getSelectionRectangles)
         if (glyphIndex >= glyphRun->textIndices.size() || glyphIdx >= static_cast<int> (glyphXs.size()))
         {
             ++glyphIdx;
@@ -731,19 +716,15 @@ int StyledText::getGlyphIndexAtPosition (const Point<float>& position) const
                              ? glyphXs[static_cast<size_t> (glyphIdx) + 1]
                              : lineEndX;
 
-        // Check if click is within this character's bounds
         if (clickX >= glyphX && clickX <= nextGlyphX)
         {
-            // Return the closest boundary
             float midPoint = (glyphX + nextGlyphX) * 0.5f;
             return (clickX <= midPoint) ? charIndex : charIndex + 1;
         }
 
-        // Calculate distances to start and end of this character
         float distanceToStart = std::abs (clickX - glyphX);
         float distanceToEnd = std::abs (clickX - nextGlyphX);
 
-        // Check if click is closer to the start of this character
         if (distanceToStart < minDistance)
         {
             minDistance = distanceToStart;
@@ -751,7 +732,6 @@ int StyledText::getGlyphIndexAtPosition (const Point<float>& position) const
             foundAnyGlyph = true;
         }
 
-        // Check if click is closer to the end of this character
         if (distanceToEnd < minDistance)
         {
             minDistance = distanceToEnd;
@@ -762,11 +742,9 @@ int StyledText::getGlyphIndexAtPosition (const Point<float>& position) const
         ++glyphIdx;
     }
 
-    // If no glyph was found, this is an empty line (e.g. consecutive newlines)
     if (! foundAnyGlyph)
         return findParagraphNewlinePosition (targetLineIndex);
 
-    // Ensure the result is within valid bounds
     return jlimit (0, static_cast<int> (styledTexts.unichars().size()), bestCharIndex);
 }
 
@@ -778,18 +756,11 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
     if (isDirty || orderedLines.empty())
         return {};
 
-    // Handle bounds checking
     if (characterIndex < 0)
         characterIndex = 0;
 
-    // Newline characters have no glyph. Position the caret at the end of the line whose
-    // paragraph the newline terminates. For empty lines (consecutive newlines) the caret
-    // lands at startX, which is the left edge of that empty line. This avoids calling
-    // lastCodePointIndex() on empty orderedLines (which would be UB).
     const auto& unichars = styledTexts.unichars();
 
-    // Bug 2: caret is at end-of-text and the text ends with \n - the caret belongs on the
-    // virtual new line created by the trailing newline, not at the end of the previous line.
     if (characterIndex == static_cast<int> (unichars.size()) && ! unichars.empty() && unichars.back() == '\n' && ! paragraphYOffsets.empty())
     {
         if (! lines.empty() && lines.back().empty())
@@ -807,13 +778,11 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
 
     if (characterIndex < static_cast<int> (unichars.size()) && unichars[characterIndex] == '\n')
     {
-        // Count how many \n appear before characterIndex to identify the paragraph
         int targetParagraphIdx = 0;
         for (int i = 0; i < characterIndex; ++i)
             if (unichars[i] == '\n')
                 ++targetParagraphIdx;
 
-        // Walk the paragraph/line structure to find the last orderedLine of that paragraph
         int lineOffset = 0;
         for (int paraIdx = 0; paraIdx < static_cast<int> (lines.size()); ++paraIdx)
         {
@@ -821,8 +790,6 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
 
             if (paraIdx == targetParagraphIdx)
             {
-                // Bug 3: empty paragraph - numLinesInPara == 0 makes lastLineIdx wrong.
-                // Use the stored Y offset directly instead of trying to index orderedLines.
                 if (numLinesInPara == 0)
                 {
                     float paraY = (paraIdx < static_cast<int> (paragraphYOffsets.size()))
@@ -838,7 +805,6 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
                 const rive::OrderedLine& targetOLine = orderedLines[lastLineIdx];
                 const rive::GlyphLine& gl = targetOLine.glyphLine();
 
-                // End-X of visible content from the cached line-relative positions
                 const float endX = lastLineIdx < static_cast<int> (this->lineEndX.size())
                                      ? this->lineEndX[static_cast<size_t> (lastLineIdx)]
                                      : gl.startX;
@@ -850,8 +816,6 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
         }
     }
 
-    // Use the same approach as getSelectionRectangles, but with the cached
-    // line-relative absolute x positions so wrapped lines report correctly.
     for (size_t lineIdx = 0; lineIdx < orderedLines.size(); ++lineIdx)
     {
         const rive::OrderedLine& line = orderedLines[lineIdx];
@@ -866,7 +830,6 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
         int glyphIdx = 0;
         for (const auto& [glyphRun, glyphIndex] : line)
         {
-            // Check if this glyph run has valid data
             if (glyphIndex < glyphRun->textIndices.size())
             {
                 uint32_t textIndex = glyphRun->textIndices[glyphIndex];
@@ -890,8 +853,6 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
             ++glyphIdx;
         }
 
-        // If we've checked all glyphs in this line and character index is beyond them,
-        // position at the end of this line
         if (characterIndex < static_cast<int> (line.lastCodePointIndex (glyphLookup)))
         {
             const float caretWidth = 1.0f;
@@ -903,7 +864,6 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
         }
     }
 
-    // If character index is beyond all text, position at the end of the last line
     if (! orderedLines.empty())
     {
         const rive::OrderedLine& lastLine = orderedLines.back();
@@ -1064,13 +1024,11 @@ std::vector<Rectangle<float>> StyledText::getSelectionRectangles (int startIndex
 
     rectangles.reserve (orderedLines.size());
 
-    // Use the orderedLines to find selection rectangles
     for (size_t lineIdx = 0; lineIdx < orderedLines.size(); ++lineIdx)
     {
         const rive::OrderedLine& line = orderedLines[lineIdx];
         const rive::GlyphLine& glyphLine = line.glyphLine();
 
-        // Track selection bounds for this line
         float selectionStartX = -1.0f;
         float selectionEndX = -1.0f;
         float lineY = line.y();
@@ -1084,7 +1042,6 @@ std::vector<Rectangle<float>> StyledText::getSelectionRectangles (int startIndex
         int glyphIdx = 0;
         for (auto [glyphRun, glyphIndex] : line)
         {
-            // Check if this glyph run has valid data
             if (glyphIndex >= glyphRun->textIndices.size() || glyphIdx >= static_cast<int> (glyphXs.size()))
             {
                 ++glyphIdx;
@@ -1094,7 +1051,6 @@ std::vector<Rectangle<float>> StyledText::getSelectionRectangles (int startIndex
             uint32_t textIndex = glyphRun->textIndices[glyphIndex];
             int charIndex = static_cast<int> (textIndex);
 
-            // Check if this character is within the selection
             if (charIndex >= startIndex && charIndex < endIndex)
             {
                 float glyphX = glyphXs[static_cast<size_t> (glyphIdx)];
@@ -1118,7 +1074,6 @@ std::vector<Rectangle<float>> StyledText::getSelectionRectangles (int startIndex
             ++glyphIdx;
         }
 
-        // If this line has selection, add a rectangle for it
         if (hasSelectionInLine && selectionStartX >= 0.0f && selectionEndX > selectionStartX)
         {
             rectangles.push_back (Rectangle<float> (
@@ -1192,7 +1147,6 @@ std::shared_ptr<const std::vector<StyledText::ColorGlyphLayer>> StyledText::find
     if (auto cached = fontCache.find (glyphId); cached != fontCache.end())
         return cached->second;
 
-    // The copy shares the decoded pixels, and keeps its own GPU texture for as long as this text lives
     std::shared_ptr<const std::vector<ColorGlyphLayer>> layers;
     if (auto decodedLayers = decodeColorGlyphLayers (font, glyphId))
         layers = std::make_shared<const std::vector<ColorGlyphLayer>> (*decodedLayers);
@@ -1203,8 +1157,6 @@ std::shared_ptr<const std::vector<StyledText::ColorGlyphLayer>> StyledText::find
 
 std::shared_ptr<const std::vector<StyledText::ColorGlyphLayer>> StyledText::decodeColorGlyphLayers (const rive::rcp<rive::Font>& font, rive::GlyphID glyphId)
 {
-    // Shared by all texts, so text shaped for a single draw does not decode bitmap emoji again.
-    // The lock also guards the font's own layer cache, which Rive does not synchronize
     struct DecodedLayers
     {
         rive::rcp<rive::Font> font;
@@ -1230,7 +1182,6 @@ std::shared_ptr<const std::vector<StyledText::ColorGlyphLayer>> StyledText::deco
 
         for (auto& fontLayer : fontLayers)
         {
-            // Bitmap emoji are decoded once here, and their encoded bytes are no longer needed
             Image image;
             if (fontLayer.paintType == rive::Font::ColorGlyphPaintType::image)
                 image = Image::loadFromData (Span<const uint8> (fontLayer.imageBytes.data(), fontLayer.imageBytes.size())).valueOr (Image());
@@ -1240,7 +1191,6 @@ std::shared_ptr<const std::vector<StyledText::ColorGlyphLayer>> StyledText::deco
         }
     }
 
-    // Holding the font keeps its address from being reused by another font
     cache.emplace (key, DecodedLayers { font, layers });
     return layers;
 }
@@ -1299,8 +1249,6 @@ int StyledText::findParagraphNewlinePosition (int orderedLineIndex) const
                 }
             }
 
-            // The orderedLine belongs to the last paragraph which has no trailing '\n'.
-            // Return end-of-text so the caret lands at the very end.
             return static_cast<int> (unichars.size());
         }
 

@@ -181,6 +181,33 @@ TEST_F (GpuTextureMockTests, CreateCubeWithWrongLayerCountReturnsNull)
     EXPECT_EQ (GpuTexture::create (ctx, desc), nullptr);
 }
 
+TEST_F (GpuTextureMockTests, CreateBeyondTheDeviceSizeLimitsReturnsNull)
+{
+    EXPECT_CALL (*mockOreCtx, makeTexture (_)).Times (0);
+
+    const auto max2D = ctx->getMaximumTextureSize (GpuTextureType::texture2D);
+    EXPECT_EQ (GpuTexture::create (ctx, makeRenderTargetDesc (max2D + 1, 64)), nullptr);
+    EXPECT_EQ (GpuTexture::create (ctx, makeRenderTargetDesc (64, max2D + 1)), nullptr);
+
+    GpuTextureDesc volume;
+    volume.width = volume.height = 4;
+    volume.type = GpuTextureType::texture3D;
+    volume.depthOrArrayLayers = ctx->getMaximumTextureSize (GpuTextureType::texture3D) + 1;
+    EXPECT_EQ (GpuTexture::create (ctx, volume), nullptr);
+}
+
+TEST_F (GpuTextureMockTests, CreateWithUnsupportedSampleCountReturnsNull)
+{
+    EXPECT_CALL (*mockOreCtx, makeTexture (_)).Times (0);
+
+    auto desc = makeRenderTargetDesc();
+    desc.sampleCount = 3;
+    EXPECT_EQ (GpuTexture::create (ctx, desc), nullptr);
+
+    desc.sampleCount = ctx->getMaximumSampleCount() * 2;
+    EXPECT_EQ (GpuTexture::create (ctx, desc), nullptr);
+}
+
 TEST_F (GpuTextureMockTests, CreateWithoutGpuContextReturnsNull)
 {
     auto headless = GpuDevice::create (GpuPlatform::Headless, {});
@@ -517,6 +544,19 @@ TEST_F (GpuTextureMockTests, SamplerTranslatesEveryDescriptorFieldToOre)
     EXPECT_FLOAT_EQ (captured.minLod, 1.0f);
     EXPECT_FLOAT_EQ (captured.maxLod, 4.0f);
     EXPECT_EQ (captured.maxAnisotropy, 8u);
+}
+
+TEST_F (GpuTextureMockTests, SamplerDropsAnisotropyWithoutLinearFiltering)
+{
+    rive::ore::SamplerDesc captured {};
+    EXPECT_CALL (*mockOreCtx, makeSampler (_))
+        .WillOnce (DoAll (SaveArg<0> (&captured), Return (rive::make_rcp<TestOreSampler>())));
+
+    GpuSamplerDesc desc (GpuFilter::linear, GpuWrapMode::repeat);
+    desc.maxAnisotropy = 16;
+
+    ASSERT_NE (GpuSampler::create (ctx, desc), nullptr);
+    EXPECT_EQ (captured.maxAnisotropy, 1u);
 }
 
 TEST_F (GpuTextureMockTests, SamplerWithComparisonSetsTheCompareFunction)

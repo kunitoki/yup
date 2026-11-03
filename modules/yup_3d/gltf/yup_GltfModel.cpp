@@ -286,7 +286,7 @@ GpuWrapMode gltfWrapMode (int32_t wrap) noexcept
 
 /** Maps a glTF sampler, or the glTF defaults (repeat, linear, mipmapped) when there is none.
 
-    Fully linear samplers ask for 16x anisotropic filtering: Texture lowers it on devices without it.
+    Fully linear samplers ask for 16x anisotropic filtering: GpuSampler lowers it on devices without it.
 */
 GpuSamplerDesc gltfSamplerDesc (const tg3_sampler* sampler) noexcept
 {

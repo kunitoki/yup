@@ -73,6 +73,20 @@ void Desktop::updateScreens()
 
 void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
 {
+    // SDL cursors drive the native windowing API, which only the message thread may touch (AppKit
+    // asserts otherwise), while components can change their cursor while painting on the render thread
+    if (auto* messageManager = MessageManager::getInstanceWithoutCreating();
+        messageManager != nullptr && ! messageManager->isThisTheMessageThread())
+    {
+        MessageManager::callAsync ([cursorToSet]
+        {
+            if (auto* desktop = Desktop::getInstanceWithoutCreating())
+                desktop->setMouseCursor (cursorToSet);
+        });
+
+        return;
+    }
+
     static const auto cursors = []
     {
         return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {

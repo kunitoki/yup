@@ -264,6 +264,7 @@ struct SerialisationTraits<ShaderReflection::ResourceBinding>
                  named ("members", t.members),
                  named ("imageDim", t.imageDim),
                  named ("imageIsDepth", t.imageIsDepth),
+                 named ("imageUnfiltered", t.imageUnfiltered),
                  named ("imageArrayed", t.imageArrayed),
                  named ("imageMS", t.imageMS),
                  named ("imageFormat", t.imageFormat),

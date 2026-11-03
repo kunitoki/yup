@@ -576,6 +576,7 @@ void registerYupRhiBindings (py::module_& m)
         .def_readwrite ("fillsDisabled", &GpuFrameDescriptor::fillsDisabled)
         .def_readwrite ("strokesDisabled", &GpuFrameDescriptor::strokesDisabled)
         .def_readwrite ("clockwiseFillOverride", &GpuFrameDescriptor::clockwiseFillOverride)
+        .def_readwrite ("inkbleedOverride", &GpuFrameDescriptor::inkbleedOverride)
         .def ("__repr__", [] (const GpuFrameDescriptor& self)
         {
             String result;
@@ -638,6 +639,7 @@ void registerYupRhiBindings (py::module_& m)
         .def_readwrite ("disableRasterOrdering", &GpuDevice::Options::disableRasterOrdering)
         .def_readwrite ("allowHeadlessRendering", &GpuDevice::Options::allowHeadlessRendering)
         .def_readwrite ("vsync", &GpuDevice::Options::vsync)
+        .def_readwrite ("pipelineCacheData", &GpuDevice::Options::pipelineCacheData)
         /*.def_readwrite ("loaderFunction", &GpuDevice::Options::loaderFunction)*/;
 
     gpuDevice
@@ -652,6 +654,11 @@ void registerYupRhiBindings (py::module_& m)
         .def ("isFragmentStorageBufferAvailable", &GpuDevice::isFragmentStorageBufferAvailable)
         .def ("isDynamicUniformOffsetAvailable", &GpuDevice::isDynamicUniformOffsetAvailable)
         .def ("isStorageTextureAvailable", &GpuDevice::isStorageTextureAvailable)
+        .def ("isMultisampledTextureReadAvailable", &GpuDevice::isMultisampledTextureReadAvailable)
+        .def ("isBaseInstanceAvailable", &GpuDevice::isBaseInstanceAvailable)
+        .def ("isPerTargetBlendAvailable", &GpuDevice::isPerTargetBlendAvailable)
+        .def ("getMaximumTextureSize", &GpuDevice::getMaximumTextureSize, "type"_a)
+        .def ("getPipelineCacheData", &GpuDevice::getPipelineCacheData)
         .def ("getMaximumSampleCount", py::overload_cast<> (&GpuDevice::getMaximumSampleCount, py::const_))
         .def ("getMaximumSampleCount", py::overload_cast<GpuTextureFormat> (&GpuDevice::getMaximumSampleCount, py::const_), "format"_a)
         .def ("getMaximumColorAttachments", &GpuDevice::getMaximumColorAttachments)

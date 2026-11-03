@@ -289,10 +289,11 @@ public:
         @param vertexCount    Number of vertices to draw. The vertex buffers must hold at least this many vertices.
         @param instanceCount  Number of instances to draw. Per-instance vertex buffers must hold at least this many elements.
         @param firstVertex    Index of the first vertex to draw.
-        @param firstInstance  Index of the first instance to draw.
+        @param firstInstance  Index of the first instance to draw. Non-zero requires
+                              GpuDevice::isBaseInstanceAvailable().
 
-        @returns true on success; false if invalid or a bound storage buffer cannot be
-                 bound (see setStorageBuffer()).
+        @returns true on success; false if invalid, firstInstance is not supported or a
+                 bound storage buffer cannot be bound (see setStorageBuffer()).
     */
     bool draw (uint32_t vertexCount,
                uint32_t instanceCount = 1,
@@ -308,10 +309,13 @@ public:
         @param instanceCount  Number of instances to draw.
         @param firstIndex     Index of the first element to read from the index buffer.
         @param baseVertex     Value added to every index before indexing the vertex buffers.
-        @param firstInstance  Index of the first instance to draw.
+                              Non-zero requires GpuDevice::isBaseInstanceAvailable().
+        @param firstInstance  Index of the first instance to draw. Non-zero requires
+                              GpuDevice::isBaseInstanceAvailable().
 
-        @returns true on success; false if invalid, no index buffer is bound or a bound
-                 storage buffer cannot be bound (see setStorageBuffer()).
+        @returns true on success; false if invalid, no index buffer is bound, baseVertex or
+                 firstInstance is not supported or a bound storage buffer cannot be bound
+                 (see setStorageBuffer()).
     */
     bool drawIndexed (uint32_t indexCount,
                       uint32_t instanceCount = 1,

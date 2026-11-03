@@ -953,3 +953,93 @@ TEST (ColorGradientTests, Spread_Reflect_RadialMirrorsPattern)
     // At distance 200 (t=2.0): reflect to 0.0 → inner
     EXPECT_EQ (gradient.getColorAt (200.0f, 0.0f), inner);
 }
+
+// =============================================================================
+// Angular gradients and gradient transforms
+// =============================================================================
+
+class ColorGradientShapeTests : public ::testing::Test
+{
+protected:
+    const Color black { 0xff000000 };
+    const Color white { 0xffffffff };
+
+    static void expectColorNear (Color actual, Color expected)
+    {
+        EXPECT_NEAR (actual.getRed(), expected.getRed(), 1);
+        EXPECT_NEAR (actual.getGreen(), expected.getGreen(), 1);
+        EXPECT_NEAR (actual.getBlue(), expected.getBlue(), 1);
+        EXPECT_NEAR (actual.getAlpha(), expected.getAlpha(), 1);
+    }
+};
+
+TEST_F (ColorGradientShapeTests, AngularSweepsClockwiseFromLastStopDirection)
+{
+    const ColorGradient gradient (black, 50.0f, 50.0f, white, 100.0f, 50.0f, ColorGradient::Angular);
+
+    EXPECT_EQ (gradient.getType(), ColorGradient::Angular);
+    EXPECT_FLOAT_EQ (gradient.getStartAngle(), 0.0f);
+
+    expectColorNear (gradient.getColorAt (100.0f, 50.0f), black);
+    expectColorNear (gradient.getColorAt (50.0f, 100.0f), gradient.getColorAt (0.25f));
+    expectColorNear (gradient.getColorAt (0.0f, 50.0f), gradient.getColorAt (0.5f));
+    expectColorNear (gradient.getColorAt (50.0f, 0.0f), gradient.getColorAt (0.75f));
+}
+
+TEST_F (ColorGradientShapeTests, AngularStartAngleFollowsLastStopPosition)
+{
+    const ColorGradient gradient (black, 50.0f, 50.0f, white, 50.0f, 100.0f, ColorGradient::Angular);
+
+    EXPECT_NEAR (gradient.getStartAngle(), MathConstants<float>::halfPi, 1.0e-6f);
+
+    expectColorNear (gradient.getColorAt (50.0f, 100.0f), black);
+    expectColorNear (gradient.getColorAt (0.0f, 50.0f), gradient.getColorAt (0.25f));
+}
+
+TEST_F (ColorGradientShapeTests, AngularStartAngleIsZeroForCoincidentStops)
+{
+    const ColorGradient gradient (black, 10.0f, 10.0f, white, 10.0f, 10.0f, ColorGradient::Angular);
+
+    EXPECT_FLOAT_EQ (gradient.getStartAngle(), 0.0f);
+    expectColorNear (gradient.getColorAt (20.0f, 10.0f), black);
+}
+
+TEST_F (ColorGradientShapeTests, TransformDefaultsToIdentityAndWithTransformReturnsCopy)
+{
+    const ColorGradient gradient (black, 0.0f, 0.0f, white, 100.0f, 0.0f);
+    const auto transformed = gradient.withTransform (AffineTransform::scaling (2.0f, 1.0f));
+
+    EXPECT_TRUE (gradient.getTransform().isIdentity());
+    EXPECT_EQ (transformed.getTransform(), AffineTransform::scaling (2.0f, 1.0f));
+    EXPECT_EQ (transformed.getNumStops(), gradient.getNumStops());
+    EXPECT_EQ (transformed.getType(), gradient.getType());
+}
+
+TEST_F (ColorGradientShapeTests, LinearColorAtMapsPointThroughInverseTransform)
+{
+    const auto gradient = ColorGradient (black, 0.0f, 0.0f, white, 100.0f, 0.0f)
+                              .withTransform (AffineTransform::scaling (2.0f, 1.0f));
+
+    expectColorNear (gradient.getColorAt (100.0f, 0.0f), gradient.getColorAt (0.5f));
+    expectColorNear (gradient.getColorAt (200.0f, 0.0f), white);
+}
+
+TEST_F (ColorGradientShapeTests, RadialWithScaleTransformIsElliptical)
+{
+    const auto gradient = ColorGradient (black, 0.0f, 0.0f, white, 100.0f, 0.0f, ColorGradient::Radial)
+                              .withTransform (AffineTransform::scaling (2.0f, 1.0f));
+
+    expectColorNear (gradient.getColorAt (200.0f, 0.0f), white);
+    expectColorNear (gradient.getColorAt (0.0f, 100.0f), white);
+    expectColorNear (gradient.getColorAt (100.0f, 0.0f), gradient.getColorAt (0.5f));
+    expectColorNear (gradient.getColorAt (0.0f, 50.0f), gradient.getColorAt (0.5f));
+}
+
+TEST_F (ColorGradientShapeTests, AngularWithTranslationMovesCenter)
+{
+    const auto gradient = ColorGradient (black, 0.0f, 0.0f, white, 1.0f, 0.0f, ColorGradient::Angular)
+                              .withTransform (AffineTransform::translation (50.0f, 50.0f));
+
+    expectColorNear (gradient.getColorAt (100.0f, 50.0f), black);
+    expectColorNear (gradient.getColorAt (50.0f, 100.0f), gradient.getColorAt (0.25f));
+}

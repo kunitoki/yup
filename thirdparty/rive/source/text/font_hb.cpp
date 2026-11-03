@@ -647,6 +647,7 @@ static void paint_sweep_gradient(
   layer.y0 = sc.y;
   layer.startAngle = startAngle;
   layer.endAngle = endAngle;
+  layer.radialTransform = state->glyphTransform() * rive::Mat2D::fromTranslate(cx, cy);
 
   state->layers->push_back(std::move(layer));
 }

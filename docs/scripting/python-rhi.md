@@ -204,6 +204,8 @@ available. Probe before creating:
 if device.isFormatRenderable(yup.GpuTextureFormat.rgba16float):
     ...
 print(device.getMaximumSampleCount(), device.isAnisotropicFilteringAvailable())
+print(device.isMultisampledTextureReadAvailable(), device.isBaseInstanceAvailable())
+print(device.getMaximumTextureSize(yup.GpuTextureType.texture2D))
 
 # Per-format MSAA limit (0 when the format cannot render) and attachment count
 print(device.getMaximumSampleCount(yup.GpuTextureFormat.rgba16float))

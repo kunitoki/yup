@@ -108,7 +108,7 @@ inline constexpr const char* documentSchemaJson = R"({
     },
     "Fill": {
       "properties": {
-        "kind": { "type": "string", "default": "solid", "enum": ["none", "solid", "linear", "radial", "image"] },
+        "kind": { "type": "string", "default": "solid", "enum": ["none", "solid", "linear", "radial", "angular", "image"] },
         "color": { "type": "string", "default": "#4f8cffff" },
         "image": { "type": "string", "default": "" },
         "wrapX": { "type": "string", "default": "repeat", "enum": ["clamp", "repeat", "mirror"] },
@@ -127,7 +127,7 @@ inline constexpr const char* documentSchemaJson = R"({
     },
     "Stroke": {
       "properties": {
-        "kind": { "type": "string", "default": "none", "enum": ["none", "solid", "linear", "radial", "image"] },
+        "kind": { "type": "string", "default": "none", "enum": ["none", "solid", "linear", "radial", "angular", "image"] },
         "color": { "type": "string", "default": "#ffffffff" },
         "image": { "type": "string", "default": "" },
         "wrapX": { "type": "string", "default": "repeat", "enum": ["clamp", "repeat", "mirror"] },
@@ -185,7 +185,7 @@ inline constexpr const char* blendModeNames[] = {
     "plus-lighter"
 };
 
-inline constexpr const char* paintKindNames[] = { "none", "solid", "linear", "radial", "image" };
+inline constexpr const char* paintKindNames[] = { "none", "solid", "linear", "radial", "angular", "image" };
 inline constexpr const char* imageWrapNames[] = { "clamp", "repeat", "mirror" };
 inline constexpr const char* imageFilterNames[] = { "smooth", "pixelated" };
 inline constexpr const char* strokePositionNames[] = { "inside", "center", "outside" };
@@ -247,7 +247,7 @@ inline yup::DataTree getFill (const yup::DataTree& layer) { return layer.getChil
 
 inline yup::DataTree getStroke (const yup::DataTree& layer) { return layer.getChildWithName (Ids::stroke); }
 
-inline bool isGradientKind (const yup::String& kind) { return kind == "linear" || kind == "radial"; }
+inline bool isGradientKind (const yup::String& kind) { return kind == "linear" || kind == "radial" || kind == "angular"; }
 
 /** Gradients and image paints are placed with two on-canvas handles, see getPaintHandleEnd(). */
 inline bool hasPaintHandles (const yup::String& kind) { return isGradientKind (kind) || kind == "image"; }
@@ -652,7 +652,10 @@ inline yup::ColorGradient createGradient (const yup::DataTree& paint)
 {
     const auto p1 = getPoint (paint, Ids::x1, Ids::y1);
     const auto p2 = getPoint (paint, Ids::x2, Ids::y2);
-    const auto type = getString (paint, Ids::kind) == "radial" ? yup::ColorGradient::Radial : yup::ColorGradient::Linear;
+    const auto kind = getString (paint, Ids::kind);
+    const auto type = kind == "radial"    ? yup::ColorGradient::Radial
+                    : kind == "angular" ? yup::ColorGradient::Angular
+                                        : yup::ColorGradient::Linear;
 
     std::vector<yup::ColorGradient::ColorStop> colorStops;
     for (const auto& stop : getPaddedStops (paint))

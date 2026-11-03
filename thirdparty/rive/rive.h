@@ -184,10 +184,11 @@
 #include "include/rive/renderer/rive_render_image.hpp"
 #include "include/rive/renderer/render_context.hpp"
 #include "include/rive/renderer/render_context_impl.hpp"
+#include "include/rive/renderer/rive_render_paint.hpp"
+#include "include/rive/renderer/ore/ore_script_guards.hpp"
 
 // Internals
 #include "source/renderer/rive_render_path.hpp"
-#include "source/renderer/rive_render_paint.hpp"
 
 #if __GNUC__
  #pragma GCC diagnostic pop

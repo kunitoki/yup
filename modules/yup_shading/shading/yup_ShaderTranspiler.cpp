@@ -614,6 +614,80 @@ public:
 };
 
 //==============================================================================
+// Finds the images a shader never samples with filtering: GLSL reaches texelFetch and textureSize
+// on a separate texture through a combined sampler, so an image whose loaded value only flows
+// into fetches, reads and size queries is unfilterable. Any other use counts as sampling.
+//==============================================================================
+
+static std::unordered_set<uint32_t> findUnfilteredImages (const std::vector<uint32_t>& spirv,
+                                                          const std::vector<ShaderReflection::ResourceBinding>& images)
+{
+    std::unordered_map<uint32_t, uint32_t> origins;
+    for (const auto& image : images)
+        origins[image.resourceId] = image.resourceId;
+
+    std::unordered_set<uint32_t> sampled;
+    bool inFunctions = false;
+
+    for (size_t offset = 5; offset < spirv.size();)
+    {
+        const auto wordCount = spirv[offset] >> 16;
+        const auto opcode = static_cast<spv::Op> (spirv[offset] & 0xffff);
+
+        if (wordCount == 0 || offset + wordCount > spirv.size())
+            return {};
+
+        const auto* words = spirv.data() + offset;
+        offset += wordCount;
+
+        inFunctions = inFunctions || opcode == spv::OpFunction;
+        if (! inFunctions)
+            continue;
+
+        switch (opcode)
+        {
+            case spv::OpLoad:
+            case spv::OpAccessChain:
+            case spv::OpInBoundsAccessChain:
+            case spv::OpCopyObject:
+            case spv::OpSampledImage:
+            case spv::OpImage:
+                if (const auto source = origins.find (words[3]); source != origins.end())
+                    origins[words[2]] = source->second;
+                continue;
+
+            case spv::OpImageFetch:
+            case spv::OpImageRead:
+            case spv::OpImageQuerySizeLod:
+            case spv::OpImageQuerySize:
+            case spv::OpImageQueryLevels:
+            case spv::OpImageQuerySamples:
+            case spv::OpImageSparseFetch:
+            case spv::OpImageSparseRead:
+                continue;
+
+            default:
+                break;
+        }
+
+        for (uint32_t i = 1; i < wordCount; ++i)
+        {
+            if (const auto source = origins.find (words[i]); source != origins.end())
+                sampled.insert (source->second);
+        }
+    }
+
+    std::unordered_set<uint32_t> unfiltered;
+    for (const auto& image : images)
+    {
+        if (sampled.count (image.resourceId) == 0)
+            unfiltered.insert (image.resourceId);
+    }
+
+    return unfiltered;
+}
+
+//==============================================================================
 // Extracts full ShaderReflection from a spirv_cross::Compiler
 //==============================================================================
 
@@ -669,6 +743,11 @@ static ShaderReflection extractReflection (spirv_cross::Compiler& compiler)
         for (auto& binding : *bindings)
             binding.imageIsDepth = binding.imageIsDepth || comparisons.isComparison (binding.resourceId);
     }
+
+    const auto unfiltered = findUnfilteredImages (compiler.get_ir().spirv, ref.separateImages);
+
+    for (auto& image : ref.separateImages)
+        image.imageUnfiltered = ! image.imageIsDepth && unfiltered.count (image.resourceId) != 0;
 
     // Builtins
     compiler.update_active_builtins();

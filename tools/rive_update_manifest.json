@@ -1797,6 +1797,22 @@
               "    }"
             ]
           }
+        },
+        {
+          "path": "source/text/font_hb.cpp",
+          "note": "COLR sweep gradient layers also report their glyph space transform in radialTransform, placed at the sweep center, so renderers can draw them as angular gradients under the font transforms enclosing them",
+          "already_contains": "  layer.radialTransform = state->glyphTransform() * rive::Mat2D::fromTranslate(cx, cy);",
+          "replace": {
+            "from": [
+              "  layer.startAngle = startAngle;",
+              "  layer.endAngle = endAngle;"
+            ],
+            "to": [
+              "  layer.startAngle = startAngle;",
+              "  layer.endAngle = endAngle;",
+              "  layer.radialTransform = state->glyphTransform() * rive::Mat2D::fromTranslate(cx, cy);"
+            ]
+          }
         }
       ],
       "shader_generation": {

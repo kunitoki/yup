@@ -312,6 +312,11 @@ struct ShaderReflection
             binds as a depth texture or a comparison sampler. */
         bool imageIsDepth = false;
 
+        /** Whether the shader never samples the separate image with filtering, only fetching
+            texels or querying its size, so it binds as an unfilterable float texture and accepts
+            formats that cannot be filtered (depth, 32-bit float). */
+        bool imageUnfiltered = false;
+
         /** Whether the image is arrayed. */
         bool imageArrayed = false;
 

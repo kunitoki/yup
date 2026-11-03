@@ -4059,7 +4059,6 @@ TEST_F (GpuPipelineMappingMockTests, EverySamplerFilterWrapModeAndCompareReaches
         desc.wrapV = wrapModes[(i + 1) % wrapModes.size()].first;
         desc.wrapW = wrapModes[(i + 2) % wrapModes.size()].first;
         desc.compare = compares[i].first;
-        desc.maxAnisotropy = 4;
 
         GpuDevice::Ptr device = new OreInjectedGpuDevice (&oreCtx);
         EXPECT_NE (GpuSampler::create (device, desc), nullptr);
@@ -4072,6 +4071,5 @@ TEST_F (GpuPipelineMappingMockTests, EverySamplerFilterWrapModeAndCompareReaches
         EXPECT_EQ (captured->wrapV, wrapModes[(i + 1) % wrapModes.size()].second);
         EXPECT_EQ (captured->wrapW, wrapModes[(i + 2) % wrapModes.size()].second);
         EXPECT_EQ (captured->compare, compares[i].second);
-        EXPECT_EQ (captured->maxAnisotropy, 4u);
     }
 }
