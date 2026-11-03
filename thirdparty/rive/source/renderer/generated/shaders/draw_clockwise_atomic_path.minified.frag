@@ -1,120 +1,120 @@
 #ifdef FRAGMENT
-R1
+I1
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-B0(K2,n0);
+z0(B2,q0);
 #endif
-B0(c3,m0);
+z0(o3,o0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-rb(o6,O6);
+rc(F6,j7);
 #endif
-S1 f4 mb(Na,Te,V0);g4 f d Zi(float n3,d A0,uint d2,i1(uint) z1,i1(d) Z3){
+J1 n4 pc(Ib,Vf,d1);p4 f d qk(float A3,d F0,uint n2,p1(uint) G1,p1(d) k4){
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-if(min(n3,A0)>=1.){return 1.;}
+if(min(A3,F0)>=1.){return 1.;}
 #endif
-d F;uint We=G7(abs(A0));z1=M7(V0,d2,j.j2|We);if(z1<j.j2){F=A0;
+d G;uint Yf=j8(abs(F0));G1=o8(d1,n2,j.z2|Yf);if(G1<j.z2){G=F0;
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-Z3=A0;
+k4=F0;
 #endif
 }else{
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-if((z1&w7)!=0u){z1=M7(V0,d2,j.j2|w7|We);}
+if((G1&R7)!=0u){G1=o8(d1,n2,j.z2|R7|Yf);}
 #endif
-d i2=j6(z1&Ra)*Pa;d M1=max(i2,A0);F=c9(i2,M1,n3);
+d y2=z6(G1&Mb)*Kb;d U1=max(y2,F0);G=R9(y2,U1,A3);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-Z3=M1;
+k4=U1;
 #endif
-}return F;}f d aj(float n3,d g5,uint d2,i1(uint) z1,i1(d) Z3){d F=.0;uint Xb=G7(abs(g5));z1=fe(V0,d2);
+}return G;}f d rk(float A3,d D5,uint n2,p1(uint) G1,p1(d) k4){d G=.0;uint ad=j8(abs(D5));G1=Q5(d1,n2);
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-if(min(n3,g5)>=1.&&(z1<j.j2||z1>=(j.j2|C5))){return 1.;}
+if(min(A3,D5)>=1.&&(G1<j.z2||G1>=(j.z2|P5))){return 1.;}
 #endif
-if(z1<j.j2){uint Xe=j.j2|(C5+Xb);uint r3=M7(V0,d2,Xe);
+if(G1<j.z2){uint Zf=j.z2|(P5+ad);uint D3=o8(d1,n2,Zf);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-z1=r3;
+G1=D3;
 #endif
-if(r3<=j.j2){F=g5;
+if(D3<=j.z2){G=D5;
 #ifdef DRAW_INTERIOR_TRIANGLES
-F=min(F,1.);
+G=min(G,1.);
 #endif
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-Z3=F;
+k4=G;
 #endif
-g5=.0;}else if(r3<Xe){uint Ye=(r3&Ra)-C5;d i2=j6(Ye)*Pa;d M1=g5;
+D5=.0;}else if(D3<Zf){uint ag=(D3&Mb)-P5;d y2=z6(ag)*Kb;d U1=D5;
 #ifdef DRAW_INTERIOR_TRIANGLES
-M1=min(M1,1.);
+U1=min(U1,1.);
 #endif
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-Z3=M1;
+k4=U1;
 #endif
-F=c9(i2,M1,n3);Xb=Ye;g5=i2;}}if(g5>.0){uint Wb=nb(V0,d2,Xb);d i2=ib(Wb);d M1=i2+g5;i2=clamp(i2,.0,1.);M1=clamp(M1,.0,1.);
+G=R9(y2,U1,A3);ad=ag;D5=y2;}}if(D5>.0){uint Zc=qc(d1,n2,ad);d y2=kc(Zc);d U1=y2+D5;y2=clamp(y2,.0,1.);U1=clamp(U1,.0,1.);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-Z3=M1;
+k4=U1;
 #endif
-F+=(1.-F*n3)*c9(i2,M1,n3);}return F;}z5(IB){q(a1,e);
+G+=(1.-G*A3)*R9(y2,U1,A3);}return G;}M5(HB){q(N0,e);
 #ifdef ENABLE_MODULATED_IMAGE
-q(r1,O);
+q(O0,M);
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
-T(m1,d);
+V(v1,d);
 #else
-T(S,G2);
+V(S,U2);
 #endif
-q(F0,d);
+q(J0,d);
 #ifdef ENABLE_CLIPPING
-q(l1,C);
+q(m2,F);
 #endif
 #ifdef ENABLE_CLIP_RECT
-q(R0,e);
+q(Y0,e);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-q(Q0,d);
+q(S0,d);
 #endif
-q(q3,O0);q(F4,c);i o0=Y7(
+q(C3,R0);q(W4,c);i r0=G8(
 #ifdef ENABLE_MODULATED_IMAGE
-r1,
+O0,
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-k3(Q0),
+a3(S0),
 #endif
-a1 e3);
+N0 q3);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-i Yb=N0(n0);
+i bd=L0(q0);
 #endif
-d A0=
+d F0=
 #ifdef DRAW_INTERIOR_TRIANGLES
-m1;
+v1;
 #else
-Ub(S);
+Xc(S);
 #endif
-c N6=F4;
+c i7=W4;
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-N6+=(Yb.xy+Yb.zw)*j.Ph;
+i7+=(bd.xy+bd.zw)*j.cj;
 #endif
-N6=floor(N6);uint a8=q3.y;uint d2=q3.x+d9(O0(N6),a8);d N1=1.;
+i7=floor(i7);uint I8=C3.y;uint n2=C3.x+S9(R0(i7),I8);d X1=1.;
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){d Zb=v3(v5(R0));N1=min(Zb,N1);}
+if(ENABLE_CLIP_RECT){d cd=E3(y4(Y0));X1=min(cd,X1);}
 #endif
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING&&l1.x!=.0){d ac=N0(m0).x;N1=min(ac,N1);}
+if(ENABLE_CLIPPING&&m2.x!=.0){d dd=L0(o0).x;X1=min(dd,X1);}
 #endif
-N1=max(N1,.0);A0=clamp(A0,.0,N1);uint z1;d d8;float Z3;
+X1=max(X1,.0);F0=clamp(F0,.0,X1);uint G1;d K8;float k4;
 #ifndef DRAW_INTERIOR_TRIANGLES
-if(f6(S)){d8=Zi(o0.w,A0,d2,z1,Z3);}else
+if(w6(S)){K8=qk(r0.w,F0,n2,G1,k4);}else
 #endif
-{d8=aj(o0.w,A0,d2,z1,Z3);}
+{K8=rk(r0.w,F0,n2,G1,k4);}
 #ifdef ENABLE_DITHER
-d W5;if(ENABLE_DITHER){W5=Da(f0.xy,j.L3,j.M3);}
+d l6;if(ENABLE_DITHER){l6=sb(Y.xy,j.J3,j.K3);}
 #endif
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-o0*=d8;
+r0*=K8;
 #else
-if(ENABLE_ADVANCED_BLEND&&k3(Q0)!=L4){o0.w*=d8;if(o0.w>.0){bool bj=z1>=j.j2&&(z1&w7)!=0u;if(!bj){o0.xyz=h5(o0.xyz,Yb,k3(Q0));if(Z3<1.){v e8=o0.xyz;
+if(ENABLE_ADVANCED_BLEND&&a3(S0)!=W3){r0.w*=K8;if(r0.w>.0){bool sk=G1>=j.z2&&(G1&R7)!=0u;if(!sk){r0.xyz=Y4(r0.xyz,bd,a3(S0));if(k4<1.){v L8=r0.xyz;
 #ifdef ENABLE_DITHER
-if(ENABLE_DITHER){e8+=W5*j.Wd;}
+if(ENABLE_DITHER){L8+=l6*j.cf;}
 #endif
-qb(O6,I0(e8,.0));memoryBarrier();Rh(V0,d2,w7);}}else{o0.xyz=pb(O6).xyz;}}o0.xyz*=o0.w;}else{o0*=d8;}
+r5(j7,A0(L8,.0));memoryBarrier();ej(d1,n2,R7);}}else{r0.xyz=e4(j7).xyz;}}r0.xyz*=r0.w;}else{r0*=K8;}
 #endif
 #ifdef ENABLE_DITHER
-o0.xyz=M2(o0.xyz,o0.w,W5);
+r0.xyz=M2(r0.xyz,r0.w,l6);
 #endif
-y0(m0,I0(.0));n4(o0);}
+y0(o0,A0(.0));E4(r0);}
 #endif

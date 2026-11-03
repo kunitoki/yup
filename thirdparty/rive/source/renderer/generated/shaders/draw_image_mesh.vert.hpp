@@ -5,69 +5,69 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char draw_image_mesh_vert[] = R"===(#ifdef BB
-c1(w3) K(0,c,PC);d1 c1(J3) K(1,c,QC);d1 c1(A1) K(L9,e,YB);K(M9,e,SB);K(N9,e,PB);K(O9,uint,ZB);K(P9,uint,AC);K(Q9,uint,BC);K(R9,uint,LC);K(Z9,e,HC);d1
+const char draw_image_mesh_vert[] = R"===(#ifdef CB
+h1(G3) K(0,c,SC);i1 h1(V3) K(1,c,TC);i1 h1(H1) K(ya,e,AC);K(za,e,VB);K(Aa,e,QB);K(Ba,uint,BC);K(Ca,uint,CC);K(Da,uint,DC);K(Ea,uint,NC);K(Ma,e,IC);i1
 #endif
-l2 E0 V(0,c,V5);
-#ifdef A
-KB V(1,d,Y3);
-#endif
-#if defined(AB)&&!defined(CB)
-E0 V(2,e,R0);
-#endif
-KB V(3,i,Q1);
+o2 I0 W(0,c,j6);
 #ifdef N
-Z2 V(4,Q,H1);
+NB W(1,d,j4);
 #endif
-e2
-#ifdef BB
-j4 k4 T6(RB,w3,x3,J3,K3,A1,h0,G){L(G,x3,PC,c);L(G,K3,QC,c);L(r,h0,YB,e);L(r,h0,SB,e);L(r,h0,PB,e);L(r,h0,ZB,uint);L(r,h0,AC,uint);L(r,h0,BC,uint);L(r,h0,LC,uint);L(r,h0,HC,e);T(V5,c);
-#ifdef A
-T(Y3,d);
+#if defined(AB)&&!defined(BB)
+I0 W(2,e,Y0);
 #endif
-#if defined(AB)&&!defined(CB)
-T(R0,e);
+NB W(3,i,a2);
+#ifdef H
+l3 W(4,O,Q1);
 #endif
-T(Q1,i);
+P1
+#ifdef CB
+A4 B4 n7(UB,G3,H3,V3,n3,H1,j0,C){L(C,H3,SC,c);L(C,n3,TC,c);L(r,j0,AC,e);L(r,j0,VB,e);L(r,j0,QB,e);L(r,j0,BC,uint);L(r,j0,CC,uint);L(r,j0,DC,uint);L(r,j0,NC,uint);L(r,j0,IC,e);V(j6,c);
 #ifdef N
-T(H1,Q);
+V(j4,d);
 #endif
-c k0=M0(n1(YB),PC)+PB.xy;V5=QC*HC.zw+HC.xy;
-#ifdef A
-if(A){Y3=l6(AC,j.T4);}
+#if defined(AB)&&!defined(BB)
+V(Y0,e);
+#endif
+V(a2,i);
+#ifdef H
+V(Q1,O);
+#endif
+c i0=G0(w1(AC),SC)+QB.xy;j6=TC*IC.zw+IC.xy;
+#ifdef N
+if(N){j4=r9(CC,j.B6);}
 #endif
 #ifdef AB
 if(AB){
-#ifndef CB
-R0=i8(n1(SB),PB.zw,k0 Y4);
+#ifndef BB
+Y0=P8(w1(VB),QB.zw,i0 I4);
 #else
-Ga(n1(SB),PB.zw,k0 Y4);
+vb(w1(VB),QB.zw,i0 I4);
 #endif
 }
 #endif
-e I=H3(k0);
-#ifdef MC
+e I=T3(i0);
+#ifdef OC
 I.y=-I.y;
 #endif
-#ifdef CB
-I.z=I8(LC,0xffu);
+#ifdef BB
+I.z=v9(NC,0xffu);
 #endif
-Q1=unpackUnorm4x8(ZB);
+a2=unpackUnorm4x8(BC);
+#ifdef H
+Q1=Z1(DC);
+#endif
+e0(j6);
 #ifdef N
-H1=P1(BC);
+e0(j4);
 #endif
-Z(V5);
-#ifdef A
-Z(Y3);
+#if defined(AB)&&!defined(BB)
+e0(Y0);
 #endif
-#if defined(AB)&&!defined(CB)
-Z(R0);
+e0(a2);
+#ifdef H
+e0(Q1);
 #endif
-Z(Q1);
-#ifdef N
-Z(H1);
-#endif
-w1(I);}
+C1(I);}
 #endif
 )===";
 } // namespace glsl

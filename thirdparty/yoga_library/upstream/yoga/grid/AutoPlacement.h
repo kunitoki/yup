@@ -19,19 +19,24 @@
 namespace facebook::yoga {
 
 struct OccupancyGrid {
-  // Flat row -> column intervals. A grid has few rows, so a linear scan beats a
-  // hash map and avoids instantiating unordered_map<int, vector<pair>>.
+  // Rows are dense and may start below 1 in the implicit grid, so index them
+  // from the lowest one seen; a scan per lookup is quadratic in rows.
   using Intervals = std::vector<std::pair<int32_t, int32_t>>;
-  std::vector<std::pair<int32_t, Intervals>> rowIntervals;
+  std::vector<Intervals> rows;
+  int32_t firstRow = 0;
 
   Intervals& intervalsForRow(int32_t row) {
-    for (auto& entry : rowIntervals) {
-      if (entry.first == row) {
-        return entry.second;
-      }
+    if (rows.empty()) {
+      firstRow = row;
+    } else if (row < firstRow) {
+      rows.insert(rows.begin(), static_cast<size_t>(firstRow - row), {});
+      firstRow = row;
     }
-    rowIntervals.emplace_back(row, Intervals{});
-    return rowIntervals.back().second;
+    auto index = static_cast<size_t>(row - firstRow);
+    if (index >= rows.size()) {
+      rows.resize(index + 1);
+    }
+    return rows[index];
   }
 
   void markOccupied(
@@ -50,16 +55,14 @@ struct OccupancyGrid {
       int32_t colStart,
       int32_t colEnd) const {
     for (int32_t row = rowStart; row < rowEnd; row++) {
-      for (const auto& entry : rowIntervals) {
-        if (entry.first != row) {
-          continue;
+      if (row < firstRow ||
+          static_cast<size_t>(row - firstRow) >= rows.size()) {
+        continue;
+      }
+      for (const auto& interval : rows[static_cast<size_t>(row - firstRow)]) {
+        if (interval.first < colEnd && interval.second > colStart) {
+          return true;
         }
-        for (const auto& interval : entry.second) {
-          if (interval.first < colEnd && interval.second > colStart) {
-            return true;
-          }
-        }
-        break;
       }
     }
     return false;
@@ -396,6 +399,10 @@ struct AutoPlacement {
     }
 
     // Step 4: Position the remaining grid items.
+    // Sorted so skipping placed items stays n log n for many items; step 4
+    // appends past the sorted range.
+    std::sort(placedItems.begin(), placedItems.end());
+    auto placedBefore = static_cast<std::ptrdiff_t>(placedItems.size());
     std::array<int32_t, 2> autoPlacementCursor = {minColumnStart, minRowStart};
     for (auto child : node->getLayoutChildren()) {
       if (child->style().positionType() == YGPositionTypeAbsolute ||
@@ -403,8 +410,8 @@ struct AutoPlacement {
         continue;
       }
 
-      if (std::find(placedItems.begin(), placedItems.end(), child) ==
-          placedItems.end()) {
+      if (!std::binary_search(
+              placedItems.begin(), placedItems.begin() + placedBefore, child)) {
         auto gridItemColumnStart = child->style().gridColumnStart();
         auto gridItemColumnEnd = child->style().gridColumnEnd();
         auto hasDefiniteColumn =
@@ -575,6 +582,14 @@ struct ResolvedAutoPlacement {
       // TODO: find a better place to call this
       placement.node->processDimensions();
     }
+
+    // rive: nodeless items extend the implicit grid like placed ones.
+    maxColumnEnd = std::max(
+        maxColumnEnd,
+        static_cast<int32_t>(node->gridVirtualTrackCount(YGDimensionWidth)));
+    maxRowEnd = std::max(
+        maxRowEnd,
+        static_cast<int32_t>(node->gridVirtualTrackCount(YGDimensionHeight)));
 
     return ResolvedAutoPlacement{
         .gridItems = std::move(resolvedAreas),

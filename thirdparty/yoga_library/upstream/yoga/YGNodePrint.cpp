@@ -219,6 +219,13 @@ void YGNodeToString(
           str, "position: %s; ", YGPositionTypeToString(style.positionType()));
     }
 
+    if (style.aspectRatioAxis() != YGNode().getStyle().aspectRatioAxis()) {
+      appendFormattedString(
+          str,
+          "aspect-ratio-axis: %s; ",
+          YGAspectRatioAxisToString(style.aspectRatioAxis()));
+    }
+
     appendEdgeIfNotUndefined(str, "left", style.position(), YGEdgeLeft);
     appendEdgeIfNotUndefined(str, "right", style.position(), YGEdgeRight);
     appendEdgeIfNotUndefined(str, "top", style.position(), YGEdgeTop);

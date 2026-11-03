@@ -5,14 +5,14 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char draw_input_attachment_frag[] = R"===(#ifdef FB
+const char draw_input_attachment_frag[] = R"===(#ifdef EB
 layout(input_attachment_index=0,
-#ifdef HF
-binding=HF,
+#ifdef NF
+binding=NF,
 #else
 binding=0,
 #endif
-set=C3) uniform lowp subpassInput cj;layout(location=0) out i bc;void main(){bc=subpassLoad(cj);}
+set=N3) uniform lowp subpassInput tk;layout(location=0) out i ed;void main(){ed=subpassLoad(tk);}
 #endif
 )===";
 } // namespace glsl

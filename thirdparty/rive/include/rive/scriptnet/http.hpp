@@ -15,8 +15,8 @@ namespace rive::scriptnet
 /// case-insensitively.
 struct HttpHeader
 {
-    std::string name;
-    std::string value;
+  std::string name;
+  std::string value;
 };
 using HttpHeaders = std::vector<HttpHeader>;
 
@@ -24,46 +24,46 @@ using HttpHeaders = std::vector<HttpHeader>;
 /// normalizes it.
 struct HttpRequest
 {
-    std::string url;
-    std::string method = "GET";
-    HttpHeaders headers;
-    std::vector<uint8_t> body;
-    /// Zero means the policy default.
-    uint32_t timeoutMs = 0;
+  std::string url;
+  std::string method = "GET";
+  HttpHeaders headers;
+  std::vector<uint8_t> body;
+  /// Zero means the policy default.
+  uint32_t timeoutMs = 0;
 };
 
 struct HttpResponse
 {
-    uint16_t status = 0;
-    std::string statusText;
-    /// The final URL, after redirects.
-    std::string url;
-    HttpHeaders headers;
-    std::vector<uint8_t> body;
+  uint16_t status = 0;
+  std::string statusText;
+  /// The final URL, after redirects.
+  std::string url;
+  HttpHeaders headers;
+  std::vector<uint8_t> body;
 };
 
 enum class NetErrorCode : uint8_t
 {
-    /// The host has not given scripts a network transport.
-    Disabled,
-    /// NetPolicy refused the request: scheme, host, method, header or size.
-    Policy,
-    /// Too many requests in flight, or too many in the last minute.
-    RateLimited,
-    /// No response within the timeout.
-    Timeout,
-    /// Cancelled by the script, or its VM shut down.
-    Aborted,
-    /// The response body exceeded the size limit.
-    TooLarge,
-    /// DNS, TLS, CORS, connection or any other transport failure.
-    Network,
+  /// The host has not given scripts a network transport.
+  Disabled,
+  /// NetPolicy refused the request: scheme, host, method, header or size.
+  Policy,
+  /// The script's queue of requests waiting to start is full.
+  RateLimited,
+  /// No response within the timeout.
+  Timeout,
+  /// Cancelled by the script, or its VM shut down.
+  Aborted,
+  /// The response body exceeded the size limit.
+  TooLarge,
+  /// DNS, TLS, CORS, connection or any other transport failure.
+  Network,
 };
 
 struct NetError
 {
-    NetErrorCode code = NetErrorCode::Network;
-    std::string message;
+  NetErrorCode code = NetErrorCode::Network;
+  std::string message;
 };
 
 /// Header names and hosts are ASCII case-insensitive.
@@ -75,5 +75,10 @@ const char* netErrorCodeName(NetErrorCode code);
 
 /// Inverse of netErrorCodeName; unknown names map to Network.
 NetErrorCode netErrorCodeFromName(const char* name, size_t length);
+
+/// The standard reason phrase for `status` ("OK", "Not Found"), or "" for
+/// one without. Transports report it where the server's own is hidden from
+/// them, as NSURLSession does, or absent, as over HTTP/2.
+const char* standardReasonPhrase(uint16_t status);
 
 } // namespace rive::scriptnet

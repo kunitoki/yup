@@ -5,31 +5,31 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char color_ramp[] = R"===(#ifdef BB
-c1(d0)
-#ifdef ta
-K(0,uint,TD);K(1,uint,UD);K(2,uint,VD);K(3,uint,WD);
+const char color_ramp[] = R"===(#ifdef CB
+h1(d0)
+#ifdef hb
+K(0,uint,ZD);K(1,uint,AE);K(2,uint,BE);K(3,uint,CE);
 #else
-K(0,M,JC);
+K(0,R,KC);
 #endif
-d1
+i1
 #endif
-l2 E0 V(0,i,g7);e2
-#ifdef BB
-j4 k4 P4 Q4 i Zf(uint p){return Pc((M(p,p,p,p)>>M(16,8,0,24))&0xffu)/255.;}v1(MF,d0,D,G,r){
-#ifdef ta
-L(r,D,TD,uint);L(r,D,UD,uint);L(r,D,VD,uint);L(r,D,WD,uint);M JC=M(TD,UD,VD,WD);
+o2 I0 W(0,i,B7);P1
+#ifdef CB
+A4 B4 i5 j5 i bh(uint k){return Nd((R(k,k,k,k)>>R(16,8,0,24))&0xffu)/255.;}n1(TF,d0,A,C,r){
+#ifdef hb
+L(r,A,ZD,uint);L(r,A,AE,uint);L(r,A,BE,uint);L(r,A,CE,uint);R KC=R(ZD,AE,BE,CE);
 #else
-L(r,D,JC,M);
+L(r,A,KC,R);
 #endif
-T(g7,i);int E8=G>>1;float x=float(E8<=1?JC.x&0xffffu:JC.x>>16)/65536.;float ua=(G&1)==0?.0:1.;if(j.Qc<.0){ua=1.-ua;}uint h7=JC.y;float y=float(h7&~ag)+ua;if((h7&Rc)!=0u&&E8==0){if((h7&va)!=0u) x=.0;else x-=Sc;}if((h7&Tc)!=0u&&E8==3){if((h7&va)!=0u) x=1.;else x+=Sc;}g7=Zf(E8<=1?JC.z:JC.w);e I=F8(c(x,y),2.,j.Qc);
-#ifdef MC
+V(B7,i);int o9=C>>1;float x=float(o9<=1?KC.x&0xffffu:KC.x>>16)/65536.;float ib=(C&1)==0?.0:1.;if(j.Od<.0){ib=1.-ib;}uint C7=KC.y;float y=float(C7&~ch)+ib;if((C7&Pd)!=0u&&o9==0){if((C7&jb)!=0u) x=.0;else x-=l5;}if((C7&Qd)!=0u&&o9==3){if((C7&jb)!=0u) x=1.;else x+=l5;}B7=bh(o9<=1?KC.z:KC.w);e I=p9(c(x,y),2.,j.Od);
+#ifdef OC
 I.y=-I.y;
 #endif
-Z(g7);w1(I);}
+e0(B7);C1(I);}
 #endif
-#ifdef FB
-N3 O3 j3(i,NF){q(g7,i);P2(g7);}
+#ifdef EB
+X3 Y3 v2(i,UF){q(B7,i);w2(B7);}
 #endif
 )===";
 } // namespace glsl

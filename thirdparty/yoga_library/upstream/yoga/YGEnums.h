@@ -29,6 +29,14 @@ YG_ENUM_SEQ_DECL(
     YGAlignEnd,
     YGAlignSpaceEvenly)
 
+// rive: which axis an aspect ratio is computed from. Auto is Yoga's own rule,
+// the owner's main axis.
+YG_ENUM_SEQ_DECL(
+    YGAspectRatioAxis,
+    YGAspectRatioAxisAuto,
+    YGAspectRatioAxisWidth,
+    YGAspectRatioAxisHeight)
+
 YG_ENUM_SEQ_DECL(
     YGDimension,
     YGDimensionWidth,

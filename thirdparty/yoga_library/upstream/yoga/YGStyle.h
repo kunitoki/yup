@@ -140,6 +140,15 @@ private:
       flexWrapOffset + facebook::yoga::detail::bitWidthFn<YGWrap>();
   static constexpr size_t displayOffset =
       overflowOffset + facebook::yoga::detail::bitWidthFn<YGOverflow>();
+  // rive: which axis the aspect ratio is computed from. Last, so every field
+  // before it keeps its bits.
+  static constexpr size_t aspectRatioAxisOffset =
+      displayOffset + facebook::yoga::detail::bitWidthFn<YGDisplay>();
+  static_assert(
+      aspectRatioAxisOffset +
+              facebook::yoga::detail::bitWidthFn<YGAspectRatioAxis>() <=
+          32,
+      "YGStyle::flags overflows 32 bits");
 
   uint32_t flags = 0;
 
@@ -239,6 +248,15 @@ public:
     return facebook::yoga::detail::getEnumData<YGDisplay>(flags, displayOffset);
   }
   BitfieldRef<YGDisplay> display() { return {*this, displayOffset}; }
+
+  // rive: explicit aspect ratio axis, see aspectRatioAxisOffset
+  YGAspectRatioAxis aspectRatioAxis() const {
+    return facebook::yoga::detail::getEnumData<YGAspectRatioAxis>(
+        flags, aspectRatioAxisOffset);
+  }
+  BitfieldRef<YGAspectRatioAxis> aspectRatioAxis() {
+    return {*this, aspectRatioAxisOffset};
+  }
 
   YGFloatOptional flex() const { return flex_; }
   Ref<YGFloatOptional, &YGStyle::flex_> flex() { return {*this}; }

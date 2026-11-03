@@ -145,7 +145,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Rive text fields on Windows now use Ctrl, not the Windows key, for select all, undo and redo (`RIVE_WINDOWS` is now defined).
 - Rive ViewModel data binding: `ArtboardFile` exposes the ViewModels of a file and its global instances, `ArtboardViewModel` describes a schema, and `ArtboardViewModelInstance` reads and writes properties by name or dotted path (nested ViewModels, lists, enums, triggers) with change callbacks; `Artboard` binds instances.
 - Scripted Rive files whose scripts draw into canvases or run GPU shaders now render in `Artboard`. `ArtboardFile::load` imports them through a Rive recording session, which the artboard replays into the window frame. `GraphicsContext::suspendFrame` / `resumeFrame` flush and reopen the open frame for that replay.
-- Updated Rive to `runtime-v0.1.512`, with Luau `rive_0_734_ice` and Yoga `rive_changes_v2_0_1_4_grid` (grid layout). `tools/rive_update.py` now removes stale generated shaders even when an optional shader target is skipped, and fails when a new upstream Luau source is missing from `luau.cpp`.
+- Updated Rive to `runtime-v0.1.700`, with Luau `rive_0_734_ice` and Yoga `rive_yoga_dee88d2dfcad` (grid layout). `tools/rive_update.py` now removes stale generated shaders even when an optional shader target is skipped, fails when a new upstream Luau source is missing from `luau.cpp`, and reads dependency refs pinned in upstream `.ref` files.
 
 ### Audio
 

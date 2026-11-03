@@ -68,6 +68,9 @@ struct TrackSizing {
   YGConfigRef config;   // rive: threaded for YGLayoutNodeInternal
   void* layoutContext;  // rive: threaded for YGLayoutNodeInternal
   CrossDimensionEstimator crossDimensionEstimator;
+  // rive: grid line of the first track, to index nodeless contributions.
+  int32_t firstColumnLine = 0;
+  int32_t firstRowLine = 0;
 
   // below flags are used for optimization purposes
   bool hasPercentageColumnTracks = false;
@@ -327,6 +330,27 @@ struct TrackSizing {
       }
     }
 
+    // rive: nodeless single-cell items size their tracks as the items above.
+    for (size_t i = 0; i < tracks.size(); i++) {
+      auto& track = tracks[i];
+      float contribution = virtualContribution(dimension, i);
+      if (contribution <= 0.0f ||
+          isFlexibleSizingFunction(track.maxSizingFunction)) {
+        continue;
+      }
+      if (isAutoSizingFunction(track.minSizingFunction, containerSize)) {
+        track.baseSize = std::max(track.baseSize, contribution);
+      }
+      if (isAutoSizingFunction(track.maxSizingFunction, containerSize)) {
+        track.growthLimit = track.growthLimit == INFINITY
+            ? contribution
+            : std::max(track.growthLimit, contribution);
+      }
+      if (track.growthLimit < track.baseSize) {
+        track.growthLimit = track.baseSize;
+      }
+    }
+
     // 3. Increase sizes to accommodate spanning items crossing content-sized
     // tracks: https://www.w3.org/TR/css-grid-1/#algo-spanning-items
     if (spanningItemIndices.empty()) {
@@ -510,6 +534,17 @@ struct TrackSizing {
 
     if (!itemsSpanningFlexible.empty()) {
       distributeSpaceToFlexibleTracksForItems(dimension, itemsSpanningFlexible);
+    }
+
+    // rive: a nodeless single-cell item grows its flexible track to fit, as
+    // distributing over its one track would.
+    for (size_t i = 0; i < tracks.size(); i++) {
+      auto& track = tracks[i];
+      if (isFlexibleSizingFunction(track.maxSizingFunction) &&
+          isIntrinsicSizingFunction(track.minSizingFunction, containerSize)) {
+        track.baseSize =
+            std::max(track.baseSize, virtualContribution(dimension, i));
+      }
     }
   };
 
@@ -969,6 +1004,18 @@ struct TrackSizing {
                 itemMaxContentContribution,
                 std::vector<GridTrack*>()));
       }
+
+      // rive: nodeless single-cell items in flexible tracks.
+      for (size_t i = 0; i < gridTracks.size(); i++) {
+        float contribution = virtualContribution(dimension, i);
+        if (contribution > 0.0f &&
+            isFlexibleSizingFunction(gridTracks[i].maxSizingFunction)) {
+          flexFraction = std::max(
+              flexFraction,
+              findFrSize(
+                  dimension, i, i + 1, contribution, std::vector<GridTrack*>()));
+        }
+      }
     }
 
     // If using this flex fraction would cause the grid to be smaller than the
@@ -1212,6 +1259,13 @@ struct TrackSizing {
   };
 
   // https://www.w3.org/TR/css-grid-1/#free-space
+  float virtualContribution(YGDimension dimension, size_t track) const {
+    return node->gridVirtualContribution(
+        dimension,
+        static_cast<int32_t>(track) +
+            (dimension == YGDimensionWidth ? firstColumnLine : firstRowLine));
+  }
+
   float calculateFreeSpace(YGDimension dimension) {
     float freeSpace = YGUndefined;
     auto containerSize = dimension == YGDimensionWidth ? containerInnerWidth
@@ -1222,6 +1276,26 @@ struct TrackSizing {
     }
 
     return freeSpace;
+  }
+
+  // rive: whether [dimension] follows the other one through an explicit
+  // aspect ratio axis.
+  static bool derivesFromAspectRatioAnchor(
+      const GridItem& item,
+      YGDimension dimension) {
+    const auto& style = item.node->getStyle();
+    if (!style.aspectRatio().isDefined() ||
+        style.aspectRatio().unwrap() <= 0.0f) {
+      return false;
+    }
+    switch (style.aspectRatioAxis()) {
+      case YGAspectRatioAxisWidth:
+        return dimension == YGDimensionHeight;
+      case YGAspectRatioAxisHeight:
+        return dimension == YGDimensionWidth;
+      default:
+        return false;
+    }
   }
 
   float measureItem(
@@ -1245,7 +1319,27 @@ struct TrackSizing {
         depth + 1,
         generationCount);
 
-    return item.node->getLayout().measuredDimensions[dimension];
+    float measured = item.node->getLayout().measuredDimensions[dimension];
+    // rive: a track asking for the dimension that follows an explicit aspect
+    // ratio axis gets the size derived from the anchor it just measured,
+    // bounded as the final layout will bound it -- not the authored size,
+    // which the layout ignores.
+    if (derivesFromAspectRatioAnchor(item, dimension)) {
+      const bool isWidth = dimension == YGDimensionWidth;
+      const YGStyle& lockedStyle = item.node->getStyle();
+      const float ratio = lockedStyle.aspectRatio().unwrap();
+      const float anchor = item.node->getLayout().measuredDimensions
+                               [isWidth ? YGDimensionHeight : YGDimensionWidth];
+      measured = boundAxis(
+          item.node,
+          isWidth ? YGFlexDirectionRow : YGFlexDirectionColumn,
+          node->getLayout().direction(),
+          isWidth ? anchor * ratio : anchor / ratio,
+          isWidth ? constraints.containingBlockWidth
+                  : constraints.containingBlockHeight,
+          constraints.containingBlockWidth);
+    }
+    return measured;
   }
 
   // rive: min-content, by laying the item out in zero space on [dimension] and
@@ -1268,7 +1362,10 @@ struct TrackSizing {
     const auto containingBlockSize = isWidth
         ? constraints.containingBlockWidth
         : constraints.containingBlockHeight;
-    if (item.node->hasDefiniteLength(dimension, containingBlockSize)) {
+    // rive: a dimension that follows an explicit aspect ratio axis has no
+    // min-content of its own; it is whatever the anchor's measure derives.
+    if (item.node->hasDefiniteLength(dimension, containingBlockSize) ||
+        derivesFromAspectRatioAnchor(item, dimension)) {
       return measureItem(item, dimension, constraints);
     }
 
@@ -1783,7 +1880,66 @@ struct TrackSizing {
     if (itemStyle.aspectRatio().isDefined() &&
         !inexactEquals(itemStyle.aspectRatio().unwrap(), 0.0f)) {
       const float aspectRatio = itemStyle.aspectRatio().unwrap();
-      if (itemWidthSizingMode == YGMeasureModeExactly &&
+      const auto aspectRatioAxis = itemStyle.aspectRatioAxis();
+      // rive: an explicit axis is the anchor whenever it is definite or
+      // stretched; a hugging anchor is measured first (GridLayout) and the
+      // other size follows it then.
+      if (aspectRatioAxis == YGAspectRatioAxisWidth) {
+        if (itemWidthSizingMode == YGMeasureModeExactly) {
+          // rive: the anchor is bounded by its own min/max before the other
+          // side follows it, as the final layout will bound it.
+          const float anchorWidth = boundAxis(
+              item.node,
+              YGFlexDirectionRow,
+              direction,
+              availableWidth - marginInline,
+              containingBlockWidth,
+              containingBlockWidth);
+          availableWidth = anchorWidth + marginInline;
+          auto resolvedHeight = anchorWidth / aspectRatio;
+          resolvedHeight = boundAxis(
+              item.node,
+              YGFlexDirectionColumn,
+              direction,
+              resolvedHeight,
+              containingBlockHeight,
+              containingBlockWidth);
+          availableHeight = resolvedHeight + marginBlock;
+          itemHeightSizingMode = YGMeasureModeExactly;
+        } else {
+          // rive: a hugging anchor measures with the computed axis free: the
+          // size authored or stretched there is the one the ratio overrides,
+          // and at that size wrapping content would move the anchor. The
+          // item is laid out again from the measured anchor (GridLayout).
+          availableHeight = YGUndefined;
+          itemHeightSizingMode = YGMeasureModeUndefined;
+        }
+      } else if (aspectRatioAxis == YGAspectRatioAxisHeight) {
+        if (itemHeightSizingMode == YGMeasureModeExactly) {
+          const float anchorHeight = boundAxis(
+              item.node,
+              YGFlexDirectionColumn,
+              direction,
+              availableHeight - marginBlock,
+              containingBlockHeight,
+              containingBlockWidth);
+          availableHeight = anchorHeight + marginBlock;
+          auto resolvedWidth = anchorHeight * aspectRatio;
+          resolvedWidth = boundAxis(
+              item.node,
+              YGFlexDirectionRow,
+              direction,
+              resolvedWidth,
+              containingBlockWidth,
+              containingBlockWidth);
+          availableWidth = resolvedWidth + marginInline;
+          itemWidthSizingMode = YGMeasureModeExactly;
+        } else {
+          availableWidth = YGUndefined;
+          itemWidthSizingMode = YGMeasureModeUndefined;
+        }
+      } else if (
+          itemWidthSizingMode == YGMeasureModeExactly &&
           itemHeightSizingMode == YGMeasureModeExactly) {
         if (!hasDefiniteWidth && !hasDefiniteHeight) {
           auto resolvedWidth = (availableHeight - marginBlock) * aspectRatio;

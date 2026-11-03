@@ -48,6 +48,12 @@ struct LayoutData {
   int measureCallbacks;
   std::array<int, static_cast<uint8_t>(LayoutPassReason::COUNT)>
       measureCallbackReasonsCount;
+  // rive: measurements so far that sized a node to the space it was offered
+  // rather than its content (YGLayout::limitDependentMeasurements).
+  int limitDependentMeasures;
+  // rive: containers with children so far that measured as nothing in an
+  // axis (YGLayout::emptyContainerMeasurements).
+  int emptyContainerMeasures;
 };
 
 const char* LayoutPassReasonToString(const LayoutPassReason value);

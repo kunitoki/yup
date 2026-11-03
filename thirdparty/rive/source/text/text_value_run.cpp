@@ -5,206 +5,254 @@
 #include "rive/artboard.hpp"
 #include "rive/hittest_command_path.hpp"
 #include "rive/importers/artboard_importer.hpp"
+#include "rive/viewmodel/viewmodel_instance_artboard.hpp"
 
 using namespace rive;
 
 void TextValueRun::textChanged()
 {
-    m_length = -1;
-    textComponent()->markShapeDirty();
+  m_length = -1;
+  textComponent()->markShapeDirty();
 }
 
 Text* TextValueRun::textComponent() const
 {
-    if (m_textComponent)
-    {
-        return m_textComponent;
-    }
-    return parent()->as<Text>();
+  if (m_textComponent)
+  {
+    return m_textComponent;
+  }
+  return parent()->as<Text>();
 }
 
 StatusCode TextValueRun::onAddedClean(CoreContext* context)
 {
-    StatusCode code = Super::onAddedClean(context);
-    if (code != StatusCode::Ok)
-    {
-        return code;
-    }
+  StatusCode code = Super::onAddedClean(context);
+  if (code != StatusCode::Ok)
+  {
+    return code;
+  }
 
-    if (parent() != nullptr && parent()->is<Text>())
-    {
-        parent()->as<Text>()->addRun(this);
-        return StatusCode::Ok;
-    }
+  if (parent() != nullptr && parent()->is<Text>())
+  {
+    parent()->as<Text>()->addRun(this);
+    return StatusCode::Ok;
+  }
 
-    return StatusCode::MissingObject;
+  return StatusCode::MissingObject;
 }
 
 StatusCode TextValueRun::onAddedDirty(CoreContext* context)
 {
-    StatusCode code = Super::onAddedDirty(context);
-    if (code != StatusCode::Ok)
-    {
-        return code;
-    }
-    auto coreObject = context->resolve(styleId());
-    if (coreObject == nullptr || !coreObject->is<TextStylePaint>())
-    {
-        return StatusCode::MissingObject;
-    }
+  StatusCode code = Super::onAddedDirty(context);
+  if (code != StatusCode::Ok)
+  {
+    return code;
+  }
+  auto coreObject = context->resolve(styleId());
+  if (coreObject == nullptr || !coreObject->is<TextStyleReference>())
+  {
+    return StatusCode::MissingObject;
+  }
 
-    m_style = static_cast<TextStylePaint*>(coreObject);
+  m_styleReference = static_cast<TextStyleReference*>(coreObject);
 
-    return StatusCode::Ok;
+  return StatusCode::Ok;
 }
 
-void TextValueRun::styleIdChanged()
+TextValueRun::TextValueRun() {}
+TextValueRun::~TextValueRun() {}
+
+TextStyleReference* TextValueRun::authoredStyle() const
 {
-    auto coreObject = artboard()->resolve(styleId());
-    if (coreObject != nullptr && coreObject->is<TextStylePaint>())
-    {
-        m_style = static_cast<TextStylePaint*>(coreObject);
-        textComponent()->markShapeDirty();
-    }
+  auto host = artboard();
+  auto coreObject = host != nullptr ? host->resolve(styleId()) : nullptr;
+  return coreObject != nullptr && coreObject->is<TextStyleReference>()
+             ? static_cast<TextStyleReference*>(coreObject)
+             : nullptr;
+}
+
+// A bind on styleId wins over the authored style, keyframed or not.
+void TextValueRun::styleIdChanged() { resolveStyle(); }
+
+void TextValueRun::bindStyle(ViewModelInstanceArtboard* value)
+{
+  m_boundStyleValue = ref_rcp(value);
+  resolveStyle();
+}
+
+void TextValueRun::resolveStyle()
+{
+  Text* text = textComponent();
+  TextStyleReference* style = nullptr;
+#ifdef WITH_RIVE_TEXT
+  if (m_boundStyleValue != nullptr && text != nullptr)
+  {
+    style = text->boundRunStyle(m_boundStyleValue.get(), this);
+  }
+#endif
+  if (style == nullptr)
+  {
+    style = authoredStyle();
+  }
+  // An id naming no style keeps the current one.
+  if (style == nullptr || style == m_styleReference)
+  {
+    return;
+  }
+  m_styleReference = style;
+  if (text != nullptr)
+  {
+#ifdef WITH_RIVE_TEXT
+    text->runStyleChanged();
+#else
+    text->markShapeDirty();
+#endif
+  }
 }
 
 uint32_t TextValueRun::offset() const
 {
 #ifdef WITH_RIVE_TEXT
-    Text* text = textComponent();
-    uint32_t offset = 0;
+  Text* text = textComponent();
+  uint32_t offset = 0;
 
-    for (TextValueRun* run : text->runs())
+  for (TextValueRun* run : text->runs())
+  {
+    if (run == this)
     {
-        if (run == this)
-        {
-            break;
-        }
-        offset += run->length();
+      break;
     }
-    return offset;
+    offset += run->length();
+  }
+  return offset;
 #else
-    return 0;
+  return 0;
 #endif
 }
 
 bool TextValueRun::canHitTest() const
 {
-    return (m_isHitTarget && textComponent() != nullptr &&
-            !m_localBounds.isEmptyOrNaN());
+  return (
+      m_isHitTarget && textComponent() != nullptr &&
+      !m_localBounds.isEmptyOrNaN());
 }
 
 void TextValueRun::resetHitTest()
 {
-    m_glyphHitRects.clear();
-    m_localBounds = AABB::forExpansion();
+  m_glyphHitRects.clear();
+  m_localBounds = AABB::forExpansion();
 }
 
 void TextValueRun::addHitRect(const AABB& rect)
 {
-    AABB::expandTo(m_localBounds, rect.min());
-    AABB::expandTo(m_localBounds, rect.max());
-    m_glyphHitRects.push_back(rect);
+  AABB::expandTo(m_localBounds, rect.min());
+  AABB::expandTo(m_localBounds, rect.max());
+  m_glyphHitRects.push_back(rect);
 }
 
 void TextValueRun::computeHitContours()
 {
-    if (!m_rectanglesToContour)
-    {
-        m_rectanglesToContour = std::make_unique<RectanglesToContour>();
-    }
-    else
-    {
-        m_rectanglesToContour->reset();
-    }
-    for (const AABB& rect : m_glyphHitRects)
-    {
-        m_rectanglesToContour->addRect(rect);
-    }
-    m_rectanglesToContour->computeContours();
+  if (!m_rectanglesToContour)
+  {
+    m_rectanglesToContour = std::make_unique<RectanglesToContour>();
+  }
+  else
+  {
+    m_rectanglesToContour->reset();
+  }
+  for (const AABB& rect : m_glyphHitRects)
+  {
+    m_rectanglesToContour->addRect(rect);
+  }
+  m_rectanglesToContour->computeContours();
 }
 
 bool TextValueRun::hitTestAABB(const Vec2D& position)
 {
-    if (!canHitTest())
-    {
-        return false;
-    }
-
-    if (textComponent()->overflow() != TextOverflow::visible)
-    {
-        Mat2D inverseWorld;
-        if (!textComponent()->worldTransform().invert(&inverseWorld))
-        {
-            return false;
-        }
-
-        if (!textComponent()->localBounds().contains(inverseWorld * position))
-        {
-            return false;
-        }
-    }
-
-    Mat2D inverseWorld;
-    Mat2D worldTransform =
-        textComponent()->worldTransform() * textComponent()->m_transform;
-    if (worldTransform.invert(&inverseWorld))
-    {
-        auto localWorld = inverseWorld * position;
-        return m_localBounds.contains(localWorld);
-    }
-
+  if (!canHitTest())
+  {
     return false;
+  }
+
+  if (textComponent()->overflow() != TextOverflow::visible)
+  {
+    Mat2D inverseWorld;
+    if (!textComponent()->worldTransform().invert(&inverseWorld))
+    {
+      return false;
+    }
+
+    if (!textComponent()->localBounds().contains(inverseWorld * position))
+    {
+      return false;
+    }
+  }
+
+  Mat2D inverseWorld;
+  Mat2D worldTransform = textComponent()->worldTransform() *
+                         textComponent()->m_transform;
+  if (worldTransform.invert(&inverseWorld))
+  {
+    auto localWorld = inverseWorld * position;
+    return m_localBounds.contains(localWorld);
+  }
+
+  return false;
 }
 
 bool TextValueRun::hitTestHiFi(const Vec2D& position, float hitRadius)
 {
-    if (!canHitTest())
+  if (!canHitTest())
+  {
+    return false;
+  }
+
+  auto hitArea = AABB(
+                     position.x - hitRadius,
+                     position.y - hitRadius,
+                     position.x + hitRadius,
+                     position.y + hitRadius)
+                     .round();
+  HitTestCommandPath tester(hitArea);
+  tester.setXform(
+      textComponent()->worldTransform() * textComponent()->m_transform);
+
+  assert(m_rectanglesToContour != nullptr);
+  for (auto contour : *m_rectanglesToContour)
+  {
+    assert(contour.begin() != contour.end());
+    auto pointItr = contour.begin();
+    auto end = contour.end();
+
+    Vec2D firstPoint = *pointItr;
+    tester.moveTo(firstPoint.x, firstPoint.y);
+
+    while (++pointItr != end)
     {
-        return false;
+      Vec2D point = *pointItr;
+      tester.lineTo(point.x, point.y);
     }
 
-    auto hitArea = AABB(position.x - hitRadius,
-                        position.y - hitRadius,
-                        position.x + hitRadius,
-                        position.y + hitRadius)
-                       .round();
-    HitTestCommandPath tester(hitArea);
-    tester.setXform(textComponent()->worldTransform() *
-                    textComponent()->m_transform);
+    tester.close();
+  }
 
-    assert(m_rectanglesToContour != nullptr);
-    for (auto contour : *m_rectanglesToContour)
-    {
-        assert(contour.begin() != contour.end());
-        auto pointItr = contour.begin();
-        auto end = contour.end();
-
-        Vec2D firstPoint = *pointItr;
-        tester.moveTo(firstPoint.x, firstPoint.y);
-
-        while (++pointItr != end)
-        {
-            Vec2D point = *pointItr;
-            tester.lineTo(point.x, point.y);
-        }
-
-        tester.close();
-    }
-
-    return tester.wasHit();
+  return tester.wasHit();
 }
 
 void TextValueRun::isHitTarget(bool value) { m_isHitTarget = value; }
 
-bool TextValueRun::hitTestPoint(const Vec2D& position,
-                                bool skipOnUnclipped,
-                                bool isPrimaryHit)
+bool TextValueRun::hitTestPoint(
+    const Vec2D& position,
+    bool skipOnUnclipped,
+    bool isPrimaryHit)
 {
-    if (hitTestAABB(position) &&
-        Component::hitTestPoint(position, skipOnUnclipped, isPrimaryHit))
-    {
-        return hitTestHiFi(position, 2);
-    }
-    return false;
+  // A list-driven run has no parent: its Text clips and hides it.
+  if (hitTestAABB(position) &&
+      (parent() != nullptr
+           ? Component::hitTestPoint(position, skipOnUnclipped, isPrimaryHit)
+           : textComponent()->hitTestPoint(position, skipOnUnclipped, false)))
+  {
+    return hitTestHiFi(position, 2);
+  }
+  return false;
 }

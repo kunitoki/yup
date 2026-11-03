@@ -37,6 +37,19 @@ const char* YGAlignToString(const YGAlign value) {
   return "unknown";
 }
 
+// rive: explicit aspect ratio axis
+const char* YGAspectRatioAxisToString(const YGAspectRatioAxis value) {
+  switch (value) {
+    case YGAspectRatioAxisAuto:
+      return "auto";
+    case YGAspectRatioAxisWidth:
+      return "width";
+    case YGAspectRatioAxisHeight:
+      return "height";
+  }
+  return "unknown";
+}
+
 const char* YGDimensionToString(const YGDimension value) {
   switch (value) {
     case YGDimensionWidth:

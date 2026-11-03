@@ -9,28 +9,35 @@ class ArtboardInstance;
 class ArtboardComponentListOverride : public ArtboardComponentListOverrideBase
 {
 public:
-    void addArtboard(ArtboardInstance* artboard);
-    void removeArtboard(ArtboardInstance* artboard);
-    float actualInstanceWidth(ArtboardInstance* artboardInstance);
-    float actualInstanceHeight(ArtboardInstance* artboardInstance);
-    void markHostingLayoutDirty(ArtboardInstance* artboardInstance);
-    bool isRow();
-    bool isStack();
+  void addArtboard(ArtboardInstance* artboard);
+  void removeArtboard(ArtboardInstance* artboard);
+  void clearArtboards() { m_artboards.clear(); }
+#ifdef TESTING
+  const std::vector<ArtboardInstance*>& artboards() const
+  {
+    return m_artboards;
+  }
+#endif
+  float actualInstanceWidth(ArtboardInstance* artboardInstance);
+  float actualInstanceHeight(ArtboardInstance* artboardInstance);
+  void markHostingLayoutDirty(ArtboardInstance* artboardInstance);
+  bool isRow();
+  bool isStack();
 
 protected:
-    void instanceWidthChanged() override;
-    void instanceHeightChanged() override;
-    void instanceWidthUnitsValueChanged() override;
-    void instanceHeightUnitsValueChanged() override;
-    void instanceWidthScaleTypeChanged() override;
-    void instanceHeightScaleTypeChanged() override;
+  void instanceWidthChanged() override;
+  void instanceHeightChanged() override;
+  void instanceWidthUnitsValueChanged() override;
+  void instanceHeightUnitsValueChanged() override;
+  void instanceWidthScaleTypeChanged() override;
+  void instanceHeightScaleTypeChanged() override;
 
 private:
-    std::vector<ArtboardInstance*> m_artboards;
-    void updateWidthOverride();
-    void updateHeightOverride();
-    StyleOverrider<ArtboardComponentListOverride> m_styleOverrider =
-        StyleOverrider<ArtboardComponentListOverride>(this);
+  std::vector<ArtboardInstance*> m_artboards;
+  void updateWidthOverride();
+  void updateHeightOverride();
+  StyleOverrider<ArtboardComponentListOverride>
+      m_styleOverrider = StyleOverrider<ArtboardComponentListOverride>(this);
 };
 
 } // namespace rive
