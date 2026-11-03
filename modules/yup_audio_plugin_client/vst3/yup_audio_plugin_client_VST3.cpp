@@ -1134,7 +1134,7 @@ public:
 
     AudioPluginProcessorVST3()
     {
-        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
+        processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::vst3, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
 
         setControllerClass (YupPlugin_Controller_UID);
     }

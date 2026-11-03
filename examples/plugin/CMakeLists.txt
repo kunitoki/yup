@@ -117,10 +117,13 @@ yup_audio_plugin (
         ${target_name}_blur_shaders
         ${target_name}_neon_composite_shaders)
 
-# ==== Enable link time optimization for release builds of every plugin format
+# ==== Enable link time optimization for release builds of the shared core and every plugin format
 include (CheckIPOSupported)
 check_ipo_supported (RESULT ipo_supported OUTPUT ipo_output)
 if (ipo_supported)
+    set_target_properties (${target_name}_shared PROPERTIES
+        INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+
     foreach (plugin_format clap vst3 standalone au auv3 aax lv2)
         if (TARGET ${target_name}_${plugin_format}_plugin)
             set_target_properties (${target_name}_${plugin_format}_plugin PROPERTIES
@@ -136,8 +139,11 @@ file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/source/*.h")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
+# The plugin sources are compiled once into the shared plugin core
+target_sources (${target_name}_shared PRIVATE ${sources})
+
 # The shader bundles are OBJECT libraries, whose objects only reach targets linking them directly
-target_sources (${target_name}_shared PUBLIC ${sources}
+target_sources (${target_name}_shared INTERFACE
     $<TARGET_OBJECTS:${target_name}_shaders>
     $<TARGET_OBJECTS:${target_name}_glow_prefilter_shaders>
     $<TARGET_OBJECTS:${target_name}_blur_shaders>

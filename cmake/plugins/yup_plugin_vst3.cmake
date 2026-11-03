@@ -90,8 +90,6 @@ function (_yup_audio_plugin_create_vst3)
     set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
-    set (additional_libraries "${YUP_ARG_ADDITIONAL_LIBRARIES}")
-    set (target_modules "${YUP_ARG_MODULES}")
 
     _yup_fetch_vst3sdk()
 
@@ -105,15 +103,6 @@ function (_yup_audio_plugin_create_vst3)
         yup_audio_plugin_client
         ${target_ide_group}
         vst3
-        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
-        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
-        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
-        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
-        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
-        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
-        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
-        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
-        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO}
         PLUGIN_VST3_CATEGORIES ${YUP_ARG_PLUGIN_VST3_CATEGORIES})
 
     # Create VST3 plugin target
@@ -127,28 +116,21 @@ function (_yup_audio_plugin_create_vst3)
         YUP_AUDIO_PLUGIN_ENABLE_VST3=1
         YUP_STANDALONE_APPLICATION=0)
 
-    _yup_sdl_configure_symbols_patch ("${target_name}_vst3_plugin" vst3_sdl_symbols_patch_target vst3_sdl_symbols_sdl_target)
+    _yup_sdl_configure_private_static_target ("${target_name}_vst3_plugin" vst3_sdl_symbols_sdl_target)
     set (vst3_plugin_bundle_libraries
-        ${vst3_sdl_symbols_sdl_target}
-        ${vst3_sdl_symbols_patch_target})
+        ${vst3_sdl_symbols_sdl_target})
 
     target_link_libraries (${target_name}_vst3_plugin PRIVATE
         ${target_name}_shared
-        yup_audio_plugin_client
         sdk
         ${target_name}_vst3
-        ${additional_libraries}
-        ${vst3_plugin_bundle_libraries}
-        ${target_modules})
+        ${vst3_plugin_bundle_libraries})
 
     _yup_module_apply_arc_to_target_sources (${target_name}_vst3_plugin
         ${target_name}_shared
-        yup_audio_plugin_client
         sdk
         ${target_name}_vst3
-        ${additional_libraries}
-        ${vst3_plugin_bundle_libraries}
-        ${target_modules})
+        ${vst3_plugin_bundle_libraries})
 
     set_target_properties (${target_name}_vst3_plugin PROPERTIES
         C_VISIBILITY_PRESET hidden

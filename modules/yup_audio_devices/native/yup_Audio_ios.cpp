@@ -111,37 +111,45 @@ bool getNotificationValueForKey (NSNotification* notification, NSString* key, NS
 
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-} // namespace yup
-
 //==============================================================================
-@interface iOSAudioSessionNative : NSObject
+/** Observes the AVAudioSession notifications on behalf of an AudioSessionHolder.
+
+    Registered at runtime under a unique name, so every binary embedding YUP owns a distinct
+    Objective-C class. */
+struct AudioSessionObserverClass final : public ObjCClass<NSObject>
 {
-@private
-    yup::AudioSessionHolder* audioSessionHolder;
-};
-
-- (id)init:(yup::AudioSessionHolder*)holder;
-- (void)dealloc;
-
-- (void)audioSessionChangedInterruptionType:(NSNotification*)notification;
-- (void)handleMediaServicesReset;
-- (void)handleMediaServicesLost;
-- (void)handleRouteChange:(NSNotification*)notification;
-@end
-
-@implementation iOSAudioSessionNative
-
-- (id)init:(yup::AudioSessionHolder*)holder
-{
-    self = [super init];
-
-    if (self != nil)
+    AudioSessionObserverClass()
+        : ObjCClass<NSObject> ("YUPAudioSessionObserver_")
     {
-        audioSessionHolder = holder;
+        addIvar<AudioSessionHolder*> ("holder");
+
+        YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
+        addMethod (@selector (audioSessionChangedInterruptionType:), audioSessionChangedInterruptionType);
+        addMethod (@selector (handleMediaServicesReset), handleMediaServicesReset);
+        addMethod (@selector (handleMediaServicesLost), handleMediaServicesLost);
+        addMethod (@selector (handleRouteChange:), handleRouteChange);
+        YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+        addMethod (sel_registerName ("dealloc"), [] (id self, SEL)
+        {
+            [[NSNotificationCenter defaultCenter] removeObserver:self];
+            sendSuperclassMessage<void> (self, sel_registerName ("dealloc"));
+        });
+
+        registerClass();
+    }
+
+    static id create (AudioSessionHolder* holder)
+    {
+        static AudioSessionObserverClass observerClass;
+
+        id self = [observerClass.createInstance() init];
+        setIvar (self, "holder", holder);
 
         auto session = [AVAudioSession sharedInstance];
         auto centre = [NSNotificationCenter defaultCenter];
 
+        YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
         [centre addObserver:self
                    selector:@selector (audioSessionChangedInterruptionType:)
                        name:AVAudioSessionInterruptionNotification
@@ -161,60 +169,55 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
                    selector:@selector (handleRouteChange:)
                        name:AVAudioSessionRouteChangeNotification
                      object:session];
+        YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+        return self;
     }
-    else
+
+    static AudioSessionHolder* getHolder (id self) { return getIvar<AudioSessionHolder*> (self, "holder"); }
+
+    static void audioSessionChangedInterruptionType (id self, SEL, NSNotification* notification)
     {
-        jassertfalse;
-    }
+        NSUInteger value;
 
-    return self;
-}
-
-- (void)dealloc
-{
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
-
-- (void)audioSessionChangedInterruptionType:(NSNotification*)notification
-{
-    NSUInteger value;
-
-    if (yup::getNotificationValueForKey (notification, AVAudioSessionInterruptionTypeKey, value))
-    {
-        switch ((AVAudioSessionInterruptionType) value)
+        if (getNotificationValueForKey (notification, AVAudioSessionInterruptionTypeKey, value))
         {
-            case AVAudioSessionInterruptionTypeBegan:
-                audioSessionHolder->handleStatusChange (false, "AVAudioSessionInterruptionTypeBegan");
-                break;
+            switch ((AVAudioSessionInterruptionType) value)
+            {
+                case AVAudioSessionInterruptionTypeBegan:
+                    getHolder (self)->handleStatusChange (false, "AVAudioSessionInterruptionTypeBegan");
+                    break;
 
-            case AVAudioSessionInterruptionTypeEnded:
-                audioSessionHolder->handleStatusChange (true, "AVAudioSessionInterruptionTypeEnded");
-                break;
+                case AVAudioSessionInterruptionTypeEnded:
+                    getHolder (self)->handleStatusChange (true, "AVAudioSessionInterruptionTypeEnded");
+                    break;
 
-                // No default so the code doesn't compile if this enum is extended.
+                    // No default so the code doesn't compile if this enum is extended.
+            }
         }
     }
-}
 
-- (void)handleMediaServicesReset
-{
-    audioSessionHolder->handleStatusChange (true, "AVAudioSessionMediaServicesWereResetNotification");
-}
+    static void handleMediaServicesReset (id self, SEL)
+    {
+        getHolder (self)->handleStatusChange (true, "AVAudioSessionMediaServicesWereResetNotification");
+    }
 
-- (void)handleMediaServicesLost
-{
-    audioSessionHolder->handleStatusChange (false, "AVAudioSessionMediaServicesWereLostNotification");
-}
+    static void handleMediaServicesLost (id self, SEL)
+    {
+        getHolder (self)->handleStatusChange (false, "AVAudioSessionMediaServicesWereLostNotification");
+    }
 
-- (void)handleRouteChange:(NSNotification*)notification
-{
-    NSUInteger value;
+    static void handleRouteChange (id self, SEL, NSNotification* notification)
+    {
+        NSUInteger value;
 
-    if (yup::getNotificationValueForKey (notification, AVAudioSessionRouteChangeReasonKey, value))
-        audioSessionHolder->handleRouteChange ((AVAudioSessionRouteChangeReason) value);
-}
+        if (getNotificationValueForKey (notification, AVAudioSessionRouteChangeReasonKey, value))
+            getHolder (self)->handleRouteChange ((AVAudioSessionRouteChangeReason) value);
+    }
+};
 
-@end
+} // namespace yup
+
 
 //==============================================================================
 namespace yup
@@ -1544,7 +1547,7 @@ void iOSAudioIODeviceType::handleAsyncUpdate()
 }
 
 //==============================================================================
-AudioSessionHolder::AudioSessionHolder() { nativeSession = [[iOSAudioSessionNative alloc] init:this]; }
+AudioSessionHolder::AudioSessionHolder() { nativeSession = AudioSessionObserverClass::create (this); }
 
 AudioSessionHolder::~AudioSessionHolder() = default;
 

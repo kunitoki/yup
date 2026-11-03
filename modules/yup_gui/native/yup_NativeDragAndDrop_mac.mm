@@ -21,48 +21,6 @@
 
 #if YUP_MAC
 
-/** The source an AppKit drag session reports its operations to.
-
-    Stateless, and shared: it offers all three operations and records the one the destination settles
-    on, in the optional "ended" callback AppKit invokes before the session-starting call returns.
-
-    It lives outside the yup namespace, because an Objective-C class cannot be declared inside one -
-    which is why the action type is spelled out here rather than picked up unqualified. */
-@interface YUPDraggingSource : NSObject <NSDraggingSource>
-
-/** The operation the destination settled on.
-
-    Recorded by the session's ended callback, which AppKit invokes before the call that started the
-    session returns - so the caller can read it straight afterwards. */
-@property (nonatomic, assign) yup::DragAndDropAction performedAction;
-
-@end
-
-@implementation YUPDraggingSource
-
-- (NSDragOperation) draggingSession: (NSDraggingSession*) __unused session
-    sourceOperationMaskForDraggingContext: (NSDraggingContext) __unused context
-{
-    // Offer all three so the destination can choose for itself.
-    return NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink;
-}
-
-- (void) draggingSession: (NSDraggingSession*) __unused session
-             endedAtPoint: (NSPoint) __unused screenPoint
-                operation: (NSDragOperation) operation
-{
-    if ((operation & NSDragOperationMove) != 0)
-        self.performedAction = yup::DragAndDropAction::move;
-    else if ((operation & NSDragOperationLink) != 0)
-        self.performedAction = yup::DragAndDropAction::link;
-    else if ((operation & NSDragOperationCopy) != 0)
-        self.performedAction = yup::DragAndDropAction::copy;
-    else
-        self.performedAction = yup::DragAndDropAction::none;
-}
-
-@end
-
 namespace yup
 {
 
@@ -71,6 +29,51 @@ namespace
 {
 
 //==============================================================================
+
+/** The source an AppKit drag session reports its operations to.
+
+    Shared: it offers all three operations and records the one the destination settles
+    on, in the optional "ended" callback AppKit invokes before the session-starting call returns.
+
+    Registered at runtime under a unique name, so every binary embedding YUP (several plugin formats
+    loaded in one host, for example) owns a distinct Objective-C class. */
+struct DraggingSourceClass final : public ObjCClass<NSObject>
+{
+    DraggingSourceClass()
+        : ObjCClass<NSObject> ("YUPDraggingSource_")
+    {
+        addIvar<int> ("performedAction");
+
+        addMethod (@selector (draggingSession:sourceOperationMaskForDraggingContext:),
+                   [] (id, SEL, NSDraggingSession*, NSDraggingContext) -> NSDragOperation
+        {
+            // Offer all three so the destination can choose for itself.
+            return NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink;
+        });
+
+        addMethod (@selector (draggingSession:endedAtPoint:operation:),
+                   [] (id self, SEL, NSDraggingSession*, NSPoint, NSDragOperation operation)
+        {
+            if ((operation & NSDragOperationMove) != 0)
+                setPerformedAction (self, DragAndDropAction::move);
+            else if ((operation & NSDragOperationLink) != 0)
+                setPerformedAction (self, DragAndDropAction::link);
+            else if ((operation & NSDragOperationCopy) != 0)
+                setPerformedAction (self, DragAndDropAction::copy);
+            else
+                setPerformedAction (self, DragAndDropAction::none);
+        });
+
+        addProtocol (@protocol (NSDraggingSource));
+        registerClass();
+    }
+
+    /** The operation the destination settled on, recorded by the session's ended callback. */
+    static DragAndDropAction getPerformedAction (id self) { return static_cast<DragAndDropAction> (getIvar<int> (self, "performedAction")); }
+
+    static void setPerformedAction (id self, DragAndDropAction action) { setIvar (self, "performedAction", static_cast<int> (action)); }
+};
+
 
 NSString* toNSString (const String& text)
 {
@@ -215,14 +218,15 @@ bool performNativeDrag (Component& sourceComponent,
     if ([items count] == 0)
         return false;
 
-    static YUPDraggingSource* dragSource = [[YUPDraggingSource alloc] init];
+    static DraggingSourceClass draggingSourceClass;
+    static id<NSDraggingSource> dragSource = (id) [draggingSourceClass.createInstance() init];
 
-    dragSource.performedAction = DragAndDropAction::none;
+    DraggingSourceClass::setPerformedAction (dragSource, DragAndDropAction::none);
 
     [view beginDraggingSessionWithItems: items event: event source: dragSource];
 
     if (onComplete != nullptr)
-        MessageManager::callAsync ([completion = std::move (onComplete), action = dragSource.performedAction] { completion (action); });
+        MessageManager::callAsync ([completion = std::move (onComplete), action = DraggingSourceClass::getPerformedAction (dragSource)] { completion (action); });
 
     return true;
 }

@@ -152,8 +152,6 @@ function (_yup_audio_plugin_create_aax)
     set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
-    set (additional_libraries "${YUP_ARG_ADDITIONAL_LIBRARIES}")
-    set (target_modules "${YUP_ARG_MODULES}")
 
     _yup_find_aax_sdk()
 
@@ -168,15 +166,6 @@ function (_yup_audio_plugin_create_aax)
         yup_audio_plugin_client
         ${target_ide_group}
         aax
-        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
-        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
-        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
-        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
-        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
-        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
-        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
-        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
-        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO}
         PLUGIN_AAX_MANUFACTURER_ID ${YUP_ARG_PLUGIN_AAX_MANUFACTURER_ID}
         PLUGIN_AAX_PRODUCT_ID ${YUP_ARG_PLUGIN_AAX_PRODUCT_ID}
         PLUGIN_AAX_PLUGIN_ID_NATIVE ${YUP_ARG_PLUGIN_AAX_PLUGIN_ID_NATIVE}
@@ -198,10 +187,9 @@ function (_yup_audio_plugin_create_aax)
         YUP_AUDIO_PLUGIN_ENABLE_AAX=1
         YUP_STANDALONE_APPLICATION=0)
 
-    _yup_sdl_configure_symbols_patch ("${target_name}_aax_plugin" aax_sdl_symbols_patch_target aax_sdl_symbols_sdl_target)
+    _yup_sdl_configure_private_static_target ("${target_name}_aax_plugin" aax_sdl_symbols_sdl_target)
     set (aax_plugin_bundle_libraries
-        ${aax_sdl_symbols_sdl_target}
-        ${aax_sdl_symbols_patch_target})
+        ${aax_sdl_symbols_sdl_target})
 
     # The ACF entry points (ACFRegisterPlugin, ACFStartup, ...) are defined in the SDK's AAX_Exports.cpp
     get_target_property (aax_sdk_root yup_audio_plugin_client_aaxsdk YUP_AAX_SDK_ROOT)
@@ -210,21 +198,15 @@ function (_yup_audio_plugin_create_aax)
 
     target_link_libraries (${target_name}_aax_plugin PRIVATE
         ${target_name}_shared
-        yup_audio_plugin_client
         yup_audio_plugin_client_aaxsdk
         ${target_name}_aax
-        ${additional_libraries}
-        ${aax_plugin_bundle_libraries}
-        ${target_modules})
+        ${aax_plugin_bundle_libraries})
 
     _yup_module_apply_arc_to_target_sources (${target_name}_aax_plugin
         ${target_name}_shared
-        yup_audio_plugin_client
         yup_audio_plugin_client_aaxsdk
         ${target_name}_aax
-        ${additional_libraries}
-        ${aax_plugin_bundle_libraries}
-        ${target_modules})
+        ${aax_plugin_bundle_libraries})
 
     set_target_properties (${target_name}_aax_plugin PROPERTIES
         C_VISIBILITY_PRESET hidden

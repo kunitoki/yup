@@ -83,7 +83,7 @@ class AudioProcessorApplication
 {
 public:
     AudioProcessorApplication()
-        : processor (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION())
+        : processor (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::standalone, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION))
         , player (*processor, &deviceManager)
         , stateStore (StandaloneStateStore::createDefault (YupPlugin_Vendor, YupPlugin_Name, YupPlugin_Id))
     {

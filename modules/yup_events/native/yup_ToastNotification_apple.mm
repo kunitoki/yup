@@ -87,122 +87,123 @@ ToastNotification::PermissionState mapAuthorizationStatus (UNAuthorizationStatus
     }
 }
 
+//==============================================================================
+// The delegate object that receives notification presentation and activation
+// callbacks from the system. It is retained for the lifetime of the process, and
+// registered at runtime under a unique name so every binary embedding YUP owns a
+// distinct Objective-C class.
+struct ToastNotificationCenterDelegateClass final : public ObjCClass<NSObject>
+{
+    ToastNotificationCenterDelegateClass()
+        : ObjCClass<NSObject> ("YUPToastNotificationCenterDelegate_")
+    {
+        addMethod (@selector (userNotificationCenter:willPresentNotification:withCompletionHandler:), willPresentNotification);
+        addMethod (@selector (userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:), didReceiveNotificationResponse);
+
+        YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
+        addMethod (@selector (userNotificationCenter:didChangeSettings:), didChangeSettings);
+        YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+        addProtocol (@protocol (UNUserNotificationCenterDelegate));
+        registerClass();
+    }
+
+    static void willPresentNotification (id, SEL, UNUserNotificationCenter*, UNNotification*, void (^completionHandler) (UNNotificationPresentationOptions))
+    {
+        UNNotificationPresentationOptions options = UNNotificationPresentationOptionSound;
+
+#if defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && __IPHONE_OS_VERSION_MIN_REQUIRED < 140000
+        // iOS < 14 has no Banner/List presentation options.
+        options |= UNNotificationPresentationOptionAlert;
+#else
+        options |= UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList;
+#endif
+
+        completionHandler (options);
+    }
+
+    static void didReceiveNotificationResponse (id, SEL, UNUserNotificationCenter*, UNNotificationResponse* response, void (^completionHandler) (void))
+    {
+        auto& state = getToastState();
+
+        const String identifier = nsStringToYup (response.notification.request.identifier);
+
+        ToastCallbacks callbacks;
+        bool foundCallbacks = false;
+
+        {
+            ScopedLock lock (state.lock);
+
+            const auto callbacksIter = state.identifierToCallbacks.find (identifier);
+            if (callbacksIter != state.identifierToCallbacks.end())
+            {
+                callbacks = callbacksIter->second;
+                foundCallbacks = true;
+            }
+
+            state.identifierToCallbacks.erase (identifier);
+
+            for (auto it = state.idToIdentifier.begin(); it != state.idToIdentifier.end(); ++it)
+            {
+                if (it->second == identifier)
+                {
+                    state.idToIdentifier.erase (it);
+                    break;
+                }
+            }
+        }
+
+        if (! foundCallbacks)
+        {
+            completionHandler();
+            return;
+        }
+
+        if ([response.actionIdentifier isEqualToString:UNNotificationDefaultActionIdentifier])
+        {
+            if (callbacks.onActivated)
+                callbacks.onActivated();
+        }
+        else if ([response.actionIdentifier isEqualToString:UNNotificationDismissActionIdentifier])
+        {
+            if (callbacks.onDismissed)
+                callbacks.onDismissed (ToastTemplate::DismissalReason::userCanceled);
+        }
+        else
+        {
+            NSString* const prefix = @"yup_action_";
+
+            if ([response.actionIdentifier hasPrefix:prefix])
+            {
+                const int actionIndex = [[response.actionIdentifier substringFromIndex:prefix.length] intValue];
+
+                if (callbacks.onActivatedWithAction)
+                    callbacks.onActivatedWithAction (actionIndex);
+            }
+        }
+
+        completionHandler();
+    }
+
+    static void didChangeSettings (id, SEL, UNUserNotificationCenter*, UNNotificationSettings* settings)
+    {
+        auto& state = getToastState();
+
+        std::function<void (ToastNotification::PermissionState)> callback;
+
+        {
+            ScopedLock lock (state.lock);
+            callback = state.permissionStateChangedCallback;
+        }
+
+        if (callback)
+            callback (mapAuthorizationStatus (settings.authorizationStatus));
+    }
+};
+
 } // namespace
 
 } // yup::detail
-
-//==============================================================================
-// The delegate object that receives notification presentation and activation
-// callbacks from the system. It is retained for the lifetime of the process.
-@interface ToastNotificationCenterDelegate : NSObject <UNUserNotificationCenterDelegate>
-@end
-
-@implementation ToastNotificationCenterDelegate
-
-- (void)userNotificationCenter:(UNUserNotificationCenter*)center
-       willPresentNotification:(UNNotification*)notification
-         withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler
-{
-    yup::ignoreUnused (center, notification);
-
-    UNNotificationPresentationOptions options = UNNotificationPresentationOptionSound;
-
-#if defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && __IPHONE_OS_VERSION_MIN_REQUIRED < 140000
-    // iOS < 14 has no Banner/List presentation options.
-    options |= UNNotificationPresentationOptionAlert;
-#else
-    options |= UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList;
-#endif
-
-    completionHandler (options);
-}
-
-- (void)userNotificationCenter:(UNUserNotificationCenter*)center
-    didReceiveNotificationResponse:(UNNotificationResponse*)response
-           withCompletionHandler:(void (^)(void))completionHandler
-{
-    yup::ignoreUnused (center);
-
-    auto& state = yup::detail::getToastState();
-
-    const yup::String identifier = yup::nsStringToYup (response.notification.request.identifier);
-
-    yup::detail::ToastCallbacks callbacks;
-    bool foundCallbacks = false;
-
-    {
-        yup::ScopedLock lock (state.lock);
-
-        const auto callbacksIter = state.identifierToCallbacks.find (identifier);
-        if (callbacksIter != state.identifierToCallbacks.end())
-        {
-            callbacks = callbacksIter->second;
-            foundCallbacks = true;
-        }
-
-        state.identifierToCallbacks.erase (identifier);
-
-        for (auto it = state.idToIdentifier.begin(); it != state.idToIdentifier.end(); ++it)
-        {
-            if (it->second == identifier)
-            {
-                state.idToIdentifier.erase (it);
-                break;
-            }
-        }
-    }
-
-    if (! foundCallbacks)
-    {
-        completionHandler();
-        return;
-    }
-
-    if ([response.actionIdentifier isEqualToString:UNNotificationDefaultActionIdentifier])
-    {
-        if (callbacks.onActivated)
-            callbacks.onActivated();
-    }
-    else if ([response.actionIdentifier isEqualToString:UNNotificationDismissActionIdentifier])
-    {
-        if (callbacks.onDismissed)
-            callbacks.onDismissed (yup::ToastTemplate::DismissalReason::userCanceled);
-    }
-    else
-    {
-        NSString* const prefix = @"yup_action_";
-
-        if ([response.actionIdentifier hasPrefix:prefix])
-        {
-            const int actionIndex = [[response.actionIdentifier substringFromIndex:prefix.length] intValue];
-
-            if (callbacks.onActivatedWithAction)
-                callbacks.onActivatedWithAction (actionIndex);
-        }
-    }
-
-    completionHandler();
-}
-
-- (void)userNotificationCenter:(UNUserNotificationCenter*)center
-    didChangeSettings:(UNNotificationSettings*)settings API_AVAILABLE(macos(12.0), ios(15.0))
-{
-    yup::ignoreUnused (center);
-
-    auto& state = yup::detail::getToastState();
-
-    std::function<void (yup::ToastNotification::PermissionState)> callback;
-
-    {
-        yup::ScopedLock lock (state.lock);
-        callback = state.permissionStateChangedCallback;
-    }
-
-    if (callback)
-        callback (yup::detail::mapAuthorizationStatus (settings.authorizationStatus));
-}
-
-@end
 
 namespace yup
 {
@@ -213,7 +214,7 @@ namespace detail
 namespace
 {
 
-static ToastNotificationCenterDelegate* toastNotificationDelegate = nil;
+static id<UNUserNotificationCenterDelegate> toastNotificationDelegate = nil;
 static NSMutableSet<UNNotificationCategory*>* sRegisteredCategories = nil;
 
 //==============================================================================
@@ -309,7 +310,8 @@ Result toastNotificationInitialize (const ToastNotificationSettings&)
 
     if (toastNotificationDelegate == nil)
     {
-        toastNotificationDelegate = [[ToastNotificationCenterDelegate alloc] init];
+        static ToastNotificationCenterDelegateClass delegateClass;
+        toastNotificationDelegate = (id) [delegateClass.createInstance() init];
 
         runOnMainQueue (^
         {

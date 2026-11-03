@@ -16,3 +16,5 @@
 #   DISCLAIMED.
 #
 # ==============================================================================
+
+include (${CMAKE_CURRENT_LIST_DIR}/yup_apple.cmake)

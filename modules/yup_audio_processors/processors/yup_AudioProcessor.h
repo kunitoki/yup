@@ -26,6 +26,24 @@ class AudioProcessorEditor;
 
 //==============================================================================
 /**
+    Identifies the plugin format wrapper that is hosting the processors of the current binary.
+
+    @see AudioProcessor::getWrapperType
+*/
+enum class AudioPluginWrapperType
+{
+    unknown,    /**< Not loaded through a plugin wrapper (for example, a host or a test). */
+    clap,       /**< CLAP plugin. */
+    vst3,       /**< VST3 plugin. */
+    au,         /**< Audio Unit v2 plugin. */
+    auv3,       /**< Audio Unit v3 app extension. */
+    aax,        /**< AAX plugin. */
+    lv2,        /**< LV2 plugin. */
+    standalone  /**< Standalone plugin application. */
+};
+
+//==============================================================================
+/**
     Base class for all audio processors.
 
     The AudioProcessor class is the base class for all audio processing modules in the framework.
@@ -74,6 +92,21 @@ public:
 
     /** Creates an editor for the processor. */
     virtual AudioProcessorEditor* createEditor();
+
+    //==============================================================================
+    /** Returns the plugin format wrapper this binary was built and loaded as.
+
+        Plugin code is compiled once and shared by all formats, so use this instead of
+        format-specific preprocessor macros. The value is set by the wrapper before the
+        processor is created, so it can already be queried from processor constructors.
+    */
+    static AudioPluginWrapperType getWrapperType() noexcept;
+
+    /** Returns a lowercase name for a wrapper type (for example "vst3" or "standalone"). */
+    static StringRef getWrapperTypeName (AudioPluginWrapperType wrapperType) noexcept;
+
+    /** @internal Used by plugin wrappers to declare the format of the current binary. */
+    static void setWrapperType (AudioPluginWrapperType wrapperType) noexcept;
 
     //==============================================================================
     /** @internal Used by plugin wrappers. */

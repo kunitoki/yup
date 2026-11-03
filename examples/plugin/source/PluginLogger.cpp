@@ -21,33 +21,14 @@
 
 #include "PluginLogger.h"
 
-namespace
-{
-const char* getPluginFormatName()
-{
-#if YUP_AUDIO_PLUGIN_ENABLE_AU
-    return "au";
-#elif YUP_AUDIO_PLUGIN_ENABLE_CLAP
-    return "clap";
-#elif YUP_AUDIO_PLUGIN_ENABLE_VST3
-    return "vst3";
-#elif YUP_AUDIO_PLUGIN_ENABLE_LV2
-    return "lv2";
-#elif YUP_AUDIO_PLUGIN_ENABLE_AAX
-    return "aax";
-#elif YUP_AUDIO_PLUGIN_ENABLE_STANDALONE
-    return "standalone";
-#else
-    return "unknown";
-#endif
-}
-} // namespace
+#include <yup_audio_processors/yup_audio_processors.h>
 
 PluginLogger::PluginLogger()
 {
-    const auto logFileName = yup::String (YupPlugin_Name) + "_" + getPluginFormatName() + ".log";
+    const auto formatName = yup::String (yup::AudioProcessor::getWrapperTypeName (yup::AudioProcessor::getWrapperType()));
+    const auto logFileName = yup::String (YupPlugin_Name) + "_" + formatName + ".log";
     logger.reset (new yup::FileLogger (yup::FileLogger::getSystemLogFileFolder().getChildFile (logFileName),
-                                       yup::String (YupPlugin_Name) + " " + getPluginFormatName() + " log"));
+                                       yup::String (YupPlugin_Name) + " " + formatName + " log"));
 
     yup::Logger::setCurrentLogger (logger.get());
     yup::Logger::writeToLog ("Logger initialised: " + logger->getLogFile().getFullPathName());

@@ -278,7 +278,7 @@ public:
 
     YupAAX_Processor()
     {
-        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
+        processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::aax, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
         processor->addListener (this);
 
         AAX_CEffectParameters::GetNumberOfChunks (&yupChunkIndex);
@@ -1240,7 +1240,7 @@ void AAX_CALLBACK yupAAXAlgorithmCallback (void* const instancesBegin[], const v
 
 static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
 {
-    std::unique_ptr<AudioProcessor> plugin (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
+    std::unique_ptr<AudioProcessor> plugin (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::aax, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
 
     descriptor.AddName (YupPlugin_Name);
     descriptor.AddName (YupPlugin_Description);

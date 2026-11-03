@@ -239,16 +239,7 @@ function (_yup_audio_plugin_create_lv2)
         ${target_name}
         yup_audio_plugin_client
         ${target_ide_group}
-        lv2
-        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
-        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
-        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
-        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
-        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
-        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
-        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
-        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
-        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO})
+        lv2)
 
     # Extract PLUGIN_ID for LV2 URI
     if (YUP_ARG_PLUGIN_ID)
@@ -293,42 +284,16 @@ function (_yup_audio_plugin_create_lv2)
     target_include_directories (${target_name}_lv2_ttl_generator PRIVATE
         ${lv2_plugin_client_includes})
 
-    if (YUP_ARG_PLUGIN_IS_SYNTH)
-        set (lv2_ttl_gen_synth_define YupPlugin_IsSynth=1)
-    else()
-        set (lv2_ttl_gen_synth_define YupPlugin_IsSynth=0)
-    endif()
-
-    if (YUP_ARG_PLUGIN_IS_MONO)
-        set (lv2_ttl_gen_mono_define YupPlugin_IsMono=1)
-    else()
-        set (lv2_ttl_gen_mono_define YupPlugin_IsMono=0)
-    endif()
-
+    # Plugin metadata and module settings come from the shared plugin core
     target_compile_definitions (${target_name}_lv2_ttl_generator PRIVATE
-        $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
-        YUP_STANDALONE_APPLICATION=0
-        YUP_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-        YupPlugin_Id="${YUP_ARG_PLUGIN_ID}"
-        YupPlugin_Name="${YUP_ARG_PLUGIN_NAME}"
-        YupPlugin_Version="${YUP_ARG_PLUGIN_VERSION}"
-        YupPlugin_Vendor="${YUP_ARG_PLUGIN_VENDOR}"
-        YupPlugin_Description="${YUP_ARG_PLUGIN_DESCRIPTION}"
-        YupPlugin_URL="${YUP_ARG_PLUGIN_URL}"
-        YupPlugin_Email="${YUP_ARG_PLUGIN_EMAIL}"
-        ${lv2_ttl_gen_synth_define}
-        ${lv2_ttl_gen_mono_define})
+        YUP_STANDALONE_APPLICATION=0)
 
     target_link_libraries (${target_name}_lv2_ttl_generator PRIVATE
         ${target_name}_shared
-        sdl::sdl
-        ${additional_libraries}
-        ${target_modules})
+        sdl::sdl)
 
     _yup_module_apply_arc_to_target_sources (${target_name}_lv2_ttl_generator
-        ${target_name}_shared
-        ${additional_libraries}
-        ${target_modules})
+        ${target_name}_shared)
 
     set_target_properties (${target_name}_lv2_ttl_generator PROPERTIES
         FOLDER "${target_ide_group}"
@@ -346,28 +311,21 @@ function (_yup_audio_plugin_create_lv2)
         YUP_STANDALONE_APPLICATION=0
         YupPlugin_LV2URI="${lv2_uri}")
 
-    _yup_sdl_configure_symbols_patch ("${target_name}_lv2_plugin" lv2_sdl_symbols_patch_target lv2_sdl_symbols_sdl_target)
+    _yup_sdl_configure_private_static_target ("${target_name}_lv2_plugin" lv2_sdl_symbols_sdl_target)
     set (lv2_plugin_bundle_libraries
-        ${lv2_sdl_symbols_sdl_target}
-        ${lv2_sdl_symbols_patch_target})
+        ${lv2_sdl_symbols_sdl_target})
 
     target_link_libraries (${target_name}_lv2_plugin PRIVATE
         ${target_name}_shared
-        yup_audio_plugin_client
         lv2-headers
         ${target_name}_lv2
-        ${additional_libraries}
-        ${lv2_plugin_bundle_libraries}
-        ${target_modules})
+        ${lv2_plugin_bundle_libraries})
 
     _yup_module_apply_arc_to_target_sources (${target_name}_lv2_plugin
         ${target_name}_shared
-        yup_audio_plugin_client
         lv2-headers
         ${target_name}_lv2
-        ${additional_libraries}
-        ${lv2_plugin_bundle_libraries}
-        ${target_modules})
+        ${lv2_plugin_bundle_libraries})
 
     set_target_properties (${target_name}_lv2_plugin PROPERTIES
         C_VISIBILITY_PRESET hidden

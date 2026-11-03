@@ -16,3 +16,8 @@
 #   DISCLAIMED.
 #
 # ==============================================================================
+
+# Applies the platform settings of a yup_standalone_app target. Called from yup_standalone_app,
+# so it reads its parsed YUP_ARG_* arguments and target_* variables directly.
+function (_yup_platform_setup_standalone_app target_name)
+endfunction()

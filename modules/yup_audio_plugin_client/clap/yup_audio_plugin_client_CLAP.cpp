@@ -940,7 +940,7 @@ bool AudioPluginProcessorCLAP::initialise()
 {
     jassert (audioProcessor == nullptr);
 
-    audioProcessor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
+    audioProcessor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::clap, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
     if (audioProcessor == nullptr)
         return false;
 

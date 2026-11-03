@@ -123,7 +123,7 @@ public:
                               NSError**)
         : au (audioUnit)
     {
-        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
+        processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::auv3, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
         init();
     }
 

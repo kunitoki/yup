@@ -407,3 +407,17 @@ function (_yup_android_add_single_java_class)
     _yup_message (STATUS "Successfully copied header: ${output_header} to ${module_path}/native/generated/${output_header}")
 
 endfunction()
+
+# ==============================================================================
+
+# Applies the platform settings of a yup_standalone_app target. Called from yup_standalone_app,
+# so it reads its parsed YUP_ARG_* arguments and target_* variables directly.
+function (_yup_platform_setup_standalone_app target_name)
+    target_link_options (${target_name} PRIVATE
+        "-Wl,-z,max-page-size=16384"
+        "-Wl,-z,common-page-size=16384")
+
+    if (YUP_ARG_BUNDLE_RESOURCES)
+        yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
+    endif()
+endfunction()

@@ -41,6 +41,11 @@
 #import <CoreMIDI/CoreMIDI.h>
 #import <Foundation/Foundation.h>
 
+#import <objc/message.h>
+#import <objc/runtime.h>
+
+#include <yup_core/native/yup_ObjCHelpers_apple.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -53,10 +58,10 @@
 
 extern "C" yup::AudioProcessor* YUP_AUDIO_PLUGIN_CREATE_FUNCTION();
 
-@class AudioPluginEditorViewAU;
-
 namespace yup
 {
+
+class AudioPluginEditorViewAU;
 
 static String describeScopeAndElement (AudioUnitScope scope, AudioUnitElement element)
 {
@@ -125,7 +130,7 @@ public:
 #endif
         componentInstance (component)
     {
-        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
+        processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::au, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "created processor instance: wrapper=" << yup::describePointer (this) << ", component=" << yup::describePointer (componentInstance) << ", processor=" << yup::describePointer (processor.get()));
 
@@ -998,20 +1003,20 @@ public:
 
     void registerEditorView (AudioPluginEditorViewAU* view)
     {
-        if (view == nil)
+        if (view == nullptr)
             return;
 
         std::lock_guard<std::mutex> lock (editorViewsMutex);
-        editorViews.push_back ((__bridge void*) view);
+        editorViews.push_back (view);
     }
 
     void unregisterEditorView (AudioPluginEditorViewAU* view)
     {
-        if (view == nil)
+        if (view == nullptr)
             return;
 
         std::lock_guard<std::mutex> lock (editorViewsMutex);
-        editorViews.erase (std::remove (editorViews.begin(), editorViews.end(), (__bridge void*) view), editorViews.end());
+        editorViews.erase (std::remove (editorViews.begin(), editorViews.end(), view), editorViews.end());
     }
 
     void closeEditorViews();
@@ -1128,7 +1133,7 @@ private:
     std::vector<AUChannelInfo> channelInfoCache;
     std::vector<AudioParameter::Ptr> listenedParameters;
     std::vector<float*> audioChannels;
-    std::vector<void*> editorViews;
+    std::vector<AudioPluginEditorViewAU*> editorViews;
 
     // Per-bus view state, pre-allocated in Initialize so the render callback
     // only clears and refills the vectors without allocating
@@ -1147,275 +1152,272 @@ private:
 namespace yup
 {
 
-class AudioPluginEditorViewAUListener final : public ComponentListener
+/** The state behind the NSView handed to the host, which owns it through an ivar.
+
+    The NSView class and the view factory class are registered at runtime under unique names, so
+    every plugin binary embedding YUP owns distinct Objective-C classes and hosts never resolve
+    them from another plugin loaded in the same process. */
+class AudioPluginEditorViewAU final : public ComponentListener
 {
 public:
-    explicit AudioPluginEditorViewAUListener (AudioPluginEditorViewAU* owner)
-        : owner (owner)
+    AudioPluginEditorViewAU (NSView* view, AudioPluginProcessorAU* processorWrapper)
+        : view (view)
+        , processorWrapper (processorWrapper)
+        , processor (processorWrapper != nullptr ? processorWrapper->getProcessor() : nullptr)
     {
     }
 
-    void componentResized (Component& component) override;
-
-private:
-    AudioPluginEditorViewAU* owner = nil;
-
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginEditorViewAUListener)
-};
-
-} // namespace yup
-
-@interface AudioPluginEditorViewAU : NSView
-{
-    yup::AudioPluginProcessorAU* _processorWrapper;
-    yup::AudioProcessor* _processor;
-    std::unique_ptr<yup::AudioProcessorEditor> _processorEditor;
-    std::unique_ptr<yup::AudioPluginEditorViewAUListener> _processorEditorListener;
-    bool _resizingEditorToBounds;
-}
-- (instancetype)initWithAudioUnitWrapper:(yup::AudioPluginProcessorAU*)processorWrapper
-                           preferredSize:(NSSize)size;
-- (void)attachEditorIfNeeded;
-- (void)detachEditorIfNeeded;
-- (void)closeEditorIfNeeded;
-- (void)closeEditorForProcessorDestruction;
-- (void)resizeEditorToBounds;
-- (void)resizeViewToEditorSize;
-- (void)processorEditorResized;
-@end
-
-@implementation AudioPluginEditorViewAU
-
-- (instancetype)initWithAudioUnitWrapper:(yup::AudioPluginProcessorAU*)processorWrapper
-                           preferredSize:(NSSize)size
-{
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "creating editor view: requestedWidth=" << yup::String (static_cast<double> (size.width)) << ", requestedHeight=" << yup::String (static_cast<double> (size.height)) << ", wrapper=" << yup::describePointer (processorWrapper) << ", view=" << yup::describePointer ((__bridge void*) self));
-
-    if ((self = [super initWithFrame:NSMakeRect (0, 0, size.width, size.height)]))
+    ~AudioPluginEditorViewAU() override
     {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view initialised: view=" << yup::describePointer ((__bridge void*) self));
-        _processorWrapper = processorWrapper;
-        _processor = processorWrapper != nullptr ? processorWrapper->getProcessor() : nullptr;
-        _resizingEditorToBounds = false;
-        [self setPostsFrameChangedNotifications:YES];
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "destroying editor view: view=" << describePointer ((__bridge void*) view) << ", editor=" << describePointer (processorEditor.get()) << ", processor=" << describePointer (processor));
 
-        if (_processorWrapper != nullptr)
-            _processorWrapper->registerEditorView (self);
+        closeEditorIfNeeded();
 
-        if (_processor != nullptr && _processor->hasEditor())
+        if (processorWrapper != nullptr)
+            processorWrapper->unregisterEditorView (this);
+    }
+
+    void initialise()
+    {
+        [view setPostsFrameChangedNotifications:YES];
+
+        if (processorWrapper != nullptr)
+            processorWrapper->registerEditorView (this);
+
+        if (processor == nullptr || ! processor->hasEditor())
         {
-            _processorEditor.reset (_processor->createEditor());
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "processor has no editor");
+            return;
+        }
 
-            if (_processorEditor != nullptr)
-            {
-                const auto preferredSize = _processorEditor->getPreferredSize();
-                YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "created editor: preferredWidth=" << yup::String (preferredSize.getWidth()) << ", preferredHeight=" << yup::String (preferredSize.getHeight()) << ", editor=" << yup::describePointer (_processorEditor.get()));
+        processorEditor.reset (processor->createEditor());
 
-                if (_processorEditor->isResizable())
-                    [self setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-                else
-                    [self setAutoresizingMask:NSViewNotSizable];
+        if (processorEditor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "processor returned null editor");
+            return;
+        }
 
-                _processorEditorListener = std::make_unique<yup::AudioPluginEditorViewAUListener> (self);
-                _processorEditor->addComponentListener (_processorEditorListener.get());
+        const auto preferredSize = processorEditor->getPreferredSize();
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "created editor: preferredWidth=" << String (preferredSize.getWidth()) << ", preferredHeight=" << String (preferredSize.getHeight()) << ", editor=" << describePointer (processorEditor.get()));
 
-                [self setFrameSize:NSMakeSize (preferredSize.getWidth(), preferredSize.getHeight())];
-                [self resizeEditorToBounds];
-            }
-            else
-            {
-                YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "processor returned null editor");
-            }
+        [view setAutoresizingMask:processorEditor->isResizable() ? (NSViewWidthSizable | NSViewHeightSizable) : NSViewNotSizable];
+
+        processorEditor->addComponentListener (this);
+
+        [view setFrameSize:NSMakeSize (preferredSize.getWidth(), preferredSize.getHeight())];
+        resizeEditorToBounds();
+    }
+
+    void viewDidMoveToWindow()
+    {
+        if ([view window] != nil)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view moved to window: view=" << describePointer ((__bridge void*) view) << ", window=" << describePointer ((__bridge void*) [view window]) << ", contentView=" << describePointer ((__bridge void*) [[view window] contentView]));
+
+            attachEditorIfNeeded();
         }
         else
         {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "processor has no editor");
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view removed from window: view=" << describePointer ((__bridge void*) view));
+
+            detachEditorIfNeeded();
         }
     }
-    else
+
+    void closeEditorForProcessorDestruction()
     {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view initialisation failed");
+        closeEditorIfNeeded();
+
+        processorWrapper = nullptr;
+        processor = nullptr;
     }
 
-    return self;
-}
-
-- (void)viewDidMoveToWindow
-{
-    [super viewDidMoveToWindow];
-
-    if ([self window] != nil)
+    void resizeEditorToBounds()
     {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view moved to window: view=" << yup::describePointer ((__bridge void*) self) << ", window=" << yup::describePointer ((__bridge void*) [self window]) << ", contentView=" << yup::describePointer ((__bridge void*) [[self window] contentView]));
+        if (processorEditor == nullptr)
+            return;
 
-        [self attachEditorIfNeeded];
-    }
-    else
-    {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view removed from window: view=" << yup::describePointer ((__bridge void*) self));
+        const auto bounds = [view bounds];
 
-        [self detachEditorIfNeeded];
-    }
-}
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor to bounds: width=" << String (static_cast<double> (NSWidth (bounds))) << ", height=" << String (static_cast<double> (NSHeight (bounds))) << ", editor=" << describePointer (processorEditor.get()));
 
-- (void)setFrameSize:(NSSize)newSize
-{
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view frame size changed: width=" << yup::String (static_cast<double> (newSize.width)) << ", height=" << yup::String (static_cast<double> (newSize.height)));
+        const ScopedValueSetter<bool> scoped (resizingEditorToBounds, true);
 
-    [super setFrameSize:newSize];
-    [self resizeEditorToBounds];
-}
-
-- (void)attachEditorIfNeeded
-{
-    if (_processorEditor == nullptr)
-    {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "attachEditorIfNeeded skipped: editor is null");
-        return;
+        processorEditor->setBounds ({ 0.0f,
+                                      0.0f,
+                                      jmax (1.0f, static_cast<float> (NSWidth (bounds))),
+                                      jmax (1.0f, static_cast<float> (NSHeight (bounds))) });
     }
 
-    if (_processorEditor->isOnDesktop())
+    void componentResized (Component&) override
     {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "attachEditorIfNeeded skipped: editor is already on desktop");
-        return;
+        if (! resizingEditorToBounds)
+            resizeViewToEditorSize();
     }
 
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "attaching editor to native view: editor=" << yup::describePointer (_processorEditor.get()) << ", view=" << yup::describePointer ((__bridge void*) self) << ", window=" << yup::describePointer ((__bridge void*) [self window]));
-
-    [self resizeEditorToBounds];
-
-    yup::ComponentNative::Flags flags = yup::ComponentNative::defaultFlags & ~yup::ComponentNative::decoratedWindow;
-
-    if (_processorEditor->shouldRenderContinuous())
-        flags.set (yup::ComponentNative::renderContinuous);
-
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor native options: renderContinuous=" << yup::String (_processorEditor->shouldRenderContinuous() ? "true" : "false") << ", resizable=" << yup::String (_processorEditor->isResizable() ? "true" : "false"));
-
-    auto options = yup::ComponentNative::Options()
-                       .withFlags (flags)
-                       .withResizableWindow (_processorEditor->isResizable());
-
-    _processorEditor->addToDesktop (options, (__bridge void*) self);
-    _processorEditor->setVisible (true);
-    _processorEditor->attachedToNative();
-
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor attached to native view: isOnDesktop=" << yup::String (_processorEditor->isOnDesktop() ? "true" : "false"));
-}
-
-- (void)detachEditorIfNeeded
-{
-    if (_processorEditor == nullptr)
+private:
+    void attachEditorIfNeeded()
     {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "detachEditorIfNeeded skipped: editor is null");
-        return;
+        if (processorEditor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "attachEditorIfNeeded skipped: editor is null");
+            return;
+        }
+
+        if (processorEditor->isOnDesktop())
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "attachEditorIfNeeded skipped: editor is already on desktop");
+            return;
+        }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "attaching editor to native view: editor=" << describePointer (processorEditor.get()) << ", view=" << describePointer ((__bridge void*) view) << ", window=" << describePointer ((__bridge void*) [view window]));
+
+        resizeEditorToBounds();
+
+        ComponentNative::Flags flags = ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
+
+        if (processorEditor->shouldRenderContinuous())
+            flags.set (ComponentNative::renderContinuous);
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor native options: renderContinuous=" << String (processorEditor->shouldRenderContinuous() ? "true" : "false") << ", resizable=" << String (processorEditor->isResizable() ? "true" : "false"));
+
+        auto options = ComponentNative::Options()
+                           .withFlags (flags)
+                           .withResizableWindow (processorEditor->isResizable());
+
+        processorEditor->addToDesktop (options, (__bridge void*) view);
+        processorEditor->setVisible (true);
+        processorEditor->attachedToNative();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor attached to native view: isOnDesktop=" << String (processorEditor->isOnDesktop() ? "true" : "false"));
     }
 
-    if (! _processorEditor->isOnDesktop())
+    void detachEditorIfNeeded()
     {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "detachEditorIfNeeded skipped: editor is not on desktop");
-        return;
+        if (processorEditor == nullptr)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "detachEditorIfNeeded skipped: editor is null");
+            return;
+        }
+
+        if (! processorEditor->isOnDesktop())
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "detachEditorIfNeeded skipped: editor is not on desktop");
+            return;
+        }
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "detaching editor from native view: editor=" << describePointer (processorEditor.get()) << ", view=" << describePointer ((__bridge void*) view) << ", window=" << describePointer ((__bridge void*) [view window]));
+
+        endActiveParameterGestures (processor);
+        processorEditor->setVisible (false);
+        processorEditor->removeFromDesktop();
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor detached from native view: isOnDesktop=" << String (processorEditor->isOnDesktop() ? "true" : "false"));
     }
 
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "detaching editor from native view: editor=" << yup::describePointer (_processorEditor.get()) << ", view=" << yup::describePointer ((__bridge void*) self) << ", window=" << yup::describePointer ((__bridge void*) [self window]));
+    void closeEditorIfNeeded()
+    {
+        detachEditorIfNeeded();
 
-    yup::endActiveParameterGestures (_processor);
-    _processorEditor->setVisible (false);
-    _processorEditor->removeFromDesktop();
+        endActiveParameterGestures (processor);
 
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor detached from native view: isOnDesktop=" << yup::String (_processorEditor->isOnDesktop() ? "true" : "false"));
-}
+        if (processorEditor != nullptr)
+            processorEditor->removeComponentListener (this);
 
-- (void)closeEditorIfNeeded
+        processorEditor.reset();
+    }
+
+    void resizeViewToEditorSize()
+    {
+        if (processorEditor == nullptr || ! processorEditor->isResizable())
+            return;
+
+        const auto newSize = NSMakeSize (jmax (1.0f, processorEditor->getWidth()),
+                                         jmax (1.0f, processorEditor->getHeight()));
+
+        if (NSEqualSizes ([view frame].size, newSize))
+            return;
+
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor view to editor: width=" << String (static_cast<double> (newSize.width)) << ", height=" << String (static_cast<double> (newSize.height)) << ", editor=" << describePointer (processorEditor.get()));
+
+        // Skip our own override, which would resize the editor back to the view
+        ObjCClass<NSView>::sendSuperclassMessage<void> (view, @selector (setFrameSize:), newSize);
+    }
+
+    __unsafe_unretained NSView* view = nil;
+    AudioPluginProcessorAU* processorWrapper = nullptr;
+    AudioProcessor* processor = nullptr;
+    std::unique_ptr<AudioProcessorEditor> processorEditor;
+    bool resizingEditorToBounds = false;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginEditorViewAU)
+};
+
+//==============================================================================
+struct AudioPluginEditorViewAUClass final : public ObjCClass<NSView>
 {
-    [self detachEditorIfNeeded];
+    AudioPluginEditorViewAUClass()
+        : ObjCClass<NSView> ("YUPAudioPluginEditorViewAU_")
+    {
+        addIvar<AudioPluginEditorViewAU*> ("state");
 
-    yup::endActiveParameterGestures (_processor);
+        addMethod (@selector (viewDidMoveToWindow), [] (id self, SEL)
+        {
+            sendSuperclassMessage<void> (self, @selector (viewDidMoveToWindow));
 
-    if (_processorEditor != nullptr && _processorEditorListener != nullptr)
-        _processorEditor->removeComponentListener (_processorEditorListener.get());
+            if (auto* state = getState (self))
+                state->viewDidMoveToWindow();
+        });
 
-    _processorEditorListener.reset();
-    _processorEditor.reset();
-}
+        addMethod (@selector (setFrameSize:), [] (id self, SEL, NSSize newSize)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view frame size changed: width=" << String (static_cast<double> (newSize.width)) << ", height=" << String (static_cast<double> (newSize.height)));
 
-- (void)closeEditorForProcessorDestruction
-{
-    [self closeEditorIfNeeded];
+            sendSuperclassMessage<void> (self, @selector (setFrameSize:), newSize);
 
-    _processorWrapper = nullptr;
-    _processor = nullptr;
-}
+            if (auto* state = getState (self))
+                state->resizeEditorToBounds();
+        });
 
-- (void)resizeEditorToBounds
-{
-    if (_processorEditor == nullptr)
-        return;
+        addMethod (sel_registerName ("dealloc"), [] (id self, SEL)
+        {
+            delete getState (self);
+            setIvar<AudioPluginEditorViewAU*> (self, "state", nullptr);
 
-    const auto bounds = [self bounds];
+            sendSuperclassMessage<void> (self, sel_registerName ("dealloc"));
+        });
 
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor to bounds: width=" << yup::String (static_cast<double> (NSWidth (bounds))) << ", height=" << yup::String (static_cast<double> (NSHeight (bounds))) << ", editor=" << yup::describePointer (_processorEditor.get()));
+        registerClass();
+    }
 
-    const auto scoped = yup::ScopedValueSetter<bool> (_resizingEditorToBounds, true);
+    static NSView* create (AudioPluginProcessorAU* processorWrapper, NSSize size)
+    {
+        static AudioPluginEditorViewAUClass viewClass;
 
-    _processorEditor->setBounds ({ 0.0f,
-                                   0.0f,
-                                   yup::jmax (1.0f, static_cast<float> (NSWidth (bounds))),
-                                   yup::jmax (1.0f, static_cast<float> (NSHeight (bounds))) });
-}
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "creating editor view: requestedWidth=" << String (static_cast<double> (size.width)) << ", requestedHeight=" << String (static_cast<double> (size.height)) << ", wrapper=" << describePointer (processorWrapper));
 
-- (void)resizeViewToEditorSize
-{
-    if (_processorEditor == nullptr || ! _processorEditor->isResizable())
-        return;
+        NSView* view = [viewClass.createInstance() initWithFrame:NSMakeRect (0, 0, size.width, size.height)];
 
-    const auto newSize = NSMakeSize (yup::jmax (1.0f, _processorEditor->getWidth()),
-                                     yup::jmax (1.0f, _processorEditor->getHeight()));
+        if (view == nil)
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view initialisation failed");
+            return nil;
+        }
 
-    if (NSEqualSizes ([self frame].size, newSize))
-        return;
+        auto* state = new AudioPluginEditorViewAU (view, processorWrapper);
+        setIvar (view, "state", state);
+        state->initialise();
 
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor view to editor: width=" << yup::String (static_cast<double> (newSize.width)) << ", height=" << yup::String (static_cast<double> (newSize.height)) << ", editor=" << yup::describePointer (_processorEditor.get()));
+        return view;
+    }
 
-    [super setFrameSize:newSize];
-}
-
-- (void)processorEditorResized
-{
-    if (_resizingEditorToBounds)
-        return;
-
-    [self resizeViewToEditorSize];
-}
-
-- (void)dealloc
-{
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "destroying editor view: view=" << yup::describePointer ((__bridge void*) self) << ", editor=" << yup::describePointer (_processorEditor.get()) << ", processor=" << yup::describePointer (_processor));
-
-    [self closeEditorIfNeeded];
-
-    if (_processorWrapper != nullptr)
-        _processorWrapper->unregisterEditorView (self);
-
-    _processorWrapper = nullptr;
-    _processor = nullptr;
-}
-
-@end
-
-namespace yup
-{
-
-void AudioPluginEditorViewAUListener::componentResized (Component& component)
-{
-    ignoreUnused (component);
-
-    if (owner != nil)
-        [owner processorEditorResized];
-}
+    static AudioPluginEditorViewAU* getState (id self) { return getIvar<AudioPluginEditorViewAU*> (self, "state"); }
+};
 
 void AudioPluginProcessorAU::closeEditorViews()
 {
-    std::vector<void*> viewsToClose;
+    std::vector<AudioPluginEditorViewAU*> viewsToClose;
 
     {
         std::lock_guard<std::mutex> lock (editorViewsMutex);
@@ -1424,53 +1426,69 @@ void AudioPluginProcessorAU::closeEditorViews()
 
     for (auto* view : viewsToClose)
         if (view != nullptr)
-            [(__bridge AudioPluginEditorViewAU*) view closeEditorForProcessorDestruction];
+            view->closeEditorForProcessorDestruction();
 }
-
-} // namespace yup
 
 //==============================================================================
 // Cocoa view factory
 
-@interface AudioPluginProcessorAUViewFactory : NSObject <AUCocoaUIBase>
-@end
-
-@implementation AudioPluginProcessorAUViewFactory
-
-- (unsigned)interfaceVersion
+struct AudioPluginProcessorAUViewFactoryClass final : public ObjCClass<NSObject>
 {
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory interfaceVersion requested");
-    return 0;
-}
-
-- (NSString*)description
-{
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory description requested");
-    return @YupPlugin_Name;
-}
-
-- (NSView*)uiViewForAudioUnit:(AudioUnit)inAudioUnit withSize:(NSSize)inPreferredSize
-{
-    YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory requested editor view: audioUnit=" << yup::describePointer (inAudioUnit) << ", preferredWidth=" << yup::String (static_cast<double> (inPreferredSize.width)) << ", preferredHeight=" << yup::String (static_cast<double> (inPreferredSize.height)));
-
-    auto* proc = yup::AudioPluginProcessorAU::findInstance (inAudioUnit);
-    if (proc == nullptr)
+    AudioPluginProcessorAUViewFactoryClass()
+        : ObjCClass<NSObject> ("YUPAudioPluginProcessorAUViewFactory_")
     {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory failed: AU instance not found");
-        return nil;
+        addMethod (@selector (interfaceVersion), [] (id, SEL) -> unsigned
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory interfaceVersion requested");
+            return 0;
+        });
+
+        addMethod (@selector (description), [] (id, SEL) -> NSString*
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory description requested");
+            return @YupPlugin_Name;
+        });
+
+        addMethod (@selector (uiViewForAudioUnit:withSize:), [] (id, SEL, AudioUnit inAudioUnit, NSSize inPreferredSize) -> NSView*
+        {
+            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory requested editor view: audioUnit=" << describePointer (inAudioUnit) << ", preferredWidth=" << String (static_cast<double> (inPreferredSize.width)) << ", preferredHeight=" << String (static_cast<double> (inPreferredSize.height)));
+
+            auto* proc = AudioPluginProcessorAU::findInstance (inAudioUnit);
+            if (proc == nullptr)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory failed: AU instance not found");
+                return nil;
+            }
+
+            if (proc->getProcessor() == nullptr)
+            {
+                YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory failed: processor is null");
+                return nil;
+            }
+
+            return AudioPluginEditorViewAUClass::create (proc, inPreferredSize);
+        });
+
+        addProtocol (@protocol (AUCocoaUIBase));
+        registerClass();
     }
 
-    if (proc->getProcessor() == nullptr)
+    static Class get()
     {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "view factory failed: processor is null");
-        return nil;
+        static AudioPluginProcessorAUViewFactoryClass factoryClass;
+        return factoryClass.cls;
     }
+};
 
-    return [[AudioPluginEditorViewAU alloc] initWithAudioUnitWrapper:proc
-                                                       preferredSize:inPreferredSize];
+/** The bundle of this plugin binary: runtime classes belong to no image, so bundleForClass would
+    answer the host's main bundle instead. */
+static NSBundle* getPluginBundle()
+{
+    const auto bundleFile = File::getSpecialLocation (File::currentApplicationFile);
+    return [NSBundle bundleWithPath:yupStringToNS (bundleFile.getFullPathName())];
 }
 
-@end
+} // namespace yup
 
 //==============================================================================
 // GetProperty implementation (needs ObjC)
@@ -1541,7 +1559,7 @@ OSStatus AudioPluginProcessorAU::GetProperty (AudioUnitPropertyID inID,
         auto* info = static_cast<AudioUnitCocoaViewInfo*> (outData);
 
         // The bundle location is this plugin's own bundle
-        NSBundle* bundle = [NSBundle bundleForClass:[AudioPluginProcessorAUViewFactory class]];
+        NSBundle* bundle = getPluginBundle();
         if (bundle == nil)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "GetProperty CocoaUI failed: bundle is nil");
@@ -1549,8 +1567,8 @@ OSStatus AudioPluginProcessorAU::GetProperty (AudioUnitPropertyID inID,
         }
 
         auto* bundleLocation = (__bridge_retained CFURLRef)[bundle bundleURL];
-        // The class may be renamed per plugin to stay unique in the host process, so pass its runtime name
-        auto* viewClass = (__bridge_retained CFStringRef) NSStringFromClass ([AudioPluginProcessorAUViewFactory class]);
+        // The class is registered at runtime under a unique name, so pass that name to the host
+        auto* viewClass = (__bridge_retained CFStringRef) NSStringFromClass (AudioPluginProcessorAUViewFactoryClass::get());
 
         if (bundleLocation == nullptr || viewClass == nullptr)
         {

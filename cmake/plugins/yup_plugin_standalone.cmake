@@ -32,24 +32,13 @@ function (_yup_audio_plugin_create_standalone)
     set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
-    set (additional_libraries "${YUP_ARG_ADDITIONAL_LIBRARIES}")
-    set (target_modules "${YUP_ARG_MODULES}")
 
     _yup_message (STATUS "Setting up standalone plugin client")
     _yup_module_setup_plugin_client (
         ${target_name}
         yup_audio_plugin_client
         ${target_ide_group}
-        standalone
-        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
-        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
-        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
-        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
-        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
-        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
-        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
-        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
-        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO})
+        standalone)
 
     # ==== The application is named after the plugin, the target keeps its own name
     set (product_args "")
@@ -79,12 +68,7 @@ function (_yup_audio_plugin_create_standalone)
             YUP_AUDIO_PLUGIN_ENABLE_STANDALONE=1
         MODULES
             ${target_name}_shared
-            ${target_name}_standalone
-            yup_audio_plugin_client
-            yup_audio_devices
-            yup_audio_gui
-            ${additional_libraries}
-            ${target_modules})
+            ${target_name}_standalone)
 
     _yup_audio_plugin_apply_binary_optimizations (${target_name}_standalone_plugin)
 endfunction()

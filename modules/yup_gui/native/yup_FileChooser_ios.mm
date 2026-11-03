@@ -19,43 +19,81 @@
   ==============================================================================
 */
 
-//==============================================================================
-@interface YUPFileChooserDelegate : NSObject <UIDocumentPickerDelegate>
-@property (nonatomic) yup::FileChooser::CompletionCallback callback;
-@property (nonatomic) yup::Array<yup::File> results;
-@end
-
-@implementation YUPFileChooserDelegate
-
-- (void)documentPicker:(UIDocumentPickerViewController*)controller didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls
-{
-    for (NSURL* url in urls)
-    {
-        NSString* path = [url path];
-        if (path != nil)
-            self.results.add(yup::File(yup::String::fromUTF8([path UTF8String])));
-    }
-
-    yup::MessageManager::callAsync([self]
-                                   {
-        if (self.callback)
-            self.callback (true, self.results);
-
-        self.results.clear(); });
-}
-
-- (void)documentPickerWasCancelled:(UIDocumentPickerViewController*)controller
-{
-    yup::MessageManager::callAsync([self]
-                                   {
-        if (self.callback)
-            self.callback (false, {}); });
-}
-
-@end
-
 namespace yup
 {
+
+//==============================================================================
+/** The document picker delegate, registered at runtime under a unique name so every binary
+    embedding YUP owns a distinct Objective-C class. */
+struct FileChooserDelegateClass final : public ObjCClass<NSObject>
+{
+    struct State
+    {
+        FileChooser::CompletionCallback callback;
+        Array<File> results;
+    };
+
+    FileChooserDelegateClass()
+        : ObjCClass<NSObject> ("YUPFileChooserDelegate_")
+    {
+        addIvar<State*> ("state");
+
+        addMethod (@selector (documentPicker:didPickDocumentsAtURLs:), [] (id self, SEL, UIDocumentPickerViewController*, NSArray<NSURL*>* urls)
+        {
+            auto* state = getState (self);
+
+            for (NSURL* url in urls)
+            {
+                NSString* path = [url path];
+                if (path != nil)
+                    state->results.add (File (String::fromUTF8 ([path UTF8String])));
+            }
+
+            MessageManager::callAsync ([self]
+            {
+                auto* state = getState (self);
+
+                if (state->callback)
+                    state->callback (true, state->results);
+
+                state->results.clear();
+            });
+        });
+
+        addMethod (@selector (documentPickerWasCancelled:), [] (id self, SEL, UIDocumentPickerViewController*)
+        {
+            MessageManager::callAsync ([self]
+            {
+                auto* state = getState (self);
+
+                if (state->callback)
+                    state->callback (false, {});
+            });
+        });
+
+        addMethod (sel_registerName ("dealloc"), [] (id self, SEL)
+        {
+            delete getState (self);
+            setIvar<State*> (self, "state", nullptr);
+
+            sendSuperclassMessage<void> (self, sel_registerName ("dealloc"));
+        });
+
+        addProtocol (@protocol (UIDocumentPickerDelegate));
+        registerClass();
+    }
+
+    static id<UIDocumentPickerDelegate> create (FileChooser::CompletionCallback callback)
+    {
+        static FileChooserDelegateClass delegateClass;
+
+        id<UIDocumentPickerDelegate> delegate = (id) [delegateClass.createInstance() init];
+        setIvar (delegate, "state", new State { std::move (callback), {} });
+        return delegate;
+    }
+
+    static State* getState (id self) { return getIvar<State*> (self, "state"); }
+};
 
 //==============================================================================
 // For iOS 13.0 compatibility, we use string-based UTI identifiers
@@ -286,11 +324,7 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
             return;
         }
 
-        YUPFileChooserDelegate* delegate = [[YUPFileChooserDelegate alloc] init];
-        delegate.callback = std::move(callback);
-        delegate.results = yup::Array<yup::File>();
-
-        documentPicker.delegate = delegate;
+        documentPicker.delegate = FileChooserDelegateClass::create (std::move (callback));
         documentPicker.modalPresentationStyle = UIModalPresentationPageSheet;
 
         [rootViewController presentViewController:documentPicker animated:NO completion:nil];
