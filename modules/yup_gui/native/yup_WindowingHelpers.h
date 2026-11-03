@@ -54,14 +54,6 @@ void focusNativeWindow (void* nativeWindow);
  */
 void activateAppWindowOnLaunch (void* nativeWindow);
 
-/**
-    Sets the system cursor directly through AppKit.
-
-    SDL only applies its cursor through the cursor rects of a key window, which embedded plugin editors never are.
-
-    @param type The cursor type to show, ignored for MouseCursor::None.
- */
-void setNativeMouseCursor (MouseCursor::Type type);
 #endif
 
 } // namespace yup
