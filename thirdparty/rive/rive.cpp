@@ -906,7 +906,9 @@
 #include "source/wasm/prelinked_aot.cpp"
 #include "source/wasm/wasm_scripting_vm.cpp"
 #include "source/watermark.cpp"
+#define s_pendingDecodes yup_rive_browser_image_decode_s_pendingDecodes
 #include "source/async/browser_image_decode.cpp"
+#undef s_pendingDecodes
 #include "source/async/job_pool.cpp"
 #include "source/constraints/scrolling/virtual_layout.cpp"
 #include "source/custom_property_trigger.cpp"
