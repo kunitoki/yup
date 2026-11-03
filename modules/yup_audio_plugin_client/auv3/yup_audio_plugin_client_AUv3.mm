@@ -123,7 +123,7 @@ public:
                               NSError**)
         : au (audioUnit)
     {
-        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
+        processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::auv3, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
         init();
     }
 
@@ -1630,7 +1630,7 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
         });
 
         YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
-        addMethod (sel_registerName ("dealloc"), [] (id self, SEL) {
+        addMethod (sel_registerName ("dealloc"), [] (__unsafe_unretained id self, SEL) {
             auto* cpp = _this (self);
             delete cpp;
             setThis (self, nullptr);

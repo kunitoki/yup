@@ -226,12 +226,19 @@ class AUEditor : public AudioProcessorEditor
 
     ~AUEditor() override
     {
+        if (frameObserver != nil)
+            [[NSNotificationCenter defaultCenter] removeObserver:frameObserver];
+
         detachCocoaView();
     }
 
-    bool isResizable() const override { return true; }
+    bool isResizable() const override { return resizable; }
 
     Size<int> getPreferredSize() const override { return preferredSize; }
+
+    bool shouldPreserveAspectRatio() const override { return aspectRatioSize.has_value(); }
+
+    Size<int> getPreferredAspectRatioSize() const override { return aspectRatioSize.value_or(preferredSize); }
 
     void paint(Graphics& g) override
     {
@@ -267,8 +274,44 @@ class AUEditor : public AudioProcessorEditor
             jmax(320, static_cast<int>(std::ceil(size.width))),
             jmax(240, static_cast<int>(std::ceil(size.height)))};
 
-        [cocoaView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+        resizable = ([cocoaView autoresizingMask] & (NSViewWidthSizable | NSViewHeightSizable)) != 0;
+
+        if (resizable)
+        {
+            const auto originalSize = [cocoaView frame].size;
+
+            aspectRatioSize = probeHostedEditorAspectRatio({static_cast<int>(std::lround(size.width)), static_cast<int>(std::lround(size.height))}, [this](Size<int> sizeToConstrain)
+            {
+                [cocoaView setFrameSize:NSMakeSize(sizeToConstrain.getWidth(), sizeToConstrain.getHeight())];
+
+                const auto constrainedSize = [cocoaView frame].size;
+                return Size<int>(static_cast<int>(std::lround(constrainedSize.width)), static_cast<int>(std::lround(constrainedSize.height)));
+            });
+
+            [cocoaView setFrameSize:originalSize];
+        }
+
+        [cocoaView setAutoresizingMask:NSViewNotSizable];
         [cocoaView setFrameSize:NSMakeSize(preferredSize.getWidth(), preferredSize.getHeight())];
+
+        // Plugins resize their view on their own (corner resizers, or constraining the size we set), follow them
+        [cocoaView setPostsFrameChangedNotifications:YES];
+        frameObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSViewFrameDidChangeNotification
+                                                                          object:cocoaView
+                                                                           queue:nil
+                                                                      usingBlock:^(NSNotification*)
+        {
+            if ([cocoaView superview] == nil)
+                return;
+
+            const auto size = [cocoaView frame].size;
+            const Size<int> pluginSize{static_cast<int>(std::lround(size.width)), static_cast<int>(std::lround(size.height))};
+
+            if (updatingCocoaViewFrame)
+                followHostedEditorSize(*this, pluginSize);
+            else if (pluginSize != getSize().to<int>())
+                setHostedEditorSize(*this, pluginSize);
+        }];
     }
 
     void attachCocoaView()
@@ -313,6 +356,8 @@ class AUEditor : public AudioProcessorEditor
         if (contentView == nil)
             return;
 
+        const ScopedValueSetter<bool> scopedUpdating(updatingCocoaViewFrame, true);
+
         const auto bounds = getBoundsRelativeToTopLevelComponent();
         const auto contentBounds = [contentView bounds];
         const auto width = jmax(1.0f, bounds.getWidth());
@@ -325,9 +370,13 @@ class AUEditor : public AudioProcessorEditor
     }
 
     Size<int> preferredSize{640, 480};
+    std::optional<Size<int>> aspectRatioSize;
+    bool resizable = false;
+    bool updatingCocoaViewFrame = false;
     NSView* __strong cocoaView = nil;
     NSBundle* __strong cocoaViewBundle = nil;
     id<AUCocoaUIBase> __strong cocoaViewFactory = nil;
+    id __strong frameObserver = nil;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AUEditor)
 };

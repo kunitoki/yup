@@ -82,8 +82,6 @@ function (_yup_audio_plugin_create_au)
     set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
-    set (additional_libraries "${YUP_ARG_ADDITIONAL_LIBRARIES}")
-    set (target_modules "${YUP_ARG_MODULES}")
 
     _yup_fetch_apple_ausdk()
 
@@ -93,15 +91,6 @@ function (_yup_audio_plugin_create_au)
         yup_audio_plugin_client
         ${target_ide_group}
         au
-        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
-        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
-        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
-        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
-        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
-        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
-        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
-        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
-        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO}
         PLUGIN_AU_SUBTYPE ${YUP_ARG_PLUGIN_AU_SUBTYPE}
         PLUGIN_AU_MANUFACTURER ${YUP_ARG_PLUGIN_AU_MANUFACTURER}
         PLUGIN_AU_SANDBOX_SAFE ${YUP_ARG_PLUGIN_AU_SANDBOX_SAFE})
@@ -138,23 +127,29 @@ function (_yup_audio_plugin_create_au)
 
     target_compile_features (${target_name}_au_plugin PRIVATE cxx_std_${target_cxx_standard})
 
+    # Hosts look the Cocoa view factory up by name in the bundle image, so it must be a compiled
+    # class with a name unique per plugin and version
+    if (YUP_ARG_PLUGIN_ID)
+        set (au_view_factory_id "${YUP_ARG_PLUGIN_ID}")
+    else()
+        set (au_view_factory_id "${target_name}")
+    endif()
+    string (MAKE_C_IDENTIFIER "YUPAUViewFactory_${au_view_factory_id}_${YUP_ARG_PLUGIN_VERSION}" au_view_factory_class)
+
     target_compile_definitions (${target_name}_au_plugin PRIVATE
         YUP_AUDIO_PLUGIN_ENABLE_AU=1
-        YUP_STANDALONE_APPLICATION=0)
+        YUP_STANDALONE_APPLICATION=0
+        YupPlugin_AUViewFactoryClass=${au_view_factory_class})
 
-    _yup_sdl_configure_symbols_patch ("${target_name}_au_plugin" au_sdl_symbols_patch_target au_sdl_symbols_sdl_target)
+    _yup_sdl_configure_private_static_target ("${target_name}_au_plugin" au_sdl_symbols_sdl_target)
     set (au_plugin_bundle_libraries
-        ${au_sdl_symbols_sdl_target}
-        ${au_sdl_symbols_patch_target})
+        ${au_sdl_symbols_sdl_target})
 
     target_link_libraries (${target_name}_au_plugin PRIVATE
         ${target_name}_shared
-        yup_audio_plugin_client
         base-sdk-auv2
         ${target_name}_au
-        ${additional_libraries}
         ${au_plugin_bundle_libraries}
-        ${target_modules}
         "-framework AudioUnit"
         "-framework AudioToolbox"
         "-framework CoreAudio"
@@ -163,12 +158,9 @@ function (_yup_audio_plugin_create_au)
 
     _yup_module_apply_arc_to_target_sources (${target_name}_au_plugin
         ${target_name}_shared
-        yup_audio_plugin_client
         base-sdk-auv2
         ${target_name}_au
-        ${additional_libraries}
-        ${au_plugin_bundle_libraries}
-        ${target_modules})
+        ${au_plugin_bundle_libraries})
 
     # Generate the AU Info.plist from our template
     set (au_plist_template "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../platforms/mac/AudioUnitInfo.plist.in")

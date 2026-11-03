@@ -54,8 +54,6 @@ function (_yup_audio_plugin_create_clap)
     set (target_bundle_id "${YUP_ARG_TARGET_BUNDLE_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
-    set (additional_libraries "${YUP_ARG_ADDITIONAL_LIBRARIES}")
-    set (target_modules "${YUP_ARG_MODULES}")
 
     _yup_fetch_clap()
 
@@ -65,15 +63,6 @@ function (_yup_audio_plugin_create_clap)
         yup_audio_plugin_client
         ${target_ide_group}
         clap
-        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
-        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
-        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
-        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
-        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
-        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
-        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
-        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
-        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO}
         PLUGIN_CLAP_FEATURES ${YUP_ARG_PLUGIN_CLAP_FEATURES})
 
     # Create CLAP plugin target
@@ -90,28 +79,21 @@ function (_yup_audio_plugin_create_clap)
         YUP_AUDIO_PLUGIN_ENABLE_CLAP=1
         YUP_STANDALONE_APPLICATION=0)
 
-    _yup_sdl_configure_symbols_patch ("${target_name}_clap_plugin" clap_sdl_symbols_patch_target clap_sdl_symbols_sdl_target)
+    _yup_sdl_configure_private_static_target ("${target_name}_clap_plugin" clap_sdl_symbols_sdl_target)
     set (clap_plugin_bundle_libraries
-        ${clap_sdl_symbols_sdl_target}
-        ${clap_sdl_symbols_patch_target})
+        ${clap_sdl_symbols_sdl_target})
 
     target_link_libraries (${target_name}_clap_plugin PRIVATE
         ${target_name}_shared
-        yup_audio_plugin_client
         clap
         ${target_name}_clap
-        ${additional_libraries}
-        ${clap_plugin_bundle_libraries}
-        ${target_modules})
+        ${clap_plugin_bundle_libraries})
 
     _yup_module_apply_arc_to_target_sources (${target_name}_clap_plugin
         ${target_name}_shared
-        yup_audio_plugin_client
         clap
         ${target_name}_clap
-        ${additional_libraries}
-        ${clap_plugin_bundle_libraries}
-        ${target_modules})
+        ${clap_plugin_bundle_libraries})
 
     set_target_properties (${target_name}_clap_plugin PROPERTIES
         C_VISIBILITY_PRESET hidden

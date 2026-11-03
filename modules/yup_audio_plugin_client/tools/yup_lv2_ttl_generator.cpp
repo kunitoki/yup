@@ -341,7 +341,7 @@ int main (int argc, char** argv)
         return 1;
     }
 
-    std::unique_ptr<yup::AudioProcessor> processor (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
+    std::unique_ptr<yup::AudioProcessor> processor (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::lv2, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
     if (processor == nullptr)
     {
         std::cerr << "lv2_ttl_generator: createPluginProcessor() returned nullptr\n";

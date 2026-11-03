@@ -16,3 +16,22 @@
 #   DISCLAIMED.
 #
 # ==============================================================================
+
+# Applies the platform settings of a yup_standalone_app target. Called from yup_standalone_app,
+# so it reads its parsed YUP_ARG_* arguments and target_* variables directly.
+function (_yup_platform_setup_standalone_app target_name)
+    # An .ico next to the icon image, with the same name, becomes the icon of the executable
+    get_filename_component (target_icon_directory "${target_icon}" DIRECTORY)
+    get_filename_component (target_icon_name "${target_icon}" NAME_WLE)
+    set (target_icon_ico "${target_icon_directory}/${target_icon_name}.ico")
+
+    if (NOT "${target_console}" AND NOT "${target_wheel}" AND NOT "${target_static_library}" AND EXISTS "${target_icon_ico}")
+        set (target_icon_rc "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_icon.rc")
+        file (WRITE "${target_icon_rc}" "1 ICON \"${target_icon_ico}\"\n")
+        target_sources (${target_name} PRIVATE "${target_icon_rc}")
+    endif()
+
+    if (YUP_ARG_BUNDLE_RESOURCES)
+        yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
+    endif()
+endfunction()

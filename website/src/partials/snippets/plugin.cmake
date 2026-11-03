@@ -31,4 +31,4 @@ yup_audio_plugin (
         yup::yup_gui
         yup::yup_audio_processors)
 
-target_sources (my_plugin_shared PUBLIC plugin.cpp)
+target_sources (my_plugin_shared PRIVATE plugin.cpp)

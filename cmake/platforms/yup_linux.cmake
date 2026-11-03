@@ -16,3 +16,13 @@
 #   DISCLAIMED.
 #
 # ==============================================================================
+
+# Applies the platform settings of a yup_standalone_app target. Called from yup_standalone_app,
+# so it reads its parsed YUP_ARG_* arguments and target_* variables directly.
+function (_yup_platform_setup_standalone_app target_name)
+    set_target_properties (${target_name} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
+    if (YUP_ARG_BUNDLE_RESOURCES)
+        yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
+    endif()
+endfunction()

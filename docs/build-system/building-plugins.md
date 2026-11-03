@@ -95,6 +95,17 @@ extern "C" yup::AudioProcessor* createPluginProcessor()
 }
 ```
 
+### Resizable editors
+
+When `isResizable()` returns true, the CLAP, VST3 and AU wrappers place a
+`yup::ResizableCorner` on top of the editor, in its bottom-right corner, so users can resize
+it even in hosts without resizable plugin windows. The corner belongs to the wrapper, not to the
+editor, so it is drawn outside any effect the editor applies to its own content. Override
+`shouldShowResizableCorner()` to return false to hide it. Every size requested
+by the host or the corner goes through `getConstrainedSize()`, which applies
+`shouldPreserveAspectRatio()` and `getPreferredAspectRatioSize()`. An editor
+calling `setSize()` on itself resizes the host window as well.
+
 ## Building with CMake
 
 Create a `CMakeLists.txt` file for your plugin:
@@ -145,7 +156,17 @@ yup_audio_plugin (
 # Add source files
 file (GLOB sources "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-target_sources (${target_name}_shared PUBLIC ${sources})
+target_sources (${target_name}_shared PRIVATE ${sources})
+```
+
+The sources added to `${target_name}_shared` are compiled once and shared by every plugin format,
+so keep them `PRIVATE`. For the same reason the format macros (`YUP_AUDIO_PLUGIN_ENABLE_CLAP` and
+similar) only reach the format wrappers. To check at runtime which format loaded the plugin, use
+`AudioProcessor::getWrapperType()`, which is already set when the processor constructor runs:
+
+```cpp
+if (yup::AudioProcessor::getWrapperType() == yup::AudioPluginWrapperType::standalone)
+    enableStandaloneOnlyFeatures();
 ```
 
 ## Building for Different Platforms

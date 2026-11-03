@@ -73,40 +73,10 @@ function (yup_audio_plugin)
     set (target_modules "${YUP_ARG_MODULES}")
     list (APPEND target_modules yup_audio_plugin_client)
     if (YUP_ARG_PLUGIN_CREATE_STANDALONE)
-        list (APPEND target_modules yup_audio_devices)
+        # The core is shared by all formats, so the standalone modules are part of every format binary
+        list (APPEND target_modules yup_audio_devices yup_audio_gui)
     endif()
     _yup_module_check_circular_dependencies ("${target_name} audio plugin" "${target_modules}")
-
-    # ==== Create static library for user's plugin code
-    _yup_message (STATUS "Creating static library for user's plugin code")
-    add_library (${target_name}_shared INTERFACE)
-
-    target_compile_features (${target_name}_shared INTERFACE cxx_std_${target_cxx_standard})
-
-    target_compile_definitions (${target_name}_shared INTERFACE
-        $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
-        YUP_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-        YUP_MODAL_LOOPS_PERMITTED=1
-        ${additional_definitions}
-        ${YUP_ARG_DEFINITIONS})
-
-    target_compile_options (${target_name}_shared INTERFACE
-        ${additional_options}
-        ${YUP_ARG_OPTIONS})
-
-    target_link_libraries (${target_name}_shared INTERFACE
-        ${additional_libraries}
-        ${YUP_ARG_MODULES})
-
-    set_target_properties (${target_name}_shared PROPERTIES
-        FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
-        C_VISIBILITY_PRESET hidden
-        CXX_VISIBILITY_PRESET hidden
-        OBJC_VISIBILITY_PRESET hidden
-        OBJCXX_VISIBILITY_PRESET hidden
-        VISIBILITY_INLINES_HIDDEN ON
-        XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ON
-        XCODE_GENERATE_SCHEME ON)
 
     # ==== Find dependencies
     include (FetchContent)
@@ -116,17 +86,100 @@ function (yup_audio_plugin)
     if (has_audio_plugin_host)
         _yup_collect_audio_plugin_host_dependencies ("${YUP_ARG_DEFINITIONS}" audio_plugin_host_libraries)
         list (APPEND additional_libraries ${audio_plugin_host_libraries})
-        if (audio_plugin_host_libraries)
-            target_link_libraries (${target_name}_shared INTERFACE
-                ${audio_plugin_host_libraries})
-        endif()
     endif()
+
+    # ==== Create the plugin core, compiled once and linked into every plugin format binary
+    _yup_message (STATUS "Creating shared plugin core for user's plugin code")
+    add_library (${target_name}_shared OBJECT)
+
+    _yup_audio_plugin_common_definitions (plugin_definitions
+        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
+        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
+        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
+        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
+        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
+        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
+        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
+        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
+        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO})
+
+    set (core_definitions "")
+    set (core_options "")
+    set (core_libraries "")
+
+    if (YUP_PLATFORM_EMSCRIPTEN)
+        # Only the standalone format exists on emscripten, so the core is part of a standalone app
+        _yup_emscripten_get_compile_settings (ON core_definitions core_options)
+        list (APPEND core_definitions YUP_STANDALONE_APPLICATION=1)
+    endif()
+
+    if (YUP_ENABLE_PROFILING)
+        list (APPEND core_definitions YUP_ENABLE_PROFILING=1)
+        list (APPEND core_libraries perfetto::perfetto)
+    endif()
+
+    target_compile_features (${target_name}_shared PRIVATE cxx_std_${target_cxx_standard})
+
+    target_compile_definitions (${target_name}_shared PRIVATE
+        $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
+        YUP_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        YUP_MODAL_LOOPS_PERMITTED=1
+        ${plugin_definitions}
+        ${core_definitions}
+        ${additional_definitions})
+
+    target_compile_options (${target_name}_shared PRIVATE
+        ${core_options}
+        ${additional_options})
+
+    target_link_libraries (${target_name}_shared PRIVATE
+        $<COMPILE_ONLY:sdl::sdl>
+        ${core_libraries}
+        ${additional_libraries}
+        ${target_modules})
+
+    if (TARGET sdl_headers_copy)
+        add_dependencies (${target_name}_shared sdl_headers_copy)
+    endif()
+
+    _yup_module_apply_arc_to_target_sources (${target_name}_shared
+        ${additional_libraries}
+        ${target_modules})
+
+    # Format binaries link the core objects, so they must not see the module INTERFACE_SOURCES
+    # again: export the resolved compile settings for the per-format wrapper sources instead.
+    foreach (compile_property IN ITEMS COMPILE_DEFINITIONS COMPILE_OPTIONS COMPILE_FEATURES INCLUDE_DIRECTORIES)
+        set_property (TARGET ${target_name}_shared APPEND PROPERTY
+            INTERFACE_${compile_property} "$<TARGET_PROPERTY:${target_name}_shared,${compile_property}>")
+    endforeach()
+
+    set (system_include_dirs "")
+    set (visited_targets "")
+    _yup_collect_system_include_directories (system_include_dirs visited_targets
+        ${additional_libraries}
+        ${target_modules})
+
+    if (system_include_dirs)
+        list (REMOVE_DUPLICATES system_include_dirs)
+        set_property (TARGET ${target_name}_shared APPEND PROPERTY
+            INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${system_include_dirs})
+    endif()
+
+    set_target_properties (${target_name}_shared PROPERTIES
+        FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
+        POSITION_INDEPENDENT_CODE ON
+        C_VISIBILITY_PRESET hidden
+        CXX_VISIBILITY_PRESET hidden
+        OBJC_VISIBILITY_PRESET hidden
+        OBJCXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+        XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ON
+        XCODE_GENERATE_SCHEME ON)
 
     # ==== Build CLAP plugin target
     if (YUP_ARG_PLUGIN_CREATE_CLAP)
         _yup_audio_plugin_create_clap(
             TARGET_BUNDLE_ID ${target_bundle_id}
-            ADDITIONAL_LIBRARIES ${additional_libraries}
             ${ARGN})
     endif()
 
@@ -134,7 +187,6 @@ function (yup_audio_plugin)
     if (YUP_ARG_PLUGIN_CREATE_VST3)
         _yup_audio_plugin_create_vst3(
             TARGET_BUNDLE_ID ${target_bundle_id}
-            ADDITIONAL_LIBRARIES ${additional_libraries}
             ${ARGN})
     endif()
 
@@ -142,7 +194,6 @@ function (yup_audio_plugin)
     if (YUP_ARG_PLUGIN_CREATE_STANDALONE)
         _yup_audio_plugin_create_standalone(
             TARGET_BUNDLE_ID ${target_bundle_id}
-            ADDITIONAL_LIBRARIES ${additional_libraries}
             ${ARGN})
     endif()
 
@@ -150,7 +201,6 @@ function (yup_audio_plugin)
     if (YUP_ARG_PLUGIN_CREATE_AU AND YUP_PLATFORM_MAC)
         _yup_audio_plugin_create_au(
             TARGET_BUNDLE_ID ${target_bundle_id}
-            ADDITIONAL_LIBRARIES ${additional_libraries}
             ${ARGN})
     endif()
 
@@ -168,7 +218,6 @@ function (yup_audio_plugin)
             HAS_STANDALONE ${auv3_has_standalone}
             STANDALONE_TARGET ${auv3_standalone_target}
             SHARED_LIBS ${target_name}_shared
-            ADDITIONAL_LIBRARIES ${additional_libraries}
             ${ARGN})
     endif()
 
@@ -176,7 +225,6 @@ function (yup_audio_plugin)
     if (YUP_ARG_PLUGIN_CREATE_AAX)
         _yup_audio_plugin_create_aax(
             TARGET_BUNDLE_ID ${target_bundle_id}
-            ADDITIONAL_LIBRARIES ${additional_libraries}
             ${ARGN})
     endif()
 
@@ -184,7 +232,6 @@ function (yup_audio_plugin)
     if (YUP_ARG_PLUGIN_CREATE_LV2)
         _yup_audio_plugin_create_lv2 (
             TARGET_BUNDLE_ID ${target_bundle_id}
-            ADDITIONAL_LIBRARIES ${additional_libraries}
             ${ARGN})
     endif()
 

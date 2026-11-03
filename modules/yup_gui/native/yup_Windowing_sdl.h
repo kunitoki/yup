@@ -71,6 +71,10 @@ public:
     bool isVisible() const override;
 
     //==============================================================================
+    bool isResizable() const override;
+    void setResizable (bool shouldBeResizable) override;
+
+    //==============================================================================
     void toFront() override;
 
     //==============================================================================
@@ -230,6 +234,7 @@ private:
     static bool requestMouseCapture();
     static void releaseMouseCapture();
     static void pollCapturedMouseState();
+    bool cancelMouseGestureIfReleasedElsewhere();
     static void triggerPopupDismissalCheck();
     static void dismissPopupsIfNoNativeWindowHasFocus();
     static bool anyNativeWindowHasKeyboardFocus();
@@ -310,6 +315,7 @@ private:
 
     HashMap<int, char> keyState;
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
+    double buttonsReleasedElsewhereSinceMs = 0.0;
     KeyModifiers currentKeyModifiers;
     Array<TouchFinger> activeTouches;
     Array<TouchClickState> touchClickStates;

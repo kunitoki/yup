@@ -663,3 +663,35 @@ TEST_F (ProcessAudioBlockTests, RoutesToBypassedWhenBypassed)
     EXPECT_EQ (0, processor.floatProcessCallCount);
     EXPECT_EQ (1, processor.floatBypassCallCount);
 }
+
+//==============================================================================
+class WrapperTypeTests : public ::testing::Test
+{
+protected:
+    void TearDown() override { AudioProcessor::setWrapperType (previousType); }
+
+    const AudioPluginWrapperType previousType = AudioProcessor::getWrapperType();
+};
+
+TEST_F (WrapperTypeTests, CreateForWrapperSetsTypeBeforeConstruction)
+{
+    auto typeSeenInCreate = AudioPluginWrapperType::unknown;
+
+    std::unique_ptr<AudioProcessor> processor (createPluginProcessorForWrapper (AudioPluginWrapperType::vst3, [&]
+    {
+        typeSeenInCreate = AudioProcessor::getWrapperType();
+        return new UtilitiesTestProcessor();
+    }));
+
+    ASSERT_NE (nullptr, processor);
+    EXPECT_EQ (AudioPluginWrapperType::vst3, typeSeenInCreate);
+    EXPECT_EQ (AudioPluginWrapperType::vst3, AudioProcessor::getWrapperType());
+}
+
+TEST_F (WrapperTypeTests, WrapperTypeNamesAreLowercaseFormatNames)
+{
+    EXPECT_EQ (String ("unknown"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::unknown)));
+    EXPECT_EQ (String ("clap"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::clap)));
+    EXPECT_EQ (String ("auv3"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::auv3)));
+    EXPECT_EQ (String ("standalone"), String (AudioProcessor::getWrapperTypeName (AudioPluginWrapperType::standalone)));
+}

@@ -36,6 +36,48 @@ AudioProcessor::~AudioProcessor() = default;
 
 //==============================================================================
 
+namespace
+{
+std::atomic<AudioPluginWrapperType> currentWrapperType { AudioPluginWrapperType::unknown };
+} // namespace
+
+AudioPluginWrapperType AudioProcessor::getWrapperType() noexcept
+{
+    return currentWrapperType.load (std::memory_order_relaxed);
+}
+
+void AudioProcessor::setWrapperType (AudioPluginWrapperType wrapperType) noexcept
+{
+    currentWrapperType.store (wrapperType, std::memory_order_relaxed);
+}
+
+StringRef AudioProcessor::getWrapperTypeName (AudioPluginWrapperType wrapperType) noexcept
+{
+    switch (wrapperType)
+    {
+        case AudioPluginWrapperType::clap:
+            return "clap";
+        case AudioPluginWrapperType::vst3:
+            return "vst3";
+        case AudioPluginWrapperType::au:
+            return "au";
+        case AudioPluginWrapperType::auv3:
+            return "auv3";
+        case AudioPluginWrapperType::aax:
+            return "aax";
+        case AudioPluginWrapperType::lv2:
+            return "lv2";
+        case AudioPluginWrapperType::standalone:
+            return "standalone";
+        case AudioPluginWrapperType::unknown:
+            break;
+    }
+
+    return "unknown";
+}
+
+//==============================================================================
+
 int AudioProcessor::getNumAudioOutputs() const
 {
     int count = 0;

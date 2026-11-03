@@ -104,34 +104,29 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_sdl_configure_private_static_target target_name force_include_options output_target)
-    if (NOT TARGET sdl::sdl)
-        _yup_message (FATAL_ERROR "Cannot configure private SDL symbols for ${target_name}: sdl::sdl target is not available.")
-    endif()
-
+function (_yup_sdl_split_sources output_c_sources output_objc_sources)
     _yup_sdl_get_target_property (sdl_sources sdl::sdl SOURCES)
     if (NOT sdl_sources)
-        _yup_message (FATAL_ERROR "Cannot configure private SDL symbols for ${target_name}: sdl::sdl has no source files.")
+        _yup_message (FATAL_ERROR "Cannot configure private SDL: sdl::sdl has no source files.")
     endif()
 
-    set (private_sdl_target "${target_name}_sdl")
-    add_library (${private_sdl_target} STATIC ${sdl_sources})
-
-    if (APPLE)
-        set (sdl_objc_sources "")
-        foreach (sdl_source IN LISTS sdl_sources)
-            if (sdl_source MATCHES "^.*\\.m$")
-                list (APPEND sdl_objc_sources "${sdl_source}")
-            endif()
-        endforeach()
-
-        if (sdl_objc_sources)
-            set_property (SOURCE ${sdl_objc_sources}
-                TARGET_DIRECTORY ${private_sdl_target}
-                APPEND_STRING PROPERTY COMPILE_FLAGS " -x objective-c")
+    set (c_sources "")
+    set (objc_sources "")
+    foreach (sdl_source IN LISTS sdl_sources)
+        if (APPLE AND sdl_source MATCHES "^.*\\.m$")
+            list (APPEND objc_sources "${sdl_source}")
+        else()
+            list (APPEND c_sources "${sdl_source}")
         endif()
-    endif()
+    endforeach()
 
+    set (${output_c_sources} "${c_sources}" PARENT_SCOPE)
+    set (${output_objc_sources} "${objc_sources}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_sdl_apply_private_target_settings private_sdl_target)
     if (TARGET sdl_headers_copy)
         add_dependencies (${private_sdl_target} sdl_headers_copy)
     endif()
@@ -151,29 +146,14 @@ function (_yup_sdl_configure_private_static_target target_name force_include_opt
 
     _yup_sdl_apply_build_options (${private_sdl_target})
 
-    _yup_sdl_get_target_property (sdl_interface_include_dirs sdl::sdl INTERFACE_INCLUDE_DIRECTORIES)
-    if (sdl_interface_include_dirs)
-        target_include_directories (${private_sdl_target} INTERFACE ${sdl_interface_include_dirs})
-    endif()
-
     _yup_sdl_get_target_property (sdl_compile_definitions sdl::sdl COMPILE_DEFINITIONS)
     if (sdl_compile_definitions)
         target_compile_definitions (${private_sdl_target} PRIVATE ${sdl_compile_definitions})
     endif()
 
-    _yup_sdl_get_target_property (sdl_interface_compile_definitions sdl::sdl INTERFACE_COMPILE_DEFINITIONS)
-    if (sdl_interface_compile_definitions)
-        target_compile_definitions (${private_sdl_target} INTERFACE ${sdl_interface_compile_definitions})
-    endif()
-
     _yup_sdl_get_target_property (sdl_compile_options sdl::sdl COMPILE_OPTIONS)
-    target_compile_options (${private_sdl_target} PRIVATE
-        ${sdl_compile_options}
-        ${force_include_options})
-
-    _yup_sdl_get_target_property (sdl_interface_compile_options sdl::sdl INTERFACE_COMPILE_OPTIONS)
-    if (sdl_interface_compile_options)
-        target_compile_options (${private_sdl_target} INTERFACE ${sdl_interface_compile_options})
+    if (sdl_compile_options)
+        target_compile_options (${private_sdl_target} PRIVATE ${sdl_compile_options})
     endif()
 
     _yup_sdl_get_target_property (sdl_link_libraries sdl::sdl LINK_LIBRARIES)
@@ -181,25 +161,80 @@ function (_yup_sdl_configure_private_static_target target_name force_include_opt
         target_link_libraries (${private_sdl_target} PRIVATE ${sdl_link_libraries})
     endif()
 
-    _yup_sdl_get_target_property (sdl_interface_link_libraries sdl::sdl INTERFACE_LINK_LIBRARIES)
-    if (sdl_interface_link_libraries)
-        target_link_libraries (${private_sdl_target} INTERFACE ${sdl_interface_link_libraries})
-    endif()
-
-    _yup_sdl_get_target_property (sdl_link_options sdl::sdl LINK_OPTIONS)
-    if (sdl_link_options)
-        target_link_options (${private_sdl_target} PRIVATE ${sdl_link_options})
-    endif()
-
-    _yup_sdl_get_target_property (sdl_interface_link_options sdl::sdl INTERFACE_LINK_OPTIONS)
-    if (sdl_interface_link_options)
-        target_link_options (${private_sdl_target} INTERFACE ${sdl_interface_link_options})
-    endif()
-
     _yup_sdl_get_target_property (sdl_position_independent_code sdl::sdl POSITION_INDEPENDENT_CODE)
     if (sdl_position_independent_code)
         set_target_properties (${private_sdl_target} PROPERTIES
             POSITION_INDEPENDENT_CODE "${sdl_position_independent_code}")
+    endif()
+
+    set_target_properties (${private_sdl_target} PROPERTIES FOLDER "Thirdparty")
+endfunction()
+
+#==============================================================================
+
+function (_yup_sdl_get_private_common_target output_target)
+    set (common_target "yup_sdl_private_common")
+
+    if (NOT TARGET ${common_target})
+        _yup_sdl_split_sources (sdl_c_sources sdl_objc_sources)
+
+        # SDL C sources declare no Objective-C classes, so all plugin images share a single compilation
+        add_library (${common_target} OBJECT ${sdl_c_sources})
+        _yup_sdl_apply_private_target_settings (${common_target})
+    endif()
+
+    set (${output_target} "${common_target}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_sdl_configure_private_static_target target_name output_target)
+    if (NOT TARGET sdl::sdl)
+        _yup_message (FATAL_ERROR "Cannot configure private SDL symbols for ${target_name}: sdl::sdl target is not available.")
+    endif()
+
+    _yup_sdl_get_private_common_target (common_sdl_target)
+    _yup_sdl_split_sources (sdl_c_sources sdl_objc_sources)
+
+    set (private_sdl_target "${target_name}_sdl")
+    add_library (${private_sdl_target} STATIC ${sdl_objc_sources} $<TARGET_OBJECTS:${common_sdl_target}>)
+    add_dependencies (${private_sdl_target} ${common_sdl_target})
+
+    _yup_sdl_apply_private_target_settings (${private_sdl_target})
+
+    if (sdl_objc_sources)
+        set_property (SOURCE ${sdl_objc_sources}
+            TARGET_DIRECTORY ${private_sdl_target}
+            APPEND_STRING PROPERTY COMPILE_FLAGS " -x objective-c")
+
+        # Only the Objective-C sources declare classes that must be private to each plugin image
+        string (MAKE_C_IDENTIFIER "${target_name}" YupPluginPrefix)
+        if (YupPluginPrefix MATCHES "^[0-9]")
+            set (YupPluginPrefix "_${YupPluginPrefix}")
+        endif()
+
+        set (patch_header "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_sdl-symbols-patch.h")
+        configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/sdl-symbols-patch.h.in" "${patch_header}" @ONLY)
+
+        _yup_sdl_make_symbols_force_include_options (force_include_options "${patch_header}")
+        target_compile_options (${private_sdl_target} PRIVATE ${force_include_options})
+    endif()
+
+    foreach (sdl_interface_property
+             INTERFACE_INCLUDE_DIRECTORIES
+             INTERFACE_COMPILE_DEFINITIONS
+             INTERFACE_COMPILE_OPTIONS
+             INTERFACE_LINK_LIBRARIES
+             INTERFACE_LINK_OPTIONS)
+        _yup_sdl_get_target_property (sdl_interface_value sdl::sdl ${sdl_interface_property})
+        if (sdl_interface_value)
+            set_property (TARGET ${private_sdl_target} APPEND PROPERTY ${sdl_interface_property} ${sdl_interface_value})
+        endif()
+    endforeach()
+
+    _yup_sdl_get_target_property (sdl_link_options sdl::sdl LINK_OPTIONS)
+    if (sdl_link_options)
+        target_link_options (${private_sdl_target} PRIVATE ${sdl_link_options})
     endif()
 
     _yup_sdl_get_target_property (sdl_debug_postfix sdl::sdl DEBUG_POSTFIX)
@@ -209,8 +244,7 @@ function (_yup_sdl_configure_private_static_target target_name force_include_opt
     endif()
 
     set_target_properties (${private_sdl_target} PROPERTIES
-        OUTPUT_NAME "${target_name}_sdl-static"
-        FOLDER "Thirdparty")
+        OUTPUT_NAME "${target_name}_sdl-static")
 
     set_property (TARGET ${private_sdl_target} APPEND PROPERTY COMPATIBLE_INTERFACE_BOOL SDL3_SHARED)
     set_property (TARGET ${private_sdl_target} PROPERTY INTERFACE_SDL3_SHARED FALSE)
@@ -218,35 +252,6 @@ function (_yup_sdl_configure_private_static_target target_name force_include_opt
     set_property (TARGET ${private_sdl_target} PROPERTY INTERFACE_SDL_VERSION "SDL3")
 
     set (${output_target} "${private_sdl_target}" PARENT_SCOPE)
-endfunction()
-
-#==============================================================================
-
-function (_yup_sdl_configure_symbols_patch target_name output_patch_target output_sdl_target)
-    string (MAKE_C_IDENTIFIER "${target_name}" YupPluginPrefix)
-    if (YupPluginPrefix MATCHES "^[0-9]")
-        set (YupPluginPrefix "_${YupPluginPrefix}")
-    endif()
-
-    set (patch_header "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_sdl-symbols-patch.h")
-    configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/sdl-symbols-patch.h.in" "${patch_header}" @ONLY)
-
-    # Statically declared Objective-C classes of the YUP modules, compiled into the plugin itself
-    set (objc_patch_header "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_objc-symbols-patch.h")
-    configure_file ("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/objc-symbols-patch.h.in" "${objc_patch_header}" @ONLY)
-
-    set (patch_target "${target_name}_sdl_symbols_patch")
-    add_library (${patch_target} INTERFACE)
-    target_sources (${patch_target} INTERFACE "${patch_header}" "${objc_patch_header}")
-
-    _yup_sdl_make_symbols_force_include_options (force_include_options "${patch_header}")
-    _yup_sdl_make_symbols_force_include_options (objc_force_include_options "${objc_patch_header}")
-    target_compile_options (${patch_target} INTERFACE ${force_include_options} ${objc_force_include_options})
-
-    _yup_sdl_configure_private_static_target ("${target_name}" "${force_include_options}" private_sdl_target)
-
-    set (${output_patch_target} "${patch_target}" PARENT_SCOPE)
-    set (${output_sdl_target} "${private_sdl_target}" PARENT_SCOPE)
 endfunction()
 
 #==============================================================================

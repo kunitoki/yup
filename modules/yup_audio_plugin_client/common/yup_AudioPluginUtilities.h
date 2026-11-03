@@ -78,6 +78,18 @@ inline int getTotalAudioInputChannels (const AudioProcessor& processor)
     return count;
 }
 
+/** Declares the wrapper type of the current binary, then creates the plugin processor.
+
+    Wrappers must create processors through this, so processor constructors can query
+    AudioProcessor::getWrapperType().
+*/
+template <class CreateFunction>
+AudioProcessor* createPluginProcessorForWrapper (AudioPluginWrapperType wrapperType, CreateFunction&& createFunction)
+{
+    AudioProcessor::setWrapperType (wrapperType);
+    return createFunction();
+}
+
 /** Returns the default automation-event capacity used by plugin wrappers. */
 inline int getDefaultParameterChangeCapacity (const AudioProcessor& processor)
 {

@@ -205,7 +205,7 @@ public:
 
         processFeatures (features);
 
-        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
+        processor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::lv2, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
         jassert (processor != nullptr);
 
         if (processor == nullptr)

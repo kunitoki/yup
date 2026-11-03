@@ -67,7 +67,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
     // Setup window hints and get flags
     windowFlags = setContextWindowHints (currentGraphicsApi);
 
-    if (options.flags.test (resizableWindow))
+    if (options.flags.test (resizableWindow) && parent == nullptr)
         windowFlags |= SDL_WINDOW_RESIZABLE;
 
     if (! component.isVisible())
@@ -356,6 +356,9 @@ SDLComponentNative::~SDLComponentNative()
             windowContext = nullptr;
         }
 
+        if (parentWindow != nullptr)
+            removeNativeParent (window);
+
         SDL_DestroyProperties (SDL_GetWindowProperties (window));
         SDL_DestroyWindow (window);
 
@@ -436,6 +439,21 @@ void SDLComponentNative::setVisible (bool shouldBeVisible)
 bool SDLComponentNative::isVisible() const
 {
     return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_HIDDEN) == 0;
+}
+
+//==============================================================================
+
+bool SDLComponentNative::isResizable() const
+{
+    return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_RESIZABLE) != 0;
+}
+
+void SDLComponentNative::setResizable (bool shouldBeResizable)
+{
+    if (window == nullptr || parentWindow != nullptr)
+        return;
+
+    SDL_SetWindowResizable (window, shouldBeResizable);
 }
 
 //==============================================================================
@@ -639,6 +657,9 @@ void SDLComponentNative::setAspectRatio (std::optional<float> newAspectRatio)
     // Zero for both bounds lets the window resize freely again.
     const auto ratio = aspectRatio.value_or (0.0f);
     SDL_SetWindowAspectRatio (window, ratio, ratio);
+
+    if (! aspectRatio.has_value())
+        resetNativeResizeIncrements (window);
 #endif
 }
 
@@ -987,7 +1008,19 @@ Point<float> SDLComponentNative::getCursorPosition() const
 
     float x = 0, y = 0;
 
+#if YUP_MOBILE || YUP_EMSCRIPTEN
     SDL_GetMouseState (&x, &y);
+#else
+    // SDL only tracks the pointer for windows receiving mouse moved events, which embedded (non key) child windows never do
+    SDL_GetGlobalMouseState (&x, &y);
+
+    if (window != nullptr)
+    {
+        const auto windowPosition = getWindowContentPosition (window);
+        x -= windowPosition.getX();
+        y -= windowPosition.getY();
+    }
+#endif
 
     return Point<float> (x, y) / windowUnitsPerPoint;
 }
@@ -1220,17 +1253,9 @@ void SDLComponentNative::runWithGraphicsContext (const std::function<void()>& fn
 void SDLComponentNative::timerCallback()
 {
 #if ! (YUP_MOBILE || YUP_EMSCRIPTEN)
-    if (window != nullptr) // WIN ONLY: currentMouseButtons != MouseEvent::noButtons
+    if (window != nullptr && ! cancelMouseGestureIfReleasedElsewhere()) // WIN ONLY: currentMouseButtons != MouseEvent::noButtons
     {
-        int windowX = 0, windowY = 0;
-        SDL_GetWindowPosition (window, &windowX, &windowY);
-
-        float mouseX = 0.0f, mouseY = 0.0f;
-        SDL_GetGlobalMouseState (&mouseX, &mouseY);
-
-        const auto cursorPosition = Point<float> { mouseX - static_cast<float> (windowX),
-                                                   mouseY - static_cast<float> (windowY) }
-                                  / windowUnitsPerPoint;
+        const auto cursorPosition = getCursorPosition();
 
         const bool framePainted = framePaintedSincePointerCheck.exchange (false);
 
@@ -1242,6 +1267,36 @@ void SDLComponentNative::timerCallback()
 
     pollCapturedMouseState();
 #endif
+}
+
+bool SDLComponentNative::cancelMouseGestureIfReleasedElsewhere()
+{
+    const auto releasedElsewhere = lastComponentClicked != nullptr
+                                && currentMouseButtons != MouseEvent::noButtons
+                                && activeTouches.isEmpty()
+                                && SDL_GetGlobalMouseState (nullptr, nullptr) == 0
+                                && ! SDL_HasEvent (SDL_EVENT_MOUSE_BUTTON_UP);
+
+    if (! releasedElsewhere)
+    {
+        buttonsReleasedElsewhereSinceMs = 0.0;
+        return false;
+    }
+
+    const auto now = Time::getMillisecondCounterHiRes();
+
+    if (buttonsReleasedElsewhereSinceMs == 0.0)
+    {
+        buttonsReleasedElsewhereSinceMs = now;
+        return true;
+    }
+
+    if (now - buttonsReleasedElsewhereSinceMs <= 100.0)
+        return true;
+
+    buttonsReleasedElsewhereSinceMs = 0.0;
+    cancelCurrentMouseGesture();
+    return false;
 }
 
 //==============================================================================
@@ -2880,8 +2935,12 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_MOUSE_BUTTON_DOWN " << event->button.x << " " << event->button.y);
 
+#if YUP_MOBILE || YUP_EMSCRIPTEN
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) }
                                 / windowUnitsPerPoint;
+#else
+            auto cursorPosition = getCursorPosition();
+#endif
             auto mouseButton = toMouseButton (event->button.button);
             auto keyModifiers = toKeyModifiers (SDL_GetModState());
 
@@ -2895,8 +2954,12 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_MOUSE_BUTTON_UP " << event->button.x << " " << event->button.y);
 
+#if YUP_MOBILE || YUP_EMSCRIPTEN
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) }
                                 / windowUnitsPerPoint;
+#else
+            auto cursorPosition = getCursorPosition();
+#endif
             auto mouseButton = toMouseButton (event->button.button);
             auto keyModifiers = toKeyModifiers (SDL_GetModState());
 

@@ -23,6 +23,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 class PluginEditorWindow final : public yup::DocumentWindow
 {
@@ -35,8 +36,12 @@ public:
         , onClose (std::move (onCloseCallback))
     {
         setTitle (windowTitle);
+        setResizable (editor != nullptr && editor->isResizable());
+        setWindowAspectRatio (getEditorAspectRatio());
+
         addAndMakeVisible (*editor);
         editor->attachedToNative();
+
         takeKeyboardFocus();
     }
 
@@ -54,6 +59,18 @@ public:
     }
 
 private:
+    std::optional<float> getEditorAspectRatio() const
+    {
+        if (! editor->isResizable() || ! editor->shouldPreserveAspectRatio())
+            return std::nullopt;
+
+        const auto size = editor->getPreferredAspectRatioSize();
+        if (size.getWidth() <= 0 || size.getHeight() <= 0)
+            return std::nullopt;
+
+        return static_cast<float> (size.getWidth()) / static_cast<float> (size.getHeight());
+    }
+
     static yup::ComponentNative::Options makeWindowOptions (yup::AudioProcessorEditor* editor)
     {
         return yup::ComponentNative::Options()

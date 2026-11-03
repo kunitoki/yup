@@ -194,7 +194,7 @@ struct MetaSuperFn
 #endif
 
 template <typename SuperType, typename ReturnType, typename... Params>
-inline ReturnType ObjCMsgSendSuper(id self, SEL sel, Params... params)
+inline ReturnType ObjCMsgSendSuper(__unsafe_unretained id self, SEL sel, Params... params)
 {
     using SuperFn = ReturnType (*)(struct objc_super*, SEL, Params...);
     const auto fn = reinterpret_cast<SuperFn>(MetaSuperFn<ReturnType>::value);
@@ -401,7 +401,7 @@ struct ObjCClass
     }
 
     template <typename ReturnType, typename... Params>
-    static ReturnType sendSuperclassMessage(id self, SEL sel, Params... params)
+    static ReturnType sendSuperclassMessage(__unsafe_unretained id self, SEL sel, Params... params)
     {
         return ObjCMsgSendSuper<SuperclassType, ReturnType, Params...>(self, sel, params...);
     }
@@ -444,7 +444,7 @@ struct ObjCLifetimeManagedClass : public ObjCClass<NSObject>
         return self;
     }
 
-    static void dealloc(id _self, SEL)
+    static void dealloc(__unsafe_unretained id _self, SEL)
     {
         if (auto* obj = getIvar<YupClass*>(_self, "cppObject"))
         {

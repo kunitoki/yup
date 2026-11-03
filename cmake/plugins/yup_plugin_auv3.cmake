@@ -41,15 +41,6 @@ function (yup_plugin_auv3)
         yup_audio_plugin_client
         ${target_ide_group}
         auv3
-        PLUGIN_ID ${YUP_ARG_PLUGIN_ID}
-        PLUGIN_NAME ${YUP_ARG_PLUGIN_NAME}
-        PLUGIN_VENDOR ${YUP_ARG_PLUGIN_VENDOR}
-        PLUGIN_EMAIL ${YUP_ARG_PLUGIN_EMAIL}
-        PLUGIN_VERSION ${YUP_ARG_PLUGIN_VERSION}
-        PLUGIN_DESCRIPTION ${YUP_ARG_PLUGIN_DESCRIPTION}
-        PLUGIN_URL ${YUP_ARG_PLUGIN_URL}
-        PLUGIN_IS_SYNTH ${YUP_ARG_PLUGIN_IS_SYNTH}
-        PLUGIN_IS_MONO ${YUP_ARG_PLUGIN_IS_MONO}
         PLUGIN_AU_SUBTYPE ${YUP_ARG_PLUGIN_AU_SUBTYPE}
         PLUGIN_AU_MANUFACTURER ${YUP_ARG_PLUGIN_AU_MANUFACTURER}
         PLUGIN_AU_SANDBOX_SAFE ${YUP_ARG_PLUGIN_AU_SANDBOX_SAFE})
@@ -92,18 +83,14 @@ function (yup_plugin_auv3)
         YUP_AUDIO_PLUGIN_ENABLE_AUv3=1
         YUP_STANDALONE_APPLICATION=0)
 
-    _yup_sdl_configure_symbols_patch ("${target_name}_auv3_plugin" auv3_sdl_symbols_patch_target auv3_sdl_symbols_sdl_target)
+    _yup_sdl_configure_private_static_target ("${target_name}_auv3_plugin" auv3_sdl_symbols_sdl_target)
     set (auv3_plugin_bundle_libraries
-        ${auv3_sdl_symbols_sdl_target}
-        ${auv3_sdl_symbols_patch_target})
+        ${auv3_sdl_symbols_sdl_target})
 
     target_link_libraries (${target_name}_auv3_plugin PRIVATE
         ${YUP_ARG_SHARED_LIBS}
-        yup_audio_plugin_client
         ${target_name}_auv3
-        ${YUP_ARG_ADDITIONAL_LIBRARIES}
         ${auv3_plugin_bundle_libraries}
-        ${YUP_ARG_MODULES}
         "-framework AVFoundation"
         "-framework AudioToolbox"
         "-framework CoreAudioKit"
@@ -113,11 +100,8 @@ function (yup_plugin_auv3)
 
     _yup_module_apply_arc_to_target_sources (${target_name}_auv3_plugin
         ${YUP_ARG_SHARED_LIBS}
-        yup_audio_plugin_client
         ${target_name}_auv3
-        ${YUP_ARG_ADDITIONAL_LIBRARIES}
-        ${auv3_plugin_bundle_libraries}
-        ${YUP_ARG_MODULES})
+        ${auv3_plugin_bundle_libraries})
 
     # Generate the AUv3 Info.plist from our template
     set (auv3_plist_template "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../platforms/mac/AudioUnitV3Info.plist.in")

@@ -53,6 +53,7 @@ void focusNativeWindow (void* nativeWindow);
     @param nativeWindow The native window handle.
  */
 void activateAppWindowOnLaunch (void* nativeWindow);
+
 #endif
 
 } // namespace yup

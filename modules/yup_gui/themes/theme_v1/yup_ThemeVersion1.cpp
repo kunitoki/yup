@@ -972,6 +972,25 @@ void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar
 
 //==============================================================================
 
+void paintResizableCorner (Graphics& g, const ApplicationTheme& theme, const ResizableCorner& corner)
+{
+    const auto bounds = corner.getLocalBounds().reduced (2.0f);
+    const auto lineColor = theme.findColor (corner, ResizableCorner::Style::lineColorId)
+                               .value_or (theme.getPalette (corner).getColor (PaletteRole::textMuted));
+
+    g.setStrokeColor (lineColor);
+    g.setStrokeWidth (1.5f);
+    g.setStrokeCap (StrokeCap::Round);
+
+    for (int i = 1; i <= 3; ++i)
+    {
+        const auto offset = bounds.getWidth() * static_cast<float> (i) / 3.0f;
+        g.strokeLine (bounds.getRight() - offset, bounds.getBottom(), bounds.getRight(), bounds.getBottom() - offset);
+    }
+}
+
+//==============================================================================
+
 void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const ProgressBar& progressBar)
 {
     const auto bounds = progressBar.getLocalBounds();
@@ -2374,6 +2393,8 @@ void mapPaletteThemeVersion1 (const ThemePalette& palette, ApplicationTheme& the
     set (ProgressBar::Style::backgroundColorId, surfaceRaised);
     set (ProgressBar::Style::foregroundColorId, accent);
 
+    set (ResizableCorner::Style::lineColorId, textMuted.withAlpha (0.6f));
+
     set (ListBox::Style::backgroundColorId, surface);
     set (ListBox::Style::outlineColorId, outline);
     set (ListBox::Style::rowBackgroundColorId, Colors::transparentBlack);
@@ -2512,6 +2533,7 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
     theme->setComponentStyle<ScrollBar> (ComponentStyle::createStyle<ScrollBar> (paintScrollBar));
     theme->setComponentStyle<ProgressBar> (ComponentStyle::createStyle<ProgressBar> (paintProgressBar));
+    theme->setComponentStyle<ResizableCorner> (ComponentStyle::createStyle<ResizableCorner> (paintResizableCorner));
 
     theme->setComponentStyle<ListBox> (ComponentStyle::createStyle<ListBox> (paintListBox));
     theme->setMetric (ListBox::Style::refreshIndicatorSizeId, 56.0f);

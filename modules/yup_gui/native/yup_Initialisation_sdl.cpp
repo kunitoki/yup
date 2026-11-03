@@ -331,9 +331,16 @@ YUP_API void YUP_CALLTYPE shutdownYup_Windowing()
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: subsystems quit");
 
 #if YUP_STANDALONE_APPLICATION
-    std::atexit (&SDL_Quit);
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered SDL_Quit at exit");
+    constexpr bool isStandaloneApplication = true;
+#else
+    const bool isStandaloneApplication = YUPApplicationBase::isStandaloneApp();
 #endif
+
+    if (isStandaloneApplication)
+    {
+        std::atexit (&SDL_Quit);
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered SDL_Quit at exit");
+    }
 }
 
 //==============================================================================

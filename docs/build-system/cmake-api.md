@@ -42,7 +42,7 @@ yup_audio_plugin (
     MODULES yup::yup_gui yup::yup_audio_processors)
 
 file (GLOB sources "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
-target_sources (${target_name}_shared PUBLIC ${sources})
+target_sources (${target_name}_shared PRIVATE ${sources})
 ```
 
 ### Platform-Specific Build Commands
@@ -116,6 +116,12 @@ Enables code coverage instrumentation. OFF by default.
 
 Enables pluginval validation as a post-build step for plugin targets. OFF by default.
 
+### `YUP_PLUGINVAL_ARGUMENTS`
+
+Semicolon-separated arguments passed to pluginval before `--validate <plugin>`. Defaults to
+`--strictness-level;5;--validate-in-process;--skip-gui-tests`, for example
+`-DYUP_PLUGINVAL_ARGUMENTS="--strictness-level;10;--validate-in-process"`.
+
 ### `YUP_ENABLE_CLAP_VALIDATOR`
 
 Enables CLAP validator as a post-build step for CLAP plugin targets. OFF by default.
@@ -140,8 +146,10 @@ yup_audio_plugin(
 )
 ```
 
-Adds a shared code static library target with name `<TARGET_NAME>_shared`, along with extra targets
-for each of the specified plugin formats. All arguments are optional unless noted otherwise. Keys
+Adds a shared code object library target with name `<TARGET_NAME>_shared`, along with extra targets
+for each of the specified plugin formats. The modules and the sources added to `<TARGET_NAME>_shared`
+are compiled once and linked into every format; each format only compiles its own wrapper. Add your
+sources as `PRIVATE`, as `PUBLIC` or `INTERFACE` sources would be compiled again by every format. All arguments are optional unless noted otherwise. Keys
 that are not specified will fall back to sensible defaults.
 
 #### Target Globals

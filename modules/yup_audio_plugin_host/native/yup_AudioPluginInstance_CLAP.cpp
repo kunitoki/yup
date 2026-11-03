@@ -326,6 +326,16 @@ public:
         return gui != nullptr && gui->can_resize != nullptr && gui->can_resize (clapPlugin);
     }
 
+    bool shouldPreserveAspectRatio() const override
+    {
+        return getAspectRatioHint().has_value();
+    }
+
+    Size<int> getPreferredAspectRatioSize() const override
+    {
+        return getAspectRatioHint().value_or (preferredSize);
+    }
+
     Size<int> getPreferredSize() const override { return preferredSize; }
 
     void paint (Graphics& g) override
@@ -401,10 +411,7 @@ private:
             jmax (1, static_cast<int> (height))
         };
 
-        if (auto* topLevel = getTopLevelComponent())
-            topLevel->setSize (preferredSize.to<float>());
-        else
-            setSize (preferredSize.to<float>());
+        setHostedEditorSize (*this, preferredSize);
 
         return true;
     }
@@ -466,6 +473,19 @@ private:
         attached = false;
     }
 
+    std::optional<Size<int>> getAspectRatioHint() const
+    {
+        clap_gui_resize_hints_t hints {};
+
+        if (gui == nullptr || gui->get_resize_hints == nullptr || ! gui->get_resize_hints (clapPlugin, &hints))
+            return std::nullopt;
+
+        if (! hints.preserve_aspect_ratio || hints.aspect_ratio_width == 0 || hints.aspect_ratio_height == 0)
+            return std::nullopt;
+
+        return Size<int> { static_cast<int> (hints.aspect_ratio_width), static_cast<int> (hints.aspect_ratio_height) };
+    }
+
     void resizePlugViewToBounds()
     {
         if (gui == nullptr || clapPlugin == nullptr || ! attached || gui->set_size == nullptr)
@@ -475,8 +495,8 @@ private:
         uint32_t width = static_cast<uint32_t> (jmax (1.0f, bounds.getWidth()));
         uint32_t height = static_cast<uint32_t> (jmax (1.0f, bounds.getHeight()));
 
-        if (gui->adjust_size != nullptr)
-            gui->adjust_size (clapPlugin, &width, &height);
+        if (isResizable() && gui->adjust_size != nullptr && gui->adjust_size (clapPlugin, &width, &height))
+            followHostedEditorSize (*this, { static_cast<int> (width), static_cast<int> (height) });
 
         if (width > 0 && height > 0)
             gui->set_size (clapPlugin, width, height);

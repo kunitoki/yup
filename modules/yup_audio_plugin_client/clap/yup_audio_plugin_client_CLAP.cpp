@@ -459,7 +459,9 @@ private:
 
 //==============================================================================
 
-class AudioPluginEditorCLAP final : public Component
+class AudioPluginEditorCLAP final
+    : public Component
+    , private ComponentListener
 {
 public:
     AudioPluginEditorCLAP (AudioPluginProcessorCLAP* wrapper, AudioProcessorEditor* editor)
@@ -467,6 +469,18 @@ public:
         , processorEditor (editor)
     {
         addAndMakeVisible (*processorEditor);
+
+        if (processorEditor->shouldShowResizableCorner())
+        {
+            resizableCorner = std::make_unique<ResizableCorner>();
+            resizableCorner->constrainSize = [this] (Size<float> size)
+            {
+                return processorEditor->getConstrainedSize (size.to<int>()).to<float>();
+            };
+            addAndMakeVisible (*resizableCorner);
+        }
+
+        processorEditor->addComponentListener (this);
     }
 
     ~AudioPluginEditorCLAP() override
@@ -476,6 +490,8 @@ public:
             setVisible (false);
             removeFromDesktop();
 
+            processorEditor->removeComponentListener (this);
+            resizableCorner.reset();
             removeChildComponent (processorEditor.get());
             processorEditor.reset();
         }
@@ -488,9 +504,16 @@ public:
     void resized() override;
 
 private:
+    void componentResized (Component& component) override
+    {
+        if (component.getSize() != getSize())
+            setSize (component.getSize());
+    }
+
     ScopedYupInitialiser_Windowing scopeInitialiser;
     AudioPluginProcessorCLAP* wrapper = nullptr;
     std::unique_ptr<AudioProcessorEditor> processorEditor;
+    std::unique_ptr<ResizableCorner> resizableCorner;
 };
 
 //==============================================================================
@@ -542,6 +565,11 @@ private:
     void handleMainThreadNotifications() noexcept;
     void handleAudioThreadNotifications() noexcept;
 
+    bool isCLAPAudioBusMain (uint32_t clapAudioBusIndex, bool isInput) const noexcept
+    {
+        return audioProcessor->getBusLayout().getAudioBusRole (static_cast<int> (clapAudioBusIndex), isInput) == AudioBus::Role::Main;
+    }
+
     ScopedYupInitialiser_GUI scopeInitialiser;
 
     std::unique_ptr<AudioProcessor> audioProcessor;
@@ -585,13 +613,6 @@ private:
 
     bool isBypassed = false;
     std::atomic<bool> isActive { false };
-
-    //==============================================================================
-    /** Returns true when the CLAP audio bus role is Main. */
-    bool isCLAPAudioBusMain (uint32_t clapAudioBusIndex, bool isInput) const noexcept
-    {
-        return audioProcessor->getBusLayout().getAudioBusRole (static_cast<int> (clapAudioBusIndex), isInput) == AudioBus::Role::Main;
-    }
 
     std::atomic<bool> isInsideProcessBlock { false };
     std::atomic<bool> callLatencyChangeOnNextActivate { false };
@@ -944,7 +965,7 @@ bool AudioPluginProcessorCLAP::initialise()
 {
     jassert (audioProcessor == nullptr);
 
-    audioProcessor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
+    audioProcessor.reset (yup::createPluginProcessorForWrapper (yup::AudioPluginWrapperType::clap, ::YUP_AUDIO_PLUGIN_CREATE_FUNCTION));
     if (audioProcessor == nullptr)
         return false;
 
@@ -1362,6 +1383,8 @@ bool AudioPluginProcessorCLAP::initialise()
 
         auto wrapper = getWrapper (plugin);
 
+        ScopedYupInitialiser_Windowing windowingInitialiser;
+
         auto processorEditor = wrapper->audioProcessor->createEditor();
         if (processorEditor == nullptr)
             return false;
@@ -1451,8 +1474,8 @@ bool AudioPluginProcessorCLAP::initialise()
         hints->can_resize_horizontally = audioProcessorEditor->isResizable();
         hints->can_resize_vertically = audioProcessorEditor->isResizable();
         hints->preserve_aspect_ratio = audioProcessorEditor->shouldPreserveAspectRatio();
-        hints->aspect_ratio_width = audioProcessorEditor->getPreferredSize().getWidth();
-        hints->aspect_ratio_height = audioProcessorEditor->getPreferredSize().getHeight();
+        hints->aspect_ratio_width = static_cast<uint32_t> (audioProcessorEditor->getPreferredAspectRatioSize().getWidth());
+        hints->aspect_ratio_height = static_cast<uint32_t> (audioProcessorEditor->getPreferredAspectRatioSize().getHeight());
 
         return true;
     };
@@ -1465,20 +1488,10 @@ bool AudioPluginProcessorCLAP::initialise()
 
         auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
 
-        const auto preferredSize = audioProcessorEditor->getPreferredSize();
+        const auto size = audioProcessorEditor->getConstrainedSize ({ static_cast<int> (*width), static_cast<int> (*height) });
 
-        if (! audioProcessorEditor->isResizable())
-        {
-            *width = static_cast<uint32_t> (preferredSize.getWidth());
-            *height = static_cast<uint32_t> (preferredSize.getHeight());
-        }
-        else if (audioProcessorEditor->shouldPreserveAspectRatio())
-        {
-            if (preferredSize.getWidth() > preferredSize.getHeight())
-                *height = static_cast<uint32_t> (*width * (preferredSize.getWidth() / static_cast<float> (preferredSize.getHeight())));
-            else
-                *width = static_cast<uint32_t> (*height * (preferredSize.getHeight() / static_cast<float> (preferredSize.getWidth())));
-        }
+        *width = static_cast<uint32_t> (size.getWidth());
+        *height = static_cast<uint32_t> (size.getHeight());
 
         return true;
     };

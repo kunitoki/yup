@@ -565,6 +565,41 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_audio_plugin_common_definitions output_variable)
+    set (one_value_args
+        PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL
+        PLUGIN_IS_SYNTH PLUGIN_IS_MONO)
+
+    cmake_parse_arguments (YUP_ARG "" "${one_value_args}" "" ${ARGN})
+
+    set (plugin_defines
+        YupPlugin_Id="${YUP_ARG_PLUGIN_ID}"
+        YupPlugin_Name="${YUP_ARG_PLUGIN_NAME}"
+        YupPlugin_Version="${YUP_ARG_PLUGIN_VERSION}"
+        YupPlugin_Vendor="${YUP_ARG_PLUGIN_VENDOR}"
+        YupPlugin_Description="${YUP_ARG_PLUGIN_DESCRIPTION}"
+        YupPlugin_URL="${YUP_ARG_PLUGIN_URL}"
+        YupPlugin_Email="${YUP_ARG_PLUGIN_EMAIL}")
+
+    if (YUP_ARG_PLUGIN_IS_SYNTH)
+        list (APPEND plugin_defines YupPlugin_IsSynth=1)
+    else()
+        list (APPEND plugin_defines YupPlugin_IsSynth=0)
+    endif()
+
+    if (YUP_ARG_PLUGIN_IS_MONO)
+        list (APPEND plugin_defines YupPlugin_IsMono=1)
+    else()
+        list (APPEND plugin_defines YupPlugin_IsMono=0)
+    endif()
+
+    set (${output_variable} "${plugin_defines}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+# Creates the per-format wrapper target, compiled only into the plugin binary of that format.
+# Common plugin metadata and the modules come from the shared plugin core instead.
 function (_yup_module_setup_plugin_client target_name plugin_client_target folder_name plugin_type)
     if (NOT YUP_PLATFORM_DESKTOP AND NOT (YUP_PLATFORM_EMSCRIPTEN AND plugin_type STREQUAL "standalone"))
         return()
@@ -572,8 +607,6 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
 
     set (options "")
     set (one_value_args
-        PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL
-        PLUGIN_IS_SYNTH PLUGIN_IS_MONO
         PLUGIN_AU_SUBTYPE PLUGIN_AU_MANUFACTURER PLUGIN_AU_SANDBOX_SAFE
         PLUGIN_AAX_MANUFACTURER_ID PLUGIN_AAX_PRODUCT_ID
         PLUGIN_AAX_PLUGIN_ID_NATIVE PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE
@@ -621,28 +654,8 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     get_target_property (module_libs_paths ${plugin_client_target} YUP_MODULE_LIBS_PATHS)
     get_target_property (module_link_options ${plugin_client_target} YUP_MODULE_LINK_OPTIONS)
     get_target_property (module_frameworks ${plugin_client_target} YUP_MODULE_FRAMEWORK)
-    get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
 
     list (APPEND module_defines ${plugin_define})
-    list (APPEND module_defines YupPlugin_Id="${YUP_ARG_PLUGIN_ID}")
-    list (APPEND module_defines YupPlugin_Name="${YUP_ARG_PLUGIN_NAME}")
-    list (APPEND module_defines YupPlugin_Version="${YUP_ARG_PLUGIN_VERSION}")
-    list (APPEND module_defines YupPlugin_Vendor="${YUP_ARG_PLUGIN_VENDOR}")
-    list (APPEND module_defines YupPlugin_Description="${YUP_ARG_PLUGIN_DESCRIPTION}")
-    list (APPEND module_defines YupPlugin_URL="${YUP_ARG_PLUGIN_URL}")
-    list (APPEND module_defines YupPlugin_Email="${YUP_ARG_PLUGIN_EMAIL}")
-
-    if (YUP_ARG_PLUGIN_IS_SYNTH)
-        list (APPEND module_defines YupPlugin_IsSynth=1)
-    else()
-        list (APPEND module_defines YupPlugin_IsSynth=0)
-    endif()
-
-    if (YUP_ARG_PLUGIN_IS_MONO)
-        list (APPEND module_defines YupPlugin_IsMono=1)
-    else()
-        list (APPEND module_defines YupPlugin_IsMono=0)
-    endif()
 
     if (YUP_ARG_PLUGIN_AU_SUBTYPE)
         list (APPEND module_defines "YupPlugin_AUSubType=\"${YUP_ARG_PLUGIN_AU_SUBTYPE}\"")
@@ -728,7 +741,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
                               "${module_libs_paths}"
                               "${module_link_options}"
                               "${module_frameworks}"
-                              "${module_dependencies}")
+                              "")
 
     _yup_glob_recurse ("${module_path}/${plugin_type}/*" all_module_files)
     target_sources (${custom_target_name} PRIVATE ${all_module_files})

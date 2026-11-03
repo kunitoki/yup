@@ -52,6 +52,10 @@ public:
 
     bool isVisible() const override { return false; }
 
+    bool isResizable() const override { return false; }
+
+    void setResizable (bool) override {}
+
     void toFront() override {}
 
     void setSize (const Size<int>&) override {}

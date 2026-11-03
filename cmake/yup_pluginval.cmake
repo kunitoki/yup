@@ -22,6 +22,9 @@
 set (PLUGINVAL_VERSION "v1.0.4")
 set (CLAP_VALIDATOR_VERSION "0.3.2")
 
+set (YUP_PLUGINVAL_ARGUMENTS "--strictness-level;5;--validate-in-process;--skip-gui-tests" CACHE STRING
+    "Semicolon-separated pluginval arguments used by the plugin post-build validation, before --validate <plugin>")
+
 # ==============================================================================
 
 function (_yup_setup_validation_tool tool_name tool_version tool_platform tool_archive tool_executable tool_url executable_cache_variable)
@@ -178,16 +181,27 @@ function (yup_validate_pluginval target_name plugin_path)
         set (lv2_cleanup_command COMMAND ${CMAKE_COMMAND} -E rm -f "$ENV{HOME}/Library/Audio/Plug-Ins/LV2/.DS_Store")
     endif()
 
+    # The LV2 host prints harmless lilv errors that IDEs report as build errors, the script rewrites them
+    if (plugin_path MATCHES "\\.lv2$")
+        string (REPLACE ";" "$<SEMICOLON>" pluginval_arguments "${YUP_PLUGINVAL_ARGUMENTS}")
+        set (pluginval_command
+            ${CMAKE_COMMAND}
+            -DPLUGINVAL=${PLUGINVAL_EXECUTABLE}
+            "-DPLUGINVAL_ARGUMENTS=${pluginval_arguments}"
+            -DPLUGIN_PATH=${plugin_path}
+            -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/tools/yup_run_pluginval.cmake")
+    else()
+        set (pluginval_command
+            "${PLUGINVAL_EXECUTABLE}"
+            ${YUP_PLUGINVAL_ARGUMENTS}
+            --validate "${plugin_path}")
+    endif()
+
     add_custom_command(
         TARGET ${target_name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "[PLUGINVAL] Starting validation of ${target_name}..."
         ${lv2_cleanup_command}
-        COMMAND
-            "${PLUGINVAL_EXECUTABLE}"
-            --strictness-level 5
-            --validate-in-process
-            --skip-gui-tests
-            --validate "${plugin_path}"
+        COMMAND ${pluginval_command}
         COMMAND ${CMAKE_COMMAND} -E echo "[PLUGINVAL] Validation of ${target_name} completed"
         COMMENT "Running pluginval validation on ${target_name}"
         VERBATIM)
