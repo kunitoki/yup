@@ -411,10 +411,7 @@ private:
             jmax (1, static_cast<int> (height))
         };
 
-        if (auto* topLevel = getTopLevelComponent())
-            topLevel->setSize (preferredSize.to<float>());
-        else
-            setSize (preferredSize.to<float>());
+        setHostedEditorSize (*this, preferredSize);
 
         return true;
     }
@@ -498,8 +495,8 @@ private:
         uint32_t width = static_cast<uint32_t> (jmax (1.0f, bounds.getWidth()));
         uint32_t height = static_cast<uint32_t> (jmax (1.0f, bounds.getHeight()));
 
-        if (gui->adjust_size != nullptr)
-            gui->adjust_size (clapPlugin, &width, &height);
+        if (isResizable() && gui->adjust_size != nullptr && gui->adjust_size (clapPlugin, &width, &height))
+            followHostedEditorSize (*this, { static_cast<int> (width), static_cast<int> (height) });
 
         if (width > 0 && height > 0)
             gui->set_size (clapPlugin, width, height);

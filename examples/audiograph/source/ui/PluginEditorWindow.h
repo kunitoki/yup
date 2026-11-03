@@ -36,9 +36,12 @@ public:
         , onClose (std::move (onCloseCallback))
     {
         setTitle (windowTitle);
+        setResizable (editor != nullptr && editor->isResizable());
         setWindowAspectRatio (getEditorAspectRatio());
+
         addAndMakeVisible (*editor);
         editor->attachedToNative();
+
         takeKeyboardFocus();
     }
 

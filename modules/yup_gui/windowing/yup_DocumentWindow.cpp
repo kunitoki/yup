@@ -60,6 +60,22 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
 
 //==============================================================================
 
+bool DocumentWindow::isResizable() const
+{
+    if (auto native = getNativeComponent())
+        return native->isResizable();
+
+    return false;
+}
+
+void DocumentWindow::setResizable (bool shouldBeResizable)
+{
+    if (auto native = getNativeComponent())
+        native->setResizable (shouldBeResizable);
+}
+
+//==============================================================================
+
 void DocumentWindow::paint (Graphics& g)
 {
     g.setFillColor (ApplicationTheme::findComponentColor (*this, Style::backgroundColorId).value_or (Colors::dimgray));

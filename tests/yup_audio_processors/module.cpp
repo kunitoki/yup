@@ -26,6 +26,7 @@
 #include "yup_AudioBusLayout.cpp"
 #include "yup_AudioParameter.cpp"
 #include "yup_AudioProcessContext.cpp"
+#include "yup_AudioProcessorEditor.cpp"
 #include "yup_ParameterChangeBuffer.cpp"
 #include "yup_SpectralBridge.cpp"
 #include "yup_StandalonePluginHost.cpp"

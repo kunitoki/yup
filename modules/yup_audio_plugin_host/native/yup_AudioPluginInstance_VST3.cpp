@@ -790,6 +790,10 @@ public:
 
     Size<int> getPreferredSize() const override { return preferredSize; }
 
+    bool shouldPreserveAspectRatio() const override { return aspectRatioSize.has_value(); }
+
+    Size<int> getPreferredAspectRatioSize() const override { return aspectRatioSize.value_or (preferredSize); }
+
     void paint (Graphics& g) override
     {
         g.setFillColor (Color (0xff101417));
@@ -824,10 +828,7 @@ public:
         newSize->right = newSize->left + preferredSize.getWidth();
         newSize->bottom = newSize->top + preferredSize.getHeight();
 
-        if (auto* topLevel = getTopLevelComponent())
-            topLevel->setSize (preferredSize.to<float>());
-        else
-            setSize (preferredSize.to<float>());
+        setHostedEditorSize (*this, preferredSize);
 
         plugView->onSize (newSize);
         return kResultTrue;
@@ -847,6 +848,19 @@ private:
                 jmax (320, static_cast<int> (size.getWidth())),
                 jmax (240, static_cast<int> (size.getHeight()))
             };
+
+            if (isResizable())
+            {
+                aspectRatioSize = probeHostedEditorAspectRatio ({ size.getWidth(), size.getHeight() }, [this] (Size<int> sizeToConstrain)
+                {
+                    ViewRect rect (0, 0, sizeToConstrain.getWidth(), sizeToConstrain.getHeight());
+
+                    if (plugView->checkSizeConstraint (std::addressof (rect)) != kResultTrue)
+                        return sizeToConstrain;
+
+                    return Size<int> (rect.getWidth(), rect.getHeight());
+                });
+            }
         }
 
         setSize (preferredSize.to<float>());
@@ -910,12 +924,16 @@ private:
         size.right = size.left + jmax (1, static_cast<int32> (bounds.getWidth()));
         size.bottom = size.top + jmax (1, static_cast<int32> (bounds.getHeight()));
 
+        if (isResizable() && plugView->checkSizeConstraint (std::addressof (size)) == kResultTrue)
+            followHostedEditorSize (*this, { size.getWidth(), size.getHeight() });
+
         plugView->onSize (std::addressof (size));
     }
 
     IPtr<IPlugView> plugView;
     IPtr<IPlugFrame> frame;
     Size<int> preferredSize { 640, 480 };
+    std::optional<Size<int>> aspectRatioSize;
     bool attached = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VST3Editor)

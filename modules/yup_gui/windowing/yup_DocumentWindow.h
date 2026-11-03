@@ -44,6 +44,13 @@ public:
     void centreWithSize (const Size<int>& size);
 
     //==============================================================================
+    /** Returns whether the window is resizable. */
+    bool isResizable() const;
+
+    /** Sets whether the window should be resizable. */
+    void setResizable (bool shouldBeResizable);
+
+    //==============================================================================
     /** The style identifiers for this class. */
     struct Style
     {

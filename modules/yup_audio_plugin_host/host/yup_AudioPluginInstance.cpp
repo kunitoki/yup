@@ -107,4 +107,60 @@ void AudioPluginInstance::processBlockBypassed (AudioProcessContext<double>& con
     processPluginBypassedBlock (pluginDescription, context.audio);
 }
 
+//==============================================================================
+
+namespace
+{
+
+/** Resizes the window holding a hosted editor so that the editor ends up with the given size. */
+void setHostedEditorSize (Component& editor, Size<int> editorSize)
+{
+    auto* topLevel = editor.getTopLevelComponent();
+
+    topLevel->setSize ({ topLevel->getWidth() - editor.getWidth() + static_cast<float> (editorSize.getWidth()),
+                         topLevel->getHeight() - editor.getHeight() + static_cast<float> (editorSize.getHeight()) });
+}
+
+/** Detects whether a hosted editor locks its aspect ratio, for plugin formats which can't report it.
+
+    Asks the plugin to constrain a size twice as wide as its current one: an editor which locks its aspect ratio
+    grows the height as well. Returns the size to derive the aspect ratio from, or nothing for free resizing.
+*/
+std::optional<Size<int>> probeHostedEditorAspectRatio (Size<int> currentSize, const std::function<Size<int> (Size<int>)>& constrainSize)
+{
+    if (currentSize.getWidth() <= 0 || currentSize.getHeight() <= 0)
+        return std::nullopt;
+
+    const auto probed = constrainSize ({ currentSize.getWidth() * 2, currentSize.getHeight() });
+
+    if (probed.getWidth() <= 0 || probed.getHeight() <= currentSize.getHeight())
+        return std::nullopt;
+
+    const auto ratio = currentSize.getWidth() / static_cast<double> (currentSize.getHeight());
+    const auto probedRatio = probed.getWidth() / static_cast<double> (probed.getHeight());
+
+    if (std::abs (probedRatio - ratio) > ratio * 0.02)
+        return std::nullopt;
+
+    return currentSize;
+}
+
+/** Makes the window holding a hosted editor follow the size the plugin settled on, when it differs from the editor's. */
+void followHostedEditorSize (Component& editor, Size<int> editorSize)
+{
+    if (std::abs (editor.getWidth() - static_cast<float> (editorSize.getWidth())) <= 1.0f
+        && std::abs (editor.getHeight() - static_cast<float> (editorSize.getHeight())) <= 1.0f)
+    {
+        return;
+    }
+
+    MessageManager::callAsync ([weakEditor = WeakReference<Component> (&editor), editorSize]
+    {
+        if (auto* editorToResize = weakEditor.get())
+            setHostedEditorSize (*editorToResize, editorSize);
+    });
+}
+
+} // namespace
+
 } // namespace yup

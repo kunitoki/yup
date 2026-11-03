@@ -192,6 +192,7 @@ class DeferredReplayer;
 #include "widgets/yup_ScrollBar.h"
 #include "widgets/yup_Viewport.h"
 #include "widgets/yup_ProgressBar.h"
+#include "widgets/yup_ResizableCorner.h"
 #include "widgets/yup_ListBoxItem.h"
 #include "widgets/yup_ListBox.h"
 #include "widgets/yup_TreeViewItem.h"

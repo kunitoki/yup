@@ -365,6 +365,23 @@ public:
     virtual bool isVisible() const = 0;
 
     //==============================================================================
+    /** Checks whether the window is resizable.
+
+        @return True if the window is resizable, false otherwise.
+    */
+    virtual bool isResizable() const = 0;
+
+    /** Sets whether the window should be resizable.
+
+        @param shouldBeResizable True to make the window resizable, false to make it fixed.
+    */
+    virtual void setResizable (bool shouldBeResizable) = 0;
+
+    //==============================================================================
+    /** Brings the window to the front.
+
+        This will make the window the topmost window and give it focus.
+    */
     virtual void toFront() = 0;
 
     //==============================================================================

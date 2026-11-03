@@ -104,6 +104,10 @@ void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
             SDL_SetCursor (it->second);
 
         SDL_ShowCursor();
+
+#if YUP_MAC
+        setNativeMouseCursor (cursorToSet.getType());
+#endif
     }
 }
 

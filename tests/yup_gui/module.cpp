@@ -64,6 +64,7 @@
 #include "yup_PaintProfiler.cpp"
 #include "yup_PopupMenu.cpp"
 #include "yup_ProgressBar.cpp"
+#include "yup_ResizableCorner.cpp"
 #include "yup_ScrollBar.cpp"
 #include "yup_Slider.cpp"
 #include "yup_SwitchButton.cpp"

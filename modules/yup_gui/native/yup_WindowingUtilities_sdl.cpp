@@ -267,25 +267,6 @@ float getWindowUnitsPerPoint (SDL_Window* window) noexcept
 
 //==============================================================================
 
-bool isMouseOutsideWindow (SDL_Window* window)
-{
-#if YUP_EMSCRIPTEN
-    ignoreUnused (window);
-    return false;
-#else
-    int windowX, windowY, windowW, windowH;
-    SDL_GetWindowPosition (window, &windowX, &windowY);
-    SDL_GetWindowSize (window, &windowW, &windowH);
-
-    float mouseX, mouseY;
-    [[maybe_unused]] auto mouseState = SDL_GetGlobalMouseState (&mouseX, &mouseY);
-
-    return (mouseX < (float) windowX || mouseX > (float) (windowX + windowW) || mouseY < (float) windowY || mouseY > (float) (windowY + windowH));
-#endif
-}
-
-//==============================================================================
-
 void* getNativeWindowHandle (SDL_Window* window)
 {
     if (window == nullptr)
@@ -319,6 +300,53 @@ void* getNativeWindowHandle (SDL_Window* window)
     return reinterpret_cast<void*> (SDL_GetPointerProperty (props, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr));
 #else
     return nullptr;
+#endif
+}
+
+//==============================================================================
+
+/** Returns the top left of a window's content in global SDL coordinates.
+
+    On macOS this is read from the window itself: SDL caches it from move events, which embedded windows miss when
+    their host relocates them while resizing.
+*/
+Point<float> getWindowContentPosition (SDL_Window* window)
+{
+#if YUP_MAC
+    if (NSWindow* nsWindow = (__bridge NSWindow*) getNativeWindowHandle (window))
+    {
+        const auto contentRect = [nsWindow contentRectForFrameRect:[nsWindow frame]];
+        const auto mainScreenHeight = NSMaxY ([[NSScreen screens].firstObject frame]);
+
+        return { static_cast<float> (NSMinX (contentRect)), static_cast<float> (mainScreenHeight - NSMaxY (contentRect)) };
+    }
+#endif
+
+    int x = 0, y = 0;
+    SDL_GetWindowPosition (window, &x, &y);
+
+    return { static_cast<float> (x), static_cast<float> (y) };
+}
+
+//==============================================================================
+
+bool isMouseOutsideWindow (SDL_Window* window)
+{
+#if YUP_EMSCRIPTEN
+    ignoreUnused (window);
+    return false;
+#else
+    int windowW, windowH;
+    SDL_GetWindowSize (window, &windowW, &windowH);
+
+    const auto windowPosition = getWindowContentPosition (window);
+    const auto windowX = windowPosition.getX();
+    const auto windowY = windowPosition.getY();
+
+    float mouseX, mouseY;
+    [[maybe_unused]] auto mouseState = SDL_GetGlobalMouseState (&mouseX, &mouseY);
+
+    return (mouseX < windowX || mouseX > windowX + (float) windowW || mouseY < windowY || mouseY > windowY + (float) windowH);
 #endif
 }
 
@@ -394,6 +422,33 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
 
 #else
 
+#endif
+}
+
+/** Detaches a window parented with setNativeParent, so the host window keeps no stale child. */
+void removeNativeParent (SDL_Window* window)
+{
+#if YUP_MAC
+    NSWindow* currentWindow = (__bridge NSWindow*) getNativeWindowHandle (window);
+    if (currentWindow == nil)
+        return;
+
+    if (NSWindow* parentWindow = [currentWindow parentWindow])
+        [parentWindow removeChildWindow:currentWindow];
+#else
+    ignoreUnused (window);
+#endif
+}
+
+/** SDL clears an aspect ratio with setContentAspectRatio:NSZeroSize, which also zeroes the window
+    resize increments: AppKit then computes a NaN frame on live resize and traps. */
+void resetNativeResizeIncrements (SDL_Window* window)
+{
+#if YUP_MAC
+    if (NSWindow* nsWindow = (__bridge NSWindow*) getNativeWindowHandle (window))
+        [nsWindow setResizeIncrements:NSMakeSize (1.0, 1.0)];
+#else
+    ignoreUnused (window);
 #endif
 }
 

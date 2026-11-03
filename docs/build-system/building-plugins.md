@@ -95,6 +95,17 @@ extern "C" yup::AudioProcessor* createPluginProcessor()
 }
 ```
 
+### Resizable editors
+
+When `isResizable()` returns true, the CLAP, VST3 and AU wrappers place a
+`yup::ResizableCorner` on top of the editor, in its bottom-right corner, so users can resize
+it even in hosts without resizable plugin windows. The corner belongs to the wrapper, not to the
+editor, so it is drawn outside any effect the editor applies to its own content. Override
+`shouldShowResizableCorner()` to return false to hide it. Every size requested
+by the host or the corner goes through `getConstrainedSize()`, which applies
+`shouldPreserveAspectRatio()` and `getPreferredAspectRatioSize()`. An editor
+calling `setSize()` on itself resizes the host window as well.
+
 ## Building with CMake
 
 Create a `CMakeLists.txt` file for your plugin:

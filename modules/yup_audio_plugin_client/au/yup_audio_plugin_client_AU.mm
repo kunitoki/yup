@@ -1152,6 +1152,65 @@ private:
 namespace yup
 {
 
+/** The component placed on the desktop for the host view, holding the editor and its resizable corner on top. */
+class AudioPluginEditorAU final
+    : public Component
+    , private ComponentListener
+{
+public:
+    explicit AudioPluginEditorAU (std::unique_ptr<AudioProcessorEditor> editorToWrap)
+        : processorEditor (std::move (editorToWrap))
+    {
+        jassert (processorEditor != nullptr);
+
+        addAndMakeVisible (*processorEditor);
+
+        if (processorEditor->shouldShowResizableCorner())
+        {
+            resizableCorner = std::make_unique<ResizableCorner>();
+            resizableCorner->constrainSize = [this] (Size<float> size)
+            {
+                return processorEditor->getConstrainedSize (size.to<int>()).to<float>();
+            };
+            addAndMakeVisible (*resizableCorner);
+        }
+
+        processorEditor->addComponentListener (this);
+    }
+
+    ~AudioPluginEditorAU() override
+    {
+        processorEditor->removeComponentListener (this);
+        resizableCorner.reset();
+        removeChildComponent (processorEditor.get());
+    }
+
+    AudioProcessorEditor& getEditor() const noexcept { return *processorEditor; }
+
+    void resized() override
+    {
+        processorEditor->setBounds (getLocalBounds());
+    }
+
+    void contentScaleChanged (float dpiScale) override
+    {
+        processorEditor->contentScaleChanged (dpiScale);
+    }
+
+private:
+    void componentResized (Component& component) override
+    {
+        if (component.getSize() != getSize())
+            setSize (component.getSize());
+    }
+
+    std::unique_ptr<AudioProcessorEditor> processorEditor;
+    std::unique_ptr<ResizableCorner> resizableCorner;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginEditorAU)
+};
+
+//==============================================================================
 /** The state behind the NSView handed to the host, which owns it through an ivar.
 
     The NSView class and the view factory class are registered at runtime under unique names, so
@@ -1169,7 +1228,7 @@ public:
 
     ~AudioPluginEditorViewAU() override
     {
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "destroying editor view: view=" << describePointer ((__bridge void*) view) << ", editor=" << describePointer (processorEditor.get()) << ", processor=" << describePointer (processor));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "destroying editor view: view=" << describePointer ((__bridge void*) view) << ", editor=" << describePointer (editorComponent.get()) << ", processor=" << describePointer (processor));
 
         closeEditorIfNeeded();
 
@@ -1190,7 +1249,7 @@ public:
             return;
         }
 
-        processorEditor.reset (processor->createEditor());
+        std::unique_ptr<AudioProcessorEditor> processorEditor (processor->createEditor());
 
         if (processorEditor == nullptr)
         {
@@ -1203,7 +1262,8 @@ public:
 
         [view setAutoresizingMask:processorEditor->isResizable() ? (NSViewWidthSizable | NSViewHeightSizable) : NSViewNotSizable];
 
-        processorEditor->addComponentListener (this);
+        editorComponent = std::make_unique<AudioPluginEditorAU> (std::move (processorEditor));
+        editorComponent->addComponentListener (this);
 
         [view setFrameSize:NSMakeSize (preferredSize.getWidth(), preferredSize.getHeight())];
         resizeEditorToBounds();
@@ -1235,19 +1295,28 @@ public:
 
     void resizeEditorToBounds()
     {
-        if (processorEditor == nullptr)
+        if (editorComponent == nullptr)
             return;
 
         const auto bounds = [view bounds];
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor to bounds: width=" << String (static_cast<double> (NSWidth (bounds))) << ", height=" << String (static_cast<double> (NSHeight (bounds))) << ", editor=" << describePointer (processorEditor.get()));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor to bounds: width=" << String (static_cast<double> (NSWidth (bounds))) << ", height=" << String (static_cast<double> (NSHeight (bounds))) << ", editor=" << describePointer (editorComponent.get()));
 
         const ScopedValueSetter<bool> scoped (resizingEditorToBounds, true);
 
-        processorEditor->setBounds ({ 0.0f,
+        editorComponent->setBounds ({ 0.0f,
                                       0.0f,
                                       jmax (1.0f, static_cast<float> (NSWidth (bounds))),
                                       jmax (1.0f, static_cast<float> (NSHeight (bounds))) });
+    }
+
+    NSSize getConstrainedFrameSize (NSSize size) const
+    {
+        if (editorComponent == nullptr)
+            return size;
+
+        const auto constrained = editorComponent->getEditor().getConstrainedSize ({ static_cast<int> (size.width), static_cast<int> (size.height) });
+        return NSMakeSize (constrained.getWidth(), constrained.getHeight());
     }
 
     void componentResized (Component&) override
@@ -1259,61 +1328,63 @@ public:
 private:
     void attachEditorIfNeeded()
     {
-        if (processorEditor == nullptr)
+        if (editorComponent == nullptr)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "attachEditorIfNeeded skipped: editor is null");
             return;
         }
 
-        if (processorEditor->isOnDesktop())
+        auto& processorEditor = editorComponent->getEditor();
+
+        if (editorComponent->isOnDesktop())
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "attachEditorIfNeeded skipped: editor is already on desktop");
             return;
         }
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "attaching editor to native view: editor=" << describePointer (processorEditor.get()) << ", view=" << describePointer ((__bridge void*) view) << ", window=" << describePointer ((__bridge void*) [view window]));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "attaching editor to native view: editor=" << describePointer (editorComponent.get()) << ", view=" << describePointer ((__bridge void*) view) << ", window=" << describePointer ((__bridge void*) [view window]));
 
         resizeEditorToBounds();
 
         ComponentNative::Flags flags = ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
 
-        if (processorEditor->shouldRenderContinuous())
+        if (processorEditor.shouldRenderContinuous())
             flags.set (ComponentNative::renderContinuous);
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor native options: renderContinuous=" << String (processorEditor->shouldRenderContinuous() ? "true" : "false") << ", resizable=" << String (processorEditor->isResizable() ? "true" : "false"));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor native options: renderContinuous=" << String (processorEditor.shouldRenderContinuous() ? "true" : "false") << ", resizable=" << String (processorEditor.isResizable() ? "true" : "false"));
 
         auto options = ComponentNative::Options()
                            .withFlags (flags)
-                           .withResizableWindow (processorEditor->isResizable());
+                           .withResizableWindow (processorEditor.isResizable());
 
-        processorEditor->addToDesktop (options, (__bridge void*) view);
-        processorEditor->setVisible (true);
-        processorEditor->attachedToNative();
+        editorComponent->addToDesktop (options, (__bridge void*) view);
+        editorComponent->setVisible (true);
+        processorEditor.attachedToNative();
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor attached to native view: isOnDesktop=" << String (processorEditor->isOnDesktop() ? "true" : "false"));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor attached to native view: isOnDesktop=" << String (editorComponent->isOnDesktop() ? "true" : "false"));
     }
 
     void detachEditorIfNeeded()
     {
-        if (processorEditor == nullptr)
+        if (editorComponent == nullptr)
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "detachEditorIfNeeded skipped: editor is null");
             return;
         }
 
-        if (! processorEditor->isOnDesktop())
+        if (! editorComponent->isOnDesktop())
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "detachEditorIfNeeded skipped: editor is not on desktop");
             return;
         }
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "detaching editor from native view: editor=" << describePointer (processorEditor.get()) << ", view=" << describePointer ((__bridge void*) view) << ", window=" << describePointer ((__bridge void*) [view window]));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "detaching editor from native view: editor=" << describePointer (editorComponent.get()) << ", view=" << describePointer ((__bridge void*) view) << ", window=" << describePointer ((__bridge void*) [view window]));
 
         endActiveParameterGestures (processor);
-        processorEditor->setVisible (false);
-        processorEditor->removeFromDesktop();
+        editorComponent->setVisible (false);
+        editorComponent->removeFromDesktop();
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor detached from native view: isOnDesktop=" << String (processorEditor->isOnDesktop() ? "true" : "false"));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor detached from native view: isOnDesktop=" << String (editorComponent->isOnDesktop() ? "true" : "false"));
     }
 
     void closeEditorIfNeeded()
@@ -1322,24 +1393,24 @@ private:
 
         endActiveParameterGestures (processor);
 
-        if (processorEditor != nullptr)
-            processorEditor->removeComponentListener (this);
+        if (editorComponent != nullptr)
+            editorComponent->removeComponentListener (this);
 
-        processorEditor.reset();
+        editorComponent.reset();
     }
 
     void resizeViewToEditorSize()
     {
-        if (processorEditor == nullptr || ! processorEditor->isResizable())
+        if (editorComponent == nullptr || ! editorComponent->getEditor().isResizable())
             return;
 
-        const auto newSize = NSMakeSize (jmax (1.0f, processorEditor->getWidth()),
-                                         jmax (1.0f, processorEditor->getHeight()));
+        const auto newSize = NSMakeSize (jmax (1.0f, editorComponent->getWidth()),
+                                         jmax (1.0f, editorComponent->getHeight()));
 
         if (NSEqualSizes ([view frame].size, newSize))
             return;
 
-        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor view to editor: width=" << String (static_cast<double> (newSize.width)) << ", height=" << String (static_cast<double> (newSize.height)) << ", editor=" << describePointer (processorEditor.get()));
+        YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "resizing editor view to editor: width=" << String (static_cast<double> (newSize.width)) << ", height=" << String (static_cast<double> (newSize.height)) << ", editor=" << describePointer (editorComponent.get()));
 
         // Skip our own override, which would resize the editor back to the view
         ObjCClass<NSView>::sendSuperclassMessage<void> (view, @selector (setFrameSize:), newSize);
@@ -1348,7 +1419,7 @@ private:
     __unsafe_unretained NSView* view = nil;
     AudioPluginProcessorAU* processorWrapper = nullptr;
     AudioProcessor* processor = nullptr;
-    std::unique_ptr<AudioProcessorEditor> processorEditor;
+    std::unique_ptr<AudioPluginEditorAU> editorComponent;
     bool resizingEditorToBounds = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginEditorViewAU)
@@ -1374,9 +1445,14 @@ struct AudioPluginEditorViewAUClass final : public ObjCClass<NSView>
         {
             YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "editor view frame size changed: width=" << String (static_cast<double> (newSize.width)) << ", height=" << String (static_cast<double> (newSize.height)));
 
+            auto* state = getState (self);
+
+            if (state != nullptr)
+                newSize = state->getConstrainedFrameSize (newSize);
+
             sendSuperclassMessage<void> (self, @selector (setFrameSize:), newSize);
 
-            if (auto* state = getState (self))
+            if (state != nullptr)
                 state->resizeEditorToBounds();
         });
 

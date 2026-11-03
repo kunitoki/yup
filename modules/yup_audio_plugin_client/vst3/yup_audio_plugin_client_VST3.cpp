@@ -302,6 +302,7 @@ static void writeMidiBufferToVST3EventList (const MidiBuffer& midiBuffer,
 class AudioPluginEditorViewVST3
     : public Component
     , public Vst::EditorView
+    , private ComponentListener
 {
 public:
     AudioPluginEditorViewVST3 (AudioProcessor* processor, Vst::EditController* controller, ViewRect* size = nullptr)
@@ -329,6 +330,18 @@ public:
             setSize ({ static_cast<float> (preferredSize.getWidth()),
                        static_cast<float> (preferredSize.getHeight()) });
         }
+
+        if (editor->shouldShowResizableCorner())
+        {
+            resizableCorner = std::make_unique<ResizableCorner>();
+            resizableCorner->constrainSize = [this] (Size<float> size)
+            {
+                return editor->getConstrainedSize (size.to<int>()).to<float>();
+            };
+            addAndMakeVisible (*resizableCorner);
+        }
+
+        editor->addComponentListener (this);
     }
 
     ~AudioPluginEditorViewVST3()
@@ -339,6 +352,8 @@ public:
             setVisible (false);
             removeFromDesktop();
 
+            editor->removeComponentListener (this);
+            resizableCorner.reset();
             removeChildComponent (editor.get());
             editor.reset();
         }
@@ -411,8 +426,10 @@ public:
         if (editor == nullptr)
             return kInternalError;
 
-        // TODO
+        if (rect == nullptr)
+            return kInvalidArgument;
 
+        constrainViewRect (*rect);
         return kResultTrue;
     }
 
@@ -423,23 +440,7 @@ public:
 
         if (newSize != nullptr)
         {
-            const auto preferredSize = editor->getPreferredSize();
-
-            if (! editor->isResizable())
-            {
-                newSize->right = newSize->left + preferredSize.getWidth();
-                newSize->bottom = newSize->top + preferredSize.getHeight();
-            }
-            else if (editor->shouldPreserveAspectRatio())
-            {
-                const auto width = newSize->getWidth();
-                const auto height = newSize->getHeight();
-
-                if (preferredSize.getWidth() > preferredSize.getHeight())
-                    newSize->bottom = newSize->top + static_cast<int32> (width * (preferredSize.getHeight() / static_cast<float> (preferredSize.getWidth())));
-                else
-                    newSize->right = newSize->left + static_cast<int32> (height * (preferredSize.getWidth() / static_cast<float> (preferredSize.getHeight())));
-            }
+            constrainViewRect (*newSize);
 
             rect = *newSize;
 
@@ -513,9 +514,24 @@ public:
     }
 
 private:
+    void componentResized (Component& component) override
+    {
+        if (component.getSize() != Component::getSize())
+            setSize (component.getSize());
+    }
+
+    void constrainViewRect (ViewRect& viewRect) const
+    {
+        const auto size = editor->getConstrainedSize ({ viewRect.getWidth(), viewRect.getHeight() });
+
+        viewRect.right = viewRect.left + size.getWidth();
+        viewRect.bottom = viewRect.top + size.getHeight();
+    }
+
     ScopedYupInitialiser_Windowing scopeInitialiser;
     AudioProcessor* processor = nullptr;
     std::unique_ptr<AudioProcessorEditor> editor;
+    std::unique_ptr<ResizableCorner> resizableCorner;
     bool hostTriggeredResizing = false;
 };
 

@@ -23,19 +23,65 @@ namespace yup
 {
 
 //==============================================================================
+/** Base class for audio processor editors.
+
+    This class provides the basic interface and functionality for audio processor editors,
+    including handling resizing, aspect ratio preservation, and continuous rendering.
+    It serves as a base class for creating custom audio processor editors within the YUP framework.
+    Derived classes should implement the pure virtual methods to define their specific behavior.
+    It also provides default implementations for certain behaviors, which can be overridden by
+    derived classes as needed.
+
+    @see AudioProcessor
+*/
 class YUP_API AudioProcessorEditor : public Component
 {
 public:
+    //==============================================================================
+    /** Constructor. */
     AudioProcessorEditor();
+    
+    /** Destructor. */
     virtual ~AudioProcessorEditor();
 
+    //==============================================================================
+    /** Returns whether this editor can be resized by the host or the user. */
     virtual bool isResizable() const = 0;
+
+    /** Returns the preferred size of this editor. */
     virtual Size<int> getPreferredSize() const = 0;
 
+    /** Returns the closest size to the requested one this editor accepts.
+
+        Non resizable editors always return getPreferredSize(). Resizable editors which preserve their aspect
+        ratio grow the requested size to match getPreferredAspectRatioSize(): a request wider than the ratio
+        derives the height from the width, a taller one derives the width from the height.
+
+        @param requestedSize  The size requested by the host or by the user.
+
+        @returns The constrained size.
+    */
+    Size<int> getConstrainedSize (Size<int> requestedSize) const;
+
+    /** Returns whether this editor should preserve its aspect ratio when resized. */
     virtual bool shouldPreserveAspectRatio() const { return false; }
 
+    /** Get the preferred aspect ratio size.
+
+        This is used by resizable editors that want to maintain a specific aspect ratio.
+        By default, it returns the preferred size.
+    */
     virtual Size<int> getPreferredAspectRatioSize() const { return getPreferredSize(); }
 
+    /** Returns whether plugin wrappers should overlay a ResizableCorner on the editor.
+
+        Hosts don't always let users resize plugin windows, so by default resizable editors get a corner
+        handle in the bottom right that drives the size from within the plugin.
+    */
+    virtual bool shouldShowResizableCorner() const { return isResizable(); }
+
+    //==============================================================================
+    /** Returns whether this editor should render continuously. */
     virtual bool shouldRenderContinuous() const { return false; }
 };
 
