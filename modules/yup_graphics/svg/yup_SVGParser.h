@@ -67,6 +67,8 @@ public:
     ///@}
 
 private:
+    static constexpr int maxHrefDepth = 32;
+
     explicit SVGParser (SVGDocument& document);
 
     bool parseDocument (std::unique_ptr<XmlElement> svgRoot);
@@ -76,12 +78,12 @@ private:
     AffineTransform parseTransform (const String& transformString);
     void parseGradient (const XmlElement& element);
     SVGGradient::Ptr getGradientById (const String& id) const;
-    SVGGradient::Ptr resolveGradient (SVGGradient::Ptr gradient) const;
+    SVGGradient::Ptr resolveGradient (SVGGradient::Ptr gradient, int depth = 0) const;
     void parseFilter (const XmlElement& element);
     void parseFEBlend (const XmlElement& element, SVGFilter& filter);
     void parseFEGaussianBlur (const XmlElement& element, SVGFilter& filter);
     SVGFilter::Ptr getFilterById (const String& id) const;
-    SVGFilter::Ptr resolveFilter (SVGFilter::Ptr filter) const;
+    SVGFilter::Ptr resolveFilter (SVGFilter::Ptr filter, int depth = 0) const;
     void parseClipPath (const XmlElement& element);
     SVGClipPath::Ptr getClipPathById (const String& id) const;
     void parseMask (const XmlElement& element);

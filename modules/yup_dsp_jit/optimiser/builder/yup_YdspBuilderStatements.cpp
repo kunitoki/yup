@@ -99,11 +99,14 @@ void YdspIrBuilder::lowerStatement (const YdspStmt& stmt)
             {
                 const auto type = toStorageType (stmt.declType);
 
-                locals[stmt.name] = type == YdspValueType::int32Type   ? emitConstI (0)
-                                  : type == YdspValueType::int64Type   ? emitConstI64 (0)
-                                  : type == YdspValueType::float64Type ? emitConstF64 (0.0)
-                                  : type == YdspValueType::boolType    ? emitConstB (false)
-                                                                       : emitConstF (0.0);
+                const auto zero = type == YdspValueType::int32Type   ? emitConstI (0)
+                                : type == YdspValueType::int64Type   ? emitConstI64 (0)
+                                : type == YdspValueType::float64Type ? emitConstF64 (0.0)
+                                : type == YdspValueType::boolType    ? emitConstB (false)
+                                                                     : emitConstF (0.0);
+                const auto local = newValue (type);
+                emitInst ({ moveOpcodeFor (type), local, zero });
+                locals[stmt.name] = local;
             }
 
             break;
@@ -465,6 +468,9 @@ void YdspIrBuilder::lowerAssignment (const YdspStmt& stmt)
             const auto localType = valueTypes[static_cast<size_t> (it->second)];
             const auto coerced = coerceTo (value, localType);
             emitInst ({ moveOpcodeFor (localType), it->second, coerced });
+            intConstPayloads.erase (it->second);
+            floatConstPayloads.erase (it->second);
+            indexUpperBounds.erase (it->second);
             return;
         }
 

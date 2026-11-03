@@ -116,6 +116,24 @@ BmpImageFormatReader::BmpImageFormatReader (InputStream* stream, const ImageForm
     uint32 colorUsed = readLE32 (*input);
     readLE32 (*input); // colorImportant (unused)
 
+    if (imageWidth == std::numeric_limits<int32>::min() || imageHeight == std::numeric_limits<int32>::min())
+        return;
+
+    if (bitCount != 1 && bitCount != 4 && bitCount != 8 && bitCount != 16 && bitCount != 24 && bitCount != 32)
+        return;
+
+    const auto absWidth = static_cast<uint64> (std::abs (imageWidth));
+    const auto absHeight = static_cast<uint64> (std::abs (imageHeight));
+
+    if (absWidth == 0 || absHeight == 0)
+        return;
+
+    if (((absWidth * bitCount + 31) / 32) * 4 > static_cast<uint64> (std::numeric_limits<int>::max()))
+        return;
+
+    if (absWidth > std::numeric_limits<size_t>::max() / 4 / absHeight)
+        return;
+
     // For V4/V5 headers, skip extra bytes to reach pixel data offset marker.
     if (headerSize > 40)
         input->setPosition (14 + static_cast<int64> (headerSize));
@@ -124,7 +142,7 @@ BmpImageFormatReader::BmpImageFormatReader (InputStream* stream, const ImageForm
 
     if (bitCount <= 8)
     {
-        const uint32 numColors = (colorUsed > 0) ? colorUsed : (1u << bitCount);
+        const uint32 numColors = (colorUsed > 0 && colorUsed < (1u << bitCount)) ? colorUsed : (1u << bitCount);
         palette.resize (numColors);
 
         for (uint32 i = 0; i < numColors; ++i)
@@ -144,8 +162,8 @@ BmpImageFormatReader::BmpImageFormatReader (InputStream* stream, const ImageForm
 
     // --- Populate public fields ---
 
-    width = std::abs (imageWidth);
-    height = std::abs (imageHeight);
+    width = static_cast<int> (absWidth);
+    height = static_cast<int> (absHeight);
     topDown = (imageHeight < 0);
 
     pixelFormat = (bitCount == 32) ? PixelFormat::RGBA : PixelFormat::RGB;
@@ -174,7 +192,11 @@ Image BmpImageFormatReader::readImage()
     Image image (width, height, pixelFormat);
 
     // Row stride is padded to a multiple of 4 bytes.
-    const int stride = ((width * bitCount + 31) / 32) * 4;
+    const auto stride64 = ((static_cast<uint64> (width) * bitCount + 31) / 32) * 4;
+    if (stride64 > static_cast<uint64> (std::numeric_limits<int>::max()))
+        return {};
+
+    const int stride = static_cast<int> (stride64);
 
     // BI_RGB (0) and BI_BITFIELDS (3): uncompressed pixel data.
     if (compression == 0 || compression == 3)
@@ -291,10 +313,10 @@ Image BmpImageFormatReader::readImage()
         // Decode into a flat index buffer (row-major, top-down).
         std::vector<uint8> indexBuffer (static_cast<size_t> (width) * static_cast<size_t> (height), 0);
 
-        int x = 0;
-        int y = 0; // logical row from top
+        int64 x = 0;
+        int64 y = 0; // logical row from top
 
-        const auto clampedSet = [&] (int px, int py, uint8 idx)
+        const auto clampedSet = [&] (int64 px, int64 py, uint8 idx)
         {
             if (px < width && py < height)
                 indexBuffer[static_cast<size_t> (py) * static_cast<size_t> (width)
@@ -374,10 +396,10 @@ Image BmpImageFormatReader::readImage()
         // Decode into a flat index buffer (row-major, top-down).
         std::vector<uint8> indexBuffer (static_cast<size_t> (width) * static_cast<size_t> (height), 0);
 
-        int x = 0;
-        int y = 0;
+        int64 x = 0;
+        int64 y = 0;
 
-        const auto clampedSet = [&] (int px, int py, uint8 idx)
+        const auto clampedSet = [&] (int64 px, int64 py, uint8 idx)
         {
             if (px < width && py < height)
                 indexBuffer[static_cast<size_t> (py) * static_cast<size_t> (width)
@@ -487,9 +509,14 @@ bool BmpImageFormatWriter::writeImage (const Image& image)
     const uint16 bitCount = isRGBA ? 32u : 24u;
 
     // Row stride padded to 4-byte boundary.
-    const int stride = ((w * bitCount + 31) / 32) * 4;
-    const uint32 pixelDataSize = static_cast<uint32> (stride) * static_cast<uint32> (h);
+    const uint64 stride = ((static_cast<uint64> (w) * bitCount + 31) / 32) * 4;
+    const uint64 pixelDataSize64 = stride * static_cast<uint64> (h);
     const uint32 pixelDataOffset = 14u + 40u;
+
+    if (pixelDataSize64 > static_cast<uint64> (std::numeric_limits<uint32>::max() - pixelDataOffset))
+        return false;
+
+    const uint32 pixelDataSize = static_cast<uint32> (pixelDataSize64);
     const uint32 fileSize = pixelDataOffset + pixelDataSize;
 
     // --- BITMAPFILEHEADER (14 bytes) ---
@@ -516,7 +543,7 @@ bool BmpImageFormatWriter::writeImage (const Image& image)
 
     // --- Pixel data (top-to-bottom, left-to-right) ---
 
-    const int paddingBytes = stride - w * (bitCount / 8);
+    const int paddingBytes = static_cast<int> (stride - static_cast<uint64> (w) * (bitCount / 8));
 
     for (int y = 0; y < h; ++y)
     {

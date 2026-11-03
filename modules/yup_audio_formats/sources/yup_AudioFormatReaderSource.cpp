@@ -62,6 +62,11 @@ void AudioFormatReaderSource::setNextReadPosition (int64 newPosition)
 
 int64 AudioFormatReaderSource::getNextReadPosition() const
 {
+    const auto totalLength = getTotalLength();
+
+    if (looping && totalLength > 0)
+        return nextReadPosition % totalLength;
+
     return nextReadPosition;
 }
 
@@ -95,76 +100,60 @@ void AudioFormatReaderSource::getNextAudioBlock (const AudioSourceChannelInfo& b
 
     const auto totalLength = getTotalLength();
 
-    if (totalLength > 0)
+    if (totalLength <= 0)
     {
-        auto samplesAvailable = totalLength - nextReadPosition;
+        bufferToFill.clearActiveBufferRegion();
+        return;
+    }
 
-        if (samplesAvailable < bufferToFill.numSamples)
+    if (looping)
+    {
+        auto position = nextReadPosition % totalLength;
+        int destOffset = 0;
+
+        while (destOffset < bufferToFill.numSamples)
         {
-            if (looping)
-            {
-                auto samplesNeeded = bufferToFill.numSamples;
-                auto firstChunk = static_cast<int> (samplesAvailable);
-                auto secondChunk = samplesNeeded - firstChunk;
+            const auto numToRead = static_cast<int> (jmin (static_cast<int64> (bufferToFill.numSamples - destOffset), totalLength - position));
 
-                // Read first chunk from the end of the file
-                if (firstChunk > 0)
-                {
-                    reader->read (bufferToFill.buffer,
-                                  bufferToFill.startSample,
-                                  firstChunk,
-                                  nextReadPosition,
-                                  true,
-                                  true);
-                }
-
-                // Read second chunk from the beginning of the file
-                if (secondChunk > 0)
-                {
-                    reader->read (bufferToFill.buffer,
-                                  bufferToFill.startSample + firstChunk,
-                                  secondChunk,
-                                  0,
-                                  true,
-                                  true);
-                }
-
-                nextReadPosition = secondChunk;
-            }
-            else
-            {
-                // Read what's left and clear the rest
-                auto numToRead = static_cast<int> (samplesAvailable);
-
-                reader->read (bufferToFill.buffer,
-                              bufferToFill.startSample,
-                              numToRead,
-                              nextReadPosition,
-                              true,
-                              true);
-
-                bufferToFill.buffer->clear (bufferToFill.startSample + numToRead,
-                                            bufferToFill.numSamples - numToRead);
-
-                nextReadPosition = totalLength;
-            }
-        }
-        else
-        {
             reader->read (bufferToFill.buffer,
-                          bufferToFill.startSample,
-                          bufferToFill.numSamples,
-                          nextReadPosition,
+                          bufferToFill.startSample + destOffset,
+                          numToRead,
+                          position,
                           true,
                           true);
 
-            nextReadPosition += bufferToFill.numSamples;
+            destOffset += numToRead;
+            position += numToRead;
+
+            if (position >= totalLength)
+                position = 0;
         }
+
+        nextReadPosition = position;
+        return;
     }
-    else
+
+    const auto numToRead = static_cast<int> (jlimit (static_cast<int64> (0),
+                                                     static_cast<int64> (bufferToFill.numSamples),
+                                                     totalLength - nextReadPosition));
+
+    if (numToRead > 0)
     {
-        bufferToFill.clearActiveBufferRegion();
+        reader->read (bufferToFill.buffer,
+                      bufferToFill.startSample,
+                      numToRead,
+                      nextReadPosition,
+                      true,
+                      true);
     }
+
+    if (numToRead < bufferToFill.numSamples)
+    {
+        bufferToFill.buffer->clear (bufferToFill.startSample + numToRead,
+                                    bufferToFill.numSamples - numToRead);
+    }
+
+    nextReadPosition = jmin (nextReadPosition + bufferToFill.numSamples, totalLength);
 }
 
 } // namespace yup

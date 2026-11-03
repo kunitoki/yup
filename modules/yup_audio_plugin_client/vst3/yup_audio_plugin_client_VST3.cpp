@@ -91,10 +91,19 @@ void toString128 (const String& source, Vst::String128 destination)
         return;
     }
 
-    // Convert UTF-8 to UTF-16
-    CharPointer_UTF16 utf16 (source.toUTF16());
-    const size_t length = std::min (static_cast<size_t> (sizeof (Vst::String128) - 1), utf16.length());
-    std::memcpy (destination, utf16.getAddress(), length * sizeof (Vst::TChar));
+    constexpr size_t capacity = sizeof (Vst::String128) / sizeof (Vst::TChar) - 1;
+
+    const CharPointer_UTF16 utf16 (source.toUTF16());
+    const auto* units = utf16.getAddress();
+
+    size_t length = 0;
+    while (length < capacity && units[length] != 0)
+        ++length;
+
+    if (length == capacity && units[length] != 0 && (units[length - 1] & 0xfc00) == 0xd800)
+        --length;
+
+    std::memcpy (destination, units, length * sizeof (Vst::TChar));
     destination[length] = 0;
 }
 
@@ -812,7 +821,7 @@ public:
             return kResultFalse;
 
         const auto parameters = processor->getParameters();
-        if (midiControllerNumber < static_cast<int32> (parameters.size()))
+        if (busIndex == 0 && isPositiveAndBelow (static_cast<int> (midiControllerNumber), static_cast<int> (parameters.size())))
         {
             id = getVST3ParameterID (parameters[static_cast<int> (midiControllerNumber)]);
             return kResultOk;
@@ -1456,6 +1465,8 @@ public:
             processor->setOfflineProcessing ((processContext.state & Vst::kOfflineProcessing) != 0);
         }
 
+        const int32 lastSampleOffset = jmax (0, data.numSamples - 1);
+
         // --- Process Parameters ---
         bool bypassed = isBypassed;
         paramChangeBuffer.clear();
@@ -1506,7 +1517,7 @@ public:
                                                                  paramChangeBuffer,
                                                                  static_cast<uint32> (tag),
                                                                  static_cast<float> (value),
-                                                                 sampleOffset);
+                                                                 jlimit (0, lastSampleOffset, sampleOffset));
                     }
                 }
             }
@@ -1533,33 +1544,33 @@ public:
                         midiBuffer.addEvent (MidiMessage::noteOn (e.noteOn.channel + 1,
                                                                   e.noteOn.pitch,
                                                                   static_cast<uint8> (e.noteOn.velocity * 127.0f)),
-                                             e.sampleOffset);
+                                             jlimit (0, lastSampleOffset, e.sampleOffset));
                         break;
 
                     case Vst::Event::kNoteOffEvent:
                         midiBuffer.addEvent (MidiMessage::noteOff (e.noteOff.channel + 1,
                                                                    e.noteOff.pitch,
                                                                    static_cast<uint8> (e.noteOff.velocity * 127.0f)),
-                                             e.sampleOffset);
+                                             jlimit (0, lastSampleOffset, e.sampleOffset));
                         break;
 
                     case Vst::Event::kPolyPressureEvent:
                         midiBuffer.addEvent (MidiMessage::aftertouchChange (e.polyPressure.channel + 1,
                                                                             e.polyPressure.pitch,
                                                                             static_cast<int> (e.polyPressure.pressure * 127.0f)),
-                                             e.sampleOffset);
+                                             jlimit (0, lastSampleOffset, e.sampleOffset));
                         break;
 
                     case Vst::Event::kLegacyMIDICCOutEvent:
                         midiBuffer.addEvent (MidiMessage::controllerEvent (e.midiCCOut.channel + 1,
                                                                            e.midiCCOut.controlNumber,
                                                                            e.midiCCOut.value),
-                                             e.sampleOffset);
+                                             jlimit (0, lastSampleOffset, e.sampleOffset));
                         break;
 
                     case Vst::Event::kDataEvent:
                         if (e.data.type == Vst::DataEvent::kMidiSysEx)
-                            midiBuffer.addEvent (e.data.bytes, static_cast<int> (e.data.size), e.sampleOffset);
+                            midiBuffer.addEvent (e.data.bytes, static_cast<int> (e.data.size), jlimit (0, lastSampleOffset, e.sampleOffset));
                         break;
 
                     default:
@@ -1786,7 +1797,7 @@ DEF_CLASS2 (
     PClassInfo::kManyInstances, // Supports multiple instances
     kVstAudioEffectClass,       // Component category (do not change this)
     YupPlugin_Name,             // Plugin name
-    Vst::kDistributable,        // Distribution status
+    0,                          // Not distributable: controller shares the processor instance
     yup::YupPlugin_Category,    // Subcategory
     YupPlugin_Version,          // Plugin version
     kVstVersionString,          // The VST 3 SDK version (do not change this, always use this define)

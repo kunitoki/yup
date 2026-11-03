@@ -268,19 +268,19 @@ static bool hasSymbolicPart (const File& root, const File& f)
     return false;
 }
 
-static bool isSymlinkTargetContained (const File& root, const File& link, const String& linkTarget)
+static bool isSymlinkTargetContained (const File& root, const File& link, const String& linkTarget, bool parentIsSymbolic)
 {
     if (linkTarget.isEmpty() || File::isAbsolutePath (linkTarget))
         return false;
 
-    // ".." after a named component could climb out of a previously extracted symlink
+    // ".." after a named component, or below a symlinked parent, could climb out through a symlink
     bool seenNamedComponent = false;
 
     for (const auto& component : StringArray::fromTokens (linkTarget, File::getSeparatorString(), {}))
     {
         if (component == "..")
         {
-            if (seenNamedComponent)
+            if (parentIsSymbolic || seenNamedComponent)
                 return false;
         }
         else if (component.isNotEmpty() && component != ".")
@@ -289,7 +289,20 @@ static bool isSymlinkTargetContained (const File& root, const File& link, const 
         }
     }
 
-    return link.getParentDirectory().getChildFile (linkTarget).isAChildOf (root);
+    const auto resolved = link.getParentDirectory().getChildFile (linkTarget);
+    return resolved == root || resolved.isAChildOf (root);
+}
+
+static Result copyEntryData (InputStream& in, OutputStream& out, int64 declaredSize, const String& entryPath)
+{
+    out.writeFromInputStream (in, declaredSize);
+
+    char extra = 0;
+
+    if (in.read (&extra, 1) > 0)
+        return Result::fail ("Entry " + entryPath + " holds more data than the archive's central directory declares");
+
+    return Result::ok();
 }
 
 //==============================================================================
@@ -608,7 +621,9 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
     if (! targetFile.isAChildOf (targetDirectory))
         return Result::fail ("Entry " + entryPath + " is outside the target directory");
 
-    if (followSymlinks == FollowSymlinks::no && hasSymbolicPart (targetDirectory, targetFile))
+    const auto parentIsSymbolic = hasSymbolicPart (targetDirectory, targetFile.getParentDirectory());
+
+    if (followSymlinks == FollowSymlinks::no && (parentIsSymbolic || targetFile.isSymbolicLink()))
         return Result::fail ("Parent directory leads through symlink for target file: " + targetFile.getFullPathName());
 
     if (entryPath.endsWithChar ('/') || entryPath.endsWithChar ('\\'))
@@ -623,9 +638,14 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
 
     if (zei->entry.isSymbolicLink)
     {
-        linkTargetPath = in->readEntireStreamAsString().replaceCharacter (L'/', File::getSeparatorChar());
+        MemoryOutputStream linkText;
 
-        if (followSymlinks == FollowSymlinks::no && ! isSymlinkTargetContained (targetDirectory, targetFile, linkTargetPath))
+        if (auto result = copyEntryData (*in, linkText, zei->entry.uncompressedSize, entryPath); result.failed())
+            return result;
+
+        linkTargetPath = linkText.toString().replaceCharacter (L'/', File::getSeparatorChar());
+
+        if (! isSymlinkTargetContained (targetDirectory, targetFile, linkTargetPath, parentIsSymbolic))
             return Result::fail ("Symbolic link " + entryPath + " points outside the target directory: " + linkTargetPath);
     }
 
@@ -648,12 +668,25 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
     }
     else
     {
-        FileOutputStream out (targetFile);
+        const auto writeResult = [&]
+        {
+            FileOutputStream out (targetFile);
 
-        if (out.failedToOpen())
-            return Result::fail ("Failed to write to target file: " + targetFile.getFullPathName());
+            if (out.failedToOpen())
+                return Result::fail ("Failed to write to target file: " + targetFile.getFullPathName());
 
-        out << *in;
+            if (auto result = copyEntryData (*in, out, zei->entry.uncompressedSize, entryPath); result.failed())
+                return result;
+
+            out.flush();
+            return out.getStatus();
+        }();
+
+        if (writeResult.failed())
+        {
+            targetFile.deleteFile();
+            return writeResult;
+        }
     }
 
     targetFile.setCreationTime (zei->entry.fileTime);

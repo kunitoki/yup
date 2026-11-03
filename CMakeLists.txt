@@ -123,7 +123,8 @@ if (YUP_BUILD_EXAMPLES AND NOT YUP_BUILD_WHEEL)
     endif()
 endif()
 
-if (YUP_BUILD_TESTS AND NOT YUP_PLATFORM_MOBILE)
+# The gradle generation pass only prepares example projects, Android tests configure with the NDK toolchain
+if (YUP_BUILD_TESTS AND NOT YUP_TARGET_ANDROID)
     _yup_message (STATUS "Building tests")
     add_subdirectory (tests)
 endif()

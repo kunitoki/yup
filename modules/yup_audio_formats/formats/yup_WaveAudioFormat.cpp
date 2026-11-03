@@ -40,6 +40,8 @@ public:
                       int64 startSampleInFile,
                       int numSamples) override;
 
+    bool hasValidFormat() const;
+
 private:
     static size_t readCallback (void* pUserData, void* pBufferOut, size_t bytesToRead)
     {
@@ -90,31 +92,61 @@ WaveAudioFormatReader::WaveAudioFormatReader (InputStream* sourceStream)
         numChannels = (int) wav.channels;
         usesFloatingPointData = wav.translatedFormatTag == DR_WAVE_FORMAT_IEEE_FLOAT;
 
+        // dr_wav copies info text verbatim, so it is not guaranteed to be null terminated
+        const auto infoText = [] (const drwav_metadata& metadata)
+        {
+            const auto numBytes = jmin ((drwav_uint64) metadata.data.infoText.stringLength + 1, (drwav_uint64) (std::numeric_limits<int>::max)());
+            return String::fromUTF8 (metadata.data.infoText.pString, (int) numBytes);
+        };
+
         // Extract metadata
         for (drwav_uint32 i = 0; i < wav.metadataCount; ++i)
         {
             auto& metadata = wav.pMetadata[i];
 
             if (metadata.type == drwav_metadata_type_list_info_title && metadata.data.infoText.pString)
-                metadataValues.set ("title", String::fromUTF8 (metadata.data.infoText.pString));
+                metadataValues.set ("title", infoText (metadata));
             else if (metadata.type == drwav_metadata_type_list_info_artist && metadata.data.infoText.pString)
-                metadataValues.set ("artist", String::fromUTF8 (metadata.data.infoText.pString));
+                metadataValues.set ("artist", infoText (metadata));
             else if (metadata.type == drwav_metadata_type_list_info_album && metadata.data.infoText.pString)
-                metadataValues.set ("album", String::fromUTF8 (metadata.data.infoText.pString));
+                metadataValues.set ("album", infoText (metadata));
             else if (metadata.type == drwav_metadata_type_list_info_date && metadata.data.infoText.pString)
-                metadataValues.set ("year", String::fromUTF8 (metadata.data.infoText.pString));
+                metadataValues.set ("year", infoText (metadata));
             else if (metadata.type == drwav_metadata_type_list_info_genre && metadata.data.infoText.pString)
-                metadataValues.set ("genre", String::fromUTF8 (metadata.data.infoText.pString));
+                metadataValues.set ("genre", infoText (metadata));
             else if (metadata.type == drwav_metadata_type_list_info_comment && metadata.data.infoText.pString)
-                metadataValues.set ("comment", String::fromUTF8 (metadata.data.infoText.pString));
+                metadataValues.set ("comment", infoText (metadata));
             else if (metadata.type == drwav_metadata_type_list_info_tracknumber && metadata.data.infoText.pString)
-                metadataValues.set ("tracknumber", String::fromUTF8 (metadata.data.infoText.pString));
+                metadataValues.set ("tracknumber", infoText (metadata));
         }
 
         // Allocate temp buffer for reading
         const auto bytesPerFrame = numChannels * (bitsPerSample / 8);
         tempBufferSize = bytesPerFrame * 4096;
         tempBuffer.allocate (tempBufferSize, true);
+    }
+}
+
+bool WaveAudioFormatReader::hasValidFormat() const
+{
+    if (! isOpen || sampleRate <= 0 || numChannels <= 0)
+        return false;
+
+    // readSamples sizes its buffers from numChannels and bitsPerSample, so the frame size must match
+    switch (wav.translatedFormatTag)
+    {
+        case DR_WAVE_FORMAT_ALAW:
+        case DR_WAVE_FORMAT_MULAW:
+            return true;
+
+        case DR_WAVE_FORMAT_PCM:
+            return bitsPerSample == 8 || bitsPerSample == 16 || bitsPerSample == 24 || bitsPerSample == 32;
+
+        case DR_WAVE_FORMAT_IEEE_FLOAT:
+            return bitsPerSample == 32 || bitsPerSample == 64;
+
+        default:
+            return false;
     }
 }
 
@@ -150,7 +182,7 @@ bool WaveAudioFormatReader::readSamples (float* const* destChannels,
 
     for (int ch = 0; ch < numDestChannels; ++ch)
     {
-        offsetDestChannels[ch] = destChannels[ch] + startOffsetInDestBuffer;
+        offsetDestChannels[ch] = destChannels[ch] != nullptr ? destChannels[ch] + startOffsetInDestBuffer : nullptr;
     }
 
     drwav_uint64 framesRead;
@@ -384,7 +416,7 @@ bool WaveAudioFormatWriter::write (const float* const* samplesToWrite, int numSa
     const auto numChannels = getNumChannels();
     const auto bytesPerSample = getBitsPerSample() / 8;
     const auto bytesPerFrame = numChannels * bytesPerSample;
-    const auto bytesToWrite = numSamples * bytesPerFrame;
+    const auto bytesToWrite = (size_t) numSamples * (size_t) bytesPerFrame;
 
     if (bytesToWrite > tempBufferSize)
     {
@@ -500,7 +532,7 @@ std::unique_ptr<AudioFormatReader> WaveAudioFormat::createReaderFor (InputStream
 {
     auto reader = std::make_unique<WaveAudioFormatReader> (sourceStream);
 
-    if (reader->sampleRate > 0 && reader->numChannels > 0)
+    if (reader->hasValidFormat())
         return reader;
 
     return nullptr;
@@ -517,7 +549,7 @@ std::unique_ptr<AudioFormatWriter> WaveAudioFormat::createWriterFor (OutputStrea
         return nullptr;
 
     // Check supported configurations
-    if (numberOfChannels == 0 || numberOfChannels > 64)
+    if (numberOfChannels <= 0 || numberOfChannels > 64)
         return nullptr;
 
     if (sampleRate <= 0 || sampleRate > 192000)

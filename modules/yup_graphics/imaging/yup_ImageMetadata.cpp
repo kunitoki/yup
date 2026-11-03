@@ -120,14 +120,22 @@ static uint32 read32 (const uint8* data, bool bigEndian)
              : static_cast<uint32> (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
 }
 
-static String readExifString (const uint8* tiffBase, const uint8* data, uint32 length, bool bigEndian)
+static bool isRangeValid (size_t offset, size_t length, size_t size)
 {
-    if (data == nullptr || length == 0)
+    return offset <= size && length <= size - offset;
+}
+
+static String readExifString (const uint8* tiffBase, size_t size, const uint8* data, uint32 length, bool bigEndian)
+{
+    if (data == nullptr || length == 0 || length > static_cast<uint32> (std::numeric_limits<int>::max()))
         return {};
 
     if (length > 4)
     {
         auto offset = read32 (data, bigEndian);
+        if (! isRangeValid (offset, length, size))
+            return {};
+
         return String::createStringFromData (reinterpret_cast<const char*> (tiffBase + offset),
                                              static_cast<int> (length));
     }
@@ -177,10 +185,16 @@ struct IFDEntry
     const uint8* data; // points to the 4-byte value/offset field
 };
 
-static void walkIFD (const uint8* tiffBase, const uint8* ifdStart, bool bigEndian, std::function<void (const IFDEntry&)> callback)
+static void walkIFD (const uint8* tiffBase, size_t size, size_t ifdOffset, bool bigEndian, std::function<void (const IFDEntry&)> callback)
 {
-    auto numEntries = read16 (ifdStart, bigEndian);
-    auto* entry = ifdStart + 2;
+    if (tiffBase == nullptr || ! isRangeValid (ifdOffset, 2, size))
+        return;
+
+    auto numEntries = read16 (tiffBase + ifdOffset, bigEndian);
+    if (! isRangeValid (ifdOffset + 2, static_cast<size_t> (numEntries) * 12, size))
+        return;
+
+    auto* entry = tiffBase + ifdOffset + 2;
 
     for (uint16 i = 0; i < numEntries; ++i, entry += 12)
     {
@@ -193,24 +207,25 @@ static void walkIFD (const uint8* tiffBase, const uint8* ifdStart, bool bigEndia
     }
 }
 
-static const uint8* resolvePointer (const uint8* tiffBase, const uint8* data, bool bigEndian)
+static String readAsciiValue (const uint8* tiffBase, size_t size, const IFDEntry& e, bool bigEndian)
 {
-    if (data == nullptr)
-        return nullptr;
-
-    auto offset = read32 (data, bigEndian);
-    return tiffBase + offset;
+    return readExifString (tiffBase, size, e.data, e.count, bigEndian);
 }
 
-static String readAsciiValue (const uint8* tiffBase, const IFDEntry& e, bool bigEndian)
+static bool readGPSCoordinate (const uint8* tiffBase, size_t size, const IFDEntry& e, bool bigEndian, double& result)
 {
-    return readExifString (tiffBase, e.data, e.count, bigEndian);
-}
+    if (e.type != RATIONAL || e.count < 3)
+        return false;
 
-static double readGPSRational (const uint8* tiffBase, const uint8* data, bool bigEndian)
-{
-    auto offset = read32 (data, bigEndian);
-    return readExifRational (tiffBase, tiffBase + offset, bigEndian);
+    auto offset = read32 (e.data, bigEndian);
+    if (! isRangeValid (offset, 24, size))
+        return false;
+
+    auto deg = readExifRational (tiffBase, tiffBase + offset, bigEndian);
+    auto min = readExifRational (tiffBase, tiffBase + offset + 8, bigEndian);
+    auto sec = readExifRational (tiffBase, tiffBase + offset + 16, bigEndian);
+    result = deg + min / 60.0 + sec / 3600.0;
+    return true;
 }
 } // namespace ExifIfd
 
@@ -226,11 +241,11 @@ int ImageMetadata::getOrientation() const
 
     // Read TIFF header offset to first IFD
     auto ifdOffset = ExifIfd::read32 (data + 4, bigEndian);
-    if (ifdOffset + 2 > size)
+    if (! ExifIfd::isRangeValid (ifdOffset, 2, size))
         return 0;
 
     int orientation = 0;
-    ExifIfd::walkIFD (data, data + ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
+    ExifIfd::walkIFD (data, size, ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
     {
         if (e.tag == ExifIfd::Orientation && e.type == ExifIfd::SHORT)
             orientation = ExifIfd::read16 (e.data, bigEndian);
@@ -248,14 +263,14 @@ String ImageMetadata::getCreationDate() const
 
     bool bigEndian = (data[0] == 'M' && data[1] == 'M');
     auto ifdOffset = ExifIfd::read32 (data + 4, bigEndian);
-    if (ifdOffset + 2 > size)
+    if (! ExifIfd::isRangeValid (ifdOffset, 2, size))
         return {};
 
     String result;
-    ExifIfd::walkIFD (data, data + ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
+    ExifIfd::walkIFD (data, size, ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
     {
         if (e.tag == ExifIfd::DateTime && e.type == ExifIfd::ASCII)
-            result = ExifIfd::readAsciiValue (data, e, bigEndian);
+            result = ExifIfd::readAsciiValue (data, size, e, bigEndian);
     });
 
     return result;
@@ -270,14 +285,14 @@ String ImageMetadata::getCameraMake() const
 
     bool bigEndian = (data[0] == 'M' && data[1] == 'M');
     auto ifdOffset = ExifIfd::read32 (data + 4, bigEndian);
-    if (ifdOffset + 2 > size)
+    if (! ExifIfd::isRangeValid (ifdOffset, 2, size))
         return {};
 
     String result;
-    ExifIfd::walkIFD (data, data + ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
+    ExifIfd::walkIFD (data, size, ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
     {
         if (e.tag == ExifIfd::Make && e.type == ExifIfd::ASCII)
-            result = ExifIfd::readAsciiValue (data, e, bigEndian);
+            result = ExifIfd::readAsciiValue (data, size, e, bigEndian);
     });
 
     return result;
@@ -292,14 +307,14 @@ String ImageMetadata::getCameraModel() const
 
     bool bigEndian = (data[0] == 'M' && data[1] == 'M');
     auto ifdOffset = ExifIfd::read32 (data + 4, bigEndian);
-    if (ifdOffset + 2 > size)
+    if (! ExifIfd::isRangeValid (ifdOffset, 2, size))
         return {};
 
     String result;
-    ExifIfd::walkIFD (data, data + ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
+    ExifIfd::walkIFD (data, size, ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
     {
         if (e.tag == ExifIfd::Model && e.type == ExifIfd::ASCII)
-            result = ExifIfd::readAsciiValue (data, e, bigEndian);
+            result = ExifIfd::readAsciiValue (data, size, e, bigEndian);
     });
 
     return result;
@@ -314,14 +329,14 @@ String ImageMetadata::getImageDescription() const
 
     bool bigEndian = (data[0] == 'M' && data[1] == 'M');
     auto ifdOffset = ExifIfd::read32 (data + 4, bigEndian);
-    if (ifdOffset + 2 > size)
+    if (! ExifIfd::isRangeValid (ifdOffset, 2, size))
         return {};
 
     String result;
-    ExifIfd::walkIFD (data, data + ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
+    ExifIfd::walkIFD (data, size, ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
     {
         if (e.tag == ExifIfd::ImageDescription && e.type == ExifIfd::ASCII)
-            result = ExifIfd::readAsciiValue (data, e, bigEndian);
+            result = ExifIfd::readAsciiValue (data, size, e, bigEndian);
     });
 
     return result;
@@ -336,14 +351,14 @@ String ImageMetadata::getCopyright() const
 
     bool bigEndian = (data[0] == 'M' && data[1] == 'M');
     auto ifdOffset = ExifIfd::read32 (data + 4, bigEndian);
-    if (ifdOffset + 2 > size)
+    if (! ExifIfd::isRangeValid (ifdOffset, 2, size))
         return {};
 
     String result;
-    ExifIfd::walkIFD (data, data + ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
+    ExifIfd::walkIFD (data, size, ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
     {
         if (e.tag == ExifIfd::Copyright && e.type == ExifIfd::ASCII)
-            result = ExifIfd::readAsciiValue (data, e, bigEndian);
+            result = ExifIfd::readAsciiValue (data, size, e, bigEndian);
     });
 
     return result;
@@ -358,14 +373,14 @@ String ImageMetadata::getSoftware() const
 
     bool bigEndian = (data[0] == 'M' && data[1] == 'M');
     auto ifdOffset = ExifIfd::read32 (data + 4, bigEndian);
-    if (ifdOffset + 2 > size)
+    if (! ExifIfd::isRangeValid (ifdOffset, 2, size))
         return {};
 
     String result;
-    ExifIfd::walkIFD (data, data + ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
+    ExifIfd::walkIFD (data, size, ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
     {
         if (e.tag == ExifIfd::Software && e.type == ExifIfd::ASCII)
-            result = ExifIfd::readAsciiValue (data, e, bigEndian);
+            result = ExifIfd::readAsciiValue (data, size, e, bigEndian);
     });
 
     return result;
@@ -380,7 +395,7 @@ std::pair<double, double> ImageMetadata::getGpsCoordinates() const
 
     bool bigEndian = (data[0] == 'M' && data[1] == 'M');
     auto ifdOffset = ExifIfd::read32 (data + 4, bigEndian);
-    if (ifdOffset + 2 > size)
+    if (! ExifIfd::isRangeValid (ifdOffset, 2, size))
         return { 0.0, 0.0 };
 
     double lat = 0.0, lon = 0.0;
@@ -388,18 +403,18 @@ std::pair<double, double> ImageMetadata::getGpsCoordinates() const
     double latRef = 1.0, lonRef = 1.0;
 
     // Walk IFD0 for GPS IFD pointer
-    const uint8* gpsIfd = nullptr;
-    ExifIfd::walkIFD (data, data + ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
+    std::optional<uint32> gpsIfdOffset;
+    ExifIfd::walkIFD (data, size, ifdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
     {
         if (e.tag == ExifIfd::GPSIFDPointer && e.type == ExifIfd::LONG)
-            gpsIfd = ExifIfd::resolvePointer (data, e.data, bigEndian);
+            gpsIfdOffset = ExifIfd::read32 (e.data, bigEndian);
     });
 
-    if (gpsIfd == nullptr)
+    if (! gpsIfdOffset.has_value())
         return { 0.0, 0.0 };
 
     // Walk GPS IFD
-    ExifIfd::walkIFD (data, gpsIfd, bigEndian, [&] (const ExifIfd::IFDEntry& e)
+    ExifIfd::walkIFD (data, size, *gpsIfdOffset, bigEndian, [&] (const ExifIfd::IFDEntry& e)
     {
         switch (e.tag)
         {
@@ -414,27 +429,13 @@ std::pair<double, double> ImageMetadata::getGpsCoordinates() const
                 break;
 
             case ExifIfd::GPSLatitude:
-                if (e.type == ExifIfd::RATIONAL && e.count >= 3)
-                {
-                    auto offset = ExifIfd::read32 (e.data, bigEndian);
-                    auto deg = ExifIfd::readExifRational (data, data + offset, bigEndian);
-                    auto min = ExifIfd::readExifRational (data, data + offset + 8, bigEndian);
-                    auto sec = ExifIfd::readExifRational (data, data + offset + 16, bigEndian);
-                    lat = deg + min / 60.0 + sec / 3600.0;
+                if (ExifIfd::readGPSCoordinate (data, size, e, bigEndian, lat))
                     hasLat = true;
-                }
                 break;
 
             case ExifIfd::GPSLongitude:
-                if (e.type == ExifIfd::RATIONAL && e.count >= 3)
-                {
-                    auto offset = ExifIfd::read32 (e.data, bigEndian);
-                    auto deg = ExifIfd::readExifRational (data, data + offset, bigEndian);
-                    auto min = ExifIfd::readExifRational (data, data + offset + 8, bigEndian);
-                    auto sec = ExifIfd::readExifRational (data, data + offset + 16, bigEndian);
-                    lon = deg + min / 60.0 + sec / 3600.0;
+                if (ExifIfd::readGPSCoordinate (data, size, e, bigEndian, lon))
                     hasLon = true;
-                }
                 break;
         }
     });

@@ -36,7 +36,10 @@ namespace
 static void pngReadCallback (png_structp pngPtr, png_bytep data, png_size_t length)
 {
     auto* stream = static_cast<InputStream*> (png_get_io_ptr (pngPtr));
-    stream->read (data, static_cast<int> (length));
+
+    if (length > static_cast<png_size_t> (std::numeric_limits<int>::max())
+        || stream->read (data, static_cast<int> (length)) != static_cast<int> (length))
+        png_error (pngPtr, "Read Error");
 }
 
 static void pngWriteCallback (png_structp pngPtr, png_bytep data, png_size_t length)
@@ -64,13 +67,12 @@ struct MemoryReadState
 static void memoryReadCallback (png_structp pngPtr, png_bytep data, png_size_t length)
 {
     auto* state = static_cast<MemoryReadState*> (png_get_io_ptr (pngPtr));
-    const size_t remaining = state->size - state->pos;
-    const size_t toRead = std::min (static_cast<size_t> (length), remaining);
-    std::memcpy (data, state->data + state->pos, toRead);
-    state->pos += toRead;
 
-    if (toRead < static_cast<size_t> (length))
-        std::memset (data + toRead, 0, static_cast<size_t> (length) - toRead);
+    if (static_cast<size_t> (length) > state->size - state->pos)
+        png_error (pngPtr, "Read Error");
+
+    std::memcpy (data, state->data + state->pos, static_cast<size_t> (length));
+    state->pos += static_cast<size_t> (length);
 }
 
 struct MemoryWriteState
@@ -94,6 +96,17 @@ static uint32_t readBE32 (const uint8_t* p)
          | (static_cast<uint32_t> (p[1]) << 16)
          | (static_cast<uint32_t> (p[2]) << 8)
          | static_cast<uint32_t> (p[3]);
+}
+
+static bool isValidImageSize (uint32_t w, uint32_t h)
+{
+    constexpr auto maxDimension = static_cast<uint32_t> (std::numeric_limits<int>::max());
+
+    if (w == 0 || h == 0 || w > maxDimension || h > maxDimension)
+        return false;
+
+    constexpr size_t bytesPerPixel = 4;
+    return static_cast<size_t> (w) <= std::numeric_limits<size_t>::max() / bytesPerPixel / static_cast<size_t> (h);
 }
 
 static uint16_t readBE16 (const uint8_t* p)
@@ -221,8 +234,17 @@ void PngImageFormatReader::parseHeader()
     png_set_read_fn (pngPtr, input.get(), pngReadCallback);
     png_read_info (pngPtr, infoPtr);
 
-    width = static_cast<int> (png_get_image_width (pngPtr, infoPtr));
-    height = static_cast<int> (png_get_image_height (pngPtr, infoPtr));
+    const auto imageWidth = png_get_image_width (pngPtr, infoPtr);
+    const auto imageHeight = png_get_image_height (pngPtr, infoPtr);
+
+    if (! isValidImageSize (imageWidth, imageHeight))
+    {
+        png_destroy_read_struct (&pngPtr, &infoPtr, nullptr);
+        return;
+    }
+
+    width = static_cast<int> (imageWidth);
+    height = static_cast<int> (imageHeight);
 
     auto colorType = png_get_color_type (pngPtr, infoPtr);
     auto bitDepth = png_get_bit_depth (pngPtr, infoPtr);
@@ -428,7 +450,7 @@ void PngImageFormatReader::parseChunks()
 
     isApng = true;
     loopCount = static_cast<int> (numPlays);
-    frames.reserve (numFrames);
+    frames.reserve (jmin (static_cast<size_t> (numFrames), fileData.size() / 38)); // fcTL chunk is 38 bytes
 
     // Second pass: collect frame data
     pos = 8;
@@ -452,15 +474,30 @@ void PngImageFormatReader::parseChunks()
 
         if (std::memcmp (type, "fcTL", 4) == 0 && chunkLen >= 26)
         {
+            // Skip sequence_number (4 bytes)
+            const auto frameWidth = readBE32 (chunkData + 4);
+            const auto frameHeight = readBE32 (chunkData + 8);
+            const auto xOffset = readBE32 (chunkData + 12);
+            const auto yOffset = readBE32 (chunkData + 16);
+
+            if (! isValidImageSize (frameWidth, frameHeight)
+                || static_cast<uint64_t> (xOffset) + frameWidth > static_cast<uint64_t> (width)
+                || static_cast<uint64_t> (yOffset) + frameHeight > static_cast<uint64_t> (height))
+            {
+                // Invalid frame region, fall back to the default image
+                isApng = false;
+                frames.clear();
+                return;
+            }
+
             // New frame starts
             ++frameIndex;
 
             FrameInfo info;
-            // Skip sequence_number (4 bytes)
-            info.frameWidth = static_cast<int> (readBE32 (chunkData + 4));
-            info.frameHeight = static_cast<int> (readBE32 (chunkData + 8));
-            info.xOffset = static_cast<int> (readBE32 (chunkData + 12));
-            info.yOffset = static_cast<int> (readBE32 (chunkData + 16));
+            info.frameWidth = static_cast<int> (frameWidth);
+            info.frameHeight = static_cast<int> (frameHeight);
+            info.xOffset = static_cast<int> (xOffset);
+            info.yOffset = static_cast<int> (yOffset);
 
             const auto delayNum = readBE16 (chunkData + 20);
             const auto delayDen = readBE16 (chunkData + 22);
@@ -545,6 +582,11 @@ Image PngImageFormatReader::readImage()
 
     input->setPosition (0);
 
+    // Declared before setjmp so a libpng error longjmp never skips their destructors
+    Image image;
+    std::vector<png_bytep> rowPointers;
+    std::vector<std::vector<png_byte>> rowBuffers;
+
     auto* pngPtr = png_create_read_struct (PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (pngPtr == nullptr)
         return {};
@@ -582,11 +624,10 @@ Image PngImageFormatReader::readImage()
     png_read_update_info (pngPtr, infoPtr);
 
     auto rowBytes = png_get_rowbytes (pngPtr, infoPtr);
-    Image image (width, height, pixelFormat);
+    image = Image (width, height, pixelFormat);
 
-    std::vector<png_bytep> rowPointers (static_cast<size_t> (height));
-    std::vector<std::vector<png_byte>> rowBuffers (static_cast<size_t> (height),
-                                                   std::vector<png_byte> (rowBytes));
+    rowPointers.resize (static_cast<size_t> (height));
+    rowBuffers.assign (static_cast<size_t> (height), std::vector<png_byte> (rowBytes));
     for (int y = 0; y < height; ++y)
         rowPointers[static_cast<size_t> (y)] = rowBuffers[static_cast<size_t> (y)].data();
 
@@ -672,6 +713,11 @@ Image PngImageFormatReader::decodeFrameImage (int frameIndex)
     readState.size = minimalPng.size();
     readState.pos = 0;
 
+    // Declared before setjmp so a libpng error longjmp never skips their destructors
+    Image image;
+    std::vector<png_byte> rowBuffer;
+    std::vector<png_bytep> rowPointers;
+
     auto* pngPtr = png_create_read_struct (PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (pngPtr == nullptr)
         return {};
@@ -709,11 +755,11 @@ Image PngImageFormatReader::decodeFrameImage (int frameIndex)
     png_read_update_info (pngPtr, infoPtr);
 
     const auto rowBytes = png_get_rowbytes (pngPtr, infoPtr);
-    Image image (frame.frameWidth, frame.frameHeight, PixelFormat::RGBA);
+    image = Image (frame.frameWidth, frame.frameHeight, PixelFormat::RGBA);
 
     // Single contiguous buffer with row-pointer indirection (avoids per-row allocations)
-    std::vector<png_byte> rowBuffer (static_cast<size_t> (frame.frameHeight * rowBytes));
-    std::vector<png_bytep> rowPointers (static_cast<size_t> (frame.frameHeight));
+    rowBuffer.resize (static_cast<size_t> (frame.frameHeight * rowBytes));
+    rowPointers.resize (static_cast<size_t> (frame.frameHeight));
 
     for (int y = 0; y < frame.frameHeight; ++y)
         rowPointers[static_cast<size_t> (y)] = rowBuffer.data() + static_cast<size_t> (y * rowBytes);

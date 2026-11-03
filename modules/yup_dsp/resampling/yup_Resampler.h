@@ -155,13 +155,19 @@ public:
                            samples per channel in the output buffers.
         @param numChannels Number of channels to process.
         @param numSamples  Number of input samples per channel.
-        @return            Number of output samples written per channel.
+        @return            Number of output samples written per channel, or 0 if the
+                           channel count or block size exceeds what prepare() allocated.
     */
     int resample (const SampleType* const* input, SampleType* const* output, int numChannels, int numSamples) noexcept
     {
         jassert (numChannels > 0 && numSamples > 0);
         jassert (numChannels <= static_cast<int> (xBufs.size()));
         jassert (numSamples + historySize <= static_cast<int> (xBufs[0].size()));
+
+        if (numChannels <= 0 || numSamples <= 0
+            || numChannels > static_cast<int> (xBufs.size())
+            || numSamples + historySize > static_cast<int> (xBufs[0].size()))
+            return 0;
 
         const int outputCount = static_cast<int> (std::ceil ((numSamples - currentPhase) * oversampleFactor));
         const CoeffType gainScale = (oversampleFactor < 1.0)

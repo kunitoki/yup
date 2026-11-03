@@ -116,6 +116,104 @@ TEST (PngImageFormatTests, InvalidSignatureReturnsInvalidImage)
     EXPECT_FALSE (result.isValid());
 }
 
+class PngImageFormatMalformedTests : public ::testing::Test
+{
+protected:
+    static void appendBE32 (std::vector<uint8>& out, uint32 v)
+    {
+        for (int shift = 24; shift >= 0; shift -= 8)
+            out.push_back (static_cast<uint8> (v >> shift));
+    }
+
+    static std::vector<uint8> makeChunk (const char* type, const std::vector<uint8>& payload)
+    {
+        std::vector<uint8> chunk;
+        appendBE32 (chunk, static_cast<uint32> (payload.size()));
+        chunk.insert (chunk.end(), type, type + 4);
+        chunk.insert (chunk.end(), payload.begin(), payload.end());
+
+        uint32 crc = 0xffffffffu;
+        for (size_t i = 4; i < chunk.size(); ++i)
+        {
+            crc ^= chunk[i];
+            for (int k = 0; k < 8; ++k)
+                crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
+        }
+
+        appendBE32 (chunk, crc ^ 0xffffffffu);
+        return chunk;
+    }
+
+    static std::vector<uint8> makeFcTL (uint32 sequence, uint32 w, uint32 h, uint32 x, uint32 y, uint8 disposeOp)
+    {
+        std::vector<uint8> payload;
+        for (auto v : { sequence, w, h, x, y })
+            appendBE32 (payload, v);
+
+        payload.insert (payload.end(), { 0, 1, 0, 10, disposeOp, 0 });
+        return makeChunk ("fcTL", payload);
+    }
+};
+
+TEST_F (PngImageFormatMalformedTests, ApngFrameOutsideCanvasFallsBackToDefaultImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PngImageFormatWriter writer (rawStream, PixelFormat::RGBA);
+    ASSERT_TRUE (writer.writeImage (generateSolidImage (4, 4, PixelFormat::RGBA)));
+
+    const auto* bytes = static_cast<const uint8*> (rawStream->getData());
+    const std::vector<uint8> original (bytes, bytes + rawStream->getDataSize());
+    ASSERT_GT (original.size(), 45u);
+
+    constexpr size_t ihdrEnd = 8 + 25;
+    const size_t iendStart = original.size() - 12;
+
+    std::vector<uint8> actl;
+    appendBE32 (actl, 3);
+    appendBE32 (actl, 0);
+
+    std::vector<uint8> png (original.begin(), original.begin() + ihdrEnd);
+    for (const auto& chunk : { makeChunk ("acTL", actl), makeFcTL (0, 4, 4, 0, 0, 0) })
+        png.insert (png.end(), chunk.begin(), chunk.end());
+
+    png.insert (png.end(), original.begin() + ihdrEnd, original.begin() + iendStart);
+
+    for (const auto& chunk : { makeFcTL (1, 4, 4, 0xfffffffeu, 0, 1), makeFcTL (2, 4, 4, 0, 0, 0) })
+        png.insert (png.end(), chunk.begin(), chunk.end());
+
+    png.insert (png.end(), original.begin() + iendStart, original.end());
+
+    PngImageFormatReader reader (new MemoryInputStream (png.data(), png.size(), true));
+
+    EXPECT_EQ (reader.width, 4);
+    EXPECT_FALSE (reader.isAnimated());
+
+    Image frame;
+    EXPECT_NO_THROW (EXPECT_FALSE (reader.readFrame (2, frame)));
+
+    const auto image = reader.readImage();
+    ASSERT_TRUE (image.isValid());
+    EXPECT_EQ (image.getWidth(), 4);
+    EXPECT_EQ (image.getHeight(), 4);
+}
+
+TEST_F (PngImageFormatMalformedTests, TruncatedImageDataReturnsInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PngImageFormatWriter writer (rawStream, PixelFormat::RGBA);
+    ASSERT_TRUE (writer.writeImage (generateTestImage (64, 64, PixelFormat::RGBA)));
+
+    const auto* bytes = static_cast<const uint8*> (rawStream->getData());
+    const size_t truncatedSize = rawStream->getDataSize() / 2;
+    ASSERT_GT (truncatedSize, static_cast<size_t> (8 + 25 + 8));
+
+    PngImageFormatReader reader (new MemoryInputStream (bytes, truncatedSize, true));
+
+    EXPECT_EQ (reader.width, 64);
+    EXPECT_EQ (reader.height, 64);
+    EXPECT_FALSE (reader.readImage().isValid());
+}
+
 TEST (PngImageFormatTests, ReaderHasAccessibleMetadataValues)
 {
     auto* rawStream = new MemoryOutputStream();

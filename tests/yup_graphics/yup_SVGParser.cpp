@@ -2407,3 +2407,63 @@ TEST (SVGParserTests, ParsePlusLighterAsAdditive)
 {
     EXPECT_EQ (std::optional<BlendMode> (BlendMode::Additive), SVGParser::parseBlendMode ("plus-lighter"));
 }
+
+TEST (SVGParserTests, ParseCyclicGradientHrefsDoesNotRecurseForever)
+{
+    Drawable d;
+    EXPECT_TRUE (d.parseSVG (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<linearGradient id=\"a\" href=\"#b\" />"
+        "<linearGradient id=\"b\" href=\"#a\" />"
+        "</defs>"
+        "<rect width=\"100\" height=\"100\" fill=\"url(#a)\" />"
+        "</svg>"));
+}
+
+TEST (SVGParserTests, ParseCyclicFilterHrefsDoesNotRecurseForever)
+{
+    Drawable d;
+    EXPECT_TRUE (d.parseSVG (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs>"
+        "<filter id=\"a\" href=\"#b\" />"
+        "<filter id=\"b\" href=\"#a\" />"
+        "</defs>"
+        "<rect width=\"100\" height=\"100\" fill=\"red\" filter=\"url(#a)\" />"
+        "</svg>"));
+}
+
+TEST (SVGParserTests, LoadImageFromHrefConfinesLocalImagesToBaseDirectory)
+{
+    const auto writeBmp = [] (const File& file)
+    {
+        Image img (2, 2, PixelFormat::RGB);
+        img.fill (0xff00ff00u);
+
+        auto* rawStream = new MemoryOutputStream();
+        BmpImageFormatWriter writer (rawStream, PixelFormat::RGB);
+        ASSERT_TRUE (writer.writeImage (img));
+        ASSERT_TRUE (file.replaceWithData (rawStream->getData(), rawStream->getDataSize()));
+    };
+
+    const auto rootDir = File::getSpecialLocation (File::tempDirectory).getChildFile ("svg_href_confinement_test");
+    const auto baseDir = rootDir.getChildFile ("assets");
+    ASSERT_TRUE (baseDir.createDirectory());
+
+    const auto insideFile = baseDir.getChildFile ("inside.bmp");
+    const auto outsideFile = rootDir.getChildFile ("outside.bmp");
+    writeBmp (insideFile);
+    writeBmp (outsideFile);
+
+    SVGDocument::ParseOptions options;
+    options.baseDirectory = baseDir;
+
+    EXPECT_TRUE (SVGParser::loadImageFromHref (options, "inside.bmp").has_value());
+    EXPECT_FALSE (SVGParser::loadImageFromHref (options, "../outside.bmp").has_value());
+    EXPECT_FALSE (SVGParser::loadImageFromHref (options, "sub/../../outside.bmp").has_value());
+    EXPECT_FALSE (SVGParser::loadImageFromHref (options, "..\\outside.bmp").has_value());
+    EXPECT_FALSE (SVGParser::loadImageFromHref (options, outsideFile.getFullPathName()).has_value());
+
+    rootDir.deleteRecursively();
+}

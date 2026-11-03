@@ -84,6 +84,11 @@ public:
 
     /** Sets the directory where disk cache files are stored.
 
+        The default is a per-user folder inside the temporary directory. On POSIX systems
+        a directory created by the cache gets owner-only permissions, and the disk cache is
+        not used if the directory is a symlink, is not owned by the current user, or is
+        writable by others.
+
         @param directory  The cache directory path
     */
     void setCacheDirectory (const File& directory);
@@ -196,6 +201,7 @@ private:
     File getCacheFilePath (const String& cacheKey) const;
     std::shared_ptr<AudioPeakProfile> loadFromDisk (const String& cacheKey);
     void saveToDisk (const String& cacheKey, const AudioPeakProfile& profile);
+    bool prepareCacheDirectory() const;
     void notifyProfileReady (const String& cacheKey, std::shared_ptr<AudioPeakProfile> profile);
     void notifyProfileProgress (const String& cacheKey, double progress);
 

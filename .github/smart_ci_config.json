@@ -56,7 +56,7 @@
     },
     "ios": {
       "deps": ["iosDeps", "iosSimDeps", "appleDeps"],
-      "tests": false,
+      "tests": true,
       "skip": [
         "/native/(generated|java[^/]*)/",
         "/native/[^/]*_(android|emscripten|linux|mac|vulkan|wasm|windows)\\."
@@ -113,7 +113,7 @@
     },
     "android": {
       "deps": ["androidDeps"],
-      "tests": false,
+      "tests": true,
       "skip": [
         "/native/[^/]*_(apple|emscripten|linux|mac|wasm|windows)\\.",
         "/native/[^/]*_ios[^/]*\\."

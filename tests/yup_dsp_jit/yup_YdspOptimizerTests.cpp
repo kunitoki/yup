@@ -1253,6 +1253,54 @@ TEST (YdspOptimizerTests, RetainsBoundsChecksForNegativeAndOversizedRanges)
     }
 }
 
+TEST (YdspOptimizerTests, RetainsBoundsChecksForUninitializedLocalsAssignedLater)
+{
+    for (const auto* index : { "x", "x + 0" })
+    {
+        YdspDiagnostics diagnostics;
+        auto ir = buildIr (String (R"YDSP(
+            processor P {
+                input stream in; output stream out;
+                state float buf[8];
+                state int k;
+                process {
+                    int x;
+                    x = k * 4096 - 1000000;
+                    out = buf[INDEX];
+                    k = k + 1;
+                }
+            }
+            graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+        )YDSP").replace ("INDEX", index), diagnostics);
+        ASSERT_FALSE (diagnostics.hasErrors()) << index << diagnostics.toString();
+        ASSERT_NE (nullptr, ir);
+        EXPECT_GT (countInst (*ir->kernels[0], YdspIrOp::ltUI), 0) << index;
+    }
+}
+
+TEST (YdspOptimizerTests, RetainsBoundsChecksForUninitializedLocalsStoredAfterAssignment)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in; output stream out;
+            state float buf[8];
+            state int k;
+            process {
+                int x;
+                x = k * 4096 - 1000000;
+                buf[x] = in;
+                out = in;
+                k = k + 1;
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP", diagnostics);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+    EXPECT_GT (countInst (*ir->kernels[0], YdspIrOp::ltUI), 0);
+}
+
 TEST (YdspOptimizerTests, CheckedArrayReadsSelectASafeIndexBeforeLoading)
 {
     YdspDiagnostics diagnostics;
@@ -1463,8 +1511,9 @@ TEST (YdspOptimizerTests, LoopInvariantCodeMotionKeepsPathDependentValuesInLoop)
             sawCopyInEntry = true;
 
     EXPECT_FALSE (sawCopyInEntry);
-    // The array arm retains its copy; the other arm becomes a constant.
-    EXPECT_EQ (1, countInst (fn, YdspIrOp::movF));
+    // The declaration's zero-init copy and the array arm's copy stay in the loop;
+    // the other arm becomes a constant.
+    EXPECT_EQ (2, countInst (fn, YdspIrOp::movF));
     EXPECT_EQ (0, std::count_if (fn.blocks[0].insts.begin(), fn.blocks[0].insts.end(), [] (const YdspIrInst& inst)
     {
         return inst.op == YdspIrOp::loadStateArrayF;

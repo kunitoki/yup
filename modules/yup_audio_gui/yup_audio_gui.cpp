@@ -30,6 +30,11 @@
 
 #include "yup_audio_gui.h"
 
+#if YUP_MAC || YUP_IOS || YUP_LINUX || YUP_ANDROID || YUP_BSD
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 //==============================================================================
 
 #include "waveform/yup_AudioPeakProfile.cpp"

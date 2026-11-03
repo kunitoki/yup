@@ -132,12 +132,19 @@ public:
     //==============================================================================
     /** Saves the profile to a disk file for caching.
 
+        The data is written to a temporary file next to the target, which then atomically
+        replaces the target, so an existing file (or symlink) is never appended to.
+
         @param file  The file to save to
         @returns     Result indicating success or failure
     */
     Result saveToFile (const File& file) const;
 
     /** Loads a profile from a disk cache file.
+
+        The data is fully validated (metadata bounds, aggregation factors and peak counts
+        consistent with the sample count and the available data). On failure the profile
+        is left invalid.
 
         @param file  The file to load from
         @returns     Result indicating success or failure
@@ -151,6 +158,8 @@ public:
     MemoryBlock serialize() const;
 
     /** Deserializes a profile from a memory block.
+
+        Applies the same validation as loadFromFile(). On failure the profile is left invalid.
 
         @param data  The serialized data
         @returns     Result indicating success or failure
@@ -182,6 +191,8 @@ private:
     };
 
     void computeAggregatedLevel (int sourceLevelIndex, int aggregationFactor);
+    void writeToStream (OutputStream& stream) const;
+    Result readFromStream (InputStream& stream);
     void clear();
 
     int numSamples = 0;

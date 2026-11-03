@@ -110,7 +110,9 @@ public:
             if (expectedLength == currentMessageLen)
             {
                 callback.handleIncomingMidiMessage (input, MidiMessage (currentMessage, expectedLength, time));
-                currentMessageLen = 1; // reset, but leave the first byte to use as the running status byte
+
+                // System common messages cancel running status, channel messages keep it
+                currentMessageLen = isSystemCommon (currentMessage[0]) ? 0 : 1;
             }
         }
     }
@@ -186,6 +188,8 @@ private:
     }
 
     static bool isRealtimeMessage (uint8 byte) { return byte >= 0xf8 && byte <= 0xfe; }
+
+    static bool isSystemCommon (uint8 byte) { return byte >= 0xf1 && byte <= 0xf7; }
 
     static bool isStatusByte (uint8 byte) { return byte >= 0x80; }
 

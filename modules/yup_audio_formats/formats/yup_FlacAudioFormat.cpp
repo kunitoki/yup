@@ -154,6 +154,10 @@ private:
         const int samplesAvailable = (int) frame->header.blocksize;
         const int numChannels = reader->numChannels;
 
+        // The frame must provide every channel declared by the stream info, which is what we index
+        if ((int) frame->header.channels != numChannels)
+            return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+
         if (reader->currentReadState != nullptr)
         {
             auto& state = *reader->currentReadState;

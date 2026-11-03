@@ -82,7 +82,12 @@ public:
         /** Allows image data embedded as data: URIs. */
         bool allowDataImages = true;
 
-        /** Allows local file image hrefs relative to baseDirectory. */
+        /** Allows local file image hrefs relative to baseDirectory.
+
+            Local images are confined to baseDirectory: absolute paths, paths containing
+            ".." components, drive or scheme prefixes and symbolic links inside
+            baseDirectory are rejected. Use imageResolver for custom loading rules.
+        */
         bool allowLocalImages = true;
 
         /** Optional custom image resolver. Return std::nullopt to use the default. */

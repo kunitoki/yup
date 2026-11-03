@@ -106,7 +106,11 @@ public:
         if (! prepared)
             return;
 
-        prepared = false;
+        {
+            const CriticalSection::ScopedLockType lock (processor.getProcessLock());
+            prepared = false;
+        }
+
         processor.releaseResources();
     }
 

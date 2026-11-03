@@ -430,6 +430,12 @@ void LottieReader::resolveLayerAssets (AnimationComposition& comp,
         else if (layer->getType() == AnimationLayer::Type::Precomp)
         {
             auto& precompLayer = static_cast<PrecompLayer&> (*layer);
+            if (resolvingPrecomps.contains (precompLayer.precompRefId))
+            {
+                precompLayer.precompRefId = {};
+                continue;
+            }
+
             auto assetPtr = comp.assets[precompLayer.precompRefId];
             if (assetPtr != nullptr && ! assetPtr->layers.empty())
             {
@@ -438,12 +444,9 @@ void LottieReader::resolveLayerAssets (AnimationComposition& comp,
                     precompLayer.layerSize = comp.size;
                 }
 
-                if (! resolvingPrecomps.contains (precompLayer.precompRefId))
-                {
-                    resolvingPrecomps.add (precompLayer.precompRefId);
-                    resolveLayerAssets (comp, assetPtr->layers, resolvingPrecomps);
-                    resolvingPrecomps.removeString (precompLayer.precompRefId);
-                }
+                resolvingPrecomps.add (precompLayer.precompRefId);
+                resolveLayerAssets (comp, assetPtr->layers, resolvingPrecomps);
+                resolvingPrecomps.removeString (precompLayer.precompRefId);
             }
         }
     }
@@ -1239,7 +1242,7 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
         gradient.highlightAngle = parseProperty<float> (gradObj["a"], extractFloat);
     }
 
-    const int colorPoints = varInt (gradObj["g"]["p"]);
+    const int colorPoints = jlimit (0, 1024, varInt (gradObj["g"]["p"]));
     gradient.numColorPoints = colorPoints;
     const var& gk = gradObj["g"]["k"];
 
@@ -1294,6 +1297,28 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
                     }
 
                     gradient.animatedStops.push_back (std::move (gkf));
+                }
+
+                auto& animatedStops = gradient.animatedStops;
+                std::erase_if (animatedStops, [] (const AnimationGradient::GradientKeyframe& k)
+                {
+                    return ! std::isfinite (k.frame);
+                });
+
+                std::stable_sort (animatedStops.begin(), animatedStops.end(), [] (const AnimationGradient::GradientKeyframe& a, const AnimationGradient::GradientKeyframe& b)
+                {
+                    return a.frame < b.frame;
+                });
+
+                if (animatedStops.size() < 2)
+                {
+                    if (animatedStops.size() == 1)
+                    {
+                        for (const auto& [pos, col] : AnimationGradient::parseStopsFromFlatArray (animatedStops.front().values, colorPoints))
+                            gradient.addColorStop (pos, col);
+                    }
+
+                    animatedStops.clear();
                 }
             }
         }
@@ -1471,6 +1496,9 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool
                     {
                         const var& kf = (*kfs)[i];
                         const float frame = varFloat (kf["t"]);
+                        if (! std::isfinite (frame))
+                            continue;
+
                         const var& startVal = kf["s"];
                         const var& endVal = kf["e"];
 
@@ -1512,6 +1540,15 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool
                         previousValue = value;
                         hasPreviousValue = true;
                     }
+
+                    std::stable_sort (t.spatialKeyframes.begin(), t.spatialKeyframes.end(), [] (const SpatialPositionKeyframe& a, const SpatialPositionKeyframe& b)
+                    {
+                        return a.frame < b.frame;
+                    });
+
+                    if (t.spatialKeyframes.size() < 2)
+                        t.spatialKeyframes.clear();
+
                     t.position = builder.build();
                 }
                 else

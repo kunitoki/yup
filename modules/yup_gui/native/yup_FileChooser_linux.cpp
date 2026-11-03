@@ -26,10 +26,10 @@ namespace yup
 class FileChooser::FileChooserImpl : public Thread
 {
 public:
-    FileChooserImpl (CompletionCallback callback, String command, bool allowsMultiple, bool isSave)
+    FileChooserImpl (CompletionCallback callback, StringArray arguments, bool allowsMultiple, bool isSave)
         : Thread ("FileChooser")
         , callback (std::move (callback))
-        , command (std::move (command))
+        , arguments (std::move (arguments))
         , allowsMultiple (allowsMultiple)
         , isSave (isSave)
     {
@@ -44,27 +44,30 @@ public:
     {
         int result = 1;
 
-        if (FILE* pipe = popen (command.toUTF8(), "r"))
+        ChildProcess process;
+        if (process.start (arguments, ChildProcess::wantStdOut))
         {
-            int fd = fileno (pipe);
-            int flags = fcntl (fd, F_GETFL, 0);
-            flags |= O_NONBLOCK;
-            fcntl (fd, F_SETFL, flags);
-
+            MemoryOutputStream outputStream;
             char buffer[4096];
-            String output;
 
             while (! threadShouldExit())
             {
-                while (fgets (buffer, sizeof (buffer), pipe) != nullptr && ! threadShouldExit())
-                    output += String::fromUTF8 (buffer);
-
-                result = pclose (pipe);
-                if (threadShouldExit())
-                {
-                    result = 1;
+                const int numBytesRead = process.readProcessOutput (buffer, (int) sizeof (buffer));
+                if (numBytesRead > 0)
+                    outputStream.write (buffer, (size_t) numBytesRead);
+                else if (! process.isRunning())
                     break;
-                }
+            }
+
+            if (threadShouldExit())
+            {
+                process.kill();
+                result = 1;
+            }
+            else
+            {
+                result = (int) process.getExitCode();
+                String output = outputStream.toUTF8();
 
                 if (result == 0 && output.isNotEmpty())
                 {
@@ -84,8 +87,6 @@ public:
                         results.add (File (output));
                     }
                 }
-
-                break;
             }
         }
 
@@ -97,7 +98,7 @@ public:
 
 private:
     CompletionCallback callback;
-    String command;
+    StringArray arguments;
     bool allowsMultiple;
     bool isSave;
     Array<File> results;
@@ -111,22 +112,25 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
     const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
     const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
 
-    String command = "zenity --file-selection";
+    StringArray arguments { "zenity", "--file-selection" };
 
     if (isSave)
-        command += " --save";
+        arguments.add ("--save");
 
     if (canChooseDirectories)
-        command += " --directory";
+        arguments.add ("--directory");
 
     if (allowsMultiple && ! isSave)
-        command += " --multiple";
+        arguments.add ("--multiple");
 
     if (title.isNotEmpty())
-        command += " --title=\"" + title + "\"";
+        arguments.add ("--title=" + title);
 
-    if (auto path = startingFile.getFullPathName(); path.isNotEmpty())
-        command += " --filename=\"" + path + "\"";
+    // A trailing separator makes zenity open inside a directory instead of selecting it in its parent
+    if (auto path = startingFile.isDirectory() ? File::addTrailingSeparator (startingFile.getFullPathName())
+                                               : startingFile.getFullPathName();
+        path.isNotEmpty())
+        arguments.add ("--filename=" + path);
 
     if (filters.isNotEmpty() && ! canChooseDirectories)
     {
@@ -139,14 +143,12 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
                 if (! pattern.startsWith ("*"))
                     pattern = "*." + pattern;
 
-                command += " --file-filter=\"" + pattern + "\"";
+                arguments.add ("--file-filter=" + pattern);
             }
         }
     }
 
-    command += " 2>/dev/null";
-
-    impl = std::make_unique<FileChooserImpl> (std::move (callback), command, allowsMultiple, isSave);
+    impl = std::make_unique<FileChooserImpl> (std::move (callback), std::move (arguments), allowsMultiple, isSave);
     impl->startThread();
 }
 

@@ -117,11 +117,14 @@ Point<float> AnimationTransform::positionAt (float frameNo) const
         return applyPositionBounce (position.getValueAt (frameNo), frameNo);
 
     // Spatial bezier interpolation with position tangents
-    if (frameNo <= spatialKeyframes.front().frame)
+    if (! (frameNo > spatialKeyframes.front().frame))
         return spatialKeyframes.front().value;
 
     if (frameNo >= spatialKeyframes.back().frame)
         return applyPositionBounce (spatialKeyframes.back().endValue.value_or (spatialKeyframes.back().value), frameNo);
+
+    if (spatialKeyframes.size() < 2)
+        return spatialKeyframes.front().value;
 
     int lo = 0;
     int hi = static_cast<int> (spatialKeyframes.size()) - 2;
@@ -138,7 +141,7 @@ Point<float> AnimationTransform::positionAt (float frameNo) const
     const auto& k1 = spatialKeyframes[static_cast<size_t> (lo + 1)];
 
     const float span = k1.frame - k0.frame;
-    if (span < 1e-6f)
+    if (! (span >= 1e-6f))
         return k0.endValue.value_or (k1.value);
 
     // Apply temporal easing

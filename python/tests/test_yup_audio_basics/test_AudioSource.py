@@ -1,3 +1,4 @@
+import pytest
 import yup
 
 #==================================================================================================
@@ -249,3 +250,28 @@ def test_positionable_audio_source_is_an_audio_source():
 
     assert isinstance(source, yup.PositionableAudioSource)
     assert isinstance(source, yup.AudioSource)
+
+#==================================================================================================
+
+def test_mixer_audio_source_keeps_inputs_alive():
+    import gc
+
+    mixer = yup.MixerAudioSource()
+    mixer.addInputSource(SimpleAudioSource())
+    gc.collect()
+
+    mixer.prepareToPlay(64, 44100.0)
+
+    buffer = yup.AudioBuffer(2, 64)
+    mixer.getNextAudioBlock(yup.AudioSourceChannelInfo(buffer, 0, 64))
+    assert abs(buffer.getSample(0, 0) - 0.5) < 0.001
+
+    mixer.removeAllInputs()
+
+#==================================================================================================
+
+def test_mixer_audio_source_rejects_delete_when_removed():
+    mixer = yup.MixerAudioSource()
+
+    with pytest.raises(ValueError):
+        mixer.addInputSource(SimpleAudioSource(), True)

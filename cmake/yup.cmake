@@ -41,7 +41,7 @@ function (_yup_setup_platform)
         set (platform "ios")
         list (APPEND platforms "ios" "apple" "posix" "mobile")
 
-    elseif (ANDROID OR YUP_TARGET_ANDROID)
+    elseif (ANDROID OR YUP_TARGET_ANDROID OR CMAKE_TOOLCHAIN_FILE MATCHES ".*android\.toolchain\.cmake$")
         set (platform "android")
         list (APPEND platforms "android" "posix" "mobile")
 

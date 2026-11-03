@@ -95,3 +95,27 @@ def test_message_manager_lock(juce_app):
     assert t.currentThreadHasLockedMessageManagerPost
     assert t.wasRunSuccesfully
     assert t.runResult == 42
+
+#==================================================================================================
+
+def test_call_function_on_message_thread_returns_owned_result():
+    mm = yup.MessageManager.getInstance()
+
+    for _ in range(100):
+        result = mm.callFunctionOnMessageThread(lambda: [1, 2, 3])
+        assert result == [1, 2, 3]
+
+    assert mm.callFunctionOnMessageThread(lambda: None) is None
+
+#==================================================================================================
+
+def test_call_function_on_message_thread_propagates_exceptions():
+    mm = yup.MessageManager.getInstance()
+
+    def raiser():
+        raise KeyError("boom")
+
+    with pytest.raises(KeyError):
+        mm.callFunctionOnMessageThread(raiser)
+
+    assert mm.callFunctionOnMessageThread(lambda: 42) == 42

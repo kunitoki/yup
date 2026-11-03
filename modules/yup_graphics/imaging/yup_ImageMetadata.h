@@ -77,7 +77,7 @@ public:
     /** Raw binary chunks keyed by format-prefixed chunk type.
 
         Examples: "jpeg/exif", "jpeg/icc", "jpeg/xmp", "png/iCCP", "png/chunk_cuSt",
-        "tiff/exif", "tiff/xmp", "webp/EXIF", "webp/ICCP", "gif/xmp".
+        "tiff/icc", "tiff/xmp", "webp/EXIF", "webp/ICCP", "gif/xmp".
     */
     std::unordered_map<String, MemoryBlock> rawChunks;
 

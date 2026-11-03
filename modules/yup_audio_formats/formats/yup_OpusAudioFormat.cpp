@@ -160,16 +160,16 @@ static bool parseOpusTags (const std::vector<uint8>& packet, StringPairArray& me
     size_t offset = 8;
     const auto size = packet.size();
 
-    if (offset + 4 > size)
+    if (size - offset < 4)
         return false;
 
     const uint32 vendorLength = readLittleEndian32 (packet.data() + offset);
     offset += 4;
-    if (offset + vendorLength > size)
+    if (vendorLength > size - offset)
         return false;
 
     offset += vendorLength;
-    if (offset + 4 > size)
+    if (size - offset < 4)
         return false;
 
     const uint32 commentCount = readLittleEndian32 (packet.data() + offset);
@@ -177,13 +177,13 @@ static bool parseOpusTags (const std::vector<uint8>& packet, StringPairArray& me
 
     for (uint32 i = 0; i < commentCount; ++i)
     {
-        if (offset + 4 > size)
+        if (size - offset < 4)
             return false;
 
         const uint32 commentLength = readLittleEndian32 (packet.data() + offset);
         offset += 4;
 
-        if (offset + commentLength > size)
+        if (commentLength > size - offset || commentLength > (uint32) (std::numeric_limits<int>::max)())
             return false;
 
         const auto* commentData = reinterpret_cast<const char*> (packet.data() + offset);

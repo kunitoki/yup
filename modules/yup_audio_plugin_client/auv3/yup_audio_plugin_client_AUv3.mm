@@ -449,8 +449,12 @@ public:
 
     void setCurrentPreset (AUAudioUnitPreset* preset)
     {
-        if (processor != nullptr && preset != nullptr)
-            processor->setCurrentPreset (static_cast<int> ([preset number]));
+        if (processor == nullptr || preset == nullptr)
+            return;
+
+        const auto index = static_cast<int> ([preset number]);
+        if (isPositiveAndBelow (index, processor->getNumPresets()))
+            processor->setCurrentPreset (index);
     }
 
     //==============================================================================
@@ -1139,7 +1143,7 @@ public:
                     const AUMIDIEvent& midiEvent = event->MIDI;
                     midiMessages.addEvent (midiEvent.data,
                                            static_cast<int> (midiEvent.length),
-                                           static_cast<int> (midiEvent.eventSampleTime - startTime));
+                                           static_cast<int> (jlimit<int64> (0, jmax (0, static_cast<int> (frameCount) - 1), midiEvent.eventSampleTime - startTime)));
                 }
                 break;
 

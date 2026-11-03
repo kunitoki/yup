@@ -850,6 +850,9 @@ void AnimationRenderer::renderImageLayer (Graphics& g, const ImageLayer& layer, 
 
 void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& layer, const RenderContext& ctx, float opacity)
 {
+    if (ctx.precompDepth >= maxPrecompDepth)
+        return;
+
     const auto* assetPtr = ctx.scene.comp.assets.getPointer (layer.precompRefId);
     const AnimationAsset* asset = assetPtr ? assetPtr->get() : nullptr;
     if (asset == nullptr || asset->layers.empty())
@@ -910,7 +913,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 
                     precompScene.buildParentTransforms (asset->layers);
 
-                    RenderContext offscreenCtx { precompScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases, ctx.precompLeases };
+                    RenderContext offscreenCtx { precompScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases, ctx.precompLeases, ctx.precompDepth + 1 };
                     renderLayerList (offscreenG, asset->layers, offscreenCtx);
                 }
 
@@ -937,7 +940,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 
     precompScene.buildParentTransforms (asset->layers);
 
-    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases, ctx.precompLeases };
+    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases, ctx.precompLeases, ctx.precompDepth + 1 };
 
     renderLayerList (g, asset->layers, precompCtx);
 }
@@ -1099,8 +1102,11 @@ AffineTransform buildLayerTransformInAsset (const AnimationLayer& layer,
     return transform;
 }
 
-Path buildLayerAlphaPath (const AnimationLayer& layer, const AnimationComposition& comp, float frameNo)
+Path buildLayerAlphaPath (const AnimationLayer& layer, const AnimationComposition& comp, float frameNo, int depth = 0)
 {
+    if (depth > maxPrecompDepth)
+        return {};
+
     switch (layer.getType())
     {
         case AnimationLayer::Type::Shape:
@@ -1137,7 +1143,7 @@ Path buildLayerAlphaPath (const AnimationLayer& layer, const AnimationCompositio
                 if (childLayer == nullptr || childLayer->hidden || childLayer->isMatteSource || ! childLayer->isVisibleAt (localFrame))
                     continue;
 
-                Path childPath = buildLayerAlphaPath (*childLayer, comp, localFrame);
+                Path childPath = buildLayerAlphaPath (*childLayer, comp, localFrame, depth + 1);
                 if (childPath.isEmpty())
                     continue;
 

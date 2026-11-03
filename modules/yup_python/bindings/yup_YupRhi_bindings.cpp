@@ -39,14 +39,84 @@ using namespace py::literals;
 namespace
 {
 
-/** Total byte count of a buffer protocol view.
-
-    buffer_info::size counts items, not bytes, so a numpy float32 array of 16
-    elements reports 16 here and 64 there - only the latter is what the RHI wants.
-*/
-size_t byteSizeOf (const py::buffer_info& info) noexcept
+/** Minimum number of source bytes GpuTexture::upload reads for a region, or 0 when the upload is rejected before reading. */
+uint64 requiredTextureUploadBytes (const GpuTexture& texture, const GpuTextureDataDesc& region) noexcept
 {
-    return static_cast<size_t> (info.size) * static_cast<size_t> (info.itemsize);
+    if (region.mipLevel >= texture.getMipLevels())
+        return 0;
+
+    uint32 bytesPerTexel = 0;
+    uint32 blockHeight = 1;
+
+    switch (texture.getFormat())
+    {
+        case GpuTextureFormat::r8unorm:
+            bytesPerTexel = 1;
+            break;
+
+        case GpuTextureFormat::rg8unorm:
+        case GpuTextureFormat::r16float:
+        case GpuTextureFormat::depth16unorm:
+            bytesPerTexel = 2;
+            break;
+
+        case GpuTextureFormat::rgba8unorm:
+        case GpuTextureFormat::rgba8snorm:
+        case GpuTextureFormat::bgra8unorm:
+        case GpuTextureFormat::rg16float:
+        case GpuTextureFormat::r32float:
+        case GpuTextureFormat::rgb10a2unorm:
+        case GpuTextureFormat::r11g11b10float:
+        case GpuTextureFormat::depth24plusStencil8:
+        case GpuTextureFormat::depth32float:
+            bytesPerTexel = 4;
+            break;
+
+        case GpuTextureFormat::rgba16float:
+        case GpuTextureFormat::rg32float:
+        case GpuTextureFormat::depth32floatStencil8:
+            bytesPerTexel = 8;
+            break;
+
+        case GpuTextureFormat::rgba32float:
+            bytesPerTexel = 16;
+            break;
+
+        case GpuTextureFormat::astc6x6:
+            blockHeight = 6;
+            break;
+
+        case GpuTextureFormat::astc8x8:
+            blockHeight = 8;
+            break;
+
+        default:
+            blockHeight = 4;
+            break;
+    }
+
+    if (region.bytesPerRow == 0 && bytesPerTexel == 0)
+        return 0;
+
+    const auto width = region.width != 0 ? region.width : jmax (1u, static_cast<uint32> (texture.getWidth()) >> region.mipLevel);
+    const auto height = region.height != 0 ? region.height : jmax (1u, static_cast<uint32> (texture.getHeight()) >> region.mipLevel);
+    const auto rowsPerImage = region.rowsPerImage != 0 ? region.rowsPerImage : height;
+
+    const uint64 bytesPerRow = region.bytesPerRow != 0 ? static_cast<uint64> (region.bytesPerRow) : static_cast<uint64> (width) * bytesPerTexel;
+    const uint64 rows = (static_cast<uint64> (height) + blockHeight - 1) / blockHeight;
+    const uint64 imageRows = (static_cast<uint64> (rowsPerImage) + blockHeight - 1) / blockHeight;
+    const uint64 depth = jmax (1u, region.depth);
+
+    constexpr auto maxBytes = std::numeric_limits<uint64>::max();
+    const auto multiply = [] (uint64 a, uint64 b)
+    {
+        return (a != 0 && b > maxBytes / a) ? maxBytes : a * b;
+    };
+
+    const auto leadingImagesBytes = multiply (multiply (bytesPerRow, imageRows), depth - 1);
+    const auto lastImageBytes = bytesPerRow * rows;
+
+    return leadingImagesBytes > maxBytes - lastImageBytes ? maxBytes : leadingImagesBytes + lastImageBytes;
 }
 
 /** Unwraps a ResultValue, raising the failure message as a Python exception.
@@ -528,9 +598,9 @@ void registerYupRhiBindings (py::module_& m)
                        },
                        [] (GpuShaderSource& self, py::buffer data)
                        {
-                           auto info = data.request();
+                           auto info = Helpers::requestContiguousBuffer (data);
                            auto* bytePtr = reinterpret_cast<const uint8*> (info.ptr);
-                           self.code.assign (bytePtr, bytePtr + byteSizeOf (info));
+                           self.code.assign (bytePtr, bytePtr + info.size);
                        })
         .def_property ("bindingMap",
                        [] (const GpuShaderSource& self)
@@ -539,9 +609,9 @@ void registerYupRhiBindings (py::module_& m)
                        },
                        [] (GpuShaderSource& self, py::buffer data)
                        {
-                           auto info = data.request();
+                           auto info = Helpers::requestContiguousBuffer (data);
                            auto* bytePtr = reinterpret_cast<const uint8*> (info.ptr);
-                           self.bindingMap.assign (bytePtr, bytePtr + byteSizeOf (info));
+                           self.bindingMap.assign (bytePtr, bytePtr + info.size);
                        })
         .def_property ("glFixup",
                        [] (const GpuShaderSource& self)
@@ -550,9 +620,9 @@ void registerYupRhiBindings (py::module_& m)
                        },
                        [] (GpuShaderSource& self, py::buffer data)
                        {
-                           auto info = data.request();
+                           auto info = Helpers::requestContiguousBuffer (data);
                            auto* bytePtr = reinterpret_cast<const uint8*> (info.ptr);
-                           self.glFixup.assign (bytePtr, bytePtr + byteSizeOf (info));
+                           self.glFixup.assign (bytePtr, bytePtr + info.size);
                        })
         .def_readwrite ("entryPoint", &GpuShaderSource::entryPoint);
 
@@ -587,18 +657,18 @@ void registerYupRhiBindings (py::module_& m)
         .def ("getMaximumColorAttachments", &GpuDevice::getMaximumColorAttachments)
         .def ("createBuffer", [] (GpuDevice& self, GpuBufferType type, py::buffer data)
         {
-            auto info = data.request();
-            return self.createBuffer (type, info.ptr, byteSizeOf (info));
+            auto info = Helpers::requestContiguousBuffer (data);
+            return self.createBuffer (type, info.ptr, info.size);
         }, "type"_a, "data"_a)
         .def ("updateBuffer", [] (GpuDevice& self, GpuBuffer::Ptr buffer, py::buffer data)
         {
-            auto info = data.request();
-            return self.updateBuffer (std::move (buffer), info.ptr, byteSizeOf (info));
+            auto info = Helpers::requestContiguousBuffer (data);
+            return self.updateBuffer (std::move (buffer), info.ptr, info.size);
         }, "buffer"_a, "data"_a)
         .def ("readBuffer", [] (GpuDevice& self, GpuBuffer::Ptr buffer, py::buffer dst)
         {
-            auto info = dst.request (true);
-            return self.readBuffer (std::move (buffer), info.ptr, byteSizeOf (info));
+            auto info = Helpers::requestContiguousBuffer (dst, true);
+            return self.readBuffer (std::move (buffer), info.ptr, info.size);
         }, "buffer"_a, "dst"_a,
              "Reads a storage buffer back into a writable buffer object. Returns False when no\n"
              "new data is available yet; the destination keeps its previous contents.");
@@ -609,7 +679,10 @@ void registerYupRhiBindings (py::module_& m)
         .def_static ("create", &GpuTexture::create, "device"_a, "desc"_a)
         .def ("upload", [] (GpuTexture& self, py::buffer data, const GpuTextureDataDesc& region)
         {
-            auto info = data.request();
+            auto info = Helpers::requestContiguousBuffer (data);
+
+            if (static_cast<uint64> (info.size) < requiredTextureUploadBytes (self, region))
+                throw py::value_error ("Buffer is smaller than the texture region to upload");
 
             auto desc = region;
             desc.data = info.ptr;
@@ -648,8 +721,8 @@ void registerYupRhiBindings (py::module_& m)
     py::class_<GpuBuffer, ReferenceCountedObjectPtr<GpuBuffer>> (m, "GpuBuffer")
         .def_static ("create", [] (GpuDevice::Ptr device, GpuBufferType type, py::buffer data)
         {
-            auto info = data.request();
-            return GpuBuffer::create (std::move (device), type, info.ptr, byteSizeOf (info));
+            auto info = Helpers::requestContiguousBuffer (data);
+            return GpuBuffer::create (std::move (device), type, info.ptr, info.size);
         }, "device"_a, "type"_a, "data"_a)
         .def ("getType", &GpuBuffer::getType)
         .def ("getSizeInBytes", &GpuBuffer::getSizeInBytes)
@@ -774,8 +847,8 @@ void registerYupRhiBindings (py::module_& m)
         .def ("setStorageBuffer", &GpuRenderPass::setStorageBuffer, "group"_a, "binding"_a, "buffer"_a)
         .def ("setUniformBuffer", [] (GpuRenderPass& self, int group, int binding, py::buffer data)
         {
-            auto info = data.request();
-            self.setUniformBuffer (group, binding, info.ptr, byteSizeOf (info));
+            auto info = Helpers::requestContiguousBuffer (data);
+            self.setUniformBuffer (group, binding, info.ptr, info.size);
         }, "group"_a, "binding"_a, "data"_a)
         .def ("setVertexBuffer", &GpuRenderPass::setVertexBuffer, "slot"_a, "buffer"_a)
         .def ("setIndexBuffer", &GpuRenderPass::setIndexBuffer, "format"_a, "buffer"_a)
@@ -813,8 +886,8 @@ void registerYupRhiBindings (py::module_& m)
         .def ("setSampler", &GpuComputePass::setSampler, "group"_a, "binding"_a, "sampler"_a)
         .def ("setUniformBuffer", [] (GpuComputePass& self, int group, int binding, py::buffer data)
         {
-            auto info = data.request();
-            self.setUniformBuffer (group, binding, info.ptr, byteSizeOf (info));
+            auto info = Helpers::requestContiguousBuffer (data);
+            self.setUniformBuffer (group, binding, info.ptr, info.size);
         }, "group"_a, "binding"_a, "data"_a)
         .def ("dispatch", &GpuComputePass::dispatch, "groupsX"_a, "groupsY"_a = 1, "groupsZ"_a = 1)
         .def ("finish", &GpuComputePass::finish)

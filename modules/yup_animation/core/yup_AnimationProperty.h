@@ -176,7 +176,7 @@ public:
         if (keyframes_.empty())
             return T {};
 
-        if (frameNo <= keyframes_.front().frame)
+        if (! (frameNo > keyframes_.front().frame))
             return keyframes_.front().value;
 
         // Apply loopOut('cycle') by wrapping frames past the last keyframe back
@@ -191,7 +191,7 @@ public:
                 frameNo = first + std::fmod (frameNo - first, period);
         }
 
-        if (frameNo >= keyframes_.back().frame)
+        if (frameNo >= keyframes_.back().frame || keyframes_.size() < 2)
             return keyframes_.back().endValue.value_or (keyframes_.back().value);
 
         // Binary search for the active keyframe interval
@@ -214,7 +214,7 @@ public:
             return k0.value;
 
         const float span = k1.frame - k0.frame;
-        if (span < 1e-6f)
+        if (! (span >= 1e-6f))
             return k0.endValue.value_or (k1.value);
 
         const float t = k0.easing.evaluate ((frameNo - k0.frame) / span);
@@ -318,6 +318,11 @@ public:
 private:
     void sortKeyframes()
     {
+        std::erase_if (keyframes_, [] (const Keyframe& k)
+        {
+            return ! std::isfinite (k.frame);
+        });
+
         std::sort (keyframes_.begin(), keyframes_.end(), [] (const Keyframe& a, const Keyframe& b)
         {
             return a.frame < b.frame;
