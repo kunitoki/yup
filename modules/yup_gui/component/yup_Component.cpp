@@ -441,9 +441,9 @@ void Component::setSize (float width, float height)
 
 void Component::setSize (const Size<float>& newSize)
 {
-    auto areaToRepaint = boundsInParent;
+    auto areaToRepaint = getPaintBounds();
     boundsInParent = boundsInParent.withSize (newSize);
-    areaToRepaint = areaToRepaint.unionWith (boundsInParent);
+    areaToRepaint = areaToRepaint.unionWith (getPaintBounds());
 
     if (flags.onDesktop && native != nullptr)
         native->setSize (newSize.to<int>());
@@ -726,6 +726,30 @@ bool Component::isRenderingUnclipped() const
     return flags.unclippedRendering;
 }
 
+//==============================================================================
+
+void Component::setPaintMargin (float left, float top, float right, float bottom)
+{
+    jassert (left >= 0.0f && top >= 0.0f && right >= 0.0f && bottom >= 0.0f);
+
+    repaint();
+    paintMargin = { jmax (0.0f, left), jmax (0.0f, top), jmax (0.0f, right), jmax (0.0f, bottom) };
+    repaint();
+}
+
+void Component::setPaintMargin (float margin)
+{
+    setPaintMargin (margin, margin, margin, margin);
+}
+
+Rectangle<float> Component::getPaintBounds() const
+{
+    return { -paintMargin.left,
+             -paintMargin.top,
+             getWidth() + paintMargin.left + paintMargin.right,
+             getHeight() + paintMargin.top + paintMargin.bottom };
+}
+
 void Component::setPaintProfilingDisabled (bool shouldBeDisabled)
 {
     flags.paintProfilingDisabled = shouldBeDisabled;
@@ -738,7 +762,7 @@ bool Component::isPaintProfilingDisabled() const
 
 void Component::repaint()
 {
-    repaint (getLocalBounds());
+    repaint (getPaintBounds());
 }
 
 void Component::repaint (float x, float y, float width, float height)
@@ -1030,7 +1054,7 @@ void Component::removeChildComponent (int index)
     auto component = children.removeAndReturn (index);
 
     if (component->isShowing())
-        repaint (component->getBounds());
+        repaint (component->getPaintBounds().translated (component->getPosition()));
 
     component->parentComponent = nullptr;
 
@@ -1739,7 +1763,7 @@ void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 
 void Component::internalRepaint()
 {
-    internalRepaint (getLocalBounds());
+    internalRepaint (getPaintBounds());
 }
 
 void Component::internalRepaint (const Rectangle<float>& rect)
@@ -1895,7 +1919,7 @@ void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRe
     // outline too. Children paint inside this state, so they inherit it.
     const bool isAxisAligned = approximatelyEqual (toTopLevel.getShearX(), 0.0f) && approximatelyEqual (toTopLevel.getShearY(), 0.0f);
     if (! flags.unclippedRendering && ! isAxisAligned)
-        g.setClipPath (getLocalBounds());
+        g.setClipPath (getPaintBounds());
 }
 
 void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous)
@@ -1991,14 +2015,14 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
     const auto toTopLevel = getTransformToTopLevelComponent();
 
-    auto boundsToRedraw = intersectRepaintRegion (repaintRegions, getLocalBounds(), toTopLevel);
+    auto boundsToRedraw = intersectRepaintRegion (repaintRegions, getPaintBounds(), toTopLevel);
 
     if (boundsToRedraw.isEmpty())
     {
         if (! renderContinuous)
             return;
 
-        boundsToRedraw.addWithoutMerge (getTransformedBounds (getLocalBounds(), toTopLevel));
+        boundsToRedraw.addWithoutMerge (getTransformedBounds (getPaintBounds(), toTopLevel));
     }
 
     const auto selfOpacity = (! flags.onDesktop && native == nullptr) ? getOpacity() : 1.0f;

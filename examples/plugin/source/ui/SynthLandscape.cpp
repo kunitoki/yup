@@ -89,7 +89,7 @@ bool SynthLandscape::paint (yup::Graphics& g, const yup::Component& scope, yup::
     const auto isLight = ! SynthTheme::isDark (scope);
     const auto pixelWidth = yup::roundToInt (bounds.getWidth());
     const auto pixelHeight = yup::roundToInt (bounds.getHeight());
-    const auto resized = target == nullptr || target->getWidth() != pixelWidth || target->getHeight() != pixelHeight;
+    const auto resized = target.isStale (g.getGraphicsContext()) || target.texture->getWidth() != pixelWidth || target.texture->getHeight() != pixelHeight;
 
     if (dirty || resized || cached == nullptr || accent != look.accent || ground != look.ground || isLight != look.isLight)
     {

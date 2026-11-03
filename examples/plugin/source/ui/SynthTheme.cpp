@@ -190,6 +190,18 @@ void paintPanel (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<f
     paintBevel (g, scope, bounds, panelCorner);
 }
 
+void paintDropShadow (yup::Graphics& g, yup::Rectangle<float> bounds, float corner)
+{
+    g.setFillColor (yup::Colors::black.withAlpha (0.6f));
+    g.setFeather (10.0f);
+    g.fillRoundedRect (bounds.translated (0.0f, 4.0f), corner);
+
+    g.setFillColor (yup::Colors::black.withAlpha (0.35f));
+    g.setFeather (3.0f);
+    g.fillRoundedRect (bounds.translated (0.0f, 1.0f), corner);
+    g.setFeather (0.0f);
+}
+
 void paintTile (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds)
 {
     g.setFillColor (stripColor (scope));

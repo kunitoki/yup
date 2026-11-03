@@ -118,6 +118,7 @@ private:
         /*
         viewport = std::make_unique<yup::Viewport> ("viewport");
         viewportContent = std::make_unique<yup::Component> ("viewportContent");
+        viewportContent->setOpaque (false);
         viewportContent->setSize (yup::Size<float> (800.0f, 600.0f)); // Larger than viewport
 
         contentLabel = std::make_unique<yup::Label> ("contentLabel");

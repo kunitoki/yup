@@ -56,6 +56,16 @@ public:
         float trail = 0.1f;     /**< How far the playhead's trail reaches behind it, as a fraction of the width. */
     };
 
+    /** A render target owned by a display, with the device that made it. */
+    struct Target
+    {
+        yup::GpuTarget::Ptr texture;
+        yup::GpuDevice::Ptr device;
+
+        /** Returns true when there is no target yet, or another device made it than the one the context paints with now. */
+        bool isStale (yup::GraphicsContext& context) const { return texture == nullptr || device != context.getGpuDevice(); }
+    };
+
     /** Returns the sample that puts the ridge on the far wall at a vertical position.
 
         @param y       The position, from the top of the landscape
@@ -66,17 +76,17 @@ public:
     /** Renders the landscape into a target owned by the caller.
 
         @param context  The context the display paints with, providing the GPU device
-        @param target   The caller's target, recreated here whenever the size changes
+        @param target   The caller's target, recreated here whenever the size or the device changes
         @param width    The width of the landscape, in logical units
         @param height   The height of the landscape, in logical units
-        @param samples  The profile, sampleCount values: -1 to 1 spans most of the height
+        @param samples  The profile, sampleCount values: -1 to 1 spans most of the height; any other count renders nothing
         @param time     The animation time, in seconds
         @param look     The colors, motion and playhead of the landscape
 
         @returns The rendered landscape, or nullptr when no GPU path is available.
     */
     yup::GpuTexture::Ptr render (yup::GraphicsContext& context,
-                                 yup::GpuTarget::Ptr& target,
+                                 Target& target,
                                  int width,
                                  int height,
                                  const std::vector<float>& samples,

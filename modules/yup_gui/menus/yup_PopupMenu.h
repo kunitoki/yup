@@ -437,6 +437,7 @@ private:
     float dragAnchorY = 0.0f;
 
     static constexpr float scrollIndicatorHeight = 12.0f;
+    static constexpr float shadowMargin = 16.0f;
     static constexpr int scrollSpeed = 1; // Number of items to scroll per wheel event
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenu)

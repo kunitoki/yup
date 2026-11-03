@@ -41,6 +41,9 @@ public:
     /** Called when a click starts editing. */
     std::function<void()> onStarted;
 
+    /** Starts editing without a click, taking the keyboard focus. */
+    void startEditing();
+
     /** Called when editing stops, by return, escape or the focus moving away. It runs
         inside the focus change, so it must not move the focus itself. */
     std::function<void()> onFinished;
@@ -50,5 +53,7 @@ public:
     bool keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override;
 
 private:
+    void beginEdit();
+
     yup::String textBeforeEdit;
 };

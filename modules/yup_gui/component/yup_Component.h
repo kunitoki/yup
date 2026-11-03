@@ -802,6 +802,47 @@ public:
     bool isRenderingUnclipped() const;
 
     //==============================================================================
+    /**
+        Lets the component paint outside its bounds by the given amounts, for a drop shadow
+        or a glow.
+
+        The margin only widens what the component paints and repaints: its bounds, layout and
+        mouse hit testing are unchanged, so it is invisible to everything but drawing. Its
+        paint() is clipped to getPaintBounds() instead of getLocalBounds(), and so are its
+        children, and repaint() covers the margin too, so moving, resizing or hiding the
+        component clears what it drew there.
+
+        A component still paints inside its parent's area only. The margin is not painted
+        for components on the desktop, nor by components with a ComponentEffect or cached to
+        a texture, which render their bounds only.
+
+        @param left    How far the component may paint left of its bounds
+        @param top     How far the component may paint above its bounds
+        @param right   How far the component may paint right of its bounds
+        @param bottom  How far the component may paint below its bounds
+
+        @see getPaintBounds
+     */
+    void setPaintMargin (float left, float top, float right, float bottom);
+
+    /**
+        Lets the component paint outside its bounds by the same amount on every side.
+
+        @param margin  How far the component may paint outside its bounds
+
+        @see setPaintMargin
+     */
+    void setPaintMargin (float margin);
+
+    /**
+        Returns the area the component paints, in its local coordinates: its local bounds
+        enlarged by its paint margin.
+
+        @see setPaintMargin, getLocalBounds
+     */
+    Rectangle<float> getPaintBounds() const;
+
+    //==============================================================================
     /** Enables or disables paint measurement suppression for this component.
 
         When suppression is enabled, component paint listeners will not receive
@@ -1949,6 +1990,10 @@ private:
     Array<Component*> children;
     Rectangle<float> boundsInParent;
     AffineTransform transform;
+    struct
+    {
+        float left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f;
+    } paintMargin;
     ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;

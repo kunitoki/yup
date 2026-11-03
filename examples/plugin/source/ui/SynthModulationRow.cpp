@@ -20,8 +20,8 @@
 */
 
 #include "SynthModulationRow.h"
+#include "SynthRouteEdits.h"
 #include "SynthTheme.h"
-#include "SynthUndoHistory.h"
 
 SynthModulationRow::SynthModulationRow (int slotToEdit,
                                         SynthRoutes& routesToEdit,
@@ -87,16 +87,7 @@ void SynthModulationRow::syncFromRoutes()
 
 void SynthModulationRow::clear (bool joinsLastStep)
 {
-    if (! joinsLastStep)
-        SynthUndoHistory::beginStep (*this);
-
-    const auto before = readRoute();
-    routes.clearRoute (slot);
-    recordRoute (before, true);
-
-    if (depth->getValue() != depth->getDefaultValue())
-        ParameterGesture (*this, depth).setNormalized (depth->convertToNormalizedValue (depth->getDefaultValue()), true);
-
+    SynthRouteEdits::clear (*this, routes, slot, depth, joinsLastStep);
     syncFromRoutes();
 }
 
@@ -117,34 +108,9 @@ void SynthModulationRow::writeRoute()
     if (source < 0 || ! yup::isPositiveAndBelow (destination, static_cast<int> (destinations.size())))
         return;
 
-    const auto before = readRoute();
     const auto& target = destinations[static_cast<std::size_t> (destination)];
-    routes.setRoute (slot, static_cast<SynthModulationSource> (source), target.id, target.index);
+    SynthRouteEdits::write (*this, routes, slot, { source, target.index, target.id });
     removeButton.setVisible (isUsed());
-    recordRoute (before);
-}
-
-SynthModulationRow::RouteState SynthModulationRow::readRoute() const
-{
-    const auto route = routes.getRoute (slot);
-    return { static_cast<int> (route.source), route.destination, routes.getDestinationID (slot) };
-}
-
-void SynthModulationRow::recordRoute (const RouteState& before, bool joinsLastStep)
-{
-    const auto after = readRoute();
-
-    if (after == before)
-        return;
-
-    SynthUndoHistory::record<RouteState> (*this, before, after, [&routes = routes, slot = slot] (const RouteState& state)
-    {
-        if (state.destination < 0)
-            routes.clearRoute (slot);
-        else
-            routes.setRoute (slot, static_cast<SynthModulationSource> (state.source), state.destinationID, state.destination);
-    },
-                                          joinsLastStep);
 }
 
 void SynthModulationRow::resized()

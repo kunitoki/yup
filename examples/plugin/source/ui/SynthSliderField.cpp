@@ -32,7 +32,14 @@ SynthSliderField::SynthSliderField (const yup::String& captionText, yup::AudioPa
 
     setOpaque (false);
     setMouseCursor (yup::MouseCursor::Hand);
+    textEntry.onClosed = [this] { syncFromParameter(); };
     syncFromParameter();
+}
+
+void SynthSliderField::setTrackSunken (bool shouldBeSunken)
+{
+    trackSunken = shouldBeSunken;
+    repaint();
 }
 
 void SynthSliderField::setModulationArcs (std::vector<SynthKnob::ModulationArc> newArcs)
@@ -78,7 +85,8 @@ yup::Rectangle<float> SynthSliderField::getTrackBounds() const
 
     if (look == Look::bar)
     {
-        const auto trimmed = bounds.withTrimmedLeft (getCaptionWidth()).withTrimmedRight (valueWidth);
+        const auto captionSpace = caption.isEmpty() ? 0.0f : captionWidth + barGap;
+        const auto trimmed = bounds.withTrimmedLeft (captionSpace).withTrimmedRight (valueWidth + barGap);
         return trimmed.withSizeKeepingCenter (trimmed.getWidth(), 4.0f);
     }
 
@@ -116,7 +124,8 @@ void SynthSliderField::paint (yup::Graphics& g)
         g.fillFittedText (parameter->toString(), valueFont.withHeight (12.0f), bounds.withTrimmedLeft (bounds.getWidth() - valueWidth), yup::Justification::centerRight);
     }
 
-    g.setFillColor (SynthTheme::wellColor (*this).mixedWith (SynthTheme::panelColor (*this), 0.35f, yup::ColorSpace::SRGB));
+    const auto well = SynthTheme::wellColor (*this);
+    g.setFillColor (trackSunken ? well : well.mixedWith (SynthTheme::panelColor (*this), 0.35f, yup::ColorSpace::SRGB));
     g.fillRoundedRect (track, 2.0f);
 
     const auto positionOf = [&track] (float normalized) { return track.getX() + track.getWidth() * yup::jlimit (0.0f, 1.0f, normalized); };
@@ -150,8 +159,21 @@ void SynthSliderField::paint (yup::Graphics& g)
     }
 }
 
-void SynthSliderField::mouseDown (const yup::MouseEvent&)
+void SynthSliderField::mouseDown (const yup::MouseEvent& event)
 {
+    if (event.isRightButtonDown())
+    {
+        requestModulationPanel (*this);
+        return;
+    }
+
+    if (SynthKnob::isResetClick (event))
+    {
+        gesture.resetToDefault();
+        syncFromParameter();
+        return;
+    }
+
     gesture.begin();
 }
 
@@ -175,6 +197,20 @@ void SynthSliderField::mouseUp (const yup::MouseEvent&)
 
 void SynthSliderField::mouseDoubleClick (const yup::MouseEvent&)
 {
-    gesture.resetToDefault();
-    syncFromParameter();
+    if (! isEnabled())
+        return;
+
+    const auto bounds = getLocalBounds();
+
+    if (look == Look::bar)
+    {
+        textEntry.show (bounds.withTrimmedLeft (getCaptionWidth()));
+        return;
+    }
+
+    // Over the value line only, so the caption stays readable.
+    const auto valueBottom = getTrackBounds().getY() - 2.0f;
+    const auto height = yup::jmin (bounds.getHeight(), ParameterTextEntry::minimumHeight);
+    const auto top = yup::jlimit (bounds.getY(), bounds.getBottom() - height, valueBottom - height + 3.0f);
+    textEntry.show ({ bounds.getCenterX(), top, bounds.getRight() - 4.0f - bounds.getCenterX(), height });
 }

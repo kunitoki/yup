@@ -4273,3 +4273,30 @@ TEST (ComponentPropagationTests, OnlyNestedMouseListenersReceiveChildEvents)
     parent.removeMouseListener (&nested);
     parent.removeMouseListener (&direct);
 }
+
+// =============================================================================
+
+TEST_F (ComponentTest, PaintBoundsGrowLocalBoundsByTheMargin)
+{
+    EXPECT_EQ (child->getPaintBounds(), child->getLocalBounds());
+
+    child->setPaintMargin (2.0f, 3.0f, 4.0f, 5.0f);
+    EXPECT_EQ (child->getPaintBounds(), (Rectangle<float> { -2.0f, -3.0f, 106.0f, 83.0f }));
+
+    child->setPaintMargin (6.0f);
+    EXPECT_EQ (child->getPaintBounds(), (Rectangle<float> { -6.0f, -6.0f, 112.0f, 87.0f }));
+
+    child->setPaintMargin (0.0f);
+    EXPECT_EQ (child->getPaintBounds(), child->getLocalBounds());
+}
+
+TEST_F (ComponentTest, PaintMarginLeavesBoundsAndHitTestingUnchanged)
+{
+    parent->setVisible (true);
+    child->setVisible (true);
+    child->setPaintMargin (10.0f);
+
+    EXPECT_EQ (child->getBounds(), (Rectangle<float> { 25.0f, 25.0f, 100.0f, 75.0f }));
+    EXPECT_EQ (parent->findComponentAt ({ 30.0f, 30.0f }), child.get());
+    EXPECT_EQ (parent->findComponentAt ({ 20.0f, 20.0f }), parent.get());
+}

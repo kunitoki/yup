@@ -148,12 +148,16 @@ PresetLibrary::ScanResult PresetLibrary::scanFolders (const std::vector<Folder>&
         if (! root.folder.isDirectory())
             continue;
 
-        for (const auto& child : yup::RangedDirectoryIterator (root.folder, true, "*", yup::File::findFilesAndDirectories, yup::File::FollowSymlinks::noCycles))
+        // Links aren't followed, so every file the browser edits, moves or deletes stays inside its folder.
+        for (const auto& child : yup::RangedDirectoryIterator (root.folder, true, "*", yup::File::findFilesAndDirectories, yup::File::FollowSymlinks::no))
         {
             if (cancelled.load())
                 return {};
 
             const auto file = child.getFile();
+
+            if (file.isSymbolicLink())
+                continue;
 
             if (child.isDirectory())
             {

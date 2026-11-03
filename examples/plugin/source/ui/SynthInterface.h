@@ -34,11 +34,13 @@
 #include "SynthOscillatorPanel.h"
 #include "SynthPage.h"
 #include "SynthHeader.h"
+#include "SynthIconButton.h"
 #include "SynthPresetBrowser.h"
 #include "SynthFieldEditor.h"
 #include "SynthKeyboardToolbar.h"
 #include "SynthMacroPanel.h"
 #include "SynthModulationHandle.h"
+#include "SynthModulationPanel.h"
 #include "SynthSection.h"
 #include "SynthUndoHistory.h"
 #include "SynthVoicingPanel.h"
@@ -63,7 +65,8 @@
 
     A modulation handle of an envelope, an LFO, a macro or a wheel dragged over the interface lights every
     control it can be routed into, and the one under the mouse more brightly; dropped
-    there, it takes a free route slot at +25 % depth, as one undoable step.
+    there, it takes a free route slot at +25 % depth, as one undoable step. A right click
+    on a control a route can reach shows the routes reaching it, see SynthModulationPanel.
 
     @see RetraceProcessor
 */
@@ -71,6 +74,7 @@ class SynthInterface
     : public yup::Component
     , public UndoHistoryOwner
     , public yup::DragAndDropTarget
+    , public SynthModulationPanelHost
     , private yup::Timer
 {
 public:
@@ -121,6 +125,9 @@ public:
     void itemDragExit (const yup::DragAndDropSourceDetails& details) override;
     bool itemDropped (const yup::DragAndDropSourceDetails& details) override;
 
+    //==============================================================================
+    void showModulationPanel (SynthModulationTarget& target) override;
+
 private:
     void timerCallback() override;
 
@@ -139,6 +146,7 @@ private:
     std::vector<std::pair<SynthModulationTarget*, yup::Rectangle<float>>> getDropAreas() const;
     void hoverDrag (yup::Point<float> position);
     void clearDrag();
+    void swapFilters();
 
     //==============================================================================
     static constexpr float wheelWidth = 30.0f;
@@ -175,6 +183,7 @@ private:
     std::unique_ptr<SynthEffectsPage> effectsPage;
     std::unique_ptr<SynthMacroPanel> macroPanel;
     std::unique_ptr<ParameterSegmented> routingSelector;
+    SynthIconButton swapFiltersButton { "SwapFilters", YUP_ICON_ARROW_RIGHT_ARROW_LEFT, 13.0f };
     std::unique_ptr<yup::Label> matrixCaption;
     std::unique_ptr<yup::Label> modulationCaption;
     std::vector<std::unique_ptr<ParameterLed>> lfoSyncLeds;
@@ -187,6 +196,7 @@ private:
 
     std::unique_ptr<SynthVoicingPanel> voicingPanel;
     std::unique_ptr<SynthPresetBrowser> presetBrowser;
+    std::unique_ptr<SynthModulationPanel> modulationPanel;
 
     std::vector<SynthModulationTarget*> modulationTargets;
     std::optional<SynthModulationSource> dragSource;

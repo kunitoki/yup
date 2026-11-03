@@ -198,6 +198,24 @@ MemoryBlock memoryBlockFromString (const String& text)
 
 } // namespace
 
+TEST (AudioParameterTests, IgnoresNonFiniteValues)
+{
+    auto parameter = makeParameter ("value", "Value");
+    parameter->setValue (0.25f);
+
+    parameter->setValue (std::numeric_limits<float>::quiet_NaN());
+    EXPECT_FLOAT_EQ (0.25f, parameter->getValue());
+
+    parameter->setValue (std::numeric_limits<float>::infinity());
+    EXPECT_FLOAT_EQ (0.25f, parameter->getValue());
+
+    parameter->setNormalizedValue (std::numeric_limits<float>::quiet_NaN());
+    EXPECT_FLOAT_EQ (0.25f, parameter->getValue());
+
+    parameter->fromString ("nan");
+    EXPECT_FLOAT_EQ (0.25f, parameter->getValue());
+}
+
 TEST (AudioParameterTests, UsesIndexAsHostIDByDefault)
 {
     TestAudioProcessor processor;

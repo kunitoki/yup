@@ -47,6 +47,7 @@ public:
         canvas->setSize (canvasWidth, canvasHeight);
         viewport.setViewedComponent (canvas.get());
         addAndMakeVisible (viewport);
+        setOpaque (false);
     }
 
     void resized() override

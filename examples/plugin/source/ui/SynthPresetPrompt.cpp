@@ -208,6 +208,7 @@ void SynthPresetPrompt::paint (yup::Graphics& g)
     g.setFillColor (yup::Colors::black.withAlpha (0.45f));
     g.fillRect (getLocalBounds());
 
+    SynthTheme::paintDropShadow (g, tile);
     SynthTheme::paintTile (g, *this, tile);
 
     auto content = tile.reduced (SynthTheme::panelPadding * 2.0f);

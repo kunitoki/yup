@@ -26,16 +26,28 @@ SynthFieldEditor::SynthFieldEditor()
     setWantsKeyboardFocus (false);
 }
 
+void SynthFieldEditor::beginEdit()
+{
+    textBeforeEdit = getText();
+    setWantsKeyboardFocus (true);
+
+    if (onStarted != nullptr)
+        onStarted();
+}
+
+void SynthFieldEditor::startEditing()
+{
+    if (isReadOnly() || hasKeyboardFocus())
+        return;
+
+    beginEdit();
+    takeKeyboardFocus();
+}
+
 void SynthFieldEditor::mouseDown (const yup::MouseEvent& event)
 {
     if (! isReadOnly() && ! hasKeyboardFocus())
-    {
-        textBeforeEdit = getText();
-        setWantsKeyboardFocus (true);
-
-        if (onStarted != nullptr)
-            onStarted();
-    }
+        beginEdit();
 
     yup::TextEditor::mouseDown (event);
 }

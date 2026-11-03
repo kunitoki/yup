@@ -447,6 +447,17 @@ const RandomFilter coloringFilters[] {
     { SynthFilterType::lowpass12, { 2000.0f, 10000.0f } },
     { SynthFilterType::comb, { 200.0f, 1500.0f } }
 };
+
+/** Reads a parameter value from untrusted state, falling back when it is missing or not finite. */
+float readParameterValue (const yup::DataTree& state, const yup::AudioParameter& parameter, float fallback)
+{
+    const auto value = static_cast<double> (state.getProperty (yup::Identifier (parameter.getID()), static_cast<double> (fallback)));
+
+    if (! std::isfinite (value))
+        return fallback;
+
+    return static_cast<float> (yup::jlimit<double> (parameter.getMinimumValue(), parameter.getMaximumValue(), value));
+}
 } // namespace
 
 //==============================================================================
@@ -540,8 +551,7 @@ yup::Result loadState (const yup::DataTree& tree, yup::Span<const yup::AudioPara
         if (! tree.hasProperty (id) && ! parameter->isAutomatable())
             continue;
 
-        parameter->setValue (tree.hasProperty (id) ? static_cast<float> (static_cast<double> (tree.getProperty (id)))
-                                                   : parameter->getDefaultValue());
+        parameter->setValue (readParameterValue (tree, *parameter, parameter->getDefaultValue()));
     }
 
     for (std::size_t index = 0; index < state.partials.size(); ++index)
@@ -903,7 +913,7 @@ void varyState (yup::DataTree& state, const SynthParameters& parameters, yup::Ra
 
     const auto valueOf = [&state] (const Parameter& parameter)
     {
-        return static_cast<float> (static_cast<double> (state.getProperty (yup::Identifier (parameter->getID()))));
+        return readParameterValue (state, *parameter, 0.0f);
     };
 
     const auto isOn = [&valueOf] (const Parameter& enabled) { return enabled == nullptr || valueOf (enabled) >= 0.5f; };

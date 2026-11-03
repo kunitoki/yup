@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <yup_core/yup_core.h>
+
 //==============================================================================
 /** Sizing shared by the polyphonic engine and its user interface. */
 namespace SynthExample
@@ -55,4 +57,15 @@ constexpr int displayHarmonics = 127;
 
 constexpr double levelRampSeconds = 0.01;
 constexpr double enableFadeSeconds = 0.005; /**< How long switching an operator on or off fades it. */
+
+/** The largest preset or tuning file read, far above any real one. Anything empty or larger,
+    like a device, a pipe or a huge file, is refused before it is read. */
+constexpr yup::int64 maxFileBytes = 4 * 1024 * 1024;
+
+/** Returns true for a regular, non-empty file small enough to read whole. */
+inline bool isReadableFile (const yup::File& file)
+{
+    const auto size = file.getSize();
+    return file.existsAsFile() && size > 0 && size <= maxFileBytes;
+}
 } // namespace SynthExample

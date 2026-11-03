@@ -332,11 +332,17 @@ void SynthOscillatorPanel::resized()
     seamX = controls.getX();
     controls.removeFromLeft (gap * 2.0f);
 
-    auto sendArea = controls.reduced (0.0f, 12.0f);
-    const auto sendHeight = sendArea.getHeight() / static_cast<float> (sends.size());
+    // Tall enough for the value entry, spread over the controls height.
+    const auto sendHeight = 22.0f;
+    const auto sendCount = static_cast<float> (sends.size());
+    const auto sendGap = yup::jmax (2.0f, (controls.getHeight() - sendHeight * sendCount) / (sendCount + 1.0f));
+    auto sendArea = controls.withSizeKeepingCenter (controls.getWidth(), sendHeight * sendCount + sendGap * (sendCount - 1.0f));
 
     for (auto& field : sends)
+    {
         field.setBounds (sendArea.removeFromTop (sendHeight));
+        sendArea.removeFromTop (sendGap);
+    }
 }
 
 void SynthOscillatorPanel::paint (yup::Graphics& g)

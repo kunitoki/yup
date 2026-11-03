@@ -59,8 +59,19 @@ SynthMacroPanel::SynthMacroPanel (RetraceProcessor& processorToControl)
 
 void SynthMacroPanel::syncFromProcessor()
 {
-    for (auto& knob : knobs)
-        knob->syncFromParameter();
+    for (int macro = 0; macro < SynthExample::macroCount; ++macro)
+    {
+        auto& knob = *knobs[static_cast<std::size_t> (macro)];
+        knob.syncFromParameter();
+
+        auto title = knob.isShowingValue() ? knob.getValueText() : "M" + yup::String (macro + 1);
+
+        if (auto& shown = titles[static_cast<std::size_t> (macro)]; shown != title)
+        {
+            shown = std::move (title);
+            repaint();
+        }
+    }
 
     const auto info = processor.getPresetInfo();
 
@@ -151,6 +162,6 @@ void SynthMacroPanel::paint (yup::Graphics& g)
     {
         const auto knob = knobs[static_cast<std::size_t> (macro)]->getBounds();
         const auto title = yup::Rectangle<float> (knob.getX(), knob.getY() - titleHeight, knob.getWidth() - handleSize, titleHeight);
-        g.fillFittedText ("M" + yup::String (macro + 1), captionFont, title, yup::Justification::centerLeft);
+        g.fillFittedText (titles[static_cast<std::size_t> (macro)], captionFont, title, yup::Justification::centerLeft);
     }
 }

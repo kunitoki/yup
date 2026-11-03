@@ -30,6 +30,9 @@ const yup::Identifier customProperty ("custom");
 const yup::Identifier cosinesProperty ("cosines");
 const yup::Identifier sinesProperty ("sines");
 
+/** Bounds a loaded coefficient, far above any a waveform produces, so a corrupt preset can't blow up the level. */
+constexpr float maximumCoefficient = 16.0f;
+
 yup::String joinCoefficients (const std::array<std::atomic<float>, SynthExample::editableHarmonics>& coefficients)
 {
     yup::StringArray values;
@@ -45,7 +48,10 @@ void splitCoefficients (const yup::String& text, std::array<std::atomic<float>, 
     const auto values = yup::StringArray::fromTokens (text, false);
 
     for (std::size_t index = 0; index < coefficients.size(); ++index)
-        coefficients[index].store (static_cast<int> (index) < values.size() ? values[static_cast<int> (index)].getFloatValue() : 0.0f);
+    {
+        const auto value = static_cast<int> (index) < values.size() ? values[static_cast<int> (index)].getFloatValue() : 0.0f;
+        coefficients[index].store (std::isfinite (value) ? yup::jlimit (-maximumCoefficient, maximumCoefficient, value) : 0.0f);
+    }
 }
 } // namespace
 

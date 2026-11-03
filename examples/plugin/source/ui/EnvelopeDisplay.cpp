@@ -92,6 +92,10 @@ void EnvelopeDisplay::setCurve (const SynthCurveState::Curve& newCurve)
     if (newCurve == curve)
         return;
 
+    // Another curve replacing the one being dragged, like an undo or a preset load, ends the drag.
+    dragKind = DragKind::none;
+    dragIndex = -1;
+
     curve = newCurve;
     updateShown();
     repaint();

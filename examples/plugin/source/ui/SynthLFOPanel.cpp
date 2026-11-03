@@ -75,7 +75,6 @@ SynthLFOPanel::SynthLFOPanel (const SynthLFOParameters& parametersToEdit,
     for (auto* knob : { &rateKnob, &phaseKnob, &smoothKnob, &depthKnob })
         addAndMakeVisible (*knob);
 
-    rateKnob.setCaptionShowsValue (true);
     syncFromParameters();
 }
 

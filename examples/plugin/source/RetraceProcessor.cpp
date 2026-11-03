@@ -243,7 +243,7 @@ void RetraceProcessor::applyParameterChange (const yup::ParameterChange& change)
 {
     const auto parameters = getParameters();
 
-    if (! yup::isPositiveAndBelow (change.parameterIndex, static_cast<int> (parameters.size())))
+    if (! yup::isPositiveAndBelow (change.parameterIndex, static_cast<int> (parameters.size())) || ! std::isfinite (change.normalizedValue))
         return;
 
     const auto index = static_cast<std::size_t> (change.parameterIndex);
@@ -403,6 +403,9 @@ yup::Result RetraceProcessor::savePresetFile (const yup::File& file)
 
 yup::Result RetraceProcessor::loadPresetFile (const yup::File& file)
 {
+    if (! SynthExample::isReadableFile (file))
+        return yup::Result::fail ("Cannot read " + file.getFullPathName());
+
     const auto xml = yup::parseXML (file);
 
     if (xml == nullptr)

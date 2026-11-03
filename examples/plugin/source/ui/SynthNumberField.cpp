@@ -30,6 +30,7 @@ SynthNumberField::SynthNumberField (const yup::String& captionText, yup::AudioPa
 
     setOpaque (false);
     setMouseCursor (yup::MouseCursor::Hand);
+    textEntry.onClosed = [this] { syncFromParameter(); };
     syncFromParameter();
 }
 
@@ -122,8 +123,21 @@ void SynthNumberField::paint (yup::Graphics& g)
     }
 }
 
-void SynthNumberField::mouseDown (const yup::MouseEvent&)
+void SynthNumberField::mouseDown (const yup::MouseEvent& event)
 {
+    if (event.isRightButtonDown())
+    {
+        requestModulationPanel (*this);
+        return;
+    }
+
+    if (SynthKnob::isResetClick (event))
+    {
+        gesture.resetToDefault();
+        syncFromParameter();
+        return;
+    }
+
     gesture.begin();
 }
 
@@ -146,6 +160,6 @@ void SynthNumberField::mouseUp (const yup::MouseEvent&)
 
 void SynthNumberField::mouseDoubleClick (const yup::MouseEvent&)
 {
-    gesture.resetToDefault();
-    syncFromParameter();
+    if (isEnabled())
+        textEntry.show (caption.isNotEmpty() ? getLocalBounds().withTrimmedLeft (getWidth() * 0.5f) : getLocalBounds());
 }

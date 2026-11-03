@@ -720,17 +720,23 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 
 void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu& p)
 {
-    auto localBounds = p.getLocalBounds();
+    const auto localBounds = p.getLocalBounds();
 
-    // TODO: Draw drop shadow if enabled
-    if (false) // (p.getOptions().parentComponent != nullptr)
+    // The drop shadow fills the paint margin the menu has around it inside a parent.
+    if (const auto paintBounds = p.getPaintBounds(); paintBounds != localBounds)
     {
-        auto shadowRadius = static_cast<float> (8.0f);
-        localBounds = localBounds.reduced (shadowRadius);
+        const auto room = jmin (localBounds.getX() - paintBounds.getX(),
+                                localBounds.getY() - paintBounds.getY(),
+                                paintBounds.getRight() - localBounds.getRight(),
+                                paintBounds.getBottom() - localBounds.getBottom());
 
-        g.setFillColor (Color (0, 0, 0));
-        g.setFeather (shadowRadius);
-        g.fillRoundedRect (localBounds.translated (0.0f, 2.0f), 4.0f);
+        g.setFillColor (Colors::black.withAlpha (0.6f));
+        g.setFeather (room * 0.6f);
+        g.fillRoundedRect (localBounds.translated (0.0f, room * 0.25f), widgetCornerRadius);
+
+        g.setFillColor (Colors::black.withAlpha (0.35f));
+        g.setFeather (room * 0.2f);
+        g.fillRoundedRect (localBounds.translated (0.0f, 1.0f), widgetCornerRadius);
         g.setFeather (0.0f);
     }
 

@@ -168,7 +168,7 @@ private:
 
     yup::GpuTexture::Ptr getLandscape (yup::Graphics& g);
 
-    yup::GpuTarget::Ptr landscapeTarget;
+    SynthWaveformShader::Target landscapeTarget;
     yup::GpuTexture::Ptr cachedLandscape;
     float animationTime = 0.0f;
     double sinceLastFrame = 0.0;

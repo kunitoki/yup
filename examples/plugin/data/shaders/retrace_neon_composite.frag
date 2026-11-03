@@ -78,7 +78,7 @@ void main()
     // Powering on runs a tube switching off backwards: the picture, squashed into a bright
     // line one pixel tall, first fades in while the line widens from the center, then
     // opens vertically as it dims back to its own colors.
-    float onePixel = (p.height - 1.0) / p.height;
+    float onePixel = max(p.height - 1.0, 0.0) / max(p.height, 1.0);
     float time = (1.0 - clamp(p.opening, 0.0, 1.0)) * (1.0 / squashSpeed + 1.0);
     float squash = clamp(time * squashSpeed, 0.0, onePixel);
     float fade = clamp(time - onePixel / squashSpeed, 0.0, 1.0);

@@ -22,6 +22,7 @@
 #include "SynthInterface.h"
 #include "ParameterGesture.h"
 #include "SynthNeonEffect.h"
+#include "SynthRouteEdits.h"
 #include "SynthKeyboardLook.h"
 #include "SynthTheme.h"
 #include "SynthSettings.h"
@@ -181,7 +182,9 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
         filterTabs.push_back ({ "Filter " + yup::String (index + 1), filterPanels[static_cast<std::size_t> (index)].get(), parameters.filters[static_cast<std::size_t> (index)].enabled });
 
     routingSelector = std::make_unique<ParameterSegmented> (parameters.filterRouting, std::vector<ParameterSegmented::Segment> { { "Serial" }, { "Par" } });
-    filterSection = std::make_unique<SynthSection> (std::move (filterTabs), SynthTheme::Section::filters, std::vector<SynthSection::StripControl> { { routingSelector.get(), 96.0f } });
+    swapFiltersButton.setTitle ("Swap filters");
+    swapFiltersButton.onClick = [this] { swapFilters(); };
+    filterSection = std::make_unique<SynthSection> (std::move (filterTabs), SynthTheme::Section::filters, std::vector<SynthSection::StripControl> { { routingSelector.get(), 96.0f }, { &swapFiltersButton, 28.0f } });
 
     std::vector<SynthSection::Tab> envelopeTabs;
 
@@ -225,6 +228,10 @@ SynthInterface::SynthInterface (RetraceProcessor& processorToEdit, int themeToWe
 
     collectModulationTargets (*this, modulationTargets);
 
+    // Added after the targets are collected, so its depth fields are not targets themselves.
+    modulationPanel = std::make_unique<SynthModulationPanel> (processor.getRoutes(), parameters.modulation.depths);
+    addChildComponent (*modulationPanel);
+
     SynthThemes::applyTheme (*this, theme);
 
     // Menus and combo box lists open inside the interface, so the post effect draws them too.
@@ -252,6 +259,7 @@ void SynthInterface::resized()
     mainPage.setBounds (bounds);
 
     layoutMainPage();
+    modulationPanel->setBounds (getLocalBounds());
 }
 
 /** Lays the instrument out as rows of panels with a right column of one width, so the
@@ -314,6 +322,8 @@ void SynthInterface::setBrowserOpen (bool shouldBeOpen)
 {
     if (shouldBeOpen == isBrowserOpen())
         return;
+
+    modulationPanel->close();
 
     for (auto* section : { oscillatorSection.get(), macroSection.get(), matrixSection.get(), filterSection.get(), envelopeSection.get(), lfoSection.get() })
         section->setVisible (! shouldBeOpen);
@@ -534,32 +544,68 @@ bool SynthInterface::itemDropped (const yup::DragAndDropSourceDetails& details)
     if (component == nullptr || slot < 0 || destination < 0)
         return false;
 
-    struct RouteState
-    {
-        int source = 0;
-        int destination = -1;
-        yup::String destinationID;
-
-        bool operator== (const RouteState&) const = default;
-    };
-
-    const auto previous = routes.getRoute (slot);
-    const RouteState before { static_cast<int> (previous.source), previous.destination, routes.getDestinationID (slot) };
-
-    routes.setRoute (slot, *source, parameter->getID(), destination);
-    SynthUndoHistory::record<RouteState> (*component, before, { static_cast<int> (*source), destination, parameter->getID() }, [&routes = routes, slot] (const RouteState& state)
-    {
-        if (state.destination < 0)
-            routes.clearRoute (slot);
-        else
-            routes.setRoute (slot, static_cast<SynthModulationSource> (state.source), state.destinationID, state.destination);
-    });
+    SynthRouteEdits::write (*component, routes, slot, { static_cast<int> (*source), destination, parameter->getID() });
 
     // The depth joins the route's step, so one undo takes both back.
     const auto& depth = processor.getSynthParameters().modulation.depths[static_cast<std::size_t> (slot)];
     ParameterGesture (*component, depth).setNormalized (depth->convertToNormalizedValue (initialDepth), true);
 
     return true;
+}
+
+/** Swaps the two filters, settings and the routes reaching them, as one undoable step. */
+void SynthInterface::swapFilters()
+{
+    static_assert (SynthExample::filterCount == 2);
+
+    const auto& filters = processor.getSynthParameters().filters;
+
+    // The history is found from a child of the interface.
+    auto& control = swapFiltersButton;
+    SynthUndoHistory::beginStep (control);
+
+    for (const auto& [first, second] : { std::pair { filters[0].type, filters[1].type },
+                                         std::pair { filters[0].cutoff, filters[1].cutoff },
+                                         std::pair { filters[0].resonance, filters[1].resonance },
+                                         std::pair { filters[0].drive, filters[1].drive },
+                                         std::pair { filters[0].keytrack, filters[1].keytrack },
+                                         std::pair { filters[0].mix, filters[1].mix },
+                                         std::pair { filters[0].enabled, filters[1].enabled } })
+    {
+        const auto firstValue = first->getNormalizedValue();
+        ParameterGesture (control, first).setNormalized (second->getNormalizedValue(), true);
+        ParameterGesture (control, second).setNormalized (firstValue, true);
+    }
+
+    // Every route is read before any is written, so the two filters' routes do not mix.
+    auto& routes = processor.getRoutes();
+    std::vector<std::pair<int, SynthRouteEdits::RouteState>> moved;
+
+    for (int slot = 0; slot < SynthExample::modulationSlots; ++slot)
+    {
+        auto state = SynthRouteEdits::read (routes, slot);
+        const auto other = state.destinationID.startsWith ("flt1.") ? "flt2." : state.destinationID.startsWith ("flt2.") ? "flt1." : nullptr;
+
+        if (state.destination < 0 || other == nullptr)
+            continue;
+
+        state.destinationID = yup::String (other) + state.destinationID.substring (5);
+        state.destination = SynthPatch::findRouteDestination (processor.getParameters(), state.destinationID);
+        moved.emplace_back (slot, state);
+    }
+
+    for (const auto& [slot, state] : moved)
+        SynthRouteEdits::write (control, routes, slot, state, true);
+}
+
+void SynthInterface::showModulationPanel (SynthModulationTarget& target)
+{
+    const auto parameter = target.getModulationParameter();
+
+    if (isBrowserOpen() || parameter == nullptr || SynthPatch::findRouteDestination (processor.getParameters(), parameter->getID()) < 0)
+        return;
+
+    modulationPanel->show (target);
 }
 
 //==============================================================================
@@ -686,6 +732,12 @@ yup::ComponentEffect::Ptr SynthInterface::createPostEffect()
     the interface's, and the rest play the keyboard. */
 bool SynthInterface::keyDown (const yup::KeyPress& key, const yup::Point<float>&)
 {
+    if (key.getKey() == yup::KeyPress::escapeKey && modulationPanel->isOpen())
+    {
+        modulationPanel->close();
+        return true;
+    }
+
     if (key.getKey() == yup::KeyPress::escapeKey && isBrowserOpen())
     {
         setBrowserOpen (false);
@@ -770,6 +822,7 @@ void SynthInterface::timerCallback()
 
     updateModulation();
     syncFromProcessor();
+    modulationPanel->syncFromRoutes();
 
     // A drag cancelled or dropped elsewhere does not always leave through itemDragExit().
     if (dragSource.has_value() && ! getDraggedSource().has_value())
@@ -907,6 +960,7 @@ void SynthInterface::syncFromProcessor()
             macroNames[static_cast<std::size_t> (macro)] = info.getMacroName (macro);
 
         modulationPage->setMacroNames (macroNames);
+        modulationPanel->setMacroNames (macroNames);
         shownPresetInfo = std::move (info);
     }
 

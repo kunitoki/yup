@@ -396,6 +396,22 @@ painting outside (e.g. a shadow that bleeds beyond the bounds):
 comp.enableRenderingUnclipped (true);
 ```
 
+### Paint margin
+
+A paint margin gives a component room around its bounds to paint into, such as
+a drop shadow, without changing its bounds, layout or hit testing. `paint()`
+may draw into it, and `repaint()` covers it, so nothing is left behind when the
+component moves, resizes or hides:
+
+```cpp
+comp.setPaintMargin (8.0f, 8.0f, 8.0f, 12.0f); // left, top, right, bottom
+auto area = comp.getPaintBounds();              // local bounds grown by the margin
+```
+
+The margin is still clipped to the parent. Desktop components, and components
+with an effect or cached to a texture, paint within their bounds only. A
+`PopupMenu` shown inside a parent component uses it for its drop shadow.
+
 ### `refreshDisplay()` — continuous animation
 
 Override `refreshDisplay()` for per-frame animation (timers, property animation,

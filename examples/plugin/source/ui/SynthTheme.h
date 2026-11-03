@@ -122,6 +122,10 @@ void paintBevel (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<f
 /** Paints a panel body with its bevel. */
 void paintPanel (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds);
 
+/** Paints the soft shadow a floating card casts under its bounds; paint the card over it.
+    It reaches about 14 units out, so leave that much room around the card. */
+void paintDropShadow (yup::Graphics& g, yup::Rectangle<float> bounds, float corner = panelCorner);
+
 /** Paints a tile, a strip colored box with a bevel. */
 void paintTile (yup::Graphics& g, const yup::Component& scope, yup::Rectangle<float> bounds);
 

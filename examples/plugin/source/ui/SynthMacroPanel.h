@@ -36,7 +36,8 @@
     A macro is a parameter the host automates and a modulation source the routes read, so
     one knob can move any number of destinations. Its name belongs to the patch: a click
     on it starts editing, and each rename is one step of the undo history. The handle in the
-    title above the knob is dragged onto a control to modulate it with the macro.
+    title above the knob is dragged onto a control to modulate it with the macro. The title
+    shows the macro's value while its knob is hovered or dragged.
 
     @see SynthParameters, SynthModulationSource
 */
@@ -66,5 +67,6 @@ private:
     std::array<SynthFieldEditor, SynthExample::macroCount> names;
     std::array<std::unique_ptr<SynthModulationHandle>, SynthExample::macroCount> handles;
     std::array<yup::String, SynthExample::macroCount> namesBeforeEdit;
+    std::array<yup::String, SynthExample::macroCount> titles;
     yup::Font captionFont;
 };

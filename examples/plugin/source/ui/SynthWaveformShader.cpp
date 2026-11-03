@@ -29,7 +29,7 @@ float SynthWaveformShader::sampleForY (float y, float height) noexcept
 }
 
 yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
-                                                  yup::GpuTarget::Ptr& target,
+                                                  Target& target,
                                                   int width,
                                                   int height,
                                                   const std::vector<float>& samples,
@@ -38,13 +38,16 @@ yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
 {
     jassert (samples.size() == static_cast<std::size_t> (sampleCount));
 
-    if (width < 2 || height < 2 || ! ensurePipeline (context))
+    if (samples.size() != static_cast<std::size_t> (sampleCount) || width < 2 || height < 2 || ! ensurePipeline (context))
         return nullptr;
 
-    if (target == nullptr || target->getWidth() != width || target->getHeight() != height)
-        target = yup::GpuTarget::create (device, width, height);
+    if (target.texture == nullptr || target.device != device || target.texture->getWidth() != width || target.texture->getHeight() != height)
+    {
+        target.texture = yup::GpuTarget::create (device, width, height);
+        target.device = device;
+    }
 
-    if (target == nullptr)
+    if (target.texture == nullptr)
         return nullptr;
 
     const auto& accent = look.accent;
@@ -67,7 +70,7 @@ yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
     if (! frame.isValid())
         return nullptr;
 
-    auto pass = target->beginRenderPass (frame, { true, look.ground });
+    auto pass = target.texture->beginRenderPass (frame, { true, look.ground });
     if (! pass.isValid())
         return nullptr;
 
@@ -78,11 +81,24 @@ yup::GpuTexture::Ptr SynthWaveformShader::render (yup::GraphicsContext& context,
     if (! pass.draw (3) || ! pass.finish() || ! frame.submit())
         return nullptr;
 
-    return target->asTexture();
+    return target.texture->asTexture();
 }
 
 bool SynthWaveformShader::ensurePipeline (yup::GraphicsContext& context)
 {
+    const auto currentDevice = context.getGpuDevice();
+
+    // A device replacing a lost one needs a pipeline of its own.
+    if (currentDevice != device)
+    {
+        device = currentDevice;
+        pipeline = nullptr;
+        compileAttempted = false;
+    }
+
+    if (device == nullptr || device->isDeviceLost())
+        return false;
+
     if (pipeline != nullptr)
         return true;
 
@@ -90,7 +106,6 @@ bool SynthWaveformShader::ensurePipeline (yup::GraphicsContext& context)
         return false;
 
     compileAttempted = true;
-    device = context.getGpuDevice();
 
     yup::GpuPipelineOptions options;
     options.colorTargets.emplace_back().blendEnabled = false;

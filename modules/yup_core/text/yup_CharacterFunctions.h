@@ -428,7 +428,7 @@ public:
                 break;
         }
 
-        return isNeg ? -(IntType) v : (IntType) v;
+        return (IntType) (isNeg ? (UIntType) (UIntType (0) - v) : v);
     }
 
     /** Parses a character string, to read a hexadecimal value. */
