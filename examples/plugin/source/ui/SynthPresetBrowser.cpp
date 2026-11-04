@@ -126,12 +126,12 @@ void SynthPresetBrowser::showRowMenu (int row, yup::Point<float> position)
 
     if (listed != nullptr)
     {
-        const auto isFile = ! entry.isFactory();
-        menu->addItem ("Rename...", renameId, isFile);
-        menu->addItem ("Duplicate", duplicateId, isFile);
-        menu->addItem ("Delete...", deleteId, isFile);
+        const auto isWritable = ! entry.isReadOnly();
+        menu->addItem ("Rename...", renameId, isWritable);
+        menu->addItem ("Duplicate", duplicateId, isWritable);
+        menu->addItem ("Delete...", deleteId, isWritable);
         menu->addSeparator();
-        menu->addItem (SynthPresetSources::getRevealCommandName(), revealId, isFile);
+        menu->addItem (SynthPresetSources::getRevealCommandName(), revealId, ! entry.isFactory());
     }
     else
     {

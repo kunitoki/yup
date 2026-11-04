@@ -139,7 +139,9 @@ yup::DataTree createRandomState (const SynthParameters& parameters,
 void varyState (yup::DataTree& state, const SynthParameters& parameters, yup::Random& random);
 
 //==============================================================================
-/** Returns how many factory presets there are. */
+/** Returns how many factory presets there are: Init, built in code, then the presets of
+    the factory bank embedded in the plugin, in the order of their paths in it.
+*/
 int getNumFactoryPresets();
 
 /** Returns the UUID of a factory preset, which stays the same when it is renamed. */
@@ -147,6 +149,11 @@ yup::String getFactoryPresetId (int index);
 
 /** Returns the name of a factory preset. */
 yup::String getFactoryPresetName (int index);
+
+/** Returns the folders of a factory preset inside the factory bank, joined with " / ",
+    like "Pads"; empty for Init and an index out of range.
+*/
+yup::String getFactoryPresetFolder (int index);
 
 /** Returns the description of a factory preset, empty for an index out of range. */
 PresetInfo getFactoryPresetInfo (int index);

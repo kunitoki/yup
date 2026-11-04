@@ -31,7 +31,8 @@
 
 //==============================================================================
 /** Every preset the browser knows: the factory presets plus the preset files found in a
-    list of folders.
+    list of folders, and the presets inside the bank files found there, which are listed
+    in place and read-only.
 
     The folders are walked and each file's metadata is read on a background thread; the
     message thread only receives the finished list, so a big library never stalls the UI.

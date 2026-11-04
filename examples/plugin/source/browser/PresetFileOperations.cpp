@@ -25,7 +25,7 @@ namespace PresetFileOperations
 {
 namespace
 {
-const char* const factoryError = "Factory presets can't be changed";
+const char* const readOnlyError = "Factory presets and presets in a bank can't be changed";
 
 /** The entry as it is about to be written to a file: with that file and name, and an id,
     which is also its key from now on. */
@@ -69,8 +69,8 @@ yup::File getFileFor (const yup::File& folder, const yup::String& name, const Pr
 
 yup::ResultValue<PresetEntry> rename (const PresetEntry& entry, const yup::String& newName, const PresetFormat& format, PresetUserData& userData)
 {
-    if (entry.isFactory())
-        return yup::makeResultValueFail (factoryError);
+    if (entry.isReadOnly())
+        return yup::makeResultValueFail (readOnlyError);
 
     const auto name = newName.trim();
 
@@ -109,8 +109,8 @@ yup::ResultValue<PresetEntry> rename (const PresetEntry& entry, const yup::Strin
 
 yup::ResultValue<yup::File> duplicate (const PresetEntry& entry, const PresetFormat& format, PresetUserData& userData)
 {
-    if (entry.isFactory())
-        return yup::makeResultValueFail (factoryError);
+    if (entry.isReadOnly())
+        return yup::makeResultValueFail (readOnlyError);
 
     auto target = getFileFor (entry.file.getParentDirectory(), entry.name + " copy", format);
 
@@ -136,8 +136,8 @@ yup::ResultValue<yup::File> duplicate (const PresetEntry& entry, const PresetFor
 
 yup::Result remove (const PresetEntry& entry, PresetUserData& userData)
 {
-    if (entry.isFactory())
-        return yup::Result::fail (factoryError);
+    if (entry.isReadOnly())
+        return yup::Result::fail (readOnlyError);
 
     if (! entry.file.deleteFile())
         return yup::Result::fail ("Can't delete " + entry.file.getFullPathName());
@@ -148,8 +148,8 @@ yup::Result remove (const PresetEntry& entry, PresetUserData& userData)
 
 yup::ResultValue<PresetEntry> writeMetadata (const PresetEntry& edited, const PresetFormat& format, PresetUserData& userData)
 {
-    if (edited.isFactory())
-        return yup::makeResultValueFail (factoryError);
+    if (edited.isReadOnly())
+        return yup::makeResultValueFail (readOnlyError);
 
     auto written = prepareForFile (edited, edited.file, edited.name, false);
 

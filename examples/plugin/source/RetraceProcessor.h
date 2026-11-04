@@ -143,7 +143,9 @@ public:
     */
     PresetBrowseState& getPresetBrowser();
 
-    /** Loads a factory preset or a preset file listed by the browser. Message thread. */
+    /** Loads a factory preset, a preset file or a preset inside a bank file listed by the
+        browser. Message thread.
+    */
     yup::Result loadPresetEntry (const PresetEntry& entry);
 
     /** Returns the preset file the current patch was loaded from or saved to, or an invalid
@@ -152,7 +154,8 @@ public:
     yup::File getCurrentPresetFile() const;
 
     /** Returns the browser key of the current patch: the preset's id (or the file's path
-        when the file has none), or empty for a patch that is not a preset. Message thread.
+        when the file has none), the key of the bank entry it was loaded from, or empty for a
+        patch that is not a preset. Message thread.
     */
     yup::String getCurrentPresetKey() const;
 
@@ -296,6 +299,7 @@ private:
     std::atomic<int> currentPreset { 0 };
     SynthPatch::PresetInfo presetInfo;
     yup::File currentPresetFile;
+    yup::String currentBankEntryKey;
     mutable yup::SpinLock presetInfoLock;
     yup::String themeName;
     mutable yup::SpinLock themeNameLock;

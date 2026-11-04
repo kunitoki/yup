@@ -24,6 +24,7 @@
 #include "PluginLogger.h"
 #include "ui/SynthThemes.h"
 #include "ui/SynthPresetLibrary.h"
+#include "browser/PresetBank.h"
 #include "browser/PresetBrowseState.h"
 #include "mcp/RetraceMCPServer.h"
 #include "ui/SynthSettings.h"
@@ -426,6 +427,7 @@ yup::Result RetraceProcessor::savePresetFile (const yup::File& file)
     const yup::SpinLock::ScopedLockType lock (presetInfoLock);
     presetInfo = std::move (info);
     currentPresetFile = file;
+    currentBankEntryKey = {};
     return yup::Result::ok();
 }
 
@@ -472,6 +474,25 @@ PresetBrowseState& RetraceProcessor::getPresetBrowser()
 
 yup::Result RetraceProcessor::loadPresetEntry (const PresetEntry& entry)
 {
+    if (entry.isInBank())
+    {
+        const auto xml = yup::parseXML (PresetBank (entry.file).readEntry (entry.bankPath, SynthExample::maxFileBytes));
+
+        if (xml == nullptr)
+            return yup::Result::fail ("Cannot read " + entry.bankPath + " in " + entry.file.getFullPathName());
+
+        if (auto result = applyState (yup::DataTree::fromXml (*xml), ChangeDetails {}.withProgramChanged (true)); result.failed())
+            return result;
+
+        const yup::SpinLock::ScopedLockType lock (presetInfoLock);
+        currentBankEntryKey = entry.key;
+
+        if (presetInfo.name.isEmpty())
+            presetInfo.name = entry.bankPath.fromLastOccurrenceOf ("/", false, false).upToLastOccurrenceOf (".", false, false);
+
+        return yup::Result::ok();
+    }
+
     if (! entry.isFactory())
         return loadPresetFile (entry.file);
 
@@ -502,7 +523,8 @@ yup::String RetraceProcessor::getCurrentPresetKey() const
     if (const auto index = currentPreset.load(); index >= 0)
         return SynthPatch::getFactoryPresetId (index);
 
-    return {};
+    const yup::SpinLock::ScopedLockType lock (presetInfoLock);
+    return currentBankEntryKey;
 }
 
 /** Follows a preset file the browser changed when it is the current one, in whichever
@@ -573,6 +595,7 @@ yup::Result RetraceProcessor::applyState (const yup::DataTree& state, ChangeDeta
         const yup::SpinLock::ScopedLockType lock (presetInfoLock);
         presetInfo = SynthPatch::readInfo (state);
         currentPresetFile = yup::File();
+        currentBankEntryKey = {};
     }
 
     // A patch replaced by a preset, a file or the host leaves nothing to undo into.

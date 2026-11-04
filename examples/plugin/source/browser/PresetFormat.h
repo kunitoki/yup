@@ -29,20 +29,25 @@
 //==============================================================================
 /** How one kind of preset file is recognized, read and written.
 
-    @see PresetLibrary, PresetFileOperations
+    @see PresetLibrary, PresetFileOperations, PresetBank
 */
 struct PresetFormat
 {
-    yup::String extension; /**< With the dot: ".retrace". */
+    /** The largest preset read, a guard against loading anything else by mistake. */
+    static constexpr yup::int64 maxPresetBytes = 4 * 1024 * 1024;
 
-    /** Reads one file's id and metadata (name, category, author, bank, description, notes
-        and tags), leaving the key to the library.
+    yup::String extension; /**< With the dot: ".retrace". */
+    yup::String bankExtension; /**< With the dot: ".rebank", the read-only zip archives of presets; empty for no banks. */
+
+    /** Reads the id and metadata (name, category, author, bank, description, notes and tags)
+        of one preset's content, leaving the key to the library and an empty name to the
+        name of its file.
 
         Runs on the scan thread, so it must not touch shared state, and it never writes:
         files without an id get one only when they are next written. Returning nullopt
-        skips the file.
+        skips the preset.
     */
-    std::function<std::optional<PresetEntry> (const yup::File&)> readEntry;
+    std::function<std::optional<PresetEntry> (const yup::String&)> readEntry;
 
     /** Writes the entry's id, name, category, author, bank, description, notes and tags into
         the file, keeping the rest of it. Called on the message thread.

@@ -24,6 +24,7 @@
 #include "RetraceAudioCapture.h"
 #include "RetraceAudioRender.h"
 #include "../RetraceProcessor.h"
+#include "../browser/PresetBank.h"
 #include "../dsp/SynthEffectsParameters.h"
 #include "../dsp/SynthTypes.h"
 #include "../ui/SynthPresetLibrary.h"
@@ -223,6 +224,9 @@ yup::var describeEntry (const PresetEntry& entry)
         set (object, "factoryIndex", entry.factoryIndex);
     else
         set (object, "file", entry.file.getFullPathName());
+
+    if (entry.isInBank())
+        set (object, "bankPath", entry.bankPath);
 
     return object;
 }
@@ -822,9 +826,9 @@ void RetraceMCPServer::registerPatchTools()
 //==============================================================================
 void RetraceMCPServer::registerPresetTools()
 {
-    server.registerTool (makeTool ("list_presets", "Lists the factory and user presets the browser shows.",
+    server.registerTool (makeTool ("list_presets", "Lists the factory and user presets the browser shows. A user preset inside a .rebank bank file has the bank as its file and its path inside the bank as bankPath.",
                                    R"("query": { "type": "string", "description": "Only presets whose name, category, tags, author or bank contain this text, ignoring case." },
-                                      "source": { "type": "string", "enum": ["all", "factory", "user"], "default": "all" },
+                                      "source": { "type": "string", "enum": ["all", "factory", "user", "bank"], "default": "all", "description": "bank lists only the user presets inside .rebank files." },
                                       "limit": { "type": "integer", "minimum": 1, "default": 200 })"),
                          [this] (const yup::var& arguments)
     {
@@ -840,7 +844,7 @@ void RetraceMCPServer::registerPresetTools()
 
             for (const auto& entry : library.getEntries())
             {
-                if ((source == "factory" && ! entry.isFactory()) || (source == "user" && entry.isFactory()))
+                if ((source == "factory" && ! entry.isFactory()) || (source == "user" && entry.isFactory()) || (source == "bank" && ! entry.isInBank()))
                     continue;
 
                 if (query.isNotEmpty()
@@ -863,16 +867,21 @@ void RetraceMCPServer::registerPresetTools()
         });
     });
 
-    server.registerTool (makeTool ("load_preset", "Loads a preset listed by list_presets, by key, or a factory preset by index.",
-                                   R"("key": { "type": "string" }, "factoryIndex": { "type": "integer", "minimum": 0 })"),
+    server.registerTool (makeTool ("load_preset", "Loads a preset listed by list_presets, by key, a factory preset by index, or any .retrace file or preset inside a .rebank bank file by path.",
+                                   R"("key": { "type": "string" }, "factoryIndex": { "type": "integer", "minimum": 0 },
+                                      "file": { "type": "string", "description": "The absolute path of a .retrace preset or of a .rebank bank." },
+                                      "bankPath": { "type": "string", "description": "The path of the preset inside the .rebank bank given as file; left out, the error lists them." })"),
                          [this] (const yup::var& arguments)
     {
         const auto key = arguments["key"].toString();
         const auto factoryIndex = static_cast<int> (arguments.getProperty ("factoryIndex", -1));
+        const auto path = arguments["file"].toString();
+        const auto bankPath = arguments["bankPath"].toString();
 
-        return onMessageThread ([this, key, factoryIndex]
+        return onMessageThread ([this, key, factoryIndex, path, bankPath]
         {
-            PresetEntry factory;
+            const auto& format = processor.getPresetLibrary().getLibrary().getFormat();
+            PresetEntry unlisted;
             const PresetEntry* entry = nullptr;
 
             if (key.isNotEmpty())
@@ -881,12 +890,27 @@ void RetraceMCPServer::registerPresetTools()
             }
             else if (factoryIndex >= 0)
             {
-                factory.factoryIndex = factoryIndex;
-                entry = &factory;
+                unlisted.factoryIndex = factoryIndex;
+                entry = &unlisted;
+            }
+            else if (yup::File::isAbsolutePath (path) && yup::File (path).existsAsFile())
+            {
+                unlisted.file = yup::File (path);
+                entry = &unlisted;
+
+                if (unlisted.file.hasFileExtension (format.bankExtension))
+                {
+                    const auto paths = PresetBank (unlisted.file).getEntryPaths (format.extension);
+
+                    if (! paths.contains (bankPath))
+                        return yup::MCPToolResult::fromError ("Give bankPath, one of: " + paths.joinIntoString (", "));
+
+                    unlisted.bankPath = bankPath;
+                }
             }
 
             if (entry == nullptr)
-                return yup::MCPToolResult::fromError ("No preset " + (key.isNotEmpty() ? key : yup::String (factoryIndex)));
+                return yup::MCPToolResult::fromError ("No preset " + (key.isNotEmpty() ? key : path.isNotEmpty() ? path : yup::String (factoryIndex)));
 
             if (const auto result = processor.loadPresetEntry (*entry); result.failed())
                 return yup::MCPToolResult::fromError (result.getErrorMessage());

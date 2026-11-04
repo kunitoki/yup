@@ -96,7 +96,7 @@ yup::String SynthPresetInfoPanel::getValue (const PresetEntry& entry, Field fiel
 void SynthPresetInfoPanel::showEntry (const PresetEntry* entry)
 {
     hasEntry = entry != nullptr;
-    const auto readOnly = entry == nullptr || entry->isFactory();
+    const auto readOnly = entry == nullptr || entry->isReadOnly();
 
     for (int field = 0; field < fieldCount; ++field)
     {
@@ -127,7 +127,7 @@ void SynthPresetInfoPanel::finishField (Field field)
     auto& library = presetLibrary.getLibrary();
     const auto* entry = library.findEntry (shownKey);
 
-    if (entry == nullptr || entry->isFactory())
+    if (entry == nullptr || entry->isReadOnly())
     {
         editors[index].setText (shownValues[index], yup::dontSendNotification);
         return;

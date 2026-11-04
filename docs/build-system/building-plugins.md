@@ -256,6 +256,22 @@ Then open the generated `.html` page under `build/emscripten/examples/plugin/Deb
 - `CUSTOM_SHELL`, `PRELOAD_FILES`, `INITIAL_MEMORY`, `PTHREAD_POOL_SIZE` and
   `STACK_SIZE` given to `yup_audio_plugin` are passed to the standalone target.
 
+## Retrace presets
+
+Retrace's factory presets are the `.retrace` files under
+`examples/plugin/data/presets`, one folder per category. At configure time CMake
+packs them into a `Factory.rebank` zip archive and embeds it in the plugin, so
+editing, adding or removing a file there is picked up by the next build. Only
+the Init patch is defined in code.
+
+A `.rebank` file is a plain zip archive of `.retrace` presets, in any folder
+layout, renamed. Put one in the user preset folder or in a folder added to the
+browser and its presets are listed in place, read-only, under the bank's name.
+To make one: `cd MyBank && zip -r ../MyBank.rebank .`
+
+`examples/plugin/tools` holds the Python scripts that generated the factory bank
+through the MCP server below (`python3 generate_presets.py [names...]`).
+
 ## Controlling Retrace from an AI assistant (MCP)
 
 The example plugin, Retrace, embeds an [MCP](../ai/mcp.md) server, so assistants
@@ -282,7 +298,7 @@ The server only listens on `127.0.0.1` and rejects requests from web pages.
 | Synth | `get_synth_info` |
 | Parameters | `list_parameters`, `get_parameters`, `set_parameters` (plain or normalized values) |
 | Patch | `get_patch`, `set_patch` (merge or replace), `describe_patch_format`, `randomize_patch` |
-| Presets | `list_presets`, `load_preset`, `set_preset_info`, `save_preset` |
+| Presets | `list_presets`, `load_preset` (also a `.retrace` file or a preset inside a `.rebank` by path), `set_preset_info`, `save_preset` |
 | Playing | `note_on`, `note_off`, `all_notes_off`, `send_midi`, `play_notes` |
 | Audio | `render_audio` (offline, with parameter automation), `start_capture`, `stop_capture` |
 | Editor | `screenshot` |

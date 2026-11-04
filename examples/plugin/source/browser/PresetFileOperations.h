@@ -29,7 +29,8 @@
 /** The browser's operations on preset files.
 
     Each one either succeeds completely or leaves the files and the user data as they were.
-    Factory presets live in code, so every operation refuses them. A file they write gets an
+    Factory presets and presets in a bank are read-only, so every operation refuses them.
+    A file they write gets an
     id when it has none, which becomes its key, and its favorite and rating follow.
 
     @see PresetLibrary, PresetUserData
@@ -45,7 +46,7 @@ yup::File getFileFor (const yup::File& folder, const yup::String& name, const Pr
 
 /** Moves the file to the new name in the same folder and writes the new file's name inside
     it, so the two stay in step: characters a file name cannot hold are dropped from both.
-    Returns the renamed entry. Fails for factory presets, empty names and names already
+    Returns the renamed entry. Fails for read-only presets, empty names and names already
     taken.
 */
 yup::ResultValue<PresetEntry> rename (const PresetEntry& entry, const yup::String& newName, const PresetFormat& format, PresetUserData& userData);
@@ -56,11 +57,11 @@ yup::ResultValue<PresetEntry> rename (const PresetEntry& entry, const yup::Strin
 */
 yup::ResultValue<yup::File> duplicate (const PresetEntry& entry, const PresetFormat& format, PresetUserData& userData);
 
-/** Deletes the file permanently and forgets its favorite and rating. Fails for factory presets. */
+/** Deletes the file permanently and forgets its favorite and rating. Fails for read-only presets. */
 yup::Result remove (const PresetEntry& entry, PresetUserData& userData);
 
 /** Writes the edited metadata into the entry's file and returns the entry as written.
-    Fails for factory presets.
+    Fails for read-only presets.
 */
 yup::ResultValue<PresetEntry> writeMetadata (const PresetEntry& edited, const PresetFormat& format, PresetUserData& userData);
 } // namespace PresetFileOperations
