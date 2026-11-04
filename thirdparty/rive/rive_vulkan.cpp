@@ -61,6 +61,7 @@
 #include "source/renderer/ore/vulkan/ore_render_pass_vulkan.cpp"
 #include "source/renderer/ore/vulkan/ore_sampler_vulkan.cpp"
 #include "source/renderer/ore/vulkan/ore_shader_module_vulkan.cpp"
+#include "source/renderer/ore/vulkan/ore_spirv_entry_split.cpp"
 #include "source/renderer/ore/vulkan/ore_texture_vulkan.cpp"
 
 #if __clang__
