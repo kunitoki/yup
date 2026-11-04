@@ -935,7 +935,7 @@ TEST (MCPClient, GetTransportReturnsPointer)
     EXPECT_EQ (transportPtr, client.getTransport());
 }
 
-TEST (MCPServer, ToolReturningNonStringUsesJsonContent)
+TEST (MCPServer, ToolReturningObjectUsesTextAndStructuredContent)
 {
     MCPServer server;
     server.registerTool (makeEchoToolDefinition(), [] (const var& arguments)
@@ -959,8 +959,10 @@ TEST (MCPServer, ToolReturningNonStringUsesJsonContent)
     auto response = JsonRpcResponse::fromVar (transportPtr->sentMessages.back());
     ASSERT_TRUE (response.has_value());
     ASSERT_TRUE (response->result.has_value());
-    EXPECT_EQ ("json", (*response->result)["content"][0]["type"].toString());
-    EXPECT_EQ ("test", (*response->result)["content"][0]["json"]["echoed"].toString());
+    EXPECT_EQ ("text", (*response->result)["content"][0]["type"].toString());
+    EXPECT_EQ ("test", JSON::parse ((*response->result)["content"][0]["text"].toString())["echoed"].toString());
+    EXPECT_EQ ("test", (*response->result)["structuredContent"]["echoed"].toString());
+    EXPECT_FALSE ((*response->result).hasProperty ("isError"));
 }
 
 TEST (MCPServer, CallToolWithEmptyNameReturnsError)
@@ -1035,10 +1037,123 @@ TEST (MCPServer, StartStdioReturnsNotImplemented)
     EXPECT_TRUE (server.startStdio().failed());
 }
 
-TEST (MCPServer, StartHttpReturnsNotImplemented)
+TEST (MCPServer, NegotiatesProtocolVersion)
 {
     MCPServer server;
-    EXPECT_TRUE (server.startHttp (8080).failed());
+    auto transport = std::make_unique<ServerCaptureTransport>();
+    auto* transportPtr = transport.get();
+    ASSERT_TRUE (server.start (std::move (transport)).wasOk());
+
+    transportPtr->deliver (makeTestRequest (1, "initialize", JSON::parse (R"({"protocolVersion":"2025-03-26"})")).toVar());
+    transportPtr->deliver (makeTestRequest (2, "initialize", JSON::parse (R"({"protocolVersion":"1999-01-01"})")).toVar());
+
+    ASSERT_EQ (2u, transportPtr->sentMessages.size());
+    EXPECT_EQ ("2025-03-26", transportPtr->sentMessages[0]["result"]["protocolVersion"].toString());
+    EXPECT_EQ ("2025-06-18", transportPtr->sentMessages[1]["result"]["protocolVersion"].toString());
+}
+
+TEST (MCPServer, AnswersPingWithEmptyResult)
+{
+    MCPServer server;
+    auto transport = std::make_unique<ServerCaptureTransport>();
+    auto* transportPtr = transport.get();
+    ASSERT_TRUE (server.start (std::move (transport)).wasOk());
+
+    transportPtr->deliver (makeTestRequest (1, "ping").toVar());
+
+    ASSERT_EQ (1u, transportPtr->sentMessages.size());
+    auto response = JsonRpcResponse::fromVar (transportPtr->sentMessages.back());
+    ASSERT_TRUE (response.has_value());
+    ASSERT_TRUE (response->result.has_value());
+    EXPECT_TRUE (response->result->isObject());
+}
+
+TEST (MCPServer, ToolHandlerReturnsImageContent)
+{
+    MCPServer server;
+    server.registerTool (makeEchoToolDefinition(), MCPServer::ToolHandler ([] (const var&)
+    {
+        const uint8 bytes[] = { 0x89, 'P', 'N', 'G' };
+
+        MCPToolResult result;
+        result.content.push_back (MCPContent::makeImage (MemoryBlock (bytes, sizeof (bytes)), "image/png"));
+        return result;
+    }));
+
+    auto transport = std::make_unique<ServerCaptureTransport>();
+    auto* transportPtr = transport.get();
+    ASSERT_TRUE (server.start (std::move (transport)).wasOk());
+
+    transportPtr->deliver (makeTestRequest (1, "tools/call", JSON::parse (R"({"name":"echo","arguments":{}})")).toVar());
+
+    ASSERT_EQ (1u, transportPtr->sentMessages.size());
+    const auto content = transportPtr->sentMessages.back()["result"]["content"][0];
+    EXPECT_EQ ("image", content["type"].toString());
+    EXPECT_EQ ("image/png", content["mimeType"].toString());
+    EXPECT_EQ ("iVBORw==", content["data"].toString());
+}
+
+TEST (MCPServer, UnknownToolReturnsErrorResult)
+{
+    MCPServer server;
+    auto transport = std::make_unique<ServerCaptureTransport>();
+    auto* transportPtr = transport.get();
+    ASSERT_TRUE (server.start (std::move (transport)).wasOk());
+
+    transportPtr->deliver (makeTestRequest (1, "tools/call", JSON::parse (R"({"name":"missing","arguments":{}})")).toVar());
+
+    ASSERT_EQ (1u, transportPtr->sentMessages.size());
+    const auto result = transportPtr->sentMessages.back()["result"];
+    EXPECT_TRUE (static_cast<bool> (result["isError"]));
+    EXPECT_TRUE (result["content"][0]["text"].toString().contains ("missing"));
+}
+
+TEST (MCPTypes, ToolResultRoundTripsContentAndErrorFlag)
+{
+    const uint8 bytes[] = { 'R', 'I', 'F', 'F' };
+
+    MCPToolResult original = MCPToolResult::fromError ("failed");
+    original.content.push_back (MCPContent::makeAudio (MemoryBlock (bytes, sizeof (bytes)), "audio/wav"));
+
+    const auto parsed = MCPToolResult::fromVar (original.toVar());
+    ASSERT_TRUE (parsed.has_value());
+    EXPECT_TRUE (parsed->isError);
+    ASSERT_EQ (2u, parsed->content.size());
+    EXPECT_EQ (MCPContent::Type::text, parsed->content[0].type);
+    EXPECT_EQ ("failed", parsed->content[0].text);
+    EXPECT_EQ (MCPContent::Type::audio, parsed->content[1].type);
+    EXPECT_EQ ("audio/wav", parsed->content[1].mimeType);
+    EXPECT_EQ ("UklGRg==", parsed->content[1].data);
+}
+
+TEST (MCPTypes, ToolDefinitionWithoutSchemaListsEmptyObjectSchema)
+{
+    MCPToolDefinition tool;
+    tool.name = "noop";
+
+    EXPECT_EQ ("object", tool.toVar()["inputSchema"]["type"].toString());
+}
+
+TEST (MCPIntegration, ClientCallToolFailsOnErrorResult)
+{
+    auto clientTransport = std::make_unique<LinkedMCPTransport>();
+    auto serverTransport = std::make_unique<LinkedMCPTransport>();
+    clientTransport->peer = serverTransport.get();
+    serverTransport->peer = clientTransport.get();
+
+    MCPServer server;
+    server.registerTool (makeEchoToolDefinition(), MCPServer::ToolHandler ([] (const var&)
+    {
+        return MCPToolResult::fromError ("nothing to echo");
+    }));
+    ASSERT_TRUE (server.start (std::move (serverTransport)).wasOk());
+
+    MCPClient client (std::move (clientTransport));
+    ASSERT_TRUE (client.initialize().wasOk());
+
+    const auto result = client.callTool ("echo", JSON::parse (R"({"value":"x"})"));
+    ASSERT_TRUE (result.failed());
+    EXPECT_EQ ("nothing to echo", result.getErrorMessage());
 }
 
 TEST (MCPIntegration, ClientAndServerCommunicateOverLinkedTransports)

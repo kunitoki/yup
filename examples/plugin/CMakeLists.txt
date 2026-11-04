@@ -111,6 +111,7 @@ yup_audio_plugin (
         yup::yup_gui
         yup::yup_audio_processors
         yup::yup_audio_gui
+        yup::yup_ai
         pffft_library
         ${target_name}_shaders
         ${target_name}_glow_prefilter_shaders

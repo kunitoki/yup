@@ -1085,7 +1085,7 @@ public:
         // This will validate that "fontSize" accepts numbers and is within range
         auto result = validatedTransaction.setProperty ("fontSize", 14);
         if (result.failed())
-            DBG("Invalid fontSize: " << result.getErrorMessage());
+            YUP_DBG("Invalid fontSize: " << result.getErrorMessage());
 
         // Auto-commits if all operations were valid
         @endcode

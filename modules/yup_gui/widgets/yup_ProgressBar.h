@@ -101,7 +101,7 @@ public:
         @code
         progressBar.onProgressChanged = [](double progress)
         {
-            DBG ("Progress: " << (progress * 100.0) << "%");
+            YUP_DBG ("Progress: " << (progress * 100.0) << "%");
         };
         @endcode
     */

@@ -29,6 +29,7 @@
 #include "dsp/SynthPatch.h"
 #include "browser/PresetEntry.h"
 #include "ui/SynthPresetLibrary.h"
+#include "mcp/RetraceAudioCapture.h"
 
 #include <array>
 #include <atomic>
@@ -36,6 +37,7 @@
 #include <vector>
 
 class PresetBrowseState;
+class RetraceMCPServer;
 
 //==============================================================================
 /** RETRACE, a four operator spectral FM synthesiser, as an audio plugin.
@@ -62,7 +64,14 @@ class RetraceProcessor
     , private SynthPresetLibrary::FileListener
 {
 public:
-    RetraceProcessor();
+    /** What an instance is for. */
+    enum class Role
+    {
+        plugin,  /**< Played by a host, serving MCP when the setting asks for it. */
+        renderer /**< A private copy the MCP server renders audio with offline. */
+    };
+
+    explicit RetraceProcessor (Role role = Role::plugin);
     ~RetraceProcessor() override;
 
     //==============================================================================
@@ -167,6 +176,24 @@ public:
         editor. Replacing the patch clears it. Message thread.
     */
     yup::UndoManager& getUndoManager() noexcept { return undoManager; }
+
+    /** Returns the whole current patch, as presets store it. Message thread. */
+    yup::DataTree createPatch();
+
+    /** Replaces the whole patch, as loading a preset does. Message thread. */
+    yup::Result applyPatch (const yup::DataTree& patch);
+
+    /** Records the output for the MCP server's live capture. */
+    RetraceAudioCapture& getAudioCapture() noexcept { return audioCapture; }
+
+    /** Returns the MCP server of this instance, or nullptr for a renderer. */
+    RetraceMCPServer* getMCPServer() noexcept { return mcpServer.get(); }
+
+    /** Returns the editor on screen, for screenshots, or nullptr. Message thread. */
+    yup::AudioProcessorEditor* getEditorComponent() const noexcept { return editorComponent; }
+
+    /** Called by the editor as it opens and closes. Message thread. */
+    void setEditorComponent (yup::AudioProcessorEditor* editor) noexcept { editorComponent = editor; }
 
     /** Releases every sounding note at the start of the next block. */
     void requestAllNotesOff() noexcept { engine.requestAllNotesOff(); }
@@ -279,6 +306,10 @@ private:
     // The browse state watches the library, so it is declared after it to go first.
     std::shared_ptr<SynthPresetLibrary> presetLibrary;
     std::unique_ptr<PresetBrowseState> presetBrowser;
+
+    RetraceAudioCapture audioCapture;
+    yup::AudioProcessorEditor* editorComponent = nullptr;
+    std::unique_ptr<RetraceMCPServer> mcpServer;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RetraceProcessor)
 };

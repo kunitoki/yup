@@ -148,7 +148,7 @@ detector.prepare ({
 detector.processOffline (audioBuffer);        // AudioBuffer<float> (stereo = L+R average) or raw samples
 
 for (auto t : detector.getOnsetTimes())
-    DBG ("Onset at " << t << "s");
+    YUP_DBG ("Onset at " << t << "s");
 ```
 
 Key `Parameters` fields: `spectrogram`, `superFluxODF`, `complexFluxODF`,

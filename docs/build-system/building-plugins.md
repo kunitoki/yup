@@ -256,6 +256,44 @@ Then open the generated `.html` page under `build/emscripten/examples/plugin/Deb
 - `CUSTOM_SHELL`, `PRELOAD_FILES`, `INITIAL_MEMORY`, `PTHREAD_POOL_SIZE` and
   `STACK_SIZE` given to `yup_audio_plugin` are passed to the standalone target.
 
+## Controlling Retrace from an AI assistant (MCP)
+
+The example plugin, Retrace, embeds an [MCP](../ai/mcp.md) server, so assistants
+such as Claude or Copilot can design sounds, play the synth and listen to it.
+
+1. Open the settings menu in the header and enable **MCP Server**. The setting is
+   saved and off by default. It does nothing in the browser build.
+2. Pick **Copy http://127.0.0.1:7380/mcp** from the same menu. Every open
+   instance takes the next free port from 7380.
+3. Add the server to the MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "retrace": { "type": "http", "url": "http://127.0.0.1:7380/mcp" }
+  }
+}
+```
+
+The server only listens on `127.0.0.1` and rejects requests from web pages.
+
+| Group | Tools |
+|-------|-------|
+| Synth | `get_synth_info` |
+| Parameters | `list_parameters`, `get_parameters`, `set_parameters` (plain or normalized values) |
+| Patch | `get_patch`, `set_patch` (merge or replace), `describe_patch_format`, `randomize_patch` |
+| Presets | `list_presets`, `load_preset`, `set_preset_info`, `save_preset` |
+| Playing | `note_on`, `note_off`, `all_notes_off`, `send_midi`, `play_notes` |
+| Audio | `render_audio` (offline, with parameter automation), `start_capture`, `stop_capture` |
+| Editor | `screenshot` |
+
+A patch is the whole sound: every parameter plus partials, curves, modulation
+routes, the effect chain, tuning and preset info. `describe_patch_format`
+explains it, so an assistant can write patches from scratch. Audio comes back
+as a WAV file, inline audio content or both, with an analysis (levels, crest
+factor, spectral centroid, octave bands, tail). The patch, parameters, format
+and preset list are also readable as `retrace://` resources.
+
 ## Plugin Installation
 
 ### macOS

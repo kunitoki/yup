@@ -63,7 +63,7 @@ if (counts.contains ("apples"))
     int n = counts["apples"];
 
 for (HashMap<String, int>::Iterator it (counts); it.next();)
-    DBG (it.getKey() << " -> " << it.getValue());
+    YUP_DBG (it.getKey() << " -> " << it.getValue());
 ```
 
 ## Sets

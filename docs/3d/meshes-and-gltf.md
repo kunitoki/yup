@@ -62,12 +62,12 @@ model can be instanced many times, in one or several scenes:
 auto model = yup::GltfModel::loadFromFile (file);
 if (model.failed())
 {
-    DBG (model.getErrorMessage());
+    YUP_DBG (model.getErrorMessage());
     return;
 }
 
 for (const auto& warning : model.getReference().getWarnings())
-    DBG (warning);
+    YUP_DBG (warning);
 
 yup::Entity instance = model.getReference().instantiate (*scene, someEntity);
 ```

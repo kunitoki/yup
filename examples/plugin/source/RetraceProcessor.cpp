@@ -25,6 +25,8 @@
 #include "ui/SynthThemes.h"
 #include "ui/SynthPresetLibrary.h"
 #include "browser/PresetBrowseState.h"
+#include "mcp/RetraceMCPServer.h"
+#include "ui/SynthSettings.h"
 
 namespace
 {
@@ -32,7 +34,7 @@ const yup::Identifier themeProperty ("theme");
 const yup::Identifier presetFileProperty ("presetFile");
 } // namespace
 
-RetraceProcessor::RetraceProcessor()
+RetraceProcessor::RetraceProcessor (Role role)
     : yup::AudioProcessor ("Retrace",
                            yup::AudioBusLayout ({}, { yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     , engine (synthParameters, partials, routes, curves, tuning)
@@ -54,10 +56,24 @@ RetraceProcessor::RetraceProcessor()
         presetNames.push_back (SynthPatch::getFactoryPresetName (index));
 
     themeName = SynthThemes::getThemes()[static_cast<std::size_t> (SynthThemes::loadSelectedTheme())].name;
+
+    if (role == Role::plugin)
+    {
+        mcpServer = std::make_unique<RetraceMCPServer> (*this);
+
+        if (SynthSettings::get().mcpServer)
+        {
+            if (const auto result = mcpServer->setEnabled (true); result.failed())
+                YUP_DBG ("Retrace MCP server: " << result.getErrorMessage());
+        }
+    }
 }
 
 RetraceProcessor::~RetraceProcessor()
 {
+    // Stops serving first, so no tool reaches a processor going away.
+    mcpServer.reset();
+
     synthParameters.quality->removeListener (this);
 
     if (presetLibrary != nullptr)
@@ -205,6 +221,8 @@ void RetraceProcessor::processBlock (yup::AudioProcessContext<float>& context)
         }
     }
 
+    audioCapture.push (audio);
+
     // Whatever is left in the buffer goes back to the host as output events.
     context.midi.clear();
 }
@@ -335,6 +353,16 @@ yup::Result RetraceProcessor::loadStateFromDataTree (const yup::DataTree& state)
     }
 
     return yup::Result::ok();
+}
+
+yup::DataTree RetraceProcessor::createPatch()
+{
+    return SynthPatch::createState (getParameters(), getPatchState(), currentPreset.load(), getPresetInfo());
+}
+
+yup::Result RetraceProcessor::applyPatch (const yup::DataTree& patch)
+{
+    return applyState (patch, {});
 }
 
 yup::Result RetraceProcessor::saveStateIntoDataTree (yup::DataTree& state)

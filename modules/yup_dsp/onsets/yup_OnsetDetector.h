@@ -45,7 +45,7 @@ namespace yup
     detector.processOffline (audioBuffer);
 
     for (auto t : detector.getOnsetTimes())
-        DBG ("Onset at " << t << "s");
+        YUP_DBG ("Onset at " << t << "s");
     @endcode
 
     @see SuperFlux, ComplexFlux

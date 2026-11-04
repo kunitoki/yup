@@ -21,4 +21,5 @@
 
 #include "yup_LLMProviders.cpp"
 #include "yup_LLMTypes.cpp"
+#include "yup_MCPHttpServerTransport.cpp"
 #include "yup_MCPTypes.cpp"

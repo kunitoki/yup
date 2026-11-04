@@ -66,7 +66,7 @@ var parsed = JSON::parse (jsonText);
 var result;
 Result r = JSON::parse (jsonText, result);
 if (r.failed())
-    DBG (r.getErrorMessage());
+    YUP_DBG (r.getErrorMessage());
 
 // Stringify
 String text = JSON::toString (parsed, /* allOnOneLine */ false);

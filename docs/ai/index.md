@@ -51,7 +51,7 @@ auto client = yup::LLMClientFactory::openAIChat (
 // One-shot chat
 auto response = client->chat ("What is the capital of France?");
 if (! response.failed())
-    DBG (response.choices.front().message.content); // "Paris"
+    YUP_DBG (response.choices.front().message.content); // "Paris"
 
 // Structured output with JSON Schema
 yup::LLMClient::Request request;

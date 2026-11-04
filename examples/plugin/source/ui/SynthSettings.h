@@ -48,6 +48,7 @@ struct Values
     bool postEffect = true;
     bool landscapes = true; /**< Draws the filter, envelope and LFO curves as shader landscapes. */
     bool undo = true; /**< Keeps an undo history of edits; off forgets it. */
+    bool mcpServer = false; /**< Serves MCP on the loopback address, see RetraceMCPServer. */
     SynthNeonEffect::Options neon;
     std::set<yup::String> favorites; /**< The browser keys of the favorite presets. */
     std::map<yup::String, int> ratings; /**< 1 to 5 stars by browser key; unrated presets are absent. */

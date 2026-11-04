@@ -18,7 +18,7 @@ if (result.wasOk())
 }
 else
 {
-    DBG (result.getErrorMessage());
+    YUP_DBG (result.getErrorMessage());
 }
 ```
 

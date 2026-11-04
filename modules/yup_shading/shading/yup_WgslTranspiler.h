@@ -86,7 +86,7 @@ struct WgslTranspileOptions
                                               ShaderStage::vertex,
                                               opts);
     if (result)
-        DBG (result.getValue());
+        YUP_DBG (result.getValue());
     @endcode
 
     @see ShaderTranspiler, WgslLowering, WgslEmitter

@@ -69,6 +69,7 @@
 // MCP (Model Context Protocol).
 #include "mcp/yup_MCPTypes.h"
 #include "mcp/yup_MCPTransport.h"
+#include "mcp/yup_MCPHttpServerTransport.h"
 #include "mcp/yup_MCPClient.h"
 #include "mcp/yup_MCPServer.h"
 
