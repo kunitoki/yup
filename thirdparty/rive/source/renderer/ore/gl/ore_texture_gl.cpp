@@ -340,6 +340,17 @@ void TextureGL::setSampledLevels(uint32_t unit, uint32_t base, uint32_t max)
   m_glMaxLevel = max;
 }
 
+void TextureGL::restoreSampledLevels()
+{
+  const uint32_t max = std::max(numMipmaps(), 1u) - 1;
+  if (m_glBaseLevel == 0 && m_glMaxLevel == max)
+    return;
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(m_glTarget, m_glTexture);
+  setSampledLevels(0, 0, max);
+  glBindTexture(m_glTarget, 0);
+}
+
 TextureGL::~TextureGL()
 {
   if (m_glRenderbuffer != 0 && m_glOwnsTexture)

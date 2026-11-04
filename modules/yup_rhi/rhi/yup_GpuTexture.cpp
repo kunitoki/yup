@@ -181,6 +181,11 @@ rive::rcp<rive::ore::TextureView> GpuTexture::getOrCreateView (rive::ore::Contex
             desc.texture = oreTexture.get();
             desc.dimension = GpuPipelineHelpers::toOreViewDimension (viewDesc.dimension);
             desc.aspect = GpuPipelineHelpers::toOreTextureAspect (viewDesc.aspect);
+
+            const bool hasStencil = format == GpuTextureFormat::depth24plusStencil8 || format == GpuTextureFormat::depth32floatStencil8;
+            if (! forRenderTarget && hasStencil && viewDesc.aspect == GpuTextureAspect::all)
+                desc.aspect = rive::ore::TextureAspect::depthOnly;
+
             desc.baseMipLevel = viewDesc.baseMipLevel;
             desc.mipCount = viewDesc.mipCount;
             desc.baseLayer = viewDesc.baseLayer;

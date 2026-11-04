@@ -83,6 +83,8 @@ private:
     uint32_t max;
   };
   std::vector<SampledLevels> m_sampledLevels;
+  // Textures this pass narrowed, restored to their whole chain at finish().
+  std::vector<rcp<TextureGL>> m_narrowedTextures;
 
   // Buffers and textures at the pipeline's units, which differ from the
   // layout's when the layout came from another shader.

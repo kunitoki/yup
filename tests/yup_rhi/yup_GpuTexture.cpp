@@ -1269,7 +1269,7 @@ layout(location = 0) out vec4 color;
 void main()
 {
     float lit = texture (sampler2DShadow (shadowCompareMap, compareSampler), vec3 (uv, 0.2));
-    float raw = textureLod (sampler2D (shadowDepthMap, pointSampler), uv, 0.0).r;
+    float raw = texelFetch (sampler2D (shadowDepthMap, pointSampler), ivec2 (gl_FragCoord.xy), 0).r;
     color = vec4 (lit, raw, 0.0, 1.0);
 })";
 

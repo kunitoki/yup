@@ -15,6 +15,9 @@ public:
   // GLES3 has no texture views, so a sampled view's mip range is texture
   // state. Expects the texture bound at `unit`.
   void setSampledLevels(uint32_t unit, uint32_t base, uint32_t max);
+  // Hands the whole mip chain back, so GL users outside ore never inherit a
+  // narrowed view's range. Binds and unbinds the texture on unit 0.
+  void restoreSampledLevels();
 
 private:
   friend class ContextGL;

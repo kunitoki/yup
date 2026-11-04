@@ -631,7 +631,18 @@ void RenderPassGL::applySampledLevels()
     }
   }
   for (const auto& l : m_sampledLevels)
+  {
     l.texture->setSampledLevels(l.unit, l.base, l.max);
+    const bool narrowed =
+        l.base != 0 || l.max + 1 < std::max(l.texture->numMipmaps(), 1u);
+    if (narrowed &&
+        std::none_of(m_narrowedTextures.begin(),
+                     m_narrowedTextures.end(),
+                     [&](const auto& t) { return t.get() == l.texture; }))
+    {
+      m_narrowedTextures.push_back(ref_rcp(l.texture));
+    }
+  }
 }
 
 void RenderPassGL::setViewport(
@@ -756,6 +767,10 @@ void RenderPassGL::finish()
 
   m_currentPipeline = nullptr;
   releaseBoundResources();
+
+  for (const auto& texture : m_narrowedTextures)
+    texture->restoreSampledLevels();
+  m_narrowedTextures.clear();
 
   glDisable(GL_SCISSOR_TEST);
   glDisable(GL_BLEND);

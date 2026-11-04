@@ -1783,6 +1783,124 @@
           }
         },
         {
+          "path": "source/renderer/ore/gl/ore_texture_gl.hpp",
+          "note": "Ore GL: TextureGL::restoreSampledLevels hands a narrowed texture its whole mip chain back",
+          "already_contains": "  void restoreSampledLevels();",
+          "replace": {
+            "from": [
+              "  void setSampledLevels(uint32_t unit, uint32_t base, uint32_t max);",
+              ""
+            ],
+            "to": [
+              "  void setSampledLevels(uint32_t unit, uint32_t base, uint32_t max);",
+              "  // Hands the whole mip chain back, so GL users outside ore never inherit a",
+              "  // narrowed view's range. Binds and unbinds the texture on unit 0.",
+              "  void restoreSampledLevels();",
+              ""
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_texture_gl.cpp",
+          "note": "Ore GL: TextureGL::restoreSampledLevels implementation",
+          "already_contains": "void TextureGL::restoreSampledLevels()",
+          "replace": {
+            "from": [
+              "  m_glBaseLevel = base;",
+              "  m_glMaxLevel = max;",
+              "}",
+              ""
+            ],
+            "to": [
+              "  m_glBaseLevel = base;",
+              "  m_glMaxLevel = max;",
+              "}",
+              "",
+              "void TextureGL::restoreSampledLevels()",
+              "{",
+              "  const uint32_t max = std::max(numMipmaps(), 1u) - 1;",
+              "  if (m_glBaseLevel == 0 && m_glMaxLevel == max)",
+              "    return;",
+              "  glActiveTexture(GL_TEXTURE0);",
+              "  glBindTexture(m_glTarget, m_glTexture);",
+              "  setSampledLevels(0, 0, max);",
+              "  glBindTexture(m_glTarget, 0);",
+              "}",
+              ""
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_render_pass_gl.hpp",
+          "note": "Ore GL: a render pass remembers the textures it narrowed to a mip range",
+          "already_contains": "  std::vector<rcp<TextureGL>> m_narrowedTextures;",
+          "replace": {
+            "from": [
+              "  std::vector<SampledLevels> m_sampledLevels;",
+              ""
+            ],
+            "to": [
+              "  std::vector<SampledLevels> m_sampledLevels;",
+              "  // Textures this pass narrowed, restored to their whole chain at finish().",
+              "  std::vector<rcp<TextureGL>> m_narrowedTextures;",
+              ""
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_render_pass_gl.cpp",
+          "note": "Ore GL applySampledLevels: record textures narrowed to a mip range",
+          "already_contains": "      m_narrowedTextures.push_back(ref_rcp(l.texture));",
+          "replace": {
+            "from": [
+              "  for (const auto& l : m_sampledLevels)",
+              "    l.texture->setSampledLevels(l.unit, l.base, l.max);",
+              "}",
+              ""
+            ],
+            "to": [
+              "  for (const auto& l : m_sampledLevels)",
+              "  {",
+              "    l.texture->setSampledLevels(l.unit, l.base, l.max);",
+              "    const bool narrowed =",
+              "        l.base != 0 || l.max + 1 < std::max(l.texture->numMipmaps(), 1u);",
+              "    if (narrowed &&",
+              "        std::none_of(m_narrowedTextures.begin(),",
+              "                     m_narrowedTextures.end(),",
+              "                     [&](const auto& t) { return t.get() == l.texture; }))",
+              "    {",
+              "      m_narrowedTextures.push_back(ref_rcp(l.texture));",
+              "    }",
+              "  }",
+              "}",
+              ""
+            ]
+          }
+        },
+        {
+          "path": "source/renderer/ore/gl/ore_render_pass_gl.cpp",
+          "note": "Ore GL finish: restore the whole mip chain of narrowed textures so the GL object leaves the pass unnarrowed",
+          "already_contains": "    texture->restoreSampledLevels();",
+          "replace": {
+            "from": [
+              "  m_currentPipeline = nullptr;",
+              "  releaseBoundResources();",
+              "",
+              "  glDisable(GL_SCISSOR_TEST);"
+            ],
+            "to": [
+              "  m_currentPipeline = nullptr;",
+              "  releaseBoundResources();",
+              "",
+              "  for (const auto& texture : m_narrowedTextures)",
+              "    texture->restoreSampledLevels();",
+              "  m_narrowedTextures.clear();",
+              "",
+              "  glDisable(GL_SCISSOR_TEST);"
+            ]
+          }
+        },
+        {
           "path": "source/renderer/metal/background_shader_compiler.mm",
           "note": "Metal shader compile options: fastMathEnabled is deprecated since macOS 15 / iOS 18, so set the equivalent mathMode there and keep the fastMathEnabled default (YES) on older systems",
           "already_contains": "      compileOptions.mathMode = MTLMathModeFast;",
