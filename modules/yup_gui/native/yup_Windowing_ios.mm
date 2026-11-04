@@ -19,34 +19,80 @@
   ==============================================================================
 */
 
-/** This class is used to handle the iOS-specific parts of the YupWindowing class. */
+namespace yup
+{
+
+static void startYupApplication()
+{
+    if (YUPApplicationBase::getInstance() != nullptr)
+        return;
+
+    if (auto* app = YUPApplicationBase::createInstance())
+    {
+        if (! app->initialiseApp())
+            exit (app->shutdownApp());
+    }
+    else
+    {
+        jassertfalse;
+    }
+}
+
+static bool usesSceneLifecycle()
+{
+    return [[NSBundle mainBundle] objectForInfoDictionaryKey:@"UIApplicationSceneManifest"] != nil;
+}
+
+} // namespace yup
+
+//==============================================================================
+/** Drives the YUP application from the UIScene life cycle, required by recent iOS SDKs.
+
+    Used when the Info.plist declares a UIApplicationSceneManifest naming this class. The
+    application starts when the first window scene connects, so its windows attach to that scene.
+*/
+@interface YupSceneDelegate : UIResponder <UIWindowSceneDelegate>
+
+@end
+
+@implementation YupSceneDelegate
+
+- (void)scene:(UIScene*)scene willConnectToSession:(UISceneSession* __unused)session options:(UISceneConnectionOptions* __unused)connectionOptions
+{
+    if ([scene isKindOfClass:[UIWindowScene class]])
+        yup::startYupApplication();
+}
+
+- (void)sceneDidEnterBackground:(UIScene* __unused)scene
+{
+    if (auto* app = yup::YUPApplicationBase::getInstance())
+        app->suspended();
+}
+
+- (void)sceneWillEnterForeground:(UIScene* __unused)scene
+{
+    if (auto* app = yup::YUPApplicationBase::getInstance())
+        app->resumed();
+}
+
+@end
+
+//==============================================================================
+/** This class is used to handle the iOS-specific parts of the YupWindowing class.
+
+    Without a UIApplicationSceneManifest in the Info.plist the legacy application life cycle
+    is used, and the application starts and is suspended or resumed from here.
+*/
 @interface YupApplicationDelegate : NSObject <UIApplicationDelegate>
 
 @end
 
 @implementation YupApplicationDelegate
 
-- (id)init
-{
-    self = [super init];
-    return self;
-}
-
-- (void)dealloc
-{
-}
-
 - (void)applicationDidFinishLaunching:(UIApplication* __unused)application
 {
-    if (auto* app = yup::YUPApplicationBase::createInstance())
-    {
-        if (!app->initialiseApp())
-            exit(app->shutdownApp());
-    }
-    else
-    {
-        jassertfalse;
-    }
+    if (! yup::usesSceneLifecycle())
+        yup::startYupApplication();
 }
 
 - (void)applicationWillTerminate:(UIApplication* __unused)application
@@ -64,14 +110,6 @@
 {
     if (auto* app = yup::YUPApplicationBase::getInstance())
         app->resumed();
-}
-
-- (void)applicationDidBecomeActive:(UIApplication* __unused)application
-{
-}
-
-- (void)applicationWillResignActive:(UIApplication* __unused)application
-{
 }
 
 @end
