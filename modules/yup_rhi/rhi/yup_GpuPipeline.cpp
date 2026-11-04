@@ -746,6 +746,35 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
         }
     }
 
+    {
+        std::vector<rive::ore::TextureSamplerPair> pairs (vertModule->samplerPairs (nullptr));
+        const auto& fsPairs = fragModule->samplerPairs (nullptr);
+        pairs.insert (pairs.end(), fsPairs.begin(), fsPairs.end());
+
+        auto findMerged = [&] (uint32_t group, uint32_t binding) -> MergedEntry*
+        {
+            for (auto& me : merged)
+            {
+                if (me.group == group && me.binding == binding)
+                    return &me;
+            }
+
+            return nullptr;
+        };
+
+        for (const auto& pair : pairs)
+        {
+            auto* texture = findMerged (pair.textureGroup, pair.textureBinding);
+            const auto* sampler = findMerged (pair.samplerGroup, pair.samplerBinding);
+
+            if (texture == nullptr || sampler == nullptr)
+                continue;
+
+            if (texture->texSampleType == rive::ore::TextureSampleType::UnfilterableFloat && ! sampler->samplerNonFiltering)
+                texture->texSampleType = rive::ore::TextureSampleType::Float;
+        }
+    }
+
     // Uniform buffers taking dynamic offsets, honored where the device supports them
     const auto& requestedDynamic = pipelineOptions.dynamicUniformBuffers;
     jassert (requestedDynamic.size() <= maxDynamicUniformBuffers);
