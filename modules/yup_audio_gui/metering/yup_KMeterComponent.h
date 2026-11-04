@@ -191,7 +191,7 @@ public:
         @code
         meter.onLevelChanged = [](float peakDb, float avgDb)
         {
-            DBG ("Peak: " << peakDb << " dB, Average: " << avgDb << " dB");
+            YUP_DBG ("Peak: " << peakDb << " dB, Average: " << avgDb << " dB");
         };
         @endcode
     */
@@ -203,7 +203,7 @@ public:
         meter.onClippingChanged = [](bool isClipping)
         {
             if (isClipping)
-                DBG ("CLIPPING DETECTED!");
+                YUP_DBG ("CLIPPING DETECTED!");
         };
         @endcode
     */

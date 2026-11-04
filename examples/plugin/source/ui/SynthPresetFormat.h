@@ -25,7 +25,8 @@
 #include "../dsp/SynthPatch.h"
 
 //==============================================================================
-/** Retrace's presets as the browser sees them: `.retrace` files and the factory presets.
+/** Retrace's presets as the browser sees them: `.retrace` files, `.rebank` banks of them
+    and the factory presets.
 
     @see PresetFormat, SynthPatch, SynthPresetLibrary
 */

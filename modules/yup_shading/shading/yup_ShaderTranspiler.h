@@ -198,13 +198,13 @@ struct ShaderNativeSlots
                                          ShaderLanguage::glsl,
                                          ShaderLanguage::msl);
     if (result)
-        DBG ("MSL output: " << result.getValue());
+        YUP_DBG ("MSL output: " << result.getValue());
 
     auto reflect = transpiler->reflect (glslSource, ShaderStage::fragment,
                                         ShaderLanguage::glsl);
     if (reflect)
         for (auto& ub : reflect.getValue().uniformBuffers)
-            DBG ("UBO: " << ub.name << " binding=" << ub.binding);
+            YUP_DBG ("UBO: " << ub.name << " binding=" << ub.binding);
     @endcode
 
     @see ShaderCache

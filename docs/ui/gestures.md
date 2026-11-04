@@ -64,7 +64,7 @@ struct PinchLogger : yup::GestureListener
 {
     void gesturePinch (const yup::GestureEvent& event) override
     {
-        DBG ("scale " << event.getScale());
+        YUP_DBG ("scale " << event.getScale());
     }
 };
 

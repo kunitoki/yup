@@ -43,7 +43,11 @@ public:
     /** Requests the server's available tools. */
     std::vector<MCPToolDefinition> listTools();
 
-    /** Calls a server tool with JSON-compatible arguments. */
+    /** Calls a server tool with JSON-compatible arguments.
+
+        Returns the result's structured content when it has some, else its first text
+        block. A result flagged `isError` fails with its text.
+    */
     ResultValue<var> callTool (const String& toolName, const var& arguments);
 
     /** Requests the server's available resources. */

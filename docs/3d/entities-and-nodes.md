@@ -148,7 +148,7 @@ destroyed.
 ```cpp
 lightAdded = scene->onAttach<yup::LightNode>().connect ([] (yup::Entity entity, yup::LightNode& light)
 {
-    DBG ("light added to " << entity.getName());
+    YUP_DBG ("light added to " << entity.getName());
 });
 ```
 

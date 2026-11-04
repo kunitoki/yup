@@ -29,6 +29,7 @@
 #include "SynthThemes.h"
 
 #include "../dsp/SynthPatch.h"
+#include "../mcp/RetraceMCPServer.h"
 
 namespace
 {
@@ -621,6 +622,8 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
     constexpr int frameRateBase = 2000;
     constexpr int undoId = 3000;
     constexpr int landscapesId = 3001;
+    constexpr int mcpServerId = 3002;
+    constexpr int mcpCopyUrlId = 3003;
 
     const std::pair<const char*, bool*> switches[] { { "Post Effect", &settings.postEffect },
                                                      { "Neon Glow", &neon.glow },
@@ -653,6 +656,12 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
     menu->addSubMenu ("Frame Rate", frameRateMenu);
     menu->addItem ("Undo History", undoId, true, settings.undo);
     menu->addItem ("Landscape Displays", landscapesId, true, settings.landscapes);
+    menu->addSeparator();
+
+    auto* mcpServer = processor.getMCPServer();
+    const auto mcpUrl = mcpServer != nullptr ? mcpServer->getUrl() : yup::String();
+    menu->addItem ("MCP Server", mcpServerId, mcpServer != nullptr, settings.mcpServer);
+    menu->addItem (mcpUrl.isNotEmpty() ? "Copy " + mcpUrl : yup::String ("Copy MCP Server URL"), mcpCopyUrlId, mcpUrl.isNotEmpty(), false);
     menu->addSeparator();
 
     for (int index = 0; index < static_cast<int> (std::size (switches)); ++index)
@@ -691,6 +700,23 @@ void SynthInterface::showSettingsMenu (yup::Point<float> position)
             landscapes = ! landscapes;
             SynthSettings::save();
             interface->repaint();
+            return;
+        }
+
+        if (selectedId == mcpServerId)
+        {
+            auto& mcpServer = SynthSettings::get().mcpServer;
+            mcpServer = ! mcpServer;
+            SynthSettings::save();
+            RetraceMCPServer::setEnabledEverywhere (mcpServer);
+            return;
+        }
+
+        if (selectedId == mcpCopyUrlId)
+        {
+            if (auto* server = interface->processor.getMCPServer())
+                yup::SystemClipboard::copyTextToClipboard (server->getUrl());
+
             return;
         }
 

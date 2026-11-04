@@ -74,11 +74,13 @@ void SynthPresetBar::resized()
     menuButton.setBounds (first.removeFromRight (arrowWidth));
     nameArea = first;
 
-    const auto fieldWidth = second.getWidth() / 3.0f;
+    // Bank and author are short, the tags list is the one that needs the room.
+    constexpr std::array<float, 3> fieldShares { 0.27f, 0.27f, 0.46f };
+    const auto totalWidth = second.getWidth();
 
     for (std::size_t field = 0; field < valueAreas.size(); ++field)
     {
-        auto area = second.removeFromLeft (fieldWidth);
+        auto area = second.removeFromLeft (totalWidth * fieldShares[field]);
         captionAreas[field] = area.removeFromLeft (SynthTheme::textWidth (fieldCaptions[field], captionFont) + 4.0f);
         valueAreas[field] = area.reduced (4.0f, 6.0f);
     }

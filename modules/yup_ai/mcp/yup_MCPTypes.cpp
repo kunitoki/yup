@@ -191,7 +191,18 @@ var MCPToolDefinition::toVar() const
     auto object = makeMCPObject();
     setMCPProperty (object, "name", name);
     setMCPProperty (object, "description", description);
-    setMCPProperty (object, "inputSchema", inputSchema);
+
+    if (inputSchema.isObject())
+    {
+        setMCPProperty (object, "inputSchema", inputSchema);
+    }
+    else
+    {
+        auto emptySchema = makeMCPObject();
+        setMCPProperty (emptySchema, "type", "object");
+        setMCPProperty (object, "inputSchema", emptySchema);
+    }
+
     return object;
 }
 
@@ -237,6 +248,134 @@ std::optional<MCPResourceDefinition> MCPResourceDefinition::fromVar (const var& 
 
     if (result.uri.isEmpty() || result.name.isEmpty())
         return std::nullopt;
+
+    return result;
+}
+
+//==============================================================================
+MCPContent MCPContent::makeText (const String& text)
+{
+    MCPContent content;
+    content.text = text;
+    return content;
+}
+
+MCPContent MCPContent::makeImage (const MemoryBlock& encodedImage, const String& mimeType)
+{
+    MCPContent content;
+    content.type = Type::image;
+    content.data = Base64::toBase64 (encodedImage.getData(), encodedImage.getSize());
+    content.mimeType = mimeType;
+    return content;
+}
+
+MCPContent MCPContent::makeAudio (const MemoryBlock& encodedAudio, const String& mimeType)
+{
+    auto content = makeImage (encodedAudio, mimeType);
+    content.type = Type::audio;
+    return content;
+}
+
+var MCPContent::toVar() const
+{
+    auto object = makeMCPObject();
+
+    if (type == Type::text)
+    {
+        setMCPProperty (object, "type", "text");
+        setMCPProperty (object, "text", text);
+        return object;
+    }
+
+    setMCPProperty (object, "type", type == Type::image ? "image" : "audio");
+    setMCPProperty (object, "data", data);
+    setMCPProperty (object, "mimeType", mimeType);
+    return object;
+}
+
+std::optional<MCPContent> MCPContent::fromVar (const var& value)
+{
+    if (! value.isObject())
+        return std::nullopt;
+
+    const auto typeName = value["type"].toString();
+    if (typeName == "text")
+        return makeText (value["text"].toString());
+
+    if (typeName != "image" && typeName != "audio")
+        return std::nullopt;
+
+    MCPContent content;
+    content.type = typeName == "image" ? Type::image : Type::audio;
+    content.data = value["data"].toString();
+    content.mimeType = value["mimeType"].toString();
+    return content;
+}
+
+//==============================================================================
+MCPToolResult MCPToolResult::fromText (const String& text)
+{
+    MCPToolResult result;
+    result.content.push_back (MCPContent::makeText (text));
+    return result;
+}
+
+MCPToolResult MCPToolResult::fromJson (const var& value)
+{
+    auto result = fromText (JSON::toString (value, true));
+
+    if (value.getDynamicObject() != nullptr)
+        result.structuredContent = value;
+
+    return result;
+}
+
+MCPToolResult MCPToolResult::fromValue (const var& value)
+{
+    return value.isString() ? fromText (value.toString()) : fromJson (value);
+}
+
+MCPToolResult MCPToolResult::fromError (const String& message)
+{
+    auto result = fromText (message);
+    result.isError = true;
+    return result;
+}
+
+var MCPToolResult::toVar() const
+{
+    Array<var> contentArray;
+
+    for (const auto& block : content)
+        contentArray.add (block.toVar());
+
+    auto object = makeMCPObject();
+    setMCPProperty (object, "content", var (std::move (contentArray)));
+
+    if (structuredContent.getDynamicObject() != nullptr)
+        setMCPProperty (object, "structuredContent", structuredContent);
+
+    if (isError)
+        setMCPProperty (object, "isError", true);
+
+    return object;
+}
+
+std::optional<MCPToolResult> MCPToolResult::fromVar (const var& value)
+{
+    if (! value.isObject())
+        return std::nullopt;
+
+    MCPToolResult result;
+    result.isError = static_cast<bool> (value["isError"]);
+
+    if (hasPresentProperty (value, "structuredContent"))
+        result.structuredContent = value["structuredContent"];
+
+    if (auto* blocks = value["content"].getArray())
+        for (const auto& block : *blocks)
+            if (auto parsed = MCPContent::fromVar (block))
+                result.content.push_back (std::move (*parsed));
 
     return result;
 }

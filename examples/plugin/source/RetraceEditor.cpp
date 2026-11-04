@@ -34,11 +34,16 @@ RetraceEditor::RetraceEditor (RetraceProcessor& processorToEdit)
 
     // Fast while the tube powers on, then only polling for a new theme.
     startTimerHz (60);
+
+    processor.setEditorComponent (this);
 }
 
 RetraceEditor::~RetraceEditor()
 {
     stopTimer();
+
+    if (processor.getEditorComponent() == this)
+        processor.setEditorComponent (nullptr);
 }
 
 void RetraceEditor::resized()

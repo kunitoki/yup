@@ -26,13 +26,8 @@ namespace SynthPresetFormat
 {
 namespace
 {
-yup::DataTree readPatch (const yup::File& file)
+yup::DataTree readPatch (const std::unique_ptr<yup::XmlElement>& xml)
 {
-    if (! SynthExample::isReadableFile (file))
-        return {};
-
-    const auto xml = yup::parseXML (file);
-
     if (xml == nullptr)
         return {};
 
@@ -45,25 +40,21 @@ PresetFormat create()
 {
     PresetFormat format;
     format.extension = ".retrace";
+    format.bankExtension = ".rebank";
 
-    format.readEntry = [] (const yup::File& file) -> std::optional<PresetEntry>
+    format.readEntry = [] (const yup::String& content) -> std::optional<PresetEntry>
     {
-        const auto state = readPatch (file);
+        const auto state = readPatch (yup::parseXML (content));
 
         if (! state.isValid())
             return std::nullopt;
 
-        auto entry = fromInfo (SynthPatch::readInfo (state));
-
-        if (entry.name.isEmpty())
-            entry.name = file.getFileNameWithoutExtension();
-
-        return entry;
+        return fromInfo (SynthPatch::readInfo (state));
     };
 
     format.writeMetadata = [] (const yup::File& file, const PresetEntry& entry)
     {
-        auto state = readPatch (file);
+        auto state = SynthExample::isReadableFile (file) ? readPatch (yup::parseXML (file)) : yup::DataTree();
 
         if (! state.isValid())
             return yup::Result::fail ("Not a Retrace preset: " + file.getFullPathName());
@@ -92,10 +83,11 @@ PresetFormat create()
 
 PresetEntry makeFactoryEntry (int index)
 {
+    const auto folder = SynthPatch::getFactoryPresetFolder (index);
     auto entry = fromInfo (SynthPatch::getFactoryPresetInfo (index));
     entry.key = entry.id;
     entry.factoryIndex = index;
-    entry.location = "Factory";
+    entry.location = folder.isEmpty() ? yup::String ("Factory") : "Factory / " + folder;
     return entry;
 }
 

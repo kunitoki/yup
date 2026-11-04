@@ -68,7 +68,7 @@ auto firstEnabled = DataTreeQuery::from (appRoot)
     .node();                        // single DataTree (check isValid())
 
 if (firstEnabled.isValid())
-    DBG (firstEnabled.getProperty ("text").toString());
+    YUP_DBG (firstEnabled.getProperty ("text").toString());
 ```
 
 Common terminals: `nodes()`, `node()`, `strings()`, `properties()`, `count()`,
@@ -261,7 +261,7 @@ results rather than throwing, so defensive checks are simple:
 ```cpp
 auto r = DataTreeQuery::xpath (appRoot, "//Invalid[Syntax");
 if (r.empty())
-    DBG ("no results (possibly a syntax error)");
+    YUP_DBG ("no results (possibly a syntax error)");
 ```
 
 Guard property extraction with `hasProperty` (or `where`) when data may be

@@ -18,7 +18,7 @@ clockFormat.addTab ("12h", "12-hour");
 clockFormat.addTab ("24h", "24-hour");
 clockFormat.onSelectionChanged = [] (const yup::Identifier& tabId)
 {
-    DBG ("Selected " << tabId.toString());
+    YUP_DBG ("Selected " << tabId.toString());
 };
 addAndMakeVisible (clockFormat);
 ```

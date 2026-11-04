@@ -110,7 +110,7 @@ auto tx = settings.beginValidatedTransaction (schema);
 
 auto r = tx.setProperty ("theme", "dark");   // returns yup::Result
 if (r.failed())
-    DBG (r.getErrorMessage());
+    YUP_DBG (r.getErrorMessage());
 ```
 
 ## See also

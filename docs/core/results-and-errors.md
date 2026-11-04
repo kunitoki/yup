@@ -25,7 +25,7 @@ auto r = doThing();
 if (r.wasOk())
     proceed();
 else
-    DBG (r.getErrorMessage());
+    YUP_DBG (r.getErrorMessage());
 ```
 
 | Member | Description |
@@ -61,7 +61,7 @@ auto result = parsePositive ("42");
 if (result.wasOk())
     use (result.getValue());
 else
-    DBG (result.getErrorMessage());
+    YUP_DBG (result.getErrorMessage());
 ```
 
 | Member | Description |

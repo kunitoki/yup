@@ -199,6 +199,8 @@ public:
     void handleRestored();
     void handleExposed();
     void handleContentScaleChanged();
+    void setWindowPixelSize (int width, int height);
+    void refreshWindowPixelSize();
     void handleDisplayChanged();
     void handleSafeAreaChanged();
     void handleUserTriedToCloseWindow();
@@ -371,6 +373,7 @@ private:
 
     int currentContentWidth = 0;
     int currentContentHeight = 0;
+    std::atomic<uint64> windowPixelSize = 0; // width in the high 32 bits, height in the low 32 bits
     float windowUnitsPerPoint = 1.0f;
     bool internalBoundsChange = false;
     bool firstDisplay = true;

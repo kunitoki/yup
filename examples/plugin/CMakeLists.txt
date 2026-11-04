@@ -45,7 +45,7 @@ else()
     endif()
 endif()
 
-# ==== Embed the waveform display shader
+# ==== Embed the graphics shaders
 yup_add_shader_bundle (${target_name}_shaders
     VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
     FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/synth_waveform.frag"
@@ -53,7 +53,6 @@ yup_add_shader_bundle (${target_name}_shaders
     OUTPUT_NAME SynthWaveformShaderBundle
     RESOURCE_NAME synthWaveformShader)
 
-# ==== Embed the post effect shaders, one bundle per fragment stage
 yup_add_shader_bundle (${target_name}_glow_prefilter_shaders
     VERT "${CMAKE_CURRENT_LIST_DIR}/data/shaders/fullscreen.vert"
     FRAG "${CMAKE_CURRENT_LIST_DIR}/data/shaders/retrace_glow_prefilter.frag"
@@ -75,6 +74,33 @@ yup_add_shader_bundle (${target_name}_neon_composite_shaders
     OUTPUT_NAME SynthNeonCompositeShaderBundle
     RESOURCE_NAME synthNeonCompositeShader)
 
+# ==== Pack the factory presets into a bank, a zip archive embedded in the plugin (retrace::factoryBank_data / _size)
+set (factory_presets_dir "${CMAKE_CURRENT_LIST_DIR}/data/presets")
+set (factory_bank "${CMAKE_CURRENT_BINARY_DIR}/Factory.rebank")
+
+file (GLOB_RECURSE factory_presets RELATIVE "${factory_presets_dir}" CONFIGURE_DEPENDS "${factory_presets_dir}/*.retrace")
+list (SORT factory_presets)
+list (TRANSFORM factory_presets PREPEND "${factory_presets_dir}/" OUTPUT_VARIABLE factory_preset_files)
+set_property (DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${factory_preset_files})
+
+# A fixed time stamp keeps the archive, and so the embedded bytes, the same until a preset changes
+execute_process (
+    COMMAND ${CMAKE_COMMAND} -E tar cf "${factory_bank}" --format=zip --mtime=2026-01-01 -- ${factory_presets}
+    WORKING_DIRECTORY "${factory_presets_dir}"
+    RESULT_VARIABLE factory_bank_result)
+
+if (NOT factory_bank_result EQUAL 0)
+    message (FATAL_ERROR "Cannot pack the factory presets into ${factory_bank}")
+endif()
+
+yup_add_embedded_binary_resources (${target_name}_factory_bank
+    OUT_DIR FactoryBank
+    HEADER FactoryBank.h
+    NAMESPACE retrace
+    RESOURCE_NAMES factoryBank
+    RESOURCES "${factory_bank}")
+
+# ==== Define the audio plugin target and its properties
 yup_audio_plugin (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
@@ -87,7 +113,7 @@ yup_audio_plugin (
     PLUGIN_VENDOR "yup.audio"
     PLUGIN_EMAIL "kunitoki@gmail.com"
     PLUGIN_VERSION "${target_version}"
-    PLUGIN_DESCRIPTION "A two oscillator spectral synthesiser."
+    PLUGIN_DESCRIPTION "A spectral frequency modulated synthesiser."
     PLUGIN_URL "https://github.com/kunitoki/yup"
     PLUGIN_IS_SYNTH ON
     PLUGIN_IS_MONO OFF
@@ -111,11 +137,16 @@ yup_audio_plugin (
         yup::yup_gui
         yup::yup_audio_processors
         yup::yup_audio_gui
+        yup::yup_ai
+        yup::yup_audio_formats
+        dr_libs
+        libpng
         pffft_library
         ${target_name}_shaders
         ${target_name}_glow_prefilter_shaders
         ${target_name}_blur_shaders
-        ${target_name}_neon_composite_shaders)
+        ${target_name}_neon_composite_shaders
+        ${target_name}_factory_bank)
 
 # ==== Enable link time optimization for release builds of the shared core and every plugin format
 include (CheckIPOSupported)
@@ -139,12 +170,14 @@ file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/source/*.h")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
+
 # The plugin sources are compiled once into the shared plugin core
 target_sources (${target_name}_shared PRIVATE ${sources})
 
-# The shader bundles are OBJECT libraries, whose objects only reach targets linking them directly
+# The shader bundles and the factory bank are OBJECT libraries, whose objects only reach targets linking them directly
 target_sources (${target_name}_shared INTERFACE
     $<TARGET_OBJECTS:${target_name}_shaders>
     $<TARGET_OBJECTS:${target_name}_glow_prefilter_shaders>
     $<TARGET_OBJECTS:${target_name}_blur_shaders>
-    $<TARGET_OBJECTS:${target_name}_neon_composite_shaders>)
+    $<TARGET_OBJECTS:${target_name}_neon_composite_shaders>
+    $<TARGET_OBJECTS:${target_name}_factory_bank>)

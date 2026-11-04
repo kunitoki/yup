@@ -284,6 +284,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
 
     // Attach the graphics surface to the native view on the message thread.
     {
+        refreshWindowPixelSize();
         const auto contentSize = getContentSize();
         context->attachToWindow (getNativeHandle(), contentSize.getWidth(), contentSize.getHeight(), getScaleDpi());
     }
@@ -471,16 +472,34 @@ void SDLComponentNative::toFront()
 
 Size<int> SDLComponentNative::getContentSize() const
 {
-    if (window != nullptr)
-    {
-        int width = 0, height = 0;
-        SDL_GetWindowSizeInPixels (window, &width, &height);
+    // Cached from SDL events, the render thread can't query the window (UIKit and AppKit are main thread only)
+    const auto packedSize = windowPixelSize.load (std::memory_order_acquire);
+    const auto width = static_cast<int> (packedSize >> 32);
+    const auto height = static_cast<int> (packedSize & 0xffffffffu);
 
-        if (width > 0 && height > 0)
-            return { width, height };
-    }
+    if (width > 0 && height > 0)
+        return { width, height };
 
     return { jmax (1, currentContentWidth), jmax (1, currentContentHeight) };
+}
+
+void SDLComponentNative::setWindowPixelSize (int width, int height)
+{
+    if (width <= 0 || height <= 0)
+        return;
+
+    windowPixelSize.store ((static_cast<uint64> (static_cast<uint32> (width)) << 32) | static_cast<uint32> (height),
+                           std::memory_order_release);
+}
+
+void SDLComponentNative::refreshWindowPixelSize()
+{
+    if (window == nullptr)
+        return;
+
+    int width = 0, height = 0;
+    SDL_GetWindowSizeInPixels (window, &width, &height);
+    setWindowPixelSize (width, height);
 }
 
 //==============================================================================
@@ -2813,6 +2832,7 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED " << windowEvent.data1 << " " << windowEvent.data2);
+            setWindowPixelSize (static_cast<int> (windowEvent.data1), static_cast<int> (windowEvent.data2));
             processEvent ([this] { handleContentScaleChanged(); });
             break;
 
@@ -3254,6 +3274,7 @@ bool SDLComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
                     {
                         if (nativeComponent->context != nullptr)
                         {
+                            nativeComponent->refreshWindowPixelSize();
                             const auto contentSize = nativeComponent->getContentSize();
                             nativeComponent->context->attachToWindow (nativeComponent->getNativeHandle(),
                                                                       contentSize.getWidth(),

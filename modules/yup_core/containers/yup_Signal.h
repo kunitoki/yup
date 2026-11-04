@@ -106,7 +106,7 @@ public:
 
     @code
     yup::Signal<const yup::String&> nameChanged;
-    auto connection = nameChanged.connect ([] (const yup::String& name) { DBG (name); });
+    auto connection = nameChanged.connect ([] (const yup::String& name) { YUP_DBG (name); });
 
     nameChanged.emit (yup::String ("now"));       // calls every callback before returning
     nameChanged.emitAsync (yup::String ("later")); // calls them from the message thread

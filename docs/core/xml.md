@@ -36,7 +36,7 @@ XmlDocument doc (xmlText);
 auto root = doc.getDocumentElement();
 
 if (root == nullptr)
-    DBG ("Parse error: " << doc.getLastParseError());
+    YUP_DBG ("Parse error: " << doc.getLastParseError());
 ```
 
 To parse only when the root tag matches, use
@@ -93,7 +93,7 @@ for (auto* child : root->getChildIterator())
     if (child->isTextElement())
         continue;
 
-    DBG (child->getTagName());
+    YUP_DBG (child->getTagName());
 }
 
 // Only elements of a given tag:
@@ -101,7 +101,7 @@ for (auto* item = root->getChildByName ("item");
      item != nullptr;
      item = item->getNextElementWithTagName ("item"))
 {
-    DBG (item->getStringAttribute ("name"));
+    YUP_DBG (item->getStringAttribute ("name"));
 }
 ```
 

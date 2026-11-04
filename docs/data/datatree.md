@@ -90,7 +90,7 @@ DataTree ui ("UIConfig");
 ```cpp
 for (const auto& child : settings)
 {
-    DBG (child.getType().toString()
+    YUP_DBG (child.getType().toString()
          << " (" << child.getNumProperties() << " properties)");
 }
 ```

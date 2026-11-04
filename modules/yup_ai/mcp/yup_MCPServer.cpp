@@ -42,34 +42,9 @@ JsonRpcResponse makeMCPErrorResponse (const var& id, int code, const String& mes
     return response;
 }
 
-var makeTextContent (const String& text)
+bool isSupportedProtocolVersion (const String& version)
 {
-    auto content = makeMCPServerObject();
-    setMCPServerProperty (content, "type", "text");
-    setMCPServerProperty (content, "text", text);
-    return content;
-}
-
-var makeJsonContent (const var& value)
-{
-    auto content = makeMCPServerObject();
-    setMCPServerProperty (content, "type", "json");
-    setMCPServerProperty (content, "json", value);
-    return content;
-}
-
-var makeToolCallResult (const var& value)
-{
-    var content;
-
-    if (value.isString())
-        content.append (makeTextContent (value.toString()));
-    else
-        content.append (makeJsonContent (value));
-
-    auto result = makeMCPServerObject();
-    setMCPServerProperty (result, "content", content);
-    return result;
+    return version == "2025-06-18" || version == "2025-03-26" || version == "2024-11-05";
 }
 
 MCPToolDefinition toolDefinitionFromLLMTool (const LLMTool& tool)
@@ -97,15 +72,18 @@ struct MCPServer::Pimpl
     {
     }
 
-    void registerTool (MCPToolDefinition definition, LLMTool tool)
+    struct ToolEntry
     {
-        {
-            const ScopedLock lock (mutex);
-            toolDefinitions[definition.name] = std::move (definition);
-            options.capabilities.supportsTools = true;
-        }
+        MCPToolDefinition definition;
+        ToolHandler handler;
+    };
 
-        toolRegistry.registerTool (std::move (tool));
+    void registerTool (MCPToolDefinition definition, ToolHandler handler)
+    {
+        const ScopedLock lock (mutex);
+        const auto name = definition.name;
+        tools[name] = ToolEntry { std::move (definition), std::move (handler) };
+        options.capabilities.supportsTools = true;
     }
 
     void sendResponse (const JsonRpcResponse& response)
@@ -115,10 +93,12 @@ struct MCPServer::Pimpl
             currentTransport->sendMessage (response.toVar());
     }
 
-    var makeInitializeResult() const
+    var makeInitializeResult (const var& params) const
     {
+        const auto requestedVersion = params["protocolVersion"].toString();
+
         auto result = makeMCPServerObject();
-        setMCPServerProperty (result, "protocolVersion", "2024-11-05");
+        setMCPServerProperty (result, "protocolVersion", isSupportedProtocolVersion (requestedVersion) ? requestedVersion : String ("2025-06-18"));
         setMCPServerProperty (result, "capabilities", options.capabilities.toVar());
 
         auto serverInfo = makeMCPServerObject();
@@ -126,21 +106,24 @@ struct MCPServer::Pimpl
         setMCPServerProperty (serverInfo, "version", options.serverVersion);
         setMCPServerProperty (result, "serverInfo", serverInfo);
 
+        if (options.instructions.isNotEmpty())
+            setMCPServerProperty (result, "instructions", options.instructions);
+
         return result;
     }
 
     var makeToolsListResult() const
     {
-        var tools;
+        Array<var> toolList;
 
         {
             const ScopedLock lock (mutex);
-            for (const auto& entry : toolDefinitions)
-                tools.append (entry.second.toVar());
+            for (const auto& entry : tools)
+                toolList.add (entry.second.definition.toVar());
         }
 
         auto result = makeMCPServerObject();
-        setMCPServerProperty (result, "tools", tools);
+        setMCPServerProperty (result, "tools", var (std::move (toolList)));
         return result;
     }
 
@@ -148,23 +131,33 @@ struct MCPServer::Pimpl
     {
         const auto toolName = params["name"].toString();
         if (toolName.isEmpty())
-            return makeToolCallResult (var ("Missing MCP tool name"));
+            return MCPToolResult::fromError ("Missing MCP tool name").toVar();
 
-        return makeToolCallResult (toolRegistry.dispatchToolCall (toolName, params["arguments"]));
+        ToolHandler handler;
+        {
+            const ScopedLock lock (mutex);
+            if (auto iter = tools.find (toolName); iter != tools.end())
+                handler = iter->second.handler;
+        }
+
+        if (! handler)
+            return MCPToolResult::fromError ("Unknown MCP tool '" + toolName + "'").toVar();
+
+        return handler (params["arguments"]).toVar();
     }
 
     var makeResourcesListResult() const
     {
-        var resources;
+        Array<var> resources;
 
         {
             const ScopedLock lock (mutex);
             for (const auto& entry : resourcesByUri)
-                resources.append (entry.second.definition.toVar());
+                resources.add (entry.second.definition.toVar());
         }
 
         auto result = makeMCPServerObject();
-        setMCPServerProperty (result, "resources", resources);
+        setMCPServerProperty (result, "resources", var (std::move (resources)));
         return result;
     }
 
@@ -204,7 +197,9 @@ struct MCPServer::Pimpl
         response.id = *request.id;
 
         if (request.method == "initialize")
-            response.result = makeInitializeResult();
+            response.result = makeInitializeResult (request.params.value_or (var()));
+        else if (request.method == "ping")
+            response.result = makeMCPServerObject();
         else if (request.method == "tools/list")
             response.result = makeToolsListResult();
         else if (request.method == "tools/call")
@@ -241,9 +236,8 @@ struct MCPServer::Pimpl
     }
 
     Options options;
-    LLMToolRegistry toolRegistry;
     mutable CriticalSection mutex;
-    std::unordered_map<String, MCPToolDefinition> toolDefinitions;
+    std::unordered_map<String, ToolEntry> tools;
     std::unordered_map<String, ResourceEntry> resourcesByUri;
     std::unique_ptr<MCPTransport> transport;
     bool running = false;
@@ -266,28 +260,36 @@ MCPServer::~MCPServer()
 
 void MCPServer::registerTool (MCPToolDefinition tool, LLMTool::Handler handler)
 {
-    LLMTool llmTool;
-    llmTool.name = tool.name;
-    llmTool.description = tool.description;
-    llmTool.setHandler (std::move (handler));
+    if (! handler)
+    {
+        pimpl->registerTool (std::move (tool), nullptr);
+        return;
+    }
 
-    pimpl->registerTool (std::move (tool), std::move (llmTool));
+    pimpl->registerTool (std::move (tool), [handler = std::move (handler)] (const var& arguments)
+    {
+        return MCPToolResult::fromValue (handler (arguments));
+    });
+}
+
+void MCPServer::registerTool (MCPToolDefinition tool, ToolHandler handler)
+{
+    pimpl->registerTool (std::move (tool), std::move (handler));
 }
 
 void MCPServer::registerTool (LLMTool tool)
 {
     auto definition = toolDefinitionFromLLMTool (tool);
-    pimpl->registerTool (std::move (definition), std::move (tool));
+    pimpl->registerTool (std::move (definition), [tool = std::move (tool)] (const var& arguments)
+    {
+        return MCPToolResult::fromValue (tool.execute (arguments));
+    });
 }
 
 void MCPServer::unregisterTool (const String& name)
 {
-    {
-        const ScopedLock lock (pimpl->mutex);
-        pimpl->toolDefinitions.erase (name);
-    }
-
-    pimpl->toolRegistry.unregisterTool (name);
+    const ScopedLock lock (pimpl->mutex);
+    pimpl->tools.erase (name);
 }
 
 void MCPServer::registerResource (MCPResourceDefinition resource, std::function<String()> reader)
@@ -349,9 +351,11 @@ Result MCPServer::startStdio()
     return Result::fail ("MCP stdio transport is not implemented yet");
 }
 
-Result MCPServer::startHttp (int)
+Result MCPServer::startHttp (int port)
 {
-    return Result::fail ("MCP HTTP transport is not implemented yet");
+    MCPHttpServerTransport::Options transportOptions;
+    transportOptions.port = port;
+    return start (std::make_unique<MCPHttpServerTransport> (transportOptions));
 }
 
 } // namespace yup

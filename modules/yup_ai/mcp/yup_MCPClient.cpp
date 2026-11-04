@@ -63,23 +63,27 @@ var makeInitializeParams (const MCPCapabilities& capabilities)
     return params;
 }
 
-var unwrapToolCallResult (const var& result)
+ResultValue<var> unwrapToolCallResult (const var& result)
 {
-    if (auto* content = result["content"].getArray())
+    const auto parsed = MCPToolResult::fromVar (result);
+    if (! parsed.has_value())
+        return makeResultValueOk (result);
+
+    const auto firstText = std::find_if (parsed->content.begin(), parsed->content.end(), [] (const MCPContent& block)
     {
-        if (content->isEmpty())
-            return {};
+        return block.type == MCPContent::Type::text;
+    });
 
-        const auto& firstContent = content->getReference (0);
+    if (parsed->isError)
+        return makeResultValueFail (firstText != parsed->content.end() ? firstText->text : String ("MCP tool call failed"));
 
-        if (firstContent["type"].toString() == "text")
-            return firstContent["text"];
+    if (! parsed->structuredContent.isVoid())
+        return makeResultValueOk (parsed->structuredContent);
 
-        if (! firstContent["json"].isVoid())
-            return firstContent["json"];
-    }
+    if (firstText != parsed->content.end())
+        return makeResultValueOk (var (firstText->text));
 
-    return result;
+    return makeResultValueOk (result);
 }
 
 ResultValue<String> unwrapResourceReadResult (const var& result)
@@ -261,7 +265,7 @@ ResultValue<var> MCPClient::callTool (const String& toolName, const var& argumen
     if (! response.getReference().result.has_value())
         return makeResultValueFail ("MCP tool call response did not contain a result");
 
-    return makeResultValueOk (unwrapToolCallResult (*response.getReference().result));
+    return unwrapToolCallResult (*response.getReference().result);
 }
 
 std::vector<MCPResourceDefinition> MCPClient::listResources()
