@@ -285,9 +285,9 @@ yup::MemoryBlock encodeWav (const yup::AudioBuffer<float>& audio, double sampleR
 {
     yup::MemoryBlock block;
     auto stream = std::make_unique<yup::MemoryOutputStream> (block, false);
+
     yup::WaveAudioFormat format;
     auto writer = format.createWriterFor (stream.get(), sampleRate, audio.getNumChannels(), bitsPerSample, {}, 0);
-
     if (writer == nullptr)
         return {};
 

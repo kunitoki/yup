@@ -87,7 +87,7 @@ yup_audio_plugin (
     PLUGIN_VENDOR "yup.audio"
     PLUGIN_EMAIL "kunitoki@gmail.com"
     PLUGIN_VERSION "${target_version}"
-    PLUGIN_DESCRIPTION "A two oscillator spectral synthesiser."
+    PLUGIN_DESCRIPTION "A spectral frequency modulated synthesiser."
     PLUGIN_URL "https://github.com/kunitoki/yup"
     PLUGIN_IS_SYNTH ON
     PLUGIN_IS_MONO OFF
@@ -112,6 +112,9 @@ yup_audio_plugin (
         yup::yup_audio_processors
         yup::yup_audio_gui
         yup::yup_ai
+        yup::yup_audio_formats
+        dr_libs
+        libpng
         pffft_library
         ${target_name}_shaders
         ${target_name}_glow_prefilter_shaders
