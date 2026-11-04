@@ -77,9 +77,9 @@ jobs:
       run: cmake --build ${{ runner.workspace }}/build --config ${{ matrix.config }} --target yup_tests
     - name: Verify Android Binary
       run: |
-        lib=$(find ${{ runner.workspace }}/build -name libyup_tests.so | head -n1)
-        test -n "$lib" || { echo "libyup_tests.so not found"; exit 1; }
-        file "$lib" | tee /dev/stderr | grep -q "ARM aarch64"
+        libs=$(find ${{ runner.workspace }}/build -name "lib*_tests.so")
+        test -n "$libs" || { echo "No test runner libraries found"; exit 1; }
+        for lib in $libs; do file "$lib" | tee /dev/stderr | grep -q "ARM aarch64" || exit 1; done
 
   build_examples:
     runs-on: ubuntu-latest
