@@ -166,7 +166,7 @@ class Watchdog::Impl final
 
             FSEventStreamEventFlags evt = eventFlags[i];
 
-            // DBG (path.getFullPathName());
+            // YUP_DBG (path.getFullPathName());
             // printEventFlags (evt);
 
             if (evt & kFSEventStreamEventFlagItemModified)

@@ -20,6 +20,7 @@
 */
 
 #include "PresetLibrary.h"
+#include "PresetBank.h"
 
 #include <algorithm>
 #include <iterator>
@@ -27,7 +28,8 @@
 
 namespace
 {
-yup::String makePresetLocation (const PresetLibrary::Folder& root, const yup::File& file)
+/** The root's name and subfolders, then for a preset in a bank the bank's name and the folders inside it. */
+yup::String makePresetLocation (const PresetLibrary::Folder& root, const yup::File& file, const yup::String& bankPath)
 {
     yup::StringArray parts;
 
@@ -35,6 +37,14 @@ yup::String makePresetLocation (const PresetLibrary::Folder& root, const yup::Fi
         parts.insert (0, directory.getFileName());
 
     parts.insert (0, root.displayName);
+
+    if (bankPath.isNotEmpty())
+    {
+        parts.add (file.getFileNameWithoutExtension());
+        parts.addTokens (bankPath.upToLastOccurrenceOf ("/", false, false), "/", "");
+        parts.removeEmptyStrings();
+    }
+
     return parts.joinIntoString (" / ");
 }
 } // namespace
@@ -167,19 +177,48 @@ PresetLibrary::ScanResult PresetLibrary::scanFolders (const std::vector<Folder>&
                 continue;
             }
 
-            if (! file.hasFileExtension (format.extension) || ! seenPaths.insert (file.getFullPathName()).second)
+            const auto isBank = format.bankExtension.isNotEmpty() && file.hasFileExtension (format.bankExtension);
+
+            if ((! isBank && ! file.hasFileExtension (format.extension)) || ! seenPaths.insert (file.getFullPathName()).second)
                 continue;
 
-            auto entry = format.readEntry (file);
+            const auto add = [&] (const yup::String& content, const yup::String& bankPath)
+            {
+                auto entry = format.readEntry (content);
 
-            if (! entry.has_value())
+                if (! entry.has_value())
+                    return;
+
+                const auto path = bankPath.isNotEmpty() ? bankPath : file.getFileName();
+
+                if (entry->name.isEmpty())
+                    entry->name = path.fromLastOccurrenceOf ("/", false, false).upToLastOccurrenceOf (".", false, false);
+
+                entry->file = file;
+                entry->bankPath = bankPath;
+                entry->factoryIndex = -1;
+                entry->location = makePresetLocation (root, file, bankPath);
+                entry->modified = child.getModificationTime();
+                result.files.push_back (std::move (*entry));
+            };
+
+            if (! isBank)
+            {
+                if (child.getFileSize() > 0 && child.getFileSize() <= PresetFormat::maxPresetBytes)
+                    add (file.loadFileAsString(), {});
+
                 continue;
+            }
 
-            entry->file = file;
-            entry->factoryIndex = -1;
-            entry->location = makePresetLocation (root, file);
-            entry->modified = child.getModificationTime();
-            result.files.push_back (std::move (*entry));
+            const PresetBank bank (file);
+
+            for (const auto& path : bank.getEntryPaths (format.extension))
+            {
+                if (cancelled.load())
+                    return {};
+
+                add (bank.readEntry (path, PresetFormat::maxPresetBytes), path);
+            }
         }
     }
 
@@ -195,7 +234,8 @@ void PresetLibrary::applyScan (ScanResult result)
 {
     std::sort (result.files.begin(), result.files.end(), [] (const PresetEntry& a, const PresetEntry& b)
     {
-        return a.file.getFullPathName() < b.file.getFullPathName();
+        const auto order = a.file.getFullPathName().compare (b.file.getFullPathName());
+        return order != 0 ? order < 0 : a.bankPath < b.bankPath;
     });
 
     std::unordered_set<yup::String> usedIds;
@@ -208,7 +248,10 @@ void PresetLibrary::applyScan (ScanResult result)
         if (file.id.isEmpty() || ! usedIds.insert (file.id).second)
             file.id.clear();
 
-        file.key = file.id.isNotEmpty() ? file.id : file.file.getFullPathName();
+        if (file.id.isNotEmpty())
+            file.key = file.id;
+        else
+            file.key = file.isInBank() ? file.file.getFullPathName() + "/" + file.bankPath : file.file.getFullPathName();
     }
 
     entries.erase (entries.begin() + static_cast<std::ptrdiff_t> (numFactoryEntries), entries.end());

@@ -163,7 +163,7 @@ auto bundleResult = yup::ShaderBundle::loadFromData (yup::ShaderBundleFile_data,
                                                      yup::ShaderBundleFile_size);
 if (! bundleResult.wasOk())
 {
-    DBG (bundleResult.getErrorMessage());
+    YUP_DBG (bundleResult.getErrorMessage());
     return;
 }
 
@@ -176,7 +176,7 @@ auto pipelineResult = yup::GpuPipeline::compileFromBundle (ctx, bundle, options)
 if (pipelineResult.wasOk())
     pipeline = pipelineResult.getValue();
 else
-    DBG (pipelineResult.getErrorMessage());
+    YUP_DBG (pipelineResult.getErrorMessage());
 ```
 
 `ShaderBundle` can also be loaded from a stream, a file, or a `MemoryBlock`

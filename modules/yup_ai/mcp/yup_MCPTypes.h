@@ -156,4 +156,77 @@ struct YUP_API MCPResourceDefinition
     static std::optional<MCPResourceDefinition> fromVar (const var& value);
 };
 
+//==============================================================================
+/** One block of content in an MCP tool result: text, or base64 encoded image or audio.
+
+    @tags{AI}
+*/
+struct YUP_API MCPContent
+{
+    enum class Type
+    {
+        text,
+        image,
+        audio
+    };
+
+    Type type = Type::text;
+    String text;     /**< The text of a text block. */
+    String data;     /**< The base64 encoded bytes of an image or audio block. */
+    String mimeType; /**< The MIME type of an image or audio block, like `image/png` or `audio/wav`. */
+
+    /** Creates a text block. */
+    static MCPContent makeText (const String& text);
+
+    /** Creates an image block from encoded image bytes, like a PNG file. */
+    static MCPContent makeImage (const MemoryBlock& encodedImage, const String& mimeType);
+
+    /** Creates an audio block from encoded audio bytes, like a WAV file. */
+    static MCPContent makeAudio (const MemoryBlock& encodedAudio, const String& mimeType);
+
+    /** Serialises this block to MCP's `{ "type": ... }` content shape. */
+    var toVar() const;
+
+    /** Parses a text, image or audio content block. */
+    static std::optional<MCPContent> fromVar (const var& value);
+};
+
+//==============================================================================
+/** The result of an MCP `tools/call`: content blocks, optional structured content and
+    an error flag.
+
+    A tool that fails reports it here with `isError`, so the model sees the message,
+    rather than as a JSON-RPC error.
+
+    @tags{AI}
+*/
+struct YUP_API MCPToolResult
+{
+    std::vector<MCPContent> content;
+    var structuredContent; /**< An object mirroring the content for clients that parse it, or void. */
+    bool isError = false;
+
+    /** Creates a result holding one text block. */
+    static MCPToolResult fromText (const String& text);
+
+    /** Creates a result from a JSON value: its JSON text as a text block, and the value
+        itself as structured content when it is an object.
+    */
+    static MCPToolResult fromJson (const var& value);
+
+    /** Creates a result from a tool handler's return value: a string becomes a text block
+        and anything else goes through fromJson().
+    */
+    static MCPToolResult fromValue (const var& value);
+
+    /** Creates an error result holding the message as a text block. */
+    static MCPToolResult fromError (const String& message);
+
+    /** Serialises this result to MCP's `tools/call` result shape. */
+    var toVar() const;
+
+    /** Parses a `tools/call` result, skipping content blocks of unknown types. */
+    static std::optional<MCPToolResult> fromVar (const var& value);
+};
+
 } // namespace yup

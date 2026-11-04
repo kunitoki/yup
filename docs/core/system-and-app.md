@@ -134,7 +134,7 @@ compilation. Prefer these over ad-hoc checks:
 ```
 
 These live in `system/yup_TargetPlatform.h`, alongside `yup_CompilerSupport.h`
-(feature detection) and `yup_PlatformDefs.h` (`jassert`, `DBG`, and other core
+(feature detection) and `yup_PlatformDefs.h` (`jassert`, `YUP_DBG`, and other core
 macros).
 
 ## Other utilities

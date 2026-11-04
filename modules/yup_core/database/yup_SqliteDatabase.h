@@ -55,7 +55,7 @@ namespace yup
         {
             auto& sel = result.getReference();
             if (sel.step() == SQLITE_ROW)
-                DBG (sel.columnText (0));
+                YUP_DBG (sel.columnText (0));
         }
     }
     @endcode

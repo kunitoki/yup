@@ -83,9 +83,9 @@ request.maxTokens   = 256;
 auto response = client->complete (request);
 
 if (response.failed())
-    DBG ("Error: " << *response.errorMessage);
+    YUP_DBG ("Error: " << *response.errorMessage);
 else
-    DBG (response.choices.front().message.content);
+    YUP_DBG (response.choices.front().message.content);
 ```
 
 ### Streaming

@@ -30,6 +30,10 @@
 
 #include "yup_ai.h"
 
+#if ! YUP_WINDOWS
+#include <sys/socket.h>
+#endif
+
 //==============================================================================
 // Core LLM.
 #include "llm/yup_LLMMessage.cpp"
@@ -45,6 +49,7 @@
 // MCP.
 #include "mcp/yup_MCPTypes.cpp"
 #include "mcp/yup_MCPClient.cpp"
+#include "mcp/yup_MCPHttpServerTransport.cpp"
 #include "mcp/yup_MCPServer.cpp"
 
 // Provider implementations.

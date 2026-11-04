@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<RetraceState version="3" preset="-1" name="Alien Transmission" bank="Factory"
+              author="kunitoki" tags="alien, sci-fi, random" category="FX"
+              description="Garbled FM transmission from another world." notes="Mod wheel speeds up and garbles the signal."
+              presetId="1a1661f9-73c4-4f84-bcd2-58c4f30b8067" global.volume="-2.5"
+              global.mode="0.0" global.glide="120.0" global.quality="0.0" global.unisonVoices="1.0"
+              global.unisonDetune="0.2000000029802322" global.unisonSpread="0.6000000238418579"
+              global.filterRouting="0.0" osc1.waveform="0.0" osc1.syncMode="0.0"
+              osc1.syncRatio="1.5" osc1.frequencyMode="0.0" osc1.ratio="1.0"
+              osc1.fine="0.0" osc1.fixedHz="440.0" osc1.level="0.699999988079071"
+              osc1.pan="0.0" osc1.phase="0.0" osc1.freeRunning="0.0" osc1.toFilter1="1.0"
+              osc1.toFilter2="0.0" osc1.direct="0.0" osc1.ridges="1.5" osc1.color="0.0"
+              osc1.dispersion="0.5" osc1.squeeze="0.0" osc1.squash="1.0" osc1.tilt="0.0"
+              osc1.oddEven="0.5" osc1.formant="0.0" osc1.formantPosition="2.0"
+              osc1.scatter="0.0" osc1.enabled="1.0" osc2.waveform="0.0" osc2.syncMode="0.0"
+              osc2.syncRatio="1.5" osc2.frequencyMode="0.0" osc2.ratio="1.409999966621399"
+              osc2.fine="0.0" osc2.fixedHz="440.0" osc2.level="0.0" osc2.pan="0.0"
+              osc2.phase="0.0" osc2.freeRunning="0.0" osc2.toFilter1="1.0"
+              osc2.toFilter2="0.0" osc2.direct="0.0" osc2.ridges="1.5" osc2.color="0.0"
+              osc2.dispersion="0.5" osc2.squeeze="0.0" osc2.squash="1.0" osc2.tilt="0.0"
+              osc2.oddEven="0.5" osc2.formant="0.0" osc2.formantPosition="2.0"
+              osc2.scatter="0.0" osc2.enabled="1.0" osc3.waveform="0.0" osc3.syncMode="0.0"
+              osc3.syncRatio="1.5" osc3.frequencyMode="0.0" osc3.ratio="7.0"
+              osc3.fine="0.0" osc3.fixedHz="440.0" osc3.level="0.0" osc3.pan="0.0"
+              osc3.phase="0.0" osc3.freeRunning="0.0" osc3.toFilter1="1.0"
+              osc3.toFilter2="0.0" osc3.direct="0.0" osc3.ridges="1.5" osc3.color="0.0"
+              osc3.dispersion="0.5" osc3.squeeze="0.0" osc3.squash="1.0" osc3.tilt="0.0"
+              osc3.oddEven="0.5" osc3.formant="0.0" osc3.formantPosition="2.0"
+              osc3.scatter="0.0" osc3.enabled="1.0" osc4.waveform="0.0" osc4.syncMode="0.0"
+              osc4.syncRatio="1.5" osc4.frequencyMode="0.0" osc4.ratio="1.0"
+              osc4.fine="0.0" osc4.fixedHz="440.0" osc4.level="0.0" osc4.pan="0.0"
+              osc4.phase="0.0" osc4.freeRunning="0.0" osc4.toFilter1="1.0"
+              osc4.toFilter2="0.0" osc4.direct="0.0" osc4.ridges="1.5" osc4.color="0.0"
+              osc4.dispersion="0.5" osc4.squeeze="0.0" osc4.squash="1.0" osc4.tilt="0.0"
+              osc4.oddEven="0.5" osc4.formant="0.0" osc4.formantPosition="2.0"
+              osc4.scatter="0.0" osc4.enabled="0.0" fm.11="0.0" fm.12="0.4000000059604645"
+              fm.13="0.0" fm.14="0.0" fm.21="0.0" fm.22="0.0" fm.23="0.300000011920929"
+              fm.24="0.0" fm.31="0.0" fm.32="0.0" fm.33="0.0" fm.34="0.0" fm.41="0.0"
+              fm.42="0.0" fm.43="0.0" fm.44="0.0" flt1.type="0.0" flt1.cutoff="8000.0"
+              flt1.resonance="0.2000000029802322" flt1.drive="0.0" flt1.keytrack="0.0"
+              flt1.mix="1.0" flt1.enabled="0.0" flt2.type="0.0" flt2.cutoff="8000.0"
+              flt2.resonance="0.2000000029802322" flt2.drive="0.0" flt2.keytrack="0.0"
+              flt2.mix="1.0" flt2.enabled="0.0" env1.timeScale="1.0" env1.velocity="1.0"
+              env1.depth="1.0" env1.sync="0.0" env1.attack="1.0" env1.decay="1.0"
+              env1.sustain="1.0" env1.release="1.0" env2.timeScale="1.0" env2.velocity="0.0"
+              env2.depth="1.0" env2.enabled="0.0" env2.sync="0.0" env2.attack="1.0"
+              env2.decay="1.0" env2.sustain="1.0" env2.release="1.0" env2.polarity="0.0"
+              env3.timeScale="1.0" env3.velocity="0.0" env3.depth="1.0" env3.enabled="0.0"
+              env3.sync="0.0" env3.attack="1.0" env3.decay="1.0" env3.sustain="1.0"
+              env3.release="1.0" env3.polarity="0.0" env4.timeScale="1.0" env4.velocity="0.0"
+              env4.depth="1.0" env4.enabled="0.0" env4.sync="0.0" env4.attack="1.0"
+              env4.decay="1.0" env4.sustain="1.0" env4.release="1.0" env4.polarity="0.0"
+              lfo1.shape="4.0" lfo1.rate="9.0" lfo1.sync="0.0" lfo1.division="5.0"
+              lfo1.phase="0.0" lfo1.smooth="0.0" lfo1.retrigger="1.0" lfo1.depth="1.0"
+              lfo1.enabled="1.0" lfo1.invert="0.0" lfo2.shape="6.0" lfo2.rate="0.6000000238418579"
+              lfo2.sync="0.0" lfo2.division="5.0" lfo2.phase="0.0" lfo2.smooth="0.0"
+              lfo2.retrigger="1.0" lfo2.depth="1.0" lfo2.enabled="1.0" lfo2.invert="0.0"
+              lfo3.shape="0.0" lfo3.rate="1.0" lfo3.sync="0.0" lfo3.division="5.0"
+              lfo3.phase="0.0" lfo3.smooth="0.0" lfo3.retrigger="1.0" lfo3.depth="1.0"
+              lfo3.enabled="0.0" lfo3.invert="0.0" lfo4.shape="0.0" lfo4.rate="1.0"
+              lfo4.sync="0.0" lfo4.division="5.0" lfo4.phase="0.0" lfo4.smooth="0.0"
+              lfo4.retrigger="1.0" lfo4.depth="1.0" lfo4.enabled="0.0" lfo4.invert="0.0"
+              route.1.depth="0.300000011920929" route.2.depth="0.07999999821186066"
+              route.3.depth="0.5" route.4.depth="0.300000011920929" route.5.depth="0.25"
+              route.6.depth="0.0" route.7.depth="0.0" route.8.depth="0.0" route.9.depth="0.0"
+              route.10.depth="0.0" route.11.depth="0.0" route.12.depth="0.0"
+              route.13.depth="0.0" route.14.depth="0.0" route.15.depth="0.0"
+              route.16.depth="0.0" route.17.depth="0.0" route.18.depth="0.0"
+              route.19.depth="0.0" route.20.depth="0.0" route.21.depth="0.0"
+              route.22.depth="0.0" route.23.depth="0.0" route.24.depth="0.0"
+              route.25.depth="0.0" route.26.depth="0.0" route.27.depth="0.0"
+              route.28.depth="0.0" route.29.depth="0.0" route.30.depth="0.0"
+              route.31.depth="0.0" route.32.depth="0.0" route.33.depth="0.0"
+              route.34.depth="0.0" route.35.depth="0.0" route.36.depth="0.0"
+              route.37.depth="0.0" route.38.depth="0.0" route.39.depth="0.0"
+              route.40.depth="0.0" route.41.depth="0.0" route.42.depth="0.0"
+              route.43.depth="0.0" route.44.depth="0.0" route.45.depth="0.0"
+              route.46.depth="0.0" route.47.depth="0.0" route.48.depth="0.0"
+              route.49.depth="0.0" route.50.depth="0.0" route.51.depth="0.0"
+              route.52.depth="0.0" route.53.depth="0.0" route.54.depth="0.0"
+              route.55.depth="0.0" route.56.depth="0.0" route.57.depth="0.0"
+              route.58.depth="0.0" route.59.depth="0.0" route.60.depth="0.0"
+              route.61.depth="0.0" route.62.depth="0.0" route.63.depth="0.0"
+              route.64.depth="0.0" macro1="0.0" macro2="0.0" macro3="0.0" macro4="0.0"
+              macro5="0.0" macro6="0.0" macro7="0.0" macro8="0.0" fx.bitcrusher.enabled="0.0"
+              fx.chorus.enabled="0.0" fx.phaser.enabled="0.0" fx.flanger.enabled="1.0"
+              fx.delay.enabled="1.0" fx.reverb.enabled="1.0" fx.distortion.enabled="0.0"
+              fx.eq.enabled="0.0" fx.compressor.enabled="0.0" fx.surround.enabled="0.0"
+              fx.waveshaper.enabled="0.0" fx.bitcrusher.bits="8.0" fx.bitcrusher.rate="11025.0"
+              fx.bitcrusher.dither="0.0" fx.bitcrusher.mix="1.0" fx.chorus.mode="0.0"
+              fx.chorus.rate="0.800000011920929" fx.chorus.depth="0.5" fx.chorus.delay="7.0"
+              fx.chorus.feedback="0.0" fx.chorus.mix="0.5" fx.phaser.stages="1.0"
+              fx.phaser.rate="0.4000000059604645" fx.phaser.depth="0.699999988079071"
+              fx.phaser.center="800.0" fx.phaser.feedback="0.5" fx.phaser.stereo="0.5"
+              fx.phaser.mix="0.5" fx.flanger.rate="0.2000000029802322" fx.flanger.depth="0.699999988079071"
+              fx.flanger.delay="2.5" fx.flanger.feedback="0.699999988079071"
+              fx.flanger.stereo="0.5" fx.flanger.mix="0.5" fx.delay.sync="1.0"
+              fx.delay.time="375.0" fx.delay.division="13.0" fx.delay.feedback="0.5"
+              fx.delay.pingpong="1.0" fx.delay.lowcut="100.0" fx.delay.highcut="6000.0"
+              fx.delay.mix="0.300000011920929" fx.reverb.predelay="20.0" fx.reverb.decay="0.800000011920929"
+              fx.reverb.damping="0.4000000059604645" fx.reverb.width="1.0"
+              fx.reverb.mix="0.300000011920929" fx.distortion.type="0.0" fx.distortion.drive="12.0"
+              fx.distortion.bias="0.0" fx.distortion.tone="12000.0" fx.distortion.output="0.0"
+              fx.distortion.mix="1.0" fx.eq.lowgain="0.0" fx.eq.lowfreq="120.0"
+              fx.eq.midgain="0.0" fx.eq.midfreq="1000.0" fx.eq.midq="0.699999988079071"
+              fx.eq.highgain="0.0" fx.eq.highfreq="6000.0" fx.compressor.threshold="-18.0"
+              fx.compressor.ratio="4.0" fx.compressor.attack="10.0" fx.compressor.release="150.0"
+              fx.compressor.makeup="0.0" fx.compressor.mix="1.0" fx.surround.width="1.0"
+              fx.surround.depth="0.5" fx.surround.time="12.0" fx.surround.mono="120.0"
+              fx.surround.mix="1.0" fx.waveshaper.drive="0.0" fx.waveshaper.bias="0.0"
+              fx.waveshaper.output="0.0" fx.waveshaper.mix="1.0">
+  <Partials1 custom="1" cosines="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+             sines="1 0 0 0 0.6 0 0 0 0.428571 0 0 0 0.333333 0 0 0 0.272727 0 0 0 0.230769 0 0 0 0.2 0 0 0 0.176471 0 0 0 0.157895 0 0 0 0.142857 0 0 0 0.130435 0 0 0 0.12 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"/>
+  <Partials2 custom="0" cosines="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+             sines="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"/>
+  <Partials3 custom="0" cosines="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+             sines="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"/>
+  <Partials4 custom="0" cosines="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+             sines="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"/>
+  <Curves>
+    <Envelope index="0" points="0.000000 0.000000 0.000000;0.200000 1.000000 0.000000;0.700000 0.900000 -0.400000;2.700000 0.000000 -0.400000"
+              sustain="2" loopStart="-1" loopEnd="-1"/>
+    <Envelope index="1" points="0.000000 0.000000 0.000000;0.200000 1.000000 0.000000;0.700000 0.300000 -0.400000;1.200000 0.000000 -0.400000"
+              sustain="2" loopStart="-1" loopEnd="-1"/>
+    <Envelope index="2" points="0.000000 0.000000 0.000000;0.200000 1.000000 0.000000;0.700000 0.300000 -0.400000;1.200000 0.000000 -0.400000"
+              sustain="2" loopStart="-1" loopEnd="-1"/>
+    <Envelope index="3" points="0.000000 0.000000 0.000000;0.200000 1.000000 0.000000;0.700000 0.300000 -0.400000;1.200000 0.000000 -0.400000"
+              sustain="2" loopStart="-1" loopEnd="-1"/>
+    <LFO index="0" points="0.000000 0.000000 0.000000;0.500000 1.000000 0.000000;1.000000 0.000000 0.000000"
+         sustain="-1" loopStart="-1" loopEnd="-1"/>
+    <LFO index="1" points="0.000000 0.000000 0.000000;0.500000 1.000000 0.000000;1.000000 0.000000 0.000000"
+         sustain="-1" loopStart="-1" loopEnd="-1"/>
+    <LFO index="2" points="0.000000 0.000000 0.000000;0.500000 1.000000 0.000000;1.000000 0.000000 0.000000"
+         sustain="-1" loopStart="-1" loopEnd="-1"/>
+    <LFO index="3" points="0.000000 0.000000 0.000000;0.500000 1.000000 0.000000;1.000000 0.000000 0.000000"
+         sustain="-1" loopStart="-1" loopEnd="-1"/>
+    <Shaper index="0" points="0.000000 0.000000 0.000000;0.500000 0.500000 0.500000;1.000000 1.000000 -0.500000"
+            sustain="-1" loopStart="-1" loopEnd="-1"/>
+  </Curves>
+  <Routes>
+    <Route slot="0" source="LFO 1" destination="fm.12"/>
+    <Route slot="1" source="LFO 2" destination="osc2.ratio"/>
+    <Route slot="2" source="LFO 1" destination="osc1.pan"/>
+    <Route slot="3" source="MOD WHEEL" destination="lfo1.rate"/>
+    <Route slot="4" source="MOD WHEEL" destination="fm.23"/>
+  </Routes>
+  <EffectChain>
+    <Effect name="Distortion"/>
+    <Effect name="Waveshaper"/>
+    <Effect name="Bitcrusher"/>
+    <Effect name="EQ"/>
+    <Effect name="Compressor"/>
+    <Effect name="Chorus"/>
+    <Effect name="Phaser"/>
+    <Effect name="Flanger"/>
+    <Effect name="Delay"/>
+    <Effect name="Reverb"/>
+    <Effect name="Surround"/>
+  </EffectChain>
+  <Tuning name="12-TET" preset="0" scale="" keyMap="" tuning="" bendDown="2"
+          bendUp="2" bendMode="0"/>
+</RetraceState>

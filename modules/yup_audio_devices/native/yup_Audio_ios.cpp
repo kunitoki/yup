@@ -51,18 +51,39 @@ constexpr const char* const iOSAudioDeviceName = "iOS Audio";
 constexpr std::initializer_list<double> iOSExplicitSampleRates { YUP_IOS_AUDIO_EXPLICIT_SAMPLERATES };
 
 //==============================================================================
-struct AudioSessionHolder
+struct AudioSessionHolder final : private AsyncUpdater
 {
     AudioSessionHolder();
-    ~AudioSessionHolder();
+    ~AudioSessionHolder() override;
 
-    void handleStatusChange (bool enabled, const char* reason) const;
+    void handleStatusChange (bool enabled, const char* reason);
     void handleRouteChange (AVAudioSessionRouteChangeReason reason);
+
+    /** Activates or deactivates the AVAudioSession, skipping the calls that would not change its state.
+
+        Activation blocks the calling thread. Deactivation doesn't block on iOS 27 and later.
+    */
+    void setActive (bool shouldBeActive);
+
+    /** Deactivates the session unless a device is open. */
+    void deactivateIfUnused();
+
+    /** Deactivates the session on the next message loop iteration unless it is activated again or a
+        device is open by then, so creating a device and opening it doesn't cycle the session.
+    */
+    void deactivateLaterIfUnused();
 
     Array<iOSAudioIODevice::Pimpl*> activeDevices;
     Array<iOSAudioIODeviceType*> activeDeviceTypes;
 
     id nativeSession;
+
+private:
+    void handleAsyncUpdate() override;
+
+    // The session is process wide, so its state outlives any holder
+    static inline std::atomic<bool> isActive { false };
+    static inline std::atomic<uint32> activationCount { 0 };
 };
 
 static const char* getRoutingChangeReason (AVAudioSessionRouteChangeReason reason) noexcept
@@ -289,15 +310,12 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
     {
         YUP_IOS_AUDIO_LOG ("Creating iOS audio device");
 
-        // We need to activate the audio session here to obtain the available sample rates and buffer sizes,
-        // but if we don't set a category first then background audio will always be stopped. This category
-        // may be changed later.
         setAudioSessionCategory (AVAudioSessionCategoryPlayAndRecord);
 
-        setAudioSessionActive (true);
+        sessionHolder->setActive (true);
         updateHardwareInfo();
         channelData.reconfigure ({}, {});
-        setAudioSessionActive (false);
+        sessionHolder->deactivateLaterIfUnused();
 
         sessionHolder->activeDevices.add (this);
     }
@@ -331,15 +349,14 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                 options |= AVAudioSessionCategoryOptionAllowBluetoothA2DP;
         }
 
-        YUP_NSERROR_CHECK ([[AVAudioSession sharedInstance] setCategory:category
-                                                            withOptions:options
-                                                                  error:&error]);
-    }
+        auto session = [AVAudioSession sharedInstance];
 
-    static void setAudioSessionActive (bool enabled)
-    {
-        YUP_NSERROR_CHECK ([[AVAudioSession sharedInstance] setActive:enabled
-                                                                error:&error]);
+        if ([session.category isEqualToString:category] && session.categoryOptions == options)
+            return;
+
+        YUP_NSERROR_CHECK ([session setCategory:category
+                                    withOptions:options
+                                          error:&error]);
     }
 
     int getBufferSize (const double currentSampleRate)
@@ -373,7 +390,6 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
             newBufferSize *= 2;
         }
 
-        // Sometimes the largest supported buffer size is not a power of 2
         availableBufferSizes.addIfNotAlreadyThere (longestBufferSize);
 
         bufferSize = tryBufferSize (sampleRate, bufferSize);
@@ -440,8 +456,6 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                                       dispatchAudioUnitPropertyChange,
                                       this);
 
-        // Check the current stream format in case things have changed whilst we
-        // were going through the sample rates
         handleStreamFormatChange();
 
 #if YUP_IOS_AUDIO_LOGGING
@@ -467,9 +481,6 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
         updateAvailableSampleRates();
 
-        // The sample rate and buffer size may have been affected by
-        // updateAvailableSampleRates(), so try restoring the last good
-        // sample rate
         sampleRate = trySampleRate (sampleRate);
         bufferSize = getBufferSize (sampleRate);
 
@@ -513,9 +524,9 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                            << ", targetSampleRate: " << targetSampleRate
                            << ", targetBufferSize: " << targetBufferSize);
 
-        setAudioSessionActive (true);
         setAudioSessionCategory (requestedInputChannels > 0 ? AVAudioSessionCategoryPlayAndRecord
                                                             : AVAudioSessionCategoryPlayback);
+        sessionHolder->setActive (true);
         channelData.reconfigure (requestedInputChannels, requestedOutputChannels);
         updateHardwareInfo (true);
         setTargetSampleRateAndBufferSize();
@@ -554,7 +565,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                 audioUnit = nullptr;
             }
 
-            setAudioSessionActive (false);
+            sessionHolder->deactivateIfUnused();
         }
     }
 
@@ -808,7 +819,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         YUP_IOS_AUDIO_LOG ("handleStatusChange: enabled: " << (int) enabled << ", reason: " << reason);
 
         isRunning = enabled;
-        setAudioSessionActive (enabled);
+        sessionHolder->setActive (enabled);
 
         if (enabled)
             AudioOutputUnitStart (audioUnit);
@@ -893,7 +904,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
             if (interAppAudioConnected || inForeground)
             {
-                setAudioSessionActive (true);
+                sessionHolder->setActive (true);
                 AudioOutputUnitStart (audioUnit);
 
                 if (callback != nullptr)
@@ -902,7 +913,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
             else if (! inForeground)
             {
                 AudioOutputUnitStop (audioUnit);
-                setAudioSessionActive (false);
+                sessionHolder->setActive (false);
 
                 if (callback != nullptr)
                     callback->audioDeviceStopped();
@@ -1155,7 +1166,6 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
             {
                 YUP_NSERROR_CHECK ([session overrideOutputAudioPort:AVAudioSessionPortOverrideSpeaker
                                                               error:&error]);
-                setAudioSessionActive (true);
             }
         }
     }
@@ -1549,10 +1559,77 @@ void iOSAudioIODeviceType::handleAsyncUpdate()
 //==============================================================================
 AudioSessionHolder::AudioSessionHolder() { nativeSession = AudioSessionObserverClass::create (this); }
 
-AudioSessionHolder::~AudioSessionHolder() = default;
-
-void AudioSessionHolder::handleStatusChange (bool enabled, const char* reason) const
+AudioSessionHolder::~AudioSessionHolder()
 {
+    if (isUpdatePending())
+        setActive (false);
+}
+
+void AudioSessionHolder::setActive (bool shouldBeActive)
+{
+    if (shouldBeActive)
+    {
+        cancelPendingUpdate();
+        ++activationCount;
+    }
+
+    if (isActive.exchange (shouldBeActive) == shouldBeActive)
+        return;
+
+    auto session = [AVAudioSession sharedInstance];
+
+    if (shouldBeActive)
+    {
+        YUP_NSERROR_CHECK ([session setActive:YES error:&error]);
+        return;
+    }
+
+#if YUP_IOS_API_VERSION_CAN_BE_BUILT(27, 0)
+    if (@available (iOS 27, *))
+    {
+        const auto deactivationCount = activationCount.load();
+
+        [session deactivateWithOptions:AVAudioSessionDeactivationOptionNone
+                     completionHandler:^(BOOL, NSError* deactivationError) {
+                       logNSError (deactivationError);
+
+                       // An activation issued while this was pending has to win
+                       if (isActive && activationCount != deactivationCount)
+                           YUP_NSERROR_CHECK ([[AVAudioSession sharedInstance] setActive:YES error:&error]);
+                     }];
+        return;
+    }
+#endif
+
+    YUP_NSERROR_CHECK ([session setActive:NO error:&error]);
+}
+
+void AudioSessionHolder::deactivateIfUnused()
+{
+    cancelPendingUpdate();
+
+    for (auto* device : activeDevices)
+        if (device->isRunning)
+            return;
+
+    setActive (false);
+}
+
+void AudioSessionHolder::deactivateLaterIfUnused()
+{
+    triggerAsyncUpdate();
+}
+
+void AudioSessionHolder::handleAsyncUpdate()
+{
+    deactivateIfUnused();
+}
+
+void AudioSessionHolder::handleStatusChange (bool enabled, const char* reason)
+{
+    // Interruptions and media services resets leave the session inactive
+    isActive = false;
+
     for (auto device : activeDevices)
         device->handleStatusChange (enabled, reason);
 }

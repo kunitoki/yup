@@ -33,10 +33,14 @@ namespace yup
 class YUP_API MCPServer
 {
 public:
+    /** Handles a `tools/call`, receiving the call's arguments. */
+    using ToolHandler = std::function<MCPToolResult (const var& arguments)>;
+
     struct Options
     {
         String serverName = "YUP Application";
         String serverVersion = "1.0.0";
+        String instructions; /**< Optional usage hints returned to clients from `initialize`. */
         MCPCapabilities capabilities = {};
     };
 
@@ -44,8 +48,19 @@ public:
     explicit MCPServer (Options options);
     ~MCPServer();
 
-    /** Registers a tool definition and handler. */
+    /** Registers a tool definition and a handler returning a JSON value.
+
+        A string result becomes a text block; any other value is returned as JSON text
+        and, when it is an object, as structured content too (see MCPToolResult::fromValue()).
+    */
     void registerTool (MCPToolDefinition tool, LLMTool::Handler handler);
+
+    /** Registers a tool definition and a handler returning a full MCP result, which
+        can carry images, audio and the error flag.
+
+        Handlers run on the transport's thread, possibly several at once.
+    */
+    void registerTool (MCPToolDefinition tool, ToolHandler handler);
 
     /** Registers an LLM tool, deriving the MCP tool definition from its JSON Schema. */
     void registerTool (LLMTool tool);
@@ -71,7 +86,13 @@ public:
     /** Convenience placeholder for future stdio transport support. */
     Result startStdio();
 
-    /** Convenience placeholder for future HTTP transport support. */
+    /** Starts serving Streamable HTTP on `127.0.0.1` at the given port, at the default
+        endpoint `/mcp`.
+
+        Use start() with an MCPHttpServerTransport for other options.
+
+        @see MCPHttpServerTransport
+    */
     Result startHttp (int port);
 
 private:

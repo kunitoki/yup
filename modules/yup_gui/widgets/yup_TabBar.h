@@ -39,7 +39,7 @@ namespace yup
     tabBar.setLayout (TabBar::Layout::fill);
     tabBar.addTab ("12h", "12-hour");
     tabBar.addTab ("24h", "24-hour");
-    tabBar.onSelectionChanged = [] (const Identifier& tabId) { DBG (tabId); };
+    tabBar.onSelectionChanged = [] (const Identifier& tabId) { YUP_DBG (tabId); };
     @endcode
 
     @see TabButton, TabComponent

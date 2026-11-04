@@ -31,7 +31,7 @@ opts.baseUrl = "http://localhost:11434/v1";
 
 ```cpp
 auto embedding = embeddingModel.embed ("Machine learning is fascinating.");
-DBG ("Dimensions: " << embedding.dimensions());  // e.g. 1536
+YUP_DBG ("Dimensions: " << embedding.dimensions());  // e.g. 1536
 
 // Access the vector
 for (float v : embedding.values)
@@ -48,7 +48,7 @@ auto embeddings = embeddingModel.embedBatch ({
 });
 
 for (auto& e : embeddings)
-    DBG ("Index " << e.index << ": " << e.dimensions() << " dimensions");
+    YUP_DBG ("Index " << e.index << ": " << e.dimensions() << " dimensions");
 ```
 
 ## Similarity
@@ -94,5 +94,5 @@ std::sort (knowledgeBase.begin(), knowledgeBase.end(),
     });
 
 // Top match: "C++ is a statically typed, compiled language."
-DBG (knowledgeBase.front().first);
+YUP_DBG (knowledgeBase.front().first);
 ```

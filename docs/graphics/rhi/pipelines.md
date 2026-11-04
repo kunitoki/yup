@@ -54,7 +54,7 @@ auto result = GpuPipeline::compileFromBundle (ctx, bundle, options);
 if (result.wasOk())
     pipeline = result.getValue();
 else
-    DBG (result.getErrorMessage()); // human-readable failure description
+    YUP_DBG (result.getErrorMessage()); // human-readable failure description
 ```
 
 ### 2. From GLSL 450 source (transpiler required)

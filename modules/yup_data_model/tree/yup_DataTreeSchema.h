@@ -200,7 +200,7 @@ public:
         DataTree tree("Settings");
         auto result = schema.validate(tree);
         if (result.failed())
-            DBG("Validation failed: " << result.getErrorMessage());
+            YUP_DBG("Validation failed: " << result.getErrorMessage());
         @endcode
     */
     yup::Result validate (const DataTree& tree) const;

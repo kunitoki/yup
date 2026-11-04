@@ -53,7 +53,7 @@ String schemaJson = R"({
 DataTreeSchema::Ptr schema = DataTreeSchema::fromJsonSchemaString (schemaJson);
 if (schema == nullptr)
 {
-    DBG ("Failed to load schema");
+    YUP_DBG ("Failed to load schema");
     return;
 }
 ```
@@ -77,13 +77,13 @@ DataTree server = schema->createChildNode ("AppSettings", "ServerConfig");
 
 ```cpp
 auto theme = schema->getPropertyInfo ("AppSettings", "theme");
-DBG (theme.type);                     // "string"
-DBG (theme.defaultValue.toString());  // "light"
-DBG (theme.enumValues.size());        // 3
+YUP_DBG (theme.type);                     // "string"
+YUP_DBG (theme.defaultValue.toString());  // "light"
+YUP_DBG (theme.enumValues.size());        // 3
 
 auto children = schema->getChildConstraints ("AppSettings");
-DBG (children.maxCount);               // 10
-DBG (children.allowedTypes.size());    // 2
+YUP_DBG (children.maxCount);               // 10
+YUP_DBG (children.allowedTypes.size());    // 2
 ```
 
 ## Validated transactions
@@ -104,7 +104,7 @@ jassert (ok2.wasOk());
 
 auto bad1 = tx.setProperty ("theme", "invalid"); // not in enum
 jassert (bad1.failed());
-DBG (bad1.getErrorMessage());
+YUP_DBG (bad1.getErrorMessage());
 
 auto bad2 = tx.setProperty ("fontSize", 100);    // out of range
 jassert (bad2.failed());
@@ -131,9 +131,9 @@ network:
 ```cpp
 auto result = schema->validate (settings);
 if (result.failed())
-    DBG ("Validation failed: " << result.getErrorMessage());
+    YUP_DBG ("Validation failed: " << result.getErrorMessage());
 else
-    DBG ("Tree is valid");
+    YUP_DBG ("Tree is valid");
 ```
 
 Finer-grained checks are available via `validatePropertyValue (nodeType, name,

@@ -20,11 +20,13 @@
 */
 
 #include "SynthPatch.h"
-#include "SynthAlgorithms.h"
+#include "SynthConstants.h"
+#include "../browser/PresetBank.h"
+
+#include <FactoryBank/FactoryBank.h>
 
 #include <algorithm>
 #include <numeric>
-#include <string>
 #include <vector>
 
 namespace SynthPatch
@@ -69,228 +71,57 @@ yup::DataTree createEmptyState (int presetIndex, const SynthPatch::PresetInfo& i
 }
 
 //==============================================================================
-struct PresetValue
-{
-    std::string id;
-    float value;
-};
-
-struct PresetRoute
-{
-    SynthModulationSource source;
-    const char* destination;
-    float depth;
-};
-
-struct PresetEnvelope
-{
-    int index;
-    float attack;
-    float decay;
-    float sustain;
-    float release;
-    float curve;
-};
-
-struct FactoryPreset
-{
-    const char* id; /**< A fixed UUID, so the user's marks on the preset survive a new name. */
-    const char* name;
-    const char* category;
-    const char* tags;
-    const char* description;
-    const char* notes;
-    std::vector<PresetValue> values;
-    std::vector<PresetRoute> routes;
-    std::vector<PresetEnvelope> envelopes;
-    std::vector<float> osc1Partials; /**< Sine magnitudes from the fundamental up; empty plays the waveform. */
-};
-
 constexpr float sine = static_cast<float> (yup::Waveform::sine);
 constexpr float sawtooth = static_cast<float> (yup::Waveform::sawtooth);
 constexpr float square = static_cast<float> (yup::Waveform::square);
 constexpr float triangle = static_cast<float> (yup::Waveform::triangle);
 constexpr float pulse = static_cast<float> (yup::Waveform::pulse);
 
-/** Joins value lists, later lists overriding earlier ones. */
-std::vector<PresetValue> join (std::initializer_list<std::vector<PresetValue>> lists)
+//==============================================================================
+/** A factory preset: Init, built in code, or one read from the embedded factory bank. */
+struct FactoryPreset
 {
-    std::vector<PresetValue> result;
+    PresetInfo info;
+    yup::String folder; /**< The folder inside the bank, "Pads" or "Pads/Warm". */
+    yup::String xml; /**< Empty for Init. */
+};
 
-    for (const auto& list : lists)
-        result.insert (result.end(), list.begin(), list.end());
-
-    return result;
+PresetInfo getInitInfo()
+{
+    return { "Init", "Factory", "kunitoki", "init", "Init", "A single sine, the starting point.", {}, "ed6a924c-6fe7-4f9f-8f0e-7bf8b69740ea", {} };
 }
 
-/** The values that wire a TX81Z style algorithm: sine operators, every link at one
-    depth, operator 4's feedback, and the output operators at one level.
-*/
-std::vector<PresetValue> algorithm (int number, float depth, float feedback, float level)
-{
-    const auto& chosen = getSynthAlgorithms()[static_cast<std::size_t> (number - 1)];
-    std::vector<PresetValue> values;
-
-    const auto add = [&values] (const std::string& id, float value) { values.push_back ({ id, value }); };
-
-    for (int op = 1; op <= SynthExample::oscillatorCount; ++op)
-    {
-        const auto isOutput = std::find (chosen.outputs.begin(), chosen.outputs.end(), op) != chosen.outputs.end();
-        add ("osc" + std::to_string (op) + ".waveform", sine);
-        add ("osc" + std::to_string (op) + ".color", 0.0f);
-        add ("osc" + std::to_string (op) + ".level", isOutput ? level : 0.0f);
-    }
-
-    for (const auto& link : chosen.links)
-        add ("fm." + std::to_string (link.carrier) + std::to_string (link.modulator), depth);
-
-    add ("fm.44", feedback);
-    return values;
-}
-
-/** Switches off the modules a factory preset does not use: silent operators that modulate
-    nothing, and envelopes and LFOs no route reads. An operator a route makes heard or
-    modulating counts as used. The first operator always plays, and the filters keep their
-    defaults unless the preset sets them. */
-std::vector<std::pair<std::string, bool>> getFactoryEnables (const FactoryPreset& preset)
-{
-    // Later values override earlier ones, as they do when the preset is applied.
-    const auto valueOf = [&preset] (const std::string& id)
-    {
-        for (auto value = preset.values.rbegin(); value != preset.values.rend(); ++value)
-            if (value->id == id)
-                return value->value;
-
-        return 0.0f;
-    };
-
-    const auto isRouted = [&preset] (const std::string& id)
-    {
-        return std::any_of (preset.routes.begin(), preset.routes.end(), [&id] (const auto& route) { return route.depth != 0.0f && id == route.destination; });
-    };
-
-    std::vector<std::pair<std::string, bool>> enables;
-
-    for (int op = 2; op <= SynthExample::oscillatorCount; ++op)
-    {
-        const auto level = "osc" + std::to_string (op) + ".level";
-        auto used = valueOf (level) > 0.0f || isRouted (level);
-
-        for (int carrier = 1; carrier <= SynthExample::oscillatorCount; ++carrier)
-        {
-            const auto link = "fm." + std::to_string (carrier) + std::to_string (op);
-            used = used || (carrier != op && (valueOf (link) != 0.0f || isRouted (link)));
-        }
-
-        enables.emplace_back ("osc" + std::to_string (op) + ".enabled", used);
-    }
-
-    const auto isSourced = [&preset] (SynthModulationSource source)
-    {
-        return std::any_of (preset.routes.begin(), preset.routes.end(), [source] (const auto& route) { return route.source == source; });
-    };
-
-    for (int envelope = 1; envelope < SynthExample::envelopeCount; ++envelope)
-        enables.emplace_back ("env" + std::to_string (envelope + 1) + ".enabled", isSourced (static_cast<SynthModulationSource> (static_cast<int> (SynthModulationSource::env1) + envelope)));
-
-    for (int lfo = 0; lfo < SynthExample::lfoCount; ++lfo)
-        enables.emplace_back ("lfo" + std::to_string (lfo + 1) + ".enabled", isSourced (static_cast<SynthModulationSource> (static_cast<int> (SynthModulationSource::lfo1) + lfo)));
-
-    return enables;
-}
-
+/** Init, then every patch of the factory bank in the order of their paths, read once. */
 const std::vector<FactoryPreset>& getFactoryPresets()
 {
-    using Source = SynthModulationSource;
+    static const auto presets = []
+    {
+        std::vector<FactoryPreset> result { { getInitInfo(), {}, {} } };
+        const PresetBank bank (retrace::factoryBank_data, retrace::factoryBank_size);
 
-    const auto noFilter = std::vector<PresetValue> { { "flt1.enabled", 0.0f } };
+        for (const auto& path : bank.getEntryPaths (".retrace"))
+        {
+            auto xml = bank.readEntry (path, SynthExample::maxFileBytes);
+            const auto parsed = yup::parseXML (xml);
 
-    static const std::vector<FactoryPreset> presets {
-        { "ed6a924c-6fe7-4f9f-8f0e-7bf8b69740ea", "Init", "Init", "init", "A single sine, the starting point.", "", {}, {}, {}, {} },
+            if (parsed == nullptr)
+                continue;
 
-        { "bdb6e52d-e0a0-4613-aaaa-edc2d2df62b6", "FM E-Piano", "Keys", "fm, keys, electric piano", "Two-operator tine piano with a soft bark.", "Velocity opens the FM.",
-          join ({ algorithm (5, 0.2f, 0.0f, 0.6f), noFilter,
-                  { { "osc3.fine", 6.0f }, { "osc4.ratio", 14.0f }, { "fm.34", 0.08f } } }),
-          { { Source::env2, "fm.12", 0.3f }, { Source::env3, "fm.34", 0.35f }, { Source::velocity, "fm.12", 0.15f } },
-          { { 0, 0.002f, 2.5f, 0.0f, 0.4f, -0.6f }, { 1, 0.001f, 1.0f, 0.1f, 0.5f, -0.6f }, { 2, 0.001f, 0.15f, 0.0f, 0.1f, -0.7f } },
-          {} },
+            const auto state = yup::DataTree::fromXml (*parsed);
 
-        { "ee2ad62f-af1e-4ccf-81d8-af8cb9f7127a", "FM Bell", "Bell", "fm, bell, bright", "Inharmonic bell with a long ring.", "",
-          join ({ algorithm (5, 0.5f, 0.0f, 0.6f), noFilter,
-                  { { "osc2.ratio", 3.5f }, { "osc4.ratio", 3.5f }, { "osc3.fine", 4.0f } } }),
-          { { Source::env2, "fm.12", 0.3f }, { Source::env2, "fm.34", 0.3f } },
-          { { 0, 0.002f, 4.0f, 0.0f, 3.0f, -0.7f }, { 1, 0.001f, 2.0f, 0.0f, 2.0f, -0.6f } },
-          {} },
+            if (! isPatch (state))
+                continue;
 
-        { "ffc5ad40-26c8-4522-b7dd-667aff608e6e", "FM Bass", "Bass", "fm, bass", "Punchy FM bass.", "",
-          join ({ algorithm (3, 0.35f, 0.5f, 0.8f),
-                  { { "global.mode", static_cast<float> (SynthPlayMode::mono) }, { "global.glide", 0.0f },
-                    { "osc1.ratio", 0.5f }, { "osc2.ratio", 0.5f }, { "osc4.ratio", 0.5f },
-                    { "flt1.type", static_cast<float> (SynthFilterType::lowpass24) }, { "flt1.cutoff", 1800.0f },
-                    { "flt1.resonance", 0.25f } } }),
-          { { Source::env2, "fm.12", 0.35f } },
-          { { 0, 0.002f, 0.4f, 0.6f, 0.12f, -0.5f }, { 1, 0.001f, 0.25f, 0.0f, 0.1f, -0.6f } },
-          {} },
+            auto info = readInfo (state);
 
-        { "8c174bd5-ef1e-4a25-966a-ef3c4ab78895", "FM Brass", "Lead", "fm, brass, lead", "Swelling FM brass.", "",
-          join ({ algorithm (3, 0.15f, 0.35f, 0.7f), noFilter, { { "lfo1.rate", 5.5f }, { "lfo1.retrigger", 0.0f } } }),
-          { { Source::env2, "fm.12", 0.35f }, { Source::lfo1, "osc1.fine", 0.02f } },
-          { { 0, 0.06f, 0.3f, 0.8f, 0.2f, -0.3f }, { 1, 0.08f, 0.4f, 0.6f, 0.2f, -0.3f } },
-          {} },
+            if (info.name.isEmpty())
+                info.name = path.fromLastOccurrenceOf ("/", false, false).upToLastOccurrenceOf (".", false, false);
 
-        { "abc76eaa-3bab-4c1a-a5a4-4f83d822dae1", "Spectral Pad", "Pad", "spectral, pad, evolving", "Slowly evolving spectral pad.", "",
-          { { "global.unisonVoices", 4.0f }, { "global.unisonDetune", 0.25f }, { "global.unisonSpread", 0.8f },
-            { "osc1.ridges", 2.5f }, { "osc1.color", 0.6f }, { "osc1.dispersion", 0.3f }, { "osc1.scatter", 0.2f },
-            { "osc2.waveform", sawtooth }, { "osc2.ratio", 0.5f }, { "osc2.level", 0.25f }, { "osc2.ridges", 3.0f },
-            { "flt1.cutoff", 3500.0f }, { "flt1.resonance", 0.3f }, { "lfo1.rate", 0.3f } },
-          { { Source::lfo1, "osc1.color", 0.3f }, { Source::env2, "flt1.cutoff", 0.2f } },
-          { { 0, 0.8f, 1.2f, 0.8f, 2.0f, -0.4f } },
-          {} },
+            result.push_back ({ std::move (info), path.upToLastOccurrenceOf ("/", false, false), std::move (xml) });
+        }
 
-        { "0bac86f1-810f-423d-9861-36831e1c2a78", "Drawn Organ", "Keys", "drawn, organ, keys", "Organ drawn from partials.", "",
-          join ({ noFilter, { { "lfo1.rate", 6.0f } } }),
-          { { Source::lfo1, "osc1.fine", 0.02f } },
-          { { 0, 0.005f, 0.1f, 1.0f, 0.08f, 0.0f } },
-          { 0.8f, 0.6f, 0.5f, 0.4f, 0.0f, 0.3f, 0.0f, 0.25f } },
-
-        { "4340a4b7-9138-410a-9c4c-c3b1e22b063e", "Pluck Square", "Pluck", "pluck, square", "Short square pluck.", "",
-          { { "osc1.waveform", square }, { "osc1.squeeze", 0.1f },
-            { "flt1.type", static_cast<float> (SynthFilterType::moogLadder) }, { "flt1.cutoff", 400.0f },
-            { "flt1.resonance", 0.35f }, { "flt1.keytrack", 0.3f } },
-          { { Source::env2, "flt1.cutoff", 0.45f } },
-          { { 0, 0.002f, 0.35f, 0.2f, 0.15f, -0.5f }, { 1, 0.001f, 0.25f, 0.0f, 0.15f, -0.6f } },
-          {} },
-
-        // The budget cases of the performance pass, with a sustained amplitude.
-        { "0fef9e10-dfc6-43cb-aaab-117cdc6d9b6e", "Bench / 4 Saws", "Bench", "bench", "Benchmark: four saws.", "CPU measurement patch.",
-          { { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
-            { "osc2.waveform", sawtooth }, { "osc2.level", 0.25f }, { "osc3.waveform", sawtooth }, { "osc3.level", 0.25f },
-            { "osc4.waveform", sawtooth }, { "osc4.level", 0.25f } },
-          {},
-          { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
-          {} },
-
-        { "3f1091d9-1d44-45b4-84c9-cd365eceb072", "Bench / FM 4 Ops", "Bench", "bench, fm", "Benchmark: four FM operators.", "CPU measurement patch.",
-          algorithm (1, 0.3f, 0.3f, 0.8f),
-          {},
-          { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
-          {} },
-
-        { "9d53331f-f30a-4f90-942a-0659fa41c5db", "Bench / FM Unison 4", "Bench", "bench, fm, unison", "Benchmark: FM with unison.", "CPU measurement patch.",
-          join ({ algorithm (1, 0.3f, 0.3f, 0.8f), { { "global.unisonVoices", 4.0f } } }),
-          {},
-          { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
-          {} },
-
-        { "01d0f112-366d-4f52-b76a-22dd5e20e174", "Bench / Spectral LFO", "Bench", "bench, spectral", "Benchmark: LFO-driven spectral tilt.", "CPU measurement patch.",
-          { { "osc1.level", 0.25f }, { "osc1.color", 0.0f },
-            { "osc2.waveform", sawtooth }, { "osc2.level", 0.25f }, { "osc3.waveform", sawtooth }, { "osc3.level", 0.25f },
-            { "osc4.waveform", sawtooth }, { "osc4.level", 0.25f }, { "lfo1.rate", 2.0f } },
-          { { Source::lfo1, "osc1.tilt", 0.25f }, { Source::lfo1, "osc2.tilt", 0.25f },
-            { Source::lfo1, "osc3.tilt", 0.25f }, { Source::lfo1, "osc4.tilt", 0.25f } },
-          { { 0, 0.005f, 0.1f, 1.0f, 0.1f, 0.0f } },
-          {} }
-    };
+        return result;
+    }();
 
     return presets;
 }
@@ -992,18 +823,20 @@ int getNumFactoryPresets()
 
 yup::String getFactoryPresetId (int index)
 {
-    if (! yup::isPositiveAndBelow (index, getNumFactoryPresets()))
-        return {};
-
-    return getFactoryPresets()[static_cast<std::size_t> (index)].id;
+    return getFactoryPresetInfo (index).id;
 }
 
 yup::String getFactoryPresetName (int index)
 {
+    return getFactoryPresetInfo (index).name;
+}
+
+yup::String getFactoryPresetFolder (int index)
+{
     if (! yup::isPositiveAndBelow (index, getNumFactoryPresets()))
         return {};
 
-    return getFactoryPresets()[static_cast<std::size_t> (index)].name;
+    return getFactoryPresets()[static_cast<std::size_t> (index)].folder.replace ("/", " / ");
 }
 
 PresetInfo getFactoryPresetInfo (int index)
@@ -1011,8 +844,7 @@ PresetInfo getFactoryPresetInfo (int index)
     if (! yup::isPositiveAndBelow (index, getNumFactoryPresets()))
         return {};
 
-    const auto& preset = getFactoryPresets()[static_cast<std::size_t> (index)];
-    return { preset.name, "Factory", "kunitoki", preset.tags, preset.category, preset.description, preset.notes, preset.id };
+    return getFactoryPresets()[static_cast<std::size_t> (index)].info;
 }
 
 yup::DataTree createFactoryState (int index)
@@ -1021,52 +853,36 @@ yup::DataTree createFactoryState (int index)
         return {};
 
     const auto& preset = getFactoryPresets()[static_cast<std::size_t> (index)];
-    auto state = createEmptyState (index, getFactoryPresetInfo (index));
+
+    if (preset.xml.isNotEmpty())
+    {
+        auto state = yup::DataTree::fromXml (*yup::parseXML (preset.xml));
+
+        {
+            auto transaction = state.beginTransaction();
+            transaction.setProperty (presetProperty, index);
+        }
+
+        return state;
+    }
+
+    auto state = createEmptyState (index, preset.info);
     auto transaction = state.beginTransaction();
 
     // Quality is not automatable, so loading a patch without it would keep the current one.
     transaction.setProperty ("global.quality", static_cast<float> (SynthQuality::x2));
 
-    for (const auto& value : preset.values)
-        transaction.setProperty (yup::Identifier (value.id.c_str()), value.value);
+    // Only the first operator plays, and no envelope but the amplitude's and no LFO runs.
+    for (int op = 2; op <= SynthExample::oscillatorCount; ++op)
+        transaction.setProperty (yup::Identifier ("osc" + yup::String (op) + ".enabled"), 0.0f);
 
-    for (const auto& [id, enabled] : getFactoryEnables (preset))
-        transaction.setProperty (yup::Identifier (id.c_str()), enabled ? 1.0f : 0.0f);
+    for (int envelope = 2; envelope <= SynthExample::envelopeCount; ++envelope)
+        transaction.setProperty (yup::Identifier ("env" + yup::String (envelope) + ".enabled"), 0.0f);
 
-    std::vector<std::pair<SynthModulationSource, yup::String>> routes;
+    for (int lfo = 1; lfo <= SynthExample::lfoCount; ++lfo)
+        transaction.setProperty (yup::Identifier ("lfo" + yup::String (lfo) + ".enabled"), 0.0f);
 
-    for (std::size_t slot = 0; slot < preset.routes.size(); ++slot)
-    {
-        routes.emplace_back (preset.routes[slot].source, preset.routes[slot].destination);
-        transaction.setProperty (yup::Identifier ("route." + yup::String (static_cast<int> (slot) + 1) + ".depth"), preset.routes[slot].depth);
-    }
-
-    transaction.addChild (createRoutesTree (routes));
-
-    if (! preset.envelopes.empty())
-    {
-        SynthCurveState curves;
-
-        for (const auto& envelope : preset.envelopes)
-            curves.setEnvelope (envelope.index, SynthCurveState::makeAdsr (envelope.attack, envelope.decay, envelope.sustain, envelope.release, envelope.curve));
-
-        transaction.addChild (curves.createTree());
-    }
-
-    if (! preset.osc1Partials.empty())
-    {
-        SynthPartials seed;
-
-        for (std::size_t harmonic = 0; harmonic < preset.osc1Partials.size(); ++harmonic)
-            seed.setHarmonicMagnitude (static_cast<int> (harmonic), preset.osc1Partials[harmonic]);
-
-        seed.setUsesCustomSeries (true);
-
-        yup::DataTree child (getPartialsType (0));
-        seed.writeTo (child);
-        transaction.addChild (child);
-    }
-
+    transaction.addChild (createRoutesTree ({}));
     return state;
 }
 } // namespace SynthPatch
