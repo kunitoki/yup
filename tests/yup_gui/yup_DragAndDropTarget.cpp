@@ -28,6 +28,17 @@ using namespace yup;
 namespace
 {
 
+// The File constructor only takes absolute paths, so the payload files are built per platform.
+File dragTargetTestFileOne()
+{
+    return File::getSpecialLocation (File::tempDirectory).getChildFile ("yup_drag_one.txt");
+}
+
+File dragTargetTestFileTwo()
+{
+    return File::getSpecialLocation (File::tempDirectory).getChildFile ("yup_drag_two.txt");
+}
+
 // A component that also opts in to drag-and-drop by deriving from the mixin.
 class DragDropTargetComponent : public Component
     , public DragAndDropTarget
@@ -286,8 +297,8 @@ TEST_F (DragAndDropTargetTests, FilesOnlyPayloadDelivered)
     child->handlesDrop = true;
 
     Array<File> files;
-    files.add (File ("/tmp/one.txt"));
-    files.add (File ("/tmp/two.txt"));
+    files.add (dragTargetTestFileOne());
+    files.add (dragTargetTestFileTwo());
     DragAndDropData data = DragAndDropData().withFiles (files);
 
     DragAndDropTarget::dispatchItemDrop (*child, data, { 85.0f, 85.0f });
@@ -315,7 +326,7 @@ TEST_F (DragAndDropTargetTests, MixedPayloadDelivered)
     child->handlesDrop = true;
 
     Array<File> files;
-    files.add (File ("/tmp/one.txt"));
+    files.add (dragTargetTestFileOne());
     DragAndDropData data = DragAndDropData().withFiles (files).withText ("dropped");
 
     DragAndDropTarget::dispatchItemDrop (*child, data, { 85.0f, 85.0f });
@@ -464,7 +475,7 @@ TEST_F (DragAndDropTargetTests, PayloadDataDeliveredToDragEnter)
 {
     child->interested = true;
 
-    DragAndDropData data = DragAndDropData().withText ("hello").withFiles ({ File ("/tmp/a.txt") });
+    DragAndDropData data = DragAndDropData().withText ("hello").withFiles ({ dragTargetTestFileOne() });
 
     DragAndDropTarget::dispatchItemDragEnter (*child, data, { 85.0f, 85.0f });
     EXPECT_TRUE (child->lastDragEnterData.hasText());
@@ -488,7 +499,7 @@ TEST_F (DragAndDropTargetTests, PayloadDataDeliveredToDragExit)
 {
     child->interested = true;
 
-    DragAndDropData data = DragAndDropData().withFiles ({ File ("/tmp/a.txt") });
+    DragAndDropData data = DragAndDropData().withFiles ({ dragTargetTestFileOne() });
 
     DragAndDropTarget::dispatchItemDragExit (*child, data);
     EXPECT_TRUE (child->lastDragExitData.hasFiles());

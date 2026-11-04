@@ -159,7 +159,9 @@ struct TestApplication : yup::YUPApplication
 
         testing::TestEventListeners& listeners = testing::UnitTest::GetInstance()->listeners();
         delete listeners.Release (listeners.default_result_printer());
-        listeners.Append (new CompactPrinter (*this));
+
+        printer = std::make_unique<CompactPrinter> (*this);
+        listeners.Append (printer.get());
 
         programStart = std::chrono::steady_clock::now();
 
@@ -209,6 +211,8 @@ private:
     bool shouldUseSingleCall = false;
     int totalShards = 1;
     int shardIndex = 0;
+
+    std::unique_ptr<testing::TestEventListener> printer;
 
     void parseCommandLineSettings (const yup::String& commandLineParameters)
     {
@@ -430,6 +434,12 @@ private:
         std::cout.flush();
 
         setApplicationReturnValue (failedTests.empty() ? 0 : 1);
+
+        if (printer != nullptr)
+        {
+            testing::UnitTest::GetInstance()->listeners().Release (printer.get());
+            printer.reset();
+        }
 
         quit();
     }

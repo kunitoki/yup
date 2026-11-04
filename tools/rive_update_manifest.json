@@ -2006,6 +2006,54 @@
               "        }"
             ]
           }
+        },
+        {
+          "path": "source/renderer/ore/d3d11/ore_render_pass_d3d11.cpp",
+          "note": "Ore D3D11 pass finish: unbind the shader resource views the pass bound, so the next pass can render into a texture this one sampled without tripping the D3D11 debug layer hazards (STATE_SETTING WARNING #9 and #7)",
+          "already_contains": "        const auto unbindView = [&](const auto& binding)",
+          "replace": {
+            "from": [
+              "    m_finished = true;",
+              "    releaseBoundResources();",
+              "    if (m_d3d11Context != nullptr)",
+              "    {",
+              "        // Unbind render targets so attached textures can be used as SRVs."
+            ],
+            "to": [
+              "    m_finished = true;",
+              "",
+              "    if (m_d3d11Context != nullptr)",
+              "    {",
+              "        ID3D11ShaderResourceView* nullView = nullptr;",
+              "",
+              "        const auto unbindView = [&](const auto& binding)",
+              "        {",
+              "            if (binding.vsSlot != BindingMap::kAbsent)",
+              "                m_d3d11Context->VSSetShaderResources(binding.vsSlot, 1, &nullView);",
+              "            if (binding.psSlot != BindingMap::kAbsent)",
+              "                m_d3d11Context->PSSetShaderResources(binding.psSlot, 1, &nullView);",
+              "        };",
+              "",
+              "        for (const auto& group : m_boundGroups)",
+              "        {",
+              "            const auto* bg = static_cast<const BindGroupD3D11*>(group.get());",
+              "            if (bg == nullptr)",
+              "                continue;",
+              "",
+              "            for (const auto& texture : bg->m_d3d11Textures)",
+              "                unbindView(texture);",
+              "            for (const auto& storage : bg->m_d3d11StorageBuffers)",
+              "                unbindView(storage);",
+              "        }",
+              "    }",
+              "",
+              "    releaseBoundResources();",
+              "",
+              "    if (m_d3d11Context != nullptr)",
+              "    {",
+              "        // Unbind render targets so attached textures can be used as SRVs."
+            ]
+          }
         }
       ],
       "shader_generation": {
