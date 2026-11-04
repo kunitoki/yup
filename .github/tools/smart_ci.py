@@ -21,6 +21,8 @@ and tested for the change:
 With --platform, the "platforms" section of the config restricts the result to
 that platform: native files of other platforms are ignored, only that platform's
 <platform>Deps header lines count, and only the examples it builds are listed.
+Build files a platform lists under "owns" (its workflow, cmake platform files)
+trigger a full build of the platforms owning them and are ignored by the others.
 
 Exactly one scope selects the changed files:
 
@@ -275,6 +277,15 @@ def classify_file(file_path, config, platform_skip=()):
     return None
 
 
+def owned_elsewhere(file_path, config, platform_name):
+    """Return whether another platform owns file_path and platform_name does not."""
+    def owns(platform):
+        return any(re.match(pattern, file_path) for pattern in platform.get("owns", []))
+
+    platforms = config.get("platforms", {})
+    return not owns(platforms[platform_name]) and any(owns(platform) for name, platform in platforms.items() if name != platform_name)
+
+
 def reverse_closure(start, reverse):
     result = set(start)
     queue = deque(result)
@@ -417,6 +428,8 @@ def main():
         changed_files = get_changed_files_since(args.since)
     else:
         changed_files = get_changed_files(args.base)
+    if changed_files is not None and args.platform:
+        changed_files = [file_path for file_path in changed_files if not owned_elsewhere(file_path, config, args.platform)]
     if changed_files is not None:
         print(f"Found {len(changed_files)} changed files:")
         for file_path in changed_files:
