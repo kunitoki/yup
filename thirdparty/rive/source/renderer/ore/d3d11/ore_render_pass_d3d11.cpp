@@ -484,7 +484,37 @@ void RenderPassD3D11::finish()
   if (m_finished)
     return;
   m_finished = true;
+
+  if (m_d3d11Context != nullptr && m_currentPipeline != nullptr)
+  {
+    ID3D11ShaderResourceView* nullView = nullptr;
+    const Pipeline* pipeline = m_currentPipeline.get();
+    const auto unbindView =
+        [&](uint32_t groupIndex, uint32_t binding, SlotSpace space)
+    {
+      const Pipeline::StageSlots slots =
+          pipeline->slots(groupIndex, binding, space);
+      if (slots.vs != BindingMap::kAbsent)
+        m_d3d11Context->VSSetShaderResources(slots.vs, 1, &nullView);
+      if (slots.fs != BindingMap::kAbsent)
+        m_d3d11Context->PSSetShaderResources(slots.fs, 1, &nullView);
+    };
+
+    for (uint32_t g = 0; g < kMaxBindGroups; ++g)
+    {
+      const auto* bg = static_cast<const BindGroupD3D11*>(m_boundGroups[g].get());
+      if (bg == nullptr)
+        continue;
+
+      for (const auto& texture : bg->m_d3d11Textures)
+        unbindView(g, texture.binding, SlotSpace::texture);
+      for (const auto& storage : bg->m_d3d11StorageBuffers)
+        unbindView(g, storage.binding, SlotSpace::buffer);
+    }
+  }
+
   releaseBoundResources();
+
   if (m_d3d11Context != nullptr)
   {
     // Unbind render targets so attached textures can be used as SRVs.

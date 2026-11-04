@@ -836,13 +836,16 @@ void PopupMenu::dismiss (int itemID)
 
     restoreFocusAfterDismissal();
 
-    if (auto itemCallback = std::exchange (menuCallback, {}))
-        itemCallback (itemID);
-
-    if (onItemSelected != nullptr)
-        onItemSelected (itemID);
+    auto itemCallback = std::exchange (menuCallback, {});
+    auto selectionCallback = onItemSelected;
 
     removeActivePopup (this);
+
+    if (itemCallback != nullptr)
+        itemCallback (itemID);
+
+    if (selectionCallback != nullptr)
+        selectionCallback (itemID);
 }
 
 //==============================================================================
@@ -1124,14 +1127,18 @@ void PopupMenu::showSubmenu (int itemIndex)
     // Position the submenu
     positionSubmenu (submenuOptions);
 
-    // Show the submenu with callback
-    currentSubmenu->showCustom (submenuOptions, true, [this] (int selectedID)
+    currentSubmenu->showCustom (submenuOptions, true, [parent = WeakReference<Component> (this)] (int selectedID)
     {
-        YUP_MODULE_DBG (GUI_POPUPMENU, "showSubmenu callback: selectedID=" << selectedID << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
-        if (selectedID != 0)
-            dismiss (selectedID);
+        auto* menu = static_cast<PopupMenu*> (parent.get());
+        if (menu == nullptr)
+            return;
 
-        isShowingSubmenu = false;
+        YUP_MODULE_DBG (GUI_POPUPMENU, "showSubmenu callback: selectedID=" << selectedID << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (menu)) << "]");
+
+        menu->isShowingSubmenu = false;
+
+        if (selectedID != 0)
+            menu->dismiss (selectedID);
     });
 
     YUP_MODULE_DBG (GUI_POPUPMENU, "showSubmenu EXIT: submenu visible=" << (currentSubmenu->isVisible() ? 1 : 0) << " submenu popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (currentSubmenu.get())) << " screenBounds=" << currentSubmenu->getScreenBounds().toString() << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");

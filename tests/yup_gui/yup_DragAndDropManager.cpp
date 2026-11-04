@@ -74,6 +74,12 @@ public:
     DragAndDropData lastDropData;
 };
 
+// The File constructor only takes absolute paths, so the drag payload is built per platform.
+File managerTestDragFile()
+{
+    return File::getSpecialLocation (File::tempDirectory).getChildFile ("yup_drag_one.txt");
+}
+
 } // namespace
 
 /** Exercises the path an OS-originated drag takes through the manager.
@@ -112,7 +118,7 @@ protected:
 TEST_F (DragAndDropManagerTests, ExternalMoveEntersOnceThenMoves)
 {
     Array<File> files;
-    files.add (File ("/tmp/one.txt"));
+    files.add (managerTestDragFile());
 
     const auto data = DragAndDropData{}.withFiles (files);
 
@@ -131,7 +137,7 @@ TEST_F (DragAndDropManagerTests, ExternalMoveEntersOnceThenMoves)
 TEST_F (DragAndDropManagerTests, MovingBetweenComponentsExitsTheFirstAndEntersTheSecond)
 {
     Array<File> files;
-    files.add (File ("/tmp/one.txt"));
+    files.add (managerTestDragFile());
 
     const auto data = DragAndDropData{}.withFiles (files);
 

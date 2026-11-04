@@ -39,6 +39,10 @@
   },
   "platforms": {
     "mac": {
+      "owns": [
+        "^\\.github/workflows/build_macos\\.yml$",
+        "^cmake/platforms/(yup_(mac|apple)\\.cmake$|mac/)"
+      ],
       "deps": ["macDeps", "appleDeps"],
       "tests": true,
       "skip": [
@@ -55,6 +59,11 @@
       }
     },
     "ios": {
+      "owns": [
+        "^\\.github/workflows/build_ios\\.yml$",
+        "^cmake/platforms/(yup_(ios|apple)\\.cmake$|ios/)",
+        "^cmake/toolchains/ios\\.cmake$"
+      ],
       "deps": ["iosDeps", "iosSimDeps", "appleDeps"],
       "tests": true,
       "skip": [
@@ -68,6 +77,10 @@
       }
     },
     "linux": {
+      "owns": [
+        "^\\.github/workflows/build_linux\\.yml$",
+        "^cmake/platforms/yup_linux\\.cmake$"
+      ],
       "deps": ["linuxDeps"],
       "tests": true,
       "skip": [
@@ -83,6 +96,10 @@
       }
     },
     "windows": {
+      "owns": [
+        "^\\.github/workflows/build_windows\\.yml$",
+        "^cmake/platforms/yup_(windows|uwp)\\.cmake$"
+      ],
       "deps": ["windowsDeps", "msftDeps"],
       "tests": true,
       "skip": [
@@ -98,6 +115,10 @@
       }
     },
     "wasm": {
+      "owns": [
+        "^\\.github/workflows/build_wasm\\.yml$",
+        "^cmake/platforms/(yup_emscripten\\.cmake$|emscripten/)"
+      ],
       "deps": ["wasmDeps"],
       "tests": true,
       "skip": [
@@ -112,6 +133,10 @@
       }
     },
     "android": {
+      "owns": [
+        "^\\.github/workflows/build_android\\.yml$",
+        "^cmake/platforms/(yup_android\\.cmake$|android/)"
+      ],
       "deps": ["androidDeps"],
       "tests": true,
       "skip": [

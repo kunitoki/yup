@@ -1164,6 +1164,41 @@ TEST_F (PopupMenuTest, OptionsWithFocusComponent)
     EXPECT_TRUE (menu->isVisible());
 }
 
+TEST_F (PopupMenuTest, DismissingAllPopupsFromTheSelectionCallbackIsSafe)
+{
+    PopupMenu::dismissAllPopups();
+
+    // Nothing else holds the menu while the callback runs, so this drops its last reference.
+    PopupMenu* rawMenu = nullptr;
+    WeakReference<Component> menuReference;
+    int selectedId = -1;
+
+    {
+        auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (parentComponent.get()).withPosition (Point<int> (10, 10)));
+        menu->addItem (kPopupTestText1, kPopupTestId1);
+
+        menu->show ([&selectedId] (int id)
+        {
+            selectedId = id;
+            PopupMenu::dismissAllPopups();
+        });
+
+        rawMenu = menu.get();
+        menuReference = rawMenu;
+    }
+
+    const auto& firstItem = **rawMenu->begin();
+    const auto itemCenter = firstItem.area.getCenter();
+    const auto click = MouseEvent (MouseEvent::leftButton, KeyModifiers(), itemCenter)
+                           .withLastMouseDownPosition (itemCenter);
+
+    rawMenu->mouseDown (click);
+    rawMenu->mouseUp (click);
+
+    EXPECT_EQ (kPopupTestId1, selectedId);
+    EXPECT_EQ (nullptr, menuReference.get());
+}
+
 TEST_F (PopupMenuTest, StyleIdentifiersContainAllStyleIds)
 {
     auto id = PopupMenu::Style::menuItemBackgroundActiveSubmenu;
