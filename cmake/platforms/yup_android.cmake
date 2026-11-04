@@ -47,7 +47,7 @@ function (_yup_android_prepare_gradle)
     _yup_set_default (YUP_ANDROID_APPLICATION_VERSION "1.0")
     _yup_set_default (YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
     _yup_set_default (YUP_ANDROID_ABI "arm64-v8a")
-    _yup_set_default (YUP_ANDROID_CMAKE_VERSION "3.31.6")
+    _yup_set_default (YUP_ANDROID_CMAKE_VERSION "${CMAKE_VERSION}")
     _yup_set_default (YUP_ANDROID_NDK_VERSION "27.2.12479018")
 
     if (YUP_ANDROID_VALIDATION_LAYERS)
