@@ -42,8 +42,7 @@
     iosSimDefines:      RIVE_IOS_SIMULATOR=1
     linuxDefines:       ORE_BACKEND_GL=1
     wasmDefines:        RIVE_WEBGL=1 ORE_BACKEND_GL=1
-    wasmOptions:        -sUSE_SDL=2
-    wasmLinkOptions:    -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2
+    wasmLinkOptions:    -sMAX_WEBGL_VERSION=2
     windowsDefines:     RIVE_WINDOWS=1 ORE_BACKEND_D3D11=1 ORE_BACKEND_GL=1
     androidDefines:     RIVE_ANDROID=1 ORE_BACKEND_GL=1
     androidLibs:        EGL GLESv3

@@ -419,6 +419,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - SDL3 windowing: the render thread no longer queries the window pixel size from UIKit / AppKit, which are main thread only (flagged by Xcode's Main Thread Checker on iOS). The size is cached from `SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED`.
 - iOS: builds with Xcode 27 failed because the toolchain kept iOS 13.0 as deployment target; it now follows the minimum YUP picks for the installed Xcode.
 - iOS audio: fewer blocking AVAudioSession calls on the main thread. The session is no longer switched off and on between creating and opening a device, unchanged categories are not reapplied, and deactivation is asynchronous on iOS 27. Closing or probing a device no longer deactivates the session while another device is open.
+- Emscripten: the `rive` module no longer pulls in Emscripten's unused SDL2 port (`-sUSE_SDL=2`). Parallel compiles raced to build it in the shared Emscripten cache and failed CI builds.
 - UBSAN and ASAN fixes throughout the codebase
 
 ### Documentation
