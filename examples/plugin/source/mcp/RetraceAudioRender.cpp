@@ -157,6 +157,6 @@ yup::ResultValue<yup::AudioBuffer<float>> render (yup::AudioProcessor& processor
     }
 
     processor.releaseResources();
-    return output;
+    return yup::makeResultValueOk (std::move (output));
 }
 } // namespace RetraceAudioRender

@@ -406,7 +406,7 @@ yup::ResultValue<RetraceAudioRender::Request> parseRequest (const yup::var& argu
 
     request.length = static_cast<double> (arguments.getProperty ("length", 0.0));
     request.tail = static_cast<double> (arguments.getProperty ("tail", 2.0));
-    return request;
+    return yup::makeResultValueOk (std::move (request));
 }
 
 //==============================================================================
