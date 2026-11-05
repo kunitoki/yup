@@ -764,6 +764,35 @@ int GpuDevice::ShaderModuleCache::size() const
     return (int) modules.size();
 }
 
+ResultValue<ShaderBundle::Ptr> GpuDevice::loadShaderBundle (const void* data, size_t size)
+{
+    // The address can be reused by other bytes, so a hit must also match the content
+    const auto contentHash = static_cast<uint64> (XXH3_64bits (data, size));
+
+    const ScopedLock sl (embeddedBundlesLock);
+
+    auto& entry = embeddedBundles[std::make_pair (data, size)];
+    if (entry.bundle != nullptr && entry.contentHash == contentHash)
+        return makeResultValueOk (entry.bundle);
+
+    auto loaded = ShaderBundle::loadFromData (data, size);
+    if (loaded.failed())
+    {
+        embeddedBundles.erase (std::make_pair (data, size));
+        return makeResultValueFail (loaded.getErrorMessage());
+    }
+
+    entry.contentHash = contentHash;
+    entry.bundle = new ShaderBundle (std::move (loaded.getReference()));
+    return makeResultValueOk (entry.bundle);
+}
+
+void GpuDevice::clearShaderBundleCache()
+{
+    const ScopedLock sl (embeddedBundlesLock);
+    embeddedBundles.clear();
+}
+
 int GpuDevice::getShaderModuleCountForTesting() const
 {
     return shaderModuleCache.size();

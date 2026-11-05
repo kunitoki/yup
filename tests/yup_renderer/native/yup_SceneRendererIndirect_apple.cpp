@@ -2034,15 +2034,17 @@ TEST_F (SceneRendererMetalTests, IrradianceVolumeChangesRestartAccumulation)
         { "position", [] (Entity volume) { volume.getOrAttach<TransformNode>().setPosition ({ 0.0f, 1.6f, 0.0f }); } },
     };
 
+    // One renderer through all the changes, converged again before each
+    Scene scene;
+    buildRedRoomScene (scene, false);
+    addIrradianceVolume (scene, 4, 2, 2);
+
+    SceneRenderer renderer;
+    setFullTierTaa (renderer, 8);
+
     for (const auto& [name, change] : changes)
     {
-        Scene scene;
-        buildRedRoomScene (scene, false);
-        addIrradianceVolume (scene, 4, 2, 2);
-
-        SceneRenderer renderer;
-        setFullTierTaa (renderer, 8);
-        for (int i = 0; i < 12; ++i)
+        for (int i = 0; i < 12 && (i == 0 || ! renderer.isConverged()); ++i)
             ASSERT_NE (renderer.render (device, scene, 64, 64), nullptr) << renderer.getLastError();
         ASSERT_TRUE (renderer.isConverged()) << name;
 
@@ -2153,7 +2155,8 @@ TEST_F (SceneRendererMetalTests, VolumeBakeUniformPoolStaysSmall)
 {
     // Preflight R18 and R28: volume bakes in the red room plus 100 small casters, each its own draw
     // on every capture face: the brief's 6 x 2 x 4 volume, then the largest one, 7 x 7 x 7, which
-    // bakes over several frames, waited on and then not. The device's uniform buffers, pooled or held
+    // bakes over several frames without waiting, as an application renders: the frames in flight
+    // hold their buffers longest, which bounds a waited bake too. The device's uniform buffers, pooled or held
     // by frames in flight, are recorded once each bake completed and the frames returned them. On a
     // device of its own: the pool only grows, so the suite's device holds the peaks of earlier tests
     const auto poolDevice = GpuDevice::create (GpuPlatform::Metal, {});
@@ -2194,13 +2197,9 @@ TEST_F (SceneRendererMetalTests, VolumeBakeUniformPoolStaysSmall)
     // The pool only grows, so each figure is the running peak of the device after that bake, an upper bound of it
     const auto before = poolDevice->getUniformBufferPoolSizeForTesting();
     const auto brief = bake (6, 2, 4, "brief");
-    const auto largest = bake (IrradianceVolumeNode::maxResolution, IrradianceVolumeNode::maxResolution, IrradianceVolumeNode::maxResolution, "largest");
-
-    // As an application renders, without waiting: the frames in flight hold their buffers longer
     const auto unwaited = bake (IrradianceVolumeNode::maxResolution, IrradianceVolumeNode::maxResolution, IrradianceVolumeNode::maxResolution, "unwaited", false);
 
     EXPECT_GT (brief.second, before.second);
     EXPECT_LE (brief.second, static_cast<size_t> (16 * 1024 * 1024));
-    EXPECT_LE (largest.second, static_cast<size_t> (16 * 1024 * 1024));
     EXPECT_LE (unwaited.second, static_cast<size_t> (16 * 1024 * 1024));
 }

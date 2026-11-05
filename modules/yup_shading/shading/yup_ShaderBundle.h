@@ -95,11 +95,17 @@ struct ShaderInfo
             useSource (info->source);
     @endcode
 
+    Bundles are reference counted, so a parsed bundle can be shared through a
+    ShaderBundle::Ptr (see GpuDevice::loadShaderBundle()); they can still be
+    created and moved by value.
+
     @see ShaderBundleCompiler, ShaderInfo
 */
-class YUP_API ShaderBundle final
+class YUP_API ShaderBundle final : public ReferenceCountedObject
 {
 public:
+    using Ptr = ReferenceCountedObjectPtr<ShaderBundle>;
+
     ShaderBundle() = default;
 
     //==========================================================================

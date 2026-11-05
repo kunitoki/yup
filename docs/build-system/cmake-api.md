@@ -96,6 +96,8 @@ Controls whether targets are added for test projects. OFF by default.
 
 Semicolon-separated list of modules whose tests are built. Empty by default, which builds every module's tests. Each tested module gets its own `<module>_tests` runner, registered with `ctest` as `<module>`, and the `yup_tests` target builds them all. The `yup_tests_run` target builds them and then runs them all through `ctest`. When set, only the listed modules' runners are built, linking just what they need (the shared `yup_tests_runtime` library, plus each module's `optionalDeps` and `testDeps`), e.g. `-DYUP_TEST_MODULES="yup_core;yup_dsp"`.
 
+Setting `GTEST_OUTPUT=xml:<folder>/` (or passing `--gtest_output=xml:<folder>/`) makes each runner write one `<runner>.xml` report covering all its suites. `python3 tools/print_slowest_tests.py <folder>` then lists the slowest tests and suites, as the CI workflows do after every test run.
+
 ### `YUP_TEST_LINK_JOBS`
 
 Maximum number of test runners linked at the same time with Ninja generators, to bound the memory used by the links. `2` by default, `0` removes the limit.

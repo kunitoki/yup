@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_shading yup_simd rive
+    dependencies:       yup_core yup_shading yup_simd rive xxhash_library
     testDeps:           yup_graphics
     appleFrameworks:    Metal
 

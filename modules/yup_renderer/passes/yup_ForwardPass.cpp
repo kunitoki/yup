@@ -168,7 +168,7 @@ struct ForwardPass::Variant
     String compile (const GpuDevice::Ptr& device)
     {
         const auto& [data, size] = forwardPassShaderBundles[getForwardVariantIndex (velocity, areaLights, shadowFilters, localIndirect, layers)];
-        auto bundle = ShaderBundle::loadFromData (data, size);
+        auto bundle = device->loadShaderBundle (data, size);
         if (bundle.failed())
             return "Unable to load the scene shader bundle: " + bundle.getErrorMessage();
 
@@ -202,7 +202,7 @@ struct ForwardPass::Variant
             options.depthStencil.depthWriteEnabled = ! blend;
             options.sampleCount = sampleCount;
 
-            auto result = GpuPipeline::compileFromBundle (device, bundle.getReference(), options);
+            auto result = GpuPipeline::compileFromBundle (device, *bundle.getValue(), options);
             if (result.failed())
                 return "Unable to compile the scene pipeline: " + result.getErrorMessage();
 
@@ -213,7 +213,7 @@ struct ForwardPass::Variant
             return {};
 
         // The environment behind everything: drawn first, without testing or writing depth
-        auto backgroundBundle = ShaderBundle::loadFromData (backgroundShaderBundle, sizeof (backgroundShaderBundle));
+        auto backgroundBundle = device->loadShaderBundle (backgroundShaderBundle, sizeof (backgroundShaderBundle));
         if (backgroundBundle.failed())
             return "Unable to load the background shader bundle: " + backgroundBundle.getErrorMessage();
 
@@ -227,7 +227,7 @@ struct ForwardPass::Variant
         options.depthStencil.depthWriteEnabled = false;
         options.sampleCount = sampleCount;
 
-        auto result = GpuPipeline::compileFromBundle (device, backgroundBundle.getReference(), options);
+        auto result = GpuPipeline::compileFromBundle (device, *backgroundBundle.getValue(), options);
         if (result.failed())
             return "Unable to compile the background pipeline: " + result.getErrorMessage();
 

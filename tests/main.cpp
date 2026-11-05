@@ -219,17 +219,7 @@ private:
         auto args = yup::StringArray::fromTokens (commandLineParameters, true);
         for (auto& arg : args)
         {
-            if (arg.startsWith ("--gtest_output=xml:"))
-            {
-                auto originalXmlPath = arg.fromFirstOccurrenceOf (":", false, false);
-                if (yup::File::isAbsolutePath (originalXmlPath))
-                    originalXmlOutputPath = yup::File (originalXmlPath);
-                else
-                    originalXmlOutputPath = yup::File::getCurrentWorkingDirectory().getChildFile (originalXmlPath);
-
-                std::cout << "Will generate XML report to: " << originalXmlOutputPath.getFullPathName() << std::endl;
-            }
-            else if (arg.startsWith ("--gtest_filter=") && arg != "--gtest_filter=*")
+            if (arg.startsWith ("--gtest_filter=") && arg != "--gtest_filter=*")
             {
                 shouldUseSingleCall = true;
                 std::cout << "Filter specified: " << arg << std::endl;
@@ -284,6 +274,36 @@ private:
                 std::cout << "Slowest tests printed: " << slowestTests << std::endl;
             }
         }
+
+        parseXmlOutputSetting();
+    }
+
+    /** Takes over the XML report requested with --gtest_output or the GTEST_OUTPUT environment
+        variable: gtest would rewrite it after every suite run individually, keeping the last only. */
+    void parseXmlOutputSetting()
+    {
+        const yup::String output (::testing::GTEST_FLAG (output));
+        if (! output.startsWith ("xml"))
+            return;
+
+        auto& listeners = testing::UnitTest::GetInstance()->listeners();
+        delete listeners.Release (listeners.default_xml_generator());
+
+        auto xmlPath = output.fromFirstOccurrenceOf (":", false, false);
+        if (xmlPath.isEmpty() || xmlPath.endsWithChar ('/') || xmlPath.endsWithChar ('\\'))
+        {
+            const auto executableName = yup::File::getSpecialLocation (yup::File::currentExecutableFile).getFileNameWithoutExtension();
+            xmlPath += executableName + ".xml";
+        }
+
+        if (yup::File::isAbsolutePath (xmlPath))
+            originalXmlOutputPath = yup::File (xmlPath);
+        else
+            originalXmlOutputPath = yup::File::getCurrentWorkingDirectory().getChildFile (xmlPath);
+
+        originalXmlOutputPath.getParentDirectory().createDirectory();
+
+        std::cout << "Will generate XML report to: " << originalXmlOutputPath.getFullPathName() << std::endl;
     }
 
     void runNextSuite (int suiteIndex)

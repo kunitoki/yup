@@ -252,6 +252,104 @@ TEST_F (GpuDeviceErrorTests, GetPlatformOnHeadlessReturnsHeadless)
 }
 
 // ---------------------------------------------------------------------------
+// loadShaderBundle
+// ---------------------------------------------------------------------------
+
+TEST_F (GpuDeviceErrorTests, LoadedShaderBundleIsParsedOncePerAddress)
+{
+    ShaderBundle source;
+    ShaderInfo info;
+    info.stage = ShaderStage::vertex;
+    info.language = ShaderLanguage::msl;
+    info.entryPoint = "main0";
+    info.source = "vertex source";
+    source.addShader (std::move (info));
+
+    MemoryBlock bytes;
+    ASSERT_TRUE (source.saveToMemoryBlock (bytes).wasOk());
+
+    const auto first = device->loadShaderBundle (bytes.getData(), bytes.getSize());
+    ASSERT_TRUE (first.wasOk()) << first.getErrorMessage();
+    ASSERT_NE (first.getValue()->findShader (ShaderStage::vertex, ShaderLanguage::msl), nullptr);
+    EXPECT_EQ (first.getValue()->findShader (ShaderStage::vertex, ShaderLanguage::msl)->source, "vertex source");
+
+    const auto second = device->loadShaderBundle (bytes.getData(), bytes.getSize());
+    ASSERT_TRUE (second.wasOk());
+    EXPECT_EQ (second.getValue(), first.getValue());
+
+    const MemoryBlock copy (bytes);
+    const auto other = device->loadShaderBundle (copy.getData(), copy.getSize());
+    ASSERT_TRUE (other.wasOk());
+    EXPECT_NE (other.getValue(), first.getValue());
+}
+
+TEST_F (GpuDeviceErrorTests, ShaderBundleChangedAtTheSameAddressIsLoadedAgain)
+{
+    const auto save = [] (const char* source)
+    {
+        ShaderBundle bundle;
+        ShaderInfo info;
+        info.language = ShaderLanguage::msl;
+        info.source = source;
+        bundle.addShader (std::move (info));
+
+        MemoryBlock bytes;
+        EXPECT_TRUE (bundle.saveToMemoryBlock (bytes, ShaderBundle::Compression::none).wasOk());
+        return bytes;
+    };
+
+    auto bytes = save ("first");
+    const auto second = save ("other");
+    ASSERT_EQ (bytes.getSize(), second.getSize());
+
+    const auto sourceOf = [this, &bytes]
+    {
+        const auto bundle = device->loadShaderBundle (bytes.getData(), bytes.getSize());
+        EXPECT_TRUE (bundle.wasOk());
+        const auto* info = bundle.wasOk() ? bundle.getValue()->findShader (ShaderStage::vertex, ShaderLanguage::msl) : nullptr;
+        return info != nullptr ? info->source : String();
+    };
+
+    EXPECT_EQ (sourceOf(), "first");
+
+    bytes.copyFrom (second.getData(), 0, second.getSize());
+    EXPECT_EQ (sourceOf(), "other");
+}
+
+TEST_F (GpuDeviceErrorTests, ClearedShaderBundleCacheKeepsHeldBundlesAndLoadsAgain)
+{
+    ShaderBundle source;
+    ShaderInfo info;
+    info.language = ShaderLanguage::msl;
+    info.source = "kept";
+    source.addShader (std::move (info));
+
+    MemoryBlock bytes;
+    ASSERT_TRUE (source.saveToMemoryBlock (bytes).wasOk());
+
+    const auto held = device->loadShaderBundle (bytes.getData(), bytes.getSize());
+    ASSERT_TRUE (held.wasOk());
+
+    device->clearShaderBundleCache();
+
+    const auto reloaded = device->loadShaderBundle (bytes.getData(), bytes.getSize());
+    ASSERT_TRUE (reloaded.wasOk());
+    EXPECT_NE (reloaded.getValue(), held.getValue());
+
+    const auto* kept = held.getValue()->findShader (ShaderStage::vertex, ShaderLanguage::msl);
+    ASSERT_NE (kept, nullptr);
+    EXPECT_EQ (kept->source, "kept");
+}
+
+TEST_F (GpuDeviceErrorTests, LoadingAnInvalidShaderBundleFails)
+{
+    const char garbage[] = "not a shader bundle";
+
+    EXPECT_TRUE (device->loadShaderBundle (garbage, sizeof (garbage)).failed());
+    EXPECT_TRUE (device->loadShaderBundle (garbage, sizeof (garbage)).failed());
+}
+
+// ---------------------------------------------------------------------------
 // GpuBuffer — additional coverage
 // ---------------------------------------------------------------------------
 

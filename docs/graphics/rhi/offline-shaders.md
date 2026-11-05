@@ -183,6 +183,20 @@ else
 (`loadFromStream`, `loadFromFile`, `loadFromMemoryBlock`) when the bundle is not
 embedded.
 
+Code that builds pipelines from the same embedded bundle many times (one per pass,
+renderer or texture) can share one parsed copy per device instead:
+
+```cpp
+auto bundleResult = ctx->loadShaderBundle (yup::ShaderBundleFile_data, yup::ShaderBundleFile_size);
+if (bundleResult.wasOk())
+    pipelineResult = yup::GpuPipeline::compileFromBundle (ctx, *bundleResult.getValue(), options);
+```
+
+The device keeps the parsed `ShaderBundle::Ptr` and returns it again for the same
+bytes; bytes that changed at the same address are parsed again. Call
+`clearShaderBundleCache()` to drop the kept bundles, for example after compiling
+bundles at runtime.
+
 For repeated compilation across frames or many pipelines, cache the results with
 [`GpuPipelineCache`](pipelines.md#gpupipelinecache), which also accepts a
 `ShaderBundle`.

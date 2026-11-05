@@ -21,6 +21,8 @@
 
 #include <yup_rhi/yup_rhi.h>
 
+#include <xxhash_library/xxhash_library.h>
+
 //==============================================================================
 #if YUP_WINDOWS
 #if YUP_RIVE_USE_D3D
