@@ -27,7 +27,7 @@ function (_yup_fetch_apple_ausdk)
             _yup_message (STATUS "Fetching Apple AudioUnitSDK")
             _yup_fetchcontent_declare (AudioUnitSDK
                 GIT_REPOSITORY https://github.com/apple/AudioUnitSDK.git
-                GIT_TAG        AudioUnitSDK-1.1.0)
+                GIT_TAG        AudioUnitSDK-1.3.0)
             FetchContent_MakeAvailable (AudioUnitSDK)
             set (AUDIOUNIT_SDK_ROOT "${audiounitsdk_SOURCE_DIR}")
         endif()
