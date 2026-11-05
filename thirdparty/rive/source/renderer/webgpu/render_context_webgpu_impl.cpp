@@ -1995,6 +1995,11 @@ RenderContextWebGPUImpl::RenderContextWebGPUImpl(
   }
   m_platformFeatures.atomicPLSInitNeedsDraw = true;
 
+  // makeDrawPipeline implements BlendEquation::layerMask, so the depthStencil
+  // path can mask a layer (YUP forces masked layers into depthStencil mode,
+  // since atomic mode's blend step has no layer-mask op).
+  m_platformFeatures.supportsDepthStencilLayerMask = true;
+
 #ifdef RIVE_WAGYU
   // We can only use advanced blend if the client enabled it when setting up
   // the device.
@@ -3207,10 +3212,9 @@ static WGPUBlendOperation wgpuBlendOp(gpu::BlendEquation blendEquation)
     case gpu::BlendEquation::max:
       return WGPUBlendOperation_Max;
     case gpu::BlendEquation::layerMask:
-      // Needs a src factor of ZERO, which makeDrawPipeline does not vary
-      // yet, so WebGPU leaves supportsDepthStencilLayerMask off and is
-      // never asked for it.
-      RIVE_UNREACHABLE();
+      // dst * srcAlpha: WGPUBlendFactor_Zero src, WGPUBlendFactor_SrcAlpha
+      // dst, added together.
+      return WGPUBlendOperation_Add;
 #ifdef RIVE_WAGYU
     case gpu::BlendEquation::multiply:
       return WGPUBlendOperation_WagyuMultiply;
@@ -3291,10 +3295,19 @@ static WGPUBlendFactor wgpuDstBlendFactor(gpu::BlendEquation blendEquation)
     case gpu::BlendEquation::max:
       return WGPUBlendFactor_One;
     case gpu::BlendEquation::layerMask:
-      // See wgpuBlendOp().
-      RIVE_UNREACHABLE();
+      // dst * srcAlpha, matching the GL backend's GL_ZERO, GL_SRC_ALPHA.
+      return WGPUBlendFactor_SrcAlpha;
   }
   RIVE_UNREACHABLE();
+}
+
+static WGPUBlendFactor wgpuSrcBlendFactor(gpu::BlendEquation blendEquation)
+{
+  // dst * srcAlpha on the layer-mask path drops the src term entirely; every
+  // other equation this builder emits multiplies src by ONE.
+  return blendEquation == gpu::BlendEquation::layerMask
+             ? WGPUBlendFactor_Zero
+             : WGPUBlendFactor_One;
 }
 
 wgpu::RenderPipeline RenderContextWebGPUImpl::makeDrawPipeline(
@@ -3474,7 +3487,7 @@ wgpu::RenderPipeline RenderContextWebGPUImpl::makeDrawPipeline(
 
   const WGPUBlendComponent blendComponent = {
       .operation = wgpuBlendOp(pipelineState.blendEquation),
-      .srcFactor = WGPUBlendFactor_One,
+      .srcFactor = wgpuSrcBlendFactor(pipelineState.blendEquation),
       .dstFactor = wgpuDstBlendFactor(pipelineState.blendEquation),
   };
 

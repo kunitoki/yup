@@ -1244,6 +1244,10 @@ RenderContextVulkanImpl::RenderContextVulkanImpl(
 #endif
   m_platformFeatures.supportsClockwiseAtomicMode = m_platformFeatures
                                                        .supportsAtomicMode;
+  // draw_pipeline_vulkan.cpp implements BlendEquation::layerMask, so the
+  // depthStencil path can mask a layer on any device (including those without
+  // raster ordering, e.g. most mobile GPUs).
+  m_platformFeatures.supportsDepthStencilLayerMask = true;
   m_platformFeatures
       .supportsClipPlanes = m_vk->features.shaderClipDistance &&
                             // The Vulkan spec mandates that the minimum value

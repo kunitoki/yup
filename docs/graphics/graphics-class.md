@@ -238,6 +238,10 @@ The GPU reads a mesh's positions when the frame is rendered, so a mesh shows one
 set of positions per frame: use a separate `ImageMesh` for each differently warped
 copy drawn in the same frame. A grid has at most 255 cells per side.
 
+On GPUs without raster ordering (common with Vulkan and WebGPU), instanced copies
+are drawn one by one, and copies that overlap each other cost extra GPU work. Copies
+that don't overlap stay cheap, so spread sprites apart where you can.
+
 ## Transparency layers
 
 For correct *group* opacity - where a set of overlapping shapes must fade as a
@@ -259,13 +263,14 @@ if (layer.isValid())
 Inside the layer, coordinates are layer-local: the target area's top-left is
 `(0, 0)`.
 
-A layer can also be masked. Draw the mask into the Graphics `addMask()` returns,
-which has the layer's size and coordinates; on commit, the mask's alpha or
-luminance (optionally inverted) decides how much of the layer shows. Add several
-masks and they multiply: the layer shows only where all of them let it through.
+A layer can also be masked. Pass `enableMasking` when beginning it, then draw the
+mask into the Graphics `addMask()` returns, which has the layer's size and
+coordinates; on commit, the mask's alpha or luminance (optionally inverted) decides
+how much of the layer shows. Add several masks and they multiply: the layer shows
+only where all of them let it through.
 
 ```cpp
-auto layer = g.beginTransparencyLayer (targetArea);
+auto layer = g.beginTransparencyLayer (targetArea, 1.0f, /*enableMasking*/ true);
 if (layer.isValid())
 {
     layer.getGraphics().drawImage (photo, { 0.0f, 0.0f, targetArea.getWidth(), targetArea.getHeight() });
@@ -280,7 +285,9 @@ if (layer.isValid())
 }
 ```
 
-Where the GPU cannot apply masks, the layer is composited unmasked.
+`enableMasking` renders the layer in a GPU mode that can apply masks, which every
+backend supports but which is not the default elsewhere. Without it, or where the
+GPU cannot apply masks at all, the layer is composited unmasked.
 
 ## Offscreen rendering into an Image
 

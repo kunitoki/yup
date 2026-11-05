@@ -338,7 +338,7 @@ private:
             case maskEffect:
             {
                 // The emoji is the alpha mask of a layer filled with a turning gradient
-                auto layer = g.beginTransparencyLayer (cell);
+                auto layer = g.beginTransparencyLayer (cell, 1.0f, true);
                 if (! layer.isValid())
                     break;
 

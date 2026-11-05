@@ -1033,15 +1033,31 @@ void RiveRenderer::drawImageMeshInstanced(
     // instances may overlap. As a workaround, issue individual draw calls
     // for each instance instead. This is slow, and I'm only doing it this
     // way because atomic mode is soon going away.
+    //
+    // With known mesh bounds, each instance gets tight pixel bounds so
+    // instances that don't overlap can share a draw group and skip the
+    // atomic barriers (which restart the render pass on some backends).
+    const AABB* meshBounds = instances->meshBounds();
     for (const auto& instanceData : instances->instanceData())
     {
+      const Mat2D instanceMatrix =
+          m_renderStateStack.back().matrix * instanceData.transform;
+      const IAABB pixelBounds =
+          meshBounds != nullptr
+              ? instanceMatrix.mapBoundingBox(*meshBounds).roundOut()
+              : gpu::Draw::FULLSCREEN_PIXEL_BOUNDS;
+      if (pixelBounds.empty())
+      {
+        continue;
+      }
+
       float finalOpacity = std::max(
           0.0f,
           instanceData.opacity * m_renderStateStack.back().modulatedOpacity);
 
       clipAndPushDraw(gpu::DrawUniquePtr(m_context->make<gpu::ImageMeshDraw>(
-          gpu::Draw::FULLSCREEN_PIXEL_BOUNDS,
-          m_renderStateStack.back().matrix * instanceData.transform,
+          pixelBounds,
+          instanceMatrix,
           BlendMode::srcOver,
           instanceData.additiveness,
           imageTexture,

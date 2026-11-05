@@ -131,7 +131,7 @@ public:
     private:
         friend class Graphics;
 
-        TransparencyLayer (Graphics& parent, Rectangle<float> targetArea, float opacity);
+        TransparencyLayer (Graphics& parent, Rectangle<float> targetArea, float opacity, bool enableMasking);
 
         Graphics* parent = nullptr;
         Rectangle<float> targetArea;
@@ -167,6 +167,10 @@ public:
 
     /** Constructs a Graphics object for rendering into an Image on the GPU. */
     Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> target, uint32_t clearColor = 0) noexcept;
+
+    /** Constructs a Graphics object owning a renderable target, with full control over the
+        offscreen frame's msaa/dither/loadOp/clearColor. Begins the offscreen GPU frame immediately. */
+    Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> target, const GpuFrameDescriptor& frameDesc) noexcept;
 
     /** Constructs a Graphics object rendering into an externally-owned renderable target.
 
@@ -241,9 +245,12 @@ public:
         @param targetArea The area, in this Graphics' current coordinate space, where
                           the completed layer will be composited.
         @param opacity    The opacity used when compositing the completed layer.
+        @param enableMasking Pass true when the layer will receive TransparencyLayer::addMask()
+                          masks. It renders the layer in the GPU mode that can apply them, which
+                          every backend supports but which is not the default elsewhere.
         @return A TransparencyLayer. Check isValid() before drawing into it.
     */
-    [[nodiscard]] TransparencyLayer beginTransparencyLayer (Rectangle<float> targetArea, float opacity = 1.0f);
+    [[nodiscard]] TransparencyLayer beginTransparencyLayer (Rectangle<float> targetArea, float opacity = 1.0f, bool enableMasking = false);
 
     /** Sets a color multiplied into everything drawn afterwards.
 
